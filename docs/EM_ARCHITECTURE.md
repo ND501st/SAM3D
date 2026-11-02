@@ -504,32 +504,53 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
   to the profile as ITU-R P.1812 adds its representative clutter heights (`itu_r_p1812`), so a wood or a town between a
   radar and a low target blocks it, and over a wood's edge it is a diffraction edge like a ridge's (its height above
   the ray in J(v)). The prototype mirrors both (`has_line_of_sight`, `analyse_path`, `obstacle=`).
+  * **The search antenna** (R6's review): the gameplay engagement's line of sight starts 5 m over the ground under the
+    vehicle (`data/gameplay/osa_ak.json` `search.antenna_height_m`, as `data/em/osa_ak.json` gives the SOC's, an
+    estimate; `engagement.hpp` `SearchAntennaAltitude`), not at the scenario's point for the vehicle; the battery's
+    other launchers and the regiment's other batteries in the battery fire model (`battery_fire.hpp`) see by the same
+    rule (`SearchAntennaSees`): a target behind the ground, a wood or a building is neither taken, captured nor fired at.
   * **The 60 m skip** (terrain.hpp `kObstacleSkipM`, a game value): within 60 m of either end the obstacles are left
     out, so a radar at a wood's edge, in a clearing or in a street, or a target over a wood, is not hidden by the cell
     it stands in or flies over.
-  * **On the map** (`MapData::ObstacleHeight`, `simcore/terrain_map.hpp`): the tallest box over each node, above the
-    ground there, at 50 m on the map proper and 25 m in the detail areas (`docs/TEST_RANGE.md`). Thin or porous parts
-    (masts, chimneys, towers, launchers, tents) and flat ones (marsh, pads, runways) are left out: a 0.6 m mast must
-    not make a 50 m cell opaque. Beyond the map proper and the detail areas: whatever the map lays out there (the
-    forests' and copses' 100 m blocks running out past it, the towns laid beyond it such as Novo Varosd) by the tallest
-    top over each 50 m cell, each 400 m wood block of the far ground by its top (both kept as absolute tops, so the
-    ground plus the obstacle never falls short of what is drawn), and in the far ground's towns the map does not lay out
-    a representative clutter height
-    (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban 10 m beyond; villages
-    suburban), so what the game draws there blocks sight too.
+  * **On the map** (`MapData::ObstacleHeight` and `ObstacleTop`, `simcore/terrain_map.hpp`): the tallest box whose
+    footprint holds the point (the turned rectangle, or a round part's circle), its top over the ground there: a
+    building masks exactly where it stands, no wider (R6's review, 3 November 2026). The footprints are indexed by cell
+    (50 m on the map proper, 25 m in the detail areas, 50 m cells by hash beyond them), and every one in 500 m blocks that
+    keep only the tallest top and the narrowest side. Thin or porous parts (masts, chimneys, towers, launchers, tents)
+    and flat ones (marsh, pads, runways) are left out: a 0.6 m mast hides nothing. Everything the map lays out counts
+    the same way, beyond the map proper too (the forests' 100 m blocks running out past it, the far ground's woods, the
+    towns laid beyond it such as Novo Varosd); where no box stands in the far ground's towns the map does not lay out, a
+    representative clutter height (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban
+    10 m beyond; villages suburban), so what the game draws there blocks sight too. The obstacle grids
+    (`ObstacleGrid`, `DetailObstacleGrids`) remain as a picture: each node holds what stands over it.
+  * **Footprints between the samples** (`terrain.hpp` `ObstaclesAlong`; `Terrain::ObstacleSpacingM`, `ObstacleTopAt`,
+    `ObstacleTopBoundM`). A path sampled every 50-100 m would step over a 7 m house, so where the terrain has footprints
+    each stretch between two samples is bounded first (the blocks', then for a short stretch the cells' tallest top) and
+    looked at at the narrowest side among the footprints there (no finer than 4 m, a game value: a revetment's 2.5 m
+    bank may be stepped over) only where the ray runs lower than that bound. `HasLineOfSight` is blocked by the first
+    footprint over the ray; `AnalysePath` adds each stretch's highest footprint over the ray to its profile where one
+    comes within 10 m of the ray (`kFootprintNearRayM`), so it is a diffraction edge where it stands. A terrain
+    without footprints (a bare one, a test's function of east and north) keeps the samples alone.
+    `test_map_obstacles.cpp`: a 12 m-wide, 20 m-tall box blocks a ray 0.5 m inside its end and not 0.5 m outside, 0.5 m
+    under its roof and not 0.5 m over it, at 50, 100 and 400 m sampling; a house on the map proper and one in the capital
+    likewise.
   * **Low pilots climb over the canopy.** `TargetPilot::HoldHeight` holds the wanted height over the ground plus the
-    obstacles, here and ahead; a terrain-following helicopter over a forest flies its height over the treetops. The
+    obstacles, here and ahead (the footprints between its 100 m look-ahead points too, where one may top what he holds
+    over already); a terrain-following helicopter over a forest flies its height over the treetops. The
     ground floor (R5) is still over the bare ground.
   * The country's own ground (`command/em_radio.hpp`'s `CountryGround`) carries no obstacles yet.
   * **What is drawn is what blocks sight.** The game draws the woods as trees and masses from the same boxes
     (`scenery/map_dressing.hpp` `PlaceTrees`), each tree's top clamped to the ground plus `ObstacleHeight` where it
-    stands: nothing drawn stands above the profile the sight lines use. The other way round, an obstacle cell is
-    soft by half a cell at a wood's edge, so a ray can be blocked a few metres outside the drawn trees.
+    stands: nothing drawn stands above the profile the sight lines use. The other way round, a ray is blocked only
+    over a box's footprint, so it is never blocked outside the drawn wood's blocks.
   * Balance against r-track (the merged R5 and R7, before obstacles): see `docs/DEVELOPMENT_ROADMAP.md` track R, R6.
-  * **The cost.** Every line-of-sight sample and every `HoldHeight` probe now reads `ObstacleHeight` (a grid sample on
-    the map and in the areas; beyond them a hash lookup and the ground's height, or the clutter towns' scan). The
-    dynamic campaign test's hour in `ground_check data 3600` takes about 82 s of wall time against r-track's 53 s
-    (Kesmark's raid 0.6 s against 0.5 s). If it tells in the game's fixed step: obstacle profiles cached per path.
+  * **The cost.** A sample looks the obstacle up only where the ray runs within the tallest thing on the map
+    (`Terrain::ObstacleTallestM`: a box's top over the ground under it, 5 m to spare; `AnalysePath` within 100 m more,
+    `kObstacleFarBelowRayM`, where an edge could still diffract down to 30 MHz), and a stretch between samples only
+    where the ray runs under the blocks' bound (`ObstacleTopCeilingM` first: the tallest top anywhere). The dynamic
+    campaign test's hour in `ground_check data 3600`: 69.5 s of wall time (r6 before the footprints 89 s,
+    r-track 53 s; Kesmark's raid 0.5 s). If it tells in the game's fixed step: obstacle profiles
+    cached per path.
 * Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
   (fields, orchards) in place of the towns' two heights.
 

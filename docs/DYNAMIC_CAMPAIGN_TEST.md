@@ -15,7 +15,8 @@ origin), and its heights come from the map's ground.
   With it are the launchers 22-24, the TZM, the ATZ and the PU-12. The crew and the battery commander are NPCs; take
   any seat. An Osa's position is open ground with sight along the attack directions (`voenizdat_osa_1991`
   pp. 232-239). Until 3 Nov 2026 the battery stood 1.2 km east and 0.9 km north, among the blocks of flats, where R6's
-  buildings 285-400 m off hid anything below 1-3 degrees: a cruise missile 60 m up was not seen until it was inside the
+  buildings 285-400 m off hid anything below as much as 4.1 degrees (the worst over its four Osas, with the obstacle grid of
+  the time, which stood each building 12.5 m wider): a cruise missile 60 m up was not seen until it was inside the
   ring of flats. From the edge, each Osa's mask over the roofs within 6 km is under 0.3 degrees
   (`test_dynamic_campaign.cpp`).
 - **Our air defence within about 7 km.** None of it is ours to command:

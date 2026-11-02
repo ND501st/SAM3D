@@ -297,7 +297,8 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
 // docs/campaign/11_BATTERY_LIFE_PROPOSAL.md "Main positions"), not among the capital's blocks of flats (roadmap R6): from
 // each of battery 21's Osas, a 5 m antenna (data/em/osa_ak.json) sees over the ground, the woods and the buildings
 // within 6 km at under half a degree in every direction. Sited in the dense core (1.2 km east, 0.9 km north) a ring of
-// flats 285-400 m off masked 1-3 degrees, and a cruise missile 60 m up was hidden until it was inside the ring.
+// flats 285-400 m off masked up to 4.1 degrees (the worst over its four Osas, with the obstacle grid of the time, which
+// stood each building 12.5 m wider), and a cruise missile 60 m up was hidden until it was inside the ring.
 SC_TEST("dynamic campaign: battery 21's Osas see over the capital's roofs, sited on open ground at its edge") {
     ScenarioDef def;
     ConsoleData console;
