@@ -20,6 +20,7 @@
 #include "SimAirCampaignSubsystem.h"
 #include "SimBasicModels.h"
 #include "SimCoreIncludes.h"
+#include "SimMapAssets.h"
 #include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
 
@@ -112,6 +113,19 @@ namespace
 		}
 		return Fields;
 	}
+
+	FLinearColor Linear(const std::array<float, 3>& C) { return FLinearColor(C[0], C[1], C[2]); }
+
+	// The dressing is built once per map (a second or two) and kept while the map is: every raid's level on it shares it.
+	struct FSimDressingCache
+	{
+		std::weak_ptr<const simcore::MapData> Map;
+		FString RulesPath;
+		std::shared_ptr<const simcore::scenery::DressingRules> Rules;
+		std::shared_ptr<const simcore::scenery::CoverRaster> Cover;
+		std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
+	};
+	FSimDressingCache GSimDressingCache;
 }
 
 ASimMapActor::ASimMapActor()
@@ -179,11 +193,52 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 		{TEXT("border_range"), 30.0, 112.0, 900.0, 45.0, 126.0, 300.0},   // the border range against the Pact
 		{TEXT("lake_siro"), -78.0, -8.0, 600.0, -78.0, 2.0, 0.0},         // Lake Siro in its reeds
 	};
-	constexpr int32 Count = UE_ARRAY_COUNT(Views);
 	if (ShotIndex < 0 || !Map || BuiltFor.X > 1e8)
 	{
 		return;
 	}
+	// And R6's close views, found on the map as it is laid out: a tree at a wood's edge in the Lazne woods, a street of
+	// Kesmark, a bridge's pier from the bank, the capital from 150 m.
+	TArray<FView> All(Views, UE_ARRAY_COUNT(Views));
+	if (Dressing && !Dressing->trees.empty())
+	{
+		const simcore::scenery::TreeInstance* Best = nullptr;
+		double BestD = 1e18;
+		for (const simcore::scenery::TreeInstance& T : Dressing->trees)
+		{
+			const double Dd = FMath::Square(T.east_m + 11000.0) + FMath::Square(T.north_m + 3000.0);
+			if (Dd < BestD)
+			{
+				BestD = Dd;
+				Best = &T;
+			}
+		}
+		const double E = Best->east_m / 1000.0, N = Best->north_m / 1000.0;
+		All.Add(FView{TEXT("tree"), E, N - 0.03, 1.7, E, N, 0.6 * Best->height_m});
+	}
+	for (const simcore::MapSettlementDef& S : Map->Def().settlements)
+	{
+		if (S.id == "kesmark")
+		{
+			const double E = S.centre.east_m / 1000.0, N = S.centre.north_m / 1000.0;
+			All.Add(FView{TEXT("street"), E - 0.05, N, 1.7, E + 0.25, N, 2.0});
+		}
+	}
+	if (!Map->Layout().crossings.empty())
+	{
+		const simcore::MapCrossing& C = Map->Layout().crossings.front();
+		const double E = C.at.east_m / 1000.0, N = C.at.north_m / 1000.0;
+		const double Se = FMath::Sin(C.heading_rad), Sn = FMath::Cos(C.heading_rad);
+		// From 60 m off the bridge's side, a little above the water, at its middle.
+		All.Add(FView{TEXT("bridge_pier"), E + 0.06 * Sn, N - 0.06 * Se, 2.5, E, N, 2.0});
+	}
+	for (const simcore::MapSettlementDef& S : Map->Def().detail_settlements)
+	{
+		const double E = S.centre.east_m / 1000.0, N = S.centre.north_m / 1000.0;
+		All.Add(FView{TEXT("capital_150m"), E, N - 1.5, 150.0, E, N, 0.0});
+		break;
+	}
+	const int32 Count = All.Num();
 	ShotTimer -= DeltaSeconds;
 	if (ShotTimer > 0.0f)
 	{
@@ -196,7 +251,7 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 		ShotIndex = -1;
 		return;
 	}
-	const FView& V = Views[ShotIndex / 2];
+	const FView& V = All[ShotIndex / 2];
 	if (ShotIndex % 2 == 0)  // place the camera, then give the picture two seconds to settle
 	{
 		const simcore::MapFrameLink Link(Map->Def().origin, simcore::GeoPoint::FromDegrees(BuiltFor.Y, BuiltFor.X, BuiltFor.Z));
@@ -354,9 +409,12 @@ bool ASimMapActor::Build(const FVector& FrameOriginLonLatAlt, const FString& Dat
 	GroundLink = std::make_shared<const simcore::MapFrameLink>(Map->Def().origin,
 		simcore::GeoPoint::FromDegrees(FrameOriginLonLatAlt.Y, FrameOriginLonLatAlt.X, FrameOriginLonLatAlt.Z));
 	const simcore::MapFrameLink& Link = *GroundLink;
+	LoadDressing(DataDirectory);
 	BuildGround(Link);
 	BuildStrips(Link);
 	BuildBoxes(Link);
+	BuildTrees(Link);
+	BuildBridges(Link);
 	if (Country)
 	{
 		BuildCountry(FrameOriginLonLatAlt);
@@ -399,6 +457,11 @@ void ASimMapActor::Clear()
 	{
 		CountryStrips->DestroyComponent();
 		CountryStrips = nullptr;
+	}
+	if (Bridges != nullptr)
+	{
+		Bridges->DestroyComponent();
+		Bridges = nullptr;
 	}
 	for (USceneComponent* P : AssetParts)
 	{
@@ -528,6 +591,35 @@ bool ASimMapActor::GroundAt(const FVector& UnrealPos, FVector& OutGround, FVecto
 	return true;
 }
 
+void ASimMapActor::LoadDressing(const FString& DataDirectory)
+{
+	// The map's dressing (roadmap R6): the rules, the land cover and the trees, simcore's (scenery/map_dressing.hpp), built
+	// once per map. Without the rules' file the defaults (the file's values) serve.
+	const FString RulesPath = FPaths::Combine(DataDirectory, TEXT("scenery/map_dressing.json"));
+	FSimDressingCache& C = GSimDressingCache;
+	if (C.Map.lock() != Map || C.RulesPath != RulesPath || !C.Rules || !C.Cover || !C.Dressing)
+	{
+		const double T0 = FPlatformTime::Seconds();
+		std::shared_ptr<simcore::scenery::DressingRules> Rules = std::make_shared<simcore::scenery::DressingRules>();
+		std::string Error;
+		if (!simcore::scenery::LoadDressingRules(TCHAR_TO_UTF8(*RulesPath), *Rules, &Error))
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map %s: %s: the dressing's defaults instead"), *MapFile, UTF8_TO_TCHAR(Error.c_str()));
+		}
+		C.Map = Map;
+		C.RulesPath = RulesPath;
+		C.Rules = Rules;
+		C.Cover = std::make_shared<const simcore::scenery::CoverRaster>(simcore::scenery::BakeCover(*Map, *Rules));
+		C.Dressing = std::make_shared<const simcore::scenery::MapDressing>(simcore::scenery::PlaceTrees(*Map, *Rules));
+		UE_LOG(LogSAM3D, Log, TEXT("Map %s: dressing %d trees, %d wood masses, the land cover in %d squares (%.2f s)"), *MapFile,
+			static_cast<int32>(C.Dressing->trees.size()), static_cast<int32>(C.Dressing->masses.size()), static_cast<int32>(C.Cover->grids.size()),
+			FPlatformTime::Seconds() - T0);
+	}
+	DressRules = C.Rules;
+	Cover = C.Cover;
+	Dressing = C.Dressing;
+}
+
 void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 {
 	UMaterialInterface* GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapVertexColor.M_SimMapVertexColor"));
@@ -583,6 +675,15 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	};
 	const auto Colour = [&](std::size_t Level, double E, double N, double H)
 	{
+		// The map proper and the detail areas: the land cover's colour (roadmap R6: a field's crop, a wood, a town, military
+		// ground), a little browner up the hills and greener low by the river, as GroundColour tints its fields.
+		if ((IsCoreLike(Level) || Level < M.DetailGrids().size()) && Cover && DressRules && Cover->Has(E, N))
+		{
+			FLinearColor C = Linear(Cover->ColourAt(*DressRules, E, N));
+			const double Rise = FMath::Clamp((H - D.base_m) / 60.0, -0.3, 1.0);
+			C = FMath::Lerp(C, FLinearColor(0.30f, 0.27f, 0.18f), static_cast<float>(FMath::Max(0.0, Rise) * 0.25));
+			return C;
+		}
 		if (IsCoreLike(Level))
 		{
 			return GroundColour(D, E, N, H);
@@ -758,53 +859,93 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 	Strips->SetupAttachment(Root);
 	Strips->SetCastShadow(false);
 	Strips->RegisterComponent();
+	// The five surfaces (simcore::MapSurface), then a road's and a railway's shoulders (gravel 1.5 m each side, under the
+	// surface) and a river's banks (6 m each side, from under the water's edge out to the ground: roadmap R6). Each ribbon
+	// has UVs along it (a unit every 10 m) and across it (0 to 1), for a material that wants them.
 	constexpr int32 Surfaces = 5;
-	TArray<FVector> Verts[Surfaces];
-	TArray<int32> Tris[Surfaces];
-	TArray<FVector> Normals[Surfaces];
-	for (const simcore::MapStrip& S : Map->Layout().strips)
+	constexpr int32 Shoulder = Surfaces, Bank = Surfaces + 1, Kinds = Surfaces + 2;
+	constexpr double ShoulderM = 1.5, BankM = 6.0, BankIntoWaterM = 1.0;  // game values
+	TArray<FVector> Verts[Kinds];
+	TArray<int32> Tris[Kinds];
+	TArray<FVector> Normals[Kinds];
+	TArray<FVector2D> Uvs[Kinds];
+	// A ribbon along the strip's points from Inner to Outer metres right of its line (negative: left), at the heights
+	// HeightAt gives for each edge.
+	const auto Ribbon = [&](const simcore::MapStrip& S, int32 K, double Inner, double Outer, const TFunctionRef<double(const simcore::Vec3&, double, double, bool)>& HeightAt)
 	{
-		const int32 K = static_cast<int32>(S.surface);
 		const int32 N = static_cast<int32>(S.points.size());
-		if (N < 2)
-		{
-			continue;
-		}
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(S.points[N / 2].x, S.points[N / 2].y, Ae, An, Au);
 		const FVector Up = DirToUnreal(Au);
 		const int32 Base = Verts[K].Num();
+		double Along = 0.0;
 		for (int32 i = 0; i < N; ++i)
 		{
 			const simcore::Vec3& P = S.points[i];
 			const simcore::Vec3& A = S.points[FMath::Max(i - 1, 0)];
 			const simcore::Vec3& B = S.points[FMath::Min(i + 1, N - 1)];
+			if (i > 0)
+			{
+				Along += FMath::Sqrt(FMath::Square(P.x - S.points[i - 1].x) + FMath::Square(P.y - S.points[i - 1].y));
+			}
 			const double Dx = B.x - A.x, Dy = B.y - A.y, L = FMath::Max(FMath::Sqrt(Dx * Dx + Dy * Dy), 1e-6);
 			const double Re = Dy / L, Rn = -Dx / L;  // to the right of the line
-			const double Half = 0.5 * S.width_m;
-			Verts[K].Add(ToUnreal(Link.GroundPoint(P.x - Re * Half, P.y - Rn * Half, P.z)));
-			Verts[K].Add(ToUnreal(Link.GroundPoint(P.x + Re * Half, P.y + Rn * Half, P.z)));
+			const double Lo = FMath::Min(Inner, Outer), Hi = FMath::Max(Inner, Outer);
+			const double El = P.x + Re * Lo, Nl = P.y + Rn * Lo, Er = P.x + Re * Hi, Nr = P.y + Rn * Hi;
+			Verts[K].Add(ToUnreal(Link.GroundPoint(El, Nl, HeightAt(P, El, Nl, Lo == Inner))));
+			Verts[K].Add(ToUnreal(Link.GroundPoint(Er, Nr, HeightAt(P, Er, Nr, Hi == Inner))));
 			Normals[K].Add(Up);
 			Normals[K].Add(Up);
+			Uvs[K].Add(FVector2D(Along / 10.0, 0.0));
+			Uvs[K].Add(FVector2D(Along / 10.0, 1.0));
 		}
 		for (int32 i = 0; i + 1 < N; ++i)
 		{
 			const int32 L0 = Base + 2 * i, R0 = L0 + 1, L1 = L0 + 2, R1 = L0 + 3;
 			Tris[K].Append({L0, R0, L1, R0, R1, L1});  // facing up, as the ground's
 		}
+	};
+	const simcore::MapData& M = *Map;
+	for (const simcore::MapStrip& S : M.Layout().strips)
+	{
+		const int32 K = static_cast<int32>(S.surface);
+		if (S.points.size() < 2)
+		{
+			continue;
+		}
+		const double Half = 0.5 * S.width_m;
+		const auto OnStrip = [](const simcore::Vec3& P, double, double, bool) { return P.z; };
+		Ribbon(S, K, -Half, Half, OnStrip);
+		if (S.surface == simcore::MapSurface::Water)
+		{
+			// The bank: its inner edge under the water's edge, its outer edge on the ground.
+			const auto BankAt = [&M](const simcore::Vec3& P, double E, double N, bool bInner)
+			{
+				return bInner ? P.z - 0.2 : M.GroundHeight(E, N) + 0.05;
+			};
+			Ribbon(S, Bank, Half - BankIntoWaterM, Half + BankM, BankAt);
+			Ribbon(S, Bank, -Half + BankIntoWaterM, -Half - BankM, BankAt);
+		}
+		else if (S.surface != simcore::MapSurface::Track)
+		{
+			const auto ShoulderAt = [](const simcore::Vec3& P, double, double, bool) { return P.z - 0.06; };  // under the surface
+			Ribbon(S, Shoulder, -Half - ShoulderM, Half + ShoulderM, ShoulderAt);
+		}
 	}
-	const TArray<FVector2D> NoUv;
 	const TArray<FLinearColor> NoColours;
 	const TArray<FProcMeshTangent> NoTangents;
 	int32 Section = 0;
-	for (int32 K = 0; K < Surfaces; ++K)
+	for (int32 K = 0; K < Kinds; ++K)
 	{
 		if (Tris[K].Num() == 0)
 		{
 			continue;
 		}
-		Strips->CreateMeshSection_LinearColor(Section, Verts[K], Tris[K], Normals[K], NoUv, NoColours, NoTangents, false);
-		Strips->SetMaterial(Section, ColourMaterial(SurfaceColour(static_cast<simcore::MapSurface>(K))));
+		const FLinearColor Colour = K == Shoulder ? FLinearColor(0.30f, 0.28f, 0.23f)
+								  : K == Bank	  ? FLinearColor(0.17f, 0.19f, 0.10f)
+												  : SurfaceColour(static_cast<simcore::MapSurface>(K));
+		Strips->CreateMeshSection_LinearColor(Section, Verts[K], Tris[K], Normals[K], Uvs[K], NoColours, NoTangents, false);
+		Strips->SetMaterial(Section, ColourMaterial(Colour));
 		++Section;
 	}
 }
@@ -815,8 +956,23 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 	UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	constexpr int32 Kinds = static_cast<int32>(simcore::MapPart::Count);
 	TArray<FTransform> Instances[Kinds];
+	// Houses, barns, flats and halls as their meshes (roadmap R6, FSimMapAssets): by part key and variant.
+	struct FDressed
+	{
+		FString Part;
+		int32 Variant = 0;
+		simcore::MapPart Kind = simcore::MapPart::House;
+		TArray<FTransform> Xf;
+	};
+	TMap<FString, FDressed> Dressed;
+	TArray<FString> DressedOrder;  // the order met, so the components are made the same way each time
+	const int32 HouseVariants = DressRules ? DressRules->house_variants : simcore::scenery::kHouseVariants;
 	for (const simcore::MapBox& B : Map->Layout().boxes)
 	{
+		if (B.part == simcore::MapPart::Canopy)
+		{
+			continue;  // the woods are trees and masses (BuildTrees)
+		}
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(B.east_m, B.north_m, Ae, An, Au);
 		const double S = FMath::Sin(B.heading_rad), C = FMath::Cos(B.heading_rad);
@@ -826,7 +982,52 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 		const FVector At = ToUnreal(Link.GroundPoint(B.east_m, B.north_m, B.base_m + 0.5 * B.height_m));
 		const bool bRound = simcore::MapPartIsRound(B.part);
 		const FVector Scale(B.length_m, bRound ? B.length_m : B.width_m, B.height_m);  // the engine's cube and cylinder are 1 m
+		int Variant = 0;
+		const std::string Part = simcore::scenery::BuildingPart(B, Variant, HouseVariants);
+		if (!Part.empty())
+		{
+			// The part's mesh fills the same unit cube as the engine's (scenery/map_meshes.hpp), so the same transform.
+			const FString Key = FString::Printf(TEXT("%s#%d"), UTF8_TO_TCHAR(Part.c_str()), Variant);
+			FDressed* Found = Dressed.Find(Key);
+			if (Found == nullptr)
+			{
+				Found = &Dressed.Add(Key);
+				Found->Part = UTF8_TO_TCHAR(Part.c_str());
+				Found->Variant = Variant;
+				Found->Kind = B.part;
+				DressedOrder.Add(Key);
+			}
+			Found->Xf.Add(FTransform(Rot, At, Scale));
+			continue;
+		}
 		Instances[static_cast<int32>(B.part)].Add(FTransform(Rot, At, Scale));
+	}
+	for (const FString& Key : DressedOrder)
+	{
+		FDressed& Dr = Dressed[Key];
+		FTransform Fix;
+		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Dr.Part, Dr.Variant, Fix);
+		if (Mesh == nullptr)
+		{
+			Instances[static_cast<int32>(Dr.Kind)].Append(Dr.Xf);  // no mesh: the box, as before
+			continue;
+		}
+		TArray<FTransform> Xf;
+		Xf.Reserve(Dr.Xf.Num());
+		for (const FTransform& T : Dr.Xf)
+		{
+			Xf.Add(Fix * T);  // the asset's own fix into the part's frame first, then the box's
+		}
+		UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(
+			this, FName(*FString::Printf(TEXT("Map_%s_%d"), *Dr.Part, Dr.Variant)));
+		H->SetupAttachment(Root);
+		H->SetStaticMesh(Mesh);
+		H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		H->SetCastShadow(true);
+		H->RegisterComponent();
+		H->AddInstances(Xf, false, true);
+		Parts.Add(H);
+		BoxCount += Xf.Num();
 	}
 	for (int32 K = 0; K < Kinds; ++K)
 	{
@@ -844,11 +1045,159 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 		const bool bSolid = bCollision && (Part == simcore::MapPart::Bridge || Part == simcore::MapPart::Runway || Part == simcore::MapPart::Pad);
 		H->SetCollisionEnabled(bSolid ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 		H->SetCastShadow(Part != simcore::MapPart::Marsh && Part != simcore::MapPart::Pad && Part != simcore::MapPart::Runway);
+		if (Part == simcore::MapPart::Bridge)
+		{
+			// A bridge is drawn as its deck, parapets and piers (BuildBridges); its box stays, unseen, for the traces.
+			H->SetVisibility(false);
+			H->SetCastShadow(false);
+		}
 		H->RegisterComponent();
 		H->AddInstances(Instances[K], false, true);
 		Parts.Add(H);
 		BoxCount += Instances[K].Num();
 	}
+}
+
+void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
+{
+	// The woods (roadmap R6, simcore/scenery/map_dressing.hpp): trees where simcore plants them (the map proper's woods'
+	// open sides, the detail areas' woods whole), one instanced component per kind; the rest of each wood a mass, one per
+	// variant. No collision (nothing drives into a wood; the sight lines are simcore's), the trees cast shadows.
+	if (!Dressing)
+	{
+		return;
+	}
+	const simcore::scenery::MapDressing& Dr = *Dressing;
+	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM)
+	{
+		if (Xf.Num() == 0)
+		{
+			return;
+		}
+		FTransform Fix;
+		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Part, Variant, Fix);
+		if (Mesh == nullptr)
+		{
+			return;
+		}
+		TArray<FTransform> Placed;
+		Placed.Reserve(Xf.Num());
+		for (const FTransform& T : Xf)
+		{
+			Placed.Add(Fix * T);
+		}
+		UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(
+			this, FName(*FString::Printf(TEXT("Map_%s_%d"), *Part, Variant)));
+		H->SetupAttachment(Root);
+		H->SetStaticMesh(Mesh);
+		H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		H->SetCastShadow(bShadow);
+		if (CullM > 0.0f)
+		{
+			H->SetCullDistances(0, static_cast<int32>(CullM * 100.0f));
+		}
+		H->RegisterComponent();
+		H->AddInstances(Placed, false, true);
+		Parts.Add(H);
+		BoxCount += Placed.Num();
+	};
+	// The masses: the box the wood's block was, inset, on the engine cube's frame.
+	TArray<FTransform> Masses[simcore::scenery::kCanopyMassVariants];
+	for (const simcore::scenery::CanopyMass& C : Dr.masses)
+	{
+		simcore::Vec3 Ae, An, Au;
+		Link.AxesAt(C.east_m, C.north_m, Ae, An, Au);
+		const FVector Forward = DirToUnreal(Ae * FMath::Sin(C.heading_rad) + An * FMath::Cos(C.heading_rad));
+		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
+		const FVector At = ToUnreal(Link.GroundPoint(C.east_m, C.north_m, C.base_m + 0.5 * C.height_m));
+		Masses[C.variant % simcore::scenery::kCanopyMassVariants].Add(FTransform(Rot, At, FVector(C.length_m, C.width_m, C.height_m)));
+	}
+	for (int32 V = 0; V < simcore::scenery::kCanopyMassVariants; ++V)
+	{
+		Add(TEXT("canopy_mass"), V, Masses[V], false, 0.0f);
+	}
+	if (!bDrawTrees)
+	{
+		return;
+	}
+	// The trees: base on the ground (simcore's, 0.3 m into it), turned by their own yaw, scaled (crown, crown, height)
+	// from the unit tree (scenery/map_meshes.hpp TreeMesh).
+	constexpr int32 TreeKinds = static_cast<int32>(simcore::scenery::TreeKind::Count);
+	TArray<FTransform> Trees[TreeKinds];
+	for (const simcore::scenery::TreeInstance& T : Dr.trees)
+	{
+		simcore::Vec3 Ae, An, Au;
+		Link.AxesAt(T.east_m, T.north_m, Ae, An, Au);
+		const FVector Forward = DirToUnreal(Ae * FMath::Sin(T.yaw_rad) + An * FMath::Cos(T.yaw_rad));
+		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
+		const FVector At = ToUnreal(Link.GroundPoint(T.east_m, T.north_m, T.base_m));
+		Trees[T.kind % TreeKinds].Add(FTransform(Rot, At, FVector(T.crown_m, T.crown_m, T.height_m)));
+	}
+	for (int32 K = 0; K < TreeKinds; ++K)
+	{
+		Add(FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K))), 0, Trees[K], true,
+			TreeCullDistanceM);
+	}
+}
+
+void ASimMapActor::BuildBridges(const simcore::MapFrameLink& Link)
+{
+	// Each crossing's bridge (roadmap R6, simcore/scenery/map_meshes.hpp BridgeMesh): the deck from end to end at the
+	// crossing's height, its parapets and its piers down into the river's bed, in one mesh of the map's vertex colours.
+	// The deck's box (BuildBoxes) stays, unseen, for the traces that find the deck.
+	const simcore::MapData& M = *Map;
+	TArray<FVector> Verts;
+	TArray<int32> Tris;
+	TArray<FVector> Normals;
+	TArray<FLinearColor> Colours;
+	for (const simcore::MapCrossing& C : M.Layout().crossings)
+	{
+		double Width = 8.0;
+		for (const simcore::MapBox& B : M.Layout().boxes)
+		{
+			if (B.part == simcore::MapPart::Bridge && FMath::Abs(B.east_m - C.at.east_m) < 0.5 && FMath::Abs(B.north_m - C.at.north_m) < 0.5)
+			{
+				Width = B.width_m;
+				break;
+			}
+		}
+		const double Se = FMath::Sin(C.heading_rad), Sn = FMath::Cos(C.heading_rad);
+		const simcore::Vec3 EndA(C.at.east_m - Se * C.half_length_m, C.at.north_m - Sn * C.half_length_m, C.deck_m);
+		const simcore::Vec3 EndB(C.at.east_m + Se * C.half_length_m, C.at.north_m + Sn * C.half_length_m, C.deck_m);
+		const simcore::scenery::TriMesh T = simcore::scenery::BridgeMesh(EndA, EndB, M.GroundHeight(C.at.east_m, C.at.north_m), Width);
+		if (T.Empty())
+		{
+			continue;
+		}
+		simcore::Vec3 Ae, An, Au;
+		Link.AxesAt(C.at.east_m, C.at.north_m, Ae, An, Au);
+		const int32 Base = Verts.Num();
+		for (std::size_t i = 0; i < T.positions.size(); ++i)
+		{
+			const simcore::Vec3& P = T.positions[i];
+			const simcore::Vec3& Nrm = T.normals[i];
+			Verts.Add(ToUnreal(Link.GroundPoint(EndA.x + P.x, EndA.y + P.y, EndA.z + P.z)));
+			Normals.Add(DirToUnreal(Ae * Nrm.x + An * Nrm.y + Au * Nrm.z));
+			Colours.Add(Linear(T.colours[i]));
+		}
+		// simcore's winding (outward by (b - a) x (c - a) in east, north, up) is the ground's here: east and north become
+		// Unreal's Y and X, as the ground's triangles {A, B east, C north} face up.
+		for (const std::uint32_t I : T.indices)
+		{
+			Tris.Add(Base + static_cast<int32>(I));
+		}
+	}
+	if (Tris.Num() == 0)
+	{
+		return;
+	}
+	Bridges = NewObject<UProceduralMeshComponent>(this, TEXT("MapBridges"));
+	Bridges->SetupAttachment(Root);
+	Bridges->SetCastShadow(true);
+	Bridges->RegisterComponent();
+	Bridges->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+	Bridges->SetMaterial(0, FSimMapAssets::Material());
+	Bridges->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
@@ -1014,7 +1363,10 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 			for (double E = Lo0; E < Hi0; E += Cell)
 			{
 				const double Ce = E + 0.5 * Cell, Cn = N + 0.5 * Cell;
-				if (!simcore::mapgeo::InPolygon(Lake.points, Ce, Cn) || UnderMap(Ce, Cn, 0.0))
+				// Not under the map proper, nor in a detail area (roadmap R6: the map draws its own water there; no country's
+				// lake reaches one today, and one that does must be imported as its rivers are, MapData::ImportedLines).
+				const simcore::MapPoint LakeAt = ToMap.FrameToMap(Ce, Cn);
+				if (!simcore::mapgeo::InPolygon(Lake.points, Ce, Cn) || UnderMap(Ce, Cn, 0.0) || D.InDetail(LakeAt.east_m, LakeAt.north_m))
 				{
 					continue;
 				}

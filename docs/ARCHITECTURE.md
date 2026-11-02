@@ -209,7 +209,7 @@ Deterministic for a seed. `examples/air_war_demo.cpp` runs it end to end.
 Generic simcore models (used by the demo, not by the Osa's outcomes):
 
 - Aircraft: constant airspeed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
-- Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's obstacle grid (woods, buildings) is not yet used by line of sight (E9).
+- Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's woods and buildings block line of sight and radio paths as clutter heights (E9 in R6, `docs/EM_ARCHITECTURE.md` section 27), sampled from 50 m and 25 m grids; the country's own ground (`CountryGround`) has none.
 - Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
   deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
 - Radar physics: single-look SNR threshold, no clutter or multipath.
@@ -220,8 +220,9 @@ Generic simcore models (used by the demo, not by the Osa's outcomes):
   - Aircraft are held over the sim's terrain, not over the tiles.
   - One ground there waits on R6's map. Without a map actor, `ground_check` and `SAM3D.Map.GroundAgrees` say nothing
     about the tiles.
-  - On a map's level the obstacle heights (woods, buildings) are still bilinear and not part of the drawn ground.
-    Aircraft are held over the ground, not over the boxes.
+  - On a map's level the obstacle heights (woods, buildings) are bilinear and not part of the drawn ground; low
+    pilots hold their height over the ground plus the obstacles (R6), the ground floor (R5) over the bare ground.
+    The drawn trees (R6's dressing) never stand above the obstacle heights; the buildings' meshes fill their boxes.
 - ISA atmosphere treats geopotential altitude as geometric (< 0.5 % error below 32 km).
 
 Osa model gaps found by the October 2026 research review (`docs/research/OSA_RESEARCH_2026-10.md`), scheduled as

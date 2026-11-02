@@ -621,6 +621,10 @@ public:
         double e, n, r, h;
     };
     const std::vector<Flat>& Flats() const { return flats_; }
+    // Whether (east, north) lies within `clear_m` (under 125 m) of the edge of a road, railway or river (the map's and the
+    // detail areas' imported ones), or of a river's: what the map's dressing keeps its trees off (scenery/map_dressing.hpp).
+    bool NearLine(double e, double n, double clear_m) const { return lines_.Near(e, n, clear_m); }
+    bool NearWater(double e, double n, double clear_m) const { return water_.Near(e, n, clear_m); }
 
     // The ground's lattices as they are drawn, finest first: the detail areas (roadmap R6), the map proper, the far
     // ground, the country's, the land beyond (those it has). A coarser level leaves out only the cells lying wholly

@@ -518,6 +518,10 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     obstacles, here and ahead; a terrain-following helicopter over a forest flies its height over the treetops. The
     ground floor (R5) is still over the bare ground.
   * The country's own ground (`command/em_radio.hpp`'s `CountryGround`) carries no obstacles yet.
+  * **What is drawn is what blocks sight.** The game draws the woods as trees and masses from the same boxes
+    (`scenery/map_dressing.hpp` `PlaceTrees`), each tree's top clamped to the ground plus `ObstacleHeight` where it
+    stands: nothing drawn stands above the profile the sight lines use. The other way round, an obstacle cell is
+    soft by half a cell at a wood's edge, so a ray can be blocked a few metres outside the drawn trees.
   * Balance against r-track (the merged R5 and R7, before obstacles): see `docs/DEVELOPMENT_ROADMAP.md` track R, R6.
 * Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
   (fields, orchards) in place of the towns' two heights.

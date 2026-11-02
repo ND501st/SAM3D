@@ -146,8 +146,36 @@ Colours are game values, placeholders until real assets.
 
 In Unreal, `FSimRuntimeMesh::Build` turns any `TriMesh` LOD list into a static mesh (the munitions' builder, moved);
 `FSimMapAssets::MeshFor(part, variant)` gives the register's real asset where one is on this machine, else the
-procedural mesh. The register of third-party art and its licence rules: [ASSETS.md](ASSETS.md). The map's drawing
-(trees on the woods, buildings on the boxes, bridges, the detail ground) is R6's next part.
+procedural mesh. The register of third-party art and its licence rules: [ASSETS.md](ASSETS.md).
+
+### The map's dressing (R6)
+
+`simcore/scenery/map_dressing.hpp`, with its rules in `data/scenery/map_dressing.json` (every value a game value with
+its confidence), says where the meshes go. Presentation only: nothing in the simulation reads it.
+
+* `BakeCover`: the land cover of the map proper and each detail area as 25 m cells: farmland in parcels (250-700 m
+  along the furrows, 80-250 m across, the furrows turning from one 3 km square to the next) each with its crop by
+  share, then the levelled sites (military ground), woods, marsh, buildings with a 15 m garden, military works, roads
+  and railways (at least a cell wide) and water. `CoverRaster::ColourAt` gives the ground's colour.
+* `PlaceTrees`: a wood's block inside a detail area planted whole (a tree every 7 m each way, jittered), elsewhere in
+  the map proper two rows along each side open to the fields (8 m apart) and a mass inside; the far ground's woods
+  masses only. Kinds by share (oak, pine, black locust, poplar; poplars within 60 m of a river). Each tree's base is
+  0.3 m into the ground; its top is the wood's top less up to 15 % of its height, and never above the ground plus
+  `MapData::ObstacleHeight` there, so no drawn tree stands above what blocks the sim's sight lines. None within 4 m
+  of a road's, railway's or river's edge, none in the water, none outside the map proper and the detail areas.
+  Kesmark: about 159 000 trees, 20 000 masses, built in about 0.4 s (`map_dump` prints the counts).
+* `BuildingVariant`, `FlatsFloors`, `BuildingPart`: a house's variant by a hash of its place, a block's storeys by its
+  height, the part key a box is drawn by (`house`, `flats`, `barn`, `industrial`).
+* Deterministic: a function of the map and the rules alone, in the layout's order, so every client builds the same.
+
+In Unreal `ASimMapActor` draws them: the ground's vertices in the map proper and the detail areas coloured from the
+cover; the trees one instanced component per kind (`bDrawTrees`, culled at `TreeCullDistanceM`, 8 km), the masses
+one per variant, neither with collision; houses, barns, flats and halls through `FSimMapAssets::MeshFor` on the
+boxes' own transforms; each crossing's `BridgeMesh` over its deck box, kept unseen and QueryOnly for the traces;
+roads with 1.5 m shoulders and rivers with 6 m banks; everything on the sim's ground points
+(`MapFrameLink::GroundPoint`). `-SimMapShots` adds a tree close up, a Kesmark street, a bridge's pier and the
+capital from 150 m. The ground tiles are R5's, unchanged, so `SAM3D.Map.GroundAgrees` and `DrawnGroundAt` still
+judge what is drawn.
 
 The haze near the ground is drawn as an exponential height fog on `ASimSkyWeatherActor`: of Koschmieder's extinction
 for the day's visibility (the atmosphere's aerosol, R7's sky), `HeightFogShare` (0.3, a game value) is the fog's and

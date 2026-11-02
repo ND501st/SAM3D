@@ -19,6 +19,12 @@ namespace simcore
 	class MapData;
 	class MapFrameLink;
 	struct MapGrid;
+	namespace scenery
+	{
+		struct CoverRaster;
+		struct DressingRules;
+		struct MapDressing;
+	}
 }
 
 /**
@@ -44,9 +50,17 @@ namespace simcore
  * as simcore samples it (MapGrid::SampleTri), so what the sim has on the ground stands on what is drawn; GroundAt gives
  * it without a trace. SAM3D.Map.GroundAgrees checks the built meshes against the sim's ground (DrawnGroundAt).
  *
+ * The map's dressing (roadmap R6, simcore/scenery/map_dressing.hpp, data/scenery/map_dressing.json): the ground of the
+ * map proper and the detail areas coloured from the land cover (fields by parcel and crop, woods, towns, military
+ * ground); the woods as trees (the map proper's and the detail areas', instanced by kind) and masses (the rest), never
+ * taller than what blocks the sim's sight lines; houses, barns, flats and halls as their meshes (FSimMapAssets: a
+ * registered asset if it is on this machine, else simcore's procedural one); a bridge as its deck, parapets and piers
+ * over an invisible deck the traces land on; roads with shoulders, rivers with banks.
+ *
  * -SimMapShots=<folder> photographs the map from a few views (the battery's position, over the town, the bridges, the
  * woods, high above with the far ground and the cloud, the country from very high, the refinery and the capital's
- * airfield) once it is drawn, then quits: a run checked from its pictures.
+ * airfield; a tree close up, a street in Kesmark, a bridge's pier, the capital from 150 m) once it is drawn, then quits:
+ * a run checked from its pictures.
  */
 UCLASS()
 class SAM3D_API ASimMapActor : public AActor
@@ -78,6 +92,15 @@ public:
 	 *  none. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	FString CountryFile = TEXT("maps/pannonia.json");
+
+	/** The map's woods as trees where simcore plants them (the map proper and its detail areas; roadmap R6). Off: the woods
+	 *  are masses only. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
+	bool bDrawTrees = true;
+
+	/** How far a tree is drawn (m): beyond it the wood's mass and the trees' crowns at their lowest LOD are gone. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "500", ClampMax = "30000"))
+	float TreeCullDistanceM = 8000.0f;
 
 	/** The nation's assets on the map: every theatre object as its basic models where it stands, the running campaign's
 	 *  (where it has moved them; the wrecked dark) or else TheatreFile's. Not what the scenario draws itself: its own
@@ -139,6 +162,9 @@ private:
 	void BuildGround(const simcore::MapFrameLink& Link);
 	void BuildStrips(const simcore::MapFrameLink& Link);
 	void BuildBoxes(const simcore::MapFrameLink& Link);
+	void BuildTrees(const simcore::MapFrameLink& Link);
+	void BuildBridges(const simcore::MapFrameLink& Link);
+	void LoadDressing(const FString& DataDirectory);
 	void BuildCountry(const FVector& FrameOriginLonLatAlt);
 	void BuildAssets(const FVector& FrameOriginLonLatAlt);
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
@@ -153,10 +179,17 @@ private:
 	TObjectPtr<UProceduralMeshComponent> Strips;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Bridges;
+
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Parts;
 
 	std::shared_ptr<const simcore::MapData> Map;
 	std::shared_ptr<const simcore::CountryMap> Country;
+	// The map's dressing (roadmap R6): its rules, the land cover and the trees, built once per map (LoadDressing).
+	std::shared_ptr<const simcore::scenery::DressingRules> DressRules;
+	std::shared_ptr<const simcore::scenery::CoverRaster> Cover;
+	std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
 	// The map's frame to the frame it is drawn in (set by Build): GroundAt's.
 	std::shared_ptr<const simcore::MapFrameLink> GroundLink;
 

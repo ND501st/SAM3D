@@ -130,8 +130,20 @@ and quits.
 
 * The volumetric cloud is the engine's sample material on one layer, set to the main layer's base, depth and cover; its
   clouds stand where its own noise puts them, not exactly where the sim's do. The cells (`-SimCloudCells`) are exact.
-* Buildings scatter on lots and a grid rather than real streets; no roofs, no detail, by design.
-* Ground colour is by patches of farmland tint, not a land-use map.
+* Buildings scatter on lots and a grid rather than real streets. Since R6 they are drawn with roofs (houses gabled
+  or hipped in four variants, barns, flats with a band of windows a floor, sawtooth halls: `scenery/map_meshes.hpp`),
+  procedural placeholders until a registered asset replaces them (`docs/scenery/ASSETS.md`).
+* The ground of the map proper and the detail areas is coloured from a 25 m land cover raster
+  (`scenery/map_dressing.hpp` `BakeCover`): fields in parcels with their crops, woods, marsh, towns with their
+  gardens, military ground, roads and water. The map proper's vertices are 50 m apart, so the colour is the
+  cover at each node: a road or a parcel's edge is soft by half a cell. The far ground keeps the country's tints.
+* Woods (R6): trees only in the map proper and the detail areas. A detail area's woods are planted whole (a tree
+  every 7 m), the map proper's elsewhere get two rows along each side open to the fields and a mass inside; the far
+  ground's are masses only. About 159 000 trees on Kesmark (80 000 in the detail areas), 20 000 masses. No tree
+  stands above the obstacle height the sight lines use, so what is drawn never hides more than the sim does; a
+  wood's edge in the sim is still soft by half an obstacle cell.
+* Bridges are drawn as deck, parapets and piers (`BridgeMesh`); the deck's box stays unseen for the traces. Roads
+  and the railway have shoulders, rivers banks; ribbons only, no cut or fill.
 * A scenario played in the level on its own flat ground gets a warning: its line of sight is not the drawn ground's.
 * On a Cesium level, ground items are put on the tiles by a ground-only trace from 3 km up; the tiles are not the
   sim's ground (`docs/ARCHITECTURE.md`, known limitations). Woods and buildings are not part of the drawn ground that
