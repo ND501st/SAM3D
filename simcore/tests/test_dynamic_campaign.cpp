@@ -204,7 +204,8 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
     std::uint64_t cursor = 0;
     int releases = 0, impacts = 0, cruise = 0;
     std::set<std::string> guns, sams;
-    int sam_launches = 0, sam_hits = 0, sam_misses = 0;
+    int sam_launches = 0, sam_hits = 0, sam_misses = 0, sam_near = 0;
+    int flak = 0, damaged = 0, jettisons = 0;  // the heavy guns' shells burst, an aircraft's damage risen (damage.hpp)
     std::set<std::string> defences;  // the neighbours the battery fire model does not fight
     for (const ScenarioNeighbour& nb : r.Def().neighbours) {
         if (!nb.fights) defences.insert(nb.id);
@@ -217,6 +218,7 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
         for (const fx::Event& ev : r.Fx().Since(cursor)) {
             if (ev.kind == fx::EventKind::WeaponRelease) {
                 ++releases;
+                jettisons += ev.delivery == "jettison" ? 1 : 0;
                 released_at[ev.source] = ev.t_s;
                 well_formed = well_formed && ev.end_t_s > ev.t_s && !ev.weapon.empty() && ev.world_id >= 0;
             } else if (ev.kind == fx::EventKind::WeaponImpact) {
@@ -232,6 +234,13 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
             } else if (ev.kind == fx::EventKind::SamEnd && defences.count(ev.source) == 1) {
                 sam_hits += ev.end == fx::BurstEnd::Hit ? 1 : 0;
                 sam_misses += ev.end == fx::BurstEnd::SelfDestruct ? 1 : 0;
+                sam_near += ev.end == fx::BurstEnd::NearBurst ? 1 : 0;
+            } else if (ev.kind == fx::EventKind::FlakBurst) {
+                ++flak;
+                well_formed = well_formed && ev.weapon == "ks30";
+            } else if (ev.kind == fx::EventKind::AircraftDamaged) {
+                ++damaged;
+                well_formed = well_formed && ev.number > 0 && !ev.target.empty();
             } else if (ev.kind == fx::EventKind::GunPass) {
                 guns.insert(ev.weapon);
                 well_formed = well_formed && ev.end_t_s > ev.t_s && ev.number > 0;
@@ -250,7 +259,7 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
     SC_EXPECT(w->Drops() > 0 && r.WeaponImpacts() > 0);
     std::printf("    the feed: %d releases, %d impacts, %d cruise missiles' warheads, gun passes from %zu kinds of gun\n", releases,
                 impacts, cruise, guns.size());
-    SC_EXPECT(releases == w->Drops() && impacts > 0 && impacts <= releases && well_formed);
+    SC_EXPECT(releases == w->Drops() + jettisons && impacts > 0 && impacts <= releases && well_formed);
     SC_EXPECT(guns.count("s60") == 1 && guns.size() >= 3);
     // Our air defence round the capital fights: missiles from more than one kind of site, aircraft brought down.
     std::string kinds;
@@ -258,7 +267,17 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
     std::printf("    our defences: %d missiles launched (%d hit, %d missed) from%s; %d aircraft brought down by them\n", sam_launches,
                 sam_hits, sam_misses, kinds.c_str(), r.DefenceKills());
     SC_EXPECT(sam_launches == r.DefenceLaunches() && sam_launches > 0 && sams.size() >= 2);
-    SC_EXPECT(sam_hits + sam_misses <= sam_launches && sam_hits <= r.DefenceKills());
+    SC_EXPECT(sam_hits + sam_misses + sam_near <= sam_launches);
+    // Damage by chance (damage.hpp, aaa.hpp): the guns fire rounds, a few strike; the heavy guns' shells burst in the
+    // sky, mostly to no effect; aircraft are damaged short of destroyed and some fly on.
+    const int raised = r.DefenceDamaged("light") + r.DefenceDamaged("moderate") + r.DefenceDamaged("heavy");
+    std::printf("    damage: %d rounds fired, %d struck, %d heavy shells burst; risen to light %d, moderate %d, heavy %d; %d missiles burst near, %d loads jettisoned\n",
+                r.DefenceRoundsFired(), r.DefenceRoundHits(), r.DefenceShellBursts(), r.DefenceDamaged("light"), r.DefenceDamaged("moderate"),
+                r.DefenceDamaged("heavy"), sam_near, jettisons);
+    SC_EXPECT(r.DefenceRoundsFired() > 0 && r.DefenceRoundHits() < r.DefenceRoundsFired() / 10);
+    // Light damage leaves an aircraft as it was: only moderate and heavy show in the feed.
+    SC_EXPECT(flak == r.DefenceShellBursts() && raised > 0 && damaged > 0);
+    SC_EXPECT(damaged <= r.DefenceDamaged("moderate") + r.DefenceDamaged("heavy"));
     SC_EXPECT(r.DefenceKills() > 0);
     SC_EXPECT(r.WavesAirborne() <= r.Def().waves->max_airborne + 40);  // a wave may come on top of a nearly full sky
     // The world holds what flies, not everything that has flown.

@@ -160,6 +160,35 @@ public:
         return out;
     }
 
+    // An aircraft throws off its load (damaged: simcore/damage.hpp): what it has not yet released falls free from where it
+    // is, inert (delivery "jettison"), and it releases none of it later. It falls its height above the ground carried on
+    // by the aircraft's speed (no drag: a game value).
+    std::vector<WaveRelease> Jettison(const std::string& carrier, double t, const Vec3& pos, const Vec3& vel, const WaveScene& scene) {
+        std::vector<WaveRelease> out;
+        for (Pending& p : pending_) {
+            if (p.done || p.carrier != carrier) continue;
+            p.done = true;
+            const WeaponDef* wd = def_->weapons.Find(p.weapon);
+            WaveRelease r;
+            r.carrier = p.carrier;
+            r.carrier_name = p.carrier_name;
+            r.weapon = p.weapon;
+            r.weapon_name = wd != nullptr ? wd->name : p.weapon;
+            r.delivery = "jettison";
+            r.count = std::max(1, p.count);
+            r.t_s = t;
+            r.position = pos;
+            r.velocity = vel;
+            const Vec3 below = OnGround(scene, pos.x, pos.y, 0.0);
+            const double agl = scene.frame != nullptr ? scene.frame->AltitudeOf(pos) - scene.frame->AltitudeOf(below) : pos.z - below.z;
+            const double fall_s = std::sqrt(2.0 * std::max(agl, 1.0) / kStandardGravity);
+            r.impact = OnGround(scene, pos.x + vel.x * fall_s, pos.y + vel.y * fall_s, 0.0);
+            r.impact_t_s = t + fall_s;
+            out.push_back(std::move(r));
+        }
+        return out;
+    }
+
     int Drops() const { return drops_; }
     // The adversaries' aircraft types flown so far (faction id, type id), and our own (id).
     const std::vector<std::pair<std::string, std::string>>& EnemyTypesFlown() const { return enemy_flown_; }

@@ -163,8 +163,13 @@ shots are pushed into it whatever the switch says. It is filled where the models
   it ends (`weapon` its model). Our air defence round it (the neighbours the battery fire model does not fight,
   `ScenarioRunner::FireNeighbourDefences`): a gun site's `GunPass` of 1.5-4 s at the nearest enemy aircraft in its
   reach, then a pause of 2-6 s (rounds as the bridge's own figures); a missile site's `SamLaunch` (`weapon` its system,
-  `end_t_s` the meeting) and its `SamEnd`, `Hit` on the aircraft or `SelfDestruct` past it. A hit brings the aircraft
-  down: its `AircraftDown` follows.
+  `end_t_s` the meeting) and its `SamEnd`, `Hit` on the aircraft, `NearBurst` 15-60 m off it or `SelfDestruct` past it.
+  With the damage model (`docs/DAMAGE.md`): a contact gun's `GunPass` carries its pass's fire-control errors
+  (`aim_across_rad`, `aim_up_rad`, `range_share`, `lead_error`, `correction_per_s`, `spread_mrad`), so the game's
+  tracers miss as simcore's rounds did; a time-fuzed gun's shells are each a `FlakBurst` where simcore burst it; a
+  rise to moderate or heavy damage is an `AircraftDamaged` (`number` the level, `fire`, `falls` for smoke), whose
+  smoke and fire the game trails from the aircraft; a jettisoned load is a `WeaponRelease` with delivery `"jettison"`,
+  landing inert. An aircraft destroyed, or heavily damaged when its time comes, is an `AircraftDown`.
 
 ### 3.2 `scenery/munitions.hpp` and `data/scenery/munitions.json`
 

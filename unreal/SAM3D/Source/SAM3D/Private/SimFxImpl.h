@@ -250,6 +250,7 @@ struct FSimFxBomb
 	FVector LastTrailPos = FVector::ZeroVector;
 	bool bHaveTrail = false;
 	bool bFire = false;
+	bool bInert = false;       // jettisoned (delivery "jettison"): it lands without going off
 };
 
 /** An aircraft's gun burst at the ground: flashes at the aircraft and a line of impacts walking to the aim. */
@@ -277,6 +278,7 @@ struct FSimFxRound
 	double BurstT = 0.0;        // a flak shell's fuze time (0: none)
 	bool bTracer = true;
 	bool bEnded = false;
+	bool bExact = false;        // the simulation's shell (a FlakBurst): it bursts where it says, not scattered here
 };
 
 /** A defence's guns through a pass at an aircraft. */
@@ -301,8 +303,30 @@ struct FSimFxGunPass
 	int32 RoundIndex = 0;      // the rounds fired: which of the belt's carry a tracer (LOOK 14)
 	bool bBurstSmoked = false; // this burst's gun smoke given
 	uint32 Rng = 1;
-	bool bFlak = false;  // 57 mm and up: bursts round the target's height
+	bool bFlak = false;  // a time fuze (the KS-30's): bursts round the target's height
 	bool bDone = false;
+	// The fire control's errors through the pass (the GunPass event's, simcore/aaa.hpp): the rounds aim where the
+	// simulation's do. Zero: a perfect lead.
+	double AimAcrossRad = 0.0;
+	double AimUpRad = 0.0;
+	double RangeShare = 0.0;
+	simcore::Vec3 LeadError;
+	double CorrectionPerS = 0.0;
+	double SpreadMrad = 0.0;   // a round's scatter (0: the tuning's)
+};
+
+/** A damaged aircraft flying on (AircraftDamaged): its smoke trail and its fire, until it is down or gone. */
+struct FSimFxDamageFx
+{
+	int32 Id = -1;
+	uint64 Key = 0;
+	int32 Level = 0;           // simcore::DamageLevel: 2 moderate, 3 heavy
+	bool bSmoke = false;
+	bool bFire = false;
+	int32 Ribbon = -1;
+	FVector LastTrailPos = FVector::ZeroVector;
+	bool bHaveTrail = false;
+	double FireAccum = 0.0;
 };
 
 /** A wreck's effects: its smoke and fire while it falls, its impact. */
@@ -442,6 +466,7 @@ public:
 	TArray<FSimFxGunPass> GunPasses;
 	FSimFxWrecks Wrecks;
 	TArray<FSimFxWreckFx> WreckFx;
+	TArray<FSimFxDamageFx> DamageFx;
 	TArray<FSimFxFire> Fires;
 	TMap<int32, FSimFxAircraftFx> Aircraft;
 	TArray<FSimFxRibbon> Ribbons;
@@ -536,6 +561,7 @@ public:
 	void UpdateGunRuns();
 	void UpdateGunPasses();
 	void UpdateWrecks();
+	void UpdateDamaged();
 	void UpdateFires();
 	void UpdateAircraft();
 	void UpdateBursts();
@@ -552,6 +578,8 @@ public:
 	void FlownMissile(const simcore::fx::Event& E, bool bArm);
 	void Release(const simcore::fx::Event& E);
 	void StartGunPass(const simcore::fx::Event& E);
+	void FlakShell(const simcore::fx::Event& E);
+	void AircraftDamaged(const simcore::fx::Event& E);
 	void AircraftDown(const simcore::fx::Event& E);
 	const TArray<FVector>& NozzlesOf(const FString& Model);
 };

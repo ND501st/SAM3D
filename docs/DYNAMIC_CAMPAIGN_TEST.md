@@ -60,12 +60,18 @@ The waves come from `data/gameplay/test_waves.json`, made by `simcore/air_war/te
     and medium, fire channels and fastest target from the nation's theatre (`theatre_pannonia_nation.json`, else the
     tuned theatre it extends; `defences` in `test_waves.json`) and the raids' tuning (`gameplay/air_war.json`). Nothing
     suppresses or jams them, and the pilots do not evade. That chance is the raids' calibrated loss per pass, so most
-    missiles miss: in a test half hour about one in twenty-five hit, and some fifteen aircraft came down;
+    missiles miss;
+  - with `"damage"` and `"aaa"` in `test_waves.json` (as now), what a hit or a burst does is drawn by chance
+    (`docs/DAMAGE.md`, roadmap R1-R2): a missile's kill destroys the aircraft or leaves it heavily damaged to fall
+    10 s to 5 min later; a miss may burst near and damage it; damage short of destroyed may bring smoke, fire, a
+    jettisoned load and a turn for home. In a test half hour some 35 damage levels rose and 8 loads were jettisoned;
   - the Kub, the S-75M2, the S-125M1, the Strelas and the MANPADS launch, as many at once as their fire channels and a
     few seconds apart. The missile bursts on the aircraft at the meeting if it hit, or flies on and destroys itself.
     An empty site reloads in ten minutes;
   - the S-60s, KS-30s, Shilkas, ZU-23s and machine guns fire passes of a few seconds at the nearest aircraft in reach,
-    then pause. The pass that took on a new aircraft brings it down at its end if it hit;
+    then pause. With `"aaa"` every round is fired (`simcore/aaa.hpp`): the fire control's errors grow with range, a
+    contact gun's rounds are judged where the aircraft is when they arrive, the KS-30's time-fuzed shells burst one by
+    one, mostly well clear. Without it, the pass that took on a new aircraft brings it down at its end if it hit;
   - a kill is in the debrief ("destroyed by" the site) and its wreck falls.
 - **Clean-up.** An aircraft that has finished its route leaves the world a minute later, so four hours do not fill it.
 
@@ -86,8 +92,9 @@ Ctrl+Z speeds time up to x32. The other views are in `docs/PLAYING.md`.
 ## Known limits
 
 The project owner's review of 2 Nov 2026 turned several of these into the roadmap's track R
-(`docs/DEVELOPMENT_ROADMAP.md`): damage short of a kill, the guns' accuracy at range, assets drawn under the map,
-aircraft attitude, the map's realism, the time of day and the pilots' defensive reactions.
+(`docs/DEVELOPMENT_ROADMAP.md`): damage short of a kill and the guns' accuracy at range (R1-R2, done in first form,
+`docs/DAMAGE.md`), assets drawn under the map, aircraft attitude, the map's realism, the time of day and the pilots'
+defensive reactions.
 
 - **The other sites are not the Osa's model.** They fire by the raids' abstract chance per pass, not by a guidance
   model, and their missiles' speed (700 m/s), the launch interval and the reload are game values. Their radars do not

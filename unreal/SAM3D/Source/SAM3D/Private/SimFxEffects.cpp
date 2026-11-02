@@ -548,6 +548,11 @@ void FSimFxWorld::ClearAll()
 	GunPasses.Reset();
 	Wrecks.Clear();
 	WreckFx.Reset();
+	for (FSimFxDamageFx& D : DamageFx)
+	{
+		ReleaseRibbon(D.Ribbon, D.Key);
+	}
+	DamageFx.Reset();
 	Fires.Reset();
 	Aircraft.Reset();
 	EndedMissiles.Reset();
@@ -592,6 +597,7 @@ void FSimFxWorld::UpdateEffects()
 	UpdateGunRuns();
 	UpdateGunPasses();
 	UpdateWrecks();
+	UpdateDamaged();
 	UpdateFires();
 	UpdateAircraft();
 
@@ -858,6 +864,12 @@ void FSimFxWorld::OnEvent(const simcore::fx::Event& E)
 	case EventKind::GunPass:
 		StartGunPass(E);
 		break;
+	case EventKind::FlakBurst:
+		FlakShell(E);
+		break;
+	case EventKind::AircraftDamaged:
+		AircraftDamaged(E);
+		break;
 	}
 }
 
@@ -1024,6 +1036,7 @@ void FSimFxWorld::Release(const simcore::fx::Event& E)
 		B.FallbackVel = E.velocity;
 		B.ChargeKg = E.charge_kg > 0.0 ? E.charge_kg : Mun.ChargeKg;
 		B.bFire = E.fire;
+		B.bInert = E.delivery == "jettison";
 		B.Key = NextKey++;
 		using EKind = simcore::fx::BombPathParams;
 		const bool bBlades = Mun.Kind == TEXT("retarded") || (Mun.bRetarder && Mun.RetarderType == TEXT("blades"));
@@ -1074,7 +1087,13 @@ void FSimFxWorld::StartGunPass(const simcore::fx::Event& E)
 	G.T1 = E.end_t_s > E.t_s ? E.end_t_s : E.t_s + 6.0;
 	G.Weapon = UTF8_TO_TCHAR(E.weapon.c_str());
 	G.Mun = &Munition(G.Weapon);
-	G.bFlak = G.Mun->CalibreMm >= 50.0;
+	G.bFlak = G.Mun->bTimeFuze;  // the 57 mm's rounds burst on contact or destroy themselves; only a time fuze bursts round the aircraft
+	G.AimAcrossRad = E.aim_across_rad;
+	G.AimUpRad = E.aim_up_rad;
+	G.RangeShare = E.range_share;
+	G.LeadError = E.lead_error;
+	G.CorrectionPerS = E.correction_per_s;
+	G.SpreadMrad = E.spread_mrad;
 	G.Rng = SimFxEffHash(static_cast<uint32>(E.seq) * 2654435761u + 17u);
 	// The bursts by the event's seq alone, so the sound (USimFxAudioSubsystem) fires the same ones.
 	// A slow gun's bursts hold a few rounds (its clips), not the Shilka's fraction of a second.
@@ -1090,8 +1109,60 @@ void FSimFxWorld::StartGunPass(const simcore::fx::Event& E)
 	G.BurstEndT = G.Bursts.Num() > 0 ? G.Bursts[0].EndS : G.T1;
 }
 
+void FSimFxWorld::FlakShell(const simcore::fx::Event& E)
+{
+	// A time-fuzed shell of the simulation's (simcore/aaa.hpp): a pass of its own holding the one round, which flies the
+	// line it was fired along and bursts at the simulation's time, so at its point (fx::RoundAt on the same ballistics).
+	FSimFxGunPass& G = GunPasses.AddDefaulted_GetRef();
+	G.Site = E.position;
+	G.SiteU = ToU(G.Site);
+	G.TargetId = E.world_id;
+	G.TargetName = UTF8_TO_TCHAR(E.target.c_str());
+	G.AimFallback = E.aim;
+	G.T0 = G.T1 = E.t_s;
+	G.Weapon = UTF8_TO_TCHAR(E.weapon.c_str());
+	G.Mun = &Munition(G.Weapon);
+	G.bFlak = true;
+	G.Rng = SimFxEffHash(static_cast<uint32>(E.seq) * 2654435761u + 17u);
+	G.NextShotT = G.NextBurstT = G.BurstEndT = G.T1;  // it fires nothing of its own
+	FSimFxRound R;
+	R.FireT = E.t_s;
+	R.Muzzle = E.position;
+	R.Dir = E.velocity.LengthSquared() > 1e-9 ? E.velocity.Normalized() : (E.aim - E.position).Normalized();
+	R.BurstT = FMath::Max(E.end_t_s - E.t_s, 0.05);
+	R.bTracer = false;
+	R.bExact = true;
+	G.Rounds.Add(R);
+}
+
+void FSimFxWorld::AircraftDamaged(const simcore::fx::Event& E)
+{
+	if (E.world_id < 0)
+	{
+		return;
+	}
+	FSimFxDamageFx* D = DamageFx.FindByPredicate([&E](const FSimFxDamageFx& Each) { return Each.Id == E.world_id; });
+	if (D == nullptr)
+	{
+		D = &DamageFx.AddDefaulted_GetRef();
+		D->Id = E.world_id;
+		D->Key = NextKey++;
+	}
+	D->Level = FMath::Max(D->Level, E.number);
+	D->bSmoke = D->bSmoke || E.falls;
+	D->bFire = D->bFire || E.fire;
+}
+
 void FSimFxWorld::AircraftDown(const simcore::fx::Event& E)
 {
+	for (int32 I = DamageFx.Num() - 1; I >= 0; --I)
+	{
+		if (DamageFx[I].Id == E.world_id)
+		{
+			ReleaseRibbon(DamageFx[I].Ribbon, DamageFx[I].Key);  // the wreck's own smoke takes over
+			DamageFx.RemoveAtSwap(I, EAllowShrinking::No);
+		}
+	}
 	AddBurst(EFxBurstStyle::Kill, E.position, Tune.Wreck.KillChargeKg, E.t_s, E.velocity);
 	if (E.world_id < 0)
 	{
@@ -2429,7 +2500,7 @@ void FSimFxWorld::UpdateBombs()
 				B.ClusterOpenT = Mun.OpensS > 0.0 ? B.ReleaseT + Mun.OpensS : simcore::fx::ClusterOpenTime(B.Path, Mun.OpensAglM > 0.0 ? Mun.OpensAglM : 500.0);
 			}
 		}
-		const bool bCluster = Mun.bCluster;
+		const bool bCluster = Mun.bCluster && !B.bInert;  // thrown off unarmed, a dispenser falls shut
 		if (bCluster && !B.bClusterOpened && Now >= B.ClusterOpenT)
 		{
 			// The dispenser opens: its bomblets fall as a cloud onto the pattern, and burst there in a ripple.
@@ -2489,7 +2560,12 @@ void FSimFxWorld::UpdateBombs()
 		}
 		if (Now >= B.ImpactT)
 		{
-			if (!bCluster)
+			if (B.bInert)
+			{
+				// Jettisoned unarmed: it strikes the ground without going off, a puff of dirt.
+				AddBurst(EFxBurstStyle::Small, B.ImpactEnu, 0.05, B.ImpactT);
+			}
+			else if (!bCluster)
 			{
 				FSimFxBurst& Burst = AddBurst(EFxBurstStyle::Ground, B.ImpactEnu, FMath::Max(B.ChargeKg, 1.0), B.ImpactT);
 				Burst.bSoot = MunitionListed(Tune.Explosion.SootMunitions, Mun.Id.IsEmpty() ? B.Weapon : Mun.Id);
@@ -2720,9 +2796,21 @@ void FSimFxWorld::UpdateGunPasses()
 				R.FireT = G.NextShotT;
 				const double Side = Barrels > 1 ? (G.Barrel % Barrels - 0.5 * (Barrels - 1)) * T.BarrelSpacingM : 0.0;
 				R.Muzzle = G.Site + Across * Side;
+				// Where the fire control measures it (the pass's errors, as corrected by the time into the pass: aaa.hpp's
+				// AimGun), led along a straight line.
+				const double Fix = FMath::Exp(-FMath::Max(G.CorrectionPerS, 0.0) * FMath::Max(G.NextShotT - G.T0, 0.0));
+				const Vec3 Los = TgtPos - R.Muzzle;
+				const double Range = Los.Length();
+				const Vec3 LosU = Range > 1e-9 ? Los / Range : Vec3{0.0, 0.0, 1.0};
+				Vec3 LosRight = simcore::Cross(LosU, Vec3{0.0, 0.0, 1.0});
+				LosRight = LosRight.LengthSquared() > 1e-12 ? LosRight.Normalized() : Vec3{1.0, 0.0, 0.0};
+				const Vec3 LosUp = simcore::Cross(LosRight, LosU).Normalized();
+				const Vec3 Measured = TgtPos + (LosRight * (G.AimAcrossRad * Range) + LosUp * (G.AimUpRad * Range) + LosU * (G.RangeShare * Range)) * Fix;
 				double Tof = 0.0;
-				Vec3 Dir = simcore::fx::LeadAim(R.Muzzle, TgtPos, TgtVel, Mps, DragK, &Tof);
-				const double Mrad = T.DispersionMrad * 1e-3;
+				Vec3 Dir = simcore::fx::LeadAim(R.Muzzle, Measured, TgtVel + G.LeadError * Fix, Mps, DragK, &Tof);
+				// The scatter below is the sum of two draws (a triangle of this half-width): sqrt(6) sigma gives the
+				// simulation's sigma.
+				const double Mrad = (G.SpreadMrad > 0.0 ? G.SpreadMrad * 2.449 : T.DispersionMrad) * 1e-3;
 				const Vec3 Up{0.0, 0.0, 1.0};
 				Vec3 Right = simcore::Cross(Dir, Up).Normalized();
 				if (Right.LengthSquared() < 0.5)
@@ -2809,9 +2897,12 @@ void FSimFxWorld::UpdateGunPasses()
 			const double Age = Now - R.FireT;
 			if (R.BurstT > 0.0 && Age >= R.BurstT)
 			{
-				const Vec3 At = simcore::fx::RoundAt(R.Muzzle, R.Dir, Round, R.BurstT).position + Vec3{0.0, 0.0, 0.0};
-				const Vec3 Off{(SimFxEffRand(G.Rng) - 0.5) * 2.0 * T.FlakOffsetM, (SimFxEffRand(G.Rng) - 0.5) * 2.0 * T.FlakOffsetM,
-					(SimFxEffRand(G.Rng) - 0.5) * 2.0 * T.FlakOffsetM};
+				const Vec3 At = simcore::fx::RoundAt(R.Muzzle, R.Dir, Round, R.BurstT).position;
+				// The simulation's shell bursts where it decided (FlakBurst); a played raid's guns (the mission bridge's,
+				// with no shells of their own) are scattered here by the tuning's offset.
+				const double OffM = R.bExact ? 0.0 : T.FlakOffsetM;
+				const Vec3 Off{(SimFxEffRand(G.Rng) - 0.5) * 2.0 * OffM, (SimFxEffRand(G.Rng) - 0.5) * 2.0 * OffM,
+					(SimFxEffRand(G.Rng) - 0.5) * 2.0 * OffM};
 				AddBurst(EFxBurstStyle::Flak, At + Off, FMath::Max(Mun.ChargeKg, 0.1), R.FireT + R.BurstT).CalibreMm = Mun.CalibreMm;
 				G.Rounds.RemoveAtSwap(K, EAllowShrinking::No);
 				continue;
@@ -2828,6 +2919,17 @@ void FSimFxWorld::UpdateGunPasses()
 			{
 				G.Rounds.RemoveAtSwap(K, EAllowShrinking::No);
 				continue;
+			}
+			if (R.bExact && Age >= 0.0 && Age < 0.12)
+			{
+				// The simulation's shell leaving the muzzle: the gun's flash (its passes fire no rounds of their own).
+				FSimFxSprite F;
+				F.Layer = ESimFxLayer::Glow;
+				F.Pos = ToU(R.Muzzle + R.Dir * 1.5);
+				F.Width = F.Length = static_cast<float>(200.0 * T.MuzzleFlashM);
+				F.Tint = FLinearColor(1.0f, 0.578f, 0.262f) * Brightness(T.MuzzleBrightness);
+				F.MinPx = 1.5f;
+				AddSprite(F);
 			}
 			if (R.bTracer && Age >= 0.0 && Age < Round.tracer_s)
 			{
@@ -2855,6 +2957,58 @@ void FSimFxWorld::UpdateGunPasses()
 }
 
 // ------------------------------------------------------------------ wrecks and fires
+
+void FSimFxWorld::UpdateDamaged()
+{
+	// A damaged aircraft flying on (AircraftDamaged): heavy damage trails the wreck's black smoke a little thinner,
+	// moderate a thin faint trail; a fire streams aft from it, shorter than a falling wreck's (game values: shares of
+	// the wreck's tuning).
+	const FSimFxTuning::FWreck& T = Tune.Wreck;
+	for (int32 I = DamageFx.Num() - 1; I >= 0; --I)
+	{
+		FSimFxDamageFx& D = DamageFx[I];
+		const FSimEntityState* Ent = Entity(D.Id);
+		if (Ent == nullptr || !Ent->bAlive)
+		{
+			ReleaseRibbon(D.Ribbon, D.Key);
+			DamageFx.RemoveAtSwap(I, EAllowShrinking::No);
+			continue;
+		}
+		const FVector PosU = EntityPos(*Ent);
+		const Vec3 Pos = ToE(PosU);
+		const bool bHeavy = D.Level >= 3;
+		if (D.bSmoke && DistToCamM(PosU) < TrailRangeM(false))
+		{
+			TrailPoint(D.Ribbon, D.Key, D.LastTrailPos, D.bHaveTrail, PosU, static_cast<float>(T.SmokeWidthM * 100.0 * (bHeavy ? 0.8 : 0.35)),
+				static_cast<float>(T.SmokeOpacity * (bHeavy ? 0.9 : 0.45)), T.SmokePointM, WreckTrailStyle(), WindAt(Pos));
+		}
+		else if (D.Ribbon >= 0)
+		{
+			ReleaseRibbon(D.Ribbon, D.Key);
+			D.Ribbon = -1;
+			D.bHaveTrail = false;
+		}
+		if (D.bFire)
+		{
+			const ESimFxTier Tier = TierAt(PosU, T.TorchLengthM);
+			const FVector Aft = Ent->Velocity.SizeSquared() > 100.0 ? -Ent->Velocity.GetSafeNormal() : FVector::DownVector;
+			if (Tier == ESimFxTier::Full || Tier == ESimFxTier::Impostor)
+			{
+				const double TorchCm = T.TorchLengthM * 100.0 * 0.6 * SimFxEffFlicker(Now, D.Id * 1.3);
+				FSimFxSprite Torch;
+				Torch.Layer = ESimFxLayer::Plume;
+				Torch.Facing = ESimFxFacing::Axis;
+				Torch.Axis = Aft;
+				Torch.Length = static_cast<float>(TorchCm);
+				Torch.Width = static_cast<float>(T.TorchWidthM * 100.0 * 0.8);
+				Torch.Pos = PosU + Aft * (0.5 * TorchCm - 100.0);
+				Torch.Tint = FLinearColor(1.0f, 0.38f, 0.07f) * Brightness(T.FireBrightness * (Sun.bNight ? T.TorchNightShare : 0.3));
+				Torch.MinPx = 1.5f;
+				AddSprite(Torch);
+			}
+		}
+	}
+}
 
 void FSimFxWorld::UpdateWrecks()
 {

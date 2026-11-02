@@ -1922,6 +1922,7 @@ private:
         TargetPilot route_pilot;
         std::vector<Vec3> route_waypoints;
         std::size_t route_next = 0;
+        AircraftDamage damage;  // what the testbed's defences did to it (damage.hpp, roadmap R1)
     };
     static constexpr double kHeldLegM = 50000.0;  // a held target flies at a point this far along his heading
     // A target added once the session runs (the instructor's, a package's): its state beside the scenario's own.
@@ -2094,6 +2095,13 @@ private:
     // bridge's, air_war/mission_bridge.hpp GunRoundsPerMin: the munitions' rate_rpm, wiki_guns), and the pass that
     // engaged a new aircraft brings it down at its end if it hit. Missile speed, reload and the pauses are game values
     // (sam3d).
+    // With the waves' damage and gun tables (roadmap R1, R2: WavesDef::has_damage) the guns fire as aaa.hpp has it
+    // instead: through a pass, a group of rounds every group_s at where the fire control predicts the aircraft (its errors
+    // drawn for the pass), each group judged when it arrives against where the aircraft really is, each time-fuzed
+    // shell where it bursts; what they did is drawn by damage.hpp. A missile's kill is still the chance per pass, but it
+    // may leave the aircraft heavily damaged instead of destroyed, and a miss may burst near enough to damage it.
+    // Damage has its consequences here: smoke and fire in the feed, the load jettisoned, the aircraft turning for home,
+    // a crash 10 s to 5 min after heavy damage.
     static constexpr double kNbMissileMps = 700.0;
     static constexpr double kNbMissileMinS = 3.0;
     static constexpr double kNbMissileMaxS = 45.0;
@@ -2114,13 +2122,39 @@ private:
         double next_s = 0.0;            // its next launch or gun pass
         int launches = 0;
         std::set<std::size_t> engaged;  // aircraft (target indices) engaged on their pass through its reach
+        // A gun site's pass under way (aaa.hpp): at whom, until when, its next group, the rounds a slow gun still owes,
+        // the fire control's errors drawn for it.
+        bool passing = false;
+        std::size_t pass_target = 0;
+        double pass_start_s = 0.0;
+        double pass_end_s = 0.0;
+        double next_group_s = 0.0;
+        double rounds_due = 0.0;
+        PassErrors errors;
     };
+    // A group of a gun's contact rounds, or one time-fuzed shell, on its way.
+    struct GunRoundsInFlight {
+        std::size_t neighbour = 0;
+        std::size_t target = 0;
+        double arrive_s = 0.0;  // the group's predicted meeting; the shell's burst
+        Vec3 muzzle;
+        GunAim aim;
+        int rounds = 0;
+        bool shell = false;
+        Vec3 burst;
+    };
+    static constexpr double kGunMuzzleUpM = 2.0;  // the guns' muzzles over the ground (as the picture's, SimFxEffects.cpp)
     std::vector<NeighbourDefenceState> nb_defence_;
     std::vector<NeighbourShot> nb_shots_;
+    std::vector<GunRoundsInFlight> nb_rounds_;
     std::mt19937 defence_rng_{1u};
     bool defence_seeded_ = false;
     int nb_launches_ = 0;
     int nb_kills_ = 0;
+    int nb_rounds_fired_ = 0;
+    int nb_round_hits_ = 0;
+    int nb_shell_bursts_ = 0;
+    std::map<std::string, int> nb_damaged_;  // how often an aircraft's damage rose to each level short of destroyed
 
     static double GunRoundsPerMin(const std::string& sys) {
         return sys == "zsu234" ? 3400.0 : sys == "s60" ? 120.0 : sys == "ks30" ? 12.0 : (sys == "zu23" || sys == "aaa") ? 2000.0 : 0.0;
@@ -2140,6 +2174,8 @@ private:
             }
         }
         EndNeighbourShots();
+        EndGunRounds();
+        CrashDamaged();
         for (std::size_t j = 0; j < def_.neighbours.size(); ++j) {
             const ScenarioNeighbour& nb = def_.neighbours[j];
             const airwar::DefenceDef* d = def_.waves->Defence(nb.system);
@@ -2183,7 +2219,20 @@ private:
                     fresh_i = i;
                 }
             }
-            if (time_ < st.next_s) continue;
+            const GunDef* gun = guns && def_.waves->has_damage ? def_.waves->aaa.Gun(nb.system) : nullptr;
+            if (gun != nullptr) FireGunPass(j, *gun, site, st);
+            if (time_ < st.next_s || st.passing) continue;
+            if (gun != nullptr) {
+                const Aircraft* a = fresh_a != nullptr ? fresh_a : near_a;
+                const std::size_t i = fresh_a != nullptr ? fresh_i : near_i;
+                if (a == nullptr) {
+                    st.next_s = time_ + 1.0;
+                    continue;
+                }
+                if (fresh_a != nullptr) st.engaged.insert(i);
+                StartGunPass(j, *gun, site, i, *a, st);
+                continue;
+            }
             if (guns) {
                 const Aircraft* a = fresh_a != nullptr ? fresh_a : near_a;
                 const std::size_t i = fresh_a != nullptr ? fresh_i : near_i;
@@ -2278,6 +2327,10 @@ private:
             const ScenarioNeighbour& nb = def_.neighbours[s.neighbour];
             const std::string id = def_.targets[s.target].id;
             const Aircraft* a = targets_[s.target].spawned ? world_.FindAircraft(targets_[s.target].world_id) : nullptr;
+            if (s.missile && def_.waves->has_damage) {
+                EndNeighbourMissile(s, a);
+                continue;
+            }
             const bool down = s.hit && a != nullptr && a->alive;
             if (s.missile && fx_on_ && a != nullptr) {
                 fx::Event e;
@@ -2304,6 +2357,240 @@ private:
                 fx_.Push(e);
             }
             if (down && DestroyTarget(id, nb.name)) ++nb_kills_;
+        }
+    }
+
+    // A gun site opens a pass at aircraft i (aaa.hpp): its fire control's errors drawn for the pass, the pass's length
+    // and the pause after it game values (sam3d, as before). The picture gets the pass and its errors, so its tracers
+    // miss as these rounds do; a time-fuzed gun's shells go to the feed one by one as they are fired (FireGunPass).
+    void StartGunPass(std::size_t j, const GunDef& g, const Vec3& site, std::size_t i, const Aircraft& a, NeighbourDefenceState& st) {
+        const FireControlDef* fc = def_.waves->aaa.Control(g.fire_control);
+        const double pass_s = 1.5 + 2.5 * Uniform01(defence_rng_);
+        st.passing = true;
+        st.pass_target = i;
+        st.pass_start_s = st.next_group_s = time_;
+        st.pass_end_s = time_ + pass_s;
+        st.rounds_due = 0.0;
+        st.errors = fc != nullptr ? DrawPassErrors(*fc, a.velocity, !def_.optics.daylight, defence_rng_) : PassErrors{};
+        st.next_s = st.pass_end_s + 2.0 + 4.0 * Uniform01(defence_rng_);
+        if (fx_on_ && !g.time_fuze) {
+            const ScenarioNeighbour& nb = def_.neighbours[j];
+            fx::Event e;
+            e.kind = fx::EventKind::GunPass;
+            e.t_s = time_;
+            e.end_t_s = st.pass_end_s;
+            e.position = site;
+            e.aim = a.position;
+            e.source = nb.id;
+            e.target = def_.targets[i].id;
+            e.world_id = a.id;
+            e.number = std::max(1, static_cast<int>(std::lround(g.rate_rpm / 60.0 * pass_s)));
+            e.weapon = nb.system;
+            e.aim_across_rad = st.errors.across_rad;
+            e.aim_up_rad = st.errors.up_rad;
+            e.range_share = st.errors.range_share;
+            e.lead_error = st.errors.velocity_mps;
+            e.correction_per_s = fc != nullptr ? fc->correction_per_s : 0.0;
+            e.spread_mrad = g.dispersion_mrad;
+            fx_.Push(e);
+        }
+        FireGunPass(j, g, site, st);
+    }
+
+    // The pass's groups of rounds due by now, each aimed where the fire control predicts the aircraft from where it was
+    // when the group left (its errors as corrected so far), and on its way.
+    void FireGunPass(std::size_t j, const GunDef& g, const Vec3& site, NeighbourDefenceState& st) {
+        if (!st.passing) return;
+        const std::size_t i = st.pass_target;
+        const Aircraft* a = targets_[i].spawned && !targets_[i].gone ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+        if (a == nullptr || !a->alive || st.next_group_s >= st.pass_end_s) {
+            st.passing = false;
+            return;
+        }
+        const FireControlDef* fc = def_.waves->aaa.Control(g.fire_control);
+        const Vec3 muzzle = site + Vec3{0.0, 0.0, kGunMuzzleUpM};
+        const ScenarioNeighbour& nb = def_.neighbours[j];
+        while (st.next_group_s <= time_ + 1e-9 && st.next_group_s < st.pass_end_s) {
+            const double fired_s = st.next_group_s;
+            st.rounds_due += g.rate_rpm / 60.0 * g.group_s;
+            st.next_group_s += g.group_s;
+            const int n = static_cast<int>(std::floor(st.rounds_due + 1e-9));
+            if (n <= 0) continue;
+            st.rounds_due -= n;
+            const PassErrors e = fc != nullptr ? Corrected(st.errors, *fc, fired_s - st.pass_start_s) : PassErrors{};
+            const GunAim aim = AimGun(g, muzzle, a->position - a->velocity * (time_ - fired_s), a->velocity, e);
+            nb_rounds_fired_ += n;
+            if (!g.time_fuze) {
+                GunRoundsInFlight r;
+                r.neighbour = j;
+                r.target = i;
+                r.arrive_s = fired_s + aim.tof_s;
+                r.muzzle = muzzle;
+                r.aim = aim;
+                r.rounds = n;
+                nb_rounds_.push_back(r);
+                continue;
+            }
+            for (int k = 0; k < n; ++k) {
+                const ShellBurst b = TimeShellBurst(g, muzzle, aim, defence_rng_);
+                GunRoundsInFlight r;
+                r.neighbour = j;
+                r.target = i;
+                r.arrive_s = fired_s + b.after_s;
+                r.muzzle = muzzle;
+                r.aim = aim;
+                r.shell = true;
+                r.burst = b.position;
+                nb_rounds_.push_back(r);
+                if (fx_on_) {
+                    fx::Event ev;
+                    ev.kind = fx::EventKind::FlakBurst;
+                    ev.t_s = fired_s;
+                    ev.end_t_s = fired_s + b.after_s;
+                    ev.position = muzzle;
+                    ev.velocity = b.dir * g.muzzle_mps;
+                    ev.aim = b.position;
+                    ev.source = nb.id;
+                    ev.target = def_.targets[i].id;
+                    ev.world_id = a->id;
+                    ev.weapon = nb.system;
+                    fx_.Push(ev);
+                }
+            }
+        }
+    }
+
+    // The groups and shells whose time has come, judged against where their aircraft is then (back along its velocity to
+    // the moment): a group's hits, a shell's burst at its distance, and what they did (damage.hpp).
+    void EndGunRounds() {
+        const DamageTable& dt = def_.waves->damage;
+        for (std::size_t k = 0; k < nb_rounds_.size();) {
+            const GunRoundsInFlight r = nb_rounds_[k];
+            if (r.arrive_s > time_ + 1e-9) {
+                ++k;
+                continue;
+            }
+            nb_rounds_.erase(nb_rounds_.begin() + static_cast<std::ptrdiff_t>(k));
+            const ScenarioNeighbour& nb = def_.neighbours[r.neighbour];
+            const GunDef* g = def_.waves->aaa.Gun(nb.system);
+            const Aircraft* a = targets_[r.target].spawned ? world_.FindAircraft(targets_[r.target].world_id) : nullptr;
+            if (r.shell) ++nb_shell_bursts_;
+            if (g == nullptr || a == nullptr || !a->alive) continue;
+            const Vec3 at = a->position - a->velocity * (time_ - r.arrive_s);
+            const double area = PresentedAreaM2(dt, def_.targets[r.target].size_m);
+            DamageDraw d;
+            if (r.shell) {
+                d = DrawBurst(dt, g->mass_kg, g->charge_kg, 0.0, (r.burst - at).Length(), area, defence_rng_);
+            } else {
+                const int hits = GroupHits(*g, r.muzzle, r.aim, at, r.rounds, area, defence_rng_);
+                if (hits <= 0) continue;
+                nb_round_hits_ += hits;
+                d = DrawRoundHits(dt, g->calibre_mm, hits, defence_rng_);
+            }
+            if (d.Any()) OnDamage(r.target, ApplyDamage(dt, targets_[r.target].damage, d, time_, defence_rng_, nb.name));
+        }
+    }
+
+    // A neighbour's missile at its meeting (with the damage tables): its kill still the chance per pass, drawn into
+    // destroyed or heavy damage; a miss bursting near enough to strike (and seen to burst there), or flying on to destroy
+    // itself.
+    void EndNeighbourMissile(const NeighbourShot& s, const Aircraft* a) {
+        const ScenarioNeighbour& nb = def_.neighbours[s.neighbour];
+        const std::string& id = def_.targets[s.target].id;
+        if (a == nullptr) return;
+        double near_m = -1.0;
+        DamageChange c;
+        if (a->alive) {
+            const scenery::MunitionSpec* m = def_.waves->aaa.munitions.Resolve(nb.system);
+            const double charge = m != nullptr && m->charge_kg > 0.0 ? m->charge_kg : 10.0;
+            c = ApplyMissile(def_.waves->damage, targets_[s.target].damage, s.hit, charge,
+                             PresentedAreaM2(def_.waves->damage, def_.targets[s.target].size_m), time_, defence_rng_, nb.name, &near_m);
+        }
+        if (fx_on_) {
+            fx::Event e;
+            e.kind = fx::EventKind::SamEnd;
+            e.t_s = e.end_t_s = time_;
+            e.position = FxRails(nb.position);
+            e.source = nb.id;
+            e.target = id;
+            e.world_id = a->id;
+            e.number = s.number;
+            e.weapon = nb.system;
+            if (s.hit && a->alive) {
+                e.end = fx::BurstEnd::Hit;
+                e.aim = FxAround(a->position, 0.0, kFxHitOffsetM);
+            } else if (near_m > 0.0) {
+                e.end = fx::BurstEnd::NearBurst;
+                e.aim = FxAround(a->position, near_m, near_m);
+            } else {
+                e.end = fx::BurstEnd::SelfDestruct;
+                Vec3 dir = a->position - e.position;
+                dir = dir.LengthSquared() > 1.0 ? dir.Normalized() : Vec3{0.0, 0.0, 1.0};
+                const double past = FxBetween(kFxPastMinM, kFxPastMaxM);
+                e.aim = a->position + dir * past;
+                e.velocity = dir * kFxPastMps;
+                e.end_t_s = time_ + past / kFxPastMps;
+            }
+            fx_.Push(e);
+        }
+        OnDamage(s.target, c);
+    }
+
+    // What damage did to aircraft i: destroyed now (its wreck as any kill's), or damaged and flying on: said in the
+    // debrief, its smoke and fire in the feed, its load thrown off, its turn for home.
+    void OnDamage(std::size_t i, const DamageChange& c) {
+        if (!c.Raised()) return;
+        TargetState& ts = targets_[i];
+        const std::string id = def_.targets[i].id;
+        if (c.after == DamageLevel::Destroyed) {
+            if (DestroyTarget(id, ts.damage.by)) ++nb_kills_;
+            return;
+        }
+        ++nb_damaged_[ToString(c.after)];
+        if (c.after < DamageLevel::Moderate) return;
+        Aircraft* a = ts.spawned ? world_.FindAircraft(ts.world_id) : nullptr;
+        if (a == nullptr || !a->alive) return;
+        std::string what = std::string(ToString(c.after)) + " damage from " + ts.damage.by;
+        if (c.fire) what += ", on fire";
+        if (c.crashes) what += ", going down";
+        if (c.jettison) what += ", jettisons its load";
+        if (c.abort) what += ", turns for home";
+        Event(id, what);
+        if (fx_on_) {
+            fx::Event e;
+            e.kind = fx::EventKind::AircraftDamaged;
+            e.t_s = time_;
+            e.position = e.aim = a->position;
+            e.velocity = a->velocity;
+            e.source = ts.damage.by;
+            e.target = id;
+            e.world_id = a->id;
+            e.number = static_cast<int>(c.after);
+            e.fire = ts.damage.fire;
+            e.falls = ts.damage.smoke;
+            fx_.Push(e);
+        }
+        if (c.jettison && waves_) {
+            airwar::WaveScene scene;
+            scene.frame = &world_.Frame();
+            scene.terrain = &world_.GetTerrain();
+            scene.centre = def_.unit_position;
+            for (airwar::WaveRelease& r : waves_->Jettison(id, time_, a->position, a->velocity, scene)) ReleaseWaveLoad(std::move(r));
+        }
+        if (c.abort && !a->waypoints.empty()) a->next_waypoint = a->waypoints.size() - 1;  // straight for its way out
+    }
+
+    // The heavily damaged whose time has come fall (burning if they were on fire), credited to who did it.
+    void CrashDamaged() {
+        for (std::size_t i : wave_targets_) {
+            TargetState& ts = targets_[i];
+            if (ts.damage.crash_at_s < 0.0 || time_ < ts.damage.crash_at_s || !ts.spawned) continue;
+            ts.damage.crash_at_s = -1.0;
+            const Aircraft* a = world_.FindAircraft(ts.world_id);
+            if (a == nullptr || !a->alive) continue;
+            const std::string id = def_.targets[i].id;
+            FxDown(id, ts.damage.by, ts.damage.fire, true);
+            if (DestroyTarget(id, ts.damage.by, false)) ++nb_kills_;
         }
     }
 
@@ -10732,6 +11019,20 @@ public:
     // The testbed's air defence (FireNeighbourDefences, the neighbours that do not fight in the battery fire model): its missiles launched and the aircraft it brought down.
     int DefenceLaunches() const { return nb_launches_; }
     int DefenceKills() const { return nb_kills_; }
+    // The guns' rounds and shells fired, the rounds that struck, the shells burst (aaa.hpp), and how often an aircraft's
+    // damage rose to each level short of destroyed ("light", "moderate", "heavy": damage.hpp), so many times.
+    int DefenceRoundsFired() const { return nb_rounds_fired_; }
+    int DefenceRoundHits() const { return nb_round_hits_; }
+    int DefenceShellBursts() const { return nb_shell_bursts_; }
+    int DefenceDamaged(const std::string& level) const {
+        const auto it = nb_damaged_.find(level);
+        return it == nb_damaged_.end() ? 0 : it->second;
+    }
+    // What the testbed's defences did to a target so far (damage.hpp).
+    const AircraftDamage* TargetDamage(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        return i < targets_.size() ? &targets_[i].damage : nullptr;
+    }
     const std::vector<ScenarioScenery>& Scenery() const { return def_.scenery; }
     // The waves' aircraft and weapons in the sky or still to enter it (weapons not counted).
     int WavesAirborne() const {

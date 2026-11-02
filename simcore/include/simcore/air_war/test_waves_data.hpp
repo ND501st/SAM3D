@@ -14,8 +14,10 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/aaa.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/damage.hpp"
 #include "simcore/json.hpp"
 
 namespace simcore {
@@ -56,6 +58,11 @@ struct WavesDef {
     // so a neighbour shoots on the pass as the raids' resolver has it (test_waves.hpp, WavePassKillChance).
     std::map<std::string, DefenceDef> defences;
     TuningTable tuning;
+    // What their bursts and hits do ("damage": data/gameplay/damage.json) and how the guns fire by range ("aaa":
+    // data/gameplay/aaa.json): roadmap R1 and R2. Without them a gun's pass is decided by the chance per pass too.
+    bool has_damage = false;
+    DamageTable damage;
+    AaaTable aaa;
     // Timing.
     double first_wave_s = 45.0;
     double interval_min_s = 100.0;
@@ -93,7 +100,7 @@ class WavesLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, const std::string& data_dir, WavesDef& out) {
         if (!Keys(root, "", {"waves_id", "status", "source", "confidence", "notes", "theatre", "weapons", "factions", "timing",
-                             "geometry", "weapon_kinds", "friendly", "friendly_callsigns", "defences", "tuning"}) ||
+                             "geometry", "weapon_kinds", "friendly", "friendly_callsigns", "defences", "tuning", "damage", "aaa"}) ||
             !Provenance(root, "") || !RequireString(root, "", "waves_id", out.id)) {
             return false;
         }
@@ -116,6 +123,14 @@ public:
             }
         }
         if (!tuning.empty() && !LoadTuningFile(data_dir + "/" + tuning, out.tuning, &e)) return Fail("tuning", e);
+        std::string damage, aaa;
+        if (!OptionalString(root, "", "damage", damage) || !OptionalString(root, "", "aaa", aaa)) return false;
+        if (damage.empty() != aaa.empty()) return Fail(damage.empty() ? "damage" : "aaa", "damage and aaa come together");
+        if (!damage.empty()) {
+            if (!LoadDamageFile(data_dir + "/" + damage, out.damage, &e)) return Fail("damage", e);
+            if (!LoadAaaFile(data_dir, aaa, out.aaa, &e)) return Fail("aaa", e);
+            out.has_damage = true;
+        }
         const json::Value* fs = OptionalArray(root, "", "factions");
         if (fs == nullptr || fs->items.empty()) return message_.empty() ? Fail("factions", "required, a list of faction files") : false;
         for (std::size_t i = 0; i < fs->items.size(); ++i) {

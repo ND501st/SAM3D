@@ -8,6 +8,8 @@
   "weapons": "air_war/weapons.json",
   "defences": ["air_war/theatre_pannonia_nation.json", "air_war/theatre_pannonia.json"],
   "tuning": "gameplay/air_war.json",
+  "damage": "gameplay/damage.json",
+  "aaa": "gameplay/aaa.json",
   "factions": [
     "air_war/faction_nato.json",
     "air_war/faction_warsaw_pact.json",

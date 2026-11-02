@@ -663,7 +663,7 @@ namespace
 			const double MuzzleMps = Spec != nullptr && Spec->muzzle_mps > 0.0 ? Spec->muzzle_mps : G->MuzzleMps;
 			const double RateHz = Spec != nullptr && Spec->rate_rpm > 0.0 ? FMath::Max(Spec->rate_rpm, 30.0) / 60.0 : G->RateHz;
 			const double Calibre = Spec != nullptr && Spec->calibre_mm > 0.0 ? Spec->calibre_mm : 23.0;
-			const bool bFlak = Calibre >= 50.0;  // as the picture: 57 mm and up burst round the target's height
+			const bool bFlak = Spec != nullptr && Spec->burst == "time";  // as the picture: a time fuze bursts round the target's height
 			const double Flight = Along / FMath::Max(MuzzleMps, 100.0);
 			const auto Crack = [&](double T)
 			{
@@ -741,6 +741,20 @@ namespace
 					}
 				}
 			}
+		}
+
+		/** The simulation's time-fuzed shell (FlakBurst): its gun's report as it is fired, its burst where and when the
+		 *  simulation has it. */
+		void FlakShell(const simcore::fx::Event& E)
+		{
+			const SimFxAudio::FGunDef* G = Bank().GunFor(SimFxAudioToF(E.weapon));
+			if (G != nullptr && !G->Single.IsNone())
+			{
+				S.Scene.AddOneShot(At(E.t_s, E.position, SimFxAudio::FEventSoundDef{G->Single, G->LevelDb1m, G->Pitch}));
+			}
+			const simcore::scenery::MunitionSpec* Spec = Munition(E.weapon);
+			const double ChargeKg = Spec != nullptr && Spec->charge_kg > 0.0 ? Spec->charge_kg : Bank().FlakDefaultKg;
+			Blast(E.end_t_s, E.aim, ChargeKg, false);
 		}
 
 		void Event(const simcore::fx::Event& E)
@@ -836,6 +850,10 @@ namespace
 			{
 				const WeaponPath Path = PathOf(E.weapon);
 				const uint64 Seed = static_cast<uint64>(E.seq);
+				if (E.delivery == "jettison")
+				{
+					break;  // thrown off unarmed: it lands without going off (the picture's puff of dirt)
+				}
 				if (Path == WeaponPath::Gun)
 				{
 					// The rounds striking over the run's length (the picture walks them along the ground as long).
@@ -881,6 +899,11 @@ namespace
 			case EventKind::GunPass:
 				GunPass(E);
 				break;
+			case EventKind::FlakBurst:
+				FlakShell(E);
+				break;
+			case EventKind::AircraftDamaged:
+				break;  // its smoke and fire are silent beside its engines
 			}
 		}
 

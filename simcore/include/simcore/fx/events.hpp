@@ -32,7 +32,16 @@
 //                  stands); end_t_s: its arrival; world_id, source: the carrier; weapon.
 //   ArmBurst       position = aim: the burst point; end (Hit, or Ground for a miss); source; weapon.
 //   GunPass        position: the site (on the ground); world_id/target: the aircraft; t_s..end_t_s: the pass; number:
-//                  the rounds; source: the site; weapon: its system id; aim: the aircraft where the pass began.
+//                  the rounds; source: the site; weapon: its system id; aim: the aircraft where the pass began. Its fire
+//                  control's errors through the pass (simcore/aaa.hpp), so the picture's rounds miss as the
+//                  simulation's: aim_across_rad, aim_up_rad (across the line of sight), range_share, lead_error (the
+//                  measured velocity's, m/s), each times exp(-correction_per_s x the time into the pass), and
+//                  spread_mrad (a round's scatter). All zero: a perfect lead and the picture's own scatter.
+//   FlakBurst      a time-fuzed shell (the simulation's, aaa.hpp): t_s its firing, end_t_s its burst; position: the
+//                  muzzle; velocity: its line of fire x its muzzle velocity; aim: where it bursts (fx::RoundAt along that
+//                  line at end_t_s - t_s); world_id/target: the aircraft; source: the site; weapon: its system id.
+//   AircraftDamaged world_id/target: the aircraft; position, velocity: its; number: its damage level now (2 moderate,
+//                  3 heavy: simcore::DamageLevel); fire: it burns; falls: it trails smoke; source: who did it.
 // `weapon` is a munitions.json id, a data/air_war/weapons.json id, or an air defence system id (air_war/data.hpp
 // AirDefenceSystems: "osa", "zsu234", ...): the munitions library resolves any of them.
 #pragma once
@@ -62,6 +71,8 @@ enum class EventKind {
     ArmLaunch,       // an anti-radiation missile fired (bridge model; EM ARMs are entities)
     ArmBurst,        // an ARM bursts (EM results and the bridge model)
     GunPass,         // a defence's guns fire at an aircraft through a pass (system, site, target, duration, rounds)
+    FlakBurst,       // a time-fuzed shell fired, and where and when it bursts
+    AircraftDamaged, // an aircraft damaged and flying on: smoke, fire
 };
 
 inline const char* ToString(EventKind k) {
@@ -77,6 +88,8 @@ inline const char* ToString(EventKind k) {
         case EventKind::ArmLaunch: return "arm_launch";
         case EventKind::ArmBurst: return "arm_burst";
         case EventKind::GunPass: return "gun_pass";
+        case EventKind::FlakBurst: return "flak_burst";
+        case EventKind::AircraftDamaged: return "aircraft_damaged";
     }
     return "?";
 }
@@ -134,6 +147,13 @@ struct Event {
     bool fire = false;          // AircraftDown: it burns; WeaponImpact: it set something alight
     bool falls = false;         // AircraftDown: it drops out of the sky at once
     std::string model;          // AircraftDown: the basic model id of the wreck
+    // GunPass: the fire control's errors through the pass (aaa.hpp).
+    double aim_across_rad = 0.0;
+    double aim_up_rad = 0.0;
+    double range_share = 0.0;
+    Vec3 lead_error;            // m/s
+    double correction_per_s = 0.0;
+    double spread_mrad = 0.0;
 };
 
 // Bounded: the oldest are dropped past `capacity` (default 4096); a reader that fell behind skips them. The sequence

@@ -101,6 +101,7 @@ add_executable(simcore_tests
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
   tests/test_dynamic_campaign.cpp
+  tests/test_damage.cpp
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp
   tests/test_comms_jamming.cpp
@@ -209,6 +210,8 @@ simcore_configure_target(air_war_balance)
 
 add_executable(air_war_bench examples/air_war_bench.cpp)
 simcore_configure_target(air_war_bench)
+add_executable(aaa_bench examples/aaa_bench.cpp)
+simcore_configure_target(aaa_bench)
 
 # The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
 # as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact,
