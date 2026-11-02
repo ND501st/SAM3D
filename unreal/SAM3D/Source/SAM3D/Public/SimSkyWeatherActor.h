@@ -5,6 +5,7 @@
 #include "SimSkyWeatherActor.generated.h"
 
 class UDirectionalLightComponent;
+class UExponentialHeightFogComponent;
 class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class USceneComponent;
@@ -23,6 +24,8 @@ namespace simcore
  * - the sun: a directional light at the sun's elevation and azimuth, lighting a physically based sky atmosphere
  *   (Rayleigh and Mie scattering), whose aerosol (Mie) scattering is set from the day's visibility by Koschmieder
  *   (extinction 3.912 / visibility, less the air's own Rayleigh part), so the haze over 40 km reads as it would;
+ * - the haze near the ground (roadmap R6): an exponential height fog drawing HeightFogShare of that extinction (the
+ *   atmosphere keeps the rest), thinning upward over the boundary layer; no volumetric fog;
  * - the cloud: the engine's volumetric cloud on the weather's main layer (its base, depth and cover), and, if asked,
  *   the sim's own cloud field as low-poly cells: exactly the cloud the TV sight cannot see through, drifting with the
  *   wind at its height. The volumetric cloud is the look; the cells are the truth.
@@ -66,6 +69,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "5", ClampMax = "200"))
 	float CloudCellRadiusKm = 60.0f;
 
+	/** Draw the haze near the ground as an exponential height fog (roadmap R6), its density from the day's visibility. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky")
+	bool bHeightFog = true;
+
+	/** Of the haze's extinction at the ground (Koschmieder, from the visibility), the share the height fog draws; the sky
+	 *  atmosphere's aerosol keeps the rest, so the two together still give the day's visibility. A game value, to be tuned
+	 *  against -SimMapShots. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "0", ClampMax = "1"))
+	float HeightFogShare = 0.3f;
+
+	/** The height over which the fog's density falls by e, km: the haze's boundary layer, as the atmosphere's aerosol. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "0.1", ClampMax = "10"))
+	float HeightFogScaleHeightKm = 1.2f;
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -89,6 +106,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Sky")
 	TObjectPtr<UVolumetricCloudComponent> Clouds;
+
+	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Sky")
+	TObjectPtr<UExponentialHeightFogComponent> HeightFog;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> CloudMaterial;

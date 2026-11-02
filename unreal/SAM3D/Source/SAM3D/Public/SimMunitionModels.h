@@ -46,6 +46,7 @@ public:
 	static float LodScreenSize(int32 Lod);
 
 	/** A mesh built from simcore triangle meshes, one per LOD (LOD 0 first; at least one, none empty), metres to cm,
-	 *  each triangle wound for Unreal; null if it fails. Not cached: Mesh and PartMesh cache theirs. */
+	 *  each triangle wound for Unreal; null if it fails. Not cached: Mesh and PartMesh cache theirs. FSimRuntimeMesh::Build
+	 *  with the munitions' material, slot and LOD sizes. */
 	static UStaticMesh* BuildStaticMesh(const TArray<simcore::scenery::TriMesh>& Lods, const FString& Name);
 };

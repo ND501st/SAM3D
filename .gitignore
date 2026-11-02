@@ -71,3 +71,8 @@ unreal/**/Content/Developers/
 # Deep-research working folders (the report is copied into docs/research)
 research_notes/
 reports/
+
+# Third-party art (docs/scenery/ASSETS.md, data/scenery/assets.json): fetched per machine, never committed
+# (licences such as Fab's Standard one forbid redistributing the files). tools/check_assets.py checks it.
+unreal/**/Content/ThirdParty/
+art/thirdparty/

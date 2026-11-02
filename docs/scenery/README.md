@@ -132,6 +132,29 @@ cruise missiles, and the guns' rounds (23, 37, 57 and 130 mm).
   so since it came in these photographs (and the map's, `-SimMapShots`) showed its orbit view of the vehicle, not the
   photographer's camera; with a photographer on the command line it now leaves the camera alone.
 
+## The map's meshes (R6)
+
+`simcore/scenery/map_meshes.hpp` builds the map's dressing as triangle meshes (`TriMesh`, `scenery/trimesh.hpp`, shared
+with the munitions): a tree of each kind (`TreeMesh`: oak, poplar, pine, black locust; four LODs down to the crown
+alone), the mass of a wood seen from afar (`CanopyMassMesh`, four variants), a house (`HouseMesh`: walls 0.68 of its
+height under a gable or hipped roof, its ridge at the box's top, four variants of walls, roof and ridge), a barn, a
+block of flats with a band of windows a floor, an industrial hall under a sawtooth roof, and a bridge from a crossing's
+plain numbers (its two ends, the bed and the width: deck, parapets, piers at most 28 m apart). Buildings and masses are
+on the unit cube the map's boxes are drawn with today, so the same transform places either; a tree is one unit tall
+with a crown one unit across. Each is a set of closed convex solids, flat-shaded, deterministic (clients rebuild them).
+Colours are game values, placeholders until real assets.
+
+In Unreal, `FSimRuntimeMesh::Build` turns any `TriMesh` LOD list into a static mesh (the munitions' builder, moved);
+`FSimMapAssets::MeshFor(part, variant)` gives the register's real asset where one is on this machine, else the
+procedural mesh. The register of third-party art and its licence rules: [ASSETS.md](ASSETS.md). The map's drawing
+(trees on the woods, buildings on the boxes, bridges, the detail ground) is R6's next part.
+
+The haze near the ground is drawn as an exponential height fog on `ASimSkyWeatherActor`: of Koschmieder's extinction
+for the day's visibility (the atmosphere's aerosol, R7's sky), `HeightFogShare` (0.3, a game value) is the fog's and
+the rest stays the atmosphere's, so together they keep the day's visibility; its density thins upward over
+`HeightFogScaleHeightKm` (1.2 km, as the aerosol). The engine's density units are taken as remembered from its source
+(per 1000 cm) and are to be confirmed with `-SimMapShots`.
+
 ## On the map
 
 The map (`/Game/Maps/KesmarkRange`, `data/maps/kesmark_range.json`) draws the district; a scenario plays on its ground
