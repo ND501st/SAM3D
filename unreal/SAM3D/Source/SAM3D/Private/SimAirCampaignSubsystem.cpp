@@ -120,6 +120,8 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 		UE_LOG(LogSAM3D, Warning, TEXT("Air war: the information pipeline doesn't start: %s"), *AirWarToF(Error));
 		return;
 	}
+	// The couriers' night by the sun on a dated theatre (the nation's), as the air war's parts of the day are (roadmap R7).
+	simcore::command::GiveTheatreSky(*NewNet, Campaign->Data().theatre);
 	// On the country's ground the radio's hops are worked out by the EM layer (roadmap P5): the vehicles' R-123M and the
 	// command posts' R-111, over the hills between them.
 	if (Campaign->Data().country != nullptr)

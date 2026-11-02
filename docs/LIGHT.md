@@ -62,7 +62,7 @@ world fact for the debrief, never a crewman's knowledge.
 | The visual range (`nav::VisualRangeM`) | the sun's elevation |
 | The AAA's fire control (`aaa.hpp` `DrawPassErrors`: optical sights blind) | `dark` |
 | The dynamic campaign's waves (`air_war/test_waves.hpp` `WavePassKillChance`) | `dark`: a defence without radar takes `attrition.night`, as the abstract raids do (`mission_bridge.hpp`) |
-| The couriers' night speed (`command/info_net.hpp`) | `dark` once given a sky (`InfoNet::SetSky`); without one the old 20:00-06:00 |
+| The couriers' night speed (`command/info_net.hpp`) | `dark` once given a sky (`InfoNet::SetSky`; the campaign's net gets its dated theatre's through `command::GiveTheatreSky`); without one the old 20:00-06:00 |
 | Unreal's sky (`ASimSkyWeatherActor`, or the level's own Movable sun) | the sun's elevation and azimuth |
 | Unreal's fx (`SimFxLogic::NightShare`) | `simcore::NightShare` of the sun's elevation |
 
@@ -92,9 +92,11 @@ The nation's theatre (`theatre_pannonia_nation.json`, the game's new campaigns) 
 shift it made, small and with no rebalance, is `docs/air_war/09_BALANCE.md` §12.
 The light values there are the code's defaults, equal to `light.json`'s.
 
-A raid's scenario carries its `"clock_start"` (the theatre's local time at its second 0), its `"utc_offset_h"` and, from a
-dated theatre, its `"date"`, never the legacy keys: its light is the sun's. So a raid the bucket called dusk at 19:30 in
-October is now dark in the session, as the sun says.
+A raid from a dated theatre carries its `"clock_start"` (the theatre's local time at its second 0), its `"date"` and its
+`"utc_offset_h"`, never the legacy keys: its light is the sun's, as its planner's part of the day was. A raid from an
+undated theatre (the tuned `theatre_pannonia.json`) was planned by the buckets, so it carries no clock and keeps the
+legacy keys from the planner's part (`battery.night` for the night, `environment.daylight` otherwise): it plays in the
+light it was planned in, as before R7, and the bridge's night attrition (`mission_bridge.hpp`, the planner's part) agrees.
 
 ## 6. Left
 
@@ -103,5 +105,7 @@ October is now dark in the session, as the sun says.
   client's sky stands at the start hour.
 - OsaPractice's sun is the level's: it follows the scenario only if it is Movable (not checked without the editor).
 - The air war reads the code's light defaults, not `light.json`.
-- The air war's seven sample raids (`data/scenarios/air_war_*.json`) have estimated clocks (each file's notes) until
-  regenerated; the dawn ones now start in the dark.
+- The air war's seven sample raids (`data/scenarios/air_war_*.json`, from the undated theatre) have estimated clocks:
+  the sun's rising or setting at each origin on 15 October less half the time limit, so each dawn or dusk raid plays in
+  its twilight (each file's notes; `test_light.cpp` checks the phase at second 0). A regenerated sample from the undated
+  theatre would carry the legacy keys instead.

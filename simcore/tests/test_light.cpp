@@ -11,6 +11,7 @@
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/raid_scenario.hpp"
 #include "simcore/air_war/test_waves.hpp"
+#include "simcore/command/air_war_feed.hpp"
 #include "simcore/battery_link.hpp"
 #include "simcore/command/info_net.hpp"
 #include "simcore/light.hpp"
@@ -198,10 +199,9 @@ SC_TEST("light: the runner reads one sun: the TV's daylight by the menu's night,
     SC_EXPECT(LoadText(text, def, console, &e));
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     if (!def.has_battery) return;
-    nav::VisualRangeValues vr;
-    if (def.nav) vr = def.nav->Range();
-    const double vis = def.weather.visibility_km * 1000.0;
     ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.Nav() != nullptr);
+    if (r.Nav() == nullptr) return;
     SC_EXPECT(r.LightNow().phase == LightPhase::Dusk && r.LightNow().sun_elevation_deg > 0.0 && r.LightNow().daylight &&
               !r.GetBattery()->Night());
     bool dusk = false, night = false;
@@ -210,7 +210,7 @@ SC_TEST("light: the runner reads one sun: the TV's daylight by the menu's night,
     while (r.Time() < 3600.0 && !r.Finished()) {
         r.Step(0.1);
         const SunLight& l = r.LightNow();
-        const double range = nav::VisualRangeM(vis, l.sun_elevation_deg, vr);
+        const double range = r.Nav()->RangeNow();  // the range the runner gave the session's roads this step
         if (l.sun_elevation_deg >= 0.0) day_range = range;
         if (l.phase == LightPhase::Dusk && l.sun_elevation_deg < 0.0) {
             dusk = true;
@@ -253,25 +253,31 @@ SC_TEST("light: the waves' optical defences take the night factor in the dark; r
 }
 
 SC_TEST("light: a march planned in the dark is a night march; the couriers' night is the sun's") {
-    ScenarioDef def;
-    ConsoleData console;
+    // The runner's own march to a place (the battery commander's order to the woods, planned when he gives it a minute in):
+    // by day at 10:30, by night once the session's clock is moved to 19:00, the sun 22 deg down.
+    auto march = [](double start_h, bool& night, double& takes_s) {
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        SC_EXPECT(LoadScenarioFile(kData + "/scenarios/pu12m_battery_march.json", kData, def, console, &e));
+        if (!e.empty()) std::printf("    %s\n", e.c_str());
+        ApplyTimeChoice(def, TimePreset::Hour, start_h);
+        ScenarioRunner r(std::move(def), std::move(console));
+        while (!r.Finished() && r.Time() < 900.0 && r.MarchPlanned() == nullptr) r.Step(0.05);
+        const nav::MarchPlan* p = r.MarchPlanned();
+        SC_EXPECT(p != nullptr && p->found);
+        if (p == nullptr) return false;
+        night = p->request.night;
+        takes_s = p->end_s - p->move_off_s;
+        return r.LightNow().dark;
+    };
+    bool night = true;
+    double day_s = 0.0, night_s = 0.0;
+    SC_EXPECT(!march(10.5, night, day_s) && !night);
+    SC_EXPECT(march(19.0, night, night_s) && night);
+    std::printf("    the march to the woods: %.0f s by day, %.0f s by night\n", day_s, night_s);
+    SC_EXPECT(night_s > day_s);  // the night march's speeds (march.json), not only its flag
     std::string e;
-    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/pu12m_mission_cover.json", kData, def, console, &e));
-    if (def.nav && def.has_battery) {
-        const nav::Anchor* to = def.nav->GetAnchors().Find("bty21_bridges");
-        SC_EXPECT(to != nullptr);
-        std::vector<nav::MarchVehicle> column;
-        for (const BatteryVehicleDef& v : def.battery_vehicles) {
-            nav::MarchVehicle m;
-            m.def = v;
-            column.push_back(m);
-        }
-        if (to != nullptr && !column.empty()) {
-            const Vec3 head = column.front().def.start;
-            const nav::MarchPlan p = def.nav->PlanTo({head.x, head.y}, "bty21_bridges", column, def.battery_tactics, 0.0, nullptr, true);
-            SC_EXPECT(p.found && p.request.night);
-        }
-    }
     // The fixed bucket said 18:00 was not yet night; the sun on 15 October says it is.
     command::ChainData chain;
     SC_EXPECT(command::LoadChainData(kData, "command/chain_pannonia.json", chain, &e));
@@ -280,6 +286,20 @@ SC_TEST("light: a march planned in the dark is a night march; the couriers' nigh
     SC_EXPECT(!net.NightAt(0.0));
     net.SetSky(Kesmark(10.5), LightValues());
     SC_EXPECT(net.HasSky() && net.NightAt(0.0) && !net.NightAt(-6.0));
+    // The campaign's net (as the game's campaign screen starts it): the dated nation's sky, the undated theatre none.
+    for (const char* theatre : {"air_war/theatre_pannonia_nation.json", "air_war/theatre_pannonia.json"}) {
+        airwar::AirWarData d;
+        SC_EXPECT(airwar::LoadAirWarData(kData, theatre, "air_war/faction_nato.json", d, &e));
+        if (!e.empty()) std::printf("    %s\n", e.c_str());
+        command::InfoNet campaign_net;
+        SC_EXPECT(campaign_net.Init(chain, 1u, d.theatre.start_hour));
+        const bool dated = d.theatre.day_of_year > 0;
+        SC_EXPECT(command::GiveTheatreSky(campaign_net, d.theatre) == dated && campaign_net.HasSky() == dated);
+        // Its first evening at 18:00: dark by the sun on 15 October, not yet by the fixed 20:00.
+        const double six_pm = 18.0 - d.theatre.start_hour;
+        SC_EXPECT(campaign_net.NightAt(six_pm) == dated);
+        SC_EXPECT(!campaign_net.NightAt(12.0 - d.theatre.start_hour));
+    }
 }
 
 SC_TEST("light: the battery link's two halves take the menu's time together, and must keep one clock") {
@@ -397,4 +417,61 @@ SC_TEST("light: the air war by the sun once its theatre has a date; undated, the
         SC_EXPECT(std::fabs(def.clock.start_local_h - local) < 1.0 / 60.0 + 1e-9);
     }
     SC_EXPECT(built);
+}
+
+SC_TEST("light: an undated theatre's raid is lit as it was planned; the sample raids play in the twilight they were planned for") {
+    airwar::AirWarData d;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", d, &e));
+    SC_EXPECT(d.theatre.day_of_year == 0);
+    airwar::AirCampaign c;
+    SC_EXPECT(c.Init(d, 1));
+    c.Posture().emission = 0.1;
+    int built = 0;
+    while (c.Now() < 6.0 * 24.0 && built < 4) {
+        if (!c.Advance(6.0 * 24.0)) continue;
+        const airwar::Package p = *c.PlayerMission();
+        airwar::RaidScenarioBuilder builder;
+        const airwar::RaidScenario rs = builder.Build(c, p);
+        c.SkipPlayerMission();
+        if (!rs.ok) continue;
+        ++built;
+        // No clock and no date: the planner's part in the legacy keys, the session's light from them.
+        SC_EXPECT(rs.json_text.find("\"clock_start\"") == std::string::npos && rs.json_text.find("\"date\"") == std::string::npos);
+        const bool night = p.part == airwar::DayPart::Night;
+        SC_EXPECT(rs.manifest.night == night);
+        ScenarioDef def;
+        ConsoleData console;
+        const bool loaded = LoadScenario(rs.json_text, kData, def, console, &e);
+        if (!loaded) std::printf("    %s\n", e.c_str());
+        SC_EXPECT(loaded && !def.clock_given && def.battery_night == night && def.optics.daylight == !night);
+        const SunLight l = LightAt(def.clock, 0.0, def.light_values);
+        std::printf("    a raid at %s: the session %s\n", airwar::DayPartName(p.part), l.dark ? "dark" : "in daylight");
+        SC_EXPECT(l.dark == night && l.daylight == !night);
+    }
+    SC_EXPECT(built >= 1);
+    // The menu's samples (generated on the undated theatre, their clocks set by hand): each plays at the part of the day
+    // its description names, in daylight for the TV from its second 0 to its end.
+    MissionCatalog cat;
+    SC_EXPECT(LoadMissionCatalog(kData, cat, &e));
+    int samples = 0;
+    for (const MissionGroup& g : cat.groups) {
+        if (g.id != "air_war") continue;
+        for (const MissionDef& m : g.missions) {
+            ScenarioDef def;
+            ConsoleData console;
+            SC_EXPECT(LoadScenarioFile(kData + "/" + m.file, kData, def, console, &e));
+            const bool dawn = def.description.find(", dawn,") != std::string::npos;
+            const bool dusk = def.description.find(", dusk,") != std::string::npos;
+            SC_EXPECT(dawn != dusk);
+            const SunLight first = LightAt(def.clock, 0.0, def.light_values);
+            const SunLight last = LightAt(def.clock, def.time_limit_s, def.light_values);
+            std::printf("    %s at %s: the sun %.1f deg, at the end %.1f deg\n", m.file.c_str(), FormatLocalHour(def.clock.start_local_h).c_str(),
+                        first.sun_elevation_deg, last.sun_elevation_deg);
+            SC_EXPECT(first.phase == (dawn ? LightPhase::Dawn : LightPhase::Dusk));
+            SC_EXPECT(first.daylight && last.daylight && !first.dark && !last.dark);
+            ++samples;
+        }
+    }
+    SC_EXPECT(samples == 7);
 }

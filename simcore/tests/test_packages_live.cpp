@@ -287,18 +287,14 @@ SC_TEST("packages live (15.3): the campaign runs in step with a session, hands i
 // in the session at their own times and the package is handed back only once the last has (LivePackages,
 // MissionBridge::FallingUntil); nothing of it is dated ahead of the session (Finish would have landed them at once, their
 // blasts and impacts dated seconds later than the session). The raid's end is put (scenario.margin_s) a second after the
-// last release a first run of the same package showed. The seeds are searched for a first package with such a load: since
-// the light is the sun's (R7, docs/LIGHT.md), a raid at dusk in October comes in the dark, the deputy cannot see an ARM
-// launched on the TV, the Osa radiates on and may bring the package down before it releases (seed 3); seed 5's does not.
+// last release a first run of the same package showed.
 SC_TEST("packages live (15.3): a package over by its clock while its loads still fall is handed back once they have landed") {
     const AirWarData d = LoadWar("nato");
     LiveRun first;
     unsigned seed = 1;
     double last_release_s = -1.0, last_impact_s = -1.0;
-    for (; seed <= 8; ++seed) {
+    for (; seed <= 4; ++seed) {
         first = RunFirstPackage(d, seed);
-        std::printf("    seed %u: %s, %d releases, %d impacts, %d dated ahead\n", seed, first.ok ? "played" : "not played",
-                    static_cast<int>(first.releases.size()), static_cast<int>(first.impacts.size()), first.ahead);
         if (!first.ok || first.releases.empty()) continue;
         last_release_s = last_impact_s = -1.0;
         for (const fx::Event& ev : first.releases) {
@@ -307,8 +303,8 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
         }
         if (last_impact_s > last_release_s + 2.0) break;  // a load still falls a second after the last release
     }
-    SC_EXPECT(seed <= 8 && first.ok && first.ahead == 0);
-    if (seed > 8 || !first.ok) return;
+    SC_EXPECT(seed <= 4 && first.ok && first.ahead == 0);
+    if (seed > 4 || !first.ok) return;
     const double end_s = last_release_s + 1.0;
     AirWarData shortened = d;
     shortened.tuning.values["scenario.margin_s"] = d.tuning.Get("scenario.margin_s") + (end_s - first.end_s);

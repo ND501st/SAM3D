@@ -604,22 +604,24 @@ public:
         Put(og, "lon_deg", Num(std::round(origin.LonDeg() * 1e6) / 1e6));
         Put(og, "alt_m", Num(th.ground_height_m));
         Put(root, "origin", og);
-        {
-            // The raid's clock (roadmap R7): the local time at its second 0, and the theatre's date when it has one; the
-            // scenario's light is then the sun's there and then (light.hpp), as the planner's part was by the theatre's.
+        // The raid's clock (roadmap R7): on a dated theatre, the local time at its second 0 and the theatre's date, so the
+        // scenario's light is the sun's there and then (light.hpp), as the planner's part was by the sun. An undated theatre
+        // (the tuned theatre_pannonia.json) planned by the fixed buckets: its raid keeps the legacy light keys
+        // (battery.night, environment.daylight) from the planner's part and no clock, so it plays in the light it was planned in.
+        const bool dated = th.day_of_year > 0;
+        if (dated) {
             double local = th.start_hour + m.start_h;
             local -= 24.0 * std::floor(local / 24.0);
             Put(root, "clock_start", Str(FormatLocalHour(std::floor(local * 60.0) / 60.0)));
-            if (th.day_of_year > 0) {
-                int month = 1, day = 1;
-                if (DateOfDay(th.year, TheatreSky(th).DayOfYearAt(m.start_h * 3600.0), month, day)) {
-                    char date[16];
-                    std::snprintf(date, sizeof(date), "%04d-%02d-%02d", th.year, month, day);
-                    Put(root, "date", Str(date));
-                }
+            int month = 1, day = 1;
+            if (DateOfDay(th.year, TheatreSky(th).DayOfYearAt(m.start_h * 3600.0), month, day)) {
+                char date[16];
+                std::snprintf(date, sizeof(date), "%04d-%02d-%02d", th.year, month, day);
+                Put(root, "date", Str(date));
             }
             Put(root, "utc_offset_h", Num(th.utc_offset_h));
         }
+        const bool legacy_night = p.part == DayPart::Night;
         json::Value terrain = Obj();
         if (fmt.map_file.empty()) {
             Put(terrain, "type", Str("flat"));
@@ -726,6 +728,7 @@ public:
         json::Value battery = Obj();
         Put(battery, "share_picture", Bool(true));
         Put(battery, "deployed", Bool(true));
+        if (!dated) Put(battery, "night", Bool(legacy_night));
         json::Value own = Obj();
         Put(own, "id", Str("21"));
         Put(own, "callsign", Str("21"));
@@ -951,6 +954,7 @@ public:
             json::Value env = Obj();
             const Weather w = c.WeatherNow();
             Put(env, "visibility_km", Num(w == Weather::Clear ? 40 : (w == Weather::Cloudy ? 20 : 6)));
+            if (!dated) Put(env, "daylight", Bool(!legacy_night));
             Put(root, "environment", env);
         }
         json::Value end = Obj();

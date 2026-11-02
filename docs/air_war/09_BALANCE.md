@@ -623,7 +623,9 @@ its origin (46.9 N 19.7 E) the parts of the day become the sun's, and the planne
 | Night | 21:00-04:00 | 17:25-05:29 | 01:00 → midnight, 23:27 |
 
 `air_war_balance data 20 7` (the tuned theatre, undated) is byte for byte the same totals as §11: R7 changes nothing
-there. `--theatre theatre_pannonia_nation.json data 10 7` was run undated (identical to §10's nation table) and dated:
+there. Nor in the raids it plays as sessions (`air_war_demo`, `test_packages_live.cpp`): a raid from an undated
+theatre carries no clock and keeps the legacy light keys from the planner's part (`docs/LIGHT.md` §5), so it is lit as it
+was planned and as before R7. `--theatre theatre_pannonia_nation.json data 10 7` was run undated (identical to §10's nation table) and dated:
 
 | Adversary, battery (the nation) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
 |---|---|---|---|---|
