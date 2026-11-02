@@ -38,6 +38,7 @@ void ASimMissionMenuHUD::BeginPlay()
 	if (Missions.Num() > 0)
 	{
 		StartIndex = DefaultStart(Missions[0]);
+		ResetTime();
 	}
 	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: %d missions%s%s"), Missions.Num(), LoadError.IsEmpty() ? TEXT("") : TEXT(", "), *LoadError);
 	FParse::Value(FCommandLine::Get(), TEXT("SimMenuTest="), TestFolder);
@@ -118,6 +119,7 @@ bool ASimMissionMenuHUD::Select(const FString& MissionId, const FString& Vehicle
 			{
 				Selected = M;
 				StartIndex = I;
+				ResetTime();
 				return true;
 			}
 		}
@@ -125,7 +127,26 @@ bool ASimMissionMenuHUD::Select(const FString& MissionId, const FString& Vehicle
 	return false;
 }
 
-FString ASimMissionMenuHUD::OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial)
+FString ASimMissionMenuHUD::TimeOptionsFor(const FSimMission& Mission, int32 TimeIndex, float Hour)
+{
+	if (Mission.bTimeFixed || !Mission.TimeOptions.IsValidIndex(TimeIndex))
+	{
+		return FString();
+	}
+	const FString& Preset = Mission.TimeOptions[TimeIndex];
+	if (Preset == TEXT("mission"))
+	{
+		return FString();
+	}
+	if (Preset == TEXT("hour"))
+	{
+		return FString::Printf(TEXT("?SimTime=hour?SimHour=%.2f"), Hour);
+	}
+	return FString::Printf(TEXT("?SimTime=%s"), *Preset);
+}
+
+FString ASimMissionMenuHUD::OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial,
+	const FString& TimeOptions)
 {
 	FString Options = FString::Printf(TEXT("SimMission=%s"), *MissionId);
 	if (!VehicleId.IsEmpty())
@@ -140,7 +161,7 @@ FString ASimMissionMenuHUD::OptionsFor(const FString& MissionId, const FString& 
 	{
 		Options += FString::Printf(TEXT("?SimTutorial=%s"), *Tutorial);
 	}
-	return Options;
+	return Options + TimeOptions;
 }
 
 void ASimMissionMenuHUD::StartSelected()
@@ -154,7 +175,8 @@ void ASimMissionMenuHUD::StartSelected()
 	{
 		return;
 	}
-	const FString Options = OptionsFor(Missions[Selected].Id, Choices[StartIndex].Vehicle, Choices[StartIndex].Seat, Missions[Selected].Tutorial);
+	const FString Options = OptionsFor(Missions[Selected].Id, Choices[StartIndex].Vehicle, Choices[StartIndex].Seat, Missions[Selected].Tutorial,
+		TimeOptionsFor(Missions[Selected], TimeIndex, TimeHour));
 	// A mission on a map of its own (missions.json "level") opens that level; the rest reopen this one.
 	const FString Level = Missions[Selected].Level.IsEmpty() ? UGameplayStatics::GetCurrentLevelName(this, true) : Missions[Selected].Level;
 	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: starting %s in %s (%s)"), *Missions[Selected].Id, *Level, *Options);
@@ -176,6 +198,43 @@ void ASimMissionMenuHUD::MoveSelection(int32 Step)
 	}
 	Selected = (Selected + Step + Missions.Num()) % Missions.Num();
 	StartIndex = DefaultStart(Missions[Selected]);
+	ResetTime();
+}
+
+void ASimMissionMenuHUD::ResetTime()
+{
+	TimeIndex = 0;
+	TimeHour = Missions.IsValidIndex(Selected) ? Missions[Selected].StartHour : 10.5f;
+}
+
+void ASimMissionMenuHUD::CycleTime(int32 Step)
+{
+	if (!Missions.IsValidIndex(Selected))
+	{
+		return;
+	}
+	const int32 Count = Missions[Selected].bTimeFixed ? 1 : FMath::Max(1, Missions[Selected].TimeOptions.Num());
+	TimeIndex = (TimeIndex + Step + Count) % Count;
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: the time of day %s"), *TimeLabel());
+}
+
+FString ASimMissionMenuHUD::TimeLabel() const
+{
+	if (!Missions.IsValidIndex(Selected))
+	{
+		return FString();
+	}
+	const FSimMission& M = Missions[Selected];
+	if (M.bTimeFixed || !M.TimeLabels.IsValidIndex(TimeIndex))
+	{
+		return (M.TimeLabels.Num() > 0 ? M.TimeLabels[0] : FString(TEXT("The mission's own"))) + TEXT(" (held by the mission)");
+	}
+	if (M.TimeOptions.IsValidIndex(TimeIndex) && M.TimeOptions[TimeIndex] == TEXT("hour"))
+	{
+		const int32 Minutes = FMath::RoundToInt(TimeHour * 60.0f) % (24 * 60);
+		return FString::Printf(TEXT("An hour: %02d:%02d  (, and . move it)"), Minutes / 60, Minutes % 60);
+	}
+	return M.TimeLabels[TimeIndex];
 }
 
 void ASimMissionMenuHUD::Tick(float DeltaSeconds)
@@ -230,6 +289,17 @@ void ASimMissionMenuHUD::HandleInput()
 	{
 		CycleHelper();
 	}
+	if (Pc->WasInputKeyJustPressed(EKeys::T))
+	{
+		CycleTime(Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift) ? -1 : 1);
+	}
+	const bool bHourChoice = !Missions[Selected].bTimeFixed && Missions[Selected].TimeOptions.IsValidIndex(TimeIndex) &&
+		Missions[Selected].TimeOptions[TimeIndex] == TEXT("hour");
+	if (bHourChoice && (Pc->WasInputKeyJustPressed(EKeys::Comma) || Pc->WasInputKeyJustPressed(EKeys::Period)))
+	{
+		TimeHour += Pc->WasInputKeyJustPressed(EKeys::Period) ? 0.5f : -0.5f;
+		TimeHour = FMath::Fmod(TimeHour + 24.0f, 24.0f);
+	}
 	// The air war: 1-4 a new campaign against that adversary, C continues the one under way.
 	const FKey CampaignKeys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four};
 	for (int32 I = 0; I < 4; ++I)
@@ -267,6 +337,11 @@ void ASimMissionMenuHUD::HandleInput()
 				CycleHelper();
 				return;
 			}
+			if (TimeBox.bIsValid && TimeBox.IsInside(At))
+			{
+				CycleTime(1);
+				return;
+			}
 			for (int32 I = 0; I < CampaignBoxes.Num(); ++I)
 			{
 				if (CampaignBoxes[I].bIsValid && CampaignBoxes[I].IsInside(At))
@@ -288,6 +363,7 @@ void ASimMissionMenuHUD::HandleInput()
 				{
 					Selected = I;
 					StartIndex = DefaultStart(Missions[Selected]);
+					ResetTime();
 				}
 			}
 		}
@@ -575,6 +651,19 @@ void ASimMissionMenuHUD::DrawHUD()
 	Y += 26.0f;
 	DrawText(TEXT("H turns it: the switch, wheel, order or report your seat's crewman would take next, lit in the cabin"), Dim, X, Y, Small);
 	Y += 30.0f;
+	// The time of day (roadmap R7): by the scenario's own sun at its place and date.
+	DrawText(TEXT("Time of day"), Amber, X, Y, Medium);
+	Y += 26.0f;
+	const FString TimeLine = M.bTimeFixed ? TimeLabel() : FString::Printf(TEXT("<  %s  >"), *TimeLabel());
+	float Tw = 0.0f;
+	float Th = 0.0f;
+	GetTextSize(TimeLine, Tw, Th, Medium);
+	TimeBox = M.bTimeFixed ? FBox2D(ForceInit) : FBox2D(FVector2D(X, Y - 2.0f), FVector2D(X + Tw, Y + Th + 2.0f));
+	DrawText(TimeLine, M.bTimeFixed ? Dim : Paper, X, Y, Medium);
+	Y += 26.0f;
+	DrawText(M.bTimeFixed ? FString(TEXT("This mission plays at its own time.")) : FString(TEXT("T turns it: the light, the TV, the night march and the sky all follow the sun")),
+		Dim, X, Y, Small);
+	Y += 30.0f;
 	const float Bw = 160.0f;
 	const float Bh = 34.0f;
 	StartBox = FBox2D(FVector2D(X, Y), FVector2D(X + Bw, Y + Bh));
@@ -584,7 +673,7 @@ void ASimMissionMenuHUD::DrawHUD()
 	const float BoxW = FMath::Min(420.0f, W * 0.3f);
 	DrawCampaignBox(W - Margin - BoxW, H - Margin - 200.0f, BoxW);
 
-	DrawText(TEXT("Up / Down a mission    H the helper    Enter choose who to play    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
+	DrawText(TEXT("Up / Down a mission    H the helper    T the time of day (, . the hour)    Enter choose who to play    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
 		Dim, Margin, H - Margin, Small);
 
 	if (bChoosingCrew)

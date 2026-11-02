@@ -11,6 +11,10 @@ class USceneComponent;
 class USkyAtmosphereComponent;
 class USkyLightComponent;
 class UVolumetricCloudComponent;
+namespace simcore
+{
+	struct SunPosition;
+}
 
 /**
  * The sky over a map level, from the sim's weather (simcore/weather.hpp: the scenario's "weather" preset) and the sun's
@@ -24,6 +28,11 @@ class UVolumetricCloudComponent;
  *   wind at its height. The volumetric cloud is the look; the cells are the truth.
  *
  * The sky reaches past any map: the atmosphere is the planet's, and the cloud covers the whole airspace.
+ *
+ * One sun (roadmap R7, simcore/light.hpp): with a scenario loaded, the sun is the scenario's own sky clock (its origin,
+ * "date", "utc_offset_h" and start hour, which the missions menu's time of day sets) at the sim's time, the same sun the
+ * TV, the battery's night and the visual range read. DayOfYear, LocalTimeHours and UtcOffsetHours are only the editor's
+ * fallback, for a level played without a scenario.
  */
 UCLASS()
 class SAM3D_API ASimSkyWeatherActor : public AActor
@@ -33,15 +42,15 @@ class SAM3D_API ASimSkyWeatherActor : public AActor
 public:
 	ASimSkyWeatherActor();
 
-	/** Day of the year (1-366; 288: 15 October). */
+	/** Day of the year (1-366; 288: 15 October). Editor fallback: a loaded scenario's sky clock wins. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "1", ClampMax = "366"))
 	int32 DayOfYear = 288;
 
-	/** Local time at the scenario's start, hours. The sky moves on with sim time. */
+	/** Local time at the start, hours; the sky moves on with sim time. Editor fallback: a loaded scenario's sky clock wins. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "0", ClampMax = "24"))
 	float LocalTimeHours = 10.5f;
 
-	/** Local time minus UTC (Central European Time: 1). */
+	/** Local time minus UTC (Central European Time: 1). Editor fallback: a loaded scenario's sky clock wins. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky")
 	float UtcOffsetHours = 1.0f;
 
@@ -63,6 +72,7 @@ public:
 private:
 	void ApplyWeather();
 	void UpdateSun();
+	void SetSunDirection(const simcore::SunPosition& S);
 	void BuildCloudCells();
 
 	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Sky")

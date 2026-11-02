@@ -788,6 +788,22 @@ struct SAM3D_API FSimMission
 
 	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
 	TArray<FSimMissionVehicle> Vehicles;
+
+	/** The mission holds its own time of day (missions.json "time": "fixed"; roadmap R7). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	bool bTimeFixed = false;
+
+	/** The time presets offered, in order (simcore::TimePresetName: mission, dawn, day, dusk, night, hour); the first is the mission's own. */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FString> TimeOptions;
+
+	/** The menu's words for each, by the scenario's sun ("Dusk 17:08"). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	TArray<FString> TimeLabels;
+
+	/** The local hour of the mission's own start (for the menu's hour choice). */
+	UPROPERTY(BlueprintReadOnly, Category = "SAM3D|Missions")
+	float StartHour = 10.5f;
 };
 
 /** What a lesson's step asks of the learner now (simcore::TutorialStatus::Phase). */
@@ -1707,6 +1723,14 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")
 	double GetSimTimeSeconds() const;
+
+	/** The session's sun now (roadmap R7, simcore/light.hpp): what the TV, the battery's night and the visual range read.
+	 *  False without a scenario. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Sim")
+	bool GetSunNow(double& ElevationDeg, double& AzimuthDeg, bool& bDaylight, float& NightShare) const;
+
+	/** The scenario's sky clock (its place, date, clock offset and start hour), for the sky actor to turn the same sun. */
+	bool GetSkyClock(simcore::SkyClock& Out) const;
 
 	/** The moment being drawn: sim time plus the fixed step's leftover in the accumulator (between two steps); the sim
 	 *  time itself when paused, finished or on a network client (which never steps). */

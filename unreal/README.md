@@ -92,6 +92,15 @@ director's ScenarioFile (set the director's **Mission Menu** to Always to see th
   description and where you start: the vehicle (the Osa or the PU-12M in the battery link) and the seat. The
   commander's seat is the game's "in command" half and any other seat "in the crew"; "outside" starts you outside the
   vehicle. Up/Down a mission, Left/Right where to start, Enter (or Start) to play, Q to quit.
+- **The time of day** (roadmap R7, `docs/LIGHT.md`): T (Shift+T back) turns the mission's own time, dawn, day, dusk,
+  night or an hour (`,` `.` by half an hour), labelled by the scenario's sun ("Dusk 17:08"); a mission whose entry holds
+  its time ("time": "fixed") shows it and offers nothing. The choice goes as `?SimTime=<preset>[?SimHour=<h>]`
+  (`ASimMissionMenuHUD::TimeOptionsFor`); `USimWorldSubsystem::LoadScenario` applies it (`simcore::ApplyTimeChoice`, both
+  halves of a battery link) and logs "Time of day: ...". `-SimTime=`/`-SimHour=` on the command line do the same, even
+  for a held mission (a developer's override); `-SimFxShotsNight` loads at night. `ASimSkyWeatherActor` turns its sun by
+  the scenario's sky clock (`GetSkyClock`, `GetSunNow`), its own DayOfYear/LocalTimeHours only an editor fallback; on a
+  level without it (OsaPractice) the director turns the level's atmosphere sun once a second if it is Movable, and logs
+  a warning if it is not (making it Movable is a level edit). A restart (R) reuses the URL, so the time chosen holds.
 - Starting reopens the level with `?SimMission=<id>[?SimVehicle=post][?SimSeat=<station>]`
   (`ASimMissionMenuHUD::OptionsFor`). The director plays `scenarios/<id>.json` and puts you in that seat
   (`ASimOsaVehicle::StartInSeat`: into the cabin, the seat taken from its NPC). A mission from the menu shows no

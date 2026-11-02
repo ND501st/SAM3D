@@ -472,7 +472,7 @@ namespace SimFxLogic
 
 	float NightShare(double SunElevationDeg)
 	{
-		return 1.0f - Smooth01(static_cast<float>((SunElevationDeg + 6.0) / 12.0));
+		return static_cast<float>(simcore::NightShare(SunElevationDeg));  // the simulation's own (simcore/light.hpp, R7)
 	}
 
 	FLinearColor TracerColourAt(const FLinearColor& Day, const FLinearColor& Night, double SunElevationDeg)

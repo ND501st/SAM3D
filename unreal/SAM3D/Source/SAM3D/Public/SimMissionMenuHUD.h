@@ -13,8 +13,10 @@
  * ASimScenarioDirector plays.
  *
  * Keys: Up/Down (W/S) a mission, Left/Right (A/D) where to start, H the helper (off, hints, on: docs/crew/14_HELPER.md,
- * kept in GameUserSettings.ini for every mission), Enter to choose who to play, Q to quit; a click picks a mission, turns
- * the helper or presses Start. Enter or Start opens the crew: every crewman of the mission's vehicles with his duties
+ * kept in GameUserSettings.ini for every mission), T (Shift+T back) the time of day and , . the hour in "An hour"
+ * (roadmap R7: the mission's own, dawn, day, dusk, night or an hour, by the scenario's own sun; a mission whose entry
+ * holds its time offers only its own: ?SimTime=<preset>[?SimHour=<h>]), Enter to choose who to play, Q to quit; a click
+ * picks a mission, turns the helper or the time of day, or presses Start. Enter or Start opens the crew: every crewman of the mission's vehicles with his duties
  * (Up/Down or 1-9 one, Enter or a second click plays him, Esc back to the missions).
  *
  * Scripted check: -SimMenuTest=<folder> photographs the menu (menu.png), then -SimMenuPick=<mission>:<vehicle>:<seat>
@@ -40,7 +42,12 @@ public:
 
 	/** The level options that start a mission in that vehicle and seat (seat "" = outside the vehicle), with its tutorial
 	 *  guide if it has one (?SimTutorial). */
-	static FString OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial = FString());
+	static FString OptionsFor(const FString& MissionId, const FString& VehicleId, const FString& SeatId, const FString& Tutorial = FString(),
+		const FString& TimeOptions = FString());
+
+	/** The time of day's level options for a mission (roadmap R7): "?SimTime=dusk", "?SimTime=hour?SimHour=17.50", or empty
+	 *  for the mission's own time and always for a mission that holds its time (the menu's hold). */
+	static FString TimeOptionsFor(const FSimMission& Mission, int32 TimeIndex, float Hour);
 
 	const TArray<FSimMission>& GetMissions() const { return Missions; }
 
@@ -84,6 +91,13 @@ private:
 	/** The helper's line (a click turns it). */
 	FBox2D HelperBox = FBox2D(ForceInit);
 	void CycleHelper();
+	/** The time of day: the index into the mission's TimeOptions, the hour for "hour", and where its line was drawn. */
+	int32 TimeIndex = 0;
+	float TimeHour = 10.5f;
+	FBox2D TimeBox = FBox2D(ForceInit);
+	void ResetTime();
+	void CycleTime(int32 Step);
+	FString TimeLabel() const;
 	/** The air war box: the four adversaries and "continue". */
 	TArray<FBox2D> CampaignBoxes;
 
