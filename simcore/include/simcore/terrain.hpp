@@ -22,6 +22,33 @@ public:
     // How high woods and buildings stand above the ground there (roadmap E9): what a line of sight and a radio path
     // must clear besides the ground, and what a low pilot climbs over. None on a bare terrain.
     virtual double ObstacleHeightAt(double /*east_m*/, double /*north_m*/) const { return 0.0; }
+    // Where woods and buildings stand as footprints of their own (a map's boxes, roadmap R6), the narrowest of them: a
+    // path looks at them no coarser (ObstaclesAlong) so it steps over none. 0: none (a bare terrain, or obstacles as a
+    // representative clutter height): the path's own samples alone.
+    virtual double ObstacleSpacingM() const { return 0.0; }
+    // The top of what stands at (east, north), above sea level (the ground plus ObstacleHeightAt); kNoObstacleTop where
+    // nothing does. A terrain that has its tops at hand saves the ground's lookup.
+    virtual double ObstacleTopAt(double east_m, double north_m) const {
+        const double o = ObstacleHeightAt(east_m, north_m);
+        return o > 0.0 ? HeightAt(east_m, north_m) + o : kNoObstacleTop;
+    }
+    // No footprint over the ground segment from (e0, n0) to (e1, n1) stands higher than this (above sea level; a bound,
+    // not the top itself; kNoObstacleTop: none there), and `spacing_m` is the narrowest of those footprints: the spacing
+    // the segment is looked at at. A terrain may bound more loosely when the bound is already under `below_m` (nothing
+    // there reaches the ray). Only asked where ObstacleSpacingM() > 0.
+    virtual double ObstacleTopBoundM(double /*e0*/, double /*n0*/, double /*e1*/, double /*n1*/, double /*below_m*/,
+                                     double& spacing_m) const {
+        spacing_m = ObstacleSpacingM();
+        return spacing_m > 0.0 ? 1e300 : kNoObstacleTop;
+    }
+
+    // No footprint anywhere stands higher than this (above sea level): a path whose ray runs higher asks nothing more.
+    virtual double ObstacleTopCeilingM() const { return 1e300; }
+    // No woods or building anywhere stands higher than this over the ground under it (ObstacleHeightAt never more): a
+    // path's sample whose ray runs higher over the ground there does not look the obstacle up.
+    virtual double ObstacleTallestM() const { return 1e300; }
+
+    static constexpr double kNoObstacleTop = -1e300;
 };
 
 // A path's profile (radar.hpp HasLineOfSight, em/propagation.hpp AnalysePath) carries the woods and buildings as
@@ -29,6 +56,30 @@ public:
 // vehicle at a wood's edge, in a clearing or in a street is not hidden by the cell it stands in (a game value,
 // docs/EM_ARCHITECTURE.md section 27).
 constexpr double kObstacleSkipM = 60.0;
+
+// The woods and buildings over one stretch of a straight path, between two of its samples, at the terrain's own spacing
+// (Terrain::ObstacleSpacingM, roadmap R6): a narrow building between two samples is not stepped over. The path starts at
+// (ax, ay) and runs along the unit direction (ux, uy) for total_m; the stretch is [s0, s1] of it, less skip_m at either
+// end of the path (kObstacleSkipM). Looked at only where something there may stand higher than `below_m` (above sea
+// level: Terrain::ObstacleTopBoundM, which gives the spacing too), so open ground, and a ray high over the roofs, cost
+// one bound. `visit(s, top_m)` is called for each point where something stands (s along the path, its top above sea
+// level, without the Earth's bulge) and returns false to stop. Nothing is done on a terrain with no footprints (spacing 0).
+template <class Visit>
+inline void ObstaclesAlong(const Terrain& t, double ax, double ay, double ux, double uy, double total_m, double s0, double s1,
+                           double below_m, double skip_m, Visit visit) {
+    if (t.ObstacleSpacingM() <= 0.0) return;
+    const double lo = s0 > skip_m ? s0 : skip_m;
+    const double hi = s1 < total_m - skip_m ? s1 : total_m - skip_m;
+    if (hi < lo || below_m > t.ObstacleTopCeilingM()) return;
+    double spacing = 0.0;
+    if (t.ObstacleTopBoundM(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below_m, spacing) < below_m || spacing <= 0.0) return;
+    const int steps = static_cast<int>(std::ceil((hi - lo) / spacing));
+    for (int k = 0; k <= steps; ++k) {
+        const double s = steps > 0 ? lo + (hi - lo) * static_cast<double>(k) / steps : lo;
+        const double top = t.ObstacleTopAt(ax + ux * s, ay + uy * s);
+        if (top > Terrain::kNoObstacleTop && !visit(s, top)) return;
+    }
+}
 
 // Flat terrain at a constant height.
 class FlatTerrain final : public Terrain {

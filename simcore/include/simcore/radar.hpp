@@ -9,6 +9,7 @@
 // and must be calibrated from cited public sources.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 #include "simcore/geo.hpp"
@@ -75,8 +76,10 @@ inline double RadarHorizonRange(double radar_height_m, double target_height_m,
 // Line of sight between two ENU points over terrain, using the classic path-profile
 // method: a straight ray over an Earth "bulge" of s(D-s)/(2kR). Endpoint heights are
 // altitudes above the ellipsoid (use LocalFrame::AltitudeOf). Small-area approximation,
-// fine for ranges below ~300 km. Woods and buildings (Terrain::ObstacleHeightAt) stand on
-// the profile beyond `obstacle_skip_m` from either end (roadmap E9, terrain.hpp kObstacleSkipM).
+// fine for ranges below ~300 km. Woods and buildings (Terrain::ObstacleTopAt) stand on
+// the profile beyond `obstacle_skip_m` from either end (roadmap E9, terrain.hpp kObstacleSkipM); where the terrain has
+// them as footprints, between the samples too at its own spacing wherever the ray runs low enough to meet one
+// (ObstaclesAlong, roadmap R6), so a narrow building is neither stepped over nor widened to the sampling.
 inline bool HasLineOfSight(const Terrain& terrain, const Vec3& a_enu, double a_alt_m,
                            const Vec3& b_enu, double b_alt_m, double sample_spacing_m = 50.0,
                            double k = kStandardRefractionK, double clearance_m = 0.0,
@@ -88,17 +91,36 @@ inline bool HasLineOfSight(const Terrain& terrain, const Vec3& a_enu, double a_a
     const double re = k * wgs84::kMeanRadius;
     int samples = static_cast<int>(ground_dist / sample_spacing_m);
     if (samples < 2) samples = 2;
+    const double tallest = terrain.ObstacleTallestM();
     for (int i = 1; i < samples; ++i) {
         const double t = static_cast<double>(i) / samples;
         const double s = t * ground_dist;
         const double ray_alt = a_alt_m + (b_alt_m - a_alt_m) * t;
         const double bulge = s * (ground_dist - s) / (2.0 * re);
         const double x = a_enu.x + dx * t, y = a_enu.y + dy * t;
-        double ground = terrain.HeightAt(x, y) + bulge;
-        if (s > obstacle_skip_m && ground_dist - s > obstacle_skip_m) ground += terrain.ObstacleHeightAt(x, y);
-        if (ground + clearance_m >= ray_alt) return false;
+        double ground = terrain.HeightAt(x, y);
+        if (s > obstacle_skip_m && ground_dist - s > obstacle_skip_m && ground + tallest + bulge + clearance_m >= ray_alt) {
+            ground = std::max(ground, terrain.ObstacleTopAt(x, y));
+        }
+        if (ground + bulge + clearance_m >= ray_alt) return false;
     }
-    return true;
+    if (terrain.ObstacleSpacingM() <= 0.0) return true;
+    // The footprints between the samples: each stretch looked at where the ray over it runs lower than what may stand there.
+    const double ux = dx / ground_dist, uy = dy / ground_dist;
+    const auto ray_at = [&](double s) { return a_alt_m + (b_alt_m - a_alt_m) * (s / ground_dist); };
+    const auto bulge_at = [&](double s) { return s * (ground_dist - s) / (2.0 * re); };
+    bool blocked = false;
+    for (int i = 1; i <= samples && !blocked; ++i) {
+        const double s0 = ground_dist * static_cast<double>(i - 1) / samples, s1 = ground_dist * static_cast<double>(i) / samples;
+        const double half = 0.5 * ground_dist;
+        const double most_bulge = s0 <= half && half <= s1 ? bulge_at(half) : std::max(bulge_at(s0), bulge_at(s1));
+        const double below = std::min(ray_at(s0), ray_at(s1)) - most_bulge - clearance_m;
+        ObstaclesAlong(terrain, a_enu.x, a_enu.y, ux, uy, ground_dist, s0, s1, below, obstacle_skip_m, [&](double s, double top) {
+            blocked = top + bulge_at(s) + clearance_m >= ray_at(s);
+            return !blocked;
+        });
+    }
+    return !blocked;
 }
 
 struct DetectionResult {

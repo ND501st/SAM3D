@@ -305,6 +305,16 @@ private:
                 const double h = terrain.HeightAt(x, y) + terrain.ObstacleHeightAt(x, y);
                 if (h > ground) ground = h;
             }
+            // The buildings between those points, at the terrain's own spacing where one may top what he holds over
+            // already (ObstaclesAlong): a narrow block of flats ahead is not stepped over.
+            const double ux = a.velocity.x / vh, uy = a.velocity.y / vh;
+            for (int i = 1; i <= samples; ++i) {
+                ObstaclesAlong(terrain, a.position.x, a.position.y, ux, uy, reach, reach * (i - 1) / samples, reach * i / samples, ground,
+                               0.0, [&](double, double top) {
+                                   if (top > ground) ground = top;
+                                   return true;
+                               });
+            }
         }
         const double alt = frame.AltitudeOf(a.position);
         const double want = ground + WantedAglM(a);

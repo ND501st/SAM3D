@@ -24,6 +24,7 @@
 // band. PathCache keeps those per pair of platforms until either end moves.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include <cstddef>
@@ -152,6 +153,13 @@ struct PathGeometry {
 // `max_samples` (the profile still catches ridges wider than the spacing).
 // Woods and buildings (Terrain::ObstacleHeightAt, roadmap E9) are added to the profile as ITU-R P.1812 adds its
 // representative clutter heights (itu_r_p1812), beyond `obstacle_skip_m` from either end (terrain.hpp kObstacleSkipM).
+// Where the terrain has them as footprints (roadmap R6), each stretch between two samples is looked at at the terrain's
+// own spacing wherever the ray runs within kFootprintNearRayM of what may stand there (ObstaclesAlong), and the highest
+// point found over the ray joins the profile: a narrow building is neither stepped over nor widened to the sampling.
+constexpr double kFootprintNearRayM = 10.0;  // a game value: below this a footprint matters to neither the sight nor the edge
+// Below the ray by more than this, woods and buildings make no diffraction edge down to 30 MHz (v under -0.78 for a
+// 10 m wavelength midway along 10 km): the profile does not look them up there.
+constexpr double kObstacleFarBelowRayM = 100.0;
 inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, double a_alt_m, const Vec3& b_enu,
                                 double b_alt_m, double spacing_m = 100.0, int max_samples = 600,
                                 double k = kStandardRefractionK, double obstacle_skip_m = kObstacleSkipM) {
@@ -168,23 +176,53 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     if (n < 2) n = 2;
     g.samples = n - 1;
     const double inv_n = 1.0 / static_cast<double>(n);
-    int worst_i = -1;
-    // The profile's height at sample i: the ground, the woods and buildings on it away from the ends, the Earth's bulge.
-    auto profile_at = [&](int i) {
-        const double t = static_cast<double>(i) * inv_n;
-        const double s = t * g.ground_range_m;
-        const double x = a_enu.x + dx * t, y = a_enu.y + dy * t;
-        double h = terrain.HeightAt(x, y) + s * (g.ground_range_m - s) / (2.0 * re);
-        if (s > obstacle_skip_m && g.ground_range_m - s > obstacle_skip_m) h += terrain.ObstacleHeightAt(x, y);
-        return h;
+    const double range = g.ground_range_m;
+    const auto bulge_at = [&](double s) { return s * (range - s) / (2.0 * re); };
+    const auto ray_at = [&](double s) { return a_alt_m + dz * (s / range); };
+    // The profile, ends excluded: (distance along, the ground with the woods and buildings on it away from the ends
+    // and the Earth's bulge), in order.
+    struct Point {
+        double s, h;
     };
-    for (int i = 1; i < n; ++i) {
-        const double t = static_cast<double>(i) * inv_n;
-        const double s = t * g.ground_range_m;
-        const double rest = g.ground_range_m - s;
-        const double ray_alt = a_alt_m + dz * t;
-        const double ground = profile_at(i);
-        const double h = ground - ray_alt;  // > 0: the ground is above the ray
+    std::vector<Point> profile;
+    profile.reserve(static_cast<std::size_t>(n));
+    const bool footprints = terrain.ObstacleSpacingM() > 0.0;
+    const double tallest = terrain.ObstacleTallestM();
+    const double ux = dx / range, uy = dy / range;
+    for (int i = 1; i <= n; ++i) {
+        const double s = static_cast<double>(i) * inv_n * range;
+        if (footprints) {  // the stretch up to this sample: its highest footprint over the ray, if one comes near it
+            const double s0 = static_cast<double>(i - 1) * inv_n * range;
+            const double half = 0.5 * range;
+            const double most_bulge = s0 <= half && half <= s ? bulge_at(half) : std::max(bulge_at(s0), bulge_at(s));
+            const double below = std::min(ray_at(s0), ray_at(s)) - most_bulge - kFootprintNearRayM;
+            Point worst{0.0, 0.0};
+            double worst_over = -1e300;
+            ObstaclesAlong(terrain, a_enu.x, a_enu.y, ux, uy, range, s0, s, below, obstacle_skip_m, [&](double si, double top) {
+                const double h = top + bulge_at(si);
+                if (h - ray_at(si) > worst_over && si > 0.0 && si < range) {
+                    worst_over = h - ray_at(si);
+                    worst = Point{si, h};
+                }
+                return true;
+            });
+            if (worst_over > -1e299) profile.push_back(worst);
+        }
+        if (i == n) break;
+        const double x = a_enu.x + ux * s, y = a_enu.y + uy * s;
+        double h = terrain.HeightAt(x, y);
+        // What stands here, unless the ray runs so high over it that it could make no edge (kObstacleFarBelowRayM).
+        if (s > obstacle_skip_m && range - s > obstacle_skip_m && h + tallest + bulge_at(s) >= ray_at(s) - kObstacleFarBelowRayM) {
+            h = std::max(h, terrain.ObstacleTopAt(x, y));
+        }
+        profile.push_back(Point{s, h + bulge_at(s)});
+    }
+    const int count = static_cast<int>(profile.size());
+    int worst_i = -1;
+    for (int i = 0; i < count; ++i) {
+        const double s = profile[static_cast<std::size_t>(i)].s;
+        const double rest = range - s;
+        const double h = profile[static_cast<std::size_t>(i)].h - ray_at(s);  // > 0: the ground is above the ray
         if (-h < g.min_clearance_m) g.min_clearance_m = -h;
         if (h >= 0.0) g.line_of_sight = false;
         const double vg = h * std::sqrt(1.0 / s + 1.0 / rest);
@@ -195,10 +233,10 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     }
     // Deygout: if the main edge blocks the ray, look for the worst edge on each side of it against the line to its top.
     // The profile with the Earth's bulge added is used: straight lines stay straight in it, so the main ray and every
-    // sub-path's ray are lines in these coordinates. (Recomputed here, only for blocked paths.)
-    if (worst_i > 0 && g.worst_v_geometry >= 0.0) {
-        auto pos = [&](int i) { return static_cast<double>(i) * inv_n * g.ground_range_m; };
-        auto ground_at = [&](int i) { return profile_at(i); };
+    // sub-path's ray are lines in these coordinates.
+    if (worst_i >= 0 && g.worst_v_geometry >= 0.0) {
+        auto pos = [&](int i) { return profile[static_cast<std::size_t>(i)].s; };
+        auto ground_at = [&](int i) { return profile[static_cast<std::size_t>(i)].h; };
         const double sm = pos(worst_i);
         const double em = ground_at(worst_i);
         // A sub-edge must be a crest of its own, with a valley of at least kValleyM between it and the main edge:
@@ -208,14 +246,14 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
             const bool before = side == 0;
             const double s0 = before ? 0.0 : sm;
             const double e0 = before ? a_alt_m : em;
-            const double s1 = before ? sm : g.ground_range_m;
+            const double s1 = before ? sm : range;
             const double e1 = before ? em : b_alt_m;
             const double len = s1 - s0;
             if (len < 1.0) continue;
             double low = 1e18;  // lowest ground between the candidate and the main edge
             double& slot = before ? g.sub_v_geometry_a : g.sub_v_geometry_b;
             const int step = before ? -1 : 1;
-            for (int i = worst_i + step; i >= 1 && i < n; i += step) {
+            for (int i = worst_i + step; i >= 0 && i < count; i += step) {
                 const double ground_here = ground_at(i);
                 const double lower_of_crests = ground_here < em ? ground_here : em;
                 if (low < lower_of_crests - kValleyM) {

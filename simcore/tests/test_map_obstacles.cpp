@@ -285,3 +285,130 @@ SC_TEST("obstacles: a terrain-following pilot holds his height over the forest's
         SC_EXPECT_NEAR(over, 30.0, 1.0);
     }
 }
+
+namespace {
+
+// Flat ground with one box standing on it as a footprint (terrain.hpp's footprint interface, as MapTerrain gives the
+// map's boxes): 12 m wide across east, 30 m long along north, 20 m tall, centred at (east, north) = (0, 0). Placeholder
+// numbers.
+class OneBoxTerrain final : public Terrain {
+public:
+    static constexpr double kHalfE = 6.0, kHalfN = 15.0, kTop = 20.0;
+    double HeightAt(double, double) const override { return 0.0; }
+    double ObstacleHeightAt(double e, double n) const override { return Holds(e, n) ? kTop : 0.0; }
+    double ObstacleSpacingM() const override { return 2.0 * kHalfE; }
+    double ObstacleTopAt(double e, double n) const override { return Holds(e, n) ? kTop : kNoObstacleTop; }
+    double ObstacleTopBoundM(double e0, double n0, double e1, double n1, double, double& spacing_m) const override {
+        spacing_m = 2.0 * kHalfE;
+        const bool apart = std::max(e0, e1) < -kHalfE || std::min(e0, e1) > kHalfE || std::max(n0, n1) < -kHalfN || std::min(n0, n1) > kHalfN;
+        return apart ? kNoObstacleTop : kTop;
+    }
+
+private:
+    static bool Holds(double e, double n) { return std::fabs(e) <= kHalfE && std::fabs(n) <= kHalfN; }
+};
+
+// The ground alone of a terrain (its woods and buildings left out).
+class GroundOnly final : public Terrain {
+public:
+    explicit GroundOnly(const Terrain& t) : t_(t) {}
+    double HeightAt(double e, double n) const override { return t_.HeightAt(e, n); }
+
+private:
+    const Terrain& t_;
+};
+
+}  // namespace
+
+// Roadmap R6's review: a box masks no wider than it stands. Before, the obstacle grid stamped every node within half a
+// cell of a footprint and was sampled between its nodes, so a building masked about 12 m wider on each side; and a path
+// sampled every 50-100 m could step over a narrow one. Now a path looks the footprints up between its samples at their
+// own spacing (terrain.hpp ObstaclesAlong).
+SC_TEST("obstacles: a 12 m-wide, 20 m-tall box blocks a ray exactly where it stands, at any sampling; past its corner is clear") {
+    const OneBoxTerrain box;
+    for (const double spacing : {50.0, 100.0, 400.0}) {
+        // Across it from west to east, 10 m up, 0.5 m inside and outside its north end; no sample of the path's own
+        // spacing falls on it (the ends 1013 m west and 987 m east of it).
+        const auto los = [&](double n, double up) {
+            return HasLineOfSight(box, Vec3{-1013.0, n, 0.0}, up, Vec3{987.0, n, 0.0}, up, spacing);
+        };
+        const auto path = [&](double n, double up) {
+            return em::AnalysePath(box, Vec3{-1013.0, n, 0.0}, up, Vec3{987.0, n, 0.0}, up, spacing).line_of_sight;
+        };
+        SC_EXPECT(!los(0.0, 10.0) && !los(14.5, 10.0) && los(15.5, 10.0) && los(-15.5, 10.0));
+        SC_EXPECT(!path(14.5, 10.0) && path(15.5, 10.0));
+        // Over its top: the bulge 1 km in is 0.06 m at k 4/3, so a ray 0.5 m over the roof is clear and 0.5 m under is not.
+        SC_EXPECT(!los(0.0, 19.5) && los(0.0, 20.5));
+        // Diagonally past its north-east corner, 1 m clear of it (the ray's nearest point to the corner); and cutting the
+        // corner 8 m deep (16 m through it: a cut shorter than the footprint's spacing may be stepped over).
+        const double c = std::sqrt(0.5);
+        const auto diagonal = [&](double off) {
+            const double pe = 6.0 + off * c, pn = 15.0 + off * c;  // the ray's nearest point to the corner
+            return HasLineOfSight(box, Vec3{pe - 700.0 * c, pn + 700.0 * c, 0.0}, 10.0, Vec3{pe + 700.0 * c, pn - 700.0 * c, 0.0}, 10.0, spacing);
+        };
+        SC_EXPECT(diagonal(1.0) && !diagonal(-8.0));
+    }
+}
+
+SC_TEST("obstacles: the map's buildings mask exactly their footprints, in the map proper and in a detail area") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    const MapDef& d = m->Def();
+    const MapTerrain ground(m, d.origin);
+    const Terrain& t = ground;
+    const GroundOnly bare(t);
+    // In each of the map proper and the capital's detail area, the house or block of flats furthest from any other opaque
+    // box, among those standing over level ground.
+    for (const bool detail : {false, true}) {
+        const MapBox* pick = nullptr;
+        double pick_clear = 0.0;
+        std::vector<const MapBox*> opaque;
+        for (const MapBox& b : m->Layout().boxes) {
+            if (b.part != MapPart::Marsh && b.part != MapPart::Pad && b.part != MapPart::Runway && b.part != MapPart::Mast &&
+                b.part != MapPart::Chimney && b.part != MapPart::Tower && b.part != MapPart::Launcher && b.part != MapPart::Tent) {
+                opaque.push_back(&b);
+            }
+        }
+        for (const MapBox* b : opaque) {
+            if (b->part != MapPart::House && b->part != MapPart::Flats) continue;
+            if (detail ? !d.InDetail(b->east_m, b->north_m) || d.InCore(b->east_m, b->north_m) : !d.InCore(b->east_m, b->north_m)) continue;
+            double clear = 1e18;
+            for (const MapBox* o : opaque) {
+                if (o == b) continue;
+                const double r = std::hypot(o->east_m - b->east_m, o->north_m - b->north_m) - 0.5 * std::hypot(o->length_m, o->width_m);
+                clear = std::min(clear, r);
+                if (clear < pick_clear) break;
+            }
+            if (clear > pick_clear) {
+                pick_clear = clear;
+                pick = b;
+            }
+        }
+        SC_EXPECT(pick != nullptr && pick_clear > 150.0);
+        if (pick == nullptr || pick_clear <= 150.0) continue;
+        const MapBox& b = *pick;
+        const double top = b.base_m + b.height_m;
+        const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
+        // A ray across its width (along its "across" axis), 3 m under its roof, `along` metres from its middle along its length.
+        const double reach = std::min(140.0, pick_clear - 5.0);
+        const auto ray = [&](double along, double up_from_top, double spacing) {
+            const double pe = b.east_m + along * sh, pn = b.north_m + along * ch;  // on the box's length axis
+            const Vec3 a{pe - reach * ch, pn + reach * sh, 0.0}, z{pe + reach * ch, pn - reach * sh, 0.0};
+            SC_EXPECT(HasLineOfSight(bare, a, top + up_from_top, z, top + up_from_top, spacing));  // the ground is under it
+            return HasLineOfSight(t, a, top + up_from_top, z, top + up_from_top, spacing);
+        };
+        const double half = 0.5 * b.length_m;
+        std::printf("    %s: a %s %.1f x %.1f m, %.1f m tall, %.0f m clear of the rest\n", detail ? "the capital" : "the map proper",
+                    MapPartName(b.part), b.length_m, b.width_m, b.height_m, pick_clear);
+        for (const double spacing : {25.0, 100.0}) {
+            SC_EXPECT(!ray(0.0, -3.0, spacing));
+            SC_EXPECT(!ray(half - 0.5, -3.0, spacing) && !ray(-(half - 0.5), -3.0, spacing));
+            SC_EXPECT(ray(half + 0.5, -3.0, spacing) && ray(-(half + 0.5), -3.0, spacing));  // 0.5 m past its end: clear
+            SC_EXPECT(ray(0.0, 0.5, spacing));                                                // 0.5 m over its roof: clear
+        }
+        // The obstacle as a point: the box's own height inside it, none 0.5 m outside its side.
+        const double out_e = b.east_m + (0.5 * b.width_m + 0.5) * ch, out_n = b.north_m - (0.5 * b.width_m + 0.5) * sh;
+        SC_EXPECT_NEAR(m->ObstacleHeight(b.east_m, b.north_m), top - m->GroundHeight(b.east_m, b.north_m), 1e-6);
+        SC_EXPECT(m->ObstacleHeight(out_e, out_n) == 0.0);
+    }
+}

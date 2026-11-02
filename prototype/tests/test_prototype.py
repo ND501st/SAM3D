@@ -10,9 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from samproto import (AcmiWriter, Aircraft, GeoPoint, LocalFrame, MissileParams, RadarParams, Vec3,  # noqa: E402
                       World, detection_range, evaluate_detection, flat, radar_horizon, snr_db,
                       standard_atmosphere)
+from samproto import em  # noqa: E402
 from samproto.engagement import closest_approach, pn_accel  # noqa: E402
 from samproto.geo import ecef_to_geodetic, geodetic_to_ecef  # noqa: E402
-from samproto.radar import beam_shape_loss_db, has_line_of_sight  # noqa: E402
+from samproto.radar import Footprints, beam_shape_loss_db, has_line_of_sight  # noqa: E402
 from samproto.vec import G0, azimuth_of, elevation_of  # noqa: E402
 
 
@@ -129,3 +130,30 @@ def test_line_of_sight_over_woods():
     around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
     assert has_line_of_sight(flat(), Vec3(0, 0, 2), 2.0, Vec3(2000, 0, 300), 300.0, 10.0, obstacle=around)
     assert not has_line_of_sight(flat(), Vec3(0, 0, 2), 2.0, Vec3(2000, 0, 300), 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0)
+
+
+class _OneBox(Footprints):
+    """Mirror of test_map_obstacles.cpp's OneBoxTerrain: 12 m across east, 30 m along north, 20 m tall, at (0, 0)."""
+    spacing_m = 12.0
+
+    def top_at(self, e, n):
+        return 20.0 if abs(e) <= 6.0 and abs(n) <= 15.0 else None
+
+    def top_bound(self, e0, n0, e1, n1, below):
+        apart = max(e0, e1) < -6.0 or min(e0, e1) > 6.0 or max(n0, n1) < -15.0 or min(n0, n1) > 15.0
+        return (None if apart else 20.0), 12.0
+
+
+def test_a_narrow_box_blocks_exactly_where_it_stands():
+    # Mirror of test_map_obstacles.cpp (roadmap R6): no sample of the path falls on the box, yet it blocks 0.5 m inside
+    # its end and not 0.5 m outside, under its roof and not over it.
+    box = _OneBox()
+    for spacing in (50.0, 100.0, 400.0):
+        def los(n, up):
+            return has_line_of_sight(flat(), Vec3(-1013, n, 0), up, Vec3(987, n, 0), up, spacing, footprints=box)
+        assert not los(0.0, 10.0) and not los(14.5, 10.0) and los(15.5, 10.0) and los(-15.5, 10.0)
+        assert not los(0.0, 19.5) and los(0.0, 20.5)
+        assert not em.analyse_path(flat(), -1013, 14.5, 10.0, 987, 14.5, 10.0, spacing, footprints=box).line_of_sight
+        assert em.analyse_path(flat(), -1013, 15.5, 10.0, 987, 15.5, 10.0, spacing, footprints=box).line_of_sight
+    # Without the footprints the samples step over it.
+    assert has_line_of_sight(flat(), Vec3(-1013, 0, 0), 10.0, Vec3(987, 0, 0), 10.0, 50.0)

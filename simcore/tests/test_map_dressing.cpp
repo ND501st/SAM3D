@@ -248,7 +248,7 @@ SC_TEST("map dressing: no wood's mass tops what blocks a sight line, in the map 
             const double e = c.east_m + p[0] * sh + p[1] * ch, n = c.north_m + p[0] * ch - p[1] * sh;
             const double gap = top - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
             worst = std::max(worst, gap);
-            short_of = short_of || gap > 0.3;  // the trees' allowance: the core's grid is sampled between its nodes
+            short_of = short_of || gap > 0.3;  // the trees' allowance
         }
         over += short_of ? 1 : 0;
     }

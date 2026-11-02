@@ -670,16 +670,81 @@ public:
         return g != nullptr ? g->SampleTri(e, n) : Analytic(e, n);
     }
 
-    // How high woods and buildings stand above the ground (roadmap E9): a detail area's grid at its finer spacing, the
-    // map proper's, and beyond them the far ground's woods (each block's top) and, in the far ground's towns the map
-    // does not lay out, a representative clutter height (MapClutterDef).
+    // How high woods and buildings stand above the ground (roadmap E9): the tallest box whose footprint holds (east,
+    // north), as it is laid (roadmap R6: no wider; a building's edge is its edge), anywhere on the map; beyond the map
+    // proper and the detail areas where no box stands, in the far ground's towns the map does not lay out, a
+    // representative clutter height (MapClutterDef).
     double ObstacleHeight(double e, double n) const {
-        for (const MapGrid& g : detail_obstacles_) {
-            if (g.Covers(e, n)) return g.Sample(e, n);
-        }
-        if (obstacles_.Covers(e, n)) return obstacles_.Sample(e, n);
-        return FarObstacle(e, n);
+        const double top = ObstacleTop(e, n);
+        return top > Terrain::kNoObstacleTop ? std::max(0.0, top - GroundHeight(e, n)) : 0.0;
     }
+    // The top of what stands at (east, north), above sea level (Terrain::kNoObstacleTop: nothing).
+    double ObstacleTop(double e, double n) const {
+        double top = Terrain::kNoObstacleTop;
+        const FootCells* cells = CellsAt(e, n);
+        if (cells != nullptr) {
+            const std::size_t i = cells->Cell(e, n);
+            for (std::uint32_t k = cells->first[i]; k < cells->first[i + 1]; ++k) {
+                const Foot& f = feet_[cells->feet[k]];
+                if (f.top > top && f.Holds(e, n)) top = f.top;
+            }
+        } else {
+            const auto it = loose_.find(CellKey(e, n, kLooseCellM));
+            if (it != loose_.end()) {
+                for (std::uint32_t k : it->second) {
+                    const Foot& f = feet_[k];
+                    if (f.top > top && f.Holds(e, n)) top = f.top;
+                }
+            }
+        }
+        if (top > Terrain::kNoObstacleTop) return top;
+        const double clutter = cells == nullptr ? Clutter(e, n) : 0.0;
+        return clutter > 0.0 ? GroundHeight(e, n) + clutter : Terrain::kNoObstacleTop;
+    }
+    // No box over the ground segment from (e0, n0) to (e1, n1) stands higher than this (above sea level;
+    // Terrain::kNoObstacleTop: none there), and `spacing_m` is the narrowest of those boxes' sides (no less than
+    // kFootSpacingFloorM): what a path looks at them at (Terrain::ObstacleTopBoundM). The bound is the tallest top in the
+    // 500 m blocks the segment's bounds reach and, when that is not already under `below_m` and the segment is short,
+    // in its finer cells. The clutter of the towns not laid out is not a footprint: a path's own samples carry it.
+    double ObstacleTopBound(double e0, double n0, double e1, double n1, double below_m, double& spacing_m) const {
+        spacing_m = 0.0;
+        const double w = std::min(e0, e1), ea = std::max(e0, e1), s = std::min(n0, n1), nn = std::max(n0, n1);
+        double top = Terrain::kNoObstacleTop, side = 1e300;
+        if (blocks_.Overlaps(w, s, ea, nn)) blocks_.Bound(w, s, ea, nn, top, side);
+        if (top <= Terrain::kNoObstacleTop) return top;
+        if (top >= below_m && (ea - w) * (nn - s) <= kFineBoundAreaM2) {  // short: the finer cells' bound
+            double fine_top = Terrain::kNoObstacleTop, fine_side = 1e300;
+            for (const FootCells& c : rects_) {
+                if (c.Overlaps(w, s, ea, nn)) c.Bound(w, s, ea, nn, fine_top, fine_side);
+            }
+            // Some of it beyond every dense grid: the loose cells too.
+            if (CellsAt(w, s) == nullptr || CellsAt(w, nn) == nullptr || CellsAt(ea, s) == nullptr || CellsAt(ea, nn) == nullptr) {
+                for (long long y = CellIndex(s, kLooseCellM); y <= CellIndex(nn, kLooseCellM); ++y) {
+                    for (long long x = CellIndex(w, kLooseCellM); x <= CellIndex(ea, kLooseCellM); ++x) {
+                        const auto it = loose_.find(PairKey(x, y));
+                        if (it == loose_.end()) continue;
+                        for (std::uint32_t k : it->second) {
+                            fine_top = std::max(fine_top, feet_[k].top);
+                            fine_side = std::min(fine_side, feet_[k].side);
+                        }
+                    }
+                }
+            }
+            top = fine_top;
+            side = fine_side;
+        }
+        if (top > Terrain::kNoObstacleTop) spacing_m = side;
+        return top;
+    }
+    // The narrowest side of any box that blocks sight (no less than kFootSpacingFloorM; 0: none), and the tallest top
+    // of any (above sea level; Terrain::kNoObstacleTop: none).
+    double NarrowestObstacle() const { return narrowest_m_; }
+    double TallestObstacleTop() const { return tallest_top_m_; }
+    // How high anything stands over the ground under it at most: a box's top over the lowest of its corners and its
+    // middle with 5 m to spare, or the far ground's towns' clutter.
+    double TallestObstacle() const { return tallest_m_; }
+    // Below this a wall is not looked at finer (a revetment's 2.5 m bank): a game value.
+    static constexpr double kFootSpacingFloorM = 4.0;
 
     // How far a site keeps the map's buildings and woods off its centre (its levelled ground reaches as far, but for an
     // airfield's and a town's sites).
@@ -745,22 +810,67 @@ private:
         return h;
     }
 
-    // Beyond the map proper and the detail areas: whatever the map lays out there (the 100 m wood blocks of forests and
-    // copses running out past the core, the towns laid beyond it: the tallest top over each 50 m cell), the far ground's
-    // woods (the block's top over the ground here), then the clutter of the far ground's towns the map does not lay out.
-    // A top is kept absolute, so the ground plus the obstacle is never below anything drawn there.
-    double FarObstacle(double e, double n) const {
-        double top = -1e300;
-        if (!laid_tops_.empty()) {
-            const auto it = laid_tops_.find(LaidKey(LaidCell(e), LaidCell(n)));
-            if (it != laid_tops_.end()) top = it->second;
+    // A box that blocks sight as the paths look it up (roadmap R6): its footprint (the turned rectangle, or the round
+    // part's circle), its top above sea level, its narrowest side.
+    struct Foot {
+        double e = 0.0, n = 0.0, sin_h = 0.0, cos_h = 1.0, half_l = 0.0, half_w = 0.0, top = 0.0, side = 0.0;
+        bool round = false;
+        bool Holds(double pe, double pn) const {
+            const double de = pe - e, dn = pn - n;
+            if (round) return de * de + dn * dn <= half_l * half_l;
+            return std::fabs(de * sin_h + dn * cos_h) <= half_l && std::fabs(de * cos_h - dn * sin_h) <= half_w;
         }
-        if (!far_canopy_.empty()) {
-            const double fb = def_.far_block_m;
-            const auto it = far_canopy_.find(CanopyKey((std::floor(e / fb) + 0.5) * fb, (std::floor(n / fb) + 0.5) * fb));
-            if (it != far_canopy_.end()) top = std::max(top, it->second);
+        // Its bounds' half extents east and north.
+        double HalfE() const { return round ? half_l : half_l * std::fabs(sin_h) + half_w * std::fabs(cos_h); }
+        double HalfN() const { return round ? half_l : half_l * std::fabs(cos_h) + half_w * std::fabs(sin_h); }
+    };
+    // Which footprints reach each cell of a rectangle (the map proper, a detail area), and per cell the tallest top and
+    // the narrowest side among them.
+    struct FootCells {
+        double west_m = 0.0, south_m = 0.0, cell_m = 50.0;
+        int cols = 0, rows = 0;
+        std::vector<std::uint32_t> first;  // cols * rows + 1: the cell's footprints are feet[first[i] .. first[i + 1])
+        std::vector<std::uint32_t> feet;
+        std::vector<double> top, side;
+        bool Covers(double e, double n) const {
+            return e >= west_m && n >= south_m && e < west_m + cell_m * cols && n < south_m + cell_m * rows;
         }
-        if (top > -1e299) return std::max(0.0, top - GroundHeight(e, n));
+        bool Overlaps(double w, double s, double e, double n) const {
+            return e >= west_m && n >= south_m && w < west_m + cell_m * cols && s < south_m + cell_m * rows;
+        }
+        int Col(double e) const { return std::max(0, std::min(cols - 1, static_cast<int>(std::floor((e - west_m) / cell_m)))); }
+        int Row(double n) const { return std::max(0, std::min(rows - 1, static_cast<int>(std::floor((n - south_m) / cell_m)))); }
+        std::size_t Cell(double e, double n) const {
+            return static_cast<std::size_t>(Row(n)) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(Col(e));
+        }
+        void Bound(double w, double s, double e, double n, double& top_m, double& side_m) const {
+            for (int r = Row(s); r <= Row(n); ++r) {
+                for (int c = Col(w); c <= Col(e); ++c) {
+                    const std::size_t i = static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(c);
+                    if (top[i] <= Terrain::kNoObstacleTop) continue;
+                    top_m = std::max(top_m, top[i]);
+                    side_m = std::min(side_m, side[i]);
+                }
+            }
+        }
+    };
+    // The dense cells holding (east, north): a detail area's, else the map proper's; null beyond them (the loose cells).
+    const FootCells* CellsAt(double e, double n) const {
+        for (const FootCells& c : rects_) {
+            if (c.Covers(e, n)) return &c;
+        }
+        return nullptr;
+    }
+    static long long CellIndex(double v, double cell_m) { return static_cast<long long>(std::floor(v / cell_m)); }
+    static long long PairKey(long long x, long long y) { return x * 2000003LL + y; }
+    static long long CellKey(double e, double n, double cell_m) { return PairKey(CellIndex(e, cell_m), CellIndex(n, cell_m)); }
+    static constexpr double kLooseCellM = 50.0;           // beyond the map proper and the detail areas
+    static constexpr double kBlockM = 500.0;              // the coarse bound's blocks
+    static constexpr double kFineBoundAreaM2 = 250000.0;  // a segment whose bounds are no larger is bounded by the finer cells
+
+    // Beyond the map proper and the detail areas where no box stands: the clutter of the far ground's towns the map does
+    // not lay out.
+    double Clutter(double e, double n) const {
         for (const ClutterTown& t : clutter_towns_) {
             if (std::fabs(e - t.e) >= t.r || std::fabs(n - t.n) >= t.r) continue;
             const double d = std::hypot(e - t.e, n - t.n);
@@ -768,9 +878,6 @@ private:
         }
         return 0.0;
     }
-    static constexpr double kLaidCellM = 50.0;
-    static long long LaidCell(double v) { return static_cast<long long>(std::floor(v / kLaidCellM)); }
-    static long long LaidKey(long long x, long long y) { return x * 2000003LL + y; }
     static long long CanopyKey(double e, double n) {
         return static_cast<long long>(std::floor(e / 10.0)) * 2000003LL + static_cast<long long>(std::floor(n / 10.0));
     }
@@ -1036,7 +1143,6 @@ private:
                                            if (b.part != MapPart::Canopy || def_.InCore(b.east_m, b.north_m)) return false;
                                            if (std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) >= clear) return false;
                                            canopy_cells_.erase(CanopyKey(b.east_m, b.north_m));
-                                           far_canopy_.erase(CanopyKey(b.east_m, b.north_m));
                                            return true;
                                        }),
                         boxes.end());
@@ -1422,8 +1528,6 @@ private:
         canopy_cells_.insert(key);
         const double u = noise::Value(seed, e, n, 300.0);
         Box(MapPart::Canopy, e, n, size, size, def_.canopy_min_m + (def_.canopy_max_m - def_.canopy_min_m) * u, 0.0, 1.0);
-        // The far ground's woods as obstacles (E9: what is drawn there blocks sight): each block's top by its centre.
-        if (size == def_.far_block_m && !def_.InCore(e, n)) far_canopy_[key] = layout_.boxes.back().base_m + layout_.boxes.back().height_m;
     }
 
     void LayWoods(noise::Stream& rng) {
@@ -1514,31 +1618,141 @@ private:
                  p == MapPart::Tower || p == MapPart::Launcher || p == MapPart::Tent);
     }
 
-    // The tallest thing standing over each node, above the ground there: every node whose cell the box's footprint
-    // reaches (within half a cell).
-    void Stamp(MapGrid& g, const MapBox& bx) const {
-        const double reach = 0.5 * std::hypot(bx.length_m, std::max(bx.width_m, MapPartIsRound(bx.part) ? bx.length_m : 0.0));
-        const double top = bx.base_m + bx.height_m;
-        const int c0 = std::max(0, static_cast<int>(std::floor((bx.east_m - reach - g.west_m) / g.spacing_m)));
-        const int c1 = std::min(g.cols - 1, static_cast<int>(std::ceil((bx.east_m + reach - g.west_m) / g.spacing_m)));
-        const int r0 = std::max(0, static_cast<int>(std::floor((bx.north_m - reach - g.south_m) / g.spacing_m)));
-        const int r1 = std::min(g.rows - 1, static_cast<int>(std::ceil((bx.north_m + reach - g.south_m) / g.spacing_m)));
-        const double half_cell = 0.5 * g.spacing_m;
+    // The tallest thing standing over each node, above the ground there: every node (the centre of its cell) inside the
+    // box's footprint (roadmap R6: no wider than the box). A picture of the obstacles (ObstacleGrid); the paths look the
+    // footprints up themselves (ObstacleTop).
+    void Stamp(MapGrid& g, const Foot& f) const {
+        const int c0 = std::max(0, static_cast<int>(std::ceil((f.e - f.HalfE() - g.west_m) / g.spacing_m)));
+        const int c1 = std::min(g.cols - 1, static_cast<int>(std::floor((f.e + f.HalfE() - g.west_m) / g.spacing_m)));
+        const int r0 = std::max(0, static_cast<int>(std::ceil((f.n - f.HalfN() - g.south_m) / g.spacing_m)));
+        const int r1 = std::min(g.rows - 1, static_cast<int>(std::floor((f.n + f.HalfN() - g.south_m) / g.spacing_m)));
         for (int r = r0; r <= r1; ++r) {
             for (int c = c0; c <= c1; ++c) {
-                const double de = g.EastOf(c) - bx.east_m, dn = g.NorthOf(r) - bx.north_m;
-                const double along = de * std::sin(bx.heading_rad) + dn * std::cos(bx.heading_rad);
-                const double across = de * std::cos(bx.heading_rad) - dn * std::sin(bx.heading_rad);
-                if (std::fabs(along) > 0.5 * bx.length_m + half_cell || std::fabs(across) > 0.5 * bx.width_m + half_cell) continue;
+                if (!f.Holds(g.EastOf(c), g.NorthOf(r))) continue;
                 double& v = g.At(c, r);
-                v = std::max(v, top - GroundHeight(g.EastOf(c), g.NorthOf(r)));
+                v = std::max(v, f.top - GroundHeight(g.EastOf(c), g.NorthOf(r)));
             }
         }
     }
 
-    // The tallest thing standing over each cell of the map proper (50 m) and of each detail area (25 m), above the
-    // ground (woods and buildings).
+    // The footprints of what blocks sight, indexed by cell (the map proper's at 50 m, each detail area's at 25 m, the
+    // rest by 50 m cells as they come, and every one in 500 m blocks for the coarse bound), and the obstacle grids drawn
+    // from them: the tallest thing over each node of the map proper (50 m) and of each detail area (25 m).
     void BakeObstacles() {
+        feet_.clear();
+        narrowest_m_ = 0.0;
+        for (const MapBox& bx : layout_.boxes) {
+            if (!Opaque(bx.part)) continue;
+            Foot f;
+            f.e = bx.east_m;
+            f.n = bx.north_m;
+            f.sin_h = std::sin(bx.heading_rad);
+            f.cos_h = std::cos(bx.heading_rad);
+            f.round = MapPartIsRound(bx.part);
+            f.half_l = 0.5 * bx.length_m;
+            f.half_w = f.round ? f.half_l : 0.5 * bx.width_m;
+            f.top = bx.base_m + bx.height_m;
+            f.side = std::max(kFootSpacingFloorM, f.round ? bx.length_m : std::min(bx.length_m, bx.width_m));
+            narrowest_m_ = narrowest_m_ > 0.0 ? std::min(narrowest_m_, f.side) : f.side;
+            feet_.push_back(f);
+        }
+        rects_.clear();
+        for (const MapDetailDef& a : def_.detail) {
+            FootCells c;
+            c.cell_m = kDetailObstacleSpacingM;
+            c.west_m = a.centre.east_m - a.half_m;
+            c.south_m = a.centre.north_m - a.half_m;
+            c.cols = c.rows = static_cast<int>(std::ceil(2.0 * a.half_m / c.cell_m)) + 1;
+            rects_.push_back(c);
+        }
+        {
+            FootCells c;
+            c.cell_m = def_.core_spacing_m;
+            c.west_m = def_.west_m;
+            c.south_m = def_.south_m;
+            c.cols = static_cast<int>(std::ceil((def_.east_m - def_.west_m) / c.cell_m)) + 1;
+            c.rows = static_cast<int>(std::ceil((def_.north_m - def_.south_m) / c.cell_m)) + 1;
+            rects_.push_back(c);
+        }
+        for (FootCells& c : rects_) {  // count, then fill
+            const std::size_t cells = static_cast<std::size_t>(c.cols) * static_cast<std::size_t>(c.rows);
+            std::vector<std::uint32_t> count(cells + 1, 0);
+            c.top.assign(cells, Terrain::kNoObstacleTop);
+            c.side.assign(cells, 1e300);
+            for (int pass = 0; pass < 2; ++pass) {
+                for (std::size_t k = 0; k < feet_.size(); ++k) {
+                    const Foot& f = feet_[k];
+                    const double w = f.e - f.HalfE(), e = f.e + f.HalfE(), s = f.n - f.HalfN(), n = f.n + f.HalfN();
+                    if (!c.Overlaps(w, s, e, n)) continue;
+                    for (int r = c.Row(s); r <= c.Row(n); ++r) {
+                        for (int col = c.Col(w); col <= c.Col(e); ++col) {
+                            const std::size_t i = static_cast<std::size_t>(r) * static_cast<std::size_t>(c.cols) + static_cast<std::size_t>(col);
+                            if (pass == 0) {
+                                ++count[i + 1];
+                                c.top[i] = std::max(c.top[i], f.top);
+                                c.side[i] = std::min(c.side[i], f.side);
+                            } else {
+                                c.feet[count[i]++] = static_cast<std::uint32_t>(k);
+                            }
+                        }
+                    }
+                }
+                if (pass == 0) {
+                    for (std::size_t i = 0; i < cells; ++i) count[i + 1] += count[i];
+                    c.first = count;
+                    c.feet.assign(count[cells], 0);
+                }
+            }
+        }
+        loose_.clear();
+        // The 500 m blocks over everything that stands: each block's tallest top and narrowest side (no footprint list).
+        blocks_ = FootCells();
+        blocks_.cell_m = kBlockM;
+        tallest_top_m_ = Terrain::kNoObstacleTop;
+        tallest_m_ = std::max({0.0, def_.clutter.dense_urban_m, def_.clutter.suburban_m});
+        for (const Foot& f : feet_) {
+            double low = GroundHeight(f.e, f.n);
+            for (const double se : {-1.0, 1.0}) {
+                for (const double sn : {-1.0, 1.0}) low = std::min(low, GroundHeight(f.e + se * f.HalfE(), f.n + sn * f.HalfN()));
+            }
+            tallest_m_ = std::max(tallest_m_, f.top - low + 5.0);  // 5 m for the ground between those points
+        }
+        if (!feet_.empty()) {
+            double w = 1e300, e = -1e300, s = 1e300, n = -1e300;
+            for (const Foot& f : feet_) {
+                w = std::min(w, f.e - f.HalfE());
+                e = std::max(e, f.e + f.HalfE());
+                s = std::min(s, f.n - f.HalfN());
+                n = std::max(n, f.n + f.HalfN());
+                tallest_top_m_ = std::max(tallest_top_m_, f.top);
+            }
+            blocks_.west_m = std::floor(w / kBlockM) * kBlockM;
+            blocks_.south_m = std::floor(s / kBlockM) * kBlockM;
+            blocks_.cols = static_cast<int>(std::floor((e - blocks_.west_m) / kBlockM)) + 1;
+            blocks_.rows = static_cast<int>(std::floor((n - blocks_.south_m) / kBlockM)) + 1;
+            const std::size_t cells = static_cast<std::size_t>(blocks_.cols) * static_cast<std::size_t>(blocks_.rows);
+            blocks_.top.assign(cells, Terrain::kNoObstacleTop);
+            blocks_.side.assign(cells, 1e300);
+        }
+        for (std::size_t k = 0; k < feet_.size(); ++k) {
+            const Foot& f = feet_[k];
+            const double w = f.e - f.HalfE(), e = f.e + f.HalfE(), s = f.n - f.HalfN(), n = f.n + f.HalfN();
+            for (int r = blocks_.Row(s); r <= blocks_.Row(n); ++r) {
+                for (int c = blocks_.Col(w); c <= blocks_.Col(e); ++c) {
+                    const std::size_t i = static_cast<std::size_t>(r) * static_cast<std::size_t>(blocks_.cols) + static_cast<std::size_t>(c);
+                    blocks_.top[i] = std::max(blocks_.top[i], f.top);
+                    blocks_.side[i] = std::min(blocks_.side[i], f.side);
+                }
+            }
+            bool dense = false;  // wholly inside one dense grid: no loose cells needed
+            for (const FootCells& c : rects_) dense = dense || (c.Covers(w, s) && c.Covers(e, n));
+            if (dense) continue;
+            for (long long y = CellIndex(s, kLooseCellM); y <= CellIndex(n, kLooseCellM); ++y) {
+                for (long long x = CellIndex(w, kLooseCellM); x <= CellIndex(e, kLooseCellM); ++x) {
+                    loose_[PairKey(x, y)].push_back(static_cast<std::uint32_t>(k));
+                }
+            }
+        }
         obstacles_.west_m = def_.west_m;
         obstacles_.south_m = def_.south_m;
         obstacles_.spacing_m = def_.core_spacing_m;
@@ -1556,38 +1770,17 @@ private:
             g.rows = g.cols;
             g.values.assign(static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows), 0.0);
         }
-        for (const MapBox& bx : layout_.boxes) {
-            if (!Opaque(bx.part)) continue;
-            if (def_.InCore(bx.east_m, bx.north_m)) Stamp(obstacles_, bx);
-            else if (!(bx.part == MapPart::Canopy && bx.length_m == def_.far_block_m)) StampLaid(bx);  // the far blocks: far_canopy_
+        for (const Foot& f : feet_) {
+            if (def_.InCore(f.e, f.n)) Stamp(obstacles_, f);
             for (std::size_t i = 0; i < def_.detail.size(); ++i) {
                 const MapDetailDef& a = def_.detail[i];
-                const double reach = 0.5 * std::hypot(bx.length_m, bx.width_m) + kDetailObstacleSpacingM;
-                if (std::fabs(bx.east_m - a.centre.east_m) < a.half_m + reach && std::fabs(bx.north_m - a.centre.north_m) < a.half_m + reach) {
-                    Stamp(detail_obstacles_[i], bx);
+                if (std::fabs(f.e - a.centre.east_m) < a.half_m + f.HalfE() && std::fabs(f.n - a.centre.north_m) < a.half_m + f.HalfN()) {
+                    Stamp(detail_obstacles_[i], f);
                 }
             }
         }
     }
     static constexpr double kDetailObstacleSpacingM = 25.0;
-
-    // A box beyond the map proper into laid_tops_: its top over every 50 m cell its footprint (the turned box's bounds)
-    // reaches.
-    void StampLaid(const MapBox& bx) {
-        const bool round = MapPartIsRound(bx.part);
-        const double sh = std::fabs(std::sin(bx.heading_rad)), ch = std::fabs(std::cos(bx.heading_rad));
-        const double half_e = round ? 0.5 * bx.length_m : 0.5 * (bx.length_m * sh + bx.width_m * ch);
-        const double half_n = round ? 0.5 * bx.length_m : 0.5 * (bx.length_m * ch + bx.width_m * sh);
-        const double top = bx.base_m + bx.height_m;
-        const long long x1 = static_cast<long long>(std::ceil((bx.east_m + half_e) / kLaidCellM)) - 1;
-        const long long y1 = static_cast<long long>(std::ceil((bx.north_m + half_n) / kLaidCellM)) - 1;
-        for (long long y = LaidCell(bx.north_m - half_n); y <= y1; ++y) {
-            for (long long x = LaidCell(bx.east_m - half_e); x <= x1; ++x) {
-                const auto ins = laid_tops_.emplace(LaidKey(x, y), top);
-                if (!ins.second) ins.first->second = std::max(ins.first->second, top);
-            }
-        }
-    }
 
     MapDef def_;
     MapGrid core_, far_, country_, beyond_, obstacles_;
@@ -1600,8 +1793,15 @@ private:
     mapgeo::SegmentIndex water_{250.0};
     mapgeo::Occupancy occupied_{40.0};
     std::unordered_set<long long> canopy_cells_;
-    std::unordered_map<long long, double> far_canopy_;  // the far ground's wood blocks: their tops (CanopyKey of the centre)
-    std::unordered_map<long long, double> laid_tops_;   // the rest laid beyond the map proper: the top over each 50 m cell
+    // What blocks sight (BakeObstacles): the footprints, their dense cells (the detail areas', then the map proper's),
+    // the loose cells beyond them, the 500 m blocks' tallest top and narrowest side.
+    std::vector<Foot> feet_;
+    std::vector<FootCells> rects_;
+    std::unordered_map<long long, std::vector<std::uint32_t>> loose_;
+    FootCells blocks_;  // the 500 m blocks: top and side only
+    double narrowest_m_ = 0.0;
+    double tallest_top_m_ = Terrain::kNoObstacleTop;
+    double tallest_m_ = 0.0;
     struct ClutterTown {
         double e, n, r, dense_r;
     };
@@ -1813,6 +2013,20 @@ public:
     double ObstacleHeightAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->ObstacleHeight(p.east_m, p.north_m);
+    }
+    // The map's boxes as footprints (roadmap R6): a path looks at them at their own spacing (terrain.hpp ObstaclesAlong).
+    // The scenario's frame and the map's are an affine pair, near enough a rotation, so a segment stays a segment and
+    // a footprint's sides keep their lengths.
+    double ObstacleSpacingM() const override { return map_->NarrowestObstacle(); }
+    double ObstacleTopCeilingM() const override { return map_->TallestObstacleTop(); }
+    double ObstacleTallestM() const override { return map_->TallestObstacle(); }
+    double ObstacleTopAt(double east_m, double north_m) const override {
+        const MapPoint p = link_.FrameToMap(east_m, north_m);
+        return map_->ObstacleTop(p.east_m, p.north_m);
+    }
+    double ObstacleTopBoundM(double e0, double n0, double e1, double n1, double below_m, double& spacing_m) const override {
+        const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);
+        return map_->ObstacleTopBound(a.east_m, a.north_m, b.east_m, b.north_m, below_m, spacing_m);
     }
     // The nearest point of a road's centre line to the scenario's (east, north), within `within_m` of it (ENU; its z is
     // not the ground's), and that road's width. False if no road is that near.
