@@ -9612,6 +9612,9 @@ private:
                               : CaptureUnderWay() ? "a target ordered taken: ВЫСОКОЕ on until the tracking radar has it"
                                                    : "the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst";
             if (NpcDoes(seat, SeatDuty::Drill(seat, drill, why)) && so) {
+                // The bursts are his standing routine, not an order to answer: no «Готово!» after each (as the limited
+                // regime's, routine_order_).
+                routine_drills_.insert(seat + "|" + drill);
                 so->Order(*p);
                 const Procedure* query = query_waits ? console_.FindProcedure("iff_interrogate") : nullptr;
                 if (query != nullptr) so->Queue(*query);

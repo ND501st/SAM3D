@@ -58,6 +58,12 @@ const SpokenCallout* FirstSaid(const ScenarioRunner& r, const std::string& id, c
     }
     return nullptr;
 }
+// Said by any seat but the commander from `from_s` on: the radar seats' answers to the bursts.
+int CrewSaidSince(const ScenarioRunner& r, const std::string& id, double from_s) {
+    int n = 0;
+    for (const SpokenCallout& c : r.Callouts()->Log()) n += c.id == id && c.from != "commander" && c.start_s >= from_s ? 1 : 0;
+    return n;
+}
 int TimesSaid(const ScenarioRunner& r, const std::string& id) {
     int n = 0;
     for (const SpokenCallout& c : r.Callouts()->Log()) n += c.id == id ? 1 : 0;
@@ -197,6 +203,9 @@ SC_TEST("emission: the combat order's regime is told to the crew before the rada
     const double duty = DutyCycle(*r, 120.0, 380.0);
     std::printf("    the search transmitter on %.0f%% of the time at the halt\n", 100.0 * duty);
     SC_EXPECT(duty > 0.25 && duty < 0.6);
+    // The bursts are a standing order: no seat answers each one ("Есть!", "Готово!" every few seconds without end).
+    std::printf("    from 120 s: %d done, %d ack from the crew\n", CrewSaidSince(*r, "done", 120.0), CrewSaidSince(*r, "ack", 120.0));
+    SC_EXPECT(CrewSaidSince(*r, "done", 120.0) <= 2 && CrewSaidSince(*r, "ack", 120.0) <= 2);
     SC_EXPECT(r->GetEmissionRecord().regimes_told == 1 && r->GetEmissionRecord().bursts_s > 200.0);
     // A hostile after a quiet spell: the radar seats are reminded.
     while (!r->Finished() && r->Time() < 470.0) r->Step(0.1);
@@ -212,6 +221,8 @@ SC_TEST("emission: a limited regime is the commander's bursts, said once, kept a
     std::printf("    limited: the search transmitter on %.0f%% of the time at the halt\n", 100.0 * duty);
     SC_EXPECT(FirstSaid(*r, "order_emission_regime", "commander") != nullptr);
     SC_EXPECT(duty > 0.1 && duty < 0.45);  // 2 turns in 8
+    std::printf("    from 120 s: %d done, %d ack from the crew\n", CrewSaidSince(*r, "done", 120.0), CrewSaidSince(*r, "ack", 120.0));
+    SC_EXPECT(CrewSaidSince(*r, "done", 120.0) <= 2 && CrewSaidSince(*r, "ack", 120.0) <= 2);
 }
 
 SC_TEST("emission: a player commander's crew keeps the old regime until he tells them; the helper shows it") {
