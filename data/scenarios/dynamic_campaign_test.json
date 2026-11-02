@@ -1,7 +1,7 @@
 {
   "scenario_id": "dynamic_campaign_test",
   "name": "Dynamic campaign test: battery 21 in the capital, every air defence round it, the waves never stop",
-  "description": "A testbed for the look, the sound and the play (docs/DYNAMIC_CAMPAIGN_TEST.md): battery 21 deployed in the capital's eastern districts, every kind of our air defence and radar within a few kilometres (an Osa battery that fights, a Kub, an S-75M2, an S-125M1, Strela-10 and Strela-1, Shilkas, ten S-60 batteries, KS-30s, ZU-23s, MANPADS teams; P-14, P-15, P-18, P-19, P-40, PRV-11), and random waves of every adversary's aircraft and our own coming in for four hours: strikes dropping their loads, SEAD with ARMs, jammers, decoys, helicopters, cruise missiles, AWACS and tankers on their orbits, our fighters on patrol. F12 visits every asset. Fictional; game values.",
+  "description": "A testbed for the look, the sound and the play (docs/DYNAMIC_CAMPAIGN_TEST.md): battery 21 deployed on open ground at the capital's eastern edge, every kind of our air defence and radar within a few kilometres (an Osa battery that fights, a Kub, an S-75M2, an S-125M1, Strela-10 and Strela-1, Shilkas, ten S-60 batteries, KS-30s, ZU-23s, MANPADS teams; P-14, P-15, P-18, P-19, P-40, PRV-11), and random waves of every adversary's aircraft and our own coming in for four hours: strikes dropping their loads, SEAD with ARMs, jammers, decoys, helicopters, cruise missiles, AWACS and tankers on their orbits, our fighters on patrol. F12 visits every asset. Fictional; game values.",
   "source": "sam3d",
   "confidence": "estimate",
   "notes": "Fictional. The origin is the capital's middle (data/maps/pannonia.json settlements.capital, 36 km east and 58 km north of the theatre's origin); heights from the map's ground (map_dump --height), less the Earth's curve from the origin. The neighbours other than the Osa battery 22 are drawn and plotted but do not fire in the session (only an Osa battery fights in the battery fire model). The waves are data/gameplay/test_waves.json.",
@@ -75,54 +75,54 @@
         "id": "22",
         "kind": "launcher",
         "position": {
-          "east_m": 2300,
-          "north_m": 1700,
-          "up_m": 5.1
+          "east_m": 7300,
+          "north_m": 4300,
+          "up_m": 2.0
         }
       },
       {
         "id": "23",
         "kind": "launcher",
         "position": {
-          "east_m": 2600,
-          "north_m": -200,
-          "up_m": 6.5
+          "east_m": 7600,
+          "north_m": 2400,
+          "up_m": 2.4
         }
       },
       {
         "id": "24",
         "kind": "launcher",
         "position": {
-          "east_m": 1300,
-          "north_m": -1300,
-          "up_m": 7.1
+          "east_m": 6600,
+          "north_m": 1800,
+          "up_m": 3.8
         }
       },
       {
         "id": "TZM",
         "kind": "reload",
         "position": {
-          "east_m": 3100,
-          "north_m": 500,
-          "up_m": 6.7
+          "east_m": 7200,
+          "north_m": 3300,
+          "up_m": 2.2
         }
       },
       {
         "id": "ATZ",
         "kind": "fuel",
         "position": {
-          "east_m": 3300,
-          "north_m": 250,
-          "up_m": 6.8
+          "east_m": 7350,
+          "north_m": 3100,
+          "up_m": 2.3
         }
       },
       {
         "id": "PU-12",
         "kind": "command_post",
         "position": {
-          "east_m": 1800,
-          "north_m": 350,
-          "up_m": 5.2
+          "east_m": 6800,
+          "north_m": 2950,
+          "up_m": 2.8
         }
       }
     ]
@@ -140,9 +140,9 @@
       ]
     },
     "position": {
-      "east_m": 1200,
-      "north_m": 900,
-      "up_m": 3.2
+      "east_m": 6200,
+      "north_m": 3500,
+      "up_m": 2.4
     },
     "heading_deg": 300,
     "inputs": {

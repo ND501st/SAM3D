@@ -293,6 +293,42 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
     SC_EXPECT(d.find("wave 1") != std::string::npos && d.find("impact") != std::string::npos && d.find("destroyed by") != std::string::npos);
 }
 
+// The player's battery stands on open ground with sight along the attack directions (voenizdat_osa_1991 pp. 232-239,
+// docs/campaign/11_BATTERY_LIFE_PROPOSAL.md "Main positions"), not among the capital's blocks of flats (roadmap R6): from
+// each of battery 21's Osas, a 5 m antenna (data/em/osa_ak.json) sees over the ground, the woods and the buildings
+// within 6 km at under half a degree in every direction. Sited in the dense core (1.2 km east, 0.9 km north) a ring of
+// flats 285-400 m off masked 1-3 degrees, and a cruise missile 60 m up was hidden until it was inside the ring.
+SC_TEST("dynamic campaign: battery 21's Osas see over the capital's roofs, sited on open ground at its edge") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/dynamic_campaign_test.json", kData, def, console, &e));
+    if (!def.has_battery) return;
+    std::vector<Vec3> osas{def.unit_position};
+    for (const BatteryVehicleDef& v : def.battery_vehicles) {
+        if (!v.own && v.kind == BatteryVehicleKind::Launcher) osas.push_back(v.start);
+    }
+    SC_EXPECT(osas.size() == 4u);
+    ScenarioRunner r(std::move(def), std::move(console));
+    const Terrain& t = r.GetWorld().GetTerrain();
+    const double earth_m = kStandardRefractionK * wgs84::kMeanRadius;
+    const double antenna_m = 5.0;  // test value: the SOC's height over the ground, as data/em/osa_ak.json gives it
+    double worst_deg = -90.0;
+    for (const Vec3& p : osas) {
+        const double eye = t.HeightAt(p.x, p.y) + antenna_m;
+        for (int az = 0; az < 360; az += 5) {
+            const double a = DegToRad(static_cast<double>(az));
+            for (double s = kObstacleSkipM; s <= 6000.0; s += 10.0) {
+                const double x = p.x + s * std::sin(a), y = p.y + s * std::cos(a);
+                const double top = t.HeightAt(x, y) + t.ObstacleHeightAt(x, y) - s * s / (2.0 * earth_m);
+                worst_deg = std::max(worst_deg, RadToDeg(std::atan2(top - eye, s)));
+            }
+        }
+    }
+    std::printf("    worst mask from battery 21's Osas: %.2f deg\n", worst_deg);
+    SC_EXPECT(worst_deg < 0.5);
+}
+
 // Roadmap R5, "nothing under the map": ten minutes of the testbed's waves, judged every five seconds against the ground
 // the game draws (simcore/ground_check.hpp): no aircraft, weapon, missile or ground item under it, none flown into it.
 SC_TEST("dynamic campaign: nothing is under the ground, and no aircraft flies into it") {
