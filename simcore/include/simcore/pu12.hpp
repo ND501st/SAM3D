@@ -66,7 +66,13 @@ struct BoardMark {
     int stamp = 0;          // the minute it was plotted: 1, 2, ...
     double time_s = 0.0;
     Vec3 position;          // where the board puts it (ENU, with the navigation error)
-    int height_hm = 0;      // height above sea level in hectometres
+    // Height above sea level in hectometres, rounded. The regiment's radars give it: a height finder reckons it from the
+    // range, the elevation and its own site's height, and cannot know the ground under the target. Our sources give the
+    // board's unit (bguir_tsp: hectometres; ru_pu12_text: 0.2 km steps) but not its datum; above sea level is what a
+    // radar measures, so it stays. A cruise missile holding 60 m over ground some 110 m above the sea (round the
+    // capital, R6's dynamic campaign test), more over the roofs and woods (target_behaviour.hpp HoldHeight), is
+    // written 2 (hm).
+    int height_hm = 0;
     int type = 9;           // tens digit of the code: 0 jamming, 1 friend, 2 training target, ..., 8 enemy, 9 no IFF
     int formation = 1;      // ones digit: aircraft in the formation
     // A designation into a group the post can't resolve (voenizdat_osa_1991 p261, group_designation.hpp): `position` is
