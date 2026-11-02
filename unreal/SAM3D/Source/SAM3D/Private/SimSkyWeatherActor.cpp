@@ -1,6 +1,7 @@
 #include "SimSkyWeatherActor.h"
 
 #include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
@@ -23,6 +24,10 @@ namespace
 	// Of the haze's extinction, the share that scatters (the rest is absorbed): the engine's default single-scattering
 	// albedo for Mie, 0.003996 / (0.003996 + 0.000444).
 	constexpr double MieAlbedo = 0.9;
+	// The engine's height fog takes its density and falloff per 1000 world units (FExponentialHeightFogSceneInfo divides
+	// both by 1000): a density D is an extinction of D / 1000 per cm, 100 D per km; a falloff F an e-folding height of
+	// 1000 / F cm. (Read from the engine's source as remembered; to be confirmed on the user's build with -SimMapShots.)
+	constexpr double FogDensityPerExtinctionPerKm = 0.01;
 }
 
 ASimSkyWeatherActor::ASimSkyWeatherActor()
@@ -48,6 +53,11 @@ ASimSkyWeatherActor::ASimSkyWeatherActor()
 
 	Clouds = CreateDefaultSubobject<UVolumetricCloudComponent>(TEXT("Clouds"));
 	Clouds->SetupAttachment(Root);
+
+	// The haze near the ground (roadmap R6): its density set from the day's visibility in ApplyWeather. No volumetric fog.
+	HeightFog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("HeightFog"));
+	HeightFog->SetupAttachment(Root);
+	HeightFog->SetVolumetricFog(false);
 }
 
 void ASimSkyWeatherActor::BeginPlay()
@@ -126,8 +136,21 @@ void ASimSkyWeatherActor::ApplyWeather()
 	// Haze: Koschmieder's extinction for the day's visibility, the air's own Rayleigh part taken out.
 	const double VisKm = FMath::Max(0.5, Wx.Preset().visibility_km);
 	const double MieExt = FMath::Max(0.004 / MieAlbedo, 3.912 / VisKm - RayleighPerKm);
-	Atmosphere->SetMieScatteringScale(static_cast<float>(MieExt * MieAlbedo));
-	Atmosphere->SetMieAbsorptionScale(static_cast<float>(MieExt * (1.0 - MieAlbedo)));
+	// Near the ground a share of it is the height fog's (roadmap R6), the rest stays the atmosphere's aerosol, so the two
+	// together still give Koschmieder's extinction for the day's visibility.
+	const double FogShare = bHeightFog ? FMath::Clamp(static_cast<double>(HeightFogShare), 0.0, 1.0) : 0.0;
+	const double AtmosphereExt = MieExt * (1.0 - FogShare);
+	Atmosphere->SetMieScatteringScale(static_cast<float>(AtmosphereExt * MieAlbedo));
+	Atmosphere->SetMieAbsorptionScale(static_cast<float>(AtmosphereExt * (1.0 - MieAlbedo)));
+	HeightFog->SetVisibility(bHeightFog);
+	if (bHeightFog)
+	{
+		const double ScaleHeightCm = FMath::Max(0.1, static_cast<double>(HeightFogScaleHeightKm)) * 100000.0;
+		HeightFog->SetFogDensity(static_cast<float>(MieExt * FogShare * FogDensityPerExtinctionPerKm));
+		HeightFog->SetFogHeightFalloff(static_cast<float>(1000.0 / ScaleHeightCm));
+		HeightFog->SetFogMaxOpacity(1.0f);
+		HeightFog->SetStartDistance(0.0f);
+	}
 	Atmosphere->SetMieExponentialDistribution(1.2f);  // km: the haze lives in the boundary layer
 	Atmosphere->SetGroundAlbedo(FColor(60, 64, 40));  // the plain's farmland beyond the drawn ground
 
@@ -169,8 +192,8 @@ void ASimSkyWeatherActor::ApplyWeather()
 			}
 		}
 	}
-	UE_LOG(LogSAM3D, Log, TEXT("Sky: weather '%s', visibility %.0f km (Mie %.4f/km), %d cloud layer(s)%s"), *PresetId, VisKm,
-		MieExt * MieAlbedo, static_cast<int32>(Wx.LayerCount()),
+	UE_LOG(LogSAM3D, Log, TEXT("Sky: weather '%s', visibility %.0f km (Mie %.4f/km, %.0f %% of it the height fog's), %d cloud layer(s)%s"),
+		*PresetId, VisKm, MieExt * MieAlbedo, FogShare * 100.0, static_cast<int32>(Wx.LayerCount()),
 		bClouds ? *FString::Printf(TEXT(", volumetric on '%s'"), UTF8_TO_TCHAR(Wx.LayerDef(static_cast<std::size_t>(Main)).id.c_str())) : TEXT(""));
 	BuildCloudCells();
 }

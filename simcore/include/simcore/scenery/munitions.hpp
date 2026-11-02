@@ -30,6 +30,7 @@
 
 #include "simcore/console_data.hpp"
 #include "simcore/json.hpp"
+#include "simcore/scenery/trimesh.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -190,28 +191,6 @@ struct MunitionLibrary {
     // left as it was.
     bool Load(const std::string& path_or_json, std::string* error = nullptr);
     bool LoadJson(const std::string& text, std::string* error = nullptr);
-};
-
-// A triangle mesh: positions and normals per vertex, a linear-RGB colour per vertex, three indices a triangle.
-struct TriMesh {
-    std::vector<Vec3> positions;
-    std::vector<Vec3> normals;
-    std::vector<std::array<float, 3>> colours;
-    std::vector<std::uint32_t> indices;
-
-    std::size_t Triangles() const { return indices.size() / 3; }
-    bool Empty() const { return indices.empty(); }
-    // The box round every vertex (both zero when empty).
-    void Bounds(Vec3& lo, Vec3& hi) const {
-        lo = Vec3{};
-        hi = Vec3{};
-        for (std::size_t i = 0; i < positions.size(); ++i) {
-            const Vec3& p = positions[i];
-            if (i == 0) lo = hi = p;
-            lo = Vec3{std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
-            hi = Vec3{std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
-        }
-    }
 };
 
 // "#rrggbb" (sRGB) as linear RGB in 0..1; mid grey for anything else.

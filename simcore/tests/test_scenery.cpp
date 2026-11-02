@@ -282,3 +282,81 @@ SC_TEST("scenery: a search radar's antenna turns at its turns a minute, the rest
                                     bad, &e));
     SC_EXPECT(e.find("antenna_rpm") != std::string::npos);
 }
+
+// The register of third-party art (simcore/scenery/asset_register.hpp, data/scenery/assets.json, docs/scenery/ASSETS.md).
+namespace {
+
+// A register around `assets` (the array's items) and `parts` (the object's members).
+std::string Register(const std::string& assets, const std::string& parts) {
+    return "{\"assets\": [" + assets + "], \"parts\": {" + parts + "}}";
+}
+
+const char* kCc0Oak =
+    R"({"id": "oak_a", "unreal_path": "/Game/SAM3D/Map/Trees/SM_OakA.SM_OakA", "origin": "own work", "author": "", "licence": "CC0-1.0",
+        "redistributable": true, "fetched": "2026-11-02", "sha256": "", "scale": 1.0, "yaw_deg": 90, "z_offset_m": -0.2})";
+
+}  // namespace
+
+SC_TEST("scenery: the asset register starts empty, every part of the map procedural") {
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(kData + "/scenery/assets.json", &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(reg.assets.empty());
+    for (const std::string& part : MapMeshParts()) {
+        SC_EXPECT(reg.parts.count(part) == 1);  // every part listed, so the file says what it may hold
+        SC_EXPECT(reg.AssetFor(part, 0) == nullptr);
+    }
+}
+
+SC_TEST("scenery: the asset register keeps its rules") {
+    std::string e;
+    {
+        // A redistributable CC0 asset anywhere under /Game/, one variant of the houses and every tree of a kind.
+        AssetRegister reg;
+        SC_EXPECT(reg.Load(Register(kCc0Oak, R"("tree_oak": {"asset": "oak_a"}, "house": {"asset": null, "variants": [null, "oak_a"]})"), &e));
+        SC_EXPECT(reg.AssetFor("tree_oak", 3) != nullptr && reg.AssetFor("tree_oak", 3)->yaw_deg == 90.0);
+        SC_EXPECT(reg.AssetFor("house", 0) == nullptr && reg.AssetFor("house", 1) != nullptr && reg.AssetFor("house", 2) == nullptr);
+        SC_EXPECT(reg.AssetFor("barn", 0) == nullptr);
+        SC_EXPECT_NEAR(reg.Find("oak_a")->z_offset_m, -0.2, 1e-12);
+        // A failed load leaves the register as it was.
+        SC_EXPECT(!reg.Load(Register("", R"("windmill": {"asset": null})"), &e));
+        SC_EXPECT(e.find("windmill") != std::string::npos);
+        SC_EXPECT(reg.assets.size() == 1 && reg.AssetFor("tree_oak", 0) != nullptr);
+    }
+    auto refused = [&](const std::string& text, const char* why) {
+        AssetRegister reg;
+        std::string err;
+        const bool ok = reg.Load(text, &err);
+        if (ok || err.find(why) == std::string::npos) std::printf("    expected a refusal for '%s', got '%s'\n", why, err.c_str());
+        return !ok && err.find(why) != std::string::npos;
+    };
+    // Fab's Standard licence: the files may not be redistributed, so under /Game/ThirdParty/ only (git ignores it).
+    const std::string fab_outside =
+        R"({"id": "barn_fab", "unreal_path": "/Game/SAM3D/Map/SM_Barn.SM_Barn", "origin": "https://www.fab.com/", "licence": "Fab-Standard", "redistributable": false, "fetched": "2026-11-02"})";
+    SC_EXPECT(refused(Register(fab_outside, ""), "/Game/ThirdParty/"));
+    const std::string fab_inside =
+        R"({"id": "barn_fab", "unreal_path": "/Game/ThirdParty/Farm/SM_Barn.SM_Barn", "origin": "https://www.fab.com/", "licence": "Fab-Standard", "redistributable": false, "fetched": "2026-11-02"})";
+    {
+        AssetRegister reg;
+        SC_EXPECT(reg.Load(Register(fab_inside, R"("barn": {"asset": "barn_fab"})"), &e));
+    }
+    // ... and never marked redistributable.
+    std::string fab_free = fab_inside;
+    fab_free.replace(fab_free.find("\"redistributable\": false"), 24, "\"redistributable\": true");
+    SC_EXPECT(refused(Register(fab_free, ""), "does not allow"));
+    // CC-BY names its author.
+    const std::string ccby =
+        R"({"id": "pine_by", "unreal_path": "/Game/SAM3D/Map/SM_Pine.SM_Pine", "origin": "https://example.org/pine", "author": "", "licence": "CC-BY-4.0", "redistributable": true, "fetched": "2026-11-02"})";
+    SC_EXPECT(refused(Register(ccby, ""), "author"));
+    // A licence of its own, a missing flag, a path outside /Game/, a missing date, an id twice.
+    SC_EXPECT(refused(Register(R"({"id": "x", "unreal_path": "/Game/ThirdParty/X.X", "origin": "o", "licence": "royalty free", "redistributable": false, "fetched": "2026-11-02"})", ""), "licence"));
+    SC_EXPECT(refused(Register(R"({"id": "x", "unreal_path": "/Game/ThirdParty/X.X", "origin": "o", "licence": "Own", "fetched": "2026-11-02"})", ""), "redistributable"));
+    SC_EXPECT(refused(Register(R"({"id": "x", "unreal_path": "C:/art/X.fbx", "origin": "o", "licence": "Own", "redistributable": true, "fetched": "2026-11-02"})", ""), "/Game/"));
+    SC_EXPECT(refused(Register(R"({"id": "x", "unreal_path": "/Game/X.X", "origin": "o", "licence": "Own", "redistributable": true})", ""), "fetched"));
+    SC_EXPECT(refused(Register(std::string(kCc0Oak) + ", " + kCc0Oak, ""), "twice"));
+    // A part names a registered asset, or null.
+    SC_EXPECT(refused(Register("", R"("house": {"asset": "nobody"})"), "not registered"));
+    SC_EXPECT(refused(Register("", R"("house": {})"), "null for procedural"));
+    SC_EXPECT(refused("{\"parts\": {}}", "assets"));
+}
