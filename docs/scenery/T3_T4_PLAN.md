@@ -1,0 +1,205 @@
+# T3 and T4: the plain's layout and one colour for the whole view — the plan (4 Nov 2026)
+
+Phases T3 and T4 of `TERRAIN_ROADMAP.md`, designed together because they meet in one place: the fields. T4 lays the
+plain out in simcore (collective farm fields, household strips, farm tracks, tree rows, the tanyas' groves, the crop
+calendar). T3 draws that layout with exact edges at every distance, out to the far ground, under haze that matches the
+weather. Written on Opus as the design; built on Sonnet step by step, each step ending in its check.
+
+**Done when:** the views V1, V3, V6, V9 and V10 against their photographs show large fields with straight edges and no
+25 m steps; tracks with their tree rows; the tanyas in their trees; the far ground's fields continuing past the map
+proper's edge without a seam; the haze at V7 and V9 matching the day's visibility; the run's costs written beside
+`t1`'s; and the sight-line consumers re-read (the trees now block sight). Pannonia is fictional: judged by eye, not
+measured (no crop statistics).
+
+## What is wrong now, and why
+
+- **Fields are small** (`parcel_length_m` 250-700 by 80-250 m: 2-17 ha). A 1980s collective farm (TSZ) field is
+  100-200 ha (research table T2). From V3 and V10 the plain reads as a quilt, not as the photographs' open sheets.
+- **Field edges step every 25 m.** Each field's layer reaches the ground material only through the 25 m land cover mask.
+  The material's wander and height blend soften the steps but cannot straighten them.
+- **The far ground is another colour source.** Beyond the map proper its tiles are tinted from the country's coarse
+  cover, so an edge shows where the two meet (V9, V10).
+- **No farm tracks or tree rows**, and the tanyas stand bare. Tree rows block sight, so they must be in simcore's map,
+  not only drawn.
+
+## Decisions
+
+1. **Fields are a closed-form function of position, the same in simcore and in the shader.** Today's `FieldParcel`
+   already is one: a heading per square, a width per square, and a length and offset per row. T4 keeps that form at TSZ
+   scale and changes its hash to a 32-bit integer hash (`Hash32`, written identically in C++ and HLSL), so the ground
+   material computes a pixel's field exactly. Every field edge is straight at every distance, at no memory cost.
+   Rejected: a runtime virtual texture holding the vector shapes. It is either blurry near the eye at a size that fits
+   40 km, or it has to carry layer ids that its filtering mixes. It also adds an engine-feature risk T9 may yet bring.
+2. **A field's properties come from the mask at the field's centre.** The shader finds the pixel's field analytically,
+   then loads the mask texel under that field's centre, and reads the layer, shade and flags simcore baked there. The
+   crop, the calendar and the household-strip flag therefore stay in simcore, and HLSL holds no crop rules. Where the
+   centre cell is not farmland (a wood, a road), the shader falls back to the pixel's own cell.
+3. **Estates are squares of the map's frame** (`estate_m`, 4 km), each a collective farm's land with its own heading
+   and field sizes. A square's borders are straight lines, so the shader finds the estate by `floor(P / estate_m)`.
+   Each estate's numbers come from an **estate table** (a small texture, a texel per estate) that simcore fills. The
+   heading can then follow the nearest authored road (fields line up with roads, as in the photographs) without the
+   shader knowing any roads.
+4. **Non-field cover keeps the 25 m mask.** Woods are 100 m blocks on the map's grid (`block_m` 100, snapped), so their
+   edges fall on cell edges exactly. Towns' gardens, military ground and water keep the cell blend; roads and tracks
+   are drawn as strips over it. The 25 m steps that remain are at gardens and site edges, which are rarely seen from
+   the views.
+5. **Tree rows, tracks and groves are the map's own** (`terrain_map.hpp`), because they block sight or carry vehicles.
+   Fields, crops and the calendar are the dressing's (`scenery/`, presentation). Everything new is laid **after** the
+   existing layout, from its own seed streams, so no existing box, wood or farmstead moves. The crops change (expected).
+6. **The far ground draws the same fields.** Its tiles get a light version of the ground material: the same field
+   function and estate table, a far mask of 250 m cells from the country's land cover (fields are about 1 km, so their
+   centres find the right cell), and each layer's average colour (the albedo arrays' last mip, as the near material's
+   far fade already uses). Near and far are one colour source, so the edge at the map proper goes.
+7. **The haze is already physical** (R6, R7: Koschmieder's extinction from the weather preset's visibility, split
+   between the atmosphere's Mie and the height fog, in `ASimSkyWeatherActor::ApplyWeather`). T3 checks it rather than
+   rebuilding it: a contrast measurement at V7 and V9 (step T3.4).
+8. **Generated tracks are drawn, stamped as road cover and planted with rows, but not yet routed.** Adding them to the
+   route service would change every route and its tests. The crews already drive across fields (`nav/ground.hpp`). The
+   tracks go into the route graph later, as their own step with `nav_check` re-run.
+
+## Steps
+
+### T4.1 The estates and the fields (simcore, Sonnet)
+
+- New `simcore/include/simcore/scenery/farmland.hpp`, holding `Hash32(uint32)` (one fixed integer mix, for example
+  lowbias32) and `HashCell(seed, ix, iy)`. A test pins a table of values, which `tools/ue_build_ground_material.py`'s
+  HLSL must reproduce (the builder prints its own table under `SAM3D_GROUND_PATTERN=1` for an eye check).
+- `EstateTable BakeEstates(const MapData&, const DressingRules&)` gives each `estate_m` square:
+  - a heading: the bearing of the longest authored road inside or within 1 km of it, folded to [0, π), with a few
+    degrees' draw; or a draw where no road is near;
+  - a field length and width drawn from `field_length_m` (900-1500 m) and `field_width_m` (700-1100 m);
+  - a strip width (`strip_width_m`, 20-40 m) for the household strips.
+  It covers the map proper and the far ground out to `far_km`.
+- `FieldAt(table, e, n) -> FieldCell {id, heading, centre_e, centre_n, strips}`: the estate's rotated frame, rows
+  across, each row its own length and offset by `HashCell`, as `FieldParcel` does now. In a household-strip field, the
+  field is cut across into strips of the strip width, each its own id.
+- `FieldParcel` and `FieldHeading` keep their signatures as wrappers over `FieldAt`, so `views.hpp`, `ground_layers.hpp`
+  and their tests are untouched. `parcel_length_m`, `parcel_width_m` and `parcel_heading_cell_m` are replaced in
+  `data/scenery/map_dressing.json` by the new values. All game values, labelled `sam3d estimate`.
+- **Household strips:** a field is cut into strips when its centre lies within `strip_reach_m` (400 m) of a village's or
+  town's edge (`MapSettlementDef` radius). `BakeCover` sets a flag the mask carries (bit 7 of B; the shade keeps 7 bits).
+- `BakeCover` takes each cell's crop from `FieldAt`'s id rather than the old parcel.
+- Tests:
+  - fields are 70-200 ha away from the villages and strips 0.4-1.6 ha near them;
+  - a field's centre lies in the field;
+  - two points either side of an edge get different ids, and a point's id never depends on the grid it is asked from;
+  - the estate headings within 1 km of a road follow it within the draw;
+  - the old wrappers still give the same heading and parcel at a point.
+- Check: `python tools/terrain_views.py run --label t4a --against t1`. V3 and V10 show big fields, still stepped,
+  because T3 is not built yet.
+
+### T4.2 Tracks, tree rows and groves (simcore `terrain_map.hpp`, Sonnet; Opus reviews the sight lines)
+
+- **Farm tracks** (dűlőút): along each estate's row lines (the fields' long sides) and its borders, cut where they
+  meet woods, settlements, water and sites. Added to the layout as `MapSurface::Track` strips 4 m wide and stamped as
+  road cover. Not in the route graph yet (decision 8).
+- **Tree rows:** `MapPart::TreeRow` boxes along a share of the tracks (`row_share`, 0.3) and along main and secondary
+  roads (`road_row_share`, 0.5). The rows break where a noise says so, are 12-22 m tall and 7 m wide, and stop 30 m short
+  of junctions. They are opaque (`Opaque`), so `ObstacleTop` and the map's obstacle grid see them; R6's third pass made
+  rotated footprints exact. **None within `site_clear_m` (600 m) of a site**, so the battery positions keep their
+  sectors.
+- **Tanya groves:** each farmstead gets canopy boxes 25-40 m deep on two or three sides (the photographs' island of
+  poplar and locust), 12-18 m tall.
+- Dressing: `PlaceTrees` plants a `TreeRow` as one line of trees 6-10 m apart (poplar or locust, a species per row by
+  its draw), never above the row's obstacle height. That is the same rule the woods keep.
+- Rules in the map file, not the dressing: a `"farmland"` block in `data/maps/kesmark_range.json` (`row_share`,
+  `road_row_share`, `site_clear_m`, the grove sizes). They change sight lines, as `canopy_m` does.
+- Tests: no row within `site_clear_m` of any site; no row on water or in a settlement; every row's trees under its
+  obstacle top; the existing layout's boxes unchanged (counted and hashed before and after); a sight line across a row
+  is blocked, and one through a gap is not.
+- **Sight-line consumers re-read (Opus):**
+  - `ground_check data 3600`;
+  - the battery fire model's tests;
+  - `air_war_balance data 20 7` against its last numbers (`docs/air_war/09_BALANCE.md`);
+  - `helper_coverage` for the Osa's search and lock missions;
+  - the TV and radar horizon from `bty21` drawn before and after (`tools/map_view.py`).
+  Differences are written into `09_BALANCE.md`, not tuned away unless a mission breaks.
+
+### T4.3 The crop calendar (simcore + data, Sonnet)
+
+- `ground_layers.json`'s `summer` and `autumn` give way to a calendar. Per crop there is a list of states, each with
+  its layer and a window of days in the year. A field's own day in each window is drawn by its id, so the plain changes
+  field by field as a campaign's days pass, the same on every client.
+- Mid-October is a mix judged against the photographs (research table T11):
+  - fresh ploughland;
+  - harrowed and sown ground with a faint green (a new layer, `sown`: Poly Haven `farm_soil`, fetched with the
+    others);
+  - maize stubble, and some maize still standing (land cover colour until T6's field blocks);
+  - wheat stubble mostly ploughed under.
+- `GroundSeason(world)` becomes the scenario's day of the year; `BakeGroundMask` takes the day.
+- Tests: on 15 October every crop's state is one of its October layers; a field's state never goes backwards within a
+  year; two clients bake the same mask.
+
+### T3.0 First, the green ground (Sonnet, ten minutes)
+
+Render the views once with `SAM3D_GROUND_PATTERN=1` (`TERRAIN_ROADMAP.md`, "What the baseline views show"). If the
+flat cells are a layer the pattern shows, fix that layer. If they are the land cover's colour, the `Has` lookup is at
+fault: fix it before T3.1 changes the same shader.
+
+### T3.1 Exact field edges in the ground material (Unreal + the builder, Sonnet)
+
+- `ASimMapActor` makes the estate table texture (`PF_A32B32G32R32F`, one texel per estate: heading, length, width,
+  strip width; nearest, uncompressed) and passes it, with `estate_m` and the table's origin, as parameters.
+- `GROUND_HLSL` gains `FieldAt`, a port of simcore's (`Hash32`, the estate frame, the rows):
+  - A field pixel takes its layer, shade and heading from the mask at its field's centre (decision 2). The heading
+    comes from the estate, so furrows turn exactly at field edges.
+  - Non-field cells blend as now.
+  - Where a field meets a non-field cell, the cell blend decides, as now.
+  - Two fields meeting give a hard edge, softened by 0.5 m of the height blend, so the textures interlock, not a
+    staircase.
+- The 25 m wander stays for non-field cover only.
+- Check: V3 and V10 show straight field edges; V1's furrows turn exactly at the edge; the pattern mode shows the field
+  ids as flat colours with straight borders. The costs go beside `t4a`'s and `t1`'s.
+
+### T3.2 The far ground's colour (simcore + Unreal, Sonnet)
+
+- simcore bakes a far mask from the country's land cover (`CountryMap::LandCoverAt`) at 250 m cells over the far
+  ground. Farmland cells take their field's layer via `FieldAt` at the cell's centre; other covers take their layer.
+  The map proper's 25 m mask wins where both exist.
+- `M_SimGroundFar`: the same field function and estate table, the far mask, and each layer's average colour (the
+  albedo arrays' last mip), with the land cover's tint where the country has no layer. No detail textures, normals or
+  furrows: it is 500 m to 4 km cells seen from far.
+- The far tiles wear it instead of the vertex colours. The towns not drawn keep the town colour.
+- The near material's fade to vertex colours (6-12 km) becomes a fade to the same layer averages, so the map proper
+  and the far ground meet at the same colour.
+- Check: V9 and V10 show no edge at the map proper's border; the far ground's fields continue at the same scale. Cost:
+  the far tiles' shading is measured at V9.
+
+### T3.3 Verges and the town edges (Sonnet, only if T3.1's shots need it)
+
+Where the views still show 25 m steps worth fixing (garden edges along the village street in V2 and V3), add the
+analytic treatment to a second shape kind: a settlement's plots as strips perpendicular to its street (the same
+closed form, along the road). Otherwise leave this for T7, which lays villages out again.
+
+### T3.4 The haze check (Sonnet)
+
+- `terrain_views.py` gains a contrast reading: in each view, the far ground's luminance against the sky at the horizon
+  band, beside the expected `exp(-σ d)` for the weather preset's visibility (σ = 3.912 / V) at the distance of that band
+  (from the view's eye height and the map's ground).
+- V7 and V9 are within the eye's tolerance of it (a factor of 1.5: by eye, not by measurement).
+- `visual_range.json`'s `day_m` stays the movers' range and never exceeds the preset's visibility (already capped in
+  `nav/session.hpp`: confirm it in a test).
+- The TV sight's narrow field is checked once at V7 h180 at 8 km, by eye.
+
+## Order and models
+
+1. T3.0 (Sonnet): the green ground, first, because T3.1 changes the same shader.
+2. T4.1 (Sonnet), then `t4a` run.
+3. T4.2 (Sonnet), then **Opus** for the sight-line re-read and its balance notes.
+4. T3.1 (Sonnet), then the `t3a` run against `t1`.
+5. T4.3 and T3.2 (Sonnet, independent of each other), then T3.4 (Sonnet).
+6. **Opus** reviews the whole (`/code-review`) before the commit, then the owner looks at the page.
+
+Come back to Opus early if:
+- the HLSL field function disagrees with simcore's at a pinned point after two fixes;
+- a sight-line test or balance run moves by more than its usual spread;
+- the far ground's material costs more than 0.5 ms at V9.
+
+## Costs expected
+
+- Near ground: about 30 more ALU instructions and 2 more loads per pixel (the field function, the centre texel, the
+  estate texel). Nothing removed.
+- Far ground: from vertex colours to 2-5 loads and one averaged sample per pixel. It covers most of the screen at V9,
+  so measure it.
+- simcore: the estate table is about 75 by 75 texels. The far mask is about 1200 by 1200 cells (6 MB). Tree rows add
+  a few thousand boxes to the obstacle footprints (R6's index takes them).
