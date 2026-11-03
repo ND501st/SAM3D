@@ -4,6 +4,7 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
@@ -126,6 +127,58 @@ namespace
 		std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
 	};
 	FSimDressingCache GSimDressingCache;
+
+	// The ground's season by the scenario's date, its year's leap day counted (15 October 1985, the sky clock's default,
+	// without a scenario).
+	simcore::scenery::Season GroundSeason(const UWorld* World, const simcore::scenery::GroundLayerRules& Layers)
+	{
+		simcore::SkyClock Clock;
+		int32 Year = 1985;
+		if (USimWorldSubsystem* Sim = World != nullptr ? World->GetSubsystem<USimWorldSubsystem>() : nullptr)
+		{
+			Sim->GetSkyClock(Clock);
+			Year = Sim->GetScenarioYear();
+		}
+		int Month = 10, Day = 15;
+		simcore::DateOfDay(Year, Clock.day_of_year, Month, Day);
+		return Layers.SeasonOfMonth(Month);
+	}
+
+	// The ground's layer mask as a texture (roadmap T1): a texel per land cover cell, unfiltered (the material reads the
+	// four cells round a point itself), row 0 the southernmost, as simcore bakes it.
+	UTexture2D* MaskTexture(const simcore::scenery::GroundMask& Mask)
+	{
+		if (Mask.cols <= 0 || Mask.rows <= 0 || Mask.cols > 16384 || Mask.rows > 16384)
+		{
+			return nullptr;
+		}
+		UTexture2D* T = UTexture2D::CreateTransient(Mask.cols, Mask.rows, PF_B8G8R8A8,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), FName(*FString::Printf(TEXT("GroundMask_%hs"), Mask.id.c_str()))));
+		if (T == nullptr || T->GetPlatformData() == nullptr || T->GetPlatformData()->Mips.Num() == 0)
+		{
+			return nullptr;
+		}
+		T->Filter = TF_Nearest;
+		T->SRGB = false;
+		T->AddressX = TA_Clamp;
+		T->AddressY = TA_Clamp;
+		T->NeverStream = true;
+		T->CompressionSettings = TC_VectorDisplacementmap;
+		FTexture2DMipMap& Mip = T->GetPlatformData()->Mips[0];
+		uint8* Out = static_cast<uint8*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+		const int64 Count = static_cast<int64>(Mask.cols) * Mask.rows;
+		for (int64 I = 0; I < Count; ++I)
+		{
+			// simcore's RGBA to the texture's BGRA.
+			Out[I * 4 + 0] = Mask.texels[I * 4 + 2];
+			Out[I * 4 + 1] = Mask.texels[I * 4 + 1];
+			Out[I * 4 + 2] = Mask.texels[I * 4 + 0];
+			Out[I * 4 + 3] = Mask.texels[I * 4 + 3];
+		}
+		Mip.BulkData.Unlock();
+		T->UpdateResource();
+		return T;
+	}
 }
 
 ASimMapActor::ASimMapActor()
@@ -237,6 +290,59 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 		const simcore::MapSettlementDef& S = Map->Def().detail_settlements.front();
 		const double E = S.centre.east_m / 1000.0, N = S.centre.north_m / 1000.0;
 		All.Add(FView{TEXT("capital_150m"), E, N - 1.5, 150.0, E, N, 0.0});
+	}
+	// Track T's furrows (docs/scenery/TERRAIN_ROADMAP.md, view V1): 1.7 m over the turned field nearest the battery, well
+	// inside it, looking along its furrows. The ground material turns a field's texture with them, so they run straight
+	// ahead.
+	if (bTexturedGround && GroundLayers && Cover && DressRules)
+	{
+		const simcore::scenery::Season Season = GroundSeason(GetWorld(), *GroundLayers);
+		const double Be = 5750.0, Bn = -9050.0, Reach = 1500.0;
+		double BestD = 1e18, Fe = 0.0, Fn = 0.0, Fh = 0.0;
+		for (const simcore::scenery::CoverGrid& G : Cover->grids)
+		{
+			for (int32 Row = 0; Row < G.rows; Row += 2)
+			{
+				const double Cn = G.CentreNorth(Row);
+				if (FMath::Abs(Cn - Bn) > Reach)
+				{
+					continue;
+				}
+				for (int32 Col = 0; Col < G.cols; Col += 2)
+				{
+					const double Ce = G.CentreEast(Col);
+					const double D = FMath::Square(Ce - Be) + FMath::Square(Cn - Bn);
+					const std::size_t I = G.Index(Col, Row);
+					if (D >= BestD || D > Reach * Reach || G.cover[I] != static_cast<std::uint8_t>(simcore::scenery::Cover::Field))
+					{
+						continue;
+					}
+					const int Layer = GroundLayers->LayerAt(simcore::scenery::Cover::Field, G.crop[I], Season);
+					if (!GroundLayers->layers[static_cast<std::size_t>(Layer)].rows)
+					{
+						continue;
+					}
+					const double H = simcore::scenery::FieldHeading(*DressRules, G.parcel_seed, Ce, Cn);
+					const double Ae = FMath::Sin(H), An = FMath::Cos(H);
+					const std::uint64_t P = simcore::scenery::FieldParcel(*DressRules, G.parcel_seed, Ce, Cn);
+					const auto Same = [&](double Along, double Across)
+					{
+						return simcore::scenery::FieldParcel(*DressRules, G.parcel_seed, Ce + Along * Ae + Across * An, Cn + Along * An - Across * Ae) == P;
+					};
+					if (Same(60.0, 0.0) && Same(-20.0, 0.0) && Same(0.0, 30.0) && Same(0.0, -30.0))
+					{
+						BestD = D;
+						Fe = Ce;
+						Fn = Cn;
+						Fh = H;
+					}
+				}
+			}
+		}
+		if (BestD < 1e18)
+		{
+			All.Add(FView{TEXT("furrows"), Fe / 1000.0, Fn / 1000.0, 1.7, (Fe + 12.0 * FMath::Sin(Fh)) / 1000.0, (Fn + 12.0 * FMath::Cos(Fh)) / 1000.0, 0.0});
+		}
 	}
 	const int32 Count = All.Num();
 	ShotTimer -= DeltaSeconds;
@@ -448,6 +554,8 @@ void ASimMapActor::Clear()
 		}
 	}
 	GroundTiles.Reset();
+	GroundMaterials.Reset();
+	GroundMasks.Reset();
 	if (Strips != nullptr)
 	{
 		Strips->DestroyComponent();
@@ -618,6 +726,107 @@ void ASimMapActor::LoadDressing(const FString& DataDirectory)
 	DressRules = C.Rules;
 	Cover = C.Cover;
 	Dressing = C.Dressing;
+	// The ground's layers (roadmap T1): a small file, read each build. Without it the ground keeps the cover's colours.
+	GroundLayers.reset();
+	const FString LayersPath = FPaths::Combine(DataDirectory, TEXT("scenery/ground_layers.json"));
+	std::shared_ptr<simcore::scenery::GroundLayerRules> LayerRules = std::make_shared<simcore::scenery::GroundLayerRules>();
+	std::string Error;
+	if (simcore::scenery::LoadGroundLayers(TCHAR_TO_UTF8(*LayersPath), *DressRules, *LayerRules, &Error))
+	{
+		GroundLayers = LayerRules;
+	}
+	else
+	{
+		UE_LOG(LogSAM3D, Warning, TEXT("Map %s: %s: the ground keeps the land cover's colours"), *MapFile, UTF8_TO_TCHAR(Error.c_str()));
+	}
+}
+
+TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrameLink& Link, const std::vector<const simcore::MapGrid*>& Levels)
+{
+	TArray<UMaterialInterface*> Out;
+	Out.Init(nullptr, static_cast<int32>(Levels.size()));
+	if (!bTexturedGround || !GroundLayers || !Cover || !DressRules)
+	{
+		return Out;
+	}
+	// The ground material with this machine's texture arrays (tools/ue_build_ground_material.py makes it once the
+	// textures are fetched, docs/scenery/TERRAIN_ROADMAP.md). Not there: the plain ground, said once.
+	UMaterialInterface* Parent =
+		LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ThirdParty/Ground/MI_SimGround.MI_SimGround"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (Parent == nullptr)
+	{
+		static bool bSaid = false;
+		if (!bSaid)
+		{
+			bSaid = true;
+			UE_LOG(LogSAM3D, Log, TEXT("Map %s: no /Game/ThirdParty/Ground/MI_SimGround on this machine: the ground keeps the land cover's colours "
+				"(python tools/fetch_textures.py, then tools/ue_build_ground_material.py)"), *MapFile);
+		}
+		return Out;
+	}
+	const simcore::scenery::Season Season = GroundSeason(GetWorld(), *GroundLayers);
+	// The world's (east, north) in m to the map's: the scenario's frame is the world's less this actor's place, and the
+	// frame's (east, north) goes to the map's by an affine map (MapFrameLink::FrameToMap, exactly). The material finds a
+	// pixel's land cover cell by it (the tiles' UVs would do, but a procedural mesh may store them as 16-bit floats: steps
+	// of 30 m this far out).
+	const FVector Here = GetActorLocation();
+	const double ActE = Here.Y / 100.0, ActN = Here.X / 100.0;
+	const simcore::MapPoint O = Link.FrameToMap(0.0, 0.0), Ex = Link.FrameToMap(1000.0, 0.0), Ny = Link.FrameToMap(0.0, 1000.0);
+	const double Ma = (Ex.east_m - O.east_m) / 1000.0, Mb = (Ny.east_m - O.east_m) / 1000.0;
+	const double Mc = (Ex.north_m - O.north_m) / 1000.0, Md = (Ny.north_m - O.north_m) / 1000.0;
+	const FLinearColor MapOff(static_cast<float>(O.east_m - Ma * ActE - Mb * ActN), static_cast<float>(O.north_m - Mc * ActE - Md * ActN), 0.0f, 0.0f);
+	const FLinearColor MapAxes(static_cast<float>(Ma), static_cast<float>(Mb), static_cast<float>(Mc), static_cast<float>(Md));
+	FLinearColor Tiles[4];
+	for (int32 I = 0; I < simcore::scenery::kMaxGroundLayers; ++I)
+	{
+		const float Tile = I < static_cast<int32>(GroundLayers->layers.size()) ? static_cast<float>(GroundLayers->layers[I].tile_m) : 3.0f;
+		Tiles[I / 4].Component(I % 4) = Tile;
+	}
+	// A level is drawn with the land cover square that matches it: a detail area's own, the map proper's ("map").
+	const simcore::MapGrid& Proper = Map->CoreGrid();
+	for (std::size_t L = 0; L < Levels.size(); ++L)
+	{
+		const simcore::MapGrid& G = *Levels[L];
+		const simcore::scenery::CoverGrid* Square = nullptr;
+		for (const simcore::scenery::CoverGrid& C : Cover->grids)
+		{
+			const bool bProper = C.id == "map";
+			if ((&G == &Proper) == bProper && (bProper || (FMath::Abs(C.west_m - G.west_m) < 1.0 && FMath::Abs(C.south_m - G.south_m) < 1.0)))
+			{
+				Square = &C;
+				break;
+			}
+		}
+		if (Square == nullptr)
+		{
+			continue;
+		}
+		UTexture2D* Mask = MaskTexture(simcore::scenery::BakeGroundMask(*Square, *DressRules, *GroundLayers, Season));
+		if (Mask == nullptr)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, this);
+		Mid->SetTextureParameterValue(TEXT("Mask"), Mask);
+		Mid->SetVectorParameterValue(TEXT("MapOff"), MapOff);
+		Mid->SetVectorParameterValue(TEXT("MapAxes"), MapAxes);
+		Mid->SetScalarParameterValue(TEXT("PeriodM"), static_cast<float>(simcore::scenery::kGroundTilePeriodM));
+		// The square in the map's frame, km.
+		Mid->SetVectorParameterValue(TEXT("MaskRect"), FLinearColor(static_cast<float>(Square->west_m / 1000.0), static_cast<float>(Square->south_m / 1000.0),
+			static_cast<float>(Square->cell_m * Square->cols / 1000.0), static_cast<float>(Square->cell_m * Square->rows / 1000.0)));
+		Mid->SetScalarParameterValue(TEXT("MaskCols"), static_cast<float>(Square->cols));
+		Mid->SetScalarParameterValue(TEXT("MaskRows"), static_cast<float>(Square->rows));
+		Mid->SetVectorParameterValue(TEXT("TileA"), Tiles[0]);
+		Mid->SetVectorParameterValue(TEXT("TileB"), Tiles[1]);
+		Mid->SetVectorParameterValue(TEXT("TileC"), Tiles[2]);
+		Mid->SetVectorParameterValue(TEXT("TileD"), Tiles[3]);
+		GroundMasks.Add(Mask);
+		GroundMaterials.Add(Mid);
+		Out[static_cast<int32>(L)] = Mid;
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (%hs)"), *MapFile, GroundMaterials.Num(), static_cast<int32>(Levels.size()),
+		simcore::scenery::SeasonName(Season));
+	return Out;
 }
 
 void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
@@ -662,6 +871,8 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	}
 	const FLinearColor TownColour(0.21f, 0.2f, 0.18f);
 	const std::vector<const simcore::MapGrid*> Levels = M.DrawnLevels();
+	// The map proper and the detail areas with their layers' textures where this machine has them (roadmap T1).
+	const TArray<UMaterialInterface*> Textured = TexturedGround(Link, Levels);
 	// The detail areas (roadmap R6) come first in the levels: one inside the map proper is drawn as the map proper is
 	// (its colours, collision, shadows), one beyond it as the far ground near the scenario is.
 	const auto IsCoreLike = [&](std::size_t Level)
@@ -833,7 +1044,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		Tile->bUseAsyncCooking = true;
 		Tile->SetCastShadow(IsCoreLike(Level));
 		Tile->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, Uv, Colours, Tangents, bCollide);
-		Tile->SetMaterial(0, GroundMaterial);
+		Tile->SetMaterial(0, Textured[static_cast<int32>(Level)] != nullptr ? Textured[static_cast<int32>(Level)] : GroundMaterial);
 		Tile->SetCollisionEnabled(!bCollide ? ECollisionEnabled::NoCollision
 											: (IsCoreLike(Level) ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly));
 		Tile->RegisterComponent();

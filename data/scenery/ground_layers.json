@@ -1,0 +1,57 @@
+{
+  "layers_id": "ground_layers",
+  "status": "first pass (roadmap T1, docs/scenery/TERRAIN_ROADMAP.md)",
+  "notes": "The ground's surface layers (simcore/scenery/ground_layers.hpp, read by LoadGroundLayers): the land cover's cells take a layer by their cover, a field's by its crop and the season (autumn_months by the scenario's date). Each layer is drawn by Unreal's ground material from its textures (\"texture\": an id in data/scenery/textures.json; empty: none chosen, the land cover's colour only), repeated every tile_m metres, which divides 600 m (simcore::scenery::kGroundTilePeriodM; near each scan's own width); a layer with rows turns with the field's furrows (its textures' furrows run across the image, along U, as farm_furrows' do). The summer's standing wheat, maize and sunflowers have no texture: no free scan of a standing crop exists (docs/scenery/TERRAIN_ROADMAP.md section 4). At most 16 layers. Presentation only: nothing in the simulation reads it.",
+  "source": "game value: sam3d estimate (the Pannonian plain's fields, woods and villages; tile sizes to be tuned against -SimMapShots and the reference views in docs/scenery/TERRAIN_ROADMAP.md)",
+  "confidence": "estimate",
+  "layers": [
+    { "id": "meadow", "tile_m": 2.0, "rows": false, "texture": "leafy_grass" },
+    { "id": "wheat", "tile_m": 2.5, "rows": true, "texture": "" },
+    { "id": "stubble", "tile_m": 1.875, "rows": true, "texture": "stubble_soil" },
+    { "id": "maize", "tile_m": 3.0, "rows": true, "texture": "" },
+    { "id": "maize_stubble", "tile_m": 3.0, "rows": true, "texture": "maize_litter" },
+    { "id": "sunflower", "tile_m": 3.0, "rows": true, "texture": "" },
+    { "id": "ploughed", "tile_m": 2.0, "rows": true, "texture": "farm_furrows" },
+    { "id": "forest_floor", "tile_m": 2.4, "rows": false, "texture": "forest_leaves" },
+    { "id": "marsh", "tile_m": 2.4, "rows": false, "texture": "forest_mud" },
+    { "id": "yard", "tile_m": 2.0, "rows": false, "texture": "packed_dirt" },
+    { "id": "trampled", "tile_m": 2.4, "rows": false, "texture": "muddy_tracks" },
+    { "id": "verge", "tile_m": 2.5, "rows": false, "texture": "grass_ground" },
+    { "id": "bank", "tile_m": 3.75, "rows": false, "texture": "river_silt" }
+  ],
+  "cover": {
+    "forest": "forest_floor",
+    "marsh": "marsh",
+    "town": "yard",
+    "military": "trampled",
+    "road": "verge",
+    "water": "bank"
+  },
+  "crops": {
+    "wheat": {
+      "summer": "wheat",
+      "autumn": "stubble"
+    },
+    "maize": {
+      "summer": "maize",
+      "autumn": "maize_stubble"
+    },
+    "sunflower": {
+      "summer": "sunflower",
+      "autumn": "ploughed"
+    },
+    "ploughed": {
+      "summer": "ploughed",
+      "autumn": "ploughed"
+    },
+    "pasture": {
+      "summer": "meadow",
+      "autumn": "meadow"
+    }
+  },
+  "autumn_months": [
+    9,
+    10,
+    11
+  ]
+}

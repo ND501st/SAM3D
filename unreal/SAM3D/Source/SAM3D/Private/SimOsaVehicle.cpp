@@ -107,6 +107,9 @@ ASimOsaVehicle::ASimOsaVehicle()
 	CabinCamera->PostProcessSettings.bOverride_AutoExposureMaxBrightness = true;
 	CabinCamera->PostProcessSettings.AutoExposureMinBrightness = CabinExposureBrightness;
 	CabinCamera->PostProcessSettings.AutoExposureMaxBrightness = CabinExposureBrightness;
+	// The engine's own compensation, which the brightness above was tuned with: the sky's outdoor bias is not the cabin's.
+	CabinCamera->PostProcessSettings.bOverride_AutoExposureBias = true;
+	CabinCamera->PostProcessSettings.AutoExposureBias = 1.0f;
 	CabinHUDClass = ASimCabinHUD::StaticClass();
 
 	CrewHotkeys = DefaultCrewHotkeys();

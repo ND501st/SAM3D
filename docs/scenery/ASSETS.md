@@ -60,10 +60,29 @@ third-party files.
 The source files of redistributable models (CC0, CC-BY), if kept at all, go under `art/thirdparty/`, which is also
 ignored until a model's licence and size have been agreed for git.
 
+## Textures: `data/scenery/textures.json`
+
+The ground's textures (track T, `docs/scenery/TERRAIN_ROADMAP.md` section 4) have a register of their own, with the
+same rules: each entry gives its `site` (`polyhaven` or `ambientcg`), the site's `asset` id, `licence`, `author`,
+`origin`, `resolution`, the scan's real width `scan_m` and what it is `for`, and optionally `crop_u`, the part of the
+scan's width kept (and stretched back) where only its middle tiles along U. All ten are CC0. They are fetched per
+machine, never committed:
+
+```bash
+python tools/fetch_textures.py --sizes        # what would be downloaded, MB per texture (204 MB for all ten at 2k)
+python tools/fetch_textures.py                # albedo, normal (DirectX) and orm.png into art/thirdparty/textures/<id>/
+```
+
+The tool takes Poly Haven's files from its API (JPEG first) and ambientCG's 2K-JPG zips, keeps only the colour, the
+DirectX normal, the roughness and the occlusion, and packs `orm.png` (R occlusion, G roughness). `--record` writes
+each file's SHA-256 into the register. A texture is added like a model: with the owner's say-so, its licence checked on
+its page that day. Its test: `tools/tests/test_fetch_textures.py`.
+
 ## Credits
 
 The game's credits list every registered CC-BY asset: its title (the `notes`), its author, the licence and the origin,
-as CC-BY 4.0 requires. CC0 and the owner's own models are credited as good practice. None are registered yet.
+as CC-BY 4.0 requires. CC0 and the owner's own models are credited as good practice (the ground's textures: Poly Haven's
+authors and ambientCG, as `textures.json` names them). No CC-BY asset is registered yet.
 
 ## Checks
 

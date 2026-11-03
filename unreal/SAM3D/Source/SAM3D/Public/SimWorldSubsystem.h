@@ -1748,6 +1748,9 @@ public:
 	/** The scenario's sky clock (its place, date, clock offset and start hour), for the sky actor to turn the same sun. */
 	bool GetSkyClock(simcore::SkyClock& Out) const;
 
+	/** The year of the scenario's "date" (1985 without a scenario): the sky clock's day of the year read as a date. */
+	int32 GetScenarioYear() const;
+
 	/** The moment being drawn: sim time plus the fixed step's leftover in the accumulator (between two steps); the sim
 	 *  time itself when paused, finished or on a network client (which never steps). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Sim")

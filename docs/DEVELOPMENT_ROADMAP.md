@@ -17,7 +17,8 @@ commander's plan and the mission kinds in first form (14.1-14.3, 14.5); phase 15
 gates **the battery's war, phases 13–21**; meanwhile the leftovers each phase lists ("Left:", "Next:").
 **Priority from 2 Nov 2026: track R** (the owner's review of the dynamic campaign test): damage states drawn by
 chance and the AAA's accuracy by range first, then nothing drawn under the map, flight with attitude, a more realistic
-map, the time of day in the menu, and pilots who defend themselves.
+map, the time of day in the menu, and pilots who defend themselves. **Track T** (3 Nov 2026), the terrain made to look
+like the plain: its roadmap `docs/scenery/TERRAIN_ROADMAP.md`, T0's research done, T1's textured ground in first form.
 
 The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
 targets from the battery's PU-12 and the crew changes ripple through everything after them (re-sequenced 2 Oct 2026).
@@ -314,6 +315,31 @@ mission. Then R3, R6 and R7. R4 last, on R1 and R3.
 - nothing under the ground;
 - a map with fields, woods and towns;
 - the same hour at night, chosen in the menu, looking and fighting like night.
+
+## Track T: the terrain (3 Nov 2026)
+
+The project owner, 3 Nov 2026: a roadmap for the terrain, with research on the terrain (reference images), the
+selection of 3D models online and on Fab and the Unreal marketplace, PBR textures (free only), and the development
+process; then development. It carries on from R6, which built the map's data and drew it plainly, to make the map look
+like the Great Hungarian Plain on 15 October 1985, as the AA and AAA maps of Eastern Europe look like their places.
+**The roadmap is `docs/scenery/TERRAIN_ROADMAP.md`**: the rules, the research (`docs/research/TERRAIN_*_2026-11.md`),
+the textures and models chosen, the technical design and the process for every asset. Like track R, it is not gated.
+
+| # | Phase |
+|---|---|
+| T0 | **Research.** 92 openly licensed reference photographs of the plain and 16 traits; 10 camera views to check against; 12 AA and AAA maps' ground and 18 lessons; free PBR textures and models for every layer and kind (215 picks, each licence checked again by a second reader: 205 confirmed, 9 uncertain, 1 refuted); a runtime ground's texturing and geometry in UE 5.8. **Done (3 Nov 2026)** |
+| T1 | **The textured ground.** The ground's layers by cover, crop and season (`simcore/scenery/ground_layers.hpp`, `data/scenery/ground_layers.json`), a mask per land cover square from simcore, the texture register (`data/scenery/textures.json`: 10 CC0 textures from Poly Haven and ambientCG) and its fetch tool (`tools/fetch_textures.py`), the material made per machine (`tools/ue_build_ground_material.py`: three texture arrays, the textures laid by the world's position in 600 m squares, turned with the furrows, blended across the cells, faded to the land cover's colour far off), `ASimMapActor`'s materials on the map proper and the detail areas. **Built in first form (3 Nov 2026)**, checked with test patterns in `-SimMapShots` (a new view, `furrows`, looks along a turned field). Left: the textures fetched on the owner's say-so (204 MB), the shots looked at with them, the distances and tints tuned, the cost measured |
+| T2 | **The views and the costs**: V1-V10 as shots on the Kesmark map, a page setting each beside its photographs, the milliseconds per pass |
+| T3 | **The colour map and the far field**: a colour per tile synthesized from simcore's vectors, the far ground's colour map, the haze from the weather's visibility |
+| T4 | **The plain's layout** (simcore data): collective fields of 100-200 ha, household strips at the villages, tree rows on the farm tracks, tanyas in their trees, strip-plot villages, the crop calendar for the scenario's date; the balance runs re-read |
+| T5 | **Trees and reeds from models**, at simcore's positions, with the autumn tint, impostors and masses in rings |
+| T6 | **Clutter and crops** in a ring round the camera; standing crops as blocks |
+| T7 | **Villages and farms**: the kocka and long houses built, the picks registered, the kits as rules, building surfaces |
+| T8 | **Roads, rivers and the battery's position**: road surfaces, verges, ditches, dykes, reeds; pads and revetments in simcore |
+| T9 | **Geometry and cost**: runtime static mesh tiles, then baked Nanite tiles if they measure better |
+
+**Order:** T1, then T2. T3 and T4 side by side, then T5 and T7 model by model with the owner's say-so, T6 and T8
+after, T9 when a measure calls for it.
 
 ## The battery's war: phases 13-21 (planned 22 Oct 2026)
 

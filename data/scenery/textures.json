@@ -1,0 +1,180 @@
+{
+  "register_id": "textures",
+  "notes": "The texture register (roadmap T1, docs/scenery/TERRAIN_ROADMAP.md): every third-party texture the ground and the map's buildings are drawn with, where it comes from and under what licence, as data/scenery/assets.json does for models. Only free, CC0 or CC-BY, from the sites tools/fetch_textures.py fetches from (Poly Haven, ambientCG). The files are fetched per machine into art/thirdparty/textures/<id>/ (ignored by git) and imported by tools/ue_build_ground_material.py. A ground layer names its texture by id (data/scenery/ground_layers.json). scan_m is the scan's real width (the site's own figure); the layer's tile_m sets its repeat on the ground. The picks and why: docs/scenery/TERRAIN_ROADMAP.md section 4.",
+  "textures": [
+    {
+      "id": "leafy_grass",
+      "site": "polyhaven",
+      "asset": "leafy_grass",
+      "licence": "CC0-1.0",
+      "author": "Charlotte Baglioni",
+      "origin": "https://polyhaven.com/a/leafy_grass",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "meadow and pasture: trampled grass with scattered brown leaves and twigs",
+      "sha256": {
+        "albedo": "8e1c6d21365d4b89bc5a35ab664da98a78dbc3ab9ba6100474881c8619a5b113",
+        "normal": "6ad4b29842cb68dd4ccadeaa14f76cc52e7717eded3bac41e537a166be07356b",
+        "roughness": "34e1733bf4064b6950a575ff57e78c8b7ff71b63749eb48a49221bd65de6fb4f",
+        "ao": "bcce4368f6a1affe11b4a643e14cfed7dfb46abf6bb9e6a28a3b87c2de2ddb11"
+      }
+    },
+    {
+      "id": "stubble_soil",
+      "site": "ambientcg",
+      "asset": "Ground071",
+      "licence": "CC0-1.0",
+      "author": "ambientCG",
+      "origin": "https://ambientcg.com/view?id=Ground071",
+      "resolution": "2k",
+      "scan_m": 1.75,
+      "for": "wheat stubble after discing: brown soil strewn with pale straw (no free scan of standing stubble in drill rows exists)",
+      "sha256": {
+        "ao": "d7019c2ff1169d9e127477ffa9905e495edd89b8bb118c372f03c6f77e949f0e",
+        "albedo": "e842a27e8a832e27eb04b4f7886db45099af952099f8b57d300552e75c808b1d",
+        "normal": "b1257ee2b98f6286979118936acf66fa48932b17ab644cf823b5885e5f396c02",
+        "roughness": "e7821425eb9f1bdd6ca545cd254ae6c3ef2a3a0485c8a2ec326b1b923564bdfb"
+      }
+    },
+    {
+      "id": "maize_litter",
+      "site": "ambientcg",
+      "asset": "Ground072",
+      "licence": "CC0-1.0",
+      "author": "ambientCG",
+      "origin": "https://ambientcg.com/view?id=Ground072",
+      "resolution": "2k",
+      "scan_m": 1.75,
+      "for": "a maize field after harvest: pale chopped stalks on soil, laid larger than its scan (stover is coarser than straw)",
+      "sha256": {
+        "ao": "557416690d61cfcbaeeb351e33d570aecf96f73a2dbb53640d22a2ad780d9abb",
+        "albedo": "5d0e0d5fce41711777eded063feb23db16d2bc3ed2b66cd529c3206723bc602b",
+        "normal": "78171451dd90b1d97cfebe723d1d51e1a06a78fbb47a360aa41a4ed3d663c17c",
+        "roughness": "bc9c3910c30246a2a3a80f9e11975dd10131dc1310e6baffcf9799dfdd05e2a3"
+      }
+    },
+    {
+      "id": "farm_furrows",
+      "site": "polyhaven",
+      "asset": "farm_furrows",
+      "licence": "CC0-1.0",
+      "author": "Amal Kumar",
+      "origin": "https://polyhaven.com/a/farm_furrows",
+      "resolution": "2k",
+      "scan_m": 2.1,
+      "crop_u": [
+        0.17,
+        0.8
+      ],
+      "for": "ploughed land: deep ridged furrows (across the image, along its U), damp clods, straw bits; cut to its ridges along U (crop_u), as each side of the scan is a trench and grass, which laid end to end broke the furrows every repeat",
+      "sha256": {
+        "albedo": "673f876ad96deaae49cbca81a932e5f1ccf1b01634297719d8258f1fe6e73436",
+        "normal": "ed253758c1a40569320ff19f23853348197ba5fee55f0963f99c1d10fca396ee",
+        "roughness": "1de914e5d42e20cf897a0863592288e888d236e7ac8cb4ab9443e330913497db",
+        "ao": "39f7e41f56053b61752b6bf701fc0522460fba0b47d0dd32217ef2f79baee370"
+      }
+    },
+    {
+      "id": "forest_leaves",
+      "site": "polyhaven",
+      "asset": "forest_leaves_03",
+      "licence": "CC0-1.0",
+      "author": "Rob Tuytel, Dimitrios Savva",
+      "origin": "https://polyhaven.com/a/forest_leaves_03",
+      "resolution": "2k",
+      "scan_m": 2.3,
+      "for": "the floor of the oak and acacia woods in October: dense dry leaf litter",
+      "sha256": {
+        "albedo": "638aa3006c508566fae0b78bb0f87ab8a3e7c89dd37d7a25966a4b8dd288c651",
+        "normal": "3924303f2bf23f9da4e2b37aafe8953a5d816f9e07922b926fa38bc890d26dd9",
+        "roughness": "838d652a3563d6a26a9318af7d17e4dd7eea61e9735343ee25d865118d6d2d65",
+        "ao": "5c99ffb51cf609dce02af0114cd020f7bc9034d1d634ef27a8d343dca9a4e2d9"
+      }
+    },
+    {
+      "id": "forest_mud",
+      "site": "polyhaven",
+      "asset": "mud_forest",
+      "licence": "CC0-1.0",
+      "author": "eye-candy.xyz",
+      "origin": "https://polyhaven.com/a/mud_forest",
+      "resolution": "2k",
+      "scan_m": 2.35,
+      "for": "marsh: dark wet mud with a sheen",
+      "sha256": {
+        "albedo": "6726cf9ad9b1be9bf284c629dd95d732527b18fc92be06ae9093a96a68f77628",
+        "normal": "084d8c4a26e2d2ef423ed690c303cd4a6474147ad566ae895f1874d9d3a82848",
+        "roughness": "53245bf1e48255c38bb84ad033fb1b33da317d8507c513afd3f7f4dddcfbedaf",
+        "ao": "fb2d85523c4c3d6364de8f08d07157795570a96ba27eda77a9f3a8f62b042f94"
+      }
+    },
+    {
+      "id": "packed_dirt",
+      "site": "polyhaven",
+      "asset": "dirt",
+      "licence": "CC0-1.0",
+      "author": "Charlotte Baglioni",
+      "origin": "https://polyhaven.com/a/dirt",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "the villages' yards and lanes: dusty compacted earth with small stones",
+      "sha256": {
+        "albedo": "126d3e4886cc94b494ba609ddc323a77ff0362a1b156c3750d5d2a0a0ead02b8",
+        "normal": "50f56472147f593d8b62d71bf91a454b73674112dd3da94a43ebc5906e311dc4",
+        "roughness": "a17048230e1a86fc874b381360f6a821df1f6b0174ca7f85a59596c4290080fa",
+        "ao": "5c6f36c9cfc6a03faca87d5407eaa26e18d33c0b3762016de023a5cafa3e2246"
+      }
+    },
+    {
+      "id": "muddy_tracks",
+      "site": "polyhaven",
+      "asset": "muddy_tracks",
+      "licence": "CC0-1.0",
+      "author": "Amal Kumar",
+      "origin": "https://polyhaven.com/a/muddy_tracks",
+      "resolution": "2k",
+      "scan_m": 2.25,
+      "for": "military ground: wet earth churned by tyres and tracks",
+      "sha256": {
+        "albedo": "09d45e99ae5338b4cdb0aa1897519bc096bc38a4249c5042512e5ee74b21125c",
+        "normal": "8dbc556c3a369dcf97bbe542444a851a4b9eb9675e0ddd5b79c622306b38b11d",
+        "roughness": "3b14301b357373eec83330655b98261918eb9483627e8d936807d80df566ba5e",
+        "ao": "d2c8bdfc9d20c011817ec41da8036bce14a6fe8e4514973cbb734311f5f06c50"
+      }
+    },
+    {
+      "id": "grass_ground",
+      "site": "polyhaven",
+      "asset": "grass_ground",
+      "licence": "CC0-1.0",
+      "author": "Charlotte Baglioni",
+      "origin": "https://polyhaven.com/a/grass_ground",
+      "resolution": "2k",
+      "scan_m": 2.51,
+      "for": "road verges: worn grass on soil",
+      "sha256": {
+        "albedo": "4272bddc71a7fa659d1deeb13a9df8c42e68a5ac8cde7523187e4a081e028258",
+        "normal": "53f05a571694d521031f36eddbb405771252a0eeffc772ad7b6f4086b9f9cf43",
+        "roughness": "afaed95537e894b8054db38c81712a6d9504b05b560274526621d91d5a95fbe7",
+        "ao": "ae4739457175ab2add4421a8ae803c7ef5005c946f942828d2adf7abe9843850"
+      }
+    },
+    {
+      "id": "river_silt",
+      "site": "ambientcg",
+      "asset": "Ground054",
+      "licence": "CC0-1.0",
+      "author": "ambientCG",
+      "origin": "https://ambientcg.com/view?id=Ground054",
+      "resolution": "2k",
+      "scan_m": 3.5,
+      "for": "river banks and beds: smooth grey-beige silt and sand",
+      "sha256": {
+        "ao": "e2492e2ced9a853de4cf3a904848dff90c92d22e7545d0e941c4d0273670270c",
+        "albedo": "9f9459ae378584f568c9da887a30ab5987890df422af5a157763a51992e61245",
+        "normal": "9e20a41c6dde507de86f2f01115543e789c80ef891ea6f84393da6b175604cde",
+        "roughness": "2f977986be51d4e07e7a3a03051e49049f9c94cefb0246a714400d2a076c8044"
+      }
+    }
+  ]
+}

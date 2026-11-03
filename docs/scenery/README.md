@@ -177,6 +177,24 @@ roads with 1.5 m shoulders and rivers with 6 m banks; everything on the sim's gr
 capital from 150 m. The ground tiles are R5's, unchanged, so `SAM3D.Map.GroundAgrees` and `DrawnGroundAt` still
 judge what is drawn.
 
+### The ground's textures (track T, T1)
+
+`simcore/scenery/ground_layers.hpp`, with its rules in `data/scenery/ground_layers.json`: the ground's surface layers
+(meadow, stubble, maize stubble, ploughland, forest floor, marsh, yard, trampled, verge, bank, and the summer's standing
+crops), which layer a cell wears by its cover, its crop and the season (autumn in the scenario's September to November),
+each layer's texture from the register `data/scenery/textures.json` and its repeat (dividing 600 m). `BakeGroundMask`
+gives one texel per 25 m cell of each land cover square: the layer, the furrows' heading, the field's own shade, and
+whether the layer turns with the furrows. Presentation only; every client bakes the same.
+
+The textures (CC0, Poly Haven and ambientCG) are fetched per machine by `python tools/fetch_textures.py` into
+`art/thirdparty/textures/` (ignored), with the owner's say-so (`--sizes` first). `tools/ue_build_ground_material.py`, run
+in a commandlet, makes the texture arrays, `M_SimGround` and `MI_SimGround` under `/Game/ThirdParty/Ground/` (ignored).
+`ASimMapActor` gives each detail level and the map proper a dynamic instance with its square's mask; a machine without
+the material keeps the vertex colours. With `SAM3D_GROUND_PATTERN=1` the builder lays test patterns instead, to check
+the turn, the repeats and the cells in `-SimMapShots` before any texture is fetched; its view `furrows` looks along a
+turned field's furrows from 1.7 m (they run straight ahead when the turn is right). How it works and what is next:
+[TERRAIN_ROADMAP.md](TERRAIN_ROADMAP.md) sections 6.1 and 7.
+
 The haze near the ground is drawn as an exponential height fog on `ASimSkyWeatherActor`: of Koschmieder's extinction
 for the day's visibility (the atmosphere's aerosol, R7's sky), `HeightFogShare` (0.3, a game value) is the fog's and
 the rest stays the atmosphere's, so together they keep the day's visibility; its density thins upward over

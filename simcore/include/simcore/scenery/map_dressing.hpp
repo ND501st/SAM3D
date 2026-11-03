@@ -248,15 +248,30 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
 
 // ---------------------------------------------------------------------------------------------- the land cover
 
+namespace dressing_detail {
+
+// The draw of the square of farmland (east, north) lies in, which sets its furrows' heading and its fields' width.
+inline std::uint64_t ParcelSquare(const DressingRules& r, std::uint64_t seed, double e, double n) {
+    const double hc = r.parcel_heading_cell_m;
+    const long long hx = static_cast<long long>(std::floor(e / hc)), hy = static_cast<long long>(std::floor(n / hc));
+    return noise::Mix64(seed ^ noise::Mix64(Bits(hx) * 0x8CB92BA72F3D8DD7ull ^ noise::Mix64(Bits(hy))));
+}
+
+}  // namespace dressing_detail
+
+// The way the furrows run at (east, north): radians clockwise from north, in [0, pi). Along it a field is a parcel's
+// length, across it its width (FieldParcel).
+inline double FieldHeading(const DressingRules& r, std::uint64_t seed, double e, double n) {
+    return dressing_detail::Unit(dressing_detail::ParcelSquare(r, seed, e, n)) * kPi;
+}
+
 // The parcel of farmland (east, north) lies in, as a number: the fields' furrows run one way in each square of
 // parcel_heading_cell_m; across them the fields are a width the square draws, along them each row of fields its own
 // length and offset.
 inline std::uint64_t FieldParcel(const DressingRules& r, std::uint64_t seed, double e, double n) {
     using dressing_detail::Bits;
     using dressing_detail::Unit;
-    const double hc = r.parcel_heading_cell_m;
-    const long long hx = static_cast<long long>(std::floor(e / hc)), hy = static_cast<long long>(std::floor(n / hc));
-    const std::uint64_t hs = noise::Mix64(seed ^ noise::Mix64(Bits(hx) * 0x8CB92BA72F3D8DD7ull ^ noise::Mix64(Bits(hy))));
+    const std::uint64_t hs = dressing_detail::ParcelSquare(r, seed, e, n);
     const double heading = Unit(hs) * kPi;
     const double u = e * std::sin(heading) + n * std::cos(heading), v = e * std::cos(heading) - n * std::sin(heading);
     const double width = r.parcel_width_min_m + (r.parcel_width_max_m - r.parcel_width_min_m) * Unit(noise::Mix64(hs ^ 0x1ull));
@@ -284,6 +299,7 @@ inline std::uint8_t CropOf(const DressingRules& r, std::uint64_t parcel) {
 // One square of the land cover: cells `cell_m` across from (west, south), each its cover and, on a field, its crop.
 struct CoverGrid {
     std::string id;  // the detail area's, or "map" for the map proper
+    std::uint64_t parcel_seed = 0;  // the fields' draw (FieldParcel, FieldHeading)
     double west_m = 0.0, south_m = 0.0, cell_m = 25.0;
     int cols = 0, rows = 0;
     std::vector<std::uint8_t> cover;  // Cover
@@ -414,6 +430,7 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
         g.cover.assign(count, static_cast<std::uint8_t>(Cover::Field));
         g.crop.assign(count, 0);
         const std::uint64_t seed = noise::Mix64(def.seed ^ 0xF1E1D5ull);
+        g.parcel_seed = seed;
         for (int r = 0; r < g.rows; ++r) {
             for (int c = 0; c < g.cols; ++c) g.crop[g.Index(c, r)] = CropOf(rules, FieldParcel(rules, seed, g.CentreEast(c), g.CentreNorth(r)));
         }

@@ -3,6 +3,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -58,6 +59,12 @@ ASimSkyWeatherActor::ASimSkyWeatherActor()
 	HeightFog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("HeightFog"));
 	HeightFog->SetupAttachment(Root);
 	HeightFog->SetVolumetricFog(false);
+
+	// The outdoors' exposure (OutdoorExposureBias), for every view not setting its own.
+	Exposure = CreateDefaultSubobject<UPostProcessComponent>(TEXT("Exposure"));
+	Exposure->SetupAttachment(Root);
+	Exposure->bUnbound = true;
+	Exposure->Settings.bOverride_AutoExposureBias = true;
 }
 
 void ASimSkyWeatherActor::BeginPlay()
@@ -68,6 +75,8 @@ void ASimSkyWeatherActor::BeginPlay()
 	{
 		bDrawCloudCells = true;  // the sim's own cloud, as boxes: what the TV cannot see through
 	}
+	FParse::Value(FCommandLine::Get(), TEXT("SimExposureBias="), OutdoorExposureBias);
+	Exposure->Settings.AutoExposureBias = OutdoorExposureBias;
 	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")))
 	{
 		CloudMaterial = UMaterialInstanceDynamic::Create(M, this);

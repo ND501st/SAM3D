@@ -6,6 +6,7 @@
 
 #include "simcore/scenery/asset_register.hpp"
 #include "simcore/scenery/basic_models.hpp"
+#include "simcore/scenery/ground_layers.hpp"
 #include "simcore/scenery/map_dressing.hpp"
 #include "simcore/scenery/map_meshes.hpp"
 #include "simcore/scenery/munitions.hpp"
