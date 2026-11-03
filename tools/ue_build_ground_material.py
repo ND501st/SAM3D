@@ -108,7 +108,14 @@ float Far = saturate((Depth_m - FarStartM) / max(FarLengthM, 1.0));
     float2 Gy = float2(dot(Dy, DirU), dot(Dy, DirV)) / Tile;
     float3 Uvw = float3(Uv, Layer);
     bool Has = G.Pick(HasA, HasB, HasC, HasD, Layer) > 0.5;
-    float Shade = lerp(1.0 - ShadeAmount, 1.0 + ShadeAmount, T.b);
+    // B: the field's shade in its low 7 bits, 128 added for household strips (simcore's BakeGroundMask): a strip is StripM
+    // across the furrows and each takes a shade of its own.
+    float Bv = T.b * 255.0;
+    float StripF = step(127.5, Bv);
+    float Shade01 = (Bv - StripF * 128.0) / 127.0;
+    float Vm = P.x * cos(Heading) - P.y * sin(Heading);
+    float StripShade = (G.Hash(float2(floor(Vm / max(StripM, 1.0)), (float)Layer)) - 0.5) * 2.0 * StripVar;
+    float Shade = lerp(1.0 - ShadeAmount, 1.0 + ShadeAmount, Shade01) * (1.0 + StripF * StripShade);
     float3 A = Albedo.SampleGrad(AlbedoSampler, Uvw, Gx, Gy).rgb;
     float3 Avg = Albedo.SampleLevel(AlbedoSampler, float3(0.5, 0.5, Layer), 11.0).rgb;
     A = lerp(A, Avg, Far) * Shade;
@@ -390,6 +397,8 @@ def build_material(arrays):
         ('HasC', vector('HasC', (0.0, 0.0, 0.0, 0.0))),
         ('HasD', vector('HasD', (0.0, 0.0, 0.0, 0.0))),
         ('WarpM', scalar('WarpM', 6.0)),
+        ('StripM', scalar('StripM', 30.0)),
+        ('StripVar', scalar('StripVar', 0.3)),
         ('ShadeAmount', scalar('ShadeAmount', 0.08)),
         ('MacroAmount', scalar('MacroAmount', 0.12)),
         ('HeightBlend', scalar('HeightBlend', 0.6)),

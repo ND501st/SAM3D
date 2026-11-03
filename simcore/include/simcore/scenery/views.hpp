@@ -387,6 +387,13 @@ inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingR
                 const std::uint64_t here = FieldParcel(rules, g->parcel_seed, fe, fn);
                 double back = 0.0;
                 while (back < 2000.0 && FieldParcel(rules, g->parcel_seed, fe - back * ue, fn - back * un) == here) back += 5.0;
+                // The edge to a few centimetres: it lies between back - 5 (in the parcel) and back (out of it).
+                double in = std::max(0.0, back - 5.0), out = back;
+                for (int k = 0; k < 8; ++k) {
+                    const double mid = 0.5 * (in + out);
+                    (FieldParcel(rules, g->parcel_seed, fe - mid * ue, fn - mid * un) == here ? in : out) = mid;
+                }
+                back = out;
                 // 2 m beyond the edge (into the neighbouring parcel), looking back across this one.
                 s.ok = true;
                 s.e = fe;

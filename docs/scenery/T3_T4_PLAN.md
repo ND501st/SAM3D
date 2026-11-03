@@ -203,3 +203,25 @@ Come back to Opus early if:
   so measure it.
 - simcore: the estate table is about 75 by 75 texels. The far mask is about 1200 by 1200 cells (6 MB). Tree rows add
   a few thousand boxes to the obstacle footprints (R6's index takes them).
+
+## What was built, and where it differs (4 Nov 2026)
+
+**T3.0** found V8's flat green (the map actor drew the marsh as slabs over the ground: fixed) and left V7's open
+(`TERRAIN_ROADMAP.md`, "What the baseline views show").
+
+**T4.1**, built in first form:
+- `FieldAt` in `scenery/map_dressing.hpp` is the closed-form field function (32-bit `Hash32`/`FieldHash`, pinned by a
+  test for the shader's port): estates of `parcel_heading_cell_m` (4 km), fields of 84-200 ha (`parcel_length_m` 1200-2000
+  by `parcel_width_m` 700-1000), a straight edge at every distance. `FieldHeading` and `FieldParcel` are wrappers over
+  it, so the views, the ground layers and the cover raster needed no new calls.
+- Household strips: a field whose centre lies within `strip_reach_m` (600 m) of a settlement's edge is flagged
+  (`CoverGrid::strips`, the mask's B bit 7; the shade keeps B's low 7 bits). The material gives each strip (30 m across
+  the furrows, `StripM`) a shade of its own, first form; a strip's own crop and layer are for later.
+- Differences from the plan: **no estate table** (an estate's heading, width and draws are hashes of its square, so
+  the shader needs no texture for them: T3.1 is simpler); **the heading does not follow the nearest road yet** (that
+  needed the table; to be added as a hash-and-snap if the views ask for it); the nominal field centre is in its own
+  field for 86% of fields (an estate's border cuts the rest), so T3.1's shader reads the mask at the centre only when
+  `FieldAt(centre).id` matches and falls back to the pixel's cell otherwise.
+- The first render (`t4a`): V3 and V10 show large cut fields and strips at the village's edge; the field edges still
+  step at 25 m (T3.1).
+

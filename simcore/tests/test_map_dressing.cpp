@@ -339,3 +339,141 @@ SC_TEST("map dressing: a building's variant and part by its place") {
     b.height_m = 30.5;  // a 30 m block sunk half a metre
     SC_EXPECT(FlatsFloors(b) == 11);
 }
+
+SC_TEST("map dressing: the field function is the ground material's, pinned by its hash's values") {
+    // The material's HLSL (tools/ue_build_ground_material.py) repeats these, so a change here must change it too.
+    SC_EXPECT(Hash32(0u) == 0u);
+    SC_EXPECT(Hash32(1u) == 1753845952u);
+    SC_EXPECT(Hash32(0xDEADBEEFu) == 3861431939u);
+    SC_EXPECT(FieldHash(0x5EEDu, 3, -2) == 1850613118u);
+    SC_EXPECT(FieldHash(0u, 0, 0) == 2488251732u);
+    SC_EXPECT(FieldHash(123456u, -7, 1000) == 3906896019u);
+    SC_EXPECT(Unit24(0xFFFFFFFFu) < 1.0 && Unit24(0u) == 0.0);
+}
+
+SC_TEST("map dressing: a field is a collective farm's, its numbers within the rules") {
+    const DressingRules& r = Rules();
+    const std::uint64_t seed = 0xABCDEFull;
+    int checked = 0, centre_ok = 0;
+    double min_ha = 1e9, max_ha = 0.0;
+    for (double n = -23000.0; n < 23000.0; n += 1301.0) {
+        for (double e = -23000.0; e < 23000.0; e += 1117.0) {
+            const FieldCell f = FieldAt(r, seed, e, n);
+            // The nominal centre is the field's own unless an estate's border cuts it off from the field (the ground
+            // material reads the mask there only when it is).
+            if (FieldAt(r, seed, f.centre_e, f.centre_n).id == f.id) ++centre_ok;
+            SC_EXPECT(f.heading_rad >= 0.0 && f.heading_rad < kPi);
+            SC_EXPECT(f.length_m >= r.parcel_length_min_m && f.length_m <= r.parcel_length_max_m);
+            SC_EXPECT(f.width_m >= r.parcel_width_min_m && f.width_m <= r.parcel_width_max_m);
+            const double ha = f.length_m * f.width_m / 10000.0;
+            min_ha = std::min(min_ha, ha);
+            max_ha = std::max(max_ha, ha);
+            ++checked;
+        }
+    }
+    std::printf("    %d fields sampled (%d with their centre in them), %.0f-%.0f ha\n", checked, centre_ok, min_ha, max_ha);
+    SC_EXPECT(min_ha >= 80.0 && max_ha <= 210.0);
+    SC_EXPECT(centre_ok > checked * 7 / 10);
+    // The old names are the same function.
+    SC_EXPECT(FieldHeading(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).heading_rad);
+    SC_EXPECT(FieldParcel(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).id);
+}
+
+SC_TEST("map dressing: the fields near a settlement are household strips, and only those") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const DressingRules& r = Rules();
+    const CoverRaster a = BakeCover(*m, r);
+    const CoverGrid& g = a.grids.back();  // the map proper
+    std::size_t with = 0, fields = 0, far_with = 0;
+    for (int row = 0; row < g.rows; row += 2) {
+        for (int c = 0; c < g.cols; c += 2) {
+            const std::size_t i = g.Index(c, row);
+            SC_EXPECT(g.strips[i] <= 1);
+            if (g.cover[i] != static_cast<std::uint8_t>(Cover::Field)) continue;
+            ++fields;
+            const FieldCell f = FieldAt(r, g.parcel_seed, g.CentreEast(c), g.CentreNorth(row));
+            double nearest = 1e18;
+            for (const MapSettlementDef& s : m->Def().settlements) {
+                nearest = std::min(nearest, std::hypot(f.centre_e - s.centre.east_m, f.centre_n - s.centre.north_m) - s.radius_m);
+            }
+            const bool near_village = nearest < r.strip_reach_m;
+            SC_EXPECT((g.strips[i] != 0) == near_village);
+            with += g.strips[i] != 0;
+            far_with += g.strips[i] != 0 && nearest > r.strip_reach_m + 1.0;
+        }
+    }
+    std::printf("    %zu of %zu field cells are household strips\n", with, fields);
+    SC_EXPECT(with > 0 && with < fields / 3);
+    SC_EXPECT(far_with == 0);
+}
+
+SC_TEST("map dressing: the field function is the ground material's, pinned by its hash's values") {
+    // The material's HLSL (tools/ue_build_ground_material.py) repeats these, so a change here must change it too.
+    SC_EXPECT(Hash32(0u) == 0u);
+    SC_EXPECT(Hash32(1u) == 1753845952u);
+    SC_EXPECT(Hash32(0xDEADBEEFu) == 3861431939u);
+    SC_EXPECT(FieldHash(0x5EEDu, 3, -2) == 1850613118u);
+    SC_EXPECT(FieldHash(0u, 0, 0) == 2488251732u);
+    SC_EXPECT(FieldHash(123456u, -7, 1000) == 3906896019u);
+    SC_EXPECT(Unit24(0xFFFFFFFFu) < 1.0 && Unit24(0u) == 0.0);
+}
+
+SC_TEST("map dressing: a field is a collective farm's, its numbers within the rules") {
+    const DressingRules& r = Rules();
+    const std::uint64_t seed = 0xABCDEFull;
+    int checked = 0, centre_ok = 0;
+    double min_ha = 1e9, max_ha = 0.0;
+    for (double n = -23000.0; n < 23000.0; n += 1301.0) {
+        for (double e = -23000.0; e < 23000.0; e += 1117.0) {
+            const FieldCell f = FieldAt(r, seed, e, n);
+            // The nominal centre is the field's own unless an estate's border cuts it off from the field (the ground
+            // material reads the mask there only when it is).
+            if (FieldAt(r, seed, f.centre_e, f.centre_n).id == f.id) ++centre_ok;
+            SC_EXPECT(f.heading_rad >= 0.0 && f.heading_rad < kPi);
+            SC_EXPECT(f.length_m >= r.parcel_length_min_m && f.length_m <= r.parcel_length_max_m);
+            SC_EXPECT(f.width_m >= r.parcel_width_min_m && f.width_m <= r.parcel_width_max_m);
+            const double ha = f.length_m * f.width_m / 10000.0;
+            min_ha = std::min(min_ha, ha);
+            max_ha = std::max(max_ha, ha);
+            ++checked;
+        }
+    }
+    std::printf("    %d fields sampled (%d with their centre in them), %.0f-%.0f ha\n", checked, centre_ok, min_ha, max_ha);
+    SC_EXPECT(min_ha >= 80.0 && max_ha <= 210.0);
+    SC_EXPECT(centre_ok > checked * 7 / 10);
+    // The old names are the same function.
+    SC_EXPECT(FieldHeading(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).heading_rad);
+    SC_EXPECT(FieldParcel(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).id);
+}
+
+SC_TEST("map dressing: the fields near a settlement are household strips, and only those") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const DressingRules& r = Rules();
+    const CoverRaster a = BakeCover(*m, r);
+    const CoverGrid& g = a.grids.back();  // the map proper
+    std::size_t with = 0, fields = 0, far_with = 0;
+    for (int row = 0; row < g.rows; row += 2) {
+        for (int c = 0; c < g.cols; c += 2) {
+            const std::size_t i = g.Index(c, row);
+            SC_EXPECT(g.strips[i] <= 1);
+            if (g.cover[i] != static_cast<std::uint8_t>(Cover::Field)) continue;
+            ++fields;
+            const FieldCell f = FieldAt(r, g.parcel_seed, g.CentreEast(c), g.CentreNorth(row));
+            double nearest = 1e18;
+            for (const MapSettlementDef& s : m->Def().settlements) {
+                nearest = std::min(nearest, std::hypot(f.centre_e - s.centre.east_m, f.centre_n - s.centre.north_m) - s.radius_m);
+            }
+            const bool near_village = nearest < r.strip_reach_m;
+            SC_EXPECT((g.strips[i] != 0) == near_village);
+            with += g.strips[i] != 0;
+            far_with += g.strips[i] != 0 && nearest > r.strip_reach_m + 1.0;
+        }
+    }
+    std::printf("    %zu of %zu field cells are household strips\n", with, fields);
+    SC_EXPECT(with > 0 && with < fields / 3);
+    SC_EXPECT(far_with == 0);
+}

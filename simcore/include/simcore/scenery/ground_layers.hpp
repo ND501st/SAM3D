@@ -179,7 +179,8 @@ inline bool LoadGroundLayers(const std::string& path_or_json, const DressingRule
 
 // The mask over one square of the land cover: a texel per cell, row 0 the southernmost, column 0 the westernmost, each
 // RGBA: R the layer's number, G the furrows' heading (0..255 over 0..pi, clockwise from north; FieldHeading), B the
-// field's own shade (a draw per parcel, 128 off the fields), A 255 where the layer turns with the furrows, else 0.
+// field's own shade in its low 7 bits (a draw per parcel, 64 off the fields) and 128 added where the field is household
+// strips (CoverGrid::strips), A 255 where the layer turns with the furrows, else 0.
 struct GroundMask {
     std::string id;  // the cover grid's
     double west_m = 0.0, south_m = 0.0, cell_m = 25.0;
@@ -215,12 +216,12 @@ inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& dressi
             std::uint8_t* t = &m.texels[i * 4];
             t[0] = static_cast<std::uint8_t>(layer < 0 ? 0 : layer);
             t[1] = 0;
-            t[2] = 128;
+            t[2] = 64;
             t[3] = 0;
             if (cover == Cover::Field) {
-                const double e = g.CentreEast(c), n = g.CentreNorth(r);
-                t[1] = HeadingTexel(FieldHeading(dressing, g.parcel_seed, e, n));
-                t[2] = static_cast<std::uint8_t>((FieldParcel(dressing, g.parcel_seed, e, n) >> 40) & 0xFFu);
+                const FieldCell f = FieldAt(dressing, g.parcel_seed, g.CentreEast(c), g.CentreNorth(r));
+                t[1] = HeadingTexel(f.heading_rad);
+                t[2] = static_cast<std::uint8_t>(((f.id >> 41) & 0x7Fu) | (g.strips[i] != 0 ? 0x80u : 0u));
                 t[3] = rows ? 255 : 0;
             }
         }
