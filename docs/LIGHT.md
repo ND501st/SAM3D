@@ -77,7 +77,8 @@ fall back to 05:30 and 18:30. The choice reaches the level as `?SimTime=<preset>
 which must keep one clock.
 
 Held: the lessons, the battles on their dates (the Bekaa on 24 July 1982 at 11:00, UTC+3; Cuito Cuanavale on 20
-February 1988 at 10:30; the Angola night raid at 23:00, its date a game value) and the air war's sample raids. The
+February 1988 at 10:30; the Angola night raid at 23:00, its date a game value). The air war's sample raids offer their
+planned hour first and take any other (3 Nov 2026: the owner tried to change one's hour). The
 hours of the battles are game values, recorded in each file's notes. A command line's `-SimTime=` still overrides a held
 mission (a developer's tool).
 

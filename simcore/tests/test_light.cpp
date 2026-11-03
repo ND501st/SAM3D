@@ -327,8 +327,8 @@ SC_TEST("light: the missions menu's time: the battles and lessons held, the rest
             if (m.time_fixed) {
                 ++fixed;
                 SC_EXPECT(m.time_options.size() == 1 && m.time_options[0] == TimePreset::Mission);
-                // A battle on its date, an air war raid at its planned hour: the scenario says its own clock.
-                if (g.id == "ranges_history" || g.id == "air_war") {
+                // A battle on its date: the scenario says its own clock.
+                if (g.id == "ranges_history") {
                     ScenarioDef def;
                     ConsoleData console;
                     SC_EXPECT(LoadScenarioFile(kData + "/" + m.file, kData, def, console, &e) && def.clock_given);
@@ -339,7 +339,10 @@ SC_TEST("light: the missions menu's time: the battles and lessons held, the rest
             }
         }
     }
-    SC_EXPECT(fixed >= 3 + 7 + 11);
+    SC_EXPECT(fixed >= 3 + 11);
+    // The air war's sample raids take the menu's hour: their planned one is only the first offered.
+    const MissionDef* raid = c.Find("air_war_nato_strike");
+    SC_EXPECT(raid != nullptr && !raid->time_fixed);
     const MissionDef* angola = c.Find("osa_angola_night");
     SC_EXPECT(angola != nullptr && angola->time_fixed);
     const MissionDef* range = c.Find("kesmark_range_test");
