@@ -230,6 +230,9 @@ private:
 	FString ShotFolder;
 	int32 ShotIndex = -1;
 	float ShotTimer = 0.0f;
+	// -SimShotSet=views: the frames' times summed over the wait before each picture, for its cost file (ms).
+	double ShotGpuMs = 0.0, ShotGameMs = 0.0, ShotRenderMs = 0.0;
+	int32 ShotSamples = 0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ACameraActor> ShotCamera;

@@ -1,11 +1,16 @@
 #include "SimMapActor.h"
 
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
+#include "DynamicRHI.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -229,8 +234,9 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	// Views: a camera over the map's (east, north) km, metres above the ground there, looking at another point.
 	struct FView
 	{
-		const TCHAR* Name;
+		FString Name;
 		double E, N, Up, Te, Tn, TUp;
+		double FovDeg = 0.0;  // 0: the camera's own (90)
 	};
 	static const FView Views[] = {
 		{TEXT("battery"), 5.75, -9.05, 4.0, 12.0, -6.0, 30.0},
@@ -344,8 +350,58 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 			All.Add(FView{TEXT("furrows"), Fe / 1000.0, Fn / 1000.0, 1.7, (Fe + 12.0 * FMath::Sin(Fh)) / 1000.0, (Fn + 12.0 * FMath::Cos(Fh)) / 1000.0, 0.0});
 		}
 	}
+	// -SimShotSet=views (roadmap T2, data/scenery/views.json): the terrain's check views, resolved on the map by simcore, in
+	// place of the list above. A view the map cannot give leaves <name>.missing.txt with its reason.
+	FString ShotSet;
+	FParse::Value(FCommandLine::Get(), TEXT("SimShotSet="), ShotSet);
+	const bool bViewShots = ShotSet == TEXT("views");
+	if (bViewShots)
+	{
+		static TArray<FView> ViewList;
+		static bool bViewListBuilt = false;
+		if (!bViewListBuilt)
+		{
+			bViewListBuilt = true;
+			IFileManager::Get().MakeDirectory(*ShotFolder, true);
+			simcore::scenery::ViewSet Set;
+			std::string Error;
+			const FString ViewsPath = FPaths::Combine(FindDataDirectory(), TEXT("scenery/views.json"));
+			if (!simcore::scenery::LoadViews(TCHAR_TO_UTF8(*ViewsPath), Set, &Error))
+			{
+				UE_LOG(LogSAM3D, Error, TEXT("Map shots: %s: %s"), *ViewsPath, UTF8_TO_TCHAR(Error.c_str()));
+			}
+			else if (DressRules && Cover)
+			{
+				for (const simcore::scenery::ViewDef& Def : Set.views)
+				{
+					for (const simcore::scenery::ResolvedView& C : simcore::scenery::ResolveView(*Map, *DressRules, *Cover, Def))
+					{
+						const FString Name = UTF8_TO_TCHAR(C.id.c_str());
+						if (!C.ok)
+						{
+							UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s is missing: %s"), *Name, UTF8_TO_TCHAR(C.missing_reason.c_str()));
+							FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(C.missing_reason.c_str())), *FPaths::Combine(ShotFolder, Name + TEXT(".missing.txt")));
+							continue;
+						}
+						ViewList.Add(FView{Name, C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m, C.target_e / 1000.0, C.target_n / 1000.0, C.target_up_m,
+							FMath::RadiansToDegrees(C.fov_rad)});
+					}
+				}
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Map shots: %d views from %s"), ViewList.Num(), *ViewsPath);
+		}
+		All = ViewList;
+	}
 	const int32 Count = All.Num();
 	ShotTimer -= DeltaSeconds;
+	// The cost: the frames' times over the last second and a half of the wait before the picture (the sky has settled).
+	if (bViewShots && ShotIndex >= 0 && ShotIndex % 2 == 1 && ShotTimer > 0.0f && ShotTimer < 1.5f)
+	{
+		ShotGpuMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+		ShotGameMs += FPlatformTime::ToMilliseconds(GGameThreadTime);
+		ShotRenderMs += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+		++ShotSamples;
+	}
 	if (ShotTimer > 0.0f)
 	{
 		return;
@@ -372,6 +428,10 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 			ShotCamera = GetWorld()->SpawnActor<ACameraActor>(From, (To - From).Rotation());
 		}
 		ShotCamera->SetActorLocationAndRotation(From, (To - From).Rotation());
+		ShotCamera->GetCameraComponent()->SetFieldOfView(V.FovDeg > 0.0 ? static_cast<float>(V.FovDeg) : 90.0f);
+		// This view's cost starts afresh.
+		ShotGpuMs = ShotGameMs = ShotRenderMs = 0.0;
+		ShotSamples = 0;
 		if (APlayerController* Pc = UGameplayStatics::GetPlayerController(this, 0))
 		{
 			Pc->SetViewTarget(ShotCamera);
@@ -384,9 +444,19 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	}
 	else
 	{
-		const FString Path = FPaths::Combine(ShotFolder, FString::Printf(TEXT("map_%d_%s.png"), ShotIndex / 2, V.Name));
+		const FString Path = FPaths::Combine(ShotFolder, bViewShots ? V.Name + TEXT(".png") : FString::Printf(TEXT("map_%d_%s.png"), ShotIndex / 2, *V.Name));
 		FScreenshotRequest::RequestScreenshot(Path, false, false);
 		UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s"), *Path);
+		if (bViewShots)
+		{
+			// The mean of each time over the wait's frames, ms; 0 where the platform does not give one.
+			const double N = FMath::Max(1, ShotSamples);
+			FFileHelper::SaveStringToFile(FString::Printf(TEXT("{\"view\": \"%s\", \"samples\": %d, \"gpu_ms\": %.3f, \"game_ms\": %.3f, \"render_ms\": %.3f}\n"),
+				*V.Name, ShotSamples, ShotGpuMs / N, ShotGameMs / N, ShotRenderMs / N), *FPaths::Combine(ShotFolder, V.Name + TEXT(".cost.json")));
+			// The GPU's passes of one frame, to the log (read by tools/terrain_views.py).
+			GEngine->Exec(GetWorld(), TEXT("r.ProfileGPU.ShowUI 0"));
+			GEngine->Exec(GetWorld(), TEXT("ProfileGPU"));
+		}
 		ShotTimer = 1.0f;
 	}
 	++ShotIndex;

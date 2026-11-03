@@ -1,0 +1,470 @@
+{
+  "views_id": "terrain_views",
+  "status": "first pass (roadmap T2, docs/scenery/T2_VIEWS_PLAN.md)",
+  "notes": "The views the terrain's look is checked from (docs/scenery/TERRAIN_ROADMAP.md section 2.3): each anchored to the map's own ids and kinds, resolved on the map at load (simcore/scenery/views.hpp), never fixed coordinates; close_km only picks among candidates. Rendered by -SimMapShots=<folder> -SimShotSet=views, set beside their photographs by tools/terrain_views.py. The photos are links only (nothing copied); licences CC0, CC BY, CC BY-SA or public domain. Pannonia is fictional: judged by eye against the photographs.",
+  "source": "game value: sam3d estimate (docs/scenery/T2_VIEWS_PLAN.md; photographs in docs/research/TERRAIN_REFERENCES_2026-11.md)",
+  "confidence": "estimate",
+  "views": [
+    {
+      "id": "v1_field_edge",
+      "anchor": {
+        "kind": "parcel_edge",
+        "close_km": [
+          -4.0,
+          -15.0
+        ]
+      },
+      "eye_m": 1.7,
+      "look": "across_parcel",
+      "fov_deg": 60,
+      "photos": [
+        "P01",
+        "P03",
+        "P71",
+        "P77",
+        "P91"
+      ],
+      "must_see": "furrows along the parcel's heading; the far edge 0.6-2 km off; a tree row; pylons; haze greying the far trees"
+    },
+    {
+      "id": "v2_village_street",
+      "anchor": {
+        "kind": "settlement",
+        "settlement": "vrbice",
+        "from_centre_m": 150
+      },
+      "eye_m": 1.7,
+      "look": "along_street",
+      "fov_deg": 60,
+      "photos": [
+        "P76",
+        "P85",
+        "P60"
+      ],
+      "must_see": "long houses and square houses set back; fences; poles and wires; verges; narrow asphalt"
+    },
+    {
+      "id": "v3_village_air",
+      "anchor": {
+        "kind": "settlement",
+        "settlement": "vrbice",
+        "from_centre_m": -300
+      },
+      "eye_m": 300,
+      "look": "along_street",
+      "pitch_deg": -45,
+      "fov_deg": 60,
+      "photos": [
+        "P14",
+        "P15",
+        "P16",
+        "P17",
+        "P78"
+      ],
+      "must_see": "strip plots and gardens behind the houses; the church; big fields beyond"
+    },
+    {
+      "id": "v4_secondary_road",
+      "anchor": {
+        "kind": "road",
+        "road": "f_vrbice",
+        "at": 0.5,
+        "side_m": 4,
+        "towards": "vrbice"
+      },
+      "eye_m": 1.7,
+      "look": "along_road",
+      "fov_deg": 60,
+      "photos": [
+        "P05",
+        "P09",
+        "P60",
+        "P72",
+        "P73"
+      ],
+      "must_see": "about 6 m of asphalt; earth shoulders and a ditch; a pole line; a tree row"
+    },
+    {
+      "id": "v5_tsz_farmyard",
+      "anchor": {
+        "kind": "farmyard",
+        "close_km": [
+          0.0,
+          -11.0
+        ],
+        "from_m": 150
+      },
+      "eye_m": 2.5,
+      "look": "at_anchor",
+      "fov_deg": 60,
+      "photos": [
+        "P41",
+        "P42",
+        "P44",
+        "P87",
+        "P88",
+        "P89"
+      ],
+      "must_see": "long sheds; an open machine shelter; a dryer or silo; a slab access road; poplar rows; a fence"
+    },
+    {
+      "id": "v6_tanya",
+      "anchor": {
+        "kind": "farmstead",
+        "close_km": [
+          -6.0,
+          -14.0
+        ],
+        "from_m": 300
+      },
+      "eye_m": 1.7,
+      "look": "at_anchor",
+      "fov_deg": 50,
+      "photos": [
+        "P19",
+        "P74",
+        "P76",
+        "P80"
+      ],
+      "must_see": "the farm in its island of trees; a sweep well; haystacks"
+    },
+    {
+      "id": "v7_osa_position",
+      "anchor": {
+        "kind": "site",
+        "site": "bty21"
+      },
+      "eye_m": 4.0,
+      "look": "panorama",
+      "step_deg": 90,
+      "fov_deg": 60,
+      "photos": [
+        "P03",
+        "P12",
+        "P22",
+        "P40",
+        "P83"
+      ],
+      "must_see": "layered tree lines; water towers, silos and spires; pylons; haze at 10-20 km"
+    },
+    {
+      "id": "v8_floodplain",
+      "anchor": {
+        "kind": "river",
+        "river": "rava",
+        "close_km": [
+          16.0,
+          -10.0
+        ],
+        "side_m": 250
+      },
+      "eye_m": 5.5,
+      "look": "across_river",
+      "pitch_deg": -2,
+      "fov_deg": 60,
+      "photos": [
+        "P24",
+        "P25",
+        "P26",
+        "P27",
+        "P31"
+      ],
+      "must_see": "willow and poplar floodplain wood; reeds; a dyke road; a bridge"
+    },
+    {
+      "id": "v9_northern_hills",
+      "anchor": {
+        "kind": "hill",
+        "hill": "polany_hill",
+        "from_m": 9000,
+        "bearing_deg": 180
+      },
+      "eye_m": 1.7,
+      "look": "at_anchor",
+      "fov_deg": 50,
+      "photos": [
+        "P23",
+        "P65",
+        "P66",
+        "P67"
+      ],
+      "must_see": "the wooded hill as a low wall behind ploughland"
+    },
+    {
+      "id": "v10_low_pass",
+      "anchor": {
+        "kind": "settlement",
+        "settlement": "vrbice",
+        "from_m": 700,
+        "bearing_deg": 225
+      },
+      "eye_m": 300,
+      "look": "at_anchor",
+      "pitch_deg": -25,
+      "fov_deg": 70,
+      "photos": [
+        "P13",
+        "P14",
+        "P16",
+        "P43",
+        "P78",
+        "P79"
+      ],
+      "must_see": "field sizes and furrow headings by block; tree rows on the tracks; the village and its garden strips"
+    }
+  ],
+  "photos": {
+    "P01": {
+      "title": "Champs entre Békéscsaba et Gyula",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Champs_entre_Békéscsaba_et_Gyula.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Jean-Pierre Bazard"
+    },
+    "P03": {
+      "title": "Ploughed fields, near Igar",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Ploughed_fields,_near_Igar.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Badics"
+    },
+    "P05": {
+      "title": "Keletve tekintve a Balázs-tanyától - panoramio",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Keletve_tekintve_a_Balázs-tanyától_-_panoramio.jpg",
+      "licence": "CC BY 3.0",
+      "author": "Szodorai Imre"
+    },
+    "P09": {
+      "title": "Orosháza, 2011-09-06. Földút a kukoricamező szélén - panoramio",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Orosháza,_2011-09-06._Földút_a_kukoricamező_szélén_-_panoramio.jpg",
+      "licence": "CC BY 3.0",
+      "author": "tuskestibor"
+    },
+    "P12": {
+      "title": "Acker, reformierte Kirche, Nebel, 2024 Pilismarót",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Acker,_reformierte_Kirche,_Nebel,_2024_Pilismarót.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Globetrotter19"
+    },
+    "P13": {
+      "title": "Fortepan 8920",
+      "page_url": "https://fortepan.hu/hu/photos/?id=8920",
+      "licence": "CC BY-SA 3.0",
+      "author": "MHSZ (donor)"
+    },
+    "P14": {
+      "title": "Besenyszög látképe a magasból",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Besenyszög_látképe_a_magasból.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Civertan"
+    },
+    "P15": {
+      "title": "Hunya légi felvételen",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Hunya_légi_felvételen.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Civertan"
+    },
+    "P16": {
+      "title": "Fortepan 84605",
+      "page_url": "https://fortepan.hu/hu/photos/?id=84605",
+      "licence": "CC BY-SA 3.0",
+      "author": "MHSZ (donor)"
+    },
+    "P17": {
+      "title": "Fortepan 84606",
+      "page_url": "https://fortepan.hu/hu/photos/?id=84606",
+      "licence": "CC BY-SA 3.0",
+      "author": "MHSZ (donor)"
+    },
+    "P19": {
+      "title": "Ferme près de Bugac",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Ferme_près_de_Bugac.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Jean-Pierre Bazard"
+    },
+    "P22": {
+      "title": "The Woods Hajdudorog",
+      "page_url": "https://commons.wikimedia.org/wiki/File:The_Woods_Hajdudorog.JPG",
+      "licence": "CC BY-SA 3.0",
+      "author": "Jojojoe"
+    },
+    "P23": {
+      "title": "Bekölce határán, a fenyves mellett - panoramio",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Bekölce_határán,_a_fenyves_mellett_-_panoramio.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Mrcsifkin"
+    },
+    "P24": {
+      "title": "Tisza River - artificially planted forest, floodplain near Algyoe Hungary",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Tisza_River_-_artificially_planted_forest,_floodplain_near_Algyoe_Hungary.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Takkk"
+    },
+    "P25": {
+      "title": "Ártéri erdő a Tisza mentén Szeged és Algyő között",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Ártéri_erdő_a_Tisza_mentén_Szeged_és_Algyő_között.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Takkk"
+    },
+    "P26": {
+      "title": "Szentes-Magyartés Körös folyó elhagyott medre",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Szentes-Magyartés_Körös_folyó_elhagyott_medre.JPG",
+      "licence": "CC BY-SA 3.0",
+      "author": "Beroesz"
+    },
+    "P27": {
+      "title": "Töserdő - panoramio",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Töserdő_-_panoramio.jpg",
+      "licence": "CC BY 3.0",
+      "author": "Bocskai László"
+    },
+    "P31": {
+      "title": "Dykes in Mindszent",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Dykes_in_Mindszent.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Frank Paul Silye"
+    },
+    "P40": {
+      "title": "Czuczorstrasse und Kaffka Margit Straße Ecke, Kossuthváros, 2024 Kiskunfélegyháza",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Czuczorstrasse_und_Kaffka_Margit_Straße_Ecke,_Kossuthváros,_2024_Kiskunfélegyháza.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Globetrotter19"
+    },
+    "P41": {
+      "title": "Fortepan 70386",
+      "page_url": "https://fortepan.hu/hu/photos/?id=70386",
+      "licence": "CC BY-SA 3.0",
+      "author": "Fortepan donor Jáki L."
+    },
+    "P42": {
+      "title": "Fortepan 70381",
+      "page_url": "https://fortepan.hu/hu/photos/?id=70381",
+      "licence": "CC BY-SA 3.0",
+      "author": "Fortepan donor Jáki L."
+    },
+    "P43": {
+      "title": "Az egykori üszőnevelő telep Rosszerdőn - panoramio",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Az_egykori_üszőnevelő_telep_Rosszerdőn_-_panoramio.jpg",
+      "licence": "CC BY 3.0",
+      "author": "Szodorai Imre"
+    },
+    "P44": {
+      "title": "A szárító üzem - panoramio",
+      "page_url": "https://commons.wikimedia.org/wiki/File:A_szárító_üzem_-_panoramio.jpg",
+      "licence": "CC BY 3.0",
+      "author": "Szodorai Imre"
+    },
+    "P60": {
+      "title": "190811 7202 Ősi",
+      "page_url": "https://commons.wikimedia.org/wiki/File:190811_7202_Ősi.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Kriszti2083"
+    },
+    "P65": {
+      "title": "Acker und Cserhát, 2023 Tar",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Acker_und_Cserhát,_2023_Tar.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Globetrotter19"
+    },
+    "P66": {
+      "title": "Somlyóberg, Wald, Steppe, 2026 Apc",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Somlyóberg,_Wald,_Steppe,_2026_Apc.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Globetrotter19"
+    },
+    "P67": {
+      "title": "Kékesi bükkös",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Kékesi_bükkös.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Zello"
+    },
+    "P71": {
+      "title": "Fortepan 27177",
+      "page_url": "https://fortepan.hu/hu/photos/?id=27177",
+      "licence": "CC BY-SA 3.0",
+      "author": "Drimbe József (donor)"
+    },
+    "P72": {
+      "title": "Fortepan 184939",
+      "page_url": "https://fortepan.hu/hu/photos/?id=184939",
+      "licence": "CC BY-SA 3.0",
+      "author": "Kende János (donor)"
+    },
+    "P73": {
+      "title": "Fortepan 185445",
+      "page_url": "https://fortepan.hu/hu/photos/?id=185445",
+      "licence": "CC BY-SA 3.0",
+      "author": "Kende János (donor)"
+    },
+    "P74": {
+      "title": "Fortepan 185446",
+      "page_url": "https://fortepan.hu/hu/photos/?id=185446",
+      "licence": "CC BY-SA 3.0",
+      "author": "Kende János (donor)"
+    },
+    "P76": {
+      "title": "Fortepan 188126",
+      "page_url": "https://fortepan.hu/hu/photos/?id=188126",
+      "licence": "CC BY-SA 3.0",
+      "author": "Szalay Béla (donor)"
+    },
+    "P77": {
+      "title": "Fortepan 66679",
+      "page_url": "https://fortepan.hu/hu/photos/?id=66679",
+      "licence": "CC BY-SA 3.0",
+      "author": "Magyar Rendőr (donor)"
+    },
+    "P78": {
+      "title": "Fortepan 84601",
+      "page_url": "https://fortepan.hu/hu/photos/?id=84601",
+      "licence": "CC BY-SA 3.0",
+      "author": "MHSZ (donor)"
+    },
+    "P79": {
+      "title": "Fortepan 318635",
+      "page_url": "https://fortepan.hu/hu/photos/?id=318635",
+      "licence": "CC BY-SA 3.0",
+      "author": "Volom Zoltán (donor)"
+    },
+    "P80": {
+      "title": "Fortepan 266843",
+      "page_url": "https://fortepan.hu/hu/photos/?id=266843",
+      "licence": "CC BY-SA 3.0",
+      "author": "Vimola Károly (donor)"
+    },
+    "P83": {
+      "title": "Concrete fence, Zichyújfalu 001",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Concrete_fence,_Zichyújfalu_001.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "四代目火影 (Commons user)"
+    },
+    "P85": {
+      "title": "Árpádhalom utcakép",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Árpádhalom_utcakép.JPG",
+      "licence": "CC BY-SA 3.0",
+      "author": "Beroesz"
+    },
+    "P87": {
+      "title": "Ehem. Lókosvölgye Landwirtschaftliche Genossenschaft Standort Szent Lőrinc Straße, 2024 Tolmács",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Ehem._Lókosvölgye_Landwirtschaftliche_Genossenschaft_Standort_Szent_Lőrinc_Straße,_2024_Tolmács.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Globetrotter19"
+    },
+    "P88": {
+      "title": "Bicskei MgTSz., Micsurin Major (szárító üzem), Etyektej, 2017 Bicske",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Bicskei_MgTSz.,_Micsurin_Major_(szárító_üzem),_Etyektej,_2017_Bicske.jpg",
+      "licence": "CC BY-SA 3.0",
+      "author": "Globetrotter19"
+    },
+    "P89": {
+      "title": "Gräben, Zäune, landwirtschaftliche Maschinen, Fahrzeuge, Iparstrasse, 2026 Ecser",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Gräben,_Zäune,_landwirtschaftliche_Maschinen,_Fahrzeuge,_Iparstrasse,_2026_Ecser.jpg",
+      "licence": "CC BY-SA 4.0",
+      "author": "Globetrotter19"
+    },
+    "P91": {
+      "title": "Road - panoramio (26)",
+      "page_url": "https://commons.wikimedia.org/wiki/File:Road_-_panoramio_(26).jpg",
+      "licence": "CC BY 3.0",
+      "author": "tuskestibor"
+    }
+  }
+}

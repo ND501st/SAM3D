@@ -91,3 +91,12 @@ what each view lacks and which phase brings it. Then T2 is done.
 - Before the commit: Opus for the review (`/code-review`).
 - After T2: **Opus for the design of T3 and T4** (the colour map and haze; the plain's layout in simcore, which changes
   the sight lines).
+
+## What was built, and where it differs (4 Nov 2026)
+
+Steps 1-4 as planned. Differences: the views file is `data/scenery/views.json` with the photographs' page, licence and
+author listed in it (42 of the references note's); a road anchor takes `towards` (the settlement its view faces); the
+cost is the mean of the game, render and GPU frame timers over the last 1.5 s of the wait before each picture (not the
+CSV profiler), and `ProfileGPU` is run once per view for the log; the page's photographs are thumbnails from Wikimedia
+Commons' and Fortepan's own image addresses, loaded by the viewer's browser. Not done: the per-pass table from the
+`ProfileGPU` log; more skies than the scenario's own. The first run (`t1`) found a ground-texture defect, in the roadmap.

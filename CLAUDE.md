@@ -91,6 +91,7 @@ D:/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe C:/dev/SAM3D/unreal/SAM3D/S
 ./simcore/build/nav_check data 200                # the route service: anchors off the road net listed, the graph and 200 routes timed
 ./simcore/build/ground_check data 3600            # nothing under the map (R5): the testbed's hour and every map mission, anything under the ground listed
 python tools/ue_ground_check.py                   # the same in the game (-SimGroundCheck): every drawn actor against the drawn ground, from the logs
+python tools/terrain_views.py run --label t1                            # the terrain's check views V1-V10 (data/scenery/views.json) rendered, with costs and photo links: out/views/t1/index.html
 python tools/map_view.py out/pannonia_map.json --png                              # the country with the theatre's objects and fronts
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
 blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)

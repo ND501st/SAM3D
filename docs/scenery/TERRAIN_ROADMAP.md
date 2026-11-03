@@ -316,7 +316,7 @@ shots' harness at the reference views, before and after each phase. A fallback w
 |---|---|---|---|
 | T0 | **Research**: reference photographs and traits, the AAA maps, free textures and models with their licences checked twice, the ground's material and geometry in UE 5.8 | the notes in `docs/research/TERRAIN_*` and this roadmap | **Done (3 Nov 2026)** |
 | T1 | **The textured ground**: the layers by cover, crop and season, a mask from simcore, the texture register and its fetch tool, the material made per machine, the map actor's materials | the shots show each layer's texture on its cells, the furrows turned with the fields, no seams, no tiling at the views, the textures fading into the land cover's colours far off without a seam | **Built in first form (3 Nov 2026)**; left below |
-| T2 | **The views and the costs**: V1-V10 as `-SimMapShots` cameras on the Kesmark map, a page setting each shot beside its photographs' links, the milliseconds per pass at each view | the page renders from one command, before and after each phase | **planned in detail**: `T2_VIEWS_PLAN.md` |
+| T2 | **The views and the costs**: V1-V10 as `-SimMapShots` cameras on the Kesmark map, a page setting each shot beside its photographs' links, the milliseconds per pass at each view | the page renders from one command, before and after each phase | **Built in first form (4 Nov 2026)**: `T2_VIEWS_PLAN.md`; baseline `t1`; left below |
 | T3 | **The colour map and the far field**: the synthesized colour per tile from simcore's vectors, the far ground's colour map, haze from the weather's visibility | field edges straight, no 25 m steps, the far ground meeting the map proper without an edge, haze matching the visual range at V7 and V9 | planned |
 | T4 | **The plain's layout** (simcore data): TSZ fields of 100-200 ha with household strips at the villages (T2), tree rows along the farm tracks (T3), tanyas in their trees (T5), strip-plot villages (T6), the crop calendar for the scenario's date (T11: harvested and standing maize, ploughland, sown wheat, mixed by eye) | the views V1, V3, V6 and V10 against their photographs; the balance runs re-read (the trees block sight) | planned |
 | T5 | **Trees and reeds from models**: the vegetation picks registered one at a time, drawn at simcore's positions, the autumn tint, impostors and masses in rings | V1, V7 and V8 against their photographs; the tree budget held; sight lines unchanged | planned |
@@ -343,6 +343,30 @@ dark soil (the furrows' scan, luminance 0.08, rendered at 0.22) and paled the sk
 the outdoors' compensation, `OutdoorExposureBias` = 0 EV (an unbound post process; `-SimExposureBias=<ev>` to try
 others), and the cabin camera keeps the engine's +1 its fixed exposure was tuned with. The ploughland renders at 0.09,
 its own colour, under a blue sky.
+
+**T2 built (4 Nov 2026):** `data/scenery/views.json` (V1-V10, anchored to the map's ids), `simcore/scenery/views.hpp`
+(the resolver, `test_views.cpp`), `-SimShotSet=views` in the map actor (each view's picture, `<view>.cost.json` and, for
+a view the map cannot give, `<view>.missing.txt`), and `python tools/terrain_views.py run --label <name> [--against
+<name>]`, which renders them and writes `out/views/<name>/index.html`: each view's pictures, its photographs as
+thumbnails and links (author and licence beside each), and its costs. Baseline `t1` (RTX-class GPU not named; this PC's
+`UnrealEditor` offscreen at 1280x720, each the mean of 130-175 frames): GPU 5.9-7.0 ms (V3 from the air least, the
+battery's north most), game thread 4.9-5.4 ms, render thread 8.6-11.5 ms (V4 along the road most).
+V5 is missing (no farmyard site kind: T7); V8's eye stands on the bank (no dyke: T8).
+
+**What the baseline views show** (judged by eye against the photographs):
+- V4, V6, V9 (the ploughed, stubble and cloddy ground at 1.7 m): the real textures read as a field.
+- **A defect: some ground near the camera is flat green, with no texture** (V7 at the battery, V8 across the Rava, part
+  of V1): no texel detail at all (a pixel spread of 3 against V1's fields' 20), with straight parcel edges in V8 where
+  a ploughed field beside it is textured. Ruled out (4 Nov): the season (autumn: every crop's layer has a texture), a
+  field with no crop (every cell has one), the mask's format (linear, nearest, uncompressed), the far fades (400 m and
+  6 km), a level without the material (every level with a land cover square wears it), the detail areas (V8 is outside
+  them). Left: the shader's `Has` lookup or the meadow (pasture) layer's slice, the likeliest by the parcel shapes. Next
+  step: one render with `SAM3D_GROUND_PATTERN=1` (each layer its own pattern) to see which layer those cells draw.
+- V2 and V3: the houses are dark boxes (their materials, lit from a low sun) with no verges or poles; V3 shows the
+  land cover's 25 m cells as steps at every field edge (T3).
+- V1, V10: fields are small patches (T4); no tree rows on the tracks, no pylons; the trees are the grey models (T5).
+- Per-pass GPU times are not in the pages yet: `ProfileGPU` writes one frame's tree to the log per view; reading it is
+  left (the totals above are from the frames' own timers).
 
 **T1 left:**
 - The layers' tints by eye against the photographs; the land cover's colours far off (the fields without a texture)
