@@ -325,6 +325,7 @@ SC_TEST("map: the map proper's layout is the same with the detail areas (counts 
     std::size_t total = 0;
     for (const MapBox& b : map->Layout().boxes) {
         if (!map->Def().InCore(b.east_m, b.north_m)) continue;
+        if (b.part == MapPart::TreeRow) continue;  // laid after, along the fields (roadmap T4): not part of the layout this pins
         ++counts[static_cast<int>(b.part)];
         ++total;
         last = &b;

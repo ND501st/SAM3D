@@ -225,3 +225,20 @@ Come back to Opus early if:
 - The first render (`t4a`): V3 and V10 show large cut fields and strips at the village's edge; the field edges still
   step at 25 m (T3.1).
 
+**T4.2**, built in first form (4 Nov 2026):
+- **The field grid moved to the map** (`simcore/farm_fields.hpp`, the map file's `"farmland"` block): the tracks and tree
+  rows block sight, so they and the fields they follow are the map's, and the dressing's `parcel_*` values are gone.
+  `FieldAt(grid, e, n)`; the cover raster carries the grid (`CoverGrid::fields`); the pinned hash test is unchanged.
+- **`LayFarmland`** (`terrain_map.hpp`), after everything else, from the grid's hash: farm tracks (`farm_track_<n>`
+  strips, 4 m, `MapSurface::Track`) along half the fields' long sides inside the map proper, cut where they meet woods,
+  marsh, water, buildings, sites, settlements and roads; `MapPart::TreeRow` boxes (7 m wide, 12-22 m) along 30% of the
+  tracks and 50% of the main and secondary roads; a grove of three belts round each tanya (12-18 m). None within 600 m
+  of a site's centre. The existing layout is unmoved (the pinned layout test passes with the rows skipped).
+- **Planting** (`PlaceTrees`): a lattice of poplar and black locust (some oak in a grove) in each row, under the box's
+  height. The map actor does not draw the row boxes (it draws their trees).
+- Kesmark: 412 tracks, 3,523 row and grove boxes. The first render (`t4b`): tree rows along the main road and on the
+  horizon from V1 and V10, as in the photographs.
+- **Not done:** rows stop 30 m short of junctions (they may cross a track); the tracks are not in the route graph; the
+  fields' heading does not follow roads. **The Opus step is next**: the sight-line and balance re-read
+  (`ground_check`, `air_war_balance`, `helper_coverage`, the horizon from `bty21`), because the rows now block sight.
+

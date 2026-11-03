@@ -125,17 +125,17 @@ SC_TEST("ground layers: the furrows' heading as a texel, half a turn round to th
 SC_TEST("ground layers: a field runs along its furrows' heading, and its width across them") {
     // Walking 300 m both ways along the heading stays in the same field (1.2-2 km long) more often than 300 m both ways
     // across it (700-1000 m wide). The ground material turns the furrows' textures by this heading.
-    const DressingRules& d = Dressing();
-    const std::uint64_t seed = 0x5EEDull;
+    FieldGrid grid;
+    grid.seed = 0x5EEDu;
     int along = 0, across = 0, n = 0;
     for (int i = 0; i < 40; ++i) {
         for (int j = 0; j < 40; ++j) {
             const double e = 137.0 + i * 977.0, nn = -211.0 + j * 1013.0;
-            const double h = FieldHeading(d, seed, e, nn);
+            const double h = FieldHeading(grid, e, nn);
             const double de = std::sin(h), dn = std::cos(h);
-            const std::uint64_t p = FieldParcel(d, seed, e, nn);
-            along += FieldParcel(d, seed, e + 300.0 * de, nn + 300.0 * dn) == p && FieldParcel(d, seed, e - 300.0 * de, nn - 300.0 * dn) == p;
-            across += FieldParcel(d, seed, e + 300.0 * dn, nn - 300.0 * de) == p && FieldParcel(d, seed, e - 300.0 * dn, nn + 300.0 * de) == p;
+            const std::uint64_t p = FieldParcel(grid, e, nn);
+            along += FieldParcel(grid, e + 300.0 * de, nn + 300.0 * dn) == p && FieldParcel(grid, e - 300.0 * de, nn - 300.0 * dn) == p;
+            across += FieldParcel(grid, e + 300.0 * dn, nn - 300.0 * de) == p && FieldParcel(grid, e - 300.0 * dn, nn + 300.0 * de) == p;
             ++n;
         }
     }
@@ -171,7 +171,7 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
                 if (k == Cover::Field) {
                     ++fields;
                     const double ce = g.CentreEast(c), cn = g.CentreNorth(row);
-                    bad += t[1] != HeadingTexel(FieldHeading(Dressing(), g.parcel_seed, ce, cn));
+                    bad += t[1] != HeadingTexel(FieldHeading(g.fields, ce, cn));
                     bad += t[3] != (r.layers[static_cast<std::size_t>(layer)].rows ? 255 : 0);
                     bad += (t[2] >= 128) != (g.strips[i] != 0);
                     rows += t[3] == 255;
@@ -192,8 +192,8 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
     for (int row = 0; row + 1 < g.rows && pairs < 2000; row += 3) {
         for (int c = 0; c + 1 < g.cols && pairs < 2000; c += 3) {
             if (g.cover[g.Index(c, row)] != static_cast<std::uint8_t>(Cover::Field) || g.cover[g.Index(c + 1, row)] != static_cast<std::uint8_t>(Cover::Field)) continue;
-            if (FieldParcel(Dressing(), g.parcel_seed, g.CentreEast(c), g.CentreNorth(row)) !=
-                FieldParcel(Dressing(), g.parcel_seed, g.CentreEast(c + 1), g.CentreNorth(row))) {
+            if (FieldParcel(g.fields, g.CentreEast(c), g.CentreNorth(row)) !=
+                FieldParcel(g.fields, g.CentreEast(c + 1), g.CentreNorth(row))) {
                 continue;
             }
             ++pairs;

@@ -23,9 +23,6 @@
     "mass_top": { "value": 0.92, "source": "game value: sam3d estimate (the mass's top, of the wood's height)", "confidence": "estimate" },
     "cover_cell_m": { "value": 25, "source": "game value: sam3d estimate (the land cover raster's cell)", "confidence": "estimate" },
     "garden_m": { "value": 15, "source": "game value: sam3d estimate (a house's garden round it)", "confidence": "estimate" },
-    "parcel_length_m": { "value": [1200, 2000], "source": "game value: sam3d estimate (a collective farm's field, along its furrows: with the width 84-200 ha, a TSZ's 100-200 ha of the 1970s-80s, docs/scenery/T3_T4_PLAN.md)", "confidence": "estimate" },
-    "parcel_width_m": { "value": [700, 1000], "source": "game value: sam3d estimate (across the furrows)", "confidence": "estimate" },
-    "parcel_heading_cell_m": { "value": 4000, "source": "game value: sam3d estimate (an estate: the fields' furrows turn from one 4 km square to the next)", "confidence": "estimate" },
     "strip_width_m": { "value": [20, 40], "source": "game value: sam3d estimate (a household plot's strip at a village's edge)", "confidence": "estimate" },
     "strip_reach_m": { "value": 600, "source": "game value: sam3d estimate (a field whose centre lies within this of a settlement's edge is cut into household strips)", "confidence": "estimate" },
     "crops": {

@@ -65,6 +65,7 @@ namespace
 		case MapPart::Tent: return FLinearColor(0.27f, 0.31f, 0.20f);
 		case MapPart::Bunker: return FLinearColor(0.28f, 0.30f, 0.22f);
 		case MapPart::Launcher: return FLinearColor(0.24f, 0.29f, 0.18f);
+		case MapPart::TreeRow: return FLinearColor(0.09f, 0.17f, 0.06f);
 		case MapPart::Count: break;
 		}
 		return FLinearColor::Gray;
@@ -328,12 +329,12 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 					{
 						continue;
 					}
-					const double H = simcore::scenery::FieldHeading(*DressRules, G.parcel_seed, Ce, Cn);
+					const double H = simcore::FieldHeading(G.fields, Ce, Cn);
 					const double Ae = FMath::Sin(H), An = FMath::Cos(H);
-					const std::uint64_t P = simcore::scenery::FieldParcel(*DressRules, G.parcel_seed, Ce, Cn);
+					const std::uint64_t P = simcore::FieldParcel(G.fields, Ce, Cn);
 					const auto Same = [&](double Along, double Across)
 					{
-						return simcore::scenery::FieldParcel(*DressRules, G.parcel_seed, Ce + Along * Ae + Across * An, Cn + Along * An - Across * Ae) == P;
+						return simcore::FieldParcel(G.fields, Ce + Along * Ae + Across * An, Cn + Along * An - Across * Ae) == P;
 					};
 					if (Same(60.0, 0.0) && Same(-20.0, 0.0) && Same(0.0, 30.0) && Same(0.0, -30.0))
 					{
@@ -1250,9 +1251,9 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 	const int32 HouseVariants = DressRules ? DressRules->house_variants : simcore::scenery::kHouseVariants;
 	for (const simcore::MapBox& B : Map->Layout().boxes)
 	{
-		if (B.part == simcore::MapPart::Canopy)
+		if (B.part == simcore::MapPart::Canopy || B.part == simcore::MapPart::TreeRow)
 		{
-			continue;  // the woods are trees and masses (BuildTrees)
+			continue;  // the woods, tree rows and groves are trees and masses (BuildTrees)
 		}
 		if (B.part == simcore::MapPart::Marsh)
 		{

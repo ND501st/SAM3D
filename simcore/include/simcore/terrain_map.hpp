@@ -40,6 +40,7 @@
 
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/farm_fields.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/noise.hpp"
@@ -150,6 +151,23 @@ inline const std::vector<std::string>& MapSiteKinds() {
     return kinds;
 }
 
+// The plain's fields and what is laid along them (roadmap T4, docs/scenery/T3_T4_PLAN.md): farm tracks along some of the
+// fields' long sides, tree rows along some tracks and roads, groves round the tanyas. In the file: laid; left out: none
+// (the fields are still the default grid's). The rows and groves block sight, so they are the map's, not the dressing's.
+struct MapFarmlandDef {
+    bool laid = false;
+    FieldGrid fields;               // the fields' sizes (the seed is the map's: MapData::Fields)
+    double track_share = 0.5;       // of the fields' long sides that carry a farm track
+    double track_width_m = 4.0;
+    double row_share = 0.3;         // of a farm track's length planted with a tree row
+    double road_row_share = 0.5;    // of a main or secondary road's length inside the map proper
+    double row_width_m = 7.0;
+    double row_height_min_m = 12.0, row_height_max_m = 22.0;
+    double site_clear_m = 600.0;    // no row or grove this close to a site's centre (its sectors stay open)
+    double grove_width_m = 20.0;    // a tanya's grove, round three of its sides
+    double grove_height_min_m = 12.0, grove_height_max_m = 18.0;
+};
+
 struct MapDef {
     std::string map_id;
     std::string name;
@@ -182,6 +200,7 @@ struct MapDef {
     std::vector<MapSettlementDef> detail_settlements;
     std::vector<MapDetailDef> detail;  // the detail areas (terrain.detail)
     MapClutterDef clutter;
+    MapFarmlandDef farmland;
     int farmsteads = 0;
     int farm_buildings_min = 2, farm_buildings_max = 4;
     std::vector<MapPolygonDef> forests;
@@ -221,7 +240,7 @@ struct MapDef {
 // Every kind of box the map is made of; the game gives each kind its colour and shape.
 enum class MapPart {
     House, Flats, Industrial, Farm, Military, Hangar, Shelter, Tower, Station, Tank, Chimney, CoolingTower, Bridge,
-    Canopy, Marsh, Revetment, Pad, Runway, Mast, Tent, Bunker, Launcher, Count
+    Canopy, Marsh, Revetment, Pad, Runway, Mast, Tent, Bunker, Launcher, TreeRow, Count
 };
 
 inline const char* MapPartName(MapPart p) {
@@ -248,6 +267,7 @@ inline const char* MapPartName(MapPart p) {
     case MapPart::Tent: return "tent";
     case MapPart::Bunker: return "bunker";
     case MapPart::Launcher: return "launcher";
+    case MapPart::TreeRow: return "tree_row";
     case MapPart::Count: break;
     }
     return "?";
@@ -633,6 +653,12 @@ public:
     const std::vector<Flat>& Flats() const { return flats_; }
     // Whether (east, north) lies within `clear_m` (under 125 m) of the edge of a road, railway or river (the map's and the
     // detail areas' imported ones), or of a river's: what the map's dressing keeps its trees off (scenery/map_dressing.hpp).
+    // The plain's fields (farm_fields.hpp): the map's farmland sizes with the map's own seed.
+    FieldGrid Fields() const {
+        FieldGrid g = def_.farmland.fields;
+        g.seed = Seed32(noise::Mix64(def_.seed ^ 0xF1E1D5ull));
+        return g;
+    }
     bool NearLine(double e, double n, double clear_m) const { return lines_.Near(e, n, clear_m); }
     bool NearWater(double e, double n, double clear_m) const { return water_.Near(e, n, clear_m); }
 
@@ -1332,6 +1358,7 @@ private:
         LayFarmsteads(rng);
         LayWoods(rng);
         LayMarshes();
+        LayFarmland();
         for (const MapSettlementDef& s : def_.settlements) layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
         for (const MapSiteDef& s : def_.sites) layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
     }
@@ -1686,6 +1713,7 @@ private:
                     barn ? rng.Range(8.0, 12.0) : 8.0, barn ? rng.Range(5.0, 8.0) : 5.0, heading + (barn && rng.Chance(0.5) ? kPi / 2 : 0.0));
             }
             occupied_.Take(e, n, 60.0);
+            farmsteads_.push_back({e, n, heading});
             ++placed;
         }
     }
@@ -1757,6 +1785,149 @@ private:
                         Canopy(x, y, b, seed);
                     }
                 }
+            }
+        }
+    }
+
+    // A point where a farm track, a tree row or a grove may stand: inside the map proper and clear of woods, marsh, water,
+    // buildings, sites and settlements; `lines_m` clear of the roads, railways and rivers too (0: the point may be beside
+    // one), `built_m` clear of what is built (a grove stands near its own farm).
+    bool FarmlandClear(double e, double n, double lines_m, double built_m) const {
+        if (!def_.InCore(e, n)) return false;
+        if (lines_m > 0.0 && lines_.Near(e, n, lines_m)) return false;
+        if (built_m > 0.0 && !occupied_.Free(e, n, built_m)) return false;
+        if (water_.Near(e, n, 12.0) || InForest(e, n) || NearSettlement(e, n, 40.0)) return false;
+        for (const MapPolygonDef& m : def_.marshes) {
+            if (mapgeo::InPolygon(m.points, e, n)) return false;
+        }
+        const double b = def_.block_m;
+        return canopy_cells_.count(CanopyKey((std::floor(e / b) + 0.5) * b, (std::floor(n / b) + 0.5) * b)) == 0;
+    }
+
+    bool NearAnySite(double e, double n, double reach_m) const {
+        for (const MapSiteDef& s : def_.sites) {
+            if (std::hypot(e - s.centre.east_m, n - s.centre.north_m) < reach_m) return true;
+        }
+        return false;
+    }
+
+    // Farm tracks along the fields' long sides, then tree rows along some tracks and roads, then a grove round each tanya
+    // (roadmap T4). Each from the field grid's own hash, after everything else, so no box laid before moves.
+    void LayFarmland() {
+        const MapFarmlandDef& fd = def_.farmland;
+        if (!fd.laid) return;
+        const FieldGrid grid = Fields();
+        const double est = grid.estate_m;
+        constexpr double kStepM = 25.0;  // a track's samples
+        const std::uint32_t tag = grid.seed ^ 0x7A5C0DEu;
+        std::vector<std::vector<MapPoint>> runs;
+        int serial = 0;
+        const double cx0 = def_.west_m, cx1 = def_.east_m, cy0 = def_.south_m, cy1 = def_.north_m;
+        for (std::int32_t iy = static_cast<std::int32_t>(std::floor(cy0 / est)); iy <= static_cast<std::int32_t>(std::floor(cy1 / est)); ++iy) {
+            for (std::int32_t ix = static_cast<std::int32_t>(std::floor(cx0 / est)); ix <= static_cast<std::int32_t>(std::floor(cx1 / est)); ++ix) {
+                const FieldEstate e = EstateAt(grid, ix, iy);
+                const double sh = std::sin(e.heading_rad), ch = std::cos(e.heading_rad);
+                const double xs[2] = {ix * est, (ix + 1) * est}, ys[2] = {iy * est, (iy + 1) * est};
+                double vmin = 1e18, vmax = -1e18, umin = 1e18, umax = -1e18;
+                for (double x : xs) {
+                    for (double y : ys) {
+                        const double u = x * sh + y * ch, v = x * ch - y * sh;
+                        vmin = std::min(vmin, v);
+                        vmax = std::max(vmax, v);
+                        umin = std::min(umin, u);
+                        umax = std::max(umax, u);
+                    }
+                }
+                for (std::int32_t k = static_cast<std::int32_t>(std::ceil(vmin / e.width_m)); k * e.width_m <= vmax; ++k) {
+                    if (Unit24(FieldHash(tag, ix * 1031 + k, iy)) >= fd.track_share) continue;
+                    const double v = k * e.width_m;
+                    MapPoint p{umin * sh + v * ch, umin * ch - v * sh}, q{umax * sh + v * ch, umax * ch - v * sh};
+                    // The estate's square (an estate's border cuts the fields, and its rows are its own), inside the map proper.
+                    if (!ClipSegment(std::max(xs[0], cx0), std::max(ys[0], cy0), std::min(xs[1], cx1), std::min(ys[1], cy1), p, q)) continue;
+                    const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+                    const int steps = std::max(1, static_cast<int>(std::ceil(len / kStepM)));
+                    std::vector<MapPoint> run;
+                    const auto close_run = [&]() {
+                        if (run.size() >= 3) {
+                            MapStrip s;
+                            s.id = "farm_track_" + std::to_string(++serial);
+                            s.surface = MapSurface::Track;
+                            s.width_m = fd.track_width_m;
+                            for (const MapPoint& m : run) s.points.push_back({m.east_m, m.north_m, GroundHeight(m.east_m, m.north_m) + 0.15});
+                            layout_.strips.push_back(std::move(s));
+                            runs.push_back(run);
+                        }
+                        run.clear();
+                    };
+                    for (int i = 0; i <= steps; ++i) {
+                        const double f = static_cast<double>(i) / steps;
+                        const MapPoint m{p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f};
+                        if (FarmlandClear(m.east_m, m.north_m, 0.5 * fd.track_width_m + 8.0, 6.0)) run.push_back(m);
+                        else close_run();
+                    }
+                    close_run();
+                }
+            }
+        }
+        // A row of trees (a box) along the segment a-b, `side` of the line by `off` m (the road's or track's half width and
+        // the row's), unless something stands there or a site's sectors need the sight.
+        const auto row = [&](const MapPoint& a, const MapPoint& b, double side, double off, std::uint32_t draw) {
+            const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+            if (len < 20.0) return;
+            const double ue = (b.east_m - a.east_m) / len, un = (b.north_m - a.north_m) / len;
+            const double e = 0.5 * (a.east_m + b.east_m) + side * off * un, n = 0.5 * (a.north_m + b.north_m) - side * off * ue;
+            if (NearAnySite(e, n, fd.site_clear_m) || !FarmlandClear(e, n, 0.0, 4.0)) return;
+            const double h = fd.row_height_min_m + (fd.row_height_max_m - fd.row_height_min_m) * Unit24(Hash32(draw ^ 0x3u));
+            Box(MapPart::TreeRow, e, n, 0.92 * len, fd.row_width_m, h, std::atan2(ue, un), 0.3);
+        };
+        // Along the farm tracks: a piece of four samples at a time, a share of them, on the side each draws.
+        for (std::size_t r = 0; r < runs.size(); ++r) {
+            const std::vector<MapPoint>& pts = runs[r];
+            for (std::size_t i = 0; i + 1 < pts.size(); i += 4) {
+                const std::size_t j = std::min(i + 4, pts.size() - 1);
+                const std::uint32_t draw = FieldHash(tag ^ 0x11u, static_cast<std::int32_t>(r), static_cast<std::int32_t>(i));
+                if (Unit24(draw) >= fd.row_share) continue;
+                row(pts[i], pts[j], Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0, 0.5 * fd.track_width_m + 0.5 * fd.row_width_m + 1.5, draw);
+            }
+        }
+        // Along the main and secondary roads inside the map proper, on the side each piece draws.
+        int road_index = 0;
+        for (const MapLineDef& road : def_.roads) {
+            ++road_index;
+            if (road.line_class == "track") continue;
+            std::vector<MapPoint> pts;
+            for (std::size_t i = 1; i < road.points.size(); ++i) {
+                const MapPoint& a = road.points[i - 1];
+                const MapPoint& b = road.points[i];
+                const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+                const int steps = std::max(1, static_cast<int>(std::ceil(len / kStepM)));
+                for (int k = pts.empty() ? 0 : 1; k <= steps; ++k) {
+                    const double f = static_cast<double>(k) / steps;
+                    pts.push_back({a.east_m + (b.east_m - a.east_m) * f, a.north_m + (b.north_m - a.north_m) * f});
+                }
+            }
+            for (std::size_t i = 0; i + 1 < pts.size(); i += 4) {
+                const std::size_t j = std::min(i + 4, pts.size() - 1);
+                const std::uint32_t draw = FieldHash(tag ^ 0x22u, road_index, static_cast<std::int32_t>(i));
+                if (Unit24(draw) >= fd.road_row_share) continue;
+                row(pts[i], pts[j], Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0, 0.5 * road.width_m + 0.5 * fd.row_width_m + 2.5, draw);
+            }
+        }
+        // A grove round three sides of each tanya (the fourth, the farm's front, open).
+        for (const Farmstead& f : farmsteads_) {
+            if (NearAnySite(f.e, f.n, fd.site_clear_m)) continue;
+            const double sh = std::sin(f.heading), ch = std::cos(f.heading);
+            const double g = fd.grove_width_m;
+            struct Belt {
+                double fwd, right, length, width;
+            };
+            const Belt belts[3] = {{-(35.0 + 6.0 + 0.5 * g), 0.0, g, 96.0}, {-8.0, -(38.0 + 0.5 * g), 84.0, g}, {-8.0, 38.0 + 0.5 * g, 84.0, g}};
+            for (std::size_t b = 0; b < 3; ++b) {
+                const double e = f.e + belts[b].fwd * sh + belts[b].right * ch, n = f.n + belts[b].fwd * ch - belts[b].right * sh;
+                if (!FarmlandClear(e, n, 0.0, 0.0)) continue;
+                const std::uint32_t draw = FieldHash(tag ^ 0x33u, static_cast<std::int32_t>(std::llround(f.e)), static_cast<std::int32_t>(std::llround(f.n)) + static_cast<std::int32_t>(b));
+                const double h = fd.grove_height_min_m + (fd.grove_height_max_m - fd.grove_height_min_m) * Unit24(draw);
+                Box(MapPart::TreeRow, e, n, belts[b].length, belts[b].width, h, f.heading, 0.3);
             }
         }
     }
@@ -1959,6 +2130,10 @@ private:
     DetailLines detail_lines_;
     std::vector<Flat> flats_;
     MapLayout layout_;
+    struct Farmstead {
+        double e, n, heading;
+    };
+    std::vector<Farmstead> farmsteads_;  // the tanyas laid (their groves: LayFarmland)
     mapgeo::SegmentIndex lines_{250.0};
     mapgeo::SegmentIndex water_{250.0};
     mapgeo::Occupancy occupied_{40.0};
@@ -2252,7 +2427,7 @@ class MapLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, MapDef& out) {
         if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "origin", "seed", "extent_km",
-                             "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads",
+                             "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads", "farmland",
                              "forests", "woods", "marshes", "lakes", "sites", "detail_settlements"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !OptionalString(root, "", "far_ground", out.far_ground_file) ||
@@ -2286,7 +2461,7 @@ public:
             out.airspace_radius_m = r * 1000.0;
         }
         return LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) && LoadLines(root, "roads", "", out.roads) &&
-               LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) &&
+               LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) && LoadFarmland(root, out) &&
                LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadLakes(root, out.lakes) &&
                LoadWoods(root, out) &&
                LoadSites(root, out) && LoadDetail(root, out) && LoadSettlements(root, "detail_settlements", out.detail_settlements) &&
@@ -2534,6 +2709,30 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
                 return Fail(Index("detail_settlements", i), "must lie in a detail area (terrain.detail)");
             }
         }
+        return true;
+    }
+
+    bool LoadFarmland(const json::Value& root, MapDef& out) {
+        const json::Value* f = root.Find("farmland");
+        if (f == nullptr) return true;
+        MapFarmlandDef& d = out.farmland;
+        d.laid = true;
+        if (!Keys(*f, "farmland", {"estate_m", "field_length_m", "field_width_m", "track_share", "track_width_m", "row_share", "road_row_share", "row_width_m",
+                                   "row_height_m", "site_clear_m", "grove_width_m", "grove_height_m", "notes"}) ||
+            !OptionalNumber(*f, "farmland", "estate_m", d.fields.estate_m) || !Pair(*f, "farmland", "field_length_m", d.fields.length_min_m, d.fields.length_max_m) ||
+            !Pair(*f, "farmland", "field_width_m", d.fields.width_min_m, d.fields.width_max_m) || !OptionalNumber(*f, "farmland", "track_share", d.track_share) ||
+            !OptionalNumber(*f, "farmland", "track_width_m", d.track_width_m) || !OptionalNumber(*f, "farmland", "row_share", d.row_share) ||
+            !OptionalNumber(*f, "farmland", "road_row_share", d.road_row_share) || !OptionalNumber(*f, "farmland", "row_width_m", d.row_width_m) ||
+            !Pair(*f, "farmland", "row_height_m", d.row_height_min_m, d.row_height_max_m) || !OptionalNumber(*f, "farmland", "site_clear_m", d.site_clear_m) ||
+            !OptionalNumber(*f, "farmland", "grove_width_m", d.grove_width_m) || !Pair(*f, "farmland", "grove_height_m", d.grove_height_min_m, d.grove_height_max_m)) {
+            return false;
+        }
+        if (d.fields.estate_m < 500.0) return Fail("farmland.estate_m", "needs 500 m or more");
+        if (d.fields.length_min_m < 50.0 || d.fields.width_min_m < 20.0) return Fail("farmland", "a field needs 50 m by 20 m or more");
+        if (d.track_share < 0.0 || d.track_share > 1.0 || d.row_share < 0.0 || d.row_share > 1.0 || d.road_row_share < 0.0 || d.road_row_share > 1.0) {
+            return Fail("farmland", "the shares are in 0..1");
+        }
+        if (d.track_width_m <= 0.0 || d.row_width_m <= 0.0 || d.grove_width_m <= 0.0 || d.site_clear_m < 0.0) return Fail("farmland", "widths are positive");
         return true;
     }
 

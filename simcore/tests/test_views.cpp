@@ -172,8 +172,8 @@ SC_TEST("views: a panorama gives a camera every step, named by its bearing, and 
             if (g == nullptr) continue;
             // 2 m on, along the view, is a different parcel from 6 m on: the eye stands at an edge, looking across the next.
             const double se = std::sin(cams[0].bearing_rad), cn = std::cos(cams[0].bearing_rad);
-            const std::uint64_t here = FieldParcel(Dressing(), g->parcel_seed, cams[0].eye_e, cams[0].eye_n);
-            const std::uint64_t ahead = FieldParcel(Dressing(), g->parcel_seed, cams[0].eye_e + 4.0 * se, cams[0].eye_n + 4.0 * cn);
+            const std::uint64_t here = FieldParcel(g->fields, cams[0].eye_e, cams[0].eye_n);
+            const std::uint64_t ahead = FieldParcel(g->fields, cams[0].eye_e + 4.0 * se, cams[0].eye_n + 4.0 * cn);
             SC_EXPECT(here != ahead);
         }
     }

@@ -102,13 +102,13 @@ SC_TEST("map dressing: every field cell grows a crop, its parcel the same each t
     SC_EXPECT(crops.size() == r.crops.size());  // every crop grown somewhere
     for (std::size_t c = 0; c < per_cover.size(); ++c) SC_EXPECT(per_cover[c] > 0);
     // Fields are parcels, not noise: most cells' neighbours a cell east lie in the same parcel.
-    const std::uint64_t seed = 12345;
+    const FieldGrid fg = m->Fields();
     int same = 0, total = 0;
     for (double n = -15000.0; n < 15000.0; n += 731.0) {
         for (double e = -15000.0; e < 15000.0; e += 617.0) {
             ++total;
-            same += FieldParcel(r, seed, e, n) == FieldParcel(r, seed, e + 25.0, n) ? 1 : 0;
-            SC_EXPECT(FieldParcel(r, seed, e, n) == FieldParcel(r, seed, e, n));
+            same += FieldParcel(fg, e, n) == FieldParcel(fg, e + 25.0, n) ? 1 : 0;
+            SC_EXPECT(FieldParcel(fg, e, n) == FieldParcel(fg, e, n));
         }
     }
     SC_EXPECT(same > total * 7 / 10);
@@ -352,19 +352,19 @@ SC_TEST("map dressing: the field function is the ground material's, pinned by it
 }
 
 SC_TEST("map dressing: a field is a collective farm's, its numbers within the rules") {
-    const DressingRules& r = Rules();
-    const std::uint64_t seed = 0xABCDEFull;
+    FieldGrid grid;
+    grid.seed = 0xABCDEFu;
     int checked = 0, centre_ok = 0;
     double min_ha = 1e9, max_ha = 0.0;
     for (double n = -23000.0; n < 23000.0; n += 1301.0) {
         for (double e = -23000.0; e < 23000.0; e += 1117.0) {
-            const FieldCell f = FieldAt(r, seed, e, n);
+            const FieldCell f = FieldAt(grid, e, n);
             // The nominal centre is the field's own unless an estate's border cuts it off from the field (the ground
             // material reads the mask there only when it is).
-            if (FieldAt(r, seed, f.centre_e, f.centre_n).id == f.id) ++centre_ok;
+            if (FieldAt(grid, f.centre_e, f.centre_n).id == f.id) ++centre_ok;
             SC_EXPECT(f.heading_rad >= 0.0 && f.heading_rad < kPi);
-            SC_EXPECT(f.length_m >= r.parcel_length_min_m && f.length_m <= r.parcel_length_max_m);
-            SC_EXPECT(f.width_m >= r.parcel_width_min_m && f.width_m <= r.parcel_width_max_m);
+            SC_EXPECT(f.length_m >= grid.length_min_m && f.length_m <= grid.length_max_m);
+            SC_EXPECT(f.width_m >= grid.width_min_m && f.width_m <= grid.width_max_m);
             const double ha = f.length_m * f.width_m / 10000.0;
             min_ha = std::min(min_ha, ha);
             max_ha = std::max(max_ha, ha);
@@ -375,8 +375,8 @@ SC_TEST("map dressing: a field is a collective farm's, its numbers within the ru
     SC_EXPECT(min_ha >= 80.0 && max_ha <= 210.0);
     SC_EXPECT(centre_ok > checked * 7 / 10);
     // The old names are the same function.
-    SC_EXPECT(FieldHeading(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).heading_rad);
-    SC_EXPECT(FieldParcel(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).id);
+    SC_EXPECT(FieldHeading(grid, 100.0, 200.0) == FieldAt(grid, 100.0, 200.0).heading_rad);
+    SC_EXPECT(FieldParcel(grid, 100.0, 200.0) == FieldAt(grid, 100.0, 200.0).id);
 }
 
 SC_TEST("map dressing: the fields near a settlement are household strips, and only those") {
@@ -393,7 +393,7 @@ SC_TEST("map dressing: the fields near a settlement are household strips, and on
             SC_EXPECT(g.strips[i] <= 1);
             if (g.cover[i] != static_cast<std::uint8_t>(Cover::Field)) continue;
             ++fields;
-            const FieldCell f = FieldAt(r, g.parcel_seed, g.CentreEast(c), g.CentreNorth(row));
+            const FieldCell f = FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(row));
             double nearest = 1e18;
             for (const MapSettlementDef& s : m->Def().settlements) {
                 nearest = std::min(nearest, std::hypot(f.centre_e - s.centre.east_m, f.centre_n - s.centre.north_m) - s.radius_m);
@@ -409,71 +409,60 @@ SC_TEST("map dressing: the fields near a settlement are household strips, and on
     SC_EXPECT(far_with == 0);
 }
 
-SC_TEST("map dressing: the field function is the ground material's, pinned by its hash's values") {
-    // The material's HLSL (tools/ue_build_ground_material.py) repeats these, so a change here must change it too.
-    SC_EXPECT(Hash32(0u) == 0u);
-    SC_EXPECT(Hash32(1u) == 1753845952u);
-    SC_EXPECT(Hash32(0xDEADBEEFu) == 3861431939u);
-    SC_EXPECT(FieldHash(0x5EEDu, 3, -2) == 1850613118u);
-    SC_EXPECT(FieldHash(0u, 0, 0) == 2488251732u);
-    SC_EXPECT(FieldHash(123456u, -7, 1000) == 3906896019u);
-    SC_EXPECT(Unit24(0xFFFFFFFFu) < 1.0 && Unit24(0u) == 0.0);
-}
-
-SC_TEST("map dressing: a field is a collective farm's, its numbers within the rules") {
-    const DressingRules& r = Rules();
-    const std::uint64_t seed = 0xABCDEFull;
-    int checked = 0, centre_ok = 0;
-    double min_ha = 1e9, max_ha = 0.0;
-    for (double n = -23000.0; n < 23000.0; n += 1301.0) {
-        for (double e = -23000.0; e < 23000.0; e += 1117.0) {
-            const FieldCell f = FieldAt(r, seed, e, n);
-            // The nominal centre is the field's own unless an estate's border cuts it off from the field (the ground
-            // material reads the mask there only when it is).
-            if (FieldAt(r, seed, f.centre_e, f.centre_n).id == f.id) ++centre_ok;
-            SC_EXPECT(f.heading_rad >= 0.0 && f.heading_rad < kPi);
-            SC_EXPECT(f.length_m >= r.parcel_length_min_m && f.length_m <= r.parcel_length_max_m);
-            SC_EXPECT(f.width_m >= r.parcel_width_min_m && f.width_m <= r.parcel_width_max_m);
-            const double ha = f.length_m * f.width_m / 10000.0;
-            min_ha = std::min(min_ha, ha);
-            max_ha = std::max(max_ha, ha);
-            ++checked;
-        }
-    }
-    std::printf("    %d fields sampled (%d with their centre in them), %.0f-%.0f ha\n", checked, centre_ok, min_ha, max_ha);
-    SC_EXPECT(min_ha >= 80.0 && max_ha <= 210.0);
-    SC_EXPECT(centre_ok > checked * 7 / 10);
-    // The old names are the same function.
-    SC_EXPECT(FieldHeading(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).heading_rad);
-    SC_EXPECT(FieldParcel(r, seed, 100.0, 200.0) == FieldAt(r, seed, 100.0, 200.0).id);
-}
-
-SC_TEST("map dressing: the fields near a settlement are household strips, and only those") {
+SC_TEST("map dressing: farm tracks, tree rows and groves lie along the fields, clear of what stands and of the sites") {
     const MapData* m = Kesmark();
     SC_EXPECT(m != nullptr);
     if (m == nullptr) return;
-    const DressingRules& r = Rules();
-    const CoverRaster a = BakeCover(*m, r);
-    const CoverGrid& g = a.grids.back();  // the map proper
-    std::size_t with = 0, fields = 0, far_with = 0;
-    for (int row = 0; row < g.rows; row += 2) {
-        for (int c = 0; c < g.cols; c += 2) {
-            const std::size_t i = g.Index(c, row);
-            SC_EXPECT(g.strips[i] <= 1);
-            if (g.cover[i] != static_cast<std::uint8_t>(Cover::Field)) continue;
-            ++fields;
-            const FieldCell f = FieldAt(r, g.parcel_seed, g.CentreEast(c), g.CentreNorth(row));
-            double nearest = 1e18;
-            for (const MapSettlementDef& s : m->Def().settlements) {
-                nearest = std::min(nearest, std::hypot(f.centre_e - s.centre.east_m, f.centre_n - s.centre.north_m) - s.radius_m);
-            }
-            const bool near_village = nearest < r.strip_reach_m;
-            SC_EXPECT((g.strips[i] != 0) == near_village);
-            with += g.strips[i] != 0;
-            far_with += g.strips[i] != 0 && nearest > r.strip_reach_m + 1.0;
+    const MapDef& d = m->Def();
+    SC_EXPECT(d.farmland.laid);
+    std::size_t tracks = 0, farm_points = 0;
+    for (const MapStrip& s : m->Layout().strips) {
+        if (s.id.compare(0, 11, "farm_track_") != 0) continue;
+        ++tracks;
+        farm_points += s.points.size();
+        SC_EXPECT(s.surface == MapSurface::Track && s.points.size() >= 3 && s.width_m == d.farmland.track_width_m);
+        for (const Vec3& p : s.points) SC_EXPECT(d.InCore(p.x, p.y));
+    }
+    std::size_t rows = 0, bad_site = 0, bad_water = 0, bad_town = 0, bad_height = 0, outside = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::TreeRow) continue;
+        ++rows;
+        outside += d.InCore(b.east_m, b.north_m) ? 0 : 1;
+        for (const MapSiteDef& s : d.sites) bad_site += std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) < d.farmland.site_clear_m - 1.0 ? 1 : 0;
+        bad_water += m->NearWater(b.east_m, b.north_m, 0.0) ? 1 : 0;
+        for (const MapSettlementDef& s : d.settlements) bad_town += std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) < s.radius_m ? 1 : 0;
+        // The height above the ground: a row's or a grove's (the sink is under it).
+        const double up = b.height_m - 0.3;
+        bad_height += up < d.farmland.row_height_min_m - 1e-6 && up < d.farmland.grove_height_min_m - 1e-6 ? 1 : 0;
+        bad_height += up > std::max(d.farmland.row_height_max_m, d.farmland.grove_height_max_m) + 1e-6 ? 1 : 0;
+    }
+    std::printf("    %zu farm tracks (%zu points), %zu tree rows and grove belts\n", tracks, farm_points, rows);
+    SC_EXPECT(tracks > 20 && rows > 100);
+    SC_EXPECT(outside == 0 && bad_site == 0 && bad_water == 0 && bad_town == 0 && bad_height == 0);
+    // Each is a box that blocks sight (the obstacle top at its centre is its top), and the same each time.
+    int checked = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::TreeRow || checked >= 200) continue;
+        SC_EXPECT(m->ObstacleTop(b.east_m, b.north_m) >= b.base_m + b.height_m - 1e-6);
+        ++checked;
+    }
+    SC_EXPECT(checked > 50);
+}
+
+SC_TEST("map dressing: the tree rows are planted with trees that keep to their boxes' height") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const MapDressing& dress = Dressing();
+    std::size_t near_rows = 0, looked = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::TreeRow || looked >= 300) continue;
+        ++looked;
+        for (const TreeInstance& t : dress.trees) {
+            if (std::fabs(t.east_m - b.east_m) > 5.0 || std::fabs(t.north_m - b.north_m) > 5.0) continue;
+            ++near_rows;
+            break;
         }
     }
-    std::printf("    %zu of %zu field cells are household strips\n", with, fields);
-    SC_EXPECT(with > 0 && with < fields / 3);
-    SC_EXPECT(far_with == 0);
+    SC_EXPECT(near_rows > looked * 8 / 10);
 }

@@ -24,6 +24,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "simcore/farm_fields.hpp"
 #include "simcore/json.hpp"
 #include "simcore/noise.hpp"
 #include "simcore/scenery/map_meshes.hpp"
@@ -73,11 +74,8 @@ struct DressingRules {
     double mass_top = 0.92;      // a mass's height, of its wood's
     double cover_cell_m = 25.0;
     double garden_m = 15.0;
-    // A collective farm's field (a TSZ's, 100-200 ha: roadmap T4), in estates (squares of parcel_heading_cell_m) whose
-    // fields run one way; a field within strip_reach_m of a settlement's edge is cut into household strips.
-    double parcel_length_min_m = 1200.0, parcel_length_max_m = 2000.0;
-    double parcel_width_min_m = 700.0, parcel_width_max_m = 1000.0;
-    double parcel_heading_cell_m = 4000.0;
+    // The fields themselves are the map's (MapDef::farmland, farm_fields.hpp: they set the farm tracks and tree rows, which
+    // block sight); a field within strip_reach_m of a settlement's edge is cut into household strips.
     double strip_width_min_m = 20.0, strip_width_max_m = 40.0;
     double strip_reach_m = 600.0;
     std::vector<CropDef> crops{{"wheat", 0.3, {{0.36f, 0.33f, 0.14f}}},
@@ -189,9 +187,6 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("mass_top", r.mass_top, 0.2, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
-    range("parcel_length_m", r.parcel_length_min_m, r.parcel_length_max_m, 20.0, 5000.0);
-    range("parcel_width_m", r.parcel_width_min_m, r.parcel_width_max_m, 10.0, 5000.0);
-    number("parcel_heading_cell_m", r.parcel_heading_cell_m, 200.0, 50000.0);
     range("strip_width_m", r.strip_width_min_m, r.strip_width_max_m, 5.0, 200.0);
     number("strip_reach_m", r.strip_reach_m, 0.0, 5000.0);
     double variants = r.house_variants;
@@ -254,66 +249,6 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
 
 // ---------------------------------------------------------------------------------------------- the land cover
 
-// One 32-bit integer hash for the fields, written the same in the ground material's HLSL (uint, no 64-bit): lowbias32.
-inline std::uint32_t Hash32(std::uint32_t x) {
-    x ^= x >> 16;
-    x *= 0x7feb352du;
-    x ^= x >> 15;
-    x *= 0x846ca68bu;
-    x ^= x >> 16;
-    return x;
-}
-
-// A draw for a seed and two whole numbers (an estate's square, a field's row and column), wrapping as unsigned ints.
-inline std::uint32_t FieldHash(std::uint32_t seed, std::int32_t a, std::int32_t b) {
-    return Hash32(seed ^ Hash32(static_cast<std::uint32_t>(a) * 0x8CB92BA7u + Hash32(static_cast<std::uint32_t>(b) + 0x9E3779B9u)));
-}
-
-// A number in [0, 1) from a hash's top 24 bits (exact in a float).
-inline double Unit24(std::uint32_t h) { return static_cast<double>(h >> 8) * (1.0 / 16777216.0); }
-
-inline std::uint32_t Seed32(std::uint64_t seed) { return static_cast<std::uint32_t>(seed ^ (seed >> 32)); }
-
-// The field of farmland (east, north) lies in: the map's frame, closed form (the ground material computes the same). The
-// map is cut into estates, squares of parcel_heading_cell_m, each with its fields' heading, width and a draw; across the
-// heading a field is the estate's width, along it each row of fields its own length and offset. A field's edges are
-// straight at every distance, and an estate's border cuts the fields it crosses.
-struct FieldCell {
-    std::uint64_t id = 0;       // the field's number (the high word's bits are its shade)
-    double heading_rad = 0.0;   // the furrows' way, clockwise from north, in [0, pi)
-    double centre_e = 0.0, centre_n = 0.0;
-    double length_m = 0.0, width_m = 0.0;
-};
-
-inline FieldCell FieldAt(const DressingRules& r, std::uint64_t seed, double e, double n) {
-    const std::uint32_t s32 = Seed32(seed);
-    const double hc = r.parcel_heading_cell_m;
-    const std::uint32_t hs = FieldHash(s32, static_cast<std::int32_t>(std::floor(e / hc)), static_cast<std::int32_t>(std::floor(n / hc)));
-    FieldCell f;
-    f.heading_rad = Unit24(hs) * kPi;
-    const double sh = std::sin(f.heading_rad), ch = std::cos(f.heading_rad);
-    const double u = e * sh + n * ch, v = e * ch - n * sh;
-    f.width_m = r.parcel_width_min_m + (r.parcel_width_max_m - r.parcel_width_min_m) * Unit24(Hash32(hs ^ 0x1u));
-    const std::int32_t row = static_cast<std::int32_t>(std::floor(v / f.width_m));
-    const std::uint32_t rs = FieldHash(hs, row, 0x51);
-    f.length_m = r.parcel_length_min_m + (r.parcel_length_max_m - r.parcel_length_min_m) * Unit24(rs);
-    const double offset = Unit24(Hash32(rs ^ 0x2u)) * f.length_m;
-    const std::int32_t col = static_cast<std::int32_t>(std::floor((u + offset) / f.length_m));
-    const std::uint32_t id32 = FieldHash(rs, col, 0x77);
-    f.id = (static_cast<std::uint64_t>(id32) << 32) | Hash32(id32 ^ 0x9E3779B9u);
-    const double uc = (col + 0.5) * f.length_m - offset, vc = (row + 0.5) * f.width_m;
-    f.centre_e = uc * sh + vc * ch;
-    f.centre_n = uc * ch - vc * sh;
-    return f;
-}
-
-// The way the furrows run at (east, north): radians clockwise from north, in [0, pi). Along it a field is a parcel's
-// length, across it its width (FieldAt).
-inline double FieldHeading(const DressingRules& r, std::uint64_t seed, double e, double n) { return FieldAt(r, seed, e, n).heading_rad; }
-
-// The parcel of farmland (east, north) lies in, as a number (FieldAt's id).
-inline std::uint64_t FieldParcel(const DressingRules& r, std::uint64_t seed, double e, double n) { return FieldAt(r, seed, e, n).id; }
-
 // The crop a parcel grows: its index in the rules' crops, by their shares.
 inline std::uint8_t CropOf(const DressingRules& r, std::uint64_t parcel) {
     double sum = 0.0;
@@ -330,7 +265,7 @@ inline std::uint8_t CropOf(const DressingRules& r, std::uint64_t parcel) {
 // One square of the land cover: cells `cell_m` across from (west, south), each its cover and, on a field, its crop.
 struct CoverGrid {
     std::string id;  // the detail area's, or "map" for the map proper
-    std::uint64_t parcel_seed = 0;  // the fields' draw (FieldParcel, FieldHeading)
+    FieldGrid fields;  // the map's fields (FieldAt)
     double west_m = 0.0, south_m = 0.0, cell_m = 25.0;
     int cols = 0, rows = 0;
     std::vector<std::uint8_t> cover;  // Cover
@@ -462,11 +397,10 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
         g.cover.assign(count, static_cast<std::uint8_t>(Cover::Field));
         g.crop.assign(count, 0);
         g.strips.assign(count, 0);
-        const std::uint64_t seed = noise::Mix64(def.seed ^ 0xF1E1D5ull);
-        g.parcel_seed = seed;
+        g.fields = map.Fields();
         for (int r = 0; r < g.rows; ++r) {
             for (int c = 0; c < g.cols; ++c) {
-                const FieldCell f = FieldAt(rules, seed, g.CentreEast(c), g.CentreNorth(r));
+                const FieldCell f = FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(r));
                 g.crop[g.Index(c, r)] = CropOf(rules, f.id);
                 // A field whose centre is near a settlement's edge is the household's: strips, not a collective's field.
                 for (const MapSettlementDef& s : def.settlements) {
@@ -548,7 +482,7 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
     const std::uint64_t seed = noise::Mix64(def.seed ^ 0x7EE5ull);
     double share_sum = 0.0;
     for (double s : rules.species_shares) share_sum += s;
-    const auto plant = [&](const MapBox& b, double e, double n) {
+    const auto plant = [&](const MapBox& b, double e, double n, int forced_kind = -1) {
         if (!def.InCore(e, n) && !map.InDetail(e, n)) return;
         if (map.NearLine(e, n, rules.line_clear_m) || map.NearWater(e, n, 0.0)) return;
         const double ground = map.GroundHeight(e, n);
@@ -565,7 +499,9 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         t.height_m = static_cast<float>(height);
         t.crown_m = static_cast<float>(height * rules.crown_ratio * (1.0 + rules.crown_jitter * (2.0 * At(seed ^ 0xC20ull, e, n) - 1.0)));
         t.yaw_rad = static_cast<float>(At(seed ^ 0xA3ull, e, n) * kTwoPi);
-        if (rules.species_shares[static_cast<std::size_t>(TreeKind::Poplar)] > 0.0 && map.NearWater(e, n, rules.poplar_river_m)) {
+        if (forced_kind >= 0) {
+            t.kind = static_cast<std::uint8_t>(forced_kind);
+        } else if (rules.species_shares[static_cast<std::size_t>(TreeKind::Poplar)] > 0.0 && map.NearWater(e, n, rules.poplar_river_m)) {
             t.kind = static_cast<std::uint8_t>(TreeKind::Poplar);
         } else {
             const double pick = At(seed ^ 0x5Full, e, n) * share_sum;
@@ -590,6 +526,25 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         n = n0 + j * (2.0 * At(seed ^ 0x1E6ull, e0, n0) - 1.0);
     };
     for (const MapBox& b : map.Layout().boxes) {
+        if (b.part == MapPart::TreeRow) {
+            // A row or a grove (the map's farmland, roadmap T4): trees on a lattice of the row's own spacing, poplar and
+            // black locust (some oak in a grove), the row's own kind each. Their tops keep to the box's height, which
+            // the sight lines read.
+            constexpr double kRowSpacingM = 7.0;
+            const int count_l = std::max(1, static_cast<int>(std::floor(b.length_m / kRowSpacingM)));
+            const int count_w = std::max(1, static_cast<int>(std::floor(b.width_m / kRowSpacingM)));
+            const double step_l = b.length_m / count_l, step_w = b.width_m / count_w;
+            const double pick = At(seed ^ 0x8Eull, b.east_m, b.north_m);
+            const int kind = static_cast<int>(pick < 0.55 ? TreeKind::Poplar : (pick < 0.9 ? TreeKind::Acacia : TreeKind::Oak));
+            for (int i = 0; i < count_l; ++i) {
+                for (int j = 0; j < count_w; ++j) {
+                    double e = 0.0, n = 0.0;
+                    jittered(b, (i + 0.5) * step_l - 0.5 * b.length_m, (j + 0.5) * step_w - 0.5 * b.width_m, std::min(step_l, step_w), e, n);
+                    plant(b, e, n, kind);
+                }
+            }
+            continue;
+        }
         if (b.part != MapPart::Canopy) continue;
         const bool whole = map.InDetail(b.east_m, b.north_m);
         const bool core = def.InCore(b.east_m, b.north_m);

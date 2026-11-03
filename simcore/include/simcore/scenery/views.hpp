@@ -307,7 +307,7 @@ inline OnLine AlongLine(const std::vector<MapPoint>& pts, double fraction) {
 
 // The cameras of one view on the map: one, or a panorama's several (named <id>_h<degrees>). A view the map cannot give
 // has ok false and its reason. `cover` is the land cover (BakeCover), for the parcels of farmland.
-inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingRules& rules, const CoverRaster& cover, const ViewDef& v) {
+inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingRules& /*rules*/, const CoverRaster& cover, const ViewDef& v) {
     using namespace views_detail;
     const MapDef& def = map.Def();
     const ViewAnchor& a = v.anchor;
@@ -381,17 +381,17 @@ inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingR
             if (best == std::numeric_limits<double>::max()) {
                 s = Missing("no farmland within 3 km of close_km");
             } else {
-                const double heading = FieldHeading(rules, g->parcel_seed, fe, fn);
+                const double heading = FieldHeading(g->fields, fe, fn);
                 const double across = heading + kPi / 2.0;  // the parcel's short axis
                 const double ue = std::sin(across), un = std::cos(across);
-                const std::uint64_t here = FieldParcel(rules, g->parcel_seed, fe, fn);
+                const std::uint64_t here = FieldParcel(g->fields, fe, fn);
                 double back = 0.0;
-                while (back < 2000.0 && FieldParcel(rules, g->parcel_seed, fe - back * ue, fn - back * un) == here) back += 5.0;
+                while (back < 2000.0 && FieldParcel(g->fields, fe - back * ue, fn - back * un) == here) back += 5.0;
                 // The edge to a few centimetres: it lies between back - 5 (in the parcel) and back (out of it).
                 double in = std::max(0.0, back - 5.0), out = back;
                 for (int k = 0; k < 8; ++k) {
                     const double mid = 0.5 * (in + out);
-                    (FieldParcel(rules, g->parcel_seed, fe - mid * ue, fn - mid * un) == here ? in : out) = mid;
+                    (FieldParcel(g->fields, fe - mid * ue, fn - mid * un) == here ? in : out) = mid;
                 }
                 back = out;
                 // 2 m beyond the edge (into the neighbouring parcel), looking back across this one.

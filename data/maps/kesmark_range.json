@@ -115,6 +115,12 @@
   ],
   "farmsteads": { "count": 70, "buildings": [2, 4],
                   "notes": "Tanyas: lone farmsteads on the plain, inside the map only." },
+  "farmland": {
+    "estate_m": 4000, "field_length_m": [1200, 2000], "field_width_m": [700, 1000],
+    "track_share": 0.5, "track_width_m": 4, "row_share": 0.3, "road_row_share": 0.5, "row_width_m": 7, "row_height_m": [12, 22],
+    "site_clear_m": 600, "grove_width_m": 20, "grove_height_m": [12, 18],
+    "notes": "game values, sam3d estimates (docs/scenery/T3_T4_PLAN.md): the plain in estates of 4 km, each a collective farm's fields of 84-200 ha (a TSZ's, 100-200 ha, 1970s-80s; docs/research/TERRAIN_REFERENCES_2026-11.md) in rows along one heading; farm tracks (dulout) along half the fields' long sides, tree rows (12-22 m, poplar and locust) along 30 percent of them and 50 percent of the main and secondary roads, a grove round three sides of each tanya. None within 600 m of a site: a battery's sectors stay open. Rows and groves block sight (they are boxes of the map)."
+  },
   "forests": [
     { "id": "lazne_woods", "name": "The Lazne woods",
       "points": [ [-13.6, -5.6], [-12.4, -0.8], [-10.2, -0.2], [-8.8, -1.8], [-9.0, -4.6], [-9.6, -5.9], [-11.4, -6.4] ],

@@ -198,7 +198,7 @@ inline std::uint8_t HeadingTexel(double heading_rad) {
     return static_cast<std::uint8_t>(std::lround(h / kPi * 256.0) & 255L);
 }
 
-inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& dressing, const GroundLayerRules& layers, Season season) {
+inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& /*dressing*/, const GroundLayerRules& layers, Season season) {
     GroundMask m;
     m.id = g.id;
     m.west_m = g.west_m;
@@ -219,7 +219,7 @@ inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& dressi
             t[2] = 64;
             t[3] = 0;
             if (cover == Cover::Field) {
-                const FieldCell f = FieldAt(dressing, g.parcel_seed, g.CentreEast(c), g.CentreNorth(r));
+                const FieldCell f = FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(r));
                 t[1] = HeadingTexel(f.heading_rad);
                 t[2] = static_cast<std::uint8_t>(((f.id >> 41) & 0x7Fu) | (g.strips[i] != 0 ? 0x80u : 0u));
                 t[3] = rows ? 255 : 0;
