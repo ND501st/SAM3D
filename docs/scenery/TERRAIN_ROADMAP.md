@@ -355,13 +355,21 @@ V5 is missing (no farmyard site kind: T7); V8's eye stands on the bank (no dyke:
 
 **What the baseline views show** (judged by eye against the photographs):
 - V4, V6, V9 (the ploughed, stubble and cloddy ground at 1.7 m): the real textures read as a field.
-- **A defect: some ground near the camera is flat green, with no texture** (V7 at the battery, V8 across the Rava, part
-  of V1): no texel detail at all (a pixel spread of 3 against V1's fields' 20), with straight parcel edges in V8 where
-  a ploughed field beside it is textured. Ruled out (4 Nov): the season (autumn: every crop's layer has a texture), a
-  field with no crop (every cell has one), the mask's format (linear, nearest, uncompressed), the far fades (400 m and
-  6 km), a level without the material (every level with a land cover square wears it), the detail areas (V8 is outside
-  them). Left: the shader's `Has` lookup or the meadow (pasture) layer's slice, the likeliest by the parcel shapes. Next
-  step: one render with `SAM3D_GROUND_PATTERN=1` (each layer its own pattern) to see which layer those cells draw.
+- **V8's flat green was the marsh, drawn as slabs (found and fixed 4 Nov):** `BuildBoxes` drew every `MapPart::Marsh`
+  box (0.25 m tall, 100 m square) over the ground, so the ground's own marsh layer never showed. They are no longer
+  drawn: the marsh is the ground's cover colour and texture (the boxes stay in the layout, not opaque to sight). Found
+  by hiding the static meshes (`-ExecCmds="show StaticMeshes"`) and then the test patterns (`SAM3D_GROUND_PATTERN=1`),
+  which showed V1's textures were there all along.
+- **V7 (the battery) is still a flat olive surface, with no texture, under an eye 4 m up; open, not diagnosed.** Facts
+  from a day of probes (4 Nov): it is lit by the sun and takes the mast's shadow, so it is a surface and not the sky; its
+  horizon curves up at the left and right edges (a bowl, not a plane); it stays with the 10 m detail level not built, with
+  every static mesh hidden, with the sky atmosphere or the fog off, in the test patterns, and under a tint of every
+  level's vertex colours; it goes when the eye is 60 m up (the patterns show beyond 190 m); the eye stands 3.75 m over
+  the pad (a downward trace hits `Map_pad`); the four 10 m tiles within 200 m of the eye wear the textured material;
+  no other component near it is large. It is not the first default shot's place 0.9 km west, which is textured. Next
+  probe: hide each component class in turn (the procedural meshes by name, the strips, the sky actor's components) with
+  a `-SimHideComponent=<substring>` switch, at the battery only. Not on T3/T4's path (the shader is rewritten in
+  T3.1, which may change what it is); look again after T3.1.
 - V2 and V3: the houses are dark boxes (their materials, lit from a low sun) with no verges or poles; V3 shows the
   land cover's 25 m cells as steps at every field edge (T3).
 - V1, V10: fields are small patches (T4); no tree rows on the tracks, no pylons; the trees are the grey models (T5).

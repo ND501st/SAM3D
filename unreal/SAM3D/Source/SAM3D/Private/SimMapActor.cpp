@@ -1254,6 +1254,10 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 		{
 			continue;  // the woods are trees and masses (BuildTrees)
 		}
+		if (B.part == simcore::MapPart::Marsh)
+		{
+			continue;  // the marsh is the ground's own (its land cover's colour and its layer's texture), not a slab laid over it
+		}
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(B.east_m, B.north_m, Ae, An, Au);
 		const double S = FMath::Sin(B.heading_rad), C = FMath::Cos(B.heading_rad);
