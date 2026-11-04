@@ -52,6 +52,38 @@ struct FSimGround
         float2 u = f * f * (3.0 - 2.0 * f);
         return lerp(lerp(Hash(i), Hash(i + float2(1, 0)), u.x), lerp(Hash(i + float2(0, 1)), Hash(i + float2(1, 1)), u.x), u.y);
     }
+    // simcore's Hash32 and FieldHash (farm_fields.hpp), in 32-bit uints; the shader and the tests pin the same numbers.
+    uint Hash32(uint x)
+    {
+        x ^= x >> 16;
+        x *= 0x7feb352du;
+        x ^= x >> 15;
+        x *= 0x846ca68bu;
+        x ^= x >> 16;
+        return x;
+    }
+    uint FieldHash(uint seed, int a, int b) { return Hash32(seed ^ Hash32(asuint(a) * 0x8CB92BA7u + Hash32(asuint(b) + 0x9E3779B9u))); }
+    float Unit24(uint h) { return (float)(h >> 8) * (1.0 / 16777216.0); }
+    // simcore's FieldAt: the field of (east, north) in the map's frame: its number, the furrows' heading and its centre.
+    // GridA = (estate, length min, length max, width min), GridB = (width max, seed's high 16 bits, its low 16 bits).
+    uint FieldAt(float4 GridA, float4 GridB, float2 p, out float Heading, out float2 Centre)
+    {
+        uint seed = ((uint)GridB.y << 16) | (uint)GridB.z;
+        int ix = (int)floor(p.x / GridA.x), iy = (int)floor(p.y / GridA.x);
+        uint draw = FieldHash(seed, ix, iy);
+        Heading = Unit24(draw) * 3.14159265;
+        float Width = lerp(GridA.w, GridB.x, Unit24(Hash32(draw ^ 1u)));
+        float sh = sin(Heading), ch = cos(Heading);
+        float u = p.x * sh + p.y * ch, v = p.x * ch - p.y * sh;
+        int row = (int)floor(v / Width);
+        uint rs = FieldHash(draw, row, 0x51);
+        float Length = lerp(GridA.y, GridA.z, Unit24(rs));
+        float Offset = Unit24(Hash32(rs ^ 2u)) * Length;
+        int col = (int)floor((u + Offset) / Length);
+        float uc = (col + 0.5) * Length - Offset, vc = (row + 0.5) * Width;
+        Centre = float2(uc * sh + vc * ch, uc * ch - vc * sh);
+        return FieldHash(rs, col, 0x77);
+    }
     float Pick(float4 a, float4 b, float4 c, float4 d, int i)
     {
         float4 v = i < 4 ? a : (i < 8 ? b : (i < 12 ? c : d));
@@ -87,15 +119,42 @@ float W4[4];
 float Height4[4];
 float Depth_m = Depth * 0.01;
 float Far = saturate((Depth_m - FarStartM) / max(FarLengthM, 1.0));
+// The field this pixel lies in, exactly (the field function, not the 25 m cells): its own cells all take the mask's texel at
+// the field's centre, so two fields meet along a straight edge. When the centre lies outside the mask or in another cover,
+// or in another field (an estate's border cuts it), the cells keep their own texels, as before.
+bool FieldOk = false;
+float4 Tf = float4(0, 0, 0, 0);
+float FHeading = 0.0;
+if (FieldGridA.x > 1.0)
+{
+    float2 FCentre;
+    uint FieldId = G.FieldAt(FieldGridA, FieldGridB, P, FHeading, FCentre);
+    int2 Cd = (int2)floor((FCentre - MaskRect.xy * 1000.0) / CellM);
+    if (all(Cd >= int2(0, 0)) && Cd.x < (int)MaskCols && Cd.y < (int)MaskRows)
+    {
+        float4 Tc = Mask.Load(int3(Cd, 0));
+        float FHeading2;
+        float2 FCentre2;
+        FieldOk = Tc.a > 0.25 && G.FieldAt(FieldGridA, FieldGridB, FCentre, FHeading2, FCentre2) == FieldId;
+        Tf = Tc;
+    }
+}
 [unroll] for (int k = 0; k < 4; ++k)
 {
     int2 O = int2(k & 1, k >> 1);
     int2 Cell = clamp(C0 + O, int2(0, 0), int2((int)MaskCols - 1, (int)MaskRows - 1));
     float4 T = Mask.Load(int3(Cell, 0));
-    int Layer = clamp((int)round(T.r * 255.0), 0, 15);
-    bool Rows = T.a > 0.5;
+    // A: 0 off the fields, 128 on a field, 255 on a field whose layer turns with the furrows.
+    bool OwnField = T.a > 0.25;
     // The furrows' heading, clockwise from the map's north: the textures' U runs along them, V across.
     float Heading = T.g * 255.0 / 256.0 * Pi;
+    if (FieldOk && OwnField)
+    {
+        T = Tf;
+        Heading = FHeading;
+    }
+    int Layer = clamp((int)round(T.r * 255.0), 0, 15);
+    bool Rows = T.a > 0.75;
     float2 AlongMap = float2(sin(Heading), cos(Heading));
     float2 Along = normalize(float2(MapAxes.w * AlongMap.x - MapAxes.y * AlongMap.y, -MapAxes.z * AlongMap.x + MapAxes.x * AlongMap.y) / Det);
     float2 DirU = Rows ? Along : float2(1.0, 0.0);
@@ -388,6 +447,8 @@ def build_material(arrays):
         ('MaskRect', vector('MaskRect', (0.0, 0.0, 1.0, 1.0))),
         ('MaskCols', scalar('MaskCols', 1.0)),
         ('MaskRows', scalar('MaskRows', 1.0)),
+        ('FieldGridA', vector('FieldGridA', (0.0, 1200.0, 2000.0, 700.0))),
+        ('FieldGridB', vector('FieldGridB', (1000.0, 0.0, 0.0, 0.0))),
         ('TileA', vector('TileA', (3.0, 3.0, 3.0, 3.0))),
         ('TileB', vector('TileB', (3.0, 3.0, 3.0, 3.0))),
         ('TileC', vector('TileC', (3.0, 3.0, 3.0, 3.0))),

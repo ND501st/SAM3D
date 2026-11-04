@@ -172,7 +172,7 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
                     ++fields;
                     const double ce = g.CentreEast(c), cn = g.CentreNorth(row);
                     bad += t[1] != HeadingTexel(FieldHeading(g.fields, ce, cn));
-                    bad += t[3] != (r.layers[static_cast<std::size_t>(layer)].rows ? 255 : 0);
+                    bad += t[3] != (r.layers[static_cast<std::size_t>(layer)].rows ? 255 : 128);
                     bad += (t[2] >= 128) != (g.strips[i] != 0);
                     rows += t[3] == 255;
                 } else {

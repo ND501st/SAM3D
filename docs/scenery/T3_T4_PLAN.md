@@ -225,6 +225,22 @@ Come back to Opus early if:
 - The first render (`t4a`): V3 and V10 show large cut fields and strips at the village's edge; the field edges still
   step at 25 m (T3.1).
 
+**T3.1**, built in first form (4 Nov 2026):
+- The ground material's HLSL has a port of `FieldAt` (`Hash32`, `FieldHash`, the estate frame, the row and column), with
+  the field grid passed as two vector parameters (`FieldGridA`, `FieldGridB`: the estate, the lengths and widths, the
+  32-bit seed as two exact 16-bit halves; `ASimMapActor` sets them from `MapData::Fields()`; no "farmland" block, no port).
+  No estate texture was needed (T4.1's finding).
+- A pixel takes its field from the function at its exact position, reads the mask at the field's centre and, when that
+  cell is farmland and `FieldAt(centre)` is the same field, gives every farmland cell of its four the centre's layer,
+  shade, strip flag and the estate's exact heading. Two fields meet along a straight edge; where a field meets other
+  cover, the 25 m cells and their wander decide, as before. Where the centre lies outside the mask, off farmland or in
+  another field (about 14%: an estate's border cuts the field), the cells keep their own texels as in T4.1.
+- The mask's A is now 0 off the fields, 128 on a field, 255 on a field whose layer turns with the furrows (the shader
+  finds a field's own cells by it).
+- Not done: the 0.5 m softening of the edge between two fields (the edge is hard, one pixel); the pattern mode was not
+  re-read. The views `t31` (against `t4b`): V3 and V10 show straight edges, no 25 m staircase, the furrows turning exactly
+  at the edge; the costs equal `t4b`'s (GPU 6.0-7.0 ms, the same within 0.1 ms).
+
 **T4.2**, built in first form (4 Nov 2026):
 - **The field grid moved to the map** (`simcore/farm_fields.hpp`, the map file's `"farmland"` block): the tracks and tree
   rows block sight, so they and the fields they follow are the map's, and the dressing's `parcel_*` values are gone.

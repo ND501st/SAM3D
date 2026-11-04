@@ -887,6 +887,16 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 			static_cast<float>(Square->cell_m * Square->cols / 1000.0), static_cast<float>(Square->cell_m * Square->rows / 1000.0)));
 		Mid->SetScalarParameterValue(TEXT("MaskCols"), static_cast<float>(Square->cols));
 		Mid->SetScalarParameterValue(TEXT("MaskRows"), static_cast<float>(Square->rows));
+		// The plain's fields (simcore/farm_fields.hpp), found exactly by the material's port of FieldAt. The seed is a 32-bit
+		// number: two halves, each exact in a float. Without a "farmland" block the estate size 0 turns the port off.
+		if (Map->Def().farmland.laid)
+		{
+			const simcore::FieldGrid FG = Map->Fields();
+			Mid->SetVectorParameterValue(TEXT("FieldGridA"), FLinearColor(static_cast<float>(FG.estate_m), static_cast<float>(FG.length_min_m),
+				static_cast<float>(FG.length_max_m), static_cast<float>(FG.width_min_m)));
+			Mid->SetVectorParameterValue(TEXT("FieldGridB"), FLinearColor(static_cast<float>(FG.width_max_m), static_cast<float>(FG.seed >> 16),
+				static_cast<float>(FG.seed & 0xFFFFu), 0.0f));
+		}
 		Mid->SetVectorParameterValue(TEXT("TileA"), Tiles[0]);
 		Mid->SetVectorParameterValue(TEXT("TileB"), Tiles[1]);
 		Mid->SetVectorParameterValue(TEXT("TileC"), Tiles[2]);
