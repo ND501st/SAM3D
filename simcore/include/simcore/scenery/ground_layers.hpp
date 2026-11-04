@@ -1,5 +1,6 @@
 // simcore/scenery/ground_layers.hpp — the ground's surface layers (roadmap T1, docs/scenery/TERRAIN_ROADMAP.md): which
-// textured layer covers each cell of the land cover (a field's by its crop and the season, the rest by their cover),
+// textured layer covers each cell of the land cover (a field's by its crop's calendar and the day of the year, the rest by
+// their cover),
 // the way a field's furrows run, and a number per field for its own shade, baked into a mask Unreal's ground material
 // reads (ASimMapActor). Rules from data/scenery/ground_layers.json (LoadGroundLayers).
 //
@@ -30,9 +31,8 @@ constexpr int kMaxGroundLayers = 16;
 // it, so its textures run on unbroken from one square into the next.
 constexpr double kGroundTilePeriodM = 600.0;
 
-enum class Season : std::uint8_t { Summer, Autumn };
-
-inline const char* SeasonName(Season s) { return s == Season::Autumn ? "autumn" : "summer"; }
+// The day of the year the ground is read on when the scenario gives none: 15 October (the sky clock's default).
+constexpr int kDefaultGroundDay = 288;
 
 // One layer: a surface the ground material draws from its own textures.
 struct GroundLayerDef {
@@ -46,8 +46,14 @@ struct GroundLayerRules {
     std::vector<GroundLayerDef> layers;  // the mask's layer numbers are indices into this
     // The layer under each cover; a field's is its crop's.
     std::array<int, static_cast<std::size_t>(Cover::Count)> cover_layer{};
-    std::vector<int> crop_summer, crop_autumn;  // by the dressing's crop index
-    std::vector<int> autumn_months{9, 10, 11};
+    // A crop's year (roadmap T4.3): the layer it starts the year with, then the states that follow it, each with a window of
+    // days (1..366, in order, not overlapping) in which each field takes the state on a day of its own, drawn from its number:
+    // the plain changes field by field as the days pass, the same on every client. By the dressing's crop index.
+    struct CropState {
+        int layer = 0;
+        int from_day = 0, to_day = 0;  // the window (the first state has none: it holds from the year's start)
+    };
+    std::vector<std::vector<CropState>> calendar;
 
     int Index(const std::string& id) const {
         for (std::size_t i = 0; i < layers.size(); ++i) {
@@ -55,17 +61,22 @@ struct GroundLayerRules {
         }
         return -1;
     }
-    Season SeasonOfMonth(int month) const {
-        for (int m : autumn_months) {
-            if (m == month) return Season::Autumn;
-        }
-        return Season::Summer;
+    // The day a field enters a crop's state `state` (1..): inside the state's window, by the field's number.
+    int OwnDay(const CropState& s, int state, std::uint64_t field_id) const {
+        const std::uint32_t h = Hash32(static_cast<std::uint32_t>(field_id >> 32) ^ (static_cast<std::uint32_t>(state) * 0x85EBCA6Bu));
+        return s.from_day + static_cast<int>(static_cast<double>(s.to_day - s.from_day + 1) * Unit24(h));
     }
-    // The layer at a cell of `cover` (a field's crop `crop`, an index into the dressing's crops) in season `s`.
-    int LayerAt(Cover cover, int crop, Season s) const {
-        if (cover == Cover::Field) {
-            const std::vector<int>& by_crop = s == Season::Autumn ? crop_autumn : crop_summer;
-            if (crop >= 0 && static_cast<std::size_t>(crop) < by_crop.size()) return by_crop[static_cast<std::size_t>(crop)];
+    // The layer at a cell of `cover` on day `day` of the year (a field's crop `crop`, an index into the dressing's crops, and
+    // its number `field_id`, FieldAt's): a field is in the last state whose day of its own has come.
+    int LayerOnDay(Cover cover, int crop, std::uint64_t field_id, int day) const {
+        if (cover == Cover::Field && crop >= 0 && static_cast<std::size_t>(crop) < calendar.size()) {
+            const std::vector<CropState>& states = calendar[static_cast<std::size_t>(crop)];
+            int layer = states[0].layer;
+            for (std::size_t i = 1; i < states.size(); ++i) {
+                if (OwnDay(states[i], static_cast<int>(i), field_id) > day) break;
+                layer = states[i].layer;
+            }
+            return layer;
         }
         return cover_layer[static_cast<std::size_t>(cover)];
     }
@@ -81,7 +92,7 @@ inline bool Fail(std::string* error, const std::string& what) {
 }  // namespace ground_detail
 
 // Reads the rules from a file's path or the JSON text itself (it starts with '{'). Every cover but a field names a layer,
-// and every crop of `dressing` names one for summer and one for autumn. False with the reason in `error` (the rules are
+// and every crop of `dressing` has a calendar of states. False with the reason in `error` (the rules are
 // left as they were).
 inline bool LoadGroundLayers(const std::string& path_or_json, const DressingRules& dressing, GroundLayerRules& out,
                              std::string* error = nullptr) {
@@ -150,28 +161,38 @@ inline bool LoadGroundLayers(const std::string& path_or_json, const DressingRule
     for (const CropDef& c : dressing.crops) {
         const json::Value* by_season = crops->Find(c.id);
         if (by_season == nullptr || !by_season->Is(json::Type::Object)) return Fail(error, "crops: no layers for the crop \"" + c.id + "\"");
-        int summer = -1, autumn = -1;
-        if (!layer_of(by_season->Find("summer"), "crop " + c.id + " in summer", summer)) return false;
-        if (!layer_of(by_season->Find("autumn"), "crop " + c.id + " in autumn", autumn)) return false;
-        r.crop_summer.push_back(summer);
-        r.crop_autumn.push_back(autumn);
+        const json::Value* states = by_season->Find("states");
+        if (states == nullptr || !states->Is(json::Type::Array) || states->items.empty()) return Fail(error, "crop " + c.id + ": no \"states\" list");
+        std::vector<GroundLayerRules::CropState> list;
+        int last_day = 0;
+        for (std::size_t i = 0; i < states->items.size(); ++i) {
+            const json::Value& item = states->items[i];
+            const std::string what = "crop " + c.id + " state " + std::to_string(i + 1);
+            GroundLayerRules::CropState st;
+            if (!layer_of(item.Find("layer"), what, st.layer)) return false;
+            if (i > 0) {
+                const json::Value* from = item.Find("from_day");
+                const json::Value* to = item.Find("to_day");
+                if (from == nullptr || to == nullptr || !from->Is(json::Type::Number) || !to->Is(json::Type::Number) ||
+                    from->number != std::floor(from->number) || to->number != std::floor(to->number)) {
+                    return Fail(error, what + " needs a from_day and a to_day, whole numbers");
+                }
+                st.from_day = static_cast<int>(from->number);
+                st.to_day = static_cast<int>(to->number);
+                if (st.from_day < 1 || st.to_day > 366 || st.from_day > st.to_day) return Fail(error, what + ": its window is not within 1..366");
+                if (st.from_day <= last_day) return Fail(error, what + ": its window overlaps the one before (the states run in order)");
+                last_day = st.to_day;
+            }
+            list.push_back(st);
+        }
+        r.calendar.push_back(list);
     }
-    // Field cells take the first crop's layer when the raster has none, so the field cover's own slot is that.
-    r.cover_layer[static_cast<std::size_t>(Cover::Field)] = r.crop_summer.empty() ? 0 : r.crop_summer[0];
+    // Field cells take the first crop's first layer when the raster has none, so the field cover's own slot is that.
+    r.cover_layer[static_cast<std::size_t>(Cover::Field)] = r.calendar.empty() ? 0 : r.calendar[0][0].layer;
     for (const std::string& key : crops->keys) {
         bool known = false;
         for (const CropDef& c : dressing.crops) known = known || key == c.id;
         if (!known) return Fail(error, "crops: the dressing has no crop \"" + key + "\"");
-    }
-    if (const json::Value* months = root.Find("autumn_months")) {
-        if (!months->Is(json::Type::Array)) return Fail(error, "\"autumn_months\" is not a list");
-        r.autumn_months.clear();
-        for (const json::Value& m : months->items) {
-            if (!m.Is(json::Type::Number) || m.number < 1.0 || m.number > 12.0 || m.number != std::floor(m.number)) {
-                return Fail(error, "autumn_months: a month is a whole number 1..12");
-            }
-            r.autumn_months.push_back(static_cast<int>(m.number));
-        }
     }
     out = r;
     return true;
@@ -199,7 +220,7 @@ inline std::uint8_t HeadingTexel(double heading_rad) {
     return static_cast<std::uint8_t>(std::lround(h / kPi * 256.0) & 255L);
 }
 
-inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& /*dressing*/, const GroundLayerRules& layers, Season season) {
+inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& /*dressing*/, const GroundLayerRules& layers, int day_of_year) {
     GroundMask m;
     m.id = g.id;
     m.west_m = g.west_m;
@@ -212,7 +233,8 @@ inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& /*dres
         for (int c = 0; c < g.cols; ++c) {
             const std::size_t i = g.Index(c, r);
             const Cover cover = static_cast<Cover>(g.cover[i]);
-            const int layer = layers.LayerAt(cover, g.crop[i], season);
+            const FieldCell f = cover == Cover::Field ? FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(r)) : FieldCell{};
+            const int layer = layers.LayerOnDay(cover, g.crop[i], f.id, day_of_year);
             const bool rows = layer >= 0 && static_cast<std::size_t>(layer) < layers.layers.size() && layers.layers[static_cast<std::size_t>(layer)].rows;
             std::uint8_t* t = &m.texels[i * 4];
             t[0] = static_cast<std::uint8_t>(layer < 0 ? 0 : layer);
@@ -220,7 +242,6 @@ inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& /*dres
             t[2] = 64;
             t[3] = 0;
             if (cover == Cover::Field) {
-                const FieldCell f = FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(r));
                 t[1] = HeadingTexel(f.heading_rad);
                 t[2] = static_cast<std::uint8_t>(((f.id >> 41) & 0x7Fu) | (g.strips[i] != 0 ? 0x80u : 0u));
                 t[3] = rows ? 255 : 128;

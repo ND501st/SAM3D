@@ -241,6 +241,24 @@ Come back to Opus early if:
   re-read. The views `t31` (against `t4b`): V3 and V10 show straight edges, no 25 m staircase, the furrows turning exactly
   at the edge; the costs equal `t4b`'s (GPU 6.0-7.0 ms, the same within 0.1 ms).
 
+**T4.3**, built in first form (4 Nov 2026):
+- `ground_layers.json`'s `summer` and `autumn` are gone: each crop has `states`, the layer it starts the year with and then
+  states each with a window of days (`from_day`, `to_day`, in order, not overlapping). A field enters a state on a day of
+  its own inside the window, drawn from its number (`GroundLayerRules::LayerOnDay`, `OwnDay`), so the plain changes field
+  by field, the same on every client. `Season` is gone; `BakeGroundMask` takes the day of the year; the actor reads the
+  scenario's (`GroundDay`: the sky clock's `day_of_year`, 288 without one).
+- The windows are estimates from the harvest calendars of T11: wheat stubble 4-29 July, ploughed 23 Aug-27 Oct, sown 28 Oct
+  on; maize standing from late April, harvested 2 Sep-22 Oct, then ploughed; sunflower harvested and ploughed 7 Sep-27 Oct;
+  a ploughed field sown 27 Sep-17 Nov. On 15 October: 14% of the maize still standing, 82% of the wheat ground ploughed, 37%
+  of the ploughed fields sown (printed by the test).
+- A new layer, `sown`, wears the ploughed texture until Poly Haven's `farm_soil` is fetched (a download: the user's say).
+- Tests: every crop's state on 15 October is one of its October layers, the shares above, a field's state never goes back
+  within a year and starts the year in the first state, two bakes are equal, the loader refuses overlaps and bad windows.
+- The render (`t43`): V10 and V3 show the patchwork (ploughed, dark ploughed, stubble, bright flat-green maize). **The
+  standing maize is the crop's summer colour** (the land cover's vertex colour, flat, as planned until T6's field blocks):
+  too green for mid-October, when the stalks are dry and tan. The mask is baked once at the start, so the days of a
+  campaign do not yet change the ground; a re-bake on a new day is left.
+
 **T4.2**, built in first form (4 Nov 2026):
 - **The field grid moved to the map** (`simcore/farm_fields.hpp`, the map file's `"farmland"` block): the tracks and tree
   rows block sight, so they and the fields they follow are the map's, and the dressing's `parcel_*` values are gone.

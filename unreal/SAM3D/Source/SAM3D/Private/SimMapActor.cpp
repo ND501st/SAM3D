@@ -134,20 +134,16 @@ namespace
 	};
 	FSimDressingCache GSimDressingCache;
 
-	// The ground's season by the scenario's date, its year's leap day counted (15 October 1985, the sky clock's default,
-	// without a scenario).
-	simcore::scenery::Season GroundSeason(const UWorld* World, const simcore::scenery::GroundLayerRules& Layers)
+	// The day of the year the ground's crops are read on: the scenario's date (15 October, day 288, the sky clock's default,
+	// without a scenario). The crop calendar (simcore/scenery/ground_layers.hpp) turns it into each field's layer.
+	int GroundDay(const UWorld* World)
 	{
 		simcore::SkyClock Clock;
-		int32 Year = 1985;
 		if (USimWorldSubsystem* Sim = World != nullptr ? World->GetSubsystem<USimWorldSubsystem>() : nullptr)
 		{
 			Sim->GetSkyClock(Clock);
-			Year = Sim->GetScenarioYear();
 		}
-		int Month = 10, Day = 15;
-		simcore::DateOfDay(Year, Clock.day_of_year, Month, Day);
-		return Layers.SeasonOfMonth(Month);
+		return Clock.day_of_year;
 	}
 
 	// The ground's layer mask as a texture (roadmap T1): a texel per land cover cell, unfiltered (the material reads the
@@ -303,7 +299,7 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	// ahead.
 	if (bTexturedGround && GroundLayers && Cover && DressRules)
 	{
-		const simcore::scenery::Season Season = GroundSeason(GetWorld(), *GroundLayers);
+		const int Day = GroundDay(GetWorld());
 		const double Be = 5750.0, Bn = -9050.0, Reach = 1500.0;
 		double BestD = 1e18, Fe = 0.0, Fn = 0.0, Fh = 0.0;
 		for (const simcore::scenery::CoverGrid& G : Cover->grids)
@@ -324,7 +320,8 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 					{
 						continue;
 					}
-					const int Layer = GroundLayers->LayerAt(simcore::scenery::Cover::Field, G.crop[I], Season);
+					const int Layer = GroundLayers->LayerOnDay(simcore::scenery::Cover::Field, G.crop[I],
+							simcore::FieldParcel(G.fields, Ce, Cn), Day);
 					if (!GroundLayers->layers[static_cast<std::size_t>(Layer)].rows)
 					{
 						continue;
@@ -835,7 +832,7 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		}
 		return Out;
 	}
-	const simcore::scenery::Season Season = GroundSeason(GetWorld(), *GroundLayers);
+	const int Day = GroundDay(GetWorld());
 	// The world's (east, north) in m to the map's: the scenario's frame is the world's less this actor's place, and the
 	// frame's (east, north) goes to the map's by an affine map (MapFrameLink::FrameToMap, exactly). The material finds a
 	// pixel's land cover cell by it (the tiles' UVs would do, but a procedural mesh may store them as 16-bit floats: steps
@@ -872,7 +869,7 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		{
 			continue;
 		}
-		UTexture2D* Mask = MaskTexture(simcore::scenery::BakeGroundMask(*Square, *DressRules, *GroundLayers, Season));
+		UTexture2D* Mask = MaskTexture(simcore::scenery::BakeGroundMask(*Square, *DressRules, *GroundLayers, Day));
 		if (Mask == nullptr)
 		{
 			continue;
@@ -905,8 +902,8 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		GroundMaterials.Add(Mid);
 		Out[static_cast<int32>(L)] = Mid;
 	}
-	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (%hs)"), *MapFile, GroundMaterials.Num(), static_cast<int32>(Levels.size()),
-		simcore::scenery::SeasonName(Season));
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (crops of day %d)"), *MapFile, GroundMaterials.Num(), static_cast<int32>(Levels.size()),
+		Day);
 	return Out;
 }
 

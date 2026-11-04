@@ -49,7 +49,7 @@ std::string AllCrops(const std::string& layer) {
     std::string s;
     for (const CropDef& c : Dressing().crops) {
         if (!s.empty()) s += ", ";
-        s += "\"" + c.id + "\": {\"summer\": \"" + layer + "\", \"autumn\": \"" + layer + "\"}";
+        s += "\"" + c.id + "\": {\"states\": [{\"layer\": \"" + layer + "\"}]}";
     }
     return s;
 }
@@ -64,11 +64,8 @@ SC_TEST("ground layers: the rules load from the data, and every cover and crop h
         const int layer = r.cover_layer[static_cast<std::size_t>(k)];
         SC_EXPECT(layer >= 0 && static_cast<std::size_t>(layer) < r.layers.size());
     }
-    SC_EXPECT(r.crop_summer.size() == Dressing().crops.size());
-    SC_EXPECT(r.crop_autumn.size() == Dressing().crops.size());
-    // The plain in October: the wheat is stubble, a meadow stays a meadow.
-    SC_EXPECT(r.layers[static_cast<std::size_t>(r.LayerAt(Cover::Field, 0, Season::Autumn))].id == "stubble");
-    SC_EXPECT(r.layers[static_cast<std::size_t>(r.LayerAt(Cover::Forest, 0, Season::Autumn))].id == "forest_floor");
+    SC_EXPECT(r.calendar.size() == Dressing().crops.size());
+    SC_EXPECT(r.layers[static_cast<std::size_t>(r.LayerOnDay(Cover::Forest, 0, 0, kDefaultGroundDay))].id == "forest_floor");
     for (const GroundLayerDef& d : r.layers) {
         SC_EXPECT(d.tile_m >= 0.25 && d.tile_m <= 64.0);
         // Whole repeats in the material's square, so the textures run on unbroken across its edges.
@@ -88,7 +85,7 @@ SC_TEST("ground layers: the loader refuses a layer twice, an unknown layer, a cr
     SC_EXPECT(e.find("twice") != std::string::npos);
     SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\"}", AllCrops("b")), Dressing(), r, &e));
     SC_EXPECT(e.find("no layer \"b\"") != std::string::npos);
-    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\"}", "\"wheat\": {\"summer\": \"a\", \"autumn\": \"a\"}"), Dressing(), r, &e));
+    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\"}", "\"wheat\": {\"states\": [{\"layer\": \"a\"}]}"), Dressing(), r, &e));
     SC_EXPECT(e.find("crops: no layers for the crop") != std::string::npos);
     std::string many;
     for (int i = 0; i <= kMaxGroundLayers; ++i) many += std::string(i == 0 ? "" : ", ") + "{\"id\": \"l" + std::to_string(i) + "\"}";
@@ -105,12 +102,99 @@ SC_TEST("ground layers: the loader refuses a layer twice, an unknown layer, a cr
     SC_EXPECT(r.layers.size() == 1 && r.layers[0].id == "a");
 }
 
-SC_TEST("ground layers: the season by the scenario's month") {
+// The share of `fields` numbered fields of crop `crop` whose layer on `day` is the layer named `id`.
+double CalendarShare(const GroundLayerRules& r, int crop, int day, const std::string& id) {
+    int hit = 0;
+    const int n = 4000;
+    for (int k = 1; k <= n; ++k) {
+        const std::uint64_t field = (static_cast<std::uint64_t>(Hash32(static_cast<std::uint32_t>(k))) << 32) | Hash32(static_cast<std::uint32_t>(k) ^ 0x9E3779B9u);
+        hit += r.layers[static_cast<std::size_t>(r.LayerOnDay(Cover::Field, crop, field, day))].id == id ? 1 : 0;
+    }
+    return static_cast<double>(hit) / n;
+}
+
+int CropIndex(const std::string& id) {
+    for (std::size_t i = 0; i < Dressing().crops.size(); ++i) {
+        if (Dressing().crops[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+SC_TEST("ground layers: the crop calendar on 15 October is the patchwork of the photographs") {
     const GroundLayerRules& r = Layers();
-    SC_EXPECT(r.SeasonOfMonth(10) == Season::Autumn);
-    SC_EXPECT(r.SeasonOfMonth(9) == Season::Autumn);
-    SC_EXPECT(r.SeasonOfMonth(7) == Season::Summer);
-    SC_EXPECT(r.SeasonOfMonth(1) == Season::Summer);
+    const int day = kDefaultGroundDay;
+    const int wheat = CropIndex("wheat"), maize = CropIndex("maize"), sunflower = CropIndex("sunflower"), ploughed = CropIndex("ploughed"), pasture = CropIndex("pasture");
+    SC_EXPECT(wheat >= 0 && maize >= 0 && sunflower >= 0 && ploughed >= 0 && pasture >= 0);
+    // Every crop's state is one of its October layers.
+    const auto october = [&](int crop, std::initializer_list<const char*> ids) {
+        for (int k = 1; k <= 500; ++k) {
+            const std::uint64_t field = (static_cast<std::uint64_t>(Hash32(static_cast<std::uint32_t>(k))) << 32) | Hash32(static_cast<std::uint32_t>(k) ^ 0x9E3779B9u);
+            const std::string& id = r.layers[static_cast<std::size_t>(r.LayerOnDay(Cover::Field, crop, field, day))].id;
+            bool ok = false;
+            for (const char* want : ids) ok = ok || id == want;
+            if (!ok) return false;
+        }
+        return true;
+    };
+    SC_EXPECT(october(wheat, {"stubble", "ploughed", "sown"}));
+    SC_EXPECT(october(maize, {"maize", "maize_stubble", "ploughed"}));
+    SC_EXPECT(october(sunflower, {"sunflower", "ploughed"}));
+    SC_EXPECT(october(ploughed, {"ploughed", "sown"}));
+    SC_EXPECT(october(pasture, {"meadow"}));
+    // The research (T11): maize mostly in by mid-October (87 percent by the 16th), wheat stubble mostly ploughed under.
+    const double maize_standing = CalendarShare(r, maize, day, "maize");
+    SC_EXPECT(maize_standing > 0.05 && maize_standing < 0.25);
+    SC_EXPECT(CalendarShare(r, wheat, day, "ploughed") > 0.6);
+    SC_EXPECT(CalendarShare(r, wheat, day, "stubble") < 0.3);
+    SC_EXPECT(CalendarShare(r, ploughed, day, "sown") > 0.1);
+    std::printf("    15 October: %.0f%% of maize still standing, %.0f%% of wheat ground ploughed, %.0f%% sown\n", 100.0 * maize_standing,
+                100.0 * CalendarShare(r, wheat, day, "ploughed"), 100.0 * CalendarShare(r, ploughed, day, "sown"));
+}
+
+SC_TEST("ground layers: a field's state never goes backwards through the year, and the year's start is the first state") {
+    const GroundLayerRules& r = Layers();
+    for (std::size_t crop = 0; crop < r.calendar.size(); ++crop) {
+        const std::vector<GroundLayerRules::CropState>& states = r.calendar[crop];
+        for (int k = 1; k <= 300; ++k) {
+            const std::uint64_t field = (static_cast<std::uint64_t>(Hash32(static_cast<std::uint32_t>(k))) << 32) | Hash32(static_cast<std::uint32_t>(k) ^ 0x9E3779B9u);
+            SC_EXPECT(r.LayerOnDay(Cover::Field, static_cast<int>(crop), field, 1) == states[0].layer);
+            int last_state = 0;
+            for (int day = 1; day <= 366; ++day) {
+                int state = 0;  // the state in force: the last whose own day has come
+                for (std::size_t i = 1; i < states.size(); ++i) {
+                    if (r.OwnDay(states[i], static_cast<int>(i), field) <= day) state = static_cast<int>(i);
+                }
+                SC_EXPECT(state >= last_state);
+                SC_EXPECT(r.LayerOnDay(Cover::Field, static_cast<int>(crop), field, day) == states[static_cast<std::size_t>(state)].layer);
+                last_state = state;
+            }
+            // Each state is entered inside its window.
+            for (std::size_t i = 1; i < states.size(); ++i) {
+                const int own = r.OwnDay(states[i], static_cast<int>(i), field);
+                SC_EXPECT(own >= states[i].from_day && own <= states[i].to_day);
+            }
+        }
+    }
+}
+
+SC_TEST("ground layers: the calendar's loader refuses overlapping windows, a state without a window and a window off the year") {
+    GroundLayerRules r;
+    std::string e;
+    const std::string layers = "{\"id\": \"a\"}, {\"id\": \"b\"}";
+    const auto crops = [&](const std::string& states) {
+        std::string s;
+        for (const CropDef& c : Dressing().crops) s += std::string(s.empty() ? "" : ", ") + "\"" + c.id + "\": {\"states\": [" + states + "]}";
+        return s;
+    };
+    SC_EXPECT(LoadGroundLayers(Rules(layers, crops("{\"layer\": \"a\"}, {\"layer\": \"b\", \"from_day\": 10, \"to_day\": 20}")), Dressing(), r, &e));
+    SC_EXPECT(!LoadGroundLayers(Rules(layers, crops("{\"layer\": \"a\"}, {\"layer\": \"b\", \"from_day\": 10, \"to_day\": 20}, {\"layer\": \"a\", \"from_day\": 20, \"to_day\": 30}")), Dressing(), r, &e));
+    SC_EXPECT(e.find("overlaps") != std::string::npos);
+    SC_EXPECT(!LoadGroundLayers(Rules(layers, crops("{\"layer\": \"a\"}, {\"layer\": \"b\"}")), Dressing(), r, &e));
+    SC_EXPECT(e.find("needs a from_day") != std::string::npos);
+    SC_EXPECT(!LoadGroundLayers(Rules(layers, crops("{\"layer\": \"a\"}, {\"layer\": \"b\", \"from_day\": 300, \"to_day\": 400}")), Dressing(), r, &e));
+    SC_EXPECT(e.find("1..366") != std::string::npos);
+    SC_EXPECT(!LoadGroundLayers(Rules(layers, crops("")), Dressing(), r, &e));
+    SC_EXPECT(e.find("no \"states\"") != std::string::npos);
 }
 
 SC_TEST("ground layers: the furrows' heading as a texel, half a turn round to the same furrows") {
@@ -156,7 +240,7 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
     SC_EXPECT(!cover.grids.empty());
     const GroundLayerRules& r = Layers();
     for (const CoverGrid& g : cover.grids) {
-        const GroundMask m = BakeGroundMask(g, Dressing(), r, Season::Autumn);
+        const GroundMask m = BakeGroundMask(g, Dressing(), r, kDefaultGroundDay);
         SC_EXPECT(m.cols == g.cols && m.rows == g.rows);
         SC_EXPECT(m.texels.size() == static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows) * 4);
         SC_EXPECT(m.id == g.id);
@@ -166,7 +250,7 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
                 const std::size_t i = g.Index(c, row);
                 const Cover k = static_cast<Cover>(g.cover[i]);
                 const std::uint8_t* t = m.At(c, row);
-                const int layer = r.LayerAt(k, g.crop[i], Season::Autumn);
+                const int layer = r.LayerOnDay(k, g.crop[i], k == Cover::Field ? FieldParcel(g.fields, g.CentreEast(c), g.CentreNorth(row)) : 0, kDefaultGroundDay);
                 bad += t[0] != layer;
                 if (k == Cover::Field) {
                     ++fields;
@@ -186,7 +270,7 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
     }
     // One field, one shade: two cells of the same parcel carry the same B; the bake is the same twice.
     const CoverGrid& g = cover.grids.back();
-    const GroundMask a = BakeGroundMask(g, Dressing(), r, Season::Summer), b = BakeGroundMask(g, Dressing(), r, Season::Summer);
+    const GroundMask a = BakeGroundMask(g, Dressing(), r, 180), b = BakeGroundMask(g, Dressing(), r, 180);
     SC_EXPECT(a.texels == b.texels);
     int same = 0, pairs = 0;
     for (int row = 0; row + 1 < g.rows && pairs < 2000; row += 3) {
