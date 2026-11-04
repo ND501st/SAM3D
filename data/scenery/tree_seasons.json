@@ -1,0 +1,10 @@
+{
+  "notes": "How the map's trees take their autumn colour (simcore/scenery/tree_tint.hpp, roadmap T5.1, docs/scenery/T5_T8_PLAN.md). Game values judged by eye against the autumn photographs (docs/scenery/TERRAIN_ROADMAP.md section 2, traits T4 and T11: black locust turning colour by late September, poplar gold and oak brown in October, the planted pine staying green). Each tree turns on its own day (onset_day plus or minus spread_days, from its position) over full_day - onset_day days; 'autumn' is the multiplier on the crown's own colour at full colour (the crown's linear vertex colours are in scenery/map_meshes.hpp), 'brightness' the share each tree's brightness varies by either way. The tree's trunk is not tinted (the material tints green-dominant vertex colours only). Leaf drop is not drawn (a later phase): a tree stays in its autumn colour through the winter. The woods' masses take the weighted mean of the deciduous kinds ('mass_mix').",
+  "trees": {
+    "oak": {"onset_day": 275, "full_day": 310, "spread_days": 14, "autumn": [2.9, 0.8, 0.75], "brightness": 0.12},
+    "poplar": {"onset_day": 265, "full_day": 295, "spread_days": 12, "autumn": [5.0, 1.8, 1.0], "brightness": 0.12},
+    "pine": {"onset_day": 275, "full_day": 310, "spread_days": 0, "autumn": [1.0, 1.0, 1.0], "brightness": 0.08},
+    "acacia": {"onset_day": 255, "full_day": 300, "spread_days": 12, "autumn": [2.9, 1.5, 0.85], "brightness": 0.12}
+  },
+  "mass_mix": {"oak": 0.5, "acacia": 0.3, "poplar": 0.2}
+}

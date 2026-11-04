@@ -27,6 +27,7 @@
 #include "SimBasicModels.h"
 #include "SimCoreIncludes.h"
 #include "SimMapAssets.h"
+#include "simcore/scenery/tree_tint.hpp"
 #include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
 #include "EngineUtils.h"
@@ -1442,7 +1443,37 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		return;
 	}
 	const simcore::scenery::MapDressing& Dr = *Dressing;
-	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM)
+	// Each tree's season (roadmap T5.1, simcore/scenery/tree_tint.hpp): its colour multiplier on the day, in the instances'
+	// custom data for M_SimMapTree. Without the rules or the material the trees are drawn as before, in the plain colours.
+	simcore::scenery::TreeSeasons Seasons;
+	bool bSeasons = false;
+	{
+		std::string SeasonError;
+		const FString SeasonsPath = FPaths::Combine(FindDataDirectory(), TEXT("scenery/tree_seasons.json"));
+		bSeasons = simcore::scenery::LoadTreeSeasons(TCHAR_TO_UTF8(*SeasonsPath), Seasons, &SeasonError);
+		if (!bSeasons)
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map: no tree seasons (%s): the trees keep their summer colours"), UTF8_TO_TCHAR(SeasonError.c_str()));
+		}
+	}
+	static UMaterialInterface* TreeMaterial = nullptr;
+	static bool bTreeMaterialTried = false;
+	if (!bTreeMaterialTried)
+	{
+		bTreeMaterialTried = true;
+		TreeMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapTree.M_SimMapTree"), nullptr, LOAD_Quiet | LOAD_NoWarn);
+		if (TreeMaterial != nullptr)
+		{
+			TreeMaterial->AddToRoot();
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Map: no M_SimMapTree (tools/ue_build_tree_material.py): the trees keep their summer colours"));
+		}
+	}
+	const bool bTints = bSeasons && TreeMaterial != nullptr;
+	const int32 Day = GroundDay(GetWorld());
+	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr)
 	{
 		if (Xf.Num() == 0)
 		{
@@ -1470,8 +1501,24 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		{
 			H->SetCullDistances(0, static_cast<int32>(CullM * 100.0f));
 		}
+		const bool bTinted = Tints != nullptr && bTints && Tints->Num() == Placed.Num();
+		if (bTinted)
+		{
+			H->SetMaterial(0, TreeMaterial);
+			H->NumCustomDataFloats = 3;  // before the instances: each carries its colour multiplier
+		}
 		H->RegisterComponent();
 		H->AddInstances(Placed, false, true);
+		if (bTinted)
+		{
+			for (int32 I = 0; I < Placed.Num(); ++I)
+			{
+				const FLinearColor& C = (*Tints)[I];
+				const float Data[3] = {C.R, C.G, C.B};
+				H->SetCustomData(I, MakeArrayView(Data, 3), false);
+			}
+			H->MarkRenderStateDirty();
+		}
 		Parts.Add(H);
 		BoxCount += Placed.Num();
 	};
@@ -1488,7 +1535,13 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	}
 	for (int32 V = 0; V < simcore::scenery::kCanopyMassVariants; ++V)
 	{
-		Add(TEXT("canopy_mass"), V, Masses[V], false, 0.0f);
+		TArray<FLinearColor> Tints;
+		if (bTints)
+		{
+			const simcore::scenery::TreeTintRgb M = simcore::scenery::MassTintOn(Seasons, Day);
+			Tints.Init(FLinearColor(M[0], M[1], M[2]), Masses[V].Num());
+		}
+		Add(TEXT("canopy_mass"), V, Masses[V], false, 0.0f, &Tints);
 	}
 	if (!bDrawTrees)
 	{
@@ -1498,6 +1551,7 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	// from the unit tree (scenery/map_meshes.hpp TreeMesh).
 	constexpr int32 TreeKinds = static_cast<int32>(simcore::scenery::TreeKind::Count);
 	TArray<FTransform> Trees[TreeKinds];
+	TArray<FLinearColor> TreeTints[TreeKinds];
 	for (const simcore::scenery::TreeInstance& T : Dr.trees)
 	{
 		simcore::Vec3 Ae, An, Au;
@@ -1506,11 +1560,20 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
 		const FVector At = ToUnreal(Link.GroundPoint(T.east_m, T.north_m, T.base_m));
 		Trees[T.kind % TreeKinds].Add(FTransform(Rot, At, FVector(T.crown_m, T.crown_m, T.height_m)));
+		if (bTints)
+		{
+			const simcore::scenery::TreeTintRgb C = simcore::scenery::TreeTintOn(Seasons, T.kind % TreeKinds, T.east_m, T.north_m, Day);
+			TreeTints[T.kind % TreeKinds].Add(FLinearColor(C[0], C[1], C[2]));
+		}
 	}
 	for (int32 K = 0; K < TreeKinds; ++K)
 	{
 		Add(FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K))), 0, Trees[K], true,
-			TreeCullDistanceM);
+			TreeCullDistanceM, &TreeTints[K]);
+	}
+	if (bTints)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Map: trees in the colours of day %d"), Day);
 	}
 }
 

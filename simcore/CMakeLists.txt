@@ -128,6 +128,7 @@ add_executable(simcore_tests
   tests/test_map_meshes.cpp
   tests/test_map_dressing.cpp
   tests/test_ground_layers.cpp
+  tests/test_tree_tint.cpp
   tests/test_views.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
