@@ -1,7 +1,7 @@
 {
   "layers_id": "ground_layers",
   "status": "second pass (roadmap T4.3: the crop calendar)",
-  "notes": "The ground's surface layers (simcore/scenery/ground_layers.hpp, read by LoadGroundLayers): the land cover's cells take a layer by their cover, a field's by its crop and the season (autumn_months by the scenario's date). Each layer is drawn by Unreal's ground material from its textures (\"texture\": an id in data/scenery/textures.json; empty: none chosen, the land cover's colour only), repeated every tile_m metres, which divides 600 m (simcore::scenery::kGroundTilePeriodM; near each scan's own width); a layer with rows turns with the field's furrows (its textures' furrows run across the image, along U, as farm_furrows' do). The summer's standing wheat, maize and sunflowers have no texture: no free scan of a standing crop exists (docs/scenery/TERRAIN_ROADMAP.md section 4). At most 16 layers. Presentation only: nothing in the simulation reads it. A field's layer is its crop's calendar's on the scenario's day of the year (simcore/scenery/ground_layers.hpp LayerOnDay): each crop starts the year in its first state and enters the next in a window of days, each field on a day of its own drawn from its number, so the plain changes field by field. The windows are estimates from the Hungarian harvest calendars of recent years (docs/research/TERRAIN_REFERENCES_2026-11.md T11: maize 87 percent in by 16 October; sunflower from the second week of September; winter wheat sown in October), within a week or two of 1985's. The sown layer wears the ploughed texture until farm_soil is fetched (docs/scenery/T3_T4_PLAN.md T4.3).",
+  "notes": "The ground's surface layers (simcore/scenery/ground_layers.hpp, read by LoadGroundLayers): the land cover's cells take a layer by their cover, a field's by its crop and the season (autumn_months by the scenario's date). Each layer is drawn by Unreal's ground material from its textures (\"texture\": an id in data/scenery/textures.json; empty: none chosen, the land cover's colour only), repeated every tile_m metres, which divides 600 m (simcore::scenery::kGroundTilePeriodM; near each scan's own width); a layer with rows turns with the field's furrows (its textures' furrows run across the image, along U, as farm_furrows' do). The summer's standing wheat, maize and sunflowers have no texture: no free scan of a standing crop exists (docs/scenery/TERRAIN_ROADMAP.md section 4). At most 16 layers. Presentation only: nothing in the simulation reads it. A field's layer is its crop's calendar's on the scenario's day of the year (simcore/scenery/ground_layers.hpp LayerOnDay): each crop starts the year in its first state and enters the next in a window of days, each field on a day of its own drawn from its number, so the plain changes field by field. The windows are estimates from the Hungarian harvest calendars of recent years (docs/research/TERRAIN_REFERENCES_2026-11.md T11: maize 87 percent in by 16 October; sunflower from the second week of September; winter wheat sown in October), within a week or two of 1985's. Standing maize and sunflower dry out before the harvest: dry_stalks (the stubble texture, tan) from August or September, so mid-October shows no summer green. The sown layer wears the ploughed texture until farm_soil is fetched (docs/scenery/T3_T4_PLAN.md T4.3).",
   "source": "game value: sam3d estimate (the Pannonian plain's fields, woods and villages; tile sizes to be tuned against -SimMapShots and the reference views in docs/scenery/TERRAIN_ROADMAP.md)",
   "confidence": "estimate",
   "layers": [
@@ -88,6 +88,12 @@
       "tile_m": 3.75,
       "rows": false,
       "texture": "river_silt"
+    },
+    {
+      "id": "dry_stalks",
+      "tile_m": 1.875,
+      "rows": true,
+      "texture": "stubble_soil"
     }
   ],
   "cover": {
@@ -111,6 +117,7 @@
       "states": [
         { "layer": "ploughed" },
         { "layer": "maize", "from_day": 110, "to_day": 140 },
+        { "layer": "dry_stalks", "from_day": 225, "to_day": 244 },
         { "layer": "maize_stubble", "from_day": 245, "to_day": 295 },
         { "layer": "ploughed", "from_day": 296, "to_day": 350 }
       ]
@@ -119,6 +126,7 @@
       "states": [
         { "layer": "ploughed" },
         { "layer": "sunflower", "from_day": 105, "to_day": 135 },
+        { "layer": "dry_stalks", "from_day": 210, "to_day": 249 },
         { "layer": "ploughed", "from_day": 250, "to_day": 300 }
       ]
     },

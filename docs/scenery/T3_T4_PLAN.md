@@ -254,9 +254,10 @@ Come back to Opus early if:
 - A new layer, `sown`, wears the ploughed texture until Poly Haven's `farm_soil` is fetched (a download: the user's say).
 - Tests: every crop's state on 15 October is one of its October layers, the shares above, a field's state never goes back
   within a year and starts the year in the first state, two bakes are equal, the loader refuses overlaps and bad windows.
-- The render (`t43`): V10 and V3 show the patchwork (ploughed, dark ploughed, stubble, bright flat-green maize). **The
-  standing maize is the crop's summer colour** (the land cover's vertex colour, flat, as planned until T6's field blocks):
-  too green for mid-October, when the stalks are dry and tan. The mask is baked once at the start, so the days of a
+- The render (`t43b`): V10 and V3 show the patchwork of ploughland, darker ploughland and stubble. Standing maize and
+  sunflower dry out before the harvest (a `dry_stalks` state in August-September on the stubble texture, tan), so mid-October
+  shows no summer green (the first render, `t43`, had the maize in its flat summer green). The sown ground has no green yet:
+  it wears the ploughed texture until `farm_soil` is fetched. The mask is baked once at the start, so the days of a
   campaign do not yet change the ground; a re-bake on a new day is left.
 
 **T4.2**, built in first form (4 Nov 2026):

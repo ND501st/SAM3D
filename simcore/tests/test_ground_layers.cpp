@@ -137,12 +137,12 @@ SC_TEST("ground layers: the crop calendar on 15 October is the patchwork of the 
         return true;
     };
     SC_EXPECT(october(wheat, {"stubble", "ploughed", "sown"}));
-    SC_EXPECT(october(maize, {"maize", "maize_stubble", "ploughed"}));
-    SC_EXPECT(october(sunflower, {"sunflower", "ploughed"}));
+    SC_EXPECT(october(maize, {"dry_stalks", "maize_stubble", "ploughed"}));
+    SC_EXPECT(october(sunflower, {"dry_stalks", "ploughed"}));
     SC_EXPECT(october(ploughed, {"ploughed", "sown"}));
     SC_EXPECT(october(pasture, {"meadow"}));
     // The research (T11): maize mostly in by mid-October (87 percent by the 16th), wheat stubble mostly ploughed under.
-    const double maize_standing = CalendarShare(r, maize, day, "maize");
+    const double maize_standing = CalendarShare(r, maize, day, "dry_stalks");
     SC_EXPECT(maize_standing > 0.05 && maize_standing < 0.25);
     SC_EXPECT(CalendarShare(r, wheat, day, "ploughed") > 0.6);
     SC_EXPECT(CalendarShare(r, wheat, day, "stubble") < 0.3);
