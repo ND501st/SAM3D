@@ -241,6 +241,23 @@ Come back to Opus early if:
   re-read. The views `t31` (against `t4b`): V3 and V10 show straight edges, no 25 m staircase, the furrows turning exactly
   at the edge; the costs equal `t4b`'s (GPU 6.0-7.0 ms, the same within 0.1 ms).
 
+**T3.4**, done as far as the views allow (4 Nov 2026):
+- `tools/haze_reading.py <run>` reads each view's haze: the views are rendered twice, with the atmosphere and fog and without
+  (`run_game(..., extra=["-ExecCmds=show Fog,show Atmosphere"])` into `<label>_clear`), each picture row gets its ground
+  distance from the eye height, the pitch and the earth's curvature, and the share of the ground's light that reaches the eye,
+  `(L - Ls) / (L0 - Ls)` with `Ls` the sky over the horizon, is set beside Koschmieder's `exp(-3.912 d / V)` for the scenario's
+  weather (`cloudy`: V = 20 km). Tests: `tools/tests/test_haze_reading.py` (the rows' distances, a known transmittance recovered).
+- **The reading on `t32`:** V3 (300 m up) 0.93 against 0.90 at 0.5-1 km and V8 (5.5 m) 0.89 against 0.87 and 0.76 at 0.5-2 km:
+  within 1.2 of the law. V10 (300 m up, the clearest picture of the plain): 0.72, 0.87, 0.77, 0.72 against 0.88, 0.77, 0.59, 0.42 at
+  0.5-1, 1-2, 2-4 and 4-8 km: within 1.5 out to 4 km, the far ground 1.7 times clearer than the law at 4-8 km, where the ground's
+  luminance is close to the sky's and the ratio is soft.
+- **V7 and V9 cannot be read this way**: at 1.7-4 m a kilometre of ground is a pixel or two, and trees and the horizon's hills fill
+  those rows. By eye the haze greys the far trees as the photographs do (V9). A measurement there needs a flat, tree-free test
+  field; left.
+- `VisualRangeM` already caps the movers' range at the weather's visibility (`test_battery_life.cpp`: 40 km clear gives the 8 km
+  day range, a 500 m fog gives 500 m). The TV sight's narrow field at V7 h180 at 8 km is not checked: the views do not render the TV.
+- The haze is **not changed**: the engine's extinction matches the law where it can be read.
+
 **T3.2**, built in first form (4 Nov 2026):
 - `simcore/scenery/far_cover.hpp` (`BakeFarCover`): the country's land cover (`CountryMap::LandCoverAt`: lake and river as water, marsh,
   forest, town, open land) over the whole far ground (the map's `far_m`, 150 km each way) at 250 m cells, 1200 x 1200, as one
