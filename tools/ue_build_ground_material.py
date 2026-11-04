@@ -117,6 +117,8 @@ float3 Normal4[4];
 float2 RoughAo4[4];
 float W4[4];
 float Height4[4];
+float Layer4[4];
+float Has4[4];
 float Depth_m = Depth * 0.01;
 float Far = saturate((Depth_m - FarStartM) / max(FarLengthM, 1.0));
 // The field this pixel lies in, exactly (the field function, not the 25 m cells): its own cells all take the mask's texel at
@@ -185,6 +187,8 @@ if (FieldGridA.x > 1.0)
     float Wx = O.x == 1 ? F.x : 1.0 - F.x;
     float Wy = O.y == 1 ? F.y : 1.0 - F.y;
     W4[k] = Wx * Wy;
+    Layer4[k] = (float)Layer;
+    Has4[k] = Has ? 1.0 : 0.0;
     Height4[k] = Has ? dot(A, float3(0.3, 0.59, 0.11)) : 0.25;
     Albedo4[k] = Has ? A : VColor;
     Normal4[k] = Has ? float3(Nen * (1.0 - Far), 0.0) : float3(0, 0, 0);
@@ -208,6 +212,18 @@ float Sum = 0.0;
 Col /= max(Sum, 1e-4);
 Nd /= max(Sum, 1e-4);
 Rao /= max(Sum, 1e-4);
+// Debug (-SimGroundDebug=N): 1 the heaviest cell's layer as a colour (its number in the red and green, Has in the blue);
+// 2 the pixel's depth in 100 m (red), the cover's average weight (green), a field port's finding (blue).
+if (Debug > 0.5)
+{
+    int Hk = 0;
+    for (int q = 1; q < 4; ++q) Hk = W4[q] > W4[Hk] ? q : Hk;
+    float3 Dc = Debug < 1.5 ? float3(frac(Layer4[Hk] * 0.381966), frac(Layer4[Hk] * 0.7236 + 0.3), Has4[Hk]) : float3(saturate(Depth_m / 100.0), saturate(Sum), FieldOk ? 1.0 : 0.0);
+    NormalOut = GeomNormal;
+    RoughOut = 1.0;
+    AoOut = 1.0;
+    return Dc;
+}
 // Large patches lighter and darker, about 125 m and 370 m across.
 Col *= lerp(1.0 - MacroAmount, 1.0 + MacroAmount, G.Noise(P * 0.008) * 0.6 + G.Noise(P * 0.0027) * 0.4);
 // Far off, the land cover's own colour (the vertex colours, as before the textures). The edge to the far ground beyond
@@ -447,6 +463,7 @@ def build_material(arrays):
         ('MaskRect', vector('MaskRect', (0.0, 0.0, 1.0, 1.0))),
         ('MaskCols', scalar('MaskCols', 1.0)),
         ('MaskRows', scalar('MaskRows', 1.0)),
+        ('Debug', scalar('Debug', 0.0)),
         ('FieldGridA', vector('FieldGridA', (0.0, 1200.0, 2000.0, 700.0))),
         ('FieldGridB', vector('FieldGridB', (1000.0, 0.0, 0.0, 0.0))),
         ('TileA', vector('TileA', (3.0, 3.0, 3.0, 3.0))),

@@ -360,16 +360,23 @@ V5 is missing (no farmyard site kind: T7); V8's eye stands on the bank (no dyke:
   drawn: the marsh is the ground's cover colour and texture (the boxes stay in the layout, not opaque to sight). Found
   by hiding the static meshes (`-ExecCmds="show StaticMeshes"`) and then the test patterns (`SAM3D_GROUND_PATTERN=1`),
   which showed V1's textures were there all along.
-- **V7 (the battery) is still a flat olive surface, with no texture, under an eye 4 m up; open, not diagnosed.** Facts
-  from a day of probes (4 Nov): it is lit by the sun and takes the mast's shadow, so it is a surface and not the sky; its
-  horizon curves up at the left and right edges (a bowl, not a plane); it stays with the 10 m detail level not built, with
-  every static mesh hidden, with the sky atmosphere or the fog off, in the test patterns, and under a tint of every
-  level's vertex colours; it goes when the eye is 60 m up (the patterns show beyond 190 m); the eye stands 3.75 m over
-  the pad (a downward trace hits `Map_pad`); the four 10 m tiles within 200 m of the eye wear the textured material;
-  no other component near it is large. It is not the first default shot's place 0.9 km west, which is textured. Next
-  probe: hide each component class in turn (the procedural meshes by name, the strips, the sky actor's components) with
-  a `-SimHideComponent=<substring>` switch, at the battery only. Not on T3/T4's path (the shader is rewritten in
-  T3.1, which may change what it is); look again after T3.1.
+- **V7 (the battery) is still a flat olive surface, with no texture, under an eye 4 m up; open, not diagnosed (looked at again
+  4 Nov, after T3.1-T3.4).** Ruled out this time, by probes that stay in the build:
+  - **Not the ground material.** `-SimGroundDebug=1|2` makes `MI_SimGround` paint the layer it found (or the depth) instead of the
+    ground: V10 shows the fields as flat layer colours, V7 is unchanged, so the olive is not drawn by that material.
+  - **Not the atmosphere.** The same olive with the atmosphere and the fog off (`-ExecCmds="show Fog,show Atmosphere"`); and
+    `-SimAtmoGround=255,0,255` (the planet's colour) shows no magenta in any view (so a hole showing the planet is unlikely, or
+    the probe does not reach what is drawn there).
+  - **Not the vehicle or the position's work.** `-SimShotHide=SimEntityActor,SimPositionWork` removes the mast and the pole and the
+    olive stays.
+  - **The tile under the eye exists and wears the textured material.** `-SimShotProbe` lists every visible primitive within 300 m of
+    a shot's eye: `ProceduralMeshComponent_125` (501 x 501 m, 0 m away, `MID_MI_SimGround_0`), its neighbours at 27 and 141 m, the
+    far level's tile (25 km, `MID_MI_SimGround_3`), the strips, the bridges, the country's strips and the instanced parts: nothing
+    else near is a surface of that size, and none is olive.
+  - Still true from the earlier probes: it takes the mast's shadow, it curves up at the picture's edges, it goes with the eye 60 m
+    up, the eye stands 3.75 m over the pad.
+  - Next: `-SimShotHide` by component class for the instanced parts (`Map_pad`, `Map_revetment`, `Map_military`) and the strips;
+    then a shot with the camera 0.5 m up; then the GPU capture's draw list at that frame (`ProfileGPU` writes it).
 - V2 and V3: the houses are dark boxes (their materials, lit from a low sun) with no verges or poles; V3 shows the
   land cover's 25 m cells as steps at every field edge (T3).
 - V1, V10: fields are small patches (T4); no tree rows on the tracks, no pylons; the trees are the grey models (T5).

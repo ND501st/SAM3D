@@ -162,6 +162,19 @@ void ASimSkyWeatherActor::ApplyWeather()
 	}
 	Atmosphere->SetMieExponentialDistribution(1.2f);  // km: the haze lives in the boundary layer
 	Atmosphere->SetGroundAlbedo(FColor(60, 64, 40));  // the plain's farmland beyond the drawn ground
+	// -SimAtmoGround=R,G,B: a probe, the planet's colour the atmosphere shows where no ground is drawn (a hole shows it).
+	{
+		FString Probe;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimAtmoGround="), Probe))
+		{
+			TArray<FString> Parts;
+			Probe.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() == 3)
+			{
+				Atmosphere->SetGroundAlbedo(FColor(FCString::Atoi(*Parts[0]), FCString::Atoi(*Parts[1]), FCString::Atoi(*Parts[2])));
+			}
+		}
+	}
 
 	// The main cloud layer (the lowest that covers a quarter of the sky or more, else the most covering one).
 	int32 Main = -1;

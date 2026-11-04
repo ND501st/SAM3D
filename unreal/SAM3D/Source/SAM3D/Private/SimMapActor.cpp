@@ -29,6 +29,8 @@
 #include "SimMapAssets.h"
 #include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
+#include "EngineUtils.h"
+#include "UObject/UObjectIterator.h"
 
 namespace
 {
@@ -442,6 +444,47 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	}
 	else
 	{
+		// -SimShotHide=a,b: hide every actor whose name contains one of these (a probe: what hides the ground at a view).
+		FString HideList;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimShotHide="), HideList) && !HideList.IsEmpty())
+		{
+			TArray<FString> Names;
+			HideList.ParseIntoArray(Names, TEXT(","));
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				for (const FString& N : Names)
+				{
+					if (It->GetName().Contains(N))
+					{
+						It->SetActorHiddenInGame(true);
+					}
+				}
+			}
+		}
+		// -SimShotProbe: what the picture's eye is inside or beside (a probe): every visible primitive within 300 m of the eye, its
+		// class, owner, size and first material.
+		if (FParse::Param(FCommandLine::Get(), TEXT("SimShotProbe")) && ShotCamera != nullptr)
+		{
+			const FVector Eye = ShotCamera->GetActorLocation();
+			for (TObjectIterator<UPrimitiveComponent> It; It; ++It)
+			{
+				UPrimitiveComponent* P = *It;
+				if (P->GetWorld() != GetWorld() || !P->IsVisible() || !P->IsRegistered())
+				{
+					continue;
+				}
+				const FBoxSphereBounds& B = P->Bounds;
+				const double Away = FMath::Max(0.0, FVector::Dist(B.Origin, Eye) - B.SphereRadius);
+				if (Away > 30000.0)
+				{
+					continue;
+				}
+				UMaterialInterface* Mat = P->GetNumMaterials() > 0 ? P->GetMaterial(0) : nullptr;
+				UE_LOG(LogSAM3D, Log, TEXT("Probe %s: %s (%s) owner %s, extent %.0f x %.0f x %.0f m, %.0f m away, material %s"), *V.Name,
+					*P->GetName(), *P->GetClass()->GetName(), P->GetOwner() != nullptr ? *P->GetOwner()->GetName() : TEXT("-"), B.BoxExtent.X / 50.0,
+					B.BoxExtent.Y / 50.0, B.BoxExtent.Z / 50.0, Away / 100.0, Mat != nullptr ? *Mat->GetName() : TEXT("-"));
+			}
+		}
 		const FString Path = FPaths::Combine(ShotFolder, bViewShots ? V.Name + TEXT(".png") : FString::Printf(TEXT("map_%d_%s.png"), ShotIndex / 2, *V.Name));
 		FScreenshotRequest::RequestScreenshot(Path, false, false);
 		UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s"), *Path);
@@ -902,6 +945,10 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		}
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, this);
 		Mid->SetTextureParameterValue(TEXT("Mask"), Mask);
+		// -SimGroundDebug=1 or 2: the material draws what it found (the layers, the depth) instead of the ground (a probe).
+		float GroundDebug = 0.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("SimGroundDebug="), GroundDebug);
+		Mid->SetScalarParameterValue(TEXT("Debug"), GroundDebug);
 		// The layers' average colours take over from the vertex colours late: the map proper keeps its layers to its own edge
 		// (30 km), the far ground's from the first metre (no detail textures that far: the albedo's last mip) to 60 km, so the
 		// two meet at the same colour (roadmap T3.2).
