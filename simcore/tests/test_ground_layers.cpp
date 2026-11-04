@@ -314,20 +314,25 @@ SC_TEST("far cover: the country's land cover over the far ground at 250 m, its f
     // The fields are the map's fields: the crop at a field cell is the crop of the same field in the map proper's own cover.
     const CoverRaster raster = BakeCover(*map, Dressing());
     const CoverGrid& proper = raster.grids.back();
-    int same = 0, looked = 0;
+    int same_field = 0, same_crop = 0, looked = 0;
     for (int r = 0; r < proper.rows && looked < 4000; r += 17) {
         for (int c = 0; c < proper.cols && looked < 4000; c += 17) {
             const double ce = proper.CentreEast(c), cn = proper.CentreNorth(r);
             const std::size_t fi = far.IndexAt(ce, cn);
-            if (proper.cover[proper.Index(c, r)] != static_cast<std::uint8_t>(Cover::Field) || far.cover[fi] != static_cast<std::uint8_t>(Cover::Field)) continue;
-            ++looked;
-            // The far cell's crop is its centre's field; compare at the far cell's own centre against the proper cell nearest it.
+            // The far cell's crop is its centre's field: compare at the far cell's own centre against the map proper's cell there.
             const double fe = far.CentreEast(static_cast<int>(std::floor((ce - far.west_m) / far.cell_m))), fn = far.CentreNorth(static_cast<int>(std::floor((cn - far.south_m) / far.cell_m)));
-            same += far.crop[fi] == CropOf(Dressing(), FieldAt(far.fields, fe, fn).id) ? 1 : 0;
+            const std::size_t pc = proper.IndexAt(fe, fn);
+            if (proper.cover[pc] != static_cast<std::uint8_t>(Cover::Field) || far.cover[fi] != static_cast<std::uint8_t>(Cover::Field)) continue;
+            ++looked;
+            same_field += FieldAt(far.fields, fe, fn).id == FieldAt(proper.fields, fe, fn).id ? 1 : 0;
+            same_crop += far.crop[fi] == proper.crop[pc] ? 1 : 0;
         }
     }
+    std::printf("    the far cover against the map proper: %d of %d fields, %d crops the same\n", same_field, looked, same_crop);
     SC_EXPECT(looked > 500);
-    SC_EXPECT(same == looked);
+    SC_EXPECT(same_field == looked);  // one field grid near and far
+    // The map proper's 25 m cell round the far cell's centre can lie across a field's edge from it: nearly all, not all.
+    SC_EXPECT(same_crop * 100 >= looked * 95);
     // A mask baked from it is the same twice (every client).
     const GroundMask a = BakeGroundMask(far, Dressing(), Layers(), 288), b = BakeGroundMask(far, Dressing(), Layers(), 288);
     SC_EXPECT(a.texels == b.texels && a.cols == far.cols);

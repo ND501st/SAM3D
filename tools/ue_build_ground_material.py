@@ -216,9 +216,15 @@ Rao /= max(Sum, 1e-4);
 // 2 the pixel's depth in 100 m (red), the cover's average weight (green), a field port's finding (blue).
 if (Debug > 0.5)
 {
-    int Hk = 0;
-    for (int q = 1; q < 4; ++q) Hk = W4[q] > W4[Hk] ? q : Hk;
-    float3 Dc = Debug < 1.5 ? float3(frac(Layer4[Hk] * 0.381966), frac(Layer4[Hk] * 0.7236 + 0.3), Has4[Hk]) : float3(saturate(Depth_m / 100.0), saturate(Sum), FieldOk ? 1.0 : 0.0);
+    // Unrolled with constant indices: a run-time index would put the arrays in scratch memory for every pixel.
+    float Hw = W4[0];
+    float Hl = Layer4[0];
+    float Hh = Has4[0];
+    [unroll] for (int q = 1; q < 4; ++q)
+    {
+        if (W4[q] > Hw) { Hw = W4[q]; Hl = Layer4[q]; Hh = Has4[q]; }
+    }
+    float3 Dc = Debug < 1.5 ? float3(frac(Hl * 0.381966), frac(Hl * 0.7236 + 0.3), Hh) : float3(saturate(Depth_m / 100.0), saturate(Sum), FieldOk ? 1.0 : 0.0);
     NormalOut = GeomNormal;
     RoughOut = 1.0;
     AoOut = 1.0;

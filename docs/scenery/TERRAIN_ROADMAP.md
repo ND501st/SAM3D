@@ -364,18 +364,19 @@ V5 is missing (no farmyard site kind: T7); V8's eye stands on the bank (no dyke:
   4 Nov, after T3.1-T3.4).** Ruled out this time, by probes that stay in the build:
   - **Not the ground material.** `-SimGroundDebug=1|2` makes `MI_SimGround` paint the layer it found (or the depth) instead of the
     ground: V10 shows the fields as flat layer colours, V7 is unchanged, so the olive is not drawn by that material.
-  - **Not the atmosphere.** The same olive with the atmosphere and the fog off (`-ExecCmds="show Fog,show Atmosphere"`); and
-    `-SimAtmoGround=255,0,255` (the planet's colour) shows no magenta in any view (so a hole showing the planet is unlikely, or
-    the probe does not reach what is drawn there).
-  - **Not the vehicle or the position's work.** `-SimShotHide=SimEntityActor,SimPositionWork` removes the mast and the pole and the
-    olive stays.
+  - **Not the atmosphere's fog.** The same olive with the atmosphere and the fog off (`-ExecCmds="show Fog,show Atmosphere"`).
+    The planet-colour probe `-SimAtmoGround=255,0,255` did nothing in that run: `FParse::Value` stopped at the first comma, so
+    it read only "255" and fell through (fixed in the review, not run again). A hole showing the planet is still open.
+  - **Not the vehicle.** `-SimShotHide=SimEntityActor,SimPositionWork` hid only the first name, for the same reason (fixed in the
+    review): the vehicle went and the olive stayed; the position's work was never hidden, so it is not ruled out.
   - **The tile under the eye exists and wears the textured material.** `-SimShotProbe` lists every visible primitive within 300 m of
     a shot's eye: `ProceduralMeshComponent_125` (501 x 501 m, 0 m away, `MID_MI_SimGround_0`), its neighbours at 27 and 141 m, the
     far level's tile (25 km, `MID_MI_SimGround_3`), the strips, the bridges, the country's strips and the instanced parts: nothing
     else near is a surface of that size, and none is olive.
   - Still true from the earlier probes: it takes the mast's shadow, it curves up at the picture's edges, it goes with the eye 60 m
     up, the eye stands 3.75 m over the pad.
-  - Next: `-SimShotHide` by component class for the instanced parts (`Map_pad`, `Map_revetment`, `Map_military`) and the strips;
+  - Next: rerun `-SimShotHide=SimEntityActor,SimPositionWork` and `-SimAtmoGround=255,0,255` now that they read the whole list;
+    then `-SimShotHide` by component class for the instanced parts (`Map_pad`, `Map_revetment`, `Map_military`) and the strips;
     then a shot with the camera 0.5 m up; then the GPU capture's draw list at that frame (`ProfileGPU` writes it).
 - V2 and V3: the houses are dark boxes (their materials, lit from a low sun) with no verges or poles; V3 shows the
   land cover's 25 m cells as steps at every field edge (T3).

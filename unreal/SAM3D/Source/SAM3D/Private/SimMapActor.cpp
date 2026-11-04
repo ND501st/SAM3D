@@ -446,7 +446,7 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	{
 		// -SimShotHide=a,b: hide every actor whose name contains one of these (a probe: what hides the ground at a view).
 		FString HideList;
-		if (FParse::Value(FCommandLine::Get(), TEXT("SimShotHide="), HideList) && !HideList.IsEmpty())
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimShotHide="), HideList, false) && !HideList.IsEmpty())
 		{
 			TArray<FString> Names;
 			HideList.ParseIntoArray(Names, TEXT(","));
@@ -949,13 +949,14 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		float GroundDebug = 0.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("SimGroundDebug="), GroundDebug);
 		Mid->SetScalarParameterValue(TEXT("Debug"), GroundDebug);
-		// The layers' average colours take over from the vertex colours late: the map proper keeps its layers to its own edge
-		// (30 km), the far ground's from the first metre (no detail textures that far: the albedo's last mip) to 60 km, so the
-		// two meet at the same colour (roadmap T3.2).
+		// The layers' average colours take over from the detail textures: near on the map proper, from the first metre on the
+		// far ground (no detail textures that far: the albedo's last mip). They give way to the vertex colours over 60-120 km,
+		// the same for every level, so the map proper and the far ground meet at the same colour at any depth (the 40 km map
+		// seen from one edge has its far edge 40-57 km off; roadmap T3.2).
 		Mid->SetScalarParameterValue(TEXT("FarStartM"), bFarLevel ? 0.0f : 400.0f);
 		Mid->SetScalarParameterValue(TEXT("FarLengthM"), bFarLevel ? 1.0f : 1600.0f);
-		Mid->SetScalarParameterValue(TEXT("CoverStartM"), bFarLevel ? 60000.0f : 30000.0f);
-		Mid->SetScalarParameterValue(TEXT("CoverLengthM"), bFarLevel ? 60000.0f : 30000.0f);
+		Mid->SetScalarParameterValue(TEXT("CoverStartM"), 60000.0f);
+		Mid->SetScalarParameterValue(TEXT("CoverLengthM"), 60000.0f);
 		Mid->SetVectorParameterValue(TEXT("MapOff"), MapOff);
 		Mid->SetVectorParameterValue(TEXT("MapAxes"), MapAxes);
 		Mid->SetScalarParameterValue(TEXT("PeriodM"), static_cast<float>(simcore::scenery::kGroundTilePeriodM));

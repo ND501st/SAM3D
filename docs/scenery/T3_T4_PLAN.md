@@ -311,3 +311,32 @@ Come back to Opus early if:
 - **Not done:** rows stop 30 m short of junctions (they may cross a track); the tracks are not in the route graph; the
   fields' heading does not follow roads. The Opus re-read is done (`docs/air_war/09_BALANCE.md` §13): no check moved, but the rows raise battery 21's low-level horizon in two thirds of its directions; so the positions stand on low rises and the rows keep 2 km off them (§13, the battery on a rise): the battery now sees a 50 m target at 20 km all round.
 
+## The review (Opus, 4 Nov 2026)
+
+Two readers went over the whole set (simcore and the data; Unreal, the material builder and the tools). Fixed:
+
+- **Winter wheat stood in January.** The calendar starts each year at a crop's first state, and wheat's was the standing crop,
+  so from January to early July every wheat field stood ripe. Wheat now starts the year sown (the autumn's winter wheat) and
+  stands from days 100-130; October is unchanged. A crop whose last state differs from its first still changes on 1 January
+  (the `ploughed` crop: sown in autumn, ploughed from New Year): only a session across midnight on 31 December sees it.
+- **The far-cover test could not fail.** It compared the far crop with the expression the bake itself uses; it now compares
+  the far cell's field and crop with the map proper's own cell there (every field the same, 95 % or more of the crops: the
+  25 m cell may lie across an edge).
+- **The far ground and the map proper faded to the vertex colours over different distances** (30-60 km and 60-120 km), a
+  step where they meet more than 30 km off; both now fade over 60-120 km.
+- **Two probes read only the first value of their lists** (`-SimShotHide=a,b`, `-SimAtmoGround=R,G,B`: `FParse::Value` stops
+  at a comma unless told not to). Fixed; what that changes in V7's findings is in TERRAIN_ROADMAP.md.
+- **The debug branch indexed local arrays at run time**, which can put them in scratch memory for every pixel; unrolled.
+- **The haze check read views aimed at their anchor as level** (V5, V6, V9); it now says it cannot read them.
+- **The loader** refuses tree rows or groves of no height and fields longer or wider than their estate.
+
+Left, as found:
+
+- Site clearance is tested at a row's or a grove belt's centre: a farmstead 2000-2050 m from a position could put a belt's
+  edge inside `position_clear_m` (none does).
+- A tree row's draw is numbered by its run over the whole map, so one new building or road moves every later row (clients
+  still agree; the rows block sight, so a map edit changes the sight lines further than it looks).
+- Rivers come out of the far cover as scattered cells (a 250 m cell is river only when its centre is in the channel).
+- The capital's detail area has no household strips (`BakeCover` reads the map's settlements, not the detail area's).
+- The far cover is cached per map and country file for the editor session; an edit to the JSON needs the editor restarted.
+- The `MapFrameLink` between the country and the map is the identity today (the same origin), so it is untested in practice.

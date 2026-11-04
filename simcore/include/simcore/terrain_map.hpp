@@ -2746,6 +2746,8 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             return Fail("farmland", "the shares are in 0..1");
         }
         if (d.track_width_m <= 0.0 || d.row_width_m <= 0.0 || d.grove_width_m <= 0.0 || d.site_clear_m < 0.0 || d.position_clear_m < 0.0) return Fail("farmland", "widths are positive");
+        if (d.row_height_min_m <= 0.0 || d.grove_height_min_m <= 0.0) return Fail("farmland", "heights are positive");
+        if (d.fields.length_max_m > d.fields.estate_m || d.fields.width_max_m > d.fields.estate_m) return Fail("farmland", "a field fits in its estate");
         return true;
     }
 

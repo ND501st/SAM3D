@@ -107,7 +107,8 @@
   "crops": {
     "wheat": {
       "states": [
-        { "layer": "wheat" },
+        { "layer": "sown" },
+        { "layer": "wheat", "from_day": 100, "to_day": 130 },
         { "layer": "stubble", "from_day": 185, "to_day": 210 },
         { "layer": "ploughed", "from_day": 235, "to_day": 300 },
         { "layer": "sown", "from_day": 301, "to_day": 345 }

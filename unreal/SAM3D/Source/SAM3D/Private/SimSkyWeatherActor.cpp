@@ -165,7 +165,7 @@ void ASimSkyWeatherActor::ApplyWeather()
 	// -SimAtmoGround=R,G,B: a probe, the planet's colour the atmosphere shows where no ground is drawn (a hole shows it).
 	{
 		FString Probe;
-		if (FParse::Value(FCommandLine::Get(), TEXT("SimAtmoGround="), Probe))
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimAtmoGround="), Probe, false))
 		{
 			TArray<FString> Parts;
 			Probe.ParseIntoArray(Parts, TEXT(","));

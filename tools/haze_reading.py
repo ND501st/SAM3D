@@ -97,6 +97,14 @@ def weather_visibility_km(scenario="scenarios/kesmark_range_test.json"):
     raise SystemExit("no weather preset for the scenario")
 
 
+def view_pitch_deg(v):
+    """The view's pitch, None where the game aims it (a view that looks at its anchor without a pitch of its own looks down
+    at the anchor's ground by an angle this tool does not know)."""
+    if "pitch_deg" in v:
+        return float(v["pitch_deg"])
+    return None if v.get("look") == "at_anchor" else 0.0
+
+
 def verdict(reading):
     """'ok' when every bin's T is within a factor of 1.5 of the law's (T under 0.03 is below what a picture shows)."""
     worst = 1.0
@@ -122,22 +130,27 @@ def main(argv=None):
     # The haze's own luminance: the sky over the horizon in the views that show it (one for the run: the same weather and hour).
     skies = []
     for v in views:
+        if view_pitch_deg(v) is None:
+            continue
         for png in folder.glob(v["id"] + "*.png"):
             img = np.asarray(Image.open(png).convert("RGB"), dtype=np.float64) / 255.0
-            _d, hrow = row_distances(img.shape[0], img.shape[1], float(v.get("eye_m", 1.7)), float(v.get("pitch_deg", 0.0)), float(v.get("fov_deg", 60.0)))
+            _d, hrow = row_distances(img.shape[0], img.shape[1], float(v.get("eye_m", 1.7)), view_pitch_deg(v), float(v.get("fov_deg", 60.0)))
             sky = horizon_sky(luminance(img), hrow)
             if sky is not None:
                 skies.append(sky)
     run_sky = float(np.median(skies)) if skies else None
     print(f"the sky over the horizon, {len(skies)} views: {run_sky:.3f}" if run_sky is not None else "no view shows the horizon")
     for v in views:
+        if view_pitch_deg(v) is None:
+            print(f"{v['id']:24} not read: the game aims it at its anchor, at a pitch this tool does not know")
+            continue
         for png in sorted(folder.glob(v["id"] + "*.png")):
             if not re.fullmatch(re.escape(v["id"]) + r"(_h\d{3})?\.png", png.name):
                 continue
             if not (clear / png.name).exists():
                 print(f"{png.stem:24} no clear picture in {clear}")
                 continue
-            reading = read_view(png, clear / png.name, float(v.get("eye_m", 1.7)), float(v.get("pitch_deg", 0.0)), float(v.get("fov_deg", 60.0)),
+            reading = read_view(png, clear / png.name, float(v.get("eye_m", 1.7)), view_pitch_deg(v), float(v.get("fov_deg", 60.0)),
                                 visibility, run_sky)
             if not reading:
                 print(f"{png.stem:24} nothing to read (too little distance across the rows, or no contrast)")
