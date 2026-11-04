@@ -108,6 +108,29 @@ SC_TEST("views: every view on the Kesmark map resolves to a camera above the gro
     SC_EXPECT(resolved >= 8);
 }
 
+SC_TEST("views: a site anchor with from_m and a bearing puts the eye that far off the site on that bearing (V7 clear of the net)") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const CoverRaster cover = BakeCover(*map, Dressing());
+    const ViewSet set = Views();
+    const MapSiteDef* site = nullptr;
+    for (const MapSiteDef& s : map->Def().sites) site = s.id == "bty21" ? &s : site;
+    SC_EXPECT(site != nullptr);
+    int seen = 0;
+    for (const ViewDef& v : set.views) {
+        if (v.id != "v7_osa_position" || site == nullptr) continue;
+        for (const ResolvedView& c : ResolveView(*map, Dressing(), cover, v)) {
+            ++seen;
+            const double de = c.eye_e - site->centre.east_m, dn = c.eye_n - site->centre.north_m;
+            SC_EXPECT_NEAR(std::hypot(de, dn), 25.0, 0.01);
+            SC_EXPECT_NEAR(std::atan2(de, dn), 110.0 * kPi / 180.0, 1e-6);  // east of north
+        }
+    }
+    SC_EXPECT(seen == 4);  // the panorama's four bearings
+}
+
 SC_TEST("views: the farmyard view says why it is missing (no farmyard site kind yet), the rest are given") {
     std::string e;
     std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);

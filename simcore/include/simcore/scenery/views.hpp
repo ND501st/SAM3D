@@ -455,9 +455,15 @@ inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingR
             s.ok = true;
             s.e = st->centre.east_m;
             s.n = st->centre.north_m;
+            // On the site, along its heading; or `from_m` off it on `bearing_deg`, facing it (clear of what stands there).
             s.eye_e = s.e;
             s.eye_n = s.n;
             s.bearing_rad = st->heading_rad;
+            if (a.has_bearing && a.from_m > 0.0) {
+                s.eye_e = s.e + a.from_m * std::sin(a.bearing_rad);
+                s.eye_n = s.n + a.from_m * std::cos(a.bearing_rad);
+                s.bearing_rad = BearingTo(s.eye_e, s.eye_n, s.e, s.n);
+            }
         }
     } else if (a.kind == "river") {
         const MapLineDef* r = FindById(def.rivers, a.id);
