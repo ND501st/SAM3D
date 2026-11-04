@@ -145,7 +145,7 @@
     "position": {
       "east_m": 6400,
       "north_m": -9600,
-      "up_m": 2
+      "up_m": 24
     },
     "heading_deg": 0,
     "inputs": {
@@ -214,7 +214,7 @@
         "position": {
           "east_m": 6000,
           "north_m": -9200,
-          "up_m": 3
+          "up_m": 20.6
         }
       },
       {
@@ -223,7 +223,7 @@
         "position": {
           "east_m": 6900,
           "north_m": -9900,
-          "up_m": 3
+          "up_m": 22.5
         }
       },
       {
@@ -232,7 +232,7 @@
         "position": {
           "east_m": 5400,
           "north_m": -10400,
-          "up_m": 3
+          "up_m": 22.1
         }
       },
       {
@@ -241,7 +241,7 @@
         "position": {
           "east_m": 6300,
           "north_m": -10900,
-          "up_m": 3
+          "up_m": 22
         }
       },
       {
@@ -250,7 +250,7 @@
         "position": {
           "east_m": 6700,
           "north_m": -10300,
-          "up_m": 3
+          "up_m": 24.8
         }
       }
     ],

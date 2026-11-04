@@ -648,3 +648,65 @@ NATO 114 and 111 against 113 and 127). `air_war_bench data 400` builds its bench
 **No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11
 were read on its buckets).
 
+
+## 13. The farmland's tree rows and groves: the sight-line re-read (4 November 2026)
+
+Terrain roadmap T4.2 (`docs/scenery/T3_T4_PLAN.md`) put 412 farm tracks and 3,523 tree-row and grove boxes on the
+Kesmark range, 12-22 m tall and opaque, none within 600 m of a site. They block sight by the same rule as the woods, so
+every sight-line reader was run on the map with them (`data/`) and without them (the same data with the map's
+`"farmland"` block taken out).
+
+| Check | Without the rows | With them |
+|---|---|---|
+| `air_war_balance data 20 7` | §12's numbers | byte for byte the same (the abstract air war reads no district map) |
+| `ground_check data 3600` | 0 of 15 scenarios off the ground | the same |
+| `helper_coverage` | 336 runs, 25 gaps | 336 runs, 25 gaps; only `kesmark_range_test` moved (the helper-led commander launches once) |
+| the battery fire model's tests | pass | pass |
+
+**The horizon from battery 21's position** (6.4, -9.6 km, the Osa's search antenna 5 m up; `map_dump data
+maps/kesmark_range.json --horizon 6.4 -9.6 5`, the sight rule of `engagement.hpp` `SearchAntennaSees`): the lowest
+target seen, over the ground under it, every degree round.
+
+| Range | Median, without → with | 90th percentile | Directions hiding a target at 50 m |
+|---|---|---|---|
+| 5 km | 0 → 18 m | 6 → 47 m | 0 → 31 of 360 |
+| 10 km | 2 → 36 m | 35 → 91 m | 0 → 93 |
+| 15 km | 20 → 52 m | 54 → 144 m | 43 → 192 |
+| 20 km | 26 → 70 m | 75 → 196 m | 86 → 243 |
+
+The rows raise the horizon in about two thirds of the directions. 22 rows stand within 2 km of the position, the
+nearest at 750-820 m with closing angles of 0.7-1.0°, and a row that close hides more than everything else on the map
+together. Nothing breaks: the missions do not fly their raiders low through those directions inside 10 km. A raid
+that does will be seen later than it was, which is right for a position ringed by poplars.
+
+**Not tuned away** (the plan's rule). The question it leaves is the battery's own: a commander does not take a position
+with closing angles of a degree, and his men fell trees in the sectors. If the low-level fight from bty21 is meant to
+stay as before, the rule belongs in the map (a wider `site_clear_m` for rows round `osa_position` sites, or a closing
+angle the rows must keep from them), not in the sight rule.
+
+### The battery on a rise (4 November 2026)
+
+The project owner's answer: positions on the high ground. The range's plain got low rises (`data/maps/kesmark_range.json`
+`hills`, the same in `pannonia.json`, which must agree): battery 21's, 25 m over 2.5 km under its four launchers (they
+stand 17-21 m over the plain, the position's centre 22 m), one of 12-16 m under each dummy position, and five more for
+the plain's look (three backs, two sand ridges as chains of hills: a map file's ridge draws its peaks by its place in
+the list, which the country's own ridges would shift). And the farmland keeps its rows and groves 2 km off an Osa or
+dummy position (`position_clear_m`; its launchers stand up to a kilometre out and its crews fell what masks the
+antennas), 600 m off any other site as before. The scenarios' vehicles on the range were raised by what the ground
+under them rose; their origins and the aircraft were left as they were.
+
+The rise alone did not do it: the rows inside a kilometre stand on it too. With both, from the launchers (5 m antennas):
+
+| Range | Each launcher alone, median of the four | The battery: the best launcher each way | Directions hiding a target at 50 m, the battery |
+|---|---|---|---|
+| 5 km | 3-17 m | 0 m (90th percentile 10 m) | 0 of 360 |
+| 10 km | 16-20 m | 3 m (17 m) | 0 |
+| 15 km | 18-21 m | 10 m (21 m) | 0 |
+| 20 km | 21-25 m | 12 m (27 m) | 0 (86 on the flat without the rows) |
+
+A launcher on the rise's flank sees past the crest only on its own side (21-1, on the north-west, cannot see a 50 m
+target south-east of the crest inside 10 km): the four together cover all round, as a battery dispersed about a
+height does. `ground_check data 3600`: 0 of 15 scenarios off the ground. `helper_coverage`: 25 gaps, as before; only
+`kesmark_range_test` moved (the helper-led commander captures 29 s sooner and launches). 1028 tests pass, one new: no
+row within `position_clear_m` of a position, and battery 21's launchers between them see a target 50 m up at 15 km
+every 5° round.

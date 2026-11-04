@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/radar.hpp"
 #include "simcore/scenery/map_dressing.hpp"
 #include "simcore/terrain_map.hpp"
 #include "test_framework.hpp"
@@ -465,4 +466,42 @@ SC_TEST("map dressing: the tree rows are planted with trees that keep to their b
         }
     }
     SC_EXPECT(near_rows > looked * 8 / 10);
+}
+
+SC_TEST("map dressing: the Osa and dummy positions keep their rows off, and battery 21 on its rise sees a low flier all round") {
+    std::string e;
+    const std::shared_ptr<const MapData> m = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(m != nullptr);
+    if (!m) return;
+    const MapDef& d = m->Def();
+    SC_EXPECT(d.farmland.position_clear_m > d.farmland.site_clear_m);
+    std::size_t near_position = 0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::TreeRow) continue;
+        for (const MapSiteDef& s : d.sites) {
+            if (s.kind != "osa_position" && s.kind != "dummy_position") continue;
+            near_position += std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) < d.farmland.position_clear_m - 1.0 ? 1 : 0;
+        }
+    }
+    SC_EXPECT(near_position == 0);
+    // Battery 21's launchers (places_pannonia bty21_v1..v4) on their rise: in every direction one of them sees a target
+    // 50 m over the ground 15 km out, by the sight rule of the battery fire model (engagement.hpp SearchAntennaSees).
+    const double launchers[4][2] = {{6000.0, -9200.0}, {6900.0, -9900.0}, {5400.0, -10400.0}, {6300.0, -10900.0}};
+    const MapTerrain terrain(m, d.origin);
+    int hidden = 0;
+    for (int az = 0; az < 360; az += 5) {
+        bool seen = false;
+        for (const auto& l : launchers) {
+            const double eye = m->GroundHeight(l[0], l[1]) + 5.0;
+            const double a = az * kPi / 180.0, te = l[0] + 15000.0 * std::sin(a), tn = l[1] + 15000.0 * std::cos(a);
+            const double top = m->GroundHeight(te, tn) + 50.0;
+            if (HasLineOfSight(terrain, Vec3{l[0], l[1], eye}, eye, Vec3{te, tn, top}, top, 100.0)) {
+                seen = true;
+                break;
+            }
+        }
+        hidden += seen ? 0 : 1;
+    }
+    std::printf("    battery 21: %d of 72 directions hide a target 50 m up at 15 km\n", hidden);
+    SC_EXPECT(hidden == 0);
 }

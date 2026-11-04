@@ -28,7 +28,7 @@
         "position": {
           "east_m": 400,
           "north_m": -400,
-          "up_m": 3.9
+          "up_m": 25.9
         }
       },
       {
@@ -37,7 +37,7 @@
         "position": {
           "east_m": -1000,
           "north_m": -2300,
-          "up_m": 3.8
+          "up_m": 7.9
         }
       },
       {
@@ -46,7 +46,7 @@
         "position": {
           "east_m": -800,
           "north_m": -2600,
-          "up_m": 4.1
+          "up_m": 6.8
         }
       }
     ]
@@ -62,7 +62,7 @@
     "position": {
       "east_m": 0,
       "north_m": 0,
-      "up_m": 3
+      "up_m": 20.7
     },
     "heading_deg": 290,
     "inputs": {

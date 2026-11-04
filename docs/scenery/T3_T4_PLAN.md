@@ -239,6 +239,5 @@ Come back to Opus early if:
 - Kesmark: 412 tracks, 3,523 row and grove boxes. The first render (`t4b`): tree rows along the main road and on the
   horizon from V1 and V10, as in the photographs.
 - **Not done:** rows stop 30 m short of junctions (they may cross a track); the tracks are not in the route graph; the
-  fields' heading does not follow roads. **The Opus step is next**: the sight-line and balance re-read
-  (`ground_check`, `air_war_balance`, `helper_coverage`, the horizon from `bty21`), because the rows now block sight.
+  fields' heading does not follow roads. The Opus re-read is done (`docs/air_war/09_BALANCE.md` §13): no check moved, but the rows raise battery 21's low-level horizon in two thirds of its directions; so the positions stand on low rises and the rows keep 2 km off them (§13, the battery on a rise): the battery now sees a 50 m target at 20 km all round.
 

@@ -164,6 +164,7 @@ struct MapFarmlandDef {
     double row_width_m = 7.0;
     double row_height_min_m = 12.0, row_height_max_m = 22.0;
     double site_clear_m = 600.0;    // no row or grove this close to a site's centre (its sectors stay open)
+    double position_clear_m = 0.0;  // nor this close to an Osa or dummy position's (its crews fell them; 0: site_clear_m)
     double grove_width_m = 20.0;    // a tanya's grove, round three of its sides
     double grove_height_min_m = 12.0, grove_height_max_m = 18.0;
 };
@@ -1810,6 +1811,17 @@ private:
         }
         return false;
     }
+    // Whether a row or grove there would stand in a site's sectors: within site_clear_m of any site, or position_clear_m of
+    // an Osa or dummy position (its launchers stand up to a kilometre out, and the crews fell what masks their antennas).
+    bool InSitesSectors(double e, double n) const {
+        const MapFarmlandDef& fd = def_.farmland;
+        const double position_m = std::max(fd.site_clear_m, fd.position_clear_m);
+        for (const MapSiteDef& s : def_.sites) {
+            const double reach = s.kind == "osa_position" || s.kind == "dummy_position" ? position_m : fd.site_clear_m;
+            if (std::hypot(e - s.centre.east_m, n - s.centre.north_m) < reach) return true;
+        }
+        return false;
+    }
 
     // Farm tracks along the fields' long sides, then tree rows along some tracks and roads, then a grove round each tanya
     // (roadmap T4). Each from the field grid's own hash, after everything else, so no box laid before moves.
@@ -1876,7 +1888,7 @@ private:
             if (len < 20.0) return;
             const double ue = (b.east_m - a.east_m) / len, un = (b.north_m - a.north_m) / len;
             const double e = 0.5 * (a.east_m + b.east_m) + side * off * un, n = 0.5 * (a.north_m + b.north_m) - side * off * ue;
-            if (NearAnySite(e, n, fd.site_clear_m) || !FarmlandClear(e, n, 0.0, 4.0)) return;
+            if (InSitesSectors(e, n) || !FarmlandClear(e, n, 0.0, 4.0)) return;
             const double h = fd.row_height_min_m + (fd.row_height_max_m - fd.row_height_min_m) * Unit24(Hash32(draw ^ 0x3u));
             Box(MapPart::TreeRow, e, n, 0.92 * len, fd.row_width_m, h, std::atan2(ue, un), 0.3);
         };
@@ -1915,7 +1927,7 @@ private:
         }
         // A grove round three sides of each tanya (the fourth, the farm's front, open).
         for (const Farmstead& f : farmsteads_) {
-            if (NearAnySite(f.e, f.n, fd.site_clear_m)) continue;
+            if (InSitesSectors(f.e, f.n)) continue;
             const double sh = std::sin(f.heading), ch = std::cos(f.heading);
             const double g = fd.grove_width_m;
             struct Belt {
@@ -2718,12 +2730,13 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         MapFarmlandDef& d = out.farmland;
         d.laid = true;
         if (!Keys(*f, "farmland", {"estate_m", "field_length_m", "field_width_m", "track_share", "track_width_m", "row_share", "road_row_share", "row_width_m",
-                                   "row_height_m", "site_clear_m", "grove_width_m", "grove_height_m", "notes"}) ||
+                                   "row_height_m", "site_clear_m", "position_clear_m", "grove_width_m", "grove_height_m", "notes"}) ||
             !OptionalNumber(*f, "farmland", "estate_m", d.fields.estate_m) || !Pair(*f, "farmland", "field_length_m", d.fields.length_min_m, d.fields.length_max_m) ||
             !Pair(*f, "farmland", "field_width_m", d.fields.width_min_m, d.fields.width_max_m) || !OptionalNumber(*f, "farmland", "track_share", d.track_share) ||
             !OptionalNumber(*f, "farmland", "track_width_m", d.track_width_m) || !OptionalNumber(*f, "farmland", "row_share", d.row_share) ||
             !OptionalNumber(*f, "farmland", "road_row_share", d.road_row_share) || !OptionalNumber(*f, "farmland", "row_width_m", d.row_width_m) ||
             !Pair(*f, "farmland", "row_height_m", d.row_height_min_m, d.row_height_max_m) || !OptionalNumber(*f, "farmland", "site_clear_m", d.site_clear_m) ||
+            !OptionalNumber(*f, "farmland", "position_clear_m", d.position_clear_m) ||
             !OptionalNumber(*f, "farmland", "grove_width_m", d.grove_width_m) || !Pair(*f, "farmland", "grove_height_m", d.grove_height_min_m, d.grove_height_max_m)) {
             return false;
         }
@@ -2732,7 +2745,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         if (d.track_share < 0.0 || d.track_share > 1.0 || d.row_share < 0.0 || d.row_share > 1.0 || d.road_row_share < 0.0 || d.road_row_share > 1.0) {
             return Fail("farmland", "the shares are in 0..1");
         }
-        if (d.track_width_m <= 0.0 || d.row_width_m <= 0.0 || d.grove_width_m <= 0.0 || d.site_clear_m < 0.0) return Fail("farmland", "widths are positive");
+        if (d.track_width_m <= 0.0 || d.row_width_m <= 0.0 || d.grove_width_m <= 0.0 || d.site_clear_m < 0.0 || d.position_clear_m < 0.0) return Fail("farmland", "widths are positive");
         return true;
     }
 
