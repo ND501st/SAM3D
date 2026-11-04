@@ -624,6 +624,7 @@ void ASimMapActor::Clear()
 	GroundTiles.Reset();
 	GroundMaterials.Reset();
 	GroundMasks.Reset();
+	FarCover.reset();
 	if (Strips != nullptr)
 	{
 		Strips->DestroyComponent();
@@ -850,14 +851,39 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		const float Tile = I < static_cast<int32>(GroundLayers->layers.size()) ? static_cast<float>(GroundLayers->layers[I].tile_m) : 3.0f;
 		Tiles[I / 4].Component(I % 4) = Tile;
 	}
-	// A level is drawn with the land cover square that matches it: a detail area's own, the map proper's ("map").
+	// The far ground wears the country's land cover (roadmap T3.2): baked once a session (a second) and kept.
+	if (Country && !FarCover)
+	{
+		static TMap<FString, std::shared_ptr<const simcore::scenery::CoverGrid>> FarCache;
+		const FString Key = MapFile + TEXT("|") + CountryFile;
+		if (const std::shared_ptr<const simcore::scenery::CoverGrid>* Found = FarCache.Find(Key))
+		{
+			FarCover = *Found;
+		}
+		else
+		{
+			FarCover = std::make_shared<const simcore::scenery::CoverGrid>(simcore::scenery::BakeFarCover(*Map, *Country, *DressRules));
+			FarCache.Add(Key, FarCover);
+		}
+	}
+	// A level is drawn with the land cover square that matches it: a detail area's own, the map proper's ("map"), the far
+	// ground's.
 	const simcore::MapGrid& Proper = Map->CoreGrid();
 	for (std::size_t L = 0; L < Levels.size(); ++L)
 	{
 		const simcore::MapGrid& G = *Levels[L];
 		const simcore::scenery::CoverGrid* Square = nullptr;
+		const bool bFarLevel = &G == &Map->FarGrid() && FarCover != nullptr;
+		if (bFarLevel)
+		{
+			Square = FarCover.get();
+		}
 		for (const simcore::scenery::CoverGrid& C : Cover->grids)
 		{
+			if (bFarLevel)
+			{
+				break;
+			}
 			const bool bProper = C.id == "map";
 			if ((&G == &Proper) == bProper && (bProper || (FMath::Abs(C.west_m - G.west_m) < 1.0 && FMath::Abs(C.south_m - G.south_m) < 1.0)))
 			{
@@ -876,6 +902,13 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		}
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, this);
 		Mid->SetTextureParameterValue(TEXT("Mask"), Mask);
+		// The layers' average colours take over from the vertex colours late: the map proper keeps its layers to its own edge
+		// (30 km), the far ground's from the first metre (no detail textures that far: the albedo's last mip) to 60 km, so the
+		// two meet at the same colour (roadmap T3.2).
+		Mid->SetScalarParameterValue(TEXT("FarStartM"), bFarLevel ? 0.0f : 400.0f);
+		Mid->SetScalarParameterValue(TEXT("FarLengthM"), bFarLevel ? 1.0f : 1600.0f);
+		Mid->SetScalarParameterValue(TEXT("CoverStartM"), bFarLevel ? 60000.0f : 30000.0f);
+		Mid->SetScalarParameterValue(TEXT("CoverLengthM"), bFarLevel ? 60000.0f : 30000.0f);
 		Mid->SetVectorParameterValue(TEXT("MapOff"), MapOff);
 		Mid->SetVectorParameterValue(TEXT("MapAxes"), MapAxes);
 		Mid->SetScalarParameterValue(TEXT("PeriodM"), static_cast<float>(simcore::scenery::kGroundTilePeriodM));

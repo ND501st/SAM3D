@@ -24,6 +24,7 @@ namespace simcore
 	struct MapGrid;
 	namespace scenery
 	{
+		struct CoverGrid;
 		struct CoverRaster;
 		struct DressingRules;
 		struct GroundLayerRules;
@@ -202,6 +203,8 @@ private:
 	// The map's dressing (roadmap R6): its rules, the land cover and the trees, built once per map (LoadDressing).
 	std::shared_ptr<const simcore::scenery::DressingRules> DressRules;
 	std::shared_ptr<const simcore::scenery::CoverRaster> Cover;
+	// The far ground's land cover (roadmap T3.2, simcore/scenery/far_cover.hpp): the country's, at 250 m, with the map's fields.
+	std::shared_ptr<const simcore::scenery::CoverGrid> FarCover;
 	std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
 	// The ground's layers (roadmap T1): which layer each land cover cell is drawn with (LoadDressing).
 	std::shared_ptr<const simcore::scenery::GroundLayerRules> GroundLayers;

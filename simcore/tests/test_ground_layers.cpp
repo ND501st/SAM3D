@@ -1,10 +1,12 @@
 // The ground's surface layers (simcore/scenery/ground_layers.hpp, roadmap T1): the rules, the season, and the mask the
 // ground material reads: each cell's layer by its cover and crop, the furrows' heading and the field's own shade.
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <memory>
 #include <string>
 
+#include "simcore/scenery/far_cover.hpp"
 #include "simcore/scenery/ground_layers.hpp"
 #include "simcore/terrain_map.hpp"
 #include "test_framework.hpp"
@@ -286,4 +288,47 @@ SC_TEST("ground layers: the mask carries each cell's layer, its furrows' heading
     }
     SC_EXPECT(pairs > 100);
     SC_EXPECT(same == pairs);
+}
+
+SC_TEST("far cover: the country's land cover over the far ground at 250 m, its fields the map's own fields past the map proper") {
+    std::string e;
+    const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    const std::shared_ptr<const CountryMap> country = LoadCountryMap(kData, "maps/pannonia.json", &e);
+    SC_EXPECT(map != nullptr && country != nullptr);
+    if (!map || !country) return;
+    const auto t0 = std::chrono::steady_clock::now();
+    const CoverGrid far = BakeFarCover(*map, *country, Dressing());
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    SC_EXPECT(far.id == "far");
+    SC_EXPECT(far.cols == 1200 && far.rows == 1200 && far.cell_m == 250.0);
+    SC_EXPECT(far.cover.size() == static_cast<std::size_t>(far.cols) * static_cast<std::size_t>(far.rows));
+    std::size_t by_cover[static_cast<std::size_t>(Cover::Count)] = {};
+    for (const std::uint8_t c : far.cover) ++by_cover[c];
+    std::printf("    the far cover in %.0f ms: %zu field, %zu forest, %zu marsh, %zu town, %zu water cells\n", ms,
+                by_cover[static_cast<std::size_t>(Cover::Field)], by_cover[static_cast<std::size_t>(Cover::Forest)],
+                by_cover[static_cast<std::size_t>(Cover::Marsh)], by_cover[static_cast<std::size_t>(Cover::Town)],
+                by_cover[static_cast<std::size_t>(Cover::Water)]);
+    // Open land is most of the country, and the country has woods, towns and water too.
+    SC_EXPECT(by_cover[static_cast<std::size_t>(Cover::Field)] > far.cover.size() / 2);
+    SC_EXPECT(by_cover[static_cast<std::size_t>(Cover::Forest)] > 0 && by_cover[static_cast<std::size_t>(Cover::Town)] > 0);
+    // The fields are the map's fields: the crop at a field cell is the crop of the same field in the map proper's own cover.
+    const CoverRaster raster = BakeCover(*map, Dressing());
+    const CoverGrid& proper = raster.grids.back();
+    int same = 0, looked = 0;
+    for (int r = 0; r < proper.rows && looked < 4000; r += 17) {
+        for (int c = 0; c < proper.cols && looked < 4000; c += 17) {
+            const double ce = proper.CentreEast(c), cn = proper.CentreNorth(r);
+            const std::size_t fi = far.IndexAt(ce, cn);
+            if (proper.cover[proper.Index(c, r)] != static_cast<std::uint8_t>(Cover::Field) || far.cover[fi] != static_cast<std::uint8_t>(Cover::Field)) continue;
+            ++looked;
+            // The far cell's crop is its centre's field; compare at the far cell's own centre against the proper cell nearest it.
+            const double fe = far.CentreEast(static_cast<int>(std::floor((ce - far.west_m) / far.cell_m))), fn = far.CentreNorth(static_cast<int>(std::floor((cn - far.south_m) / far.cell_m)));
+            same += far.crop[fi] == CropOf(Dressing(), FieldAt(far.fields, fe, fn).id) ? 1 : 0;
+        }
+    }
+    SC_EXPECT(looked > 500);
+    SC_EXPECT(same == looked);
+    // A mask baked from it is the same twice (every client).
+    const GroundMask a = BakeGroundMask(far, Dressing(), Layers(), 288), b = BakeGroundMask(far, Dressing(), Layers(), 288);
+    SC_EXPECT(a.texels == b.texels && a.cols == far.cols);
 }

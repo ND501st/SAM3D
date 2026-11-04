@@ -43,7 +43,7 @@ std::string One(const std::string& anchor, const std::string& rest = "") {
 
 SC_TEST("views: the data loads, with every photo a view names listed with its page, licence and author") {
     const ViewSet set = Views();
-    SC_EXPECT(set.views.size() == 10);
+    SC_EXPECT(set.views.size() == 11);
     for (const ViewDef& v : set.views) {
         SC_EXPECT(!v.photos.empty());
         for (const std::string& id : v.photos) {

@@ -241,6 +241,24 @@ Come back to Opus early if:
   re-read. The views `t31` (against `t4b`): V3 and V10 show straight edges, no 25 m staircase, the furrows turning exactly
   at the edge; the costs equal `t4b`'s (GPU 6.0-7.0 ms, the same within 0.1 ms).
 
+**T3.2**, built in first form (4 Nov 2026):
+- `simcore/scenery/far_cover.hpp` (`BakeFarCover`): the country's land cover (`CountryMap::LandCoverAt`: lake and river as water, marsh,
+  forest, town, open land) over the whole far ground (the map's `far_m`, 150 km each way) at 250 m cells, 1200 x 1200, as one
+  `CoverGrid` ("far") in the map's frame, about a second to bake. Open land is farmland: the field grid is closed-form and goes on
+  past the map proper, so each far cell takes its field's crop and the far ground's fields are the map's fields at the same scale.
+  The mask, the calendar and the material's exact field edges (T3.1) then work on it unchanged.
+- No new material: the far level's tiles wear the same ground material with their own mask and two parameter sets
+  (`ASimMapActor::TexturedGround`). The far level: the albedo's last mip from the first metre (no detail textures that far), the
+  vertex colours only from 60 km. The near levels: the layers' averages carry to 30 km before the vertex colours take over (it was
+  6 km), so the map proper's own edge shows the same colour as the far ground beyond it. Beyond the far level (the country's 1 km
+  grid and the 4 km land) the vertex colours stay.
+- Differences from the plan: no separate `M_SimGroundFar` and no per-layer average-colour table (the albedo array's last mip is
+  that); the far level's fade to vertex colours is 60-120 km, not to the layer averages.
+- A new view, V11 (`v11_map_border`, the map proper's east edge from 600 m up, 3 km short of it): fields and woods go on at the same
+  scale and colour past the edge, no seam. Cost: V9, V10 and the rest within 0.2 ms of `t43b` (GPU 5.9-7.1 ms).
+- Left: the far ground's crops follow the calendar like the near; the far fields near a settlement are not household strips; the
+  country's other levels (beyond 150 km) keep the vertex colours; the far cover is not re-baked on a new day.
+
 **T4.3**, built in first form (4 Nov 2026):
 - `ground_layers.json`'s `summer` and `autumn` are gone: each crop has `states`, the layer it starts the year with and then
   states each with a window of days (`from_day`, `to_day`, in order, not overlapping). A field enters a state on a day of
