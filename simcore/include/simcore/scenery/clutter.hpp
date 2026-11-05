@@ -29,16 +29,29 @@ namespace simcore {
 namespace scenery {
 
 struct ClutterKind {
-    std::string id, part;
+    std::string id, part;  // its first (or only) part
+    // Its parts, each plant drawing one by its own hash ("part" may be a list of them: a crop's cards in variants).
+    // (No mirroring: a card drawn with a negative scale in Unreal has its normals turned from the light and draws black,
+    // plot 3's c7.)
+    std::vector<std::string> variants;
     float height_min_m = 0.1f, height_max_m = 0.3f, width_min_m = 0.1f, width_max_m = 0.3f;
     double brightness = 0.0;
     // Lies along the parcel's rows, turned at most this far either way (0..90 degrees); below 0 (the default), any way.
     // Off a field the yaw is any way.
     double along_rows_deg = -1.0;
+    // Drawn in full within this distance of the ring's centre and not at all beyond it (0, the default: thinned by the
+    // ring's falloff): a standing crop's plants, which stand in for its block near the camera (scenery/standing_crops.hpp).
+    double near_m = 0.0;
+    // The height drawn is a share of the field's stand on the day (height_m's two numbers are shares), none where nothing
+    // stands.
+    bool to_stand = false;
 };
 
 struct ClutterRules {
     double ring_m = 100.0, cell_m = 4.0, falloff_m = 30.0, rebuild_m = 16.0;
+    // The crop blocks dither away near the camera (Unreal's M_SimMapCrop): gone within the first, whole from the second.
+    // The ring lags the camera by up to rebuild_m, so the second plus rebuild_m must lie within every near kind's near_m.
+    double crop_fade_from_m = 0.0, crop_fade_to_m = 0.0;
     std::vector<ClutterKind> kinds;
     std::vector<std::string> parts;  // the distinct part keys, in first-use order
     RecipeSet recipes;               // where the kinds go (LoadClutterRecipes)
@@ -60,6 +73,7 @@ struct ClutterPlant {
     double east_m = 0.0, north_m = 0.0;
     float height_m = 0.0f, width_m = 0.0f, yaw_rad = 0.0f, brightness = 1.0f;
     std::uint8_t kind = 0;
+    std::uint8_t part = 0;  // the part it is drawn as: an index into ClutterRules::parts
 };
 
 namespace clutter_detail {
@@ -116,10 +130,18 @@ inline bool LoadClutterRules(const std::string& path_or_json, ClutterRules& out,
         ClutterKind c;
         c.id = kinds->keys[i];
         const json::Value* part = k.Find("part");
-        if (part == nullptr || !part->Is(json::Type::String) || std::find(known.begin(), known.end(), part->string) == known.end()) {
-            return Fail(error, c.id + ": part is not a part the map draws (MapMeshParts)");
+        const auto drawn = [&](const json::Value& v) { return v.Is(json::Type::String) && std::find(known.begin(), known.end(), v.string) != known.end(); };
+        if (part != nullptr && part->Is(json::Type::Array)) {
+            if (part->items.empty() || part->items.size() > 8) return Fail(error, c.id + ": part is a list of one to eight parts");
+            for (const json::Value& v : part->items) {
+                if (!drawn(v)) return Fail(error, c.id + ": part is not a part the map draws (MapMeshParts)");
+                c.variants.push_back(v.string);
+            }
+        } else {
+            if (part == nullptr || !drawn(*part)) return Fail(error, c.id + ": part is not a part the map draws (MapMeshParts)");
+            c.variants.push_back(part->string);
         }
-        c.part = part->string;
+        c.part = c.variants.front();
         if (!clutter_detail::Range(k.Find("height_m"), c.height_min_m, c.height_max_m)) return Fail(error, c.id + ": height_m is two metres in 0..4, low first");
         if (!clutter_detail::Range(k.Find("width_m"), c.width_min_m, c.width_max_m)) return Fail(error, c.id + ": width_m is two metres in 0..4, low first");
         const json::Value* bright = k.Find("brightness");
@@ -129,8 +151,32 @@ inline bool LoadClutterRules(const std::string& path_or_json, ClutterRules& out,
             if (!along->Is(json::Type::Number) || along->number < 0.0 || along->number > 90.0) return Fail(error, c.id + ": along_rows_deg is not in 0..90");
             c.along_rows_deg = along->number;
         }
-        if (r.PartIndex(c.part) < 0) r.parts.push_back(c.part);
+        if (const json::Value* near = k.Find("near_m")) {
+            if (!near->Is(json::Type::Number) || near->number < 5.0 || near->number > r.ring_m) return Fail(error, c.id + ": near_m is not in 5..ring_m");
+            c.near_m = near->number;
+        }
+        if (const json::Value* to = k.Find("to_stand")) {
+            if (!to->Is(json::Type::Bool)) return Fail(error, c.id + ": to_stand is not true or false");
+            c.to_stand = to->boolean;
+            if (c.to_stand && c.height_max_m > 1.5f) return Fail(error, c.id + ": with to_stand, height_m is two shares of the stand in 0..1.5");
+        }
+        for (const std::string& v : c.variants) {
+            if (r.PartIndex(v) < 0) r.parts.push_back(v);
+        }
         r.kinds.push_back(c);
+    }
+    if (const json::Value* fade = root.Find("crop_fade_m")) {
+        if (!fade->Is(json::Type::Array) || fade->items.size() != 2 || !fade->items[0].Is(json::Type::Number) || !fade->items[1].Is(json::Type::Number) ||
+            fade->items[0].number < 0.0 || fade->items[1].number <= fade->items[0].number) {
+            return Fail(error, "crop_fade_m is two distances, the first lower");
+        }
+        r.crop_fade_from_m = fade->items[0].number;
+        r.crop_fade_to_m = fade->items[1].number;
+        for (const ClutterKind& c : r.kinds) {
+            if (c.near_m > 0.0 && r.crop_fade_to_m + r.rebuild_m > c.near_m) {
+                return Fail(error, c.id + ": near_m is short of crop_fade_m's second distance plus rebuild_m (the block would stand bare)");
+            }
+        }
     }
     out = r;
     return true;
@@ -158,9 +204,16 @@ inline void ClutterAround(const ClutterRules& rules, const CoverRaster& cover, c
     std::vector<RecipeCandidate> found;
     // A candidate stays inside the ring while its fixed threshold is under the falloff at its distance: the ring moving
     // thins and thickens the plants one by one instead of reshuffling a cell.
+    // Within the farthest near kind's reach every candidate is looked at (a near kind is kept in full); the others are
+    // thinned after, by their thresholds.
+    double near_most = 0.0;
+    for (const ClutterKind& k : rules.kinds) near_most = std::max(near_most, k.near_m);
+    const auto falloff = [&](double dp, double threshold) {
+        return dp <= rules.ring_m && threshold < 1.0 / (1.0 + (dp / rules.falloff_m) * (dp / rules.falloff_m));
+    };
     const auto keep = [&](double e, double n, double threshold) {
         const double dp = std::hypot(e - east_m, n - north_m);
-        return dp <= rules.ring_m && threshold < 1.0 / (1.0 + (dp / rules.falloff_m) * (dp / rules.falloff_m));
+        return dp <= near_most || falloff(dp, threshold);
     };
     for (std::int64_t cy = r0; cy <= r1; ++cy) {
         for (std::int64_t cx = c0; cx <= c1; ++cx) {
@@ -171,11 +224,14 @@ inline void ClutterAround(const ClutterRules& rules, const CoverRaster& cover, c
             for (const RecipeCandidate& c : found) {
                 if (c.kind < 0 || static_cast<std::size_t>(c.kind) >= rules.kinds.size()) continue;
                 const ClutterKind& kind = rules.kinds[static_cast<std::size_t>(c.kind)];
+                const double dp = std::hypot(c.east_m - east_m, c.north_m - north_m);
+                if (kind.near_m > 0.0 ? dp > kind.near_m : !falloff(dp, c.threshold)) continue;
+                if (kind.to_stand && c.stand_m <= 0.0) continue;
                 ClutterPlant plant;
                 plant.east_m = c.east_m;
                 plant.north_m = c.north_m;
                 const auto draw = [&](std::uint64_t k) { return Unit(recipe_detail::Mix(c.hash ^ (0xA5A5u + k))); };
-                plant.height_m = static_cast<float>(kind.height_min_m + (kind.height_max_m - kind.height_min_m) * draw(1));
+                plant.height_m = static_cast<float>((kind.height_min_m + (kind.height_max_m - kind.height_min_m) * draw(1)) * (kind.to_stand ? c.stand_m : 1.0));
                 plant.width_m = static_cast<float>(kind.width_min_m + (kind.width_max_m - kind.width_min_m) * draw(2));
                 // Unreal turns a part's local x (north) clockwise by the yaw: the heading lays it along the rows; either
                 // end first, as a stalk falls.
@@ -188,6 +244,8 @@ inline void ClutterAround(const ClutterRules& rules, const CoverRaster& cover, c
                 }
                 plant.brightness = static_cast<float>(1.0 + (draw(4) - 0.5) * 2.0 * kind.brightness);
                 plant.kind = static_cast<std::uint8_t>(c.kind);
+                const std::size_t variant = std::min(kind.variants.size() - 1, static_cast<std::size_t>(draw(6) * static_cast<double>(kind.variants.size())));
+                plant.part = static_cast<std::uint8_t>(std::max(0, rules.PartIndex(kind.variants[variant])));
                 out.push_back(plant);
             }
         }

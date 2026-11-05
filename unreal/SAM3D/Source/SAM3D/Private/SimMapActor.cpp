@@ -1799,19 +1799,36 @@ void ASimMapActor::BuildCrops(const simcore::MapFrameLink& Link, const FString& 
 		E = FMath::Max(E, G.west_m + G.cell_m * G.cols);
 		N = FMath::Max(N, G.south_m + G.cell_m * G.rows);
 	}
-	// Dry maize standing: the tops a grey tan, the faces a little darker (linear; a field's shade varies by its number).
-	const std::array<float, 3> Top{0.26f, 0.20f, 0.11f}, Side{0.24f, 0.18f, 0.095f};
+	// Dry maize standing: the tops a warm tan, the faces a little darker (linear; a field's shade varies by its number),
+	// matched by eye to the maize cards that stand in near the camera (plot 3, c7).
+	const std::array<float, 3> Top{0.30f, 0.225f, 0.11f}, Side{0.27f, 0.20f, 0.10f};
 	constexpr double TileM = 1000.0;
 	Crops = NewObject<UProceduralMeshComponent>(this, TEXT("MapCrops"));
 	Crops->SetupAttachment(Root);
 	Crops->SetCastShadow(true);
 	Crops->RegisterComponent();
+	// M_SimMapCrop draws the blocks as plants (their UVs: StandingCrops::BlockMesh) with ragged tops, and near the camera
+	// dithers them away (clutter.json's crop_fade_m) so the clutter ring's crop plants stand in their place; without the
+	// ring the blocks are drawn whole, and without the material in the plain vertex colour material.
+	UMaterialInterface* CropMaterial = FSimMapAssets::Material();
+	UMaterialInterface* Plants = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapCrop.M_SimMapCrop"), nullptr, LOAD_Quiet | LOAD_NoWarn);
+	if (Plants != nullptr)
+	{
+		simcore::scenery::ClutterRules Rules;
+		const FString ClutterPath = FPaths::Combine(DataDirectory, TEXT("scenery/clutter.json"));
+		const bool bFade = bDrawTrees && simcore::scenery::LoadClutterRules(TCHAR_TO_UTF8(*ClutterPath), Rules) && Rules.crop_fade_to_m > 0.0;
+		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Plants, this);
+		Mid->SetScalarParameterValue(TEXT("FadeFromCm"), bFade ? static_cast<float>(Rules.crop_fade_from_m * 100.0) : -2.0f);
+		Mid->SetScalarParameterValue(TEXT("FadeToCm"), bFade ? static_cast<float>(Rules.crop_fade_to_m * 100.0) : -1.0f);
+		CropMaterial = Mid;
+	}
 	int32 Section = 0, Triangles = 0;
 	for (double Ts = S; Ts < N; Ts += TileM)
 	{
 		for (double Tw = W; Tw < E; Tw += TileM)
 		{
-			const simcore::scenery::TriMesh T = Standing->BlockMesh(Tw, Ts, Tw + TileM, Ts + TileM, Top, Side);
+			std::vector<std::array<float, 2>> Uv;
+			const simcore::scenery::TriMesh T = Standing->BlockMesh(Tw, Ts, Tw + TileM, Ts + TileM, Top, Side, Plants != nullptr ? &Uv : nullptr);
 			if (T.Empty())
 			{
 				continue;
@@ -1835,8 +1852,14 @@ void ASimMapActor::BuildCrops(const simcore::MapFrameLink& Link, const FString& 
 			{
 				Tris.Add(static_cast<int32>(I));
 			}
-			Crops->CreateMeshSection_LinearColor(Section, Verts, Tris, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
-			Crops->SetMaterial(Section, FSimMapAssets::Material());
+			TArray<FVector2D> Uvs;
+			Uvs.Reserve(static_cast<int32>(Uv.size()));
+			for (const std::array<float, 2>& U : Uv)
+			{
+				Uvs.Add(FVector2D(U[0], U[1]));
+			}
+			Crops->CreateMeshSection_LinearColor(Section, Verts, Tris, Normals, Uvs, Colours, TArray<FProcMeshTangent>(), false);
+			Crops->SetMaterial(Section, CropMaterial);
 			++Section;
 			Triangles += static_cast<int32>(T.Triangles());
 		}

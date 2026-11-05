@@ -328,7 +328,8 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
 // The ground clutter of the camera's ring (roadmap T6.1, scenery/clutter.hpp): a part's mesh at LOD 0-1 (empty beyond),
 // base at the origin, unit height, a unit across. "clutter_grass" a tuft of dry grass, "clutter_straw" a stubble clump or a
 // maize stump (a short stalk cut flat), "clutter_reed" a reed or a dry stalk with its seed head, "clutter_clod" a clod of
-// the plough's (a solid, as a clod is: no card), "clutter_stalk" a maize stalk lying on the stubble. Placeholders: spiky
+// the plough's (a solid, as a clod is: no card), "clutter_stalk" a maize stalk lying on the stubble, "clutter_maize" a
+// standing maize plant ("clutter_maize_b" to "_f" its other cards, the same placeholder). Placeholders: spiky
 // solids that read as ground cover from a metre or more.
 inline TriMesh ClutterMesh(const std::string& part, int lod) {
     using namespace map_mesh_detail;
@@ -351,6 +352,12 @@ inline TriMesh ClutterMesh(const std::string& part, int lod) {
         const int sides = lod == 0 ? 4 : 3;
         b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 0.7, 0.35), Ring(sides, 0.9, 0.2), Ring(sides, 1.0, 0.0)}, {kReedFoot, kReedFoot, kReedHead}, kReedFoot,
                kReedHead);
+    } else if (part.rfind("clutter_maize", 0) == 0) {
+        // A standing maize plant, dry: a thin stalk the full height, its leaves a narrow spindle from a fifth of the way
+        // up (the card, art/clutter/maize_card, replaces it).
+        const int sides = lod == 0 ? 4 : 3;
+        b.Loft({Ring(sides, 0.0, 0.03), Ring(sides, 0.2, 0.03), Ring(sides, 0.45, 0.5, 0.5), Ring(sides, 0.8, 0.3, 1.0), Ring(sides, 1.0, 0.02)},
+               {kReedFoot, kReedFoot, kReedHead, kReedHead}, kReedFoot, kReedHead);
     } else if (part == "clutter_stalk") {
         // A maize stalk the harvester cut and threw down, lying along local x (a unit long, 0.028 across, a unit thick, so
         // the instance's width is its length and its height its thickness), broken once so it is not a ruler.
@@ -634,7 +641,7 @@ inline TriMesh MapPartMesh(const std::string& part, int variant, int lod) {
 inline std::vector<std::string> MapMeshParts() {
     std::vector<std::string> out;
     for (int k = 0; k < static_cast<int>(TreeKind::Count); ++k) out.push_back(std::string("tree_") + TreeKindName(static_cast<TreeKind>(k)));
-    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk"}) out.push_back(p);
+    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk", "clutter_maize", "clutter_maize_b", "clutter_maize_c", "clutter_maize_d", "clutter_maize_e", "clutter_maize_f"}) out.push_back(p);
     return out;
 }
 

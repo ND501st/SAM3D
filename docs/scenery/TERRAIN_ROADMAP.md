@@ -238,6 +238,76 @@ prop test (after L9 starts).
   `crew_balance` (no map) unchanged. `em_demo` and `air_war_bench` build no `MapTerrain` with crops, so they are
   untouched by construction.
 
+### A.3.6 Plot 3, standing maize near the camera (5 Nov 2026)
+
+- **The card** (`tools/make_cards.py` `maize`, `art/clutter/maize_card`, 512 x 2048 for a card about four times as tall as
+  wide): two or three dry plants, a buff stalk, a dozen leaves arching out and hanging (one in three limp down the stalk,
+  greyer and darker low down), an ear in its husk, a tassel. Our own work, registered (`assets.json`, licence Own) as the
+  part `clutter_maize`, whose procedural placeholder is a thin spindle.
+- **Near kinds** (`clutter.hpp`): a kind with `near_m` is drawn in full within it of the ring's centre and not beyond; with
+  `to_stand` its height is a share of its field's stand on the day (`RecipeCandidate::stand_m`). The `dry_stalks` recipe
+  plants the maize kind in rows 75 cm apart, a card every half metre (60 m, 0.90-1.06 of the stand).
+- **The block dithers away near the camera** (`M_SimMapCrop`, `tools/ue_build_crop_material.py`; `BuildCrops` sets it from
+  `clutter.json`'s `crop_fade_m`, 28-42 m, when the ring is drawn). The ring lags the camera by up to `rebuild_m`, so the
+  loader refuses a fade whose far end plus that lag is beyond a near kind's reach (the block would stand bare).
+- **Cost**: a ring on a dry maize field holds 30,147 cards (32,000 in all, 18 ms); 26,682 a hectare within 25 m
+  (`test_clutter.cpp`).
+- **c3**: from the eye camera the face is rows of dry stalks and hanging leaves at its 2.4 m; from 25 m the block dissolves
+  within some 40 m into the cards (the dither is grainy in a single frame); from 150 m the block, as before.
+- **Left**: the seam where the cards end and the block takes over along a face is visible (the block's flat tan against
+  the cards); the block's top from above is a flat plane (rows in its colour, a darker shade at its edges); the cards are
+  regular (leaves in near-mirror pairs, one card drawn: a second variant); sunflower fields in dry_stalks wear the maize
+  card; the imported materials miss Unreal's Nanite and instanced usage flags (as the earlier cards and trees: a packaged
+  build would draw them in the default material).
+
+### A.3.7 Plot 3, the block drawn as plants (5 Nov 2026)
+
+- **How games do it**: near plants as models or cards, far ones as billboards or baked impostors, dithered between
+  (Epic's Impostor Baker; LOD write-ups); nothing published on maize itself. The block is our far form, so it should look
+  like the cards it hands over to: the seam was the block's flat tan, not the hand-over.
+- **The block's UVs** (`StandingCrops::BlockMesh` with `uvs`): on a wall, metres along its line and the height as a share
+  of the stand; on a top, metres along the field's rows and across them; wrapped by whole periods of the patterns (230 m,
+  225 m) for a GPU's floats. In that form the walls rise to 1.06 of the stand (`kFringe`) and the top lies at 0.88
+  (`kTopShare`), so the walls' top can be cut ragged over the top; the sight lines' obstacle stays the stand.
+- **`M_SimMapCrop` draws the plants** (two HLSL nodes): on a wall a plant every 23 cm with its own tone, a stalk, a dark gap
+  where the rows go in, darker at the foot, its top cut at its own height (0.86-1.06); on the top the rows faint and two
+  octaves of value noise (plants leaning together, gaps); the fine detail fades where a pixel spans it (`fwidth`), so afar
+  it averages instead of shimmering. Without the ring the block is still drawn this way, whole.
+- **c4** (sines on the top): a hard corduroy from 25 m and a herringbone from 150 m. **c6** (value noise, the rows faint):
+  from 150 m a lumpy canopy; from 25 m faint rows and patches; at the eye camera the face beyond the cards is stalks with
+  a ragged top in their tone, the hand-over soft.
+- **Left**: a second card (the leaves in near-mirror pairs read regular in the first rows); the canopy is greyer than the
+  near cards from above; sunflower wears the maize; the cards' and trees' Nanite and instanced usage flags.
+
+### A.3.8 Plot 3, a second card and the block's tone (5 Nov 2026)
+
+- **A kind's part may be a list** (`clutter.json`, 1-8 parts): each plant draws one by its own hash, so the same plant
+  wears the same card wherever the ring is. Maize has two: `maize_card` and `maize_card_b` (`tools/make_cards.py`,
+  seeds 23 and 41; the second limper, more leaves to one side, near half its plants snapped at 0.68-0.80 of their height
+  with no tassel). In the ring 15001 of 30147 plants wear the second card.
+- **Mirroring tried and dropped** (c7): an instance scaled by −1 across turns its card's normals from the sun and half the
+  plants drew black. Variety comes from cards, not mirrored instances.
+- **The block's tone** warmed to the cards' (top 0.30/0.225/0.11, walls 0.27/0.20/0.10).
+- **c8**: no plant drawn black; at the eye camera the two cards mix in the first rows and the face beyond is the same tan;
+  from 25 m the cards fade into the block's rows without a band of colour.
+- **Left**: sunflower wears the maize; the cards' and trees' Nanite and instanced usage flags; the field's top reads flat
+  from the eye height at the far edge (a few metres of tassels standing above it would break the line).
+
+### A.3.9 Plot 3, six maize cards of uneven height and shade (6 Nov 2026)
+
+- **The owner, 6 Nov 2026**: four more maize plants, of more drastic varying heights and slightly brighter or darker, for
+  less uniformity.
+- **Four cards more** (`tools/make_cards.py` `maize(heights=, tone=)`, seeds 57, 73, 89, 97): `maize_card_c` stunted (plants
+  0.48-0.66 of the card, darker 0.84), `_d` the tallest (0.95-1.0, paler 1.12), `_e` uneven (each plant 0.45-1.0, 0.92),
+  `_f` middling (0.66-0.84, paler 1.07, limp, a top snapped now and then). A stunted plant is smaller all over (its leaves,
+  stalk, ear and tassel by its height); `tint` lifts a card towards a pale buff or sinks it towards a damp brown. The first
+  two cards are drawn byte for byte as before.
+- **The kind draws six** (`clutter.json`); in the test's ring each card takes a sixth (5077, 5047, 5022, 5049, 5030, 4922 of
+  30147). The placeholder `clutter_maize*` mesh serves all six.
+- **c9**: the front rows ragged, short and tall plants and darker and paler ones side by side, where c8 was an even face.
+- **Left**: the block behind still stands at one height (the stand), so its top line beyond the cards stays even; a
+  height that varies across the field (in simcore's obstacle too) would carry the cards' unevenness out to the far edge.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

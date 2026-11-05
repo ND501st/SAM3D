@@ -112,6 +112,90 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "A hornbeam of twig cards (leaf photographs composed into twigs by tools/leaf_atlas.py), the far level (about 170 triangles): 150-600 m. Fab Standard licence for the leaf photographs (not redistributable): files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "id": "maize_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maize_card/maize_card/StaticMeshes/maize_card.maize_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-05",
+      "sha256": "c5393b1819da83a49cbbcf6efc77bf76fbc4472d13d096ab91f2e1f66371d76e",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing maize dried before the harvest, two or three plants: two crossed cards with an alpha texture drawn by tools/make_cards.py, drawn in rows near the camera where the crop block dithers away (data/scenery/clutter.json's maize kind)."
+    },
+    {
+      "id": "maize_card_b",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maize_card_b/maize_card_b/StaticMeshes/maize_card_b.maize_card_b",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-05",
+      "sha256": "5882623f5cdb30c77d56de05a937478138b6e1aa2c475f6a6338c96b03fab5fa",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "The second standing maize card: plants drawn less in order (more leaves limp, some on the same side running, a top snapped over), so the rows do not repeat one card (data/scenery/clutter.json's maize kind draws one of its cards per plant)."
+    },
+    {
+      "id": "maize_card_c",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maize_card_c/maize_card_c/StaticMeshes/maize_card_c.maize_card_c",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "5c98a07437bc1cd198f4f8b1be779005eaa1175842a5fefc7b6c38cc5b3b2e6c",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing maize, stunted: plants half to two thirds of the card's height, a shade darker (a wet hollow or a late sowing); one of the maize kind's cards."
+    },
+    {
+      "id": "maize_card_d",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maize_card_d/maize_card_d/StaticMeshes/maize_card_d.maize_card_d",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "8133463fb0c6ce0cad84fca0892db319e351ae6b18803e7028772fa53e20f9b9",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing maize, the tallest: plants the card's full height, a shade paler (dried out first); one of the maize kind's cards."
+    },
+    {
+      "id": "maize_card_e",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maize_card_e/maize_card_e/StaticMeshes/maize_card_e.maize_card_e",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "f35aec7e1f0f76ae0b00f636c50a0ae4d7775a6cf1be027c61b26455329b8fc5",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing maize, uneven: each plant its own height from under half to full, slightly darker; one of the maize kind's cards."
+    },
+    {
+      "id": "maize_card_f",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maize_card_f/maize_card_f/StaticMeshes/maize_card_f.maize_card_f",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "4a160ecbbd61ac0e38e6cfb067643ceb7a2657f3917810581ec8f4e44db2e4c7",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing maize, middling: plants two thirds to most of the card's height, a shade paler, more leaves hanging and a top snapped now and then; one of the maize kind's cards."
     }
   ],
   "parts": {
@@ -183,6 +267,24 @@
     },
     "clutter_stalk": {
       "asset": null
+    },
+    "clutter_maize": {
+      "asset": "maize_card"
+    },
+    "clutter_maize_b": {
+      "asset": "maize_card_b"
+    },
+    "clutter_maize_c": {
+      "asset": "maize_card_c"
+    },
+    "clutter_maize_d": {
+      "asset": "maize_card_d"
+    },
+    "clutter_maize_e": {
+      "asset": "maize_card_e"
+    },
+    "clutter_maize_f": {
+      "asset": "maize_card_f"
     }
   }
 }

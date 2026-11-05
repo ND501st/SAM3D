@@ -274,6 +274,29 @@ SC_TEST("standing crops: the block Unreal draws covers what stands, to the squar
     SC_EXPECT(standing > 50000);
     SC_EXPECT(std::fabs(top_area - static_cast<double>(standing)) < 0.003 * static_cast<double>(standing));
     SC_EXPECT(walls > 0 && wall_wrong * 100 <= walls);
+    // The form for a material: a UV for every vertex; a top under the fringe at kTopShare of the stand, its UV the rows'
+    // frame; walls from 0.3 m under the ground to the fringe, their v the height as a share of the stand, their u metres
+    // along them.
+    std::vector<std::array<float, 2>> uvs;
+    const TriMesh f = r.crops->BlockMesh(w, s, w + 1000.0, s + 1000.0, {0.2f, 0.15f, 0.08f}, {0.15f, 0.11f, 0.06f}, &uvs);
+    SC_EXPECT(uvs.size() == f.positions.size() && f.indices.size() == m.indices.size());
+    std::size_t tops_wrong = 0, walls_wrong = 0;
+    for (std::size_t i = 0; i < f.positions.size() && i < uvs.size(); ++i) {
+        const Vec3& p = f.positions[i];
+        const double stand = r.crops->StandAt(p.x - 0.05 * f.normals[i].x, p.y - 0.05 * f.normals[i].y);
+        if (stand <= 0.0) continue;  // a corner on a field's very edge
+        const double over = p.z - r.map->GroundHeight(p.x, p.y);
+        if (f.normals[i].z > 0.5) {
+            tops_wrong += std::fabs(over - StandingCrops::kTopShare * stand) < 1e-6 ? 0 : 1;
+        } else {
+            const double v = uvs[i][1];
+            const bool foot = std::fabs(v + 0.3 / stand) < 1e-4 && std::fabs(over + 0.3) < 1e-6;
+            const bool head = std::fabs(v - StandingCrops::kFringe) < 1e-4 && std::fabs(over - StandingCrops::kFringe * stand) < 1e-6;
+            walls_wrong += foot || head ? 0 : 1;
+        }
+    }
+    std::printf("    with UVs: %zu vertices, %zu tops and %zu walls off their heights\n", f.positions.size(), tops_wrong, walls_wrong);
+    SC_EXPECT(tops_wrong * 200 <= f.positions.size() && walls_wrong * 200 <= f.positions.size());
 }
 
 SC_TEST("standing crops: a scenario on the map has them for its date, and a session's ground carries them") {

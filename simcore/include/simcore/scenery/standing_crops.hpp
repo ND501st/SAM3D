@@ -182,7 +182,14 @@ public:
     // 0.3 m under the ground on every edge beyond which the crop stands lower. Map metres, heights above sea level; the
     // winding faces out by (b - a) x (c - a) in east, north, up. The colours: the crops' tops and their sides, a field's
     // shade varied by its number.
-    TriMesh BlockMesh(double w, double s, double e, double n, const std::array<float, 3>& top_colour, const std::array<float, 3>& side_colour) const {
+    //
+    // With `uvs`, one pair per vertex for a material to draw the plants by (Unreal's M_SimMapCrop): on a wall, metres along
+    // its line and the height over the ground as a share of the stand; on a top, metres along the field's rows and across
+    // them. The walls rise to kFringe of the stand and the top lies at kTopShare of it, so a material can cut the walls' top
+    // ragged (the plants' tops) over the top. The sight lines' obstacle stays the stand.
+    static constexpr double kFringe = 1.06, kTopShare = 0.88;
+    TriMesh BlockMesh(double w, double s, double e, double n, const std::array<float, 3>& top_colour, const std::array<float, 3>& side_colour,
+                      std::vector<std::array<float, 2>>* uvs = nullptr) const {
         TriMesh m;
         if (!Any()) return m;
         for (std::size_t gi = 0; gi < cover_->grids.size(); ++gi) {
@@ -202,7 +209,7 @@ public:
                         const CoverGrid& o = cover_->grids[k];
                         rects = Subtract(rects, {o.west_m, o.south_m, o.west_m + o.cell_m * o.cols, o.south_m + o.cell_m * o.rows});
                     }
-                    for (const std::array<double, 4>& rc : rects) AddCellBlock(m, g, rc, (b & kMixed) != 0, top_colour, side_colour);
+                    for (const std::array<double, 4>& rc : rects) AddCellBlock(m, g, rc, (b & kMixed) != 0, top_colour, side_colour, uvs);
                 }
             }
         }
@@ -246,11 +253,11 @@ private:
     }
 
     void AddCellBlock(TriMesh& m, const CoverGrid& g, const std::array<double, 4>& rc, bool mixed, const std::array<float, 3>& top_colour,
-                      const std::array<float, 3>& side_colour) const {
+                      const std::array<float, 3>& side_colour, std::vector<std::array<float, 2>>* uvs) const {
         const std::vector<std::array<double, 2>> square{{rc[0], rc[1]}, {rc[2], rc[1]}, {rc[2], rc[3]}, {rc[0], rc[3]}};
         if (!mixed) {
             const FieldCell f = FieldAt(g.fields, 0.5 * (rc[0] + rc[2]), 0.5 * (rc[1] + rc[3]));
-            AddPrism(m, square, FieldStand(f), f.id, top_colour, side_colour);
+            AddPrism(m, square, FieldStand(f), f, top_colour, side_colour, uvs);
             return;
         }
         // Each field a sample finds in the cell, cut to its rectangle and estate.
@@ -277,28 +284,37 @@ private:
                 poly = Clip(poly, -1.0, 0.0, -ew);
                 poly = Clip(poly, 0.0, 1.0, es + g.fields.estate_m);
                 poly = Clip(poly, 0.0, -1.0, -es);
-                if (poly.size() >= 3) AddPrism(m, poly, stand, f.id, top_colour, side_colour);
+                if (poly.size() >= 3) AddPrism(m, poly, stand, f, top_colour, side_colour, uvs);
             }
         }
     }
 
-    void AddPrism(TriMesh& m, const std::vector<std::array<double, 2>>& poly, double stand, std::uint64_t field_id, const std::array<float, 3>& top_colour,
-                  const std::array<float, 3>& side_colour) const {
+    void AddPrism(TriMesh& m, const std::vector<std::array<double, 2>>& poly, double stand, const FieldCell& field, const std::array<float, 3>& top_colour,
+                  const std::array<float, 3>& side_colour, std::vector<std::array<float, 2>>* uvs) const {
         if (stand <= 0.0 || poly.size() < 3) return;
-        const float shade = static_cast<float>(0.9 + 0.2 * Unit24(Hash32(static_cast<std::uint32_t>(field_id >> 32) ^ 0x5EEDu)));
+        const float shade = static_cast<float>(0.9 + 0.2 * Unit24(Hash32(static_cast<std::uint32_t>(field.id >> 32) ^ 0x5EEDu)));
         const std::array<float, 3> top{top_colour[0] * shade, top_colour[1] * shade, top_colour[2] * shade};
         const std::array<float, 3> side{side_colour[0] * shade, side_colour[1] * shade, side_colour[2] * shade};
-        const auto vertex = [&](double e, double n, double z, const Vec3& normal, const std::array<float, 3>& colour) {
+        const auto vertex = [&](double e, double n, double z, const Vec3& normal, const std::array<float, 3>& colour, double u, double v) {
             // The crop's tone mottled over tens of metres (thinner, drier, lodged patches), the same at a point for every cell.
             const float mottle = static_cast<float>(0.82 + 0.36 * noise::Fbm(0xC0A2Eull, e, n, 60.0, 3));
             m.positions.push_back(Vec3{e, n, z});
             m.normals.push_back(normal);
             m.colours.push_back({colour[0] * mottle, colour[1] * mottle, colour[2] * mottle});
+            if (uvs != nullptr) uvs->push_back({static_cast<float>(u), static_cast<float>(v)});
             return static_cast<std::uint32_t>(m.positions.size() - 1);
         };
-        // The top, a fan, at the crop's height over the ground at each corner.
+        const bool fringe = uvs != nullptr;  // the drawn form for a material: walls to the fringe, the top under it
+        const double top_at = fringe ? kTopShare * stand : stand, wall_to = fringe ? kFringe * stand : stand;
+        // The top, a fan, at the crop's height over the ground at each corner; its UV along the rows and across them.
+        const double sh = std::sin(field.heading_rad), ch = std::cos(field.heading_rad);
+        // UVs kept small for a GPU's floats: wrapped by whole periods of the material's patterns (225 m on a top: rows
+        // 0.75 m, plants 0.5 m; 230 m along a wall: plants 0.23 m), the same for every vertex of a face.
+        const double u0 = 225.0 * std::floor((poly[0][0] * sh + poly[0][1] * ch) / 225.0), v0 = 225.0 * std::floor((poly[0][0] * ch - poly[0][1] * sh) / 225.0);
         const std::uint32_t first = static_cast<std::uint32_t>(m.positions.size());
-        for (const std::array<double, 2>& p : poly) vertex(p[0], p[1], map_->GroundHeight(p[0], p[1]) + stand, Vec3{0.0, 0.0, 1.0}, top);
+        for (const std::array<double, 2>& p : poly) {
+            vertex(p[0], p[1], map_->GroundHeight(p[0], p[1]) + top_at, Vec3{0.0, 0.0, 1.0}, top, p[0] * sh + p[1] * ch - u0, p[0] * ch - p[1] * sh - v0);
+        }
         for (std::size_t i = 1; i + 1 < poly.size(); ++i) {
             m.indices.push_back(first);
             m.indices.push_back(first + static_cast<std::uint32_t>(i));
@@ -313,10 +329,13 @@ private:
             const Vec3 out{dn / len, -de / len, 0.0};  // right of a -> b: outward for a counter-clockwise polygon
             if (StandAt(0.5 * (a[0] + b[0]) + 0.05 * out.x, 0.5 * (a[1] + b[1]) + 0.05 * out.y) >= stand - 1e-6) continue;
             const double ga = map_->GroundHeight(a[0], a[1]), gb = map_->GroundHeight(b[0], b[1]);
-            const std::uint32_t k = vertex(a[0], a[1], ga - 0.3, out, side);
-            vertex(b[0], b[1], gb - 0.3, out, side);
-            vertex(b[0], b[1], gb + stand, out, side);
-            vertex(a[0], a[1], ga + stand, out, side);
+            // Along the wall's line (the same along a straight edge cut into cells), the height as a share of the stand.
+            const double along = a[0] * de / len + a[1] * dn / len;
+            const double ua = along - 230.0 * std::floor(along / 230.0), ub = ua + len, low = -0.3 / stand;
+            const std::uint32_t k = vertex(a[0], a[1], ga - 0.3, out, side, ua, low);
+            vertex(b[0], b[1], gb - 0.3, out, side, ub, low);
+            vertex(b[0], b[1], gb + wall_to, out, side, ub, wall_to / stand);
+            vertex(a[0], a[1], ga + wall_to, out, side, ua, wall_to / stand);
             for (const std::uint32_t t : {k, k + 1, k + 2, k, k + 2, k + 3}) m.indices.push_back(t);
         }
     }

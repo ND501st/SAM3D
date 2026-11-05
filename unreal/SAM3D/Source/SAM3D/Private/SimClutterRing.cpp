@@ -149,7 +149,8 @@ void USimClutterRing::Rebuild(double MapEast, double MapNorth)
 	Data.SetNum(Parts.Num());
 	for (const simcore::scenery::ClutterPlant& Plant : Plants)
 	{
-		const int32 Part = Rules->PartIndex(Rules->kinds[Plant.kind].part);
+		// The part the plant drew among its kind's variants.
+		const int32 Part = Plant.part;
 		if (Part < 0 || Part >= Parts.Num())
 		{
 			continue;

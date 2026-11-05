@@ -99,6 +99,7 @@ struct RecipeCandidate {
     int kind = -1;
     bool on_field = false;
     double heading_rad = 0.0;  // the parcel's furrows, clockwise from north (on a field)
+    double stand_m = 0.0;      // how high its field's crop stands on the day (0 off a field or where nothing stands)
 };
 
 namespace recipe_detail {
@@ -520,6 +521,7 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
                     c.kind = band.scatter[s].kind_index;
                     c.on_field = on_field;
                     c.heading_rad = on_field ? f.heading_rad : 0.0;
+                    c.stand_m = on_field ? layers.StandOnDay(CropOf(dressing, f.id), f.id, day_of_year) : 0.0;
                     out.push_back(c);
                 }, cell_heading);
             }

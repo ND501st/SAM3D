@@ -1,6 +1,6 @@
 {
   "recipe_id": "dry_stalks",
-  "notes": "Standing maize or sunflower dried before the harvest, as clutter until the crop blocks (L5) stand in for it.",
+  "notes": "Standing maize or sunflower dried before the harvest. Afar it is the crop block (simcore/scenery/standing_crops.hpp); near the camera the block dithers away and the plants stand in the drill's rows 75 cm apart along the parcel's furrows, one card every half metre along a row (a card shows two or three plants: a field has some 70 000 a hectare), as tall as the field's stand on the day (the maize kind: near_m, to_stand). Sunflower is drawn as maize for now.",
   "applies": {
     "layers": [
       "dry_stalks"
@@ -12,9 +12,10 @@
       "id": "body",
       "scatter": [
         {
-          "kind": "stalk",
-          "process": "blue_noise",
-          "per_ha": 1500
+          "kind": "maize",
+          "process": "rows",
+          "per_ha": 26667,
+          "row_m": 0.75
         }
       ]
     }
@@ -22,13 +23,13 @@
   "targets": [
     {
       "band": "body",
-      "kind": "stalk",
+      "kind": "maize",
       "per_ha": [
-        1200,
-        1800
+        23000,
+        30000
       ]
     }
   ],
-  "source": "game value: sam3d estimate",
+  "source": "game value: sam3d estimate (maize rows 70-76 cm: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
   "confidence": "estimate"
 }
