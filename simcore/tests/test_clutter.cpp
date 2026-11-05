@@ -109,7 +109,7 @@ static bool Listed(const ClutterRules& rules, int layer, int kind) {
 
 SC_TEST("clutter: the rules load, and the ring is deterministic, inside the ring and on the layer its kind is listed for") {
     const ClutterRules& rules = Rules();
-    SC_EXPECT(!rules.kinds.empty() && rules.parts.size() == 4);  // grass, straw, reed and the plough's clod
+    SC_EXPECT(!rules.kinds.empty() && rules.parts.size() == 5);  // grass, straw, reed, the plough's clod and the maize's lying stalk
     // Find a few points on different layers near the battery and ring each.
     const double centres[][2] = {{5750.0, -9050.0}, {-9000.0, -6000.0}, {2500.0, -12500.0}, {500.0, 500.0}};
     for (const auto& c : centres) {
@@ -200,6 +200,9 @@ SC_TEST("clutter: the loader refuses what is wrong") {
     std::string e;
     const std::string kinds = "\"kinds\": {\"grass\": {\"part\": \"clutter_grass\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}";
     SC_EXPECT(LoadClutterRules("{" + kinds + "}", r, &e));
+    SC_EXPECT(r.kinds[0].along_rows_deg < 0.0);  // any way, unless told
+    SC_EXPECT(!LoadClutterRules("{\"kinds\": {\"grass\": {\"part\": \"clutter_grass\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1, \"along_rows_deg\": 120}}}", r, &e));
+    SC_EXPECT(e.find("along_rows_deg") != std::string::npos);
     SC_EXPECT(!LoadClutterRules("{\"ring_m\": 100}", r, &e));  // no kinds
     SC_EXPECT(!LoadClutterRules("{\"kinds\": {\"grass\": {\"part\": \"lava\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}}", r, &e));
     // Where the kinds go is the recipes': the old per-layer list is refused, not silently ignored.

@@ -84,6 +84,8 @@ constexpr Colour kStrawCut{0.170f, 0.125f, 0.045f};     // #6c5a3a the cut end
 // darker ones were grey stones at noon (a8).
 constexpr Colour kClodFoot{0.048f, 0.033f, 0.020f};     // #3d3227 a clod's damp underside
 constexpr Colour kClodTop{0.110f, 0.076f, 0.044f};      // #5d4d3b its drier top
+constexpr Colour kStoverSide{0.300f, 0.240f, 0.150f};   // #95886b a lying maize stalk's weathered side
+constexpr Colour kStoverTop{0.420f, 0.350f, 0.220f};    // #ada081 its bleached top
 constexpr Colour kReedFoot{0.095f, 0.072f, 0.028f};     // #4d3f28 a reed or a dry stalk
 constexpr Colour kReedHead{0.055f, 0.038f, 0.022f};     // #3e3022 its seed head
 constexpr Colour kMassSide{0.036f, 0.070f, 0.022f};     // #354b28
@@ -326,7 +328,7 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
 // The ground clutter of the camera's ring (roadmap T6.1, scenery/clutter.hpp): a part's mesh at LOD 0-1 (empty beyond),
 // base at the origin, unit height, a unit across. "clutter_grass" a tuft of dry grass, "clutter_straw" a stubble clump or a
 // maize stump (a short stalk cut flat), "clutter_reed" a reed or a dry stalk with its seed head, "clutter_clod" a clod of
-// the plough's (a solid, as a clod is: no card). Placeholders: spiky
+// the plough's (a solid, as a clod is: no card), "clutter_stalk" a maize stalk lying on the stubble. Placeholders: spiky
 // solids that read as ground cover from a metre or more.
 inline TriMesh ClutterMesh(const std::string& part, int lod) {
     using namespace map_mesh_detail;
@@ -349,6 +351,18 @@ inline TriMesh ClutterMesh(const std::string& part, int lod) {
         const int sides = lod == 0 ? 4 : 3;
         b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 0.7, 0.35), Ring(sides, 0.9, 0.2), Ring(sides, 1.0, 0.0)}, {kReedFoot, kReedFoot, kReedHead}, kReedFoot,
                kReedHead);
+    } else if (part == "clutter_stalk") {
+        // A maize stalk the harvester cut and threw down, lying along local x (a unit long, 0.028 across, a unit thick, so
+        // the instance's width is its length and its height its thickness), broken once so it is not a ruler.
+        const Vec3 up{0.0, 0.0, 1.0};
+        if (lod == 0) {
+            const double turn = 0.26;  // the break, about 15 degrees
+            const Vec3 bent{std::cos(turn), std::sin(turn), 0.0}, bent_across{-std::sin(turn), std::cos(turn), 0.0};
+            b.Box({-0.23, 0.0, 0.5}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, up, 0.27, 0.014, 0.5, kStoverSide, kStoverTop, kStoverSide);
+            b.Box({0.02 + 0.24 * bent.x, 0.24 * bent.y, 0.45}, bent, bent_across, up, 0.24, 0.012, 0.45, kStoverSide, kStoverTop, kStoverSide);
+        } else {
+            b.Box({0.0, 0.0, 0.5}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, up, 0.5, 0.014, 0.5, kStoverSide, kStoverTop, kStoverSide);
+        }
     }
     return m;
 }
@@ -620,7 +634,7 @@ inline TriMesh MapPartMesh(const std::string& part, int variant, int lod) {
 inline std::vector<std::string> MapMeshParts() {
     std::vector<std::string> out;
     for (int k = 0; k < static_cast<int>(TreeKind::Count); ++k) out.push_back(std::string("tree_") + TreeKindName(static_cast<TreeKind>(k)));
-    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod"}) out.push_back(p);
+    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk"}) out.push_back(p);
     return out;
 }
 

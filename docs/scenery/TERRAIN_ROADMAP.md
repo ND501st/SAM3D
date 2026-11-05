@@ -183,8 +183,30 @@ prop test (after L9 starts).
   edge, and more clods on a ploughed parcel's headlands (18 m at its ends); grass, reeds and weeds in clumps.
 - **Left**: ground layers, relief stamps and the map dressing's trees are not recipes yet (D3 asks for them: the
   ground's surface values stay in `ground_layers.json`, the trees in `map_dressing.json`, to be moved one by one); the
-  parcel's distance ignores an estate's border or a road cutting it; edge recipes by a pair of neighbours (6.4); a
-  lattice along the furrows for maize rows; the material does not yet turn the headland's furrows across.
+  parcel's distance ignores an estate's border or a road cutting it; edge recipes by a pair of neighbours (6.4); the
+  material does not yet turn the headland's furrows across.
+
+### A.3.4 Plot 2, maize stover (5 Nov 2026)
+
+- **b1** (L2's recipe, blue noise stumps 2,500 a hectare): sparse dark tufts anywhere, no rows, nothing lying; the
+  ground's straw scan tiles at 25 m.
+- **A `rows` process** (`ScatterInCell`): the crop's rows along its parcel's furrows (`FieldAt`'s heading), `row_m`
+  apart, the plants along them at `per_ha`'s spacing (jittered a third of it along, 4 cm across, as a drill's row
+  wanders), one lattice over the whole estate in the furrows' frame. A rows point lies on a field of the cell's heading
+  or nowhere: off a field there are no rows. Every candidate carries its parcel's heading.
+- **Lying stalks**: the kind `stover` (`clutter_stalk` in `ClutterMesh`, a stalk broken once, its instance width its
+  length 0.6-1.4 m and its height its thickness 2-3.5 cm), laid by the kind's new `along_rows_deg` (35: within 35
+  degrees of the rows, either end first). Unreal turns a part's local x (north) clockwise by the yaw, so the heading
+  lays it along the rows.
+- **b2** (a clump a metre along rows 75 cm apart, stover 8,000): the stalks lie right, but the near-square lattice
+  reads as a scatter, not rows, and the stalks were near black and plank-thick.
+- **b3** (a single cut stalk, 0.10-0.18 m across, every half metre: 26,667 a hectare; stover 5,000, paler and thinner):
+  the rows read out to some 40 m; from 40 m up the stubble is gone into the ground, as it should be. The ring on a
+  maize field is 21,043 plants (the stumps 26,714 a hectare, the stover 5,008, both on target), the map's thickest,
+  held under 24,000 by `test_recipes.cpp`.
+- **Left**: the ground's straw scan still tiles from above (the material's, not the recipe's); real stubble has a plant
+  every 18-20 cm, drawn every 50 cm for the ring's budget; the maize ridges (the material's wobble cannot follow
+  simcore's rows yet).
 
 ### A.4 How a plot is worked (the loop)
 

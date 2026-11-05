@@ -8,7 +8,9 @@
 //   uniform     a Poisson-like scatter, so many a hectare;
 //   blue_noise  a jittered lattice, no two close together (a crop's clods, single plants);
 //   thomas      clusters: parents kappa_per_ha, offspring per_ha in all, displaced by a normal of spread_m each way;
-//   matern      the same with the offspring uniform in a disc of radius spread_m (shrub clumps, reed tussocks).
+//   matern      the same with the offspring uniform in a disc of radius spread_m (shrub clumps, reed tussocks);
+//   rows        a crop's rows along the parcel's furrows, row_m apart, the plants along them per_ha's spacing, jittered
+//               (maize stumps 70-76 cm apart); on a field only.
 // Every candidate is drawn from its own position's hash (the same on every client and wherever the camera is) and carries
 // a fixed threshold in [0, 1): a use that thins (the ring's falloff, a lower density) keeps the candidates under its
 // fraction, so thinning never moves a plant; a blue-noise lattice orders its thresholds by a 4 x 4 dither, so a thinned
@@ -34,7 +36,7 @@
 namespace simcore {
 namespace scenery {
 
-enum class ScatterProcess { Uniform, BlueNoise, Thomas, Matern };
+enum class ScatterProcess { Uniform, BlueNoise, Thomas, Matern, Rows };
 
 struct RecipeScatter {
     std::string kind;       // a clutter kind's id (data/scenery/clutter.json)
@@ -43,6 +45,7 @@ struct RecipeScatter {
     double per_ha = 0.0;        // instances a hectare at full density
     double kappa_per_ha = 0.0;  // clusters a hectare (thomas, matern)
     double spread_m = 0.0;      // thomas: the offspring's standard deviation each way; matern: the disc's radius
+    double row_m = 0.0;         // rows: the rows' spacing across the furrows (the spacing along them is per_ha's)
 };
 
 // Which of the parcel's edges a band's distance is measured from: its ends (across the furrows: the headlands), its sides
@@ -94,6 +97,8 @@ struct RecipeCandidate {
     std::uint64_t hash = 0;
     int recipe = -1, band = -1, scatter = -1;
     int kind = -1;
+    bool on_field = false;
+    double heading_rad = 0.0;  // the parcel's furrows, clockwise from north (on a field)
 };
 
 namespace recipe_detail {
@@ -236,12 +241,17 @@ inline bool LoadRecipe(const std::string& path_or_json, const GroundLayerRules& 
             else if (p == "blue_noise") s.process = ScatterProcess::BlueNoise;
             else if (p == "thomas") s.process = ScatterProcess::Thomas;
             else if (p == "matern") s.process = ScatterProcess::Matern;
-            else return Fail(error, at + b.id + ": process is not uniform, blue_noise, thomas or matern");
+            else if (p == "rows") s.process = ScatterProcess::Rows;
+            else return Fail(error, at + b.id + ": process is not uniform, blue_noise, thomas, matern or rows");
             // At most 10 a square metre (a lattice 32 cm apart).
             if (!NumberIn(sv, "per_ha", 1.0, 100000.0, s.per_ha, true)) return Fail(error, at + b.id + ": per_ha is not in 1..100000");
             if (s.process == ScatterProcess::Thomas || s.process == ScatterProcess::Matern) {
                 if (!NumberIn(sv, "kappa_per_ha", 0.01, s.per_ha, s.kappa_per_ha, true)) return Fail(error, at + b.id + ": kappa_per_ha is not in 0.01..per_ha");
                 if (!NumberIn(sv, "spread_m", 0.05, 20.0, s.spread_m, true)) return Fail(error, at + b.id + ": spread_m is not in 0.05..20");
+            }
+            if (s.process == ScatterProcess::Rows) {
+                if (!NumberIn(sv, "row_m", 0.1, 5.0, s.row_m, true)) return Fail(error, at + b.id + ": row_m is not in 0.1..5");
+                if (10000.0 / (s.per_ha * s.row_m) < 0.05) return Fail(error, at + b.id + ": the rows' plants under 5 cm apart (per_ha too high for row_m)");
             }
             b.scatter.push_back(s);
         }
@@ -319,17 +329,27 @@ inline bool LoadRecipes(const std::string& dir, const GroundLayerRules& layers, 
     return true;
 }
 
-// The distance of (east, north) in from its parcel's ends (across the furrows) and sides (along them), m; both infinite
-// off the fields.
-inline void ParcelEdgeDistance(const CoverRaster& cover, double east_m, double north_m, double& ends_m, double& sides_m) {
-    ends_m = sides_m = std::numeric_limits<double>::infinity();
+// The parcel (east, north) lies in: false off the fields.
+inline bool ParcelAt(const CoverRaster& cover, double east_m, double north_m, FieldCell& out) {
     const CoverGrid* g = cover.GridAt(east_m, north_m);
-    if (g == nullptr || static_cast<Cover>(g->cover[g->IndexAt(east_m, north_m)]) != Cover::Field) return;
-    const FieldCell f = FieldAt(g->fields, east_m, north_m);
+    if (g == nullptr || static_cast<Cover>(g->cover[g->IndexAt(east_m, north_m)]) != Cover::Field) return false;
+    out = FieldAt(g->fields, east_m, north_m);
+    return true;
+}
+
+// The distance of (east, north) in from its parcel `f`'s ends (across the furrows) and sides (along them), m.
+inline void ParcelEdgeDistance(const FieldCell& f, double east_m, double north_m, double& ends_m, double& sides_m) {
     const double sh = std::sin(f.heading_rad), ch = std::cos(f.heading_rad);
     const double de = east_m - f.centre_e, dn = north_m - f.centre_n;
     ends_m = 0.5 * f.length_m - std::fabs(de * sh + dn * ch);
     sides_m = 0.5 * f.width_m - std::fabs(de * ch - dn * sh);
+}
+
+// The same found from the map: both infinite off the fields.
+inline void ParcelEdgeDistance(const CoverRaster& cover, double east_m, double north_m, double& ends_m, double& sides_m) {
+    ends_m = sides_m = std::numeric_limits<double>::infinity();
+    FieldCell f;
+    if (ParcelAt(cover, east_m, north_m, f)) ParcelEdgeDistance(f, east_m, north_m, ends_m, sides_m);
 }
 
 // The band of `recipe` a point lies in, -1 none.
@@ -344,9 +364,11 @@ inline int RecipeBandAt(const Recipe& recipe, double ends_m, double sides_m) {
 }
 
 // One scatter's candidates in the square cell (cx, cy) of side `cell_m`, every one from its own position's hash: emit(east,
-// north, threshold, hash). The lattice and the clusters run over the whole plane, so cells meet without a seam.
+// north, threshold, hash). The lattice and the clusters run over the whole plane, so cells meet without a seam. Rows need
+// the furrows' heading there (clockwise from north; NaN off the fields: none).
 template <class Emit>
-inline void ScatterInCell(const RecipeScatter& s, std::uint64_t salt, std::int64_t cx, std::int64_t cy, double cell_m, Emit&& emit) {
+inline void ScatterInCell(const RecipeScatter& s, std::uint64_t salt, std::int64_t cx, std::int64_t cy, double cell_m, Emit&& emit,
+                          double heading_rad = std::numeric_limits<double>::quiet_NaN()) {
     using recipe_detail::Hash;
     using recipe_detail::Unit;
     const double e0 = static_cast<double>(cx) * cell_m, n0 = static_cast<double>(cy) * cell_m;
@@ -374,6 +396,35 @@ inline void ScatterInCell(const RecipeScatter& s, std::uint64_t salt, std::int64
                     const double n = (static_cast<double>(j) + 0.1 + 0.8 * Unit(recipe_detail::Mix(h ^ 1u))) * a;
                     if (!inside(e, n)) continue;
                     emit(e, n, (static_cast<double>(recipe_detail::Bayer4(i, j)) + Unit(recipe_detail::Mix(h ^ 2u))) / 16.0, h);
+                }
+            }
+            break;
+        }
+        case ScatterProcess::Rows: {
+            // The rows in the furrows' frame (farm_fields.hpp's: u along, v across), the same lattice over the whole estate.
+            if (!std::isfinite(heading_rad)) break;
+            const double sh = std::sin(heading_rad), ch = std::cos(heading_rad);
+            const double along = 10000.0 / (s.per_ha * s.row_m);
+            double umin = std::numeric_limits<double>::infinity(), umax = -umin, vmin = umin, vmax = -umin;
+            for (int k = 0; k < 4; ++k) {
+                const double e = (k & 1) != 0 ? e1 : e0, n = (k & 2) != 0 ? n1 : n0;
+                const double u = e * sh + n * ch, v = e * ch - n * sh;
+                umin = std::min(umin, u);
+                umax = std::max(umax, u);
+                vmin = std::min(vmin, v);
+                vmax = std::max(vmax, v);
+            }
+            // The heading's own bits in the salt: two estates' lattices are not one.
+            const std::uint64_t hs = salt ^ recipe_detail::Mix(static_cast<std::uint64_t>(std::llround(heading_rad * 1e6)));
+            const double jitter_v = std::min(0.4, 0.04 / s.row_m);  // a drill's row wanders some 4 cm
+            for (auto k = static_cast<std::int64_t>(std::floor(vmin / s.row_m)) - 1; k <= static_cast<std::int64_t>(std::floor(vmax / s.row_m)) + 1; ++k) {
+                for (auto j = static_cast<std::int64_t>(std::floor(umin / along)) - 1; j <= static_cast<std::int64_t>(std::floor(umax / along)) + 1; ++j) {
+                    const std::uint64_t h = Hash(j, k, hs, 11u);
+                    const double u = (static_cast<double>(j) + 0.5 + 0.6 * (Unit(h) - 0.5)) * along;
+                    const double v = (static_cast<double>(k) + 0.5 + 2.0 * jitter_v * (Unit(recipe_detail::Mix(h ^ 1u)) - 0.5)) * s.row_m;
+                    const double e = u * sh + v * ch, n = u * ch - v * sh;
+                    if (!inside(e, n)) continue;
+                    emit(e, n, Unit(recipe_detail::Mix(h ^ 2u)), h);
                 }
             }
             break;
@@ -439,16 +490,23 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
         if (recipe == nullptr) continue;
         const int ri = set.by_layer[static_cast<std::size_t>(layer)];
         const bool edges = recipe->HasEdgeBands();
+        // The furrows' heading at the cell (rows run along it); a candidate in another estate's heading is not this lattice's.
+        FieldCell cell_field;
+        const double cell_heading = ParcelAt(cover, ce, cn, cell_field) ? cell_field.heading_rad : std::numeric_limits<double>::quiet_NaN();
         for (std::size_t b = 0; b < recipe->bands.size(); ++b) {
             const RecipeBand& band = recipe->bands[b];
             for (std::size_t s = 0; s < band.scatter.size(); ++s) {
                 const std::uint64_t salt = recipe->salt ^ ((static_cast<std::uint64_t>(b) * 131u + static_cast<std::uint64_t>(s) * 7u + 1u) * 0x9E3779B97F4A7C15ull);
+                const bool rows = band.scatter[s].process == ScatterProcess::Rows;
                 ScatterInCell(band.scatter[s], salt, cx, cy, cell_m, [&](double e, double n, double threshold, std::uint64_t hash) {
                     if (!keep(e, n, threshold)) return;
                     if (PointLayer(cover, dressing, layers, e, n, day_of_year) != layer) return;
+                    FieldCell f;
+                    const bool on_field = ParcelAt(cover, e, n, f);
+                    if (rows && (!on_field || f.heading_rad != cell_heading)) return;
                     if (edges) {
-                        double ends = 0.0, sides = 0.0;
-                        ParcelEdgeDistance(cover, e, n, ends, sides);
+                        double ends = std::numeric_limits<double>::infinity(), sides = ends;
+                        if (on_field) ParcelEdgeDistance(f, e, n, ends, sides);
                         if (RecipeBandAt(*recipe, ends, sides) != static_cast<int>(b)) return;
                     }
                     RecipeCandidate c;
@@ -460,8 +518,10 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
                     c.band = static_cast<int>(b);
                     c.scatter = static_cast<int>(s);
                     c.kind = band.scatter[s].kind_index;
+                    c.on_field = on_field;
+                    c.heading_rad = on_field ? f.heading_rad : 0.0;
                     out.push_back(c);
-                });
+                }, cell_heading);
             }
         }
     }

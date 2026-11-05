@@ -32,6 +32,9 @@ struct ClutterKind {
     std::string id, part;
     float height_min_m = 0.1f, height_max_m = 0.3f, width_min_m = 0.1f, width_max_m = 0.3f;
     double brightness = 0.0;
+    // Lies along the parcel's rows, turned at most this far either way (0..90 degrees); below 0 (the default), any way.
+    // Off a field the yaw is any way.
+    double along_rows_deg = -1.0;
 };
 
 struct ClutterRules {
@@ -122,6 +125,10 @@ inline bool LoadClutterRules(const std::string& path_or_json, ClutterRules& out,
         const json::Value* bright = k.Find("brightness");
         if (bright == nullptr || !bright->Is(json::Type::Number) || bright->number < 0.0 || bright->number > 0.5) return Fail(error, c.id + ": brightness is not in 0..0.5");
         c.brightness = bright->number;
+        if (const json::Value* along = k.Find("along_rows_deg")) {
+            if (!along->Is(json::Type::Number) || along->number < 0.0 || along->number > 90.0) return Fail(error, c.id + ": along_rows_deg is not in 0..90");
+            c.along_rows_deg = along->number;
+        }
         if (r.PartIndex(c.part) < 0) r.parts.push_back(c.part);
         r.kinds.push_back(c);
     }
@@ -170,7 +177,15 @@ inline void ClutterAround(const ClutterRules& rules, const CoverRaster& cover, c
                 const auto draw = [&](std::uint64_t k) { return Unit(recipe_detail::Mix(c.hash ^ (0xA5A5u + k))); };
                 plant.height_m = static_cast<float>(kind.height_min_m + (kind.height_max_m - kind.height_min_m) * draw(1));
                 plant.width_m = static_cast<float>(kind.width_min_m + (kind.width_max_m - kind.width_min_m) * draw(2));
-                plant.yaw_rad = static_cast<float>(draw(3) * 2.0 * kPi);
+                // Unreal turns a part's local x (north) clockwise by the yaw: the heading lays it along the rows; either
+                // end first, as a stalk falls.
+                if (kind.along_rows_deg >= 0.0 && c.on_field) {
+                    const double spread = (draw(3) * 2.0 - 1.0) * kind.along_rows_deg * kPi / 180.0;
+                    const double flip = draw(5) < 0.5 ? 0.0 : kPi;
+                    plant.yaw_rad = static_cast<float>(std::fmod(c.heading_rad + spread + flip + 4.0 * kPi, 2.0 * kPi));
+                } else {
+                    plant.yaw_rad = static_cast<float>(draw(3) * 2.0 * kPi);
+                }
                 plant.brightness = static_cast<float>(1.0 + (draw(4) - 0.5) * 2.0 * kind.brightness);
                 plant.kind = static_cast<std::uint8_t>(c.kind);
                 out.push_back(plant);

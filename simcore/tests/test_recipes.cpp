@@ -219,6 +219,71 @@ SC_TEST("recipes: blue noise is even and keeps its distance, clusters clump (var
     SC_EXPECT(db >= 0.2 * std::sqrt(10000.0 / 18000.0) - 1e-9);
 }
 
+SC_TEST("recipes: a crop's rows lie along its parcel's furrows, row_m apart, on fields only; the stover lies along them") {
+    // The process alone: a hectare at a heading of 30 degrees, rows 0.75 m apart.
+    RecipeScatter rows;
+    rows.process = ScatterProcess::Rows;
+    rows.per_ha = 13333.0;
+    rows.row_m = 0.75;
+    const double heading = 30.0 * kPi / 180.0, sh = std::sin(heading), ch = std::cos(heading);
+    std::size_t count = 0, off_row = 0;
+    for (int cy = 0; cy < 25; ++cy) {
+        for (int cx = 0; cx < 25; ++cx) {
+            ScatterInCell(rows, 777u, cx, cy, 4.0, [&](double e, double n, double, std::uint64_t) {
+                ++count;
+                const double v = (e * ch - n * sh) / rows.row_m;
+                off_row += std::fabs(v - std::floor(v) - 0.5) <= 0.04 / rows.row_m + 1e-9 ? 0 : 1;
+            }, heading);
+        }
+    }
+    // With no heading (off a field) there are no rows.
+    std::size_t none = 0;
+    ScatterInCell(rows, 777u, 0, 0, 4.0, [&](double, double, double, std::uint64_t) { ++none; });
+    std::printf("    rows at 30 degrees: %zu a hectare, %zu off their row, %zu with no heading\n", count, off_row, none);
+    SC_EXPECT(std::fabs(static_cast<double>(count) - 13333.0) < 400.0);
+    SC_EXPECT(off_row == 0 && none == 0);
+
+    // On the map: a picked maize field's stumps stand on fields, each in a row of its own parcel's heading.
+    double e = 0.0, n = 0.0;
+    SC_EXPECT(FindGround("maize_stubble", 8000.0, -8000.0, e, n));
+    const int ri = RecipeIndex("maize_stubble");
+    const int stump = [&] {
+        const std::vector<std::string> ids = Rules().KindIds();
+        for (std::size_t i = 0; i < ids.size(); ++i) {
+            if (ids[i] == "stump") return static_cast<int>(i);
+        }
+        return -1;
+    }();
+    std::size_t stumps = 0, astray = 0;
+    for (const RecipeCandidate& c : All(e - 60.0, n - 60.0, e + 60.0, n + 60.0)) {
+        if (c.recipe != ri || c.kind != stump) continue;
+        ++stumps;
+        FieldCell f;
+        const bool field = ParcelAt(Raster(), c.east_m, c.north_m, f);
+        const double v = (c.east_m * std::cos(f.heading_rad) - c.north_m * std::sin(f.heading_rad)) / 0.75;
+        astray += c.on_field && field && f.heading_rad == c.heading_rad && std::fabs(v - std::floor(v) - 0.5) <= 0.054 ? 0 : 1;
+    }
+    std::printf("    maize stubble round (%.0f, %.0f): %zu stumps, %zu astray\n", e, n, stumps, astray);
+    SC_EXPECT(stumps > 5000 && astray == 0);
+
+    // The ring: the stover lies within 35 degrees of its parcel's rows, either end first.
+    std::vector<ClutterPlant> ring;
+    ClutterAround(Rules(), Raster(), Dressing(), Layers(), kDay, e, n, ring);
+    std::size_t stover = 0, across = 0;
+    for (const ClutterPlant& p : ring) {
+        if (Rules().kinds[p.kind].id != "stover") continue;
+        FieldCell f;
+        if (!ParcelAt(Raster(), p.east_m, p.north_m, f)) continue;
+        ++stover;
+        double d = std::fmod(static_cast<double>(p.yaw_rad) - f.heading_rad + 8.0 * kPi, kPi);  // either end first
+        if (d > kPi / 2.0) d = kPi - d;
+        across += d <= 35.0 * kPi / 180.0 + 1e-4 ? 0 : 1;
+    }
+    std::printf("    the ring there: %zu plants, %zu stover on fields, %zu lying across the rows\n", ring.size(), stover, across);
+    SC_EXPECT(stover > 500 && across == 0);
+    SC_EXPECT(ring.size() < 24000);  // the thickest ring on the map: the rows (21,043 at b3), a little over the 20,000 of an average one
+}
+
 SC_TEST("recipes: a ploughed parcel's edge strip is weeds within 0.6 m of its edge, its headlands at its ends") {
     double e = 0.0, n = 0.0;
     SC_EXPECT(FindGround("ploughland", 8000.0, -8000.0, e, n));
@@ -286,6 +351,10 @@ SC_TEST("recipes: the loader refuses what is wrong") {
     SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"poisson\", \"per_ha\": 100}]}"), Layers(), kinds, r, &e));
     SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"thomas\", \"per_ha\": 100}]}"), Layers(), kinds, r, &e));
     SC_EXPECT(e.find("kappa") != std::string::npos);
+    SC_EXPECT(LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"rows\", \"per_ha\": 13333, \"row_m\": 0.75}]}"), Layers(), kinds, r, &e));
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"rows\", \"per_ha\": 13333}]}"), Layers(), kinds, r, &e));
+    SC_EXPECT(e.find("row_m") != std::string::npos);
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"rows\", \"per_ha\": 400000, \"row_m\": 0.75}]}"), Layers(), kinds, r, &e));
     SC_EXPECT(!LoadRecipe(make(body + ", " + body), Layers(), kinds, r, &e));  // twice
     SC_EXPECT(!LoadRecipe(make(body + ", {\"id\": \"edge\", \"from_m\": 0, \"to_m\": 1, \"scatter\": []}"), Layers(), kinds, r, &e));
     SC_EXPECT(e.find("never be reached") != std::string::npos);

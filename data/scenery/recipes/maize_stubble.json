@@ -1,6 +1,6 @@
 {
   "recipe_id": "maize_stubble",
-  "notes": "A picked maize field: stumps and broken stalks. Rows 70-76 cm apart are not yet a process of their own (a later recipe: a lattice along the furrows).",
+  "notes": "A picked maize field: the stumps stand in the drill's rows 75 cm apart along the parcel's furrows (one cut stalk drawn every half metre along a row, for the ring's budget: a field has some 70 000 plants a hectare, one every 18-20 cm; at a metre along, plot 2's b2, the rows read as a scatter), and the harvester's broken stalks lie over the stubble, mostly along the rows (the stover kind's along_rows_deg).",
   "applies": {
     "layers": [
       "maize_stubble"
@@ -28,8 +28,14 @@
       "scatter": [
         {
           "kind": "stump",
-          "process": "blue_noise",
-          "per_ha": 2500
+          "process": "rows",
+          "per_ha": 26667,
+          "row_m": 0.75
+        },
+        {
+          "kind": "stover",
+          "process": "uniform",
+          "per_ha": 5000
         }
       ]
     }
@@ -39,8 +45,16 @@
       "band": "body",
       "kind": "stump",
       "per_ha": [
-        2000,
-        3000
+        23000,
+        30000
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "stover",
+      "per_ha": [
+        4000,
+        6000
       ]
     }
   ],

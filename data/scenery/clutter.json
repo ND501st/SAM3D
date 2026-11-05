@@ -1,5 +1,5 @@
 {
-  "notes": "The ground clutter of the camera's ring (simcore/scenery/clutter.hpp, roadmap T6.1 and L5): the ring and the kinds of plant and clod. Where they go, and how many, is the land's recipes' (data/scenery/recipes/, simcore/scenery/recipes.hpp, roadmap L2): each ground layer's recipe scatters these kinds over its bands. Game values judged by eye (Pannonia is fictional: the look, not the statistics); presentation only, nothing in the simulation reads it. Thin plants are drawn as crossed alpha cards (art/clutter, tools/make_cards.py), so a plant here is a clump: its width is a clump's and its density a clump's. Each 4 m cell draws its candidates from its own position (the same for every client, and the same when the ring moves back over it), each kept while its fixed threshold is under 1 / (1 + (d / falloff_m)^2) at its distance d from the camera. A kind's part is a mesh in scenery/map_meshes.hpp (ClutterMesh) that a registered model may replace; height_m and width_m are drawn per plant; brightness is the share a plant's brightness varies by either way. The standing crops (wheat, maize, sunflower) have no clutter: they are the crop blocks of L5. The ploughed and sown fields have clods (solids, not cards: a clod is a lump).",
+  "notes": "The ground clutter of the camera's ring (simcore/scenery/clutter.hpp, roadmap T6.1 and L5): the ring and the kinds of plant and clod. Where they go, and how many, is the land's recipes' (data/scenery/recipes/, simcore/scenery/recipes.hpp, roadmap L2): each ground layer's recipe scatters these kinds over its bands. Game values judged by eye (Pannonia is fictional: the look, not the statistics); presentation only, nothing in the simulation reads it. Thin plants are drawn as crossed alpha cards (art/clutter, tools/make_cards.py), so a plant here is a clump: its width is a clump's and its density a clump's. Each 4 m cell draws its candidates from its own position (the same for every client, and the same when the ring moves back over it), each kept while its fixed threshold is under 1 / (1 + (d / falloff_m)^2) at its distance d from the camera. A kind's part is a mesh in scenery/map_meshes.hpp (ClutterMesh) that a registered model may replace; height_m and width_m are drawn per plant; brightness is the share a plant's brightness varies by either way; along_rows_deg (0..90, if given) lays a kind along its parcel's rows, turned at most that far either way (the stover, maize stalks lying on the stubble, a stalk's width its length and its height its thickness). The standing crops (wheat, maize, sunflower) have no clutter: they are the crop blocks of L5. The ploughed and sown fields have clods (solids, not cards: a clod is a lump).",
   "ring_m": 100,
   "cell_m": 4,
   "falloff_m": 30,
@@ -7,9 +7,10 @@
   "kinds": {
     "grass": {"part": "clutter_grass", "height_m": [0.18, 0.40], "width_m": [0.35, 0.65], "brightness": 0.25},
     "stubble": {"part": "clutter_straw", "height_m": [0.15, 0.30], "width_m": [0.30, 0.55], "brightness": 0.2},
-    "stump": {"part": "clutter_straw", "height_m": [0.15, 0.30], "width_m": [0.25, 0.45], "brightness": 0.2},
+    "stump": {"part": "clutter_straw", "height_m": [0.18, 0.30], "width_m": [0.10, 0.18], "brightness": 0.2},
     "stalk": {"part": "clutter_reed", "height_m": [0.6, 1.3], "width_m": [0.35, 0.60], "brightness": 0.2},
     "reed": {"part": "clutter_reed", "height_m": [1.3, 2.2], "width_m": [0.70, 1.10], "brightness": 0.2},
-    "clod": {"part": "clutter_clod", "height_m": [0.04, 0.12], "width_m": [0.10, 0.36], "brightness": 0.25}
+    "clod": {"part": "clutter_clod", "height_m": [0.04, 0.12], "width_m": [0.10, 0.36], "brightness": 0.25},
+    "stover": {"part": "clutter_stalk", "height_m": [0.02, 0.035], "width_m": [0.6, 1.4], "brightness": 0.2, "along_rows_deg": 35}
   }
 }

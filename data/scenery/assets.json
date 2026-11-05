@@ -180,6 +180,9 @@
     },
     "clutter_clod": {
       "asset": null
+    },
+    "clutter_stalk": {
+      "asset": null
     }
   }
 }
