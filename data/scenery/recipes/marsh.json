@@ -1,0 +1,49 @@
+{
+  "recipe_id": "marsh",
+  "notes": "A marsh or an oxbow's margin: reed in stands, grass between.",
+  "applies": {
+    "layers": [
+      "marsh"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "reed",
+          "process": "matern",
+          "per_ha": 3500,
+          "kappa_per_ha": 120,
+          "spread_m": 3.0
+        },
+        {
+          "kind": "grass",
+          "process": "uniform",
+          "per_ha": 3000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "reed",
+      "per_ha": [
+        2500,
+        4500
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        2400,
+        3600
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (reed stands by a cluster process: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 2.3)",
+  "confidence": "estimate"
+}

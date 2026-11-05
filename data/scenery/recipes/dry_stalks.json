@@ -1,0 +1,34 @@
+{
+  "recipe_id": "dry_stalks",
+  "notes": "Standing maize or sunflower dried before the harvest, as clutter until the crop blocks (L5) stand in for it.",
+  "applies": {
+    "layers": [
+      "dry_stalks"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "stalk",
+          "process": "blue_noise",
+          "per_ha": 1500
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "stalk",
+      "per_ha": [
+        1200,
+        1800
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate",
+  "confidence": "estimate"
+}

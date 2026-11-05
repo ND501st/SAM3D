@@ -1,0 +1,49 @@
+{
+  "recipe_id": "maize_stubble",
+  "notes": "A picked maize field: stumps and broken stalks. Rows 70-76 cm apart are not yet a process of their own (a later recipe: a lattice along the furrows).",
+  "applies": {
+    "layers": [
+      "maize_stubble"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "margin",
+      "edge": "any",
+      "from_m": 0,
+      "to_m": 0.8,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 5000,
+          "kappa_per_ha": 1500,
+          "spread_m": 0.35
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "stump",
+          "process": "blue_noise",
+          "per_ha": 2500
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "stump",
+      "per_ha": [
+        2000,
+        3000
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (maize rows 70-76 cm, stalk stubble 25-30 cm: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
+  "confidence": "estimate"
+}

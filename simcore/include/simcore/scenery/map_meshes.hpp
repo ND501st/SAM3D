@@ -80,8 +80,10 @@ constexpr Colour kGrassBase{0.040f, 0.046f, 0.018f};    // #2e3220 dry grass, th
 constexpr Colour kGrassTip{0.110f, 0.095f, 0.035f};     // #5e5434 its straw-coloured tips
 constexpr Colour kStrawFoot{0.100f, 0.075f, 0.028f};    // #4f4128 stubble and a maize stump
 constexpr Colour kStrawCut{0.170f, 0.125f, 0.045f};     // #6c5a3a the cut end
-constexpr Colour kClodFoot{0.060f, 0.038f, 0.020f};     // #453627 a clod's damp underside
-constexpr Colour kClodTop{0.150f, 0.098f, 0.050f};      // #6b583f its drier top, the furrows' own brown
+// A clod is the furrows' own soil, its top a little drier: brighter ones glowed orange under a low sun (plot 1 a7, 16:00),
+// darker ones were grey stones at noon (a8).
+constexpr Colour kClodFoot{0.048f, 0.033f, 0.020f};     // #3d3227 a clod's damp underside
+constexpr Colour kClodTop{0.110f, 0.076f, 0.044f};      // #5d4d3b its drier top
 constexpr Colour kReedFoot{0.095f, 0.072f, 0.028f};     // #4d3f28 a reed or a dry stalk
 constexpr Colour kReedHead{0.055f, 0.038f, 0.022f};     // #3e3022 its seed head
 constexpr Colour kMassSide{0.036f, 0.070f, 0.022f};     // #354b28

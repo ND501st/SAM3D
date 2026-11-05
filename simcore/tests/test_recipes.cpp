@@ -1,0 +1,299 @@
+// The land's recipes (simcore/scenery/recipes.hpp, roadmap L2): every recipe loads and covers the layers the clutter had;
+// a cell's points are the same however they are asked for, cells meet without a seam, thinning never moves a point; the
+// processes' patterns (blue noise even, clusters clumped); the parcel's bands; every target met on the plot's ground;
+// the loader's refusals.
+#include <cmath>
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "simcore/scenery/clutter.hpp"
+#include "simcore/terrain_map.hpp"
+#include "test_framework.hpp"
+
+using namespace simcore;
+using namespace simcore::scenery;
+
+namespace {
+
+const std::string kData = SIMCORE_DATA_DIR;
+constexpr int kDay = 288;  // 15 October
+
+const DressingRules& Dressing() {
+    static DressingRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadDressingRules(kData + "/scenery/map_dressing.json", rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+const GroundLayerRules& Layers() {
+    static GroundLayerRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadGroundLayers(kData + "/scenery/ground_layers.json", Dressing(), rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+const ClutterRules& Rules() {
+    static ClutterRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadClutterRules(kData + "/scenery/clutter.json", rules, &e) || !LoadClutterRecipes(kData + "/scenery/recipes", Layers(), rules, &e)) {
+            std::printf("    %s\n", e.c_str());
+        }
+    }
+    return rules;
+}
+
+const CoverRaster& Raster() {
+    static CoverRaster raster;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+        if (map) raster = BakeCover(*map, Dressing());
+        else std::printf("    %s\n", e.c_str());
+    }
+    return raster;
+}
+
+int RecipeIndex(const std::string& id) {
+    const std::vector<Recipe>& rs = Rules().recipes.recipes;
+    for (std::size_t i = 0; i < rs.size(); ++i) {
+        if (rs[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+// Every candidate of the cells over a rectangle at full density.
+std::vector<RecipeCandidate> All(double e0, double n0, double e1, double n1, double cell = 4.0) {
+    std::vector<RecipeCandidate> out;
+    for (auto cy = static_cast<std::int64_t>(std::floor(n0 / cell)); cy <= static_cast<std::int64_t>(std::floor(n1 / cell)); ++cy) {
+        for (auto cx = static_cast<std::int64_t>(std::floor(e0 / cell)); cx <= static_cast<std::int64_t>(std::floor(e1 / cell)); ++cx) {
+            RecipeCandidates(Rules().recipes, Raster(), Dressing(), Layers(), kDay, cx, cy, cell,
+                             [&](double e, double n, double) { return e >= e0 && e < e1 && n >= n0 && n < n1; }, out);
+        }
+    }
+    return out;
+}
+
+// A spot whose 120 m square is all one recipe's, near (east, north): the plot lab's way of finding ground.
+bool FindGround(const std::string& recipe, double east, double north, double& e_out, double& n_out) {
+    const int want = RecipeIndex(recipe);
+    for (double r = 0.0; r < 4000.0; r += 150.0) {
+        for (double a = 0.0; a < 6.283; a += (r > 0.0 ? 150.0 / r : 7.0)) {
+            const double e = east + r * std::cos(a), n = north + r * std::sin(a);
+            bool all = true;
+            for (double dn = -60.0; dn <= 60.0 && all; dn += 20.0) {
+                for (double de = -60.0; de <= 60.0 && all; de += 20.0) {
+                    const int layer = PointLayer(Raster(), Dressing(), Layers(), e + de, n + dn, kDay);
+                    all = layer >= 0 && Rules().recipes.by_layer[static_cast<std::size_t>(layer)] == want;
+                }
+            }
+            if (all) {
+                e_out = e;
+                n_out = n;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+SC_TEST("recipes: every recipe loads, and every layer the clutter covered has one") {
+    const ClutterRules& rules = Rules();
+    SC_EXPECT(rules.recipes.recipes.size() == 11);
+    for (const char* id : {"ploughed", "sown", "stubble", "maize_stubble", "dry_stalks", "meadow", "verge", "trampled", "bank", "forest_floor", "marsh"}) {
+        const int layer = Layers().Index(id);
+        SC_EXPECT(layer >= 0 && rules.recipes.ForLayer(layer) != nullptr);
+    }
+    for (const Recipe& r : rules.recipes.recipes) {
+        SC_EXPECT(!r.source.empty() && !r.confidence.empty());
+        SC_EXPECT(r.bands.back().whole);  // the rest of the land type always has a band
+    }
+}
+
+SC_TEST("recipes: a cell's points are its own: asked twice, from either side of a seam, or thinned, they do not move") {
+    const double e0 = 5700.0, n0 = -9100.0;
+    const std::vector<RecipeCandidate> a = All(e0, n0, e0 + 60.0, n0 + 60.0);
+    const std::vector<RecipeCandidate> b = All(e0, n0, e0 + 60.0, n0 + 60.0);
+    SC_EXPECT(!a.empty() && a.size() == b.size());
+    bool same = a.size() == b.size();
+    for (std::size_t i = 0; same && i < a.size(); ++i) same = a[i].east_m == b[i].east_m && a[i].north_m == b[i].north_m && a[i].hash == b[i].hash;
+    SC_EXPECT(same);
+    // The same ground cut into 8 m cells: the same points (the processes run over the plane, not the cell).
+    const std::vector<RecipeCandidate> c = All(e0, n0, e0 + 60.0, n0 + 60.0, 8.0);
+    std::size_t found = 0;
+    for (const RecipeCandidate& p : a) {
+        for (const RecipeCandidate& q : c) {
+            if (q.east_m == p.east_m && q.north_m == p.north_m && q.hash == p.hash) {
+                ++found;
+                break;
+            }
+        }
+    }
+    std::printf("    %zu points in 4 m cells, %zu in 8 m cells, %zu the same\n", a.size(), c.size(), found);
+    // Every point of the small cells is one of the large cells' where it was; the large ones may add a point in a sliver of
+    // another layer that no small cell's samples fell on (RecipeCandidates), a few in a thousand at most.
+    SC_EXPECT(found == a.size());
+    SC_EXPECT(c.size() >= a.size() && (c.size() - a.size()) * 200 <= a.size());
+    // Thinned to half: every point kept is one of the full set's, where it was.
+    std::vector<RecipeCandidate> half;
+    for (auto cy = static_cast<std::int64_t>(std::floor(n0 / 4.0)); cy < static_cast<std::int64_t>(std::floor((n0 + 60.0) / 4.0)); ++cy) {
+        for (auto cx = static_cast<std::int64_t>(std::floor(e0 / 4.0)); cx < static_cast<std::int64_t>(std::floor((e0 + 60.0) / 4.0)); ++cx) {
+            RecipeCandidates(Rules().recipes, Raster(), Dressing(), Layers(), kDay, cx, cy, 4.0, [](double, double, double t) { return t < 0.5; }, half);
+        }
+    }
+    std::size_t moved = 0;
+    for (const RecipeCandidate& p : half) {
+        bool in = false;
+        for (const RecipeCandidate& q : a) in = in || (q.east_m == p.east_m && q.north_m == p.north_m && q.hash == p.hash);
+        moved += in ? 0 : 1;
+    }
+    SC_EXPECT(moved == 0);
+    SC_EXPECT(half.size() > a.size() / 3 && half.size() < a.size() * 2 / 3);
+}
+
+SC_TEST("recipes: blue noise is even and keeps its distance, clusters clump (variance against mean in 2 m squares)") {
+    RecipeScatter blue;
+    blue.process = ScatterProcess::BlueNoise;
+    blue.per_ha = 18000.0;
+    RecipeScatter thomas;
+    thomas.process = ScatterProcess::Thomas;
+    thomas.per_ha = 9000.0;
+    thomas.kappa_per_ha = 600.0;
+    thomas.spread_m = 1.2;
+    RecipeScatter uniform;
+    uniform.process = ScatterProcess::Uniform;
+    uniform.per_ha = 9000.0;
+    const auto dispersion = [](const RecipeScatter& s, double& per_ha, double& nearest_m) {
+        const int side = 25;  // 25 x 25 cells of 4 m: 1 ha
+        std::vector<double> pe, pn;
+        for (int cy = 0; cy < side; ++cy) {
+            for (int cx = 0; cx < side; ++cx) {
+                ScatterInCell(s, 12345u, cx, cy, 4.0, [&](double e, double n, double, std::uint64_t) {
+                    pe.push_back(e);
+                    pn.push_back(n);
+                });
+            }
+        }
+        per_ha = static_cast<double>(pe.size());
+        std::vector<int> q(50 * 50, 0);
+        for (std::size_t i = 0; i < pe.size(); ++i) ++q[static_cast<std::size_t>(std::floor(pn[i] / 2.0)) * 50 + static_cast<std::size_t>(std::floor(pe[i] / 2.0))];
+        double mean = 0.0, var = 0.0;
+        for (const int v : q) mean += v;
+        mean /= static_cast<double>(q.size());
+        for (const int v : q) var += (v - mean) * (v - mean);
+        var /= static_cast<double>(q.size() - 1);
+        nearest_m = 1e9;
+        for (std::size_t i = 0; i < pe.size() && i < 4000; ++i) {
+            for (std::size_t j = i + 1; j < pe.size(); ++j) {
+                const double d = std::hypot(pe[i] - pe[j], pn[i] - pn[j]);
+                if (d < nearest_m) nearest_m = d;
+            }
+        }
+        return var / mean;
+    };
+    double nb = 0.0, nt = 0.0, nu = 0.0, db = 0.0, dt = 0.0, du = 0.0;
+    const double vb = dispersion(blue, nb, db), vt = dispersion(thomas, nt, dt), vu = dispersion(uniform, nu, du);
+    std::printf("    a hectare: blue noise %.0f (var/mean %.2f, nearest %.2f m), uniform %.0f (%.2f), Thomas %.0f (%.2f)\n", nb, vb, db, nu, vu, nt, vt);
+    SC_EXPECT(std::fabs(nb - 18000.0) < 600.0);
+    SC_EXPECT(std::fabs(nu - 9000.0) < 900.0);
+    SC_EXPECT(std::fabs(nt - 9000.0) < 2500.0);  // a cluster process varies more
+    SC_EXPECT(vb < 0.6);                         // even
+    SC_EXPECT(vu > 0.6 && vu < 1.6);             // about Poisson
+    SC_EXPECT(vt > 2.0);                         // clumped
+    SC_EXPECT(db >= 0.2 * std::sqrt(10000.0 / 18000.0) - 1e-9);
+}
+
+SC_TEST("recipes: a ploughed parcel's edge strip is weeds within 0.6 m of its edge, its headlands at its ends") {
+    double e = 0.0, n = 0.0;
+    SC_EXPECT(FindGround("ploughland", 8000.0, -8000.0, e, n));
+    // Look over a 1 km square round it for the bands' points and check each against its parcel.
+    const std::vector<RecipeCandidate> pts = All(e - 500.0, n - 500.0, e + 500.0, n + 500.0);
+    const int ri = RecipeIndex("ploughland");
+    std::size_t margin = 0, headland = 0, wrong = 0;
+    for (const RecipeCandidate& c : pts) {
+        if (c.recipe != ri) continue;
+        double ends = 0.0, sides = 0.0;
+        ParcelEdgeDistance(Raster(), c.east_m, c.north_m, ends, sides);
+        const std::string& band = Rules().recipes.recipes[static_cast<std::size_t>(ri)].bands[static_cast<std::size_t>(c.band)].id;
+        if (band == "margin") {
+            ++margin;
+            wrong += std::min(ends, sides) < 0.6 ? 0 : 1;
+        } else if (band == "headland") {
+            ++headland;
+            wrong += ends >= 0.6 && ends < 18.0 ? 0 : 1;
+        } else {
+            wrong += std::min(ends, sides) >= 0.6 && ends >= 18.0 ? 0 : 1;
+        }
+    }
+    std::printf("    ploughland round (%.0f, %.0f): %zu in the edge strip, %zu on the headlands, %zu in the wrong band\n", e, n, margin, headland, wrong);
+    SC_EXPECT(margin > 0 && headland > 0 && wrong == 0);
+}
+
+SC_TEST("recipes: every recipe's targets are met on its own ground (the report)") {
+    const std::vector<std::string> kinds = Rules().KindIds();
+    int checked = 0;
+    for (const Recipe& r : Rules().recipes.recipes) {
+        if (r.targets.empty()) continue;
+        double e = 0.0, n = 0.0;
+        if (!FindGround(r.id, 8000.0, -8000.0, e, n)) {
+            std::printf("    %s: no 120 m of its ground on the map to measure on\n", r.id.c_str());
+            continue;
+        }
+        // The square round the spot, out to 300 m (bands at parcel edges included where they fall).
+        const std::vector<RecipeMeasureRow> rows = RecipeMeasure(Rules().recipes, kinds, Raster(), Dressing(), Layers(), kDay, e - 150.0, n - 150.0, e + 150.0, n + 150.0);
+        for (const RecipeMeasureRow& row : rows) {
+            if (!row.has_target || &Rules().recipes.recipes[static_cast<std::size_t>(row.recipe)] != &r) continue;
+            // A band of under a quarter hectare is too small a sample to hold to a target.
+            if (row.area_ha < 0.25) continue;
+            ++checked;
+            std::printf("    %s %s %s: %.0f a hectare over %.2f ha (target %.0f-%.0f)\n", r.id.c_str(), r.bands[static_cast<std::size_t>(row.band)].id.c_str(),
+                        kinds[static_cast<std::size_t>(row.kind)].c_str(), row.per_ha, row.area_ha, row.lo_per_ha, row.hi_per_ha);
+            SC_EXPECT(row.on_target);
+        }
+    }
+    SC_EXPECT(checked >= 6);
+}
+
+SC_TEST("recipes: the loader refuses what is wrong") {
+    const std::vector<std::string> kinds = {"grass", "clod"};
+    Recipe r;
+    std::string e;
+    const auto make = [](const std::string& bands, const std::string& extra = "") {
+        return "{\"recipe_id\": \"t\", \"applies\": {\"layers\": [\"meadow\"]}, \"bands\": [" + bands + "]" + extra +
+               ", \"source\": \"game value: sam3d estimate\", \"confidence\": \"estimate\"}";
+    };
+    const std::string body = "{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"uniform\", \"per_ha\": 100}]}";
+    SC_EXPECT(LoadRecipe(make(body), Layers(), kinds, r, &e));
+    SC_EXPECT(r.bands.size() == 1 && r.bands[0].whole && r.bands[0].scatter[0].kind_index == 0);
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"moss\", \"process\": \"uniform\", \"per_ha\": 100}]}"), Layers(), kinds, r, &e));
+    SC_EXPECT(e.find("moss") != std::string::npos);
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"poisson\", \"per_ha\": 100}]}"), Layers(), kinds, r, &e));
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"body\", \"scatter\": [{\"kind\": \"grass\", \"process\": \"thomas\", \"per_ha\": 100}]}"), Layers(), kinds, r, &e));
+    SC_EXPECT(e.find("kappa") != std::string::npos);
+    SC_EXPECT(!LoadRecipe(make(body + ", " + body), Layers(), kinds, r, &e));  // twice
+    SC_EXPECT(!LoadRecipe(make(body + ", {\"id\": \"edge\", \"from_m\": 0, \"to_m\": 1, \"scatter\": []}"), Layers(), kinds, r, &e));
+    SC_EXPECT(e.find("never be reached") != std::string::npos);
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"edge\", \"from_m\": 2, \"to_m\": 1, \"scatter\": []}, " + body), Layers(), kinds, r, &e));
+    SC_EXPECT(!LoadRecipe(make("{\"id\": \"edge\", \"edge\": \"middle\", \"from_m\": 0, \"to_m\": 1, \"scatter\": []}, " + body), Layers(), kinds, r, &e));
+    SC_EXPECT(!LoadRecipe(make(body, ", \"targets\": [{\"band\": \"rim\", \"kind\": \"grass\", \"per_ha\": [1, 2]}]"), Layers(), kinds, r, &e));
+    SC_EXPECT(!LoadRecipe("{\"recipe_id\": \"t\", \"applies\": {\"layers\": [\"lava\"]}, \"bands\": [" + body + "], \"source\": \"x\", \"confidence\": \"y\"}", Layers(), kinds, r, &e));
+    SC_EXPECT(!LoadRecipe("{\"recipe_id\": \"t\", \"applies\": {\"layers\": [\"meadow\"]}, \"bands\": [" + body + "]}", Layers(), kinds, r, &e));  // no source
+    RecipeSet set;
+    SC_EXPECT(!LoadRecipes(kData + "/scenery/no_recipes_here", Layers(), kinds, set, &e));
+}

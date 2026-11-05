@@ -1,0 +1,49 @@
+{
+  "recipe_id": "wheat_stubble",
+  "notes": "A combined wheat field: straw tufts on a lattice, a wider weedy edge (stubble is left longer and the edge was not worked since spring).",
+  "applies": {
+    "layers": [
+      "stubble"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "margin",
+      "edge": "any",
+      "from_m": 0,
+      "to_m": 1.0,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 8000,
+          "kappa_per_ha": 1500,
+          "spread_m": 0.35
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "stubble",
+          "process": "blue_noise",
+          "per_ha": 5000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "stubble",
+      "per_ha": [
+        4000,
+        6000
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (stubble about 10 cm after a combine: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
+  "confidence": "estimate"
+}

@@ -152,8 +152,39 @@ prop test (after L9 starts).
 - **a6-a7, the middle distance**: from `MidStartM` to `MidEndM` (35-250 m, material parameters) every layer fades
   by `MidAmount` (0.7) towards its average colour varied by a noise about 3 m across (±7%), and its normal softens,
   before the far fade at 400 m. a6 (from 50 m, ±10%) left a faint grid near the camera and a cloudy stubble; a7 has
-  neither from 150 m, and the furrows still read from 25 m and the eye. Next: the lower sun to show the relief, then
-  the recipe file (L2) and the next plots.
+  neither from 150 m, and the furrows still read from 25 m and the eye.
+- **a7-a9, a low sun** (`plot_lab.py run --extra "-SimTime=hour -SimHour=16"`, the sun some 10 degrees up in mid
+  October): the furrows read strongly, as in the photographs of a late afternoon; the meso swells (1-2 degree slopes)
+  do not show from 150 m even so, which is the plain's flatness, not a fault: they are there for the sight lines. The
+  clods glowed orange (`kClodTop` 0.150, 0.098, 0.050); darkened by half they were grey stones at noon; at 0.110,
+  0.076, 0.044 they are damp brown at noon, and their sunlit sides at 16:00 are bright, as a face turned to a low sun
+  is (the clutter material's roughness is 0.95: no sheen). Next: the recipe file (L2), then the next plots.
+
+### A.3.3 L2 built in first form (5 Nov 2026)
+
+- **`data/scenery/recipes/`**, one JSON per land type (11: ploughland, sown, wheat and maize stubble, dry stalks,
+  meadow, verge, trampled, bank, forest floor, marsh), read by `simcore/scenery/recipes.hpp` (`LoadRecipes`). A recipe
+  `applies` to ground layers (a field's crop state is its layer already), has a `priority` (a layer takes the highest;
+  two at one priority refused), `bands` (a point takes the first it lies in: `edge` any, ends or sides with `from_m` and
+  `to_m` in from the parcel's edge, from the field function's exact rectangle; the last band has no distance, the rest
+  of the land), each band's `scatter` (a clutter kind, a process, `per_ha`), `targets`, `source` and `confidence`.
+- **Processes** (`ScatterInCell`): uniform; blue noise (a jittered lattice, none closer than a fifth of its spacing:
+  measured 0.19 m at 18,000 a hectare, variance against mean 0.20); Thomas and Matérn clusters (measured 3.0). They run
+  over the plane, not the cell, so cells meet without a seam; every candidate has a fixed threshold, a lattice's from a
+  4 x 4 dither, so thinning (the ring's falloff) never moves a point and a thinned lattice stays even.
+- **The clutter ring reads the recipes**: `clutter.json` keeps the ring and the kinds, its per-layer list is gone (and
+  refused if it comes back); `ASimMapActor` loads both (`LoadClutterRecipes`). The ring at the battery: 6,374 plants
+  in 12 ms. Each point is checked against the layer at its own point, so the points are the same in 4 m or 8 m cells
+  (a sliver of another layer under a cell's samples is left out: 1 in 3,209).
+- **The report** (`RecipeMeasure`): each band's hectares and each kind's instances a hectare against the targets. On
+  the map's own ground near battery 21 every measured band is on target (ploughland's clods 18,028 a hectare, meadow's
+  grass 9,018, and so on); bank, marsh, trampled and verge have no 120 m of their own ground there to measure on.
+- **New in the look**: a weedy strip 0.6 m (ploughed, sown), 0.8 m (maize) or 1 m (wheat stubble) wide at every parcel
+  edge, and more clods on a ploughed parcel's headlands (18 m at its ends); grass, reeds and weeds in clumps.
+- **Left**: ground layers, relief stamps and the map dressing's trees are not recipes yet (D3 asks for them: the
+  ground's surface values stay in `ground_layers.json`, the trees in `map_dressing.json`, to be moved one by one); the
+  parcel's distance ignores an estate's border or a road cutting it; edge recipes by a pair of neighbours (6.4); a
+  lattice along the furrows for maize rows; the material does not yet turn the headland's furrows across.
 
 ### A.4 How a plot is worked (the loop)
 

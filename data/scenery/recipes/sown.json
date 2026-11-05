@@ -1,0 +1,49 @@
+{
+  "recipe_id": "sown",
+  "notes": "A parcel drilled with winter wheat in October, not yet green: a few clods left by the harrow, the drill rows the ground material's; the edge strip as on ploughland.",
+  "applies": {
+    "layers": [
+      "sown"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "margin",
+      "edge": "any",
+      "from_m": 0,
+      "to_m": 0.6,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 6000,
+          "kappa_per_ha": 1500,
+          "spread_m": 0.35
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "clod",
+          "process": "blue_noise",
+          "per_ha": 6000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "clod",
+      "per_ha": [
+        4800,
+        7200
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (wheat sown 25 September-10 October, 3-5 cm deep: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
+  "confidence": "estimate"
+}

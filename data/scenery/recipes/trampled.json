@@ -1,0 +1,36 @@
+{
+  "recipe_id": "trampled",
+  "notes": "Ground worn by vehicles and people (a site, a farmyard): a few clumps survive.",
+  "applies": {
+    "layers": [
+      "trampled"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 800,
+          "kappa_per_ha": 100,
+          "spread_m": 1.5
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        400,
+        1200
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate",
+  "confidence": "estimate"
+}

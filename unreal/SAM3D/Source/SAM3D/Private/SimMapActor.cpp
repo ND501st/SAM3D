@@ -684,13 +684,16 @@ bool ASimMapActor::Build(const FVector& FrameOriginLonLatAlt, const FString& Dat
 	BuildBoxes(Link);
 	BuildTrees(Link);
 	BuildBridges(Link);
-	// The ground clutter round the camera (roadmap T6.1): simcore's rules, one ring that follows the camera.
+	// The ground clutter round the camera (roadmap T6.1): simcore's ring and kinds, placed by the land's recipes (L2), one
+	// ring that follows the camera.
 	if (bDrawTrees && GroundLayers && Cover && DressRules)
 	{
 		auto ClutterRules = std::make_shared<simcore::scenery::ClutterRules>();
 		std::string ClutterError;
 		const FString ClutterPath = FPaths::Combine(DataDirectory, TEXT("scenery/clutter.json"));
-		if (simcore::scenery::LoadClutterRules(TCHAR_TO_UTF8(*ClutterPath), *GroundLayers, *ClutterRules, &ClutterError))
+		const FString RecipeDir = FPaths::Combine(DataDirectory, TEXT("scenery/recipes"));
+		if (simcore::scenery::LoadClutterRules(TCHAR_TO_UTF8(*ClutterPath), *ClutterRules, &ClutterError) &&
+			simcore::scenery::LoadClutterRecipes(TCHAR_TO_UTF8(*RecipeDir), *GroundLayers, *ClutterRules, &ClutterError))
 		{
 			USimClutterRing* Ring = NewObject<USimClutterRing>(this, TEXT("Map_clutter"));
 			Ring->SetupAttachment(Root);

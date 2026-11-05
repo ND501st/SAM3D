@@ -1,0 +1,51 @@
+{
+  "recipe_id": "bank",
+  "notes": "A river's or canal's bank: grass in clumps and reed tussocks.",
+  "applies": {
+    "layers": [
+      "bank"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 2500,
+          "kappa_per_ha": 300,
+          "spread_m": 1.0
+        },
+        {
+          "kind": "reed",
+          "process": "matern",
+          "per_ha": 300,
+          "kappa_per_ha": 25,
+          "spread_m": 2.5
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        1500,
+        3500
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "reed",
+      "per_ha": [
+        100,
+        500
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (reed tussocks along water by a cluster process: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 2.3)",
+  "confidence": "estimate"
+}

@@ -45,7 +45,9 @@ const ClutterRules& Rules() {
     if (!loaded) {
         loaded = true;
         std::string e;
-        if (!LoadClutterRules(kData + "/scenery/clutter.json", Layers(), rules, &e)) std::printf("    %s\n", e.c_str());
+        if (!LoadClutterRules(kData + "/scenery/clutter.json", rules, &e) || !LoadClutterRecipes(kData + "/scenery/recipes", Layers(), rules, &e)) {
+            std::printf("    %s\n", e.c_str());
+        }
     }
     return rules;
 }
@@ -93,6 +95,18 @@ SC_TEST("clutter: the point layer is the mask's layer at every cell centre") {
     SC_EXPECT(PointLayer(cover, Dressing(), Layers(), 1e9, 1e9, kDay) == -1);  // off the map
 }
 
+// The kinds a layer's recipe scatters, in any band.
+static bool Listed(const ClutterRules& rules, int layer, int kind) {
+    const Recipe* r = rules.recipes.ForLayer(layer);
+    if (r == nullptr) return false;
+    for (const RecipeBand& b : r->bands) {
+        for (const RecipeScatter& s : b.scatter) {
+            if (s.kind_index == kind) return true;
+        }
+    }
+    return false;
+}
+
 SC_TEST("clutter: the rules load, and the ring is deterministic, inside the ring and on the layer its kind is listed for") {
     const ClutterRules& rules = Rules();
     SC_EXPECT(!rules.kinds.empty() && rules.parts.size() == 4);  // grass, straw, reed and the plough's clod
@@ -110,11 +124,7 @@ SC_TEST("clutter: the rules load, and the ring is deterministic, inside the ring
         for (const ClutterPlant& p : a) {
             SC_EXPECT(std::hypot(p.east_m - c[0], p.north_m - c[1]) <= rules.ring_m + 1e-6);
             const int layer = PointLayer(Raster(), Dressing(), Layers(), p.east_m, p.north_m, kDay);
-            bool listed = false;
-            if (layer >= 0) {
-                for (const ClutterEntry& e : rules.by_layer[static_cast<std::size_t>(layer)]) listed = listed || e.kind == p.kind;
-            }
-            wrong += listed ? 0 : 1;
+            wrong += Listed(rules, layer, p.kind) ? 0 : 1;
             const ClutterKind& k = rules.kinds[p.kind];
             SC_EXPECT(p.height_m >= k.height_min_m - 1e-6f && p.height_m <= k.height_max_m + 1e-6f);
             SC_EXPECT(p.width_m >= k.width_min_m - 1e-6f && p.width_m <= k.width_max_m + 1e-6f);
@@ -164,29 +174,37 @@ SC_TEST("clutter: the density falls with the distance, a meadow is thick, a plou
     std::printf("    the ring at the battery: %zu plants in %.1f ms, %.3f a m2 within 30 m, %.3f beyond 70 m\n", all.size(), ms, inner, outer);
     SC_EXPECT(all.size() < 20000);  // the ring's instance budget
     SC_EXPECT(inner > outer);
-    // Layers: plants only on layers the rules list.
+    // Layers: plants only on layers a recipe applies to; standing wheat has none (the crop blocks are L5's).
     const int ploughed = LayerId("ploughed"), sown = LayerId("sown"), wheat = LayerId("wheat");
-    SC_EXPECT(rules.by_layer[static_cast<std::size_t>(wheat)].empty());
-    // The plough's fields have clods and nothing else, a ploughed field thicker with them than a sown one (plot lab p01).
-    for (const int l : {ploughed, sown}) {
-        const auto& entries = rules.by_layer[static_cast<std::size_t>(l)];
-        SC_EXPECT(entries.size() == 1);
-        for (const auto& en : entries) SC_EXPECT(rules.kinds[static_cast<std::size_t>(en.kind)].part == "clutter_clod");
+    SC_EXPECT(rules.recipes.ForLayer(wheat) == nullptr);
+    // The plough's fields' bodies have clods and nothing else, a ploughed field thicker with them than a sown one (plot lab
+    // p01); weeds only in the strip at the edge.
+    double body[2] = {0.0, 0.0};
+    for (int i = 0; i < 2; ++i) {
+        const Recipe* r = rules.recipes.ForLayer(i == 0 ? ploughed : sown);
+        SC_EXPECT(r != nullptr);
+        if (r == nullptr) continue;
+        const RecipeBand& b = r->bands.back();
+        SC_EXPECT(b.whole && b.scatter.size() == 1);
+        for (const RecipeScatter& s : b.scatter) {
+            SC_EXPECT(rules.kinds[static_cast<std::size_t>(s.kind_index)].part == "clutter_clod");
+            body[i] = s.per_ha;
+        }
     }
-    SC_EXPECT(rules.by_layer[static_cast<std::size_t>(ploughed)][0].per_m2 > rules.by_layer[static_cast<std::size_t>(sown)][0].per_m2);
-    SC_EXPECT(!rules.by_layer[static_cast<std::size_t>(LayerId("meadow"))].empty());
+    SC_EXPECT(body[0] > body[1]);
+    SC_EXPECT(rules.recipes.ForLayer(LayerId("meadow")) != nullptr);
 }
 
 SC_TEST("clutter: the loader refuses what is wrong") {
     ClutterRules r;
     std::string e;
-    const std::string base_layers = "\"layers\": {\"meadow\": [{\"kind\": \"grass\", \"per_m2\": 1}]}";
     const std::string kinds = "\"kinds\": {\"grass\": {\"part\": \"clutter_grass\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}";
-    SC_EXPECT(LoadClutterRules("{" + kinds + ", " + base_layers + "}", Layers(), r, &e));
-    SC_EXPECT(!LoadClutterRules("{" + base_layers + "}", Layers(), r, &e));  // no kinds
-    SC_EXPECT(!LoadClutterRules("{\"kinds\": {\"grass\": {\"part\": \"lava\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}, " + base_layers + "}", Layers(), r, &e));
-    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"lava\": [{\"kind\": \"grass\", \"per_m2\": 1}]}}", Layers(), r, &e));
-    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"meadow\": [{\"kind\": \"moss\", \"per_m2\": 1}]}}", Layers(), r, &e));
-    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"meadow\": [{\"kind\": \"grass\", \"per_m2\": 0}]}}", Layers(), r, &e));
-    SC_EXPECT(!LoadClutterRules(kData + "/scenery/nothing.json", Layers(), r, &e));
+    SC_EXPECT(LoadClutterRules("{" + kinds + "}", r, &e));
+    SC_EXPECT(!LoadClutterRules("{\"ring_m\": 100}", r, &e));  // no kinds
+    SC_EXPECT(!LoadClutterRules("{\"kinds\": {\"grass\": {\"part\": \"lava\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}}", r, &e));
+    // Where the kinds go is the recipes': the old per-layer list is refused, not silently ignored.
+    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"meadow\": [{\"kind\": \"grass\", \"per_m2\": 1}]}}", r, &e));
+    SC_EXPECT(e.find("recipes") != std::string::npos);
+    SC_EXPECT(!LoadClutterRules(kData + "/scenery/nothing.json", r, &e));
+    SC_EXPECT(!LoadClutterRecipes(kData + "/scenery/no_recipes_here", Layers(), r, &e));
 }
