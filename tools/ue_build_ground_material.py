@@ -247,6 +247,11 @@ if (FieldGridA.x > 1.0)
         }
     }
     float3 Avg = Albedo.SampleLevel(AlbedoSampler, float3(0.5, 0.5, Layer), 11.0).rgb;
+    // At middle distance (MidStartM..MidEndM) a scan's own repeat shows as a grid wherever many repeats are in view:
+    // there it fades towards its average colour, varied by a noise of a few metres that does not repeat, and its normal
+    // softens, before the far fade.
+    float Mid = MidAmount * smoothstep(MidStartM, MidEndM, Depth_m) * (1.0 - Far);
+    A = lerp(A, Avg * (0.93 + 0.14 * G.Noise(P * 0.37 + 3.3)), Mid);
     A = lerp(A, Avg, Far) * Shade;
     float2 Nen = Nxy.x * DirU + (Nxy.y - FurSlope) * DirV;   // in (east, north)
     Patch4[k] = Has ? G.Pick(PatchA, PatchB, PatchC, PatchD, Layer) : 0.0;
@@ -257,7 +262,7 @@ if (FieldGridA.x > 1.0)
     Has4[k] = Has ? 1.0 : 0.0;
     Height4[k] = Has ? dot(A, float3(0.3, 0.59, 0.11)) : 0.25;
     Albedo4[k] = Has ? A : VColor;
-    Normal4[k] = Has ? float3(Nen * (1.0 - Far), 0.0) : float3(0, 0, 0);
+    Normal4[k] = Has ? float3(Nen * (1.0 - Far) * (1.0 - 0.6 * Mid), 0.0) : float3(0, 0, 0);
     RoughAo4[k] = Has ? float2(Orm.g, Orm.r) : float2(0.92, 1.0);
 }
 // Height blending: the higher texture shows through where two cells meet.
@@ -578,6 +583,9 @@ def build_material(arrays):
         ('ShadeAmount', scalar('ShadeAmount', 0.08)),
         ('MacroAmount', scalar('MacroAmount', 0.12)),
         ('HeightBlend', scalar('HeightBlend', 0.6)),
+        ('MidStartM', scalar('MidStartM', 35.0)),
+        ('MidEndM', scalar('MidEndM', 250.0)),
+        ('MidAmount', scalar('MidAmount', 0.7)),
         ('FarStartM', scalar('FarStartM', 400.0)),
         ('FarLengthM', scalar('FarLengthM', 1600.0)),
         ('CoverStartM', scalar('CoverStartM', 6000.0)),

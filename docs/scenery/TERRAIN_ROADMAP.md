@@ -148,8 +148,12 @@ prop test (after L9 starts).
   troughs darker; the scan's furrows across are damped by a third under them and the second sample shifts across too.
   Ploughed 0.36 m and 0.09 m, sown (drill rows) 0.15 m and 0.03 m. a4 (0.12 m, smooth profile, scan damped 65%) read as
   corrugated sheet; a5 reads as ploughland from the eye. They fade once a pixel spans a fifth to a half of a furrow, so
-  from 150 m the scan's own 2 m grid still shows at middle distance, on the stubble as well: next, a mid-distance
-  fade of the scan's detail towards a macro variation, then the lower sun and the recipe file (L2).
+  from 150 m the scan's own 2 m grid still showed at middle distance, on the stubble as well.
+- **a6-a7, the middle distance**: from `MidStartM` to `MidEndM` (35-250 m, material parameters) every layer fades
+  by `MidAmount` (0.7) towards its average colour varied by a noise about 3 m across (±7%), and its normal softens,
+  before the far fade at 400 m. a6 (from 50 m, ±10%) left a faint grid near the camera and a cloudy stubble; a7 has
+  neither from 150 m, and the furrows still read from 25 m and the eye. Next: the lower sun to show the relief, then
+  the recipe file (L2) and the next plots.
 
 ### A.4 How a plot is worked (the loop)
 
