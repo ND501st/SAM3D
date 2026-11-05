@@ -58,6 +58,10 @@ struct GroundLayerRules {
     struct CropState {
         int layer = 0;
         int from_day = 0, to_day = 0;  // the window (the first state has none: it holds from the year's start)
+        // How high the crop stands in this state (0..5 m: what blocks sight, scenery/standing_crops.hpp), reached
+        // grow_days after the field's own day (0: at once).
+        double stand_m = 0.0;
+        int grow_days = 0;
     };
     std::vector<std::vector<CropState>> calendar;
 
@@ -85,6 +89,32 @@ struct GroundLayerRules {
             return layer;
         }
         return cover_layer[static_cast<std::size_t>(cover)];
+    }
+    // How high a field of crop `crop` stands on day `day` (0: nothing stands): its state's stand_m, grown over its
+    // grow_days from the field's own day.
+    double StandOnDay(int crop, std::uint64_t field_id, int day) const {
+        if (crop < 0 || static_cast<std::size_t>(crop) >= calendar.size()) return 0.0;
+        const std::vector<CropState>& states = calendar[static_cast<std::size_t>(crop)];
+        std::size_t at = 0;
+        int since = 1;
+        for (std::size_t i = 1; i < states.size(); ++i) {
+            const int own = OwnDay(states[i], static_cast<int>(i), field_id);
+            if (own > day) break;
+            at = i;
+            since = own;
+        }
+        const CropState& s = states[at];
+        if (s.stand_m <= 0.0) return 0.0;
+        if (s.grow_days <= 0) return s.stand_m;
+        return s.stand_m * std::min(1.0, std::max(0.0, static_cast<double>(day - since) / static_cast<double>(s.grow_days)));
+    }
+    // The tallest any crop stands in any state.
+    double TallestStand() const {
+        double most = 0.0;
+        for (const std::vector<CropState>& states : calendar) {
+            for (const CropState& s : states) most = std::max(most, s.stand_m);
+        }
+        return most;
     }
 };
 
@@ -207,6 +237,16 @@ inline bool LoadGroundLayers(const std::string& path_or_json, const DressingRule
                 if (st.from_day < 1 || st.to_day > 366 || st.from_day > st.to_day) return Fail(error, what + ": its window is not within 1..366");
                 if (st.from_day <= last_day) return Fail(error, what + ": its window overlaps the one before (the states run in order)");
                 last_day = st.to_day;
+            }
+            if (const json::Value* stand = item.Find("stand_m")) {
+                if (!stand->Is(json::Type::Number) || stand->number < 0.0 || stand->number > 5.0) return Fail(error, what + ": stand_m is not in 0..5");
+                st.stand_m = stand->number;
+            }
+            if (const json::Value* grow = item.Find("grow_days")) {
+                if (!grow->Is(json::Type::Number) || grow->number != std::floor(grow->number) || grow->number < 0.0 || grow->number > 200.0 || st.stand_m <= 0.0) {
+                    return Fail(error, what + ": grow_days is a whole number of days in 0..200, for a state that stands");
+                }
+                st.grow_days = static_cast<int>(grow->number);
             }
             list.push_back(st);
         }

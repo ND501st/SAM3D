@@ -2388,11 +2388,39 @@ inline bool NoGroundDrawnTwice(const MapData& map, std::string* why = nullptr) {
     return true;
 }
 
+// What stands on the map on the session's day besides its boxes, in the map's frame: the standing crops
+// (scenery/standing_crops.hpp StandingCrops, roadmap L5 and D4). MapTerrain merges it with the boxes.
+class MapStandingObstacles {
+public:
+    MapStandingObstacles() = default;
+    MapStandingObstacles(const MapStandingObstacles&) = default;
+    MapStandingObstacles& operator=(const MapStandingObstacles&) = default;
+    virtual ~MapStandingObstacles() = default;
+    // How high it stands over the ground at (east, north), its top there above sea level (Terrain::kNoObstacleTop: none),
+    // and the tallest within `radius_m`.
+    virtual double StandAt(double e, double n) const = 0;
+    virtual double TopAt(double e, double n) const = 0;
+    virtual double StandWithin(double e, double n, double radius_m) const = 0;
+    // A bound on its top over the ground segment's bounds; every stretch of it the segment crosses (as MapData's chords).
+    virtual double TopBound(double e0, double n0, double e1, double n1) const = 0;
+    virtual void Chords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const = 0;
+    virtual double TallestStand() const = 0;
+    virtual double TallestTop() const = 0;
+    // The spacing a path looks at it at where no chords are walked (> 0 while anything stands).
+    virtual double CellM() const = 0;
+};
+
 // The map's ground as a scenario's terrain: heights above sea level under the scenario's (east, north).
 class MapTerrain final : public Terrain {
 public:
     MapTerrain(std::shared_ptr<const MapData> map, const GeoPoint& frame_origin)
         : map_(std::move(map)), link_(map_->Def().origin, frame_origin) {}
+
+    // What stands on the day besides the boxes (the standing crops); null: nothing.
+    void SetStanding(std::shared_ptr<const MapStandingObstacles> standing) {
+        standing_ = standing && standing->TallestStand() > 0.0 ? std::move(standing) : nullptr;
+    }
+    const MapStandingObstacles* Standing() const { return standing_.get(); }
 
     double HeightAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
@@ -2400,31 +2428,61 @@ public:
     }
     double ObstacleHeightAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
-        return map_->ObstacleHeight(p.east_m, p.north_m);
+        const double box = map_->ObstacleHeight(p.east_m, p.north_m);
+        return standing_ ? std::max(box, standing_->StandAt(p.east_m, p.north_m)) : box;
     }
     // The map's boxes as footprints (roadmap R6): a path looks at them at their own spacing (terrain.hpp ObstaclesAlong).
     // The scenario's frame and the map's are an affine pair, near enough a rotation, so a segment stays a segment and
-    // a footprint's sides keep their lengths.
-    double ObstacleSpacingM() const override { return map_->NarrowestObstacle(); }
-    double ObstacleTopCeilingM() const override { return map_->TallestObstacleTop(); }
-    double ObstacleTallestM() const override { return map_->TallestObstacle(); }
+    // a footprint's sides keep their lengths. The standing crops are walked as chords too.
+    double ObstacleSpacingM() const override {
+        const double narrow = map_->NarrowestObstacle();
+        return narrow > 0.0 || !standing_ ? narrow : standing_->CellM();
+    }
+    double ObstacleTopCeilingM() const override {
+        return standing_ ? std::max(map_->TallestObstacleTop(), standing_->TallestTop()) : map_->TallestObstacleTop();
+    }
+    double ObstacleTallestM() const override {
+        return standing_ ? std::max(map_->TallestObstacle(), standing_->TallestStand()) : map_->TallestObstacle();
+    }
     double ObstacleTopAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
-        return map_->ObstacleTop(p.east_m, p.north_m);
+        const double box = map_->ObstacleTop(p.east_m, p.north_m);
+        return standing_ ? std::max(box, standing_->TopAt(p.east_m, p.north_m)) : box;
     }
     double ObstacleTopBoundM(double e0, double n0, double e1, double n1, double below_m, double& spacing_m) const override {
         const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);
-        return map_->ObstacleTopBound(a.east_m, a.north_m, b.east_m, b.north_m, below_m, spacing_m);
+        double top = map_->ObstacleTopBound(a.east_m, a.north_m, b.east_m, b.north_m, below_m, spacing_m);
+        if (standing_) {
+            const double crop = standing_->TopBound(a.east_m, a.north_m, b.east_m, b.north_m);
+            if (crop > Terrain::kNoObstacleTop) {
+                top = std::max(top, crop);
+                spacing_m = spacing_m > 0.0 ? std::min(spacing_m, standing_->CellM()) : standing_->CellM();
+            }
+        }
+        return top;
     }
     bool ObstacleChords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const override {
         const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);  // affine: a fraction stays a fraction
-        map_->ObstacleChords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, sink);
+        // Once the sink has said stop, neither the boxes nor the crops tell it more.
+        struct Once final : ObstacleChordSink {
+            ObstacleChordSink& to;
+            bool going = true;
+            explicit Once(ObstacleChordSink& sink_to) : to(sink_to) {}
+            bool Chord(double t_in, double t_out, double top_m) override {
+                if (going) going = to.Chord(t_in, t_out, top_m);
+                return going;
+            }
+        } once(sink);
+        map_->ObstacleChords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, once);
+        if (standing_ && once.going) standing_->Chords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, once);
         return true;
     }
-    // The tallest box whose footprint comes within `radius_m` of the scenario's (east, north) (MapData::ObstacleHeightWithin).
+    // The tallest box whose footprint comes within `radius_m` of the scenario's (east, north) (MapData::ObstacleHeightWithin),
+    // or standing crop.
     double ObstacleHeightWithin(double east_m, double north_m, double radius_m) const {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
-        return map_->ObstacleHeightWithin(p.east_m, p.north_m, radius_m);
+        const double box = map_->ObstacleHeightWithin(p.east_m, p.north_m, radius_m);
+        return standing_ ? std::max(box, standing_->StandWithin(p.east_m, p.north_m, radius_m)) : box;
     }
     // The nearest point of a road's centre line to the scenario's (east, north), within `within_m` of it (ENU; its z is
     // not the ground's), and that road's width. False if no road is that near.
@@ -2460,6 +2518,7 @@ public:
 private:
     std::shared_ptr<const MapData> map_;
     MapFrameLink link_;
+    std::shared_ptr<const MapStandingObstacles> standing_;
 };
 
 // ---------------------------------------------------------------------------------------------- loading

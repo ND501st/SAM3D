@@ -29,6 +29,7 @@ namespace simcore
 		struct DressingRules;
 		struct GroundLayerRules;
 		struct MapDressing;
+		class StandingCrops;
 	}
 }
 
@@ -176,6 +177,7 @@ private:
 	void BuildBoxes(const simcore::MapFrameLink& Link);
 	void BuildTrees(const simcore::MapFrameLink& Link);
 	void BuildBridges(const simcore::MapFrameLink& Link);
+	void BuildCrops(const simcore::MapFrameLink& Link, const FString& DataDirectory);
 	void LoadDressing(const FString& DataDirectory);
 	/** The textured ground's material for each drawn level (null: that level wears the plain one). */
 	TArray<UMaterialInterface*> TexturedGround(const simcore::MapFrameLink& Link, const std::vector<const simcore::MapGrid*>& Levels);
@@ -195,6 +197,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Bridges;
 
+	/** The crops standing on the session's day (roadmap L5): a block per 1 km tile, from the sim's own (BuildCrops). */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Crops;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Parts;
 
@@ -208,6 +214,8 @@ private:
 	std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
 	// The ground's layers (roadmap T1): which layer each land cover cell is drawn with (LoadDressing).
 	std::shared_ptr<const simcore::scenery::GroundLayerRules> GroundLayers;
+	// The crops standing on the session's day: the same the sim's sight lines meet (scenery/standing_crops.hpp).
+	std::shared_ptr<const simcore::scenery::StandingCrops> Standing;
 	// The map's frame to the frame it is drawn in (set by Build): GroundAt's.
 	std::shared_ptr<const simcore::MapFrameLink> GroundLink;
 

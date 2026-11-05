@@ -132,7 +132,8 @@ add_executable(simcore_tests
   tests/test_clutter.cpp
   tests/test_views.cpp
   tests/test_plots.cpp
-  tests/test_recipes.cpp)
+  tests/test_recipes.cpp
+  tests/test_standing_crops.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")

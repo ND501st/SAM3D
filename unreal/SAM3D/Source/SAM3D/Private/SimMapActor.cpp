@@ -29,6 +29,7 @@
 #include "SimCoreIncludes.h"
 #include "SimMapAssets.h"
 #include "simcore/scenery/clutter.hpp"
+#include "simcore/scenery/standing_crops.hpp"
 #include "simcore/scenery/tree_tint.hpp"
 #include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
@@ -684,6 +685,7 @@ bool ASimMapActor::Build(const FVector& FrameOriginLonLatAlt, const FString& Dat
 	BuildBoxes(Link);
 	BuildTrees(Link);
 	BuildBridges(Link);
+	BuildCrops(Link, DataDirectory);
 	// The ground clutter round the camera (roadmap T6.1): simcore's ring and kinds, placed by the land's recipes (L2), one
 	// ring that follows the camera.
 	if (bDrawTrees && GroundLayers && Cover && DressRules)
@@ -762,6 +764,11 @@ void ASimMapActor::Clear()
 	{
 		Bridges->DestroyComponent();
 		Bridges = nullptr;
+	}
+	if (Crops != nullptr)
+	{
+		Crops->DestroyComponent();
+		Crops = nullptr;
 	}
 	for (USceneComponent* P : AssetParts)
 	{
@@ -1761,6 +1768,82 @@ void ASimMapActor::BuildBridges(const simcore::MapFrameLink& Link)
 	Bridges->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 	Bridges->SetMaterial(0, FSimMapAssets::Material());
 	Bridges->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void ASimMapActor::BuildCrops(const simcore::MapFrameLink& Link, const FString& DataDirectory)
+{
+	// The crops standing on the session's day (roadmap L5, simcore/scenery/standing_crops.hpp): the same bake the sim's
+	// sight lines meet (LoadStandingCropsCached shares one per map and day), drawn as a block per 1 km tile, a section each.
+	Standing.reset();
+	std::string Error;
+	Standing = simcore::scenery::LoadStandingCropsCached(TCHAR_TO_UTF8(*DataDirectory), TCHAR_TO_UTF8(*MapFile), Map, GroundDay(GetWorld()), &Error);
+	if (!Standing)
+	{
+		if (!Error.empty())
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map %s: no standing crops (%s)"), *MapFile, UTF8_TO_TCHAR(Error.c_str()));
+		}
+		return;
+	}
+	if (!Standing->Any())
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Map %s: no crop stands on day %d"), *MapFile, Standing->Day());
+		return;
+	}
+	const double T0 = FPlatformTime::Seconds();
+	double W = 1e300, S = 1e300, E = -1e300, N = -1e300;
+	for (const simcore::scenery::CoverGrid& G : Standing->CoverCells().grids)
+	{
+		W = FMath::Min(W, G.west_m);
+		S = FMath::Min(S, G.south_m);
+		E = FMath::Max(E, G.west_m + G.cell_m * G.cols);
+		N = FMath::Max(N, G.south_m + G.cell_m * G.rows);
+	}
+	// Dry maize standing: the tops a grey tan, the faces a little darker (linear; a field's shade varies by its number).
+	const std::array<float, 3> Top{0.26f, 0.20f, 0.11f}, Side{0.24f, 0.18f, 0.095f};
+	constexpr double TileM = 1000.0;
+	Crops = NewObject<UProceduralMeshComponent>(this, TEXT("MapCrops"));
+	Crops->SetupAttachment(Root);
+	Crops->SetCastShadow(true);
+	Crops->RegisterComponent();
+	int32 Section = 0, Triangles = 0;
+	for (double Ts = S; Ts < N; Ts += TileM)
+	{
+		for (double Tw = W; Tw < E; Tw += TileM)
+		{
+			const simcore::scenery::TriMesh T = Standing->BlockMesh(Tw, Ts, Tw + TileM, Ts + TileM, Top, Side);
+			if (T.Empty())
+			{
+				continue;
+			}
+			simcore::Vec3 Ae, An, Au;
+			Link.AxesAt(Tw + 0.5 * TileM, Ts + 0.5 * TileM, Ae, An, Au);
+			TArray<FVector> Verts;
+			TArray<FVector> Normals;
+			TArray<FLinearColor> Colours;
+			TArray<int32> Tris;
+			Verts.Reserve(static_cast<int32>(T.positions.size()));
+			for (std::size_t I = 0; I < T.positions.size(); ++I)
+			{
+				const simcore::Vec3& P = T.positions[I];
+				const simcore::Vec3& Nrm = T.normals[I];
+				Verts.Add(ToUnreal(Link.GroundPoint(P.x, P.y, P.z)));
+				Normals.Add(DirToUnreal(Ae * Nrm.x + An * Nrm.y + Au * Nrm.z));
+				Colours.Add(Linear(T.colours[I]));
+			}
+			for (const std::uint32_t I : T.indices)
+			{
+				Tris.Add(static_cast<int32>(I));
+			}
+			Crops->CreateMeshSection_LinearColor(Section, Verts, Tris, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Crops->SetMaterial(Section, FSimMapAssets::Material());
+			++Section;
+			Triangles += static_cast<int32>(T.Triangles());
+		}
+	}
+	Crops->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: crops standing on day %d drawn in %d tiles, %d triangles, tallest %.1f m (%.2f s)"), *MapFile,
+		Standing->Day(), Section, Triangles, Standing->TallestStand(), FPlatformTime::Seconds() - T0);
 }
 
 void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)

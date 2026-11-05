@@ -1,5 +1,5 @@
 {
-  "notes": "The test plots the terrain's look is perfected on (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A; the catalogue in docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md section 6.2). Each is found on the map by its anchor, as the views are (data/scenery/views.json), and seen from three cameras looking at its middle: eye (1.7 m, 30 m back), low (25 m, 43 m back) and high (150 m, 260 m back) (simcore/scenery/plots.hpp). A field_layer anchor finds the nearest field within 3 km of close_km whose whole 50 m square is one parcel in that ground layer on the scenario's day; turn_deg turns the cameras from the anchor's own bearing (a field's: its furrows). Close to battery 21's district (10 m ground) where it can be. Photos are ids in views.json's register. Rendered by -SimMapShots=<folder> -SimShotSet=plots, set beside their photographs and their last approved render by tools/plot_lab.py. Presentation only.",
+  "notes": "The test plots the terrain's look is perfected on (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A; the catalogue in docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md section 6.2). Each is found on the map by its anchor, as the views are (data/scenery/views.json), and seen from three cameras looking at its middle: eye (1.7 m, 30 m back), low (25 m, 43 m back) and high (150 m, 260 m back) (simcore/scenery/plots.hpp). A field_layer anchor finds the nearest field within 3 km of close_km whose whole 50 m square is one parcel in that ground layer on the scenario's day (with edge set true, the cameras look at where that field ends toward them, from outside it: a standing crop's face); turn_deg turns the cameras from the anchor's own bearing (a field's: its furrows). Close to battery 21's district (10 m ground) where it can be. Photos are ids in views.json's register. Rendered by -SimMapShots=<folder> -SimShotSet=plots, set beside their photographs and their last approved render by tools/plot_lab.py. Presentation only.",
   "plots": [
     {
       "id": "p01_ploughland",
@@ -20,7 +20,7 @@
     {
       "id": "p03_standing_maize",
       "name": "Standing maize (dry)",
-      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "close_km": [8.0, -8.0] },
+      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "close_km": [8.0, -8.0], "edge": true },
       "turn_deg": 90,
       "photos": ["P09", "P71", "P77"],
       "must_see": "A 2-3 m wall of dry tan stalks in rows; the field's edge as a face."

@@ -208,6 +208,36 @@ prop test (after L9 starts).
   every 18-20 cm, drawn every 50 cm for the ring's budget; the maize ridges (the material's wobble cannot follow
   simcore's rows yet).
 
+### A.3.5 Plot 3, standing maize, in simcore first (5 Nov 2026)
+
+- **Heights in the data** (D4, L5): a crop state that stands carries `stand_m` (maize 2.4, sunflower 1.8, wheat 0.9,
+  estimates) and `grow_days`, the days from its start to full height (`ground_layers.json`); `CropLayers::StandOnDay`
+  gives a field's stand on a day.
+- **`StandingCrops`** (`simcore/scenery/standing_crops.hpp`): one bake per map and day of what stands, a byte per 25 m
+  cover cell (uniform, or mixed where a field's edge crosses it and the field is asked exactly), with 500 m blocks of
+  bounds. It is a `MapStandingObstacles` overlay on `MapTerrain` (`SetStanding`): every obstacle query, the chords and the
+  bounds take the max of R6's footprints and the crops, so the sight line, the radar's line of sight and the battery's
+  sight see standing maize as a wall at its height. Exact at the field's edge (`test_standing_crops.cpp`: 421,201 points,
+  0 wrong; 120 paths' chords, 0 missed; a man at 1.7 m blocked by 400 m of maize, clear from 5 m). A scenario loads it for
+  its day (`ScenarioDef::crops`, cached), the runner sets it on its ground; the air war's raid generator does not.
+- **Unreal** draws the same bake (`ASimMapActor::BuildCrops`, `StandingCrops::BlockMesh`): per 1 km tile a prism per field
+  part at its stand, walls only where the neighbour stands lower, tan with a per-field shade and a mottle. Day 288: 385
+  tiles, 387,636 triangles, 1.4 s.
+- **The plot's camera** (`plots.json` anchor `"edge": true`): finds the field's edge on a side that opens on a field not in
+  the layer and stands outside it looking at the face.
+- **c1**: the camera stood under a road's tree row; the face a dark grey wall. **c2** (the open-side search, lighter, a
+  mottle): the face stands right, 2.4 m over open stubble, with a clean edge from 25 m and 150 m; it reads as a tan wall,
+  not as stalks.
+- **Left**: rows of maize cards near the camera (within some 60 m, an atlas card per plant; registered as procedural);
+  the camera inside a block sees out through its back faces; the dry_stalks recipe's reed clutter is still scattered
+  under the block; the day is fixed at the session's start (a field harvested in a long session stays standing); the bake
+  costs about 2 s a map and day.
+- **The balance runs re-read**: simcore's 1061 tests pass. `helper_coverage` keeps its 25 gaps; only the dynamic
+  campaign testbed on the Kesmark map moved, by a few per cent (the commander's first launch 814 s to 785 s, the senior
+  operator's wheel moves 1616 to 1283). `ground_check` 0 of 15 scenarios with anything under the ground.
+  `crew_balance` (no map) unchanged. `em_demo` and `air_war_bench` build no `MapTerrain` with crops, so they are
+  untouched by construction.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

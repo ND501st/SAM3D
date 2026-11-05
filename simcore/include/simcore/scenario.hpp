@@ -47,6 +47,7 @@
 #include "simcore/session_deliveries.hpp"
 #include "simcore/talk_tables.hpp"
 #include "simcore/target_behaviour.hpp"
+#include "simcore/scenery/standing_crops.hpp"
 #include "simcore/terrain_map.hpp"
 #include "simcore/weather_data.hpp"
 #include "simcore/geo.hpp"
@@ -234,6 +235,9 @@ struct ScenarioDef {
     // under the scenario, whatever its origin. ground_height_m is then the map's ground under the origin.
     std::string map_file;
     std::shared_ptr<const MapData> map;
+    // The map's crops standing on the scenario's date (scenery/standing_crops.hpp, roadmap L5): they block sight as the
+    // woods do. Null off a map or where nothing stands.
+    std::shared_ptr<const scenery::StandingCrops> crops;
     // "weather": a preset of data/weather/presets.json (by id, or the air war's clear/cloudy/poor): the winds, the
     // cloud and the air (weather.hpp). Without one, still standard air and no cloud.
     bool has_weather = false;
@@ -2146,6 +2150,11 @@ private:
             }
         } else {
             c.start_local_h = !out.optics.daylight || out.battery_night ? 23.0 : 10.5;
+        }
+        // The crops standing on the date (the menu moves the hour, never the day).
+        if (out.map) {
+            out.crops = scenery::LoadStandingCropsCached(data_dir, out.map_file, out.map, c.day_of_year, &error);
+            if (!out.crops && !error.empty()) return Fail("", error);
         }
         return true;
     }

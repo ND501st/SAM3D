@@ -45,6 +45,7 @@ struct PlotDef {
     ViewAnchor anchor;         // a view's anchor kinds, and field_layer (a field in one ground layer on the day)
     std::string layer;         // field_layer: the ground layer's id (data/scenery/ground_layers.json)
     double turn_rad = 0.0;     // the cameras' bearing from the anchor's own (field_layer: from the furrows' heading)
+    bool edge = false;         // field_layer: look at where the field ends toward the cameras, from outside it (a standing crop's face)
     double core_m = 50.0;      // the plot's side: a field_layer plot's whole square is the one layer of one parcel
     double fov_rad = 1.0472;
     std::vector<std::string> photos;
@@ -117,6 +118,10 @@ inline bool LoadPlots(const std::string& path_or_json, PlotSet& out, std::string
             p.anchor.has_close = true;
             p.anchor.close_e_m = c->items[0].number * 1000.0;
             p.anchor.close_n_m = c->items[1].number * 1000.0;
+            if (const json::Value* edge = a->Find("edge")) {
+                if (!edge->Is(json::Type::Bool)) return Fail(error, p.id + ": edge is true or false");
+                p.edge = edge->boolean;
+            }
         } else {
             if (!ParseAnchor(*a, p.id, p.anchor, error)) return false;  // any other kind is a view's anchor
         }
@@ -190,8 +195,33 @@ inline views_detail::Spot FieldLayerSpot(const CoverRaster& cover, const Dressin
 // line, up to 50 m, else it is missing with the reason; a plot the map cannot give is missing whole.
 inline std::vector<ResolvedView> ResolvePlot(const MapData& map, const DressingRules& dressing, const CoverRaster& cover,
                                              const GroundLayerRules& layers, int day_of_year, const PlotDef& p) {
-    const views_detail::Spot s = p.anchor.kind == "field_layer" ? plots_detail::FieldLayerSpot(cover, dressing, layers, day_of_year, p)
-                                                                 : ResolveSpot(map, cover, p.anchor);
+    views_detail::Spot s = p.anchor.kind == "field_layer" ? plots_detail::FieldLayerSpot(cover, dressing, layers, day_of_year, p)
+                                                           : ResolveSpot(map, cover, p.anchor);
+    if (s.ok && p.edge) {
+        // Back toward the cameras, metre by metre, to the field's last point in the layer: the cameras look at its face.
+        // The four sides in turn from turn_deg's: the first whose cameras' ground (to the high one's) is open farmland in
+        // another layer (not a road, a wood or the same crop).
+        const int want = layers.Index(p.layer);
+        const auto in_layer = [&](double e, double n) {
+            return cover.At(e, n) == Cover::Field && PointLayer(cover, dressing, layers, e, n, day_of_year) == want;
+        };
+        for (int side = 0; side < 4; ++side) {
+            const double bearing = s.bearing_rad + p.turn_rad + side * 0.5 * kPi, ue = std::sin(bearing), un = std::cos(bearing);
+            double back = 0.0;
+            while (back < 2000.0 && in_layer(s.e - (back + 1.0) * ue, s.n - (back + 1.0) * un)) back += 1.0;
+            const double ee = s.e - back * ue, en = s.n - back * un;
+            bool open = true;
+            for (double d = 5.0; d <= 60.0 && open; d += 5.0) {
+                const double qe = ee - d * ue, qn = en - d * un;
+                open = cover.At(qe, qn) == Cover::Field && !in_layer(qe, qn);
+            }
+            if (!open && side < 3) continue;
+            s.e = s.eye_e = ee;
+            s.n = s.eye_n = en;
+            s.bearing_rad += side * 0.5 * kPi;
+            break;
+        }
+    }
     std::vector<ResolvedView> out;
     for (const PlotCamera& c : PlotCameras()) {
         ResolvedView r;
