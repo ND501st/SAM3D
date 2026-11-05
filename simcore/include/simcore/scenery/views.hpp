@@ -100,7 +100,7 @@ inline const std::vector<std::string>& LookKinds() {
 }
 
 inline const std::vector<std::string>& AnchorKinds() {
-    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "site", "river", "hill"};
+    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill"};
     return k;
 }
 
@@ -112,6 +112,43 @@ inline bool OneOf(const std::vector<std::string>& list, const std::string& s) {
 }
 
 }  // namespace views_detail
+
+// Reads one anchor (a view's, or a plot's: scenery/plots.hpp) into `an`. False with the reason in `error`.
+inline bool ParseAnchor(const json::Value& a_value, const std::string& id, ViewAnchor& an, std::string* error) {
+    using views_detail::Fail;
+    const json::Value* a = &a_value;
+    an = ViewAnchor();
+    an.kind = views_detail::Text(*a, "kind");
+    if (!views_detail::OneOf(views_detail::AnchorKinds(), an.kind)) return Fail(error, id + ": anchor kind \"" + an.kind + "\" unknown");
+    for (const char* key : {"settlement", "road", "site", "river", "hill"}) {
+        const std::string name = views_detail::Text(*a, key);
+        if (!name.empty()) an.id = name;
+    }
+    if (const json::Value* c = a->Find("close_km")) {
+        if (!c->Is(json::Type::Array) || c->items.size() != 2 || !c->items[0].Is(json::Type::Number) || !c->items[1].Is(json::Type::Number)) {
+            return Fail(error, id + ": close_km is [east, north] in km");
+        }
+        an.has_close = true;
+        an.close_e_m = c->items[0].number * 1000.0;
+        an.close_n_m = c->items[1].number * 1000.0;
+    }
+    an.from_m = views_detail::Number(*a, "from_m", 0.0);
+    an.from_centre_m = views_detail::Number(*a, "from_centre_m", 0.0);
+    an.at = views_detail::Number(*a, "at", 0.5);
+    an.side_m = views_detail::Number(*a, "side_m", 0.0);
+    an.towards = views_detail::Text(*a, "towards");
+    if (a->Find("bearing_deg") != nullptr) {
+        an.has_bearing = true;
+        an.bearing_rad = views_detail::Number(*a, "bearing_deg", 0.0) * kPi / 180.0;
+    }
+    if (an.at < 0.0 || an.at > 1.0) return Fail(error, id + ": at is a fraction 0..1");
+    const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
+    if (by_id && an.id.empty()) return Fail(error, id + ": a " + an.kind + " anchor names its " + an.kind);
+    if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge") && !an.has_close) {
+        return Fail(error, id + ": a " + an.kind + " anchor needs close_km");
+    }
+    return true;
+}
 
 // Reads the views from a file's path or the JSON text itself (it starts with '{'). False with the reason in `error` (the
 // set is left as it was): ids unique, kinds known, every photo named by a view listed with its page, licence and author.
@@ -155,36 +192,7 @@ inline bool LoadViews(const std::string& path_or_json, ViewSet& out, std::string
         }
         const json::Value* a = item.Find("anchor");
         if (a == nullptr || !a->Is(json::Type::Object)) return Fail(error, v.id + ": no anchor");
-        ViewAnchor& an = v.anchor;
-        an.kind = views_detail::Text(*a, "kind");
-        if (!views_detail::OneOf(views_detail::AnchorKinds(), an.kind)) return Fail(error, v.id + ": anchor kind \"" + an.kind + "\" unknown");
-        for (const char* key : {"settlement", "road", "site", "river", "hill"}) {
-            const std::string name = views_detail::Text(*a, key);
-            if (!name.empty()) an.id = name;
-        }
-        if (const json::Value* c = a->Find("close_km")) {
-            if (!c->Is(json::Type::Array) || c->items.size() != 2 || !c->items[0].Is(json::Type::Number) || !c->items[1].Is(json::Type::Number)) {
-                return Fail(error, v.id + ": close_km is [east, north] in km");
-            }
-            an.has_close = true;
-            an.close_e_m = c->items[0].number * 1000.0;
-            an.close_n_m = c->items[1].number * 1000.0;
-        }
-        an.from_m = views_detail::Number(*a, "from_m", 0.0);
-        an.from_centre_m = views_detail::Number(*a, "from_centre_m", 0.0);
-        an.at = views_detail::Number(*a, "at", 0.5);
-        an.side_m = views_detail::Number(*a, "side_m", 0.0);
-        an.towards = views_detail::Text(*a, "towards");
-        if (a->Find("bearing_deg") != nullptr) {
-            an.has_bearing = true;
-            an.bearing_rad = views_detail::Number(*a, "bearing_deg", 0.0) * kPi / 180.0;
-        }
-        if (an.at < 0.0 || an.at > 1.0) return Fail(error, v.id + ": at is a fraction 0..1");
-        const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
-        if (by_id && an.id.empty()) return Fail(error, v.id + ": a " + an.kind + " anchor names its " + an.kind);
-        if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard") && !an.has_close) {
-            return Fail(error, v.id + ": a " + an.kind + " anchor needs close_km");
-        }
+        if (!ParseAnchor(*a, v.id, v.anchor, error)) return false;
         v.eye_m = views_detail::Number(item, "eye_m", 1.7);
         if (v.eye_m < 0.5 || v.eye_m > 20000.0) return Fail(error, v.id + ": eye_m is not in 0.5..20000");
         v.look = views_detail::Text(item, "look");
@@ -305,12 +313,11 @@ inline OnLine AlongLine(const std::vector<MapPoint>& pts, double fraction) {
 
 }  // namespace views_detail
 
-// The cameras of one view on the map: one, or a panorama's several (named <id>_h<degrees>). A view the map cannot give
-// has ok false and its reason. `cover` is the land cover (BakeCover), for the parcels of farmland.
-inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingRules& /*rules*/, const CoverRaster& cover, const ViewDef& v) {
+// Where an anchor lies on the map: its point, the eye the anchor's own kind places, and the way it looks (also read by
+// the plots, scenery/plots.hpp). Not ok, with the reason, when the map cannot give it.
+inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cover, const ViewAnchor& a) {
     using namespace views_detail;
     const MapDef& def = map.Def();
-    const ViewAnchor& a = v.anchor;
     Spot s;
     if (a.kind == "settlement") {
         const MapSettlementDef* st = FindSettlement(def, a.id);
@@ -481,6 +488,46 @@ inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingR
             s.eye_n = p.n + off * std::cos(normal);
             s.bearing_rad = BearingTo(s.eye_e, s.eye_n, p.e, p.n);
         }
+    } else if (a.kind == "wood_edge") {
+        // The nearest wood to close_km; the eye stands from_m outside its edge on the side the look comes from (the data's
+        // bearing, north when none): the first open ground walking back from the wood's box against the look.
+        const MapBox* wood = nullptr;
+        double best = std::numeric_limits<double>::max();
+        for (const MapBox& b : map.Layout().boxes) {
+            if (b.part != MapPart::Canopy) continue;
+            const double d = std::hypot(b.east_m - a.close_e_m, b.north_m - a.close_n_m);
+            if (d < best) {
+                best = d;
+                wood = &b;
+            }
+        }
+        if (wood == nullptr) {
+            s = Missing("the map has no woods");
+        } else {
+            const double bearing = a.has_bearing ? a.bearing_rad : 0.0;
+            // Woods are tiled from many boxes: from the box's centre walk back against the look until the ground is open.
+            bool found = false;
+            double edge_e = 0.0, edge_n = 0.0;
+            for (double t = 0.0; t <= 1500.0; t += 5.0) {
+                const double pe = wood->east_m - t * std::sin(bearing), pn = wood->north_m - t * std::cos(bearing);
+                if (t > 0.0 && map.ObstacleHeight(pe, pn) <= 3.0) {
+                    found = true;
+                    edge_e = pe;
+                    edge_n = pn;
+                    break;
+                }
+            }
+            if (!found) {
+                s = Missing("no edge of the nearest wood found");
+            } else {
+                s.ok = true;
+                s.e = edge_e;
+                s.n = edge_n;
+                s.eye_e = edge_e - a.from_m * std::sin(bearing);
+                s.eye_n = edge_n - a.from_m * std::cos(bearing);
+                s.bearing_rad = bearing;
+            }
+        }
     } else if (a.kind == "hill") {
         const MapHillDef* h = FindById(def.hills, a.id);
         if (h == nullptr) {
@@ -494,6 +541,15 @@ inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingR
             s.bearing_rad = BearingTo(s.eye_e, s.eye_n, s.e, s.n);
         }
     }
+    return s;
+}
+
+// The cameras of one view on the map: one, or a panorama's several (named <id>_h<degrees>). A view the map cannot give
+// has ok false and its reason. `cover` is the land cover (BakeCover), for the parcels of farmland.
+inline std::vector<ResolvedView> ResolveView(const MapData& map, const DressingRules& /*rules*/, const CoverRaster& cover, const ViewDef& v) {
+    using namespace views_detail;
+    const ViewAnchor& a = v.anchor;
+    const Spot s = ResolveSpot(map, cover, a);
     std::vector<ResolvedView> out;
     if (!s.ok) {
         ResolvedView r;

@@ -18,7 +18,8 @@ gates **the battery's war, phases 13–21**; meanwhile the leftovers each phase 
 **Priority from 2 Nov 2026: track R** (the owner's review of the dynamic campaign test): damage states drawn by
 chance and the AAA's accuracy by range first, then nothing drawn under the map, flight with attitude, a more realistic
 map, the time of day in the menu, and pilots who defend themselves. **Track T** (3 Nov 2026), the terrain made to look
-like the plain: its roadmap `docs/scenery/TERRAIN_ROADMAP.md`, T0's research done, T1's textured ground in first form.
+like the plain: its roadmap `docs/scenery/TERRAIN_ROADMAP.md`, T0's research done, T1's textured ground in first form;
+reworked on 5 Nov 2026 into phases L0-L10 (test plots and recipes first: the roadmap's part A).
 
 The old "crew and mission" phase became phase 8, after the battery (phase 7), because the real Osa got most of its
 targets from the battery's PU-12 and the crew changes ripple through everything after them (re-sequenced 2 Oct 2026).
@@ -340,6 +341,29 @@ the textures and models chosen, the technical design and the process for every a
 
 **Order:** T1, then T2. T3 and T4 side by side, then T5 and T7 model by model with the owner's say-so, T6 and T8
 after, T9 when a measure calls for it.
+
+**The rework (5 Nov 2026).** The owner, on the views of 4-5 Nov: the ground's texturing worked, but the layering of
+trees, foliage and assets is failing; things are sparse, the map near completely flat, and the assets hard to import
+and poor to look at. Four research notes (other games, Unreal's tools, asset tools, the procedural method:
+`docs/research/TERRAIN_{GAMES,UE_TOOLS,ASSET_TOOLS,PROCEDURAL_METHOD}_2026-11.md`) and a new plan, the roadmap's part A:
+T5-T9 are replaced by **L1-L10**.
+
+| # | Phase |
+|---|---|
+| L0 | **The rework**: the research and the decisions (keep simcore's mesh ground; test plots and recipes; relief at three scales; fields as data; our own assets by script). **Done (5 Nov 2026)** |
+| L1 | **The plot lab**: 50 x 50 m plot worlds made by simcore's own generator, three cameras each, a page beside the photographs, under 90 s a look; the tree ladder's bug fixed |
+| L2 | **Recipes** as data: per land type and per edge, bands across a signed distance, scatter by blue noise, lattices and clusters, deterministic per cell, a report against each recipe's targets |
+| L3 | **The ground's shape**: meso relief (swells, old channels, sand ridges, mounds, embankments, ditches, canals, dykes) in simcore; the balance runs re-read |
+| L4 | **The ground's surface**: a field-state texture from simcore, layers per pixel by rule, the colour map, anti-tiling, static-mesh ground tiles with RVT and displacement |
+| L5 | **The ground cover**: grass, stubble, stover, clods and sward round the camera; standing crops as blocks |
+| L6 | **The asset kit**: card clumps, the tree builder (skeleton and twig cards), impostors, Unreal assets in place, the Megaplants spike |
+| L7 | **Woods, edges and lines** in simcore: layered stands, forest edges, tree rows, hedges, reed belts |
+| L8 | **The whole map**: every recipe on Kesmark, the views and budgets |
+| L9 | **Villages and farms**: our own building generator, fences, poles, gardens |
+| L10 | **Far field and cost**: impostor rings, baked Nanite tiles if they measure better |
+
+**Order:** L1 with L2; then one vertical slice, ploughland, through L3-L5; then maize, the forest edge and the tree row
+through L6-L7, and the other plots in turn; L8 after each group; L9 and L10 last.
 
 ## The battery's war: phases 13-21 (planned 22 Oct 2026)
 

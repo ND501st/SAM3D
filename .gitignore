@@ -76,3 +76,7 @@ reports/
 # (licences such as Fab's Standard one forbid redistributing the files). tools/check_assets.py checks it.
 unreal/**/Content/ThirdParty/
 art/thirdparty/
+# Packs Fab and the Procedural Vegetation Editor install at the Content root (their own folder names).
+unreal/**/Content/Fab/
+unreal/**/Content/GV_FreeShrubsPack/
+unreal/**/Content/Megaplant_Library/

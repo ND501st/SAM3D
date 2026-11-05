@@ -1,0 +1,60 @@
+{
+  "notes": "The test plots the terrain's look is perfected on (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A; the catalogue in docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md section 6.2). Each is found on the map by its anchor, as the views are (data/scenery/views.json), and seen from three cameras looking at its middle: eye (1.7 m, 30 m back), low (25 m, 43 m back) and high (150 m, 260 m back) (simcore/scenery/plots.hpp). A field_layer anchor finds the nearest field within 3 km of close_km whose whole 50 m square is one parcel in that ground layer on the scenario's day; turn_deg turns the cameras from the anchor's own bearing (a field's: its furrows). Close to battery 21's district (10 m ground) where it can be. Photos are ids in views.json's register. Rendered by -SimMapShots=<folder> -SimShotSet=plots, set beside their photographs and their last approved render by tools/plot_lab.py. Presentation only.",
+  "plots": [
+    {
+      "id": "p01_ploughland",
+      "name": "Ploughland (autumn)",
+      "anchor": { "kind": "field_layer", "layer": "ploughed", "close_km": [8.0, -8.0] },
+      "turn_deg": 30,
+      "photos": ["P01", "P03", "P12", "P65"],
+      "must_see": "Furrows along the parcel's heading at the plough's 30-50 cm, big dry clods, a pale dusty top; the headland worked across the furrows; the parcel's edge against its neighbour."
+    },
+    {
+      "id": "p02_maize_stover",
+      "name": "Maize stover (harvested)",
+      "anchor": { "kind": "field_layer", "layer": "maize_stubble", "close_km": [8.0, -8.0] },
+      "turn_deg": 30,
+      "photos": ["P77"],
+      "must_see": "Stalks lying and broken, stumps in rows 70-76 cm apart, cut stalks or bales in places."
+    },
+    {
+      "id": "p03_standing_maize",
+      "name": "Standing maize (dry)",
+      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "close_km": [8.0, -8.0] },
+      "turn_deg": 90,
+      "photos": ["P09", "P71", "P77"],
+      "must_see": "A 2-3 m wall of dry tan stalks in rows; the field's edge as a face."
+    },
+    {
+      "id": "p05_wheat_stubble",
+      "name": "Wheat stubble",
+      "anchor": { "kind": "field_layer", "layer": "stubble", "close_km": [8.0, -8.0] },
+      "turn_deg": 30,
+      "photos": ["P91"],
+      "must_see": "Short straw 10-20 cm in the drill's rows, the combine's straw lines, weeds."
+    },
+    {
+      "id": "p11_forest_edge",
+      "name": "Forest edge against a field",
+      "anchor": { "kind": "wood_edge", "close_km": [8.0, -8.0], "bearing_deg": 0 },
+      "photos": ["P22", "P66"],
+      "must_see": "The herb fringe, a shrub belt, a mantle of lower trees, then the stand; never a wall."
+    },
+    {
+      "id": "p13_road_verge",
+      "name": "Road with verge and ditch",
+      "anchor": { "kind": "road", "road": "f_vrbice", "at": 0.5 },
+      "turn_deg": 60,
+      "photos": ["P60", "P76"],
+      "must_see": "Asphalt 4-6 m, earth shoulders 1-2 m, a ditch, a pole line, a tree row on one side."
+    },
+    {
+      "id": "p14_river_bank",
+      "name": "River bank with reeds",
+      "anchor": { "kind": "river", "river": "rava", "close_km": [16.0, -10.0], "side_m": 60 },
+      "turn_deg": 90,
+      "photos": ["P26"],
+      "must_see": "A reed belt 1-5 m wide, reeds 2-4 m tall, willows on the bank."
+    }
+  ]
+}

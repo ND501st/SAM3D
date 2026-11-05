@@ -13,3 +13,4 @@
 #include "simcore/scenery/munitions.hpp"
 #include "simcore/scenery/trimesh.hpp"
 #include "simcore/scenery/views.hpp"
+#include "simcore/scenery/plots.hpp"

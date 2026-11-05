@@ -4,7 +4,13 @@
     "oak": {"onset_day": 275, "full_day": 310, "spread_days": 14, "autumn": [2.9, 0.8, 0.75], "brightness": 0.12},
     "poplar": {"onset_day": 265, "full_day": 295, "spread_days": 12, "autumn": [5.0, 1.8, 1.0], "brightness": 0.12},
     "pine": {"onset_day": 275, "full_day": 310, "spread_days": 0, "autumn": [1.0, 1.0, 1.0], "brightness": 0.08},
-    "acacia": {"onset_day": 255, "full_day": 300, "spread_days": 12, "autumn": [2.9, 1.5, 0.85], "brightness": 0.12}
+    "acacia": {"onset_day": 255, "full_day": 300, "spread_days": 12, "autumn": [2.9, 1.5, 0.85], "brightness": 0.12},
+    "hornbeam": {"onset_day": 278, "full_day": 312, "spread_days": 12, "autumn": [3.4, 2.0, 0.8], "brightness": 0.12},
+    "beech": {"onset_day": 280, "full_day": 312, "spread_days": 10, "autumn": [3.6, 1.4, 0.6], "brightness": 0.1},
+    "alder": {"onset_day": 295, "full_day": 330, "spread_days": 10, "autumn": [1.4, 1.1, 0.85], "brightness": 0.1},
+    "maple": {"onset_day": 272, "full_day": 305, "spread_days": 14, "autumn": [4.0, 2.2, 0.8], "brightness": 0.14},
+    "hazel": {"onset_day": 278, "full_day": 310, "spread_days": 12, "autumn": [3.0, 2.0, 0.8], "brightness": 0.12},
+    "elder": {"onset_day": 282, "full_day": 315, "spread_days": 12, "autumn": [2.0, 1.3, 0.9], "brightness": 0.12}
   },
-  "mass_mix": {"oak": 0.5, "acacia": 0.3, "poplar": 0.2}
+  "mass_mix": {"oak": 0.4, "hornbeam": 0.15, "acacia": 0.25, "poplar": 0.1, "alder": 0.1}
 }

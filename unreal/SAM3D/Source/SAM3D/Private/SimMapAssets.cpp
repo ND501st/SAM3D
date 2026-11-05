@@ -99,7 +99,8 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 			Real->AddToRoot();
 			Entry.Mesh = Real;
 			Entry.Fix = FTransform(FRotator(0.0, Asset->yaw_deg, 0.0), FVector(0.0, 0.0, Asset->z_offset_m * 100.0), FVector(Asset->scale));
-			UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s drawn by %s (%s, %s)"), *Key, *SimMapStd(Asset->id), *Path, *SimMapStd(Asset->licence));
+			UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s drawn by %s (%s, %s), %d LODs, %d material slots"), *Key, *SimMapStd(Asset->id), *Path,
+					*SimMapStd(Asset->licence), Real->GetNumLODs(), Real->GetStaticMaterials().Num());
 		}
 		else
 		{

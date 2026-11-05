@@ -43,7 +43,7 @@ std::string One(const std::string& anchor, const std::string& rest = "") {
 
 SC_TEST("views: the data loads, with every photo a view names listed with its page, licence and author") {
     const ViewSet set = Views();
-    SC_EXPECT(set.views.size() == 11);
+    SC_EXPECT(set.views.size() == 12);
     for (const ViewDef& v : set.views) {
         SC_EXPECT(!v.photos.empty());
         for (const std::string& id : v.photos) {
@@ -98,8 +98,8 @@ SC_TEST("views: every view on the Kesmark map resolves to a camera above the gro
                 continue;
             }
             ++resolved;
-            const double ground = map->GroundHeight(c.eye_e, c.eye_n);
             SC_EXPECT(c.eye_up_m >= 0.5);
+            const double ground = map->GroundHeight(c.eye_e, c.eye_n);
             SC_EXPECT(map->ObstacleTop(c.eye_e, c.eye_n) < ground + c.eye_up_m - 0.25);
             SC_EXPECT(std::hypot(c.target_e - c.eye_e, c.target_n - c.eye_n) > 1.0);
             SC_EXPECT(c.fov_rad > 0.3 && c.fov_rad < 2.1);
@@ -129,6 +129,32 @@ SC_TEST("views: a site anchor with from_m and a bearing puts the eye that far of
         }
     }
     SC_EXPECT(seen == 4);  // the panorama's four bearings
+}
+
+SC_TEST("views: the wood-edge view stands in the open with a wood ahead, the edge 25 m on") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const CoverRaster cover = BakeCover(*map, Dressing());
+    int seen = 0;
+    for (const ViewDef& v : Views().views) {
+        if (v.id != "v12_wood_edge") continue;
+        for (const ResolvedView& c : ResolveView(*map, Dressing(), cover, v)) {
+            ++seen;
+            SC_EXPECT(c.ok);
+            if (!c.ok) continue;
+            SC_EXPECT(map->ObstacleHeight(c.eye_e, c.eye_n) < 1.7);  // in the open
+            // Walking on along the look (north) meets something over 3 m within 60 m: the wood.
+            bool wood = false;
+            for (double t = 5.0; t <= 60.0; t += 5.0) {
+                const double pn = c.eye_n + t;
+                wood = wood || map->ObstacleHeight(c.eye_e, pn) > 3.0;
+            }
+            SC_EXPECT(wood);
+        }
+    }
+    SC_EXPECT(seen == 1);
 }
 
 SC_TEST("views: the farmyard view says why it is missing (no farmyard site kind yet), the rest are given") {

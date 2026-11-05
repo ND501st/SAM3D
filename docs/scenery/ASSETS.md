@@ -47,6 +47,12 @@ In the game, a part whose asset is not on this machine is drawn procedurally, an
 (`Map assets: house#1's asset house_b is not on this machine ...`). Every machine therefore runs, with or without the
 third-party files.
 
+## Getting a model onto the map (roadmap T5-T8)
+
+`docs/scenery/T5_T8_PLAN.md` section 12: `tools/fetch_models.py` (Poly Haven), `tools/prepare_model.py` (Blender fits the part's
+frame), `tools/ue_import_model.py` (imports it and writes the register); the picks are in `data/scenery/model_picks.json`. The
+part keys now include the ground clutter's `clutter_grass`, `clutter_straw` and `clutter_reed`.
+
 ## Fetching the files on a machine
 
 1. Get the model from the `origin` recorded in the register, under the licence recorded there (a Fab asset: add it to

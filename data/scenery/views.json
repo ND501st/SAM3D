@@ -216,13 +216,40 @@
     },
     {
       "id": "v11_map_border",
-      "anchor": { "kind": "site", "site": "tech_battery", "from_m": 3000, "bearing_deg": 270 },
+      "anchor": {
+        "kind": "site",
+        "site": "tech_battery",
+        "from_m": 3000,
+        "bearing_deg": 270
+      },
       "eye_m": 600,
       "look": "at_anchor",
       "pitch_deg": -6,
       "fov_deg": 70,
-      "photos": ["P14", "P65"],
+      "photos": [
+        "P14",
+        "P65"
+      ],
       "must_see": "the map proper's edge 20 km east of the origin: the far ground's fields and woods go on at the same scale and colour, no seam (roadmap T3.2)"
+    },
+    {
+      "id": "v12_wood_edge",
+      "anchor": {
+        "kind": "wood_edge",
+        "close_km": [
+          -4.0,
+          -15.0
+        ],
+        "bearing_deg": 0,
+        "from_m": 25
+      },
+      "eye_m": 1.7,
+      "look": "at_anchor",
+      "fov_deg": 60,
+      "photos": [
+        "P01"
+      ],
+      "must_see": "the edge of a wood from a field 25 m off: the mantle's trees at the top, a patchy fringe of shrubs in front of them, the stand's height steps behind (docs/scenery/VEGETATION.md)"
     }
   ],
   "photos": {

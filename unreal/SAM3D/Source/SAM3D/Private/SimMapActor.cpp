@@ -25,8 +25,10 @@
 #include "SAM3D.h"
 #include "SimAirCampaignSubsystem.h"
 #include "SimBasicModels.h"
+#include "SimClutterRing.h"
 #include "SimCoreIncludes.h"
 #include "SimMapAssets.h"
+#include "simcore/scenery/clutter.hpp"
 #include "simcore/scenery/tree_tint.hpp"
 #include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
@@ -355,8 +357,57 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	// place of the list above. A view the map cannot give leaves <name>.missing.txt with its reason.
 	FString ShotSet;
 	FParse::Value(FCommandLine::Get(), TEXT("SimShotSet="), ShotSet);
-	const bool bViewShots = ShotSet == TEXT("views");
-	if (bViewShots)
+	// -SimShotSet=plots (roadmap L1, data/scenery/plots.json): each test plot's three cameras (eye, low, high), named
+	// <plot>_<camera>; -SimPlots=<id>,<id> renders only those.
+	const bool bPlotShots = ShotSet == TEXT("plots");
+	const bool bViewShots = ShotSet == TEXT("views") || bPlotShots;
+	if (bPlotShots)
+	{
+		static TArray<FView> PlotList;
+		static bool bPlotListBuilt = false;
+		if (!bPlotListBuilt)
+		{
+			bPlotListBuilt = true;
+			IFileManager::Get().MakeDirectory(*ShotFolder, true);
+			FString Only;
+			FParse::Value(FCommandLine::Get(), TEXT("SimPlots="), Only, false);  // the whole list, past its commas
+			TArray<FString> OnlyIds;
+			Only.ParseIntoArray(OnlyIds, TEXT(","), true);
+			simcore::scenery::PlotSet Set;
+			std::string Error;
+			const FString PlotsPath = FPaths::Combine(FindDataDirectory(), TEXT("scenery/plots.json"));
+			if (!simcore::scenery::LoadPlots(TCHAR_TO_UTF8(*PlotsPath), Set, &Error))
+			{
+				UE_LOG(LogSAM3D, Error, TEXT("Map shots: %s: %s"), *PlotsPath, UTF8_TO_TCHAR(Error.c_str()));
+			}
+			else if (DressRules && Cover && GroundLayers)
+			{
+				const int Day = GroundDay(GetWorld());
+				for (const simcore::scenery::PlotDef& Def : Set.plots)
+				{
+					if (OnlyIds.Num() > 0 && !OnlyIds.Contains(FString(UTF8_TO_TCHAR(Def.id.c_str()))))
+					{
+						continue;
+					}
+					for (const simcore::scenery::ResolvedView& C : simcore::scenery::ResolvePlot(*Map, *DressRules, *Cover, *GroundLayers, Day, Def))
+					{
+						const FString Name = UTF8_TO_TCHAR(C.id.c_str());
+						if (!C.ok)
+						{
+							UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s is missing: %s"), *Name, UTF8_TO_TCHAR(C.missing_reason.c_str()));
+							FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(C.missing_reason.c_str())), *FPaths::Combine(ShotFolder, Name + TEXT(".missing.txt")));
+							continue;
+						}
+						PlotList.Add(FView{Name, C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m, C.target_e / 1000.0, C.target_n / 1000.0, C.target_up_m,
+							FMath::RadiansToDegrees(C.fov_rad)});
+					}
+				}
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Map shots: %d plot cameras from %s"), PlotList.Num(), *PlotsPath);
+		}
+		All = PlotList;
+	}
+	else if (bViewShots)
 	{
 		static TArray<FView> ViewList;
 		static bool bViewListBuilt = false;
@@ -633,6 +684,31 @@ bool ASimMapActor::Build(const FVector& FrameOriginLonLatAlt, const FString& Dat
 	BuildBoxes(Link);
 	BuildTrees(Link);
 	BuildBridges(Link);
+	// The ground clutter round the camera (roadmap T6.1): simcore's rules, one ring that follows the camera.
+	if (bDrawTrees && GroundLayers && Cover && DressRules)
+	{
+		auto ClutterRules = std::make_shared<simcore::scenery::ClutterRules>();
+		std::string ClutterError;
+		const FString ClutterPath = FPaths::Combine(DataDirectory, TEXT("scenery/clutter.json"));
+		if (simcore::scenery::LoadClutterRules(TCHAR_TO_UTF8(*ClutterPath), *GroundLayers, *ClutterRules, &ClutterError))
+		{
+			USimClutterRing* Ring = NewObject<USimClutterRing>(this, TEXT("Map_clutter"));
+			Ring->SetupAttachment(Root);
+			Ring->RegisterComponent();
+			if (Ring->Init(Map, GroundLink, Cover, DressRules, GroundLayers, ClutterRules, GroundDay(GetWorld())))
+			{
+				AssetParts.Add(Ring);
+			}
+			else
+			{
+				Ring->DestroyComponent();
+			}
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map: no ground clutter (%s)"), UTF8_TO_TCHAR(ClutterError.c_str()));
+		}
+	}
 	if (Country)
 	{
 		BuildCountry(FrameOriginLonLatAlt);
@@ -889,11 +965,17 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 	const double Mc = (Ex.north_m - O.north_m) / 1000.0, Md = (Ny.north_m - O.north_m) / 1000.0;
 	const FLinearColor MapOff(static_cast<float>(O.east_m - Ma * ActE - Mb * ActN), static_cast<float>(O.north_m - Mc * ActE - Md * ActN), 0.0f, 0.0f);
 	const FLinearColor MapAxes(static_cast<float>(Ma), static_cast<float>(Mb), static_cast<float>(Mc), static_cast<float>(Md));
-	FLinearColor Tiles[4];
+	FLinearColor Tiles[4], Patches[4], Breaks[4], Furrows[4], FurrowDepths[4];
 	for (int32 I = 0; I < simcore::scenery::kMaxGroundLayers; ++I)
 	{
-		const float Tile = I < static_cast<int32>(GroundLayers->layers.size()) ? static_cast<float>(GroundLayers->layers[I].tile_m) : 3.0f;
-		Tiles[I / 4].Component(I % 4) = Tile;
+		const bool bLayer = I < static_cast<int32>(GroundLayers->layers.size());
+		Tiles[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].tile_m) : 3.0f;
+		// Its surface's variation (plot lab, roadmap L4): damp and dry patches, and its repeat broken.
+		Patches[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].patch) : 0.0f;
+		Breaks[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].break_up) : 0.0f;
+		// Its furrows drawn procedurally: spacing and depth, m.
+		Furrows[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].furrow_m) : 0.0f;
+		FurrowDepths[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].furrow_depth_m) : 0.0f;
 	}
 	// The far ground wears the country's land cover (roadmap T3.2): baked once a session (a second) and kept.
 	if (Country && !FarCover)
@@ -980,6 +1062,22 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		Mid->SetVectorParameterValue(TEXT("TileB"), Tiles[1]);
 		Mid->SetVectorParameterValue(TEXT("TileC"), Tiles[2]);
 		Mid->SetVectorParameterValue(TEXT("TileD"), Tiles[3]);
+		Mid->SetVectorParameterValue(TEXT("PatchA"), Patches[0]);
+		Mid->SetVectorParameterValue(TEXT("PatchB"), Patches[1]);
+		Mid->SetVectorParameterValue(TEXT("PatchC"), Patches[2]);
+		Mid->SetVectorParameterValue(TEXT("PatchD"), Patches[3]);
+		Mid->SetVectorParameterValue(TEXT("BreakA"), Breaks[0]);
+		Mid->SetVectorParameterValue(TEXT("BreakB"), Breaks[1]);
+		Mid->SetVectorParameterValue(TEXT("BreakC"), Breaks[2]);
+		Mid->SetVectorParameterValue(TEXT("BreakD"), Breaks[3]);
+		Mid->SetVectorParameterValue(TEXT("FurrowA"), Furrows[0]);
+		Mid->SetVectorParameterValue(TEXT("FurrowB"), Furrows[1]);
+		Mid->SetVectorParameterValue(TEXT("FurrowC"), Furrows[2]);
+		Mid->SetVectorParameterValue(TEXT("FurrowD"), Furrows[3]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthA"), FurrowDepths[0]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthB"), FurrowDepths[1]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthC"), FurrowDepths[2]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthD"), FurrowDepths[3]);
 		GroundMasks.Add(Mask);
 		GroundMaterials.Add(Mid);
 		Out[static_cast<int32>(L)] = Mid;
@@ -1473,7 +1571,7 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	}
 	const bool bTints = bSeasons && TreeMaterial != nullptr;
 	const int32 Day = GroundDay(GetWorld());
-	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr)
+	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr, float StartM = 0.0f)
 	{
 		if (Xf.Num() == 0)
 		{
@@ -1499,9 +1597,11 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		H->SetCastShadow(bShadow);
 		if (CullM > 0.0f)
 		{
-			H->SetCullDistances(0, static_cast<int32>(CullM * 100.0f));
+			H->SetCullDistances(static_cast<int32>(StartM * 100.0f), static_cast<int32>(CullM * 100.0f));
 		}
-		const bool bTinted = Tints != nullptr && bTints && Tints->Num() == Placed.Num();
+		// The season's tint is for the procedural parts (one vertex-colour material). A registered model has its own materials
+		// (several slots): it keeps them, as the model's own season (a fall variant) is its colour.
+		const bool bTinted = Tints != nullptr && bTints && Tints->Num() == Placed.Num() && Mesh->GetStaticMaterials().Num() == 1;
 		if (bTinted)
 		{
 			H->SetMaterial(0, TreeMaterial);
@@ -1568,8 +1668,31 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	}
 	for (int32 K = 0; K < TreeKinds; ++K)
 	{
-		Add(FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K))), 0, Trees[K], true,
-			TreeCullDistanceM, &TreeTints[K]);
+		const FString PartName = FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K)));
+		// A distance ladder: where the register names real models for a tree kind's variants 0, 1, 2 (a model thinned to
+		// several budgets, tools/prepare_model.py), each is drawn in its own band of distance, and past the last one the
+		// procedural crown (the next variant, not in the register) as before. A kind with one model or none: as before.
+		const simcore::scenery::AssetRegister* Reg = FSimMapAssets::Register();
+		int32 Registered = 0;
+		while (Reg != nullptr && Registered < 3 && Reg->AssetFor(std::string(TCHAR_TO_UTF8(*PartName)), Registered) != nullptr)
+		{
+			++Registered;
+		}
+		// A wood's fringe of shrubs (hazel, elder) is not drawn as far as the trees: under 4 m, it is lost behind them.
+		const float KindCullM = simcore::scenery::IsShrub(static_cast<simcore::scenery::TreeKind>(K)) ? FMath::Min(TreeCullDistanceM, 800.0f) : TreeCullDistanceM;
+		if (Registered < 2)
+		{
+			Add(PartName, 0, Trees[K], true, KindCullM, &TreeTints[K]);
+			continue;
+		}
+		static const float BandEndM[] = {150.0f, 600.0f, 1500.0f};
+		float StartM = 0.0f;
+		for (int32 V = 0; V < Registered; ++V)
+		{
+			Add(PartName, V, Trees[K], true, BandEndM[V], &TreeTints[K], StartM);
+			StartM = BandEndM[V];
+		}
+		Add(PartName, Registered, Trees[K], true, FMath::Max(KindCullM, StartM + 1.0f), &TreeTints[K], StartM);
 	}
 	if (bTints)
 	{

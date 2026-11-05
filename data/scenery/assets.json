@@ -1,15 +1,185 @@
 {
   "notes": "The register of third-party art the map may draw in place of its procedural meshes (simcore/scenery/asset_register.hpp, docs/scenery/ASSETS.md). It starts empty: every part is procedural (simcore/scenery/map_meshes.hpp). An asset is added only with the project owner's say-so, file by file; one that may not be redistributed lives under /Game/ThirdParty/ (unreal/SAM3D/Content/ThirdParty/, ignored by git) and is fetched on each machine. tools/check_assets.py checks that none is committed.",
-  "assets": [],
+  "assets": [
+    {
+      "id": "oak_pc37",
+      "unreal_path": "/Game/ThirdParty/Models/oak_pc37/oak_pc37/StaticMeshes/oak_pc37.oak_pc37",
+      "origin": "https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-37138-b7ed18f291c3445a8b805da379e3de4f",
+      "author": "PlantCatalog (e-on software)",
+      "licence": "CC-BY-4.0",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "6f25009356f057db62ff4cbeb67383976878bae05d3b269081b2ba6b0b160c95",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Realistic HD Northern red oak (37/138), juvenile, fall; 202.6k triangles, 10.5 m, 1k textures. Credit: Realistic HD Northern red oak (37/138) by PlantCatalog, CC BY 4.0. TRIED 4 Nov 2026 and taken out of the register: as imported (40k triangles in the GLB's LOD0 at Nanite, 10 materials) it cost 20-36 ms of GPU at the views with woods (against 6-8 ms) and its leaves drew grey; it needs thinning (twigs dropped, leaves thinned and enlarged, trunk decimated), LODs and its own foliage material first."
+    },
+    {
+      "id": "oak_pc37_l1",
+      "unreal_path": "/Game/ThirdParty/Models/oak_pc37_l1/oak_pc37_l1/StaticMeshes/oak_pc37_l1.oak_pc37_l1",
+      "origin": "https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-37138-b7ed18f291c3445a8b805da379e3de4f",
+      "author": "PlantCatalog (e-on software)",
+      "licence": "CC-BY-4.0",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "93c3e255778fd37f45ac973def26ff71a6ffd811c9ae3ba09d69d958ba9207cb",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "The same oak thinned to about 2200 triangles: the mid band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown)."
+    },
+    {
+      "id": "oak_pc37_l2",
+      "unreal_path": "/Game/ThirdParty/Models/oak_pc37_l2/oak_pc37_l2/StaticMeshes/oak_pc37_l2.oak_pc37_l2",
+      "origin": "https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-37138-b7ed18f291c3445a8b805da379e3de4f",
+      "author": "PlantCatalog (e-on software)",
+      "licence": "CC-BY-4.0",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "2c2683cb3ce28daaf10fc102eae40dc237d036c88c41edbad9191a2eaa6c3a42",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "The same oak thinned to about 600 triangles: the far band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown)."
+    },
+    {
+      "id": "grass_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/grass_card/grass_card/StaticMeshes/grass_card.grass_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "c7634928a6eae15ec20bd9e1b19c9f82e58bec93699a99d148a9a4ec5f664656",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Ground clutter drawn as a tuft of dry grass: three crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "straw_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/straw_card/straw_card/StaticMeshes/straw_card.straw_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "8338a24978bd3531e03563dc4c4067c2cb11a9267638f1e66ea0a76921ea094d",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Ground clutter drawn as a bundle of stubble or a maize stump: two crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "reed_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/reed_card/reed_card/StaticMeshes/reed_card.reed_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "5016e6f3197f35718aa78874f5a71058971ce7499d843c0250f8cf06f922f3a9",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Ground clutter drawn as a stand of dry reeds or a stalk: two crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "hornbeam_cards",
+      "unreal_path": "/Game/ThirdParty/Models/hornbeam_cards/hornbeam_cards/StaticMeshes/hornbeam_cards.hornbeam_cards",
+      "origin": "own generator (tools/blender/card_tree.py); leaf photographs from Quixel Megaplants: European Hornbeam (Fab listing in the owner's library)",
+      "author": "SAM3D (generator); leaves: Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-05",
+      "sha256": "2b1ff2dade36f0b9241043c4f5bcbd465046421a653da8f6d431cacaa4e12359",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A hornbeam of twig cards (leaf photographs composed into twigs by tools/leaf_atlas.py), the near level (about 420 triangles): 0-150 m. Fab Standard licence for the leaf photographs (not redistributable): files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "id": "hornbeam_cards_l1",
+      "unreal_path": "/Game/ThirdParty/Models/hornbeam_cards_l1/hornbeam_cards_l1/StaticMeshes/hornbeam_cards_l1.hornbeam_cards_l1",
+      "origin": "own generator (tools/blender/card_tree.py); leaf photographs from Quixel Megaplants: European Hornbeam (Fab listing in the owner's library)",
+      "author": "SAM3D (generator); leaves: Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-05",
+      "sha256": "cae3f729766a61c388a5ec8daaff0d80555bf0a08819c20fb916acd1afe6d72b",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A hornbeam of twig cards (leaf photographs composed into twigs by tools/leaf_atlas.py), the far level (about 170 triangles): 150-600 m. Fab Standard licence for the leaf photographs (not redistributable): files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    }
+  ],
   "parts": {
-    "tree_oak": {"asset": null},
-    "tree_poplar": {"asset": null},
-    "tree_pine": {"asset": null},
-    "tree_acacia": {"asset": null},
-    "canopy_mass": {"asset": null},
-    "house": {"asset": null},
-    "barn": {"asset": null},
-    "flats": {"asset": null},
-    "industrial": {"asset": null}
+    "tree_oak": {
+      "asset": null,
+      "variants": [
+        "oak_pc37",
+        "oak_pc37_l1",
+        "oak_pc37_l2"
+      ]
+    },
+    "tree_poplar": {
+      "asset": null
+    },
+    "tree_pine": {
+      "asset": null
+    },
+    "tree_acacia": {
+      "asset": null
+    },
+    "tree_hornbeam": {
+      "asset": null,
+      "variants": [
+        "hornbeam_cards",
+        "hornbeam_cards_l1"
+      ]
+    },
+    "tree_beech": {
+      "asset": null
+    },
+    "tree_alder": {
+      "asset": null
+    },
+    "tree_maple": {
+      "asset": null
+    },
+    "tree_hazel": {
+      "asset": null
+    },
+    "tree_elder": {
+      "asset": null
+    },
+    "canopy_mass": {
+      "asset": null
+    },
+    "house": {
+      "asset": null
+    },
+    "barn": {
+      "asset": null
+    },
+    "flats": {
+      "asset": null
+    },
+    "industrial": {
+      "asset": null
+    },
+    "clutter_grass": {
+      "asset": "grass_card"
+    },
+    "clutter_straw": {
+      "asset": "straw_card"
+    },
+    "clutter_reed": {
+      "asset": "reed_card"
+    },
+    "clutter_clod": {
+      "asset": null
+    }
   }
 }

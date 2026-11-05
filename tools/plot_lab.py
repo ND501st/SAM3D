@@ -1,0 +1,142 @@
+"""The plot lab (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A): render the test plots of data/scenery/plots.json from
+their three cameras and set each beside its reference photographs and its last approved render.
+
+    python tools/plot_lab.py run --label a1                         # every plot, then the page
+    python tools/plot_lab.py run --label a2 --plots p01_ploughland   # one plot (or several, comma-separated)
+    python tools/plot_lab.py page --label a2                        # only (re)build the page from out/plots/a2/
+    python tools/plot_lab.py approve --label a2 --plots p01_ploughland   # the owner approved: these become the ground truth
+
+Each run writes out/plots/<label>/: <plot>_eye.png, <plot>_low.png, <plot>_high.png, their .cost.json, a
+<plot>_<camera>.missing.txt for a camera the map cannot give, and index.html. The approved renders live in
+out/plots/approved/ and are shown beside every later run, with the time each run took. The photographs are links, as in
+tools/terrain_views.py (nothing downloaded or copied).
+"""
+import argparse
+import html
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import terrain_views as tv  # noqa: E402  (the photographs' thumbnails, the costs, the game's launch)
+
+ROOT = tv.ROOT
+PLOTS = ROOT / "data" / "scenery" / "plots.json"
+OUT = ROOT / "out" / "plots"
+APPROVED = OUT / "approved"
+CAMERAS = (("eye", "eye, 1.7 m"), ("low", "low, 25 m"), ("high", "high, 150 m"))
+
+
+def plot_ids(arg, plots):
+    """The plots a command is for: the comma-separated ids given (each must exist), or all of them."""
+    known = [p["id"] for p in plots]
+    if not arg:
+        return known
+    ids = [s.strip() for s in arg.split(",") if s.strip()]
+    for i in ids:
+        if i not in known:
+            raise SystemExit(f"no plot {i!r} in {PLOTS.name}: {', '.join(known)}")
+    return ids
+
+
+def build_page(plots, photos, folder, ids, label, seconds=None):
+    """The page's HTML: per plot, its three cameras beside the approved ones, its costs and its photographs' links."""
+    esc = html.escape
+    costs = tv.read_costs(folder)
+    rows = []
+    for p in plots:
+        if p["id"] not in ids:
+            continue
+        cells = []
+        for cam, title in CAMERAS:
+            name = f"{p['id']}_{cam}"
+            now = folder / f"{name}.png"
+            ok = APPROVED / f"{name}.png"
+            reason = folder / f"{name}.missing.txt"
+            pic = f'<img src="{esc(now.name)}" alt="{esc(name)}">' if now.exists() else \
+                f'<p class="missing">Not rendered{": " + esc(reason.read_text(encoding="utf-8").strip()) if reason.exists() else ""}.</p>'
+            was = f'<img src="{esc(os.path.relpath(ok, folder).replace(os.sep, "/"))}" alt="approved {esc(name)}">' if ok.exists() else \
+                '<p class="none">No approved render yet.</p>'
+            cost = costs.get(name)
+            cost_line = f'<small>GPU {cost["gpu_ms"]:.2f} ms</small>' if cost and "gpu_ms" in cost else ""
+            cells.append(f'<div class="cam"><h3>{esc(title)}</h3><div class="pair"><figure>{pic}<figcaption>{esc(label)} {cost_line}</figcaption></figure>'
+                         f'<figure>{was}<figcaption>approved</figcaption></figure></div></div>')
+        refs = []
+        for pid in p.get("photos", []):
+            ph = photos.get(pid)
+            if ph is None:
+                continue
+            thumb = tv.thumbnail_url(ph["page_url"])
+            img = f'<img src="{esc(thumb)}" alt="{esc(ph["title"])}" loading="lazy">' if thumb else ""
+            refs.append(f'<figure><a href="{esc(ph["page_url"])}">{img}<figcaption>{esc(pid)} {esc(ph["title"])}</figcaption></a>'
+                        f'<small>{esc(ph["author"])}, {esc(ph["licence"])}</small></figure>')
+        rows.append(f'<section><h2>{esc(p["id"])}: {esc(p.get("name", ""))}</h2><p class="must">Must show: {esc(p.get("must_see", ""))}</p>'
+                    f'{"".join(cells)}<div class="refs">{"".join(refs)}</div></section>')
+    took = f"<p>The run took {seconds:.0f} s.</p>" if seconds else ""
+    return ("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>Plot lab {esc(label)}</title><style>"
+            "body{font:14px system-ui;margin:16px;background:#fafafa;color:#222}img{max-width:100%}"
+            "section{margin:0 0 32px;padding-bottom:16px;border-bottom:1px solid #ccc}.cam h3{margin:12px 0 4px;font-size:14px}"
+            ".pair{display:flex;gap:8px}.pair figure{margin:0;flex:1}.missing{color:#a40}.none{color:#888}.must{color:#555}"
+            ".refs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.refs figure{margin:0;width:200px}"
+            ".refs img{width:200px;height:130px;object-fit:cover}"
+            f"</style><h1>Plot lab: {esc(label)}</h1>{took}" + "".join(rows))
+
+
+def run_game(folder, engine, ids, extra=()):
+    """Renders the plots offscreen into `folder`: the editor in game mode on the Kesmark range, only `ids`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    exe = Path(engine) / "Engine" / "Binaries" / "Win64" / "UnrealEditor.exe"
+    project = ROOT / "unreal" / "SAM3D" / "SAM3D.uproject"
+    cmd = [str(exe), str(project), "/Game/Maps/KesmarkRange", "-game", "-RenderOffscreen",
+           "-SimScenario=scenarios/kesmark_range_test.json", f"-SimMapShots={folder.as_posix()}", "-SimShotSet=plots",
+           f"-SimPlots={','.join(ids)}", "-unattended", *extra]
+    return subprocess.run(cmd, check=False).returncode
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", choices=("run", "page", "approve"))
+    ap.add_argument("--label", default="latest")
+    ap.add_argument("--plots", default="", help="comma-separated plot ids (default: all)")
+    ap.add_argument("--extra", default="", help="more arguments for the game, space-separated (e.g. -SimGroundDebug=2)")
+    ap.add_argument("--engine", default=os.environ.get("UE_ROOT", "D:/UE_5.8"))
+    args = ap.parse_args(argv)
+    data = json.loads(PLOTS.read_text(encoding="utf-8"))
+    photos = json.loads(tv.VIEWS.read_text(encoding="utf-8")).get("photos", {})
+    plots = data["plots"]
+    ids = plot_ids(args.plots, plots)
+    folder = OUT / args.label
+    if args.command == "approve":
+        APPROVED.mkdir(parents=True, exist_ok=True)
+        for pid in ids:
+            for cam, _ in CAMERAS:
+                src = folder / f"{pid}_{cam}.png"
+                if src.exists():
+                    shutil.copy2(src, APPROVED / src.name)
+                    print(f"approved {src.name}")
+        return 0
+    seconds = None
+    if args.command == "run":
+        for pid in ids:
+            for f in folder.glob(f"{pid}_*"):
+                f.unlink()  # a run replaces these plots' earlier pictures in the label
+        start = time.monotonic()
+        code = run_game(folder, args.engine, ids, args.extra.split())
+        seconds = time.monotonic() - start
+        print(f"render exit {code} in {seconds:.0f} s")
+        if not any(folder.glob("*.png")):
+            print("no pictures were written")
+            return 1
+    page = build_page(plots, photos, folder, ids, args.label, seconds)
+    (folder / "index.html").write_text(page, encoding="utf-8")
+    print(f"wrote {folder / 'index.html'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

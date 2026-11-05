@@ -40,6 +40,12 @@ struct GroundLayerDef {
     double tile_m = 3.0;   // one repeat of its textures on the ground (divides kGroundTilePeriodM)
     bool rows = false;     // its textures turn with the field's furrows (their furrows along the textures' U, across the image)
     std::string texture;   // the texture register's id; empty: not chosen yet (the land cover's colour only)
+    double patch = 0.0;    // damp and dry patches 15-40 m across: the share they darken or lighten it by (0..0.5)
+    double break_up = 0.0; // a second, shifted sample in blobs about 8 m across, so its repeat does not show (0..1)
+    // Procedural furrows drawn by the material on a layer that turns with them: their spacing (0 none, else 0.05..1 m, each
+    // field's own within 12%) and their depth crest to trough (0..0.3 m). The scan's own furrows are damped under them.
+    double furrow_m = 0.0;
+    double furrow_depth_m = 0.0;
 };
 
 struct GroundLayerRules {
@@ -133,6 +139,25 @@ inline bool LoadGroundLayers(const std::string& path_or_json, const DressingRule
             if (!rows->Is(json::Type::Bool)) return Fail(error, d.id + ": rows is not true or false");
             d.rows = rows->boolean;
         }
+        if (const json::Value* pa = item.Find("patch")) {
+            if (!pa->Is(json::Type::Number) || pa->number < 0.0 || pa->number > 0.5) return Fail(error, d.id + ": patch is not in 0..0.5");
+            d.patch = pa->number;
+        }
+        if (const json::Value* bu = item.Find("break_up")) {
+            if (!bu->Is(json::Type::Number) || bu->number < 0.0 || bu->number > 1.0) return Fail(error, d.id + ": break_up is not in 0..1");
+            d.break_up = bu->number;
+        }
+        if (const json::Value* fu = item.Find("furrow_m")) {
+            if (!fu->Is(json::Type::Number) || (fu->number != 0.0 && (fu->number < 0.05 || fu->number > 1.0))) {
+                return Fail(error, d.id + ": furrow_m is not 0 or in 0.05..1");
+            }
+            d.furrow_m = fu->number;
+        }
+        if (const json::Value* fd = item.Find("furrow_depth_m")) {
+            if (!fd->Is(json::Type::Number) || fd->number < 0.0 || fd->number > 0.3) return Fail(error, d.id + ": furrow_depth_m is not in 0..0.3");
+            d.furrow_depth_m = fd->number;
+        }
+        if (d.furrow_m > 0.0 && !d.rows) return Fail(error, d.id + ": furrows on a layer that does not turn with the field (rows false)");
         if (const json::Value* tex = item.Find("texture")) {
             if (!tex->Is(json::Type::String)) return Fail(error, d.id + ": texture is not a string");
             d.texture = tex->string;
@@ -249,6 +274,19 @@ inline GroundMask BakeGroundMask(const CoverGrid& g, const DressingRules& /*dres
         }
     }
     return m;
+}
+
+// The layer at one point of the map (the layer BakeGroundMask gives the cell, found at the exact point: a field's own
+// edges are straight, not the cell's 25 m), on the day; -1 outside every land cover square.
+inline int PointLayer(const CoverRaster& cover, const DressingRules& dressing, const GroundLayerRules& layers, double east_m, double north_m,
+                      int day_of_year) {
+    const CoverGrid* g = cover.GridAt(east_m, north_m);
+    if (g == nullptr) return -1;
+    const std::size_t i = g->IndexAt(east_m, north_m);
+    const Cover c = static_cast<Cover>(g->cover[i]);
+    if (c != Cover::Field) return layers.LayerOnDay(c, g->crop[i], 0, day_of_year);
+    const FieldCell f = FieldAt(g->fields, east_m, north_m);
+    return layers.LayerOnDay(c, CropOf(dressing, f.id), f.id, day_of_year);
 }
 
 }  // namespace scenery

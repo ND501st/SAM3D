@@ -297,16 +297,20 @@ const char* kCc0Oak =
 
 }  // namespace
 
-SC_TEST("scenery: the asset register starts empty, every part of the map procedural") {
+SC_TEST("scenery: the shipped asset register loads, lists every part, and holds only redistributable or ignored art") {
     AssetRegister reg;
     std::string e;
-    SC_EXPECT(reg.Load(kData + "/scenery/assets.json", &e));
+    SC_EXPECT(reg.Load(kData + "/scenery/assets.json", &e));  // Load applies every rule of the register
     if (!e.empty()) std::printf("    %s\n", e.c_str());
-    SC_EXPECT(reg.assets.empty());
     for (const std::string& part : MapMeshParts()) {
         SC_EXPECT(reg.parts.count(part) == 1);  // every part listed, so the file says what it may hold
-        SC_EXPECT(reg.AssetFor(part, 0) == nullptr);
     }
+    // A part whose asset is named names one the register holds (Load checks it); the first variant's lookup agrees.
+    for (const auto& kv : reg.parts) {
+        const AssetEntry* a = reg.AssetFor(kv.first, 0);
+        SC_EXPECT(a == nullptr || !a->id.empty());
+    }
+    std::printf("    %zu registered asset(s)\n", reg.assets.size());
 }
 
 SC_TEST("scenery: the asset register keeps its rules") {

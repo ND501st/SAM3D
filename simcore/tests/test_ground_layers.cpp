@@ -76,6 +76,13 @@ SC_TEST("ground layers: the rules load from the data, and every cover and crop h
     }
     SC_EXPECT(r.layers[static_cast<std::size_t>(r.Index("ploughed"))].rows);
     SC_EXPECT(!r.layers[static_cast<std::size_t>(r.Index("meadow"))].rows);
+    // The ploughland's surface varies (plot lab p01): damp and dry patches, and its repeat broken.
+    const GroundLayerDef& pl = r.layers[static_cast<std::size_t>(r.Index("ploughed"))];
+    SC_EXPECT(pl.patch > 0.0 && pl.patch <= 0.5 && pl.break_up > 0.0 && pl.break_up <= 1.0);
+    // Its furrows drawn procedurally, a mouldboard's slice (30-40 cm) and deeper than the drill rows of the sown ground.
+    const GroundLayerDef& so = r.layers[static_cast<std::size_t>(r.Index("sown"))];
+    SC_EXPECT(pl.furrow_m >= 0.3 && pl.furrow_m <= 0.4);
+    SC_EXPECT(so.furrow_m > 0.0 && so.furrow_m < pl.furrow_m && so.furrow_depth_m < pl.furrow_depth_m);
 }
 
 SC_TEST("ground layers: the loader refuses a layer twice, an unknown layer, a crop left out, too many layers and a repeat that breaks") {
@@ -97,6 +104,14 @@ SC_TEST("ground layers: the loader refuses a layer twice, an unknown layer, a cr
     // 1.75 m (a scan's own size) leaves 342.9 repeats in 600 m, a seam every 600 m; 1.875 m fits 320.
     SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\", \"tile_m\": 1.75}", AllCrops("a")), Dressing(), r, &e));
     SC_EXPECT(e.find("does not divide 600 m") != std::string::npos);
+    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\", \"patch\": 0.8}", AllCrops("a")), Dressing(), r, &e));
+    SC_EXPECT(e.find("patch") != std::string::npos);
+    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\", \"break_up\": -1}", AllCrops("a")), Dressing(), r, &e));
+    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\", \"rows\": true, \"furrow_m\": 0.02}", AllCrops("a")), Dressing(), r, &e));
+    SC_EXPECT(e.find("furrow_m") != std::string::npos);
+    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\", \"rows\": true, \"furrow_depth_m\": 0.5}", AllCrops("a")), Dressing(), r, &e));
+    SC_EXPECT(!LoadGroundLayers(Rules("{\"id\": \"a\", \"furrow_m\": 0.3}", AllCrops("a")), Dressing(), r, &e));
+    SC_EXPECT(e.find("rows false") != std::string::npos);
     GroundLayerRules fits;
     SC_EXPECT(LoadGroundLayers(Rules("{\"id\": \"a\", \"tile_m\": 1.875}", AllCrops("a")), Dressing(), fits, &e));
     SC_EXPECT_NEAR(fits.layers[0].tile_m, 1.875, 1e-12);

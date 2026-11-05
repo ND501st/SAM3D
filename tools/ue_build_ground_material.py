@@ -116,6 +116,7 @@ float3 Albedo4[4];
 float3 Normal4[4];
 float2 RoughAo4[4];
 float W4[4];
+float Patch4[4];
 float Height4[4];
 float Layer4[4];
 float Has4[4];
@@ -131,14 +132,27 @@ if (FieldGridA.x > 1.0)
 {
     float2 FCentre;
     uint FieldId = G.FieldAt(FieldGridA, FieldGridB, P, FHeading, FCentre);
-    int2 Cd = (int2)floor((FCentre - MaskRect.xy * 1000.0) / CellM);
-    if (all(Cd >= int2(0, 0)) && Cd.x < (int)MaskCols && Cd.y < (int)MaskRows)
+    // Every cell of a field carries the same texel (its layer, shade and strip flag), so any cell whose centre lies in the
+    // field will do: the field's own centre first; when that lies outside this mask (a field across a detail area's
+    // edge), in other cover or in another field (an estate's border cuts it), the pixel's own cell, then the cell one
+    // step towards the field's centre (a pixel within half a cell of the edge, whose own cell's centre is over it).
+    float2 Origin = MaskRect.xy * 1000.0;
+    float2 Own = (floor((P - Origin) / CellM) + 0.5) * CellM + Origin;
+    float2 Towards = FCentre - Own;
+    float2 Step = abs(Towards.x) > abs(Towards.y) ? float2(sign(Towards.x), 0.0) : float2(0.0, sign(Towards.y));
+    float2 Tries[3] = { FCentre, Own, Own + Step * CellM };
+    [loop] for (int t = 0; t < 3 && !FieldOk; ++t)
     {
-        float4 Tc = Mask.Load(int3(Cd, 0));
-        float FHeading2;
-        float2 FCentre2;
-        FieldOk = Tc.a > 0.25 && G.FieldAt(FieldGridA, FieldGridB, FCentre, FHeading2, FCentre2) == FieldId;
-        Tf = Tc;
+        int2 Cd = (int2)floor((Tries[t] - Origin) / CellM);
+        if (all(Cd >= int2(0, 0)) && Cd.x < (int)MaskCols && Cd.y < (int)MaskRows)
+        {
+            float4 Tc = Mask.Load(int3(Cd, 0));
+            float FHeading2;
+            float2 FCentre2;
+            // The texel is the cell's centre's: the field there must be this one.
+            FieldOk = Tc.a > 0.25 && G.FieldAt(FieldGridA, FieldGridB, ((float2)Cd + 0.5) * CellM + Origin, FHeading2, FCentre2) == FieldId;
+            Tf = Tc;
+        }
     }
 }
 [unroll] for (int k = 0; k < 4; ++k)
@@ -178,12 +192,64 @@ if (FieldGridA.x > 1.0)
     float StripShade = (G.Hash(float2(floor(Vm / max(StripM, 1.0)), (float)Layer)) - 0.5) * 2.0 * StripVar;
     float Shade = lerp(1.0 - ShadeAmount, 1.0 + ShadeAmount, Shade01) * (1.0 + StripF * StripShade);
     float3 A = Albedo.SampleGrad(AlbedoSampler, Uvw, Gx, Gy).rgb;
+    float2 Nxy = Normal.SampleGrad(NormalSampler, Uvw, Gx, Gy).rg * 2.0 - 1.0;
+    float4 Orm = OrmMap.SampleGrad(OrmMapSampler, Uvw, Gx, Gy);
+    // Its repeat broken (BreakA..D): in blobs about 8 m across a second sample, shifted along the furrows only (a turned
+    // layer's furrows stay in their places across V), or both ways on an unturned one.
+    float Brk = G.Pick(BreakA, BreakB, BreakC, BreakD, Layer);
+    if (Has && Brk > 0.0 && Far < 0.99)
+    {
+        float Bw = Brk * smoothstep(0.42, 0.58, G.Noise(P * 0.12 + 17.3));
+        if (Bw > 0.001)
+        {
+            // Under procedural furrows the scan's own are damped, so it may shift across them too.
+            float FurOn = Rows && G.Pick(FurrowA, FurrowB, FurrowC, FurrowD, Layer) > 0.01 ? 1.0 : 0.0;
+            float3 Uvw2 = float3(Uv + (Rows ? float2(0.371, 0.5 * FurOn) : float2(0.431, 0.719)), Layer);
+            A = lerp(A, Albedo.SampleGrad(AlbedoSampler, Uvw2, Gx, Gy).rgb, Bw);
+            Nxy = lerp(Nxy, Normal.SampleGrad(NormalSampler, Uvw2, Gx, Gy).rg * 2.0 - 1.0, Bw);
+            Orm = lerp(Orm, OrmMap.SampleGrad(OrmMapSampler, Uvw2, Gx, Gy), Bw);
+        }
+    }
+    Nxy.y *= NormalGreenSign;
+    // Procedural furrows (FurrowA..D the spacing, m; FurrowDepthA..D crest to trough, m) on a layer that turns with them:
+    // the mouldboard's slice, a long back and a short steep face, its spacing a field's own (within 12%), wavering along
+    // and its crests uneven, so nothing repeats; the scan's own furrows across are damped under it. Faded out once a
+    // pixel spans a third of a furrow.
+    float Fur = Rows ? G.Pick(FurrowA, FurrowB, FurrowC, FurrowD, Layer) : 0.0;
+    float FurH = 0.0;
+    float FurZ = 0.0;
+    float FurSlope = 0.0;
+    if (Has && Fur > 0.01 && Far < 0.99)
+    {
+        float Sp = Fur * (0.88 + 0.24 * frac(Heading * 13.71 + 0.37));
+        float Fw = max(abs(dot(Dx, DirV)), abs(dot(Dy, DirV)));
+        FurZ = 1.0 - smoothstep(0.2 * Sp, 0.5 * Sp, Fw);
+        if (FurZ > 0.001)
+        {
+            float Um = P.x * sin(Heading) + P.y * cos(Heading);
+            // The furrow wavers over metres and its slice is broken into lumps a hand or two long.
+            float Vw = Vm + (G.Noise(float2(Um * 0.12, Vm * 0.02 + (float)Layer)) - 0.5) * 0.9 * Sp
+                + (G.Noise(float2(Um * 3.1, Vm * 2.3)) - 0.5) * 0.25 * Sp;
+            float Fi = floor(Vw / Sp);
+            float Tf2 = frac(Vw / Sp);
+            float Back = 0.55 + 0.25 * G.Noise(float2(Um * 0.7, Fi * 2.9));
+            float Mm = min(Tf2 / Back, (1.0 - Tf2) / (1.0 - Back));
+            float Dm = Tf2 < Back ? 1.0 / Back : -1.0 / (1.0 - Back);
+            FurH = 1.0 - (1.0 - Mm) * (1.0 - Mm);
+            float Lump = G.Noise(float2(Um * 4.7, Fi * 1.3 + Tf2 * 3.0));
+            float Amp = G.Pick(FurrowDepthA, FurrowDepthB, FurrowDepthC, FurrowDepthD, Layer)
+                * (0.35 + 0.65 * G.Noise(float2(Um * 0.9, Fi * 1.7))) * (0.6 + 0.8 * Lump);
+            FurSlope = Amp * 2.0 * (1.0 - Mm) * Dm / Sp * FurZ;
+            Nxy.y *= 1.0 - 0.35 * FurZ;
+            // Crests drier and paler, troughs darker and in shadow, unevenly.
+            A *= lerp(1.0, 0.9 + 0.14 * FurH + 0.08 * (Lump - 0.5), FurZ);
+            Orm.r *= lerp(1.0, 0.72 + 0.28 * FurH, FurZ);
+        }
+    }
     float3 Avg = Albedo.SampleLevel(AlbedoSampler, float3(0.5, 0.5, Layer), 11.0).rgb;
     A = lerp(A, Avg, Far) * Shade;
-    float2 Nxy = Normal.SampleGrad(NormalSampler, Uvw, Gx, Gy).rg * 2.0 - 1.0;
-    Nxy.y *= NormalGreenSign;
-    float2 Nen = Nxy.x * DirU + Nxy.y * DirV;   // in (east, north)
-    float4 Orm = OrmMap.SampleGrad(OrmMapSampler, Uvw, Gx, Gy);
+    float2 Nen = Nxy.x * DirU + (Nxy.y - FurSlope) * DirV;   // in (east, north)
+    Patch4[k] = Has ? G.Pick(PatchA, PatchB, PatchC, PatchD, Layer) : 0.0;
     float Wx = O.x == 1 ? F.x : 1.0 - F.x;
     float Wy = O.y == 1 ? F.y : 1.0 - F.y;
     W4[k] = Wx * Wy;
@@ -200,6 +266,7 @@ float Top = 0.0;
 float3 Col = 0;
 float3 Nd = 0;
 float2 Rao = 0;
+float Pa = 0.0;
 float Sum = 0.0;
 [unroll] for (int m = 0; m < 4; ++m)
 {
@@ -207,11 +274,20 @@ float Sum = 0.0;
     Col += Albedo4[m] * w;
     Nd += Normal4[m] * w;
     Rao += RoughAo4[m] * w;
+    Pa += Patch4[m] * w;
     Sum += w;
 }
 Col /= max(Sum, 1e-4);
 Nd /= max(Sum, 1e-4);
 Rao /= max(Sum, 1e-4);
+Pa /= max(Sum, 1e-4);
+// Damp and dry patches (PatchA..D), 15-40 m across: a damp one darker and a little smoother, a dry one paler.
+if (Pa > 0.0)
+{
+    float Damp = (G.Noise(P * 0.025 + 5.1) * 0.65 + G.Noise(P * 0.07 + 2.3) * 0.35 - 0.5) * 2.0;
+    Col *= 1.0 - Pa * Damp;
+    Rao.x *= 1.0 - 0.25 * Pa * saturate(Damp) * 2.0;
+}
 // Debug (-SimGroundDebug=N): 1 the heaviest cell's layer as a colour (its number in the red and green, Has in the blue);
 // 2 the pixel's depth in 100 m (red), the cover's average weight (green), a field port's finding (blue).
 if (Debug > 0.5)
@@ -480,6 +556,22 @@ def build_material(arrays):
         ('HasB', vector('HasB', (0.0, 0.0, 0.0, 0.0))),
         ('HasC', vector('HasC', (0.0, 0.0, 0.0, 0.0))),
         ('HasD', vector('HasD', (0.0, 0.0, 0.0, 0.0))),
+        ('PatchA', vector('PatchA', (0.0, 0.0, 0.0, 0.0))),
+        ('PatchB', vector('PatchB', (0.0, 0.0, 0.0, 0.0))),
+        ('PatchC', vector('PatchC', (0.0, 0.0, 0.0, 0.0))),
+        ('PatchD', vector('PatchD', (0.0, 0.0, 0.0, 0.0))),
+        ('BreakA', vector('BreakA', (0.0, 0.0, 0.0, 0.0))),
+        ('BreakB', vector('BreakB', (0.0, 0.0, 0.0, 0.0))),
+        ('BreakC', vector('BreakC', (0.0, 0.0, 0.0, 0.0))),
+        ('BreakD', vector('BreakD', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowA', vector('FurrowA', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowB', vector('FurrowB', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowC', vector('FurrowC', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowD', vector('FurrowD', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowDepthA', vector('FurrowDepthA', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowDepthB', vector('FurrowDepthB', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowDepthC', vector('FurrowDepthC', (0.0, 0.0, 0.0, 0.0))),
+        ('FurrowDepthD', vector('FurrowDepthD', (0.0, 0.0, 0.0, 0.0))),
         ('WarpM', scalar('WarpM', 6.0)),
         ('StripM', scalar('StripM', 30.0)),
         ('StripVar', scalar('StripVar', 0.3)),

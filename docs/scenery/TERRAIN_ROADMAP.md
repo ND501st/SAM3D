@@ -1,5 +1,171 @@
 # The terrain: a roadmap (track T)
 
+**Part A (5 Nov 2026) is the reworked roadmap and comes first.** Part B (from section 1 on) is the roadmap of 3 Nov,
+kept for its research, its rules and the design of what was built (T0-T4, T5.1); where the two disagree, part A wins.
+
+## A. The rework (5 Nov 2026)
+
+The project owner, 5 Nov 2026: "Something here is clearly not working. While the ground texturing and structuring
+phase seems to have worked, the layering of trees, foliage, and other assets to make the world appear 'realistic' is
+failing. Things are sparsely dispersed, the map is near completely flat, and many of the assets are difficult to import
+and don't look good." Look at other games (Kingdom Come: Deliverance, farming simulators, games with forests, crops,
+plains and hills); at how assets are better gathered, edited and built; at the full toolsets of the Unreal editor and
+Blender, terrain tools above all; at proceduralism, since the map cannot be edited by hand; at a way to texture the
+whole map methodically for the long term; and at **small test terrains (about 50 x 50 m: field types, forest types,
+river, road), perfected and then applied procedurally to every matching part of the map**.
+
+The research behind part A (5 Nov 2026, every claim linked):
+
+| Note | What |
+|---|---|
+| `docs/research/TERRAIN_GAMES_2026-11.md` | KCD 1-2, Farming Simulator 22/25, Horizon, Far Cry 5, Ghost Recon Wildlands, Ghost of Tsushima, The Witcher 3, MSFS 2024, Hunt and others: relief, ground blending, vegetation layers and densities, edges, villages; 21 lessons |
+| `docs/research/TERRAIN_UE_TOOLS_2026-11.md` | UE 5.8's Landscape (scriptable only from editor C++), PCG (production-ready; GPU scatter Beta), RVT, Nanite foliage, instanced skinned meshes for Megaplants, impostors; three ground options compared; a spike |
+| `docs/research/TERRAIN_ASSET_TOOLS_2026-11.md` | Tree generators (Sapling 1.0, tree-gen, MTree, SpeedTree, The Grove, PVE), grass and crop cards, terrain generators, Material Maker, scanning, AI 3D (Meshy, Tripo, Hunyuan3D, TRELLIS, SF3D); a pipeline per asset kind, candid about what will not look good |
+| `docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md` | Recipes applied by rule (Horizon, Wildlands, Reforger, PCG Biome Core, MSFS), scatter mathematics, the plain's real numbers per plot type, relief at several scales, the test-plot catalogue (17 plots, 7 transitions) and how each is judged |
+
+### A.1 What went wrong
+
+Judged from the views of 4-5 Nov (`out/views/veg6/`): V1 is a bare textured field to a flat horizon; V10 fields with
+dark box houses and almost no trees on the tracks; V12 low-poly "lollipop" trees in front of a flat green wall (the
+wood mass). The causes, in order of weight:
+
+1. **The wrong layer first.** Part B worked from the ground (T1) straight to hero trees (T5). In every game studied,
+   what makes the view near the eye read as real is the **ground cover** (grass, stubble, stalks, weeds at about one
+   clump per m² to 60-100 m: Farming Simulator, Arma, Tsushima) and **layered edges** (herb fringe, shrubs, mantle,
+   trees), not the trees' detail. T6 (clutter) was never built, so every view is bare earth.
+2. **Woods as a single layer.** simcore plants one kind of tree at one spacing in the woods' open sides and draws the
+   rest as a smooth mass. Real woods and edges are a canopy, a sub-canopy and shrubs, with a 10-20 m mantle at the edge
+   (Horizon's 20+ stacked layers, Wildlands' cascade of big trees spawning small trees spawning bushes, Reforger's edge
+   levels).
+3. **Relief at one scale only.** The map's relief is three noise bands (10 m over 18 km, 4 m over 6 km, 1.2 m over
+   1.5 km) on a 50 m grid. The plain is flat, but not as flat as that: it has swells of 0.5-3 m, old river channels,
+   sand ridges 6-8 m high, kunhalom mounds, dykes of 3-6 m, road embankments, ditches and canals, and its ground has
+   clods, furrows and ruts at the centimetre scale. None of it is there.
+4. **An asset pipeline fighting the engine.** Fab's assets were exported out of Unreal, through Blender and back in;
+   Megaplants (skeletal) cannot be exported at all, Nanite shrubs decimate into solid blobs. Hours per asset, and the
+   results looked wrong. The home-made card tree is a start, not a tree.
+5. **A slow loop judged on the whole map.** One look meant loading the 40 km map and rendering twelve views (about
+   four minutes), and nothing was perfected in one small place before being spread everywhere. Every studio studied
+   defines a land type once on a test area, as data, and applies it by rule.
+6. **A bug that spoiled the judging.** At V12 the procedural tree and the card tree were drawn in the same place:
+   the distance ladder's start distances (`SimMapActor.cpp`, `Add(..., StartM)`) do not take effect, so the procedural
+   crown is drawn from 0 m under every registered model.
+
+### A.2 The decisions
+
+| # | Decision | Why (the research) |
+|---|---|---|
+| D1 | **Keep the sim-owned mesh ground; do not move to a Landscape.** The ground tiles move from procedural mesh sections to static-mesh tiles (Part B 6.3 step 1, brought forward), for RVT, Nanite displacement of the centimetre scale and shadow caching | A Landscape can be made only by editor C++ before play, one grid per map, and the sim would follow the engine's grid. What it alone unlocks (Landscape Grass, Water carving, splines) PCG and simcore already cover (`TERRAIN_UE_TOOLS` 7). Kept as a fallback |
+| D2 | **Test plots first, as small worlds generated by the same simcore code, then the same recipes on the whole map.** A plot is never a hand-made scene: perfecting a plot perfects the rule | The owner's method; Horizon, Wildlands, Reforger and PCG Biome Core all work this way (`TERRAIN_PROCEDURAL_METHOD` 1, 6) |
+| D3 | **Recipes as data** (`data/scenery/recipes/`): per land type and per edge (a pair of neighbours), bands across a signed distance from simcore's vectors, scatter processes and densities per hectare, ground layers, relief stamps, test targets; every number sourced or marked estimate | One place per look; no painted value anywhere on the map, so a recipe change reaches every matching cell (`TERRAIN_PROCEDURAL_METHOD` 6.3) |
+| D4 | **Anything that blocks sight or is over about 0.5 m stays in simcore** (trees, shrubs over a man's height, standing maize, dykes, embankments, ditches); **ground cover under that may be generated by Unreal** (PCG fed by simcore, or the map actor's own ring), never scaled by quality if it hides a man | Part B rules 1 and 2; PCG's points are not guaranteed identical on every client, so it may place only what nothing in the game reads (`TERRAIN_UE_TOOLS` 3, Epic staff, May 2026) |
+| D5 | **Relief at three scales**: large forms from the map's data (unchanged); meso relief (0.3-8 m: swells, palaeochannels, sand ridges, mounds, dykes, embankments, ditches, headland ridges) in simcore by zero-mean band-limited noise and cross-section stamps along the map's lines; micro relief (under 0.3 m: clods, furrows, ruts) in the ground's normal and displacement only | `TERRAIN_GAMES` lesson 8, `TERRAIN_PROCEDURAL_METHOD` 4; anything a sight line could meet is simcore's |
+| D6 | **Fields carry data, not a picture**: a field-state texture baked from simcore (crop, state, furrow heading, distance to the parcel's edge, the field's own day) read by both the ground material and the ground cover | Farming Simulator's density maps (`TERRAIN_GAMES` lessons 1-2) |
+| D7 | **Assets: our own, built by script, from free photographs; Unreal assets used in place, never exported.** Trees from a branch skeleton (Blender's Sapling or tree-gen, headless) with our twig cards on its end branches, LODs by thinning cards, impostors baked in Unreal; grass, stubble, maize, reeds as our own card clumps from CC0 atlases; buildings from our own Blender generator. A Fab or Megascans asset is registered by its Unreal path and drawn as it is (Megaplants as instanced skinned meshes: a spike), never sent through Blender. AI 3D only for props. No more Fab gathering except leaf and ground textures | `TERRAIN_ASSET_TOOLS` 8; `TERRAIN_UE_TOOLS` 4 and 8 |
+| D8 | **External terrain tools are not used** (Gaea, World Machine, World Creator, Houdini): non-commercial or paid to script, and they would take the ground from simcore. A clamped droplet erosion, ported from MIT code, may run on the detail levels only | `TERRAIN_ASSET_TOOLS` 3 |
+| D9 | **Judged at three cameras per plot** (1.7 m eye; 25 m and 150 m at 30° down), beside the plot's photographs and its last approved render, with simcore's measurements (stems per hectare, spacing, band widths, obstacle heights, determinism) to catch drift; the owner judges by eye | `TERRAIN_PROCEDURAL_METHOD` 6.7 |
+
+Paid tools stay the owner's choice and are not assumed: SpeedTree Indie (USD 19 a month, under USD 100k revenue) is
+the cheapest route to good trees under 10 m; The Grove (EUR 99 and up) the most realistic cheap generator; Houdini
+Indie (about USD 299 a year) the strongest scripted pipeline (`TERRAIN_ASSET_TOOLS` 8.2).
+
+### A.3 The phases
+
+The new phases are **L0-L10** ("land"). Part B's T0-T4 and T5.1 stay built and are used by them; Part B's T5-T9 are
+replaced by the phases named in the last column.
+
+| # | Phase | Done when | Replaces |
+|---|---|---|---|
+| L0 | **The rework**: the research, this part, the decisions | this part written | |
+| L1 | **The plot lab.** Plot worlds: `data/scenery/plots/<plot>.json`, each a 50 x 50 m core in a 400 x 400 m ring, a tiny map (a parcel, a wood outline, a track, a road, a stream, a sky clock) turned into a map by the same generator path (`terrain_map.hpp`); the same plot also found on Kesmark by an anchor, as `views.json` does. `-SimShotSet=plots`: the three cameras per plot, each plot's photographs and its last approved render on one page (`tools/plot_lab.py`). The ladder bug fixed (A.1 item 6) | plot 1 (ploughland) renders from the three cameras **in under 90 s** from one command, the page beside its photographs | T2's loop for look work |
+| L2 | **Recipes.** `data/scenery/recipes/` and its simcore loader: matching by cover, crop state, stand, edge pair and signed distance (from the vectors, not the 25 m raster), wetness, soil, road class; generation per cell with position-hashed seeds, big things first and children round them; density by thresholding a fixed ordered point set (so thinning never moves a tree); blue noise, lattices, Thomas and Matérn clusters; outputs: instances, ground weights, relief stamps; the report (hectares, instances and budget per recipe, measured statistics against each recipe's targets). Today's `map_dressing.json` rules move into recipes one by one | the tests: determinism (one hash per plot), every target met on its plot, the Kesmark map's obstacle heights unchanged where no recipe changed | part of T4, T5 |
+| L3 | **The ground's shape** (simcore). Meso relief by recipe and by the map's lines: swells, palaeochannels, sand ridges, kunhalom mounds, road embankments and ditches, canals, dykes, headland ridges, as noise bands and cross-section stamps merged by distance; the ground's spacing per ring chosen by measure (plots at 1-2 m; the play area's rings at 5-10 m where the stamps need it). The balance runs re-read (sight lines move) | plots 13, 15 and 17 show their embankment, ditch, dyke and mound at 1.7 m; `ground_check`, `crew_balance`, `air_war_bench`, `em_demo`, `helper_coverage` re-read and the moved rows explained | part of T8, T9 |
+| L4 | **The ground's surface.** The field-state texture (D6) at 2 m in the detail areas and 8 m over the map; the ground's layers chosen per pixel by recipe rules (cover, state, edge distance, wetness), at most four blended; the colour map synthesized from the vectors (Part B's T3 finished); anti-tiling (two variants per texture, macro noise); the ground tiles as static meshes with RVT (meshes blend into the ground) and Nanite displacement for the micro relief | plots 1-6 at 1.7 m and 150 m: furrows, clods, stubble rows and headlands read; no tiling peak in the 150 m render's luminance | T1's left, T3 |
+| L5 | **The ground cover** (the near ring). Grass, weeds, stubble straw, maize stover and stumps, ploughed clods, verge and pasture sward, generated round the camera to 60-100 m from the field-state texture and the recipes: first the spike (PCG with a "Sim Cover Points" node on the GPU, against the map actor's own instanced ring), then the winner. Standing maize and sunflower as field blocks (rows of cards near, a block far), their height in simcore's obstacles | plots 1-6 and 13 at 1.7 m read as their photographs; the ring's cost within budget; points on the drawn ground within 1 cm; two clients alike | T6 |
+| L6 | **The asset kit** (D7). The card-clump builder for grass, crops and reeds; the tree builder (skeleton, twig cards on the end branches, crown-hull normals, vertex-colour AO, LODs by card thinning, three or four variants per species); impostors baked in Unreal; registering an Unreal asset by its path; the Megaplants spike (1000 oaks as instanced skinned meshes, a Shipping build). One species judged at a time at its plots, starting with black locust and hybrid poplar | each kit item at its plot's three cameras beside the photographs; the owner's look | T5.2-T5.3 |
+| L7 | **Woods, edges and lines** (simcore, sight-blocking). Stands as layers (canopy, sub-canopy, shrubs) by recipe: oak-hornbeam, black locust, poplar plantation, floodplain willow; the forest edge's herb fringe, shrub belt and mantle with noise along it and by aspect; tree rows on tracks and roads; hedges; reed belts on canals and oxbows. The wood masses far off take the same colour and outline | plots 7-12 and 14 at the three cameras; the obstacle heights test; the balance runs re-read | T5, part of T8 |
+| L8 | **The whole map.** Every recipe on Kesmark (and the detail areas), the report's hectares and budgets, the views V1-V12 and each plot's map anchor | V1, V4, V6, V7, V9, V10, V12 against their photographs; the budgets held on this PC's RTX 3060 Ti | |
+| L9 | **Villages and farms.** Plot 16 and its transitions; our own building generator (the Kádár cube first, then the long house, barns, the TSZ's sheds, water towers); fences, poles and wires; gardens and fruit trees by recipe; Part B's T7 for the rest | V2, V3, V5, V6 against their photographs | T7 |
+| L10 | **Far field and cost.** Impostor rings and the masses meeting without a seam; baked Nanite ground tiles if they measure better; budgets per pass at every view | each view within budget | T9 |
+
+**Order:** L1 and L2 first, together (the lab is useless without recipes, recipes untestable without the lab). Then
+**one vertical slice: plot 1, ploughland, through L3, L4 and L5**, to prove the whole chain on the October plain's
+largest surface. Then plots 2-3 (maize), then the forest edge and the tree row (11, 12) through L6 and L7, then black
+locust and poplar, the road (13), and the rest in `TERRAIN_PROCEDURAL_METHOD` 6.6's order. L8 after each group of plots
+(a cheap check, since the recipes already apply map-wide). L9 and L10 last.
+
+**Paused:** gathering from Fab (except leaf and ground textures); the Megaplants and GV exports through Blender; the
+hand tuning of `card_tree.py`'s hornbeam (it becomes L6's tree builder's leaves); the Sketchfab landmarks and the AI
+prop test (after L9 starts).
+
+### A.3.1 L1 built in first form (5 Nov 2026)
+
+- `simcore/scenery/plots.hpp` (`LoadPlots`, `ResolvePlot`; tests `test_plots.cpp`), `data/scenery/plots.json` (7 plots: 1
+  ploughland, 2 maize stover, 3 standing maize, 5 wheat stubble, 11 forest edge, 13 road, 14 river bank), the anchor kind
+  `field_layer` (the nearest field whose whole 50 m square is one parcel in one ground layer on the day), the views'
+  anchor reader and spot finder shared (`ParseAnchor`, `ResolveSpot` in `views.hpp`).
+- `-SimShotSet=plots [-SimPlots=<id>,<id>]` in `ASimMapActor`; `python tools/plot_lab.py run|page|approve`.
+- **The plots are found on the Kesmark map for now**, not in synthetic plot worlds: a run of one plot takes 74 s and
+  all seven (21 cameras) 119 s, already inside the 90 s a plot, so plot worlds wait until a land type the map lacks
+  (the dyke, plot 15) or a controlled layout is needed.
+- **The baseline, `out/plots/a0/`** (what the slice must fix):
+  - Plot 1: one corduroy furrow pattern with no clods and no change of tone, repeating plainly at 25 m; the parcel's
+    edge a soft wavy blob at 25 and 150 m where it must be straight; dead flat; the trees low-poly lollipops.
+  - Plot 3: standing maize drawn as scattered bulrush cards on bare stubble (the clutter ring's card for `dry_stalks`).
+  - Plot 11: a wall of lollipop crowns with the card tree's white shards in them (the ladder bug) and small green
+    shrub cones; no fringe, no shrub belt, no mantle.
+  - Plot 13: the road a flat grey strip, no shoulder, ditch, poles or verge grass; sparse dark tufts on the field.
+  - Plot 14: the cameras stood over the water (`side_m` 0; set to 60 m, not yet re-rendered).
+- Left: the tree ladder's bug (the procedural crown drawn under the models from 0 m) is to be settled at plot 11 with
+  the tree builder's own LODs (L6) rather than the ladder; the photos' page shows only the photographs with a page link
+  that `terrain_views.py` can thumbnail.
+
+### A.3.2 The ploughland slice, first pass (5 Nov 2026)
+
+- **a1, the field's edges**: the material's field port found the plot's field only when its nominal centre's cell was
+  on the mask; it now tries the field's centre, the pixel's own cell and the next cell towards the centre, so a
+  parcel's edge is straight wherever the field lies (checked with `-SimGroundDebug=2`). The edge against a road verge
+  is still a 25 m cell's (plot 13's job).
+- **a2-a3, the surface**: a layer's `patch` (damp and dry patches 15-40 m across, darker and smoother when damp) and
+  `break_up` (a second sample shifted along the furrows in blobs about 8 m across) in `ground_layers.json`, carried to
+  the material as `PatchA..D` and `BreakA..D` by `ASimMapActor`; ploughed and sown 0.35 and 1.0.
+- **Clods**: the clutter kind `clod` (`clutter_clod` in `ClutterMesh`, a rounded solid, not a card) on ploughed (1.8 a
+  square metre at the camera) and sown (0.6) ground, 10-36 cm across.
+- **Meso relief**: a detail area's `meso` bands (`MapDetailDef::meso`, zero-mean value noise, faded as the micro
+  relief is, off the lines, sites and towns); battery 21's district has 2.5 m at 700 m, 1.2 m at 250 m and 0.3 m at
+  90 m. The farm tracks (not among the lines the relief keeps off) take a point at each detail spacing, so they lie
+  on the swells (within 0.14 m of the ground; 0.32 m with their 25 m points). **Sight lines in the district move**, re-read 5 Nov: `ground_check` passes (0 of 15); `crew_balance`'s rows are
+  the same to the digit with and without the bands (its scenarios are not in the district); `air_war_bench` matches
+  `09_BALANCE.md` and `em_demo` passes 11 of 11; `helper_coverage` keeps its 25 gaps, and only
+  `kesmark_range_test` changes, for the better (the NPC commander launches at 785 s, not 814, and hits at 875).
+- **What a3 shows**: clods read from the eye camera and the damp patches from 150 m; the furrows are still one
+  corduroy scan repeating every 2 m, which `break_up` along the furrows cannot hide across them, and the swells do not
+  read in a 50 m plot from these cameras. Next: a cloddy scan of its own for ploughland (fetched only with the owner's
+  say-so) or a procedural furrow normal, the camera's sun lower to show the relief, then the recipe file (L2).
+- **a4-a5, procedural furrows** (the owner chose them over a scan): a rows layer's `furrow_m` and `furrow_depth_m`
+  (`FurrowA..D`, `FurrowDepthA..D`) draw a mouldboard's slice in the material, a long back and a steep face, each
+  field's spacing its own within 12%, wavering over metres, broken into lumps a hand or two long, crests paler and
+  troughs darker; the scan's furrows across are damped by a third under them and the second sample shifts across too.
+  Ploughed 0.36 m and 0.09 m, sown (drill rows) 0.15 m and 0.03 m. a4 (0.12 m, smooth profile, scan damped 65%) read as
+  corrugated sheet; a5 reads as ploughland from the eye. They fade once a pixel spans a fifth to a half of a furrow, so
+  from 150 m the scan's own 2 m grid still shows at middle distance, on the stubble as well: next, a mid-distance
+  fade of the scan's detail towards a macro variation, then the lower sun and the recipe file (L2).
+
+### A.4 How a plot is worked (the loop)
+
+1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
+2. simcore tests for the plot: its statistics against the recipe's targets, determinism, obstacle heights.
+3. `python tools/plot_lab.py run <plot>`: the plot world rendered from the three cameras (and its map anchor's), the
+   page beside the photographs and the last approved render; under 90 s.
+4. Look at every picture; change; repeat. When it reads right, show the owner.
+5. On the owner's approval the renders become the plot's ground truth; later renders are compared against it.
+6. Run the map-wide report and the views (`terrain_views.py`) to see the change everywhere; the balance runs if
+   anything that blocks sight moved.
+
+---
+
+# B. The roadmap of 3 Nov 2026
+
 The project owner, 3 Nov 2026: "Develop a roadmap - include terrain research (reference images), online/FAB/unreal
 marketplace 3D model selection, PBR and texture selection (must be free), and the development process. Then begin
 development." Asked after the question of how to make the map look like the AA and AAA maps of Eastern Europe, using
@@ -311,6 +477,9 @@ Milliseconds per pass (ground, trees, clutter, shadows, Lumen, atmosphere) on a 
 shots' harness at the reference views, before and after each phase. A fallback without Lumen kept in mind.
 
 ## 7. The phases
+
+**Superseded on 5 Nov 2026 for everything not yet built**: T5-T9 are replaced by part A's L1-L10 (A.3). The table is
+kept as the record of T0-T4 and T5.1.
 
 | # | Phase | Done when | Status |
 |---|---|---|---|

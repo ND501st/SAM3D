@@ -168,8 +168,9 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
         SC_EXPECT(t.kind < static_cast<std::uint8_t>(TreeKind::Count));
         if (t.kind < kinds.size()) ++kinds[t.kind];
     }
-    std::printf("    %zu trees (%zu in the detail areas: oak %zu, poplar %zu, pine %zu, acacia %zu), %zu masses\n", d.trees.size(), in_areas,
-                kinds[0], kinds[1], kinds[2], kinds[3], d.masses.size());
+    std::printf("    %zu trees and shrubs (%zu in the detail areas), %zu masses; by kind:", d.trees.size(), in_areas, d.masses.size());
+    for (std::size_t k = 0; k < kinds.size(); ++k) std::printf(" %s %zu", TreeKindName(static_cast<TreeKind>(k)), kinds[k]);
+    std::printf("\n");
     SC_EXPECT(d.trees.size() < 400000);
     SC_EXPECT(d.trees.size() > 50000);
     SC_EXPECT(in_areas > 10000);
@@ -205,14 +206,19 @@ SC_TEST("map dressing: no tree tops what blocks a sight line, stands near a line
     std::vector<MapLineDef> rivers = m->Def().rivers;
     rivers.insert(rivers.end(), imported.rivers.begin(), imported.rivers.end());
     double mean_height = 0.0;
+    std::size_t tree_count = 0;
     for (std::size_t i = 0; i < d.trees.size(); ++i) {
         const TreeInstance& t = d.trees[i];
+        const bool shrub = IsShrub(static_cast<TreeKind>(t.kind));
         const double top = t.base_m + t.height_m;
         const double limit = m->GroundHeight(t.east_m, t.north_m) + m->ObstacleHeight(t.east_m, t.north_m) + 0.3;
         over += top > limit + 1e-3 ? 1 : 0;
-        short_trees += t.height_m < 3.0f ? 1 : 0;
+        short_trees += t.height_m < (shrub ? 1.0f : 3.0f) ? 1 : 0;
+        SC_EXPECT(!shrub || t.height_m <= static_cast<float>(r.shrub_height_max_m + 0.3 + 1e-3));
         SC_EXPECT_NEAR(t.base_m, m->GroundHeight(t.east_m, t.north_m) - 0.3, 1e-6);
         SC_EXPECT(t.crown_m > 0.0f && t.crown_m < t.height_m);
+        if (shrub) continue;
+        ++tree_count;
         mean_height += t.height_m;
         if (i % 97 == 0) {  // a sample, against the lines themselves
             ++checked;
@@ -220,14 +226,72 @@ SC_TEST("map dressing: no tree tops what blocks a sight line, stands near a line
             wet += FromLines(rivers, t.east_m, t.north_m) < 0.0 ? 1 : 0;
         }
     }
-    if (!d.trees.empty()) mean_height /= static_cast<double>(d.trees.size());
+    if (tree_count > 0) mean_height /= static_cast<double>(tree_count);
     std::printf("    mean height %.1f m; %d trees checked against the lines\n", mean_height, checked);
     SC_EXPECT(over == 0);
     SC_EXPECT(short_trees == 0);
     SC_EXPECT(near_line == 0);
     SC_EXPECT(wet == 0);
     SC_EXPECT(checked > 500);
-    SC_EXPECT(mean_height > 0.8 * m->Def().canopy_min_m && mean_height < m->Def().canopy_max_m + 1.0);
+    SC_EXPECT(mean_height > 0.7 * m->Def().canopy_min_m && mean_height < m->Def().canopy_max_m + 1.0);
+}
+
+SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the open edges, plantations in rows") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const MapDressing& d = Dressing();
+    const DressingRules& r = Rules();
+    SC_EXPECT(r.stands.size() >= 4);
+    // Wet ground has its own stands: alder only near the water, beech and pine only away from it.
+    int alder_dry = 0, alder = 0, pine_wet = 0, shrubs = 0, shrubs_deep = 0;
+    for (const TreeInstance& t : d.trees) {
+        const TreeKind k = static_cast<TreeKind>(t.kind);
+        const bool wet = m->NearWater(t.east_m, t.north_m, r.wet_m);
+        if (k == TreeKind::Alder) {
+            ++alder;
+            // An alder off the wet ground only as a stand's admixture... none is: alder is wet stands' alone.
+            alder_dry += wet ? 0 : 1;
+        }
+        if (k == TreeKind::Pine || k == TreeKind::Beech) pine_wet += wet ? 1 : 0;
+        if (IsShrub(k)) ++shrubs;
+    }
+    // Shrubs stand only in the fringe: within the inset and a jitter of a block's side.
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::Canopy || !m->InDetail(b.east_m, b.north_m)) continue;
+        for (const TreeInstance& t : d.trees) {
+            if (!IsShrub(static_cast<TreeKind>(t.kind))) continue;
+            const double de = std::fabs(t.east_m - b.east_m), dn = std::fabs(t.north_m - b.north_m);
+            if (de > 0.5 * b.length_m || dn > 0.5 * b.width_m) continue;
+            const double in = std::min(0.5 * b.length_m - de, 0.5 * b.width_m - dn);
+            shrubs_deep += in > r.shrub_inset_m + r.jitter * r.shrub_spacing_m + 0.5 ? 1 : 0;
+        }
+        break;  // one block is enough to look inside
+    }
+    std::printf("    %d alders (%d off the wet ground), %d pine or beech on the wet ground, %d shrubs\n", alder, alder_dry, pine_wet, shrubs);
+    SC_EXPECT(alder > 100);
+    SC_EXPECT(alder_dry == 0);
+    SC_EXPECT(pine_wet == 0);
+    SC_EXPECT(shrubs > 1000);
+    SC_EXPECT(shrubs_deep == 0);
+    SC_EXPECT(shrubs < static_cast<int>(d.trees.size()) / 3);
+}
+
+SC_TEST("map dressing: the stand rules refuse what they cannot use") {
+    std::string e;
+    const auto load = [&](const std::string& values) {
+        DressingRules x;
+        return LoadDressingRules("{\"values\": {" + values + "}}", x, &e);
+    };
+    SC_EXPECT(load(R"("stands": {"value": [{"id": "a", "site": "dry", "weight": 1, "mix": {"oak": 1}}, {"id": "b", "site": "wet", "weight": 1, "mix": {"alder": 1}}]})"));
+    SC_EXPECT(!load(R"("stands": {"value": [{"id": "a", "site": "dry", "weight": 1, "mix": {"oak": 1}}]})"));  // no wet stand
+    SC_EXPECT(!load(R"("stands": {"value": [{"id": "a", "site": "damp", "weight": 1, "mix": {"oak": 1}}, {"id": "b", "site": "wet", "weight": 1, "mix": {"alder": 1}}]})"));
+    SC_EXPECT(!load(R"("stands": {"value": [{"id": "a", "site": "dry", "weight": 1, "mix": {"hazel": 1}}, {"id": "b", "site": "wet", "weight": 1, "mix": {"alder": 1}}]})"));
+    SC_EXPECT(!load(R"("stands": {"value": [{"id": "a", "site": "dry", "weight": 1, "mix": {"baobab": 1}}, {"id": "b", "site": "wet", "weight": 1, "mix": {"alder": 1}}]})"));
+    SC_EXPECT(!load(R"("shrub_mix": {"value": {"oak": 1}})"));
+    SC_EXPECT(!load(R"("edge_mix": {"value": {"oak": 0}})"));
+    SC_EXPECT(!load(R"("shrub_height_m": {"value": [4, 1]})"));
+    std::printf("    the last refusal: %s\n", e.c_str());
 }
 
 SC_TEST("map dressing: no wood's mass tops what blocks a sight line, in the map proper or beyond it") {

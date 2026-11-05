@@ -16,9 +16,43 @@
     "poplar_river_m": { "value": 60, "source": "game value: sam3d estimate (poplars along the rivers)", "confidence": "estimate" },
     "species_shares": {
       "value": { "oak": 0.55, "poplar": 0.1, "pine": 0.15, "acacia": 0.2 },
-      "source": "game value: sam3d estimate (the plain's oak woods, planted pine and black locust, poplar)",
+      "source": "game value: sam3d estimate (the plain's oak woods, planted pine and black locust, poplar); used only where no stand types are given",
       "confidence": "estimate"
     },
+    "stand_m": { "value": 150, "source": "game value: sam3d estimate (a managed wood's compartments of about 2 ha, each of one species and age, with sharp steps between them: Hungarian forestry practice, docs/scenery/VEGETATION.md section 1)", "confidence": "estimate" },
+    "wet_m": { "value": 80, "source": "game value: sam3d estimate (the floodplain's and the stream banks' wet stands: within 80 m of water)", "confidence": "estimate" },
+    "age_min": { "value": 0.75, "source": "game value: sam3d estimate (a compartment's trees from three quarters of the wood's height to all of it: even-aged stands, one age each)", "confidence": "estimate" },
+    "plantation_jitter": { "value": 0.15, "source": "game value: sam3d estimate (a plantation's rows: its trees keep to the lattice)", "confidence": "estimate" },
+    "stands": {
+      "value": [
+        { "id": "oak_hornbeam", "site": "dry", "weight": 0.3, "mix": { "oak": 0.5, "hornbeam": 0.35, "maple": 0.1, "acacia": 0.05 } },
+        { "id": "oak", "site": "dry", "weight": 0.15, "mix": { "oak": 0.85, "maple": 0.15 } },
+        { "id": "black_locust", "site": "dry", "weight": 0.22, "mix": { "acacia": 0.9, "oak": 0.1 } },
+        { "id": "pine_plantation", "site": "dry", "weight": 0.18, "plantation": true, "mix": { "pine": 0.95, "acacia": 0.05 } },
+        { "id": "beech_hornbeam", "site": "dry", "weight": 0.05, "mix": { "beech": 0.6, "hornbeam": 0.4 } },
+        { "id": "alder", "site": "wet", "weight": 0.4, "mix": { "alder": 0.75, "poplar": 0.15, "maple": 0.1 } },
+        { "id": "poplar_plantation", "site": "wet", "weight": 0.4, "plantation": true, "mix": { "poplar": 1.0 } },
+        { "id": "poplar_alder", "site": "wet", "weight": 0.2, "mix": { "poplar": 0.5, "alder": 0.5 } }
+      ],
+      "source": "game value from published shares: black locust about 24% of Hungary's forest (Redei et al., Acta Silvatica Lignaria Hungarica 2012); the sand plains' state forest pine 49%, poplar 25%, black locust 22% (KEFAG); a hill district sessile oak 35%, beech 30%, Turkey oak 18%, hornbeam 7%; the floodplains' willow-poplar and alder-ash woods (Kevey and Barna). Weighted for a plain with low hills, beech only a little (docs/scenery/VEGETATION.md section 1)",
+      "confidence": "estimate"
+    },
+    "edge_band_m": { "value": 12, "source": "Waldmantel: the mantle and shrub belt 10-20 m in practice (Thurgau forestry office, Waldrandgestaltung); a 1980s managed edge against ploughland thinner, so 12 m (docs/scenery/VEGETATION.md section 1)", "confidence": "estimate" },
+    "edge_height": { "value": 0.8, "source": "game value: sam3d estimate (the mantle's light-demanding trees lower than the stand behind)", "confidence": "estimate" },
+    "edge_mix": {
+      "value": { "oak": 0.4, "acacia": 0.25, "hornbeam": 0.15, "maple": 0.2 },
+      "source": "the mantle's light-demanding trees: oak, field maple, black locust (BIO Austria, Waldraender; docs/scenery/VEGETATION.md section 1)",
+      "confidence": "estimate"
+    },
+    "shrub_mix": {
+      "value": { "hazel": 0.6, "elder": 0.4 },
+      "source": "the shrub belt: hazel, elder, blackthorn, hawthorn, dog rose (BIO Austria); the two the art has (docs/scenery/VEGETATION.md section 4)",
+      "confidence": "estimate"
+    },
+    "shrub_spacing_m": { "value": 3, "source": "game value: sam3d estimate (a shrub every 3 m along an open edge)", "confidence": "estimate" },
+    "shrub_inset_m": { "value": 1.5, "source": "game value: sam3d estimate (the fringe just inside the wood's block, so no shrub stands where the sight lines see open ground)", "confidence": "estimate" },
+    "shrub_keep": { "value": 0.55, "source": "game value: sam3d estimate (gaps in the fringe: a managed edge's shrubs are patchy, the Swiss inventory's classes run from none to over 4 m, lfi.ch)", "confidence": "estimate" },
+    "shrub_height_m": { "value": [1.5, 4.0], "source": "game value: sam3d estimate (hazel and elder 1.5-4 m)", "confidence": "estimate" },
     "mass_inset_m": { "value": 3, "source": "game value: sam3d estimate (a wood's mass inside its block)", "confidence": "estimate" },
     "mass_top": { "value": 0.92, "source": "game value: sam3d estimate (the mass's top, of the wood's height)", "confidence": "estimate" },
     "cover_cell_m": { "value": 25, "source": "game value: sam3d estimate (the land cover raster's cell)", "confidence": "estimate" },

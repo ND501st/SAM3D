@@ -58,6 +58,15 @@ struct CropDef {
     CoverColour colour{{0.3f, 0.3f, 0.15f}};
 };
 
+// A kind of stand: where it grows, how often, whether it is planted in rows, and its trees' mix by kind.
+struct StandType {
+    std::string id;
+    bool wet = false;
+    double weight = 1.0;
+    bool plantation = false;
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> mix{};
+};
+
 // The rules (data/scenery/map_dressing.json); the defaults are the file's values.
 struct DressingRules {
     double near_spacing_m = 7.0;  // a wood planted whole (in a detail area): a tree every this far each way
@@ -69,7 +78,26 @@ struct DressingRules {
     double crown_jitter = 0.2;
     double top_drop = 0.15;      // a tree's top up to this share of the wood's height below the wood's top
     double poplar_river_m = 60.0;
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> species_shares{{0.55, 0.1, 0.15, 0.2}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> species_shares{{0.55, 0.1, 0.15, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+    // Stands (docs/scenery/VEGETATION.md): a wood is cut into compartments on a stand_m grid, each of one stand type drawn
+    // by its site (wet: within wet_m of water; dry elsewhere) and of one age (its trees' height times a factor in
+    // age_min..1). A plantation's trees stand in rows (jitter times plantation_jitter). With no stand types the species
+    // shares are used for every tree, as before.
+    std::vector<StandType> stands;
+    double stand_m = 150.0;
+    double wet_m = 80.0;
+    double age_min = 0.75;
+    double plantation_jitter = 0.15;
+    // A wood's open edge: the trees within edge_band_m of an open side are its mantle (edge_mix, edge_height of the
+    // stand's), and a fringe of shrubs (shrub_mix) stands shrub_inset_m inside it every shrub_spacing_m, keep_share of them.
+    double edge_band_m = 12.0;
+    double edge_height = 0.8;
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> edge_mix{{0.4, 0.0, 0.0, 0.25, 0.15, 0.0, 0.0, 0.2, 0.0, 0.0}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> shrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.4}};
+    double shrub_spacing_m = 3.0;
+    double shrub_inset_m = 1.5;
+    double shrub_keep = 0.75;
+    double shrub_height_min_m = 1.5, shrub_height_max_m = 4.0;
     double mass_inset_m = 3.0;
     double mass_top = 0.92;      // a mass's height, of its wood's
     double cover_cell_m = 25.0;
@@ -192,7 +220,73 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     double variants = r.house_variants;
     number("house_variants", variants, 1.0, static_cast<double>(kHouseVariants));
     r.house_variants = static_cast<int>(std::lround(variants));
+    number("stand_m", r.stand_m, 20.0, 2000.0);
+    number("wet_m", r.wet_m, 0.0, 500.0);
+    number("age_min", r.age_min, 0.3, 1.0);
+    number("plantation_jitter", r.plantation_jitter, 0.0, 1.0);
+    number("edge_band_m", r.edge_band_m, 0.0, 60.0);
+    number("edge_height", r.edge_height, 0.3, 1.0);
+    number("shrub_spacing_m", r.shrub_spacing_m, 1.0, 50.0);
+    number("shrub_inset_m", r.shrub_inset_m, 0.0, 20.0);
+    number("shrub_keep", r.shrub_keep, 0.0, 1.0);
+    range("shrub_height_m", r.shrub_height_min_m, r.shrub_height_max_m, 0.5, 8.0);
     if (!ok) return Fail(error, "\"" + bad + "\" is missing its number or out of range");
+    // A mix by kind: {"oak": 0.5, ...}, kinds named, shares not negative, summing to more than nothing.
+    const auto mix = [&](const json::Value& s, std::array<double, static_cast<std::size_t>(TreeKind::Count)>& to, const std::string& what) {
+        if (!s.Is(json::Type::Object)) return Fail(error, what + " is not an object of kinds");
+        std::array<double, static_cast<std::size_t>(TreeKind::Count)> m{};
+        double sum = 0.0;
+        for (std::size_t i = 0; i < s.keys.size(); ++i) {
+            int found = -1;
+            for (int k = 0; k < static_cast<int>(TreeKind::Count); ++k) found = s.keys[i] == TreeKindName(static_cast<TreeKind>(k)) ? k : found;
+            if (found < 0) return Fail(error, what + ": no tree kind \"" + s.keys[i] + "\"");
+            if (!s.items[i].Is(json::Type::Number) || s.items[i].number < 0.0) return Fail(error, what + ": a share is not a number of 0 or more");
+            m[static_cast<std::size_t>(found)] = s.items[i].number;
+            sum += s.items[i].number;
+        }
+        if (sum <= 0.0) return Fail(error, what + ": the shares add up to nothing");
+        to = m;
+        return true;
+    };
+    if (const json::Value* s = value("edge_mix")) {
+        if (!mix(*s, r.edge_mix, "edge_mix")) return false;
+    }
+    if (const json::Value* s = value("shrub_mix")) {
+        if (!mix(*s, r.shrub_mix, "shrub_mix")) return false;
+        for (std::size_t k = 0; k < r.shrub_mix.size(); ++k) {
+            if (r.shrub_mix[k] > 0.0 && !IsShrub(static_cast<TreeKind>(k))) return Fail(error, "shrub_mix: a tree is not a shrub");
+        }
+    }
+    if (const json::Value* s = value("stands")) {
+        if (!s->Is(json::Type::Array)) return Fail(error, "\"stands\" is not a list");
+        std::vector<StandType> stands;
+        for (const json::Value& item : s->items) {
+            const json::Value* id = item.Find("id");
+            const json::Value* site = item.Find("site");
+            const json::Value* weight = item.Find("weight");
+            const json::Value* m = item.Find("mix");
+            if (id == nullptr || !id->Is(json::Type::String) || site == nullptr || !site->Is(json::Type::String) ||
+                (site->string != "wet" && site->string != "dry") || weight == nullptr || !weight->Is(json::Type::Number) || weight->number <= 0.0 ||
+                m == nullptr) {
+                return Fail(error, "a stand needs an id, a site (wet or dry), a weight above 0 and a mix");
+            }
+            StandType t;
+            t.id = id->string;
+            t.wet = site->string == "wet";
+            t.weight = weight->number;
+            const json::Value* plantation = item.Find("plantation");
+            t.plantation = plantation != nullptr && plantation->Is(json::Type::Bool) && plantation->boolean;
+            if (!mix(*m, t.mix, "stand " + t.id)) return false;
+            for (std::size_t k = 0; k < t.mix.size(); ++k) {
+                if (t.mix[k] > 0.0 && IsShrub(static_cast<TreeKind>(k))) return Fail(error, "stand " + t.id + ": a shrub is not a stand's tree");
+            }
+            stands.push_back(t);
+        }
+        bool wet = false, dry = false;
+        for (const StandType& t : stands) (t.wet ? wet : dry) = true;
+        if (!stands.empty() && (!wet || !dry)) return Fail(error, "stands: at least one wet and one dry stand type");
+        r.stands = stands;
+    }
     if (const json::Value* s = value("species_shares")) {
         if (!s->Is(json::Type::Object)) return Fail(error, "\"species_shares\" is not an object");
         double sum = 0.0;
@@ -480,18 +574,63 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         if (b.part == MapPart::Canopy) blocks.insert(key(b.east_m, b.north_m));
     }
     const std::uint64_t seed = noise::Mix64(def.seed ^ 0x7EE5ull);
-    double share_sum = 0.0;
-    for (double s : rules.species_shares) share_sum += s;
-    const auto plant = [&](const MapBox& b, double e, double n, int forced_kind = -1) {
+    // A kind drawn from a mix by a number in [0, 1).
+    const auto draw = [](const std::array<double, static_cast<std::size_t>(TreeKind::Count)>& m, double u) {
+        double sum = 0.0;
+        for (double s : m) sum += s;
+        const double pick = u * sum;
+        double run = 0.0;
+        for (std::size_t k = 0; k < m.size(); ++k) {
+            run += m[k];
+            if (m[k] > 0.0 && pick < run) return static_cast<int>(k);
+        }
+        for (std::size_t k = m.size(); k-- > 0;) {
+            if (m[k] > 0.0) return static_cast<int>(k);
+        }
+        return 0;
+    };
+    // The stand a point is in: its compartment's type (by its site) and age factor. Null with no stand types.
+    struct Stand {
+        const StandType* type = nullptr;
+        double age = 1.0;
+    };
+    const auto stand_at = [&](double e, double n) {
+        Stand s;
+        if (rules.stands.empty()) return s;
+        const long long ce = static_cast<long long>(std::floor(e / rules.stand_m)), cn = static_cast<long long>(std::floor(n / rules.stand_m));
+        const std::uint64_t h = noise::Mix64(seed ^ 0x57A2Dull ^ Bits(ce) * 0x9E3779B97F4A7C15ull ^ noise::Mix64(Bits(cn)));
+        const bool wet = map.NearWater(e, n, rules.wet_m);
+        double sum = 0.0;
+        for (const StandType& t : rules.stands) sum += t.wet == wet ? t.weight : 0.0;
+        const double pick = Unit(h) * sum;
+        double run = 0.0;
+        for (const StandType& t : rules.stands) {
+            if (t.wet != wet) continue;
+            run += t.weight;
+            s.type = &t;
+            if (pick < run) break;
+        }
+        s.age = rules.age_min + (1.0 - rules.age_min) * Unit(noise::Mix64(h ^ 0xA6Eull));
+        return s;
+    };
+    // Plants one tree (or, for a shrub's kind, one shrub) of the kind at the point, its height times `height_factor`.
+    const auto plant = [&](const MapBox& b, double e, double n, int kind, double height_factor = 1.0) {
         if (!def.InCore(e, n) && !map.InDetail(e, n)) return;
         if (map.NearLine(e, n, rules.line_clear_m) || map.NearWater(e, n, 0.0)) return;
         const double ground = map.GroundHeight(e, n);
         const double top_limit = ground + map.ObstacleHeight(e, n);
-        double top = b.base_m + b.height_m - At(seed ^ 0x70Full, e, n) * rules.top_drop * b.height_m;
-        top = std::min(top, top_limit);
         const double base = ground - 0.3;
-        const double height = top - base;
-        if (height < 3.0) return;
+        const bool shrub = IsShrub(static_cast<TreeKind>(kind));
+        double top = 0.0;
+        if (shrub) {
+            top = ground + rules.shrub_height_min_m + (rules.shrub_height_max_m - rules.shrub_height_min_m) * At(seed ^ 0x5B2ull, e, n);
+        } else {
+            top = b.base_m + b.height_m - At(seed ^ 0x70Full, e, n) * rules.top_drop * b.height_m;
+        }
+        top = std::min(top, top_limit);
+        double height = top - base;
+        if (!shrub) height *= height_factor;
+        if (height < (shrub ? 1.0 : 3.0)) return;
         TreeInstance t;
         t.east_m = e;
         t.north_m = n;
@@ -499,29 +638,38 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         t.height_m = static_cast<float>(height);
         t.crown_m = static_cast<float>(height * rules.crown_ratio * (1.0 + rules.crown_jitter * (2.0 * At(seed ^ 0xC20ull, e, n) - 1.0)));
         t.yaw_rad = static_cast<float>(At(seed ^ 0xA3ull, e, n) * kTwoPi);
-        if (forced_kind >= 0) {
-            t.kind = static_cast<std::uint8_t>(forced_kind);
-        } else if (rules.species_shares[static_cast<std::size_t>(TreeKind::Poplar)] > 0.0 && map.NearWater(e, n, rules.poplar_river_m)) {
-            t.kind = static_cast<std::uint8_t>(TreeKind::Poplar);
-        } else {
-            const double pick = At(seed ^ 0x5Full, e, n) * share_sum;
-            double run = 0.0;
-            t.kind = 0;
-            for (std::size_t k = 0; k < rules.species_shares.size(); ++k) {
-                run += rules.species_shares[k];
-                if (pick < run) {
-                    t.kind = static_cast<std::uint8_t>(k);
-                    break;
-                }
-            }
-        }
+        t.kind = static_cast<std::uint8_t>(kind);
         out.trees.push_back(t);
     };
+    // A wood's tree at a point: the mantle's kind and height within the edge band (`edge`), else its stand's (or, with no
+    // stand types, the species shares, poplar by the water).
+    const auto wood_tree = [&](const MapBox& b, double e, double n, bool edge) {
+        const double u = At(seed ^ 0x5Full, e, n);
+        const Stand s = stand_at(e, n);
+        if (edge) {
+            plant(b, e, n, draw(rules.edge_mix, u), rules.edge_height * s.age);
+            return;
+        }
+        if (s.type != nullptr) {
+            plant(b, e, n, draw(s.type->mix, u), s.age);
+            return;
+        }
+        if (rules.species_shares[static_cast<std::size_t>(TreeKind::Poplar)] > 0.0 && map.NearWater(e, n, rules.poplar_river_m)) {
+            plant(b, e, n, static_cast<int>(TreeKind::Poplar));
+            return;
+        }
+        plant(b, e, n, draw(rules.species_shares, u));
+    };
+    // The jitter at a point: a plantation's rows keep nearly to the lattice.
+    const auto jitter_at = [&](double e, double n) {
+        const Stand s = stand_at(e, n);
+        return s.type != nullptr && s.type->plantation ? rules.plantation_jitter : 1.0;
+    };
     // A point of the block's frame (along its heading, right of it) jittered by up to `jitter` of the spacing each way.
-    const auto jittered = [&](const MapBox& b, double fwd, double right, double spacing, double& e, double& n) {
+    const auto jittered = [&](const MapBox& b, double fwd, double right, double spacing, double& e, double& n, bool rows = false) {
         const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
         const double e0 = b.east_m + fwd * sh + right * ch, n0 = b.north_m + fwd * ch - right * sh;
-        const double j = rules.jitter * spacing;
+        const double j = rules.jitter * spacing * (rows ? jitter_at(e0, n0) : 1.0);
         e = e0 + j * (2.0 * At(seed ^ 0x1E5ull, e0, n0) - 1.0);
         n = n0 + j * (2.0 * At(seed ^ 0x1E6ull, e0, n0) - 1.0);
     };
@@ -548,27 +696,57 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         if (b.part != MapPart::Canopy) continue;
         const bool whole = map.InDetail(b.east_m, b.north_m);
         const bool core = def.InCore(b.east_m, b.north_m);
+        // The block's sides open to the fields: no wood block of its size next to it (the map's blocks are square and
+        // turned north: forward is north, right is east).
+        const double size = b.length_m;
+        const bool open_n = blocks.count(key(b.east_m, b.north_m + size)) == 0;
+        const bool open_s = blocks.count(key(b.east_m, b.north_m - size)) == 0;
+        const bool open_e = blocks.count(key(b.east_m + size, b.north_m)) == 0;
+        const bool open_w = blocks.count(key(b.east_m - size, b.north_m)) == 0;
+        // How far a point (forward, right of the centre) is in from the nearest open side.
+        const auto in_from_open = [&](double fwd, double right) {
+            double d = 1e9;
+            if (open_n) d = std::min(d, 0.5 * size - fwd);
+            if (open_s) d = std::min(d, 0.5 * size + fwd);
+            if (open_e) d = std::min(d, 0.5 * size - right);
+            if (open_w) d = std::min(d, 0.5 * size + right);
+            return d;
+        };
+        // The fringe: shrubs along each open side, shrub_inset_m in, some left out, in the map proper and the areas.
+        if ((core || whole) && rules.shrub_keep > 0.0) {
+            const int along = std::max(1, static_cast<int>(std::floor(size / rules.shrub_spacing_m)));
+            const double step = size / along;
+            for (int k = 0; k < along; ++k) {
+                const double s = (k + 0.5) * step - 0.5 * size;
+                const double in = rules.shrub_inset_m;
+                const double sides[4][3] = {{open_n ? 1.0 : 0.0, 0.5 * size - in, s},
+                                            {open_s ? 1.0 : 0.0, -0.5 * size + in, s},
+                                            {open_e ? 1.0 : 0.0, s, 0.5 * size - in},
+                                            {open_w ? 1.0 : 0.0, s, -0.5 * size + in}};
+                for (const auto& side : sides) {
+                    if (side[0] == 0.0) continue;
+                    double e = 0.0, n = 0.0;
+                    jittered(b, side[1], side[2], step, e, n);
+                    if (At(seed ^ 0x5E7ull, e, n) >= rules.shrub_keep) continue;
+                    plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0x5E8ull, e, n)));
+                }
+            }
+        }
         if (whole) {
             const int count_l = std::max(1, static_cast<int>(std::floor(b.length_m / rules.near_spacing_m)));
             const int count_w = std::max(1, static_cast<int>(std::floor(b.width_m / rules.near_spacing_m)));
             const double step_l = b.length_m / count_l, step_w = b.width_m / count_w;
             for (int i = 0; i < count_l; ++i) {
                 for (int j = 0; j < count_w; ++j) {
+                    const double fwd = (i + 0.5) * step_l - 0.5 * b.length_m, right = (j + 0.5) * step_w - 0.5 * b.width_m;
                     double e = 0.0, n = 0.0;
-                    jittered(b, (i + 0.5) * step_l - 0.5 * b.length_m, (j + 0.5) * step_w - 0.5 * b.width_m, std::min(step_l, step_w), e, n);
-                    plant(b, e, n);
+                    jittered(b, fwd, right, std::min(step_l, step_w), e, n, true);
+                    wood_tree(b, e, n, in_from_open(fwd, right) < rules.edge_band_m);
                 }
             }
             continue;
         }
         if (core && rules.edge_rows > 0) {
-            // The block's sides open to the fields: no wood block of its size next to it (the map's blocks are square and
-            // turned north: forward is north, right is east).
-            const double size = b.length_m;
-            const bool open_n = blocks.count(key(b.east_m, b.north_m + size)) == 0;
-            const bool open_s = blocks.count(key(b.east_m, b.north_m - size)) == 0;
-            const bool open_e = blocks.count(key(b.east_m + size, b.north_m)) == 0;
-            const bool open_w = blocks.count(key(b.east_m - size, b.north_m)) == 0;
             const double band = std::min(0.5 * size, rules.edge_rows * rules.edge_spacing_m);
             const int along = std::max(1, static_cast<int>(std::floor(size / rules.edge_spacing_m)));
             const double step = size / along;
@@ -578,23 +756,24 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                 for (int k = 0; k < along; ++k) {
                     const double s = (k + 0.5) * step - 0.5 * size;  // along the side
                     double e = 0.0, n = 0.0;
+                    const bool mantle = in < rules.edge_band_m;
                     if (open_n) {
                         jittered(b, 0.5 * size - in, s, rules.edge_spacing_m, e, n);
-                        plant(b, e, n);
+                        wood_tree(b, e, n, mantle);
                     }
                     if (open_s) {
                         jittered(b, -0.5 * size + in, s, rules.edge_spacing_m, e, n);
-                        plant(b, e, n);
+                        wood_tree(b, e, n, mantle);
                     }
                     // The east and west rows stop short of a north or south side's rows (no tree planted twice).
                     if ((open_n && s > 0.5 * size - band) || (open_s && s < -0.5 * size + band)) continue;
                     if (open_e) {
                         jittered(b, s, 0.5 * size - in, rules.edge_spacing_m, e, n);
-                        plant(b, e, n);
+                        wood_tree(b, e, n, mantle);
                     }
                     if (open_w) {
                         jittered(b, s, -0.5 * size + in, rules.edge_spacing_m, e, n);
-                        plant(b, e, n);
+                        wood_tree(b, e, n, mantle);
                     }
                 }
             }

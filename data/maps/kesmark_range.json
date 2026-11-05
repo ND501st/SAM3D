@@ -48,8 +48,9 @@
     "valley": { "depth_m": 6, "half_width_m": 700, "notes": "The Rava's valley, carved along the river." },
     "detail": [
       { "id": "bty21", "east_km": 9.5, "north_km": -6.5, "half_km": 6, "spacing_m": 10, "micro_m": 0.8,
+        "meso": [ { "wavelength_m": 700, "amplitude_m": 2.5 }, { "wavelength_m": 250, "amplitude_m": 1.2 }, { "wavelength_m": 90, "amplitude_m": 0.3 } ],
         "source": "game value: sam3d estimate", "confidence": "estimate",
-        "notes": "Battery 21's district (its position at 6.4, -9.6 and both Kesmark bridges inside): 10 m ground with a little micro relief (roadmap R6). Its edges are nodes of the map proper's 50 m ground." },
+        "notes": "Battery 21's district (its position at 6.4, -9.6 and both Kesmark bridges inside): 10 m ground with a little micro relief (roadmap R6). Its edges are nodes of the map proper's 50 m ground. The meso relief (roadmap L3) is the loess plain's swells and swales, a few hundred metres across and a metre or two high, judged by eye against the plot lab's photographs; kept off the roads, sites and towns as the micro relief is." },
       { "id": "capital", "east_km": 36, "north_km": 58, "half_km": 7.5, "spacing_m": 20, "micro_m": 0.6,
         "source": "game value: sam3d estimate", "confidence": "estimate",
         "notes": "The capital (data/maps/pannonia.json settlements.capital, radius 7 km) and the dynamic campaign test round it: 20 m ground (roadmap R6). Its edges are nodes of the far ground's 500 m ground." }

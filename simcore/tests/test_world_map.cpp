@@ -365,11 +365,11 @@ SC_TEST("map: the detail areas are levels of the ground: their edges the coarse 
                 inside = std::max(inside, std::fabs(map->GroundHeight(x, y) - coarse.SampleTri(x, y)));
             }
         }
-        std::printf("    %s: %d x %d at %.0f m; edge off the coarse ground by %.4f m, inside by up to %.2f m (micro %.1f m)\n", a.id.c_str(),
-                    map->DetailGrids()[i].cols, map->DetailGrids()[i].rows, a.spacing_m, edge, inside, a.micro_m);
+        std::printf("    %s: %d x %d at %.0f m; edge off the coarse ground by %.4f m, inside by up to %.2f m (micro %.1f m, meso %.1f m)\n", a.id.c_str(),
+                    map->DetailGrids()[i].cols, map->DetailGrids()[i].rows, a.spacing_m, edge, inside, a.micro_m, a.MesoTotalM());
         SC_EXPECT(edge < 0.02);
-        SC_EXPECT(inside <= a.micro_m + 1e-9);
-        SC_EXPECT(inside > 0.1 * a.micro_m);
+        SC_EXPECT(inside <= a.micro_m + a.MesoTotalM() + 1e-9);
+        SC_EXPECT(inside > 0.1 * (a.micro_m + a.MesoTotalM()));
     }
     // A loader refuses an area whose edges do not fall on the coarse ground's nodes.
     std::string text, e;
@@ -409,7 +409,7 @@ SC_TEST("map: the capital is laid out on the country's roads and river, its site
     int bridges = 0;
     for (const MapCrossing& c : map->Layout().crossings) bridges += d.InDetail(c.at.east_m, c.at.north_m) && !d.InCore(c.at.east_m, c.at.north_m) ? 1 : 0;
     SC_EXPECT(bridges >= 2);
-    double worst = 0.0;
+    double worst = 0.0, worst_e = 0.0, worst_n = 0.0, worst_step = 0.0;
     for (const MapStrip& s : map->Layout().strips) {
         if (s.surface == MapSurface::Water) continue;
         const double lift = s.surface == MapSurface::Rail ? 0.45 : 0.25;
@@ -419,10 +419,17 @@ SC_TEST("map: the capital is laid out on the country's roads and river, its site
             bool ramp = false;
             for (const MapCrossing& c : map->Layout().crossings) ramp = ramp || std::hypot(e - c.at.east_m, n - c.at.north_m) < c.half_length_m + 150.0;
             if (ramp) continue;
-            worst = std::max(worst, std::fabs(0.5 * (s.points[i - 1].z + s.points[i].z) - map->GroundHeight(e, n) - lift));
+            const double off = std::fabs(0.5 * (s.points[i - 1].z + s.points[i].z) - map->GroundHeight(e, n) - lift);
+            if (off > worst) {
+                worst = off;
+                worst_e = e;
+                worst_n = n;
+                worst_step = std::hypot(s.points[i].x - s.points[i - 1].x, s.points[i].y - s.points[i - 1].y);
+            }
         }
     }
-    std::printf("    strips in the detail areas: at most %.3f m off the ground between their points\n", worst);
+    std::printf("    strips in the detail areas: at most %.3f m off the ground between their points (at %.0f, %.0f, points %.0f m apart)\n", worst,
+                worst_e, worst_n, worst_step);
     SC_EXPECT(worst < 0.3);
     // The blocks of flats round its middle stand in the way; a site of the dynamic campaign test is clear.
     double tallest = 0.0;

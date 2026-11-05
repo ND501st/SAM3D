@@ -33,8 +33,13 @@ namespace simcore {
 namespace scenery {
 
 // The kinds of tree the map's woods, rows and gardens are planted with (the plain's oak, the poplar of the river banks,
-// the planted pine and the black locust of the shelter belts).
-enum class TreeKind { Oak, Poplar, Pine, Acacia, Count };
+// the planted pine and the black locust of the shelter belts), then the oak-hornbeam and beech woods' hornbeam and beech,
+// the black alder of the wet ground, the field maple of the edges, and the two shrubs of a wood's fringe (hazel, elder):
+// docs/scenery/VEGETATION.md. The first four keep their numbers (a kind is an index into the instance lists).
+enum class TreeKind { Oak, Poplar, Pine, Acacia, Hornbeam, Beech, Alder, Maple, Hazel, Elder, Count };
+
+// A shrub of a wood's fringe: lower than a tree (data/scenery/map_dressing.json "shrub_height_m"), several stems from the ground.
+inline bool IsShrub(TreeKind k) { return k == TreeKind::Hazel || k == TreeKind::Elder; }
 
 inline const char* TreeKindName(TreeKind k) {
     switch (k) {
@@ -42,6 +47,12 @@ inline const char* TreeKindName(TreeKind k) {
     case TreeKind::Poplar: return "poplar";
     case TreeKind::Pine: return "pine";
     case TreeKind::Acacia: return "acacia";
+    case TreeKind::Hornbeam: return "hornbeam";
+    case TreeKind::Beech: return "beech";
+    case TreeKind::Alder: return "alder";
+    case TreeKind::Maple: return "maple";
+    case TreeKind::Hazel: return "hazel";
+    case TreeKind::Elder: return "elder";
     case TreeKind::Count: break;
     }
     return "?";
@@ -65,6 +76,14 @@ constexpr Colour kOakCrown{0.045f, 0.093f, 0.024f};     // #3c5629
 constexpr Colour kPoplarCrown{0.060f, 0.120f, 0.030f};  // #456130
 constexpr Colour kPineCrown{0.024f, 0.059f, 0.025f};    // #2b452c
 constexpr Colour kAcaciaCrown{0.070f, 0.115f, 0.035f};  // #4a5f35
+constexpr Colour kGrassBase{0.040f, 0.046f, 0.018f};    // #2e3220 dry grass, the foot of a tuft
+constexpr Colour kGrassTip{0.110f, 0.095f, 0.035f};     // #5e5434 its straw-coloured tips
+constexpr Colour kStrawFoot{0.100f, 0.075f, 0.028f};    // #4f4128 stubble and a maize stump
+constexpr Colour kStrawCut{0.170f, 0.125f, 0.045f};     // #6c5a3a the cut end
+constexpr Colour kClodFoot{0.060f, 0.038f, 0.020f};     // #453627 a clod's damp underside
+constexpr Colour kClodTop{0.150f, 0.098f, 0.050f};      // #6b583f its drier top, the furrows' own brown
+constexpr Colour kReedFoot{0.095f, 0.072f, 0.028f};     // #4d3f28 a reed or a dry stalk
+constexpr Colour kReedHead{0.055f, 0.038f, 0.022f};     // #3e3022 its seed head
 constexpr Colour kMassSide{0.036f, 0.070f, 0.022f};     // #354b28
 constexpr Colour kMassTop{0.050f, 0.095f, 0.028f};      // #3e562e
 constexpr Colour kConcrete{0.300f, 0.300f, 0.280f};     // #959592
@@ -267,6 +286,21 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
         trunk_top = 0.4;
         trunk_r = 0.045;
         break;
+    case TreeKind::Alder:
+        profile = {{0.25, 0.3}, {0.55, 0.5}, {0.85, 0.34}, {1.0, 0.0}};
+        trunk_top = 0.25;
+        trunk_r = 0.04;
+        break;
+    case TreeKind::Hazel:
+    case TreeKind::Elder:
+        // A shrub: the crown from near the ground, as wide as it is high.
+        profile = {{0.08, 0.36}, {0.5, 0.5}, {0.85, 0.36}, {1.0, 0.0}};
+        trunk_top = 0.1;
+        trunk_r = 0.05;
+        break;
+    case TreeKind::Hornbeam:
+    case TreeKind::Beech:
+    case TreeKind::Maple:
     case TreeKind::Oak:
     case TreeKind::Count:
     default:
@@ -287,25 +321,176 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
     return m;
 }
 
-// The mass of a wood as one solid on the unit cube (variant 0-3): steep sides with chamfered corners to a shoulder, then
-// rounding in to a flat crown. Drawn where single trees are not (the far ground, a wood's inside).
+// The ground clutter of the camera's ring (roadmap T6.1, scenery/clutter.hpp): a part's mesh at LOD 0-1 (empty beyond),
+// base at the origin, unit height, a unit across. "clutter_grass" a tuft of dry grass, "clutter_straw" a stubble clump or a
+// maize stump (a short stalk cut flat), "clutter_reed" a reed or a dry stalk with its seed head, "clutter_clod" a clod of
+// the plough's (a solid, as a clod is: no card). Placeholders: spiky
+// solids that read as ground cover from a metre or more.
+inline TriMesh ClutterMesh(const std::string& part, int lod) {
+    using namespace map_mesh_detail;
+    TriMesh m;
+    if (lod < 0 || lod > 1) return m;
+    SolidBuilder b(m);
+    if (part == "clutter_grass") {
+        const int sides = lod == 0 ? 5 : 3;
+        b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 0.45, 0.32, 0.3), Ring(sides, 1.0, 0.0)}, {kGrassBase, kGrassTip}, kGrassBase, kGrassTip);
+    } else if (part == "clutter_straw") {
+        const int sides = lod == 0 ? 6 : 4;
+        b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 1.0, 0.42)}, {kStrawFoot}, kStrawFoot, kStrawCut);
+    } else if (part == "clutter_clod") {
+        // A clod turned up by the plough: a flat, lumpy solid, its rings turned against each other so no face lines up.
+        // Rounded, its widest low down, as if half sunk in the loose soil.
+        const int sides = lod == 0 ? 7 : 5;
+        b.Loft({Ring(sides, 0.0, 0.47), Ring(sides, 0.35, 0.50, 0.4), Ring(sides, 0.70, 0.40, 0.9), Ring(sides, 0.92, 0.22, 1.3), Ring(sides, 1.0, 0.0, 1.6)},
+               {kClodFoot, kClodTop, kClodTop, kClodTop}, kClodFoot, kClodTop);
+    } else if (part == "clutter_reed") {
+        const int sides = lod == 0 ? 4 : 3;
+        b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 0.7, 0.35), Ring(sides, 0.9, 0.2), Ring(sides, 1.0, 0.0)}, {kReedFoot, kReedFoot, kReedHead}, kReedFoot,
+               kReedHead);
+    }
+    return m;
+}
+
+// The mass of a wood as one solid on the unit cube (variant 0-3): a crown of lumps (a height field of two scales of
+// value noise, so the top reads as rounded crowns, not a lid), a ragged outline pulled in at the corners and sides, and
+// the foliage's colour in blotches, lighter on the lumps' tops and darker in the hollows and down the sides. Drawn where
+// single trees are not (the far ground, a wood's inside). The top's highest point is the box's top.
 inline TriMesh CanopyMassMesh(int variant) {
     using namespace map_mesh_detail;
     const int v = ((variant % kCanopyMassVariants) + kCanopyMassVariants) % kCanopyMassVariants;
-    const double shoulder[kCanopyMassVariants] = {0.15, 0.22, 0.08, 0.18};  // z of the shoulder in -0.5..0.5
-    const double inset[kCanopyMassVariants] = {0.12, 0.16, 0.10, 0.14};     // the crown's inset at the top
-    const double chamfer = 0.1;
-    auto ring = [&](double z, double in) {
-        const double h = 0.5 - in;
-        const double c = chamfer * h / 0.5;  // the corners cut in proportion, never to nothing
-        return std::vector<Vec3>{{-h + c, -h, z}, {h - c, -h, z}, {h, -h + c, z}, {h, h - c, z},
-                                 {h - c, h, z},  {-h + c, h, z}, {-h, h - c, z}, {-h, -h + c, z}};
+    constexpr int kN = 14;       // grid cells a side
+    constexpr int kSideRows = 3;  // rings down the side
+    const std::uint32_t seed = 0x9e3779b1u * static_cast<std::uint32_t>(v + 1);
+    auto hash = [&](int x, int y) {
+        std::uint32_t h = seed ^ (static_cast<std::uint32_t>(x) * 0x85ebca6bu) ^ (static_cast<std::uint32_t>(y) * 0xc2b2ae35u);
+        h ^= h >> 15;
+        h *= 0x2c1b3c6du;
+        h ^= h >> 12;
+        h *= 0x297a2d39u;
+        h ^= h >> 15;
+        return static_cast<double>(h & 0xffffffu) / 16777215.0;
     };
+    auto smooth = [](double t) { return t * t * (3.0 - 2.0 * t); };
+    auto noise = [&](double x, double y) {  // value noise 0..1
+        const int ix = static_cast<int>(std::floor(x)), iy = static_cast<int>(std::floor(y));
+        const double fx = smooth(x - ix), fy = smooth(y - iy);
+        const double a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+        return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy;
+    };
+    auto lump = [&](double x, double y) { return 0.65 * noise(x * 3.0 + 7.0, y * 3.0 + 3.0) + 0.35 * noise(x * 8.0 + 1.0, y * 8.0 + 5.0); };
+
     TriMesh m;
-    SolidBuilder b(m);
-    const double mid_z = 0.5 * (shoulder[v] + 0.5);
-    b.Loft({ring(-0.5, 0.0), ring(shoulder[v], 0.0), ring(mid_z, 0.35 * inset[v]), ring(0.5, inset[v])},
-           {kMassSide, kMassSide, kMassTop}, kMassSide, kMassTop);
+    const int stride = kN + 1;
+    std::vector<double> topz(static_cast<std::size_t>(stride * stride));
+    std::vector<double> lumpv(topz.size());
+    double zmax = -1e9;
+    for (int j = 0; j <= kN; ++j) {
+        for (int i = 0; i <= kN; ++i) {
+            const double x = -0.5 + static_cast<double>(i) / kN, y = -0.5 + static_cast<double>(j) / kN;
+            const double d = std::min(0.5 - std::fabs(x), 0.5 - std::fabs(y));
+            const double l = lump(x, y);
+            const double rim = smooth(std::min(1.0, d / 0.14));  // the crown falls away to the side
+            const double z = 0.12 + 0.30 * l * (0.35 + 0.65 * rim) + 0.08 * rim - 0.16 * (1.0 - rim);
+            topz[static_cast<std::size_t>(j * stride + i)] = z;
+            lumpv[static_cast<std::size_t>(j * stride + i)] = l;
+            zmax = std::max(zmax, z);
+        }
+    }
+    const double lift = 0.5 - zmax;  // the highest crown is the box's top
+    // The ragged outline: border vertices pulled in by noise, never out of the box.
+    auto xy_at = [&](int i, int j, double& x, double& y) {
+        x = -0.5 + static_cast<double>(i) / kN;
+        y = -0.5 + static_cast<double>(j) / kN;
+        if (i == 0 || i == kN || j == 0 || j == kN) {
+            const double pull = 0.05 * noise(x * 6.0 + 11.0, y * 6.0 + 2.0);
+            if (i == 0) x += pull;
+            if (i == kN) x -= pull;
+            if (j == 0) y += pull;
+            if (j == kN) y -= pull;
+        }
+    };
+    auto tint = [&](double l, double shade) {  // blotches of the crown's green, lighter on the lumps' tops
+        const double t = std::min(1.0, std::max(0.0, (l - 0.25) / 0.5));
+        const double f = shade * (0.75 + 0.55 * t);
+        return std::array<float, 3>{static_cast<float>(kMassTop[0] * f), static_cast<float>(kMassTop[1] * f), static_cast<float>(kMassTop[2] * f)};
+    };
+    auto push = [&](double x, double y, double z, const std::array<float, 3>& c) {
+        m.positions.push_back(Vec3{x, y, z});
+        m.normals.push_back(Vec3{0, 0, 1});
+        m.colours.push_back(c);
+        return static_cast<std::uint32_t>(m.positions.size() - 1);
+    };
+    std::vector<std::uint32_t> top(topz.size());
+    for (int j = 0; j <= kN; ++j) {
+        for (int i = 0; i <= kN; ++i) {
+            double x, y;
+            xy_at(i, j, x, y);
+            const std::size_t k = static_cast<std::size_t>(j * stride + i);
+            top[k] = push(x, y, topz[k] + lift, tint(lumpv[k], 1.0));
+        }
+    }
+    for (int j = 0; j < kN; ++j) {
+        for (int i = 0; i < kN; ++i) {
+            const std::uint32_t a = top[static_cast<std::size_t>(j * stride + i)], b = top[static_cast<std::size_t>(j * stride + i + 1)];
+            const std::uint32_t c = top[static_cast<std::size_t>((j + 1) * stride + i + 1)], d = top[static_cast<std::size_t>((j + 1) * stride + i)];
+            for (const std::uint32_t t : {a, b, c, a, c, d}) m.indices.push_back(t);
+        }
+    }
+    // The perimeter, counter-clockwise seen from above, and the side's rings down from it.
+    std::vector<std::pair<int, int>> loop;
+    for (int i = 0; i < kN; ++i) loop.push_back({i, 0});
+    for (int j = 0; j < kN; ++j) loop.push_back({kN, j});
+    for (int i = kN; i > 0; --i) loop.push_back({i, kN});
+    for (int j = kN; j > 0; --j) loop.push_back({0, j});
+    const std::size_t n = loop.size();
+    std::vector<std::uint32_t> prev(n);
+    for (std::size_t q = 0; q < n; ++q) {  // the wall's own copy of the rim: a crease between the crown and the side
+        const std::uint32_t t = top[static_cast<std::size_t>(loop[q].second * stride + loop[q].first)];
+        prev[q] = push(m.positions[t].x, m.positions[t].y, m.positions[t].z, tint(0.3, 0.8));
+    }
+    for (int r = 1; r <= kSideRows; ++r) {
+        std::vector<std::uint32_t> ring(n);
+        for (std::size_t q = 0; q < n; ++q) {
+            double x, y;
+            xy_at(loop[q].first, loop[q].second, x, y);
+            const double top_z = m.positions[prev[q]].z;
+            const double base = m.positions[top[static_cast<std::size_t>(loop[q].second * stride + loop[q].first)]].z;
+            const double z = (r == kSideRows) ? -0.5 : base + (-0.5 - base) * (static_cast<double>(r) / kSideRows);
+            (void)top_z;
+            ring[q] = push(x, y, z, tint(0.3, 0.55 + 0.1 * (kSideRows - r)));
+        }
+        for (std::size_t q = 0; q < n; ++q) {
+            const std::size_t w = (q + 1) % n;
+            for (const std::uint32_t t : {prev[q], ring[q], ring[w], prev[q], ring[w], prev[w]}) m.indices.push_back(t);
+        }
+        prev = ring;
+    }
+    {  // the base, a fan on the last ring, facing down
+        const std::uint32_t centre = push(0.0, 0.0, -0.5, tint(0.3, 0.4));
+        std::vector<std::uint32_t> base(n);  // its own vertices, so its normals stay flat
+        for (std::size_t q = 0; q < n; ++q) base[q] = push(m.positions[prev[q]].x, m.positions[prev[q]].y, -0.5, tint(0.3, 0.4));
+        for (std::size_t q = 0; q < n; ++q) {
+            const std::size_t w = (q + 1) % n;
+            for (const std::uint32_t t : {centre, base[w], base[q]}) m.indices.push_back(t);
+        }
+    }
+    // Smooth normals from the faces.
+    std::vector<Vec3> acc(m.positions.size(), Vec3{0, 0, 0});
+    for (std::size_t t = 0; t + 2 < m.indices.size(); t += 3) {
+        const Vec3& p0 = m.positions[m.indices[t]];
+        const Vec3& p1 = m.positions[m.indices[t + 1]];
+        const Vec3& p2 = m.positions[m.indices[t + 2]];
+        const Vec3 e1{p1.x - p0.x, p1.y - p0.y, p1.z - p0.z}, e2{p2.x - p0.x, p2.y - p0.y, p2.z - p0.z};
+        const Vec3 nrm{e1.y * e2.z - e1.z * e2.y, e1.z * e2.x - e1.x * e2.z, e1.x * e2.y - e1.y * e2.x};
+        for (int k = 0; k < 3; ++k) {
+            Vec3& a = acc[m.indices[t + static_cast<std::size_t>(k)]];
+            a = Vec3{a.x + nrm.x, a.y + nrm.y, a.z + nrm.z};
+        }
+    }
+    for (std::size_t i = 0; i < acc.size(); ++i) {
+        const double len = std::sqrt(acc[i].x * acc[i].x + acc[i].y * acc[i].y + acc[i].z * acc[i].z);
+        m.normals[i] = len > 1e-12 ? Vec3{acc[i].x / len, acc[i].y / len, acc[i].z / len} : Vec3{0, 0, 1};
+    }
     return m;
 }
 
@@ -421,6 +606,7 @@ inline TriMesh MapPartMesh(const std::string& part, int variant, int lod) {
         if (part == std::string("tree_") + TreeKindName(static_cast<TreeKind>(k))) return TreeMesh(static_cast<TreeKind>(k), lod);
     }
     if (part == "canopy_mass") return lod == 0 ? CanopyMassMesh(variant) : TriMesh{};
+    if (part.compare(0, 8, "clutter_") == 0) return ClutterMesh(part, lod);
     if (part == "house") return HouseMesh(variant, lod);
     if (part == "barn") return BarnMesh(lod);
     if (part == "flats") return FlatsMesh(variant, lod);
@@ -432,7 +618,7 @@ inline TriMesh MapPartMesh(const std::string& part, int variant, int lod) {
 inline std::vector<std::string> MapMeshParts() {
     std::vector<std::string> out;
     for (int k = 0; k < static_cast<int>(TreeKind::Count); ++k) out.push_back(std::string("tree_") + TreeKindName(static_cast<TreeKind>(k)));
-    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial"}) out.push_back(p);
+    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod"}) out.push_back(p);
     return out;
 }
 

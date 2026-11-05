@@ -308,5 +308,11 @@ Great Hungarian Plain in October 1985, from reference photographs (`docs/researc
 textures and models only, each registered with its licence and fetched per machine on the owner's say-so. What blocks
 sight is simcore's and is drawn at every quality setting; the ground drawn stays simcore's triangles. T1, the textured
 ground, is built in first form (checked with test patterns; the CC0 textures not yet fetched).
+**Reworked 5 Nov 2026** (the roadmap's part A, phases L0-L10): **test plots first** (50 x 50 m worlds made by the same
+simcore code, judged at 1.7 m, 25 m and 150 m beside their photographs), **recipes as data** (`data/scenery/recipes/`)
+that apply each perfected plot's look to every matching part of the map by rule; never place or paint the map by hand.
+The ground stays simcore's mesh (no Landscape); relief over about 0.5 m and anything that hides a man is simcore's;
+ground cover under that may be generated in Unreal. Assets are our own, built by script from free photographs; Unreal
+assets are used in place, never exported through Blender.
 
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).

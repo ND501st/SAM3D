@@ -121,6 +121,14 @@ struct MapDetailDef {
     double half_m = 5000.0;   // half its side
     double spacing_m = 10.0;  // its ground's
     double micro_m = 0.0;     // the micro relief's amplitude
+    // The meso relief (roadmap L3, docs/scenery/TERRAIN_ROADMAP.md D5): the plain's swells and swales, bands of zero-mean
+    // value noise (wavelength 60-2000 m, amplitude to 3 m), faded as the micro relief is.
+    std::vector<MapReliefDef> meso;
+    double MesoTotalM() const {
+        double t = 0.0;
+        for (const MapReliefDef& r : meso) t += r.amplitude_m;
+        return t;
+    }
     bool Contains(double e, double n) const { return std::fabs(e - centre.east_m) <= half_m && std::fabs(n - centre.north_m) <= half_m; }
 };
 
@@ -1313,12 +1321,20 @@ private:
                 for (int c = 0; c < g.cols; ++c) {
                     const double e = g.EastOf(c), n = g.NorthOf(r);
                     double v = GroundHeight(e, n);  // the coarse level's triangles (the detail levels are not in yet)
-                    if (a.micro_m > 0.0) {
+                    if (a.micro_m > 0.0 || !a.meso.empty()) {
                         const double to_edge = a.half_m - std::max(std::fabs(e - a.centre.east_m), std::fabs(n - a.centre.north_m));
                         const double w = noise::Smooth(Clamp(to_edge / 300.0, 0.0, 1.0));
                         if (w > 0.0) {
                             const double m = MicroWeight(e, n, flats, towns);
-                            if (m > 0.0) v += w * m * a.micro_m * (2.0 * noise::Fbm(seed, e, n, 400.0, 3) - 1.0);
+                            if (m > 0.0) {
+                                double add = a.micro_m * (2.0 * noise::Fbm(seed, e, n, 400.0, 3) - 1.0);
+                                std::uint64_t ms = noise::Mix64(seed ^ 0x4E5050ull);
+                                for (const MapReliefDef& band : a.meso) {
+                                    ms = noise::Mix64(ms);
+                                    add += band.amplitude_m * (2.0 * noise::Value(ms, e, n, band.wavelength_m) - 1.0);
+                                }
+                                v += w * m * add;
+                            }
                         }
                     }
                     g.At(c, r) = v;
@@ -1865,7 +1881,22 @@ private:
                             s.id = "farm_track_" + std::to_string(++serial);
                             s.surface = MapSurface::Track;
                             s.width_m = fd.track_width_m;
-                            for (const MapPoint& m : run) s.points.push_back({m.east_m, m.north_m, GroundHeight(m.east_m, m.north_m) + 0.15});
+                            // On a detail area's finer ground (its meso relief, roadmap L3) the strip takes a point at
+                            // each of its spacings between the run's, so it lies on the swells rather than across them.
+                            for (std::size_t j = 0; j < run.size(); ++j) {
+                                const MapPoint& m = run[j];
+                                if (j > 0) {
+                                    const MapPoint& a = run[j - 1];
+                                    const MapDetailDef* area = def_.DetailAt(0.5 * (a.east_m + m.east_m), 0.5 * (a.north_m + m.north_m));
+                                    const int sub = area == nullptr ? 1 : std::max(1, static_cast<int>(std::ceil(kStepM / area->spacing_m)));
+                                    for (int k = 1; k < sub; ++k) {
+                                        const double f = static_cast<double>(k) / sub;
+                                        const double e = a.east_m + (m.east_m - a.east_m) * f, n = a.north_m + (m.north_m - a.north_m) * f;
+                                        s.points.push_back({e, n, GroundHeight(e, n) + 0.15});
+                                    }
+                                }
+                                s.points.push_back({m.east_m, m.north_m, GroundHeight(m.east_m, m.north_m) + 0.15});
+                            }
                             layout_.strips.push_back(std::move(s));
                             runs.push_back(run);
                         }
@@ -2682,7 +2713,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             const json::Value& v = list->items[i];
             MapDetailDef d;
             double half_km = 5.0;
-            if (!Keys(v, p, {"id", "east_km", "north_km", "half_km", "spacing_m", "micro_m", "source", "confidence", "notes"}) ||
+            if (!Keys(v, p, {"id", "east_km", "north_km", "half_km", "spacing_m", "micro_m", "meso", "source", "confidence", "notes"}) ||
                 !RequireString(v, p, "id", d.id) || !Centre(v, p, d.centre) || !Number(v, p, "half_km", half_km) ||
                 !Number(v, p, "spacing_m", d.spacing_m) || !OptionalNumber(v, p, "micro_m", d.micro_m)) {
                 return false;
@@ -2690,6 +2721,21 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             d.half_m = half_km * 1000.0;
             if (d.spacing_m < 5.0 || d.spacing_m > out.core_spacing_m) return Fail(Join(p, "spacing_m"), "needs 5 m <= spacing_m <= core_spacing_m");
             if (d.micro_m < 0.0 || d.micro_m > 1.5) return Fail(Join(p, "micro_m"), "needs 0 <= micro_m <= 1.5");
+            if (const json::Value* meso = OptionalArray(v, p, "meso")) {
+                for (std::size_t k = 0; k < meso->items.size(); ++k) {
+                    const std::string q = Index(Join(p, "meso"), k);
+                    MapReliefDef r;
+                    if (!Keys(meso->items[k], q, {"wavelength_m", "amplitude_m"}) || !Number(meso->items[k], q, "wavelength_m", r.wavelength_m) ||
+                        !Number(meso->items[k], q, "amplitude_m", r.amplitude_m)) {
+                        return false;
+                    }
+                    if (r.wavelength_m < 60.0 || r.wavelength_m > 2000.0) return Fail(Join(q, "wavelength_m"), "needs 60 m <= wavelength_m <= 2000 m");
+                    if (r.amplitude_m < 0.0 || r.amplitude_m > 3.0) return Fail(Join(q, "amplitude_m"), "needs 0 <= amplitude_m <= 3 m");
+                    d.meso.push_back(r);
+                }
+            } else if (!Message().empty()) {
+                return false;
+            }
             const double w = d.centre.east_m - d.half_m, e = d.centre.east_m + d.half_m;
             const double s = d.centre.north_m - d.half_m, n = d.centre.north_m + d.half_m;
             const bool in_core = out.InCore(w, s) && out.InCore(e, n);

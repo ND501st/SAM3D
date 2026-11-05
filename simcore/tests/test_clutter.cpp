@@ -1,0 +1,192 @@
+// The ground clutter of the camera's ring (simcore/scenery/clutter.hpp, roadmap T6.1): the point layer, the plants a cell
+// draws, the ring's density, determinism, the layer under every plant, and the loader's refusals.
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <memory>
+#include <string>
+
+#include "simcore/scenery/clutter.hpp"
+#include "simcore/terrain_map.hpp"
+#include "test_framework.hpp"
+
+using namespace simcore;
+using namespace simcore::scenery;
+
+namespace {
+
+const std::string kData = SIMCORE_DATA_DIR;
+
+const DressingRules& Dressing() {
+    static DressingRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadDressingRules(kData + "/scenery/map_dressing.json", rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+const GroundLayerRules& Layers() {
+    static GroundLayerRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadGroundLayers(kData + "/scenery/ground_layers.json", Dressing(), rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+const ClutterRules& Rules() {
+    static ClutterRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadClutterRules(kData + "/scenery/clutter.json", Layers(), rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+int LayerId(const std::string& id) {
+    for (std::size_t i = 0; i < Layers().layers.size(); ++i) {
+        if (Layers().layers[i].id == id) return static_cast<int>(i);
+    }
+    return -1;
+}
+
+const CoverRaster& Raster() {
+    static CoverRaster raster;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+        if (map) raster = BakeCover(*map, Dressing());
+        else std::printf("    %s\n", e.c_str());
+    }
+    return raster;
+}
+
+constexpr int kDay = 288;  // 15 October
+
+}  // namespace
+
+SC_TEST("clutter: the point layer is the mask's layer at every cell centre") {
+    const CoverRaster& cover = Raster();
+    SC_EXPECT(!cover.grids.empty());
+    if (cover.grids.empty()) return;
+    const CoverGrid& g = cover.grids.back();
+    const GroundMask mask = BakeGroundMask(g, Dressing(), Layers(), kDay);
+    int looked = 0, same = 0;
+    for (int r = 0; r < g.rows; r += 23) {
+        for (int c = 0; c < g.cols; c += 23) {
+            ++looked;
+            same += PointLayer(cover, Dressing(), Layers(), g.CentreEast(c), g.CentreNorth(r), kDay) == static_cast<int>(mask.At(c, r)[0]) ? 1 : 0;
+        }
+    }
+    std::printf("    the point layer against the mask: %d of %d cell centres\n", same, looked);
+    SC_EXPECT(looked > 100);
+    SC_EXPECT(same == looked);
+    SC_EXPECT(PointLayer(cover, Dressing(), Layers(), 1e9, 1e9, kDay) == -1);  // off the map
+}
+
+SC_TEST("clutter: the rules load, and the ring is deterministic, inside the ring and on the layer its kind is listed for") {
+    const ClutterRules& rules = Rules();
+    SC_EXPECT(!rules.kinds.empty() && rules.parts.size() == 4);  // grass, straw, reed and the plough's clod
+    // Find a few points on different layers near the battery and ring each.
+    const double centres[][2] = {{5750.0, -9050.0}, {-9000.0, -6000.0}, {2500.0, -12500.0}, {500.0, 500.0}};
+    for (const auto& c : centres) {
+        std::vector<ClutterPlant> a, b;
+        ClutterAround(rules, Raster(), Dressing(), Layers(), kDay, c[0], c[1], a);
+        ClutterAround(rules, Raster(), Dressing(), Layers(), kDay, c[0], c[1], b);
+        SC_EXPECT(a.size() == b.size());
+        for (std::size_t i = 0; i < a.size() && i < b.size(); ++i) {
+            SC_EXPECT(a[i].east_m == b[i].east_m && a[i].north_m == b[i].north_m && a[i].height_m == b[i].height_m);
+        }
+        std::size_t wrong = 0;
+        for (const ClutterPlant& p : a) {
+            SC_EXPECT(std::hypot(p.east_m - c[0], p.north_m - c[1]) <= rules.ring_m + 1e-6);
+            const int layer = PointLayer(Raster(), Dressing(), Layers(), p.east_m, p.north_m, kDay);
+            bool listed = false;
+            if (layer >= 0) {
+                for (const ClutterEntry& e : rules.by_layer[static_cast<std::size_t>(layer)]) listed = listed || e.kind == p.kind;
+            }
+            wrong += listed ? 0 : 1;
+            const ClutterKind& k = rules.kinds[p.kind];
+            SC_EXPECT(p.height_m >= k.height_min_m - 1e-6f && p.height_m <= k.height_max_m + 1e-6f);
+            SC_EXPECT(p.width_m >= k.width_min_m - 1e-6f && p.width_m <= k.width_max_m + 1e-6f);
+        }
+        SC_EXPECT(wrong == 0);
+        std::printf("    ring at (%.0f, %.0f): %zu plants\n", c[0], c[1], a.size());
+    }
+}
+
+SC_TEST("clutter: a plant is the same plant wherever the ring is (moving it thins and thickens, it does not reshuffle)") {
+    const ClutterRules& rules = Rules();
+    std::vector<ClutterPlant> a, b;
+    ClutterAround(rules, Raster(), Dressing(), Layers(), kDay, 5750.0, -9050.0, a);
+    ClutterAround(rules, Raster(), Dressing(), Layers(), kDay, 5766.0, -9050.0, b);  // 16 m east: the rebuild step
+    // A plant of the first ring within 40 m of both centres: if the second ring has it, it is the same plant.
+    int near_a = 0, in_both = 0, differ = 0;
+    for (const ClutterPlant& p : a) {
+        if (std::hypot(p.east_m - 5750.0, p.north_m + 9050.0) > 40.0 || std::hypot(p.east_m - 5766.0, p.north_m + 9050.0) > 40.0) continue;
+        ++near_a;
+        for (const ClutterPlant& q : b) {
+            if (q.east_m == p.east_m && q.north_m == p.north_m) {
+                ++in_both;
+                differ += (q.height_m != p.height_m || q.width_m != p.width_m || q.kind != p.kind || q.yaw_rad != p.yaw_rad) ? 1 : 0;
+                break;
+            }
+        }
+    }
+    std::printf("    %d plants near both centres, %d in both rings\n", near_a, in_both);
+    SC_EXPECT(near_a > 100);
+    SC_EXPECT(differ == 0);
+    SC_EXPECT(in_both * 10 >= near_a * 6);  // most of them stay: the density changes little over 16 m
+}
+
+SC_TEST("clutter: the density falls with the distance, a meadow is thick, a ploughed field has clods only, and the ring is within budget") {
+    const ClutterRules& rules = Rules();
+    // Ring a spot of the map, count by distance band: nearer bands are denser per square metre.
+    std::vector<ClutterPlant> all;
+    const auto t0 = std::chrono::steady_clock::now();
+    ClutterAround(rules, Raster(), Dressing(), Layers(), kDay, 5750.0, -9050.0, all);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    double inner = 0.0, outer = 0.0;
+    for (const ClutterPlant& p : all) {
+        const double d = std::hypot(p.east_m - 5750.0, p.north_m + 9050.0);
+        if (d < 30.0) inner += 1.0 / (3.14159265 * 30.0 * 30.0);
+        else if (d > 70.0) outer += 1.0 / (3.14159265 * (100.0 * 100.0 - 70.0 * 70.0));
+    }
+    std::printf("    the ring at the battery: %zu plants in %.1f ms, %.3f a m2 within 30 m, %.3f beyond 70 m\n", all.size(), ms, inner, outer);
+    SC_EXPECT(all.size() < 20000);  // the ring's instance budget
+    SC_EXPECT(inner > outer);
+    // Layers: plants only on layers the rules list.
+    const int ploughed = LayerId("ploughed"), sown = LayerId("sown"), wheat = LayerId("wheat");
+    SC_EXPECT(rules.by_layer[static_cast<std::size_t>(wheat)].empty());
+    // The plough's fields have clods and nothing else, a ploughed field thicker with them than a sown one (plot lab p01).
+    for (const int l : {ploughed, sown}) {
+        const auto& entries = rules.by_layer[static_cast<std::size_t>(l)];
+        SC_EXPECT(entries.size() == 1);
+        for (const auto& en : entries) SC_EXPECT(rules.kinds[static_cast<std::size_t>(en.kind)].part == "clutter_clod");
+    }
+    SC_EXPECT(rules.by_layer[static_cast<std::size_t>(ploughed)][0].per_m2 > rules.by_layer[static_cast<std::size_t>(sown)][0].per_m2);
+    SC_EXPECT(!rules.by_layer[static_cast<std::size_t>(LayerId("meadow"))].empty());
+}
+
+SC_TEST("clutter: the loader refuses what is wrong") {
+    ClutterRules r;
+    std::string e;
+    const std::string base_layers = "\"layers\": {\"meadow\": [{\"kind\": \"grass\", \"per_m2\": 1}]}";
+    const std::string kinds = "\"kinds\": {\"grass\": {\"part\": \"clutter_grass\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}";
+    SC_EXPECT(LoadClutterRules("{" + kinds + ", " + base_layers + "}", Layers(), r, &e));
+    SC_EXPECT(!LoadClutterRules("{" + base_layers + "}", Layers(), r, &e));  // no kinds
+    SC_EXPECT(!LoadClutterRules("{\"kinds\": {\"grass\": {\"part\": \"lava\", \"height_m\": [0.1, 0.3], \"width_m\": [0.1, 0.3], \"brightness\": 0.1}}, " + base_layers + "}", Layers(), r, &e));
+    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"lava\": [{\"kind\": \"grass\", \"per_m2\": 1}]}}", Layers(), r, &e));
+    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"meadow\": [{\"kind\": \"moss\", \"per_m2\": 1}]}}", Layers(), r, &e));
+    SC_EXPECT(!LoadClutterRules("{" + kinds + ", \"layers\": {\"meadow\": [{\"kind\": \"grass\", \"per_m2\": 0}]}}", Layers(), r, &e));
+    SC_EXPECT(!LoadClutterRules(kData + "/scenery/nothing.json", Layers(), r, &e));
+}
