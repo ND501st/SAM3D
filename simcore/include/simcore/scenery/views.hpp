@@ -25,7 +25,7 @@ namespace simcore {
 namespace scenery {
 
 struct ViewAnchor {
-    std::string kind;  // parcel_edge, settlement, road, farmstead, farmyard, site, river, hill
+    std::string kind;  // parcel_edge, settlement, road, farmstead, farmyard, site, river, hill, high_ground
     std::string id;    // the settlement's, road's, site's, river's or hill's
     bool has_close = false;
     double close_e_m = 0.0, close_n_m = 0.0;  // where to look for the nearest one (the data's close_km)
@@ -100,7 +100,7 @@ inline const std::vector<std::string>& LookKinds() {
 }
 
 inline const std::vector<std::string>& AnchorKinds() {
-    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill"};
+    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground"};
     return k;
 }
 
@@ -144,7 +144,8 @@ inline bool ParseAnchor(const json::Value& a_value, const std::string& id, ViewA
     if (an.at < 0.0 || an.at > 1.0) return Fail(error, id + ": at is a fraction 0..1");
     const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
     if (by_id && an.id.empty()) return Fail(error, id + ": a " + an.kind + " anchor names its " + an.kind);
-    if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge") && !an.has_close) {
+    if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge" || an.kind == "high_ground") &&
+        !an.has_close) {
         return Fail(error, id + ": a " + an.kind + " anchor needs close_km");
     }
     return true;
@@ -528,6 +529,28 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
                 s.bearing_rad = bearing;
             }
         }
+    } else if (a.kind == "high_ground") {
+        // The highest ground within kHighGroundReachM of close_km (sampled every 50 m; roadmap L11's hill country): the eye
+        // there, looking along the bearing at the ground a kilometre ahead.
+        constexpr double kHighGroundReachM = 1500.0;
+        double best = -1e18, be = a.close_e_m, bn = a.close_n_m;
+        for (double dn = -kHighGroundReachM; dn <= kHighGroundReachM; dn += 50.0) {
+            for (double de = -kHighGroundReachM; de <= kHighGroundReachM; de += 50.0) {
+                if (std::hypot(de, dn) > kHighGroundReachM) continue;
+                const double h = map.GroundHeight(a.close_e_m + de, a.close_n_m + dn);
+                if (h > best) {
+                    best = h;
+                    be = a.close_e_m + de;
+                    bn = a.close_n_m + dn;
+                }
+            }
+        }
+        s.ok = true;
+        s.eye_e = be;
+        s.eye_n = bn;
+        s.bearing_rad = a.has_bearing ? a.bearing_rad : 0.0;
+        s.e = be + 1000.0 * std::sin(s.bearing_rad);
+        s.n = bn + 1000.0 * std::cos(s.bearing_rad);
     } else if (a.kind == "hill") {
         const MapHillDef* h = FindById(def.hills, a.id);
         if (h == nullptr) {

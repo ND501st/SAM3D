@@ -290,7 +290,7 @@ SC_TEST("map: the ground is a plain with hills, a river valley, levelled sites a
         hi = std::max(hi, v);
     }
     std::printf("    ground in the map %.1f to %.1f m\n", lo, hi);
-    SC_EXPECT(lo > 80.0 && hi < 200.0);
+    SC_EXPECT(lo > 80.0 && hi < 270.0);  // the hill country (terrain.landform, roadmap L11) to 70 m over the plain's hills
     SC_EXPECT(map->GroundHeight(2000, 14500) > 150.0);  // Polany hill
     // The air base's runway is level end to end.
     const MapSiteDef* kecel = Site(*map, "kecel_airbase");

@@ -5,11 +5,14 @@ their three cameras and set each beside its reference photographs and its last a
     python tools/plot_lab.py run --label a2 --plots p01_ploughland   # one plot (or several, comma-separated)
     python tools/plot_lab.py page --label a2                        # only (re)build the page from out/plots/a2/
     python tools/plot_lab.py approve --label a2 --plots p01_ploughland   # the owner approved: these become the ground truth
+    python tools/plot_lab.py run --label s1 --season summer          # in early July, to compare like with like with the look target
 
 Each run writes out/plots/<label>/: <plot>_eye.png, <plot>_low.png, <plot>_high.png, their .cost.json, a
 <plot>_<camera>.missing.txt for a camera the map cannot give, and index.html. The approved renders live in
 out/plots/approved/ and are shown beside every later run, with the time each run took. The photographs are links, as in
-tools/terrain_views.py (nothing downloaded or copied).
+tools/terrain_views.py (nothing downloaded or copied). The page opens with the look target (data/scenery/look_target.json,
+docs/scenery/LOOK_TARGET.md): its pictures from the git-ignored reference/look/ where this PC has them (linked, never
+copied) and its traits K1-K14 as the checklist every pass is judged by.
 """
 import argparse
 import html
@@ -28,7 +31,33 @@ ROOT = tv.ROOT
 PLOTS = ROOT / "data" / "scenery" / "plots.json"
 OUT = ROOT / "out" / "plots"
 APPROVED = OUT / "approved"
+LOOK = ROOT / "data" / "scenery" / "look_target.json"
 CAMERAS = (("eye", "eye, 1.7 m"), ("low", "low, 25 m"), ("high", "high, 150 m"))
+# The plot lab's scenarios (data/scenarios/lab/): the Kesmark range under fair cumulus, the look target's weather, on
+# 15 October at 13:00 or on 5 July at 15:30. Plots anchored on an October field state may find none in July.
+SEASONS = {"october": "scenarios/lab/plot_lab_october.json", "summer": "scenarios/lab/plot_lab_summer.json"}
+
+
+def look_strip(look, folder, root=ROOT):
+    """The look target's section: its pictures (those on this PC, by a relative link into reference/look/) and its traits."""
+    if not look:
+        return ""
+    esc = html.escape
+    pics = []
+    base = root / look["folder"]
+    for p in look.get("pictures", []):
+        f = base / p["file"]
+        if not f.exists():
+            continue
+        rel = os.path.relpath(f, folder).replace(os.sep, "/")
+        pics.append(f'<figure><a href="{esc(rel)}"><img src="{esc(rel)}" alt="{esc(p["id"])}"></a>'
+                    f'<figcaption>{esc(p["id"])}: {esc(p["shows"])}</figcaption></figure>')
+    if not pics:
+        pics.append(f'<p class="none">The look target\'s pictures are not on this PC ({esc(look["folder"])}/).</p>')
+    traits = "".join(f'<li><b>{esc(t["id"])} {esc(t["name"])}</b>: {esc(t["target"])}</li>' for t in look.get("traits", []))
+    return (f'<section class="look"><h2>The look target</h2><p class="must">Judge every render against these too '
+            f'(docs/scenery/LOOK_TARGET.md): structure, density, light and value; hue by season.</p>'
+            f'<div class="refs">{"".join(pics)}</div><ul class="traits">{traits}</ul></section>')
 
 
 def plot_ids(arg, plots):
@@ -43,7 +72,7 @@ def plot_ids(arg, plots):
     return ids
 
 
-def build_page(plots, photos, folder, ids, label, seconds=None):
+def build_page(plots, photos, folder, ids, label, seconds=None, look=None):
     """The page's HTML: per plot, its three cameras beside the approved ones, its costs and its photographs' links."""
     esc = html.escape
     costs = tv.read_costs(folder)
@@ -84,16 +113,17 @@ def build_page(plots, photos, folder, ids, label, seconds=None):
             ".pair{display:flex;gap:8px}.pair figure{margin:0;flex:1}.missing{color:#a40}.none{color:#888}.must{color:#555}"
             ".refs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.refs figure{margin:0;width:200px}"
             ".refs img{width:200px;height:130px;object-fit:cover}"
-            f"</style><h1>Plot lab: {esc(label)}</h1>{took}" + "".join(rows))
+            ".look .refs figure{width:300px}.look .refs img{width:300px;height:169px}.traits{columns:2;font-size:13px}"
+            f"</style><h1>Plot lab: {esc(label)}</h1>{took}" + look_strip(look, folder) + "".join(rows))
 
 
-def run_game(folder, engine, ids, extra=()):
+def run_game(folder, engine, ids, extra=(), scenario=SEASONS["october"]):
     """Renders the plots offscreen into `folder`: the editor in game mode on the Kesmark range, only `ids`."""
     folder.mkdir(parents=True, exist_ok=True)
     exe = Path(engine) / "Engine" / "Binaries" / "Win64" / "UnrealEditor.exe"
     project = ROOT / "unreal" / "SAM3D" / "SAM3D.uproject"
     cmd = [str(exe), str(project), "/Game/Maps/KesmarkRange", "-game", "-RenderOffscreen",
-           "-SimScenario=scenarios/kesmark_range_test.json", f"-SimMapShots={folder.as_posix()}", "-SimShotSet=plots",
+           f"-SimScenario={scenario}", f"-SimMapShots={folder.as_posix()}", "-SimShotSet=plots",
            f"-SimPlots={','.join(ids)}", "-unattended", *extra]
     return subprocess.run(cmd, check=False).returncode
 
@@ -104,6 +134,7 @@ def main(argv=None):
     ap.add_argument("--label", default="latest")
     ap.add_argument("--plots", default="", help="comma-separated plot ids (default: all)")
     ap.add_argument("--extra", default="", help="more arguments for the game, space-separated (e.g. -SimGroundDebug=2)")
+    ap.add_argument("--season", choices=sorted(SEASONS), default="october", help="the plot lab's scenario (default october)")
     ap.add_argument("--engine", default=os.environ.get("UE_ROOT", "D:/UE_5.8"))
     args = ap.parse_args(argv)
     data = json.loads(PLOTS.read_text(encoding="utf-8"))
@@ -126,13 +157,14 @@ def main(argv=None):
             for f in folder.glob(f"{pid}_*"):
                 f.unlink()  # a run replaces these plots' earlier pictures in the label
         start = time.monotonic()
-        code = run_game(folder, args.engine, ids, args.extra.split())
+        code = run_game(folder, args.engine, ids, args.extra.split(), SEASONS[args.season])
         seconds = time.monotonic() - start
         print(f"render exit {code} in {seconds:.0f} s")
         if not any(folder.glob("*.png")):
             print("no pictures were written")
             return 1
-    page = build_page(plots, photos, folder, ids, args.label, seconds)
+    look = json.loads(LOOK.read_text(encoding="utf-8")) if LOOK.exists() else None
+    page = build_page(plots, photos, folder, ids, args.label, seconds, look)
     (folder / "index.html").write_text(page, encoding="utf-8")
     print(f"wrote {folder / 'index.html'}")
     return 0

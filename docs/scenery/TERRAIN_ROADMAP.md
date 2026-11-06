@@ -3,6 +3,11 @@
 **Part A (5 Nov 2026) is the reworked roadmap and comes first.** Part B (from section 1 on) is the roadmap of 3 Nov,
 kept for its research, its rules and the design of what was built (T0-T4, T5.1); where the two disagree, part A wins.
 
+**The look target (6 Nov 2026, `LOOK_TARGET.md`):** the owner's quality bar is Kingdom Come: Deliverance II's
+countryside, in six screenshots kept on the owner's PC. Every render is judged against them, trait by trait (K1-K14),
+as well as against the place's photographs; the terrain's variation (rolling hills, valleys, land use that follows the
+ground) is required, not optional (D10-D12, phases L11 and L12, A.5).
+
 ## A. The rework (5 Nov 2026)
 
 The project owner, 5 Nov 2026: "Something here is clearly not working. While the ground texturing and structuring
@@ -64,6 +69,9 @@ wood mass). The causes, in order of weight:
 | D7 | **Assets: our own, built by script, from free photographs; Unreal assets used in place, never exported.** Trees from a branch skeleton (Blender's Sapling or tree-gen, headless) with our twig cards on its end branches, LODs by thinning cards, impostors baked in Unreal; grass, stubble, maize, reeds as our own card clumps from CC0 atlases; buildings from our own Blender generator. A Fab or Megascans asset is registered by its Unreal path and drawn as it is (Megaplants as instanced skinned meshes: a spike), never sent through Blender. AI 3D only for props. No more Fab gathering except leaf and ground textures | `TERRAIN_ASSET_TOOLS` 8; `TERRAIN_UE_TOOLS` 4 and 8 |
 | D8 | **External terrain tools are not used** (Gaea, World Machine, World Creator, Houdini): non-commercial or paid to script, and they would take the ground from simcore. A clamped droplet erosion, ported from MIT code, may run on the detail levels only | `TERRAIN_ASSET_TOOLS` 3 |
 | D9 | **Judged at three cameras per plot** (1.7 m eye; 25 m and 150 m at 30° down), beside the plot's photographs and its last approved render, with simcore's measurements (stems per hectare, spacing, band widths, obstacle heights, determinism) to catch drift; the owner judges by eye | `TERRAIN_PROCEDURAL_METHOD` 6.7 |
+| D10 | **The look target** (6 Nov 2026): every plot pass and every view is also judged against the owner's KCD2 screenshots, by the traits K1-K14 of `LOOK_TARGET.md` (relief, land use, edges, trees, ground cover, crops, tracks, props, light, sky, colour, water, distance). Structure, density, light and value are compared; hue by season. Each pass's entry ends "Against the look target" | The owner: "the gold standard we should be aiming for" |
+| D11 | **No plugin and no new terrain builder.** The hills are made where the ground is made, in simcore (`NaturalGround` and the bake), because the sight lines, radar masking and movement read it (D1, D4); a Landscape, Gaea or World Machine would make a second ground (D8). Unreal draws them with what it has built in: Nanite and its displacement, RVT, PCG (Epic's plugin, already enabled), Sky Atmosphere, Volumetric Cloud, Height Fog, Lumen, virtual shadow maps. Only Megaplants need Epic's experimental Nanite Foliage and Procedural Vegetation Editor plugins (D7) | `TERRAIN_UE_TOOLS` 7; A.5 |
+| D12 | **Land use follows the ground.** Woods, meadows, fields, orchards, vineyards, villages and tracks are placed from the ground's slope, aspect, wetness and curvature as well as from the map's vectors; the map's data keeps the outlines it already names (the Lazne woods, the Dubnik forest), and the generator fills the rest by those rules | K2; how real hill country is used (A.5, to be sourced) |
 
 Paid tools stay the owner's choice and are not assumed: SpeedTree Indie (USD 19 a month, under USD 100k revenue) is
 the cheapest route to good trees under 10 m; The Grove (EUR 99 and up) the most realistic cheap generator; Houdini
@@ -71,8 +79,10 @@ Indie (about USD 299 a year) the strongest scripted pipeline (`TERRAIN_ASSET_TOO
 
 ### A.3 The phases
 
-The new phases are **L0-L10** ("land"). Part B's T0-T4 and T5.1 stay built and are used by them; Part B's T5-T9 are
-replaced by the phases named in the last column.
+The new phases are **L0-L12** ("land"; L11 and L12 added 6 Nov 2026 for the look target). Part B's T0-T4 and T5.1
+stay built and are used by them; Part B's T5-T9 are replaced by the phases named in the last column. The look target's
+traits each phase answers for: L3 K1, K8; L4 K3, K8, K12, K14; L5 K6, K7, K14; L6 K5, K12; L7 K2, K4, K13; L8 all, at
+the views; L9 K9; L10 K14; L11 K1, K2, K13; L12 K10, K11, K12.
 
 | # | Phase | Done when | Replaces |
 |---|---|---|---|
@@ -81,18 +91,33 @@ replaced by the phases named in the last column.
 | L2 | **Recipes.** `data/scenery/recipes/` and its simcore loader: matching by cover, crop state, stand, edge pair and signed distance (from the vectors, not the 25 m raster), wetness, soil, road class; generation per cell with position-hashed seeds, big things first and children round them; density by thresholding a fixed ordered point set (so thinning never moves a tree); blue noise, lattices, Thomas and Matérn clusters; outputs: instances, ground weights, relief stamps; the report (hectares, instances and budget per recipe, measured statistics against each recipe's targets). Today's `map_dressing.json` rules move into recipes one by one | the tests: determinism (one hash per plot), every target met on its plot, the Kesmark map's obstacle heights unchanged where no recipe changed | part of T4, T5 |
 | L3 | **The ground's shape** (simcore). Meso relief by recipe and by the map's lines: swells, palaeochannels, sand ridges, kunhalom mounds, road embankments and ditches, canals, dykes, headland ridges, as noise bands and cross-section stamps merged by distance; the ground's spacing per ring chosen by measure (plots at 1-2 m; the play area's rings at 5-10 m where the stamps need it). The balance runs re-read (sight lines move) | plots 13, 15 and 17 show their embankment, ditch, dyke and mound at 1.7 m; `ground_check`, `crew_balance`, `air_war_bench`, `em_demo`, `helper_coverage` re-read and the moved rows explained | part of T8, T9 |
 | L4 | **The ground's surface.** The field-state texture (D6) at 2 m in the detail areas and 8 m over the map; the ground's layers chosen per pixel by recipe rules (cover, state, edge distance, wetness), at most four blended; the colour map synthesized from the vectors (Part B's T3 finished); anti-tiling (two variants per texture, macro noise); the ground tiles as static meshes with RVT (meshes blend into the ground) and Nanite displacement for the micro relief | plots 1-6 at 1.7 m and 150 m: furrows, clods, stubble rows and headlands read; no tiling peak in the 150 m render's luminance | T1's left, T3 |
-| L5 | **The ground cover** (the near ring). Grass, weeds, stubble straw, maize stover and stumps, ploughed clods, verge and pasture sward, generated round the camera to 60-100 m from the field-state texture and the recipes: first the spike (PCG with a "Sim Cover Points" node on the GPU, against the map actor's own instanced ring), then the winner. Standing maize and sunflower as field blocks (rows of cards near, a block far), their height in simcore's obstacles | plots 1-6 and 13 at 1.7 m read as their photographs; the ring's cost within budget; points on the drawn ground within 1 cm; two clients alike | T6 |
+| L5 | **The ground cover** (the near ring). Grass, weeds, stubble straw, maize stover and stumps, ploughed clods, verge and pasture sward, generated round the camera to 60-100 m from the field-state texture and the recipes: first the spike (PCG with a "Sim Cover Points" node on the GPU, against the map actor's own instanced ring), then the winner. Standing maize and sunflower as field blocks (rows of cards near, a block far), their height in simcore's obstacles | plots 1-6 and 13 at 1.7 m read as their photographs; no bare texture between the clumps at 1.7 m, and past the ring the cover's tint carried by the ground with no visible ring (K6, K14); the ring's cost within budget; points on the drawn ground within 1 cm; two clients alike | T6 |
 | L6 | **The asset kit** (D7). The card-clump builder for grass, crops and reeds; the tree builder (skeleton, twig cards on the end branches, crown-hull normals, vertex-colour AO, LODs by card thinning, three or four variants per species); impostors baked in Unreal; registering an Unreal asset by its path; the Megaplants spike (1000 oaks as instanced skinned meshes, a Shipping build). One species judged at a time at its plots, starting with black locust and hybrid poplar | each kit item at its plot's three cameras beside the photographs; the owner's look | T5.2-T5.3 |
 | L7 | **Woods, edges and lines** (simcore, sight-blocking). Stands as layers (canopy, sub-canopy, shrubs) by recipe: oak-hornbeam, black locust, poplar plantation, floodplain willow; the forest edge's herb fringe, shrub belt and mantle with noise along it and by aspect; tree rows on tracks and roads; hedges; reed belts on canals and oxbows. The wood masses far off take the same colour and outline | plots 7-12 and 14 at the three cameras; the obstacle heights test; the balance runs re-read | T5, part of T8 |
 | L8 | **The whole map.** Every recipe on Kesmark (and the detail areas), the report's hectares and budgets, the views V1-V12 and each plot's map anchor | V1, V4, V6, V7, V9, V10, V12 against their photographs; the budgets held on this PC's RTX 3060 Ti | |
 | L9 | **Villages and farms.** Plot 16 and its transitions; our own building generator (the Kádár cube first, then the long house, barns, the TSZ's sheds, water towers); fences, poles and wires; gardens and fruit trees by recipe; Part B's T7 for the rest | V2, V3, V5, V6 against their photographs | T7 |
 | L10 | **Far field and cost.** Impostor rings and the masses meeting without a seam; baked Nanite ground tiles if they measure better; budgets per pass at every view | each view within budget | T9 |
+| L11 | **Hill country** (simcore, A.5). A landform layer (regions of plain, rolling and hilly ground as data, shaped by warped and ridged noise); drainage (pits filled, flow accumulated, brooks and their valleys cut); slope, aspect, wetness and curvature baked; land use placed by them (D12); roads and tracks fitted to grades, cut and fill, sunken lanes in loess; a hill-country detail area and its plots (18-22). The balance runs re-read (sight lines and radar masking move) | the hill plots and a hilltop view against K-a, K-b and K-d at the three cameras: slopes, valleys, wooded crests, fields on the gentle ground; `ground_check`, `nav_check`, `crew_balance`, `air_war_bench`, `air_war_balance`, `em_demo`, `helper_coverage`, `mission_demo` re-read and the moved rows explained; `test_country_map` agreeing | (new) |
+| L12 | **Light and air.** The scenario's clouds shown (today a "cloudy" preset renders clear or as a sheet); volumetric cumulus with shadows on the land; aerial perspective tuned so far ridges go bluer and paler, no brown haze; a fixed exposure for the plot lab, so passes compare; foliage lit as foliage (two-sided, subsurface, occlusion in crowns and grass); albedos and vertex colours calibrated, a neutral grade; a summer date for the plot lab beside October's | the eye and 150 m renders of plots 5, 11 and 19 beside K-b and K-d: cumulus and their shadows, layered blue distance, shadows filled with sky light; a measured albedo range per material (K10-K12) | (new) |
 
 **Order:** L1 and L2 first, together (the lab is useless without recipes, recipes untestable without the lab). Then
 **one vertical slice: plot 1, ploughland, through L3, L4 and L5**, to prove the whole chain on the October plain's
 largest surface. Then plots 2-3 (maize), then the forest edge and the tree row (11, 12) through L6 and L7, then black
 locust and poplar, the road (13), and the rest in `TERRAIN_PROCEDURAL_METHOD` 6.6's order. L8 after each group of plots
 (a cheap check, since the recipes already apply map-wide). L9 and L10 last.
+
+**Order from 6 Nov 2026 (the look target):** the two largest gaps (K1 relief, K2 land use) are under everything else:
+a wood's edge, a field's margin or a track looks different on a slope, and every plot anchor and view moves when the
+ground does. So, next:
+1. **L12's quick part**: the clouds shown, cloud shadows, the brown haze, a fixed exposure for the plot lab, and the
+   summer date. A few days at most, and every later render is judged in honest light.
+2. **L11's first three steps** (A.5: the landform, drainage and valleys, the ground's measures), with the plots and
+   views re-anchored and the balance runs re-read. Then the land use (D12), which also replaces the 100 m wood blocks
+   and the field grid.
+3. Then the plots as planned (black locust and poplar, the road, the rest), each on its new ground, and L11's roads,
+   sunken lanes and hill plots alongside L3.
+
+L12's foliage shading and colour calibration go with L6 (they are the asset kit's look). L8 still follows each group.
 
 **Paused:** gathering from Fab (except leaf and ground textures); the Megaplants and GV exports through Blender; the
 hand tuning of `card_tree.py`'s hornbeam (it becomes L6's tree builder's leaves); the Sketchfab landmarks and the AI
@@ -383,16 +408,172 @@ prop test (after L9 starts).
   models and the Megaplants as picks for their parts (the Megaplants come only through the editor's Fab window, the
   owner's to add); grass tufts drawn on the village's road (seen in c14, older than this change).
 
+### A.3.13 The forest edge, first pass: the ladder bug, bays, a stepped mantle, the herb fringe (6 Nov 2026)
+
+- **d0, the baseline**: a straight wall of lollipop crowns along the block's side; inside the oaks the red oak model's
+  leaves and inside the hornbeams the card tree's white shards; green shrub cones every few metres in one line; nothing
+  between the ploughland and the trees.
+- **The ladder bug (A.1 item 6) found and settled.** An instanced component's start distance only fades its instances
+  (it needs the material's per-instance fade); it never hides the nearer ones, so every rung of the ladder (the model,
+  its two thinned copies and the procedural crown) was drawn from 0 m. The white shards were the card hornbeam drawn in
+  the procedural trees' season-tint material (one material slot, so it was taken for a procedural mesh), which also
+  lacked the Nanite flag and fell to the default material. Now a kind with a registered model draws that model alone,
+  in its own materials, to the kind's distance, its thinned copies made its LODs by `tools/ue_tree_lods.py` (oak 12 267,
+  3 948 and 1 234 vertices; hornbeam 829 and 340). The script runs in the full editor (`-ExecutePythonScript`; it quits
+  when done): a commandlet has no static mesh editor subsystem and the older library's calls all return -1 there.
+  `M_SimMapTree` has its Nanite and instancing flags (`ue_fix_map_material_usage.py`).
+- **The edge's shape** (`map_dressing.hpp` `PlaceTrees`, rules in `map_dressing.json`): in a wood planted whole, the
+  trees' line stands back from the block's side by 0-7 m in waves about 35 m long (`edge_setback_m`, `edge_wave_m`), so
+  bays and tongues; across the 12 m mantle the trees rise from half the stand's height at the line to the stand's
+  (`edge_height` 0.5) with crowns 1.3 times as wide for their height (`edge_crown`); the shrub belt is two places every 3
+  m at depths from the inset to a wandering 1-7 m (`shrub_belt_m`), kept in runs and gaps by the same kind of wave
+  (`shrub_keep` 0.35: 93 000 shrubs of 294 000 plants on the map; at 0.55 the shrubs were 42% of them, over the test's
+  third). A far wood's two rows keep no bays (a bay would
+  bare the mass behind). Test: trees within 4.8 m of the side 8.2 m high against 15.1 m past the band, crowns 0.65 of
+  their height against 0.50, the first tree 1.2-13.2 m in along twenty sides.
+- **The herb fringe**: a recipe band can be measured from a wood's open side (`"edge": "wood"`, `WoodEdgeDistance`: the
+  land cover's nearest cell that is not forest); `forest_floor.json` has a fringe 0-3.5 m (grass in clumps, 45 000 a
+  hectare, and dry stalks) and a mantle floor 3.5-12 m (grass in patches), before the body.
+- **d1-d2**: the oaks draw as the oak model alone, no lollipop or shard inside; the hornbeam's cards in their own colour;
+  the fringe a pale band of tufts at the wood's foot; the line of trees varies, the mantle's front trees lower. Still not
+  the photographs.
+- **Left** (most of it art, L6): the oak model is a northern red oak and its October red dominates the edge (the plain's
+  oaks are pedunculate and Turkey oak, brown-green in mid-October): a Megaplant oak or the tree builder's; maple, black
+  locust and poplar are still lollipops (the black locust scan is unpacked, the Megaplants await the editor's Fab
+  window); the shrubs are still procedural cones; the grass card is too short for a fringe of October herbs (a tall herb
+  card, 0.5-1.2 m); the stalks do not show at 30 m; the fringe's targets are not measured by the recipe report (its test
+  area has no wood edge).
+- **Against the look target** (judged after the fact, `LOOK_TARGET.md`): K4 moved (bays, a lower mantle in front) but
+  is still far from a closed wall of leaves: trunks show through, the shrubs are cones. K5 the largest here (lollipops,
+  the red oak). K6 the fringe reads as a pale band, not grass. K11 a cloudless sky where the scenario has cloud. K1 the
+  wood stands on dead flat ground.
+
+### A.3.14 The look target, and the hills (6 Nov 2026)
+
+The owner sent six screenshots of KCD2's countryside as the quality bar (`LOOK_TARGET.md`: what each teaches, the
+traits K1-K14, today's gap, and how the pictures may be used: on the owner's PC only, never committed, traced or
+recreated). The renders c12, c14 and d2 were compared trait by trait; the gap is largest in relief (K1), land use
+following the ground (K2), the trees (K5), ground cover (K6) and tracks (K8). The owner asked whether this needs a
+plugin or another terrain builder: it does not (D11). Added: D10-D12, phases L11 (hill country) and L12 (light and air),
+the new order, the loop's comparison step (A.4) and how the hills are made (A.5).
+
+### A.3.15 L11 step 1, the landform; L12's first part, the plot lab's own sky (6 Nov 2026)
+
+- **The owner chose the extent: west and north-west.** `terrain.landform` (`terrain_map.hpp` `MapLandformDef`,
+  `LandformShape`, `LandformRelief`, added in `NaturalGround`; the same block in `kesmark_range.json` and `pannonia.json`):
+  rolling ground (22 m) ringing hilly ground (70 m), each rising from the plain over a wandering 4-5 km blend; one field
+  of forms (fBm on coordinates warped 0.8 km, a ridged share of 0.35, turned 27° off the noise's lattice, forms 1 km
+  across), contrast-stretched so floors and crests each take about a tenth of the ground. Tuned with a Python copy of
+  the noise against A.5's numbers. Measured (`test_landform.cpp`): 70 m from floor to crest in 2 km windows (p10 61 m),
+  slopes median 4.1°, p95 13.8°, 0.7% over 20°; battery 21's detail area, the bridges, Kesmark, Vrbice, the P-40 on
+  Polany hill, the Kecel airfield, Varos hill and the capital untouched to the last bit; the ground in the map now
+  97-202 m. An `exaggeration` dial in the data.
+- **Re-read:** the simcore suite (1071 tests) passes; `ground_check` (the testbed's hour and every map mission): nothing
+  under the ground, the low raid from the west included; `nav_check`: 200 of 200 routes; `air_war_balance` over 20
+  seeds identical with the hills and without (the same binary on a copy of the data with `exaggeration` 0: the air war's
+  battery is on the plain). `crew_balance`, `em_demo`, `helper_coverage`, `mission_demo` and `air_war_bench` not re-run
+  (their scenarios are on the plain or abstract; to run before the hills grow).
+- **New anchors and cameras:** the anchor kind `high_ground` (`views.hpp`: the highest ground within 1.5 km of a point,
+  looking along a bearing); the view V13 (a panorama from it) and the plots p18 (a field's edge on a slope) and p19 (the
+  Lazne woods' edge on a hillside).
+- **The plot lab's sky (L12):** the clouds did work; d2 had looked into a clear patch of the "cloudy" preset's grey
+  stratocumulus, which is simply not the look target's weather. The plot lab now renders its own scenarios
+  (`data/scenarios/lab/`, out of the missions menu): fair cumulus on 15 October at 13:00 (sun 31° up), or on 5 July at
+  15:30 (39°) with `--season summer`. The bright brown veil of the 150 m camera is the sun's glare on the ground and haze
+  ahead (the cameras face the sun), not a fog too thick: by the numbers the haze is light. Left: a fixed exposure.
+- **e1 (plots) and l11a (views):** the ground rolls at last: p18 climbs a slope with the tree rows along the crests,
+  p19's ploughland falls away from the wood. V13 from the crest reads as a sea of rolling ploughland: every slope is a
+  field, no wood holds a slope, the far hills are pale bands.
+- **Against the look target:** K1 moved most (relief at the large scale; none yet near the eye). K2 is now the largest
+  gap: land use does not know the ground (the woods are still 100 m blocks, the fields cover the hills). K4 and K5
+  unchanged; the wood mass on a hillside is an opaque dark slab draped over the slope (p19). K8 worse on slopes: the road
+  strips show kinks where they cross the forms (p18 high). K11: with 3 oktas of fair cumulus the volumetric material
+  shows little cloud and looking toward the sun the sky goes white; a cumulus material of our own is needed. Next: A.5
+  steps 2-4 (drainage and valleys, the ground's measures, land use on them), then the road strips on slopes.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
 2. simcore tests for the plot: its statistics against the recipe's targets, determinism, obstacle heights.
 3. `python tools/plot_lab.py run <plot>`: the plot world rendered from the three cameras (and its map anchor's), the
    page beside the photographs and the last approved render; under 90 s.
-4. Look at every picture; change; repeat. When it reads right, show the owner.
+4. Look at every picture; change; repeat. Compare with the look target too (the page shows its pictures; D10): write
+   in the pass's A.3 entry, by trait number, what moved and the largest gaps left. When it reads right, show the owner.
 5. On the owner's approval the renders become the plot's ground truth; later renders are compared against it.
 6. Run the map-wide report and the views (`terrain_views.py`) to see the change everywhere; the balance runs if
    anything that blocks sight moved.
+
+### A.5 Hill country: how (L11)
+
+The look target's ground rolls at every distance; ours is flat to the horizon (`LOOK_TARGET.md` K1). The owner, 6 Nov
+2026: "Although the terrain is slightly exaggerated, implementing this type of terrain variation is a necessity." It is
+made in simcore, where the ground is made (D11): `NaturalGround` (`terrain_map.hpp`) already sums the relief bands, the
+hills, the country's ranges and valleys (`MapRidgeDef`), the river valleys and beds, and every grid (the core's 50 m,
+the far ground's 500 m, the detail areas' 10 m) and every sight line read it. What it lacks is **regions of hill
+country, valleys that drain, and land use that knows the ground**.
+
+**Where (the owner, 6 Nov 2026: "West and north-west").** The west and north-west of the 40 km core become hill
+country of the Transdanubian kind (loess hills cut by brook valleys), the east along the Rava stays the plain (Kesmark, the two
+bridges, the marshes), with rolling ground between, so the map has both and the contrast. Battery 21 (6.2, -10.1)
+stays on the plain's edge on its rise, with the hills a few kilometres to its west. The hills that carry posts
+(Polany's P-40, Ludas's P-19, Varos's sector bunker) keep their places and heights: the landform is added round them,
+and their sites stay levelled. The country map gets matching regions round the district so the hills do not stop at
+its edge (`docs/COUNTRY_MAP.md`).
+
+**How high.** Estimates, to be judged by eye at the hill plots and against photographs of the real hill country: hilly
+ground 40-80 m from valley floor to crest over 1-3 km, slopes mostly 3-12° and a few to 20°; rolling ground 10-25 m
+over 1-2 km. A factor in the data (`exaggeration`) lets the owner turn it up or down without touching code.
+
+**The steps** (each with its tests: determinism, the measured relief and slopes against the data's targets, the time
+budget, the posts' hills unchanged at their summits):
+
+1. **The landform.** `terrain.landform` in the map file: regions (polygons, each a class: plain, rolling, hilly; blended
+   over 2-4 km) and per class the noise's bands. Inside a region, fBm whose input is displaced by another noise
+   (domain warping, so the forms wind instead of sitting on a grid of blobs) plus a ridged term for crests and spurs.
+   A pure function of position inside `NaturalGround`, so the district and the country agree (`test_country_map`) and a
+   sight line meets the same ground at every grid spacing.
+2. **Drainage and valleys.** Noise alone makes basins with no outlet, which read wrong at once (K-b's valley floors).
+   On the core grid (800 x 800 cells): pits filled by priority-flood (Barnes, Lehman and Mulla 2014), flow routed
+   downhill and accumulated; where the area drained passes a threshold, a **brook** (a map line of a new class
+   `brook`, running into the Rava or out of the map), and along each a valley cut by a cross-section stamp whose width
+   and depth grow with the area (a V high up, a flat meadow floor lower down) with its bed. Later, if the forms still
+   look soft: a stream-power erosion with hillslope diffusion (Braun and Willett 2013's implicit method, linear in the
+   cells) for spurs and branching valleys. This widens D8, which allowed erosion on the detail levels only, to a
+   deterministic bake on the map's own grids, in simcore. **The design point to settle first:** the drainage is a bake
+   on a grid, not a function of position, so the carved difference is kept as a grid the core, the detail areas and the
+   country's district all interpolate; `test_country_map` must keep agreeing.
+3. **The ground's measures.** Slope, aspect, a wetness index (from the area drained and the slope; Beven and Kirkby
+   1979) and curvature (convex crests, concave hollows) baked per cell and given to the recipes (L2's matching gains
+   `slope_deg`, `aspect`, `wetness`, `curvature`) and to the ground material (L4: crests and steep arable paler where
+   the soil wears thin, valley floors darker and wetter; to be sourced).
+4. **Land use follows the ground (D12).** Rules as data (`data/scenery/land_use.json`): woods on slopes over about
+   10-12°, on crests and in steep valley heads, their outlines following the slope with noise, not 100 m blocks;
+   meadows and pasture on wet valley floors, willows and alders along the brooks; fields on the gentle ground, their
+   long sides along the contours, the collective farm's big fields broken where they meet the valleys; orchards and
+   vineyards with their press-houses on south slopes near villages; villages in the valleys where brooks meet and roads
+   run; lone trees and copses on crests and balks. The named woods keep their outlines; the generated copses and the
+   estates' fields (`farmland`) follow the rules instead of the 4 km grid. Numbers are estimates until sourced.
+5. **Lines fit the ground.** Grades checked per road class (main about 6%, secondary about 8%, tracks 12-15%;
+   estimates, to be sourced): steeper, and a road gets a cut or fill (L3's stamps) and a generated track follows the
+   valley floor, the contour or the crest instead; **sunken lanes** where a track climbs loess (1-4 m deep, steep
+   grassed banks, trees over them; to be sourced with photographs). `nav` reads the grade (its movers' speeds on a
+   slope).
+6. **The hill country's detail area and its plots.** A detail area at 10 m in the hills and its plots (judged like the
+   others, against the look target first): **p18** a field's edge on a slope (K-a; first form 6 Nov, on the map's 50 m
+   ground); **p19** a wood's edge on a hillside (K-b; first form 6 Nov); **p20** a brook in a meadow valley with
+   willows (K-e); **p21** a sunken lane; **p22** a village pond with reeds and a willow (K-f, in our village's kind).
+   The view **V13** (first form 6 Nov): a panorama from the highest ground near the hills' middle (the anchor kind
+   `high_ground`), layered hills to the horizon and, east, the hills falling to the plain (K-b, K-d).
+
+**What it moves.** The sight lines (battery 21's horizon, the radar posts' masking, the P-19 and P-40 on their hills),
+low approaches along valleys, the routes and the movers' times, the plots' and views' anchors, and anything under the
+ground. Re-read: `ground_check`, `nav_check`, `crew_balance`, `air_war_bench`, `air_war_balance`, `em_demo`,
+`helper_coverage`, `mission_demo`, `test_country_map`; the moved rows explained in the step's entry.
+
+**Sources to find** (none read yet): the inventory of Hungary's micro-regions (Dövényi, ed., 2010) for the hill
+regions' relief and land use; photographs of Transdanubian hill country (Zala, Somogy, Tolna, the loess lanes of the
+Szekszárd hills) from Wikimedia Commons, registered as `docs/research/TERRAIN_REFERENCES_2026-11.md` registers its
+photographs; the three papers named above, before anything is ported.
 
 ---
 

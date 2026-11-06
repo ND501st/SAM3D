@@ -303,6 +303,13 @@ the map; aircraft flown with bank, pitch and roll; a more realistic map (free Fa
 placeholders, each with its licence recorded); the time of day in the missions menu; pilots who break, dive and jettison
 on a warning, a sighted launch or flak, or damage. Damage seen by our crews goes into the records as they saw it.
 
+**The terrain's look target** (project owner, 6 Nov 2026; `docs/scenery/LOOK_TARGET.md`): Kingdom Come: Deliverance
+II's countryside is the quality bar for light, relief, foliage and ground. Judge every plot and view against its traits
+K1-K14 as well as the place's photographs, and write what differs in each pass's roadmap entry. Its screenshots stay in
+`reference/look/kcd2/` (never committed, traced or recreated). Hill country with valleys and land use that follows the
+ground is required, made in simcore's ground, not by a plugin or a Landscape (`docs/scenery/TERRAIN_ROADMAP.md` D10-D12,
+L11, L12, A.5).
+
 **Track T, the terrain** (project owner, 3 Nov 2026; `docs/scenery/TERRAIN_ROADMAP.md`): the map made to look like the
 Great Hungarian Plain in October 1985, from reference photographs (`docs/research/TERRAIN_*_2026-11.md`), with free
 textures and models only, each registered with its licence and fetched per machine on the owner's say-so. What blocks

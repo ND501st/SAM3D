@@ -10,7 +10,12 @@ reference/
   manuals/         # scanned operator manuals, public/declassified documents
   ghidra/          # Ghidra project for sam.exe
   photos/          # cabin / vehicle reference photos
+  look/kcd2/       # the terrain's look target: the owner's six Kingdom Come: Deliverance II screenshots (6 Nov 2026)
 ```
+
+`look/kcd2/` holds the publisher's screenshots the owner chose as the terrain's quality bar
+(`docs/scenery/LOOK_TARGET.md`). They are compared with the renders on the owner's PC only: never committed, traced,
+sampled or rebuilt, and nothing of that game's world is recreated.
 
 What is on the PC now (October 2026): `samsim/` (the Osa's `.dat` files), `manuals/` with the creator's documentation
 set (`SAMSIM_docs_210109.rar`) and, extracted from it, `SA-8B_English.pdf` / `.txt`, `SA-8B_Russian.pdf`,

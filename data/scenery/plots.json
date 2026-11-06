@@ -77,6 +77,20 @@
       "anchor": { "kind": "site", "site": "bty21", "from_m": 25, "bearing_deg": 110 },
       "photos": ["P03", "P12"],
       "must_see": "Ground churned by the vehicles: wheel ruts in mud, bare earth, the grass left only between."
+    },
+    {
+      "id": "p18_slope_field_edge",
+      "name": "A field's edge on a slope in the hill country",
+      "anchor": { "kind": "parcel_edge", "close_km": [-14.0, 2.0] },
+      "photos": ["P65"],
+      "must_see": "The field climbing the slope, its edge and the hill beyond; the ground rolling, not flat (look target K1, K3)."
+    },
+    {
+      "id": "p19_slope_wood_edge",
+      "name": "A wood's edge on a hillside",
+      "anchor": { "kind": "wood_edge", "close_km": [-11.0, -0.4], "bearing_deg": 180 },
+      "photos": ["P66", "P23"],
+      "must_see": "The wood holding the slope, its edge layered and closed; the ground falling away (look target K2, K4)."
     }
   ]
 }

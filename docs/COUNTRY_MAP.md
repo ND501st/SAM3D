@@ -115,6 +115,13 @@ district's map. `NaturalGround` adds them for both, so the Kesmark range, which 
 ground is tinted by its land cover (reed beds, woods, water) and each lake's surface is a sheet of 250 m cells at its
 level; `tools/map_view.py` draws the lakes, marshes and the ranges' crests from `country_dump`'s JSON.
 
+**Planned (6 Nov 2026): hill country in the district** (`docs/scenery/TERRAIN_ROADMAP.md` L11 and A.5, for the look
+target, `docs/scenery/LOOK_TARGET.md`). The range's west and north-west are to become rolling and hilly ground with
+brook valleys cut by a drainage bake; the country's file must carry the same landform regions (and extend them round
+the district, so the hills do not stop at its edge), and the drainage, being a bake on a grid rather than a function of
+position, must be shared so the test's comparison every 500 m still agrees. The extent is the owner's choice (6 Nov
+2026: west and north-west); the height starts at 40-80 m with a factor in the data.
+
 `tests/test_country_map.cpp` ("its terrain"): every range's crest stands high, the border range's gorge has its floor
 near the plain (131 m) between shoulders over 700 m, no valley cuts below the plain, the ground under each lake lies below
 its level and the land cover there says lake, the reservoir lies above the dam on the Rava, the marshes, a forest, the

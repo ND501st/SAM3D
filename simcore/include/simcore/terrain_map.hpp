@@ -85,6 +85,29 @@ struct MapRidgeDef {
     double height_m = 0.0;  // a ridge's crest above its foot; a valley's floor below its shoulders
 };
 
+// Hill country (roadmap L11, docs/scenery/TERRAIN_ROADMAP.md A.5; the look target's K1, docs/scenery/LOOK_TARGET.md): a
+// region of the map whose ground rolls in hills, its forms `relief_m` from the lowest ground to the highest at full
+// weight. The weight rises from nothing at the outline to full `blend_m` inside it (by an uneven line, so no outline
+// shows), and where regions overlap the stronger wins, so rolling ground can ring hilly ground.
+struct MapLandformRegionDef {
+    std::string id;
+    std::vector<MapPoint> points;  // its outline (closed by the loader into `ring`)
+    std::vector<MapPoint> ring;    // the outline, first point repeated at the end
+    double relief_m = 0.0;
+    double blend_m = 4000.0;
+};
+
+// The landform: one field of forms over the whole map (warped value noise with a ridged share, so the hills wind and
+// have crests and spurs, turned off the noise's lattice), scaled at each point by the strongest region's relief there.
+// The forms rise from the plain: a valley floor at the plain's level, a crest `relief_m` above it.
+struct MapLandformDef {
+    double exaggeration = 1.0;     // the owner's dial: every region's relief times this
+    double wavelength_m = 2500.0;  // the main forms' size, crest to crest
+    double warp_m = 800.0;         // how far the forms are pushed sideways (domain warping)
+    double ridged = 0.35;          // the share of ridged noise (crests and spurs) against rounded fBm
+    std::vector<MapLandformRegionDef> regions;
+};
+
 // A lake or reservoir: the ground under it lies below its level, deepening from the shore.
 struct MapLakeDef {
     std::string id;
@@ -199,6 +222,7 @@ struct MapDef {
     double valley_depth_m = 0.0;
     double valley_half_width_m = 500.0;
     std::vector<MapLakeDef> lakes;
+    MapLandformDef landform;  // the hill country (terrain.landform, roadmap L11)
     // Lines and places.
     std::vector<MapLineDef> rivers;
     std::vector<MapLineDef> roads;
@@ -555,6 +579,39 @@ private:
 
 }  // namespace mapgeo
 
+// The landform's shape at a point, 0..1 (the share of the local relief): a contrast-stretched blend of fBm and ridged
+// noise on warped coordinates. Pure: the same (seed, point) always gives the same value.
+inline double LandformShape(const MapLandformDef& l, std::uint64_t seed, double e, double n) {
+    // Turned 27 degrees, so no form lines up with the noise's lattice (and the map's north).
+    const double ca = 0.8910065241883679, sa = 0.4539904997395468;
+    const double x0 = ca * e - sa * n, y0 = sa * e + ca * n;
+    const std::uint64_t s0 = noise::Mix64(seed ^ 0x4C414E44464F524Dull);  // "LANDFORM"
+    const double ww = 1.7 * l.wavelength_m;
+    const double x = x0 + l.warp_m * (2.0 * noise::Fbm(noise::Mix64(s0 + 1), x0, y0, ww, 2) - 1.0);
+    const double y = y0 + l.warp_m * (2.0 * noise::Fbm(noise::Mix64(s0 + 2), x0, y0, ww, 2) - 1.0);
+    const double round = noise::Fbm(noise::Mix64(s0 + 3), x, y, l.wavelength_m, 4);
+    const double fold = 1.0 - std::fabs(2.0 * noise::Fbm(noise::Mix64(s0 + 4), x, y, 1.4 * l.wavelength_m, 3) - 1.0);
+    const double f = (1.0 - l.ridged) * round + l.ridged * fold * fold;
+    // The blend gathers round its middle; stretch it so the forms use their whole relief, softly at both ends (a valley
+    // floor flattens, a crest rounds). kLandformMid and kLandformSpread are measured (test_terrain_map's landform test).
+    constexpr double kLandformMid = 0.54, kLandformSpread = 0.36;
+    const double t = std::clamp((f - kLandformMid) / kLandformSpread + 0.5, 0.0, 1.0);
+    return noise::Smooth(t);
+}
+
+// The local relief the landform reaches at a point: the strongest region's, by its weight there; 0 outside them all.
+inline double LandformRelief(const MapLandformDef& l, std::uint64_t seed, double e, double n) {
+    double best = 0.0;
+    for (const MapLandformRegionDef& r : l.regions) {
+        if (r.relief_m <= best || r.ring.size() < 4 || !mapgeo::InPolygon(r.points, e, n)) continue;
+        // The edge of full weight wanders up to a third of the blend inwards, so the hills do not end on a line.
+        const double inside = mapgeo::DistToLine(r.ring, e, n) - r.blend_m * 0.35 * noise::Value(seed ^ 0x0B1E7D0ull, e, n, 3000.0);
+        const double w = noise::Smooth(std::clamp(inside / r.blend_m, 0.0, 1.0));
+        best = std::max(best, r.relief_m * w);
+    }
+    return best * l.exaggeration;
+}
+
 // How deep a river's bed is cut below the ground around it.
 constexpr double kRiverBedDepthM = 2.0;
 
@@ -575,6 +632,11 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
     for (const MapHillDef& hill : d.hills) {
         const double dist = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
         if (dist < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * dist / hill.radius_m));
+    }
+    // The hill country, rising from the plain (before the valleys and rivers, which cut through it).
+    if (!d.landform.regions.empty()) {
+        const double relief = LandformRelief(d.landform, d.seed, e, n);
+        if (relief > 0.0) h += relief * LandformShape(d.landform, d.seed, e, n);
     }
     // Ranges: across, a smooth rise to the crest; along it, peaks and saddles (two thirds to four thirds of its height).
     for (std::size_t i = 0; i < d.ridges.size(); ++i) {
@@ -2651,7 +2713,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         const json::Value* t = root.Find("terrain");
         if (t == nullptr) return Fail("terrain", "required");
         if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "ridges", "valleys", "valley",
-                                  "detail", "notes"}) ||
+                                  "landform", "detail", "notes"}) ||
             !Number(*t, "terrain", "base_m", out.base_m) || !OptionalNumber(*t, "terrain", "core_spacing_m", out.core_spacing_m) ||
             !OptionalNumber(*t, "terrain", "far_spacing_m", out.far_spacing_m) || !OptionalNumber(*t, "terrain", "roughness_m", out.roughness_m)) {
             return false;
@@ -2699,6 +2761,45 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
                 return false;
             }
             if (out.valley_half_width_m <= 0.0) return Fail("terrain.valley.half_width_m", "must be > 0");
+        }
+        return LoadLandform(*t, out.landform);
+    }
+
+    // terrain.landform (roadmap L11): {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions": [{"id", "relief_m",
+    // "blend_km", "points": [[e, n], ...]}]}. Optional; without it the map has no hill country.
+    bool LoadLandform(const json::Value& t, MapLandformDef& out) {
+        const json::Value* l = t.Find("landform");
+        if (l == nullptr) return true;
+        const std::string p = "terrain.landform";
+        double wl = out.wavelength_m / 1000.0, warp = out.warp_m / 1000.0;
+        if (!Keys(*l, p, {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions", "source", "confidence", "notes"}) ||
+            !OptionalNumber(*l, p, "exaggeration", out.exaggeration) || !OptionalNumber(*l, p, "wavelength_km", wl) ||
+            !OptionalNumber(*l, p, "warp_km", warp) || !OptionalNumber(*l, p, "ridged", out.ridged)) {
+            return false;
+        }
+        if (out.exaggeration < 0.0 || out.exaggeration > 4.0) return Fail(Join(p, "exaggeration"), "between 0 and 4");
+        if (wl < 0.2 || wl > 50.0) return Fail(Join(p, "wavelength_km"), "between 0.2 and 50");
+        if (warp < 0.0 || warp > 10.0) return Fail(Join(p, "warp_km"), "between 0 and 10");
+        if (out.ridged < 0.0 || out.ridged > 1.0) return Fail(Join(p, "ridged"), "between 0 and 1");
+        out.wavelength_m = wl * 1000.0;
+        out.warp_m = warp * 1000.0;
+        const json::Value* regions = OptionalArray(*l, p, "regions");
+        if (regions == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < regions->items.size(); ++i) {
+            const std::string rp = Index(p + ".regions", i);
+            const json::Value& r = regions->items[i];
+            MapLandformRegionDef region;
+            double blend_km = region.blend_m / 1000.0;
+            if (!Keys(r, rp, {"id", "relief_m", "blend_km", "points", "notes"}) || !RequireString(r, rp, "id", region.id) ||
+                !Number(r, rp, "relief_m", region.relief_m) || !OptionalNumber(r, rp, "blend_km", blend_km) || !Points(r, rp, 3, region.points)) {
+                return false;
+            }
+            if (region.relief_m < 0.0 || region.relief_m > 1000.0) return Fail(Join(rp, "relief_m"), "between 0 and 1000");
+            if (blend_km <= 0.0) return Fail(Join(rp, "blend_km"), "must be > 0");
+            region.blend_m = blend_km * 1000.0;
+            region.ring = region.points;
+            region.ring.push_back(region.points.front());
+            out.regions.push_back(region);
         }
         return true;
     }

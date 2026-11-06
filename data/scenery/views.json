@@ -250,6 +250,27 @@
         "P01"
       ],
       "must_see": "the edge of a wood from a field 25 m off: the mantle's trees at the top, a patchy fringe of shrubs in front of them, the stand's height steps behind (docs/scenery/VEGETATION.md)"
+    },
+    {
+      "id": "v13_hill_country",
+      "anchor": {
+        "kind": "high_ground",
+        "close_km": [
+          -14.0,
+          4.0
+        ],
+        "bearing_deg": 90
+      },
+      "eye_m": 1.7,
+      "look": "panorama",
+      "step_deg": 90,
+      "fov_deg": 60,
+      "photos": [
+        "P65",
+        "P66",
+        "P23"
+      ],
+      "must_see": "from the highest ground within 1.5 km of the hills' middle (terrain roadmap L11, A.5): rolling hills layered to the horizon, valleys between, woods on the slopes; east, the hills falling to the plain (the look target's K1, K2, K11)"
     }
   ],
   "photos": {

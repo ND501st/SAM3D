@@ -177,6 +177,26 @@ SC_TEST("light: a scenario's sky clock: its place, its date, the legacy keys as 
     SC_EXPECT(def.clock.start_local_h == night_h);
 }
 
+SC_TEST("light: the plot lab's scenarios: fair cumulus, mid-October at 13:00 and early July at 15:30, no raid") {
+    // tools/plot_lab.py renders the test plots under the look target's weather (docs/scenery/LOOK_TARGET.md K11).
+    const struct {
+        const char* file;
+        int day;
+        double hour, elevation_deg;
+    } kLab[] = {{"scenarios/lab/plot_lab_october.json", 288, 13.0, 30.8}, {"scenarios/lab/plot_lab_summer.json", 186, 15.5, 39.3}};
+    for (const auto& l : kLab) {
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        SC_EXPECT(LoadScenarioFile(kData + "/" + l.file, kData, def, console, &e));
+        if (!e.empty()) std::printf("    %s: %s\n", l.file, e.c_str());
+        SC_EXPECT(def.has_weather && def.weather.id == "fair_cumulus");
+        SC_EXPECT(def.clock_given && def.clock.day_of_year == l.day && def.clock.start_local_h == l.hour);
+        SC_EXPECT(def.targets.empty());
+        SC_EXPECT_NEAR(def.clock.SunAtSession(0.0).elevation_rad * 180.0 / kPi, l.elevation_deg, 0.5);
+    }
+}
+
 SC_TEST("light: the runner reads one sun: the TV's daylight by the menu's night, the battery's night at dusk, the range's steps") {
     {
         ScenarioDef def;

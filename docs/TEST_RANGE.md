@@ -13,7 +13,7 @@ its detail areas):
 
 | Thing | How it is made |
 |---|---|
-| Ground | A plain at 110 m with three octaves of gentle relief, hills (Polany hill under the P-40, Ludas, the Kesmark heights, Varos hill, the neutral neighbour's hills beyond the border), low rises of the plain (battery 21's, 25 m, under its four launchers; one under each dummy position; three backs and two sand ridges of 10-16 m, each ridge a chain of hills), the Rava's valley carved along the river, sites levelled. Baked at 50 m inside the map, 500 m out to 150 km, finer in the two detail areas (below) |
+| Ground | A plain at 110 m with three octaves of gentle relief, hills (Polany hill under the P-40, Ludas, the Kesmark heights, Varos hill, the neutral neighbour's hills beyond the border), low rises of the plain (battery 21's, 25 m, under its four launchers; one under each dummy position; three backs and two sand ridges of 10-16 m, each ridge a chain of hills), the Rava's valley carved along the river, sites levelled. Baked at 50 m inside the map, 500 m out to 150 km, finer in the two detail areas (below). Planned: hill country with brook valleys in the west and north-west, the plain kept along the Rava (`docs/scenery/TERRAIN_ROADMAP.md` L11, A.5; the owner's choice, 6 Nov 2026) |
 | River | The Rava through both Kesmark bridges (12, -6) and (14, -4) and the Rava marshes |
 | Roads, railway | Main and secondary roads and tracks between the places; the railway through Kesmark station, the rail bridge and the Horka siding. A bridge wherever a road or the railway crosses the river |
 | Towns | Kesmark (1400 buildings), five villages (90-110), Novo Varosd and four towns beyond the map; houses end on to the streets, flats in a town's centre; 70 lone farmsteads |

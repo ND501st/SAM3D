@@ -1,5 +1,6 @@
 // The terrain's check views (simcore/scenery/views.hpp, roadmap T2): the data loads and refuses what is wrong, and every
 // view on the Kesmark map resolves to a camera above the ground and outside what stands there, or says why it cannot.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -43,7 +44,7 @@ std::string One(const std::string& anchor, const std::string& rest = "") {
 
 SC_TEST("views: the data loads, with every photo a view names listed with its page, licence and author") {
     const ViewSet set = Views();
-    SC_EXPECT(set.views.size() == 12);
+    SC_EXPECT(set.views.size() == 13);
     for (const ViewDef& v : set.views) {
         SC_EXPECT(!v.photos.empty());
         for (const std::string& id : v.photos) {
@@ -66,6 +67,7 @@ SC_TEST("views: the loader refuses what is wrong") {
     SC_EXPECT(!LoadViews(One("{\"kind\": \"moon\"}"), set, &e));
     SC_EXPECT(!LoadViews(One("{\"kind\": \"site\"}"), set, &e));                                   // no site named
     SC_EXPECT(!LoadViews(One("{\"kind\": \"parcel_edge\"}"), set, &e));                            // no close_km
+    SC_EXPECT(!LoadViews(One("{\"kind\": \"high_ground\"}"), set, &e));                            // no close_km
     SC_EXPECT(!LoadViews(One("{\"kind\": \"site\", \"site\": \"a\"}", ", \"look\": \"up\""), set, &e));
     SC_EXPECT(!LoadViews(One("{\"kind\": \"site\", \"site\": \"a\"}", ", \"fov_deg\": 5"), set, &e));
     SC_EXPECT(!LoadViews(One("{\"kind\": \"site\", \"site\": \"a\"}", ", \"eye_m\": 0"), set, &e));
@@ -155,6 +157,35 @@ SC_TEST("views: the wood-edge view stands in the open with a wood ahead, the edg
         }
     }
     SC_EXPECT(seen == 1);
+}
+
+SC_TEST("views: the hill-country panorama stands on the highest ground within 1.5 km of its point (V13, roadmap L11)") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const CoverRaster cover = BakeCover(*map, Dressing());
+    int seen = 0;
+    for (const ViewDef& v : Views().views) {
+        if (v.id != "v13_hill_country") continue;
+        SC_EXPECT(v.anchor.kind == "high_ground");
+        const double ce = v.anchor.close_e_m, cn = v.anchor.close_n_m;
+        double highest = -1e18;
+        for (double dn = -1500.0; dn <= 1500.0; dn += 100.0) {
+            for (double de = -1500.0; de <= 1500.0; de += 100.0) {
+                if (std::hypot(de, dn) <= 1500.0) highest = std::max(highest, map->GroundHeight(ce + de, cn + dn));
+            }
+        }
+        for (const ResolvedView& c : ResolveView(*map, Dressing(), cover, v)) {
+            ++seen;
+            SC_EXPECT(c.ok);
+            if (!c.ok) continue;
+            SC_EXPECT(std::hypot(c.eye_e - ce, c.eye_n - cn) <= 1500.0 + 50.0);
+            SC_EXPECT(map->GroundHeight(c.eye_e, c.eye_n) >= highest - 5.0);  // no coarser sample finds higher ground
+            SC_EXPECT(map->GroundHeight(c.eye_e, c.eye_n) > map->Def().base_m + 40.0);  // up in the hills
+        }
+    }
+    SC_EXPECT(seen == 4);  // the panorama's four bearings
 }
 
 SC_TEST("views: the farmyard view says why it is missing (no farmyard site kind yet), the rest are given") {
