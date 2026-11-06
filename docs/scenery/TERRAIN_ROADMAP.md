@@ -491,6 +491,45 @@ the new order, the loop's comparison step (A.4) and how the hills are made (A.5)
   shows little cloud and looking toward the sun the sky goes white; a cumulus material of our own is needed. Next: A.5
   steps 2-4 (drainage and valleys, the ground's measures, land use on them), then the road strips on slopes.
 
+### A.3.16 L11 step 2, the hills drain (6 Nov 2026)
+
+- **Why the step 1 forms could not stay.** Filled to their sills (a priority flood), the noise's forms were 43% closed
+  basins, 29% of the hills more than 10 m deep: filling would have made lakes of the hills, cutting their outlets
+  gorges. Noise alone cannot make ground that drains, so the design of A.5 step 2 changed from "carve valleys into the
+  forms" to **bake the ground from its drainage**, first prototyped in Python (the scratch script, not kept).
+- **How** (`terrain_map.hpp` `LandformBakeFor`, `landform_detail::Bake`; data `terrain.landform.drainage`, the same in
+  both map files): on a 50 m grid over the regions (1221 x 921 cells), a priority flood from the hills' outline inwards
+  with the forms (a share of them at 6 km, so trunk valleys run far, and a tilt rising inland) as the priority gives
+  every cell one cell downstream; the area drained is summed down that tree; where it passes 0.15 km² a valley runs,
+  its bed falling to the outline at 0.02 x (0.15 km² / area)^0.5 scaled by the region's relief; every cell takes its
+  nearest valley's bed (jump flooding) and rises from it at 0.26, rounding off towards a crest at 0.45-1.05 of the
+  region's relief (slow noise); big valleys get a flat floor up to 60 m each side. Where two valleys' sides meet the
+  higher side is brought down to 27° at most (a chamfer pass each way, which only lowers a cell to just above a
+  neighbour), then any hollow left is filled to its sill. The bake is built once per process and shared by every map
+  carrying the same landform, so the range and the country hold the same ground to the last bit. `NaturalGround` adds
+  its height (bilinear); the brooks (valleys draining 3 km² or more, 236 of them, lines smoothed off the cells) are laid
+  in the core and the detail areas as water strips 1.5-4 m wide (`MapData::LayBrooks`), which keep the dressing's crops
+  and trees and the air war's open-ground placements off them as any water does.
+- **Measured** (`test_landform.cpp`): 2 km windows 73 m from floor to crest (p10 60, p90 86); slopes median 6.0°, p95
+  11.4°, 0.2% over 20°; no closed hollow at all (a flood raises no cell); no step between two cells steeper than 27°;
+  19225 of 19338 brook points lie below the ground 150 m to either side. The hills now climb up to 117 m over the plain
+  inside the range (the valley floors rise inland), so the test's bound went from 70 to 130 m. Battery 21's detail
+  area, the bridges, Kesmark, Vrbice, the P-40, Kecel, Varos hill and the capital still untouched to the last bit.
+  `test_country_map`'s seam at the range's edge is now taken 10 cm beyond it, not a metre (the hills' sides rise up to
+  half a metre in a metre): 0.05 m.
+- **Re-read:** 1072 tests pass; `ground_check` PASS (0 of 15 scenarios with anything under the ground); `nav_check` 200
+  of 200 routes. Not re-run: `air_war_balance` (identical with the step 1 hills; its battery is on the plain),
+  `crew_balance`, `em_demo`, `helper_coverage`, `mission_demo`, `air_war_bench`.
+- **e2 (p18, p19) and l11b (views):** V13 from the crest now looks down a ridge between valleys, spurs and ridges layered
+  behind; p18 from above shows long smooth slopes; p19's ploughland climbs to the wood. Every slope is still ploughland
+  or stubble and the woods are where the old outlines put them, so the hills read as bare.
+- **Against the look target:** K1 moved again (forms that drain: valleys, spurs and ridges, not blobs); K13 began (brooks,
+  not yet judged near the eye). K2 is the largest gap and the next step: A.5 steps 3-4, the ground's measures (slope,
+  wetness from the area now baked, curvature) and land use on them (woods on the steep sides and crests, meadows on the
+  valley floors along the brooks). Then the road strips on slopes (K8: p18's road still kinks).
+- **Left:** brooks end where they leave the hills (none crosses the plain to the Rava yet); no bed cut under a brook (the
+  bake's cells are 50 m), no culvert or bridge where a road crosses one; the bake costs about a second at load.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
@@ -532,7 +571,9 @@ budget, the posts' hills unchanged at their summits):
    (domain warping, so the forms wind instead of sitting on a grid of blobs) plus a ridged term for crests and spurs.
    A pure function of position inside `NaturalGround`, so the district and the country agree (`test_country_map`) and a
    sight line meets the same ground at every grid spacing.
-2. **Drainage and valleys.** Noise alone makes basins with no outlet, which read wrong at once (K-b's valley floors).
+2. **Drainage and valleys.** *(First form 6 Nov 2026, A.3.16: the forms were too full of basins to carve, so the
+   ground is baked from its drainage instead, the forms only steering the valleys; the text below is the first plan.)*
+   Noise alone makes basins with no outlet, which read wrong at once (K-b's valley floors).
    On the core grid (800 x 800 cells): pits filled by priority-flood (Barnes, Lehman and Mulla 2014), flow routed
    downhill and accumulated; where the area drained passes a threshold, a **brook** (a map line of a new class
    `brook`, running into the Rava or out of the map), and along each a valley cut by a cross-section stamp whose width

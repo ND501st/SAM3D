@@ -30,6 +30,11 @@
     "valley": {"depth_m": 6, "half_width_m": 700, "notes": "The Rava's valley, carved along the river."},
     "landform": {
       "exaggeration": 1.0, "wavelength_km": 1.0, "warp_km": 0.8, "ridged": 0.35,
+      "drainage": {
+        "spacing_m": 50, "channel_area_km2": 0.15, "channel_slope": 0.02, "concavity": 0.5, "hillslope": 0.26,
+        "steepness_spread": 0.6, "floor_m": 60, "trunk_share": 0.6, "trunk_wavelength_km": 6, "inland_tilt": 0.5, "brook_area_km2": 3,
+        "notes": "The ground baked from where the water goes (roadmap A.5 step 2): every valley runs out of the hills, none ends in a closed basin; the forms above only steer the valleys. Game values, judged by eye against the look target (docs/scenery/LOOK_TARGET.md K1, K2, K13) and the hill plots."
+      },
       "regions": [
         { "id": "western_rolling", "relief_m": 22, "blend_km": 4,
           "points": [[-60, -16], [-3, -16], [1, -6], [0, 4], [-1, 14], [0, 30], [-60, 30]],

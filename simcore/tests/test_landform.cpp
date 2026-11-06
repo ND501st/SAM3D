@@ -1,9 +1,11 @@
 // The hill country (roadmap L11, docs/scenery/TERRAIN_ROADMAP.md A.5; the look target's K1, docs/scenery/LOOK_TARGET.md):
 // terrain.landform in data/maps/kesmark_range.json (and the same in maps/pannonia.json). Where the owner chose it (west
-// and north-west), nowhere else; its relief and slopes measured against what A.5 asks.
+// and north-west), nowhere else; its relief and slopes measured against what A.5 asks; and how it drains (A.5 step 2).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <functional>
+#include <queue>
 #include <string>
 #include <vector>
 
@@ -50,6 +52,7 @@ SC_TEST("landform: the hill country lies west and north-west; the plain is kept 
     SC_EXPECT(with.landform.regions.size() == 2);
     MapDef without = with;
     without.landform.regions.clear();
+    without.landform.bake.reset();
     const auto Added = [&](double e_km, double n_km) {
         return NaturalGround(with, e_km * 1000.0, n_km * 1000.0) - NaturalGround(without, e_km * 1000.0, n_km * 1000.0);
     };
@@ -79,13 +82,16 @@ SC_TEST("landform: the hill country lies west and north-west; the plain is kept 
     }
     std::printf("    the highest the landform adds round the Lazne woods and the division's posts: %.1f m\n", raised);
     SC_EXPECT(raised > 45.0);
-    // Never below the plain it rises from, never above its relief.
+    // Never below the plain it rises from; above it by the relief and the valley floors' climb into the hills.
+    double top = 0.0;
     for (double e = -20.0; e <= 2.0; e += 0.5) {
         for (double n = -20.0; n <= 20.0; n += 0.5) {
             const double a = Added(e, n);
-            SC_EXPECT(a >= 0.0 && a <= 70.0 * with.landform.exaggeration + 1e-9);
+            top = std::max(top, a);
+            SC_EXPECT(a >= 0.0 && a <= 130.0 * with.landform.exaggeration);
         }
     }
+    std::printf("    the highest the landform adds in the range: %.1f m\n", top);
 }
 
 SC_TEST("landform: the hills' forms: 40-80 m from floor to crest over a few kilometres, slopes mostly gentle, a few steep") {
@@ -93,9 +99,9 @@ SC_TEST("landform: the hills' forms: 40-80 m from floor to crest over a few kilo
     if (!LoadDistrict(d)) return;
     MapDef plain = d;
     plain.landform.regions.clear();
+    plain.landform.bake.reset();
     // The fully weighted hills, west of the blend: windows 2 km square on a 50 m lattice, the landform's own part.
     std::vector<double> window_relief, slopes;
-    std::vector<double> shape;
     const double step = 50.0;
     for (double wn = -2000.0; wn < 26000.0; wn += 2000.0) {
         for (double we = -58000.0; we < -16000.0; we += 2000.0) {
@@ -108,36 +114,103 @@ SC_TEST("landform: the hills' forms: 40-80 m from floor to crest over a few kilo
                     const double dx = (NaturalGround(d, e + step, n) - NaturalGround(d, e - step, n)) / (2.0 * step);
                     const double dy = (NaturalGround(d, e, n + step) - NaturalGround(d, e, n - step)) / (2.0 * step);
                     slopes.push_back(std::atan(std::hypot(dx, dy)) * 180.0 / kPi);
-                    shape.push_back(LandformShape(d.landform, d.seed, e, n));
                 }
             }
             window_relief.push_back(hi - lo);
         }
     }
     const double relief_med = Percentile(window_relief, 0.5), slope_med = Percentile(slopes, 0.5), slope_95 = Percentile(slopes, 0.95);
-    double steep = 0.0, floors = 0.0, crests = 0.0, mean = 0.0;
+    double steep = 0.0;
     for (double s : slopes) steep += s > 20.0 ? 1.0 : 0.0;
-    for (double s : shape) {
-        floors += s < 0.02 ? 1.0 : 0.0;
-        crests += s > 0.98 ? 1.0 : 0.0;
-        mean += s;
-    }
     steep /= static_cast<double>(slopes.size());
-    floors /= static_cast<double>(shape.size());
-    crests /= static_cast<double>(shape.size());
-    mean /= static_cast<double>(shape.size());
-    std::printf("    hills: relief in 2 km windows %.0f m (p10 %.0f, p90 %.0f); slopes median %.1f deg, p95 %.1f deg, over 20 deg %.1f%%; "
-                "shape mean %.2f, floors %.0f%%, crests %.0f%%\n",
-                relief_med, Percentile(window_relief, 0.1), Percentile(window_relief, 0.9), slope_med, slope_95, steep * 100.0, mean,
-                floors * 100.0, crests * 100.0);
+    std::printf("    hills: relief in 2 km windows %.0f m (p10 %.0f, p90 %.0f); slopes median %.1f deg, p95 %.1f deg, over 20 deg %.1f%%\n",
+                relief_med, Percentile(window_relief, 0.1), Percentile(window_relief, 0.9), slope_med, slope_95, steep * 100.0);
     SC_EXPECT(relief_med >= 40.0 && relief_med <= 80.0);
     SC_EXPECT(slope_med >= 2.5 && slope_med <= 10.0);
     SC_EXPECT(slope_95 <= 20.0);
     SC_EXPECT(steep < 0.03);
-    // The stretch (kLandformMid, kLandformSpread) uses the whole relief without piling the ground on its floor or crest.
-    SC_EXPECT(mean > 0.4 && mean < 0.6);
-    SC_EXPECT(floors > 0.01 && floors < 0.2);
-    SC_EXPECT(crests > 0.01 && crests < 0.2);
+}
+
+SC_TEST("landform: the hills drain: no closed basin, brooks that run downhill out of the hills or into another brook") {
+    MapDef d;
+    if (!LoadDistrict(d)) return;
+    SC_EXPECT(d.landform.bake != nullptr);
+    if (!d.landform.bake) return;
+    const LandformBake& b = *d.landform.bake;
+    SC_EXPECT(b.cols > 100 && b.rows > 100);
+    // A flood from the bake's edge and the plain (where the hills add nothing) raises no cell: every cell has a way out
+    // that never climbs.
+    const int cols = b.cols, rows = b.rows;
+    const std::size_t count = static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows);
+    std::vector<char> seen(count, 0);
+    // No cliff between two cells: where two valleys' sides meet, the ground steps no steeper than 30 degrees.
+    double cliff = 0.0;
+    int cliffs = 0;
+    for (int r = 0; r + 1 < rows; ++r) {
+        for (int c = 0; c + 1 < cols; ++c) {
+            const std::size_t i = static_cast<std::size_t>(r * cols + c);
+            for (const std::size_t j : {i + 1, i + static_cast<std::size_t>(cols)}) {
+                const double s = std::fabs(static_cast<double>(b.height[j]) - b.height[i]) / b.spacing_m;
+                cliff = std::max(cliff, s);
+                cliffs += s > 0.577 ? 1 : 0;
+            }
+        }
+    }
+    std::printf("    the steepest step between two cells: %.0f deg; %d steps over 30 deg\n", std::atan(cliff) * 180.0 / kPi, cliffs);
+    SC_EXPECT(cliff < 0.577);
+    using Entry = std::pair<double, int>;
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> edge;
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const int c = i % cols, r = i / cols;
+        if (b.height[static_cast<std::size_t>(i)] < 0.01f || c == 0 || r == 0 || c == cols - 1 || r == rows - 1) {
+            seen[static_cast<std::size_t>(i)] = 1;
+            edge.push({b.height[static_cast<std::size_t>(i)], i});
+        }
+    }
+    double worst = 0.0;
+    while (!edge.empty()) {
+        const double level = edge.top().first;
+        const int i = edge.top().second;
+        edge.pop();
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int c = i % cols + dx, r = i / cols + dy;
+                if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
+                const std::size_t j = static_cast<std::size_t>(r * cols + c);
+                if (seen[j]) continue;
+                seen[j] = 1;
+                worst = std::max(worst, level - b.height[j]);
+                edge.push({std::max(level, static_cast<double>(b.height[j])), static_cast<int>(j)});
+            }
+        }
+    }
+    std::printf("    the deepest closed hollow: %.3f m; %zu brooks\n", worst, b.brooks.size());
+    SC_EXPECT(worst < 0.01);
+    // Brooks: some, each draining more downstream, lying in its valley (its bed below the ground 150 m to either side).
+    SC_EXPECT(b.brooks.size() > 10);
+    int in_valley = 0, points = 0;
+    for (const MapBrookDef& br : b.brooks) {
+        SC_EXPECT(br.points.size() == br.area_m2.size());
+        SC_EXPECT(br.area_m2.back() >= br.area_m2.front());
+        SC_EXPECT(br.area_m2.front() >= d.landform.drainage.brook_area_m2 * 0.99);
+        for (std::size_t k = 1; k + 1 < br.points.size(); k += 4) {
+            const MapPoint& p = br.points[k];
+            const MapPoint& q = br.points[k + 1];
+            const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+            if (len <= 0.0) continue;
+            const double ux = -(q.north_m - p.north_m) / len, uy = (q.east_m - p.east_m) / len;  // across the brook
+            const double here = b.Height(p.east_m, p.north_m);
+            const double left = b.Height(p.east_m + 150.0 * ux, p.north_m + 150.0 * uy);
+            const double right = b.Height(p.east_m - 150.0 * ux, p.north_m - 150.0 * uy);
+            ++points;
+            in_valley += (here <= left + 0.5 && here <= right + 0.5) ? 1 : 0;
+        }
+    }
+    std::printf("    brook points in their valley: %d of %d\n", in_valley, points);
+    SC_EXPECT(points > 100 && in_valley >= 0.9 * points);
+    // The same bake for the same landform: built once and shared (the country's file carries the same block).
+    MapDef again;
+    SC_EXPECT(LoadDistrict(again) && again.landform.bake.get() == d.landform.bake.get());
 }
 
 SC_TEST("landform: the loader refuses what it should") {
@@ -150,4 +223,7 @@ SC_TEST("landform: the loader refuses what it should") {
     SC_EXPECT(Refused(text, "\"blend_km\": 5", "\"blend_km\": 0", "blend_km"));
     SC_EXPECT(Refused(text, "[[-60, -8], [-9, -8], [-5, 0], [-7, 9], [-4, 18], [-6, 30], [-60, 30]]", "[[-60, -8], [-9, -8]]", "points"));
     SC_EXPECT(Refused(text, "\"landform\": {", "\"landforms\": {", "landforms"));  // terrain's keys are checked
+    SC_EXPECT(Refused(text, "\"hillslope\": 0.26", "\"hillslope\": 0", "hillslope"));
+    SC_EXPECT(Refused(text, "\"brook_area_km2\": 3", "\"brook_area_km2\": 0.1", "brook_area_km2"));
+    SC_EXPECT(Refused(text, "\"spacing_m\": 50, \"channel", "\"spacing_m\": 5, \"channel", "spacing_m"));
 }

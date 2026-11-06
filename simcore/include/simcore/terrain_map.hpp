@@ -29,9 +29,11 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -97,15 +99,78 @@ struct MapLandformRegionDef {
     double blend_m = 4000.0;
 };
 
+// A brook the hill country's drainage made (roadmap L11, A.5 step 2): its line, smoothed off the bake's cells, from its
+// head downstream to where it joins another brook or leaves the hills, with the area it drains at each point.
+struct MapBrookDef {
+    std::string id;
+    std::vector<MapPoint> points;
+    std::vector<double> area_m2;  // drained at each point
+};
+
+// The hill country as baked from its drainage (LandformBakeFor below): the height it adds to the ground on a grid, the
+// area each cell drains, and its brooks. Shared by every map whose landform is the same (a district and its country).
+struct LandformBake {
+    double west_m = 0.0, south_m = 0.0, spacing_m = 50.0;
+    int cols = 0, rows = 0;
+    std::vector<float> height;  // added to the ground, m
+    std::vector<float> area;    // drained through the cell, m^2
+    std::vector<MapBrookDef> brooks;
+
+    bool Empty() const { return cols < 2 || rows < 2; }
+    // The height added at a point: bilinear between the cells; nothing outside the bake.
+    double Height(double e, double n) const {
+        if (Empty()) return 0.0;
+        const double x = (e - west_m) / spacing_m, y = (n - south_m) / spacing_m;
+        if (x < 0.0 || y < 0.0 || x > cols - 1 || y > rows - 1) return 0.0;
+        const int c = std::min(cols - 2, static_cast<int>(x)), r = std::min(rows - 2, static_cast<int>(y));
+        const double fx = x - c, fy = y - r;
+        const std::size_t i = static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(c);
+        const std::size_t up = i + static_cast<std::size_t>(cols);
+        const double a = height[i], b = height[i + 1], cc = height[up], d = height[up + 1];
+        return (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (cc * (1.0 - fx) + d * fx) * fy;
+    }
+    // The area drained through the cell holding a point, m^2 (0 outside the bake).
+    double Area(double e, double n) const {
+        if (Empty()) return 0.0;
+        const long c = std::lround((e - west_m) / spacing_m), r = std::lround((n - south_m) / spacing_m);
+        if (c < 0 || r < 0 || c >= cols || r >= rows) return 0.0;
+        return area[static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(c)];
+    }
+};
+
+// How the hill country drains (terrain.landform.drainage; game values, judged by eye against the look target and the
+// hill plots, docs/scenery/TERRAIN_ROADMAP.md A.5). The forms' noise is no longer the ground: it only decides where the
+// water goes. From the hills' outline inwards every cell is reached once, lowest first (a priority flood, Barnes,
+// Lehman and Mulla 2014, with the forms as the priority), so each cell has one downstream of it and no basin is closed;
+// the area drained is summed down that tree. Where it passes `channel_area_m2` a valley runs, its bed falling towards
+// the outline at `channel_slope` times (channel_area / area)^concavity (the slope-area relation of streams: steep high
+// up, gentle lower down); away from its nearest valley the ground rises at `hillslope`, rounding off towards a crest at
+// a share of the region's relief, and a valley draining more has a wider flat floor (up to `floor_m` each side).
+struct MapLandformDrainageDef {
+    double spacing_m = 50.0;            // the bake's grid (the core's spacing, so their nodes coincide)
+    double channel_area_m2 = 150000.0;  // where a valley starts
+    double channel_slope = 0.02;        // its bed's fall at its head
+    double concavity = 0.5;             // how fast the bed flattens with the area drained
+    double hillslope = 0.18;            // the valley sides' slope at their foot (tan)
+    double steepness_spread = 0.6;      // the crests' height varies by this share either way (slow noise)
+    double floor_m = 60.0;              // a big valley's flat floor, each side of its brook
+    double trunk_share = 0.6;           // the share of slow noise in the priority (so trunk valleys run far)
+    double trunk_wavelength_m = 6000.0;
+    double inland_tilt = 0.5;           // the priority's rise per 20 km in from the outline (valleys run outwards)
+    double brook_area_m2 = 3.0e6;       // a valley draining this much carries a brook (a map line)
+};
+
 // The landform: one field of forms over the whole map (warped value noise with a ridged share, so the hills wind and
-// have crests and spurs, turned off the noise's lattice), scaled at each point by the strongest region's relief there.
-// The forms rise from the plain: a valley floor at the plain's level, a crest `relief_m` above it.
+// have crests and spurs, turned off the noise's lattice). Since A.5 step 2 the forms set where the water goes and the
+// ground is baked from the drainage (MapLandformDrainageDef): valleys that all run out of the hills, ridges between.
 struct MapLandformDef {
     double exaggeration = 1.0;     // the owner's dial: every region's relief times this
     double wavelength_m = 2500.0;  // the main forms' size, crest to crest
     double warp_m = 800.0;         // how far the forms are pushed sideways (domain warping)
     double ridged = 0.35;          // the share of ridged noise (crests and spurs) against rounded fBm
     std::vector<MapLandformRegionDef> regions;
+    MapLandformDrainageDef drainage;
+    std::shared_ptr<const LandformBake> bake;  // set by the loader (LandformBakeFor)
 };
 
 // A lake or reservoir: the ground under it lies below its level, deepening from the shore.
@@ -612,6 +677,309 @@ inline double LandformRelief(const MapLandformDef& l, std::uint64_t seed, double
     return best * l.exaggeration;
 }
 
+// How far a point lies inside the landform's regions (the deepest), 0 outside them all.
+inline double LandformInside(const MapLandformDef& l, double e, double n) {
+    double best = 0.0;
+    for (const MapLandformRegionDef& r : l.regions) {
+        if (r.ring.size() < 4 || !mapgeo::InPolygon(r.points, e, n)) continue;
+        best = std::max(best, mapgeo::DistToLine(r.ring, e, n));
+    }
+    return best;
+}
+
+namespace landform_detail {
+
+// Every cell's nearest marked cell (its index; -1 where none), by jump flooding: passes of halving reach, each cell
+// taking a neighbour's nearest when it is nearer. Near-exact for these fields, linear in the cells per pass.
+inline void NearestMarked(int cols, int rows, std::vector<int>& near_of) {
+    const auto d2 = [cols](int a, int b) {
+        if (a < 0) return 1LL << 62;
+        const long long dc = a % cols - b % cols, dr = a / cols - b / cols;
+        return dc * dc + dr * dr;
+    };
+    int k = 1;
+    while (k < std::max(cols, rows)) k *= 2;
+    // Halving reaches, then 2 and 1 again (JFA+2), which mends the few cells one sweep leaves wrong.
+    std::vector<int> reaches;
+    for (k /= 2; k >= 1; k /= 2) reaches.push_back(k);
+    reaches.push_back(2);
+    reaches.push_back(1);
+    for (int reach : reaches) {
+        k = reach;
+        {
+            for (int r = 0; r < rows; ++r) {
+                for (int c = 0; c < cols; ++c) {
+                    const int i = r * cols + c;
+                    int best = near_of[static_cast<std::size_t>(i)];
+                    long long bd = d2(best, i);
+                    for (int dr = -k; dr <= k; dr += k) {
+                        for (int dc = -k; dc <= k; dc += k) {
+                            const int rr = r + dr, cc = c + dc;
+                            if ((dr == 0 && dc == 0) || rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+                            const int cand = near_of[static_cast<std::size_t>(rr * cols + cc)];
+                            const long long cd = d2(cand, i);
+                            if (cd < bd || (cd == bd && cand >= 0 && cand < best)) {
+                                best = cand;
+                                bd = cd;
+                            }
+                        }
+                    }
+                    near_of[static_cast<std::size_t>(i)] = best;
+                }
+            }
+        }
+    }
+}
+
+// Chaikin's corner cutting, twice, keeping the ends: a brook's line off the grid's steps.
+inline void SmoothLine(std::vector<MapPoint>& pts, std::vector<double>& area) {
+    for (int it = 0; it < 2 && pts.size() >= 3; ++it) {
+        std::vector<MapPoint> p{pts.front()};
+        std::vector<double> a{area.front()};
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+            const MapPoint& u = pts[i];
+            const MapPoint& v = pts[i + 1];
+            p.push_back({0.75 * u.east_m + 0.25 * v.east_m, 0.75 * u.north_m + 0.25 * v.north_m});
+            p.push_back({0.25 * u.east_m + 0.75 * v.east_m, 0.25 * u.north_m + 0.75 * v.north_m});
+            a.push_back(0.75 * area[i] + 0.25 * area[i + 1]);
+            a.push_back(0.25 * area[i] + 0.75 * area[i + 1]);
+        }
+        p.push_back(pts.back());
+        a.push_back(area.back());
+        pts.swap(p);
+        area.swap(a);
+    }
+}
+
+inline std::shared_ptr<const LandformBake> Bake(const MapLandformDef& l, std::uint64_t seed) {
+    auto out = std::make_shared<LandformBake>();
+    const MapLandformDrainageDef& dr = l.drainage;
+    double west = 1e300, south = 1e300, east = -1e300, north = -1e300, relief_ref = 0.0;
+    for (const MapLandformRegionDef& r : l.regions) {
+        for (const MapPoint& p : r.points) {
+            west = std::min(west, p.east_m);
+            east = std::max(east, p.east_m);
+            south = std::min(south, p.north_m);
+            north = std::max(north, p.north_m);
+        }
+        relief_ref = std::max(relief_ref, r.relief_m);
+    }
+    const double sp = dr.spacing_m;
+    if (l.regions.empty() || relief_ref <= 0.0 || l.exaggeration <= 0.0 || sp <= 0.0) return out;
+    out->spacing_m = sp;
+    out->west_m = std::floor(west / sp) * sp;
+    out->south_m = std::floor(south / sp) * sp;
+    out->cols = static_cast<int>(std::lround((std::ceil(east / sp) * sp - out->west_m) / sp)) + 1;
+    out->rows = static_cast<int>(std::lround((std::ceil(north / sp) * sp - out->south_m) / sp)) + 1;
+    const int cols = out->cols, rows = out->rows;
+    const std::size_t count = static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows);
+    const auto east_of = [&](int i) { return out->west_m + (i % cols) * sp; };
+    const auto north_of = [&](int i) { return out->south_m + (i / cols) * sp; };
+
+    // The relief each cell reaches, how hard its crests rise, and the order the flood takes it in.
+    const double relief_full = relief_ref * l.exaggeration;
+    std::vector<double> rel(count), prio(count), steep(count);
+    std::vector<char> outlet(count, 0);
+    const std::uint64_t ts = noise::Mix64(seed ^ 0x5452554E4B53ull);   // "TRUNKS"
+    const std::uint64_t ss = noise::Mix64(seed ^ 0x5354454550ull);     // "STEEP"
+    // The trunks' slow forms: the landform's own shape at a longer wavelength, on its own stream.
+    MapLandformDef slow;
+    slow.wavelength_m = dr.trunk_wavelength_m;
+    slow.warp_m = 0.5 * dr.trunk_wavelength_m;
+    slow.ridged = 0.0;
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const double e = east_of(i), n = north_of(i);
+        const std::size_t u = static_cast<std::size_t>(i);
+        rel[u] = LandformRelief(l, seed, e, n);
+        const int c = i % cols, r = i / cols;
+        outlet[u] = (rel[u] < 0.01 * relief_full || c == 0 || r == 0 || c == cols - 1 || r == rows - 1) ? 1 : 0;
+        if (outlet[u]) continue;
+        prio[u] = (1.0 - dr.trunk_share) * LandformShape(l, seed, e, n) + dr.trunk_share * LandformShape(slow, ts, e, n) +
+                  dr.inland_tilt * LandformInside(l, e, n) / 20000.0;
+        steep[u] = 1.0 - dr.steepness_spread + 2.0 * dr.steepness_spread * noise::Fbm(ss, e, n, 3000.0, 2);
+    }
+
+    // The flood: from every outlet at once, then always the lowest cell on its edge; the cell that reached a cell is the
+    // one downstream of it. Ties go by index, so the tree is the same on every machine.
+    std::vector<int> down(count, -1), order;
+    order.reserve(count);
+    std::vector<char> seen(count, 0);
+    using Entry = std::pair<double, int>;
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> edge;
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        if (!outlet[static_cast<std::size_t>(i)]) continue;
+        seen[static_cast<std::size_t>(i)] = 1;
+        edge.push({-1.0, i});
+    }
+    while (!edge.empty()) {
+        const int i = edge.top().second;
+        edge.pop();
+        order.push_back(i);
+        const int c = i % cols, r = i / cols;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int cc = c + dx, rr = r + dy;
+                if ((dx == 0 && dy == 0) || cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+                const int j = rr * cols + cc;
+                if (seen[static_cast<std::size_t>(j)]) continue;
+                seen[static_cast<std::size_t>(j)] = 1;
+                down[static_cast<std::size_t>(j)] = i;
+                edge.push({prio[static_cast<std::size_t>(j)], j});
+            }
+        }
+    }
+    // The area drained, summed from the heads down.
+    std::vector<double> area(count, sp * sp);
+    for (std::size_t k = order.size(); k-- > 0;) {
+        const int i = order[k];
+        const int j = down[static_cast<std::size_t>(i)];
+        if (j >= 0) area[static_cast<std::size_t>(j)] += area[static_cast<std::size_t>(i)];
+    }
+    const auto step_to = [cols, sp](int i, int j) { return (i % cols != j % cols && i / cols != j / cols) ? sp * std::sqrt(2.0) : sp; };
+    // The valleys' beds, falling down the tree to the outline (0 there).
+    std::vector<double> bed(count, 0.0);
+    std::vector<int> near_of(count, -1);
+    for (int i : order) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const int j = down[u];
+        const bool channel = outlet[u] || area[u] >= dr.channel_area_m2;
+        if (!channel) continue;
+        near_of[u] = i;
+        if (j < 0) continue;
+        bed[u] = bed[static_cast<std::size_t>(j)] +
+                 step_to(i, j) * dr.channel_slope * std::pow(dr.channel_area_m2 / area[u], dr.concavity) * rel[u] / relief_ref;
+    }
+    NearestMarked(cols, rows, near_of);
+
+    // The ground: the nearest valley's bed, its floor, then its side rising and rounding off towards a crest.
+    std::vector<double> h(count, 0.0);
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const int s = near_of[u];
+        if (s < 0) continue;
+        const std::size_t su = static_cast<std::size_t>(s);
+        const double dist = std::hypot(east_of(i) - east_of(s), north_of(i) - north_of(s));
+        const double floor_half = dr.floor_m * std::clamp(std::log10(area[su] / dr.channel_area_m2) / 2.0, 0.0, 1.0);
+        const double x = std::max(0.0, dist - floor_half);
+        const double cap = rel[u] * (0.25 + 0.5 * steep[u]);
+        h[u] = bed[su] + (cap > 1e-6 ? cap * (1.0 - std::exp(-dr.hillslope * x / cap)) : 0.0);
+    }
+    // Where the sides of two valleys of different heights meet, the nearer valley changes from one cell to the next and
+    // the ground would step: bring the higher side down to a slope of `kTalus` at most (a chamfer pass each way, which
+    // only lowers a cell to just above a neighbour, so every cell still drains through it).
+    constexpr double kTalus = 0.5;  // 27 degrees
+    const double diag = sp * std::sqrt(2.0);
+    for (int pass = 0; pass < 2; ++pass) {
+        const bool fwd = pass == 0;
+        const int dir = fwd ? -1 : 1;  // the cells the sweep has passed
+        const int nb[4][2] = {{dir, 0}, {-1, dir}, {0, dir}, {1, dir}};
+        for (int k = 0; k < static_cast<int>(count); ++k) {
+            const int i = fwd ? k : static_cast<int>(count) - 1 - k;
+            const int c = i % cols, r = i / cols;
+            double& hi = h[static_cast<std::size_t>(i)];
+            for (const auto& o : nb) {
+                const int cc = c + o[0], rr = r + o[1];
+                if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+                const double reach = (o[0] != 0 && o[1] != 0) ? diag : sp;
+                hi = std::min(hi, h[static_cast<std::size_t>(rr * cols + cc)] + kTalus * reach);
+            }
+        }
+    }
+    // Where two valleys' sides meet badly a hollow can be left: fill it to its sill (a second flood, on the ground), so
+    // the bake has no closed basin at all.
+    std::fill(seen.begin(), seen.end(), static_cast<char>(0));
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        if (!outlet[static_cast<std::size_t>(i)]) continue;
+        seen[static_cast<std::size_t>(i)] = 1;
+        edge.push({h[static_cast<std::size_t>(i)], i});
+    }
+    while (!edge.empty()) {
+        const double level = edge.top().first;
+        const int i = edge.top().second;
+        edge.pop();
+        const int c = i % cols, r = i / cols;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int cc = c + dx, rr = r + dy;
+                if ((dx == 0 && dy == 0) || cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+                const std::size_t j = static_cast<std::size_t>(rr * cols + cc);
+                if (seen[j]) continue;
+                seen[j] = 1;
+                h[j] = std::max(h[j], level);
+                edge.push({h[j], static_cast<int>(j)});
+            }
+        }
+    }
+    out->height.resize(count);
+    out->area.resize(count);
+    for (std::size_t u = 0; u < count; ++u) {
+        out->height[u] = static_cast<float>(h[u]);
+        out->area[u] = static_cast<float>(area[u]);
+    }
+
+    // The brooks: each from its head (no brook flows into it) down to where it meets one already traced or the outline.
+    std::vector<char> brook(count, 0), fed(count, 0), traced(count, 0);
+    for (std::size_t u = 0; u < count; ++u) brook[u] = (!outlet[u] && area[u] >= dr.brook_area_m2) ? 1 : 0;
+    for (std::size_t u = 0; u < count; ++u) {
+        const int j = down[u];
+        if (brook[u] && j >= 0) fed[static_cast<std::size_t>(j)] = 1;
+    }
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        if (!brook[u] || fed[u]) continue;
+        MapBrookDef b;
+        int at = i;
+        while (true) {
+            const std::size_t a = static_cast<std::size_t>(at);
+            b.points.push_back({east_of(at), north_of(at)});
+            b.area_m2.push_back(area[a]);
+            if (traced[a] || outlet[a]) break;
+            traced[a] = 1;
+            const int j = down[a];
+            if (j < 0) break;
+            at = j;
+        }
+        if (b.points.size() < 3) continue;
+        SmoothLine(b.points, b.area_m2);
+        b.id = "brook_" + std::to_string(out->brooks.size() + 1);
+        out->brooks.push_back(std::move(b));
+    }
+    return out;
+}
+
+}  // namespace landform_detail
+
+// The hill country's bake for a landform and seed: built once per process and shared, so a district and the country it
+// lies in (whose files carry the same landform) hold the very same ground, to the last bit.
+inline std::shared_ptr<const LandformBake> LandformBakeFor(const MapLandformDef& l, std::uint64_t seed) {
+    std::string key = std::to_string(seed);
+    const auto add = [&key](double v) {
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), ",%.17g", v);
+        key += buf;
+    };
+    for (double v : {l.exaggeration, l.wavelength_m, l.warp_m, l.ridged, l.drainage.spacing_m, l.drainage.channel_area_m2,
+                     l.drainage.channel_slope, l.drainage.concavity, l.drainage.hillslope, l.drainage.steepness_spread, l.drainage.floor_m,
+                     l.drainage.trunk_share, l.drainage.trunk_wavelength_m, l.drainage.inland_tilt, l.drainage.brook_area_m2}) {
+        add(v);
+    }
+    for (const MapLandformRegionDef& r : l.regions) {
+        key += ";" + r.id;
+        add(r.relief_m);
+        add(r.blend_m);
+        for (const MapPoint& p : r.points) {
+            add(p.east_m);
+            add(p.north_m);
+        }
+    }
+    static std::mutex lock;
+    static std::map<std::string, std::shared_ptr<const LandformBake>> cache;
+    std::lock_guard<std::mutex> guard(lock);
+    std::shared_ptr<const LandformBake>& held = cache[key];
+    if (!held) held = landform_detail::Bake(l, seed);
+    return held;
+}
+
 // How deep a river's bed is cut below the ground around it.
 constexpr double kRiverBedDepthM = 2.0;
 
@@ -634,10 +1002,7 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
         if (dist < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * dist / hill.radius_m));
     }
     // The hill country, rising from the plain (before the valleys and rivers, which cut through it).
-    if (!d.landform.regions.empty()) {
-        const double relief = LandformRelief(d.landform, d.seed, e, n);
-        if (relief > 0.0) h += relief * LandformShape(d.landform, d.seed, e, n);
-    }
+    if (d.landform.bake) h += d.landform.bake->Height(e, n);
     // Ranges: across, a smooth rise to the crest; along it, peaks and saddles (two thirds to four thirds of its height).
     for (std::size_t i = 0; i < d.ridges.size(); ++i) {
         const MapRidgeDef& r = d.ridges[i];
@@ -1429,9 +1794,54 @@ private:
 
     // ------------------------------------------------------------------ the map proper
 
+    // The hill country's brooks (A.5 step 2) as water strips where the map's own ground is fine enough for them (the
+    // core and the detail areas): a hand's breadth over the ground in their valley's floor, 1.5-4 m wide by the area
+    // drained (a game value; the bed itself is below the bake's 50 m cells).
+    void LayBrooks() {
+        if (!def_.landform.bake) return;
+        for (const MapBrookDef& b : def_.landform.bake->brooks) {
+            MapStrip s;
+            s.surface = MapSurface::Water;
+            double area = 0.0;
+            int piece = 0;
+            const auto flush = [&]() {
+                if (s.points.size() >= 2) {
+                    s.width_m = std::clamp(1.0 + 0.6 * std::sqrt(area / static_cast<double>(s.points.size()) / 1e6), 1.5, 4.0);
+                    s.id = piece == 0 ? b.id : b.id + "_" + std::to_string(piece);
+                    ++piece;
+                    layout_.strips.push_back(s);
+                }
+                s.points.clear();
+                area = 0.0;
+            };
+            for (std::size_t i = 0; i < b.points.size(); ++i) {
+                const MapPoint& p = b.points[i];
+                if (!def_.InCore(p.east_m, p.north_m) && !def_.InDetail(p.east_m, p.north_m)) {
+                    flush();
+                    continue;
+                }
+                if (!s.points.empty()) {  // every half cell of the core, so the strip follows the ground
+                    const Vec3& q = s.points.back();
+                    const double len = std::hypot(p.east_m - q.x, p.north_m - q.y);
+                    const int n = std::max(1, static_cast<int>(std::ceil(len / (0.5 * def_.core_spacing_m))));
+                    for (int k = 1; k < n; ++k) {
+                        const double f = static_cast<double>(k) / n;
+                        const double e = q.x + (p.east_m - q.x) * f, nn = q.y + (p.north_m - q.y) * f;
+                        s.points.push_back({e, nn, GroundHeight(e, nn) + 0.08});
+                        area += b.area_m2[i];
+                    }
+                }
+                s.points.push_back({p.east_m, p.north_m, GroundHeight(p.east_m, p.north_m) + 0.08});
+                area += b.area_m2[i];
+            }
+            flush();
+        }
+    }
+
     void Lay() {
         noise::Stream rng(noise::Mix64(def_.seed ^ 0x1A70Full));
         LayLinesOf(def_.roads, def_.railways, def_.rivers);
+        LayBrooks();
         for (const MapSiteDef& s : def_.sites) LaySite(s, rng);
         for (const MapSettlementDef& s : def_.settlements) LaySettlement(s, rng, def_.roads);
         LayFarmsteads(rng);
@@ -2762,17 +3172,17 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             }
             if (out.valley_half_width_m <= 0.0) return Fail("terrain.valley.half_width_m", "must be > 0");
         }
-        return LoadLandform(*t, out.landform);
+        return LoadLandform(*t, out.seed, out.landform);
     }
 
     // terrain.landform (roadmap L11): {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions": [{"id", "relief_m",
     // "blend_km", "points": [[e, n], ...]}]}. Optional; without it the map has no hill country.
-    bool LoadLandform(const json::Value& t, MapLandformDef& out) {
+    bool LoadLandform(const json::Value& t, std::uint64_t seed, MapLandformDef& out) {
         const json::Value* l = t.Find("landform");
         if (l == nullptr) return true;
         const std::string p = "terrain.landform";
         double wl = out.wavelength_m / 1000.0, warp = out.warp_m / 1000.0;
-        if (!Keys(*l, p, {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions", "source", "confidence", "notes"}) ||
+        if (!Keys(*l, p, {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions", "drainage", "source", "confidence", "notes"}) ||
             !OptionalNumber(*l, p, "exaggeration", out.exaggeration) || !OptionalNumber(*l, p, "wavelength_km", wl) ||
             !OptionalNumber(*l, p, "warp_km", warp) || !OptionalNumber(*l, p, "ridged", out.ridged)) {
             return false;
@@ -2801,6 +3211,40 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             region.ring.push_back(region.points.front());
             out.regions.push_back(region);
         }
+        if (!LoadDrainage(*l, out.drainage)) return false;
+        out.bake = LandformBakeFor(out, seed);
+        return true;
+    }
+
+    bool LoadDrainage(const json::Value& l, MapLandformDrainageDef& out) {
+        const json::Value* d = l.Find("drainage");
+        if (d == nullptr) return true;
+        const std::string p = "terrain.landform.drainage";
+        double channel_km2 = out.channel_area_m2 / 1e6, brook_km2 = out.brook_area_m2 / 1e6, trunk_km = out.trunk_wavelength_m / 1000.0;
+        if (!Keys(*d, p, {"spacing_m", "channel_area_km2", "channel_slope", "concavity", "hillslope", "steepness_spread", "floor_m",
+                          "trunk_share", "trunk_wavelength_km", "inland_tilt", "brook_area_km2", "notes"}) ||
+            !OptionalNumber(*d, p, "spacing_m", out.spacing_m) || !OptionalNumber(*d, p, "channel_area_km2", channel_km2) ||
+            !OptionalNumber(*d, p, "channel_slope", out.channel_slope) || !OptionalNumber(*d, p, "concavity", out.concavity) ||
+            !OptionalNumber(*d, p, "hillslope", out.hillslope) || !OptionalNumber(*d, p, "steepness_spread", out.steepness_spread) ||
+            !OptionalNumber(*d, p, "floor_m", out.floor_m) || !OptionalNumber(*d, p, "trunk_share", out.trunk_share) ||
+            !OptionalNumber(*d, p, "trunk_wavelength_km", trunk_km) || !OptionalNumber(*d, p, "inland_tilt", out.inland_tilt) ||
+            !OptionalNumber(*d, p, "brook_area_km2", brook_km2)) {
+            return false;
+        }
+        if (out.spacing_m < 20.0 || out.spacing_m > 1000.0) return Fail(Join(p, "spacing_m"), "between 20 and 1000");
+        if (channel_km2 <= 0.0 || channel_km2 > 100.0) return Fail(Join(p, "channel_area_km2"), "between 0 and 100");
+        if (brook_km2 < channel_km2) return Fail(Join(p, "brook_area_km2"), "at least channel_area_km2");
+        if (out.channel_slope < 0.0 || out.channel_slope > 0.5) return Fail(Join(p, "channel_slope"), "between 0 and 0.5");
+        if (out.concavity < 0.0 || out.concavity > 2.0) return Fail(Join(p, "concavity"), "between 0 and 2");
+        if (out.hillslope <= 0.0 || out.hillslope > 1.0) return Fail(Join(p, "hillslope"), "between 0 and 1");
+        if (out.steepness_spread < 0.0 || out.steepness_spread > 0.9) return Fail(Join(p, "steepness_spread"), "between 0 and 0.9");
+        if (out.floor_m < 0.0 || out.floor_m > 1000.0) return Fail(Join(p, "floor_m"), "between 0 and 1000");
+        if (out.trunk_share < 0.0 || out.trunk_share > 1.0) return Fail(Join(p, "trunk_share"), "between 0 and 1");
+        if (trunk_km < 0.2 || trunk_km > 100.0) return Fail(Join(p, "trunk_wavelength_km"), "between 0.2 and 100");
+        if (out.inland_tilt < 0.0 || out.inland_tilt > 10.0) return Fail(Join(p, "inland_tilt"), "between 0 and 10");
+        out.channel_area_m2 = channel_km2 * 1e6;
+        out.brook_area_m2 = brook_km2 * 1e6;
+        out.trunk_wavelength_m = trunk_km * 1000.0;
         return true;
     }
 

@@ -61,7 +61,7 @@ The plot lab's latest renders against the traits. Mid-October, so the greens are
 
 | # | Where we are | Gap |
 |---|---|---|
-| K1 | *(6 Nov, A.3.15: hill country in the west and north-west, 70 m forms with 4° median slopes; no relief near the eye yet, the plain unchanged)* Before: flat to the horizon. The map's relief is three gentle bands (10 m over 18 km, 4 m over 6 km, 1.2 m over 1.5 km) and some isolated hills of 8-70 m; the detail area's meso relief (0.3-2.5 m) does not show at all at the plots' cameras | **The largest.** No plot shows a slope |
+| K1 | *(6 Nov, A.3.15-16: hill country in the west and north-west, baked from its drainage: branching valleys and ridges, 73 m from floor to crest, 6° median slopes, brooks in the valleys; no relief near the eye yet, the plain unchanged)* Before: flat to the horizon. The map's relief is three gentle bands (10 m over 18 km, 4 m over 6 km, 1.2 m over 1.5 km) and some isolated hills of 8-70 m; the detail area's meso relief (0.3-2.5 m) does not show at all at the plots' cameras | **The largest.** No plot shows a slope |
 | K2 | Woods are 100 m square blocks from the forest outlines and copses placed by noise; fields a grid of rectangles; neither knows the ground (there is none to know) | Large |
 | K3 | Fields of 85-198 ha (right for 1985's collective farms, trait T2), household strips near villages; at 150 m the land cover's 25 m cells show as a staircase along a field's edge (p05 high) | Medium. Big fields stay (they are the period's); the hills will cut them, and their margins and balks are missing |
 | K4 | First pass (A.3.13): bays and a lower mantle, but trunks seen through, lollipops and cone shrubs, a sparse grass fringe | Large |
