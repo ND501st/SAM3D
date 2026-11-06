@@ -2,12 +2,14 @@
 //
 // A field's crop and its state on a day come from the map's dressing and the crop calendar (map_dressing.hpp CropOf,
 // ground_layers.hpp StandOnDay): standing maize 2.4 m, sunflower 1.8 m, wheat 0.9 m in their seasons, nothing on stubble or
-// ploughland. Where a field stands is where the land cover is field (the 25 m cover cells: woods, towns, roads and water
-// cut it) inside the field's own rectangle (farm_fields.hpp FieldAt, straight at every distance). This is what a sight
-// line meets (MapTerrain merges it with the map's woods and buildings) and what Unreal draws, from the same cells.
+// ploughland; each field a share taller or shorter, and patches over it taller or shorter again (GroundLayerRules
+// StandAtPoint, roadmap A.3.10). Where a field stands is where the land cover is field (the 25 m cover cells: woods, towns,
+// roads and water cut it) inside the field's own rectangle (farm_fields.hpp FieldAt, straight at every distance). This is
+// what a sight line meets (MapTerrain merges it with the map's woods and buildings) and what Unreal draws, from the same
+// cells.
 //
-// Baked once for a day: one byte a cover cell (the tallest stand in it in decimetres, and whether a field's edge crosses
-// it) and the tallest top in every 500 m block. A path's chords are walked cell by cell and, in a cell a field's edge
+// Baked once for a day: one byte a cover cell (the most the stand in it can reach in decimetres, and whether a field's
+// edge crosses it) and the tallest top in every 500 m block. A path's chords are walked cell by cell and, in a cell a field's edge
 // crosses, field by field, so a field's edge is where FieldAt puts it, not at the cell's. The day is the session's start:
 // a field harvested during a long session stands until it ends.
 //
@@ -67,7 +69,7 @@ public:
         if (gi < 0) return 0.0;
         const CoverGrid& g = cover_->grids[static_cast<std::size_t>(gi)];
         if (cells_[static_cast<std::size_t>(gi)][g.IndexAt(e, n)] == 0) return 0.0;
-        return FieldStand(FieldAt(g.fields, e, n));
+        return StandOf(FieldAt(g.fields, e, n), e, n);
     }
     // The top of the crop at (east, north), above sea level (kNoObstacleTop: nothing stands).
     double TopAt(double e, double n) const override {
@@ -114,16 +116,19 @@ public:
 
     // Every stretch of the ground segment from (e0, n0) to (e1, n1) where a crop stands, at most a cover cell long, whose
     // top is no lower than `below_m`, told to `sink` with where the segment goes in and comes out of it and its top (the
-    // ground's highest at its ends and middle, plus the stand). Exact at a field's edge.
+    // ground's highest at its ends and middle, plus the field's highest stand there). Exact at a field's edge.
     void Chords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const override {
         if (!Any() || below_m > tallest_top_m_) return;
         const double de = e1 - e0, dn = n1 - n0;
         bool going = true;
-        const auto emit = [&](double ta, double tb, double stand) {
-            if (stand <= 0.0 || tb <= ta) return;
+        const auto emit = [&](double ta, double tb, const FieldCell& f) {
+            if (tb <= ta || FieldStand(f) <= 0.0) return;
             const double tm = 0.5 * (ta + tb);
-            const double ground = std::max({map_->GroundHeight(e0 + de * ta, n0 + dn * ta), map_->GroundHeight(e0 + de * tm, n0 + dn * tm),
-                                            map_->GroundHeight(e0 + de * tb, n0 + dn * tb)});
+            double ground = -1e300, stand = 0.0;
+            for (const double t : {ta, tm, tb}) {
+                ground = std::max(ground, map_->GroundHeight(e0 + de * t, n0 + dn * t));
+                stand = std::max(stand, StandOf(f, e0 + de * t, n0 + dn * t));
+            }
             if (ground + stand >= below_m) going = sink.Chord(ta, tb, ground + stand);
         };
         // The segment grid by grid: a detail area's grid where it covers, else the map's (CoverRaster::GridAt's order).
@@ -156,7 +161,7 @@ public:
                 if (cell == 0) return going;
                 if ((cell & kMixed) == 0) {
                     const double tm = 0.5 * (ta + tb);
-                    emit(ta, tb, FieldStand(FieldAt(g.fields, e0 + de * tm, n0 + dn * tm)));
+                    emit(ta, tb, FieldAt(g.fields, e0 + de * tm, n0 + dn * tm));
                     return going;
                 }
                 // A field's edge crosses the cell: field by field, each to where the segment leaves its rectangle or estate.
@@ -167,7 +172,7 @@ public:
                     const FieldCell f = FieldAt(g.fields, pe, pn);
                     double out = std::min(tb, FieldExit(g.fields, f, pe, pn, e0, n0, de, dn));
                     if (out <= s) out = std::min(tb, s + 1e-9);
-                    emit(s, out, FieldStand(f));
+                    emit(s, out, f);
                     s = out;
                 }
                 return going;
@@ -292,9 +297,11 @@ private:
     void AddPrism(TriMesh& m, const std::vector<std::array<double, 2>>& poly, double stand, const FieldCell& field, const std::array<float, 3>& top_colour,
                   const std::array<float, 3>& side_colour, std::vector<std::array<float, 2>>* uvs) const {
         if (stand <= 0.0 || poly.size() < 3) return;
+        // The field's own shade, and its crop's tone (GroundLayerRules::BlockTone: dry sunflower darker than dry maize).
         const float shade = static_cast<float>(0.9 + 0.2 * Unit24(Hash32(static_cast<std::uint32_t>(field.id >> 32) ^ 0x5EEDu)));
-        const std::array<float, 3> top{top_colour[0] * shade, top_colour[1] * shade, top_colour[2] * shade};
-        const std::array<float, 3> side{side_colour[0] * shade, side_colour[1] * shade, side_colour[2] * shade};
+        const std::array<float, 3> tone = layers_.BlockTone(CropOf(dressing_, field.id));
+        const std::array<float, 3> top{top_colour[0] * shade * tone[0], top_colour[1] * shade * tone[1], top_colour[2] * shade * tone[2]};
+        const std::array<float, 3> side{side_colour[0] * shade * tone[0], side_colour[1] * shade * tone[1], side_colour[2] * shade * tone[2]};
         const auto vertex = [&](double e, double n, double z, const Vec3& normal, const std::array<float, 3>& colour, double u, double v) {
             // The crop's tone mottled over tens of metres (thinner, drier, lodged patches), the same at a point for every cell.
             const float mottle = static_cast<float>(0.82 + 0.36 * noise::Fbm(0xC0A2Eull, e, n, 60.0, 3));
@@ -305,7 +312,8 @@ private:
             return static_cast<std::uint32_t>(m.positions.size() - 1);
         };
         const bool fringe = uvs != nullptr;  // the drawn form for a material: walls to the fringe, the top under it
-        const double top_at = fringe ? kTopShare * stand : stand, wall_to = fringe ? kFringe * stand : stand;
+        // Shares of the stand at each corner (StandOf: the field's height varies over it).
+        const double top_share = fringe ? kTopShare : 1.0, wall_share = fringe ? kFringe : 1.0;
         // The top, a fan, at the crop's height over the ground at each corner; its UV along the rows and across them.
         const double sh = std::sin(field.heading_rad), ch = std::cos(field.heading_rad);
         // UVs kept small for a GPU's floats: wrapped by whole periods of the material's patterns (225 m on a top: rows
@@ -313,34 +321,40 @@ private:
         const double u0 = 225.0 * std::floor((poly[0][0] * sh + poly[0][1] * ch) / 225.0), v0 = 225.0 * std::floor((poly[0][0] * ch - poly[0][1] * sh) / 225.0);
         const std::uint32_t first = static_cast<std::uint32_t>(m.positions.size());
         for (const std::array<double, 2>& p : poly) {
-            vertex(p[0], p[1], map_->GroundHeight(p[0], p[1]) + top_at, Vec3{0.0, 0.0, 1.0}, top, p[0] * sh + p[1] * ch - u0, p[0] * ch - p[1] * sh - v0);
+            vertex(p[0], p[1], map_->GroundHeight(p[0], p[1]) + top_share * StandOf(field, p[0], p[1]), Vec3{0.0, 0.0, 1.0}, top,
+                   p[0] * sh + p[1] * ch - u0, p[0] * ch - p[1] * sh - v0);
         }
         for (std::size_t i = 1; i + 1 < poly.size(); ++i) {
             m.indices.push_back(first);
             m.indices.push_back(first + static_cast<std::uint32_t>(i));
             m.indices.push_back(first + static_cast<std::uint32_t>(i + 1));
         }
-        // A wall on each edge beyond which the crop stands lower (a neighbour as tall covers it).
+        // A wall on each edge beyond which the crop stands lower (a neighbour as tall, within 2 cm, covers it: inside a
+        // field the height varies smoothly, so only a field's edge or a lower field's has one).
         for (std::size_t i = 0; i < poly.size(); ++i) {
             const std::array<double, 2>& a = poly[i];
             const std::array<double, 2>& b = poly[(i + 1) % poly.size()];
             const double de = b[0] - a[0], dn = b[1] - a[1], len = std::hypot(de, dn);
             if (len < 1e-6) continue;
             const Vec3 out{dn / len, -de / len, 0.0};  // right of a -> b: outward for a counter-clockwise polygon
-            if (StandAt(0.5 * (a[0] + b[0]) + 0.05 * out.x, 0.5 * (a[1] + b[1]) + 0.05 * out.y) >= stand - 1e-6) continue;
+            const double me = 0.5 * (a[0] + b[0]), mn = 0.5 * (a[1] + b[1]);
+            if (StandAt(me + 0.05 * out.x, mn + 0.05 * out.y) >= StandOf(field, me, mn) - 0.02) continue;
             const double ga = map_->GroundHeight(a[0], a[1]), gb = map_->GroundHeight(b[0], b[1]);
+            const double sa = StandOf(field, a[0], a[1]), sb = StandOf(field, b[0], b[1]);
             // Along the wall's line (the same along a straight edge cut into cells), the height as a share of the stand.
             const double along = a[0] * de / len + a[1] * dn / len;
-            const double ua = along - 230.0 * std::floor(along / 230.0), ub = ua + len, low = -0.3 / stand;
-            const std::uint32_t k = vertex(a[0], a[1], ga - 0.3, out, side, ua, low);
-            vertex(b[0], b[1], gb - 0.3, out, side, ub, low);
-            vertex(b[0], b[1], gb + wall_to, out, side, ub, wall_to / stand);
-            vertex(a[0], a[1], ga + wall_to, out, side, ua, wall_to / stand);
+            const double ua = along - 230.0 * std::floor(along / 230.0), ub = ua + len;
+            const std::uint32_t k = vertex(a[0], a[1], ga - 0.3, out, side, ua, -0.3 / sa);
+            vertex(b[0], b[1], gb - 0.3, out, side, ub, -0.3 / sb);
+            vertex(b[0], b[1], gb + wall_share * sb, out, side, ub, wall_share);
+            vertex(a[0], a[1], ga + wall_share * sa, out, side, ua, wall_share);
             for (const std::uint32_t t : {k, k + 1, k + 2, k, k + 2, k + 3}) m.indices.push_back(t);
         }
     }
 
+    // The field's calendar height on the day, and its height at a point of it (the variation over it added).
     double FieldStand(const FieldCell& f) const { return layers_.StandOnDay(CropOf(dressing_, f.id), f.id, day_); }
+    double StandOf(const FieldCell& f, double e, double n) const { return layers_.StandAtPoint(CropOf(dressing_, f.id), f.id, day_, e, n); }
 
     int GridIndex(double e, double n) const {
         for (std::size_t i = 0; i < cover_->grids.size(); ++i) {
@@ -436,7 +450,8 @@ private:
             }
         }
         if (stand <= 0.0 && !mixed) return 0;
-        const int dm = std::min(127, static_cast<int>(std::ceil(stand * 10.0 - 1e-9)));
+        // The most it can reach anywhere in the cell (the variation's bound): what the blocks' tops and StandWithin read.
+        const int dm = std::min(127, static_cast<int>(std::ceil(stand * layers_.MostVary() * 10.0 - 1e-9)));
         if (dm == 0 && mixed) {
             // Nothing stands at the samples, but a field's edge crosses it: a sliver of a standing field may (walked anyway
             // when its neighbours stand; 0 keeps open ground cheap).

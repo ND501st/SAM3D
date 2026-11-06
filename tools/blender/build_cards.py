@@ -11,7 +11,8 @@ import bpy
 
 # name: (quads, turn between them in degrees): three quads 60 degrees apart round a tuft, two crossed for the thinner plants.
 CARDS = {"grass_card": (3, 60.0), "straw_card": (2, 90.0), "reed_card": (2, 90.0), "maize_card": (2, 90.0), "maize_card_b": (2, 90.0),
-         "maize_card_c": (2, 90.0), "maize_card_d": (2, 90.0), "maize_card_e": (2, 90.0), "maize_card_f": (2, 90.0)}
+         "maize_card_c": (2, 90.0), "maize_card_d": (2, 90.0), "maize_card_e": (2, 90.0), "maize_card_f": (2, 90.0),
+         "sunflower_card": (2, 90.0), "sunflower_card_b": (2, 90.0), "sunflower_card_c": (2, 90.0)}
 
 
 def main():

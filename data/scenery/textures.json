@@ -1,6 +1,6 @@
 {
   "register_id": "textures",
-  "notes": "The texture register (roadmap T1, docs/scenery/TERRAIN_ROADMAP.md): every third-party texture the ground and the map's buildings are drawn with, where it comes from and under what licence, as data/scenery/assets.json does for models. Only free, CC0 or CC-BY, from the sites tools/fetch_textures.py fetches from (Poly Haven, ambientCG). The files are fetched per machine into art/thirdparty/textures/<id>/ (ignored by git) and imported by tools/ue_build_ground_material.py. A ground layer names its texture by id (data/scenery/ground_layers.json). scan_m is the scan's real width (the site's own figure); the layer's tile_m sets its repeat on the ground. The picks and why: docs/scenery/TERRAIN_ROADMAP.md section 4.",
+  "notes": "The texture register (roadmap T1, docs/scenery/TERRAIN_ROADMAP.md): every third-party texture the ground and the map's buildings are drawn with, where it comes from and under what licence, as data/scenery/assets.json does for models. Only free: CC0 or CC-BY from the sites tools/fetch_textures.py fetches from (Poly Haven, ambientCG), or a Quixel Megascan under Fab's Standard licence (free on Fab since Nov 2026; site quixel), which the owner claims and downloads from Fab into art/thirdparty/quixel/zips/ and the tool unpacks, its OpenGL normal flipped to DirectX. The files are fetched per machine into art/thirdparty/textures/<id>/ (ignored by git) and imported by tools/ue_build_ground_material.py. A ground layer names its texture by id (data/scenery/ground_layers.json). scan_m is the scan's real width (the site's own figure); the layer's tile_m sets its repeat on the ground. The picks and why: docs/scenery/TERRAIN_ROADMAP.md section 4.",
   "textures": [
     {
       "id": "leafy_grass",
@@ -174,6 +174,293 @@
         "albedo": "9f9459ae378584f568c9da887a30ab5987890df422af5a157763a51992e61245",
         "normal": "9e20a41c6dde507de86f2f01115543e789c80ef891ea6f84393da6b175604cde",
         "roughness": "2f977986be51d4e07e7a3a03051e49049f9c94cefb0246a714400d2a076c8044"
+      }
+    },
+    {
+      "id": "q_grassy_soil_xbreair",
+      "site": "quixel",
+      "asset": "grassy_soil_xbreair",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/9b88de26-81a2-44ca-bd6b-c61dc41b9fb3",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans material 'Grassy Soil' (scan 2x2 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "09410ee2ebb2136fadbd9b01895a69bd9ef9ab73a5c085198be7aa2ec2ad4a2c",
+        "albedo": "16b7254b7e533c258636370fe2e844c2766c44df16f4f29a99e3a64fc21b476f",
+        "normal": "828079d295ad41e882e976d97760085fbcbf3ad56671f43e1926effb939fe840",
+        "roughness": "7a50ba2200e43c1a04f27f5104dff13d9a254d4c534b0f83a6fd63c62287c953"
+      }
+    },
+    {
+      "id": "q_arid_grass_pbiaejch2",
+      "site": "quixel",
+      "asset": "arid_grass_pbiaejch2",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/16422afa-1450-4402-ab3d-bdc5f5a62af9",
+      "resolution": "2k",
+      "scan_m": 0.4,
+      "for": "Megascans material 'Arid Grass' (scan 0.4x0.4 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "normal": "60d2d043d3e30bc6817e4cbd4f00c460353b30af9101a0e58334626d721aeffc",
+        "ao": "9d2fc1ea200f34cde95065ccd3cfc04cdec2cb3b477bb921affb82b634228826",
+        "roughness": "88fca5f96226d547fe55e627ab50eed8dd8e4ca118b46eff3723c2b94e7a4803",
+        "albedo": "997ffc40f356a46adf7c6864943f6053583ae168bcacfc0e6abc59e76208db13"
+      }
+    },
+    {
+      "id": "q_dirt_road_omdgw0",
+      "site": "quixel",
+      "asset": "dirt_road_omdgw0",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/1b0a0de7-fbc6-4d6a-b04d-1671d3adab1a",
+      "resolution": "2k",
+      "scan_m": 0.87,
+      "for": "Megascans material 'Dirt Road' (scan 0.87x0.87 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "202783164874f5e298355d1bb96a8c1a0035e62643aef73fcff705705db954b7",
+        "albedo": "920cd7510641aed062043fdb1f64c74cfa3f92c1abd4f45f47ff14c0e836d124",
+        "normal": "3e69ab9df7524d9c8d44e531d041389591c261c19f183a26baba9518964abfda",
+        "roughness": "21fc4d52ea754392e92b9816686035d13559179b45cc3749b0642dea27b22d20"
+      }
+    },
+    {
+      "id": "q_dirt_road_omdg10",
+      "site": "quixel",
+      "asset": "dirt_road_omdg10",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/04e25963-1790-4b85-bc1e-dc96b4f35af0",
+      "resolution": "2k",
+      "scan_m": 0.87,
+      "for": "Megascans material 'Dirt Road' (scan 0.87x0.87 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "410afd149739876d9fe3fde2e34de875f0200f0613cd73b96c31303dbe7cb096",
+        "albedo": "f7e20c2e16568db746218bcd1478fd89e2720e4db21a25b80562b57e48039add",
+        "normal": "ec10a46cbdd94f9a1084a8947630e11d9f907ac5d5876e5dc8e7b562ac916b83",
+        "roughness": "4c8f62ca2023c07fa2fc5164654b503b3b6675422a97ccadba42eabf238f36a5"
+      }
+    },
+    {
+      "id": "q_gravel_ground_vi0maebg",
+      "site": "quixel",
+      "asset": "gravel_ground_vi0maebg",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/c19d425f-4957-4238-b1d7-34c984e9867f",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans material 'Gravel Ground' (scan 2x2 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "280c4843e202df873bee680f6eba69bee1a288cfd3534abbdc1227f692bb3d83",
+        "albedo": "bacc7f9d0f3225bea05020c2f844266f5e75b3c1d95e538232d29917c8c43b8f",
+        "normal": "4d2a7b1990e7c1d18127f7752fc4bf94e00b34b4e860a86cdcc721e16a0b0841",
+        "roughness": "662931674ac7a99f88fb4a31aafd090c3a24a0cd0194327d8e4d2c795d3d4451"
+      }
+    },
+    {
+      "id": "q_soil_and_gravel_pcciq0",
+      "site": "quixel",
+      "asset": "soil_and_gravel_pcciq0",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/07a43eea-e608-4b35-ae29-4ed884beb12a",
+      "resolution": "2k",
+      "scan_m": 0.85,
+      "for": "Megascans material 'Soil And Gravel' (scan 0.85x0.85 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "e0012b6fbe0b0c3560007dca459665f2822a12dd5034dc09507d5648b1685b11",
+        "albedo": "4fdb0c72a1991a814e9e3ab70a60153524a8ac481bd7db4730c9f15816e8ce88",
+        "normal": "5f8ec9397e71af4dacb68bd4d72328c84c05daabb3311add3535b8253bd41d1c",
+        "roughness": "9fe3a785dd5c829833f5cd58859307392a486989d39d369015a5d37b54583b89"
+      }
+    },
+    {
+      "id": "q_asphalt_fresh_sfrofg0a",
+      "site": "quixel",
+      "asset": "asphalt_fresh_sfrofg0a",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/d656c99c-e792-4880-b832-7835dd450395",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans material 'Asphalt Fresh' (scan 2x2 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "339d23598206811560905435ffef8d7b6600aca1942c3f1eb9194799b3e41513",
+        "albedo": "4db6971121b6baeefb680daf2572981ad91402b17499058c0567049740e58bfa",
+        "normal": "9aa4581cac56a47e22387979ff9c8635816a66db644ba1d059a865dcc0652e7c",
+        "roughness": "cb5b514151da7dfc89fab0e50475080215b91579b049c9dab664989811d31c44"
+      }
+    },
+    {
+      "id": "q_concrete_slab_vmcxajwfw",
+      "site": "quixel",
+      "asset": "concrete_slab_vmcxajwfw",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/1607354c-659f-4db1-a0c2-dce2e09ff461",
+      "resolution": "2k",
+      "scan_m": 8.0,
+      "for": "Megascans material 'Concrete Slab' (scan 8x4 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "0ef3b17eada8d8129fa3c2d89d40aee144fbbda3ee58a14b2b16b9b20229c3c9",
+        "albedo": "5553d363dbac5645edc82e0476141b781d5974891d14cb1e3b759cf50a66ec2b",
+        "normal": "a260753f9cc0df2971b35279fbc2f60d535df1a35e154e1522bcdb3bfc63ebac",
+        "roughness": "024ed49510cbb5d327229203093c6a76f4c947dc1708251e308d017c38e7a81a"
+      }
+    },
+    {
+      "id": "q_damaged_concrete_slab_tbqlffhr",
+      "site": "quixel",
+      "asset": "damaged_concrete_slab_tbqlffhr",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/afe6eb53-f9bb-462c-87a4-75f507fab2ed",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans material 'Damaged Concrete Slab' (scan 2x2 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "5b018cf7cae5f14b629d0132cb9d2d5d6361a750d472c9820550f2b7494a8bcd",
+        "albedo": "56ccfedb5af83f8a257d9bbf8d6063bccecc678ede659b68890bc1700c409836",
+        "normal": "fbcdbf9438b942b7da6ee78704dc79525f41812091a88c2c6c123323bfcbb5e4",
+        "roughness": "621a39eea3360c96604e58acd025bf8b5f5f782ecca99115059fe815dceabeb3"
+      }
+    },
+    {
+      "id": "q_soil_mud_pkbch0",
+      "site": "quixel",
+      "asset": "soil_mud_pkbch0",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/c6898458-3c90-4fe3-8572-ab35cc3f1033",
+      "resolution": "2k",
+      "scan_m": 1.0,
+      "for": "Megascans material 'Soil Mud' (scan 1x1 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "cc3394eea619adc034e3c485b0ed3562d95cbb2265545fca1e2cba0565df90ff",
+        "albedo": "c429ed211d4160a5a47bc67585759d392ebbb12005763c5d1393e4cd2c27b102",
+        "normal": "6b01830a3bf00cf471cf003c2b7527edc9e0aafc6f658bec6a6b577bcf1817c4",
+        "roughness": "b3681d34ad2c4b5adf76403e49804e7209f647ab2c003c1bd538f77d3cef7415"
+      }
+    },
+    {
+      "id": "q_wheat_kicjn2",
+      "site": "quixel",
+      "asset": "wheat_kicjn2",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/0eccec61-26c4-4af2-b92f-41c2356ce5b8",
+      "resolution": "2k",
+      "scan_m": 0.95,
+      "for": "Megascans material 'Wheat' (scan 0.95x0.95 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "albedo": "11724bd2adb469beb9263f0b6ce26395a7c7c2c575bd0e9c2ad0057db406531e",
+        "normal": "1b933e10dda7e4861f01e9bcb3d55cd319c16c1e8db60f52868fb822b79f2fa2",
+        "roughness": "195eed9c05cf18611b326129783be09f65fb1dfd8d0d790ee867df007c088688"
+      }
+    },
+    {
+      "id": "q_wheat_peemb2",
+      "site": "quixel",
+      "asset": "wheat_peemb2",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/0286d8e2-7042-46e9-a7ab-6cb3245b1f21",
+      "resolution": "2k",
+      "scan_m": 0.86,
+      "for": "Megascans material 'Wheat' (scan 0.86x0.86 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "albedo": "2cc0bb4277f5337913b2ed96c947ef748f5c3a2698c7181ae2c11ad1f9a485dd",
+        "normal": "47a89cdbdcf5c4bb32420a2e6d7f3a6d61acdf4b2694094b69cfcf1579b5d171",
+        "roughness": "c94d953fd79bbc7850a317d89e14445b0d232c610d7234ae61121498129fd214"
+      }
+    },
+    {
+      "id": "q_mud_tire_tracks_wcksce0",
+      "site": "quixel",
+      "asset": "mud_tire_tracks_wcksce0",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/0e14c66e-d570-4466-9b02-44f5addcedfa",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans material 'Mud Tire Tracks' (scan 2x2 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer",
+      "sha256": {
+        "ao": "37ecc536d00e400d3b2e159e16d50e0f4dba76f0476212215c3ac2f4b1e949d4",
+        "albedo": "908eced2012be73a7f3bd359709e01f9c502cd2d8574c7fd095b658aa0dd7ca1",
+        "normal": "ff683d8d0783755dd067104652eab2b366a79fdf2de98e55585f3966dde6d6a3",
+        "roughness": "1e69a92233723fb2149b94b584dd837ad9f1f3b0c1cb43e7610f983ba97fd2c5"
+      }
+    },
+    {
+      "id": "q_dry_grass_sjtnnul",
+      "site": "quixel",
+      "asset": "dry_grass_sjtnnul",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/029c71e9-1c8b-4a02-aef5-8d3ea582300f",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans decal 'Dry Grass' (scan 2x0.25 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer; a decal (it has an opacity map), not a tiling ground",
+      "sha256": {
+        "ao": "08c8dfedc8d19ad4f81d02096657df0a3fa0a6f993a5cee8e0c2c88a845049fa",
+        "albedo": "590b59a9bb6400b0444f632f2cb655ad4d53af4fc9d3e20a6c165e3660fd4c7f",
+        "normal": "d884606e851fc227ff0bfdf96decd296ac3d5b78aaf405a25750aafa21260eb0",
+        "roughness": "5313685f9b304f92946cd79e9c27c0b90c25b57653f97e4ceaec00eb787cde9b"
+      }
+    },
+    {
+      "id": "q_dry_grass_tc0owlh",
+      "site": "quixel",
+      "asset": "dry_grass_tc0owlh",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/0842bb9e-5d20-44e6-b12f-7c95d4f99e88",
+      "resolution": "2k",
+      "scan_m": 0.5,
+      "for": "Megascans decal 'Dry Grass' (scan 0.5x0.5 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer; a decal (it has an opacity map), not a tiling ground",
+      "sha256": {
+        "ao": "fd6144e49c620785a15f3148a73142827d64ee967a04e3e6281b73381e4084d8",
+        "albedo": "7ec7202bfa0b071b8ec2024d16253598d6a3c0f06ecbba16e4b318f80575f05b",
+        "normal": "7ef9efb37754b1b181656503a1772aa16853481119b85f754fca189906543633",
+        "roughness": "8c705831e15fa85827093bf9785726218696345a36b66ae00478782756d02279"
+      }
+    },
+    {
+      "id": "q_dry_grass_sf2kpzh",
+      "site": "quixel",
+      "asset": "dry_grass_sf2kpzh",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/92073002-aee8-478f-af56-02a65c0b853b",
+      "resolution": "2k",
+      "scan_m": 2.0,
+      "for": "Megascans decal 'Dry Grass' (scan 2x2 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer; a decal (it has an opacity map), not a tiling ground",
+      "sha256": {
+        "ao": "dbf99d9dfd0d9bef3debbf25d9398e4dfc47e5423aa87e580be3b558dd52df32",
+        "albedo": "ddf9140a062f1aef52b32050345cf83f4d525e458b4c031fb4a101ca3ac947d0",
+        "normal": "7abeca5c3bef597836b6de418701967cfc7027b67cfe2dc9a56e0cb2c32b5e6f",
+        "roughness": "f003dd765b7ae52eeda4736cdf79b153171cb95f42efe5dbf0c073b000888722"
+      }
+    },
+    {
+      "id": "q_tire_tracks_on_mud_seymxkg",
+      "site": "quixel",
+      "asset": "tire_tracks_on_mud_seymxkg",
+      "licence": "Fab-Standard",
+      "author": "Quixel",
+      "origin": "https://www.fab.com/listings/045ed3f6-833e-496a-9a66-14a089a2f135",
+      "resolution": "2k",
+      "scan_m": 1.0,
+      "for": "Megascans decal 'Tire Tracks On Mud' (scan 1x0.5 m); claimed 6 Nov 2026 on the Professional tier, not yet given to a ground layer; a decal (it has an opacity map), not a tiling ground",
+      "sha256": {
+        "ao": "4a7ce12b203e54a78c4cbe600c3c3e501bf88bc3bcdde2582c97b4e58674823f",
+        "albedo": "6c0bd089792b83bf8fb997b5fc228268de6997593356ea094aadb3a2bbd42d6e",
+        "normal": "4e45d26c2f9c3a5b3f160b42a0128feeadd9deedd225f23698e37cd568d7b8a1",
+        "roughness": "2fea90766e01304daa5a20296b628db54bd29de63ee1cb3c915eefa0d173d55d"
       }
     }
   ]

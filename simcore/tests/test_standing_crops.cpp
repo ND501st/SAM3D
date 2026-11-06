@@ -53,12 +53,12 @@ const Rig& TheRig() {
     return rig;
 }
 
-// The truth at a point: what the cover and the field's calendar say stands there.
+// The truth at a point: what the cover, the field's calendar and the variation over it say stands there.
 double Truth(const Rig& r, double e, double n) {
     const CoverGrid* g = r.cover->GridAt(e, n);
     if (g == nullptr || static_cast<Cover>(g->cover[g->IndexAt(e, n)]) != Cover::Field) return 0.0;
     const FieldCell f = FieldAt(g->fields, e, n);
-    return r.layers.StandOnDay(CropOf(r.dressing, f.id), f.id, kDay);
+    return r.layers.StandAtPoint(CropOf(r.dressing, f.id), f.id, kDay, e, n);
 }
 
 struct Collect final : ObstacleChordSink {
@@ -78,11 +78,11 @@ bool FindStandingRun(const Rig& r, double& e_out, double& n_out, double& heading
     for (int row = 40; row < g.rows - 40; row += 7) {
         for (int col = 40; col < g.cols - 40; col += 7) {
             const double e = g.CentreEast(col), n = g.CentreNorth(row);
-            if (Truth(r, e, n) < 2.0) continue;
+            if (Truth(r, e, n) < 1.5) continue;
             const FieldCell f = FieldAt(g.fields, e, n);
             const double sh = std::sin(f.heading_rad), ch = std::cos(f.heading_rad);
             bool all = true;
-            for (double s = -200.0; s <= 200.0 && all; s += 2.0) all = Truth(r, f.centre_e + s * sh, f.centre_n + s * ch) >= 2.0;
+            for (double s = -200.0; s <= 200.0 && all; s += 2.0) all = Truth(r, f.centre_e + s * sh, f.centre_n + s * ch) >= 1.5;
             if (!all) continue;
             e_out = f.centre_e;
             n_out = f.centre_n;
@@ -138,11 +138,63 @@ SC_TEST("standing crops: the calendar's heights grow from a field's own day, and
     SC_EXPECT(!LoadGroundLayers(with(", \"stand_m\": 2.0, \"grow_days\": 2.5"), r.dressing, l, &e));
 }
 
+SC_TEST("standing crops: a field's height varies over it and from field to field, within the bounds the loader holds") {
+    const Rig& r = TheRig();
+    if (r.crops == nullptr) return;
+    SC_EXPECT(r.layers.vary_field > 0.0 && r.layers.vary_patch > 0.0);
+    // Along a 400 m run through a standing field: the height swings by tens of centimetres, smoothly, within the bounds.
+    double e = 0.0, n = 0.0, h = 0.0;
+    SC_EXPECT(FindStandingRun(r, e, n, h));
+    const CoverGrid& g = r.cover->grids.back();
+    const FieldCell f = FieldAt(g.fields, e, n);
+    const double base = r.layers.StandOnDay(CropOf(r.dressing, f.id), f.id, kDay);
+    const double lo_bound = base * (1.0 - r.layers.vary_field - r.layers.vary_patch), hi_bound = base * r.layers.MostVary();
+    double lo = 1e300, hi = 0.0, steepest = 0.0, last = -1.0;
+    for (double s = -200.0; s <= 200.0; s += 1.0) {
+        const double here = r.crops->StandAt(f.centre_e + s * std::sin(h), f.centre_n + s * std::cos(h));
+        lo = std::min(lo, here);
+        hi = std::max(hi, here);
+        if (last >= 0.0) steepest = std::max(steepest, std::fabs(here - last));
+        last = here;
+    }
+    std::printf("    a run of 400 m in a field of %.1f m: %.2f to %.2f m, at most %.3f m from one metre to the next\n", base, lo, hi, steepest);
+    SC_EXPECT(lo >= lo_bound - 1e-9 && hi <= hi_bound + 1e-9);
+    SC_EXPECT(hi - lo > 0.3);      // it undulates
+    SC_EXPECT(steepest < 0.08);   // smoothly: no step inside a field
+    // Field to field: the same crop on the same day, a share apart.
+    std::size_t taller = 0, shorter = 0;
+    for (std::uint64_t id = 1; id < 400; ++id) {
+        const double v = r.layers.StandVary(id * 0x9E3779B97F4A7C15ull, 1234.5, -987.0) - r.layers.StandVary(0x9E3779B97F4A7C15ull, 1234.5, -987.0);
+        taller += v > 0.02 ? 1 : 0;
+        shorter += v < -0.02 ? 1 : 0;
+    }
+    SC_EXPECT(taller > 50 && shorter > 50);
+    // The loader holds the shares.
+    GroundLayerRules l;
+    std::string err;
+    std::ifstream file(kData + "/scenery/ground_layers.json", std::ios::binary);
+    std::ostringstream text;
+    text << file.rdbuf();
+    const std::string json = text.str(), at = "\"patch\": 0.20";
+    const std::size_t p = json.find(at);
+    SC_EXPECT(p != std::string::npos);
+    if (p == std::string::npos) return;
+    const auto with = [&](const std::string& instead) { return std::string(json).replace(p, at.size(), instead); };
+    SC_EXPECT(LoadGroundLayers(with("\"patch\": 0.1"), r.dressing, l, &err) && std::fabs(l.MostVary() - 1.15) < 1e-9);
+    SC_EXPECT(!LoadGroundLayers(with("\"patch\": 0.5"), r.dressing, l, &err));
+    std::string both = with("\"patch\": 0.25");
+    const std::size_t pf = both.find("\"field\": 0.05");
+    SC_EXPECT(pf != std::string::npos);
+    if (pf != std::string::npos) SC_EXPECT(!LoadGroundLayers(both.replace(pf, 13, "\"field\": 0.2"), r.dressing, l, &err));  // 0.45 in all
+    SC_EXPECT(!LoadGroundLayers(with("\"patch\": 0.2, \"lumps\": 1"), r.dressing, l, &err));
+}
+
 SC_TEST("standing crops: the bake says what stands at every point, as the cover and the calendar do") {
     const Rig& r = TheRig();
     if (r.crops == nullptr) return;
     std::printf("    baked in %.0f ms: tallest %.1f m\n", r.bake_ms, r.crops->TallestStand());
-    SC_EXPECT(r.crops->Any() && std::fabs(r.crops->TallestStand() - 2.4) < 1e-9);
+    // The bake's tallest is the variation's bound over the calendar's tallest, to the decimetre above.
+    SC_EXPECT(r.crops->Any() && r.crops->TallestStand() >= r.layers.TallestVaried() - 1e-9 && r.crops->TallestStand() <= r.layers.TallestVaried() + 0.1);
     // A lattice of points over the map, a little off the cells' lines.
     std::size_t points = 0, standing = 0, wrong = 0, sliver = 0;
     const CoverGrid& g = r.cover->grids.back();
@@ -162,8 +214,8 @@ SC_TEST("standing crops: the bake says what stands at every point, as the cover 
     // The top: the ground plus the stand.
     double e = 0.0, n = 0.0, h = 0.0;
     SC_EXPECT(FindStandingRun(r, e, n, h));
-    SC_EXPECT(std::fabs(r.crops->TopAt(e, n) - (r.map->GroundHeight(e, n) + 2.4)) < 1e-9);
-    SC_EXPECT(r.crops->StandWithin(e, n, 30.0) >= 2.4);
+    SC_EXPECT(std::fabs(r.crops->TopAt(e, n) - (r.map->GroundHeight(e, n) + Truth(r, e, n))) < 1e-9);
+    SC_EXPECT(r.crops->StandWithin(e, n, 30.0) >= Truth(r, e, n));
     SC_EXPECT(r.crops->TopBound(e - 10.0, n - 10.0, e + 10.0, n + 10.0) >= r.crops->TopAt(e, n));
 }
 
@@ -227,7 +279,7 @@ SC_TEST("standing crops: a man in standing maize does not see 400 m through it; 
     std::printf("    across the maize at (%.0f, %.0f): bare %s, with the crops %s, from 5 m %s\n", e, n, open_bare ? "clear" : "blocked",
                 open_crops ? "clear" : "blocked", over ? "clear" : "blocked");
     SC_EXPECT(open_bare && !open_crops && over);
-    SC_EXPECT(crops.ObstacleHeightAt(e, n) >= 2.4 && bare.ObstacleHeightAt(e, n) < 2.4);
+    SC_EXPECT(crops.ObstacleHeightAt(e, n) >= Truth(r, e, n) && bare.ObstacleHeightAt(e, n) < Truth(r, e, n));
     SC_EXPECT(crops.ObstacleTallestM() >= 2.4);
 }
 
@@ -286,12 +338,13 @@ SC_TEST("standing crops: the block Unreal draws covers what stands, to the squar
         const double stand = r.crops->StandAt(p.x - 0.05 * f.normals[i].x, p.y - 0.05 * f.normals[i].y);
         if (stand <= 0.0) continue;  // a corner on a field's very edge
         const double over = p.z - r.map->GroundHeight(p.x, p.y);
+        // The stand 5 cm in from the vertex: within a centimetre of the vertex's own (the height varies smoothly).
         if (f.normals[i].z > 0.5) {
-            tops_wrong += std::fabs(over - StandingCrops::kTopShare * stand) < 1e-6 ? 0 : 1;
+            tops_wrong += std::fabs(over - StandingCrops::kTopShare * stand) < 0.01 ? 0 : 1;
         } else {
             const double v = uvs[i][1];
-            const bool foot = std::fabs(v + 0.3 / stand) < 1e-4 && std::fabs(over + 0.3) < 1e-6;
-            const bool head = std::fabs(v - StandingCrops::kFringe) < 1e-4 && std::fabs(over - StandingCrops::kFringe * stand) < 1e-6;
+            const bool foot = std::fabs(v + 0.3 / stand) < 1e-3 && std::fabs(over + 0.3) < 1e-6;
+            const bool head = std::fabs(v - StandingCrops::kFringe) < 1e-4 && std::fabs(over - StandingCrops::kFringe * stand) < 0.01;
             walls_wrong += foot || head ? 0 : 1;
         }
     }

@@ -284,6 +284,78 @@ SC_TEST("recipes: a crop's rows lie along its parcel's furrows, row_m apart, on 
     SC_EXPECT(ring.size() < 24000);  // the thickest ring on the map: the rows (21,043 at b3), a little over the 20,000 of an average one
 }
 
+SC_TEST("recipes: a scatter kept to a crop stands only on its fields; the wheat's swaths lie a header's width apart") {
+    const std::vector<std::string> ids = Rules().KindIds();
+    const auto kind = [&](const char* id) {
+        for (std::size_t i = 0; i < ids.size(); ++i) {
+            if (ids[i] == id) return static_cast<int>(i);
+        }
+        return -1;
+    };
+    const int dry = Layers().Index("dry_stalks"), maize = Layers().CropIndex("maize"), sunflower = Layers().CropIndex("sunflower");
+    SC_EXPECT(dry >= 0 && maize >= 0 && sunflower >= 0 && kind("maize") >= 0 && kind("sunflower") >= 0);
+    // A field of each crop standing dry on the day, near the battery.
+    const auto find = [&](int crop, double& e_out, double& n_out) {
+        for (double r = 0.0; r < 6000.0; r += 50.0) {
+            for (double a = 0.0; a < 2.0 * kPi; a += r > 0.0 ? 50.0 / r : 7.0) {
+                const double e = 8000.0 + r * std::cos(a), n = -8000.0 + r * std::sin(a);
+                FieldCell f;
+                if (PointLayer(Raster(), Dressing(), Layers(), e, n, kDay) != dry || !ParcelAt(Raster(), e, n, f) || CropOf(Dressing(), f.id) != crop) continue;
+                e_out = e;
+                n_out = n;
+                return true;
+            }
+        }
+        return false;
+    };
+    const int ri = RecipeIndex("dry_stalks");
+    for (const int crop : {maize, sunflower}) {
+        double e = 0.0, n = 0.0;
+        SC_EXPECT(find(crop, e, n));
+        std::size_t mine = 0, wrong = 0;
+        for (const RecipeCandidate& c : All(e - 40.0, n - 40.0, e + 40.0, n + 40.0)) {
+            if (c.recipe != ri) continue;
+            FieldCell f;
+            const int here = ParcelAt(Raster(), c.east_m, c.north_m, f) ? CropOf(Dressing(), f.id) : -1;
+            const int want = c.kind == kind("maize") ? maize : sunflower;
+            wrong += here == want ? 0 : 1;
+            mine += here == crop ? 1 : 0;
+        }
+        std::printf("    dry %s round (%.0f, %.0f): %zu plants of its own, %zu on another crop's field\n", Layers().crop_ids[static_cast<std::size_t>(crop)].c_str(), e, n,
+                    mine, wrong);
+        SC_EXPECT(mine > 2000 && wrong == 0);
+    }
+    // The wheat stubble's swaths: each within a quarter metre of its line, the lines 6 m apart along the furrows.
+    double e = 0.0, n = 0.0;
+    SC_EXPECT(FindGround("wheat_stubble", 8000.0, -8000.0, e, n));
+    const int wi = RecipeIndex("wheat_stubble");
+    std::size_t swaths = 0, off = 0, stubble = 0;
+    for (const RecipeCandidate& c : All(e - 60.0, n - 60.0, e + 60.0, n + 60.0)) {
+        if (c.recipe != wi) continue;
+        stubble += c.kind == kind("stubble") ? 1 : 0;
+        if (c.kind != kind("swath")) continue;
+        ++swaths;
+        const double v = (c.east_m * std::cos(c.heading_rad) - c.north_m * std::sin(c.heading_rad)) / 6.0;
+        off += std::fabs(v - std::floor(v) - 0.5) * 6.0 <= 0.25 + 1e-6 ? 0 : 1;
+    }
+    std::printf("    wheat stubble round (%.0f, %.0f): %zu stubble tufts, %zu swath pieces, %zu off their line\n", e, n, stubble, swaths, off);
+    SC_EXPECT(swaths > 500 && off == 0 && stubble > swaths * 5);
+    // The loader: across_m for rows only and within 0.4 of row_m; crops the dressing's.
+    Recipe r;
+    std::string err;
+    const auto with = [&](const std::string& scatter) {
+        return R"({"recipe_id": "x", "applies": {"layers": ["stubble"]}, "priority": 1, "bands": [{"id": "body", "scatter": [)" + scatter +
+               R"(]}], "source": "s", "confidence": "c"})";
+    };
+    SC_EXPECT(LoadRecipe(with(R"({"kind": "swath", "process": "rows", "per_ha": 1400, "row_m": 6, "across_m": 0.25})"), Layers(), ids, r, &err));
+    SC_EXPECT(!LoadRecipe(with(R"({"kind": "swath", "process": "rows", "per_ha": 1400, "row_m": 6, "across_m": 3})"), Layers(), ids, r, &err));
+    SC_EXPECT(!LoadRecipe(with(R"({"kind": "swath", "process": "uniform", "per_ha": 1400, "across_m": 0.2})"), Layers(), ids, r, &err));
+    SC_EXPECT(!LoadRecipe(with(R"({"kind": "swath", "process": "rows", "per_ha": 1400, "row_m": 13})"), Layers(), ids, r, &err));
+    SC_EXPECT(LoadRecipe(with(R"({"kind": "maize", "process": "uniform", "per_ha": 100, "crops": ["maize"]})"), Layers(), ids, r, &err));
+    SC_EXPECT(!LoadRecipe(with(R"({"kind": "maize", "process": "uniform", "per_ha": 100, "crops": ["rice"]})"), Layers(), ids, r, &err));
+    SC_EXPECT(!LoadRecipe(with(R"({"kind": "maize", "process": "uniform", "per_ha": 100, "crops": []})"), Layers(), ids, r, &err));
+}
+
 SC_TEST("recipes: a ploughed parcel's edge strip is weeds within 0.6 m of its edge, its headlands at its ends") {
     double e = 0.0, n = 0.0;
     SC_EXPECT(FindGround("ploughland", 8000.0, -8000.0, e, n));

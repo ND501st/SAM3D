@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "simcore/json.hpp"
+#include "simcore/noise.hpp"
 #include "simcore/scenery/map_dressing.hpp"
 
 namespace simcore {
@@ -64,6 +65,20 @@ struct GroundLayerRules {
         int grow_days = 0;
     };
     std::vector<std::vector<CropState>> calendar;
+    // By the dressing's crop index too: its id, and the tone its standing block is drawn in (a multiplier of the block's
+    // colours, 1 1 1 if not given: dry sunflower stands near black where dry maize is tan).
+    std::vector<std::string> crop_ids;
+    std::vector<std::array<float, 3>> block_tone;
+
+    int CropIndex(const std::string& id) const {
+        for (std::size_t i = 0; i < crop_ids.size(); ++i) {
+            if (crop_ids[i] == id) return static_cast<int>(i);
+        }
+        return -1;
+    }
+    std::array<float, 3> BlockTone(int crop) const {
+        return crop >= 0 && static_cast<std::size_t>(crop) < block_tone.size() ? block_tone[static_cast<std::size_t>(crop)] : std::array<float, 3>{1.0f, 1.0f, 1.0f};
+    }
 
     int Index(const std::string& id) const {
         for (std::size_t i = 0; i < layers.size(); ++i) {
@@ -108,7 +123,7 @@ struct GroundLayerRules {
         if (s.grow_days <= 0) return s.stand_m;
         return s.stand_m * std::min(1.0, std::max(0.0, static_cast<double>(day - since) / static_cast<double>(s.grow_days)));
     }
-    // The tallest any crop stands in any state.
+    // The tallest any crop stands in any state (the calendar's, before StandVary).
     double TallestStand() const {
         double most = 0.0;
         for (const std::vector<CropState>& states : calendar) {
@@ -116,6 +131,27 @@ struct GroundLayerRules {
         }
         return most;
     }
+
+    // A crop does not stand at one height (roadmap A.3.10): a field a share taller or shorter than its calendar's height
+    // (its own sowing, its soil), and over it patches some 40 m across a share taller or shorter again (wetter hollows,
+    // poorer ground). Shares of the calendar's height, from data/scenery/ground_layers.json's "stand_vary".
+    double vary_field = 0.0, vary_patch = 0.0, vary_patch_m = 40.0;
+    // The factor at (east, north) of field `field_id`: 1 +- vary_field +- vary_patch, the same at a point for every client.
+    double StandVary(std::uint64_t field_id, double e, double n) const {
+        if (vary_field <= 0.0 && vary_patch <= 0.0) return 1.0;
+        const double own = 2.0 * Unit24(Hash32(static_cast<std::uint32_t>(field_id >> 32) ^ 0x57A4Du)) - 1.0;
+        const double patch = 2.0 * noise::Fbm(0x57A4D0ull, e, n, vary_patch_m, 2) - 1.0;
+        return 1.0 + vary_field * own + vary_patch * patch;
+    }
+    // The most StandVary gives anywhere.
+    double MostVary() const { return 1.0 + vary_field + vary_patch; }
+    // How high field `field_id` of crop `crop` stands at (east, north) on day `day`: StandOnDay times StandVary.
+    double StandAtPoint(int crop, std::uint64_t field_id, int day, double e, double n) const {
+        const double s = StandOnDay(crop, field_id, day);
+        return s > 0.0 ? s * StandVary(field_id, e, n) : 0.0;
+    }
+    // The tallest any crop stands anywhere: TallestStand times MostVary.
+    double TallestVaried() const { return TallestStand() * MostVary(); }
 };
 
 namespace ground_detail {
@@ -251,6 +287,36 @@ inline bool LoadGroundLayers(const std::string& path_or_json, const DressingRule
             list.push_back(st);
         }
         r.calendar.push_back(list);
+        r.crop_ids.push_back(c.id);
+        std::array<float, 3> tone{1.0f, 1.0f, 1.0f};
+        if (const json::Value* bt = by_season->Find("block_tone")) {
+            if (!bt->Is(json::Type::Array) || bt->items.size() != 3) return Fail(error, "crop " + c.id + ": block_tone is [r, g, b]");
+            for (std::size_t k = 0; k < 3; ++k) {
+                if (!bt->items[k].Is(json::Type::Number) || bt->items[k].number < 0.1 || bt->items[k].number > 2.0) {
+                    return Fail(error, "crop " + c.id + ": block_tone's shares are in 0.1..2");
+                }
+                tone[k] = static_cast<float>(bt->items[k].number);
+            }
+        }
+        r.block_tone.push_back(tone);
+    }
+    // How a crop's height varies over the land: {"field": share, "patch": share, "patch_m": m}, the shares adding to 0.4 at most.
+    if (const json::Value* vary = root.Find("stand_vary")) {
+        if (!vary->Is(json::Type::Object)) return Fail(error, "stand_vary is not an object");
+        const auto share = [&](const char* key, double lo, double hi, double& to) {
+            const json::Value* v = vary->Find(key);
+            if (v == nullptr) return true;
+            if (!v->Is(json::Type::Number) || v->number < lo || v->number > hi) {
+                return Fail(error, std::string("stand_vary: ") + key + " is out of its range (field and patch 0..0.3, patch_m 10..500)");
+            }
+            to = v->number;
+            return true;
+        };
+        if (!share("field", 0.0, 0.3, r.vary_field) || !share("patch", 0.0, 0.3, r.vary_patch) || !share("patch_m", 10.0, 500.0, r.vary_patch_m)) return false;
+        if (r.vary_field + r.vary_patch > 0.4) return Fail(error, "stand_vary: field and patch add to more than 0.4");
+        for (const std::string& key : vary->keys) {
+            if (key != "field" && key != "patch" && key != "patch_m" && key != "notes") return Fail(error, "stand_vary: no key \"" + key + "\"");
+        }
     }
     // Field cells take the first crop's first layer when the raster has none, so the field cover's own slot is that.
     r.cover_layer[static_cast<std::size_t>(Cover::Field)] = r.calendar.empty() ? 0 : r.calendar[0][0].layer;

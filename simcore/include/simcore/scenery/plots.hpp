@@ -44,6 +44,7 @@ struct PlotDef {
     std::string name;
     ViewAnchor anchor;         // a view's anchor kinds, and field_layer (a field in one ground layer on the day)
     std::string layer;         // field_layer: the ground layer's id (data/scenery/ground_layers.json)
+    std::string crop;          // field_layer: only a field of this crop (the dressing's id); empty: any
     double turn_rad = 0.0;     // the cameras' bearing from the anchor's own (field_layer: from the furrows' heading)
     bool edge = false;         // field_layer: look at where the field ends toward the cameras, from outside it (a standing crop's face)
     double core_m = 50.0;      // the plot's side: a field_layer plot's whole square is the one layer of one parcel
@@ -110,6 +111,10 @@ inline bool LoadPlots(const std::string& path_or_json, PlotSet& out, std::string
             p.anchor.kind = kind;
             p.layer = plots_detail::Text(*a, "layer");
             if (p.layer.empty()) return Fail(error, p.id + ": a field_layer anchor names its layer");
+            if (const json::Value* crop = a->Find("crop")) {
+                if (!crop->Is(json::Type::String) || crop->string.empty()) return Fail(error, p.id + ": crop is a crop's id");
+                p.crop = crop->string;
+            }
             const json::Value* c = a->Find("close_km");
             if (c == nullptr || !c->Is(json::Type::Array) || c->items.size() != 2 || !c->items[0].Is(json::Type::Number) ||
                 !c->items[1].Is(json::Type::Number)) {
@@ -156,6 +161,13 @@ inline views_detail::Spot FieldLayerSpot(const CoverRaster& cover, const Dressin
                                          int day_of_year, const PlotDef& p) {
     const int want = layers.Index(p.layer);
     if (want < 0) return views_detail::Missing("no ground layer \"" + p.layer + "\"");
+    int crop = -1;
+    if (!p.crop.empty()) {
+        for (std::size_t i = 0; i < dressing.crops.size(); ++i) {
+            if (dressing.crops[i].id == p.crop) crop = static_cast<int>(i);
+        }
+        if (crop < 0) return views_detail::Missing("no crop \"" + p.crop + "\"");
+    }
     const double half = 0.5 * p.core_m + 10.0;
     double best = std::numeric_limits<double>::max();
     views_detail::Spot s;
@@ -167,6 +179,7 @@ inline views_detail::Spot FieldLayerSpot(const CoverRaster& cover, const Dressin
             const CoverGrid* g = cover.GridAt(pe, pn);
             if (g == nullptr || cover.At(pe, pn) != Cover::Field) continue;
             if (PointLayer(cover, dressing, layers, pe, pn, day_of_year) != want) continue;
+            if (crop >= 0 && CropOf(dressing, FieldAt(g->fields, pe, pn).id) != crop) continue;
             const std::uint64_t parcel = FieldParcel(g->fields, pe, pn);
             bool whole = true;
             for (int i = -1; i <= 1 && whole; ++i) {
@@ -184,7 +197,9 @@ inline views_detail::Spot FieldLayerSpot(const CoverRaster& cover, const Dressin
             s.bearing_rad = FieldHeading(g->fields, pe, pn);
         }
     }
-    if (!s.ok) return views_detail::Missing("no field in \"" + p.layer + "\" with a whole square within 3 km of close_km");
+    if (!s.ok) {
+        return views_detail::Missing("no field" + (p.crop.empty() ? std::string() : " of " + p.crop) + " in \"" + p.layer + "\" with a whole square within 3 km of close_km");
+    }
     return s;
 }
 

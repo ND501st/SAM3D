@@ -308,6 +308,81 @@ prop test (after L9 starts).
 - **Left**: the block behind still stands at one height (the stand), so its top line beyond the cards stays even; a
   height that varies across the field (in simcore's obstacle too) would carry the cards' unevenness out to the far edge.
 
+### A.3.10 Plot 3, a stand that varies over the field (6 Nov 2026)
+
+- **One height function** (`GroundLayerRules::StandAtPoint`): the calendar's stand times `StandVary`, a field's own share
+  (±0.05, by its number) and patches about 40 m across (±0.20, two octaves of value noise), from `ground_layers.json`'s
+  `"stand_vary"` (the loader holds each share to 0..0.3 and both to 0.4). The plain's maize from about 1.8 m in a poor
+  patch to 3 m in a good one.
+- **Everything reads it**: what blocks sight (`StandingCrops::StandAt`, and `Chords`, a chord's top the highest of the
+  field's stand at its ends and middle); the cells' bytes the bound (the field's stand times `MostVary`, so the tallest
+  stand baked is now 3.0 m); the block's corners (its top and walls follow the height at each corner; a wall only where the
+  crop beyond stands 2 cm or more lower, so none inside a field); the near cards' heights (`RecipeCandidate::stand_m`).
+- **Tests**: along 400 m of a 2.4 m field, 2.21 to 2.84 m, at most 2.3 cm from one metre to the next; fields apart by
+  their own shares; the chords, the bake and the drawn block still agree with the truth everywhere they did.
+- **c10** (c10's first try lost the GPU on its fourth frame as Windows swapped audio devices; the second ran): the
+  wall's top edge moves 1-2 px against c9. From the eye camera the wall is some 100 m off and its top a little above the
+  eye, so ±0.3 m is a sixth of a degree: right for a real field at that range, but it does not break the line there.
+- **Left**: whether to make the patches stronger or smaller (by eye: `"patch"`, `"patch_m"`); the line at the far edge
+  is a fringe of tassels more than a slope of the canopy, which the material's ragged top draws on the wall but not
+  along the top's skyline.
+
+### A.3.11 Plots 3-5 in one batch: each crop its own plants, the sunflower, the wheat's swaths (6 Nov 2026)
+
+- **The owner, 6 Nov 2026**: carry on with the roadmap, but make far more changes before each render. One batch, two
+  renders (c11, then c12 after what c11 showed).
+- **The materials' usage flags** (`tools/ue_fix_map_material_usage.py`): `M_SimFoliage`, `M_SimMapVertexColor` and
+  `M_SimMapClutter` set for Nanite and instanced meshes, and the 68 instances under them resaved, so the editor no longer
+  compiles them on the fly.
+- **A scatter kept to a crop** (`RecipeScatter::crops`, ids from the dressing's crops): `dry_stalks` is maize's and
+  sunflower's both, so it has a maize scatter and a sunflower scatter, each standing only on its own crop's fields
+  (round the test points 11315 maize plants and 4263 sunflowers on their own fields, none on another's). Each target is
+  measured over its own crop's area. **The old plot 3 stood on a sunflower field**, drawn as maize: its anchor now names
+  the crop (`"crop": "maize"`), and the nearest dry maize with a whole square is about 4.6 km on, at (10.8, -11.5) km.
+- **Plot 4, standing sunflower dried before the harvest** (`p04_standing_sunflower`): three cards
+  (`make_cards.py` `sunflower`, a stalk to the neck, shrivelled leaves, the neck bent over 110-160 degrees, the head
+  hanging face down; `_b` uneven, `_c` three plants), the kind `sunflower` in `clutter.json` like maize's (to the stand,
+  in full within 60 m), and the far block darker by the crop's `block_tone` in `ground_layers.json`. No photo of it in
+  the register yet: the plots test lets this one plot go without until the owner gives one.
+- **c11**: the sunflowers stood but drawn tan, like dry maize; near-black was wanted. **c12**: the cards' colours some
+  0.6 of what they were (the stalk #2a231c to #4c4032, the head's back #504230), the far block's tone as before. The
+  stand's face in the eye camera is a fifth darker (mean RGB 101, 78, 45 to 81, 63, 37; the ground showing between the
+  stalks holds it up): darker than c11, still a dark brown more than the near-black of the photos' fields.
+- **Plot 3 on its maize field** (c12): the dry maize stands as a dark wall of stalks, its tassels ragged along the top,
+  the six cards' heights and shades side by side.
+- **Wheat stubble** (`wheat_stubble.json`): the stubble in the drill's rows (`"across_m"`: a row's sideways scatter in
+  metres, held to 0.4 of the row spacing) and the combine's swaths in lines a header's width apart (6 m, an estimate),
+  as overlapping pieces of a low mound (`clutter_swath`). In c11 they read as dark logs 1 m wide with gaps between; in
+  c12 they are 0.36 of their length wide, 3-7 cm high, bleached straw colour, 2395 pieces a hectare (target 2000-2900),
+  and read as pale lines 6 m apart, still beaded where the pieces meet.
+- **Left**: a sunflower photo for plot 4 (the owner's say-so); the sunflower stand darker still, its block's wall
+  too; a swath drawn as one strip along its line rather than pieces; by mid-October a real swath is mostly baled or ploughed
+  in, so a stubble field's date should choose between swath, bales and bare stubble; the cards' leaves arch up and over
+  where a dead sunflower's hang straight down.
+
+### A.3.12 Quixel's Megascans on the ground (6 Nov 2026)
+
+- **Quixel made the whole Megascans library free on Fab** (announced 5 Nov 2026; listings updating to 12 Nov). 55 items
+  claimed on the owner's account (Professional tier; two rubble packs skipped, free only on the Personal tier): 24
+  Megaplants, 17 texture sets, 13 scanned models and Unreal's Norway maple.
+- **The texture sets** (`tools/fetch_textures.py`, site `quixel`): the owner's 2K zips in `art/thirdparty/quixel/zips/`,
+  unpacked as albedo, normal, roughness, AO and ORM like Poly Haven's and ambientCG's, and registered in
+  `textures.json` (Fab-Standard; `scan_m` from each set's own metadata). Their normals are OpenGL (green up the image:
+  0.45 and 0.93 correlated with the bump map's slope down it, on two sets) and are flipped to DirectX.
+- **Not ground**: arid grass and both wheat sets are atlases of plant cards; the concrete, asphalt and dirt roads wait
+  for layers of their own (the roads are drawn as meshes today).
+- **Three layers changed**: `marsh` from the forest's mud to `q_soil_mud` (1 m); `yard` (the towns' ground) from
+  packed dirt to `q_soil_and_gravel` (0.8 m: a repeat must divide the 600 m period, the scan is 0.85 m); `trampled` (the
+  military ground) from a reddish mud to `q_grassy_soil` (2 m).
+- **c13-c14**: two plots added on those layers, `p15_town_yard` (in Vrbice) and `p16_battery_position` (battery 21).
+  The tyre tracks tried first on `trampled` (c13) repeat every 2 m over the whole position and read as paving: tracks
+  belong along routes, not as a tiling. The grassy soil (c14) reads as worn earth with grass left between. The village's
+  soil and gravel shows its grit within a few metres, and from 25 m up is a pale sand, yellower than a village street.
+  p01-p05 unchanged (their layers' textures were not touched; 0.3-2 levels of 255 from c12).
+- **Left**: the yard's colour; tracks as decals along the routes vehicles use (the tyre-track decal is here); the 13
+  models and the Megaplants as picks for their parts (the Megaplants come only through the editor's Fab window, the
+  owner's to add); grass tufts drawn on the village's road (seen in c14, older than this change).
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

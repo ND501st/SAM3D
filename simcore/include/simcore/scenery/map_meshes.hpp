@@ -352,6 +352,26 @@ inline TriMesh ClutterMesh(const std::string& part, int lod) {
         const int sides = lod == 0 ? 4 : 3;
         b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 0.7, 0.35), Ring(sides, 0.9, 0.2), Ring(sides, 1.0, 0.0)}, {kReedFoot, kReedFoot, kReedHead}, kReedFoot,
                kReedHead);
+    } else if (part.rfind("clutter_sunflower", 0) == 0) {
+        // A standing sunflower, dry: a stalk the full height widening to the hanging head near the top (a convex loft;
+        // the cards, art/clutter/sunflower_card*, replace it).
+        const int sides = lod == 0 ? 4 : 3;
+        b.Loft({Ring(sides, 0.0, 0.04), Ring(sides, 0.3, 0.04), Ring(sides, 0.6, 0.22), Ring(sides, 0.9, 0.25), Ring(sides, 1.0, 0.03)},
+               {kReedFoot, kReedFoot, kReedHead, kReedHead}, kReedFoot, kReedHead);
+    } else if (part == "clutter_swath") {
+        // A combine's swath of chopped straw lying along local x: a low mound a unit long, 0.55 across and a unit high (the
+        // instance's width its length, its height its depth), pale on top, its ends tapering.
+        const int sides = lod == 0 ? 10 : 6;
+        const auto ellipse = [&](double z, double rx, double ry, double turn) {
+            std::vector<Vec3> out;
+            for (int k = 0; k < sides; ++k) {
+                const double a = turn + 2.0 * kPi * k / sides;
+                out.push_back(Vec3{rx * std::cos(a), ry * std::sin(a), z});
+            }
+            return out;
+        };
+        b.Loft({ellipse(0.0, 0.5, 0.18, 0.0), ellipse(0.45, 0.46, 0.15, 0.15), ellipse(0.85, 0.38, 0.085, 0.3), ellipse(1.0, 0.26, 0.026, 0.45)},
+               {kStrawCut, kStoverTop, kStoverTop}, kStrawCut, kStoverTop);  // straw weeks in the sun: bleached all over
     } else if (part.rfind("clutter_maize", 0) == 0) {
         // A standing maize plant, dry: a thin stalk the full height, its leaves a narrow spindle from a fifth of the way
         // up (the card, art/clutter/maize_card, replaces it).
@@ -641,7 +661,7 @@ inline TriMesh MapPartMesh(const std::string& part, int variant, int lod) {
 inline std::vector<std::string> MapMeshParts() {
     std::vector<std::string> out;
     for (int k = 0; k < static_cast<int>(TreeKind::Count); ++k) out.push_back(std::string("tree_") + TreeKindName(static_cast<TreeKind>(k)));
-    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk", "clutter_maize", "clutter_maize_b", "clutter_maize_c", "clutter_maize_d", "clutter_maize_e", "clutter_maize_f"}) out.push_back(p);
+    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk", "clutter_maize", "clutter_maize_b", "clutter_maize_c", "clutter_maize_d", "clutter_maize_e", "clutter_maize_f", "clutter_sunflower", "clutter_sunflower_b", "clutter_sunflower_c", "clutter_swath"}) out.push_back(p);
     return out;
 }
 

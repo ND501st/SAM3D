@@ -9,7 +9,8 @@ fetched per machine, as docs/scenery/ASSETS.md says for every third-party file).
     python tools/fetch_textures.py --record        # write each file's SHA-256 into the register where none is recorded
 
 Every texture is free: CC0-1.0 from Poly Haven (its public API, api.polyhaven.com) or ambientCG (its zip download),
-the only sites this tool fetches from. Each texture lands as albedo, normal (DirectX convention, as Unreal reads it),
+the only sites this tool fetches from, or a Quixel Megascan under Fab's Standard licence (free since Nov 2026), which
+the owner claims and downloads from Fab into art/thirdparty/quixel/zips/ and this tool unpacks from there. Each texture lands as albedo, normal (DirectX convention, as Unreal reads it),
 roughness and, when the site has one, ao, as the site serves them (JPEG: a quarter of PNG's size, and Unreal compresses
 them again), and orm.png made from them (R the occlusion, white without one; G the roughness), which the ground
 material reads. A file whose SHA-256 differs from the register's is refused. Packing needs Pillow (pip install pillow).
@@ -27,8 +28,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REGISTER = ROOT / "data" / "scenery" / "textures.json"
 OUT = ROOT / "art" / "thirdparty" / "textures"
-SITES = ("polyhaven", "ambientcg")
-LICENCES = ("CC0-1.0", "CC-BY-4.0")
+# Quixel's Megascans come from Fab, which serves them only to a signed-in account that has claimed them: the owner claims
+# and downloads each texture set's zip (its 2K "texture set") into this folder by hand, and this tool reads it there.
+QUIXEL_ZIPS = ROOT / "art" / "thirdparty" / "quixel" / "zips"
+SITES = ("polyhaven", "ambientcg", "quixel")
+LICENCES = ("CC0-1.0", "CC-BY-4.0", "Fab-Standard")
 MAPS = ("albedo", "normal", "roughness", "ao")
 RESOLUTIONS = ("1k", "2k", "4k")
 USER_AGENT = "SAM3D-fetch-textures/1.0 (a hobby flight-sim project; CC0 textures)"
@@ -122,6 +126,35 @@ def ambientcg_members(names):
     return out
 
 
+def quixel_members(names):
+    """The map each member of a Megascans texture set's zip is: {map: member} (<Name>_<id>_2K_BaseColor.jpg, _Normal,
+    _Roughness, _AO). Its normal is in the OpenGL convention (green up the image; measured against the set's own bump
+    map, 6 Nov 2026), flipped to DirectX by quixel_normal_dx."""
+    keys = {"_basecolor": "albedo", "_normal": "normal", "_roughness": "roughness", "_ao": "ao"}
+    out = {}
+    for n in names:
+        stem, dot, ext = n.lower().rpartition(".")
+        if not dot or ext not in ("png", "jpg"):
+            continue
+        for suffix, m in keys.items():
+            if stem.endswith(suffix):
+                out[m] = n
+    missing = [m for m in ("albedo", "normal", "roughness") if m not in out]
+    if missing:
+        raise ValueError(f"the Megascans zip has no {', '.join(missing)}")
+    return out
+
+
+def quixel_normal_dx(data):
+    """An OpenGL normal map's bytes as a DirectX one's PNG bytes: the green channel inverted."""
+    from PIL import Image, ImageOps  # only the flip needs Pillow
+
+    r, g, b = Image.open(io.BytesIO(data)).convert("RGB").split()
+    out = io.BytesIO()
+    Image.merge("RGB", (r, ImageOps.invert(g), b)).save(out, format="PNG")
+    return out.getvalue()
+
+
 def pack_orm(roughness, ao=None, size=2048):
     """orm.png's bytes from the roughness and occlusion maps' bytes: R the occlusion (white without one), G the
     roughness, B 0, `size` square (the ground's texture arrays take one size)."""
@@ -153,6 +186,8 @@ def crop_u(data, lo, hi):
 def download_size(t):
     """What fetching the texture downloads, bytes, from the site's API (nothing else fetched)."""
     res = t.get("resolution", "2k")
+    if t["site"] == "quixel":
+        return 0  # on this machine already, or claimed and downloaded from Fab by hand
     if t["site"] == "polyhaven":
         files = json.loads(fetch(f"https://api.polyhaven.com/files/{t['asset']}"))
         return sum(f["size"] for f in polyhaven_files(files, res).values())
@@ -178,6 +213,13 @@ def fetch(url):
 def maps_of(t):
     """The texture's maps as {map: bytes}, from its site."""
     res = t.get("resolution", "2k")
+    if t["site"] == "quixel":
+        path = QUIXEL_ZIPS / f"{t['asset']}_{res}.zip"
+        if not path.exists():
+            raise FileNotFoundError(f"{path.relative_to(ROOT)} is not here: claim it on Fab ({t['origin']}) and "
+                                    f"download its {res.upper()} texture set there")
+        with zipfile.ZipFile(path) as z:
+            return {m: z.read(n) for m, n in quixel_members(z.namelist()).items()}
     if t["site"] == "polyhaven":
         files = json.loads(fetch(f"https://api.polyhaven.com/files/{t['asset']}"))
         return {m: fetch(u) for m, u in polyhaven_urls(files, res).items()}
@@ -252,6 +294,8 @@ def main(argv=None):
             print(f"{t['id']}: refused ({e})")
             continue
         try:
+            if t["site"] == "quixel":
+                named["normal"] = (quixel_normal_dx(named["normal"][0]), ".png")
             if "crop_u" in t:
                 named = {m: (crop_u(data, *t["crop_u"]), ".png") for m, (data, _) in named.items()}
             orm = pack_orm(named["roughness"][0], named["ao"][0] if "ao" in named else None)

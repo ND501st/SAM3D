@@ -20,10 +20,18 @@
     {
       "id": "p03_standing_maize",
       "name": "Standing maize (dry)",
-      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "close_km": [8.0, -8.0], "edge": true },
+      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "crop": "maize", "close_km": [10.8, -11.5], "edge": true },
       "turn_deg": 90,
       "photos": ["P09", "P71", "P77"],
       "must_see": "A 2-3 m wall of dry tan stalks in rows; the field's edge as a face."
+    },
+    {
+      "id": "p04_standing_sunflower",
+      "name": "Standing sunflower (dry)",
+      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "crop": "sunflower", "close_km": [8.0, -8.0], "edge": true },
+      "turn_deg": 90,
+      "photos": [],
+      "must_see": "A 1.6-2 m stand of near-black dry stalks in rows, the heads hanging face down; darker than maize from afar."
     },
     {
       "id": "p05_wheat_stubble",
@@ -55,6 +63,20 @@
       "turn_deg": 90,
       "photos": ["P26"],
       "must_see": "A reed belt 1-5 m wide, reeds 2-4 m tall, willows on the bank."
+    },
+    {
+      "id": "p15_town_yard",
+      "name": "Village ground",
+      "anchor": { "kind": "settlement", "settlement": "vrbice", "from_centre_m": 60 },
+      "photos": ["P76", "P85"],
+      "must_see": "The town's open ground (the yard layer): packed earth and gravel worn by wheels, weeds at the edges."
+    },
+    {
+      "id": "p16_battery_position",
+      "name": "The battery's position, worn",
+      "anchor": { "kind": "site", "site": "bty21", "from_m": 25, "bearing_deg": 110 },
+      "photos": ["P03", "P12"],
+      "must_see": "Ground churned by the vehicles: wheel ruts in mud, bare earth, the grass left only between."
     }
   ]
 }

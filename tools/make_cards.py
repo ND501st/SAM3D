@@ -253,6 +253,77 @@ def maize(rng, name="maize_card", limp=0.35, same_side=0.0, broken=0.0, heights=
     return finish(tint(img, tone), name, MAIZE_W, MAIZE_H, fill=fill)
 
 
+def sunflower(rng, name="sunflower_card", heights=(0.84, 0.99), tone=1.0, plants=2):
+    """Standing sunflower dried before the harvest (plot 4): a thick grey-brown stalk, a few shrivelled near-black leaves
+    hanging close down it, and at the top the neck bent over so the heavy head hangs face down: its back a dull tan
+    disc, a ring of dry bracts round it, a rim of the black face showing. On the same tall canvas as the maize's."""
+    W, H = MAIZE_W * SS, MAIZE_H * SS
+    img = canvas(MAIZE_W, MAIZE_H)
+    d = ImageDraw.Draw(img)
+    base_y = H - 4
+    xs = [W * (0.5 + (i - (plants - 1) / 2.0) * 0.36 + rng.uniform(-0.05, 0.05)) for i in range(plants)]
+    for x0 in xs:
+        height = rng.uniform(heights[0], heights[1]) * H
+        scale = min(1.0, height / (0.84 * H))
+        lean = rng.uniform(-0.05, 0.05) * W
+        stalk_w = rng.uniform(0.045, 0.060) * W * (0.6 + 0.4 * scale)
+        neck_at = rng.uniform(0.80, 0.86)
+        blade(d, x0, base_y, height * neck_at, lean * neck_at * neck_at, stalk_w, (42, 35, 28), (76, 64, 50), taper=0.35, segments=22)
+        # The leaves: shrivelled, dark, hanging close down the stalk from its lower two thirds.
+        for i in range(rng.randint(5, 8)):
+            t = rng.uniform(0.12, 0.70)
+            sx, sy = x0 + lean * t * t, base_y - height * t
+            leaf(d, sx, sy, rng.uniform(0.05, 0.11) * H * scale, rng.choice([-1, 1]), rng.uniform(8.0, 25.0), rng.uniform(160.0, 182.0),
+                 rng.uniform(0.04, 0.07) * W * scale ** 0.5, (30, 25, 20), (60, 50, 38), rng)
+        # The neck bends over from the top of the stalk; the head hangs at its end.
+        side = rng.choice([-1, 1])
+        if (side < 0 and x0 < 0.3 * W) or (side > 0 and x0 > 0.7 * W):
+            side = -side
+        nx, ny = x0 + lean * neck_at * neck_at, base_y - height * neck_at
+        neck_len = height * (1.0 - neck_at) * 1.2
+        bend = math.radians(rng.uniform(110.0, 160.0))
+        pts = [(nx, ny)]
+        x, y = nx, ny
+        for k in range(12):
+            a = bend * ((k + 0.5) / 12) ** 1.3
+            x += side * math.sin(a) * neck_len / 12
+            y -= math.cos(a) * neck_len / 12
+            pts.append((x, y))
+        for k in range(12):
+            (xa, ya), (xb, yb) = pts[k], pts[k + 1]
+            w = stalk_w * (0.85 - 0.25 * k / 12) * 0.5
+            dx, dy = xb - xa, yb - ya
+            n = math.hypot(dx, dy) or 1.0
+            px, py = -dy / n * w, dx / n * w
+            d.polygon([(xa - px, ya - py), (xa + px, ya + py), (xb + px, yb + py), (xb - px, yb - py)], fill=(58, 48, 36, 255))
+        # The head: a disc seen from its back and edge, turned with the neck's end; its face's black rim below.
+        hx, hy = pts[-1]
+        r = rng.uniform(0.15, 0.20) * W * (0.7 + 0.3 * scale)
+        flat = rng.uniform(0.45, 0.65)  # the disc's tilt to the eye
+        axis = bend + rng.uniform(-0.2, 0.2)
+        ux, uy = side * math.sin(axis), -math.cos(axis)  # the neck's way out: the disc's face looks along it
+        vx, vy = -uy, ux
+        cx, cy = hx + ux * r * flat * 0.6, hy + uy * r * flat * 0.6
+
+        def disc(rad, f, shift):
+            return [(cx + ux * shift + vx * rad * math.cos(t) + ux * rad * f * math.sin(t), cy + uy * shift + vy * rad * math.cos(t) + uy * rad * f * math.sin(t))
+                    for t in [2.0 * math.pi * k / 40 for k in range(40)]]
+
+        # Bracts: a ring of small dry points round the back.
+        for k in range(18):
+            t = 2.0 * math.pi * k / 18 + rng.uniform(-0.1, 0.1)
+            bx, by = cx + vx * r * math.cos(t) + ux * r * flat * math.sin(t), cy + vy * r * math.cos(t) + uy * r * flat * math.sin(t)
+            ox, oy = vx * math.cos(t) + ux * flat * math.sin(t), vy * math.cos(t) + uy * flat * math.sin(t)
+            tip = r * rng.uniform(0.18, 0.32)
+            d.polygon([(bx - oy * r * 0.08, by + ox * r * 0.08), (bx + oy * r * 0.08, by - ox * r * 0.08), (bx + ox * tip, by + oy * tip)],
+                      fill=(50, 40, 30, 255))
+        d.polygon(disc(r, flat, r * flat * 0.25), fill=(20, 17, 15, 255))     # the face's rim
+        d.polygon(disc(r * 0.97, flat, 0.0), fill=(80, 66, 48, 255))       # the back
+        d.polygon(disc(r * 0.55, flat, -r * flat * 0.1), fill=(68, 56, 42, 255))
+    fill = tint(Image.new("RGBA", (1, 1), (52, 44, 34, 255)), tone).getpixel((0, 0))[:3]
+    return finish(tint(img, tone), name, MAIZE_W, MAIZE_H, fill=fill)
+
+
 def main():
     rng = random.Random(11)
     sheets = [grass(rng), straw(rng), reed(rng)]
@@ -264,7 +335,11 @@ def main():
              # Mixed: one plant full, one barely half (each draws its own height across the range).
              maize(random.Random(89), "maize_card_e", limp=0.4, same_side=0.2, heights=(0.45, 1.0), tone=0.92),
              # Middling and pale, more leaves hanging, a top snapped now and then.
-             maize(random.Random(97), "maize_card_f", limp=0.6, broken=0.3, heights=(0.66, 0.84), tone=1.07)]
+             maize(random.Random(97), "maize_card_f", limp=0.6, broken=0.3, heights=(0.66, 0.84), tone=1.07),
+             # Sunflower (plot 4): even, uneven and short-and-dark.
+             sunflower(random.Random(131)),
+             sunflower(random.Random(137), "sunflower_card_b", heights=(0.55, 1.0), tone=0.9),
+             sunflower(random.Random(149), "sunflower_card_c", heights=(0.6, 0.8), tone=1.1, plants=3)]
     sheet = Image.new("RGB", (SIZE * 3 + len(talls) * MAIZE_W // 4, SIZE), (92, 110, 150))
     for i, im in enumerate(sheets):
         sheet.paste(im.convert("RGB"), (i * SIZE, 0), mask=im.split()[3])
@@ -286,7 +361,7 @@ def main():
     ok = [l for l in done.stdout.splitlines() if l.startswith("CARD ")]
     for l in ok:
         print(l)
-    if done.returncode != 0 or len(ok) != 9:
+    if done.returncode != 0 or len(ok) != 12:
         print(done.stdout[-1200:], done.stderr[-1200:])
         raise SystemExit("Blender did not build the cards")
     return 0

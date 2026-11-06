@@ -196,6 +196,48 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "Standing maize, middling: plants two thirds to most of the card's height, a shade paler, more leaves hanging and a top snapped now and then; one of the maize kind's cards."
+    },
+    {
+      "id": "sunflower_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/sunflower_card/sunflower_card/StaticMeshes/sunflower_card.sunflower_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "4d0e6dd3c490045237ced66d0a9a317074d989513afdb69b6ba616e2bff3e76a",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing sunflower dried before the harvest, two plants: a grey-brown stalk, shrivelled dark leaves, the head hanging face down from a bent neck; one of the sunflower kind's cards (data/scenery/clutter.json)."
+    },
+    {
+      "id": "sunflower_card_b",
+      "unreal_path": "/Game/SAM3D/Map/Cards/sunflower_card_b/sunflower_card_b/StaticMeshes/sunflower_card_b.sunflower_card_b",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "e16f7403c7903643100c5505b2e14bc15ab48f335a96d35adbff9add8a770f10",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing sunflower, uneven: each plant its own height from half to full, a shade darker; one of the sunflower kind's cards."
+    },
+    {
+      "id": "sunflower_card_c",
+      "unreal_path": "/Game/SAM3D/Map/Cards/sunflower_card_c/sunflower_card_c/StaticMeshes/sunflower_card_c.sunflower_card_c",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "sha256": "6b1e4650b65f443215d9f2c34143c1e55ac834427313c09b744de71ccfe7155f",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Standing sunflower, three short plants, a shade paler; one of the sunflower kind's cards."
     }
   ],
   "parts": {
@@ -285,6 +327,18 @@
     },
     "clutter_maize_f": {
       "asset": "maize_card_f"
+    },
+    "clutter_sunflower": {
+      "asset": "sunflower_card"
+    },
+    "clutter_sunflower_b": {
+      "asset": "sunflower_card_b"
+    },
+    "clutter_sunflower_c": {
+      "asset": "sunflower_card_c"
+    },
+    "clutter_swath": {
+      "asset": null
     }
   }
 }

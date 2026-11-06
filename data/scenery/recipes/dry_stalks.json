@@ -1,6 +1,6 @@
 {
   "recipe_id": "dry_stalks",
-  "notes": "Standing maize or sunflower dried before the harvest. Afar it is the crop block (simcore/scenery/standing_crops.hpp); near the camera the block dithers away and the plants stand in the drill's rows 75 cm apart along the parcel's furrows, one card every half metre along a row (a card shows two or three plants: a field has some 70 000 a hectare), as tall as the field's stand on the day (the maize kind: near_m, to_stand). Sunflower is drawn as maize for now.",
+  "notes": "Standing maize or sunflower dried before the harvest. Afar it is the crop block (simcore/scenery/standing_crops.hpp; sunflower's darker by its block_tone in ground_layers.json); near the camera the block dithers away and the plants stand in the drill's rows 75 cm apart along the parcel's furrows, one card every half metre along a row (a card shows two or three plants: a field has some 70 000 maize or 55 000 sunflowers a hectare), as tall as the field's stand there on the day (the kinds' near_m, to_stand). Each crop its own kind, by the scatter's crops.",
   "applies": {
     "layers": [
       "dry_stalks"
@@ -15,7 +15,15 @@
           "kind": "maize",
           "process": "rows",
           "per_ha": 26667,
-          "row_m": 0.75
+          "row_m": 0.75,
+          "crops": ["maize"]
+        },
+        {
+          "kind": "sunflower",
+          "process": "rows",
+          "per_ha": 26667,
+          "row_m": 0.75,
+          "crops": ["sunflower"]
         }
       ]
     }
@@ -28,8 +36,16 @@
         23000,
         30000
       ]
+    },
+    {
+      "band": "body",
+      "kind": "sunflower",
+      "per_ha": [
+        23000,
+        30000
+      ]
     }
   ],
-  "source": "game value: sam3d estimate (maize rows 70-76 cm: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
+  "source": "game value: sam3d estimate (maize rows 70-76 cm, sunflower 70-75 cm: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
   "confidence": "estimate"
 }

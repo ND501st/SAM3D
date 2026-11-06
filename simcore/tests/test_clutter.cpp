@@ -110,8 +110,9 @@ static bool Listed(const ClutterRules& rules, int layer, int kind) {
 
 SC_TEST("clutter: the rules load, and the ring is deterministic, inside the ring and on the layer its kind is listed for") {
     const ClutterRules& rules = Rules();
-    // grass, straw, reed, the plough's clod, the maize's lying stalk and the standing maize plant's six cards
-    SC_EXPECT(!rules.kinds.empty() && rules.parts.size() == 11);
+    // grass, straw, reed, the plough's clod, the maize's lying stalk, the standing maize plant's six cards, the
+    // sunflower's three and the wheat's swath
+    SC_EXPECT(!rules.kinds.empty() && rules.parts.size() == 15);
     // Find a few points on different layers near the battery and ring each.
     const double centres[][2] = {{5750.0, -9050.0}, {-9000.0, -6000.0}, {2500.0, -12500.0}, {500.0, 500.0}};
     for (const auto& c : centres) {
@@ -129,7 +130,7 @@ SC_TEST("clutter: the rules load, and the ring is deterministic, inside the ring
             wrong += Listed(rules, layer, p.kind) ? 0 : 1;
             const ClutterKind& k = rules.kinds[p.kind];
             SC_EXPECT(p.part < rules.parts.size() && std::find(k.variants.begin(), k.variants.end(), rules.parts[p.part]) != k.variants.end());
-            const float stand = k.to_stand ? static_cast<float>(Layers().TallestStand()) : 1.0f;  // a share of its field's stand
+            const float stand = k.to_stand ? static_cast<float>(Layers().TallestVaried()) : 1.0f;  // a share of its field's stand
             SC_EXPECT(p.height_m > 0.0f && p.height_m <= k.height_max_m * stand + 1e-5f);
             if (!k.to_stand) SC_EXPECT(p.height_m >= k.height_min_m - 1e-6f);
             SC_EXPECT(p.width_m >= k.width_min_m - 1e-6f && p.width_m <= k.width_max_m + 1e-6f);
@@ -211,19 +212,27 @@ SC_TEST("clutter: standing maize is drawn in full within its near_m and not beyo
     const ClutterKind& k = rules.kinds[static_cast<std::size_t>(maize)];
     SC_EXPECT(k.near_m > 0.0 && k.to_stand);
     SC_EXPECT(rules.crop_fade_to_m > rules.crop_fade_from_m && rules.crop_fade_to_m + rules.rebuild_m <= k.near_m);
-    // The middle of a dry_stalks field near the battery: a cell centre with its whole 50 m square on the layer.
+    // The middle of a dry maize field near the battery: a cell centre with its whole 50 m square on the layer and the crop
+    // (a dry_stalks field may be sunflower's).
     const int dry = LayerId("dry_stalks");
+    const int maize_crop = Layers().CropIndex("maize");
+    SC_EXPECT(maize_crop >= 0);
     const CoverRaster& cover = Raster();
+    const auto dry_maize = [&](double e, double n) {
+        if (PointLayer(cover, Dressing(), Layers(), e, n, kDay) != dry) return false;
+        FieldCell f;
+        return ParcelAt(cover, e, n, f) && CropOf(Dressing(), f.id) == maize_crop;
+    };
     double ce = 0.0, cn = 0.0, best = 1e300;
     for (const CoverGrid& g : cover.grids) {
         for (int r = 0; r < g.rows; r += 2) {
             for (int c = 0; c < g.cols; c += 2) {
                 const double e = g.CentreEast(c), n = g.CentreNorth(r);
                 const double d = std::hypot(e - 8000.0, n + 8000.0);
-                if (d >= best || PointLayer(cover, Dressing(), Layers(), e, n, kDay) != dry) continue;
+                if (d >= best || !dry_maize(e, n)) continue;
                 bool whole = true;
                 for (double de = -25.0; de <= 25.0 && whole; de += 12.5) {
-                    for (double dn = -25.0; dn <= 25.0 && whole; dn += 12.5) whole = PointLayer(cover, Dressing(), Layers(), e + de, n + dn, kDay) == dry;
+                    for (double dn = -25.0; dn <= 25.0 && whole; dn += 12.5) whole = dry_maize(e + de, n + dn);
                 }
                 if (whole) best = d, ce = e, cn = n;
             }
@@ -245,7 +254,7 @@ SC_TEST("clutter: standing maize is drawn in full within its near_m and not beyo
         beyond += d > k.near_m + 1e-9 ? 1 : 0;
         within_25 += d <= 25.0 ? 1 : 0;
         FieldCell f;
-        const double stand = ParcelAt(cover, p.east_m, p.north_m, f) ? Layers().StandOnDay(CropOf(Dressing(), f.id), f.id, kDay) : 0.0;
+        const double stand = ParcelAt(cover, p.east_m, p.north_m, f) ? Layers().StandAtPoint(CropOf(Dressing(), f.id), f.id, kDay, p.east_m, p.north_m) : 0.0;
         wrong_height += (p.height_m < k.height_min_m * stand - 1e-4 || p.height_m > k.height_max_m * stand + 1e-4) ? 1 : 0;
     }
     // Within 25 m the square is the field's (its 50 m square is): drawn in full, at the rows' density.

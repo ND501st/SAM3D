@@ -46,6 +46,8 @@ struct RecipeScatter {
     double kappa_per_ha = 0.0;  // clusters a hectare (thomas, matern)
     double spread_m = 0.0;      // thomas: the offspring's standard deviation each way; matern: the disc's radius
     double row_m = 0.0;         // rows: the rows' spacing across the furrows (the spacing along them is per_ha's)
+    double across_m = 0.04;     // rows: how far a point wanders across its row either way (a drill's 4 cm, a swath's half width)
+    std::vector<int> crops;     // only on a field of these crops (the dressing's crop indices); empty: any
 };
 
 // Which of the parcel's edges a band's distance is measured from: its ends (across the furrows: the headlands), its sides
@@ -99,7 +101,7 @@ struct RecipeCandidate {
     int kind = -1;
     bool on_field = false;
     double heading_rad = 0.0;  // the parcel's furrows, clockwise from north (on a field)
-    double stand_m = 0.0;      // how high its field's crop stands on the day (0 off a field or where nothing stands)
+    double stand_m = 0.0;      // how high its field's crop stands here on the day (StandAtPoint; 0 off a field or where nothing stands)
 };
 
 namespace recipe_detail {
@@ -251,8 +253,20 @@ inline bool LoadRecipe(const std::string& path_or_json, const GroundLayerRules& 
                 if (!NumberIn(sv, "spread_m", 0.05, 20.0, s.spread_m, true)) return Fail(error, at + b.id + ": spread_m is not in 0.05..20");
             }
             if (s.process == ScatterProcess::Rows) {
-                if (!NumberIn(sv, "row_m", 0.1, 5.0, s.row_m, true)) return Fail(error, at + b.id + ": row_m is not in 0.1..5");
+                // Up to 12 m: a combine's swaths lie a header's width apart.
+                if (!NumberIn(sv, "row_m", 0.1, 12.0, s.row_m, true)) return Fail(error, at + b.id + ": row_m is not in 0.1..12");
                 if (10000.0 / (s.per_ha * s.row_m) < 0.05) return Fail(error, at + b.id + ": the rows' plants under 5 cm apart (per_ha too high for row_m)");
+                if (!NumberIn(sv, "across_m", 0.0, 0.4 * s.row_m, s.across_m, false)) return Fail(error, at + b.id + ": across_m is not in 0..0.4 of row_m");
+            } else if (sv.Find("across_m") != nullptr) {
+                return Fail(error, at + b.id + ": across_m is for rows only");
+            }
+            if (const json::Value* crops = sv.Find("crops")) {
+                if (!crops->Is(json::Type::Array) || crops->items.empty()) return Fail(error, at + b.id + ": crops is a list of the dressing's crops");
+                for (const json::Value& c : crops->items) {
+                    const int ci = c.Is(json::Type::String) ? layers.CropIndex(c.string) : -1;
+                    if (ci < 0) return Fail(error, at + b.id + ": crops names no crop of the dressing's");
+                    s.crops.push_back(ci);
+                }
             }
             b.scatter.push_back(s);
         }
@@ -417,7 +431,7 @@ inline void ScatterInCell(const RecipeScatter& s, std::uint64_t salt, std::int64
             }
             // The heading's own bits in the salt: two estates' lattices are not one.
             const std::uint64_t hs = salt ^ recipe_detail::Mix(static_cast<std::uint64_t>(std::llround(heading_rad * 1e6)));
-            const double jitter_v = std::min(0.4, 0.04 / s.row_m);  // a drill's row wanders some 4 cm
+            const double jitter_v = std::min(0.4, s.across_m / s.row_m);  // a drill's row wanders some 4 cm (across_m)
             for (auto k = static_cast<std::int64_t>(std::floor(vmin / s.row_m)) - 1; k <= static_cast<std::int64_t>(std::floor(vmax / s.row_m)) + 1; ++k) {
                 for (auto j = static_cast<std::int64_t>(std::floor(umin / along)) - 1; j <= static_cast<std::int64_t>(std::floor(umax / along)) + 1; ++j) {
                     const std::uint64_t h = Hash(j, k, hs, 11u);
@@ -505,6 +519,8 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
                     FieldCell f;
                     const bool on_field = ParcelAt(cover, e, n, f);
                     if (rows && (!on_field || f.heading_rad != cell_heading)) return;
+                    const std::vector<int>& crops = band.scatter[s].crops;
+                    if (!crops.empty() && (!on_field || std::find(crops.begin(), crops.end(), CropOf(dressing, f.id)) == crops.end())) return;
                     if (edges) {
                         double ends = std::numeric_limits<double>::infinity(), sides = ends;
                         if (on_field) ParcelEdgeDistance(f, e, n, ends, sides);
@@ -521,7 +537,7 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
                     c.kind = band.scatter[s].kind_index;
                     c.on_field = on_field;
                     c.heading_rad = on_field ? f.heading_rad : 0.0;
-                    c.stand_m = on_field ? layers.StandOnDay(CropOf(dressing, f.id), f.id, day_of_year) : 0.0;
+                    c.stand_m = on_field ? layers.StandAtPoint(CropOf(dressing, f.id), f.id, day_of_year, e, n) : 0.0;
                     out.push_back(c);
                 }, cell_heading);
             }
@@ -555,9 +571,14 @@ inline std::vector<RecipeMeasureRow> RecipeMeasure(const RecipeSet& set, const s
         rows.push_back(r);
         return rows.back();
     };
-    // Areas: each band's lattice points.
+    // Areas: each band's lattice points; a scatter kept to some crops, its own (the band's points on those crops' fields).
     std::vector<std::vector<double>> area(set.recipes.size());
-    for (std::size_t i = 0; i < set.recipes.size(); ++i) area[i].assign(set.recipes[i].bands.size(), 0.0);
+    std::vector<std::vector<std::vector<double>>> crop_area(set.recipes.size());
+    for (std::size_t i = 0; i < set.recipes.size(); ++i) {
+        area[i].assign(set.recipes[i].bands.size(), 0.0);
+        crop_area[i].resize(set.recipes[i].bands.size());
+        for (std::size_t b = 0; b < set.recipes[i].bands.size(); ++b) crop_area[i][b].assign(set.recipes[i].bands[b].scatter.size(), 0.0);
+    }
     for (double n = north0_m + 0.5 * step_m; n < north1_m; n += step_m) {
         for (double e = east0_m + 0.5 * step_m; e < east1_m; e += step_m) {
             const int layer = PointLayer(cover, dressing, layers, e, n, day_of_year);
@@ -566,7 +587,19 @@ inline std::vector<RecipeMeasureRow> RecipeMeasure(const RecipeSet& set, const s
             double ends = 0.0, sides = 0.0;
             if (r->HasEdgeBands()) ParcelEdgeDistance(cover, e, n, ends, sides);
             const int b = RecipeBandAt(*r, ends, sides);
-            if (b >= 0) area[static_cast<std::size_t>(set.by_layer[static_cast<std::size_t>(layer)])][static_cast<std::size_t>(b)] += step_m * step_m / 10000.0;
+            if (b < 0) continue;
+            const std::size_t ri = static_cast<std::size_t>(set.by_layer[static_cast<std::size_t>(layer)]);
+            area[ri][static_cast<std::size_t>(b)] += step_m * step_m / 10000.0;
+            const RecipeBand& band = r->bands[static_cast<std::size_t>(b)];
+            FieldCell f;
+            int crop = -2;
+            for (std::size_t s = 0; s < band.scatter.size(); ++s) {
+                if (band.scatter[s].crops.empty()) continue;
+                if (crop == -2) crop = ParcelAt(cover, e, n, f) ? CropOf(dressing, f.id) : -1;
+                if (std::find(band.scatter[s].crops.begin(), band.scatter[s].crops.end(), crop) != band.scatter[s].crops.end()) {
+                    crop_area[ri][static_cast<std::size_t>(b)][s] += step_m * step_m / 10000.0;
+                }
+            }
         }
     }
     // Counts: every candidate at full density.
@@ -598,7 +631,13 @@ inline std::vector<RecipeMeasureRow> RecipeMeasure(const RecipeSet& set, const s
         }
     }
     for (RecipeMeasureRow& row : rows) {
-        row.area_ha = area[static_cast<std::size_t>(row.recipe)][static_cast<std::size_t>(row.band)];
+        const std::size_t ri = static_cast<std::size_t>(row.recipe), bi = static_cast<std::size_t>(row.band);
+        row.area_ha = area[ri][bi];
+        const RecipeBand& band = set.recipes[ri].bands[bi];
+        for (std::size_t s = 0; s < band.scatter.size(); ++s) {
+            if (band.scatter[s].kind_index == row.kind && !band.scatter[s].crops.empty()) row.area_ha = crop_area[ri][bi][s];
+        }
+        if (row.area_ha <= 0.0) row.has_target = false;  // none of its crop's ground in the rectangle: nothing to measure
         row.per_ha = row.area_ha > 0.0 ? static_cast<double>(row.count) / row.area_ha : 0.0;
         row.on_target = row.has_target && row.per_ha >= row.lo_per_ha && row.per_ha <= row.hi_per_ha;
     }

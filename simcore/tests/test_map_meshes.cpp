@@ -85,6 +85,7 @@ SC_TEST("map meshes: every part, variant and LOD is closed, wound outward and ha
                 const TriMesh m = MapPartMesh(part, part == "flats" ? variant + 1 : variant, lod);
                 if (m.Empty()) continue;
                 ++meshes;
+                if (OpenEdges(m) != 0 || MeshFaults(m) != 0) std::printf("    %s variant %d LOD %d: %d open edges, %d faults\n", part.c_str(), variant, lod, OpenEdges(m), MeshFaults(m));
                 SC_EXPECT(OpenEdges(m) == 0);
                 SC_EXPECT(MeshFaults(m) == 0);
                 SC_EXPECT(SignedVolume(m) > 0.0);

@@ -17,6 +17,28 @@ def test_the_register_in_the_data_passes():
     assert fetch_textures.check_register(register) == []
 
 
+def test_quixels_zip_members_and_its_normal_flipped_to_directx():
+    import io
+
+    from PIL import Image
+
+    names = ["Gravel_Ground_x_2K_AO.jpg", "Gravel_Ground_x_2K_BaseColor.jpg", "Gravel_Ground_x_2K_Bump.jpg",
+             "Gravel_Ground_x_2K_Gloss.jpg", "Gravel_Ground_x_2K_Normal.jpg", "Gravel_Ground_x_2K_Roughness.jpg", "x.json"]
+    assert fetch_textures.quixel_members(names) == {
+        "albedo": "Gravel_Ground_x_2K_BaseColor.jpg", "normal": "Gravel_Ground_x_2K_Normal.jpg",
+        "roughness": "Gravel_Ground_x_2K_Roughness.jpg", "ao": "Gravel_Ground_x_2K_AO.jpg"}
+    try:
+        fetch_textures.quixel_members(names[:2])
+        assert False, "a zip without a normal and a roughness is refused"
+    except ValueError:
+        pass
+    src = io.BytesIO()
+    Image.new("RGB", (2, 2), (10, 200, 250)).save(src, format="PNG")
+    out = Image.open(io.BytesIO(fetch_textures.quixel_normal_dx(src.getvalue()))).convert("RGB")
+    assert out.getpixel((0, 0)) == (10, 55, 250)  # green inverted, red and blue kept
+    assert fetch_textures.check_register({"textures": [dict(GOOD, site="quixel", licence="Fab-Standard")]}) == []
+
+
 def test_the_register_rules():
     assert fetch_textures.check_register({"textures": [GOOD]}) == []
     assert any("twice" in p for p in fetch_textures.check_register({"textures": [GOOD, GOOD]}))
