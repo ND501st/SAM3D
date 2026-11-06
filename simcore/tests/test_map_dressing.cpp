@@ -11,6 +11,7 @@
 
 #include "simcore/radar.hpp"
 #include "simcore/scenery/map_dressing.hpp"
+#include "simcore/scenery/recipes.hpp"
 #include "simcore/terrain_map.hpp"
 #include "test_framework.hpp"
 
@@ -256,18 +257,22 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
         if (k == TreeKind::Pine || k == TreeKind::Beech) pine_wet += wet ? 1 : 0;
         if (IsShrub(k)) ++shrubs;
     }
-    // Shrubs stand only in the fringe: within the inset and a jitter of a block's side.
+    // Shrubs stand only in the belt: from the inset to the belt's deepest and a jitter in from a block's side, never on
+    // the open ground outside it.
+    int shrubs_out = 0;
     for (const MapBox& b : m->Layout().boxes) {
         if (b.part != MapPart::Canopy || !m->InDetail(b.east_m, b.north_m)) continue;
         for (const TreeInstance& t : d.trees) {
             if (!IsShrub(static_cast<TreeKind>(t.kind))) continue;
             const double de = std::fabs(t.east_m - b.east_m), dn = std::fabs(t.north_m - b.north_m);
-            if (de > 0.5 * b.length_m || dn > 0.5 * b.width_m) continue;
+            if (de > 0.5 * b.length_m + 2.0 || dn > 0.5 * b.width_m + 2.0) continue;
             const double in = std::min(0.5 * b.length_m - de, 0.5 * b.width_m - dn);
-            shrubs_deep += in > r.shrub_inset_m + r.jitter * r.shrub_spacing_m + 0.5 ? 1 : 0;
+            shrubs_deep += in > r.shrub_inset_m + r.shrub_belt_max_m + r.jitter * r.shrub_spacing_m + 0.5 ? 1 : 0;
+            shrubs_out += in < 0.0 ? 1 : 0;
         }
         break;  // one block is enough to look inside
     }
+    SC_EXPECT(shrubs_out == 0);
     std::printf("    %d alders (%d off the wet ground), %d pine or beech on the wet ground, %d shrubs\n", alder, alder_dry, pine_wet, shrubs);
     SC_EXPECT(alder > 100);
     SC_EXPECT(alder_dry == 0);
@@ -275,6 +280,80 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
     SC_EXPECT(shrubs > 1000);
     SC_EXPECT(shrubs_deep == 0);
     SC_EXPECT(shrubs < static_cast<int>(d.trees.size()) / 3);
+}
+
+SC_TEST("map dressing: a wood's edge stands back in bays and steps down to the field, never a wall (plot 11)") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const MapDressing& d = Dressing();
+    const DressingRules& r = Rules();
+    SC_EXPECT(r.edge_setback_max_m > r.edge_setback_min_m && r.edge_height < 1.0 && r.edge_crown > 1.0);
+    // The detail areas' blocks open on the north (no block beyond): the trees (not shrubs) within the edge band by how
+    // far in they stand, and the first tree's depth along the side in 7 m slices.
+    double h_near = 0.0, h_far = 0.0, ratio_near = 0.0, ratio_far = 0.0;
+    int n_near = 0, n_far = 0, sides = 0;
+    double first_lo = 1e9, first_hi = -1e9;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (sides >= 20) break;
+        if (b.part != MapPart::Canopy || !m->InDetail(b.east_m, b.north_m) || m->NearLine(b.east_m, b.north_m, 0.5 * b.length_m + 10.0)) continue;
+        bool open = true;
+        for (const MapBox& o : m->Layout().boxes) {
+            open = open && !(o.part == MapPart::Canopy && std::fabs(o.east_m - b.east_m) < 1.0 && std::fabs(o.north_m - b.north_m - b.width_m) < 1.0);
+        }
+        if (!open) continue;
+        ++sides;
+        const double top = b.north_m + 0.5 * b.width_m;
+        std::vector<double> first(static_cast<std::size_t>(b.length_m / 7.0), 1e9);
+        for (const TreeInstance& t : d.trees) {
+            if (IsShrub(static_cast<TreeKind>(t.kind))) continue;
+            const double de = t.east_m - b.east_m, in = top - t.north_m;
+            if (std::fabs(de) > 0.5 * b.length_m - r.edge_band_m || in < -2.0 || in > r.edge_band_m + 4.0) continue;
+            const std::size_t slice = static_cast<std::size_t>((de + 0.5 * b.length_m) / 7.0);
+            if (slice < first.size()) first[slice] = std::min(first[slice], in);
+            if (in < 0.4 * r.edge_band_m) {
+                h_near += t.height_m;
+                ratio_near += t.crown_m / t.height_m;
+                ++n_near;
+            } else if (in > r.edge_band_m) {
+                h_far += t.height_m;
+                ratio_far += t.crown_m / t.height_m;
+                ++n_far;
+            }
+        }
+        for (double f : first) {
+            if (f > 1e8) continue;
+            first_lo = std::min(first_lo, f);
+            first_hi = std::max(first_hi, f);
+        }
+    }
+    SC_EXPECT(sides >= 5 && n_near > 20 && n_far > 20);
+    if (n_near == 0 || n_far == 0) return;
+    std::printf("    %d open sides: the trees within %.1f m %.1f m high (crown %.2f of height), past %.0f m %.1f m (%.2f); the first tree "
+                "%.1f-%.1f m in\n",
+                sides, 0.4 * r.edge_band_m, h_near / n_near, ratio_near / n_near, r.edge_band_m, h_far / n_far, ratio_far / n_far, first_lo, first_hi);
+    SC_EXPECT(h_near / n_near < 0.85 * h_far / n_far);              // lower at the side
+    SC_EXPECT(ratio_near / n_near > 1.1 * ratio_far / n_far);       // and wider for their height
+    SC_EXPECT(first_hi - first_lo > 0.5 * (r.edge_setback_max_m - r.edge_setback_min_m));  // bays and tongues: no straight wall
+}
+
+SC_TEST("recipes: a wood's floor is measured in from its open side") {
+    CoverRaster cover;
+    CoverGrid g;
+    g.west_m = 0.0;
+    g.south_m = 0.0;
+    g.cell_m = 25.0;
+    g.cols = 4;
+    g.rows = 4;
+    g.cover.assign(16, static_cast<std::uint8_t>(Cover::Forest));
+    g.crop.assign(16, 0);
+    g.strips.assign(16, 0);
+    for (int c = 0; c < 4; ++c) g.cover[g.Index(c, 3)] = static_cast<std::uint8_t>(Cover::Field);  // the top row open: the edge at 75 m
+    cover.grids.push_back(g);
+    SC_EXPECT_NEAR(WoodEdgeDistance(cover, 50.0, 73.0, 12.0), 2.0, 1e-9);
+    SC_EXPECT_NEAR(WoodEdgeDistance(cover, 50.0, 66.0, 12.0), 9.0, 1e-9);
+    SC_EXPECT(std::isinf(WoodEdgeDistance(cover, 50.0, 40.0, 12.0)));  // deeper than the reach
+    SC_EXPECT(std::isinf(WoodEdgeDistance(cover, 50.0, 80.0, 12.0)));  // on the field: not a wood
 }
 
 SC_TEST("map dressing: the stand rules refuse what they cannot use") {

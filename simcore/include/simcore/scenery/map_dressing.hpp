@@ -88,10 +88,19 @@ struct DressingRules {
     double wet_m = 80.0;
     double age_min = 0.75;
     double plantation_jitter = 0.15;
-    // A wood's open edge: the trees within edge_band_m of an open side are its mantle (edge_mix, edge_height of the
-    // stand's), and a fringe of shrubs (shrub_mix) stands shrub_inset_m inside it every shrub_spacing_m, keep_share of them.
+    // A wood's open edge (roadmap L7, plot 11): the trees within edge_band_m of an open side are its mantle (edge_mix),
+    // edge_height of the stand's height and edge_crown times its crown at the side, growing to the stand's at the band's
+    // inner line; the trees' line stands back from the side by edge_setback_m, which wanders along it in waves about
+    // edge_wave_m long (bays and tongues, never a wall). A belt of shrubs (shrub_mix) from shrub_inset_m in, its depth
+    // shrub_belt_m wandering the same way, a shrub every shrub_spacing_m along it twice over, in runs and gaps: about
+    // shrub_keep of them, more where the wave is high. All inside the wood's block (no shrub where the sight lines see open
+    // ground).
     double edge_band_m = 12.0;
-    double edge_height = 0.8;
+    double edge_height = 0.5;
+    double edge_crown = 1.3;
+    double edge_setback_min_m = 0.0, edge_setback_max_m = 7.0;
+    double edge_wave_m = 35.0;
+    double shrub_belt_min_m = 1.0, shrub_belt_max_m = 7.0;
     std::array<double, static_cast<std::size_t>(TreeKind::Count)> edge_mix{{0.4, 0.0, 0.0, 0.25, 0.15, 0.0, 0.0, 0.2, 0.0, 0.0}};
     std::array<double, static_cast<std::size_t>(TreeKind::Count)> shrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.4}};
     double shrub_spacing_m = 3.0;
@@ -226,6 +235,10 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("plantation_jitter", r.plantation_jitter, 0.0, 1.0);
     number("edge_band_m", r.edge_band_m, 0.0, 60.0);
     number("edge_height", r.edge_height, 0.3, 1.0);
+    number("edge_crown", r.edge_crown, 0.5, 2.0);
+    range("edge_setback_m", r.edge_setback_min_m, r.edge_setback_max_m, 0.0, 30.0);
+    number("edge_wave_m", r.edge_wave_m, 5.0, 500.0);
+    range("shrub_belt_m", r.shrub_belt_min_m, r.shrub_belt_max_m, 0.0, 30.0);
     number("shrub_spacing_m", r.shrub_spacing_m, 1.0, 50.0);
     number("shrub_inset_m", r.shrub_inset_m, 0.0, 20.0);
     number("shrub_keep", r.shrub_keep, 0.0, 1.0);
@@ -614,7 +627,7 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         return s;
     };
     // Plants one tree (or, for a shrub's kind, one shrub) of the kind at the point, its height times `height_factor`.
-    const auto plant = [&](const MapBox& b, double e, double n, int kind, double height_factor = 1.0) {
+    const auto plant = [&](const MapBox& b, double e, double n, int kind, double height_factor = 1.0, double crown_factor = 1.0) {
         if (!def.InCore(e, n) && !map.InDetail(e, n)) return;
         if (map.NearLine(e, n, rules.line_clear_m) || map.NearWater(e, n, 0.0)) return;
         const double ground = map.GroundHeight(e, n);
@@ -636,18 +649,30 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         t.north_m = n;
         t.base_m = base;
         t.height_m = static_cast<float>(height);
-        t.crown_m = static_cast<float>(height * rules.crown_ratio * (1.0 + rules.crown_jitter * (2.0 * At(seed ^ 0xC20ull, e, n) - 1.0)));
+        t.crown_m = static_cast<float>(crown_factor * height * rules.crown_ratio * (1.0 + rules.crown_jitter * (2.0 * At(seed ^ 0xC20ull, e, n) - 1.0)));
         t.yaw_rad = static_cast<float>(At(seed ^ 0xA3ull, e, n) * kTwoPi);
         t.kind = static_cast<std::uint8_t>(kind);
         out.trees.push_back(t);
     };
-    // A wood's tree at a point: the mantle's kind and height within the edge band (`edge`), else its stand's (or, with no
-    // stand types, the species shares, poplar by the water).
-    const auto wood_tree = [&](const MapBox& b, double e, double n, bool edge) {
+    // The edge's wave at a point, in [0, 1): one smooth field per use (`salt`), features about edge_wave_m along the side.
+    const auto wave = [&](std::uint64_t salt, double e, double n) { return noise::Value(seed ^ salt, e, n, rules.edge_wave_m); };
+    // How far the trees' line stands back from an open side there.
+    const auto setback = [&](double e, double n) {
+        return rules.edge_setback_min_m + (rules.edge_setback_max_m - rules.edge_setback_min_m) * wave(0xBA75ull, e, n);
+    };
+    // A wood's tree at a point `depth` in from the nearest open side: none in front of the trees' line (a wood planted
+    // whole only: a far wood's two rows stand before its mass, which a bay would bare); the mantle's kind, lower and wider
+    // towards the side, within the edge band; else its stand's (or, with no stand types, the species shares, poplar by
+    // the water).
+    const auto wood_tree = [&](const MapBox& b, double e, double n, double depth, bool bays) {
         const double u = At(seed ^ 0x5Full, e, n);
         const Stand s = stand_at(e, n);
-        if (edge) {
-            plant(b, e, n, draw(rules.edge_mix, u), rules.edge_height * s.age);
+        if (depth < rules.edge_band_m) {
+            const double back = bays ? setback(e, n) : 0.0;
+            if (depth < back) return;
+            const double t = noise::Smooth(std::min(1.0, std::max(0.0, (depth - back) / std::max(1.0, rules.edge_band_m - back))));
+            plant(b, e, n, draw(rules.edge_mix, u), (rules.edge_height + (1.0 - rules.edge_height) * t) * s.age,
+                  rules.edge_crown + (1.0 - rules.edge_crown) * t);
             return;
         }
         if (s.type != nullptr) {
@@ -712,23 +737,33 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
             if (open_w) d = std::min(d, 0.5 * size + right);
             return d;
         };
-        // The fringe: shrubs along each open side, shrub_inset_m in, some left out, in the map proper and the areas.
+        // The shrub belt: along each open side, from shrub_inset_m in to the belt's wandering depth, a shrub every
+        // shrub_spacing_m twice over, kept in runs where the edge's wave is high and gaps where it is low; in the map
+        // proper and the areas.
         if ((core || whole) && rules.shrub_keep > 0.0) {
             const int along = std::max(1, static_cast<int>(std::floor(size / rules.shrub_spacing_m)));
             const double step = size / along;
+            const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
             for (int k = 0; k < along; ++k) {
-                const double s = (k + 0.5) * step - 0.5 * size;
-                const double in = rules.shrub_inset_m;
-                const double sides[4][3] = {{open_n ? 1.0 : 0.0, 0.5 * size - in, s},
-                                            {open_s ? 1.0 : 0.0, -0.5 * size + in, s},
-                                            {open_e ? 1.0 : 0.0, s, 0.5 * size - in},
-                                            {open_w ? 1.0 : 0.0, s, -0.5 * size + in}};
-                for (const auto& side : sides) {
-                    if (side[0] == 0.0) continue;
-                    double e = 0.0, n = 0.0;
-                    jittered(b, side[1], side[2], step, e, n);
-                    if (At(seed ^ 0x5E7ull, e, n) >= rules.shrub_keep) continue;
-                    plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0x5E8ull, e, n)));
+                for (int twice = 0; twice < 2; ++twice) {
+                    const double s = (k + 0.25 + 0.5 * twice) * step - 0.5 * size;
+                    // (open, forward of the side's point at depth 0, right of it, the inward direction's forward and right)
+                    const double sides[4][5] = {{open_n ? 1.0 : 0.0, 0.5 * size, s, -1.0, 0.0},
+                                                {open_s ? 1.0 : 0.0, -0.5 * size, s, 1.0, 0.0},
+                                                {open_e ? 1.0 : 0.0, s, 0.5 * size, 0.0, -1.0},
+                                                {open_w ? 1.0 : 0.0, s, -0.5 * size, 0.0, 1.0}};
+                    for (const auto& side : sides) {
+                        if (side[0] == 0.0) continue;
+                        const double se = b.east_m + side[1] * sh + side[2] * ch, sn = b.north_m + side[1] * ch - side[2] * sh;
+                        const double belt = rules.shrub_belt_min_m + (rules.shrub_belt_max_m - rules.shrub_belt_min_m) * wave(0xBE17ull, se, sn);
+                        const double in = rules.shrub_inset_m + belt * At(seed ^ (0x5E9ull + static_cast<std::uint64_t>(twice)), se, sn);
+                        double e = 0.0, n = 0.0;
+                        jittered(b, side[1] + side[3] * in, side[2] + side[4] * in, step, e, n);
+                        if (in_from_open(side[1] + side[3] * in, side[2] + side[4] * in) < rules.shrub_inset_m) continue;
+                        const double keep = std::min(1.0, rules.shrub_keep * (0.25 + 1.5 * wave(0x5E7ull, se, sn)));
+                        if (At(seed ^ 0x5E7ull, e, n) >= keep) continue;
+                        plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0x5E8ull, e, n)));
+                    }
                 }
             }
         }
@@ -741,7 +776,7 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                     const double fwd = (i + 0.5) * step_l - 0.5 * b.length_m, right = (j + 0.5) * step_w - 0.5 * b.width_m;
                     double e = 0.0, n = 0.0;
                     jittered(b, fwd, right, std::min(step_l, step_w), e, n, true);
-                    wood_tree(b, e, n, in_from_open(fwd, right) < rules.edge_band_m);
+                    wood_tree(b, e, n, in_from_open(fwd, right), true);
                 }
             }
             continue;
@@ -756,24 +791,23 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                 for (int k = 0; k < along; ++k) {
                     const double s = (k + 0.5) * step - 0.5 * size;  // along the side
                     double e = 0.0, n = 0.0;
-                    const bool mantle = in < rules.edge_band_m;
                     if (open_n) {
                         jittered(b, 0.5 * size - in, s, rules.edge_spacing_m, e, n);
-                        wood_tree(b, e, n, mantle);
+                        wood_tree(b, e, n, in, false);
                     }
                     if (open_s) {
                         jittered(b, -0.5 * size + in, s, rules.edge_spacing_m, e, n);
-                        wood_tree(b, e, n, mantle);
+                        wood_tree(b, e, n, in, false);
                     }
                     // The east and west rows stop short of a north or south side's rows (no tree planted twice).
                     if ((open_n && s > 0.5 * size - band) || (open_s && s < -0.5 * size + band)) continue;
                     if (open_e) {
                         jittered(b, s, 0.5 * size - in, rules.edge_spacing_m, e, n);
-                        wood_tree(b, e, n, mantle);
+                        wood_tree(b, e, n, in, false);
                     }
                     if (open_w) {
                         jittered(b, s, -0.5 * size + in, rules.edge_spacing_m, e, n);
-                        wood_tree(b, e, n, mantle);
+                        wood_tree(b, e, n, in, false);
                     }
                 }
             }

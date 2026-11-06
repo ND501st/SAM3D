@@ -38,7 +38,11 @@
       "confidence": "estimate"
     },
     "edge_band_m": { "value": 12, "source": "Waldmantel: the mantle and shrub belt 10-20 m in practice (Thurgau forestry office, Waldrandgestaltung); a 1980s managed edge against ploughland thinner, so 12 m (docs/scenery/VEGETATION.md section 1)", "confidence": "estimate" },
-    "edge_height": { "value": 0.8, "source": "game value: sam3d estimate (the mantle's light-demanding trees lower than the stand behind)", "confidence": "estimate" },
+    "edge_height": { "value": 0.5, "source": "game value: sam3d estimate (the mantle's light-demanding trees lower than the stand behind, rising to it across the band: a stepped edge profile, docs/scenery/VEGETATION.md section 1; plot 11 judged by eye)", "confidence": "estimate" },
+    "edge_crown": { "value": 1.3, "source": "game value: sam3d estimate (a tree in the light at the edge keeps wider crown and lower branches; plot 11 judged by eye)", "confidence": "estimate" },
+    "edge_setback_m": { "value": [0, 7], "source": "game value: sam3d estimate (the trees' line wanders in bays and tongues rather than following the block's straight side; plot 11 judged by eye)", "confidence": "estimate" },
+    "edge_wave_m": { "value": 35, "source": "game value: sam3d estimate (the bays' length along the edge)", "confidence": "estimate" },
+    "shrub_belt_m": { "value": [1, 7], "source": "game value: sam3d estimate (the shrub belt's depth wanders within the 10-20 m of mantle and belt, Thurgau forestry office, Waldrandgestaltung)", "confidence": "estimate" },
     "edge_mix": {
       "value": { "oak": 0.4, "acacia": 0.25, "hornbeam": 0.15, "maple": 0.2 },
       "source": "the mantle's light-demanding trees: oak, field maple, black locust (BIO Austria, Waldraender; docs/scenery/VEGETATION.md section 1)",
@@ -51,7 +55,7 @@
     },
     "shrub_spacing_m": { "value": 3, "source": "game value: sam3d estimate (a shrub every 3 m along an open edge)", "confidence": "estimate" },
     "shrub_inset_m": { "value": 1.5, "source": "game value: sam3d estimate (the fringe just inside the wood's block, so no shrub stands where the sight lines see open ground)", "confidence": "estimate" },
-    "shrub_keep": { "value": 0.55, "source": "game value: sam3d estimate (gaps in the fringe: a managed edge's shrubs are patchy, the Swiss inventory's classes run from none to over 4 m, lfi.ch)", "confidence": "estimate" },
+    "shrub_keep": { "value": 0.35, "source": "game value: sam3d estimate (of the belt's two places every shrub_spacing_m, in runs and gaps by the edge's wave; gaps in the fringe: a managed edge's shrubs are patchy, the Swiss inventory's classes run from none to over 4 m, lfi.ch)", "confidence": "estimate" },
     "shrub_height_m": { "value": [1.5, 4.0], "source": "game value: sam3d estimate (hazel and elder 1.5-4 m)", "confidence": "estimate" },
     "mass_inset_m": { "value": 3, "source": "game value: sam3d estimate (a wood's mass inside its block)", "confidence": "estimate" },
     "mass_top": { "value": 0.92, "source": "game value: sam3d estimate (the mass's top, of the wood's height)", "confidence": "estimate" },

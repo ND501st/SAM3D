@@ -81,9 +81,15 @@ lacked was the near part: stands, edges and shrubs.
     poplar plantation and poplar-alder (`stands`).
   - A plantation's trees keep to the lattice (`plantation_jitter`).
 - **The mantle.** Trees within 12 m of an open side (`edge_band_m`) are the edge's kinds (`edge_mix`: oak, locust,
-  hornbeam, field maple) at 0.8 of the stand's height (`edge_height`).
-- **The fringe.** Shrubs stand 1.5 m inside each open side, every 3 m, and about half are left out (`shrub_keep`).
-  They are 1.5-4 m high. They stand inside the wood's block, so the sight lines' obstacle covers them.
+  hornbeam, field maple), from half the stand's height at the trees' line to the stand's at the band's inner edge
+  (`edge_height`), their crowns up to 1.3 times as wide (`edge_crown`). In a wood planted whole the trees' line stands
+  back 0-7 m from the side in waves about 35 m long (`edge_setback_m`, `edge_wave_m`): bays and tongues, not a wall
+  (roadmap A.3.13).
+- **The shrub belt.** Shrubs stand from 1.5 m inside each open side to a depth wandering between 1 and 7 m more
+  (`shrub_belt_m`), two places every 3 m, kept in runs and gaps (`shrub_keep`). They are 1.5-4 m high. They stand inside
+  the wood's block, so the sight lines' obstacle covers them.
+- **The herb fringe.** The forest floor's recipe draws dense grass and dry stalks in the first 3.5 m in from the open
+  side, and patchy grass under the mantle (`data/scenery/recipes/forest_floor.json`, edge `wood`).
 - **Unreal.** Each kind is its own instance list. The shrubs stop drawing at 800 m.
 
 On Kesmark this comes to about 270-300k trees and shrubs against a budget of 400k (the test prints the count by kind).

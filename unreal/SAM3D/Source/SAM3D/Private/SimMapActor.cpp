@@ -1679,30 +1679,16 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	for (int32 K = 0; K < TreeKinds; ++K)
 	{
 		const FString PartName = FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K)));
-		// A distance ladder: where the register names real models for a tree kind's variants 0, 1, 2 (a model thinned to
-		// several budgets, tools/prepare_model.py), each is drawn in its own band of distance, and past the last one the
-		// procedural crown (the next variant, not in the register) as before. A kind with one model or none: as before.
+		// A kind the register names a real model for is drawn by that model alone (variant 0), out to the kind's distance:
+		// its thinner variants (tools/prepare_model.py's budgets) are the model's own LODs (tools/ue_tree_lods.py). It keeps
+		// its own materials (no season tint). A distance ladder of separate meshes cannot work: an instanced component's
+		// start distance only fades, it never hides the instances nearer, so every rung was drawn from 0 m (the procedural
+		// crown under the model, roadmap A.1 item 6).
 		const simcore::scenery::AssetRegister* Reg = FSimMapAssets::Register();
-		int32 Registered = 0;
-		while (Reg != nullptr && Registered < 3 && Reg->AssetFor(std::string(TCHAR_TO_UTF8(*PartName)), Registered) != nullptr)
-		{
-			++Registered;
-		}
+		const bool bRegistered = Reg != nullptr && Reg->AssetFor(std::string(TCHAR_TO_UTF8(*PartName)), 0) != nullptr;
 		// A wood's fringe of shrubs (hazel, elder) is not drawn as far as the trees: under 4 m, it is lost behind them.
 		const float KindCullM = simcore::scenery::IsShrub(static_cast<simcore::scenery::TreeKind>(K)) ? FMath::Min(TreeCullDistanceM, 800.0f) : TreeCullDistanceM;
-		if (Registered < 2)
-		{
-			Add(PartName, 0, Trees[K], true, KindCullM, &TreeTints[K]);
-			continue;
-		}
-		static const float BandEndM[] = {150.0f, 600.0f, 1500.0f};
-		float StartM = 0.0f;
-		for (int32 V = 0; V < Registered; ++V)
-		{
-			Add(PartName, V, Trees[K], true, BandEndM[V], &TreeTints[K], StartM);
-			StartM = BandEndM[V];
-		}
-		Add(PartName, Registered, Trees[K], true, FMath::Max(KindCullM, StartM + 1.0f), &TreeTints[K], StartM);
+		Add(PartName, 0, Trees[K], true, KindCullM, bRegistered ? nullptr : &TreeTints[K]);
 	}
 	if (bTints)
 	{

@@ -51,8 +51,9 @@ struct RecipeScatter {
 };
 
 // Which of the parcel's edges a band's distance is measured from: its ends (across the furrows: the headlands), its sides
-// (along them) or the nearer of the two.
-enum class RecipeEdge { Any, Ends, Sides };
+// (along them) or the nearer of the two; or, under a wood, its open side (the land cover's nearest cell that is not
+// forest: a wood's herb fringe, roadmap L7).
+enum class RecipeEdge { Any, Ends, Sides, Wood };
 
 struct RecipeBand {
     std::string id;
@@ -80,6 +81,14 @@ struct Recipe {
             if (!b.whole) return true;
         }
         return false;
+    }
+    // How far in from a wood's side its bands reach (0: none measured from a wood's side).
+    double WoodReachM() const {
+        double reach = 0.0;
+        for (const RecipeBand& b : bands) {
+            if (!b.whole && b.edge == RecipeEdge::Wood) reach = std::max(reach, b.to_m);
+        }
+        return reach;
     }
 };
 
@@ -223,7 +232,8 @@ inline bool LoadRecipe(const std::string& path_or_json, const GroundLayerRules& 
             if (e == "any") b.edge = RecipeEdge::Any;
             else if (e == "ends") b.edge = RecipeEdge::Ends;
             else if (e == "sides") b.edge = RecipeEdge::Sides;
-            else return Fail(error, at + b.id + ": edge is not any, ends or sides");
+            else if (e == "wood") b.edge = RecipeEdge::Wood;
+            else return Fail(error, at + b.id + ": edge is not any, ends, sides or wood");
         } else {
             whole_seen = true;
         }
@@ -367,12 +377,37 @@ inline void ParcelEdgeDistance(const CoverRaster& cover, double east_m, double n
     if (ParcelAt(cover, east_m, north_m, f)) ParcelEdgeDistance(f, east_m, north_m, ends_m, sides_m);
 }
 
-// The band of `recipe` a point lies in, -1 none.
-inline int RecipeBandAt(const Recipe& recipe, double ends_m, double sides_m) {
+// How far (east, north), in a wood (forest in the land cover), is in from the wood's open side: the distance to the
+// nearest cell of its grid within `reach_m` that is not forest; infinite off the woods or with none so near.
+inline double WoodEdgeDistance(const CoverRaster& cover, double east_m, double north_m, double reach_m) {
+    const double none = std::numeric_limits<double>::infinity();
+    const CoverGrid* g = cover.GridAt(east_m, north_m);
+    if (g == nullptr || reach_m <= 0.0 || static_cast<Cover>(g->cover[g->IndexAt(east_m, north_m)]) != Cover::Forest) return none;
+    const int c0 = std::max(0, static_cast<int>(std::floor((east_m - reach_m - g->west_m) / g->cell_m)));
+    const int c1 = std::min(g->cols - 1, static_cast<int>(std::floor((east_m + reach_m - g->west_m) / g->cell_m)));
+    const int r0 = std::max(0, static_cast<int>(std::floor((north_m - reach_m - g->south_m) / g->cell_m)));
+    const int r1 = std::min(g->rows - 1, static_cast<int>(std::floor((north_m + reach_m - g->south_m) / g->cell_m)));
+    double best = none;
+    for (int r = r0; r <= r1; ++r) {
+        for (int c = c0; c <= c1; ++c) {
+            if (static_cast<Cover>(g->cover[g->Index(c, r)]) == Cover::Forest) continue;
+            const double x0 = g->west_m + g->cell_m * c, y0 = g->south_m + g->cell_m * r;
+            const double dx = std::max({x0 - east_m, 0.0, east_m - (x0 + g->cell_m)});
+            const double dy = std::max({y0 - north_m, 0.0, north_m - (y0 + g->cell_m)});
+            best = std::min(best, std::hypot(dx, dy));
+        }
+    }
+    return best <= reach_m ? best : none;
+}
+
+// The band of `recipe` a point lies in, -1 none. `wood_m`: WoodEdgeDistance's (infinite where no band reads it).
+inline int RecipeBandAt(const Recipe& recipe, double ends_m, double sides_m, double wood_m = std::numeric_limits<double>::infinity()) {
     for (std::size_t i = 0; i < recipe.bands.size(); ++i) {
         const RecipeBand& b = recipe.bands[i];
         if (b.whole) return static_cast<int>(i);
-        const double d = b.edge == RecipeEdge::Ends ? ends_m : (b.edge == RecipeEdge::Sides ? sides_m : std::min(ends_m, sides_m));
+        const double d = b.edge == RecipeEdge::Wood ? wood_m
+                         : b.edge == RecipeEdge::Ends ? ends_m
+                         : (b.edge == RecipeEdge::Sides ? sides_m : std::min(ends_m, sides_m));
         if (d >= b.from_m && d < b.to_m) return static_cast<int>(i);
     }
     return -1;
@@ -505,6 +540,7 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
         if (recipe == nullptr) continue;
         const int ri = set.by_layer[static_cast<std::size_t>(layer)];
         const bool edges = recipe->HasEdgeBands();
+        const double wood_reach = recipe->WoodReachM();
         // The furrows' heading at the cell (rows run along it); a candidate in another estate's heading is not this lattice's.
         FieldCell cell_field;
         const double cell_heading = ParcelAt(cover, ce, cn, cell_field) ? cell_field.heading_rad : std::numeric_limits<double>::quiet_NaN();
@@ -524,7 +560,8 @@ inline void RecipeCandidates(const RecipeSet& set, const CoverRaster& cover, con
                     if (edges) {
                         double ends = std::numeric_limits<double>::infinity(), sides = ends;
                         if (on_field) ParcelEdgeDistance(f, e, n, ends, sides);
-                        if (RecipeBandAt(*recipe, ends, sides) != static_cast<int>(b)) return;
+                        const double wood = wood_reach > 0.0 ? WoodEdgeDistance(cover, e, n, wood_reach) : std::numeric_limits<double>::infinity();
+                        if (RecipeBandAt(*recipe, ends, sides, wood) != static_cast<int>(b)) return;
                     }
                     RecipeCandidate c;
                     c.east_m = e;
@@ -586,7 +623,8 @@ inline std::vector<RecipeMeasureRow> RecipeMeasure(const RecipeSet& set, const s
             if (r == nullptr) continue;
             double ends = 0.0, sides = 0.0;
             if (r->HasEdgeBands()) ParcelEdgeDistance(cover, e, n, ends, sides);
-            const int b = RecipeBandAt(*r, ends, sides);
+            const double wood = r->WoodReachM() > 0.0 ? WoodEdgeDistance(cover, e, n, r->WoodReachM()) : std::numeric_limits<double>::infinity();
+            const int b = RecipeBandAt(*r, ends, sides, wood);
             if (b < 0) continue;
             const std::size_t ri = static_cast<std::size_t>(set.by_layer[static_cast<std::size_t>(layer)]);
             area[ri][static_cast<std::size_t>(b)] += step_m * step_m / 10000.0;

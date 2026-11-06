@@ -20,6 +20,7 @@ MASTERS = {
     'M_SimFoliage': ('used_with_nanite', 'used_with_instanced_static_meshes'),
     'M_SimMapVertexColor': ('used_with_nanite', 'used_with_instanced_static_meshes'),
     'M_SimMapClutter': ('used_with_nanite', 'used_with_instanced_static_meshes'),
+    'M_SimMapTree': ('used_with_nanite', 'used_with_instanced_static_meshes'),  # the procedural trees' season tint
 }
 # Where the masters' instances live: the cards (committed) and the fetched models (ignored by git).
 INSTANCE_ROOTS = ('/Game/SAM3D/Map/Cards', '/Game/ThirdParty/Models')
