@@ -117,6 +117,8 @@ struct DressingRules {
     double brook_gap_share = 0.25;  // of a brook's alder line, the share left open (a smooth wave: grazed or cut banks, A.3.22)
     double interior_height_spread = 0.3;  // the inside trees from the stand's height down by up to this share (A.3.23)
     double sapling_keep = 0.15;  // of the inside lattice's cells, the share with a sapling of the stand's kinds (A.3.23)
+    double shrub_crown = 1.8;    // a bush's crown this much wider than a tree's of its height: about as wide as tall (A.3.24)
+    double row_bush_share = 0.3;  // of a field's tree row's gaps between trees, the share with a bush (a hedge under the row, A.3.24)
     double brook_bush_share = 0.15;  // of what is left, the share a bush (hazel, elder) instead of an alder
     double cover_cell_m = 25.0;
     double garden_m = 15.0;
@@ -237,6 +239,8 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("brook_gap_share", r.brook_gap_share, 0.0, 1.0);
     number("interior_height_spread", r.interior_height_spread, 0.0, 0.8);
     number("sapling_keep", r.sapling_keep, 0.0, 1.0);
+    number("shrub_crown", r.shrub_crown, 0.5, 3.0);
+    number("row_bush_share", r.row_bush_share, 0.0, 1.0);
     number("brook_bush_share", r.brook_bush_share, 0.0, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
@@ -671,7 +675,9 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         t.north_m = n;
         t.base_m = base;
         t.height_m = static_cast<float>(height);
-        t.crown_m = static_cast<float>(crown_factor * height * rules.crown_ratio * (1.0 + rules.crown_jitter * (2.0 * At(seed ^ 0xC20ull, e, n) - 1.0)));
+        // A bush is about as wide as it is tall (shrub_crown, A.3.24), a tree half as wide.
+        t.crown_m = static_cast<float>(crown_factor * height * rules.crown_ratio * (shrub ? rules.shrub_crown : 1.0) *
+                                       (1.0 + rules.crown_jitter * (2.0 * At(seed ^ 0xC20ull, e, n) - 1.0)));
         t.yaw_rad = static_cast<float>(At(seed ^ 0xA3ull, e, n) * kTwoPi);
         t.kind = static_cast<std::uint8_t>(kind);
         out.trees.push_back(t);
@@ -766,6 +772,13 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                         continue;
                     }
                     plant(b, e, n, kind);
+                    // A hedge under the row (A.3.24): in a share of the gaps, half a step on, a bush, in runs.
+                    if (rules.row_bush_share > 0.0 && i + 1 < count_l) {
+                        double be = 0.0, bn = 0.0;
+                        jittered(b, (i + 1.0) * step_l - 0.5 * b.length_m, (j + 0.5) * step_w - 0.5 * b.width_m, 0.5 * std::min(step_l, step_w), be, bn);
+                        const double keep = std::min(1.0, rules.row_bush_share * (0.25 + 1.5 * wave(0xB059ull, be, bn)));
+                        if (At(seed ^ 0xB05Aull, be, bn) < keep) plant(b, be, bn, draw(rules.shrub_mix, At(seed ^ 0xB05Bull, be, bn)));
+                    }
                 }
             }
             continue;

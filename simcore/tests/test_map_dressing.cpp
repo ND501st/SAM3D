@@ -246,7 +246,8 @@ SC_TEST("map dressing: no tree tops what blocks a sight line, stands near a line
         short_trees += t.height_m < (shrub ? 1.0f : 3.0f) ? 1 : 0;
         SC_EXPECT(!shrub || t.height_m <= static_cast<float>(r.shrub_height_max_m + 0.3 + 1e-3));
         SC_EXPECT_NEAR(t.base_m, m->GroundHeight(t.east_m, t.north_m) - 0.3, 1e-6);
-        SC_EXPECT(t.crown_m > 0.0f && t.crown_m < t.height_m);
+        // A tree narrower than tall; a bush about as wide as tall (A.3.24).
+        SC_EXPECT(t.crown_m > 0.0f && t.crown_m < (shrub ? 1.3f : 1.0f) * t.height_m);
         if (shrub) continue;
         ++tree_count;
         mean_height += t.height_m;

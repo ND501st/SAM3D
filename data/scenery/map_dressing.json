@@ -65,6 +65,8 @@
     "brook_bush_share": { "value": 0.15, "source": "game value: sam3d estimate (A.3.22: hazel and elder among a brook's alders)", "confidence": "estimate" },
     "interior_height_spread": { "value": 0.3, "source": "game value: sam3d estimate (A.3.23: a closed stand's dominant, codominant and suppressed trees)", "confidence": "estimate" },
     "sapling_keep": { "value": 0.15, "source": "game value: sam3d estimate (A.3.23: young growth of the stand's kinds where light gets in)", "confidence": "estimate" },
+    "shrub_crown": { "value": 1.8, "source": "game value: sam3d estimate (A.3.24: a hazel or elder about as wide as it is tall; A.3.23's were half as wide)", "confidence": "estimate" },
+    "row_bush_share": { "value": 0.3, "source": "game value: sam3d estimate (A.3.24: bushes under the fields' tree rows, a hedge in runs)", "confidence": "estimate" },
     "understorey_keep": { "value": 0.2, "source": "game value: sam3d estimate (L7: shrubs and young trees under a closed stand's crowns, in patches where light gets in)", "confidence": "estimate" },
     "cover_cell_m": { "value": 25, "source": "game value: sam3d estimate (the land cover raster's cell)", "confidence": "estimate" },
     "garden_m": { "value": 15, "source": "game value: sam3d estimate (a house's garden round it)", "confidence": "estimate" },

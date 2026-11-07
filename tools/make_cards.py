@@ -373,6 +373,128 @@ def bush(rng, name, stems, leaf_len, leaf_w, greens, yellows, yellow_share, berr
     fill = tuple(int(sum(c[i] for c in greens + yellows) / len(greens + yellows) * 0.8) for i in range(3))
     return finish(img, name, fill=fill)
 
+TREE_W, TREE_H = 512, 1024  # a tree's card: its crown about half as wide as the tree is tall (map_dressing.json crown_ratio)
+
+
+def tree_card(rng, name, shape, crown_base, leaves, leaf_len, leaf_w, greens, autumn, autumn_share, bark, clumps=0, open_share=0.0, lumps=0.18, top=False):
+    """A whole tree on one card (roadmap L7, A.3.24: the kinds still drawn as primitives), our own drawing: a trunk from the
+    foot to the crown, branches up into it, and leaves filling the crown's outline `shape(y)` (the half-width, 0..1 of the
+    card's, at y 0 the crown's foot to 1 its top), darker inside and lit at its edge, in October's colours. `clumps` > 0
+    gathers the leaves into that many clumps with gaps between (an open crown); drawn as three crossed cards."""
+    W, H = TREE_W * SS, TREE_H * SS
+    img = canvas(TREE_W, TREE_H)
+    d = ImageDraw.Draw(img)
+    foot_y = H - 4
+    top_y = H * 0.01
+    base_y = foot_y - (foot_y - top_y) * crown_base
+    span = base_y - top_y
+    cx = W * 0.5
+
+    # The outline's lumps: a few waves up each side, its own on each, so the crown is never a smooth oval.
+    waves = [[(rng.uniform(4.0, 11.0), rng.uniform(0.0, 2.0 * math.pi), rng.uniform(0.4, 1.0)) for _ in range(3)] for _ in range(2)]
+
+    def half(t, side):
+        bump = sum(a * math.sin(f * t * math.pi + ph) for f, ph, a in waves[side]) / 2.4
+        return min(0.88, shape(t) * (1.0 + lumps * bump))  # inside its half of the atlas, leaf sprays and all
+
+    def inside(x, y):
+        t = (base_y - y) / span
+        if t < 0.0 or t > 1.0:
+            return False
+        return abs(x - cx) <= half(t, 0 if x < cx else 1) * 0.5 * W
+
+    # The trunk and the branches into the crown.
+    trunk_w = W * 0.05
+    blade(d, cx + W * rng.uniform(-0.01, 0.01), foot_y, (foot_y - top_y) * 0.92, W * rng.uniform(-0.02, 0.02), trunk_w, bark[0], bark[1], taper=0.8, segments=24)
+    for _ in range(rng.randint(6, 10)):
+        t = rng.uniform(0.0, 0.7)
+        y0 = base_y - span * t
+        side = rng.choice([-1, 1])
+        reach = shape(min(1.0, t + 0.15)) * 0.5 * W * rng.uniform(0.6, 0.95)
+        blade(d, cx, y0, span * rng.uniform(0.15, 0.35), side * reach, trunk_w * rng.uniform(0.25, 0.45), bark[0], bark[1], taper=0.85)
+    centres = [(cx + rng.uniform(-0.35, 0.35) * W, base_y - span * rng.uniform(0.1, 0.9)) for _ in range(clumps)]
+    centres = [(x, y) for x, y in centres if inside(x, y)]
+    # The leaves in three layers, inner and shaded first, the lit rim last.
+    placed = 0
+    tries = 0
+    while placed < leaves and tries < leaves * 30:
+        tries += 1
+        x, y = rng.uniform(0.0, W), rng.uniform(top_y, base_y)
+        if not inside(x, y):
+            continue
+        if centres:
+            near = min(math.hypot(x - a, y - b) for a, b in centres)
+            if near > W * 0.13 and rng.random() < 0.92:
+                continue
+        if open_share > 0.0 and rng.random() < open_share:
+            continue
+        t = (base_y - y) / span
+        rim = min(1.0, abs(x - cx) / max(1.0, half(t, 0 if x < cx else 1) * 0.5 * W))  # 0 at the middle, 1 at the outline
+        lit = 0.55 + 0.35 * rim + 0.15 * t + rng.uniform(-0.06, 0.06)
+        base = rng.choice(autumn) if rng.random() < autumn_share * (0.6 + 0.6 * rim) else rng.choice(greens)
+        colour = tuple(max(0, min(255, int(c * lit))) for c in base)
+        # A spray of leaves on a twig, not one leaf alone.
+        for _ in range(rng.randint(2, 4)):
+            ellipse_leaf(d, x + rng.uniform(-1.5, 1.5) * leaf_len * W, y + rng.uniform(-1.5, 1.5) * leaf_len * W, leaf_len * W * rng.uniform(0.8, 1.25),
+                         leaf_w * W * rng.uniform(0.8, 1.25), rng.uniform(0.0, math.pi), colour)
+        placed += 1
+    fill = tuple(int(sum(c[i] for c in greens + autumn) / len(greens + autumn) * 0.7) for i in range(3))
+    if not top:
+        return finish(img, name, TREE_W, TREE_H, fill=fill)
+    # The crown from above (top=True; tried in A.3.24, see build_cards.py TOPS), on the atlas's right half, its upper
+    # square: the same leaves within a lumpy circle, lit more than the side, darker toward the middle.
+    top = canvas(TREE_W, TREE_W)
+    dt = ImageDraw.Draw(top)
+    R = 0.40 * TREE_W * SS
+    c0 = 0.5 * TREE_W * SS
+    ring = [(rng.uniform(3.0, 7.0), rng.uniform(0.0, 2.0 * math.pi), rng.uniform(0.4, 1.0)) for _ in range(3)]
+    for _ in range(int(leaves * 1.1)):
+        a = rng.uniform(0.0, 2.0 * math.pi)
+        edge = min(0.44 * TREE_W * SS, R * (1.0 + lumps * sum(k * math.sin(f * a + ph) for f, ph, k in ring) / 2.4))
+        r = edge * math.sqrt(rng.random())
+        if centres and rng.random() < 0.6:
+            r *= rng.uniform(0.3, 1.0)  # an open crown's leaves gather in clumps
+        x, y = c0 + r * math.cos(a), c0 + r * math.sin(a)
+        rim = r / max(1.0, edge)
+        lit = 0.62 + 0.38 * rim + rng.uniform(-0.06, 0.06)
+        base = rng.choice(autumn) if rng.random() < autumn_share * (0.6 + 0.6 * rim) else rng.choice(greens)
+        colour = tuple(max(0, min(255, int(ch * lit))) for ch in base)
+        for _ in range(rng.randint(2, 4)):
+            ellipse_leaf(dt, x + rng.uniform(-1.5, 1.5) * leaf_len * W, y + rng.uniform(-1.5, 1.5) * leaf_len * W, leaf_len * W * rng.uniform(0.8, 1.25),
+                         leaf_w * W * rng.uniform(0.8, 1.25), rng.uniform(0.0, math.pi), colour)
+    atlas = canvas(2 * TREE_W, TREE_H)
+    atlas.paste(img, (0, 0))
+    atlas.paste(top, (TREE_W * SS, 0))
+    return finish(atlas, name, 2 * TREE_W, TREE_H, fill=fill)
+
+
+def tree_cards():
+    """The four kinds (A.3.24): Lombardy and hybrid poplar along the plain's roads and rows, a narrow column turning
+    yellow; black alder by the water, an oval crown still dark green; black locust (acacia) in the rows and groves, a
+    thin open crown of small leaflets, yellow-green; field maple, a round dense crown turning orange and yellow."""
+    out = []
+    out.append(tree_card(random.Random(301), "poplar_card", lambda t: 0.42 * math.sin(math.pi * min(1.0, t * 0.95 + 0.04)) ** 0.5 + 0.06 * (1.0 - t),
+                         0.12, 1100, 0.035, 0.03, [(96, 112, 48), (110, 124, 54)], [(200, 178, 64), (214, 190, 80), (184, 160, 58)], 0.65,
+                         ((70, 66, 58), (120, 116, 104))))
+    out.append(tree_card(random.Random(311), "alder_card", lambda t: 0.92 * math.sin(math.pi * min(1.0, 0.1 + 0.9 * t)) ** 0.7 * (1.0 - 0.35 * t),
+                         0.3, 1100, 0.04, 0.032, [(44, 66, 32), (54, 78, 36), (62, 86, 40)], [(120, 116, 52)], 0.08,
+                         ((48, 42, 38), (86, 78, 70))))
+    out.append(tree_card(random.Random(321), "acacia_card", lambda t: 0.98 * math.sin(math.pi * t) ** 0.45,
+                         0.42, 1300, 0.024, 0.013, [(108, 124, 56), (122, 136, 62)], [(176, 170, 74), (196, 184, 86)], 0.45,
+                         ((62, 54, 46), (104, 92, 78)), clumps=12, lumps=0.3))
+    out.append(tree_card(random.Random(331), "maple_card", lambda t: 0.96 * math.sqrt(max(0.0, 1.0 - (2.0 * t - 1.0) ** 2)) ** 0.8,
+                         0.33, 1200, 0.04, 0.036, [(96, 108, 46)], [(206, 120, 40), (222, 156, 52), (196, 168, 60), (178, 90, 36)], 0.8,
+                         ((58, 52, 46), (100, 92, 82))))
+    # Scots pine: a tall bare trunk, orange-brown up top, the crown a flat irregular cap of dark needle tufts in clumps.
+    out.append(tree_card(random.Random(341), "pine_card", lambda t: 0.9 * math.sin(math.pi * min(1.0, 0.25 + 0.75 * t)) ** 0.35,
+                         0.58, 1300, 0.028, 0.012, [(34, 58, 36), (42, 66, 40), (50, 74, 44)], [(70, 84, 48)], 0.1,
+                         ((88, 60, 40), (168, 104, 60)), clumps=9, lumps=0.35))
+    # Beech: a broad dome on a smooth grey trunk, the leaves turning copper and orange, still green inside.
+    out.append(tree_card(random.Random(351), "beech_card", lambda t: 0.97 * math.sin(math.pi * min(1.0, 0.08 + 0.92 * t)) ** 0.6,
+                         0.26, 1300, 0.036, 0.024, [(88, 100, 44), (100, 108, 48)], [(176, 96, 38), (194, 120, 46), (160, 84, 34), (204, 150, 60)], 0.75,
+                         ((104, 104, 98), (150, 148, 140))))
+    return out
+
 
 def main():
     rng = random.Random(11)
@@ -393,6 +515,7 @@ def main():
     # The woods' bushes (A.3.23): hazel turning yellow, elder still green with its berries.
     sheets += [bush(random.Random(211), "hazel_card", 11, 0.075, 0.062, [(92, 104, 44), (110, 116, 50)], [(178, 160, 62), (196, 172, 70), (160, 138, 56)], 0.55),
                bush(random.Random(223), "elder_card", 8, 0.06, 0.03, [(56, 78, 34), (68, 90, 40), (80, 98, 46)], [(150, 140, 60)], 0.12, berries=0.6, arch=0.45)]
+    trees = tree_cards()
     sheet = Image.new("RGB", (SIZE * len(sheets) + len(talls) * MAIZE_W // 4, SIZE), (92, 110, 150))
     for i, im in enumerate(sheets):
         sheet.paste(im.convert("RGB"), (i * SIZE, 0), mask=im.split()[3])
@@ -414,7 +537,7 @@ def main():
     ok = [l for l in done.stdout.splitlines() if l.startswith("CARD ")]
     for l in ok:
         print(l)
-    if done.returncode != 0 or len(ok) != 14:
+    if done.returncode != 0 or len(ok) != 20:
         print(done.stdout[-1200:], done.stderr[-1200:])
         raise SystemExit("Blender did not build the cards")
     return 0

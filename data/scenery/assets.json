@@ -266,6 +266,90 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "An elder bush in October, arching stems, narrow leaflets still green, black-purple berry umbels: three crossed cards (A.3.23)."
+    },
+    {
+      "id": "poplar_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/poplar_card/poplar_card/StaticMeshes/poplar_card.poplar_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "066d3a10fb947c2ac1059d07f43b54214363027d610d2379d6f6a7d5df151c56",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A Lombardy or hybrid poplar in October, a narrow lumpy column turning yellow on a short trunk: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "alder_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/alder_card/alder_card/StaticMeshes/alder_card.alder_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "09906a313ee940faf17687ac9049c121efef93d8015a52db458f33db81779e82",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A black alder by the water in October, an oval crown still dark green: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "acacia_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/acacia_card/acacia_card/StaticMeshes/acacia_card.acacia_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "5ab7e2d4ea1576b15e84096ef78d886b1aab3d7347a2f70c1bffaedd8b3309da",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A black locust (acacia) in October, a thin open crown of small leaflets in clumps, yellow-green, on a tall trunk: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "maple_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/maple_card/maple_card/StaticMeshes/maple_card.maple_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "f40e8b00dc3ce02f4bd200dc72deee6c182da1ec80a32702c4b9c7aaeaeec333",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A field maple in October, a round dense crown turning orange and yellow: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "pine_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/pine_card/pine_card/StaticMeshes/pine_card.pine_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "a7ed7865e3f9c8696ec405fd99fe852a955767f670ba057bef977b9c4badc576",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A Scots pine, a tall bare trunk orange-brown up top, the crown a flat irregular cap of dark needle tufts in clumps: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "beech_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/beech_card/beech_card/StaticMeshes/beech_card.beech_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "58902aab0f9ba40ef09cec4dae94c25fa66045b48c4b5819e5fd41248d0b39c5",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A beech in October, a broad dome on a smooth grey trunk, its leaves turning copper and orange: three crossed cards, our own drawing (A.3.24)."
     }
   ],
   "parts": {
@@ -278,13 +362,13 @@
       ]
     },
     "tree_poplar": {
-      "asset": null
+      "asset": "poplar_card"
     },
     "tree_pine": {
-      "asset": null
+      "asset": "pine_card"
     },
     "tree_acacia": {
-      "asset": null
+      "asset": "acacia_card"
     },
     "tree_hornbeam": {
       "asset": null,
@@ -294,13 +378,13 @@
       ]
     },
     "tree_beech": {
-      "asset": null
+      "asset": "beech_card"
     },
     "tree_alder": {
-      "asset": null
+      "asset": "alder_card"
     },
     "tree_maple": {
-      "asset": null
+      "asset": "maple_card"
     },
     "tree_hazel": {
       "asset": "hazel_card"

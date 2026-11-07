@@ -707,6 +707,34 @@ Four changes in one pass (the owner, 7 Nov: more changes before each test and re
 - **Left:** the bushes drawn too narrow (a shrub's crown is half its height, as a tree's; a hazel is as wide as tall);
   the crowns high on their trunks, so the floor stays lit (the tree models' proportions); the game thread's growth.
 
+### A.3.24 Six kinds of tree as cards; wider bushes; hedges under the rows (7 Nov 2026)
+
+The owner, 7 Nov: build, place and develop more assets and changes before each test and render.
+
+- **Tree cards, our own drawing** (`tools/make_cards.py` `tree_card`, `tree_cards`; three crossed cards each,
+  `build_cards.py`; picks, imported and registered for their parts): poplar (a narrow lumpy column turning yellow),
+  black alder (an oval crown, dark green), black locust (a thin open crown of leaflets in clumps, yellow-green), field
+  maple (a round dense crown, orange and yellow), Scots pine (a tall bare trunk orange up top, a flat cap of needle
+  tufts in clumps), beech (a broad dome on a grey trunk, copper). Each a whole tree on a 512 by 1024 card: the trunk,
+  branches into the crown, the crown's outline lumpy and different each side, leaves in sprays, shaded inside and lit
+  at the rim. With hornbeam's and oak's registered models, every kind but none is now drawn from something better than
+  a primitive (the oak's taken out, A.3.12's note). 25 registered assets.
+- **A crown from above, tried and left out**: a flat quad at the crown's top carrying a top view (the card an atlas,
+  side and top). From 150 m the crossed planes still read as propellers, and from the ground the quad showed as a dark
+  bar across the crown (p11, y2); the player is mostly on the ground. Kept as an option (`tree_card(top=True)`,
+  `build_cards.py` `TOPS`), empty.
+- **Bushes as wide as tall** (`shrub_crown` 1.8, an estimate): a hazel's or elder's crown 0.9 of its height, a tree's
+  0.5 (`test_map_dressing` lets a bush's crown be up to 1.3 of its height).
+- **Hedges under the fields' tree rows** (`row_bush_share` 0.3, an estimate): in a share of the gaps between a row's
+  trees, in runs, a bush of the edge's mix. About 12 000 of them; 1.44 million trees and shrubs in all.
+- **y3:** 1076 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations and assets clean.
+  Cost against x1: GPU 10.95 ms against 10.50 ms (worst view 12.68 ms against 11.76 ms), the game thread 11.46 ms
+  against 11.11 ms (the views' means). p11 at eye height: maples and beeches in their colours over the shrub belt, the
+  bushes full; p13 the poplar rows on the skyline as columns; p21 copper and orange among the hornbeams.
+- **Left:** from above, the crossed cards (the propellers; more cards or impostors, not a flat top); a near tree's
+  planes seen crossing (an X) at 30-50 m; a second card per kind, so a row is not one tree repeated; the cards carry
+  their own colour, so the stands' seasonal tints (`TreeTintOn`) no longer reach these kinds.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
