@@ -663,6 +663,24 @@ Three changes in one pass (the owner, 7 Nov: more changes before each test and r
 - **Left:** a plot inside a wood of the map proper, to see the understorey; alder lines of uneven height and spacing,
   with gaps where the bank is grazed; a photograph of a hill brook's alders.
 
+### A.3.22 Alder lines grown wild; a plot inside a wood (7 Nov 2026)
+
+- **The brooks' alder lines** (`map_dressing.hpp`, the TreeRow planting; `map_dressing.json` `brook_gap_share` 0.25,
+  `brook_bush_share` 0.15, estimates): open where a smooth wave is low (a grazed or cut bank, gaps tens of metres long),
+  a hazel or elder in place of an alder here and there, the alders 60-100% of the row's height and their crowns 0.8-1.2
+  of a lone tree's. 87% of the lines' places planted (the wave's spread leaves about 13% open, not the quarter asked),
+  2657 of them bushes (`test_map_dressing`). v1's p20 from 150 m: runs of uneven trees with gaps, no longer a planting.
+- **p21, inside a wood** (`views.hpp` anchor `wood_inside`: the nearest block of the map proper with wood on its four
+  sides; `plots.hpp` lets the eye stand among the trunks there, the wood being an obstacle to sight lines, not to a
+  walker; `test_plots` likewise; +1.5 EV). v1 at eye height: trunks receding, the litter floor, crowns overhead, a
+  hazel or elder in patches. It reads as a park: the floor sunlit, the crowns high and apart, the far edge seen through
+  the stand, and the understorey's shrubs are the placeholder primitive (a green egg). No photograph (`test_plots`
+  lets it be; fetching one waits for the owner).
+- **v1:** 1076 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations clean. Cost against
+  u1: GPU 10.37 ms both, the game thread 10.47 ms against 10.50 ms (the views' means).
+- **Left:** a closed stand inside: lower, wider crowns touching, young trees and saplings (the stand's layers), the
+  floor in shade; shrub models (hazel, elder) in place of the primitive; the gap share by rank, not by the wave's value.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

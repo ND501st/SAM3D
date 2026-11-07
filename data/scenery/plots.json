@@ -100,6 +100,14 @@
       "anchor": { "kind": "brook_row", "close_km": [-12.0, 0.0] },
       "photos": [],
       "must_see": "A line of dark alders on one bank of a narrow brook in a valley floor, broken in places; meadow to the water."
+    },
+    {
+      "id": "p21_wood_inside",
+      "name": "Inside a wood in the hills",
+      "anchor": { "kind": "wood_inside", "close_km": [-11.0, -0.4] },
+      "photos": [],
+      "must_see": "Trunks receding into shade, the crowns closed overhead, hazel and elder in patches under them, the floor dark; never a wall or a green slab (A.3.19, A.3.21).",
+      "exposure_ev": 1.5
     }
   ]
 }

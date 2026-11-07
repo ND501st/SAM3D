@@ -61,9 +61,11 @@ SC_TEST("plots: the data loads, each plot with photos from the views' register")
     const PlotSet set = Plots();
     SC_EXPECT(set.plots.size() >= 1);
     SC_EXPECT(Find(set, "p01_ploughland") != nullptr);
-    // Every plot but the dry sunflower's and the brook's alders (A.3.21), which have no photo in the register yet
-    // (fetching one waits for the owner).
-    for (const PlotDef& p : set.plots) SC_EXPECT(!p.photos.empty() || p.id == "p04_standing_sunflower" || p.id == "p20_brook_alders");
+    // Every plot but the dry sunflower's, the brook's alders (A.3.21) and a wood's inside (A.3.22), which have no photo in
+    // the register yet (fetching one waits for the owner).
+    for (const PlotDef& p : set.plots) {
+        SC_EXPECT(!p.photos.empty() || p.id == "p04_standing_sunflower" || p.id == "p20_brook_alders" || p.id == "p21_wood_inside");
+    }
 }
 
 SC_TEST("plots: the loader refuses a field_layer without its layer, an unknown kind, a photo not in the register") {
@@ -141,8 +143,10 @@ SC_TEST("plots: every plot on the Kesmark map gives its three cameras, or says w
                 std::printf("    (missing) %s: %s\n", c.id.c_str(), c.missing_reason.c_str());
                 continue;
             }
+            // Clear of what stands there, but for the eye inside a wood, among its trunks (A.3.22).
             const double ground = map->GroundHeight(c.eye_e, c.eye_n);
-            SC_EXPECT(map->ObstacleTop(c.eye_e, c.eye_n) < ground + c.eye_up_m);
+            const bool among_trees = p.anchor.kind == "wood_inside" && c.eye_up_m < 3.0;
+            SC_EXPECT(among_trees || map->ObstacleTop(c.eye_e, c.eye_n) < ground + c.eye_up_m);
         }
     }
 }

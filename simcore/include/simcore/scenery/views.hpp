@@ -100,7 +100,7 @@ inline const std::vector<std::string>& LookKinds() {
 }
 
 inline const std::vector<std::string>& AnchorKinds() {
-    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row"};
+    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row", "wood_inside"};
     return k;
 }
 
@@ -145,7 +145,7 @@ inline bool ParseAnchor(const json::Value& a_value, const std::string& id, ViewA
     const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
     if (by_id && an.id.empty()) return Fail(error, id + ": a " + an.kind + " anchor names its " + an.kind);
     if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge" || an.kind == "high_ground" ||
-         an.kind == "brook_row") &&
+         an.kind == "brook_row" || an.kind == "wood_inside") &&
         !an.has_close) {
         return Fail(error, id + ": a " + an.kind + " anchor needs close_km");
     }
@@ -489,6 +489,37 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             s.eye_e = p.e + off * std::sin(normal);
             s.eye_n = p.n + off * std::cos(normal);
             s.bearing_rad = BearingTo(s.eye_e, s.eye_n, p.e, p.n);
+        }
+    } else if (a.kind == "wood_inside") {
+        // The nearest wood block of the map proper to close_km with wood on its four sides (no edge rows: its inside
+        // trees and understorey throughout, A.3.19, A.3.21), the cameras looking at its middle along the bearing.
+        const MapBox* wood = nullptr;
+        double best = std::numeric_limits<double>::max();
+        const auto canopy_at = [&](double e, double n, double size) {
+            for (const MapBox& o : map.Layout().boxes) {
+                if (o.part == MapPart::Canopy && o.length_m == size && std::fabs(o.east_m - e) < 1.0 && std::fabs(o.north_m - n) < 1.0) return true;
+            }
+            return false;
+        };
+        for (const MapBox& b : map.Layout().boxes) {
+            if (b.part != MapPart::Canopy || !def.InCore(b.east_m, b.north_m) || map.InDetail(b.east_m, b.north_m)) continue;
+            const double d = std::hypot(b.east_m - a.close_e_m, b.north_m - a.close_n_m);
+            if (d >= best) continue;
+            const double z = b.length_m;
+            if (!canopy_at(b.east_m + z, b.north_m, z) || !canopy_at(b.east_m - z, b.north_m, z) || !canopy_at(b.east_m, b.north_m + z, z) ||
+                !canopy_at(b.east_m, b.north_m - z, z)) {
+                continue;
+            }
+            best = d;
+            wood = &b;
+        }
+        if (wood == nullptr) {
+            s = Missing("no wood of the map proper with wood on its four sides");
+        } else {
+            s.ok = true;
+            s.e = s.eye_e = wood->east_m;
+            s.n = s.eye_n = wood->north_m;
+            s.bearing_rad = a.has_bearing ? a.bearing_rad : 0.0;
         }
     } else if (a.kind == "brook_row") {
         // The nearest row of trees along a brook to close_km (terrain roadmap A.3.20's alders), looked at across the brook:

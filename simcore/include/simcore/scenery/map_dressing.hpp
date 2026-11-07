@@ -114,6 +114,8 @@ struct DressingRules {
     double interior_spacing_m = 12.0;
     double interior_crown = 1.4;  // their crowns this much wider than a lone tree's: a closed stand's crowns fill the gaps
     double understorey_keep = 0.2;  // of the inside lattice's cells, the share with a shrub under the crowns (L7, A.3.21)
+    double brook_gap_share = 0.25;  // of a brook's alder line, the share left open (a smooth wave: grazed or cut banks, A.3.22)
+    double brook_bush_share = 0.15;  // of what is left, the share a bush (hazel, elder) instead of an alder
     double cover_cell_m = 25.0;
     double garden_m = 15.0;
     // The fields themselves are the map's (MapDef::farmland, farm_fields.hpp: they set the farm tracks and tree rows, which
@@ -230,6 +232,8 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("interior_spacing_m", r.interior_spacing_m, 0.0, 50.0);
     number("interior_crown", r.interior_crown, 0.5, 3.0);
     number("understorey_keep", r.understorey_keep, 0.0, 1.0);
+    number("brook_gap_share", r.brook_gap_share, 0.0, 1.0);
+    number("brook_bush_share", r.brook_bush_share, 0.0, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
     range("strip_width_m", r.strip_width_min_m, r.strip_width_max_m, 5.0, 200.0);
@@ -728,6 +732,18 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                 for (int j = 0; j < count_w; ++j) {
                     double e = 0.0, n = 0.0;
                     jittered(b, (i + 0.5) * step_l - 0.5 * b.length_m, (j + 0.5) * step_w - 0.5 * b.width_m, std::min(step_l, step_w), e, n);
+                    if (b.by_water) {
+                        // An alder line grows wild (A.3.22): gone where the bank is grazed or cut (a smooth wave, so
+                        // gaps run tens of metres), a bush here and there, the trees of uneven height and crown.
+                        if (wave(0xA1D0ull, e, n) < rules.brook_gap_share) continue;
+                        const double u = At(seed ^ 0xA1D1ull, e, n);
+                        if (u < rules.brook_bush_share) {
+                            plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0xA1D2ull, e, n)));
+                            continue;
+                        }
+                        plant(b, e, n, kind, 0.6 + 0.4 * At(seed ^ 0xA1D3ull, e, n), 0.8 + 0.4 * At(seed ^ 0xA1D4ull, e, n));
+                        continue;
+                    }
                     plant(b, e, n, kind);
                 }
             }

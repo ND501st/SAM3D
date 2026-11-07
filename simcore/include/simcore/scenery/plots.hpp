@@ -255,7 +255,9 @@ inline std::vector<ResolvedView> ResolvePlot(const MapData& map, const DressingR
         for (; back <= c.back_m + 50.0; back += 5.0) {
             ee = s.e - back * ue;
             en = s.n - back * un;
-            if (map.ObstacleTop(ee, en) < map.GroundHeight(ee, en) + c.up_m - 0.3) {
+            // Inside a wood (A.3.22) the eye stands among the trunks, under the obstacle the wood is to a sight line.
+            const bool among_trees = p.anchor.kind == "wood_inside" && c.up_m < 3.0;
+            if (among_trees || map.ObstacleTop(ee, en) < map.GroundHeight(ee, en) + c.up_m - 0.3) {
                 clear = true;
                 break;
             }

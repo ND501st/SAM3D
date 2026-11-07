@@ -306,6 +306,23 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
                 alder_brook, brook_rows.size(), alder_dry, pine_wet, shrubs);
     SC_EXPECT(alder > 100);
     SC_EXPECT(brook_rows.size() > 100 && alder_brook > 1000);
+    // A brook's alder line grows wild (A.3.22): of its lattice's places (every 7 m), some left open in runs, a few bushes.
+    {
+        std::size_t slots = 0;
+        for (const MapBox* b : brook_rows) {
+            slots += static_cast<std::size_t>(std::max(1.0, std::floor(b->length_m / 7.0)) * std::max(1.0, std::floor(b->width_m / 7.0)));
+        }
+        int in_rows = 0, bushes = 0;
+        for (const TreeInstance& t : d.trees) {
+            if (m->NearWater(t.east_m, t.north_m, r.wet_m) || !in_brook_row(t)) continue;
+            ++in_rows;
+            bushes += IsShrub(static_cast<TreeKind>(t.kind)) ? 1 : 0;
+        }
+        const double kept = slots > 0 ? static_cast<double>(in_rows) / static_cast<double>(slots) : 0.0;
+        std::printf("    brook lines: %d of %zu places planted (%.2f), %d of them bushes\n", in_rows, slots, kept, bushes);
+        SC_EXPECT(kept > 0.4 && kept < 0.95);
+        SC_EXPECT(bushes > 0.05 * in_rows && bushes < 0.3 * in_rows);
+    }
     SC_EXPECT(alder_dry == 0);
     SC_EXPECT(pine_wet == 0);
     SC_EXPECT(shrubs > 1000);
