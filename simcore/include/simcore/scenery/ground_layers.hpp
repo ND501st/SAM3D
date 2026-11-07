@@ -392,7 +392,11 @@ inline int PointLayer(const CoverRaster& cover, const DressingRules& dressing, c
     const Cover c = static_cast<Cover>(g->cover[i]);
     if (c != Cover::Field) return layers.LayerOnDay(c, g->crop[i], 0, day_of_year);
     const FieldCell f = FieldAt(g->fields, east_m, north_m);
-    return layers.LayerOnDay(c, CropOf(dressing, f.id), f.id, day_of_year);
+    // The cell's own crop where the land use gave it one (the hills' meadows, A.5 step 4), else the point's field's.
+    const FieldCell centre = FieldAt(g->fields, g->CentreEast(static_cast<int>(i % static_cast<std::size_t>(g->cols))),
+                                     g->CentreNorth(static_cast<int>(i / static_cast<std::size_t>(g->cols))));
+    const std::uint8_t crop = g->crop[i] != CropOf(dressing, centre.id) ? g->crop[i] : CropOf(dressing, f.id);
+    return layers.LayerOnDay(c, crop, f.id, day_of_year);
 }
 
 }  // namespace scenery

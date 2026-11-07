@@ -1,0 +1,17 @@
+{
+  "land_use_id": "land_use",
+  "status": "first pass (roadmap L11, docs/scenery/TERRAIN_ROADMAP.md A.5 step 4 and decision D12)",
+  "notes": "Land use following the ground in the hill country (simcore/terrain_map.hpp MapLandUseDef, read by LoadMap; the measures are the hills' bake's, LandformBake): woods on the steep sides and the crests, meadow on the wet valley floors and on slopes too steep to plough. The named forests, the copses and the fields of the plain are unchanged. Judged by eye against the look target (docs/scenery/LOOK_TARGET.md K2) and photographs of Transdanubian hill country (to be gathered); every value an estimate until sourced.",
+  "source": "game value: sam3d estimate",
+  "confidence": "estimate",
+  "values": {
+    "wood_slope_deg": { "value": 11, "source": "game value: sam3d estimate (A.5: woods on slopes over about 10-12 degrees)", "confidence": "estimate" },
+    "wood_slope_spread_deg": { "value": 3, "source": "game value: sam3d estimate (so a wood's edge winds, not a contour)", "confidence": "estimate" },
+    "crest_rise_m": { "value": 6, "source": "game value: sam3d estimate", "confidence": "estimate" },
+    "crest_share": { "value": 0.5, "source": "game value: sam3d estimate", "confidence": "estimate" },
+    "min_relief_m": { "value": 3, "source": "game value: sam3d estimate (none where the hills fade into the plain)", "confidence": "estimate" },
+    "meadow_wetness": { "value": 11, "source": "game value: sam3d estimate (the wetness index of Beven and Kirkby 1979 on a valley floor; not read, the index's form only)", "confidence": "estimate" },
+    "meadow_slope_deg": { "value": 8, "source": "game value: sam3d estimate", "confidence": "estimate" },
+    "meadow_crop": { "value": "pasture", "source": "game value: sam3d estimate (a crop of data/scenery/map_dressing.json)", "confidence": "estimate" }
+  }
+}

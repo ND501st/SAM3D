@@ -530,15 +530,24 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             }
         }
     } else if (a.kind == "high_ground") {
-        // The highest ground within kHighGroundReachM of close_km (sampled every 50 m; roadmap L11's hill country): the eye
-        // there, looking along the bearing at the ground a kilometre ahead.
-        constexpr double kHighGroundReachM = 1500.0;
+        // The highest open ground within kHighGroundReachM of close_km (sampled every 50 m; roadmap L11's hill country; open:
+        // nothing standing within 40 m, since the hills' crests are often wooded): the eye there, looking along the
+        // bearing at the ground a kilometre ahead.
+        constexpr double kHighGroundReachM = 1500.0, kOpenM = 40.0;
+        const auto open = [&map](double e, double n) {
+            const double k = kOpenM;
+            const double ring[5][2] = {{0.0, 0.0}, {k, 0.0}, {-k, 0.0}, {0.0, k}, {0.0, -k}};
+            for (const auto& o : ring) {
+                if (map.ObstacleTop(e + o[0], n + o[1]) > map.GroundHeight(e + o[0], n + o[1]) + 1.0) return false;
+            }
+            return true;
+        };
         double best = -1e18, be = a.close_e_m, bn = a.close_n_m;
         for (double dn = -kHighGroundReachM; dn <= kHighGroundReachM; dn += 50.0) {
             for (double de = -kHighGroundReachM; de <= kHighGroundReachM; de += 50.0) {
                 if (std::hypot(de, dn) > kHighGroundReachM) continue;
                 const double h = map.GroundHeight(a.close_e_m + de, a.close_n_m + dn);
-                if (h > best) {
+                if (h > best && open(a.close_e_m + de, a.close_n_m + dn)) {
                     best = h;
                     be = a.close_e_m + de;
                     bn = a.close_n_m + dn;

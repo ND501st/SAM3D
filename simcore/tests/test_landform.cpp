@@ -227,3 +227,77 @@ SC_TEST("landform: the loader refuses what it should") {
     SC_EXPECT(Refused(text, "\"brook_area_km2\": 3", "\"brook_area_km2\": 0.1", "brook_area_km2"));
     SC_EXPECT(Refused(text, "\"spacing_m\": 50, \"channel", "\"spacing_m\": 5, \"channel", "spacing_m"));
 }
+
+SC_TEST("land use: the hills' steep sides and crests wooded, their wet floors and steep slopes meadow, the plain untouched") {
+    std::string e;
+    const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const MapDef& d = map->Def();
+    SC_EXPECT(d.land_use.laid);
+    const LandformBake& b = *d.landform.bake;
+    // Over the hills inside the map proper, every 100 m.
+    int all = 0, wood = 0, meadow = 0, steep = 0, steep_wood = 0, gentle = 0, gentle_wood = 0, wet = 0, wet_meadow = 0;
+    std::vector<double> wetness;
+    for (double n = -2000.0; n < 20000.0; n += 100.0) {
+        for (double x = -19950.0; x < -9000.0; x += 100.0) {
+            if (b.Height(x, n) < d.land_use.min_relief_m) continue;
+            ++all;
+            const bool w = map->LandUseWood(x, n), m = !w && map->LandUseMeadow(x, n);
+            wood += w ? 1 : 0;
+            meadow += m ? 1 : 0;
+            const double s = b.SlopeDeg(x, n), t = b.Wetness(x, n);
+            wetness.push_back(t);
+            if (s >= 15.0) {
+                ++steep;
+                steep_wood += w ? 1 : 0;
+            }
+            if (s < 5.0) {
+                ++gentle;
+                gentle_wood += w ? 1 : 0;
+            }
+            if (t >= 13.0 && s < 5.0) {
+                ++wet;
+                wet_meadow += m ? 1 : 0;
+            }
+        }
+    }
+    const auto share = [](int a, int of) { return of > 0 ? static_cast<double>(a) / of : 0.0; };
+    std::printf("    hills in the map: %d points, wooded %.0f%%, meadow %.0f%%; over 15 deg wooded %.0f%% (%d), under 5 deg wooded %.0f%% (%d); "
+                "wet floors meadow %.0f%% (%d); wetness p10 %.1f, p50 %.1f, p90 %.1f, p99 %.1f\n",
+                all, 100.0 * share(wood, all), 100.0 * share(meadow, all), 100.0 * share(steep_wood, steep), steep,
+                100.0 * share(gentle_wood, gentle), gentle, 100.0 * share(wet_meadow, wet), wet, Percentile(wetness, 0.1),
+                Percentile(wetness, 0.5), Percentile(wetness, 0.9), Percentile(wetness, 0.99));
+    SC_EXPECT(all > 5000);
+    SC_EXPECT(share(wood, all) > 0.15 && share(wood, all) < 0.5);
+    SC_EXPECT(share(meadow, all) > 0.05 && share(meadow, all) < 0.4);
+    SC_EXPECT(share(steep_wood, steep) > 0.8);
+    SC_EXPECT(share(gentle_wood, gentle) < 0.25);
+    SC_EXPECT(wet > 50 && share(wet_meadow, wet) > 0.9);
+    // The woods are laid: canopy over the hills in the map proper.
+    int canopy = 0;
+    for (const MapBox& bx : map->Layout().boxes) {
+        canopy += (bx.part == MapPart::Canopy && bx.east_m < -9000.0 && bx.north_m > -2000.0 && bx.north_m < 20000.0) ? 1 : 0;
+    }
+    std::printf("    canopy blocks over the hills in the map: %d\n", canopy);
+    SC_EXPECT(canopy > 1000);
+    // The plain: nothing of it.
+    for (const auto& p : {std::pair<double, double>{6400.0, -9600.0}, {12000.0, -6000.0}, {2500.0, -12500.0}, {9000.0, -1000.0}}) {
+        SC_EXPECT(!map->LandUseWood(p.first, p.second) && !map->LandUseMeadow(p.first, p.second));
+    }
+}
+
+SC_TEST("land use: the loader refuses what it should") {
+    std::string text;
+    SC_EXPECT(detail::ReadTextFile(kData + "/scenery/land_use.json", text));
+    MapLandUseDef u;
+    std::string e;
+    SC_EXPECT(LoadLandUseJson(text, u, &e) && u.laid && u.meadow_crop == "pasture");
+    std::string bad = text;
+    const std::string share_was = "\"crest_share\": { \"value\": 0.5";
+    bad.replace(bad.find(share_was), share_was.size(), "\"crest_share\": { \"value\": 1.5");
+    SC_EXPECT(!LoadLandUseJson(bad, u, &e) && e.find("crest_share") != std::string::npos);
+    bad = text;
+    bad.replace(bad.find("\"crest_share\""), 13, "\"crest_sharp\"");
+    SC_EXPECT(!LoadLandUseJson(bad, u, &e) && e.find("crest_sharp") != std::string::npos);
+}

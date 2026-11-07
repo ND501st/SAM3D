@@ -530,6 +530,40 @@ the new order, the loop's comparison step (A.4) and how the hills are made (A.5)
 - **Left:** brooks end where they leave the hills (none crosses the plain to the Rava yet); no bed cut under a brook (the
   bake's cells are 50 m), no culvert or bridge where a road crosses one; the bake costs about a second at load.
 
+### A.3.17 L11 steps 3-4 in first form: the ground's measures, land use on them (7 Nov 2026)
+
+- **The measures** (`LandformBake`: `SlopeDeg`, `Wetness`, `Rise`): the slope across a cell each way; the wetness index
+  ln(a / tan b) (Beven and Kirkby 1979's form; the paper not read) from the area the bake now drains; how far a point
+  stands above the ring 250 m round it (a crest or spur positive, a hollow negative). In the hills inside the map the
+  wetness runs p10 6.0, p50 7.3, p90 9.6, p99 17.8.
+- **The rules** (`data/scenery/land_use.json`, read by `LoadMap`; `MapData::LandUseWood`, `LandUseMeadow`; estimates):
+  woods where the slope passes 11° (the threshold wandering 3° either way on slow noise, so an edge winds) and on half
+  the crests 6 m above their surroundings; meadow (the dressing's `pasture`) on floors with a wetness of 11 or more and on
+  slopes over 8° not wooded. Only where the hills add 3 m or more: the plain, the named forests and the copses as before.
+  The woods are canopy blocks like every other wood (so sight lines, the dressing's trees and the edges of A.3.13 follow
+  them), at 100 m in the map and 400 m beyond it, so the panorama's far ridges are wooded too.
+  A block is wood only where five of its nine (itself and its neighbours) are, so no lone speck or one-block hole: the
+  woods' outlines are whole woods' and their edges fewer (the first try, without it, planted 794 000 trees and shrubs,
+  44% of them shrubs on the edges of ragged blocks).
+- **Measured** (`test_landform.cpp`, every 100 m over the hills in the map): the rule woods 21%, meadow 27%; every point
+  over 15° wooded, 18% of those under 5° (the crests); every wet floor meadow; 8279 canopy blocks over the hills.
+  The map proper now has 12387 canopy blocks (was 8833; `test_world_map`'s pinned layout updated); the dressing plants
+  about 500 000 trees and shrubs (its budget raised from 400 000 to 600 000: the views' GPU time measured unchanged at
+  about 10 ms, l11b against lu2), shrubs about 40% of them (the bound raised from a third to a half: the hills' woods
+  have long winding edges). The ground layer at a point now takes its cell's meadow (`ground_layers.hpp` `PointLayer`,
+  which had read the field's own crop). 1074 tests pass (the whole suite: an earlier run filtered by name had reported
+  the suite's count without running it); `ground_check` PASS; `nav_check` 200 of 200; citations clean.
+- **The view V13** stood in a crest's new wood: the anchor `high_ground` now takes the highest open ground (nothing
+  standing within 40 m).
+- **lu3 (views) and e4 (p18, p19):** V13 west and north looks over ridges with woods on their sides and crests, layered
+  to the horizon; south-west, a row of woods along a crest beyond a field. The woods are still boxes draped in a green
+  slab with lollipop trees at their edges (K4, K5), and p18's slope woods (single blocks) went with the smoothing: its
+  slopes are pale and dark fields again. p19 unchanged (the Lazne wood is a named forest).
+- **Against the look target:** K2 moved (woods on slopes and crests, meadow in the valleys); K4 and K5 now the hills'
+  largest gaps (block outlines, the mass a slab, lollipop trees). Left: the woods' outlines at the bake's 50 m or finer,
+  alders and willows along the brooks, villages and orchards by the ground, fields' long sides along the contours, the
+  road strips on slopes (K8).
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

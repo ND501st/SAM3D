@@ -314,9 +314,10 @@ SC_TEST("map: the map proper's layout is the same with the detail areas (counts 
     // The core's boxes as laid before the detail areas (roadmap R6, recorded from r-track at acea88a): the detail
     // areas' towns draw on their own random streams, so nothing in the map proper moves. Since R6's review, 9 fewer wood
     // blocks: a site's clearance is found however far a block is from the site's centre (mapgeo::Occupancy), and r-track
-    // had 9 blocks inside the 140 m clearance of two field posts and the P-40 post (8842 canopy, 12038 boxes).
+    // had 9 blocks inside the 140 m clearance of two field posts and the P-40 post (8842 canopy, 12038 boxes). Since the
+    // hill country's land use (terrain roadmap A.3.17, 7 Nov 2026), 3554 more: the woods on its steep sides and crests.
     const std::pair<MapPart, std::size_t> before[] = {
-        {MapPart::Bridge, 3},  {MapPart::Canopy, 8833}, {MapPart::Chimney, 1},   {MapPart::Farm, 204},     {MapPart::Flats, 77},
+        {MapPart::Bridge, 3},  {MapPart::Canopy, 12387}, {MapPart::Chimney, 1},   {MapPart::Farm, 204},     {MapPart::Flats, 77},
         {MapPart::House, 1836}, {MapPart::Industrial, 6}, {MapPart::Launcher, 3}, {MapPart::Marsh, 951},   {MapPart::Mast, 7},
         {MapPart::Military, 21}, {MapPart::Pad, 6},      {MapPart::Revetment, 54}, {MapPart::Station, 1}, {MapPart::Tank, 8},
         {MapPart::Tent, 17},   {MapPart::Tower, 1}};
@@ -336,7 +337,7 @@ SC_TEST("map: the map proper's layout is the same with the detail areas (counts 
         SC_EXPECT(counts[static_cast<int>(p.first)] == p.second);
         expected += p.second;
     }
-    SC_EXPECT(total == expected && total == 12029);
+    SC_EXPECT(total == expected && total == 15583);
     SC_EXPECT(last != nullptr && last->part == MapPart::Marsh && last->east_m == 16250.0 && last->north_m == -8450.0);
 }
 

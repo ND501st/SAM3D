@@ -172,7 +172,9 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
     std::printf("    %zu trees and shrubs (%zu in the detail areas), %zu masses; by kind:", d.trees.size(), in_areas, d.masses.size());
     for (std::size_t k = 0; k < kinds.size(); ++k) std::printf(" %s %zu", TreeKindName(static_cast<TreeKind>(k)), kinds[k]);
     std::printf("\n");
-    SC_EXPECT(d.trees.size() < 400000);
+    // The budget grew with the hill country's woods (terrain roadmap A.3.17: about 500 000; the views' GPU time measured
+    // unchanged at about 10 ms, l11b against lu2).
+    SC_EXPECT(d.trees.size() < 600000);
     SC_EXPECT(d.trees.size() > 50000);
     SC_EXPECT(in_areas > 10000);
     for (std::size_t k : kinds) SC_EXPECT(k > 0);
@@ -279,7 +281,8 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
     SC_EXPECT(pine_wet == 0);
     SC_EXPECT(shrubs > 1000);
     SC_EXPECT(shrubs_deep == 0);
-    SC_EXPECT(shrubs < static_cast<int>(d.trees.size()) / 3);
+    // Shrubs stay the lesser part; the hills' woods (A.3.17) have long winding edges, so their share rose to about 40%.
+    SC_EXPECT(shrubs < static_cast<int>(d.trees.size()) / 2);
 }
 
 SC_TEST("map dressing: a wood's edge stands back in bays and steps down to the field, never a wall (plot 11)") {

@@ -136,6 +136,47 @@ struct LandformBake {
         if (c < 0 || r < 0 || c >= cols || r >= rows) return 0.0;
         return area[static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(c)];
     }
+    bool Inside(double e, double n) const {
+        return !Empty() && e >= west_m && n >= south_m && e <= west_m + spacing_m * (cols - 1) && n <= south_m + spacing_m * (rows - 1);
+    }
+
+    // The ground's measures (roadmap A.5 step 3), of the hills' own part of the ground, across a cell each way.
+    // The slope's tangent.
+    double SlopeTan(double e, double n) const {
+        const double d = spacing_m;
+        const double dx = (Height(e + d, n) - Height(e - d, n)) / (2.0 * d), dy = (Height(e, n + d) - Height(e, n - d)) / (2.0 * d);
+        return std::hypot(dx, dy);
+    }
+    double SlopeDeg(double e, double n) const { return std::atan(SlopeTan(e, n)) * 57.29577951308232; }
+    // The topographic wetness index, ln(a / tan b) (Beven and Kirkby 1979): a the area drained per metre of contour (the
+    // cell's area over its width), b the slope. About 4-7 on a hillside, 8-11 in a hollow, 12 and more on a valley floor.
+    double Wetness(double e, double n) const {
+        return std::log(std::max(Area(e, n), spacing_m * spacing_m) / spacing_m / std::max(SlopeTan(e, n), 0.005));
+    }
+    // How much higher the ground is than the ring `reach_m` round it (positive on a crest or spur, negative in a hollow).
+    double Rise(double e, double n, double reach_m) const {
+        double ring = 0.0;
+        for (int k = 0; k < 8; ++k) {
+            const double a = k * 0.7853981633974483;
+            ring += Height(e + reach_m * std::cos(a), n + reach_m * std::sin(a));
+        }
+        return Height(e, n) - ring / 8.0;
+    }
+};
+
+// Land use following the ground in the hill country (roadmap A.5 step 4, D12; data/scenery/land_use.json, read by LoadMap):
+// woods on the steep sides and the crests, meadow on the wet valley floors and on slopes too steep to plough. Estimates
+// until sourced, judged by eye against the look target (docs/scenery/LOOK_TARGET.md K2).
+struct MapLandUseDef {
+    bool laid = false;
+    double wood_slope_deg = 11.0;     // a side this steep is wooded
+    double wood_slope_spread_deg = 3.0;  // the threshold wanders this much either way (slow noise), so woods' edges wind
+    double crest_rise_m = 6.0;        // a crest this far above the ground 250 m round it is wooded...
+    double crest_share = 0.5;         // ...on this share of the crests (noise)
+    double min_relief_m = 3.0;        // nowhere the hills add less than this (their blend into the plain)
+    double meadow_wetness = 11.0;     // a valley floor this wet is meadow
+    double meadow_slope_deg = 8.0;    // a slope this steep (but not wooded) is pasture, not ploughed
+    std::string meadow_crop = "pasture";  // the dressing's crop on the meadows
 };
 
 // How the hill country drains (terrain.landform.drainage; game values, judged by eye against the look target and the
@@ -288,6 +329,7 @@ struct MapDef {
     double valley_half_width_m = 500.0;
     std::vector<MapLakeDef> lakes;
     MapLandformDef landform;  // the hill country (terrain.landform, roadmap L11)
+    MapLandUseDef land_use;   // land use on the hills' ground (data/scenery/land_use.json)
     // Lines and places.
     std::vector<MapLineDef> rivers;
     std::vector<MapLineDef> roads;
@@ -1517,6 +1559,29 @@ private:
     // Relief, hills and the river valley: the ground before the sites are levelled.
     double Natural(double e, double n) const { return NaturalGround(def_, e, n); }
 
+public:
+    // The hill country's land use at a point (A.5 step 4, MapLandUseDef): a wood on a steep side or a crest.
+    bool LandUseWood(double e, double n) const {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake) return false;
+        const LandformBake& bake = *def_.landform.bake;
+        if (!bake.Inside(e, n) || bake.Height(e, n) < u.min_relief_m) return false;
+        const std::uint64_t ls = noise::Mix64(def_.seed ^ 0x4C414E44555345ull);  // "LANDUSE"
+        const double threshold = u.wood_slope_deg + u.wood_slope_spread_deg * (2.0 * noise::Fbm(ls, e, n, 700.0, 2) - 1.0);
+        if (bake.SlopeDeg(e, n) >= threshold) return true;
+        return bake.Rise(e, n, 250.0) >= u.crest_rise_m && noise::Value(ls + 1, e, n, 900.0) < u.crest_share;
+    }
+    // Meadow: a wet valley floor, or a slope too steep to plough that is not wooded.
+    bool LandUseMeadow(double e, double n) const {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake) return false;
+        const LandformBake& bake = *def_.landform.bake;
+        if (!bake.Inside(e, n) || bake.Height(e, n) < u.min_relief_m) return false;
+        return bake.Wetness(e, n) >= u.meadow_wetness || bake.SlopeDeg(e, n) >= u.meadow_slope_deg;
+    }
+
+private:
+
     static double SiteClearance(const MapSiteDef& s) {
         if (s.kind == "airfield") return 0.5 * s.runway_length_m + 400.0;
         if (s.kind == "power_station" ) return 450.0;
@@ -2233,6 +2298,35 @@ private:
             for (double y = snap(s, b); y < nn; y += b) {
                 for (double x = snap(w, b); x < e; x += b) {
                     if (mapgeo::InPolygon(f.points, x, y)) Canopy(x, y, b, seed);
+                }
+            }
+        }
+        // The hill country's woods (A.5 step 4): its steep sides and crests, in the map at its blocks and beyond it at the
+        // far ground's, so the panorama's far ridges are wooded too.
+        if (def_.land_use.laid && def_.landform.bake) {
+            const LandformBake& bake = *def_.landform.bake;
+            const double fb = def_.far_block_m;
+            // A block is wood where most of it and its neighbours are (a majority of the nine): no lone speck of a block,
+            // no one-block hole, so the woods' outlines are whole woods' and their edges fewer.
+            const auto wooded = [&](double x, double y, double size) {
+                int votes = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) votes += LandUseWood(x + dx * size, y + dy * size) ? 1 : 0;
+                }
+                return votes >= 5;
+            };
+            for (double y = snap(bake.south_m, b); y < bake.south_m + bake.spacing_m * (bake.rows - 1); y += b) {
+                for (double x = snap(bake.west_m, b); x < bake.west_m + bake.spacing_m * (bake.cols - 1); x += b) {
+                    if (def_.InCore(x, y) && wooded(x, y, b)) Canopy(x, y, b, seed);
+                }
+            }
+            for (double y = snap(bake.south_m, fb); y < bake.south_m + bake.spacing_m * (bake.rows - 1); y += fb) {
+                for (double x = snap(bake.west_m, fb); x < bake.west_m + bake.spacing_m * (bake.cols - 1); x += fb) {
+                    if (std::fabs(x) > def_.far_m - fb || std::fabs(y) > def_.far_m - fb) continue;
+                    const bool near_core = x > def_.west_m - 0.5 * fb && x < def_.east_m + 0.5 * fb && y > def_.south_m - 0.5 * fb &&
+                                           y < def_.north_m + 0.5 * fb;
+                    if (near_core || NearSettlement(x, y, 0.5 * fb + 100.0) || OnFarWater(x, y, 0.5 * fb)) continue;
+                    if (wooded(x, y, fb)) Canopy(x, y, fb, seed);
                 }
             }
         }
@@ -3577,6 +3671,51 @@ inline bool LoadMapDefJson(const std::string& text, MapDef& out, std::string* er
     return true;
 }
 
+// Reads data/scenery/land_use.json into `out` (laid when it loads).
+inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::string* error = nullptr) {
+    json::Value root;
+    std::string parse_error;
+    const auto fail = [error](const std::string& why) {
+        if (error) *error = "scenery/land_use.json: " + why;
+        return false;
+    };
+    if (!json::Parse(text, root, &parse_error)) return fail(parse_error);
+    const json::Value* values = root.Find("values");
+    if (values == nullptr || !values->Is(json::Type::Object)) return fail("\"values\" missing");
+    MapLandUseDef u;
+    struct Field {
+        const char* key;
+        double* to;
+        double lo, hi;
+    };
+    const Field fields[] = {{"wood_slope_deg", &u.wood_slope_deg, 1.0, 60.0},       {"wood_slope_spread_deg", &u.wood_slope_spread_deg, 0.0, 20.0},
+                            {"crest_rise_m", &u.crest_rise_m, 0.5, 100.0},          {"crest_share", &u.crest_share, 0.0, 1.0},
+                            {"min_relief_m", &u.min_relief_m, 0.0, 100.0},          {"meadow_wetness", &u.meadow_wetness, 0.0, 30.0},
+                            {"meadow_slope_deg", &u.meadow_slope_deg, 1.0, 60.0}};
+    for (std::size_t i = 0; i < values->keys.size(); ++i) {
+        const std::string& key = values->keys[i];
+        const json::Value& v = values->items[i];
+        const json::Value* number = v.Find("value");
+        if (key == "meadow_crop") {
+            if (number == nullptr || !number->Is(json::Type::String) || number->string.empty()) return fail("meadow_crop: a crop's id");
+            u.meadow_crop = number->string;
+            continue;
+        }
+        bool known = false;
+        for (const Field& f : fields) {
+            if (key != f.key) continue;
+            known = true;
+            if (number == nullptr || !number->Is(json::Type::Number)) return fail(key + ": a number");
+            if (number->number < f.lo || number->number > f.hi) return fail(key + ": out of its range");
+            *f.to = number->number;
+        }
+        if (!known) return fail("no value \"" + key + "\"");
+    }
+    u.laid = true;
+    out = u;
+    return true;
+}
+
 // Loads and builds data/<map_file> (e.g. "maps/kesmark_range.json").
 inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const std::string& map_file, std::string* error = nullptr) {
     std::string text;
@@ -3604,6 +3743,11 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
         value("dense_urban_m", def.clutter.dense_urban_m);
         value("suburban_m", def.clutter.suburban_m);
         value("dense_share", def.clutter.dense_share);
+    }
+    // Land use on the hills' ground (data/scenery/land_use.json; none without it).
+    std::string land_use_text;
+    if (detail::ReadTextFile(data_dir + "/scenery/land_use.json", land_use_text) && !LoadLandUseJson(land_use_text, def.land_use, error)) {
+        return nullptr;
     }
     if (!def.far_ground_file.empty()) {
         // A district: its far ground is its country's (the same frame, so one ground meets the other at the map's edge).

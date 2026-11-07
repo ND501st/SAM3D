@@ -492,6 +492,8 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
     const MapDef& def = map.Def();
     CoverRaster raster;
     const double cell = rules.cover_cell_m;
+    int meadow = -1;
+    for (std::size_t i = 0; i < rules.crops.size(); ++i) meadow = rules.crops[i].id == def.land_use.meadow_crop ? static_cast<int>(i) : meadow;
     const auto add = [&](const std::string& id, double west, double south, double east, double north) {
         CoverGrid g;
         g.id = id;
@@ -509,6 +511,8 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
             for (int c = 0; c < g.cols; ++c) {
                 const FieldCell f = FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(r));
                 g.crop[g.Index(c, r)] = CropOf(rules, f.id);
+                // The hill country's meadows (A.5 step 4): wet valley floors and slopes too steep to plough.
+                if (meadow >= 0 && map.LandUseMeadow(g.CentreEast(c), g.CentreNorth(r))) g.crop[g.Index(c, r)] = static_cast<std::uint8_t>(meadow);
                 // A field whose centre is near a settlement's edge is the household's: strips, not a collective's field.
                 for (const MapSettlementDef& s : def.settlements) {
                     if (std::hypot(f.centre_e - s.centre.east_m, f.centre_n - s.centre.north_m) < s.radius_m + rules.strip_reach_m) {
