@@ -176,6 +176,7 @@ struct MapLandUseDef {
     double min_relief_m = 3.0;        // nowhere the hills add less than this (their blend into the plain)
     double meadow_wetness = 11.0;     // a valley floor this wet is meadow
     double meadow_slope_deg = 8.0;    // a slope this steep (but not wooded) is pasture, not ploughed
+    double brook_row_share = 0.6;     // of a brook's 100 m pieces, the share with a row of alders on one bank (A.3.20)
     std::string meadow_crop = "pasture";  // the dressing's crop on the meadows
     // The lines fit the ground (A.5 step 5, the look target's K8): no road or railway steeper than its class's grade. Each
     // line's profile is held to the grade (halfway between the highest and the lowest profiles that keep it, so cut and
@@ -437,6 +438,14 @@ struct MapBox {
     double width_m = 10.0;
     double height_m = 5.0;
     double heading_rad = 0.0;
+    // A wood's top on a slope (terrain roadmap A.3.20): it rises this much per metre east and north of its centre, as the
+    // ground under it does, so it stands its height over the ground across the block (a level top was buried uphill and
+    // twice as tall downhill). 0 for everything else: a building's roof is level.
+    double rise_e = 0.0, rise_n = 0.0;
+    bool by_water = false;  // a tree row along a brook (A.3.20): alders, not the fields' poplars and black locust
+    double Top() const { return base_m + height_m; }
+    // Its top over (east, north), above sea level.
+    double TopAt(double e, double n) const { return base_m + height_m + rise_e * (e - east_m) + rise_n * (n - north_m); }
 };
 
 enum class MapSurface { Water, MainRoad, Road, Track, Rail };
@@ -1200,14 +1209,14 @@ public:
             const std::size_t i = cells->Cell(e, n);
             for (std::uint32_t k = cells->first[i]; k < cells->first[i + 1]; ++k) {
                 const Foot& f = feet_[cells->feet[k]];
-                if (f.top > top && f.Holds(e, n)) top = f.top;
+                if (f.top > top && f.Holds(e, n)) top = std::max(top, f.TopAt(e, n));
             }
         } else {
             const auto it = loose_.find(CellKey(e, n, kLooseCellM));
             if (it != loose_.end()) {
                 for (std::uint32_t k : it->second) {
                     const Foot& f = feet_[k];
-                    if (f.top > top && f.Holds(e, n)) top = f.top;
+                    if (f.top > top && f.Holds(e, n)) top = std::max(top, f.TopAt(e, n));
                 }
             }
         }
@@ -1265,7 +1274,7 @@ public:
             if (!f.Chord(e0, n0, de, dn, t_in, t_out)) return;
             const double first = std::max(t_in, walk_in);  // where the walk first meets it
             if (first < cell_in - kWalkEps || first > cell_out + kWalkEps) return;
-            going = sink.Chord(t_in, t_out, f.top);
+            going = sink.Chord(t_in, t_out, f.TopAt(e0 + de * t_in, n0 + dn * t_in), f.TopAt(e0 + de * t_out, n0 + dn * t_out));
         };
         const double w = std::min(e0, e1), s = std::min(n0, n1), ea = std::max(e0, e1), nn = std::max(n0, n1);
         bool inside_one = false;
@@ -1306,7 +1315,7 @@ public:
                 const double v = std::max(0.0, std::fabs(de * f.cos_h - dn * f.sin_h) - f.half_w);
                 d = std::hypot(u, v);
             }
-            if (d <= radius_m) most = std::max(most, f.top - GroundHeight(f.e, f.n));
+            if (d <= radius_m) most = std::max(most, f.top0 - GroundHeight(f.e, f.n));
         };
         const double w = e - radius_m, ea = e + radius_m, s = n - radius_m, nn = n + radius_m;
         for (const FootCells& c : rects_) {
@@ -1405,8 +1414,12 @@ private:
     // A box that blocks sight as the paths look it up (roadmap R6): its footprint (the turned rectangle, or the round
     // part's circle), its top above sea level, its narrowest side.
     struct Foot {
+        // `top` its highest (what every bound reads); `top0` its top at its centre, rising `ge` and `gn` per metre east and
+        // north (MapBox::rise_e, rise_n: a wood on a slope; 0 and top0 == top for anything level).
         double e = 0.0, n = 0.0, sin_h = 0.0, cos_h = 1.0, half_l = 0.0, half_w = 0.0, top = 0.0, side = 0.0;
+        double top0 = 0.0, ge = 0.0, gn = 0.0;
         bool round = false;
+        double TopAt(double pe, double pn) const { return top0 + ge * (pe - e) + gn * (pn - n); }
         bool Holds(double pe, double pn) const {
             const double de = pe - e, dn = pn - n;
             if (round) return de * de + dn * dn <= half_l * half_l;
@@ -2392,7 +2405,15 @@ private:
         canopy_cells_.insert(key);
         const double u = noise::Value(seed, e, n, 300.0);
         Box(MapPart::Canopy, e, n, size, size, def_.canopy_min_m + (def_.canopy_max_m - def_.canopy_min_m) * u, 0.0, 1.0);
+        // On a slope its top follows the ground's plane across it (A.3.20); on the plain (under 2%) it stays level.
+        const double h = 0.5 * size;
+        const double ge = (GroundHeight(e + h, n) - GroundHeight(e - h, n)) / size, gn = (GroundHeight(e, n + h) - GroundHeight(e, n - h)) / size;
+        if (std::hypot(ge, gn) >= kCanopySlopeMin) {
+            layout_.boxes.back().rise_e = ge;
+            layout_.boxes.back().rise_n = gn;
+        }
     }
+    static constexpr double kCanopySlopeMin = 0.02;  // a game value: the plain's woods stay level, as they were
 
     void LayWoods(noise::Stream& rng) {
         const std::uint64_t seed = noise::Mix64(def_.seed ^ 0xF0E57ull);
@@ -2640,6 +2661,25 @@ private:
                 row(pts[i], pts[j], Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0, 0.5 * road.width_m + 0.5 * fd.row_width_m + 2.5, draw);
             }
         }
+        // Along the hills' brooks (A.3.20): alders on one bank, a share of each brook's 100 m pieces, the bank each draws.
+        if (def_.land_use.laid && def_.land_use.brook_row_share > 0.0) {
+            int brook_index = 0;
+            const std::size_t strips = layout_.strips.size();
+            for (std::size_t si = 0; si < strips; ++si) {
+                const MapStrip& s = layout_.strips[si];
+                if (s.surface != MapSurface::Water || s.id.compare(0, 6, "brook_") != 0) continue;
+                ++brook_index;
+                for (std::size_t i = 0; i + 1 < s.points.size(); i += 4) {
+                    const std::size_t j = std::min(i + 4, s.points.size() - 1);
+                    const std::uint32_t draw = FieldHash(tag ^ 0x44u, brook_index, static_cast<std::int32_t>(i));
+                    if (Unit24(draw) >= def_.land_use.brook_row_share) continue;
+                    const std::size_t before = layout_.boxes.size();
+                    row({s.points[i].x, s.points[i].y}, {s.points[j].x, s.points[j].y}, Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0,
+                        0.5 * s.width_m + 0.5 * fd.row_width_m + 1.0, draw);
+                    if (layout_.boxes.size() > before) layout_.boxes.back().by_water = true;
+                }
+            }
+        }
         // A grove round three sides of each tanya (the fourth, the farm's front, open).
         for (const Farmstead& f : farmsteads_) {
             if (InSitesSectors(f.e, f.n)) continue;
@@ -2698,7 +2738,7 @@ private:
             for (int c = c0; c <= c1; ++c) {
                 if (!f.Holds(g.EastOf(c), g.NorthOf(r))) continue;
                 double& v = g.At(c, r);
-                v = std::max(v, f.top - GroundHeight(g.EastOf(c), g.NorthOf(r)));
+                v = std::max(v, f.TopAt(g.EastOf(c), g.NorthOf(r)) - GroundHeight(g.EastOf(c), g.NorthOf(r)));
             }
         }
     }
@@ -2719,7 +2759,10 @@ private:
             f.round = MapPartIsRound(bx.part);
             f.half_l = 0.5 * bx.length_m;
             f.half_w = f.round ? f.half_l : 0.5 * bx.width_m;
-            f.top = bx.base_m + bx.height_m;
+            f.top0 = bx.Top();
+            f.ge = bx.rise_e;
+            f.gn = bx.rise_n;
+            f.top = f.top0 + std::fabs(f.ge) * f.HalfE() + std::fabs(f.gn) * f.HalfN();
             f.side = std::max(kFootSpacingFloorM, f.round ? bx.length_m : std::min(bx.length_m, bx.width_m));
             narrowest_m_ = narrowest_m_ > 0.0 ? std::min(narrowest_m_, f.side) : f.side;
             feet_.push_back(f);
@@ -3154,8 +3197,8 @@ public:
             ObstacleChordSink& to;
             bool going = true;
             explicit Once(ObstacleChordSink& sink_to) : to(sink_to) {}
-            bool Chord(double t_in, double t_out, double top_m) override {
-                if (going) going = to.Chord(t_in, t_out, top_m);
+            bool Chord(double t_in, double t_out, double top_in_m, double top_out_m) override {
+                if (going) going = to.Chord(t_in, t_out, top_in_m, top_out_m);
                 return going;
             }
         } once(sink);
@@ -3814,7 +3857,8 @@ inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::st
                             {"meadow_slope_deg", &u.meadow_slope_deg, 1.0, 60.0},  {"max_grade_main", &u.max_grade_main, 0.01, 0.3},
                             {"max_grade_road", &u.max_grade_road, 0.01, 0.3},      {"max_grade_track", &u.max_grade_track, 0.01, 0.4},
                             {"max_grade_rail", &u.max_grade_rail, 0.005, 0.1},     {"side_slope", &u.side_slope, 0.5, 5.0},
-                            {"formation_m", &u.formation_m, 0.0, 30.0},            {"formation_min_half_m", &u.formation_min_half_m, 0.0, 100.0}};
+                            {"formation_m", &u.formation_m, 0.0, 30.0},            {"formation_min_half_m", &u.formation_min_half_m, 0.0, 100.0},
+                            {"brook_row_share", &u.brook_row_share, 0.0, 1.0}};
     for (std::size_t i = 0; i < values->keys.size(); ++i) {
         const std::string& key = values->keys[i];
         const json::Value& v = values->items[i];

@@ -19,6 +19,7 @@
     "max_grade_rail": { "value": 0.025, "source": "game value: sam3d estimate (a main line through hills; to be sourced)", "confidence": "estimate" },
     "side_slope": { "value": 1.5, "source": "game value: sam3d estimate (a cutting's or embankment's side, 1 in 1.5)", "confidence": "estimate" },
     "formation_m": { "value": 6, "source": "game value: sam3d estimate (shoulder and ditch each side)", "confidence": "estimate" },
+    "brook_row_share": { "value": 0.6, "source": "game value: sam3d estimate (of a brook's 100 m pieces, the share with alders on one bank; A.5 step 4: willows and alders along the brooks)", "confidence": "estimate" },
     "formation_min_half_m": { "value": 25, "source": "game value: sam3d estimate (half the core's 50 m ground cell, so a node falls on the formation)", "confidence": "estimate" }
   }
 }

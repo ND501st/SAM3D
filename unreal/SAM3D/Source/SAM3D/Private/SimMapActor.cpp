@@ -2,6 +2,7 @@
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
@@ -556,10 +557,41 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	++ShotIndex;
 }
 
+void ASimMapActor::UpdateMassTiles()
+{
+	// The woods' masses near the camera give way to the trees inside them (A.3.19): a tile is hidden while its nearest
+	// point is within nine tenths of the distance the inside trees are drawn to, so the trees always cover it.
+	if (MassTiles.Num() == 0 || GetWorld() == nullptr)
+	{
+		return;
+	}
+	const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (Cam == nullptr)
+	{
+		return;
+	}
+	const FVector At = Cam->GetCameraLocation();
+	const double Near = 0.9 * 100.0 * FMath::Min(InteriorTreeDistanceM, TreeCullDistanceM);
+	for (int32 I = 0; I < MassTiles.Num(); ++I)
+	{
+		UHierarchicalInstancedStaticMeshComponent* T = MassTiles[I];
+		if (T == nullptr)
+		{
+			continue;
+		}
+		const bool bShow = !bDrawTrees || MassTileBounds[I].ComputeSquaredDistanceToPoint(At) >= Near * Near;
+		if (T->IsVisible() != bShow)
+		{
+			T->SetVisibility(bShow);
+		}
+	}
+}
+
 void ASimMapActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	RunShots(DeltaSeconds);
+	UpdateMassTiles();
 	CheckTimer -= DeltaSeconds;
 	if (CheckTimer > 0.0f)
 	{
@@ -739,6 +771,8 @@ void ASimMapActor::Clear()
 		}
 	}
 	Parts.Reset();
+	MassTiles.Reset();
+	MassTileBounds.Reset();
 	for (UProceduralMeshComponent* T : GroundTiles)
 	{
 		if (T != nullptr)
@@ -1619,17 +1653,18 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	}
 	const bool bTints = bSeasons && TreeMaterial != nullptr;
 	const int32 Day = GroundDay(GetWorld());
-	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr, float StartM = 0.0f)
+	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr,
+						 float StartM = 0.0f, const FString& Tag = FString()) -> UHierarchicalInstancedStaticMeshComponent*
 	{
 		if (Xf.Num() == 0)
 		{
-			return;
+			return nullptr;
 		}
 		FTransform Fix;
 		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Part, Variant, Fix);
 		if (Mesh == nullptr)
 		{
-			return;
+			return nullptr;
 		}
 		TArray<FTransform> Placed;
 		Placed.Reserve(Xf.Num());
@@ -1638,7 +1673,7 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 			Placed.Add(Fix * T);
 		}
 		UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(
-			this, FName(*FString::Printf(TEXT("Map_%s_%d"), *Part, Variant)));
+			this, FName(*FString::Printf(TEXT("Map_%s_%d%s"), *Part, Variant, *Tag)));
 		H->SetupAttachment(Root);
 		H->SetStaticMesh(Mesh);
 		H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -1669,27 +1704,64 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		}
 		Parts.Add(H);
 		BoxCount += Placed.Num();
+		return H;
 	};
-	// The masses: the box the wood's block was, inset, on the engine cube's frame.
+	// The masses: the box the wood's block was, inset, on the engine cube's frame. The far ground's by variant; the map
+	// proper's (whose insides are trees near the camera) by 2 km tile, each tile one variant, so a tile can be hidden.
+	const simcore::MapDef& MapDefinition = Map->Def();
 	TArray<FTransform> Masses[simcore::scenery::kCanopyMassVariants];
+	TMap<FIntPoint, TArray<FTransform>> TileMasses;
+	constexpr double MassTileM = 2000.0;
 	for (const simcore::scenery::CanopyMass& C : Dr.masses)
 	{
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(C.east_m, C.north_m, Ae, An, Au);
 		const FVector Forward = DirToUnreal(Ae * FMath::Sin(C.heading_rad) + An * FMath::Cos(C.heading_rad));
-		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
+		// Its up the normal of its block's plane (A.3.20: a wood on a slope lies along it, as its top does in simcore).
+		const FVector Up = DirToUnreal(Au - Ae * C.rise_e - An * C.rise_n).GetSafeNormal();
+		const FRotator Rot = FRotationMatrix::MakeFromZX(Up, Forward).Rotator();
 		const FVector At = ToUnreal(Link.GroundPoint(C.east_m, C.north_m, C.base_m + 0.5 * C.height_m));
-		Masses[C.variant % simcore::scenery::kCanopyMassVariants].Add(FTransform(Rot, At, FVector(C.length_m, C.width_m, C.height_m)));
+		const FTransform Xf(Rot, At, FVector(C.length_m, C.width_m, C.height_m));
+		if (MapDefinition.InCore(C.east_m, C.north_m))
+		{
+			TileMasses.FindOrAdd(FIntPoint(FMath::FloorToInt32(C.east_m / MassTileM), FMath::FloorToInt32(C.north_m / MassTileM))).Add(Xf);
+		}
+		else
+		{
+			Masses[C.variant % simcore::scenery::kCanopyMassVariants].Add(Xf);
+		}
 	}
+	const simcore::scenery::TreeTintRgb MassTint = bTints ? simcore::scenery::MassTintOn(Seasons, Day) : simcore::scenery::TreeTintRgb{{1.0f, 1.0f, 1.0f}};
 	for (int32 V = 0; V < simcore::scenery::kCanopyMassVariants; ++V)
 	{
 		TArray<FLinearColor> Tints;
 		if (bTints)
 		{
-			const simcore::scenery::TreeTintRgb M = simcore::scenery::MassTintOn(Seasons, Day);
-			Tints.Init(FLinearColor(M[0], M[1], M[2]), Masses[V].Num());
+			Tints.Init(FLinearColor(MassTint[0], MassTint[1], MassTint[2]), Masses[V].Num());
 		}
 		Add(TEXT("canopy_mass"), V, Masses[V], false, 0.0f, &Tints);
+	}
+	for (const TPair<FIntPoint, TArray<FTransform>>& Tile : TileMasses)
+	{
+		TArray<FLinearColor> Tints;
+		if (bTints)
+		{
+			Tints.Init(FLinearColor(MassTint[0], MassTint[1], MassTint[2]), Tile.Value.Num());
+		}
+		const uint32 TileHash = (static_cast<uint32>(Tile.Key.X) * 73856093u) ^ (static_cast<uint32>(Tile.Key.Y) * 19349663u);
+		const int32 V = static_cast<int32>(TileHash % static_cast<uint32>(simcore::scenery::kCanopyMassVariants));
+		UHierarchicalInstancedStaticMeshComponent* H =
+			Add(TEXT("canopy_mass"), V, Tile.Value, false, 0.0f, &Tints, 0.0f, FString::Printf(TEXT("_t%d_%d"), Tile.Key.X, Tile.Key.Y));
+		if (H != nullptr)
+		{
+			FBox Bounds(ForceInit);
+			for (const FTransform& T : Tile.Value)
+			{
+				Bounds += T.GetLocation();
+			}
+			MassTiles.Add(H);
+			MassTileBounds.Add(Bounds.ExpandBy(100.0 * 60.0));  // a block's half and a little
+		}
 	}
 	if (!bDrawTrees)
 	{
@@ -1698,8 +1770,9 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	// The trees: base on the ground (simcore's, 0.3 m into it), turned by their own yaw, scaled (crown, crown, height)
 	// from the unit tree (scenery/map_meshes.hpp TreeMesh).
 	constexpr int32 TreeKinds = static_cast<int32>(simcore::scenery::TreeKind::Count);
-	TArray<FTransform> Trees[TreeKinds];
-	TArray<FLinearColor> TreeTints[TreeKinds];
+	// The trees inside the map proper's woods (A.3.19) in components of their own, drawn only as far as InteriorTreeDistanceM.
+	TArray<FTransform> Trees[TreeKinds], Inside[TreeKinds];
+	TArray<FLinearColor> TreeTints[TreeKinds], InsideTints[TreeKinds];
 	for (const simcore::scenery::TreeInstance& T : Dr.trees)
 	{
 		simcore::Vec3 Ae, An, Au;
@@ -1707,11 +1780,12 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		const FVector Forward = DirToUnreal(Ae * FMath::Sin(T.yaw_rad) + An * FMath::Cos(T.yaw_rad));
 		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
 		const FVector At = ToUnreal(Link.GroundPoint(T.east_m, T.north_m, T.base_m));
-		Trees[T.kind % TreeKinds].Add(FTransform(Rot, At, FVector(T.crown_m, T.crown_m, T.height_m)));
+		const int32 K = T.kind % TreeKinds;
+		(T.interior != 0 ? Inside : Trees)[K].Add(FTransform(Rot, At, FVector(T.crown_m, T.crown_m, T.height_m)));
 		if (bTints)
 		{
-			const simcore::scenery::TreeTintRgb C = simcore::scenery::TreeTintOn(Seasons, T.kind % TreeKinds, T.east_m, T.north_m, Day);
-			TreeTints[T.kind % TreeKinds].Add(FLinearColor(C[0], C[1], C[2]));
+			const simcore::scenery::TreeTintRgb C = simcore::scenery::TreeTintOn(Seasons, K, T.east_m, T.north_m, Day);
+			(T.interior != 0 ? InsideTints : TreeTints)[K].Add(FLinearColor(C[0], C[1], C[2]));
 		}
 	}
 	for (int32 K = 0; K < TreeKinds; ++K)
@@ -1727,6 +1801,7 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		// A wood's fringe of shrubs (hazel, elder) is not drawn as far as the trees: under 4 m, it is lost behind them.
 		const float KindCullM = simcore::scenery::IsShrub(static_cast<simcore::scenery::TreeKind>(K)) ? FMath::Min(TreeCullDistanceM, 800.0f) : TreeCullDistanceM;
 		Add(PartName, 0, Trees[K], true, KindCullM, bRegistered ? nullptr : &TreeTints[K]);
+		Add(PartName, 0, Inside[K], true, FMath::Min(InteriorTreeDistanceM, TreeCullDistanceM), bRegistered ? nullptr : &InsideTints[K], 0.0f, TEXT("_in"));
 	}
 	if (bTints)
 	{

@@ -117,14 +117,19 @@ def build_page(plots, photos, folder, ids, label, seconds=None, look=None):
             f"</style><h1>Plot lab: {esc(label)}</h1>{took}" + look_strip(look, folder) + "".join(rows))
 
 
-def run_game(folder, engine, ids, extra=(), scenario=SEASONS["october"]):
-    """Renders the plots offscreen into `folder`: the editor in game mode on the Kesmark range, only `ids`."""
+FIXED_EXPOSURE_EV = 0.0  # the plot lab's fixed exposure (A.3.20); None: the engine's eye adaptation, as before
+
+
+def run_game(folder, engine, ids, extra=(), scenario=SEASONS["october"], exposure=FIXED_EXPOSURE_EV):
+    """Renders the plots offscreen into `folder`: the editor in game mode on the Kesmark range, only `ids`, at a fixed
+    exposure so passes compare (or adapting, with exposure None)."""
     folder.mkdir(parents=True, exist_ok=True)
     exe = Path(engine) / "Engine" / "Binaries" / "Win64" / "UnrealEditor.exe"
     project = ROOT / "unreal" / "SAM3D" / "SAM3D.uproject"
+    fixed = [] if exposure is None else [f"-SimFixedExposure={exposure}"]
     cmd = [str(exe), str(project), "/Game/Maps/KesmarkRange", "-game", "-RenderOffscreen",
            f"-SimScenario={scenario}", f"-SimMapShots={folder.as_posix()}", "-SimShotSet=plots",
-           f"-SimPlots={','.join(ids)}", "-unattended", *extra]
+           f"-SimPlots={','.join(ids)}", "-unattended", *fixed, *extra]
     return subprocess.run(cmd, check=False).returncode
 
 

@@ -115,6 +115,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "500", ClampMax = "30000"))
 	float TreeCullDistanceM = 8000.0f;
 
+	/** How far the trees inside the map proper's woods are drawn (m; terrain roadmap A.3.19): nearer, the woods' masses are
+	 *  hidden (by 2 km tiles) and the woods are trees throughout; farther, the edge rows and the masses. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "500", ClampMax = "30000"))
+	float InteriorTreeDistanceM = 2500.0f;
+
 	/** The nation's assets on the map: every theatre object as its basic models where it stands, the running campaign's
 	 *  (where it has moved them; the wrecked dark) or else TheatreFile's. Not what the scenario draws itself: its own
 	 *  battery, its dummies and its neighbours. With them the chain of command's places that are not theatre objects
@@ -176,6 +181,7 @@ private:
 	void BuildStrips(const simcore::MapFrameLink& Link);
 	void BuildBoxes(const simcore::MapFrameLink& Link);
 	void BuildTrees(const simcore::MapFrameLink& Link);
+	void UpdateMassTiles();
 	void BuildBridges(const simcore::MapFrameLink& Link);
 	void BuildCrops(const simcore::MapFrameLink& Link, const FString& DataDirectory);
 	void LoadDressing(const FString& DataDirectory);
@@ -203,6 +209,11 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Parts;
+
+	/** The map proper's woods' masses by 2 km tile (also in Parts), hidden near the camera (UpdateMassTiles). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> MassTiles;
+	TArray<FBox> MassTileBounds;
 
 	std::shared_ptr<const simcore::MapData> Map;
 	std::shared_ptr<const simcore::CountryMap> Country;

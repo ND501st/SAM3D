@@ -66,7 +66,7 @@ struct Collect final : ObstacleChordSink {
         double a, b, top;
     };
     std::vector<C> chords;
-    bool Chord(double t_in, double t_out, double top_m) override {
+    bool Chord(double t_in, double t_out, double top_m, double /*top_out_m*/) override {
         chords.push_back({t_in, t_out, top_m});
         return true;
     }

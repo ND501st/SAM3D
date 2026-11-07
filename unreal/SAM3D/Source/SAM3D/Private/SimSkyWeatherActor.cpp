@@ -77,6 +77,18 @@ void ASimSkyWeatherActor::BeginPlay()
 	}
 	FParse::Value(FCommandLine::Get(), TEXT("SimExposureBias="), OutdoorExposureBias);
 	Exposure->Settings.AutoExposureBias = OutdoorExposureBias;
+	// -SimFixedExposure=<ev>: no eye adaptation, a fixed exposure of <ev> stops (the plot lab's, terrain roadmap L12 and
+	// A.3.20: every pass rendered at the same exposure, so a darker wood is darker, not re-exposed).
+	float FixedEv = 0.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("SimFixedExposure="), FixedEv))
+	{
+		Exposure->Settings.bOverride_AutoExposureMethod = true;
+		Exposure->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+		Exposure->Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+		Exposure->Settings.AutoExposureApplyPhysicalCameraExposure = false;
+		Exposure->Settings.AutoExposureBias = FixedEv;
+		UE_LOG(LogTemp, Log, TEXT("Sky: a fixed exposure of %.2f EV"), FixedEv);
+	}
 	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")))
 	{
 		CloudMaterial = UMaterialInstanceDynamic::Create(M, this);

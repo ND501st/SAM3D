@@ -593,6 +593,55 @@ the new order, the loop's comparison step (A.4) and how the hills are made (A.5)
 - **Left:** sunken lanes; `nav` reading the grade; brooks crossing a fill (their strips ride over the embankment, no
   culvert); the tracks along the contours.
 
+### A.3.19 L7 and L10 in first form: the woods' insides are trees near, masses far (7 Nov 2026)
+
+- **The owner, 7 Nov:** "big green shapes in the middle of all the woods". Each 100 m wood block in the map proper had
+  two rows of trees on its open sides and, inside, a lumpy box (`CanopyMassMesh`), level on the block's centre, so on
+  a hillside a slab standing out of the slope.
+- **The insides planted** (`map_dressing.hpp` `PlaceTrees`; `map_dressing.json` `interior_spacing_m` 12,
+  `interior_crown` 1.4, estimates): behind the edge rows (the whole block where no side is open), the stand's canopy
+  trees on a jittered lattice every 12 m, their crowns 1.4 times a lone tree's (at 1.0, w1, the forest floor showed
+  between them), each flagged `interior`. Their tops keep under the obstacle heights as every tree's. The masses are
+  kept, for far off. About 707 000 inside trees, 1.2 million trees and shrubs in all (`test_map_dressing`'s budget
+  raised to 1.4 million).
+- **Drawn near, the masses far** (`SimMapActor.cpp` `BuildTrees`, `UpdateMassTiles`): the inside trees in components of
+  their own out to `InteriorTreeDistanceM` (2.5 km); the map proper's masses by 2 km tile, a tile hidden while its
+  nearest point is within nine tenths of that distance, so near the camera every wood is trees throughout and farther
+  off the edge rows and the masses as before. The far ground's masses unchanged.
+- **Cost** (the views, w2 against lu3): GPU within 0.4 ms (7.2-11.4 ms); the game thread about 3 ms slower (7 to 10 ms),
+  to be looked into (the tiles' update is a few hundred box distances a frame; more likely the instances).
+- **w2:** V13 north looks over a wood that is trees through to its far side, dark floor between the crowns; p19 at eye
+  height looks into the Lazne wood's trunks (a detail area's wood, planted whole as before). From above, the hills'
+  woods are crowns throughout, open where a stand is young. 1075 tests pass (the whole suite); `ground_check` PASS;
+  `nav_check` 200 of 200; citations clean. V13's camera stands elsewhere than in lu3: the highest open ground moved with
+  A.3.18's cuts.
+- **Left:** the masses themselves (a crowned shell draped on the ground, or impostors: L10); the tile's swap is a pop
+  at 2.25 km; understorey and young growth inside (the stand's layers, L7); the game thread's 3 ms.
+
+### A.3.20 Woods that slope with the hill, alders along the brooks, the plot lab at a fixed exposure (7 Nov 2026)
+
+Three changes in one pass (the owner, 7 Nov: more changes before each test and render).
+
+- **A wood's top slopes with its hill** (`terrain_map.hpp` `MapBox::rise_e`, `rise_n`, `TopAt`; set in `Canopy()` from
+  the ground's central difference across the block where the gradient is 2% or more, so the plain stays level and
+  bit-exact). The obstacle follows the plane: `Foot::TopAt` in `ObstacleTop`, the stamp and the chords, the chord sink
+  given its top at both ends (`ObstacleChordSink::Chord(t_in, t_out, top_in, top_out)`). Before, a block on a hillside
+  had one level top, its height over the ground uphill a fraction of downhill. Of 7808 sloping blocks, 200 checked:
+  the height difference uphill to downhill at most 16.7 m (a level top: 34.6 m; what is left is the ground not being a
+  plane); rays along their tops are blocked 1 m under and clear 1 m over (`test_map_obstacles`, a new test). The
+  dressing's trees take their tops from the plane, the masses are tilted to it (`SimMapActor.cpp`).
+- **Alders along the hills' brooks** (`LayFarmland`; `land_use.json` `brook_row_share` 0.6, an estimate): on 60% of
+  each brook's 100 m pieces, a row on one bank, the bank drawn, its trees alders (`MapBox::by_water`). 2725 rows,
+  19 926 alders, none on dry ground off a brook (`test_map_dressing`).
+- **The plot lab at a fixed exposure** (`-SimFixedExposure=<ev>` in `SimSkyWeatherActor.cpp`: manual exposure, no
+  physical camera; `plot_lab.py` passes 0 EV by default, `exposure=None` for the old eye adaptation). A pass now differs
+  from the last by the scene, not by the eye re-exposing it. The plots spread: p18 at eye height against the sun 162 mean
+  grey, p19 low over shaded ploughland 34 (auto-exposure kept every plot near 110).
+- **s1:** 1076 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations clean. Cost against
+  w2: GPU and game thread within 0.3 ms in every view. V13 east: the far hills' woods sit on their slopes, no level slab.
+- **Left:** a plot's own exposure (one value per run now, too bright for p18 into the sun); a view down a brook to see
+  the alders; the ground under a block that is no plane (a ridge or hollow inside 100 m).
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

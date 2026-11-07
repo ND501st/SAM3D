@@ -109,6 +109,10 @@ struct DressingRules {
     double shrub_height_min_m = 1.5, shrub_height_max_m = 4.0;
     double mass_inset_m = 3.0;
     double mass_top = 0.92;      // a mass's height, of its wood's
+    // A wood's inside in the map proper (roadmap L7, A.3.19): its canopy trees every interior_spacing_m each way behind the
+    // edge rows, flagged `interior`, drawn near the camera in place of the block's mass (which is kept for far off). 0: none.
+    double interior_spacing_m = 12.0;
+    double interior_crown = 1.4;  // their crowns this much wider than a lone tree's: a closed stand's crowns fill the gaps
     double cover_cell_m = 25.0;
     double garden_m = 15.0;
     // The fields themselves are the map's (MapDef::farmland, farm_fields.hpp: they set the farm tracks and tree rows, which
@@ -222,6 +226,8 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("poplar_river_m", r.poplar_river_m, 0.0, 120.0);
     number("mass_inset_m", r.mass_inset_m, 0.0, 20.0);
     number("mass_top", r.mass_top, 0.2, 1.0);
+    number("interior_spacing_m", r.interior_spacing_m, 0.0, 50.0);
+    number("interior_crown", r.interior_crown, 0.5, 3.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
     range("strip_width_m", r.strip_width_min_m, r.strip_width_max_m, 5.0, 200.0);
@@ -560,12 +566,14 @@ struct TreeInstance {
     double east_m = 0.0, north_m = 0.0, base_m = 0.0;
     float height_m = 0.0f, crown_m = 0.0f, yaw_rad = 0.0f;
     std::uint8_t kind = 0;  // TreeKind
+    std::uint8_t interior = 0;  // 1: inside a wood of the map proper, behind its edge rows (drawn near only, with the mass far)
 };
 
 // A wood's block drawn as one mass (scenery/map_meshes.hpp CanopyMassMesh): a box as the map's boxes are.
 struct CanopyMass {
     double east_m = 0.0, north_m = 0.0, base_m = 0.0;
     double length_m = 0.0, width_m = 0.0, height_m = 0.0, heading_rad = 0.0;
+    double rise_e = 0.0, rise_n = 0.0;  // its block's top's slope (MapBox::rise_e, rise_n): drawn tilted to the ground's plane
     std::uint8_t variant = 0;
 };
 
@@ -642,7 +650,7 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         if (shrub) {
             top = ground + rules.shrub_height_min_m + (rules.shrub_height_max_m - rules.shrub_height_min_m) * At(seed ^ 0x5B2ull, e, n);
         } else {
-            top = b.base_m + b.height_m - At(seed ^ 0x70Full, e, n) * rules.top_drop * b.height_m;
+            top = b.TopAt(e, n) - At(seed ^ 0x70Full, e, n) * rules.top_drop * b.height_m;  // on a slope, its plane's
         }
         top = std::min(top, top_limit);
         double height = top - base;
@@ -712,7 +720,8 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
             const int count_w = std::max(1, static_cast<int>(std::floor(b.width_m / kRowSpacingM)));
             const double step_l = b.length_m / count_l, step_w = b.width_m / count_w;
             const double pick = At(seed ^ 0x8Eull, b.east_m, b.north_m);
-            const int kind = static_cast<int>(pick < 0.55 ? TreeKind::Poplar : (pick < 0.9 ? TreeKind::Acacia : TreeKind::Oak));
+            const int kind = b.by_water ? static_cast<int>(TreeKind::Alder)  // along a brook (A.3.20)
+                                        : static_cast<int>(pick < 0.55 ? TreeKind::Poplar : (pick < 0.9 ? TreeKind::Acacia : TreeKind::Oak));
             for (int i = 0; i < count_l; ++i) {
                 for (int j = 0; j < count_w; ++j) {
                     double e = 0.0, n = 0.0;
@@ -816,6 +825,27 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                 }
             }
         }
+        // Its inside: the stand's canopy trees on a lattice behind the edge rows (the whole block where no side is open).
+        if (core && rules.interior_spacing_m > 0.0) {
+            const double band = rules.edge_rows * rules.edge_spacing_m;
+            const int count = std::max(1, static_cast<int>(std::floor(size / rules.interior_spacing_m)));
+            const double step = size / count;
+            const std::size_t first = out.trees.size();
+            for (int i = 0; i < count; ++i) {
+                for (int j = 0; j < count; ++j) {
+                    const double fwd = (i + 0.5) * step - 0.5 * size, right = (j + 0.5) * step - 0.5 * size;
+                    const double depth = in_from_open(fwd, right);
+                    if (depth < band) continue;
+                    double e = 0.0, n = 0.0;
+                    jittered(b, fwd, right, step, e, n, true);
+                    wood_tree(b, e, n, depth, false);
+                }
+            }
+            for (std::size_t t = first; t < out.trees.size(); ++t) {
+                out.trees[t].interior = 1;
+                out.trees[t].crown_m = static_cast<float>(out.trees[t].crown_m * rules.interior_crown);
+            }
+        }
         CanopyMass m;
         m.east_m = b.east_m;
         m.north_m = b.north_m;
@@ -824,6 +854,8 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         m.width_m = std::max(1.0, b.width_m - 2.0 * rules.mass_inset_m);
         m.height_m = rules.mass_top * b.height_m;
         m.heading_rad = b.heading_rad;
+        m.rise_e = b.rise_e;
+        m.rise_n = b.rise_n;
         m.variant = static_cast<std::uint8_t>(noise::Mix64(seed ^ Bits(std::llround(b.east_m)) * 0x9E37ull ^ Bits(std::llround(b.north_m))) %
                                               static_cast<std::uint64_t>(kCanopyMassVariants));
         out.masses.push_back(m);

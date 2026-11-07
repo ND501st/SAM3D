@@ -129,7 +129,7 @@ public:
                 ground = std::max(ground, map_->GroundHeight(e0 + de * t, n0 + dn * t));
                 stand = std::max(stand, StandOf(f, e0 + de * t, n0 + dn * t));
             }
-            if (ground + stand >= below_m) going = sink.Chord(ta, tb, ground + stand);
+            if (ground + stand >= below_m) going = sink.Chord(ta, tb, ground + stand, ground + stand);
         };
         // The segment grid by grid: a detail area's grid where it covers, else the map's (CoverRaster::GridAt's order).
         double t = 0.0;

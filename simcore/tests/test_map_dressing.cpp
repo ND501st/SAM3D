@@ -160,21 +160,30 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
         const TreeInstance& y = again.trees.back();
         SC_EXPECT(x.east_m == y.east_m && x.north_m == y.north_m && x.base_m == y.base_m && x.height_m == y.height_m && x.kind == y.kind);
     }
-    std::size_t in_areas = 0;
+    std::size_t in_areas = 0, interior = 0;
     std::vector<std::size_t> kinds(static_cast<std::size_t>(TreeKind::Count), 0);
     for (const TreeInstance& t : d.trees) {
         const bool inside = m->Def().InCore(t.east_m, t.north_m) || m->InDetail(t.east_m, t.north_m);
         SC_EXPECT(inside);
         in_areas += m->InDetail(t.east_m, t.north_m) ? 1 : 0;
+        // A wood's inside (A.3.19): in the map proper, never in a detail area's wood (planted whole), never a shrub.
+        if (t.interior != 0) {
+            ++interior;
+            SC_EXPECT(!m->InDetail(t.east_m, t.north_m));
+            SC_EXPECT(!IsShrub(static_cast<TreeKind>(t.kind)));
+        }
         SC_EXPECT(t.kind < static_cast<std::uint8_t>(TreeKind::Count));
         if (t.kind < kinds.size()) ++kinds[t.kind];
     }
-    std::printf("    %zu trees and shrubs (%zu in the detail areas), %zu masses; by kind:", d.trees.size(), in_areas, d.masses.size());
+    std::printf("    %zu trees and shrubs (%zu in the detail areas, %zu inside the woods), %zu masses; by kind:", d.trees.size(), in_areas, interior,
+                d.masses.size());
     for (std::size_t k = 0; k < kinds.size(); ++k) std::printf(" %s %zu", TreeKindName(static_cast<TreeKind>(k)), kinds[k]);
     std::printf("\n");
     // The budget grew with the hill country's woods (terrain roadmap A.3.17: about 500 000; the views' GPU time measured
     // unchanged at about 10 ms, l11b against lu2).
-    SC_EXPECT(d.trees.size() < 600000);
+    // And again with the woods' insides (A.3.19: about 700 000 of them, drawn only within 2.5 km of the camera).
+    SC_EXPECT(d.trees.size() < 1400000);
+    SC_EXPECT(interior > 100000);
     SC_EXPECT(d.trees.size() > 50000);
     SC_EXPECT(in_areas > 10000);
     for (std::size_t k : kinds) SC_EXPECT(k > 0);
@@ -246,15 +255,30 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
     const MapDressing& d = Dressing();
     const DressingRules& r = Rules();
     SC_EXPECT(r.stands.size() >= 4);
-    // Wet ground has its own stands: alder only near the water, beech and pine only away from it.
-    int alder_dry = 0, alder = 0, pine_wet = 0, shrubs = 0, shrubs_deep = 0;
+    // Wet ground has its own stands: alder only near the water (a river's, or a brook's row of them, A.3.20), beech and
+    // pine only away from it.
+    std::vector<const MapBox*> brook_rows;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part == MapPart::TreeRow && b.by_water) brook_rows.push_back(&b);
+    }
+    const auto in_brook_row = [&](const TreeInstance& t) {
+        for (const MapBox* b : brook_rows) {
+            const double de = t.east_m - b->east_m, dn = t.north_m - b->north_m;
+            const double sh = std::sin(b->heading_rad), ch = std::cos(b->heading_rad);
+            if (std::fabs(de * sh + dn * ch) <= 0.5 * b->length_m + 3.0 && std::fabs(de * ch - dn * sh) <= 0.5 * b->width_m + 3.0) return true;
+        }
+        return false;
+    };
+    int alder_dry = 0, alder = 0, alder_brook = 0, pine_wet = 0, shrubs = 0, shrubs_deep = 0;
     for (const TreeInstance& t : d.trees) {
         const TreeKind k = static_cast<TreeKind>(t.kind);
         const bool wet = m->NearWater(t.east_m, t.north_m, r.wet_m);
         if (k == TreeKind::Alder) {
             ++alder;
             // An alder off the wet ground only as a stand's admixture... none is: alder is wet stands' alone.
-            alder_dry += wet ? 0 : 1;
+            const bool brook = !wet && in_brook_row(t);
+            alder_brook += brook ? 1 : 0;
+            alder_dry += wet || brook ? 0 : 1;
         }
         if (k == TreeKind::Pine || k == TreeKind::Beech) pine_wet += wet ? 1 : 0;
         if (IsShrub(k)) ++shrubs;
@@ -275,8 +299,10 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
         break;  // one block is enough to look inside
     }
     SC_EXPECT(shrubs_out == 0);
-    std::printf("    %d alders (%d off the wet ground), %d pine or beech on the wet ground, %d shrubs\n", alder, alder_dry, pine_wet, shrubs);
+    std::printf("    %d alders (%d along the brooks in %zu rows, %d off the wet ground), %d pine or beech on the wet ground, %d shrubs\n", alder,
+                alder_brook, brook_rows.size(), alder_dry, pine_wet, shrubs);
     SC_EXPECT(alder > 100);
+    SC_EXPECT(brook_rows.size() > 100 && alder_brook > 1000);
     SC_EXPECT(alder_dry == 0);
     SC_EXPECT(pine_wet == 0);
     SC_EXPECT(shrubs > 1000);
@@ -393,7 +419,7 @@ SC_TEST("map dressing: no wood's mass tops what blocks a sight line, in the map 
         bool short_of = false;
         for (const auto& p : at) {
             const double e = c.east_m + p[0] * sh + p[1] * ch, n = c.north_m + p[0] * ch - p[1] * sh;
-            const double gap = top - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
+            const double gap = top + c.rise_e * (e - c.east_m) + c.rise_n * (n - c.north_m) - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
             worst = std::max(worst, gap);
             short_of = short_of || gap > 0.3;  // the trees' allowance
         }
@@ -436,19 +462,26 @@ SC_TEST("map dressing: a wood's open side has its rows of trees, a wood in a det
             continue;
         }
         if (whole || found_edge >= 3 || block_at(b.east_m, b.north_m + b.width_m)) continue;
-        int row0 = 0, row1 = 0, inside = 0;
+        int row0 = 0, row1 = 0, inside = 0, inside_flagged = 0;
         const double top = b.north_m + 0.5 * b.width_m;
         for (const TreeInstance& t : d.trees) {
             if (!in_block(t, b)) continue;
             const double in = top - t.north_m;
             if (in > 0.0 && in < r.edge_spacing_m) ++row0;
             else if (in >= r.edge_spacing_m && in < 2.0 * r.edge_spacing_m) ++row1;
-            else if (in > 2.0 * r.edge_spacing_m + 4.0 && std::fabs(t.east_m - b.east_m) < 0.5 * b.length_m - 2.0 * r.edge_spacing_m - 4.0) ++inside;
+            else if (in > 2.0 * r.edge_spacing_m + 4.0 && std::fabs(t.east_m - b.east_m) < 0.5 * b.length_m - 2.0 * r.edge_spacing_m - 4.0) {
+                ++inside;
+                inside_flagged += t.interior != 0 ? 1 : 0;
+            }
         }
         const int per_row = static_cast<int>(std::floor(b.length_m / r.edge_spacing_m));
         SC_EXPECT(row0 >= per_row * 7 / 10);
         SC_EXPECT(row1 >= per_row * 7 / 10);
-        SC_EXPECT(inside == 0);  // its inside is a mass
+        // Its inside (A.3.19): canopy trees on the interior lattice, every one flagged (drawn near; the mass far).
+        const double inner = b.length_m - 2.0 * (2.0 * r.edge_spacing_m + 4.0);
+        const int lattice = static_cast<int>(std::floor(inner / r.interior_spacing_m));
+        SC_EXPECT(inside >= lattice * lattice / 2);
+        SC_EXPECT(inside_flagged == inside);
         ++found_edge;
     }
     SC_EXPECT(found_edge == 3);
