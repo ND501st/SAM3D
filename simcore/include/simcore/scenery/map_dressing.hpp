@@ -115,6 +115,8 @@ struct DressingRules {
     double interior_crown = 1.4;  // their crowns this much wider than a lone tree's: a closed stand's crowns fill the gaps
     double understorey_keep = 0.2;  // of the inside lattice's cells, the share with a shrub under the crowns (L7, A.3.21)
     double brook_gap_share = 0.25;  // of a brook's alder line, the share left open (a smooth wave: grazed or cut banks, A.3.22)
+    double interior_height_spread = 0.3;  // the inside trees from the stand's height down by up to this share (A.3.23)
+    double sapling_keep = 0.15;  // of the inside lattice's cells, the share with a sapling of the stand's kinds (A.3.23)
     double brook_bush_share = 0.15;  // of what is left, the share a bush (hazel, elder) instead of an alder
     double cover_cell_m = 25.0;
     double garden_m = 15.0;
@@ -233,6 +235,8 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("interior_crown", r.interior_crown, 0.5, 3.0);
     number("understorey_keep", r.understorey_keep, 0.0, 1.0);
     number("brook_gap_share", r.brook_gap_share, 0.0, 1.0);
+    number("interior_height_spread", r.interior_height_spread, 0.0, 0.8);
+    number("sapling_keep", r.sapling_keep, 0.0, 1.0);
     number("brook_bush_share", r.brook_bush_share, 0.0, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
@@ -716,6 +720,23 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         e = e0 + j * (2.0 * At(seed ^ 0x1E5ull, e0, n0) - 1.0);
         n = n0 + j * (2.0 * At(seed ^ 0x1E6ull, e0, n0) - 1.0);
     };
+    // The alder lines' gaps by rank (A.3.23): the wave's value at the brook rows' places, cut at brook_gap_share of them,
+    // so the share asked is the share left open (the wave's values bunch round the middle: cut at its value, 0.25 left
+    // 13% open).
+    double brook_gap_cut = 0.0;
+    if (rules.brook_gap_share > 0.0) {
+        std::vector<double> values;
+        for (const MapBox& b : map.Layout().boxes) {
+            if (b.part != MapPart::TreeRow || !b.by_water) continue;
+            const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
+            for (double f = -0.5 * b.length_m; f <= 0.5 * b.length_m; f += 7.0) values.push_back(wave(0xA1D0ull, b.east_m + f * sh, b.north_m + f * ch));
+        }
+        if (!values.empty()) {
+            const std::size_t k = std::min(values.size() - 1, static_cast<std::size_t>(rules.brook_gap_share * static_cast<double>(values.size())));
+            std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(k), values.end());
+            brook_gap_cut = values[k];
+        }
+    }
     for (const MapBox& b : map.Layout().boxes) {
         if (b.part == MapPart::TreeRow) {
             // A row or a grove (the map's farmland, roadmap T4): trees on a lattice of the row's own spacing, poplar and
@@ -735,7 +756,7 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                     if (b.by_water) {
                         // An alder line grows wild (A.3.22): gone where the bank is grazed or cut (a smooth wave, so
                         // gaps run tens of metres), a bush here and there, the trees of uneven height and crown.
-                        if (wave(0xA1D0ull, e, n) < rules.brook_gap_share) continue;
+                        if (wave(0xA1D0ull, e, n) < brook_gap_cut) continue;
                         const double u = At(seed ^ 0xA1D1ull, e, n);
                         if (u < rules.brook_bush_share) {
                             plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0xA1D2ull, e, n)));
@@ -859,8 +880,35 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                     wood_tree(b, e, n, depth, false);
                 }
             }
+            // A closed stand (A.3.23): crowns wide enough to touch, the trees of uneven height (dominant, codominant,
+            // suppressed: interior_height_spread under the stand's own), so the canopy is a rough roof, not a lawn of cones.
             for (std::size_t t = first; t < out.trees.size(); ++t) {
-                out.trees[t].crown_m = static_cast<float>(out.trees[t].crown_m * rules.interior_crown);
+                TreeInstance& tr = out.trees[t];
+                tr.crown_m = static_cast<float>(tr.crown_m * rules.interior_crown);
+                // (no shorter than a tree is planted at all: 3 m)
+                const double h = std::max(std::min(1.0, 3.01 / std::max(1e-3, static_cast<double>(tr.height_m))),
+                                          1.0 - rules.interior_height_spread * At(seed ^ 0x1A7ull, tr.east_m, tr.north_m));
+                tr.height_m = static_cast<float>(tr.height_m * h);
+                tr.crown_m = static_cast<float>(tr.crown_m * h);  // a suppressed tree narrower too: never wider than tall
+            }
+            // The young growth (L7): in a share of the cells, a third of a step off the canopy tree, a sapling of the
+            // stand's own kinds, a quarter to a half of its height, in the same patches of light as the shrubs.
+            if (rules.sapling_keep > 0.0) {
+                for (int i = 0; i < count; ++i) {
+                    for (int j = 0; j < count; ++j) {
+                        const double fwd = (i + 0.85) * step - 0.5 * size, right = (j + 0.2) * step - 0.5 * size;
+                        if (fwd >= 0.5 * size || in_from_open(fwd, right) < band) continue;
+                        double e = 0.0, n = 0.0;
+                        jittered(b, fwd, right, 0.5 * step, e, n);
+                        const double keep = std::min(1.0, rules.sapling_keep * (0.25 + 1.5 * wave(0x0D57ull, e, n)));
+                        if (At(seed ^ 0x5A9ull, e, n) >= keep) continue;
+                        const Stand s = stand_at(e, n);
+                        const double u = At(seed ^ 0x5AAull, e, n);
+                        const int kind = s.type != nullptr ? draw(s.type->mix, u) : draw(rules.species_shares, u);
+                        if (IsShrub(static_cast<TreeKind>(kind))) continue;
+                        plant(b, e, n, kind, (0.25 + 0.25 * At(seed ^ 0x5ABull, e, n)) * s.age, 0.8);
+                    }
+                }
             }
             // The understorey (L7, A.3.21): in a share of the lattice's cells, half a step off the canopy tree, a shrub
             // of the edge's mix under the crowns, in patches where the wave lets light in.

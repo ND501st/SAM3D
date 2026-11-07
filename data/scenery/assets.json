@@ -238,6 +238,34 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "Standing sunflower, three short plants, a shade paler; one of the sunflower kind's cards."
+    },
+    {
+      "id": "hazel_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/hazel_card/hazel_card/StaticMeshes/hazel_card.hazel_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "8cfe3a82710aba9adeabd94c2ebf3a16c14c13d653208c7d4729e4e1796b43c0",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A hazel bush in October, many stems fanning from one foot, broad round leaves turning yellow: three crossed cards (A.3.23; the understorey and the brooks' bushes)."
+    },
+    {
+      "id": "elder_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/elder_card/elder_card/StaticMeshes/elder_card.elder_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "sha256": "5e290fd69d167e298fe0e49ad426f756bca13ab92fba354b00afaf718db58006",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "An elder bush in October, arching stems, narrow leaflets still green, black-purple berry umbels: three crossed cards (A.3.23)."
     }
   ],
   "parts": {
@@ -275,10 +303,10 @@
       "asset": null
     },
     "tree_hazel": {
-      "asset": null
+      "asset": "hazel_card"
     },
     "tree_elder": {
-      "asset": null
+      "asset": "elder_card"
     },
     "canopy_mass": {
       "asset": null

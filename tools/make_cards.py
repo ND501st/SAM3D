@@ -324,6 +324,56 @@ def sunflower(rng, name="sunflower_card", heights=(0.84, 0.99), tone=1.0, plants
     return finish(tint(img, tone), name, MAIZE_W, MAIZE_H, fill=fill)
 
 
+def ellipse_leaf(d, cx, cy, length, width, angle, colour):
+    """A broad leaf seen flat: an ellipse `length` long and `width` wide at (cx, cy), its long axis at `angle` (radians)."""
+    ca, sa = math.cos(angle), math.sin(angle)
+    pts = []
+    for k in range(14):
+        a = 2.0 * math.pi * k / 14
+        x, y = 0.5 * length * math.cos(a), 0.5 * width * math.sin(a)
+        pts.append((cx + x * ca - y * sa, cy + x * sa + y * ca))
+    d.polygon(pts, fill=colour + (255,))
+
+
+def bush(rng, name, stems, leaf_len, leaf_w, greens, yellows, yellow_share, berries=0.0, arch=0.25):
+    """A woodland shrub in October (roadmap L7, A.3.23: the understorey and the brooks' bushes), many stems from one foot
+    fanning out, their upper two thirds in leaves: a hazel's broad round leaves turning yellow, an elder's narrower leaflets
+    still green with black-purple umbels of berries. Drawn as three crossed cards (tools/blender/build_cards.py)."""
+    img = canvas()
+    d = ImageDraw.Draw(img)
+    W = H = SIZE * SS
+    base_y = H - 4
+    tips = []
+    for i in range(stems):
+        x0 = W * rng.uniform(0.42, 0.58)
+        length = H * rng.uniform(0.55, 0.95)
+        lean = W * (-0.42 + 0.84 * (i + rng.uniform(0.2, 0.8)) / stems) * (length / H)  # spread across the fan, not by chance
+        blade(d, x0, base_y, length, lean, W * rng.uniform(0.012, 0.022), (70, 60, 48), (104, 92, 74), taper=0.6)
+        tips.append((x0, length, lean))
+    # The leaves in layers: the inner ones darker (in the bush's shade), the outer lit; each along a stem's upper part.
+    for layer in range(3):
+        shade = 0.62 + 0.19 * layer
+        for x0, length, lean in tips:
+            for _ in range(int(rng.uniform(10, 18))):
+                t = rng.uniform(0.3, 1.0)
+                droop = arch * length * t * t * (1.0 - t) * 1.5
+                x = x0 + lean * t * t + rng.uniform(-0.05, 0.05) * W
+                y = base_y - length * t + droop + rng.uniform(-0.04, 0.04) * H
+                base = rng.choice(yellows) if rng.random() < yellow_share else rng.choice(greens)
+                colour = tuple(max(0, min(255, int(c * shade * rng.uniform(0.9, 1.08)))) for c in base)
+                ellipse_leaf(d, x, y, leaf_len * W * rng.uniform(0.8, 1.2), leaf_w * W * rng.uniform(0.8, 1.2), rng.uniform(0.0, math.pi), colour)
+    for x0, length, lean in tips:
+        if rng.random() < berries:
+            t = rng.uniform(0.6, 0.95)
+            cx, cy = x0 + lean * t * t, base_y - length * t
+            for _ in range(rng.randint(12, 22)):
+                r = W * 0.006
+                bx, by = cx + rng.uniform(-0.03, 0.03) * W, cy + rng.uniform(-0.012, 0.03) * H
+                d.ellipse((bx - r, by - r, bx + r, by + r), fill=(32, 18, 30, 255))
+    fill = tuple(int(sum(c[i] for c in greens + yellows) / len(greens + yellows) * 0.8) for i in range(3))
+    return finish(img, name, fill=fill)
+
+
 def main():
     rng = random.Random(11)
     sheets = [grass(rng), straw(rng), reed(rng)]
@@ -340,12 +390,15 @@ def main():
              sunflower(random.Random(131)),
              sunflower(random.Random(137), "sunflower_card_b", heights=(0.55, 1.0), tone=0.9),
              sunflower(random.Random(149), "sunflower_card_c", heights=(0.6, 0.8), tone=1.1, plants=3)]
-    sheet = Image.new("RGB", (SIZE * 3 + len(talls) * MAIZE_W // 4, SIZE), (92, 110, 150))
+    # The woods' bushes (A.3.23): hazel turning yellow, elder still green with its berries.
+    sheets += [bush(random.Random(211), "hazel_card", 11, 0.075, 0.062, [(92, 104, 44), (110, 116, 50)], [(178, 160, 62), (196, 172, 70), (160, 138, 56)], 0.55),
+               bush(random.Random(223), "elder_card", 8, 0.06, 0.03, [(56, 78, 34), (68, 90, 40), (80, 98, 46)], [(150, 140, 60)], 0.12, berries=0.6, arch=0.45)]
+    sheet = Image.new("RGB", (SIZE * len(sheets) + len(talls) * MAIZE_W // 4, SIZE), (92, 110, 150))
     for i, im in enumerate(sheets):
         sheet.paste(im.convert("RGB"), (i * SIZE, 0), mask=im.split()[3])
     for i, tall in enumerate(talls):
         small = tall.resize((MAIZE_W // 4, SIZE), Image.LANCZOS)
-        sheet.paste(small.convert("RGB"), (SIZE * 3 + i * MAIZE_W // 4, 0), mask=small.split()[3])
+        sheet.paste(small.convert("RGB"), (SIZE * len(sheets) + i * MAIZE_W // 4, 0), mask=small.split()[3])
     (ROOT / "out").mkdir(exist_ok=True)
     sheet.save(ROOT / "out" / "cards.png")
     blender = None
@@ -361,7 +414,7 @@ def main():
     ok = [l for l in done.stdout.splitlines() if l.startswith("CARD ")]
     for l in ok:
         print(l)
-    if done.returncode != 0 or len(ok) != 12:
+    if done.returncode != 0 or len(ok) != 14:
         print(done.stdout[-1200:], done.stderr[-1200:])
         raise SystemExit("Blender did not build the cards")
     return 0

@@ -681,6 +681,32 @@ Three changes in one pass (the owner, 7 Nov: more changes before each test and r
 - **Left:** a closed stand inside: lower, wider crowns touching, young trees and saplings (the stand's layers), the
   floor in shade; shrub models (hazel, elder) in place of the primitive; the gap share by rank, not by the wave's value.
 
+### A.3.23 The stand's layers, hazel and elder as cards, the alder gaps by rank (7 Nov 2026)
+
+Four changes in one pass (the owner, 7 Nov: more changes before each test and render).
+
+- **A closed stand** (`map_dressing.hpp`; `map_dressing.json` `interior_crown` 1.6, from 1.4, and
+  `interior_height_spread` 0.3, estimates): the inside trees' crowns wider, and each tree from the stand's height down
+  by up to 30% (dominant, codominant, suppressed), its crown with it, so no crown is wider than its tree is tall (1.8
+  was tried: crowns 1.5 times their trees' height) and none under the 3 m a tree is planted at.
+- **Young growth** (`sapling_keep` 0.15, an estimate): in a share of the inside cells, in the shrubs' patches of light,
+  a sapling of the stand's own kinds, a quarter to a half of its height. 100 623 saplings; 1.43 million trees and
+  shrubs in all, under `test_map_dressing`'s 1.5 million.
+- **Hazel and elder as cards** (`tools/make_cards.py` `bush`, our own drawing; three crossed cards each,
+  `build_cards.py`; picks `hazel_card`, `elder_card`, imported and registered for the parts `tree_hazel` and
+  `tree_elder`): a hazel's many stems fanning from one foot, broad round leaves turning yellow; an elder's arching
+  stems, narrow leaflets still green, black-purple umbels. They replace the green primitive wherever a hazel or elder
+  stands: the woods' edges, the understorey, the brooks.
+- **The alder gaps by rank**: the wave measured at the brook rows' own places and cut at `brook_gap_share` of them;
+  the lines now 76% planted (24% open, the quarter asked; A.3.22 left 13%).
+- **x1:** 1076 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations and assets clean.
+  Cost against v1: GPU 10.50 ms against 10.37 ms, the game thread 11.11 ms against 10.47 ms (the views' means). p21 at
+  eye height: a hazel or elder card among the trunks; still light, the floor sunlit in patches, the crowns high on
+  their trunks. From 150 m the stands of the map proper are closed in places and open in others (the stands' ages and
+  kinds); p20 an elder bush among the alders.
+- **Left:** the bushes drawn too narrow (a shrub's crown is half its height, as a tree's; a hazel is as wide as tall);
+  the crowns high on their trunks, so the floor stays lit (the tree models' proportions); the game thread's growth.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

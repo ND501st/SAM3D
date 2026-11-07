@@ -160,7 +160,8 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
         const TreeInstance& y = again.trees.back();
         SC_EXPECT(x.east_m == y.east_m && x.north_m == y.north_m && x.base_m == y.base_m && x.height_m == y.height_m && x.kind == y.kind);
     }
-    std::size_t in_areas = 0, interior = 0, understorey = 0;
+    std::size_t in_areas = 0, interior = 0, understorey = 0, saplings = 0, canopy_trees = 0;
+    double canopy_low = 1e9, canopy_high = 0.0;
     std::vector<std::size_t> kinds(static_cast<std::size_t>(TreeKind::Count), 0);
     for (const TreeInstance& t : d.trees) {
         const bool inside = m->Def().InCore(t.east_m, t.north_m) || m->InDetail(t.east_m, t.north_m);
@@ -172,6 +173,18 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
             ++interior;
             SC_EXPECT(!m->InDetail(t.east_m, t.north_m));
             understorey += IsShrub(static_cast<TreeKind>(t.kind)) ? 1 : 0;
+            // The young growth (A.3.23): narrow crowns for their height (0.8 of a lone tree's), where the canopy's were
+            // widened by interior_crown.
+            if (!IsShrub(static_cast<TreeKind>(t.kind))) {
+                const double ratio = t.crown_m / (t.height_m * Rules().crown_ratio);
+                if (ratio < 1.2) {
+                    ++saplings;
+                } else {
+                    ++canopy_trees;
+                    canopy_low = std::min(canopy_low, static_cast<double>(t.height_m));
+                    canopy_high = std::max(canopy_high, static_cast<double>(t.height_m));
+                }
+            }
         }
         SC_EXPECT(t.kind < static_cast<std::uint8_t>(TreeKind::Count));
         if (t.kind < kinds.size()) ++kinds[t.kind];
@@ -187,6 +200,8 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
     SC_EXPECT(d.trees.size() < 1500000);
     SC_EXPECT(interior > 100000);
     SC_EXPECT(understorey > 0.05 * static_cast<double>(interior) && understorey < 0.4 * static_cast<double>(interior));
+    std::printf("    inside the woods: %zu canopy trees (%.1f-%.1f m), %zu saplings, %zu shrubs\n", canopy_trees, canopy_low, canopy_high, saplings, understorey);
+    SC_EXPECT(saplings > 0.03 * static_cast<double>(interior) && saplings < 0.3 * static_cast<double>(interior));
     SC_EXPECT(d.trees.size() > 50000);
     SC_EXPECT(in_areas > 10000);
     for (std::size_t k : kinds) SC_EXPECT(k > 0);

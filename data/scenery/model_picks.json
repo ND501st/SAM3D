@@ -167,6 +167,36 @@
       "notes": "Standing sunflower, three short plants, a shade paler; one of the sunflower kind's cards."
     },
     {
+      "id": "hazel_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "hazel_card.glb",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A hazel bush in October, many stems fanning from one foot, broad round leaves turning yellow: three crossed cards (A.3.23; the understorey and the brooks' bushes)."
+    },
+    {
+      "id": "elder_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "elder_card.glb",
+      "part": "tree_elder",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "An elder bush in October, arching stems, narrow leaflets still green, black-purple berry umbels: three crossed cards (A.3.23)."
+    },
+    {
       "id": "maize_card_c",
       "root": "art/clutter",
       "folder": "",
