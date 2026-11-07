@@ -12,6 +12,13 @@
     "min_relief_m": { "value": 3, "source": "game value: sam3d estimate (none where the hills fade into the plain)", "confidence": "estimate" },
     "meadow_wetness": { "value": 11, "source": "game value: sam3d estimate (the wetness index of Beven and Kirkby 1979 on a valley floor; not read, the index's form only)", "confidence": "estimate" },
     "meadow_slope_deg": { "value": 8, "source": "game value: sam3d estimate", "confidence": "estimate" },
-    "meadow_crop": { "value": "pasture", "source": "game value: sam3d estimate (a crop of data/scenery/map_dressing.json)", "confidence": "estimate" }
+    "meadow_crop": { "value": "pasture", "source": "game value: sam3d estimate (a crop of data/scenery/map_dressing.json)", "confidence": "estimate" },
+    "max_grade_main": { "value": 0.06, "source": "game value: sam3d estimate (A.5 step 5: main roads about 6%; to be sourced)", "confidence": "estimate" },
+    "max_grade_road": { "value": 0.08, "source": "game value: sam3d estimate (A.5 step 5: secondary roads about 8%; to be sourced)", "confidence": "estimate" },
+    "max_grade_track": { "value": 0.14, "source": "game value: sam3d estimate (A.5 step 5: tracks 12-15%; to be sourced)", "confidence": "estimate" },
+    "max_grade_rail": { "value": 0.025, "source": "game value: sam3d estimate (a main line through hills; to be sourced)", "confidence": "estimate" },
+    "side_slope": { "value": 1.5, "source": "game value: sam3d estimate (a cutting's or embankment's side, 1 in 1.5)", "confidence": "estimate" },
+    "formation_m": { "value": 6, "source": "game value: sam3d estimate (shoulder and ditch each side)", "confidence": "estimate" },
+    "formation_min_half_m": { "value": 25, "source": "game value: sam3d estimate (half the core's 50 m ground cell, so a node falls on the formation)", "confidence": "estimate" }
   }
 }

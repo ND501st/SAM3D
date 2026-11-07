@@ -287,6 +287,66 @@ SC_TEST("land use: the hills' steep sides and crests wooded, their wet floors an
     }
 }
 
+SC_TEST("roads in the hills: their grades by class (A.5 step 5, the look target's K8)") {
+    std::string e;
+    const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const LandformBake& b = *map->Def().landform.bake;
+    // Every pair of a strip's points over the hills, off the bridges' ramps, as a grade in per cent.
+    // In the map proper, off its last 500 m (beyond, the country's ground, unfitted).
+    const MapDef& d = map->Def();
+    const auto inner = [&d](const Vec3& p) {
+        return p.x > d.west_m + 500.0 && p.x < d.east_m - 500.0 && p.y > d.south_m + 500.0 && p.y < d.north_m - 500.0;
+    };
+    std::vector<double> grades[5];
+    double worst[5] = {0, 0, 0, 0, 0};
+    Vec3 worst_at[5];
+    for (const MapStrip& s : map->Layout().strips) {
+        if (s.surface == MapSurface::Water) continue;
+        for (std::size_t i = 1; i < s.points.size(); ++i) {
+            const Vec3& p = s.points[i - 1];
+            const Vec3& q = s.points[i];
+            if (!inner(p) || !inner(q)) continue;
+            if (b.Height(p.x, p.y) < 3.0 || b.Height(q.x, q.y) < 3.0) continue;
+            if (p.z - map->GroundHeight(p.x, p.y) > 1.0 || q.z - map->GroundHeight(q.x, q.y) > 1.0) continue;
+            const double run = std::hypot(q.x - p.x, q.y - p.y);
+            if (run < 1.0) continue;
+            const int k = static_cast<int>(s.surface);
+            const double g = 100.0 * std::fabs(q.z - p.z) / run;
+            grades[k].push_back(g);
+            if (g > worst[k]) {
+                worst[k] = g;
+                worst_at[k] = p;
+            }
+        }
+    }
+    // How deep the cuts and fills run under the lines.
+    double deepest = 0.0;
+    for (const MapStrip& s : map->Layout().strips) {
+        if (s.surface == MapSurface::Water) continue;
+        for (const Vec3& p : s.points) {
+            if (inner(p) && p.z - map->GroundHeight(p.x, p.y) < 1.0) deepest = std::max(deepest, std::fabs(map->GroundHeight(p.x, p.y) - NaturalGround(d, p.x, p.y)));
+        }
+    }
+    std::printf("    the deepest cut or fill under a line: %.1f m\n", deepest);
+    for (int k = 1; k < 5; ++k) {
+        const std::vector<double>& g = grades[k];
+        std::printf("    %s in the hills: %zu spans, grade p50 %.1f%%, p95 %.1f%%, p99 %.1f%%, max %.1f%% at (%.0f, %.0f)\n",
+                    MapSurfaceName(static_cast<MapSurface>(k)), g.size(), Percentile(g, 0.5), Percentile(g, 0.95), Percentile(g, 0.99), worst[k],
+                    worst_at[k].x, worst_at[k].y);
+    }
+    // The profiles keep land_use.json's grades (main 6%, secondary 8%, tracks 14%, the railway 2.5%); the 50 m ground
+    // they are cut into carries them only to a cell (a node 25-35 m off the line sits on the cutting's side), so the
+    // strips measure somewhat steeper. On a detail area's finer ground they keep them (A.5 step 6). Before the fit
+    // (6 Nov 2026), in the same spans: p95 16% main, 15% secondary, 15% tracks, 13% rail; max 44-59%.
+    SC_EXPECT(Percentile(grades[1], 0.95) <= 8.5 && worst[1] <= 14.0);
+    SC_EXPECT(Percentile(grades[2], 0.95) <= 10.5 && worst[2] <= 18.0);
+    SC_EXPECT(Percentile(grades[3], 0.95) <= 12.5 && worst[3] <= 25.0);
+    SC_EXPECT(Percentile(grades[4], 0.95) <= 6.5 && worst[4] <= 10.0);
+    SC_EXPECT(deepest > 2.0 && deepest < 30.0);
+}
+
 SC_TEST("land use: the loader refuses what it should") {
     std::string text;
     SC_EXPECT(detail::ReadTextFile(kData + "/scenery/land_use.json", text));

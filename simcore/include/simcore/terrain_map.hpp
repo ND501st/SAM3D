@@ -177,6 +177,16 @@ struct MapLandUseDef {
     double meadow_wetness = 11.0;     // a valley floor this wet is meadow
     double meadow_slope_deg = 8.0;    // a slope this steep (but not wooded) is pasture, not ploughed
     std::string meadow_crop = "pasture";  // the dressing's crop on the meadows
+    // The lines fit the ground (A.5 step 5, the look target's K8): no road or railway steeper than its class's grade. Each
+    // line's profile is held to the grade (halfway between the highest and the lowest profiles that keep it, so cut and
+    // fill balance) and the ground cut or filled to it: the formation level, its sides at `side_slope` (run per rise).
+    double max_grade_main = 0.06;     // a main road
+    double max_grade_road = 0.08;     // a secondary road
+    double max_grade_track = 0.14;    // a field or forest track
+    double max_grade_rail = 0.025;    // the railway
+    double side_slope = 1.5;          // a cutting's or an embankment's side, metres out per metre down or up
+    double formation_m = 6.0;         // the formation beyond the strip's edge each side (shoulder and ditch)
+    double formation_min_half_m = 25.0;  // never narrower than this each side, so the 50 m ground has a node on it
 };
 
 // How the hill country drains (terrain.landform.drainage; game values, judged by eye against the look target and the
@@ -1337,6 +1347,7 @@ public:
     // The ground as the file shapes it (relief, hills, the valley, the flattened sites), before baking.
     double Analytic(double e, double n) const {
         double h = Natural(e, n);
+        h = FitToLines(e, n, h);
         for (const Flat& f : flats_) {
             const double d = std::hypot(e - f.e, n - f.n);
             if (d >= f.r) continue;
@@ -1599,11 +1610,112 @@ private:
         return SiteClearance(s);
     }
 
+    // ------------------------------------------------------------------ the lines fit the ground (A.5 step 5)
+
+    // A span of a road's or the railway's held profile where it leaves the natural ground: its ends at the formation's
+    // level, the formation's half width, the side slope, and the most it cuts or fills (for its reach).
+    struct LineFit {
+        double ae, an, az, be, bn, bz, half_m, side, reach_m;
+    };
+    static constexpr double kFitCellM = 250.0;   // the index's cells
+    static constexpr double kFitStepM = 20.0;    // the profile's samples along a line
+    static constexpr double kFitMinM = 0.3;      // nearer the natural ground than this, no cut or fill
+    static constexpr double kFitEdgeM = 500.0;   // faded out over this to the map proper's edge (the country beyond)
+    static long long FitKey(long long c, long long r) { return c * 1000003LL + r; }
+
+    // The ground at (east, north) cut or filled to the nearest line's formation (`h` the natural ground there).
+    double FitToLines(double e, double n, double h) const {
+        if (fits_.empty() || !def_.InCore(e, n)) return h;
+        const auto it = fit_cells_.find(FitKey(static_cast<long long>(std::floor(e / kFitCellM)), static_cast<long long>(std::floor(n / kFitCellM))));
+        if (it == fit_cells_.end()) return h;
+        double best_d = 1e18, best_w = 0.0, best_z = h;
+        for (const int i : it->second) {
+            const LineFit& f = fits_[static_cast<std::size_t>(i)];
+            const double dx = f.be - f.ae, dy = f.bn - f.an, len2 = dx * dx + dy * dy;
+            const double t = len2 > 0.0 ? Clamp(((e - f.ae) * dx + (n - f.an) * dy) / len2, 0.0, 1.0) : 0.0;
+            const double d = std::hypot(e - (f.ae + dx * t), n - (f.an + dy * t));
+            if (d >= f.reach_m || d >= best_d) continue;
+            const double z = f.az + (f.bz - f.az) * t;
+            const double side = f.side * std::fabs(z - h);  // the side's run down or up to the natural ground
+            if (d >= f.half_m + side) continue;
+            best_d = d;
+            best_z = z;
+            best_w = d <= f.half_m ? 1.0 : 1.0 - (d - f.half_m) / side;
+        }
+        if (best_w <= 0.0) return h;
+        const double to_edge = std::min(std::min(e - def_.west_m, def_.east_m - e), std::min(n - def_.south_m, def_.north_m - n));
+        return h + (best_z - h) * best_w * noise::Smooth(Clamp(to_edge / kFitEdgeM, 0.0, 1.0));
+    }
+
+    // Each road's and the railway's profile held to its class's grade: sampled every 20 m on the natural ground, the
+    // highest profile under the ground that keeps the grade (cut only) and the lowest over it (fill only), both by two
+    // sweeps, and their mean (it keeps the grade too); then the spans that leave the ground by more than 0.3 m, indexed.
+    // Not within 40 m of a river's bank: the bridges' ramps lift the strip there (Strip). The hills only, inside the map.
+    void BakeLineFits() {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake) return;
+        const auto fit = [&](const MapLineDef& line, double grade) {
+            std::vector<double> se, sn, sh, ss;
+            for (std::size_t i = 1; i < line.points.size(); ++i) {
+                const MapPoint& a = line.points[i - 1];
+                const MapPoint& b = line.points[i];
+                const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+                const int k = std::max(1, static_cast<int>(std::ceil(len / kFitStepM)));
+                for (int j = (i == 1 ? 0 : 1); j <= k; ++j) {
+                    const double f = static_cast<double>(j) / k;
+                    const double e = a.east_m + (b.east_m - a.east_m) * f, n = a.north_m + (b.north_m - a.north_m) * f;
+                    ss.push_back(se.empty() ? 0.0 : ss.back() + std::hypot(e - se.back(), n - sn.back()));
+                    se.push_back(e);
+                    sn.push_back(n);
+                    sh.push_back(Natural(e, n));
+                }
+            }
+            const std::size_t m = sh.size();
+            if (m < 2) return;
+            std::vector<double> lo = sh, hi = sh;
+            for (std::size_t i = 1; i < m; ++i) {
+                lo[i] = std::min(lo[i], lo[i - 1] + grade * (ss[i] - ss[i - 1]));
+                hi[i] = std::max(hi[i], hi[i - 1] - grade * (ss[i] - ss[i - 1]));
+            }
+            for (std::size_t i = m - 1; i-- > 0;) {
+                lo[i] = std::min(lo[i], lo[i + 1] + grade * (ss[i + 1] - ss[i]));
+                hi[i] = std::max(hi[i], hi[i + 1] - grade * (ss[i + 1] - ss[i]));
+            }
+            const double half = std::max(0.5 * line.width_m + u.formation_m, u.formation_min_half_m);
+            for (std::size_t i = 1; i < m; ++i) {
+                const double za = 0.5 * (lo[i - 1] + hi[i - 1]), zb = 0.5 * (lo[i] + hi[i]);
+                const double dev = std::max(std::fabs(za - sh[i - 1]), std::fabs(zb - sh[i]));
+                if (dev < kFitMinM || !def_.InCore(se[i], sn[i])) continue;
+                bool by_river = false;
+                for (const MapLineDef& r : def_.rivers) {
+                    by_river = by_river || mapgeo::DistToLine(r.points, se[i], sn[i]) < 0.5 * r.width_m + 40.0;
+                }
+                if (by_river) continue;
+                LineFit lf{se[i - 1], sn[i - 1], za, se[i], sn[i], zb, half, u.side_slope, half + u.side_slope * (dev + 2.0)};
+                const int idx = static_cast<int>(fits_.size());
+                fits_.push_back(lf);
+                const double r = lf.reach_m;
+                const long long c0 = static_cast<long long>(std::floor((std::min(lf.ae, lf.be) - r) / kFitCellM));
+                const long long c1 = static_cast<long long>(std::floor((std::max(lf.ae, lf.be) + r) / kFitCellM));
+                const long long r0 = static_cast<long long>(std::floor((std::min(lf.an, lf.bn) - r) / kFitCellM));
+                const long long r1 = static_cast<long long>(std::floor((std::max(lf.an, lf.bn) + r) / kFitCellM));
+                for (long long c = c0; c <= c1; ++c) {
+                    for (long long rr = r0; rr <= r1; ++rr) fit_cells_[FitKey(c, rr)].push_back(idx);
+                }
+            }
+        };
+        for (const MapLineDef& r : def_.roads) {
+            fit(r, r.line_class == "main" ? u.max_grade_main : (r.line_class == "track" ? u.max_grade_track : u.max_grade_road));
+        }
+        for (const MapLineDef& r : def_.railways) fit(r, u.max_grade_rail);
+    }
+
     void Bake() {
         for (const MapSiteDef& s : def_.sites) {
             const double r = SiteFlatRadius(s);
             if (r > 0.0) flats_.push_back({s.centre.east_m, s.centre.north_m, r, Natural(s.centre.east_m, s.centre.north_m)});
         }
+        BakeLineFits();
         const auto fill = [this](MapGrid& g, double west, double south, double east, double north, double spacing) {
             g.spacing_m = spacing;
             g.west_m = west;
@@ -2468,10 +2580,16 @@ private:
                         }
                         run.clear();
                     };
+                    // In the hills a track does not climb a bank steeper than a track's grade (A.5 step 5): it stops at
+                    // its foot and goes on beyond it (the field's edge, not the slope's line).
+                    const double steepest = def_.land_use.laid ? def_.land_use.max_grade_track : 1e9;
                     for (int i = 0; i <= steps; ++i) {
                         const double f = static_cast<double>(i) / steps;
                         const MapPoint m{p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f};
-                        if (FarmlandClear(m.east_m, m.north_m, 0.5 * fd.track_width_m + 8.0, 6.0)) run.push_back(m);
+                        const bool steep = !run.empty() && std::fabs(GroundHeight(m.east_m, m.north_m) - GroundHeight(run.back().east_m, run.back().north_m)) >
+                                                               steepest * std::hypot(m.east_m - run.back().east_m, m.north_m - run.back().north_m);
+                        if (steep) close_run();
+                        else if (FarmlandClear(m.east_m, m.north_m, 0.5 * fd.track_width_m + 8.0, 6.0)) run.push_back(m);
                         else close_run();
                     }
                     close_run();
@@ -2738,6 +2856,8 @@ private:
     std::vector<const MapGrid*> levels_;                    // DrawnLevels
     DetailLines detail_lines_;
     std::vector<Flat> flats_;
+    std::vector<LineFit> fits_;                                  // the lines' cuts and fills (BakeLineFits)
+    std::unordered_map<long long, std::vector<int>> fit_cells_;  // by kFitCellM cell
     MapLayout layout_;
     struct Farmstead {
         double e, n, heading;
@@ -3691,7 +3811,10 @@ inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::st
     const Field fields[] = {{"wood_slope_deg", &u.wood_slope_deg, 1.0, 60.0},       {"wood_slope_spread_deg", &u.wood_slope_spread_deg, 0.0, 20.0},
                             {"crest_rise_m", &u.crest_rise_m, 0.5, 100.0},          {"crest_share", &u.crest_share, 0.0, 1.0},
                             {"min_relief_m", &u.min_relief_m, 0.0, 100.0},          {"meadow_wetness", &u.meadow_wetness, 0.0, 30.0},
-                            {"meadow_slope_deg", &u.meadow_slope_deg, 1.0, 60.0}};
+                            {"meadow_slope_deg", &u.meadow_slope_deg, 1.0, 60.0},  {"max_grade_main", &u.max_grade_main, 0.01, 0.3},
+                            {"max_grade_road", &u.max_grade_road, 0.01, 0.3},      {"max_grade_track", &u.max_grade_track, 0.01, 0.4},
+                            {"max_grade_rail", &u.max_grade_rail, 0.005, 0.1},     {"side_slope", &u.side_slope, 0.5, 5.0},
+                            {"formation_m", &u.formation_m, 0.0, 30.0},            {"formation_min_half_m", &u.formation_min_half_m, 0.0, 100.0}};
     for (std::size_t i = 0; i < values->keys.size(); ++i) {
         const std::string& key = values->keys[i];
         const json::Value& v = values->items[i];

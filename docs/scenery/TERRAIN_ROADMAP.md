@@ -564,6 +564,35 @@ the new order, the loop's comparison step (A.4) and how the hills are made (A.5)
   alders and willows along the brooks, villages and orchards by the ground, fields' long sides along the contours, the
   road strips on slopes (K8).
 
+### A.3.18 L11 step 5 in first form: the lines fit the ground (7 Nov 2026)
+
+- **Why p18's road kinked:** the game laid each road ribbon flat across, at its centre line's height, so on a cross
+  slope one edge sank into the ground and the other floated; and the roads, laid before the hills were, climbed them
+  as they came (in the hills inside the map: p95 16% on main roads, 15% secondary, 15% tracks, 13% the railway, the
+  worst 44-59%).
+- **The ribbon drapes** (`SimMapActor.cpp` `BuildStrips`): each edge on the ground under it at the strip's own lift over
+  its line, the points every 12.5 m; on a bridge or its ramp (a metre or more over the ground) the deck stays level
+  across; water lies level across as before.
+- **The lines' grades** (`land_use.json`'s `max_grade_*`, estimates from step 5's text: main 6%, secondary 8%, tracks
+  14%, the railway 2.5%; `MapData::BakeLineFits`, `FitToLines`): each of the map's roads and railways sampled every 20 m
+  on the natural ground, its profile the mean of the highest under the ground and the lowest over it that keep its
+  grade (cut and fill balance), and the ground cut or filled to it in `Analytic` before the sites' flats: the
+  formation (the strip, 6 m each side, never under 25 m so the 50 m ground has a node on it), then the side at 1 in 1.5
+  out to the natural ground. Not within 40 m of a river's bank (the bridges' ramps), not beyond the map proper (faded
+  over its last 500 m, so the country's ground still meets it). Only with land use laid, so a map loaded without
+  `land_use.json` is unchanged. The deepest cut or fill under a line is 24 m.
+- **The farm tracks** (generated along the fields' long sides) do not climb a bank steeper than a track's grade: they
+  stop at its foot and go on beyond it. Following the valley floor, a contour or a crest instead is left.
+- **Measured** (`test_landform.cpp`, the strips' spans over the hills in the map proper): p95 7.7% main, 9.5%
+  secondary, 11.3% tracks, 5.9% the railway; the worst 11.9%, 15.3%, 19.5%, 8.9%. Steeper than the profiles because the
+  50 m ground carries a profile only to a cell; a hill detail area at 10 m (step 6) keeps them. 1075 tests pass (the
+  whole suite).
+- **e5 (p18):** at eye height the road runs level across the slope on its bench, no break (e4 had it kinked and
+  half buried). From above, the cutting's sides cast a scalloped shadow: the 50 m ground draws the side slope as
+  triangles a cell wide. 1 in 1.5 needs the finer ground too. `ground_check` PASS; `nav_check` 200 of 200; citations clean.
+- **Left:** sunken lanes; `nav` reading the grade; brooks crossing a fill (their strips ride over the embankment, no
+  culvert); the tracks along the contours.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

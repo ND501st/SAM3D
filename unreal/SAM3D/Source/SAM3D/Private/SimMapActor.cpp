@@ -1385,15 +1385,53 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 		}
 	};
 	const simcore::MapData& M = *Map;
-	for (const simcore::MapStrip& S : M.Layout().strips)
+	// A road or track on a slope (terrain roadmap A.3.18, the look target's K8): each edge on the ground under it, at the
+	// strip's own lift over the ground at its line, so the uphill edge is not buried and the downhill one does not float;
+	// points every 12.5 m (a quarter of the core's cell), so the ribbon follows the ground's cells between the map's points.
+	// On a bridge or its ramp (the strip a metre or more over the ground) the deck stays level across.
+	constexpr double DrapeStepM = 12.5, OnDeckM = 1.0;
+	const auto Densify = [&M](const simcore::MapStrip& S)
 	{
-		const int32 K = static_cast<int32>(S.surface);
-		if (S.points.size() < 2)
+		simcore::MapStrip D = S;
+		D.points.clear();
+		D.points.push_back(S.points.front());
+		for (size_t i = 1; i < S.points.size(); ++i)
+		{
+			const simcore::Vec3& A = S.points[i - 1];
+			const simcore::Vec3& B = S.points[i];
+			const double Len = FMath::Sqrt(FMath::Square(B.x - A.x) + FMath::Square(B.y - A.y));
+			const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Len / DrapeStepM));
+			const double LiftA = A.z - M.GroundHeight(A.x, A.y), LiftB = B.z - M.GroundHeight(B.x, B.y);
+			for (int32 k = 1; k < Steps; ++k)
+			{
+				const double F = static_cast<double>(k) / Steps;
+				const double E = A.x + (B.x - A.x) * F, N = A.y + (B.y - A.y) * F;
+				const double Lift = LiftA + (LiftB - LiftA) * F;
+				D.points.push_back({E, N, Lift >= OnDeckM ? A.z + (B.z - A.z) * F : M.GroundHeight(E, N) + Lift});
+			}
+			D.points.push_back(B);
+		}
+		return D;
+	};
+	for (const simcore::MapStrip& Raw : M.Layout().strips)
+	{
+		const int32 K = static_cast<int32>(Raw.surface);
+		if (Raw.points.size() < 2)
 		{
 			continue;
 		}
+		const bool bWater = Raw.surface == simcore::MapSurface::Water;
+		const simcore::MapStrip S = bWater ? Raw : Densify(Raw);
 		const double Half = 0.5 * S.width_m;
-		const auto OnStrip = [](const simcore::Vec3& P, double, double, bool) { return P.z; };
+		const auto OnStrip = [&M, bWater](const simcore::Vec3& P, double E, double N, bool)
+		{
+			if (bWater)
+			{
+				return P.z;  // water lies level across
+			}
+			const double Lift = P.z - M.GroundHeight(P.x, P.y);
+			return Lift >= OnDeckM ? P.z : M.GroundHeight(E, N) + Lift;
+		};
 		Ribbon(S, K, -Half, Half, OnStrip);
 		if (S.surface == simcore::MapSurface::Water)
 		{
@@ -1407,7 +1445,7 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 		}
 		else if (S.surface != simcore::MapSurface::Track)
 		{
-			const auto ShoulderAt = [](const simcore::Vec3& P, double, double, bool) { return P.z - 0.06; };  // under the surface
+			const auto ShoulderAt = [&OnStrip](const simcore::Vec3& P, double E, double N, bool bInner) { return OnStrip(P, E, N, bInner) - 0.06; };  // under the surface
 			Ribbon(S, Shoulder, -Half - ShoulderM, Half + ShoulderM, ShoulderAt);
 		}
 	}
