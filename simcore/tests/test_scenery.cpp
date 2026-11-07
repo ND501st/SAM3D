@@ -364,3 +364,26 @@ SC_TEST("scenery: the asset register keeps its rules") {
     SC_EXPECT(refused(Register("", R"("house": {})"), "null for procedural"));
     SC_EXPECT(refused("{\"parts\": {}}", "assets"));
 }
+
+SC_TEST("scenery: a part's alternates are drawn instance by instance, the same model at the same place every time") {
+    const std::string oak_b =
+        R"({"id": "oak_b", "unreal_path": "/Game/SAM3D/Map/Trees/SM_OakB.SM_OakB", "origin": "own work", "licence": "Own", "redistributable": true, "fetched": "2026-11-08"})";
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_a", "oak_b"]})"), &e));
+    SC_EXPECT(reg.AlternateCount("tree_oak") == 2 && reg.AlternateCount("tree_pine") == 1);
+    SC_EXPECT(reg.AlternateFor("tree_oak", 0)->id == "oak_a" && reg.AlternateFor("tree_oak", 1)->id == "oak_b");
+    SC_EXPECT(reg.AlternateFor("tree_pine", 1) == nullptr);
+    // A place keeps its alternate; over many places each is drawn about as often as the other.
+    SC_EXPECT(AssetRegister::AlternateAt(1234.5, -987.6, 4) == AssetRegister::AlternateAt(1234.5, -987.6, 4));
+    SC_EXPECT(AssetRegister::AlternateAt(5.0, 5.0, 1) == 0);
+    int counts[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4000; ++i) ++counts[AssetRegister::AlternateAt(7.3 * i - 9000.0, 3.1 * (i % 97) + 0.4 * i, 4)];
+    for (int c : counts) SC_EXPECT(c > 800 && c < 1200);
+    // The first alternate is the part's asset; every alternate is registered.
+    AssetRegister bad;
+    SC_EXPECT(!bad.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_b", "oak_a"]})"), &e));
+    SC_EXPECT(e.find("first alternate") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_a", "oak_c"]})"), &e));
+    SC_EXPECT(e.find("not registered") != std::string::npos);
+}

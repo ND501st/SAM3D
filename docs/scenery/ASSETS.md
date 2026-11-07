@@ -53,6 +53,19 @@ third-party files.
 frame), `tools/ue_import_model.py` (imports it and writes the register); the picks are in `data/scenery/model_picks.json`. The
 part keys now include the ground clutter's `clutter_grass`, `clutter_straw` and `clutter_reed`.
 
+## A Fab asset already in the project (A.3.25)
+
+A Megaplant (skeletal, from the Procedural Vegetation Editor) or a Megascans plant that Fab's window put in the project
+(`Content/Megaplant_Library/`, `Content/Fab/`, both ignored by git) is never exported. `tools/ue_fab_part.py` copies it in
+Unreal with Geometry Script, fits it to the part's frame and saves a Nanite static mesh under `/Game/ThirdParty/Fab/<id>/`,
+with the source's materials (a pick's `season` gives the foliage a child instance with the master's Seasons switch on).
+Its pick names the source by `unreal_source`. A Megaplant's wind (its bones) does not come across.
+
+A part may list **`alternates`**: other models of the same thing (a Megaplant's variants A-D), the first its `asset`. The
+map draws each tree with the alternate its place picks (`AssetRegister::AlternateAt`, a hash of the place: the same on every
+machine), so a row is not one tree repeated. `variants` stay a tree's ladder of thinner levels (`tools/ue_tree_lods.py`);
+a part drawn by a Fab model has none (Nanite is its level of detail).
+
 ## Fetching the files on a machine
 
 1. Get the model from the `origin` recorded in the register, under the licence recorded there (a Fab asset: add it to

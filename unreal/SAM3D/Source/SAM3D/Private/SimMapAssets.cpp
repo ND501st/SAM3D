@@ -76,10 +76,10 @@ float FSimMapAssets::LodScreenSize(int32 Lod)
 	return Sizes[FMath::Clamp(Lod, 0, 3)];
 }
 
-UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransform& OutFix)
+UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransform& OutFix, int32 Alternate)
 {
 	OutFix = FTransform::Identity;
-	const FString Key = FString::Printf(TEXT("%s#%d"), *Part, Variant);
+	const FString Key = Alternate > 0 ? FString::Printf(TEXT("%s#%d/%d"), *Part, Variant, Alternate) : FString::Printf(TEXT("%s#%d"), *Part, Variant);
 	if (const FSimMapAssetMesh* Found = GSimMapAssetMeshes.Find(Key))
 	{
 		OutFix = Found->Fix;
@@ -90,7 +90,9 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 
 	// A real asset, if the register names one and it is on this machine.
 	const simcore::scenery::AssetRegister* Reg = Register();
-	const simcore::scenery::AssetEntry* Asset = Reg != nullptr ? Reg->AssetFor(PartStd, Variant) : nullptr;
+	// An alternate (A.3.25) is another model of the same part, drawn in place of the first instance by instance.
+	const simcore::scenery::AssetEntry* Asset =
+		Reg == nullptr ? nullptr : (Alternate > 0 ? Reg->AlternateFor(PartStd, Alternate) : Reg->AssetFor(PartStd, Variant));
 	if (Asset != nullptr)
 	{
 		const FString Path = SimMapStd(Asset->unreal_path);

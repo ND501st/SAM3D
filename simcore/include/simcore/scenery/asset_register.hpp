@@ -54,6 +54,10 @@ struct AssetEntry {
 struct AssetPart {
     std::string asset;                  // empty: procedural
     std::vector<std::string> variants;  // optional: variant k's asset (empty string: procedural)
+    // Optional (A.3.25): other models of the same thing, drawn in place of `asset` instance by instance (a hornbeam
+    // row of four different hornbeams, not one repeated); the first is `asset` itself. Not levels of detail: those are
+    // `variants` (tools/ue_tree_lods.py).
+    std::vector<std::string> alternates;
 };
 
 class AssetRegister {
@@ -137,8 +141,19 @@ public:
                         }
                     }
                 }
+                if (const json::Value* as = p.Find("alternates")) {
+                    if (!as->Is(json::Type::Array)) return Fail(error, "parts: " + key + ": \"alternates\" is not an array");
+                    for (const json::Value& v : as->items) {
+                        if (!v.Is(json::Type::String) || v.string.empty()) return Fail(error, "parts: " + key + ": an alternate must be an asset's id");
+                        part.alternates.push_back(v.string);
+                    }
+                    if (!part.alternates.empty() && part.alternates.front() != part.asset) {
+                        return Fail(error, "parts: " + key + ": the first alternate must be its \"asset\"");
+                    }
+                }
                 std::vector<std::string> named = part.variants;
                 named.push_back(part.asset);
+                named.insert(named.end(), part.alternates.begin(), part.alternates.end());
                 for (const std::string& id : named) {
                     if (!id.empty() && ids.count(id) == 0) return Fail(error, "parts: " + key + " names " + id + ", which is not registered");
                 }
@@ -166,6 +181,31 @@ public:
             return v.empty() ? nullptr : Find(v);
         }
         return p.asset.empty() ? nullptr : Find(p.asset);
+    }
+
+    // How many models a part is drawn by, instance by instance (its alternates; 1 with none).
+    int AlternateCount(const std::string& part) const {
+        const auto it = parts.find(part);
+        return it == parts.end() || it->second.alternates.empty() ? 1 : static_cast<int>(it->second.alternates.size());
+    }
+
+    // The asset that draws alternate k of a part (k 0 is AssetFor(part, 0)), or null.
+    const AssetEntry* AlternateFor(const std::string& part, int k) const {
+        const auto it = parts.find(part);
+        if (it == parts.end() || k <= 0 || static_cast<std::size_t>(k) >= it->second.alternates.size()) return AssetFor(part, 0);
+        return Find(it->second.alternates[static_cast<std::size_t>(k)]);
+    }
+
+    // Which alternate draws the instance at (east, north): a hash of the place, so it is the same on every machine and
+    // every run, and a tree keeps its model when the map is rebuilt.
+    static int AlternateAt(double east_m, double north_m, int count) {
+        if (count <= 1) return 0;
+        const auto e = static_cast<long long>(east_m * 10.0), n = static_cast<long long>(north_m * 10.0);
+        unsigned long long h = static_cast<unsigned long long>(e) * 0x9E3779B97F4A7C15ull ^ static_cast<unsigned long long>(n) * 0xC2B2AE3D27D4EB4Full;
+        h ^= h >> 31;
+        h *= 0xBF58476D1CE4E5B9ull;
+        h ^= h >> 29;
+        return static_cast<int>(h % static_cast<unsigned long long>(count));
     }
 
     // The register's rules for one asset: true, or false with the rule it breaks.

@@ -1654,14 +1654,14 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	const bool bTints = bSeasons && TreeMaterial != nullptr;
 	const int32 Day = GroundDay(GetWorld());
 	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr,
-						 float StartM = 0.0f, const FString& Tag = FString()) -> UHierarchicalInstancedStaticMeshComponent*
+						 float StartM = 0.0f, const FString& Tag = FString(), int32 Alternate = 0) -> UHierarchicalInstancedStaticMeshComponent*
 	{
 		if (Xf.Num() == 0)
 		{
 			return nullptr;
 		}
 		FTransform Fix;
-		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Part, Variant, Fix);
+		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Part, Variant, Fix, Alternate);
 		if (Mesh == nullptr)
 		{
 			return nullptr;
@@ -1689,6 +1689,14 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		{
 			H->SetMaterial(0, TreeMaterial);
 			H->NumCustomDataFloats = 3;  // before the instances: each carries its colour multiplier
+		}
+		if (Mesh->GetStaticMaterials().Num() > 1)
+		{
+			// A registered model with its own materials (A.3.25: a Megaplant's foliage) may move its vertices (wind, world
+			// position offset): on Nanite that costs a programmable raster per frame and throws away the virtual shadow maps'
+			// cache. The map's trees stand still, so neither is asked for.
+			H->bEvaluateWorldPositionOffset = false;
+			H->ShadowCacheInvalidationBehavior = EShadowCacheInvalidationBehavior::Static;
 		}
 		H->RegisterComponent();
 		H->AddInstances(Placed, false, true);
@@ -1797,12 +1805,36 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		// start distance only fades, it never hides the instances nearer, so every rung was drawn from 0 m (the procedural
 		// crown under the model, roadmap A.1 item 6).
 		const simcore::scenery::AssetRegister* Reg = FSimMapAssets::Register();
-		const bool bRegistered = Reg != nullptr && Reg->AssetFor(std::string(TCHAR_TO_UTF8(*PartName)), 0) != nullptr;
+		const std::string PartStd(TCHAR_TO_UTF8(*PartName));
+		const bool bRegistered = Reg != nullptr && Reg->AssetFor(PartStd, 0) != nullptr;
 		// A wood's fringe of shrubs (hazel, elder) is not drawn as far as the trees: under 4 m, it is lost behind them.
 		const float KindCullM = simcore::scenery::IsShrub(static_cast<simcore::scenery::TreeKind>(K)) ? FMath::Min(TreeCullDistanceM, 800.0f) : TreeCullDistanceM;
-		Add(PartName, 0, Trees[K], true, KindCullM, bRegistered ? nullptr : &TreeTints[K]);
-		// The understorey's shrubs (A.3.21) as near as the edge's; the inside trees out to InteriorTreeDistanceM.
-		Add(PartName, 0, Inside[K], true, FMath::Min(InteriorTreeDistanceM, KindCullM), bRegistered ? nullptr : &InsideTints[K], 0.0f, TEXT("_in"));
+		// A kind with alternates (A.3.25: a Megaplant's variants) is split among them by each tree's place, the same on every
+		// machine (AssetRegister::AlternateAt); each its own component. Registered models carry no tints.
+		const int32 Alternates = bRegistered ? Reg->AlternateCount(PartStd) : 1;
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			const TArray<FTransform>& All = Pass == 0 ? Trees[K] : Inside[K];
+			const float CullM = Pass == 0 ? KindCullM : FMath::Min(InteriorTreeDistanceM, KindCullM);
+			const FString Tag = Pass == 0 ? FString() : FString(TEXT("_in"));
+			if (Alternates <= 1)
+			{
+				// The understorey's shrubs (A.3.21) as near as the edge's; the inside trees out to InteriorTreeDistanceM.
+				Add(PartName, 0, All, true, CullM, bRegistered ? nullptr : (Pass == 0 ? &TreeTints[K] : &InsideTints[K]), 0.0f, Tag);
+				continue;
+			}
+			TArray<TArray<FTransform>> Split;
+			Split.SetNum(Alternates);
+			for (const FTransform& T : All)
+			{
+				const FVector L = T.GetLocation();
+				Split[simcore::scenery::AssetRegister::AlternateAt(L.X / 100.0, L.Y / 100.0, Alternates)].Add(T);
+			}
+			for (int32 A = 0; A < Alternates; ++A)
+			{
+				Add(PartName, 0, Split[A], true, CullM, nullptr, 0.0f, Tag + FString::Printf(TEXT("_a%d"), A), A);
+			}
+		}
 	}
 	if (bTints)
 	{

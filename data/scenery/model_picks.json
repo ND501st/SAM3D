@@ -431,6 +431,344 @@
       "file": "prepared/hornbeam_L1.glb",
       "variant": 1,
       "notes": "A hornbeam of twig cards (leaf photographs composed into twigs by tools/leaf_atlas.py), the far level (about 170 triangles): 150-600 m. Fab Standard licence for the leaf photographs (not redistributable): files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "id": "hornbeam_mp_a",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_A.Tree_Hornbeam_01_A",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants European Hornbeam, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.32,
+          0.3,
+          0.04
+        ],
+        "color_2": [
+          1.2,
+          1.0,
+          0.12
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "hornbeam_mp_c",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_C.Tree_Hornbeam_01_C",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants European Hornbeam, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.32,
+          0.3,
+          0.04
+        ],
+        "color_2": [
+          1.2,
+          1.0,
+          0.12
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "hornbeam_mp_d",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.32,
+          0.3,
+          0.04
+        ],
+        "color_2": [
+          1.2,
+          1.0,
+          0.12
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "poplar_mp_a",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_A.Tree_Black_Poplar_01_A",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "poplar_mp_b",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_B.Tree_Black_Poplar_01_B",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant B, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "poplar_mp_c",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_C.Tree_Black_Poplar_01_C",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "poplar_mp_d",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_D.Tree_Black_Poplar_01_D",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 3,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "maple_mp_a",
+      "part": "tree_maple",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Norway_Maple/Tree_Norway_Maple_Forest_01/Tree_Norway_Maple_Forest_01_A.Tree_Norway_Maple_Forest_01_A",
+      "origin": "Fab listing: Quixel Megaplants: Norway Maple, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Norway Maple, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.341176,
+          0.231373,
+          0.0
+        ],
+        "color_2": [
+          2.0,
+          0.59174,
+          0.0
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "maple_mp_b",
+      "part": "tree_maple",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Norway_Maple/Tree_Norway_Maple_Forest_01/Tree_Norway_Maple_Forest_01_B.Tree_Norway_Maple_Forest_01_B",
+      "origin": "Fab listing: Quixel Megaplants: Norway Maple, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Norway Maple, variant B, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.341176,
+          0.231373,
+          0.0
+        ],
+        "color_2": [
+          2.0,
+          0.59174,
+          0.0
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "maple_mp_c",
+      "part": "tree_maple",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Norway_Maple/Tree_Norway_Maple_Forest_01/Tree_Norway_Maple_Forest_01_C.Tree_Norway_Maple_Forest_01_C",
+      "origin": "Fab listing: Quixel Megaplants: Norway Maple, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Norway Maple, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.341176,
+          0.231373,
+          0.0
+        ],
+        "color_2": [
+          2.0,
+          0.59174,
+          0.0
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "hazel_mp_a",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_A.Tree_Common_Hazel_01_A",
+      "origin": "Fab listing: Quixel Megaplants: Common Hazel, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Common Hazel, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.34,
+          0.3,
+          0.02
+        ],
+        "color_2": [
+          1.5,
+          1.1,
+          0.05
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "hazel_mp_b",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_B.Tree_Common_Hazel_01_B",
+      "origin": "Fab listing: Quixel Megaplants: Common Hazel, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Common Hazel, variant B, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.34,
+          0.3,
+          0.02
+        ],
+        "color_2": [
+          1.5,
+          1.1,
+          0.05
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
+      }
+    },
+    {
+      "id": "hazel_mp_c",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_C.Tree_Common_Hazel_01_C",
+      "origin": "Fab listing: Quixel Megaplants: Common Hazel, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Common Hazel, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.34,
+          0.3,
+          0.02
+        ],
+        "color_2": [
+          1.5,
+          1.1,
+          0.05
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
+      }
     }
   ]
 }

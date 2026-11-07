@@ -30,7 +30,7 @@ public:
 	 * mesh's frame into the part's (identity for a procedural mesh). Null for an unknown part. Logs once per part and
 	 * variant whether it is drawn by a real asset or procedurally.
 	 */
-	static UStaticMesh* MeshFor(const FString& Part, int32 Variant, FTransform& OutFix);
+	static UStaticMesh* MeshFor(const FString& Part, int32 Variant, FTransform& OutFix, int32 Alternate = 0);
 
 	/** The map's material: /Game/SAM3D/Map/M_SimMapVertexColor, else the engine's VertexColorMaterial (as the ground). */
 	static UMaterialInterface* Material();

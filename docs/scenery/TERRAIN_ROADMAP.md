@@ -735,6 +735,41 @@ The owner, 7 Nov: build, place and develop more assets and changes before each t
   planes seen crossing (an X) at 30-50 m; a second card per kind, so a row is not one tree repeated; the cards carry
   their own colour, so the stands' seasonal tints (`TreeTintOn`) no longer reach these kinds.
 
+### A.3.25 Fab's Megaplants as map trees: built, drawn, measured, set aside (8 Nov 2026)
+
+The owner, 8 Nov: consider replacing the assets with Fab's and Quixel's.
+
+- **What the project has** (the owner's Fab library, added from the editor): Megaplants European Hornbeam, Black Poplar,
+  Norway Maple (forest and saplings), Common Hazel, Dry Common Reed (skeletal, four variants each); Megascans Elderberry
+  and four ground surfaces; the GV Free Shrubs Pack; unpacked Megascans zips (a black locust, grasses, a poppy, a dead tree,
+  surfaces). The black locust scan is a sapling (1.8 m at most, its own metadata), not a tree; the elderberry stays out
+  (white flowers in October, A.3.12's note); reeds are thin and abundant, so they stay cards.
+- **`tools/ue_fab_part.py`** (D7: used in place, never exported): Geometry Script copies a Megaplant's or Megascans
+  mesh into a dynamic mesh in Unreal, fits it to the tree frame (pivot at the trunk's foot), saves a Nanite static mesh
+  under `/Game/ThirdParty/Fab/<id>/` with the source's materials, and registers it. A pick's `season` gives the foliage a
+  child instance with `MA_Foliage_Trees`'s Seasons switch on and two colours (estimates). 13 made: hornbeam A, C, D
+  (120-350 thousand triangles), poplar A-D (360-810 thousand), maple A-C (30-55 thousand), hazel A-C (30-390 thousand).
+  Wind does not come across.
+- **Alternates** (`AssetRegister` `alternates`, `AlternateCount`, `AlternateFor`, `AlternateAt`; test
+  `test_scenery`): other models of a part, picked tree by tree by a hash of the place; the map actor splits each kind's
+  instances among them. `variants` stay a tree's ladder of levels. A registered model with several material slots is drawn
+  with world position offset off and its shadows cached as static.
+- **Seen (z1-z3):** real trees at last: trunks, branching, crowns with light through them, four different hornbeams in a
+  row. The hornbeam's October came out red (yellowed for z2); the root flare stands above the ground, stretched by the
+  frame's height; the bark pale.
+- **Measured, and why they are not drawn:** at eye height the GPU took 147-1340 ms a frame (p11, p19, p20, p21) against
+  13 ms with the cards; 46-216 ms at 25 m. On p21: with masked Nanite materials off, 1340 to 196 ms (the leaves' cut-outs,
+  close and many deep); with virtual shadow maps off, 25 m from 213 to 46 ms. Static copies of million-triangle masked
+  plants on 1.4 million trees do not fit this PC's RTX 3060 Ti. The parts are back on the cards; the 13 stay registered,
+  one line of `parts` each to draw them again.
+- **y3 checks hold:** 1077 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations and
+  assets clean (38 registered). `pytest tools`: 161 pass, one fails (`test_voice_lines`: the recording of
+  `battery_commander/order_tzm_run` is missing on this branch, not this batch's).
+- **Left:** Megaplants only near the camera: a ring of the nearest few hundred trees swapped from card to model as the
+  camera moves (as the ground cover's ring does), with the cards beyond; or Unreal's own Nanite foliage (the Megaplants as
+  instanced skinned meshes with their voxel far levels, D7's spike). The root flare (fit from the ground up, not the
+  root's foot); the October colours by date, not baked.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
