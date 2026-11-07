@@ -100,7 +100,7 @@ inline const std::vector<std::string>& LookKinds() {
 }
 
 inline const std::vector<std::string>& AnchorKinds() {
-    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground"};
+    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row"};
     return k;
 }
 
@@ -144,7 +144,8 @@ inline bool ParseAnchor(const json::Value& a_value, const std::string& id, ViewA
     if (an.at < 0.0 || an.at > 1.0) return Fail(error, id + ": at is a fraction 0..1");
     const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
     if (by_id && an.id.empty()) return Fail(error, id + ": a " + an.kind + " anchor names its " + an.kind);
-    if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge" || an.kind == "high_ground") &&
+    if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge" || an.kind == "high_ground" ||
+         an.kind == "brook_row") &&
         !an.has_close) {
         return Fail(error, id + ": a " + an.kind + " anchor needs close_km");
     }
@@ -488,6 +489,43 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             s.eye_e = p.e + off * std::sin(normal);
             s.eye_n = p.n + off * std::cos(normal);
             s.bearing_rad = BearingTo(s.eye_e, s.eye_n, p.e, p.n);
+        }
+    } else if (a.kind == "brook_row") {
+        // The nearest row of trees along a brook to close_km (terrain roadmap A.3.20's alders), looked at across the brook:
+        // the bearing from the brook's nearest point to the row's middle, the eye from_m back from the row on that line.
+        const MapBox* row = nullptr;
+        double best = std::numeric_limits<double>::max();
+        for (const MapBox& b : map.Layout().boxes) {
+            if (b.part != MapPart::TreeRow || !b.by_water) continue;
+            const double d = std::hypot(b.east_m - a.close_e_m, b.north_m - a.close_n_m);
+            if (d < best) {
+                best = d;
+                row = &b;
+            }
+        }
+        double we = 0.0, wn = 0.0, wbest = std::numeric_limits<double>::max();
+        if (row != nullptr) {
+            for (const MapStrip& st : map.Layout().strips) {
+                if (st.surface != MapSurface::Water || st.id.compare(0, 6, "brook_") != 0) continue;
+                for (const auto& q : st.points) {
+                    const double d = std::hypot(q.x - row->east_m, q.y - row->north_m);
+                    if (d < wbest) {
+                        wbest = d;
+                        we = q.x;
+                        wn = q.y;
+                    }
+                }
+            }
+        }
+        if (row == nullptr || wbest > 100.0 || wbest < 0.5) {
+            s = Missing(row == nullptr ? "the map has no rows along its brooks" : "no brook beside the nearest brook row");
+        } else {
+            s.ok = true;
+            s.e = row->east_m;
+            s.n = row->north_m;
+            s.bearing_rad = BearingTo(we, wn, row->east_m, row->north_m);
+            s.eye_e = row->east_m - a.from_m * std::sin(s.bearing_rad);
+            s.eye_n = row->north_m - a.from_m * std::cos(s.bearing_rad);
         }
     } else if (a.kind == "wood_edge") {
         // The nearest wood to close_km; the eye stands from_m outside its edge on the side the look comes from (the data's

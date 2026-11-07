@@ -160,30 +160,33 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
         const TreeInstance& y = again.trees.back();
         SC_EXPECT(x.east_m == y.east_m && x.north_m == y.north_m && x.base_m == y.base_m && x.height_m == y.height_m && x.kind == y.kind);
     }
-    std::size_t in_areas = 0, interior = 0;
+    std::size_t in_areas = 0, interior = 0, understorey = 0;
     std::vector<std::size_t> kinds(static_cast<std::size_t>(TreeKind::Count), 0);
     for (const TreeInstance& t : d.trees) {
         const bool inside = m->Def().InCore(t.east_m, t.north_m) || m->InDetail(t.east_m, t.north_m);
         SC_EXPECT(inside);
         in_areas += m->InDetail(t.east_m, t.north_m) ? 1 : 0;
-        // A wood's inside (A.3.19): in the map proper, never in a detail area's wood (planted whole), never a shrub.
+        // A wood's inside (A.3.19): in the map proper, never in a detail area's wood (planted whole); its shrubs the
+        // understorey (A.3.21).
         if (t.interior != 0) {
             ++interior;
             SC_EXPECT(!m->InDetail(t.east_m, t.north_m));
-            SC_EXPECT(!IsShrub(static_cast<TreeKind>(t.kind)));
+            understorey += IsShrub(static_cast<TreeKind>(t.kind)) ? 1 : 0;
         }
         SC_EXPECT(t.kind < static_cast<std::uint8_t>(TreeKind::Count));
         if (t.kind < kinds.size()) ++kinds[t.kind];
     }
-    std::printf("    %zu trees and shrubs (%zu in the detail areas, %zu inside the woods), %zu masses; by kind:", d.trees.size(), in_areas, interior,
-                d.masses.size());
+    std::printf("    %zu trees and shrubs (%zu in the detail areas, %zu inside the woods, %zu of them the understorey), %zu masses; by kind:",
+                d.trees.size(), in_areas, interior, understorey, d.masses.size());
     for (std::size_t k = 0; k < kinds.size(); ++k) std::printf(" %s %zu", TreeKindName(static_cast<TreeKind>(k)), kinds[k]);
     std::printf("\n");
     // The budget grew with the hill country's woods (terrain roadmap A.3.17: about 500 000; the views' GPU time measured
     // unchanged at about 10 ms, l11b against lu2).
     // And again with the woods' insides (A.3.19: about 700 000 of them, drawn only within 2.5 km of the camera).
-    SC_EXPECT(d.trees.size() < 1400000);
+    // And with their understorey (A.3.21: a fifth of the inside lattice's cells, in patches).
+    SC_EXPECT(d.trees.size() < 1500000);
     SC_EXPECT(interior > 100000);
+    SC_EXPECT(understorey > 0.05 * static_cast<double>(interior) && understorey < 0.4 * static_cast<double>(interior));
     SC_EXPECT(d.trees.size() > 50000);
     SC_EXPECT(in_areas > 10000);
     for (std::size_t k : kinds) SC_EXPECT(k > 0);

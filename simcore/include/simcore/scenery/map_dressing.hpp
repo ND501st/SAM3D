@@ -113,6 +113,7 @@ struct DressingRules {
     // edge rows, flagged `interior`, drawn near the camera in place of the block's mass (which is kept for far off). 0: none.
     double interior_spacing_m = 12.0;
     double interior_crown = 1.4;  // their crowns this much wider than a lone tree's: a closed stand's crowns fill the gaps
+    double understorey_keep = 0.2;  // of the inside lattice's cells, the share with a shrub under the crowns (L7, A.3.21)
     double cover_cell_m = 25.0;
     double garden_m = 15.0;
     // The fields themselves are the map's (MapDef::farmland, farm_fields.hpp: they set the farm tracks and tree rows, which
@@ -228,6 +229,7 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("mass_top", r.mass_top, 0.2, 1.0);
     number("interior_spacing_m", r.interior_spacing_m, 0.0, 50.0);
     number("interior_crown", r.interior_crown, 0.5, 3.0);
+    number("understorey_keep", r.understorey_keep, 0.0, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
     range("strip_width_m", r.strip_width_min_m, r.strip_width_max_m, 5.0, 200.0);
@@ -842,9 +844,24 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                 }
             }
             for (std::size_t t = first; t < out.trees.size(); ++t) {
-                out.trees[t].interior = 1;
                 out.trees[t].crown_m = static_cast<float>(out.trees[t].crown_m * rules.interior_crown);
             }
+            // The understorey (L7, A.3.21): in a share of the lattice's cells, half a step off the canopy tree, a shrub
+            // of the edge's mix under the crowns, in patches where the wave lets light in.
+            if (rules.understorey_keep > 0.0) {
+                for (int i = 0; i < count; ++i) {
+                    for (int j = 0; j < count; ++j) {
+                        const double fwd = (i + 1.0) * step - 0.5 * size, right = (j + 1.0) * step - 0.5 * size;
+                        if (fwd >= 0.5 * size || right >= 0.5 * size || in_from_open(fwd, right) < band) continue;
+                        double e = 0.0, n = 0.0;
+                        jittered(b, fwd, right, step, e, n);
+                        const double keep = std::min(1.0, rules.understorey_keep * (0.25 + 1.5 * wave(0x0D57ull, e, n)));
+                        if (At(seed ^ 0x0D58ull, e, n) >= keep) continue;
+                        plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0x0D59ull, e, n)));
+                    }
+                }
+            }
+            for (std::size_t t = first; t < out.trees.size(); ++t) out.trees[t].interior = 1;
         }
         CanopyMass m;
         m.east_m = b.east_m;

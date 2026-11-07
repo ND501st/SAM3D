@@ -61,6 +61,7 @@
     "mass_top": { "value": 0.92, "source": "game value: sam3d estimate (the mass's top, of the wood's height)", "confidence": "estimate" },
     "interior_spacing_m": { "value": 12, "source": "game value: sam3d estimate (a wood's canopy trees behind its edge rows, one every 12 m each way: crowns about half the trees' height, so near closed; the mass drawn far off only)", "confidence": "estimate" },
     "interior_crown": { "value": 1.4, "source": "game value: sam3d estimate (a closed stand's crowns wider than a lone tree's of its height; w1 showed the forest floor between crowns at 1.0)", "confidence": "estimate" },
+    "understorey_keep": { "value": 0.2, "source": "game value: sam3d estimate (L7: shrubs and young trees under a closed stand's crowns, in patches where light gets in)", "confidence": "estimate" },
     "cover_cell_m": { "value": 25, "source": "game value: sam3d estimate (the land cover raster's cell)", "confidence": "estimate" },
     "garden_m": { "value": 15, "source": "game value: sam3d estimate (a house's garden round it)", "confidence": "estimate" },
     "strip_width_m": { "value": [20, 40], "source": "game value: sam3d estimate (a household plot's strip at a village's edge)", "confidence": "estimate" },

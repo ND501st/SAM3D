@@ -162,9 +162,17 @@ def main(argv=None):
             for f in folder.glob(f"{pid}_*"):
                 f.unlink()  # a run replaces these plots' earlier pictures in the label
         start = time.monotonic()
-        code = run_game(folder, args.engine, ids, args.extra.split(), SEASONS[args.season])
+        # One launch per exposure: a plot's own exposure_ev (A.3.20, a plot into the sun or into a wood's shade), else
+        # the lab's fixed one. Each plot's pictures are its own files, so the launches share the folder.
+        by_ev = {}
+        by_id = {p["id"]: p for p in plots}
+        for pid in ids:
+            by_ev.setdefault(by_id[pid].get("exposure_ev", FIXED_EXPOSURE_EV), []).append(pid)
+        code = 0
+        for ev, group in by_ev.items():
+            code = code or run_game(folder, args.engine, group, args.extra.split(), SEASONS[args.season], exposure=ev)
         seconds = time.monotonic() - start
-        print(f"render exit {code} in {seconds:.0f} s")
+        print(f"render exit {code} in {seconds:.0f} s ({len(by_ev)} launch(es))")
         if not any(folder.glob("*.png")):
             print("no pictures were written")
             return 1

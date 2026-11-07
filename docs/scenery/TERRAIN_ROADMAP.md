@@ -642,6 +642,27 @@ Three changes in one pass (the owner, 7 Nov: more changes before each test and r
 - **Left:** a plot's own exposure (one value per run now, too bright for p18 into the sun); a view down a brook to see
   the alders; the ground under a block that is no plane (a ridge or hollow inside 100 m).
 
+### A.3.21 A plot's own exposure, a brook plot, the woods' understorey (7 Nov 2026)
+
+- **A plot's own exposure** (`plots.json` `exposure_ev`; `plot_lab.py` launches the game once per exposure, the plots'
+  pictures being their own files): p18 -1 EV (it looks into the sun), p19 +1 EV (a wood's shade). The u1 plots' mean
+  grey 59-121 (s1 at one exposure: 34-162).
+- **p20, alders along a brook** (`views.hpp` anchor `brook_row`: the nearest row along a brook to `close_km`, looked at
+  across the brook from its nearest point). u1: from 150 m, the rows run in broken lengths on one bank, the bank changing
+  piece by piece; at eye height, dark crowns over the water and meadow. The rows' trees are one height and evenly
+  spaced, more a planting than a wild alder line. No photograph in the register yet (`test_plots` lets it be, as the
+  sunflower's; fetching one waits for the owner).
+- **The understorey** (L7; `map_dressing.hpp`, `map_dressing.json` `understorey_keep` 0.2, an estimate): in a share of
+  the inside lattice's cells, half a step off the canopy tree, a shrub of the edge's mix (hazel, elder), in patches
+  where a wave lets light in; flagged `interior`, drawn out to 800 m as the edge's shrubs (`SimMapActor.cpp`). 107 650
+  of them; 1.33 million trees and shrubs in all (`test_map_dressing`'s budget 1.5 million).
+- **u1:** 1076 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations clean. Cost
+  against s1: GPU 10.37 ms against 10.35 ms, the game thread 10.50 ms against 10.35 ms (the views' means). The
+  understorey not yet seen in a picture: the plots' woods are detail areas' (planted whole), the views' woods are
+  farther than 800 m or seen from outside.
+- **Left:** a plot inside a wood of the map proper, to see the understorey; alder lines of uneven height and spacing,
+  with gaps where the bank is grazed; a photograph of a hill brook's alders.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

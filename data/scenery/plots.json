@@ -1,5 +1,5 @@
 {
-  "notes": "The test plots the terrain's look is perfected on (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A; the catalogue in docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md section 6.2). Each is found on the map by its anchor, as the views are (data/scenery/views.json), and seen from three cameras looking at its middle: eye (1.7 m, 30 m back), low (25 m, 43 m back) and high (150 m, 260 m back) (simcore/scenery/plots.hpp). A field_layer anchor finds the nearest field within 3 km of close_km whose whole 50 m square is one parcel in that ground layer on the scenario's day (with edge set true, the cameras look at where that field ends toward them, from outside it: a standing crop's face); turn_deg turns the cameras from the anchor's own bearing (a field's: its furrows). Close to battery 21's district (10 m ground) where it can be. Photos are ids in views.json's register. Rendered by -SimMapShots=<folder> -SimShotSet=plots, set beside their photographs and their last approved render by tools/plot_lab.py. Presentation only.",
+  "notes": "The test plots the terrain's look is perfected on (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A; the catalogue in docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md section 6.2). Each is found on the map by its anchor, as the views are (data/scenery/views.json), and rendered at the plot lab's fixed exposure, 0 EV unless its exposure_ev says otherwise (tools/plot_lab.py, A.3.20), and seen from three cameras looking at its middle: eye (1.7 m, 30 m back), low (25 m, 43 m back) and high (150 m, 260 m back) (simcore/scenery/plots.hpp). A field_layer anchor finds the nearest field within 3 km of close_km whose whole 50 m square is one parcel in that ground layer on the scenario's day (with edge set true, the cameras look at where that field ends toward them, from outside it: a standing crop's face); turn_deg turns the cameras from the anchor's own bearing (a field's: its furrows). Close to battery 21's district (10 m ground) where it can be. Photos are ids in views.json's register. Rendered by -SimMapShots=<folder> -SimShotSet=plots, set beside their photographs and their last approved render by tools/plot_lab.py. Presentation only.",
   "plots": [
     {
       "id": "p01_ploughland",
@@ -83,14 +83,23 @@
       "name": "A field's edge on a slope in the hill country",
       "anchor": { "kind": "parcel_edge", "close_km": [-14.0, 2.0] },
       "photos": ["P65"],
-      "must_see": "The field climbing the slope, its edge and the hill beyond; the ground rolling, not flat (look target K1, K3)."
+      "must_see": "The field climbing the slope, its edge and the hill beyond; the ground rolling, not flat (look target K1, K3).",
+      "exposure_ev": -1.0
     },
     {
       "id": "p19_slope_wood_edge",
       "name": "A wood's edge on a hillside",
       "anchor": { "kind": "wood_edge", "close_km": [-11.0, -0.4], "bearing_deg": 180 },
       "photos": ["P66", "P23"],
-      "must_see": "The wood holding the slope, its edge layered and closed; the ground falling away (look target K2, K4)."
+      "must_see": "The wood holding the slope, its edge layered and closed; the ground falling away (look target K2, K4).",
+      "exposure_ev": 1.0
+    },
+    {
+      "id": "p20_brook_alders",
+      "name": "Alders along a brook in the hills",
+      "anchor": { "kind": "brook_row", "close_km": [-12.0, 0.0] },
+      "photos": [],
+      "must_see": "A line of dark alders on one bank of a narrow brook in a valley floor, broken in places; meadow to the water."
     }
   ]
 }

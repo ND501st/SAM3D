@@ -1801,7 +1801,8 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		// A wood's fringe of shrubs (hazel, elder) is not drawn as far as the trees: under 4 m, it is lost behind them.
 		const float KindCullM = simcore::scenery::IsShrub(static_cast<simcore::scenery::TreeKind>(K)) ? FMath::Min(TreeCullDistanceM, 800.0f) : TreeCullDistanceM;
 		Add(PartName, 0, Trees[K], true, KindCullM, bRegistered ? nullptr : &TreeTints[K]);
-		Add(PartName, 0, Inside[K], true, FMath::Min(InteriorTreeDistanceM, TreeCullDistanceM), bRegistered ? nullptr : &InsideTints[K], 0.0f, TEXT("_in"));
+		// The understorey's shrubs (A.3.21) as near as the edge's; the inside trees out to InteriorTreeDistanceM.
+		Add(PartName, 0, Inside[K], true, FMath::Min(InteriorTreeDistanceM, KindCullM), bRegistered ? nullptr : &InsideTints[K], 0.0f, TEXT("_in"));
 	}
 	if (bTints)
 	{
