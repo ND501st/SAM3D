@@ -906,6 +906,28 @@ so L12 next.
 - **Left:** a cumulus material of our own (cells with flat bases, the form K-b and K-d show) and the cloud shadows on the
   land judged with it; the scenario presets' other layers (one volumetric layer is drawn, the main one).
 
+### A.3.33 L12: separate clouds, sized by the layer's cell (8 Nov 2026)
+
+A.3.32's Left, the form. Before writing a cumulus material, the sample material's one other shape control:
+`Layout_CloudGlobalScale` (default 256).
+
+- **Seen at 16, 48, 128 and 256** (`-SimCloudScale=<v>`, a measurement), the fair-cumulus sky: 16 a mackerel sky
+  (altocumulus), **48 separate cells with blue between**, 128 and 256 merged banks and veils. The weather data already gives
+  each layer a `cell_m` (fair cumulus 1200 m), so the scale follows it, 0.04 per metre: cumulus 48; stratocumulus (2500 m)
+  100; altostratus (6000 m) 240 and cirrus (8000 m) 320, near the material's own.
+- **The amount re-measured at 48** (the coverage changes the share differently at another scale): -0.2 11 per cent, -0.1 26,
+  0.0 45 (over the 14 plots' directions; none at -0.27, extrapolated). The coverage now comes from that table and A.3.32's
+  (at 256), between them by the scale's logarithm.
+- **Measured (n10):** at 3 oktas the coverage is -0.038 at scale 48, and the sky is 37.2 per cent cloud over the 14
+  directions (37.5 meant); the views' 5-okta stratocumulus 0.233 at 100.
+- **Seen:** fair-weather cumulus at last, flat cells with blue sky between, smaller toward the horizon; not yet the tall
+  towers of a summer afternoon (K-b), which the sample material's profile does not make.
+- **Costs (n10):** the plots' 42 views GPU mean 10.7 ms, max 16.3; the map views GPU mean 11.83 ms, max 14.38, game thread
+  11.91 ms (n9 11.57, 14.25, 11.66).
+- **Left:** cumulus with height (a material of our own, its vertical profile from the layer's thickness: congestus in
+  July); the scales between 48 and 256 not measured (interpolated); the cloud shadows on the land judged; the presets'
+  other layers.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
