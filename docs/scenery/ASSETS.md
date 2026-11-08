@@ -66,6 +66,12 @@ map draws each tree with the alternate its place picks (`AssetRegister::Alternat
 machine), so a row is not one tree repeated. `variants` stay a tree's ladder of thinner levels (`tools/ue_tree_lods.py`);
 a part drawn by a Fab model has none (Nanite is its level of detail).
 
+A part may also list **`near`** models (A.3.26): `{"alternates": [...], "within_m": 80}`. Drawn everywhere, a Megaplant
+cost 150-1340 ms a frame (A.3.25); so a tree within `within_m` of the camera is drawn by a near model (picked by its place,
+as alternates are) and beyond by the part's own (its cards), whose material (`M_SimFoliage`'s `NearHideM`) hides each
+instance whose pivot is within that distance. Both by distance on the GPU, no work per frame. If any near model is not on
+the machine, the part's own draws everywhere and hides nothing. `tools/ue_fab_part.py` registers its models as near models.
+
 ## Fetching the files on a machine
 
 1. Get the model from the `origin` recorded in the register, under the licence recorded there (a Fab asset: add it to

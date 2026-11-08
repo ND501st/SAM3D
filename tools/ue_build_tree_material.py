@@ -9,6 +9,8 @@ own brightness, from the day of the year). The multiplier is laid on green-domin
 wood's mass: G over R), so a trunk keeps its bark. Without this material the map actor draws the trees in the plain vertex
 colour material, as before.
 """
+import os
+
 import unreal
 
 MATERIAL_DIR = '/Game/SAM3D/Map'
@@ -121,8 +123,8 @@ def build_foliage_material():
     rough.set_editor_property('r', 0.85)
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(norm, 'RGB', unreal.MaterialProperty.MP_NORMAL)
-    lib.connect_material_property(base, 'A', unreal.MaterialProperty.MP_OPACITY_MASK)
     lib.connect_material_property(rough, '', unreal.MaterialProperty.MP_ROUGHNESS)
+    near_hide(mat, base)
     lib.recompile_material(mat)
     if lib.get_material_property_input_node(mat, unreal.MaterialProperty.MP_OPACITY_MASK) is None:
         raise RuntimeError('the alpha did not connect to the opacity mask')
@@ -130,6 +132,60 @@ def build_foliage_material():
     unreal.log('FOLIAGE MATERIAL: %s' % path)
 
 
-build_material()
-build_clutter_material()
-build_foliage_material()
+def near_hide(mat, base):
+    """The opacity mask is the texture's alpha times 'not within NearHideM metres of the camera', measured from the
+    instance's pivot (the local origin taken to the world: per instance on an instanced mesh), so a card tree near the
+    camera is gone whole where its near model draws (A.3.26, SimMapActor). NearHideM 0, the default, hides nothing."""
+    lib = unreal.MaterialEditingLibrary
+    zero = lib.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -1100, 700)
+    pivot = lib.create_material_expression(mat, unreal.MaterialExpressionTransformPosition, -900, 700)
+    pivot.set_editor_property('transform_source_type', unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    pivot.set_editor_property('transform_type', unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD)
+    lib.connect_material_expressions(zero, '', pivot, '')
+    cam = lib.create_material_expression(mat, unreal.MaterialExpressionCameraPositionWS, -900, 820)
+    dist = lib.create_material_expression(mat, unreal.MaterialExpressionDistance, -700, 750)
+    lib.connect_material_expressions(pivot, '', dist, 'A')
+    lib.connect_material_expressions(cam, '', dist, 'B')
+    to_m = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -550, 750)
+    to_m.set_editor_property('const_b', 0.01)
+    lib.connect_material_expressions(dist, '', to_m, 'A')
+    param = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -550, 880)
+    param.set_editor_property('parameter_name', 'NearHideM')
+    param.set_editor_property('default_value', 0.0)
+    beyond = lib.create_material_expression(mat, unreal.MaterialExpressionSubtract, -400, 800)
+    lib.connect_material_expressions(to_m, '', beyond, 'A')
+    lib.connect_material_expressions(param, '', beyond, 'B')
+    sharp = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -280, 800)
+    sharp.set_editor_property('const_b', 1000.0)
+    lib.connect_material_expressions(beyond, '', sharp, 'A')
+    keep = lib.create_material_expression(mat, unreal.MaterialExpressionSaturate, -160, 800)
+    lib.connect_material_expressions(sharp, '', keep, '')
+    mask = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -40, 650)
+    lib.connect_material_expressions(base, 'A', mask, 'A')
+    lib.connect_material_expressions(keep, '', mask, 'B')
+    lib.connect_material_property(mask, '', unreal.MaterialProperty.MP_OPACITY_MASK)
+
+
+def patch_foliage_near_hide():
+    """Adds near_hide to the existing M_SimFoliage in place, keeping every card's instance of it."""
+    path = MATERIAL_DIR + '/' + FOLIAGE
+    mat = unreal.load_asset(path)
+    lib = unreal.MaterialEditingLibrary
+    if 'NearHideM' in [str(n) for n in lib.get_scalar_parameter_names(mat)]:
+        unreal.log('FOLIAGE MATERIAL: NearHideM already there')
+        return
+    base = lib.get_material_property_input_node(mat, unreal.MaterialProperty.MP_OPACITY_MASK)
+    if not isinstance(base, unreal.MaterialExpressionTextureSampleParameter2D):
+        raise RuntimeError('the opacity mask is not the base texture\'s alpha: %s' % base)
+    near_hide(mat, base)
+    lib.recompile_material(mat)
+    unreal.EditorAssetLibrary.save_asset(path)
+    unreal.log('FOLIAGE MATERIAL: NearHideM added to %s' % path)
+
+
+if os.environ.get('SAM3D_FOLIAGE_NEAR_ONLY') == '1':
+    patch_foliage_near_hide()
+else:
+    build_material()
+    build_clutter_material()
+    build_foliage_material()

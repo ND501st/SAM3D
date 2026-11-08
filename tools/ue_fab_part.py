@@ -11,7 +11,7 @@ copies its highest level of detail into a dynamic mesh, fits it to the part's tr
 its base and across its crown, the pivot left at the trunk's foot) and saves it as a Nanite static mesh under
 /Game/ThirdParty/Fab/<id>/ (ignored by git: Fab's Standard licence forbids handing the files on), with the source's own
 materials slot by slot. The wind of a Megaplant (its bones) does not come across. Then the asset and the part's entry
-(its alternate: another model of the part, chosen tree by tree) go into data/scenery/assets.json. Nothing is committed.
+(as a near model: drawn within near_m of the camera, chosen tree by tree; the part's cards beyond) go into data/scenery/assets.json. Nothing is committed.
 """
 import json
 import os
@@ -82,6 +82,12 @@ def fit(mesh, pick):
         raise RuntimeError('the source has no height or width: %s %s' % (lo, hi))
     log('source %.0f x %.0f x %.0f cm (base %.0f), pivot off the box centre (%.0f, %.0f) cm' % (
         hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, lo.z, 0.5 * (hi.x + lo.x), 0.5 * (hi.y + lo.y)))
+    # A model whose foot is meant to be buried (a hornbeam's root flare) goes down by the pick's sink_m first (A.3.26):
+    # what is left above z 0 is the tree the frame fits.
+    sink_cm = 100.0 * pick.get('sink_m', 0.0)
+    if sink_cm > 0.0:
+        unreal.GeometryScript_MeshTransforms.translate_mesh(mesh, unreal.Vector(0.0, 0.0, -sink_cm))
+        height -= sink_cm
     s = unreal.Vector(100.0 / width, 100.0 / width, 100.0 / height)
     unreal.GeometryScript_MeshTransforms.scale_mesh(mesh, s, unreal.Vector(0.0, 0.0, 0.0))
     return width / 100.0, height / 100.0
@@ -154,20 +160,18 @@ def register(pick, mesh_path, size_m, tris):
     }
     reg['assets'] = [a for a in reg.get('assets', []) if a['id'] != pick['id']] + [entry]
     part = reg.setdefault('parts', {}).setdefault(pick['part'], {'asset': None})
-    # A Fab model draws the whole part: its alternates (A.3.25), chosen tree by tree by place. The part's earlier ladder of
-    # thinner variants (a card tree's levels) goes; Nanite is the Fab model's level of detail.
+    # A Fab model is a near model of the part (A.3.26): drawn within the pick's near_m of the camera, picked tree by tree by
+    # place, the part's own (its cards) beyond. Drawn everywhere it cost 150-1340 ms a frame (A.3.25).
     k = pick.get('alternate', 0)
-    alternates = part.get('alternates') or []
-    while len(alternates) <= k:
-        alternates.append(None)
-    alternates[k] = pick['id']
-    part['alternates'] = alternates
-    part['asset'] = alternates[0]
-    part.pop('variants', None)
+    near = part.setdefault('near', {'alternates': [], 'within_m': pick.get('near_m', 80.0)})
+    ids = near['alternates']
+    while len(ids) <= k:
+        ids.append(None)
+    ids[k] = pick['id']
     with open(REGISTER, 'w', encoding='utf-8', newline='') as f:
         json.dump(reg, f, indent=2)
         f.write('\n')
-    log('registered %s as %s alternate %d' % (pick['id'], pick['part'], k))
+    log('registered %s as %s near model %d (within %.0f m)' % (pick['id'], pick['part'], k, near['within_m']))
 
 
 def main():

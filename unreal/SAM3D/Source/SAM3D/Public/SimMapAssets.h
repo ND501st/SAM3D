@@ -32,6 +32,13 @@ public:
 	 */
 	static UStaticMesh* MeshFor(const FString& Part, int32 Variant, FTransform& OutFix, int32 Alternate = 0);
 
+	/** Alternate codes from NearAlternate up are a part's near models (A.3.26): NearAlternate + k is the k-th. A near model
+	 * that is not on this machine is null, never procedural. */
+	static constexpr int32 NearAlternate = 1000;
+
+	/** True if every near model of a part is on this machine (then the part's own hides itself within their distance). */
+	static bool NearOnMachine(const FString& Part);
+
 	/** The map's material: /Game/SAM3D/Map/M_SimMapVertexColor, else the engine's VertexColorMaterial (as the ground). */
 	static UMaterialInterface* Material();
 

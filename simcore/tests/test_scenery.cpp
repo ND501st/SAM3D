@@ -387,3 +387,21 @@ SC_TEST("scenery: a part's alternates are drawn instance by instance, the same m
     SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_a", "oak_c"]})"), &e));
     SC_EXPECT(e.find("not registered") != std::string::npos);
 }
+
+SC_TEST("scenery: a part's near models are drawn within their distance, its own asset beyond") {
+    const std::string oak_b =
+        R"({"id": "oak_b", "unreal_path": "/Game/SAM3D/Map/Trees/SM_OakB.SM_OakB", "origin": "own work", "licence": "Own", "redistributable": true, "fetched": "2026-11-08"})";
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "near": {"alternates": ["oak_b"], "within_m": 80}})"), &e));
+    SC_EXPECT(reg.NearCount("tree_oak") == 1 && reg.NearFor("tree_oak", 0)->id == "oak_b" && reg.NearFor("tree_oak", 1) == nullptr);
+    SC_EXPECT_NEAR(reg.NearM("tree_oak"), 80.0, 1e-12);
+    SC_EXPECT(reg.AssetFor("tree_oak", 0)->id == "oak_a");  // beyond, the part's own
+    SC_EXPECT(reg.NearCount("tree_pine") == 0 && reg.NearM("tree_pine") == 0.0);
+    // A near model is registered; it has a distance above 0.
+    AssetRegister bad;
+    SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("tree_oak": {"asset": "oak_a", "near": {"alternates": ["oak_z"], "within_m": 80}})"), &e));
+    SC_EXPECT(e.find("not registered") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "near": {"alternates": ["oak_b"]}})"), &e));
+    SC_EXPECT(e.find("within_m") != std::string::npos);
+}

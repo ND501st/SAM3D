@@ -770,6 +770,33 @@ The owner, 8 Nov: consider replacing the assets with Fab's and Quixel's.
   instanced skinned meshes with their voxel far levels, D7's spike). The root flare (fit from the ground up, not the
   root's foot); the October colours by date, not baked.
 
+### A.3.26 The Megaplants in a near ring: real trees within 80 m, cards beyond (8 Nov 2026)
+
+The owner, 8 Nov: keep working through the roadmap. A.3.25's first Left: the Megaplants only near the camera.
+
+- **Priced first** (`-SimFabTreeM=<m>`, a measurement flag: a kind drawn by its Fab models only that far): within 150 m the
+  eye views took 23-49 ms, within 60 m 18-20 ms, against 147-1340 ms with no limit. The cost was the far instances.
+- **Near models in the register** (`AssetRegister`: a part's `near`, `{"alternates": [...], "within_m": 80}`; `NearCount`,
+  `NearFor`, `NearM`; test `test_scenery`): models drawn for the part's trees within that distance, picked tree by tree by
+  place as alternates are; the part's own (its cards) beyond. `tools/ue_fab_part.py` now registers its models so; the four
+  kinds' 13 Megaplants are near models of `tree_hornbeam`, `tree_poplar`, `tree_maple`, `tree_hazel`.
+- **No work per frame:** the map actor adds each near model's instances culled at `within_m`, and gives the cards' material
+  `M_SimFoliage`'s new `NearHideM` (`tools/ue_build_tree_material.py`'s `near_hide`, patched into the existing material
+  with `SAM3D_FOLIAGE_NEAR_ONLY=1`): the opacity mask is cut for an instance whose pivot is within that distance of the
+  camera. Both by distance on the GPU; nothing swapped as the camera moves. If a near model is not on the machine the
+  cards draw everywhere and hide nothing (`FSimMapAssets::NearOnMachine`), so a machine without the Fab files runs as before.
+- **The hornbeam's root flare:** its picks sink the model 0.6 m before the fit (`sink_m`).
+- **Seen (n1, n2):** hornbeams, maples, poplars and hazels as real trees round the camera, the cards beyond; the change at
+  80 m is not obvious from the eye views. The hornbeam's roots still stand clear of the ground on p21 at 0.6 m.
+- **Costs (n2 against y3):** the plots' 42 views GPU mean 10.7 ms, max 18.1; the map views GPU mean 11.79 ms (y3 10.95),
+  max 14.81 (12.68), game thread 12.00 ms (11.46).
+- **Checks:** 1078 tests pass (the whole suite); `ground_check` PASS; `nav_check` 200 of 200; citations clean (159 files);
+  assets clean (38).
+- **Left:** the hornbeam's roots (a deeper sink, or the flare cut off at the ground); the bark pale; the cards' colours to
+  the Megaplants' at the ring (the poplar's yellow card against its greener model; the hazel still green); the hidden cards'
+  shadows may still be drawn (the shadow pass's camera is not the eye's); a ring for the other kinds; the game thread's
+  0.5 ms; the October colours by date.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

@@ -1812,15 +1812,58 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		// A kind with alternates (A.3.25: a Megaplant's variants) is split among them by each tree's place, the same on every
 		// machine (AssetRegister::AlternateAt); each its own component. Registered models carry no tints.
 		const int32 Alternates = bRegistered ? Reg->AlternateCount(PartStd) : 1;
+		// Near models (A.3.26) only if every one is on this machine, and only over a single own model (its cards).
+		const int32 NearCount = bRegistered && Alternates <= 1 && FSimMapAssets::NearOnMachine(PartName) ? Reg->NearCount(PartStd) : 0;
+		const float NearM = NearCount > 0 ? static_cast<float>(Reg->NearM(PartStd)) : 0.0f;
+		if (NearCount > 0)
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Map: %s within %.0f m by %d near model(s), its own beyond"), *PartName, NearM, NearCount);
+		}
 		for (int32 Pass = 0; Pass < 2; ++Pass)
 		{
 			const TArray<FTransform>& All = Pass == 0 ? Trees[K] : Inside[K];
-			const float CullM = Pass == 0 ? KindCullM : FMath::Min(InteriorTreeDistanceM, KindCullM);
+			float CullM = Pass == 0 ? KindCullM : FMath::Min(InteriorTreeDistanceM, KindCullM);
+			// -SimFabTreeM=<m> (A.3.26, a measurement): a kind drawn by Fab models only that far, to price a ring of them near
+			// the camera before one is built.
+			float FabTreeM = 0.0f;
+			const simcore::scenery::AssetEntry* KindAsset = bRegistered ? Reg->AssetFor(PartStd, 0) : nullptr;
+			if (KindAsset != nullptr && KindAsset->unreal_path.find("/ThirdParty/Fab/") != std::string::npos &&
+				FParse::Value(FCommandLine::Get(), TEXT("SimFabTreeM="), FabTreeM) && FabTreeM > 0.0f)
+			{
+				CullM = FMath::Min(CullM, FabTreeM);
+			}
 			const FString Tag = Pass == 0 ? FString() : FString(TEXT("_in"));
+			if (NearM > 0.0f)
+			{
+				// The near models (A.3.26): each tree within NearM of the camera drawn by one of them, picked by its place;
+				// beyond, by the part's own, which hides its instances within NearM (M_SimFoliage's NearHideM, per instance,
+				// by its pivot). No work per frame: both by distance, on the GPU.
+				TArray<TArray<FTransform>> Near;
+				Near.SetNum(NearCount);
+				for (const FTransform& T : All)
+				{
+					const FVector L = T.GetLocation();
+					Near[simcore::scenery::AssetRegister::AlternateAt(L.X / 100.0, L.Y / 100.0, NearCount)].Add(T);
+				}
+				for (int32 A = 0; A < NearCount; ++A)
+				{
+					Add(PartName, 0, Near[A], true, NearM, nullptr, 0.0f, Tag + FString::Printf(TEXT("_near%d"), A), FSimMapAssets::NearAlternate + A);
+				}
+			}
 			if (Alternates <= 1)
 			{
 				// The understorey's shrubs (A.3.21) as near as the edge's; the inside trees out to InteriorTreeDistanceM.
-				Add(PartName, 0, All, true, CullM, bRegistered ? nullptr : (Pass == 0 ? &TreeTints[K] : &InsideTints[K]), 0.0f, Tag);
+				UHierarchicalInstancedStaticMeshComponent* Own =
+					Add(PartName, 0, All, true, CullM, bRegistered ? nullptr : (Pass == 0 ? &TreeTints[K] : &InsideTints[K]), 0.0f, Tag);
+				if (Own != nullptr && NearM > 0.0f)
+				{
+					for (int32 Slot = 0; Slot < Own->GetNumMaterials(); ++Slot)
+					{
+						UMaterialInstanceDynamic* Hide = UMaterialInstanceDynamic::Create(Own->GetMaterial(Slot), this);
+						Hide->SetScalarParameterValue(TEXT("NearHideM"), NearM);
+						Own->SetMaterial(Slot, Hide);
+					}
+				}
 				continue;
 			}
 			TArray<TArray<FTransform>> Split;

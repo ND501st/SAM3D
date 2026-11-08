@@ -436,48 +436,6 @@
       "notes": "Megaplants Common Hazel, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_C.Tree_Common_Hazel_01_C; as drawn 1.4 m across, 1.7 m tall; 32628 triangles)"
     },
     {
-      "id": "hornbeam_mp_a",
-      "unreal_path": "/Game/ThirdParty/Fab/hornbeam_mp_a/SM_hornbeam_mp_a.SM_hornbeam_mp_a",
-      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
-      "author": "Quixel Megascans",
-      "licence": "Fab-Standard",
-      "redistributable": false,
-      "fetched": "2026-11-05",
-      "sha256": "",
-      "scale": 1.0,
-      "yaw_deg": 0.0,
-      "z_offset_m": 0.0,
-      "notes": "Megaplants European Hornbeam, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_A.Tree_Hornbeam_01_A; as drawn 10.6 m across, 15.4 m tall; 352959 triangles)"
-    },
-    {
-      "id": "hornbeam_mp_c",
-      "unreal_path": "/Game/ThirdParty/Fab/hornbeam_mp_c/SM_hornbeam_mp_c.SM_hornbeam_mp_c",
-      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
-      "author": "Quixel Megascans",
-      "licence": "Fab-Standard",
-      "redistributable": false,
-      "fetched": "2026-11-05",
-      "sha256": "",
-      "scale": 1.0,
-      "yaw_deg": 0.0,
-      "z_offset_m": 0.0,
-      "notes": "Megaplants European Hornbeam, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_C.Tree_Hornbeam_01_C; as drawn 6.1 m across, 13.9 m tall; 271407 triangles)"
-    },
-    {
-      "id": "hornbeam_mp_d",
-      "unreal_path": "/Game/ThirdParty/Fab/hornbeam_mp_d/SM_hornbeam_mp_d.SM_hornbeam_mp_d",
-      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
-      "author": "Quixel Megascans",
-      "licence": "Fab-Standard",
-      "redistributable": false,
-      "fetched": "2026-11-05",
-      "sha256": "",
-      "scale": 1.0,
-      "yaw_deg": 0.0,
-      "z_offset_m": 0.0,
-      "notes": "Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D; as drawn 4.4 m across, 11.5 m tall; 121467 triangles)"
-    },
-    {
       "id": "poplar_mp_a",
       "unreal_path": "/Game/ThirdParty/Fab/poplar_mp_a/SM_poplar_mp_a.SM_poplar_mp_a",
       "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
@@ -532,6 +490,48 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "Megaplants Black Poplar, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_D.Tree_Black_Poplar_01_D; as drawn 4.1 m across, 17.6 m tall; 544860 triangles)"
+    },
+    {
+      "id": "hornbeam_mp_a",
+      "unreal_path": "/Game/ThirdParty/Fab/hornbeam_mp_a/SM_hornbeam_mp_a.SM_hornbeam_mp_a",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-05",
+      "sha256": "",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megaplants European Hornbeam, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_A.Tree_Hornbeam_01_A; as drawn 10.6 m across, 14.8 m tall; 352959 triangles)"
+    },
+    {
+      "id": "hornbeam_mp_c",
+      "unreal_path": "/Game/ThirdParty/Fab/hornbeam_mp_c/SM_hornbeam_mp_c.SM_hornbeam_mp_c",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-05",
+      "sha256": "",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megaplants European Hornbeam, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_C.Tree_Hornbeam_01_C; as drawn 6.1 m across, 13.3 m tall; 271407 triangles)"
+    },
+    {
+      "id": "hornbeam_mp_d",
+      "unreal_path": "/Game/ThirdParty/Fab/hornbeam_mp_d/SM_hornbeam_mp_d.SM_hornbeam_mp_d",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-05",
+      "sha256": "",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D; as drawn 4.4 m across, 10.9 m tall; 121467 triangles)"
     }
   ],
   "parts": {
@@ -544,7 +544,16 @@
       ]
     },
     "tree_poplar": {
-      "asset": "poplar_card"
+      "asset": "poplar_card",
+      "near": {
+        "alternates": [
+          "poplar_mp_a",
+          "poplar_mp_b",
+          "poplar_mp_c",
+          "poplar_mp_d"
+        ],
+        "within_m": 80
+      }
     },
     "tree_pine": {
       "asset": "pine_card"
@@ -557,7 +566,15 @@
       "variants": [
         "hornbeam_cards",
         "hornbeam_cards_l1"
-      ]
+      ],
+      "near": {
+        "alternates": [
+          "hornbeam_mp_a",
+          "hornbeam_mp_c",
+          "hornbeam_mp_d"
+        ],
+        "within_m": 80
+      }
     },
     "tree_beech": {
       "asset": "beech_card"
@@ -566,10 +583,26 @@
       "asset": "alder_card"
     },
     "tree_maple": {
-      "asset": "maple_card"
+      "asset": "maple_card",
+      "near": {
+        "alternates": [
+          "maple_mp_a",
+          "maple_mp_b",
+          "maple_mp_c"
+        ],
+        "within_m": 80
+      }
     },
     "tree_hazel": {
-      "asset": "hazel_card"
+      "asset": "hazel_card",
+      "near": {
+        "alternates": [
+          "hazel_mp_a",
+          "hazel_mp_b",
+          "hazel_mp_c"
+        ],
+        "within_m": 80
+      }
     },
     "tree_elder": {
       "asset": "elder_card"

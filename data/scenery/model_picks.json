@@ -456,7 +456,8 @@
           0.12
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": 0.6
     },
     {
       "id": "hornbeam_mp_c",
@@ -482,7 +483,8 @@
           0.12
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": 0.6
     },
     {
       "id": "hornbeam_mp_d",
@@ -508,7 +510,8 @@
           0.12
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": 0.6
     },
     {
       "id": "poplar_mp_a",

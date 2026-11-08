@@ -67,6 +67,21 @@ UMaterialInterface* FSimMapAssets::Material()
 	return GSimMapAssetMaterial;
 }
 
+bool FSimMapAssets::NearOnMachine(const FString& Part)
+{
+	const simcore::scenery::AssetRegister* Reg = Register();
+	const int32 Count = Reg != nullptr ? Reg->NearCount(std::string(TCHAR_TO_UTF8(*Part))) : 0;
+	for (int32 K = 0; K < Count; ++K)
+	{
+		FTransform Fix;
+		if (MeshFor(Part, 0, Fix, NearAlternate + K) == nullptr)
+		{
+			return false;
+		}
+	}
+	return Count > 0;
+}
+
 float FSimMapAssets::LodScreenSize(int32 Lod)
 {
 	// A tree or a house fills little of the screen: its full shape while its bounds' sphere is a tenth of the screen or
@@ -91,8 +106,11 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 	// A real asset, if the register names one and it is on this machine.
 	const simcore::scenery::AssetRegister* Reg = Register();
 	// An alternate (A.3.25) is another model of the same part, drawn in place of the first instance by instance.
-	const simcore::scenery::AssetEntry* Asset =
-		Reg == nullptr ? nullptr : (Alternate > 0 ? Reg->AlternateFor(PartStd, Alternate) : Reg->AssetFor(PartStd, Variant));
+	const bool bNear = Alternate >= NearAlternate;
+	const simcore::scenery::AssetEntry* Asset = Reg == nullptr ? nullptr
+		: bNear						   ? Reg->NearFor(PartStd, Alternate - NearAlternate)
+		: Alternate > 0				   ? Reg->AlternateFor(PartStd, Alternate)
+									   : Reg->AssetFor(PartStd, Variant);
 	if (Asset != nullptr)
 	{
 		const FString Path = SimMapStd(Asset->unreal_path);
@@ -111,8 +129,8 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 		}
 	}
 
-	// Else simcore's own mesh, LOD 0 down to the first empty one.
-	if (Entry.Mesh == nullptr)
+	// Else simcore's own mesh, LOD 0 down to the first empty one (never for a near model: there the part's own draws).
+	if (Entry.Mesh == nullptr && !bNear)
 	{
 		TArray<simcore::scenery::TriMesh> Lods;
 		for (int32 L = 0; L < 4; ++L)
