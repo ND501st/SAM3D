@@ -121,6 +121,8 @@ struct DressingRules {
     double row_bush_share = 0.3;  // of a field's tree row's gaps between trees, the share with a bush (a hedge under the row, A.3.24)
     double brook_bush_share = 0.15;  // of what is left, the share a bush (hazel, elder) instead of an alder
     double cover_cell_m = 25.0;
+    double pond_reeds_m = 3.0;         // a village pond's reed margin out from its water's edge (A.3.35)
+    double pond_reeds_in_m = 1.5;      // and in from it, the reeds standing in the shallows
     double garden_m = 15.0;
     // The fields themselves are the map's (MapDef::farmland, farm_fields.hpp: they set the farm tracks and tree rows, which
     // block sight); a field within strip_reach_m of a settlement's edge is cut into household strips.
@@ -243,6 +245,8 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("row_bush_share", r.row_bush_share, 0.0, 1.0);
     number("brook_bush_share", r.brook_bush_share, 0.0, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
+    number("pond_reeds_m", r.pond_reeds_m, 0.0, 20.0);
+    number("pond_reeds_in_m", r.pond_reeds_in_m, 0.0, 10.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
     range("strip_width_m", r.strip_width_min_m, r.strip_width_max_m, 5.0, 200.0);
     number("strip_reach_m", r.strip_reach_m, 0.0, 5000.0);
@@ -415,6 +419,20 @@ struct CoverGrid {
 // The land cover over the detail areas (first, in the map's order) and the map proper.
 struct CoverRaster {
     std::vector<CoverGrid> grids;
+    // The villages' ponds (A.3.35): middle, half length along the heading (from north), half width.
+    struct Pond {
+        double e = 0.0, n = 0.0, rx = 0.0, ry = 0.0, heading = 0.0;
+    };
+    std::vector<Pond> ponds;
+    // Whether (east, north) is in a pond's reed margin: from `inside_m` within its water's edge out to `out_m` beyond it.
+    bool InPondMargin(double e, double n, double inside_m, double out_m) const {
+        for (const Pond& p : ponds) {
+            if (std::hypot(e - p.e, n - p.n) > p.rx + out_m) continue;
+            const double d = EllipseEdgeDistance(p.e, p.n, p.rx, p.ry, p.heading, e, n);
+            if (d >= -inside_m && d <= out_m) return true;
+        }
+        return false;
+    }
 
     const CoverGrid* GridAt(double e, double n) const {
         for (const CoverGrid& g : grids) {
@@ -563,20 +581,24 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
         for (const bool water : {false, true}) {
             for (const MapStrip& s : map.Layout().strips) {
                 if ((s.surface == MapSurface::Water) != water) continue;
+                if (s.id.rfind("pond_", 0) == 0) continue;  // a village pond's: its margin is found at the point (A.3.35)
                 const double half = std::max(0.5 * s.width_m, 0.5 * cell);
                 for (std::size_t i = 1; i < s.points.size(); ++i) {
                     StampSegment(g, s.points[i - 1].x, s.points[i - 1].y, s.points[i].x, s.points[i].y, half, water ? Cover::Water : Cover::Road);
                 }
             }
         }
-        // A village pond's shore (terrain roadmap A.3.34): water's cover out over its bank, so the bank's grass and reeds
-        // grow round it and no field is ploughed to its edge; out half a cell more, so every cell the shore touches.
-        for (std::size_t i = 0; i < map.PondCount(); ++i) {
-            MapPoint c;
-            double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
-            map.PondAt(i, c, rx, ry, heading, level);
-            StampRect(g, c.east_m, c.north_m, 2.0 * rx, 2.0 * ry, heading, def.land_use.pond_shore_m + 0.5 * cell, Cover::Water);
-        }
+    }
+    // The villages' ponds (terrain roadmap A.3.35): their reed margins are found at the exact point (PointLayer), not by the
+    // raster's 25 m cells.
+    for (std::size_t i = 0; i < map.PondCount(); ++i) {
+        CoverRaster::Pond p;
+        MapPoint c;
+        double level = 0.0;
+        map.PondAt(i, c, p.rx, p.ry, p.heading, level);
+        p.e = c.east_m;
+        p.n = c.north_m;
+        raster.ponds.push_back(p);
     }
     return raster;
 }

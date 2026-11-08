@@ -625,26 +625,6 @@ SC_TEST("map dressing: the fields near a settlement are household strips, and on
     SC_EXPECT(far_with == 0);
 }
 
-SC_TEST("map dressing: a village pond's water and its shore are water's cover (the bank's grass and reeds), no field") {
-    const MapData* m = Kesmark();
-    SC_EXPECT(m != nullptr);
-    if (m == nullptr) return;
-    const CoverRaster a = BakeCover(*m, Rules());
-    const CoverGrid& g = a.grids.back();  // the map proper
-    SC_EXPECT(m->PondCount() >= 3);
-    for (std::size_t i = 0; i < m->PondCount(); ++i) {
-        MapPoint c;
-        double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
-        m->PondAt(i, c, rx, ry, heading, level);
-        // Its middle and the ends of its long axis, a metre out over the water's edge.
-        for (const double f : {0.0, -1.0, 1.0}) {
-            const double e = c.east_m + f * (rx + 1.0) * std::sin(heading), n = c.north_m + f * (rx + 1.0) * std::cos(heading);
-            const int col = static_cast<int>(std::floor((e - g.west_m) / g.cell_m)), row = static_cast<int>(std::floor((n - g.south_m) / g.cell_m));
-            SC_EXPECT(g.cover[g.Index(col, row)] == static_cast<std::uint8_t>(Cover::Water));
-        }
-    }
-}
-
 SC_TEST("map dressing: farm tracks, tree rows and groves lie along the fields, clear of what stands and of the sites") {
     const MapData* m = Kesmark();
     SC_EXPECT(m != nullptr);

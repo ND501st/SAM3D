@@ -293,6 +293,11 @@ if (Pa > 0.0)
     Col *= 1.0 - Pa * Damp;
     Rao.x *= 1.0 - 0.25 * Pa * saturate(Damp) * 2.0;
 }
+// A village pond's wet margin (terrain roadmap A.3.35): the vertex colour's alpha is 1 less the wetness (simcore's
+// MapData::PondWetness, 1 at the water's edge to 0 a little beyond its shore); wet ground darker, greener and smoother.
+float Wet = saturate(1.0 - VWet);
+Col = lerp(Col, Col * WetTint.rgb, Wet);
+Rao.x *= 1.0 - WetSmooth * Wet;
 // Debug (-SimGroundDebug=N): 1 the heaviest cell's layer as a colour (its number in the red and green, Has in the blue);
 // 2 the pixel's depth in 100 m (red), the cover's average weight (green), a field port's finding (blue).
 if (Debug > 0.5)
@@ -540,6 +545,7 @@ def build_material(arrays):
         ('PeriodM', period),
         ('Depth', node(unreal.MaterialExpressionPixelDepth)),
         ('VColor', node(unreal.MaterialExpressionVertexColor)),
+        ('VWet', 'vertex_alpha'),
         ('GeomNormal', node(unreal.MaterialExpressionVertexNormalWS)),
         ('Mask', texture('Mask', unreal.EditorAssetLibrary.load_asset('/Engine/EngineResources/WhiteSquareTexture'))),
         ('Albedo', texture('Albedo', arrays['TA_GroundAlbedo'])),
@@ -593,6 +599,8 @@ def build_material(arrays):
         ('NormalGreenSign', scalar('NormalGreenSign', 1.0)),
         ('NormalStrength', scalar('NormalStrength', 0.8)),
         ('AoAmount', scalar('AoAmount', 0.6)),
+        ('WetTint', vector('WetTint', (0.55, 0.62, 0.5, 1.0))),
+        ('WetSmooth', scalar('WetSmooth', 0.45)),
     ]
     inputs = []
     for name, _ in sources:
@@ -608,8 +616,13 @@ def build_material(arrays):
         co.set_editor_property('output_type', kind)
         outputs.append(co)
     custom.set_editor_property('additional_outputs', outputs)
+    vertex_colour = None
     for name, src in sources:
-        if isinstance(src, unreal.MaterialExpressionVectorParameter):
+        if src == 'vertex_alpha':
+            # The vertex colour's alpha alone (VColor above is its RGB).
+            vertex_colour = vertex_colour or node(unreal.MaterialExpressionVertexColor)
+            connect(vertex_colour, 'A', custom, name)
+        elif isinstance(src, unreal.MaterialExpressionVectorParameter):
             rgba(src, custom, name)
         else:
             connect(src, '', custom, name)

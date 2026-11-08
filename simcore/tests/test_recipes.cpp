@@ -2,6 +2,7 @@
 // a cell's points are the same however they are asked for, cells meet without a seam, thinning never moves a point; the
 // processes' patterns (blue noise even, clusters clumped); the parcel's bands; every target met on the plot's ground;
 // the loader's refusals.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -405,6 +406,48 @@ SC_TEST("recipes: every recipe's targets are met on its own ground (the report)"
         }
     }
     SC_EXPECT(checked >= 6);
+}
+
+SC_TEST("recipes: a village pond's reeds stand in a margin at its water's edge, not out over the fields (A.3.35)") {
+    const CoverRaster& raster = Raster();
+    const DressingRules& d = Dressing();
+    SC_EXPECT(raster.ponds.size() >= 3);
+    const int marsh = Layers().LayerOnDay(Cover::Marsh, 0, 0, kDay);
+    const std::vector<std::string> ids = Rules().KindIds();
+    const int reed = static_cast<int>(std::find(ids.begin(), ids.end(), std::string("reed")) - ids.begin());
+    for (const CoverRaster::Pond& p : raster.ponds) {
+        // Round its edge: in the margin the marsh's layer, well beyond it the ground's own (unless the raster has a marsh).
+        for (int k = 0; k < 16; ++k) {
+            const double a = 2.0 * 3.14159265358979 * k / 16.0;
+            const double x = std::cos(a), y = std::sin(a);
+            const double ue = std::sin(p.heading), un = std::cos(p.heading);
+            const auto at = [&](double off) {
+                // A point `off` beyond the edge along the ray from the middle (the edge where rho = rx*ry/|(ry x, rx y)|).
+                const double edge = p.rx * p.ry / std::hypot(p.ry * x, p.rx * y);
+                const double r = edge + off, lx = r * x, ly = r * y;
+                return PointLayer(raster, d, Layers(), p.e + lx * ue + ly * un, p.n + lx * un - ly * ue, kDay);
+            };
+            SC_EXPECT(at(0.5 * d.pond_reeds_m) == marsh);
+            SC_EXPECT(at(-0.5 * d.pond_reeds_in_m) == marsh);
+            const double fe = p.e + (p.rx + d.pond_reeds_m + 6.0) * ue, fn = p.n + (p.rx + d.pond_reeds_m + 6.0) * un;
+            if (k == 0 && raster.At(fe, fn) != Cover::Marsh) SC_EXPECT(PointLayer(raster, d, Layers(), fe, fn, kDay) != marsh);
+        }
+        // Reeds there, at full density: none farther than the margin from the water's edge.
+        int reeds = 0, beyond = 0;
+        const double reach = p.rx + d.pond_reeds_m + 8.0;
+        for (const RecipeCandidate& c : All(p.e - reach, p.n - reach, p.e + reach, p.n + reach)) {
+            if (c.kind != reed) continue;
+            const double off = EllipseEdgeDistance(p.e, p.n, p.rx, p.ry, p.heading, c.east_m, c.north_m);
+            const Cover under = raster.At(c.east_m, c.north_m);
+            if (off <= d.pond_reeds_m + 1e-9 && off >= -d.pond_reeds_in_m - 1e-9) {
+                ++reeds;
+            } else if (under != Cover::Marsh && under != Cover::Water) {  // a marsh's or a bank's own reeds are theirs
+                ++beyond;
+            }
+        }
+        std::printf("    pond at (%.0f, %.0f): %d reed candidates in its margin, %d beyond it\n", p.e, p.n, reeds, beyond);
+        SC_EXPECT(reeds > 10 && beyond == 0);
+    }
 }
 
 SC_TEST("recipes: the loader refuses what is wrong") {

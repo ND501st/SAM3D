@@ -1121,6 +1121,17 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
     return h;
 }
 
+// Where (east, north) lies off an ellipse's edge (negative inside), along the ray from its middle: the ellipse centred at
+// (centre_e, centre_n), half length `rx` along `heading` (from north) and half width `ry` (a village pond's, A.3.34).
+inline double EllipseEdgeDistance(double centre_e, double centre_n, double rx, double ry, double heading, double e, double n) {
+    const double ue = std::sin(heading), un = std::cos(heading);
+    const double de = e - centre_e, dn = n - centre_n;
+    const double x = de * ue + dn * un, y = de * un - dn * ue;
+    const double rho = std::hypot(x, y);
+    if (rho < 1e-9) return -ry;
+    return rho - rx * ry / std::hypot(ry * x / rho, rx * y / rho);
+}
+
 // ---------------------------------------------------------------------------------------------- the built map
 
 class MapData {
@@ -1232,6 +1243,18 @@ public:
         half_width_m = p.ry;
         heading_rad = p.heading;
         level_m = p.level_m;
+    }
+    // How wet the ground at (east, north) is by a pond (A.3.35): 1 at its water's edge and under it, falling smoothly to 0
+    // at kPondWetM beyond its shore (the ground's darker, smoother margin; presentation only).
+    static constexpr double kPondWetM = 2.0;  // the wet margin beyond the shore (a game value)
+    double PondWetness(double e, double n) const {
+        double wet = 0.0;
+        for (const Pond& p : ponds_) {
+            if (std::hypot(e - p.c.east_m, n - p.c.north_m) >= p.reach_m) continue;
+            const double t = std::clamp(PondEdgeDistance(p, e, n) / (p.shore_m + kPondWetM), 0.0, 1.0);
+            wet = std::max(wet, 1.0 - t * t * (3.0 - 2.0 * t));
+        }
+        return wet;
     }
 
     // The level of DrawnLevels the ground at (east, north) is drawn by (-1: none, beyond every lattice: Analytic).
@@ -1727,12 +1750,7 @@ private:
     static constexpr double kPondCrestM = 2.0;      // a dam's crest beyond its bank before it falls at 1 in 2 (a game value)
     // Where (east, north) lies off the pond's edge (negative inside), along the ray from its middle.
     static double PondEdgeDistance(const Pond& p, double e, double n) {
-        const double ue = std::sin(p.heading), un = std::cos(p.heading);
-        const double de = e - p.c.east_m, dn = n - p.c.north_m;
-        const double x = de * ue + dn * un, y = de * un - dn * ue;
-        const double rho = std::hypot(x, y);
-        if (rho < 1e-9) return -p.ry;
-        return rho - p.rx * p.ry / std::hypot(p.ry * x / rho, p.rx * y / rho);
+        return EllipseEdgeDistance(p.c.east_m, p.c.north_m, p.rx, p.ry, p.heading, e, n);
     }
     // The ground at (east, north) with the pond, `h` the ground there without it: under the water its bed, from the water's
     // edge at 0.15 m under the water up over shore_m to the ground round it, and where that ground lies lower than the

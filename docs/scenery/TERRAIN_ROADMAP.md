@@ -978,13 +978,43 @@ A.5 step 5's sunken lanes and step 6's pond (the owner's pick after A.3.33). The
     uphill ground.
   - The pond's tree is drawn as an alder: there is no willow kind.
   - The reeds go by 25 m cover cells, so they stand back from the water (up to ~16 m beyond the shore), not at its
-    edge, and the bank layer is a river's sand: a pond needs its own wet margin.
+    edge, and the bank layer is a river's sand: a pond needs its own wet margin (done in A.3.35).
   - p22 frames the pond but not the village (K-f).
   - The lane banks' cover is the field's except where the track's verge stamps it.
   - `nav` does not read the grade.
   - p22 and p23 have no reference photo (fetching one waits for the owner).
   - `tools/tests/test_voice_lines.py` fails on this machine: `battery_commander/order_tzm_run` has no recording (not this
     batch's).
+
+### A.3.35 The village pond's wet margin: reeds at the water, darker ground on the tiles (8 Nov 2026)
+
+A.3.34's Left: the pond's reeds stood back from the water on the 25 m cover cells, and the ground round it was a river's
+pale silt.
+
+- **Reeds at the exact point.** The cover raster no longer stamps a pond's shore or its water strip. It keeps the ponds'
+  ellipses (`CoverRaster::ponds`), and `PointLayer` gives the marsh's layer in a margin from 1.5 m inside the water's
+  edge to 3 m beyond it (`map_dressing.json`'s `pond_reeds_in_m` and `pond_reeds_m`, game values). The marsh recipe
+  scatters reed stands with grass between them there. Measured at full density: 92-175 reed candidates in each pond's
+  margin and none beyond it.
+- **A wet margin on the tiles.** `MapData::PondWetness` is 1 at the water's edge and under it, falling smoothly to 0 at
+  2 m beyond the 4 m shore. The ponds lie on the 2 m tiles, which carry 1 − wetness in their vertex colour's alpha.
+  The ground material (`tools/ue_build_ground_material.py`, rebuilt on this machine) multiplies the colour towards
+  `WetTint` (0.55, 0.62, 0.50) and smooths it by `WetSmooth` 0.45. Every other ground's alpha is 1, so nothing else
+  changes (the ploughland plot p01 rendered the same).
+- **The river's ribbons dropped.** A pond's water is a rectangle that its bowl clips to an ellipse, so the river's
+  green bank ribbons along its straight sides stood as bars and an "island". Ponds now have none, and no shoulder.
+  `EllipseEdgeDistance` is shared by the map and the dressing.
+- **Seen (l6).**
+  - From above: an elliptical pond in a darker, greener ring, with reed stands at the water and the tree on its bank,
+    in the fields with no seams.
+  - From the eye: the water low in its hollow, reeds along the far edge, the field running down to it.
+- **Costs (l6):** the map views GPU mean 11.83 ms, max 14.38, game thread 11.94 (l3 12.01, 14.88, 11.86): no change
+  beyond the runs' spread.
+- **Left:**
+  - The margin's grass is the marsh recipe's, set among the field's stubble. A pond's own grassed bank (a meadow
+    ring, no stubble) would read better.
+  - p22 still frames the fields, not the village (K-f).
+  - Still no willow kind.
 
 ### A.4 How a plot is worked (the loop)
 

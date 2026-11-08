@@ -1343,7 +1343,13 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				const double E = G.EastOf(Gc), N = G.NorthOf(Gr), H = G.At(Gc, Gr);
 				Verts.Add(GroundVertex(Link, G, Gc, Gr));
 				Normals.Add(NormalAt(Gc, Gr));
-				Colours.Add(Colour(Level, E, N, H));
+				FLinearColor Col = Colour(Level, E, N, H);
+				if (bLaneTile)
+				{
+					// A village pond's wet margin (A.3.35): the ground material darkens and smooths it by 1 - alpha.
+					Col.A = static_cast<float>(1.0 - M.PondWetness(E, N));
+				}
+				Colours.Add(Col);
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
 			}
 		}
@@ -1581,7 +1587,9 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 			return Lift >= OnDeckM ? P.z : M.GroundHeight(E, N) + Lift;
 		};
 		Ribbon(S, K, -Half, Half, OnStrip);
-		if (S.surface == simcore::MapSurface::Water)
+		// A village pond's water (A.3.34) is a rectangle its ground's bowl clips to its shape: its banks are the ground's own
+		// (the wet margin, A.3.35), not a river's ribbons along the rectangle's sides.
+		if (S.surface == simcore::MapSurface::Water && S.id.rfind("pond_", 0) != 0)
 		{
 			// The bank: its inner edge under the water's edge, its outer edge on the ground.
 			const auto BankAt = [&M](const simcore::Vec3& P, double E, double N, bool bInner)
@@ -1591,7 +1599,7 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 			Ribbon(S, Bank, Half - BankIntoWaterM, Half + BankM, BankAt);
 			Ribbon(S, Bank, -Half + BankIntoWaterM, -Half - BankM, BankAt);
 		}
-		else if (S.surface != simcore::MapSurface::Track)
+		else if (S.surface != simcore::MapSurface::Track && S.surface != simcore::MapSurface::Water)
 		{
 			const auto ShoulderAt = [&OnStrip](const simcore::Vec3& P, double E, double N, bool bInner) { return OnStrip(P, E, N, bInner) - 0.06; };  // under the surface
 			Ribbon(S, Shoulder, -Half - ShoulderM, Half + ShoulderM, ShoulderAt);

@@ -388,6 +388,8 @@ inline int PointLayer(const CoverRaster& cover, const DressingRules& dressing, c
                       int day_of_year) {
     const CoverGrid* g = cover.GridAt(east_m, north_m);
     if (g == nullptr) return -1;
+    // A village pond's reed margin (A.3.35): the marsh's layer, at the exact point.
+    if (cover.InPondMargin(east_m, north_m, dressing.pond_reeds_in_m, dressing.pond_reeds_m)) return layers.LayerOnDay(Cover::Marsh, 0, 0, day_of_year);
     const std::size_t i = g->IndexAt(east_m, north_m);
     const Cover c = static_cast<Cover>(g->cover[i]);
     if (c != Cover::Field) return layers.LayerOnDay(c, g->crop[i], 0, day_of_year);

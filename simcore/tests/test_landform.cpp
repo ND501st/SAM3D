@@ -489,6 +489,12 @@ SC_TEST("village ponds: one by each village of the map proper, in its lowest ope
         std::printf("    pond %zu at (%.0f, %.0f): %.0f x %.0f m, water %.1f m, its middle %.1f m under it, its bank at least %.2f m over it\n", i,
                     c.east_m, c.north_m, 2.0 * rx, 2.0 * ry, level, level - middle, lowest_bank);
         SC_EXPECT(lowest_bank > 0.0);
+        // Its wet margin (A.3.35): wet in the water and at its edge, drying over its shore, dry beyond.
+        const double edge_e = c.east_m + rx * ue, edge_n = c.north_m + rx * un;
+        SC_EXPECT(map->PondWetness(c.east_m, c.north_m) == 1.0 && map->PondWetness(edge_e, edge_n) > 0.99);
+        const double mid = map->PondWetness(edge_e + 0.5 * (u.pond_shore_m + 2.0) * ue, edge_n + 0.5 * (u.pond_shore_m + 2.0) * un);
+        SC_EXPECT(mid > 0.4 && mid < 0.6);
+        SC_EXPECT(map->PondWetness(edge_e + (u.pond_shore_m + 2.1) * ue, edge_n + (u.pond_shore_m + 2.1) * un) == 0.0);
         // Its water a strip at its level.
         bool water = false;
         for (const MapStrip& s : map->Layout().strips) {
