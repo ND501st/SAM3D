@@ -816,6 +816,22 @@ A.3.26's first Left, the hornbeam's roots. Measured, not guessed:
 - **Checks:** 1078 tests pass; citations and assets clean; `pytest tools` 161 pass, `test_voice_lines` fails as before.
 - **Left:** as A.3.26's (bark, the ring's colours, hidden cards' shadows, the other kinds, dates).
 
+### A.3.28 The ring's colours measured (8 Nov 2026)
+
+A.3.26's Left: the cards' colours against the Megaplants' at 80 m. Measured, not judged by eye: each kind rendered with its
+near ring shut (`within_m` 0.1 for that kind alone, cards everywhere) against all Fab (n3, n4), on p11, p19 and p21's eye and
+low views; the mean colour of the pixels that changed, leaves only (not the sky, not the darkest shade). The cards against the
+models: hornbeam 1.03, 1.04, 0.86 (R, G, B); poplar 0.99-1.01; maple 1.10, 1.09, 1.02; hazel 1.18, 1.23, 1.15. The hue
+agrees; the maple's and hazel's cards are 10 and 20 per cent brighter. The poplar seen as yellower on its card (A.3.26) is
+not borne out.
+
+- **Tried:** the Megaplants' `BaseColor Tint Leaves` times the ratio (maple 1.1, hazel 1.2): no change in the renders
+  (under 0.2 per cent of pixels differ), so `MA_Foliage_Trees` does not read it with its Seasons switch on. Taken out.
+- **The pale bark was the oak's** (A.3.27), not the hornbeam's: a hornbeam's bark is smooth and grey.
+- **Left:** the maple's and hazel's leaves brightened through a parameter the Seasons path reads (or their cards darkened);
+  the measurement's mask counts some ground where the shade moved, so it states a direction, not an exact gain; the oak's
+  bark; the hidden cards' shadows; the other kinds; the colours by date.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
