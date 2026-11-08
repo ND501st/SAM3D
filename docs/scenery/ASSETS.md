@@ -38,7 +38,9 @@ Read by `simcore::scenery::AssetRegister` (`simcore/scenery/asset_register.hpp`)
 - **CC-BY names its author**, for the credits below.
 - `scale`, `yaw_deg`, `z_offset_m`: the fix from the model's frame into the part's (a unit cube for a building or a
   wood's mass, centred, x along its length; a tree one unit tall from its base, its crown one unit across). A house
-  modelled at full size, 10 m long, takes a scale of 0.1.
+  modelled at full size, 10 m long, takes a scale of 0.1. `z_offset_m` is in the part's frame too: for a tree, 1 is its
+  height (the oak's -0.07 puts its exposed roots into the ground; a pick's `z_offset_m` carries it through import).
+  A Fab pick's `"sink_m": "auto"` measures the root flare instead and lowers the mesh before the fit (A.3.27).
 - `parts` maps each part key (`MapMeshParts()`: `tree_oak`, `tree_poplar`, `tree_pine`, `tree_acacia`,
   `canopy_mass`, `house`, `barn`, `flats`, `industrial`) to an asset id or `null` (procedural); `variants` gives one
   per variant (for `flats` the variant is the floor count). An unknown key, or an id not registered, is refused.

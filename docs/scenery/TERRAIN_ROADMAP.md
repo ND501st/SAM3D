@@ -797,6 +797,25 @@ The owner, 8 Nov: keep working through the roadmap. A.3.25's first Left: the Meg
   shadows may still be drawn (the shadow pass's camera is not the eye's); a ring for the other kinds; the game thread's
   0.5 ms; the October colours by date.
 
+### A.3.27 The roots that stood above the ground were the oak's (8 Nov 2026)
+
+A.3.26's first Left, the hornbeam's roots. Measured, not guessed:
+
+- **The Megaplants have no flare to sink.** `tools/ue_fab_part.py` now measures it (a pick's `"sink_m": "auto"`,
+  `flare_top_cm`): slices 10 cm deep up the trunk, each slice's width the 90th percentile of its vertices' distance from
+  the pivot's axis, against the trunk's width 0.8-2 m up; the model goes down to where the slice is within 1.3 times the
+  trunk. Hornbeam A is 64 cm across at its foot against a trunk of 53 (widest vertex 69): no flare; the 13 sink by 0-30 cm.
+  The saved meshes reach at most 1% of their height below z 0. And p21's roots were the same with A.3.26's 0.6 m sink as
+  without it.
+- **They were the oak's** (`oak_pc37`, PlantCatalog's juvenile red oak, CC-BY, A.3.18's ladder): its roots spread to 12-13
+  hundredths of its height from the axis and stand 8 hundredths high (a 15 m oak on 1.2 m of roots; its frame stretches it
+  taller). Its three levels now take `z_offset_m` -0.07 (the register's fix, in the part's frame: 1 is the tree's height),
+  from the picks (`tools/ue_import_model.py` reads a pick's `z_offset_m`).
+- **Seen (n3):** p21's oaks stand on the ground on a plain trunk; nothing else changed.
+- **Costs (n3, five plots):** eye views 12-17 ms; p19's eye once 26.5 ms, 15.2 ms when rendered again (n3b, as n2's).
+- **Checks:** 1078 tests pass; citations and assets clean; `pytest tools` 161 pass, `test_voice_lines` fails as before.
+- **Left:** as A.3.26's (bark, the ring's colours, hidden cards' shadows, the other kinds, dates).
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

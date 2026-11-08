@@ -150,7 +150,9 @@ def register(pick, mesh_path, src):
         'sha256': sha,
         'scale': 1.0,
         'yaw_deg': pick.get('yaw_deg', 0.0),
-        'z_offset_m': 0.0,
+        # A pick's z_offset_m (A.3.27) lowers the model in the part's frame, where 1 is the tree's height: an oak's
+        # exposed roots go into the ground.
+        'z_offset_m': pick.get('z_offset_m', 0.0),
         'notes': pick.get('notes', ''),
     }
     reg['assets'] = [a for a in reg.get('assets', []) if a['id'] != pick['id']] + [entry]

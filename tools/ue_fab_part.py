@@ -71,6 +71,42 @@ def copy_source(pick):
     return mesh, materials
 
 
+def flare_top_cm(mesh, height_cm):
+    """Where the root flare ends (A.3.27, a pick's "sink_m": "auto"): the lowest height whose slice of the trunk is no
+    wider than 1.25 times the trunk's own width, measured over 2-3 m up. Slices 10 cm deep, of the vertices within 2.5 m
+    of the pivot's axis; a slice's width is the 90th percentile of their distance from the axis. Capped at 2 m."""
+    got = unreal.GeometryScript_MeshQueries.get_all_vertex_positions(mesh, True)
+    pts = next((g for g in (got if isinstance(got, tuple) else (got,)) if isinstance(g, unreal.GeometryScriptVectorList)))
+    arr = unreal.GeometryScript_List.convert_vector_list_to_array(pts)
+    slices = {}
+    for p in arr:
+        if -50.0 <= p.z < 250.0:
+            r = (p.x * p.x + p.y * p.y) ** 0.5
+            if r < 300.0:
+                slices.setdefault(int(p.z // 10.0), []).append(r)
+
+    def width(k):
+        rs = sorted(slices.get(k, []))
+        return rs[int(0.9 * (len(rs) - 1))] if len(rs) >= 8 else None
+
+    profile = [width(k) for k in range(25)]
+    trunk = sorted(w for w in profile[8:20] if w is not None)
+    if not trunk:
+        log('flare: no trunk found 0.8-2 m up, not sunk')
+        return 0.0
+    trunk_r = trunk[len(trunk) // 2]
+    top = 0.0
+    for k in range(15):
+        w = profile[k]
+        if w is not None and w <= 1.3 * trunk_r:
+            break
+        top = 10.0 * (k + 1)
+    log('flare: widest %s' % ' '.join('%.0f' % max(slices[k]) if k in slices else '-' for k in range(25)))
+    log('flare: profile %s; trunk %.0f cm across, flare to %.0f cm of %.0f; sunk by that' % (
+        ' '.join('%.0f' % w if w is not None else '-' for w in profile), 2.0 * trunk_r, top, height_cm))
+    return top
+
+
 def fit(mesh, pick):
     """The tree frame: its base at z 0 and one unit tall, its crown one unit across (the mean of its two widths), the
     pivot where the source has it (a Megaplant's at the trunk's foot)."""
@@ -84,7 +120,8 @@ def fit(mesh, pick):
         hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, lo.z, 0.5 * (hi.x + lo.x), 0.5 * (hi.y + lo.y)))
     # A model whose foot is meant to be buried (a hornbeam's root flare) goes down by the pick's sink_m first (A.3.26):
     # what is left above z 0 is the tree the frame fits.
-    sink_cm = 100.0 * pick.get('sink_m', 0.0)
+    sink = pick.get('sink_m', 0.0)
+    sink_cm = flare_top_cm(mesh, hi.z) if sink == 'auto' else 100.0 * sink
     if sink_cm > 0.0:
         unreal.GeometryScript_MeshTransforms.translate_mesh(mesh, unreal.Vector(0.0, 0.0, -sink_cm))
         height -= sink_cm
@@ -131,8 +168,12 @@ def save(mesh, materials, pick):
     if outcome != unreal.GeometryScriptOutcomePins.SUCCESS or sm is None:
         raise RuntimeError('could not save %s' % path)
     slots = len(sm.static_materials)
+    lib = unreal.MaterialEditingLibrary
     for i in range(min(slots, len(materials))):
         if materials[i] is not None:
+            log('slot %d %s: vectors %s, scalars %s' % (i, materials[i].get_name(),
+                [str(n) for n in lib.get_vector_parameter_names(materials[i])],
+                [str(n) for n in lib.get_scalar_parameter_names(materials[i])]))
             sm.set_material(i, seasoned(materials[i], pick, folder) if 'Foliage' in materials[i].get_name() else materials[i])
     unreal.EditorAssetLibrary.save_loaded_asset(sm)
     tris = unreal.GeometryScript_MeshQueries.get_num_triangle_i_ds(mesh)

@@ -14,7 +14,8 @@
       "notes": "Realistic HD Northern red oak (37/138), juvenile, fall; 202.6k triangles, 10.5 m, 1k textures. Credit: Realistic HD Northern red oak (37/138) by PlantCatalog, CC BY 4.0. TRIED 4 Nov 2026 and taken out of the register: as imported (40k triangles in the GLB's LOD0 at Nanite, 10 materials) it cost 20-36 ms of GPU at the views with woods (against 6-8 ms) and its leaves drew grey; it needs thinning (twigs dropped, leaves thinned and enlarged, trunk decimated), LODs and its own foliage material first.",
       "thin_tris": 9000,
       "foliage": true,
-      "variant": 0
+      "variant": 0,
+      "z_offset_m": -0.07
     },
     {
       "id": "oak_pc37_l1",
@@ -29,7 +30,8 @@
       "notes": "The same oak thinned to about 2200 triangles: the mid band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown).",
       "thin_tris": 2200,
       "foliage": true,
-      "variant": 1
+      "variant": 1,
+      "z_offset_m": -0.07
     },
     {
       "id": "oak_pc37_l2",
@@ -44,7 +46,8 @@
       "notes": "The same oak thinned to about 600 triangles: the far band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown).",
       "thin_tris": 600,
       "foliage": true,
-      "variant": 2
+      "variant": 2,
+      "z_offset_m": -0.07
     },
     {
       "id": "grass_card",
@@ -457,7 +460,7 @@
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
       },
-      "sink_m": 0.6
+      "sink_m": "auto"
     },
     {
       "id": "hornbeam_mp_c",
@@ -484,7 +487,7 @@
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
       },
-      "sink_m": 0.6
+      "sink_m": "auto"
     },
     {
       "id": "hornbeam_mp_d",
@@ -511,7 +514,7 @@
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
       },
-      "sink_m": 0.6
+      "sink_m": "auto"
     },
     {
       "id": "poplar_mp_a",
@@ -537,7 +540,8 @@
           0.1
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "poplar_mp_b",
@@ -563,7 +567,8 @@
           0.1
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "poplar_mp_c",
@@ -589,7 +594,8 @@
           0.1
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "poplar_mp_d",
@@ -615,7 +621,8 @@
           0.1
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "maple_mp_a",
@@ -641,7 +648,8 @@
           0.0
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "maple_mp_b",
@@ -667,7 +675,8 @@
           0.0
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "maple_mp_c",
@@ -693,7 +702,8 @@
           0.0
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "hazel_mp_a",
@@ -719,7 +729,8 @@
           0.05
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "hazel_mp_b",
@@ -745,7 +756,8 @@
           0.05
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     },
     {
       "id": "hazel_mp_c",
@@ -771,7 +783,8 @@
           0.05
         ],
         "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
-      }
+      },
+      "sink_m": "auto"
     }
   ]
 }
