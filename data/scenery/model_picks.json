@@ -15,7 +15,9 @@
       "thin_tris": 9000,
       "foliage": true,
       "variant": 0,
-      "z_offset_m": -0.07
+      "z_offset_m": -0.07,
+      "bark_gain": 0.35,
+      "bark_gain_source": "game value: sam3d estimate (A.3.31): the texture averages 0.45 sRGB (about 0.17 linear) and drew near white in sun; times 0.35 is about 0.06, a dark grey bark"
     },
     {
       "id": "oak_pc37_l1",
@@ -31,7 +33,9 @@
       "thin_tris": 2200,
       "foliage": true,
       "variant": 1,
-      "z_offset_m": -0.07
+      "z_offset_m": -0.07,
+      "bark_gain": 0.35,
+      "bark_gain_source": "game value: sam3d estimate (A.3.31): the texture averages 0.45 sRGB (about 0.17 linear) and drew near white in sun; times 0.35 is about 0.06, a dark grey bark"
     },
     {
       "id": "oak_pc37_l2",
@@ -47,7 +51,9 @@
       "thin_tris": 600,
       "foliage": true,
       "variant": 2,
-      "z_offset_m": -0.07
+      "z_offset_m": -0.07,
+      "bark_gain": 0.35,
+      "bark_gain_source": "game value: sam3d estimate (A.3.31): the texture averages 0.45 sRGB (about 0.17 linear) and drew near white in sun; times 0.35 is about 0.06, a dark grey bark"
     },
     {
       "id": "grass_card",
@@ -785,6 +791,90 @@
         "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
       },
       "sink_m": "auto"
+    },
+    {
+      "id": "beech_mp_a",
+      "part": "tree_beech",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_A.Tree_Hornbeam_01_A",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.2,
+          0.03
+        ],
+        "color_2": [
+          1.5,
+          0.7,
+          0.06
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: beech turning copper-orange, later than the hornbeam's yellow)"
+      },
+      "sink_m": "auto",
+      "near_m": 40
+    },
+    {
+      "id": "beech_mp_c",
+      "part": "tree_beech",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_C.Tree_Hornbeam_01_C",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.2,
+          0.03
+        ],
+        "color_2": [
+          1.5,
+          0.7,
+          0.06
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: beech turning copper-orange, later than the hornbeam's yellow)"
+      },
+      "sink_m": "auto",
+      "near_m": 40
+    },
+    {
+      "id": "beech_mp_d",
+      "part": "tree_beech",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.2,
+          0.03
+        ],
+        "color_2": [
+          1.5,
+          0.7,
+          0.06
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: beech turning copper-orange, later than the hornbeam's yellow)"
+      },
+      "sink_m": "auto",
+      "near_m": 40
     }
   ]
 }

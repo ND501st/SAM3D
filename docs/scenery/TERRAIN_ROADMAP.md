@@ -862,6 +862,28 @@ A.3.26's Left: the cards hidden within 80 m might still draw their shadows, the 
   Unreal's default (grey, opaque) until a component mask (RGB) went between. Restored from git before the second try.
 - **Left:** as A.3.29's.
 
+### A.3.31 The oak's bark darkened; beech drawn near by the hornbeam's Megaplants (8 Nov 2026)
+
+The owner, 8 Nov: do both (the oak's bark, and the near ring for more kinds).
+
+- **The bark:** the oak's bark texture (PlantCatalog's) averages 0.45 in sRGB, about 0.17 linear, and drew near white in sun.
+  `M_SimFoliage` gains `ColourGain` (default 1: nothing else changes), times the base colour; a pick's `bark_gain` sets it on
+  its bark slots' instances (`tools/ue_build_tree_material.py`, `SAM3D_FOLIAGE_GAINS=1`). 0.6 darkened the trunk on screen
+  by only 18 per cent (the tone curve lifts it back); 0.35 (about 0.06 linear, a dark grey bark) took it from 128 to 82 in
+  the p21 render: grey bark, the light on it kept.
+- **More kinds near:** the project holds no other Fab trees (the Elderberry stays out for its white flowers, A.3.12; nothing
+  is fetched without the owner). The hornbeam's three Megaplants stand in for **beech** within the ring (`beech_mp_a`, `c`,
+  `d`): the two share the smooth grey bark and the crown's build; the beech's own October, copper (estimates), in its season.
+  Alder, elder, acacia, pine and oak keep their own models.
+- **Priced:** at 80 m the wood's inside (p21) took 37-41 ms at the eye and 30 low, beeches being most of a wood's trees; at
+  40 m, 19.9 and 13.8 (A.3.26's were 17.3 and 13.8). Beech's ring is 40 m (its picks' `near_m`).
+- **Costs (n7, the beech at 80 m for these):** the plots' 42 views GPU mean 11.3 ms, max 37.0 (p21's eye, since 19.9 at 40 m);
+  the map views GPU mean 11.74 ms (n2 11.79), max 14.78, game thread 11.81 ms (12.00).
+- **Checks:** 1078 tests pass; citations clean; assets clean (41 registered); `pytest tools` 161 pass, `test_voice_lines`
+  fails as before. No material failed to compile.
+- **Left:** a beech Megaplant (with the owner's say-so), then the beech's ring back to 80 m if the cost allows; the other
+  kinds; the maple's and hazel's brightness at the ring (A.3.29); the colours by date.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

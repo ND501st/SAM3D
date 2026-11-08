@@ -9,10 +9,12 @@ own brightness, from the day of the year). The multiplier is laid on green-domin
 wood's mass: G over R), so a trunk keeps its bark. Without this material the map actor draws the trees in the plain vertex
 colour material, as before.
 """
+import json
 import os
 
 import unreal
 
+ROOT = 'C:/dev/SAM3D-wt/terrain'
 MATERIAL_DIR = '/Game/SAM3D/Map'
 MATERIAL = 'M_SimMapTree'
 CLUTTER = 'M_SimMapClutter'
@@ -124,6 +126,7 @@ def build_foliage_material():
     lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
     lib.connect_material_property(norm, 'RGB', unreal.MaterialProperty.MP_NORMAL)
     lib.connect_material_property(rough, '', unreal.MaterialProperty.MP_ROUGHNESS)
+    colour_gain(mat, colour)
     near_hide(mat, base)
     lib.recompile_material(mat)
     if lib.get_material_property_input_node(mat, unreal.MaterialProperty.MP_OPACITY_MASK) is None:
@@ -166,6 +169,50 @@ def near_hide(mat, base):
     lib.connect_material_property(mask, '', unreal.MaterialProperty.MP_OPACITY_MASK)
 
 
+def colour_gain(mat, colour):
+    """The base colour times ColourGain (default 1, A.3.31): a slot whose texture is too light for the map (the oak's bark)
+    is darkened per material instance, from its pick's bark_gain."""
+    lib = unreal.MaterialEditingLibrary
+    gain = lib.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -400, 250)
+    gain.set_editor_property('parameter_name', 'ColourGain')
+    gain.set_editor_property('default_value', 1.0)
+    out = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -250, 150)
+    lib.connect_material_expressions(colour, '', out, 'A')
+    lib.connect_material_expressions(gain, '', out, 'B')
+    lib.connect_material_property(out, '', unreal.MaterialProperty.MP_BASE_COLOR)
+
+
+def patch_foliage_gains():
+    """Adds ColourGain to the existing M_SimFoliage in place (if it has none) and sets each pick's bark_gain on its bark
+    slots' instances (/Game/ThirdParty/Models/<id>/SimMaterials/*bark*)."""
+    path = MATERIAL_DIR + '/' + FOLIAGE
+    mat = unreal.load_asset(path)
+    lib = unreal.MaterialEditingLibrary
+    if 'ColourGain' not in [str(n) for n in lib.get_scalar_parameter_names(mat)]:
+        colour = lib.get_material_property_input_node(mat, unreal.MaterialProperty.MP_BASE_COLOR)
+        if not isinstance(colour, unreal.MaterialExpressionMultiply):
+            raise RuntimeError('the base colour is not the texture times the tint: %s' % colour)
+        colour_gain(mat, colour)
+        lib.recompile_material(mat)
+        unreal.EditorAssetLibrary.save_asset(path)
+        unreal.log('FOLIAGE MATERIAL: ColourGain added to %s' % path)
+    with open(ROOT + '/data/scenery/model_picks.json', encoding='utf-8') as f:
+        picks = json.load(f)['picks']
+    for pick in picks:
+        gain = pick.get('bark_gain')
+        if gain is None:
+            continue
+        folder = '/Game/ThirdParty/Models/%s/SimMaterials' % pick['id']
+        for asset in unreal.EditorAssetLibrary.list_assets(folder, recursive=False):
+            if 'bark' not in asset.lower():
+                continue
+            mi = unreal.load_asset(asset)
+            lib.set_material_instance_scalar_parameter_value(mi, 'ColourGain', gain)
+            lib.update_material_instance(mi)
+            unreal.EditorAssetLibrary.save_loaded_asset(mi)
+            unreal.log('FOLIAGE MATERIAL: %s ColourGain %.2f' % (mi.get_name(), gain))
+
+
 def patch_foliage_near_hide():
     """Adds near_hide to the existing M_SimFoliage in place, keeping every card's instance of it."""
     path = MATERIAL_DIR + '/' + FOLIAGE
@@ -183,7 +230,9 @@ def patch_foliage_near_hide():
     unreal.log('FOLIAGE MATERIAL: NearHideM added to %s' % path)
 
 
-if os.environ.get('SAM3D_FOLIAGE_NEAR_ONLY') == '1':
+if os.environ.get('SAM3D_FOLIAGE_GAINS') == '1':
+    patch_foliage_gains()
+elif os.environ.get('SAM3D_FOLIAGE_NEAR_ONLY') == '1':
     patch_foliage_near_hide()
 else:
     build_material()
