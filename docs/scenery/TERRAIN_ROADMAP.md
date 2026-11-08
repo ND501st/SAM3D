@@ -832,6 +832,19 @@ not borne out.
   the measurement's mask counts some ground where the shade moved, so it states a direction, not an exact gain; the oak's
   bark; the hidden cards' shadows; the other kinds; the colours by date.
 
+### A.3.29 The Megaplants' October colours scaled: no closer (8 Nov 2026)
+
+A.3.28's first Left. The maple's and hazel's `Season Color 1` and `2` (which the Seasons path does read: A.3.25 turned the
+hornbeam red with them) times 1.1 and 1.2, rebuilt, rendered (n5) and measured as in A.3.28: maple 1.10 to 1.09, hazel 1.19
+to 1.19; under 0.25 per cent of the pixels changed. The leaves' blend towards the season colours is partial, so the colours
+do not set the leaves' brightness. Taken out, the six rebuilt as they were.
+
+- **What the gap likely is:** the cards are flat and lit whole; a Megaplant's crown is deep and shades itself, and its
+  leaves are thin and translucent. The hazel, an understorey shrub, is measured partly on the ground and shade round it.
+- **Left:** a leaf brightness the Seasons path reads (the master's `MA_Foliage_Trees` graph to be read for it, not
+  guessed), or the cards' textures darkened in `tools/make_cards.py`; the measurement's mask (leaves only, by the material
+  ids, not by colour); then A.3.26's other items.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
