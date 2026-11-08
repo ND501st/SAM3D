@@ -219,7 +219,26 @@ void ASimSkyWeatherActor::ApplyWeather()
 			const double Cover = Wx.LayerCover(static_cast<std::size_t>(Main));
 			if (bHaveDefaultCoverage)
 			{
-				const float Value = static_cast<float>(Cover >= 0.999 ? DefaultCoverage + 1.0 : DefaultCoverage + 1.2 * (Cover - 0.625));
+				// The coverage for the layer's cover, through the sky's cloud share measured at each coverage (A.3.32: the plot
+				// lab's sky cameras, the 14 plots' directions, against the cloudless sky at -0.5): -0.2 none, 0.0 30 %,
+				// +0.1 56 %; a full overcast at the default + 1. The old line (the default + 1.2 (cover - 5/8)) showed no
+				// cloud below 5 oktas.
+				static const double Share[] = {0.0, 0.30, 0.56, 1.0};
+				static const double Coverage[] = {-0.2, 0.0, 0.1, 0.8};
+				double Interp = Coverage[3];
+				for (int32 k = 1; k < 4; ++k)
+				{
+					if (Cover <= Share[k])
+					{
+						const double T = (Cover - Share[k - 1]) / (Share[k] - Share[k - 1]);
+						Interp = Coverage[k - 1] + FMath::Clamp(T, 0.0, 1.0) * (Coverage[k] - Coverage[k - 1]);
+						break;
+					}
+				}
+				float Value = static_cast<float>(Cover >= 0.999 ? DefaultCoverage + 1.0 : Interp);
+				// -SimCloudCoverage=<v> (A.3.32, a measurement): the material's coverage itself, to measure the sky's
+				// cloud share against it.
+				FParse::Value(FCommandLine::Get(), TEXT("SimCloudCoverage="), Value);
 				CloudMaterial->SetScalarParameterValue(TEXT("Cloud_GlobalCoverage"), Value);
 				UE_LOG(LogSAM3D, Log, TEXT("Sky: cloud coverage %.3f (the material's default %.3f, the layer's cover %.0f oktas)"), Value,
 					DefaultCoverage, Cover * 8.0);

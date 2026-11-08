@@ -402,6 +402,16 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 						}
 						PlotList.Add(FView{Name, C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m, C.target_e / 1000.0, C.target_n / 1000.0, C.target_up_m,
 							FMath::RadiansToDegrees(C.fov_rad)});
+						// -SimSkyShots (A.3.32, a measurement): from each eye camera also the sky ahead, 1 km on and 600 m up (31 deg up
+						// the middle), named <plot>_sky, to measure the clouds' share of it.
+						static const bool bSkyShots = FParse::Param(FCommandLine::Get(), TEXT("SimSkyShots"));
+						if (bSkyShots && Name.EndsWith(TEXT("_eye")))
+						{
+							const FVector2D Ahead = FVector2D(C.target_e - C.eye_e, C.target_n - C.eye_n).GetSafeNormal();
+							PlotList.Add(FView{Name.LeftChop(4) + TEXT("_sky"), C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m,
+								(C.eye_e + 1000.0 * Ahead.X) / 1000.0, (C.eye_n + 1000.0 * Ahead.Y) / 1000.0, C.eye_up_m + 600.0,
+								FMath::RadiansToDegrees(C.fov_rad)});
+						}
 					}
 				}
 			}

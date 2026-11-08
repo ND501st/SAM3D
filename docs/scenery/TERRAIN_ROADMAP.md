@@ -884,6 +884,28 @@ The owner, 8 Nov: do both (the oak's bark, and the near ring for more kinds).
 - **Left:** a beech Megaplant (with the owner's say-so), then the beech's ring back to 80 m if the cost allows; the other
   kinds; the maple's and hazel's brightness at the ring (A.3.29); the colours by date.
 
+### A.3.32 L12: the clouds' amount measured and set (8 Nov 2026)
+
+A.3.15's K11: with 3 oktas of fair cumulus the volumetric material showed little cloud. The trees' Left needs new assets,
+so L12 next.
+
+- **Why:** `ASimSkyWeatherActor` set the engine sample material's `Cloud_GlobalCoverage` to its default (-0.2) plus
+  1.2 (cover - 5/8), taking the default for about 5 oktas. Measured, -0.2 shows no cloud at all: 3 oktas got -0.5, a clear
+  sky, and so did every layer under 5 oktas.
+- **Measured:** two flags, `-SimSkyShots` (each plot's eye camera also looks at the sky ahead, 1 km on and 600 m up:
+  `<plot>_sky`) and `-SimCloudCoverage=<v>` (the coverage itself). A pixel is cloud where it is brighter than the same
+  shot at -0.5, the cloudless sky (a colour test counted the glare toward the sun as cloud). Over the 14 plots' directions:
+  -0.2 none; 0.0 30 per cent; +0.1 56. Three directions alone ranged 14-96 per cent at one coverage: too few.
+- **Set:** the coverage through those points (piecewise linear; a full overcast at the default + 1 as before). At 3 oktas
+  (the plot lab's October and July skies) 0.029, measured at 37.0 per cent cloud (n9) against 37.5; the views' 5-okta
+  preset 0.203.
+- **Seen (n9):** cloud in the sky at last, but as soft banks and veils: the sample material makes no separate cumulus
+  towers with blue between. K11 is half met (the amount, not the form).
+- **Costs:** the plots' 42 views GPU mean 10.6 ms, max 16.5; the map views GPU mean 11.57 ms, max 14.25, game thread
+  11.66 ms (n7 11.74, 14.78, 11.81).
+- **Left:** a cumulus material of our own (cells with flat bases, the form K-b and K-d show) and the cloud shadows on the
+  land judged with it; the scenario presets' other layers (one volumetric layer is drawn, the main one).
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
