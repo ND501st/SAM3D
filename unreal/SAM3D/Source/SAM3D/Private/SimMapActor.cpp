@@ -1822,18 +1822,12 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		for (int32 Pass = 0; Pass < 2; ++Pass)
 		{
 			const TArray<FTransform>& All = Pass == 0 ? Trees[K] : Inside[K];
-			float CullM = Pass == 0 ? KindCullM : FMath::Min(InteriorTreeDistanceM, KindCullM);
-			// -SimFabTreeM=<m> (A.3.26, a measurement): a kind drawn by Fab models only that far, to price a ring of them near
-			// the camera before one is built.
-			float FabTreeM = 0.0f;
-			const simcore::scenery::AssetEntry* KindAsset = bRegistered ? Reg->AssetFor(PartStd, 0) : nullptr;
-			if (KindAsset != nullptr && KindAsset->unreal_path.find("/ThirdParty/Fab/") != std::string::npos &&
-				FParse::Value(FCommandLine::Get(), TEXT("SimFabTreeM="), FabTreeM) && FabTreeM > 0.0f)
-			{
-				CullM = FMath::Min(CullM, FabTreeM);
-			}
+			const float CullM = Pass == 0 ? KindCullM : FMath::Min(InteriorTreeDistanceM, KindCullM);
 			const FString Tag = Pass == 0 ? FString() : FString(TEXT("_in"));
-			if (NearM > 0.0f)
+			// -SimNearOff (A.3.30, a measurement): the near models left out while the cards still hide within NearM, so what
+			// is left near the camera (a shadow with no tree) is the hidden cards'.
+			static const bool bNearOff = FParse::Param(FCommandLine::Get(), TEXT("SimNearOff"));
+			if (NearM > 0.0f && !bNearOff)
 			{
 				// The near models (A.3.26): each tree within NearM of the camera drawn by one of them, picked by its place;
 				// beyond, by the part's own, which hides its instances within NearM (M_SimFoliage's NearHideM, per instance,

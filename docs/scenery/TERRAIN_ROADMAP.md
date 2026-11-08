@@ -845,6 +845,23 @@ do not set the leaves' brightness. Taken out, the six rebuilt as they were.
   guessed), or the cards' textures darkened in `tools/make_cards.py`; the measurement's mask (leaves only, by the material
   ids, not by colour); then A.3.26's other items.
 
+### A.3.30 The hidden cards cast no shadows: checked (8 Nov 2026)
+
+A.3.26's Left: the cards hidden within 80 m might still draw their shadows, the hide being measured from
+`CameraPositionWS`, which in a shadow pass could be the light's view.
+
+- **`-SimNearOff`** (replaces A.3.26's `-SimFabTreeM`, dead since the parts' own models are their cards): the near models
+  left out while the cards still hide within `NearM`, so a shadow near the camera with no tree over it would be a hidden
+  card's.
+- **Tried both ways:** s0, the hide from `CameraPositionWS`; s1, from a material parameter collection (`MPC_SimView`'s
+  Viewer, written each frame from the player's camera by the map actor), the eye's position in every pass. p21 and p11,
+  eye and low: the same image (0.0-0.2 per cent of pixels differ, none of the ground). The viewer was read (with it unset
+  every card would have drawn), so the shadow passes already hid the cards by the eye's distance. The collection and the
+  per-frame write were taken out; only the flag stays.
+- **On the way:** a collection's vector is float4 and `Distance` wants a position: the material failed to compile and drew
+  Unreal's default (grey, opaque) until a component mask (RGB) went between. Restored from git before the second try.
+- **Left:** as A.3.29's.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
