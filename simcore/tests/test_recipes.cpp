@@ -408,7 +408,7 @@ SC_TEST("recipes: every recipe's targets are met on its own ground (the report)"
     SC_EXPECT(checked >= 6);
 }
 
-SC_TEST("recipes: a village pond's reeds stand in a margin at its water's edge, not out over the fields (A.3.35)") {
+SC_TEST("recipes: a village pond's reeds stand in a margin at its water's edge, its grassed bank beyond (A.3.35-36)") {
     const CoverRaster& raster = Raster();
     const DressingRules& d = Dressing();
     SC_EXPECT(raster.ponds.size() >= 3);
@@ -429,6 +429,7 @@ SC_TEST("recipes: a village pond's reeds stand in a margin at its water's edge, 
             };
             SC_EXPECT(at(0.5 * d.pond_reeds_m) == marsh);
             SC_EXPECT(at(-0.5 * d.pond_reeds_in_m) == marsh);
+            SC_EXPECT(at(0.5 * (d.pond_reeds_m + d.pond_bank_m)) == Layers().Index("meadow"));  // its grassed bank (A.3.36)
             const double fe = p.e + (p.rx + d.pond_reeds_m + 6.0) * ue, fn = p.n + (p.rx + d.pond_reeds_m + 6.0) * un;
             if (k == 0 && raster.At(fe, fn) != Cover::Marsh) SC_EXPECT(PointLayer(raster, d, Layers(), fe, fn, kDay) != marsh);
         }

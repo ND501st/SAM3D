@@ -1016,6 +1016,29 @@ pale silt.
   - p22 still frames the fields, not the village (K-f).
   - Still no willow kind.
 
+#### A.3.36 The pond's grassed bank, and p22 toward its village (9 Nov 2026)
+
+A.3.35's Left: the margin's grass stood among the field's stubble, and p22 framed the fields.
+
+- **A meadow ring.** Beyond the reed margin, `PointLayer` gives the meadow's layer out to `pond_bank_m` from the
+  water's edge. That is 8 m, a game value in `map_dressing.json`. So the field's crop and stubble stop short of the
+  bank, and the meadow recipe's grass grows there. The test of the pond's margin (`test_recipes.cpp`) now also checks
+  the meadow halfway between the reeds' edge and the bank's.
+- **p22 framed toward the village.** By default, a pond view's bearing now runs from the pond to the nearest village. A
+  bearing given in the data still overrides it. The eye stands back by the ellipse's radius along that bearing
+  (`views.hpp`), so the water lies between the eye and the houses.
+- **Seen (l7).**
+  - From the eye: the pond in its hollow with reeds along it, and behind it the village and its church on the rise
+    (K-f).
+  - From above: tufts of grass in a ring about 8 m wide round the reeds, with the stubble beyond.
+- **Costs (l7, p22):** eye GPU 12.21 ms, low 9.12 and high 8.54. In l6 they were 11.43, 9.37 and 8.59: no change beyond
+  the runs' spread.
+- **Left:**
+  - The ring reads weakly. The meadow's tufts are dark and sparse at this season, and the ground's texture under them
+    is still the field's (the 25 m mask), so the ring is not green. It needs a grass texture on the ground there, on
+    the tiles' vertex colours like the wet margin.
+  - Still no willow kind.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

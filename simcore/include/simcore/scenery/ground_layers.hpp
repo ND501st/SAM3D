@@ -8,6 +8,7 @@
 // client bakes the same mask (docs/MULTIPLAYER.md).
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -390,6 +391,11 @@ inline int PointLayer(const CoverRaster& cover, const DressingRules& dressing, c
     if (g == nullptr) return -1;
     // A village pond's reed margin (A.3.35): the marsh's layer, at the exact point.
     if (cover.InPondMargin(east_m, north_m, dressing.pond_reeds_in_m, dressing.pond_reeds_m)) return layers.LayerOnDay(Cover::Marsh, 0, 0, day_of_year);
+    // Beyond the reeds its grassed bank (A.3.36): the meadow's layer, no field ploughed or cropped to the water.
+    if (cover.InPondMargin(east_m, north_m, 0.0, std::max(dressing.pond_bank_m, dressing.pond_reeds_m))) {
+        const int meadow = layers.Index("meadow");
+        if (meadow >= 0) return meadow;
+    }
     const std::size_t i = g->IndexAt(east_m, north_m);
     const Cover c = static_cast<Cover>(g->cover[i]);
     if (c != Cover::Field) return layers.LayerOnDay(c, g->crop[i], 0, day_of_year);

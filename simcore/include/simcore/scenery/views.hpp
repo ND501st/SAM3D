@@ -552,8 +552,9 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             s.eye_n = foot.north_m + up * std::cos(s.bearing_rad);
         }
     } else if (a.kind == "pond") {
-        // The nearest village pond to close_km (terrain roadmap A.3.34), looked at across its width: the eye from_m beyond its
-        // bank on the side the data's bearing looks from (the pond's left side looking along its length when none), at it.
+        // The nearest village pond to close_km (terrain roadmap A.3.34), looked at across it: the eye from_m beyond its edge on
+        // the side the data's bearing looks from; when none, from the far side of its village, looking over the water at the
+        // village's middle (A.3.36, the look target's K-f).
         double best = std::numeric_limits<double>::max();
         std::size_t found = map.PondCount();
         for (std::size_t i = 0; i < map.PondCount(); ++i) {
@@ -572,8 +573,19 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             MapPoint c;
             double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
             map.PondAt(found, c, rx, ry, heading, level);
-            const double bearing = a.has_bearing ? a.bearing_rad : heading + 0.5 * kPi;
-            const double back = ry + a.from_m;
+            double bearing = heading + 0.5 * kPi;
+            double nearest = std::numeric_limits<double>::max();
+            for (const MapSettlementDef& v : map.Def().settlements) {
+                const double dv = std::hypot(v.centre.east_m - c.east_m, v.centre.north_m - c.north_m);
+                if (v.kind == "village" && dv < nearest && dv > 1.0) {
+                    nearest = dv;
+                    bearing = BearingTo(c.east_m, c.north_m, v.centre.east_m, v.centre.north_m);
+                }
+            }
+            if (a.has_bearing) bearing = a.bearing_rad;
+            // The pond's edge along the bearing, in its own frame (x along its length, y across).
+            const double x = std::cos(bearing - heading), y = std::sin(bearing - heading);
+            const double back = rx * ry / std::hypot(ry * x, rx * y) + a.from_m;
             s.ok = true;
             s.e = c.east_m;
             s.n = c.north_m;

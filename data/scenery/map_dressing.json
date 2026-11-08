@@ -71,6 +71,7 @@
     "cover_cell_m": { "value": 25, "source": "game value: sam3d estimate (the land cover raster's cell)", "confidence": "estimate" },
     "pond_reeds_m": { "value": 3, "source": "game value: sam3d estimate (A.3.35: a village pond's reed margin out from its water's edge over its shore, judged by eye)", "confidence": "estimate" },
     "pond_reeds_in_m": { "value": 1.5, "source": "game value: sam3d estimate (A.3.35: the reeds in the pond's shallows, in from its water's edge)", "confidence": "estimate" },
+    "pond_bank_m": { "value": 8, "source": "game value: sam3d estimate (A.3.36: a village pond's grassed bank, out from its water's edge beyond the reeds, judged by eye)", "confidence": "estimate" },
     "garden_m": { "value": 15, "source": "game value: sam3d estimate (a house's garden round it)", "confidence": "estimate" },
     "strip_width_m": { "value": [20, 40], "source": "game value: sam3d estimate (a household plot's strip at a village's edge)", "confidence": "estimate" },
     "strip_reach_m": { "value": 600, "source": "game value: sam3d estimate (a field whose centre lies within this of a settlement's edge is cut into household strips)", "confidence": "estimate" },

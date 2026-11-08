@@ -123,6 +123,7 @@ struct DressingRules {
     double cover_cell_m = 25.0;
     double pond_reeds_m = 3.0;         // a village pond's reed margin out from its water's edge (A.3.35)
     double pond_reeds_in_m = 1.5;      // and in from it, the reeds standing in the shallows
+    double pond_bank_m = 8.0;          // its grassed bank beyond the reeds, out from its water's edge (A.3.36)
     double garden_m = 15.0;
     // The fields themselves are the map's (MapDef::farmland, farm_fields.hpp: they set the farm tracks and tree rows, which
     // block sight); a field within strip_reach_m of a settlement's edge is cut into household strips.
@@ -247,6 +248,7 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("pond_reeds_m", r.pond_reeds_m, 0.0, 20.0);
     number("pond_reeds_in_m", r.pond_reeds_in_m, 0.0, 10.0);
+    number("pond_bank_m", r.pond_bank_m, 0.0, 40.0);
     number("garden_m", r.garden_m, 0.0, 60.0);
     range("strip_width_m", r.strip_width_min_m, r.strip_width_max_m, 5.0, 200.0);
     number("strip_reach_m", r.strip_reach_m, 0.0, 5000.0);
