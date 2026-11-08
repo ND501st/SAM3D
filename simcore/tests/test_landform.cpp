@@ -310,6 +310,8 @@ SC_TEST("roads in the hills: their grades by class (A.5 step 5, the look target'
             if (!inner(p) || !inner(q)) continue;
             if (b.Height(p.x, p.y) < 3.0 || b.Height(q.x, q.y) < 3.0) continue;
             if (p.z - map->GroundHeight(p.x, p.y) > 1.0 || q.z - map->GroundHeight(q.x, q.y) > 1.0) continue;
+            // A track up a sunken lane (A.3.34) climbs the slope as the lane does: not a graded line.
+            if (map->LaneDepthAt(p.x, p.y) > 0.0 || map->LaneDepthAt(q.x, q.y) > 0.0) continue;
             const double run = std::hypot(q.x - p.x, q.y - p.y);
             if (run < 1.0) continue;
             const int k = static_cast<int>(s.surface);
@@ -345,6 +347,162 @@ SC_TEST("roads in the hills: their grades by class (A.5 step 5, the look target'
     SC_EXPECT(Percentile(grades[3], 0.95) <= 12.5 && worst[3] <= 25.0);
     SC_EXPECT(Percentile(grades[4], 0.95) <= 6.5 && worst[4] <= 10.0);
     SC_EXPECT(deepest > 2.0 && deepest < 30.0);
+}
+
+SC_TEST("sunken lanes: where the hills' farm tracks climb, worn into the slope; on tiles of finer ground that meet the map's") {
+    std::string e;
+    const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const MapLandUseDef& u = map->Def().land_use;
+    const MapGrid& core = map->CoreGrid();
+    const std::size_t lanes = map->LaneCount();
+    std::printf("    %zu sunken lanes on %zu tiles\n", lanes, map->FinerLevelCount() - map->DetailGrids().size());
+    SC_EXPECT(lanes >= 10);
+    // The lane plot p23 looks up (the nearest to (-3.67, 11.71) km, the deepest): its cross-section a third of the way up.
+    {
+        std::size_t near_i = 0;
+        double best = 1e18;
+        for (std::size_t i = 0; i < lanes; ++i) {
+            MapPoint a, b;
+            double depth = 0.0;
+            map->LaneEnds(i, a, b, depth);
+            const double dd = std::hypot(0.5 * (a.east_m + b.east_m) + 3670.0, 0.5 * (a.north_m + b.north_m) - 11710.0);
+            if (dd < best) {
+                best = dd;
+                near_i = i;
+            }
+        }
+        MapPoint a, b;
+        double depth = 0.0;
+        map->LaneEnds(near_i, a, b, depth);
+        const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+        const double ue = (b.east_m - a.east_m) / len, un = (b.north_m - a.north_m) / len;
+        const double pe = a.east_m + ue * len / 3.0, pn = a.north_m + un * len / 3.0;
+        std::printf("    p23's lane: (%.0f, %.0f) to (%.0f, %.0f), %.0f m, %.1f m deep; across it a third of the way up, every 2 m:", a.east_m,
+                    a.north_m, b.east_m, b.north_m, len, depth);
+        const double base = map->GroundHeight(pe, pn);
+        for (int k = -8; k <= 8; ++k) std::printf(" %+.1f", map->GroundHeight(pe + 2.0 * k * un, pn - 2.0 * k * ue) - base);
+        std::printf("\n");
+    }
+    std::vector<double> depths, lengths, floor_grades;
+    int tracked = 0;
+    for (std::size_t i = 0; i < lanes; ++i) {
+        MapPoint a, b;
+        double depth = 0.0;
+        map->LaneEnds(i, a, b, depth);
+        depths.push_back(depth);
+        const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+        lengths.push_back(len);
+        // Inside De Geeter, Poesen and Vanmaercke's ranges (depth 0.5-10 m, length 12-913 m), the foot below the head.
+        SC_EXPECT(depth >= u.lane_depth_m / u.lane_depth_spread - 1e-9 && depth <= u.lane_depth_m * u.lane_depth_spread + 1e-9);
+        SC_EXPECT(len >= 50.0 && len <= 950.0);
+        SC_EXPECT(core.SampleTri(a.east_m, a.north_m) < core.SampleTri(b.east_m, b.north_m));
+        // Along it, every 2 m on its centre line: the drawn ground the map's less the cut, the floor's grade, and the
+        // deepest cut its depth.
+        double deepest = 0.0, prev = 0.0;
+        const int k = static_cast<int>(std::ceil(len / 2.0));
+        for (int j = 0; j <= k; ++j) {
+            const double f = static_cast<double>(j) / k;
+            const double pe = a.east_m + (b.east_m - a.east_m) * f, pn = a.north_m + (b.north_m - a.north_m) * f;
+            const double cut = core.SampleTri(pe, pn) - map->GroundHeight(pe, pn);
+            deepest = std::max(deepest, cut);
+            const double h = map->GroundHeight(pe, pn);
+            if (j > 0) floor_grades.push_back(100.0 * std::fabs(h - prev) / (len / k));
+            prev = h;
+        }
+        SC_EXPECT(deepest > 0.85 * depth && deepest <= depth + 0.05);
+        // A farm track along its floor: a strip point within a metre of the centre line, at the floor.
+        bool on_floor = false;
+        for (const MapStrip& s : map->Layout().strips) {
+            if (s.surface != MapSurface::Track || on_floor) continue;
+            for (const Vec3& p : s.points) {
+                if (map->LaneDepthAt(p.x, p.y) < 0.5 * depth) continue;
+                if (mapgeo::DistToSegment(p.x, p.y, a.east_m, a.north_m, b.east_m, b.north_m) < 1.0 && std::fabs(p.z - map->GroundHeight(p.x, p.y) - 0.15) < 0.05) {
+                    on_floor = true;
+                    break;
+                }
+            }
+        }
+        tracked += on_floor ? 1 : 0;
+    }
+    std::printf("    depth p50 %.1f m, max %.1f m; length p50 %.0f m, max %.0f m; the floors' grade p50 %.0f%%, p95 %.0f%%; %d of %zu with a track on the floor\n",
+                Percentile(depths, 0.5), Percentile(depths, 1.0), Percentile(lengths, 0.5), Percentile(lengths, 1.0), Percentile(floor_grades, 0.5),
+                Percentile(floor_grades, 0.95), tracked, lanes);
+    SC_EXPECT(tracked == static_cast<int>(lanes));
+    // The tiles' edges are the map's: on every tile's boundary, every 0.5 m, the ground is the map proper's triangles.
+    const std::vector<const MapGrid*> levels = map->DrawnLevels();
+    double worst_edge = 0.0;
+    for (std::size_t l = 0; l < levels.size(); ++l) {
+        if (!map->IsLaneTile(l)) continue;
+        const MapGrid& g = *levels[l];
+        const double w = g.west_m, s = g.south_m, side = g.spacing_m * (g.cols - 1);
+        for (int j = 0; j <= 100; ++j) {
+            const double f = side * j / 100.0;
+            // Each edge's point and a point a metre out across it: where the ground beyond is the map proper's.
+            const MapPoint edges[4][2] = {{{w + f, s}, {w + f, s - 1.0}}, {{w + f, s + side}, {w + f, s + side + 1.0}},
+                                          {{w, s + f}, {w - 1.0, s + f}}, {{w + side, s + f}, {w + side + 1.0, s + f}}};
+            for (const auto& edge : edges) {
+                const int beyond = map->LevelAt(edge[1].east_m, edge[1].north_m);
+                if (beyond < 0 || map->IsLaneTile(static_cast<std::size_t>(beyond))) continue;
+                worst_edge = std::max(worst_edge, std::fabs(g.SampleTri(edge[0].east_m, edge[0].north_m) - core.SampleTri(edge[0].east_m, edge[0].north_m)));
+            }
+        }
+    }
+    std::printf("    the tiles' edges off the map's triangles by at most %.2g m\n", worst_edge);
+    SC_EXPECT(worst_edge < 1e-6);
+    // Nothing built or grown in a lane: no box stands on a point it cuts more than 0.3 m.
+    int in_lane = 0;
+    for (const MapBox& bx : map->Layout().boxes) in_lane += map->LaneDepthAt(bx.east_m, bx.north_m) > 0.3 ? 1 : 0;
+    SC_EXPECT(in_lane == 0);
+    std::string why;
+    SC_EXPECT(NoGroundDrawnTwice(*map, &why));
+    if (!why.empty()) std::printf("    %s\n", why.c_str());
+}
+
+SC_TEST("village ponds: one by each village of the map proper, in its lowest open ground, water held by its banks") {
+    std::string e;
+    const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const MapDef& d = map->Def();
+    const MapLandUseDef& u = d.land_use;
+    int villages = 0;
+    for (const MapSettlementDef& s : d.settlements) villages += s.kind == "village" && d.InCore(s.centre.east_m, s.centre.north_m) ? 1 : 0;
+    std::printf("    %zu ponds by %d villages of the map proper\n", map->PondCount(), villages);
+    SC_EXPECT(map->PondCount() >= 3 && static_cast<int>(map->PondCount()) <= villages);
+    for (std::size_t i = 0; i < map->PondCount(); ++i) {
+        MapPoint c;
+        double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
+        map->PondAt(i, c, rx, ry, heading, level);
+        const double ue = std::sin(heading), un = std::cos(heading);
+        // Its bed under the water: the middle at about its depth.
+        const double middle = map->GroundHeight(c.east_m, c.north_m);
+        SC_EXPECT(middle < level - 0.9 * u.pond_depth_m);
+        // Its water held all round: beyond its bank the ground stands over the water.
+        double lowest_bank = 1e18;
+        for (int k = 0; k < 32; ++k) {
+            const double a = 2.0 * 3.14159265358979 * k / 32.0;
+            const double x = (rx + u.pond_shore_m + 0.5) * std::cos(a), y = (ry + u.pond_shore_m + 0.5) * std::sin(a);
+            lowest_bank = std::min(lowest_bank, map->GroundHeight(c.east_m + x * ue + y * un, c.north_m + x * un - y * ue) - level);
+        }
+        std::printf("    pond %zu at (%.0f, %.0f): %.0f x %.0f m, water %.1f m, its middle %.1f m under it, its bank at least %.2f m over it\n", i,
+                    c.east_m, c.north_m, 2.0 * rx, 2.0 * ry, level, level - middle, lowest_bank);
+        SC_EXPECT(lowest_bank > 0.0);
+        // Its water a strip at its level.
+        bool water = false;
+        for (const MapStrip& s : map->Layout().strips) {
+            if (s.surface != MapSurface::Water || s.id.compare(0, 5, "pond_") != 0 || s.points.empty()) continue;
+            water = water || (std::hypot(0.5 * (s.points.front().x + s.points.back().x) - c.east_m, 0.5 * (s.points.front().y + s.points.back().y) - c.north_m) < 0.5 &&
+                              std::fabs(s.points.front().z - level) < 1e-9);
+        }
+        SC_EXPECT(water);
+        // No house, barn, wood or row in it.
+        for (const MapBox& b : map->Layout().boxes) {
+            if (b.by_water) continue;
+            SC_EXPECT(std::hypot(b.east_m - c.east_m, b.north_m - c.north_m) > rx + 0.5 * std::min(b.length_m, b.width_m));
+        }
+    }
 }
 
 SC_TEST("land use: the loader refuses what it should") {

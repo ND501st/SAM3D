@@ -625,6 +625,26 @@ SC_TEST("map dressing: the fields near a settlement are household strips, and on
     SC_EXPECT(far_with == 0);
 }
 
+SC_TEST("map dressing: a village pond's water and its shore are water's cover (the bank's grass and reeds), no field") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const CoverRaster a = BakeCover(*m, Rules());
+    const CoverGrid& g = a.grids.back();  // the map proper
+    SC_EXPECT(m->PondCount() >= 3);
+    for (std::size_t i = 0; i < m->PondCount(); ++i) {
+        MapPoint c;
+        double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
+        m->PondAt(i, c, rx, ry, heading, level);
+        // Its middle and the ends of its long axis, a metre out over the water's edge.
+        for (const double f : {0.0, -1.0, 1.0}) {
+            const double e = c.east_m + f * (rx + 1.0) * std::sin(heading), n = c.north_m + f * (rx + 1.0) * std::cos(heading);
+            const int col = static_cast<int>(std::floor((e - g.west_m) / g.cell_m)), row = static_cast<int>(std::floor((n - g.south_m) / g.cell_m));
+            SC_EXPECT(g.cover[g.Index(col, row)] == static_cast<std::uint8_t>(Cover::Water));
+        }
+    }
+}
+
 SC_TEST("map dressing: farm tracks, tree rows and groves lie along the fields, clear of what stands and of the sites") {
     const MapData* m = Kesmark();
     SC_EXPECT(m != nullptr);
@@ -639,9 +659,22 @@ SC_TEST("map dressing: farm tracks, tree rows and groves lie along the fields, c
         SC_EXPECT(s.surface == MapSurface::Track && s.points.size() >= 3 && s.width_m == d.farmland.track_width_m);
         for (const Vec3& p : s.points) SC_EXPECT(d.InCore(p.x, p.y));
     }
+    std::size_t pond_trees = 0;
     std::size_t rows = 0, bad_site = 0, bad_water = 0, bad_town = 0, bad_height = 0, outside = 0;
     for (const MapBox& b : m->Layout().boxes) {
         if (b.part != MapPart::TreeRow) continue;
+        // A village pond's trees (A.3.34): by its water, in the village, checked in test_landform.cpp.
+        bool by_pond = false;
+        for (std::size_t i = 0; i < m->PondCount() && b.by_water; ++i) {
+            MapPoint c;
+            double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
+            m->PondAt(i, c, rx, ry, heading, level);
+            by_pond = by_pond || std::hypot(b.east_m - c.east_m, b.north_m - c.north_m) < rx + d.land_use.pond_shore_m + 1.0;
+        }
+        if (by_pond) {
+            ++pond_trees;
+            continue;
+        }
         ++rows;
         outside += d.InCore(b.east_m, b.north_m) ? 0 : 1;
         for (const MapSiteDef& s : d.sites) bad_site += std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) < d.farmland.site_clear_m - 1.0 ? 1 : 0;
@@ -654,6 +687,8 @@ SC_TEST("map dressing: farm tracks, tree rows and groves lie along the fields, c
     }
     std::printf("    %zu farm tracks (%zu points), %zu tree rows and grove belts\n", tracks, farm_points, rows);
     SC_EXPECT(tracks > 20 && rows > 100);
+    SC_EXPECT(pond_trees == m->PondCount() * static_cast<std::size_t>(std::lround(d.land_use.pond_trees)));
+    std::printf("    off the map %zu, at a site %zu, in water %zu, in a town %zu, of a wrong height %zu\n", outside, bad_site, bad_water, bad_town, bad_height);
     SC_EXPECT(outside == 0 && bad_site == 0 && bad_water == 0 && bad_town == 0 && bad_height == 0);
     // Each is a box that blocks sight (the obstacle top at its centre is its top), and the same each time.
     int checked = 0;

@@ -188,6 +188,27 @@ struct MapLandUseDef {
     double side_slope = 1.5;          // a cutting's or an embankment's side, metres out per metre down or up
     double formation_m = 6.0;         // the formation beyond the strip's edge each side (shoulder and ditch)
     double formation_min_half_m = 25.0;  // never narrower than this each side, so the 50 m ground has a node on it
+    // Sunken lanes (A.5 step 5, A.3.34): where a farm track climbs a bank steeper than a track's grade in the hills' loess,
+    // a share of the climbs are lanes worn into the slope (De Geeter, Poesen and Vanmaercke's 132 lanes of the Belgian loess
+    // belt: depth 0.5-10 m, mean 2.5; floor 0.8-11 m, mean 2.3; top 5-28 m, mean 10; deepest where the slope is steepest).
+    // Each is drawn on its own tiles of finer ground (`lane_grid_m`), one per core cell it touches.
+    double lane_share = 0.5;          // of the climbs, the share worn into lanes
+    double lane_depth_m = 2.5;        // a lane's depth at its deepest (the middle of its draw)...
+    double lane_depth_spread = 2.0;   // ...times or divided by up to this
+    double lane_floor_m = 4.0;        // its floor's width
+    double lane_bank_run = 1.5;       // its banks' run per metre of depth (rounded at top and foot)
+    double lane_min_rise_m = 3.0;     // a climb rising less is not a lane
+    double lane_grid_m = 2.0;         // the tiles' spacing (divides the core's)
+    double lane_row_share = 0.5;      // of a lane's 40 m pieces, each side, the share with shrubs and trees on the bank's top
+    // A village's pond (A.5 step 6's p22, A.3.34; the look target's K-f): one by each village of the map proper, in the
+    // lowest open ground at its edge, long along the contour, its bed and banks on tiles of finer ground as a lane's.
+    double pond_radius_m = 16.0;      // half its length (drawn 0.8-1.2 times)
+    double pond_aspect = 0.6;         // its width to its length
+    double pond_depth_m = 1.5;        // its bed below the water at the middle
+    double pond_drop_m = 0.4;         // the water below the lowest of its rim
+    double pond_shore_m = 4.0;        // its bank's run from the water's edge up to the ground round it
+    double pond_max_dam_m = 1.5;      // where the ground falls away more than this from its bank's top, no pond there
+    double pond_trees = 2.0;          // waterside trees on its bank
 };
 
 // How the hill country drains (terrain.landform.drainage; game values, judged by eye against the look target and the
@@ -1114,6 +1135,7 @@ public:
         m->SetLevels(false);
         m->ImportDetailLines();
         m->BuildIndices();
+        m->BakeLanes();
         m->BakeDetail();
         m->Lay();
         m->LayDetailSettlements();
@@ -1171,14 +1193,47 @@ public:
     // Whether level `level` of DrawnLevels draws its cell (c, r) (corners c..c+1, r..r+1): not wholly inside a finer one.
     bool DrawsCell(std::size_t level, int c, int r) const {
         if (level >= levels_.size()) return false;
+        if (IsLaneTile(level)) return true;  // nothing finer under a lane's tile
+        if (levels_[level] == &core_ && lane_tile_at_.count(LaneCellKey(c, r)) != 0) return false;
         const MapGrid& g = *levels_[level];
         const double w = g.EastOf(c), s = g.NorthOf(r), e = g.EastOf(c + 1), n = g.NorthOf(r + 1);
         for (std::size_t j = 0; j < level; ++j) {
+            if (IsLaneTile(j)) continue;  // no cell but the core's lies wholly in one
             const MapGrid& f = *levels_[j];
             if (f.Covers(w, s) && f.Covers(e, s) && f.Covers(w, n) && f.Covers(e, n)) return false;
         }
         return true;
     }
+    // The sunken lanes' tiles among DrawnLevels (A.3.34): each a core cell's square of finer ground, after the detail
+    // areas and before the map proper; FinerLevelCount the levels before the map proper (the detail areas and the tiles).
+    bool IsLaneTile(std::size_t level) const { return level >= lane_first_ && level < lane_end_; }
+    std::size_t FinerLevelCount() const { return lane_end_; }
+    // How deep the sunken lanes cut the ground at (east, north), 0 off them; how many there are.
+    double LaneDepthAt(double e, double n) const {
+        double d = 0.0;
+        for (const Lane& l : lanes_) d = std::max(d, LaneCut(l, e, n));
+        return d;
+    }
+    std::size_t LaneCount() const { return lanes_.size(); }
+    // A lane's foot and head (east, north) and its depth at the deepest.
+    void LaneEnds(std::size_t i, MapPoint& foot, MapPoint& head, double& depth_m) const {
+        foot = lanes_[i].a;
+        head = lanes_[i].b;
+        depth_m = lanes_[i].depth_m;
+    }
+
+    // The villages' ponds (A.3.34): how many, and one's middle, half length and width, heading (the length's, from north),
+    // and its water's level above sea level.
+    std::size_t PondCount() const { return ponds_.size(); }
+    void PondAt(std::size_t i, MapPoint& centre, double& half_length_m, double& half_width_m, double& heading_rad, double& level_m) const {
+        const Pond& p = ponds_[i];
+        centre = p.c;
+        half_length_m = p.rx;
+        half_width_m = p.ry;
+        heading_rad = p.heading;
+        level_m = p.level_m;
+    }
+
     // The level of DrawnLevels the ground at (east, north) is drawn by (-1: none, beyond every lattice: Analytic).
     int LevelAt(double e, double n) const {
         int index = -1;
@@ -1375,6 +1430,15 @@ private:
     // The lattice drawing the ground at (east, north) and its place in DrawnLevels (null, -1: none).
     const MapGrid* LevelGridAt(double e, double n, int* index) const {
         for (std::size_t i = 0; i < levels_.size(); ++i) {
+            if (i == lane_first_ && lane_end_ > lane_first_) {  // the lanes' tiles: by the core cell (A.3.34)
+                const int tile = LaneTileAt(e, n);
+                if (tile >= 0) {
+                    if (index != nullptr) *index = static_cast<int>(lane_first_) + tile;
+                    return levels_[lane_first_ + static_cast<std::size_t>(tile)];
+                }
+                i = lane_end_ - 1;
+                continue;
+            }
             if (levels_[i]->Covers(e, n)) {
                 if (index != nullptr) *index = static_cast<int>(i);
                 return levels_[i];
@@ -1397,6 +1461,9 @@ private:
                 if (detail_ground_[i].cols > 1 && detail_ground_[i].rows > 1) levels_.push_back(&detail_ground_[i]);
             }
         }
+        lane_first_ = levels_.size();
+        for (const MapGrid& g : lane_tiles_) levels_.push_back(&g);
+        lane_end_ = levels_.size();
         for (const MapGrid* g : {&core_, &far_, &country_, &beyond_}) {
             if (g->cols > 1 && g->rows > 1) levels_.push_back(g);
         }
@@ -1623,6 +1690,349 @@ private:
         return SiteClearance(s);
     }
 
+    // ------------------------------------------------------------------ sunken lanes (A.5 step 5, A.3.34)
+
+    // A lane: from its foot (where it fans out, downhill) to its head, deepest at `peak` (the share of the way up, where
+    // the slope under it was steepest), its floor and its banks.
+    struct Lane {
+        MapPoint a, b;
+        double depth_m = 0.0, peak = 0.5, floor_half_m = 2.0, bank_run = 1.5;
+        double Reach() const { return floor_half_m + bank_run * depth_m; }
+    };
+    // How deep lane `l` cuts the ground at (east, north): its depth along it rising from nothing at the foot to the full
+    // depth at the peak and falling to nothing at the head (smoothstep each way); across, the floor at that depth and the
+    // banks rounded up to the ground over `bank_run` per metre of it. 0 off the lane.
+    static double LaneCut(const Lane& l, double e, double n) {
+        const double dx = l.b.east_m - l.a.east_m, dy = l.b.north_m - l.a.north_m, len2 = dx * dx + dy * dy;
+        if (len2 <= 0.0) return 0.0;
+        const double t = ((e - l.a.east_m) * dx + (n - l.a.north_m) * dy) / len2;
+        if (t <= 0.0 || t >= 1.0) return 0.0;
+        const double x = std::fabs((e - l.a.east_m) * dy - (n - l.a.north_m) * dx) / std::sqrt(len2);
+        const double along = t < l.peak ? noise::Smooth(t / l.peak) : noise::Smooth((1.0 - t) / (1.0 - l.peak));
+        const double d = l.depth_m * along;
+        if (d <= 0.0) return 0.0;
+        if (x <= l.floor_half_m) return d;
+        const double run = l.bank_run * d;
+        if (x >= l.floor_half_m + run) return 0.0;
+        return d * (1.0 - noise::Smooth((x - l.floor_half_m) / run));
+    }
+    // A village's pond: its middle, half length and width, the length's heading, the water's level, its bed's depth, its
+    // bank's run, and how far from its middle it changes the ground (its bank and any dam).
+    struct Pond {
+        MapPoint c;
+        double rx = 16.0, ry = 10.0, heading = 0.0, level_m = 0.0, depth_m = 1.5, shore_m = 4.0, reach_m = 0.0;
+        std::string id;
+    };
+    static constexpr double kPondFreeboardM = 0.3;  // its bank's top over the water (a game value)
+    static constexpr double kPondCrestM = 2.0;      // a dam's crest beyond its bank before it falls at 1 in 2 (a game value)
+    // Where (east, north) lies off the pond's edge (negative inside), along the ray from its middle.
+    static double PondEdgeDistance(const Pond& p, double e, double n) {
+        const double ue = std::sin(p.heading), un = std::cos(p.heading);
+        const double de = e - p.c.east_m, dn = n - p.c.north_m;
+        const double x = de * ue + dn * un, y = de * un - dn * ue;
+        const double rho = std::hypot(x, y);
+        if (rho < 1e-9) return -p.ry;
+        return rho - p.rx * p.ry / std::hypot(p.ry * x / rho, p.rx * y / rho);
+    }
+    // The ground at (east, north) with the pond, `h` the ground there without it: under the water its bed, from the water's
+    // edge at 0.15 m under the water up over shore_m to the ground round it, and where that ground lies lower than the
+    // bank's top (the water's level and the freeboard), a dam (its crest kPondCrestM wide, then falling at 1 in 2 to it).
+    static double PondGround(const Pond& p, double e, double n, double h) {
+        if (std::hypot(e - p.c.east_m, n - p.c.north_m) >= p.reach_m) return h;
+        const double d = PondEdgeDistance(p, e, n);
+        const double edge = p.level_m - 0.15;
+        if (d < 0.0) return std::min(h, edge - p.depth_m * noise::Smooth(Clamp(-d / (0.6 * p.ry), 0.0, 1.0)));
+        const double top = p.level_m + kPondFreeboardM;
+        if (d <= p.shore_m) return edge + (std::max(h, top) - edge) * noise::Smooth(d / p.shore_m);
+        return std::max(h, top - 0.5 * std::max(0.0, d - p.shore_m - kPondCrestM));
+    }
+    static long long LaneCellKey(long long c, long long r) { return c * 1000003LL + r; }
+    static constexpr double kLaneClimbShare = 0.5;  // a lane runs on while the ground climbs at this share of a track's grade
+    static constexpr double kLaneMinLengthM = 50.0;  // shorter, no lane (game values)
+    // The tile drawing (east, north) (an index into lane_tiles_), -1: none.
+    int LaneTileAt(double e, double n) const {
+        if (lane_tile_at_.empty()) return -1;
+        const long long c = static_cast<long long>(std::floor((e - core_.west_m) / core_.spacing_m));
+        const long long r = static_cast<long long>(std::floor((n - core_.south_m) / core_.spacing_m));
+        const auto it = lane_tile_at_.find(LaneCellKey(c, r));
+        return it == lane_tile_at_.end() ? -1 : it->second;
+    }
+
+    // Each farm track's line inside the map proper, as the fields lay them (a share of the long sides between parcels, each
+    // estate's own, clipped to its square): fn(p, q).
+    template <class F>
+    void ForEachTrackLine(F&& fn) const {
+        const MapFarmlandDef& fd = def_.farmland;
+        const FieldGrid grid = Fields();
+        const double est = grid.estate_m;
+        const std::uint32_t tag = grid.seed ^ 0x7A5C0DEu;
+        const double cx0 = def_.west_m, cx1 = def_.east_m, cy0 = def_.south_m, cy1 = def_.north_m;
+        for (std::int32_t iy = static_cast<std::int32_t>(std::floor(cy0 / est)); iy <= static_cast<std::int32_t>(std::floor(cy1 / est)); ++iy) {
+            for (std::int32_t ix = static_cast<std::int32_t>(std::floor(cx0 / est)); ix <= static_cast<std::int32_t>(std::floor(cx1 / est)); ++ix) {
+                const FieldEstate e = EstateAt(grid, ix, iy);
+                const double sh = std::sin(e.heading_rad), ch = std::cos(e.heading_rad);
+                const double xs[2] = {ix * est, (ix + 1) * est}, ys[2] = {iy * est, (iy + 1) * est};
+                double vmin = 1e18, vmax = -1e18, umin = 1e18, umax = -1e18;
+                for (double x : xs) {
+                    for (double y : ys) {
+                        const double u = x * sh + y * ch, v = x * ch - y * sh;
+                        vmin = std::min(vmin, v);
+                        vmax = std::max(vmax, v);
+                        umin = std::min(umin, u);
+                        umax = std::max(umax, u);
+                    }
+                }
+                for (std::int32_t k = static_cast<std::int32_t>(std::ceil(vmin / e.width_m)); k * e.width_m <= vmax; ++k) {
+                    if (Unit24(FieldHash(tag, ix * 1031 + k, iy)) >= fd.track_share) continue;
+                    const double v = k * e.width_m;
+                    MapPoint p{umin * sh + v * ch, umin * ch - v * sh}, q{umax * sh + v * ch, umax * ch - v * sh};
+                    // The estate's square (an estate's border cuts the fields, and its rows are its own), inside the map proper.
+                    if (!ClipSegment(std::max(xs[0], cx0), std::max(ys[0], cy0), std::min(xs[1], cx1), std::min(ys[1], cy1), p, q)) continue;
+                    fn(p, q);
+                }
+            }
+        }
+    }
+
+    // An empty tile of finer ground on the core cell `key`, `per` of its cells to a side.
+    MapGrid TileOf(long long key, int per, double spacing) const {
+        const long long r = key % 1000003LL, c = key / 1000003LL;
+        MapGrid g;
+        g.spacing_m = spacing;
+        g.west_m = core_.EastOf(static_cast<int>(c));
+        g.south_m = core_.NorthOf(static_cast<int>(r));
+        g.cols = per + 1;
+        g.rows = per + 1;
+        g.values.assign(static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows), 0.0);
+        return g;
+    }
+
+    // The sunken lanes (A.3.34): along each farm track's line, sampled every 25 m on the map proper's ground, each climb
+    // steeper than a track's grade (the steps in a row that are) is a lane if it draws one (`lane_share`) and rises enough,
+    // from a sample below it (its foot, where the wash fans out) to a sample above (its head), in the open: in the map
+    // proper, out of the detail areas, off the lines, the water, the brooks, the named forests, the towns, the marshes,
+    // the sites and the hills' woods. Its tiles: every core cell its banks reach, none shared with another lane (the later
+    // one is dropped), each the core's triangles at `lane_grid_m` less the lane's cut, so its edges are the core's.
+    void BakeLanes() {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake || !def_.farmland.laid || core_.cols < 2) return;
+        const MapGrid& core = core_;
+        const double cell = core_.spacing_m;
+        const int per = static_cast<int>(std::lround(cell / u.lane_grid_m));
+        if (per < 2 || std::fabs(per * u.lane_grid_m - cell) > 1e-6) return;  // the tiles' nodes must fall on the core's
+        constexpr double kStepM = 25.0;
+        const std::uint32_t tag = Fields().seed ^ 0x1A4E5u;
+        mapgeo::SegmentIndex brooks(250.0);
+        for (const MapBrookDef& b : def_.landform.bake->brooks) brooks.Add(b.points, 2.0);
+        std::vector<std::vector<long long>> cells_of;
+        std::unordered_set<long long> taken;
+        int line_index = 0;
+        const auto open = [&](double e, double n, double reach) {
+            if (!def_.InCore(e, n) || def_.DetailAt(e, n) != nullptr) return false;
+            if (lines_.Near(e, n, reach + 5.0) || water_.Near(e, n, reach + 12.0) || brooks.Near(e, n, reach + 10.0)) return false;
+            if (InForest(e, n) || NearSettlement(e, n, reach + 40.0) || !occupied_.Free(e, n, reach + 20.0) || LandUseWood(e, n)) return false;
+            for (const MapPolygonDef& m : def_.marshes) {
+                if (mapgeo::InPolygon(m.points, e, n)) return false;
+            }
+            return true;
+        };
+        const auto try_lane = [&](const std::vector<MapPoint>& pts, const std::vector<double>& h, std::size_t s0, std::size_t s1,
+                                  std::size_t steepest) {
+            const std::uint32_t draw = FieldHash(tag, line_index, static_cast<std::int32_t>(s0));
+            if (u.lane_share <= 0.0 || Unit24(draw) >= u.lane_share || std::fabs(h[s1] - h[s0]) < u.lane_min_rise_m) return;
+            Lane l;
+            const bool up = h[s1] >= h[s0];
+            l.a = up ? pts[s0] : pts[s1];
+            l.b = up ? pts[s1] : pts[s0];
+            const double len = std::hypot(l.b.east_m - l.a.east_m, l.b.north_m - l.a.north_m);
+            if (len < kLaneMinLengthM) return;
+            const MapPoint mid{0.5 * (pts[steepest].east_m + pts[steepest + 1].east_m), 0.5 * (pts[steepest].north_m + pts[steepest + 1].north_m)};
+            l.peak = Clamp(std::hypot(mid.east_m - l.a.east_m, mid.north_m - l.a.north_m) / len, 0.2, 0.8);
+            l.depth_m = u.lane_depth_m * std::pow(u.lane_depth_spread, 2.0 * Unit24(Hash32(draw ^ 0x9u)) - 1.0);
+            l.floor_half_m = 0.5 * u.lane_floor_m;
+            l.bank_run = u.lane_bank_run;
+            const double reach = l.Reach();
+            const int k = std::max(1, static_cast<int>(std::ceil(len / 10.0)));
+            for (int i = 0; i <= k; ++i) {
+                const double f = static_cast<double>(i) / k;
+                if (!open(l.a.east_m + (l.b.east_m - l.a.east_m) * f, l.a.north_m + (l.b.north_m - l.a.north_m) * f, reach)) return;
+            }
+            // The core cells its banks reach: any whose centre lies within the reach and half a cell's diagonal.
+            std::vector<long long> cells;
+            const auto col = [&](double e) { return static_cast<long long>(std::floor((e - core_.west_m) / cell)); };
+            const auto row = [&](double n) { return static_cast<long long>(std::floor((n - core_.south_m) / cell)); };
+            const double grow = reach + cell;
+            for (long long r = row(std::min(l.a.north_m, l.b.north_m) - grow); r <= row(std::max(l.a.north_m, l.b.north_m) + grow); ++r) {
+                for (long long c = col(std::min(l.a.east_m, l.b.east_m) - grow); c <= col(std::max(l.a.east_m, l.b.east_m) + grow); ++c) {
+                    const double ce = core_.west_m + (static_cast<double>(c) + 0.5) * cell, cn = core_.south_m + (static_cast<double>(r) + 0.5) * cell;
+                    if (mapgeo::DistToSegment(ce, cn, l.a.east_m, l.a.north_m, l.b.east_m, l.b.north_m) >= reach + 0.7072 * cell) continue;
+                    if (c < 0 || r < 0 || c >= core_.cols - 1 || r >= core_.rows - 1 || taken.count(LaneCellKey(c, r)) != 0) return;
+                    for (int corner = 0; corner < 4; ++corner) {
+                        const double e = core_.west_m + static_cast<double>(c + (corner & 1)) * cell, n = core_.south_m + static_cast<double>(r + (corner >> 1)) * cell;
+                        if (!def_.InCore(e, n) || def_.DetailAt(e, n) != nullptr) return;
+                    }
+                    cells.push_back(LaneCellKey(c, r));
+                }
+            }
+            for (long long key : cells) taken.insert(key);
+            lanes_.push_back(l);
+            cells_of.push_back(std::move(cells));
+        };
+        ForEachTrackLine([&](const MapPoint& p, const MapPoint& q) {
+            ++line_index;
+            const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+            const std::size_t steps = static_cast<std::size_t>(std::max(1, static_cast<int>(std::ceil(len / kStepM))));
+            std::vector<MapPoint> pts;
+            std::vector<double> h;
+            for (std::size_t i = 0; i <= steps; ++i) {
+                const double f = static_cast<double>(i) / static_cast<double>(steps);
+                pts.push_back({p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f});
+                h.push_back(GroundHeight(pts.back().east_m, pts.back().north_m));
+            }
+            const double step_m = len / static_cast<double>(steps);
+            const auto steep = [&](std::size_t i) { return std::fabs(h[i + 1] - h[i]) > u.max_grade_track * step_m; };
+            std::size_t i = 0;
+            while (i < steps) {
+                if (!steep(i)) {
+                    ++i;
+                    continue;
+                }
+                std::size_t j = i, steepest = i;
+                while (j < steps && steep(j)) {
+                    if (std::fabs(h[j + 1] - h[j]) > std::fabs(h[steepest + 1] - h[steepest])) steepest = j;
+                    ++j;
+                }
+                // The whole climb: on down and up from the steep steps while the ground still climbs the same way at half a
+                // track's grade or more (a lane runs the length of its slope, De Geeter et al.'s mean 285 m), and a step
+                // beyond each end (its head, and its foot where the wash fans out).
+                const double sign = h[j] >= h[i] ? 1.0 : -1.0;
+                const auto climbs = [&](std::size_t k) { return sign * (h[k + 1] - h[k]) > kLaneClimbShare * u.max_grade_track * step_m; };
+                std::size_t s0 = i, s1 = j;
+                while (s0 > 0 && climbs(s0 - 1)) --s0;
+                while (s1 < steps && climbs(s1)) ++s1;
+                try_lane(pts, h, s0 > 0 ? s0 - 1 : 0, std::min(s1 + 1, steps), steepest);
+                i = std::max(j, s1);
+            }
+        });
+        // The villages' ponds (A.3.34): one by each village of the map proper, in the lowest open ground round its edge (16
+        // bearings at three distances), long along the contour there, its water the lowest of its rim less pond_drop_m;
+        // passed over where a dam would be higher than pond_max_dam_m, or its ground touches a lane's or another's.
+        std::vector<std::vector<long long>> pond_cells_of;
+        // A pond's ground: in the map proper, out of the detail areas, off the lines (its village's streets), the water, the
+        // brooks, the named forests, the hills' woods, the marshes and the sites.
+        const auto pond_open = [&](double e, double n, double reach) {
+            if (!def_.InCore(e, n) || def_.DetailAt(e, n) != nullptr) return false;
+            if (lines_.Near(e, n, reach + 3.0) || water_.Near(e, n, reach + 15.0) || brooks.Near(e, n, reach + 5.0)) return false;
+            if (InForest(e, n) || LandUseWood(e, n) || !occupied_.Free(e, n, reach + 10.0)) return false;
+            for (const MapPolygonDef& m : def_.marshes) {
+                if (mapgeo::InPolygon(m.points, e, n)) return false;
+            }
+            return true;
+        };
+        for (const MapSettlementDef& s : def_.settlements) {
+            if (s.kind != "village" || !def_.InCore(s.centre.east_m, s.centre.north_m) || u.pond_radius_m <= 0.0) continue;
+            const std::uint32_t draw = FieldHash(tag ^ 0x90D5u, static_cast<std::int32_t>(std::llround(s.centre.east_m)), static_cast<std::int32_t>(std::llround(s.centre.north_m)));
+            Pond pond;
+            pond.id = s.id;
+            pond.rx = u.pond_radius_m * (0.8 + 0.4 * Unit24(draw));
+            pond.ry = pond.rx * u.pond_aspect;
+            pond.depth_m = u.pond_depth_m;
+            pond.shore_m = u.pond_shore_m;
+            struct Spot {
+                double h, e, n;
+            };
+            std::vector<Spot> spots;
+            for (const double share : {0.6, 0.85, 1.1}) {
+                for (int k = 0; k < 16; ++k) {
+                    const double b = 2.0 * kPi * (k + 0.5 * Unit24(Hash32(draw ^ static_cast<std::uint32_t>(k)))) / 16.0;
+                    const double e = s.centre.east_m + (share * s.radius_m) * std::sin(b), n = s.centre.north_m + (share * s.radius_m) * std::cos(b);
+                    if (pond_open(e, n, pond.rx + pond.shore_m)) spots.push_back({core.SampleTri(e, n), e, n});
+                }
+            }
+            std::sort(spots.begin(), spots.end(), [](const Spot& x, const Spot& y) { return x.h < y.h; });
+            for (const Spot& spot : spots) {
+                pond.c = {spot.e, spot.n};
+                // Along the contour: across the slope's fall.
+                const double ge = core.SampleTri(spot.e + 20.0, spot.n) - core.SampleTri(spot.e - 20.0, spot.n);
+                const double gn = core.SampleTri(spot.e, spot.n + 20.0) - core.SampleTri(spot.e, spot.n - 20.0);
+                pond.heading = std::hypot(ge, gn) > 1e-6 ? std::atan2(-gn, ge) : 0.0;
+                const double ue = std::sin(pond.heading), un = std::cos(pond.heading);
+                double rim = 1e18, ring = 1e18;
+                for (int k = 0; k < 32; ++k) {
+                    const double a = 2.0 * kPi * k / 32.0;
+                    const double x = std::cos(a), y = std::sin(a);
+                    for (const double out : {0.0, pond.shore_m}) {
+                        const double xe = (pond.rx + out) * x, ye = (pond.ry + out) * y;
+                        const double h = core.SampleTri(spot.e + xe * ue + ye * un, spot.n + xe * un - ye * ue);
+                        if (out == 0.0) rim = std::min(rim, h);
+                        else ring = std::min(ring, h);
+                    }
+                }
+                pond.level_m = rim - u.pond_drop_m;
+                const double dam = std::max(0.0, pond.level_m + kPondFreeboardM - ring);
+                if (dam > u.pond_max_dam_m) continue;
+                pond.reach_m = pond.rx + pond.shore_m + kPondCrestM + 2.0 * dam + 4.0;
+                std::vector<long long> cells;
+                bool fits = true;
+                const auto col = [&](double e) { return static_cast<long long>(std::floor((e - core_.west_m) / cell)); };
+                const auto row = [&](double n) { return static_cast<long long>(std::floor((n - core_.south_m) / cell)); };
+                for (long long r = row(spot.n - pond.reach_m - cell); fits && r <= row(spot.n + pond.reach_m + cell); ++r) {
+                    for (long long c = col(spot.e - pond.reach_m - cell); fits && c <= col(spot.e + pond.reach_m + cell); ++c) {
+                        const double ce = core_.west_m + (static_cast<double>(c) + 0.5) * cell, cn = core_.south_m + (static_cast<double>(r) + 0.5) * cell;
+                        if (std::hypot(ce - spot.e, cn - spot.n) >= pond.reach_m + 0.7072 * cell) continue;
+                        fits = c >= 0 && r >= 0 && c < core_.cols - 1 && r < core_.rows - 1 && taken.count(LaneCellKey(c, r)) == 0;
+                        for (int corner = 0; fits && corner < 4; ++corner) {
+                            const double e = core_.west_m + static_cast<double>(c + (corner & 1)) * cell, n = core_.south_m + static_cast<double>(r + (corner >> 1)) * cell;
+                            fits = def_.InCore(e, n) && def_.DetailAt(e, n) == nullptr;
+                        }
+                        cells.push_back(LaneCellKey(c, r));
+                    }
+                }
+                if (!fits) continue;
+                for (long long key : cells) taken.insert(key);
+                ponds_.push_back(pond);
+                pond_cells_of.push_back(std::move(cells));
+                break;
+            }
+        }
+        // The tiles, and the indices the layout keeps off them with.
+        for (std::size_t pi = 0; pi < ponds_.size(); ++pi) {
+            const Pond& pond = ponds_[pi];
+            const double ue = std::sin(pond.heading), un = std::cos(pond.heading);
+            const std::vector<MapPoint> axis = {{pond.c.east_m - pond.rx * ue, pond.c.north_m - pond.rx * un}, {pond.c.east_m + pond.rx * ue, pond.c.north_m + pond.rx * un}};
+            pond_reach_.Add(axis, pond.ry + pond.shore_m);
+            water_.Add(axis, pond.ry);
+            occupied_.Take(pond.c.east_m, pond.c.north_m, pond.rx + pond.shore_m);
+            for (long long key : pond_cells_of[pi]) {
+                MapGrid g = TileOf(key, per, u.lane_grid_m);
+                for (int gr = 0; gr < g.rows; ++gr) {
+                    for (int gc = 0; gc < g.cols; ++gc) {
+                        const double e = g.EastOf(gc), n = g.NorthOf(gr);
+                        g.At(gc, gr) = PondGround(pond, e, n, core_.SampleTri(e, n));
+                    }
+                }
+                lane_tile_at_[key] = static_cast<int>(lane_tiles_.size());
+                lane_tiles_.push_back(std::move(g));
+            }
+        }
+        for (std::size_t li = 0; li < lanes_.size(); ++li) {
+            const Lane& l = lanes_[li];
+            lane_floor_.Add({l.a, l.b}, l.floor_half_m);
+            lane_reach_.Add({l.a, l.b}, l.Reach());
+            for (long long key : cells_of[li]) {
+                MapGrid g = TileOf(key, per, u.lane_grid_m);
+                for (int gr = 0; gr < g.rows; ++gr) {
+                    for (int gc = 0; gc < g.cols; ++gc) {
+                        const double e = g.EastOf(gc), n = g.NorthOf(gr);
+                        g.At(gc, gr) = core_.SampleTri(e, n) - LaneCut(l, e, n);
+                    }
+                }
+                lane_tile_at_[key] = static_cast<int>(lane_tiles_.size());
+                lane_tiles_.push_back(std::move(g));
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ the lines fit the ground (A.5 step 5)
 
     // A span of a road's or the railway's held profile where it leaves the natural ground: its ends at the formation's
@@ -1786,7 +2196,18 @@ private:
 
     // ------------------------------------------------------------------ laying the map out
 
-    void Box(MapPart part, double e, double n, double length, double width, double height, double heading, double sink = 0.5) {
+    void Box(MapPart part, double e, double n, double length, double width, double height, double heading, double sink = 0.5,
+             bool by_lane = false) {
+        // Nothing built or grown in a sunken lane or a pond (A.3.34) but the trees on their banks.
+        if (!by_lane && (!lanes_.empty() || !ponds_.empty()) &&
+            (part == MapPart::House || part == MapPart::Farm || part == MapPart::Canopy || part == MapPart::TreeRow)) {
+            const double ue = std::sin(heading), un = std::cos(heading);
+            const int k = std::max(1, static_cast<int>(std::ceil(length / 5.0)));
+            for (int i = 0; i <= k; ++i) {
+                const double f = length * (static_cast<double>(i) / k - 0.5);
+                if (lane_reach_.Near(e + ue * f, n + un * f, 0.5 * width) || pond_reach_.Near(e + ue * f, n + un * f, 0.5 * width)) return;
+            }
+        }
         MapBox b;
         b.part = part;
         b.east_m = e;
@@ -1987,6 +2408,32 @@ private:
     // The hill country's brooks (A.5 step 2) as water strips where the map's own ground is fine enough for them (the
     // core and the detail areas): a hand's breadth over the ground in their valley's floor, 1.5-4 m wide by the area
     // drained (a game value; the bed itself is below the bake's 50 m cells).
+    // The villages' ponds (A.3.34): the water a strip along the pond's length as wide as the pond at its level (the banks
+    // rise out of it, so the ground draws the shore), and waterside trees on its bank, each a short row on its own draw.
+    void LayPonds() {
+        for (std::size_t i = 0; i < ponds_.size(); ++i) {
+            const Pond& p = ponds_[i];
+            const double ue = std::sin(p.heading), un = std::cos(p.heading);
+            MapStrip s;
+            s.id = "pond_" + p.id;
+            s.surface = MapSurface::Water;
+            s.width_m = 2.0 * p.ry;
+            s.points.push_back({p.c.east_m - p.rx * ue, p.c.north_m - p.rx * un, p.level_m});
+            s.points.push_back({p.c.east_m + p.rx * ue, p.c.north_m + p.rx * un, p.level_m});
+            layout_.strips.push_back(s);
+            const std::uint32_t draw = Hash32(static_cast<std::uint32_t>(def_.seed) ^ static_cast<std::uint32_t>(HashId(p.id)));
+            const int trees = static_cast<int>(std::lround(def_.land_use.pond_trees));
+            for (int k = 0; k < trees; ++k) {
+                const double a = 2.0 * kPi * (static_cast<double>(k) + Unit24(Hash32(draw ^ static_cast<std::uint32_t>(k)))) / std::max(1, trees);
+                const double x = (p.rx + 0.6 * p.shore_m) * std::cos(a), y = (p.ry + 0.6 * p.shore_m) * std::sin(a);
+                const double e = p.c.east_m + x * ue + y * un, n = p.c.north_m + x * un - y * ue;
+                const double h = 8.0 + 4.0 * Unit24(Hash32(draw ^ 0x77u ^ static_cast<std::uint32_t>(k)));
+                Box(MapPart::TreeRow, e, n, 7.0, 7.0, h, a, 0.3, true);
+                layout_.boxes.back().by_water = true;
+            }
+        }
+    }
+
     void LayBrooks() {
         if (!def_.landform.bake) return;
         for (const MapBrookDef& b : def_.landform.bake->brooks) {
@@ -2032,6 +2479,7 @@ private:
         noise::Stream rng(noise::Mix64(def_.seed ^ 0x1A70Full));
         LayLinesOf(def_.roads, def_.railways, def_.rivers);
         LayBrooks();
+        LayPonds();
         for (const MapSiteDef& s : def_.sites) LaySite(s, rng);
         for (const MapSettlementDef& s : def_.settlements) LaySettlement(s, rng, def_.roads);
         LayFarmsteads(rng);
@@ -2544,79 +2992,62 @@ private:
         const MapFarmlandDef& fd = def_.farmland;
         if (!fd.laid) return;
         const FieldGrid grid = Fields();
-        const double est = grid.estate_m;
         constexpr double kStepM = 25.0;  // a track's samples
         const std::uint32_t tag = grid.seed ^ 0x7A5C0DEu;
         std::vector<std::vector<MapPoint>> runs;
         int serial = 0;
-        const double cx0 = def_.west_m, cx1 = def_.east_m, cy0 = def_.south_m, cy1 = def_.north_m;
-        for (std::int32_t iy = static_cast<std::int32_t>(std::floor(cy0 / est)); iy <= static_cast<std::int32_t>(std::floor(cy1 / est)); ++iy) {
-            for (std::int32_t ix = static_cast<std::int32_t>(std::floor(cx0 / est)); ix <= static_cast<std::int32_t>(std::floor(cx1 / est)); ++ix) {
-                const FieldEstate e = EstateAt(grid, ix, iy);
-                const double sh = std::sin(e.heading_rad), ch = std::cos(e.heading_rad);
-                const double xs[2] = {ix * est, (ix + 1) * est}, ys[2] = {iy * est, (iy + 1) * est};
-                double vmin = 1e18, vmax = -1e18, umin = 1e18, umax = -1e18;
-                for (double x : xs) {
-                    for (double y : ys) {
-                        const double u = x * sh + y * ch, v = x * ch - y * sh;
-                        vmin = std::min(vmin, v);
-                        vmax = std::max(vmax, v);
-                        umin = std::min(umin, u);
-                        umax = std::max(umax, u);
-                    }
-                }
-                for (std::int32_t k = static_cast<std::int32_t>(std::ceil(vmin / e.width_m)); k * e.width_m <= vmax; ++k) {
-                    if (Unit24(FieldHash(tag, ix * 1031 + k, iy)) >= fd.track_share) continue;
-                    const double v = k * e.width_m;
-                    MapPoint p{umin * sh + v * ch, umin * ch - v * sh}, q{umax * sh + v * ch, umax * ch - v * sh};
-                    // The estate's square (an estate's border cuts the fields, and its rows are its own), inside the map proper.
-                    if (!ClipSegment(std::max(xs[0], cx0), std::max(ys[0], cy0), std::min(xs[1], cx1), std::min(ys[1], cy1), p, q)) continue;
-                    const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
-                    const int steps = std::max(1, static_cast<int>(std::ceil(len / kStepM)));
-                    std::vector<MapPoint> run;
-                    const auto close_run = [&]() {
-                        if (run.size() >= 3) {
-                            MapStrip s;
-                            s.id = "farm_track_" + std::to_string(++serial);
-                            s.surface = MapSurface::Track;
-                            s.width_m = fd.track_width_m;
-                            // On a detail area's finer ground (its meso relief, roadmap L3) the strip takes a point at
-                            // each of its spacings between the run's, so it lies on the swells rather than across them.
-                            for (std::size_t j = 0; j < run.size(); ++j) {
-                                const MapPoint& m = run[j];
-                                if (j > 0) {
-                                    const MapPoint& a = run[j - 1];
-                                    const MapDetailDef* area = def_.DetailAt(0.5 * (a.east_m + m.east_m), 0.5 * (a.north_m + m.north_m));
-                                    const int sub = area == nullptr ? 1 : std::max(1, static_cast<int>(std::ceil(kStepM / area->spacing_m)));
-                                    for (int k = 1; k < sub; ++k) {
-                                        const double f = static_cast<double>(k) / sub;
-                                        const double e = a.east_m + (m.east_m - a.east_m) * f, n = a.north_m + (m.north_m - a.north_m) * f;
-                                        s.points.push_back({e, n, GroundHeight(e, n) + 0.15});
-                                    }
-                                }
-                                s.points.push_back({m.east_m, m.north_m, GroundHeight(m.east_m, m.north_m) + 0.15});
+        ForEachTrackLine([&](const MapPoint& p, const MapPoint& q) {
+            const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+            const int steps = std::max(1, static_cast<int>(std::ceil(len / kStepM)));
+            std::vector<MapPoint> run;
+            const auto close_run = [&]() {
+                if (run.size() >= 3 || (run.size() == 2 && lane_floor_.Near(run[0].east_m, run[0].north_m, 0.5))) {
+                    MapStrip s;
+                    s.id = "farm_track_" + std::to_string(++serial);
+                    s.surface = MapSurface::Track;
+                    s.width_m = fd.track_width_m;
+                    // On a detail area's finer ground (its meso relief, roadmap L3) the strip takes a point at
+                    // each of its spacings between the run's, so it lies on the swells rather than across them.
+                    for (std::size_t j = 0; j < run.size(); ++j) {
+                        const MapPoint& m = run[j];
+                        if (j > 0) {
+                            const MapPoint& a = run[j - 1];
+                            const double me =0.5 * (a.east_m + m.east_m), mn = 0.5 * (a.north_m + m.north_m);
+                            const MapDetailDef* area = def_.DetailAt(me, mn);
+                            // In a sunken lane (A.3.34), every two of its tiles' spacings, so the track lies on its floor.
+                            const double fine = area != nullptr ? area->spacing_m : (lane_floor_.Near(me, mn, 1.0) ? 2.0 * def_.land_use.lane_grid_m : kStepM);
+                            const int sub = std::max(1, static_cast<int>(std::ceil(kStepM / fine)));
+                            for (int k = 1; k < sub; ++k) {
+                                const double f = static_cast<double>(k) / sub;
+                                const double e = a.east_m + (m.east_m - a.east_m) * f, n = a.north_m + (m.north_m - a.north_m) * f;
+                                s.points.push_back({e, n, GroundHeight(e, n) + 0.15});
                             }
-                            layout_.strips.push_back(std::move(s));
-                            runs.push_back(run);
                         }
-                        run.clear();
-                    };
-                    // In the hills a track does not climb a bank steeper than a track's grade (A.5 step 5): it stops at
-                    // its foot and goes on beyond it (the field's edge, not the slope's line).
-                    const double steepest = def_.land_use.laid ? def_.land_use.max_grade_track : 1e9;
-                    for (int i = 0; i <= steps; ++i) {
-                        const double f = static_cast<double>(i) / steps;
-                        const MapPoint m{p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f};
-                        const bool steep = !run.empty() && std::fabs(GroundHeight(m.east_m, m.north_m) - GroundHeight(run.back().east_m, run.back().north_m)) >
-                                                               steepest * std::hypot(m.east_m - run.back().east_m, m.north_m - run.back().north_m);
-                        if (steep) close_run();
-                        else if (FarmlandClear(m.east_m, m.north_m, 0.5 * fd.track_width_m + 8.0, 6.0)) run.push_back(m);
-                        else close_run();
+                        s.points.push_back({m.east_m, m.north_m, GroundHeight(m.east_m, m.north_m) + 0.15});
                     }
-                    close_run();
+                    layout_.strips.push_back(std::move(s));
+                    runs.push_back(run);
                 }
+                run.clear();
+            };
+            // In the hills a track does not climb a bank steeper than a track's grade (A.5 step 5): it stops at
+            // its foot and goes on beyond it (the field's edge, not the slope's line).
+            const double steepest = def_.land_use.laid ? def_.land_use.max_grade_track : 1e9;
+            for (int i = 0; i <= steps; ++i) {
+                const double f = static_cast<double>(i) / steps;
+                const MapPoint m{p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f};
+                const bool steep = !run.empty() && std::fabs(GroundHeight(m.east_m, m.north_m) - GroundHeight(run.back().east_m, run.back().north_m)) >
+                                                       steepest * std::hypot(m.east_m - run.back().east_m, m.north_m - run.back().north_m);
+                // Up a sunken lane (A.3.34) the track goes on: the lane is its way up.
+                const bool lane = run.empty() ? lane_floor_.Near(m.east_m, m.north_m, 0.5)
+                                              : lane_floor_.Near(0.5 * (m.east_m + run.back().east_m), 0.5 * (m.north_m + run.back().north_m), 0.5);
+                if (lane) run.push_back(m);
+                else if (steep) close_run();
+                else if (FarmlandClear(m.east_m, m.north_m, 0.5 * fd.track_width_m + 8.0, 6.0)) run.push_back(m);
+                else close_run();
             }
-        }
+            close_run();
+        });
         // A row of trees (a box) along the segment a-b, `side` of the line by `off` m (the road's or track's half width and
         // the row's), unless something stands there or a site's sectors need the sight.
         const auto row = [&](const MapPoint& a, const MapPoint& b, double side, double off, std::uint32_t draw) {
@@ -2636,6 +3067,28 @@ private:
                 const std::uint32_t draw = FieldHash(tag ^ 0x11u, static_cast<std::int32_t>(r), static_cast<std::int32_t>(i));
                 if (Unit24(draw) >= fd.row_share) continue;
                 row(pts[i], pts[j], Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0, 0.5 * fd.track_width_m + 0.5 * fd.row_width_m + 1.5, draw);
+            }
+        }
+        // On the sunken lanes' banks (A.3.34): shrubs and trees along the top of each bank, a share of each side's 40 m
+        // pieces where the lane is a metre or more deep, beyond the bank's top.
+        for (std::size_t li = 0; li < lanes_.size(); ++li) {
+            const Lane& l = lanes_[li];
+            const double len = std::hypot(l.b.east_m - l.a.east_m, l.b.north_m - l.a.north_m);
+            const double ue = (l.b.east_m - l.a.east_m) / len, un = (l.b.north_m - l.a.north_m) / len;
+            int piece = 0;
+            for (double s = 0.0; s + 20.0 < len; s += 40.0, ++piece) {
+                const double t = (s + 20.0) / len;
+                const double d = l.depth_m * (t < l.peak ? noise::Smooth(t / l.peak) : noise::Smooth((1.0 - t) / (1.0 - l.peak)));
+                if (d < 1.0) continue;
+                for (int side = -1; side <= 1; side += 2) {
+                    const std::uint32_t draw = FieldHash(tag ^ 0x55u, static_cast<std::int32_t>(li), piece * 2 + (side > 0 ? 1 : 0));
+                    if (Unit24(draw) >= def_.land_use.lane_row_share) continue;
+                    const double off = l.floor_half_m + l.bank_run * d + 0.5 * fd.row_width_m + 0.5;
+                    const double e = l.a.east_m + ue * (s + 20.0) + side * off * un, n = l.a.north_m + un * (s + 20.0) - side * off * ue;
+                    if (InSitesSectors(e, n) || lines_.Near(e, n, 4.0)) continue;
+                    const double h = fd.row_height_min_m + (fd.row_height_max_m - fd.row_height_min_m) * Unit24(Hash32(draw ^ 0x3u));
+                    Box(MapPart::TreeRow, e, n, 0.92 * std::min(40.0, len - s), fd.row_width_m, h, std::atan2(ue, un), 0.3, true);
+                }
             }
         }
         // Along the main and secondary roads inside the map proper, on the side each piece draws.
@@ -2900,6 +3353,13 @@ private:
     DetailLines detail_lines_;
     std::vector<Flat> flats_;
     std::vector<LineFit> fits_;                                  // the lines' cuts and fills (BakeLineFits)
+    std::vector<Lane> lanes_;                                    // the sunken lanes (BakeLanes)
+    std::vector<MapGrid> lane_tiles_;                            // their tiles of finer ground
+    std::unordered_map<long long, int> lane_tile_at_;           // a core cell's tile
+    std::size_t lane_first_ = 0, lane_end_ = 0;                  // the tiles' range in levels_
+    mapgeo::SegmentIndex lane_floor_{250.0}, lane_reach_{250.0}; // their floors, and their banks' tops
+    std::vector<Pond> ponds_;                                    // the villages' ponds (BakeLanes)
+    mapgeo::SegmentIndex pond_reach_{250.0};                     // their banks
     std::unordered_map<long long, std::vector<int>> fit_cells_;  // by kFitCellM cell
     MapLayout layout_;
     struct Farmstead {
@@ -3858,7 +4318,14 @@ inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::st
                             {"max_grade_road", &u.max_grade_road, 0.01, 0.3},      {"max_grade_track", &u.max_grade_track, 0.01, 0.4},
                             {"max_grade_rail", &u.max_grade_rail, 0.005, 0.1},     {"side_slope", &u.side_slope, 0.5, 5.0},
                             {"formation_m", &u.formation_m, 0.0, 30.0},            {"formation_min_half_m", &u.formation_min_half_m, 0.0, 100.0},
-                            {"brook_row_share", &u.brook_row_share, 0.0, 1.0}};
+                            {"brook_row_share", &u.brook_row_share, 0.0, 1.0},     {"lane_share", &u.lane_share, 0.0, 1.0},
+                            {"lane_depth_m", &u.lane_depth_m, 0.5, 15.0},          {"lane_depth_spread", &u.lane_depth_spread, 1.0, 4.0},
+                            {"lane_floor_m", &u.lane_floor_m, 1.0, 12.0},          {"lane_bank_run", &u.lane_bank_run, 0.2, 5.0},
+                            {"lane_min_rise_m", &u.lane_min_rise_m, 0.0, 50.0},    {"lane_grid_m", &u.lane_grid_m, 0.5, 10.0},
+                            {"lane_row_share", &u.lane_row_share, 0.0, 1.0},       {"pond_radius_m", &u.pond_radius_m, 0.0, 100.0},
+                            {"pond_aspect", &u.pond_aspect, 0.2, 1.0},             {"pond_depth_m", &u.pond_depth_m, 0.2, 10.0},
+                            {"pond_drop_m", &u.pond_drop_m, 0.0, 3.0},             {"pond_shore_m", &u.pond_shore_m, 0.5, 30.0},
+                            {"pond_max_dam_m", &u.pond_max_dam_m, 0.0, 10.0},      {"pond_trees", &u.pond_trees, 0.0, 10.0}};
     for (std::size_t i = 0; i < values->keys.size(); ++i) {
         const std::string& key = values->keys[i];
         const json::Value& v = values->items[i];

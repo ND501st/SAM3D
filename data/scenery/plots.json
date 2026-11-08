@@ -108,6 +108,20 @@
       "photos": [],
       "must_see": "Trunks receding into shade, the crowns closed overhead, hazel and elder in patches under them, the floor dark; never a wall or a green slab (A.3.19, A.3.21).",
       "exposure_ev": 1.5
+    },
+    {
+      "id": "p22_village_pond",
+      "name": "A village pond in the hills",
+      "anchor": { "kind": "pond", "close_km": [-8.0, -7.0], "from_m": 14 },
+      "photos": [],
+      "must_see": "Still water low in its hollow at the village's edge, a soft grassed bank rising from it, reeds along the water, a waterside tree; the village behind (the look target's K-f)."
+    },
+    {
+      "id": "p23_sunken_lane",
+      "name": "A sunken lane up a loess slope",
+      "anchor": { "kind": "sunken_lane", "close_km": [-3.67, 11.71] },
+      "photos": [],
+      "must_see": "A track worn 1-5 m into the slope between grassed banks, deepest halfway up, shrubs and trees along the banks' tops, the field beyond hidden (A.3.34)."
     }
   ]
 }

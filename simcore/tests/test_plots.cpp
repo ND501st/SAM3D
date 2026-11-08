@@ -61,10 +61,11 @@ SC_TEST("plots: the data loads, each plot with photos from the views' register")
     const PlotSet set = Plots();
     SC_EXPECT(set.plots.size() >= 1);
     SC_EXPECT(Find(set, "p01_ploughland") != nullptr);
-    // Every plot but the dry sunflower's, the brook's alders (A.3.21) and a wood's inside (A.3.22), which have no photo in
+    // Every plot but the dry sunflower's, the brook's alders (A.3.21), a wood's inside (A.3.22), a village pond and a sunken lane (A.3.34), which have no photo in
     // the register yet (fetching one waits for the owner).
     for (const PlotDef& p : set.plots) {
-        SC_EXPECT(!p.photos.empty() || p.id == "p04_standing_sunflower" || p.id == "p20_brook_alders" || p.id == "p21_wood_inside");
+        SC_EXPECT(!p.photos.empty() || p.id == "p04_standing_sunflower" || p.id == "p20_brook_alders" || p.id == "p21_wood_inside" ||
+                   p.id == "p22_village_pond" || p.id == "p23_sunken_lane");
     }
 }
 

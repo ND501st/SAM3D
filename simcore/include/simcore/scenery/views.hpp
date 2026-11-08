@@ -100,7 +100,7 @@ inline const std::vector<std::string>& LookKinds() {
 }
 
 inline const std::vector<std::string>& AnchorKinds() {
-    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row", "wood_inside"};
+    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row", "wood_inside", "pond", "sunken_lane"};
     return k;
 }
 
@@ -145,7 +145,7 @@ inline bool ParseAnchor(const json::Value& a_value, const std::string& id, ViewA
     const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
     if (by_id && an.id.empty()) return Fail(error, id + ": a " + an.kind + " anchor names its " + an.kind);
     if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge" || an.kind == "high_ground" ||
-         an.kind == "brook_row" || an.kind == "wood_inside") &&
+         an.kind == "brook_row" || an.kind == "wood_inside" || an.kind == "pond" || an.kind == "sunken_lane") &&
         !an.has_close) {
         return Fail(error, id + ": a " + an.kind + " anchor needs close_km");
     }
@@ -520,6 +520,66 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             s.e = s.eye_e = wood->east_m;
             s.n = s.eye_n = wood->north_m;
             s.bearing_rad = a.has_bearing ? a.bearing_rad : 0.0;
+        }
+    } else if (a.kind == "sunken_lane") {
+        // The nearest sunken lane to close_km (terrain roadmap A.3.34), looked up from its floor: the eye on its centre line
+        // a third of the way up from its foot (or from_m up when given), looking up it to its head.
+        double best = std::numeric_limits<double>::max();
+        std::size_t found = map.LaneCount();
+        for (std::size_t i = 0; i < map.LaneCount(); ++i) {
+            MapPoint foot, head;
+            double depth = 0.0;
+            map.LaneEnds(i, foot, head, depth);
+            const double d = std::hypot(0.5 * (foot.east_m + head.east_m) - a.close_e_m, 0.5 * (foot.north_m + head.north_m) - a.close_n_m);
+            if (d < best) {
+                best = d;
+                found = i;
+            }
+        }
+        if (found == map.LaneCount()) {
+            s = Missing("the map has no sunken lanes");
+        } else {
+            MapPoint foot, head;
+            double depth = 0.0;
+            map.LaneEnds(found, foot, head, depth);
+            const double len = std::hypot(head.east_m - foot.east_m, head.north_m - foot.north_m);
+            const double up = a.from_m > 0.0 ? std::min(a.from_m, len) : len / 3.0;
+            s.ok = true;
+            s.e = head.east_m;
+            s.n = head.north_m;
+            s.bearing_rad = BearingTo(foot.east_m, foot.north_m, head.east_m, head.north_m);
+            s.eye_e = foot.east_m + up * std::sin(s.bearing_rad);
+            s.eye_n = foot.north_m + up * std::cos(s.bearing_rad);
+        }
+    } else if (a.kind == "pond") {
+        // The nearest village pond to close_km (terrain roadmap A.3.34), looked at across its width: the eye from_m beyond its
+        // bank on the side the data's bearing looks from (the pond's left side looking along its length when none), at it.
+        double best = std::numeric_limits<double>::max();
+        std::size_t found = map.PondCount();
+        for (std::size_t i = 0; i < map.PondCount(); ++i) {
+            MapPoint c;
+            double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
+            map.PondAt(i, c, rx, ry, heading, level);
+            const double d = std::hypot(c.east_m - a.close_e_m, c.north_m - a.close_n_m);
+            if (d < best) {
+                best = d;
+                found = i;
+            }
+        }
+        if (found == map.PondCount()) {
+            s = Missing("the map has no ponds");
+        } else {
+            MapPoint c;
+            double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
+            map.PondAt(found, c, rx, ry, heading, level);
+            const double bearing = a.has_bearing ? a.bearing_rad : heading + 0.5 * kPi;
+            const double back = ry + a.from_m;
+            s.ok = true;
+            s.e = c.east_m;
+            s.n = c.north_m;
+            s.eye_e = c.east_m - back * std::sin(bearing);
+            s.eye_n = c.north_m - back * std::cos(bearing);
+            s.bearing_rad = bearing;
         }
     } else if (a.kind == "brook_row") {
         // The nearest row of trees along a brook to close_km (terrain roadmap A.3.20's alders), looked at across the brook:

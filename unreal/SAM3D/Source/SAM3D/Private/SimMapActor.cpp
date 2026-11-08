@@ -1136,6 +1136,20 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		GroundMaterials.Add(Mid);
 		Out[static_cast<int32>(L)] = Mid;
 	}
+	// The sunken lanes' tiles (A.3.34) are the map proper's ground, finer: its material.
+	for (std::size_t L = 0; L < Levels.size(); ++L)
+	{
+		if (Levels[L] == &Proper)
+		{
+			for (std::size_t T = 0; T < Levels.size(); ++T)
+			{
+				if (Map->IsLaneTile(T))
+				{
+					Out[static_cast<int32>(T)] = Out[static_cast<int32>(L)];
+				}
+			}
+		}
+	}
 	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (crops of day %d)"), *MapFile, GroundMaterials.Num(), static_cast<int32>(Levels.size()),
 		Day);
 	return Out;
@@ -1190,17 +1204,17 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	const auto IsCoreLike = [&](std::size_t Level)
 	{
 		const simcore::MapGrid* G = Levels[Level];
-		return G == &M.CoreGrid() || (Level < M.DetailGrids().size() && D.InCore(G->west_m + 1.0, G->south_m + 1.0));
+		return G == &M.CoreGrid() || (Level < M.FinerLevelCount() && D.InCore(G->west_m + 1.0, G->south_m + 1.0));
 	};
 	const auto IsFarLike = [&](std::size_t Level)
 	{
-		return Levels[Level] == &M.FarGrid() || (Level < M.DetailGrids().size() && !IsCoreLike(Level));
+		return Levels[Level] == &M.FarGrid() || (Level < M.FinerLevelCount() && !IsCoreLike(Level));
 	};
 	const auto Colour = [&](std::size_t Level, double E, double N, double H)
 	{
 		// The map proper and the detail areas: the land cover's colour (roadmap R6: a field's crop, a wood, a town, military
 		// ground), a little browner up the hills and greener low by the river, as GroundColour tints its fields.
-		if ((IsCoreLike(Level) || Level < M.DetailGrids().size()) && Cover && DressRules && Cover->Has(E, N))
+		if ((IsCoreLike(Level) || Level < M.FinerLevelCount()) && Cover && DressRules && Cover->Has(E, N))
 		{
 			FLinearColor C = Linear(Cover->ColourAt(*DressRules, E, N));
 			const double Rise = FMath::Clamp((H - D.base_m) / 60.0, -0.3, 1.0);
@@ -1229,6 +1243,16 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	const simcore::MapPoint Here = Link.FrameToMap(0.0, 0.0);
 	constexpr double QueryReachM = 15000.0;
 	constexpr double SkirtM = 5.0;
+	struct FLaneBlock
+	{
+		std::size_t Level = 0;
+		TArray<FVector> Verts;
+		TArray<FVector> Normals;
+		TArray<FLinearColor> Colours;
+		TArray<FVector2D> Uv;
+		TArray<int32> Tris;
+	};
+	TMap<FIntPoint, FLaneBlock> LaneBlocks;
 	// One square of a level as a mesh of its own: cells [C0, C1) x [R0, R1).
 	auto AddSection = [&](std::size_t Level, int32 C0, int32 C1, int32 R0, int32 R1)
 	{
@@ -1262,11 +1286,53 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		Uv.Reserve(Nc * Nr);
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(G.EastOf((C0 + C1) / 2), G.NorthOf((R0 + R1) / 2), Ae, An, Au);
+		const bool bLaneTile = M.IsLaneTile(Level);
+		const simcore::MapGrid& Core = M.CoreGrid();
+		// The map proper's slope at its node (c, r), per metre east and north.
+		const auto CoreSlope = [&](int32 Cc, int32 Cr, double& Se, double& Sn)
+		{
+			Se = (Core.At(FMath::Min(Cc + 1, Core.cols - 1), Cr) - Core.At(FMath::Max(Cc - 1, 0), Cr)) / (2.0 * Core.spacing_m);
+			Sn = (Core.At(Cc, FMath::Min(Cr + 1, Core.rows - 1)) - Core.At(Cc, FMath::Max(Cr - 1, 0))) / (2.0 * Core.spacing_m);
+		};
 		const auto NormalAt = [&](int32 Gc, int32 Gr)
 		{
-			const double He = G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr);
-			const double Hn = G.At(Gc, FMath::Min(Gr + 1, G.rows - 1)) - G.At(Gc, FMath::Max(Gr - 1, 0));
-			const simcore::Vec3 Local(-He / (2.0 * G.spacing_m), -Hn / (2.0 * G.spacing_m), 1.0);
+			double Se = 0.0, Sn = 0.0;
+			if (bLaneTile)
+			{
+				// A sunken lane's tile (A.3.34): the map proper's slope as its triangle carries it between its nodes' (as
+				// the GPU interpolates the map proper's normals, so the tile's edge shades as its neighbours do), less the
+				// lane's cut.
+				const double E = G.EastOf(Gc), N = G.NorthOf(Gr);
+				int Cc = 0, Cr = 0;
+				Core.CellOf(E, N, Cc, Cr);
+				const double Tx = FMath::Clamp((E - Core.EastOf(Cc)) / Core.spacing_m, 0.0, 1.0), Ty = FMath::Clamp((N - Core.NorthOf(Cr)) / Core.spacing_m, 0.0, 1.0);
+				struct FCorner
+				{
+					int32 C, R;
+					double W;
+				};
+				const bool bLower = Tx + Ty <= 1.0;
+				const FCorner Corners[3] = {bLower ? FCorner{Cc, Cr, 1.0 - Tx - Ty} : FCorner{Cc + 1, Cr + 1, Tx + Ty - 1.0},
+					FCorner{Cc + 1, Cr, bLower ? Tx : 1.0 - Ty}, FCorner{Cc, Cr + 1, bLower ? Ty : 1.0 - Tx}};
+				for (const FCorner& K : Corners)
+				{
+					double Ke = 0.0, Kn = 0.0;
+					CoreSlope(K.C, K.R, Ke, Kn);
+					Se += K.W * Ke;
+					Sn += K.W * Kn;
+				}
+				// The cut: the map proper's triangles less the tile's (a lane's cut, a pond's bed and banks), across a node.
+				const double Step = 0.5 * G.spacing_m;
+				const auto Cut = [&](double Pe, double Pn) { return Core.SampleTri(Pe, Pn) - M.GroundHeight(Pe, Pn); };
+				Se -= (Cut(E + Step, N) - Cut(E - Step, N)) / (2.0 * Step);
+				Sn -= (Cut(E, N + Step) - Cut(E, N - Step)) / (2.0 * Step);
+			}
+			else
+			{
+				Se = (G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr)) / (2.0 * G.spacing_m);
+				Sn = (G.At(Gc, FMath::Min(Gr + 1, G.rows - 1)) - G.At(Gc, FMath::Max(Gr - 1, 0))) / (2.0 * G.spacing_m);
+			}
+			const simcore::Vec3 Local(-Se, -Sn, 1.0);
 			return DirToUnreal((Ae * Local.x + An * Local.y + Au * Local.z).Normalized());
 		};
 		for (int32 r = 0; r < Nr; ++r)
@@ -1327,6 +1393,10 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				// The face's normal is (C - A) x (B - A) for (A, B, C): A, B (east), C (north) faces up. The split along
 				// B-C is simcore's (MapGrid::SampleTri): the contract.
 				Tris.Append({A, B, Cc, B, Dd, Cc});
+				if (bLaneTile)
+				{
+					continue;  // a lane's tile meets the map proper's triangles node for node along their edge: no skirt
+				}
 				if (!DrawnAt(Gc, Gr - 1))
 				{
 					Skirt(Gc, Gr, Gc + 1, Gr);
@@ -1347,6 +1417,23 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		}
 		// Collision: the map proper's (bCollision), the far ground's near the scenario for queries only.
 		const double E0 = G.EastOf(C0), E1 = G.EastOf(C1), N0 = G.NorthOf(R0), N1 = G.NorthOf(R1);
+		if (bLaneTile)
+		{
+			// The sunken lanes' tiles go into one mesh per kilometre square (hundreds of 50 m tiles: one component each would
+			// be a draw call each).
+			FLaneBlock& Block = LaneBlocks.FindOrAdd(FIntPoint(FMath::FloorToInt32(E0 / 1000.0), FMath::FloorToInt32(N0 / 1000.0)));
+			Block.Level = Level;
+			const int32 Base = Block.Verts.Num();
+			Block.Verts.Append(Verts);
+			Block.Normals.Append(Normals);
+			Block.Colours.Append(Colours);
+			Block.Uv.Append(Uv);
+			for (const int32 T : Tris)
+			{
+				Block.Tris.Add(Base + T);
+			}
+			return;
+		}
 		const double Away = FMath::Sqrt(FMath::Square(FMath::Max3(E0 - Here.east_m, 0.0, Here.east_m - E1)) +
 										FMath::Square(FMath::Max3(N0 - Here.north_m, 0.0, Here.north_m - N1)));
 		const bool bCollide = IsCoreLike(Level) ? bCollision : (IsFarLike(Level) && bCollision && Away < QueryReachM);
@@ -1374,6 +1461,23 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 			}
 		}
 	}
+	int32 LaneTris = 0;
+	for (TPair<FIntPoint, FLaneBlock>& Pair : LaneBlocks)
+	{
+		FLaneBlock& Block = Pair.Value;
+		UProceduralMeshComponent* Tile = NewObject<UProceduralMeshComponent>(this);
+		Tile->SetupAttachment(Root);
+		Tile->bUseAsyncCooking = true;
+		Tile->SetCastShadow(true);
+		Tile->CreateMeshSection_LinearColor(0, Block.Verts, Block.Tris, Block.Normals, Block.Uv, Block.Colours, TArray<FProcMeshTangent>(), bCollision);
+		Tile->SetMaterial(0, Textured[static_cast<int32>(Block.Level)] != nullptr ? Textured[static_cast<int32>(Block.Level)] : GroundMaterial);
+		Tile->SetCollisionEnabled(bCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		Tile->RegisterComponent();
+		GroundTiles.Add(Tile);
+		LaneTris += Block.Tris.Num() / 3;
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: %d sunken lanes on %d blocks of finer ground (%d triangles)"), *MapFile, static_cast<int32>(M.LaneCount()), LaneBlocks.Num(),
+		LaneTris);
 }
 
 void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)

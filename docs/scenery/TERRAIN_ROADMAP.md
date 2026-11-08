@@ -928,6 +928,64 @@ A.3.32's Left, the form. Before writing a cumulus material, the sample material'
   July); the scales between 48 and 256 not measured (interpolated); the cloud shadows on the land judged; the presets'
   other layers.
 
+### A.3.34 L11 step 5: sunken lanes on tiles of finer ground; village ponds (8 Nov 2026)
+
+A.5 step 5's sunken lanes and step 6's pond (the owner's pick after A.3.33). The plots are **p22** (pond) and **p23**
+(lane): p21 was already the wood's inside, so the lane is p23, not A.5's p21.
+
+- **Source.** De Geeter, Poesen and Vanmaercke's survey of 132 sunken lanes on the Belgian loess (`degeeter_sunken_lanes`,
+  registered in `docs/SOURCES.md` as a textbook): length 12-913 m (mean 285), depth 0.5-10 m (mean 2.5), floor 0.8-11 m wide
+  (mean 2.3), top 5-28 m (mean 10). They start where the slope is steepest, with shrubs and grass on their banks. Our
+  values are in `land_use.json`'s `lane_*`, each cited or marked as a game value.
+- **Where.** On the hills' farm tracks, along runs steeper than a track's grade, extended over the whole climb. A hash
+  picks half of them. A lane needs at least 3 m of rise and 50 m of length, and open ground every 10 m (no wood, town,
+  water, marsh, site or detail area).
+- **The cut.** It is deepest at its middle and smoothed along to its ends and across its banks. It is drawn on **tiles
+  of finer ground**: one 2 m grid per 50 m core cell the lane touches, the core's height less the cut. The tiles go in
+  `DrawnLevels` between the detail areas and the core; the core leaves their cells out. Their outer edges meet the
+  core's triangles to 1.4e-12 m.
+- **Measured.** 96 lanes on 647 tiles. Depth p50 2.4 m, max 5.0 m. Length p50 124 m, max 348 m. The floor's grade
+  p50 12%, p95 25%. All 96 have a farm track on the floor (sampled every 4 m in a lane). Nothing is built or grown in a
+  lane except the trees laid along its banks. The core has 16 fewer canopy boxes: wood blocks over a lane's banks are
+  dropped whole.
+- **Village ponds.** One per village of the map proper, in its lowest open ground on rings at 0.6-1.1 × the village's
+  radius:
+  - an ellipse along the contour;
+  - its level is its rim's lowest point less 0.4 m;
+  - a 1.5 m bed, a 4 m grassed shore, and a dam with a 2 m crest where the ground falls away (at most 1.5 m high);
+  - drawn on the same tiles, with its water as a strip at its level and two waterside trees.
+
+  Five ponds, 28-37 × 17-22 m, each with its middle 1.7 m under the water and its bank at least 0.28 m above it. The 2 m
+  crest was needed: without it, Lazne's pond had one bank 0.01 m below its water. The pond's shore is stamped as
+  water's cover in the cover raster, so the ground layer there is `bank` (grass and reed tussocks), not the field.
+- **Unreal.** The tiles are drawn by `SimMapActor` in one component per km block. Their normals are the core's slope
+  less the cut's gradient, and they have no skirts. The log line is "96 sunken lanes on 103 blocks of finer ground
+  (808750 triangles)".
+- **Seen (l2, l3).**
+  - p23 from the floor of the deepest lane (5.0 m, 74 m long; across it a third of the way up, the banks stand 3.4 m
+    and 4.7 m over the floor): a track between grassed banks, with trees on their tops against the sky. It reads as a
+    sunken lane. From above it is a faint shaded line.
+  - The first anchor's lane (nearest (-12, 0) km, 4 km off) was 1.3 m deep and **on a sidehill**: its downhill bank
+    stood only 0.7 m. The plot now looks at the deepest lane.
+  - p22 (l4): still water in a hollow, a bank beyond, the waterside tree, and the bank layer's reed tussocks and grass
+    on the near shore instead of stubble. The bank layer's ground is too pale and sandy for a pond's wet edge.
+- **Costs (l3):** the map views GPU mean 12.01 ms, max 14.88, game thread 11.86 (n10 11.83, 14.38, 11.91); the two plots'
+  six views GPU mean 10.34 ms, max 12.43.
+- **Fixed on the way:** `AssetPart::near` (A.3.26) is a Windows macro's name, and `simcore_header_check` had failed to
+  compile since then. It is renamed `near_models`; the JSON key stays `"near"`.
+- **Left:**
+  - Lanes that climb across the slope are shallow on their downhill side. Prefer runs down the fall line, or cut to the
+    uphill ground.
+  - The pond's tree is drawn as an alder: there is no willow kind.
+  - The reeds go by 25 m cover cells, so they stand back from the water (up to ~16 m beyond the shore), not at its
+    edge, and the bank layer is a river's sand: a pond needs its own wet margin.
+  - p22 frames the pond but not the village (K-f).
+  - The lane banks' cover is the field's except where the track's verge stamps it.
+  - `nav` does not read the grade.
+  - p22 and p23 have no reference photo (fetching one waits for the owner).
+  - `tools/tests/test_voice_lines.py` fails on this machine: `battery_commander/order_tzm_run` has no recording (not this
+    batch's).
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
@@ -1000,7 +1058,8 @@ budget, the posts' hills unchanged at their summits):
 6. **The hill country's detail area and its plots.** A detail area at 10 m in the hills and its plots (judged like the
    others, against the look target first): **p18** a field's edge on a slope (K-a; first form 6 Nov, on the map's 50 m
    ground); **p19** a wood's edge on a hillside (K-b; first form 6 Nov); **p20** a brook in a meadow valley with
-   willows (K-e); **p21** a sunken lane; **p22** a village pond with reeds and a willow (K-f, in our village's kind).
+   willows (K-e); **p23** a sunken lane (p21 became the wood's inside, A.3.22; first form A.3.34); **p22** a village pond
+   with reeds and a willow (K-f, in our village's kind; first form A.3.34).
    The view **V13** (first form 6 Nov): a panorama from the highest ground near the hills' middle (the anchor kind
    `high_ground`), layered hills to the horizon and, east, the hills falling to the plain (K-b, K-d).
 

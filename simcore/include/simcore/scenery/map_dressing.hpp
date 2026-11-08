@@ -569,6 +569,14 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
                 }
             }
         }
+        // A village pond's shore (terrain roadmap A.3.34): water's cover out over its bank, so the bank's grass and reeds
+        // grow round it and no field is ploughed to its edge; out half a cell more, so every cell the shore touches.
+        for (std::size_t i = 0; i < map.PondCount(); ++i) {
+            MapPoint c;
+            double rx = 0.0, ry = 0.0, heading = 0.0, level = 0.0;
+            map.PondAt(i, c, rx, ry, heading, level);
+            StampRect(g, c.east_m, c.north_m, 2.0 * rx, 2.0 * ry, heading, def.land_use.pond_shore_m + 0.5 * cell, Cover::Water);
+        }
     }
     return raster;
 }

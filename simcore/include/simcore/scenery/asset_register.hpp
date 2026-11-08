@@ -61,7 +61,7 @@ struct AssetPart {
     // Optional (A.3.26): the models drawn in its place near the camera, within `near_m` (a Fab plant too dear to draw
     // everywhere), picked tree by tree as the alternates are; beyond, `asset` or `variants` as before, which hide
     // themselves within `near_m` (M_SimFoliage's NearHideM).
-    std::vector<std::string> near;
+    std::vector<std::string> near_models;
     double near_m = 0.0;
 };
 
@@ -164,13 +164,13 @@ public:
                     }
                     for (const json::Value& v : ns->items) {
                         if (!v.Is(json::Type::String) || v.string.empty()) return Fail(error, "parts: " + key + ": a near model must be an asset's id");
-                        part.near.push_back(v.string);
+                        part.near_models.push_back(v.string);
                     }
                     part.near_m = Number(*nr, "within_m", 0.0);
                     if (!(part.near_m > 0.0)) return Fail(error, "parts: " + key + ": \"near\" needs \"within_m\" above 0");
                 }
                 std::vector<std::string> named = part.variants;
-                named.insert(named.end(), part.near.begin(), part.near.end());
+                named.insert(named.end(), part.near_models.begin(), part.near_models.end());
                 named.push_back(part.asset);
                 named.insert(named.end(), part.alternates.begin(), part.alternates.end());
                 for (const std::string& id : named) {
@@ -206,16 +206,16 @@ public:
     // none).
     int NearCount(const std::string& part) const {
         const auto it = parts.find(part);
-        return it == parts.end() ? 0 : static_cast<int>(it->second.near.size());
+        return it == parts.end() ? 0 : static_cast<int>(it->second.near_models.size());
     }
     const AssetEntry* NearFor(const std::string& part, int k) const {
         const auto it = parts.find(part);
-        if (it == parts.end() || k < 0 || static_cast<std::size_t>(k) >= it->second.near.size()) return nullptr;
-        return Find(it->second.near[static_cast<std::size_t>(k)]);
+        if (it == parts.end() || k < 0 || static_cast<std::size_t>(k) >= it->second.near_models.size()) return nullptr;
+        return Find(it->second.near_models[static_cast<std::size_t>(k)]);
     }
     double NearM(const std::string& part) const {
         const auto it = parts.find(part);
-        return it == parts.end() || it->second.near.empty() ? 0.0 : it->second.near_m;
+        return it == parts.end() || it->second.near_models.empty() ? 0.0 : it->second.near_m;
     }
 
     // How many models a part is drawn by, instance by instance (its alternates; 1 with none).

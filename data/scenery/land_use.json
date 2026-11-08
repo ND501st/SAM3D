@@ -20,6 +20,21 @@
     "side_slope": { "value": 1.5, "source": "game value: sam3d estimate (a cutting's or embankment's side, 1 in 1.5)", "confidence": "estimate" },
     "formation_m": { "value": 6, "source": "game value: sam3d estimate (shoulder and ditch each side)", "confidence": "estimate" },
     "brook_row_share": { "value": 0.6, "source": "game value: sam3d estimate (of a brook's 100 m pieces, the share with alders on one bank; A.5 step 4: willows and alders along the brooks)", "confidence": "estimate" },
-    "formation_min_half_m": { "value": 25, "source": "game value: sam3d estimate (half the core's 50 m ground cell, so a node falls on the formation)", "confidence": "estimate" }
+    "formation_min_half_m": { "value": 25, "source": "game value: sam3d estimate (half the core's 50 m ground cell, so a node falls on the formation)", "confidence": "estimate" },
+    "lane_share": { "value": 0.5, "source": "game value: sam3d estimate (of the steep climbs of the hills' farm tracks, the share worn into sunken lanes; to be judged against photographs of the Transdanubian loess hills)", "confidence": "estimate" },
+    "lane_depth_m": { "value": 2.5, "source": "degeeter_sunken_lanes (the mean depth of 132 lanes at their initiation point, 2.5 m; range 0.5-10 m)", "confidence": "medium" },
+    "lane_depth_spread": { "value": 2.0, "source": "game value: sam3d estimate (depths drawn from half to twice the mean, 1.25-5 m, inside degeeter_sunken_lanes's range)", "confidence": "estimate" },
+    "lane_floor_m": { "value": 4.0, "source": "game value: sam3d estimate (the farm track's width, inside degeeter_sunken_lanes's bottom widths of 0.8-11 m, mean 2.3 m)", "confidence": "estimate" },
+    "lane_bank_run": { "value": 1.5, "source": "derived: degeeter_sunken_lanes's mean top width 10 m and bottom width 2.3 m at the mean depth 2.5 m give (10 - 2.3) / 2 / 2.5 = 1.54 m of bank per metre of depth", "confidence": "medium" },
+    "lane_min_rise_m": { "value": 3.0, "source": "game value: sam3d estimate (a climb rising less is left a track; degeeter_sunken_lanes counts a lane from 0.5 m deep)", "confidence": "estimate" },
+    "lane_grid_m": { "value": 2.0, "source": "game value: sam3d estimate (the lanes' tiles of finer ground: 25 to the core's 50 m cell, so a bank of 2-7 m has nodes on it)", "confidence": "estimate" },
+    "lane_row_share": { "value": 0.5, "source": "game value: sam3d estimate (degeeter_sunken_lanes: the banks vegetated by shrubs and grasses)", "confidence": "estimate" },
+    "pond_radius_m": { "value": 16, "source": "game value: sam3d estimate (a village pond 25-40 m long, judged by eye against the look target's K-f; to be sourced)", "confidence": "estimate" },
+    "pond_aspect": { "value": 0.6, "source": "game value: sam3d estimate (long along the contour, as a dammed hollow)", "confidence": "estimate" },
+    "pond_depth_m": { "value": 1.5, "source": "game value: sam3d estimate (a shallow village pond)", "confidence": "estimate" },
+    "pond_drop_m": { "value": 0.4, "source": "game value: sam3d estimate (the water below the lowest of its rim)", "confidence": "estimate" },
+    "pond_shore_m": { "value": 4, "source": "game value: sam3d estimate (its bank's run from the water up to the ground round it)", "confidence": "estimate" },
+    "pond_max_dam_m": { "value": 1.5, "source": "game value: sam3d estimate (no village pond needing a higher dam)", "confidence": "estimate" },
+    "pond_trees": { "value": 2, "source": "game value: sam3d estimate (the look target's K-f: a willow by the pond; drawn as alders until the asset kit has a willow)", "confidence": "estimate" }
   }
 }
