@@ -1,0 +1,59 @@
+{
+  "about": "The cab's and compartment's heights above the aisle floor, from the joint solve and multi-angle reads of the book's photos, independent of the model's floor and of any height placed in the model. docs/OSA_INTERIOR_HOLISTIC.md section 25. Exterior rows are read off two near-orthographic profiles, with the 1.2 m wheel as the yardstick.",
+  "source": "wwp_gecko g011-a, g012-a (exterior profiles; wheel 1200 mm, roadmap X3); g082-b, g083-a, g083-b, g085-c, g085-d, g088-a, g089-d, g091-a, g091-b, g091-d (interior, joint solve)",
+  "confidence": "medium for heights above the seat deck's mat (+-0.05-0.08); low to medium for the deck's height above the aisle and the floor's above the road",
+  "solve_scale": {
+    "k": 0.9,
+    "why": "The solve runs about 10 % large wherever it can be checked",
+    "checks": [
+      {"what": "aft door's width", "true_m": 0.59, "solve_m": 0.65, "source": "mon_2112_80 Fig. 3 against the solve, section 16"},
+      {"what": "R-123M's face", "ratio": 0.91, "source": "section 22: the solve reads the radio 10 % large"},
+      {"what": "g082-b to the seats' backs", "true_m": 2.46, "solve_m": 2.72, "source": "seat width 0.50 m (Fig. 3) at the solved focal length, against the solved distance"}
+    ]
+  },
+  "forward_group_pitch": {
+    "why": "The rack's foot and top run uphill forward in the solve, at the same slope, so the group is pitched",
+    "foot": [[1.199, 0.967], [2.472, 1.017]],
+    "top": [[1.177, 1.521], [2.45, 1.57]]
+  },
+  "mat_level": {
+    "how": "g082-b's level camera (solve y -0.32, z 0.938) stands 0.475 m over the aisle mat: 627 px from the horizon to the mat's forward edge, at 0.758 mm per pixel from the seat's 0.50 m width",
+    "camera": [-0.318, 0.938],
+    "camera_over_mat_m": 0.475
+  },
+  "interior": [
+    {"id": "footwell_mat", "label": "Footwell mat", "y": 3.23, "z": 0.19, "model_m": 0.62, "photos": ["g083-a", "g085-c"]},
+    {"id": "toe_floor", "label": "Floor at the toes", "y": 3.52, "z": 0.375, "model_m": 0.8, "photos": ["g085-d"]},
+    {"id": "gap_tubes", "label": "Tubes between the seats", "y": 2.53, "z": 0.556, "model_m": null, "photos": ["g083-a", "g088-a"]},
+    {"id": "dash_foot", "label": "Dash, foot", "y": 3.15, "z": 0.84, "model_m": 1.17, "photos": ["g082-b", "g089-d"]},
+    {"id": "dash_top", "label": "Dash, top", "y": 3.15, "z": 1.03, "model_m": 1.47, "photos": ["g082-b", "g089-d"]},
+    {"id": "wheel_centre", "label": "Steering wheel", "y": 3.15, "z": 1.09, "model_m": 1.47, "photos": ["g082-b", "g083-a"]},
+    {"id": "screen_foot", "label": "Windscreen, foot", "y": 3.15, "z": 1.14, "model_m": 1.52, "photos": ["g082-b", "g089-d", "g087-d"]},
+    {"id": "screen_top", "label": "Windscreen, top", "y": 3.15, "z": 1.47, "model_m": 1.857, "photos": ["g082-b", "g089-d"]},
+    {"id": "header", "label": "Header loom", "y": 3.15, "z": 1.58, "model_m": 1.91, "photos": ["g082-b", "g089-d", "g087-d"]},
+    {"id": "front_rack_foot", "label": "SL-1M, foot", "y": 2.472, "z": 1.017, "model_m": 1.373, "photos": ["g091-a", "g091-b", "g091-d", "g082-b"]},
+    {"id": "front_rack_top", "label": "SL-1M, top", "y": 2.45, "z": 1.57, "model_m": 1.927, "photos": ["g091-a", "g091-b", "g091-d"]}
+  ],
+  "single_view": [
+    {"id": "seat_back_top", "label": "Top of the seat's back, as parked", "over_mat_m": 0.53, "spread_m": 0.02, "model_m": 1.54, "how": "g082-b: 730 and 675 px above the mat at 0.758 mm per pixel, driver and commander", "confidence": "medium"},
+    {"id": "cushion", "label": "Cushion's top", "over_mat_m": 0.15, "spread_m": 0.05, "model_m": 1.05, "how": "g082-b: the hinge arms' pivots about 0.14 over the mat, by eye", "confidence": "low"}
+  ],
+  "datum": {
+    "deck_above_aisle_m": 0.36,
+    "aisle_model_m": 0.62,
+    "aisle_above_road_m": 0.72,
+    "lining_clear_of_outer_roof_m": 0.08,
+    "roof_above_aisle_m": [1.40, 1.49],
+    "outer_roof_max_m": 2.25,
+    "how": "Two ties to the exterior that do not share a number: the windscreen's band against the side windows puts the seat mat at 1.07-1.13 above the road; the hull's outer roof, no higher than about 2.25 m in g011-a and nearly flat in g026-a, less the lining, less the roof's height over the aisle, puts the aisle at 0.68-0.77. So the mat stands about 0.36 above the aisle, and the footwell, 0.32 below the mat, is at the aisle's own level: one hull floor with a deck across it. g083-b's seam shows only that the mat is level with the plates just aft of it. The deck's height above the aisle is +-0.08; the compartment keeps its own z (aisle 0.62) and stands 0.10 higher on the hull when the real exterior is placed (X2).",
+    "confidence": "low to medium"
+  },
+  "exterior": {
+    "wheel_m": 1.2,
+    "profiles": [
+      {"photo": "g011-a", "ground": 1235, "tyre_top": 888, "rows": {"nose_top": 782, "window_foot": 778, "window_top": 656, "cab_roof": 608, "hull_side_top": 627, "hull_lower": 1060}},
+      {"photo": "g012-a", "ground": 1421, "tyre_top": 1033, "rows": {"nose_top": 915, "window_foot": 893, "window_top": 801, "cab_roof": 700, "hull_side_top": 732, "hull_lower": 1195}}
+    ],
+    "model_m": {"window_foot": 1.68, "window_top": 2.04, "cab_roof": 2.13}
+  }
+}

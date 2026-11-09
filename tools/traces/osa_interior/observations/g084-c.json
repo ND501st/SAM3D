@@ -1,0 +1,549 @@
+{
+ "photo": "g084-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "just behind and right of the driver seat, seated-to-eye height",
+  "looks": "forward at the driver station",
+  "covers": [
+   "control.steering_wheel",
+   "console.driver_dash",
+   "console.pu303",
+   "control.pedals"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "three-spoke wheel square-on with emblem hub",
+   "bbox": [
+    0.23,
+    0.06,
+    0.75,
+    0.86
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "0.5 m",
+   "material": "black plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.column_stalk",
+   "class": "control",
+   "seen_as": "stalk with a red-knobbed switch on the column right",
+   "bbox": [
+    0.52,
+    0.43,
+    0.59,
+    0.53
+   ],
+   "zone": "cab",
+   "on": "control.steering_wheel",
+   "relations": [
+    [
+     "on",
+     "control.steering_wheel"
+    ]
+   ],
+   "size_cue": "finger-length",
+   "material": "black, red knob",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "PU-303 on the left cheek behind the wheel",
+   "bbox": [
+    0.1,
+    0.28,
+    0.23,
+    0.6
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black face",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.gauge_by_pu303",
+   "class": "instrument",
+   "seen_as": "gauge edge above-left of PU-303",
+   "bbox": [
+    0.03,
+    0.28,
+    0.11,
+    0.39
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue bezel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.ring_pillar_left",
+   "class": "bracket",
+   "seen_as": "grey ring bracket at the top left",
+   "bbox": [
+    0.0,
+    0.18,
+    0.08,
+    0.36
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.clutch_instruction",
+   "class": "plate",
+   "seen_as": "clutch instruction plate on the pillar",
+   "bbox": [
+    0.0,
+    0.37,
+    0.08,
+    0.56
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.frame.pillar_left",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": "Paraphrase: clutch fast in, smooth out, first gear only."
+  },
+  {
+   "id": "new.plate.driver_instructions",
+   "class": "plate",
+   "seen_as": "ВОДИТЕЛЬ instruction plate",
+   "bbox": [
+    0.27,
+    0.33,
+    0.33,
+    0.41
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.driver_dash",
+   "class": "console",
+   "seen_as": "driver panel: tachometer with red/green arc, gate lever, small instrument",
+   "bbox": [
+    0.33,
+    0.29,
+    0.53,
+    0.63
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.gear_positions",
+   "class": "plate",
+   "seen_as": "gear diagram plate",
+   "bbox": [
+    0.54,
+    0.28,
+    0.61,
+    0.34
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.water_jet_flaps",
+   "class": "plate",
+   "seen_as": "ЗАСЛОНКА ВОДОМЕТОВ plate with ЛЕВАЯ / ПРАВАЯ",
+   "bbox": [
+    0.54,
+    0.35,
+    0.59,
+    0.4
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "below",
+     "new.plate.gear_positions"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black metal",
+   "confidence": "medium",
+   "notes": "May be part of the driver panel face."
+  },
+  {
+   "id": "new.console.centre_dash",
+   "class": "console",
+   "seen_as": "centre panel with speedometer, gauges, four ОТКЛ toggles, lamps, socket",
+   "bbox": [
+    0.59,
+    0.33,
+    1.0,
+    0.68
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash housing",
+   "bbox": [
+    0.1,
+    0.25,
+    1.0,
+    0.7
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.dash",
+   "class": "handle",
+   "seen_as": "tubular handles beside the gauges",
+   "bbox": [
+    0.33,
+    0.33,
+    0.61,
+    0.53
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "left windscreen",
+   "bbox": [
+    0.08,
+    0.0,
+    0.82,
+    0.22
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass, rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "edge of the right windscreen",
+   "bbox": [
+    0.88,
+    0.0,
+    1.0,
+    0.22
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.windscreen_centre_post",
+   "class": "frame",
+   "seen_as": "centre post",
+   "bbox": [
+    0.79,
+    0.0,
+    0.89,
+    0.3
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.windscreen_right_latch",
+   "class": "clamp",
+   "seen_as": "long loop latch on the right screen frame",
+   "bbox": [
+    0.89,
+    0.0,
+    0.94,
+    0.19
+   ],
+   "zone": "cab.dash",
+   "on": "hull.windscreen_right",
+   "relations": [],
+   "size_cue": "hand-length",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": "Screen or shutter latch."
+  },
+  {
+   "id": "control.pedals",
+   "class": "control",
+   "seen_as": "three pedals: clutch, brake, long accelerator",
+   "bbox": [
+    0.49,
+    0.7,
+    0.72,
+    0.85
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "pads ~0.1 m",
+   "material": "rubber pads",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.gear_lever",
+   "class": "control",
+   "seen_as": "gear lever with black ball knob, right of the driver",
+   "bbox": [
+    0.75,
+    0.76,
+    0.82,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "control.pedals"
+    ]
+   ],
+   "size_cue": "knob fist-sized",
+   "material": "black",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed rubber mat",
+   "bbox": [
+    0.46,
+    0.8,
+    0.92,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "ribbed rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_driver_dash",
+   "class": "loom",
+   "seen_as": "rods, cables and pipes under the driver dash",
+   "bbox": [
+    0.35,
+    0.6,
+    0.55,
+    0.8
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "mixed",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.yellow_under_driver_dash",
+   "class": "pipe",
+   "seen_as": "yellow pipe under the dash",
+   "bbox": [
+    0.55,
+    0.62,
+    0.58,
+    0.69
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "finger-thick",
+   "material": "yellow",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.grey_driver_left_low",
+   "class": "box",
+   "seen_as": "grey box with red stencils",
+   "bbox": [
+    0.12,
+    0.63,
+    0.21,
+    0.72
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "shoebox",
+   "material": "grey",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.red_cap_fitting_left",
+   "class": "unknown",
+   "seen_as": "red-capped round fitting",
+   "bbox": [
+    0.22,
+    0.65,
+    0.27,
+    0.73
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "right_of",
+     "new.box.grey_driver_left_low"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "red cap",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_left_floor",
+   "class": "loom",
+   "seen_as": "white and black cables at the lower left",
+   "bbox": [
+    0.0,
+    0.5,
+    0.1,
+    1.0
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "PVC",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "cushion edge at the bottom",
+   "bbox": [
+    0.2,
+    0.9,
+    0.48,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive vinyl",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "column stalk",
+  "water-jet flap plate"
+ ],
+ "doubts": [
+  "Wiper motor housing in the notes is not clearly in this frame; not listed."
+ ]
+}

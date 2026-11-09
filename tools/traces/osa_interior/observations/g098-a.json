@@ -1,0 +1,615 @@
+{
+ "photo": "g098-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle near the centreline, about standing eye height, forward of the right post",
+  "looks": "aft and right along the right wall to the rear bulkhead; image left is forward",
+  "covers": [
+   "rack.sp2m",
+   "frame.post_sp2m_sp3m",
+   "rack.sp3m",
+   "hull.door_rear",
+   "kit.first_aid"
+  ],
+  "lens": "wide"
+ },
+ "components": [
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "rear column of the right-wall rack seen edge-on, four blocks stacked",
+   "bbox": [
+    0.0,
+    0.0,
+    0.16,
+    0.99
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [
+    [
+     "forward_of",
+     "frame.post_sp2m_sp3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r0_3",
+   "class": "block",
+   "seen_as": "top block of the column, nameplate OK52-15M, three amber lamps",
+   "bbox": [
+    0.0,
+    0.0,
+    0.15,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_r1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "nameplate OK52-15M is clear; which of the four register OK52-15M ids it is is a guess"
+  },
+  {
+   "id": "block.sp2_r1",
+   "class": "block",
+   "seen_as": "second block, nameplate OS52-16M, one fuse holder",
+   "bbox": [
+    0.0,
+    0.24,
+    0.15,
+    0.47
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_r2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r2",
+   "class": "block",
+   "seen_as": "third block, OK52-17M, tall brown jack strip \"КАНАЛ I\"",
+   "bbox": [
+    0.0,
+    0.48,
+    0.15,
+    0.73
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_r3"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r3",
+   "class": "block",
+   "seen_as": "fourth block, 0091-17M, fuse holders behind a bent tube guard",
+   "bbox": [
+    0.0,
+    0.74,
+    0.15,
+    0.97
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "frame.post_sp2m_sp3m",
+   "class": "frame",
+   "seen_as": "curved lined post between the right-wall racks, floor to roof",
+   "bbox": [
+    0.15,
+    0.0,
+    0.42,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sp2m"
+    ],
+    [
+     "forward_of",
+     "rack.sp3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey lined steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.lamp.blue_post_right",
+   "class": "lamp",
+   "seen_as": "blue glass dome lamp in a three-bar cage at the top of the post",
+   "bbox": [
+    0.17,
+    0.03,
+    0.3,
+    0.16
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "a hand across",
+   "material": "blue glass, metal cage",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.post_right_white",
+   "class": "cable",
+   "seen_as": "white cable down the post into a blue fitting low",
+   "bbox": [
+    0.2,
+    0.0,
+    0.33,
+    0.6
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white insulation",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.seat_post_right",
+   "class": "bracket",
+   "seen_as": "sheet-steel hinge bracket with a wire bail and clips on the post",
+   "bbox": [
+    0.26,
+    0.6,
+    0.47,
+    0.82
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.keys_post_right",
+   "class": "kit",
+   "seen_as": "T-handled key held in a clip on the post",
+   "bbox": [
+    0.23,
+    0.83,
+    0.34,
+    0.91
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "about a hand long",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.keys_right",
+   "class": "plate",
+   "seen_as": "small plate \"КЛЮЧИ\" above the key",
+   "bbox": [
+    0.23,
+    0.82,
+    0.27,
+    0.84
+   ],
+   "zone": "compartment.right_wall",
+   "on": "frame.post_sp2m_sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sp3m",
+   "class": "rack",
+   "seen_as": "aft right-wall rack: white power panel and drawer top, open instrument blocks, front flap below",
+   "bbox": [
+    0.26,
+    0.06,
+    0.7,
+    0.48
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [
+    [
+     "aft_of",
+     "frame.post_sp2m_sp3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp3_0094_11m",
+   "class": "block",
+   "seen_as": "top-left white panel of the rack with jacks, lamp and fuse cover",
+   "bbox": [
+    0.26,
+    0.06,
+    0.52,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "by the drawing's nameplate starting 0094-; not readable here"
+  },
+  {
+   "id": "new.block.sp3m_top_right",
+   "class": "block",
+   "seen_as": "drawer-like box with handles and a clear front, top right of the rack",
+   "bbox": [
+    0.52,
+    0.1,
+    0.7,
+    0.26
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [
+    [
+     "beside",
+     "block.sp3_0094_11m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.sp3m_front_flap",
+   "class": "cover",
+   "seen_as": "long grey front flap of the rack hanging below the instrument blocks, louvres under it",
+   "bbox": [
+    0.27,
+    0.34,
+    0.69,
+    0.48
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_sp3m",
+   "class": "loom",
+   "seen_as": "cable looms visible under the flap",
+   "bbox": [
+    0.28,
+    0.45,
+    0.6,
+    0.48
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.black_cloth",
+   "class": "kit",
+   "seen_as": "dark cloth bundle stuffed under the rack",
+   "bbox": [
+    0.37,
+    0.45,
+    0.58,
+    0.62
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.head_strap",
+   "class": "kit",
+   "seen_as": "round strap with a brown band hung by the bulkhead corner",
+   "bbox": [
+    0.67,
+    0.45,
+    0.82,
+    0.5
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.box.stowage_5937",
+   "class": "box",
+   "seen_as": "long grey box with lid and clasps, stencilled, on a ledge",
+   "bbox": [
+    0.59,
+    0.5,
+    0.82,
+    0.6
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "rack.sp3m"
+    ],
+    [
+     "behind",
+     "kit.first_aid"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "kit.first_aid",
+   "class": "kit",
+   "seen_as": "white first-aid box with red cross on a white circle, two clasps",
+   "bbox": [
+    0.56,
+    0.6,
+    0.73,
+    0.79
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "rack.sp3m"
+    ],
+    [
+     "in_front_of",
+     "new.box.stowage_5937"
+    ]
+   ],
+   "size_cue": "about 30 by 20 cm",
+   "material": "white painted sheet",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.seat.rear_right_folding",
+   "class": "seat",
+   "seen_as": "curved grey sheet seat back/base folded against the post",
+   "bbox": [
+    0.31,
+    0.56,
+    0.64,
+    0.92
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "aft_of",
+     "frame.post_sp2m_sp3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey sheet steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.rear_floor_step",
+   "class": "sponson",
+   "seen_as": "raised grey plinth boxes on the floor at the bottom",
+   "bbox": [
+    0.57,
+    0.75,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.door_rear",
+   "class": "door",
+   "seen_as": "engine-compartment door with pressed ribs, right edge",
+   "bbox": [
+    0.88,
+    0.17,
+    1.0,
+    0.6
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.bulkhead_rear",
+   "class": "bulkhead",
+   "seen_as": "glossy light grey rear bulkhead",
+   "bbox": [
+    0.72,
+    0.12,
+    1.0,
+    0.75
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "lamp.blue",
+   "class": "lamp",
+   "seen_as": "second blue-domed lamp at the bulkhead corner",
+   "bbox": [
+    0.74,
+    0.13,
+    0.84,
+    0.2
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "right_of",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hatch.bulkhead_low",
+   "class": "hatch",
+   "seen_as": "small blue-grey panel low on the bulkhead",
+   "bbox": [
+    0.92,
+    0.66,
+    1.0,
+    0.76
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "below",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "quilted off-white roof padding",
+   "bbox": [
+    0.25,
+    0.0,
+    1.0,
+    0.12
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.roof_right_rear",
+   "class": "cable",
+   "seen_as": "cable clipped on studs along the roof lining over the rear rack",
+   "bbox": [
+    0.38,
+    0.02,
+    0.75,
+    0.13
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_right",
+   "class": "hull_wall",
+   "seen_as": "lined right wall round the rear rack",
+   "bbox": [
+    0.6,
+    0.08,
+    0.8,
+    0.6
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the key stowage plate on the right post",
+  "the blue lamp on the post",
+  "the stencilled long box",
+  "the cable on studs along the roof"
+ ],
+ "doubts": [
+  "OK52-15M top block: which of the register's four OK52-15M ids",
+  "the curved grey sheet item is read as a folded seat; it may be a cover",
+  "the round strap may be a headset band or helmet strap"
+ ]
+}

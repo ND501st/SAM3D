@@ -1,0 +1,145 @@
+{
+ "photo": "g089-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the commander's seat",
+  "looks": "up at the roof above the left end of the right visor",
+  "covers": [
+   "lamp.dome_cab"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "lamp.dome_cab",
+   "class": "lamp",
+   "seen_as": "round lamp with a blue-green lens behind a four-spoke grille, in a screwed grey housing",
+   "bbox": [
+    0.18,
+    0.25,
+    0.73,
+    0.6
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "new.kit.sun_visor_right"
+    ]
+   ],
+   "size_cue": "about a third of the visor's width",
+   "material": "grey cast housing, blue glass",
+   "confidence": "medium",
+   "notes": "blue-out/emergency light by the book"
+  },
+  {
+   "id": "new.loom.cab_header",
+   "class": "loom",
+   "seen_as": "white, black and blue cables in a strap clip above the lamp",
+   "bbox": [
+    0.0,
+    0.17,
+    1.0,
+    0.31
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "lamp.dome_cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.sun_visor_right",
+   "class": "kit",
+   "seen_as": "visor with the sticker's edge and its ball pivot",
+   "bbox": [
+    0.18,
+    0.64,
+    1.0,
+    0.95
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "below",
+     "lamp.dome_cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.lamp_braid",
+   "class": "cable",
+   "seen_as": "braided earth lead from the lamp housing",
+   "bbox": [
+    0.0,
+    0.45,
+    0.37,
+    0.65
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "connects",
+     "lamp.dome_cab"
+    ]
+   ],
+   "size_cue": "",
+   "material": "tinned braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.roof.cab",
+   "class": "roof",
+   "seen_as": "roof plate round the lamp",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.64
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.cab_roof_white_lug",
+   "class": "unknown",
+   "seen_as": "white lug with a hole at the right edge",
+   "bbox": [
+    0.95,
+    0.48,
+    1.0,
+    0.66
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "white",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "blue-lensed lamp on the cab roof"
+ ],
+ "doubts": [
+  "register lamp.dome_cab vs a separate emergency lamp: the book calls it an emergency light; only one cab lamp seen in g089-d"
+ ]
+}

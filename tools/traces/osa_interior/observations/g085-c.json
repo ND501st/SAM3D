@@ -1,0 +1,312 @@
+{
+ "photo": "g085-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "over the driver seat",
+  "looks": "down and forward into the driver footwell",
+  "covers": [
+   "control.pedals",
+   "cushion.floor_mat"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash underside and housing",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.22
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.console.centre_dash",
+   "class": "console",
+   "seen_as": "bottom of the centre panel with the four-ОТКЛ plate",
+   "bbox": [
+    0.32,
+    0.0,
+    1.0,
+    0.12
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.driver_dash",
+   "class": "console",
+   "seen_as": "bottom of the driver panel",
+   "bbox": [
+    0.0,
+    0.0,
+    0.15,
+    0.13
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "left_of",
+     "new.console.centre_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "control.pedals",
+   "class": "control",
+   "seen_as": "clutch pad, brake pad, long flat accelerator hinged at the floor",
+   "bbox": [
+    0.18,
+    0.25,
+    0.94,
+    0.91
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "hull.dashboard"
+    ]
+   ],
+   "size_cue": "pads ~0.1 m",
+   "material": "rubber pads, steel arms",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.brake_master_cylinder",
+   "class": "box",
+   "seen_as": "cast housing above the pedals",
+   "bbox": [
+    0.4,
+    0.23,
+    0.6,
+    0.42
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "above",
+     "control.pedals"
+    ]
+   ],
+   "size_cue": "fist-to-shoebox",
+   "material": "grey cast",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.braided_driver_footwell",
+   "class": "hose",
+   "seen_as": "braided hoses at the top right",
+   "bbox": [
+    0.78,
+    0.25,
+    0.92,
+    0.38
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "thumb-thick",
+   "material": "metal braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_driver_dash",
+   "class": "loom",
+   "seen_as": "rods and blue-marked cables under the dash",
+   "bbox": [
+    0.0,
+    0.27,
+    1.0,
+    0.6
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "hull.dashboard"
+    ]
+   ],
+   "size_cue": "",
+   "material": "mixed",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.yellow_under_driver_dash",
+   "class": "pipe",
+   "seen_as": "yellow pipe down to the floor",
+   "bbox": [
+    0.36,
+    0.47,
+    0.44,
+    0.64
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "finger-thick",
+   "material": "yellow",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.switch.floor_dip_driver",
+   "class": "switch",
+   "seen_as": "grey domed cup on the floor with a cable, between clutch and brake",
+   "bbox": [
+    0.47,
+    0.53,
+    0.57,
+    0.64
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "beside",
+     "control.pedals"
+    ]
+   ],
+   "size_cue": "fist-sized",
+   "material": "grey metal",
+   "confidence": "low",
+   "notes": "Looks like a foot dip switch; unconfirmed."
+  },
+  {
+   "id": "new.control.pedal_linkage",
+   "class": "control",
+   "seen_as": "rods with springs at the left",
+   "bbox": [
+    0.07,
+    0.46,
+    0.16,
+    0.9
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "left_of",
+     "control.pedals"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "steering column and its linkage at the left",
+   "bbox": [
+    0.0,
+    0.25,
+    0.25,
+    0.88
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed rubber mat",
+   "bbox": [
+    0.15,
+    0.63,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "ribbed rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.floor_plug_driver",
+   "class": "cover",
+   "seen_as": "round floor plug in the mat",
+   "bbox": [
+    0.4,
+    0.89,
+    0.46,
+    0.96
+   ],
+   "zone": "cab.floor",
+   "on": "cushion.floor_mat",
+   "relations": [],
+   "size_cue": "coin-to-palm",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "control.gear_lever",
+   "class": "control",
+   "seen_as": "blurred grey knob at the right edge",
+   "bbox": [
+    0.88,
+    0.43,
+    1.0,
+    0.62
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": "Notes: the gear lever boot."
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "olive cushion edge at the bottom left",
+   "bbox": [
+    0.0,
+    0.83,
+    0.35,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive vinyl",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "floor dip switch(?)",
+  "brake master cylinder housing"
+ ],
+ "doubts": [
+  "Gear lever knob at the right is out of focus."
+ ]
+}

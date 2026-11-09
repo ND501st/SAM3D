@@ -27,5 +27,9 @@ reference exists. Read it first. In short:
    in `data/cabins/osa_ak.json`, import with no Nanite (`PLAIN` in `tools/ue_import_cabin_interior.py`), photograph with
    `tools/ue_panel_shot.py`, revert unchanged re-saved material assets, run all checks, commit.
 
+For a space with many photos (the Osa's compartment), also run the depth comparison, `tools/recon/holistic_diff.py`
+(`docs/OSA_INTERIOR_HOLISTIC.md` section 32): it says in words and metres what differs from the photos (turned, moved, raised,
+missing, excess); `measure` reads a region of a registered photo as a plane; edit from those numbers and re-score.
+
 Show the user the photo overlay and an in-cabin shot at the end. Say what is measured, what is scaled (with the yardstick
 and its accuracy) and what is SAM3D's choice.

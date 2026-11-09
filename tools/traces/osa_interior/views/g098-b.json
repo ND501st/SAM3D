@@ -1,0 +1,7 @@
+{
+  "photo": "g098-b",
+  "image": "clean",
+  "camera_from": "sfm",
+  "why": "Camera from the joint solve of the book's interior photos (tools/recon/holistic_sfm.py), which uses no model point. Aligned on SP-2M2's face; the width across the aisle is the solve's own (docs/OSA_INTERIOR_HOLISTIC.md section 16).",
+  "notes": "SP-3M-2 from the aisle, slightly oblique, flash: the white panel, the drawer, the blocks above the closed flap, the ribbed shelf. Session A."
+}

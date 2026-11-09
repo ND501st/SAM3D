@@ -60,6 +60,7 @@ MATERIALS = {
     'Paint_Red': ((0.3, 0.035, 0.012), 0.35, 0.0, 0.05, 'PaintN', 0.05, 4.0, None),
     'Metal_Brass': ((0.42, 0.3, 0.12), 0.38, 1.0, 0.35, 'PaintN', 0.1, 4.0, None),   # brass screw heads (r123_kuzmin)
     'Lens_Amber': ((0.45, 0.17, 0.02), 0.22, 0.0, 0.05, 'PaintN', 0.02, 4.0, None),   # the R-111's lamp lenses, unlit (r111_photos)
+    'Lens_Green': ((0.03, 0.16, 0.05), 0.22, 0.0, 0.05, 'PaintN', 0.02, 4.0, None),   # SP-2M2's green lamp lenses, unlit (wwp_gecko p. 93)
     'PanelFace': ((1.0, 1.0, 1.0), 0.5, 0.0, 0.0, 'PaintN', 0.18, 2.0, None),
 }
 
@@ -72,7 +73,8 @@ TEX = '/Game/SAM3D/Cabin/Textures'
 MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
-PLAIN = ('SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4')   # no Nanite: their details are mm thick
+PLAIN = ('SM_Cabinet0096', 'SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4',
+         'SM_SP2M2Face', 'SM_SP3MFace', 'SM_SP3MFlap', 'SM_SL3MFace', 'SM_SL1MFace', 'SM_SP1MFace', 'SM_CabSeat')   # no Nanite: their details are mm thick
 ONLY = %(only)r
 DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,
             'SM_RackSP2M': 2.0, 'SM_RackSP3M': 2.0, 'SM_OperatorBench': 2.0}

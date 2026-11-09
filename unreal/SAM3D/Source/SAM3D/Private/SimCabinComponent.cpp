@@ -368,6 +368,11 @@ bool USimCabinComponent::Build(const USimWorldSubsystem* Sim)
 	}
 	for (const simcore::CabinBlock& Block : Layout->blocks)
 	{
+		const simcore::CabinPanel* Owner = Layout->FindPanel(Block.panel_id);
+		if (Owner != nullptr && Owner->bare)
+		{
+			continue;  // the panel's mesh has the blocks themselves (SP-2M2's, traced from photographs)
+		}
 		BuildBlock(*Layout, Block);
 	}
 	for (const simcore::CabinPanel& Panel : Layout->panels)

@@ -1,0 +1,307 @@
+{
+ "photo": "g099-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the rear, about seated eye height",
+  "looks": "aft and slightly left at the rear bulkhead; the left-wall rack seen obliquely at the right edge",
+  "covers": [
+   "hull.bulkhead_rear",
+   "rack.sl3m",
+   "new.unknown.pylon_hanging_drum"
+  ],
+  "lens": "normal-wide"
+ },
+ "components": [
+  {
+   "id": "new.unknown.pylon_hanging_drum",
+   "class": "unknown",
+   "seen_as": "large grey cylinder, narrow bolted upper part with small holes, wide lower drum, hanging from the turret base",
+   "bbox": [
+    0.03,
+    0.08,
+    0.35,
+    0.8
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "new.unknown.turret_base_casting"
+    ],
+    [
+     "right_of",
+     "rack.sl3m"
+    ]
+   ],
+   "size_cue": "several times a rack block's height",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": "identity unknown: turret column, its drive or a ventilator"
+  },
+  {
+   "id": "new.unknown.turret_base_casting",
+   "class": "unknown",
+   "seen_as": "blue-grey casting at the ceiling over the drum",
+   "bbox": [
+    0.1,
+    0.0,
+    0.38,
+    0.17
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "above",
+     "new.unknown.pylon_hanging_drum"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue-grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.pylon_white",
+   "class": "cable",
+   "seen_as": "thin white cable looping over the drum",
+   "bbox": [
+    0.0,
+    0.03,
+    0.33,
+    0.37
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.behind_pylon_drum",
+   "class": "box",
+   "seen_as": "grey box beside the drum and a dark blue-grey box under it",
+   "bbox": [
+    0.12,
+    0.24,
+    0.43,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "behind",
+     "new.unknown.pylon_hanging_drum"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.pylon_left_parts",
+   "class": "unknown",
+   "seen_as": "olive and grey parts with blue cables at the left edge",
+   "bbox": [
+    0.0,
+    0.1,
+    0.05,
+    0.6
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.drum_sleeve",
+   "class": "loom",
+   "seen_as": "silver braided-sleeve cable from the drum side down to the floor",
+   "bbox": [
+    0.34,
+    0.56,
+    0.46,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "connects",
+     "new.unknown.pylon_hanging_drum"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.bulkhead_rear",
+   "class": "bulkhead",
+   "seen_as": "plain glossy light grey bulkhead",
+   "bbox": [
+    0.35,
+    0.18,
+    0.8,
+    0.9
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.bulkhead_hose_flange",
+   "class": "cover",
+   "seen_as": "small blue-grey square flange with four screws low on the bulkhead",
+   "bbox": [
+    0.48,
+    0.79,
+    0.6,
+    0.88
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.blue_floor_rear",
+   "class": "hose",
+   "seen_as": "blue hose through the flange along the floor",
+   "bbox": [
+    0.47,
+    0.82,
+    0.7,
+    0.93
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl3m",
+   "class": "rack",
+   "seen_as": "left-wall rack seen obliquely, three blocks, fuse holders, black knobs",
+   "bbox": [
+    0.79,
+    0.07,
+    1.0,
+    0.92
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0096_10m",
+   "class": "block",
+   "seen_as": "bottom block with a clear hinged fuse cover ПР1-ПР11 and big angle plugs",
+   "bbox": [
+    0.8,
+    0.63,
+    0.97,
+    0.82
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.sl3m_plugs",
+   "class": "loom",
+   "seen_as": "two large grey-green angle plugs with silver braided cables",
+   "bbox": [
+    0.66,
+    0.67,
+    0.85,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "block.p_0096_10m",
+   "relations": [],
+   "size_cue": "plugs about 8-10 cm across",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.ga3_guard",
+   "class": "rail",
+   "seen_as": "bent aluminium-tube loop in the foreground",
+   "bbox": [
+    0.23,
+    0.9,
+    0.62,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "by shape it could be the GA-3 guard hoop of g099-d"
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "roof lining at the top",
+   "bbox": [
+    0.35,
+    0.0,
+    1.0,
+    0.2
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "dark grey floor-level structure at the bottom",
+   "bbox": [
+    0.0,
+    0.8,
+    0.3,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the large hanging drum under the turret base",
+  "the hose flange low on the bulkhead"
+ ],
+ "doubts": [
+  "the drum is not named in any source read; may be the turret column, a drive or Fig. 3's rear ventilator",
+  "the tube loop in the foreground may be the GA-3 guard"
+ ]
+}

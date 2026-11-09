@@ -1,0 +1,404 @@
+{
+ "photo": "g095-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in front of the console's forward column, eye height",
+  "looks": "left, square on to slightly from the rear",
+  "covers": [
+   "block.g_0004_14m",
+   "block.g_vpu44",
+   "block.g_os81_10m",
+   "block.g_0004_11m",
+   "box.panel_indication"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "grey frame round the forward column and the middle column's forward edge",
+   "bbox": [
+    0.0,
+    0.0,
+    0.86,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.g_0004_14m",
+   "class": "block",
+   "seen_as": "four meters with hoods",
+   "bbox": [
+    0.14,
+    0.05,
+    0.83,
+    0.29
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.g_vpu44"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_vpu44",
+   "class": "block",
+   "seen_as": "TV monitor in a dark grey bezel with its controls",
+   "bbox": [
+    0.14,
+    0.24,
+    0.59,
+    0.55
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.g_os81_10m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "dark grey panel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; VPU-44 by position in the register's list"
+  },
+  {
+   "id": "block.g_os81_10m",
+   "class": "block",
+   "seen_as": "round scope with a yellow filter and a ribbed bezel",
+   "bbox": [
+    0.59,
+    0.28,
+    0.83,
+    0.54
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.g_vpu44"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_0004_11m",
+   "class": "block",
+   "seen_as": "launch block: two ten-button groups, a meter, a launch button",
+   "bbox": [
+    0.13,
+    0.55,
+    0.83,
+    0.83
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "below",
+     "block.g_vpu44"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate 0004-11М2"
+  },
+  {
+   "id": "block.g_os52_14m",
+   "class": "block",
+   "seen_as": "block with a large black hand wheel and sockets",
+   "bbox": [
+    0.13,
+    0.82,
+    0.83,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "below",
+     "block.g_0004_11m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate ОС52-14М2"
+  },
+  {
+   "id": "block.s_0094_5",
+   "class": "block",
+   "seen_as": "end of the dial strip at the top left",
+   "bbox": [
+    0.0,
+    0.03,
+    0.09,
+    0.17
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.g_0004_14m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_op81_16m",
+   "class": "block",
+   "seen_as": "PPI block's forward controls",
+   "bbox": [
+    0.0,
+    0.18,
+    0.08,
+    0.7
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.g_vpu44"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_op63_6m2",
+   "class": "block",
+   "seen_as": "forward end of the block under the PPI",
+   "bbox": [
+    0.0,
+    0.71,
+    0.07,
+    0.83
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_os52_12m",
+   "class": "block",
+   "seen_as": "forward end of the next block down",
+   "bbox": [
+    0.0,
+    0.86,
+    0.07,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "box.panel_indication",
+   "class": "box",
+   "seen_as": "tall narrow white box beyond the column: a column of lamp lenses, a rotary switch, a red lamp; its plate at the foot",
+   "bbox": [
+    0.85,
+    0.17,
+    0.96,
+    0.69
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "forward_of",
+     "block.g_0004_14m"
+    ],
+    [
+     "beside",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "as tall as the TV block and 0004-14M together, a sixth of a block wide",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "plate reads ПАНЕЛЬ ИНДИКАЦИИ"
+  },
+  {
+   "id": "new.connector.panel_indication_plugs",
+   "class": "connector",
+   "seen_as": "two plug bodies with plates at the box's foot and right side",
+   "bbox": [
+    0.86,
+    0.56,
+    1.0,
+    0.73
+   ],
+   "zone": "compartment.left_wall",
+   "on": "box.panel_indication",
+   "relations": [
+    [
+     "below",
+     "box.panel_indication"
+    ]
+   ],
+   "size_cue": "about a fist",
+   "material": "grey cast metal",
+   "confidence": "medium",
+   "notes": "plates name the panel's plugs Ш1, Ш2"
+  },
+  {
+   "id": "new.cable.panel_indication",
+   "class": "cable",
+   "seen_as": "sleeved cable leaving the plug downward and forward",
+   "bbox": [
+    0.86,
+    0.7,
+    0.98,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "on": "box.panel_indication",
+   "relations": [
+    [
+     "connects",
+     "box.panel_indication"
+    ]
+   ],
+   "size_cue": "about a finger thick",
+   "material": "white sleeve",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.wall_left_front_round",
+   "class": "connector",
+   "seen_as": "round blue-grey connector at the lower right edge",
+   "bbox": [
+    0.95,
+    0.73,
+    1.0,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "box.panel_indication"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue-grey metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.wall_left_front_tables",
+   "class": "plate",
+   "seen_as": "two printed tables on the wall at the right edge",
+   "bbox": [
+    0.94,
+    0.3,
+    1.0,
+    0.6
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "forward_of",
+     "box.panel_indication"
+    ]
+   ],
+   "size_cue": "",
+   "material": "paper or metal plates",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "grey wall forward of the console",
+   "bbox": [
+    0.84,
+    0.1,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "padded lining sloping down at the top right",
+   "bbox": [
+    0.6,
+    0.0,
+    1.0,
+    0.16
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "above",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey padded fabric",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the ПАНЕЛЬ ИНДИКАЦИИ's plugs and cable",
+  "two tables on the wall forward of the console",
+  "a round connector low on that wall"
+ ],
+ "doubts": [
+  "whether the panel stands on the hull wall or on the post forward of SŁ-2M (frame.post_sl1m_sl2m)",
+  "the TV block taken as VPU-44 from the register's order"
+ ]
+}

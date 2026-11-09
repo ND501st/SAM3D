@@ -1,0 +1,131 @@
+{
+ "photo": "g095-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in front of the console's middle column, eye height",
+  "looks": "left, square on to the dial strip and the PPI",
+  "covers": [
+   "block.s_0094_5",
+   "block.s_op81_16m"
+  ],
+  "lens": "normal, close"
+ },
+ "components": [
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "grey frame round the middle column",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sl2m_rack",
+   "class": "plate",
+   "seen_as": "black name plate on the top rail",
+   "bbox": [
+    0.31,
+    0.02,
+    0.43,
+    0.045
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.s_0094_5"
+    ]
+   ],
+   "size_cue": "about a fifth of the block's width",
+   "material": "black plate, white letters",
+   "confidence": "high",
+   "notes": "reads СЛ-2М2 with a serial"
+  },
+  {
+   "id": "block.s_0094_5",
+   "class": "block",
+   "seen_as": "strip of eight small yellow dials",
+   "bbox": [
+    0.03,
+    0.04,
+    0.95,
+    0.24
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.s_op81_16m"
+    ],
+    [
+     "same_as",
+     "instrument.dial_strip"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; its plate reads 0094-9"
+  },
+  {
+   "id": "block.s_op81_16m",
+   "class": "block",
+   "seen_as": "round PPI with an amber filter and a white bezel",
+   "bbox": [
+    0.04,
+    0.26,
+    0.95,
+    0.93
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.s_op63_6m2"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate reads ОП81-16М3"
+  },
+  {
+   "id": "block.s_op63_6m2",
+   "class": "block",
+   "seen_as": "top edge of the block below",
+   "bbox": [
+    0.04,
+    0.93,
+    0.95,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; plate reads ОП63-6М3"
+  }
+ ],
+ "not_in_register": [
+  "the rack's name plate on its top rail"
+ ],
+ "doubts": [
+  "the dial strip's plate reads 0094-9 while the register's block is 0094-5",
+  "plates carry -M3 suffixes against the register's -M / -M2"
+ ]
+}

@@ -1,0 +1,303 @@
+{
+ "photo": "g088-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "behind the commander's seat, eye height",
+  "looks": "forward at the seat's back; image right is the vehicle's right",
+  "covers": [
+   "seat.commander",
+   "intercom.a1"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "back of the backrest: grey pressed-steel pan with rounded corners, raised centre panel, pivot bar with hinge brackets",
+   "bbox": [
+    0.14,
+    0.05,
+    0.79,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey pressed steel",
+   "confidence": "high",
+   "notes": "backrest up"
+  },
+  {
+   "id": "new.frame.seat_commander_back_hoop",
+   "class": "frame",
+   "seen_as": "tubular hoop fixed by lugs to the backrest's pan",
+   "bbox": [
+    0.18,
+    0.23,
+    0.77,
+    0.8
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_commander",
+   "class": "kit",
+   "seen_as": "khaki canvas bag with a leather strap hung on the hoop",
+   "bbox": [
+    0.17,
+    0.27,
+    0.78,
+    1.0
+   ],
+   "zone": "cab",
+   "on": "new.frame.seat_commander_back_hoop",
+   "relations": [],
+   "size_cue": "about two-thirds the backrest's width",
+   "material": "canvas, leather",
+   "confidence": "high",
+   "notes": "gas-mask bag by look"
+  },
+  {
+   "id": "new.plate.hb_sticker_seat_commander",
+   "class": "plate",
+   "seen_as": "triangular cigarette advertising sticker on the backrest",
+   "bbox": [
+    0.56,
+    0.08,
+    0.73,
+    0.29
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [],
+   "size_cue": "",
+   "material": "paper sticker",
+   "confidence": "high",
+   "notes": "later civilian addition, not original"
+  },
+  {
+   "id": "intercom.a1",
+   "class": "intercom",
+   "seen_as": "the box on the right wall",
+   "bbox": [
+    0.84,
+    0.42,
+    0.99,
+    0.66
+   ],
+   "zone": "cab.right_wall",
+   "on": "new.hull_wall.cab_right",
+   "relations": [
+    [
+     "right_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey cast alloy",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hull_wall.cab_right",
+   "class": "hull_wall",
+   "seen_as": "right wall",
+   "bbox": [
+    0.79,
+    0.0,
+    1.0,
+    0.65
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.control.seat_t_rod",
+   "class": "control",
+   "seen_as": "vertical rod with a T top at the left",
+   "bbox": [
+    0.01,
+    0.34,
+    0.05,
+    0.86
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.seat_cross_frame",
+   "class": "frame",
+   "seen_as": "tubes behind the T-rod",
+   "bbox": [
+    0.03,
+    0.25,
+    0.13,
+    0.62
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey tube",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.channel_between_seats",
+   "class": "sponson",
+   "seen_as": "orange-brown channel at the left",
+   "bbox": [
+    0.04,
+    0.36,
+    0.12,
+    0.86
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "orange-brown paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cushion.cab_floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed rubber at the top left ahead of the seat",
+   "bbox": [
+    0.0,
+    0.0,
+    0.18,
+    0.18
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "box.zip",
+   "class": "box",
+   "seen_as": "grey cabinet at the lower right",
+   "bbox": [
+    0.86,
+    0.65,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "below",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_right_wall",
+   "class": "loom",
+   "seen_as": "blue cables along the right wall",
+   "bbox": [
+    0.82,
+    0.12,
+    0.99,
+    0.6
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "blue",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.a1_lead",
+   "class": "cable",
+   "seen_as": "black lead into the box",
+   "bbox": [
+    0.78,
+    0.51,
+    0.86,
+    0.56
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "connects",
+     "intercom.a1"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "olive edge at the far left",
+   "bbox": [
+    0.0,
+    0.15,
+    0.03,
+    0.6
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "new.control.seat_t_rod"
+    ]
+   ],
+   "size_cue": "",
+   "material": "olive leatherette",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the hoop on the seat back, a gas-mask bag"
+ ],
+ "doubts": [
+  "the lower-right cabinet may not be the same as the one in g088-b"
+ ]
+}

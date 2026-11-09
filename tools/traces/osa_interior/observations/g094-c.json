@@ -1,0 +1,438 @@
+{
+ "photo": "g094-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "none (drawing)",
+  "looks": "elevation of the main console, square on",
+  "covers": [
+   "rack.sl2m"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "line drawing of the console: green riveted frame, chamfered lower corners, 17 blue faces",
+   "bbox": [
+    0.0,
+    0.12,
+    0.98,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "17 blocks",
+   "material": "drawing",
+   "confidence": "high",
+   "notes": "a drawing; forward is the image's right, as in g094-a"
+  },
+  {
+   "id": "block.r_0062_6m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.03,
+    0.15,
+    0.33,
+    0.25
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_os81_9m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.03,
+    0.25,
+    0.33,
+    0.41
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_ok62_5m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.03,
+    0.41,
+    0.33,
+    0.5
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_os61_5m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.03,
+    0.5,
+    0.33,
+    0.6
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_os81_18m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.03,
+    0.6,
+    0.33,
+    0.75
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_0051_7m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.1,
+    0.76,
+    0.33,
+    0.91
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_0094_5",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.34,
+    0.16,
+    0.65,
+    0.23
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_op81_16m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.34,
+    0.23,
+    0.65,
+    0.51
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_op63_6m2",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.34,
+    0.51,
+    0.65,
+    0.6
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_os52_12m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.34,
+    0.6,
+    0.65,
+    0.76
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_ok81_4m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.34,
+    0.76,
+    0.65,
+    0.92
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_0004_14m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.65,
+    0.15,
+    0.96,
+    0.25
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_vpu44",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.65,
+    0.25,
+    0.83,
+    0.43
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_os81_10m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.83,
+    0.25,
+    0.95,
+    0.43
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_0004_11m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.65,
+    0.43,
+    0.96,
+    0.59
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_os52_14m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.65,
+    0.59,
+    0.96,
+    0.75
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_ok51_6m",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g094-a",
+   "bbox": [
+    0.66,
+    0.75,
+    0.89,
+    0.9
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "new.connector.sl2m_frame_bottom",
+   "class": "connector",
+   "seen_as": "square-flanged round connector drawn on the frame's bottom rail under the middle column",
+   "bbox": [
+    0.36,
+    0.91,
+    0.4,
+    0.97
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "below",
+     "block.s_ok81_4m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.sl2m_frame_lower_rear",
+   "class": "connector",
+   "seen_as": "a few round connectors drawn on the frame's lower rear chamfer",
+   "bbox": [
+    0.04,
+    0.75,
+    0.1,
+    0.84
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.r_0051_7m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.fuse_panel.sl2m_front_lower",
+   "class": "fuse_panel",
+   "seen_as": "drawn fuse caps on the frame forward of the bottom forward block",
+   "bbox": [
+    0.89,
+    0.75,
+    0.95,
+    0.84
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.g_ok51_6m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sl2m_rack",
+   "class": "plate",
+   "seen_as": "small plate drawn on the frame's top rail above the middle column",
+   "bbox": [
+    0.44,
+    0.13,
+    0.48,
+    0.15
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.s_0094_5"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "a connector on SŁ-2M's bottom rail",
+  "connectors on the lower rear chamfer"
+ ],
+ "doubts": [
+  "a drawing: proportions only; the book's title banner across the top is not part of the vehicle",
+  "17 blocks drawn, one OK51-6M only"
+ ]
+}

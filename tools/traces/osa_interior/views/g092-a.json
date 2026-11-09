@@ -1,0 +1,76 @@
+{
+  "photo": "g092-a",
+  "image": "raw",
+  "camera_from": "face",
+  "face": {
+    "panel": "sp2m_panel",
+    "size_m": [
+      1.89,
+      1.24
+    ],
+    "camera": {
+      "K": [
+        [
+          3497.080360703129,
+          0.0,
+          1435.0
+        ],
+        [
+          0.0,
+          3497.080360703129,
+          1307.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "R": [
+        [
+          0.6490687811747675,
+          -0.0023018858243341583,
+          -0.7607262442074372
+        ],
+        [
+          -0.02730101434981131,
+          0.9992807614052781,
+          -0.026317570191013787
+        ],
+        [
+          0.760239680574339,
+          0.03785051131674802,
+          0.6485391020387958
+        ]
+      ],
+      "t": [
+        -557.742693581734,
+        -532.2350765732056,
+        1242.2385626538812
+      ],
+      "size": [
+        2870,
+        2615
+      ],
+      "dist": [
+        0.014861304874083752,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rms_px": 3.303813649330526,
+      "inliers": 1044
+    },
+    "note": "solved by the measuring run on SP-2M2's flattened face (ALIKED + LightGlue to g093-b's front, the plane by MAGSAC, 1044 inliers, rms 3.3 px; tools/blender/sp2m_trace.py section 5): R, t in the face's frame (mm, x right, y down, z into the face, origin top left), on the raw scan 2870 x 2615"
+  },
+  "notes": "From the forward end of the aisle looking aft along the right wall: SP-2M2 whole, the curtain, the roof, the corner aft of the rack. The camera rests on SP-2M2 alone, so everything else in the photo is checked against it, not fitted to it.",
+  "state": {
+    "hide": [
+      "seat_deputy",
+      "seat_senior",
+      "seat_operator"
+    ],
+    "why": "The BM3-1 photographed has the operators' seat backs folded down (g095-d, g096-a: folded seats with canvas bags on them); the cabin builds them up. The folded form is I5's."
+  }
+}

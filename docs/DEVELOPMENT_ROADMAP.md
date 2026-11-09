@@ -196,6 +196,16 @@ test found a battery inside a wood); the game mode's stand-in pawn no longer flo
 where they matter most (the Osa, the PU-12M and the TZM have them), the player's own Osa as the 9A33 model, wrecks, the
 map's sites drawn with these models, woods in the sim's line of sight (E9).
 
+## The Osa as a 3-D vehicle: interior first (8 Nov 2026)
+
+`docs/OSA_MODEL_ROADMAP.md`. **The interior is the priority (project owner, 8 Nov 2026): most effort, close attention to
+detail.** From *SA-8 Gecko in Detail* (`wwp_gecko`, acquired 6 Nov 2026; research `docs/research/OSA_BOOK_WWP_2026-11.md`):
+I0 a per-block reference sheet, I1 the compartment re-measured from the wide photos, I2-I5 the main console, the racks
+(replacing the rule-placed rack fill), the power cabinet and rear, and the cab traced face by face to ±1-3 mm, I6-I8
+materials, small parts and Unreal; I9 an optional BM3 cabin. Then the exterior (X0-X5) by the photo pipeline
+`docs/OSA_EXTERIOR_RECONSTRUCTION.md` (`tools/recon/`), ingestion done. Decision D1 (owner, 8 Nov 2026): the book's interior is a
+9A33BM3-1; the game keeps the 9A33BM2 and takes shapes from the BM3-1 where the blocks are shared.
+
 ## Electromagnetic (EM) track
 
 Radar, passive sensing, EW, communications and command as one simulated environment

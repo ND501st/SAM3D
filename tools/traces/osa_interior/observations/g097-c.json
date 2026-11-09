@@ -1,0 +1,71 @@
+{
+ "photo": "g097-c",
+ "vehicle": "drawing (0096-9M)",
+ "camera": {
+  "stands": "drawing (front elevation)",
+  "looks": "square-on at the cabinet face, lid closed",
+  "covers": [
+   "rack.0096_9m"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "drawn cabinet face, nameplate reads 0096-9M; meters, toggle pairs, fuse rows, three tube rails, door with three hinges",
+   "bbox": [
+    0.1,
+    0.05,
+    0.9,
+    0.95
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "drawing from an earlier manual; layout as the photographed 0096-9M2"
+  },
+  {
+   "id": "new.cover.0096_9m_lid",
+   "class": "cover",
+   "seen_as": "lid lying on the sloping top with a hinge block and knurled screws",
+   "bbox": [
+    0.25,
+    0.02,
+    0.65,
+    0.17
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.0096_9m_plugs",
+   "class": "connector",
+   "seen_as": "six round connectors along the bottom",
+   "bbox": [
+    0.16,
+    0.88,
+    0.75,
+    0.95
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "a drawing, not a photo: no surroundings"
+ ]
+}

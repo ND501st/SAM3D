@@ -1,0 +1,363 @@
+{
+ "photo": "g090-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in front of the right radio station, slightly forward of it, eye height, close",
+  "looks": "right (+x) and a little aft at the radio face; image left forward",
+  "covers": [
+   "radio.r123m_right",
+   "psu.bp26_right",
+   "rack.sp1m",
+   "hull.roof"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "radio.r123m_right",
+   "class": "radio",
+   "seen_as": "R-123M face in full",
+   "bbox": [
+    0.21,
+    0.53,
+    0.96,
+    0.86
+   ],
+   "zone": "cab.right_wall",
+   "on": "mount.r123m_right",
+   "relations": [
+    [
+     "below",
+     "psu.bp26_right"
+    ],
+    [
+     "in_front_of",
+     "rack.sp1m"
+    ]
+   ],
+   "size_cue": "R-123M, 406 mm wide",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "psu.bp26_right",
+   "class": "power",
+   "seen_as": "grey power unit with a finned forward end and orange-capped connectors, on the frame's upper tray",
+   "bbox": [
+    0.09,
+    0.2,
+    0.64,
+    0.43
+   ],
+   "zone": "cab.right_wall",
+   "on": "mount.r123m_right",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "about half the radio's width",
+   "material": "grey painted metal, cooling fins",
+   "confidence": "high",
+   "notes": "matches the BP-26 of g091-b"
+  },
+  {
+   "id": "mount.r123m_right",
+   "class": "mount",
+   "seen_as": "tubular frame round radio and power unit, with tray and shock mounts at the bottom",
+   "bbox": [
+    0.08,
+    0.4,
+    0.97,
+    0.94
+   ],
+   "zone": "cab.right_wall",
+   "on": "box.zczz1a_2",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel tube",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.r123m_right_canvas",
+   "class": "cover",
+   "seen_as": "green canvas dust cover pushed back over the radio top",
+   "bbox": [
+    0.15,
+    0.4,
+    0.97,
+    0.7
+   ],
+   "zone": "cab.right_wall",
+   "on": "radio.r123m_right",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.r123m_right_leather",
+   "class": "strap",
+   "seen_as": "brown leather strap loop behind the power unit",
+   "bbox": [
+    0.62,
+    0.37,
+    0.72,
+    0.46
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "leather",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_right_braided",
+   "class": "cable",
+   "seen_as": "braided screened cable from the radio's lower connectors looping up to the power unit's end",
+   "bbox": [
+    0.0,
+    0.33,
+    0.24,
+    0.93
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "connects",
+     "radio.r123m_right"
+    ],
+    [
+     "connects",
+     "psu.bp26_right"
+    ]
+   ],
+   "size_cue": "thumb-thick",
+   "material": "braided metal sleeve",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_right_white",
+   "class": "cable",
+   "seen_as": "white cables with blue tags, one at the left, one under the radio",
+   "bbox": [
+    0.0,
+    0.43,
+    0.4,
+    0.89
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "rack.sp1m",
+   "class": "rack",
+   "seen_as": "light-grey block faces behind the radio, a rack plate at the upper left",
+   "bbox": [
+    0.0,
+    0.22,
+    0.97,
+    0.56
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "behind",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey enamel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sp1m_rack_plate",
+   "class": "plate",
+   "seen_as": "rack plate at the upper left of the rack frame (begins with СП)",
+   "bbox": [
+    0.0,
+    0.24,
+    0.1,
+    0.27
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "if this is the rack plate it sits at the forward end of the top rail, not the centre as the drawing has; may be a block plate"
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "roof plates above the station",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.24
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.roof_over_radio_right_fwd",
+   "class": "handle",
+   "seen_as": "black rubber-gripped grab handle on brackets at the roof, forward",
+   "bbox": [
+    0.16,
+    0.02,
+    0.39,
+    0.15
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "above",
+     "psu.bp26_right"
+    ],
+    [
+     "forward_of",
+     "new.handle.roof_over_radio_right_aft"
+    ]
+   ],
+   "size_cue": "hand-grip length",
+   "material": "steel, black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.roof_over_radio_right_aft",
+   "class": "handle",
+   "seen_as": "second grab handle at the roof, aft",
+   "bbox": [
+    0.6,
+    0.02,
+    0.92,
+    0.09
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "hand-grip length",
+   "material": "steel, black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.roof_white_right",
+   "class": "cable",
+   "seen_as": "white cable clipped along the roof",
+   "bbox": [
+    0.0,
+    0.12,
+    0.92,
+    0.25
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.vent_lever_right",
+   "class": "plate",
+   "seen_as": "black plate with a lever diagram (open/closed) on the roof",
+   "bbox": [
+    0.64,
+    0.14,
+    0.77,
+    0.21
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "beside",
+     "new.control.vent_lever_roof_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": "the ventilation lever's plate, by its wording"
+  },
+  {
+   "id": "new.control.vent_lever_roof_right",
+   "class": "control",
+   "seen_as": "grey tubular lever with a knob hanging diagonally at the upper right",
+   "bbox": [
+    0.86,
+    0.22,
+    1.0,
+    0.37
+   ],
+   "zone": "cab.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.right_wall_post_aft_of_sp1m",
+   "class": "frame",
+   "seen_as": "grey vertical post / side cheek at the rack's aft end",
+   "bbox": [
+    0.86,
+    0.25,
+    1.0,
+    0.55
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "box.zczz1a_2",
+   "class": "box",
+   "seen_as": "top ledge of the ZIP box under the tray, its plate at the bottom right edge",
+   "bbox": [
+    0.0,
+    0.86,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "A stencilled number \"85\" on the roof near the aft handle is not a component.",
+  "The plate at upper left may be the rack's plate or a block's."
+ ]
+}

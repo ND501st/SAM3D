@@ -1,0 +1,432 @@
+{
+ "photo": "g093-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "none (drawing)",
+  "looks": "elevation of the right wall's middle rack, square on",
+  "covers": [
+   "rack.sp2m"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "line drawing of the rack: green riveted frame, chamfered lower corners, stepped lower forward corner, 18 blue faces",
+   "bbox": [
+    0.0,
+    0.02,
+    1.0,
+    0.99
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [],
+   "size_cue": "18 blocks",
+   "material": "drawing",
+   "confidence": "high",
+   "notes": "a drawing, not a photo; same layout as g093-b; cut off at the right edge"
+  },
+  {
+   "id": "block.sp2_f0",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.03,
+    0.05,
+    0.36,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_f1",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.03,
+    0.23,
+    0.36,
+    0.41
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_f2",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.03,
+    0.41,
+    0.36,
+    0.59
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_f3",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.03,
+    0.59,
+    0.36,
+    0.77
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_f4",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.11,
+    0.77,
+    0.36,
+    0.95
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_m0",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.37,
+    0.05,
+    0.69,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_m1",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.37,
+    0.23,
+    0.69,
+    0.41
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_m2",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.37,
+    0.41,
+    0.69,
+    0.59
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_m3",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.37,
+    0.59,
+    0.69,
+    0.77
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_m4",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.37,
+    0.77,
+    0.69,
+    0.95
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r0_0",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.7,
+    0.05,
+    0.78,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r0_1",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.78,
+    0.05,
+    0.86,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r0_2",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.86,
+    0.05,
+    0.94,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r0_3",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.94,
+    0.05,
+    1.0,
+    0.23
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r1",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.7,
+    0.23,
+    1.0,
+    0.41
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r2",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.7,
+    0.41,
+    1.0,
+    0.59
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r3",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.7,
+    0.59,
+    1.0,
+    0.76
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.sp2_r4",
+   "class": "block",
+   "seen_as": "drawn block, same place and face as in g093-b",
+   "bbox": [
+    0.7,
+    0.76,
+    0.94,
+    0.94
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "new.connector.sp2m_frame_lower_front",
+   "class": "connector",
+   "seen_as": "drawn round connector on the frame's stepped corner",
+   "bbox": [
+    0.06,
+    0.79,
+    0.1,
+    0.84
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.sp2_f4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.sp2m_frame_lower_rear",
+   "class": "connector",
+   "seen_as": "drawn cluster of caps on the frame aft of the bottom rear block",
+   "bbox": [
+    0.94,
+    0.77,
+    1.0,
+    0.86
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sp2m_frame_top",
+   "class": "plate",
+   "seen_as": "small dark plate drawn on the frame's top rail above the middle column",
+   "bbox": [
+    0.47,
+    0.03,
+    0.51,
+    0.045
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_m0"
+    ]
+   ],
+   "size_cue": "",
+   "material": "drawing",
+   "confidence": "medium",
+   "notes": "the rack's name plate (СП-2М2 per g092-d), by analogy with SŁ-2M's top plate"
+  }
+ ],
+ "not_in_register": [
+  "a name plate on SP-2M's top rail (drawn)"
+ ],
+ "doubts": [
+  "a drawing: proportions only, no dimensions; plates illegible",
+  "block ids by position as in g093-b"
+ ]
+}

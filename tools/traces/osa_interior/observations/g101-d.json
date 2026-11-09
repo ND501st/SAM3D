@@ -1,0 +1,177 @@
+{
+ "photo": "g101-d",
+ "vehicle": "9A33BM2/BM3 late Czech Army vehicle (Bouchal, 2000s; not the 1980s fit)",
+ "camera": {
+  "stands": "unknown, close",
+  "looks": "down into a cramped compartment",
+  "covers": [],
+  "lens": "normal, close"
+ },
+ "components": [
+  {
+   "id": "new.unknown.gas_bottles_pair_cz",
+   "class": "unknown",
+   "seen_as": "two silver cylinders with domed ends side by side, strap bands",
+   "bbox": [
+    0.15,
+    0.25,
+    0.75,
+    0.66
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "silver painted steel",
+   "confidence": "medium",
+   "notes": "probably compressed-air bottles; location in the vehicle not known"
+  },
+  {
+   "id": "new.control.gas_bottle_valves",
+   "class": "control",
+   "seen_as": "brass valves with T/star handles and unions on the bottles' necks",
+   "bbox": [
+    0.33,
+    0.49,
+    0.68,
+    0.72
+   ],
+   "zone": "engine",
+   "on": "new.unknown.gas_bottles_pair_cz",
+   "relations": [
+    [
+     "on",
+     "new.unknown.gas_bottles_pair_cz"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "brass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.blue_taped",
+   "class": "hose",
+   "seen_as": "blue-taped hoses over the bottles",
+   "bbox": [
+    0.02,
+    0.12,
+    0.92,
+    0.75
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "blue tape",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.grey_steel_lines",
+   "class": "pipe",
+   "seen_as": "grey steel pipes",
+   "bbox": [
+    0.18,
+    0.47,
+    0.72,
+    1.0
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.gas_valve_block",
+   "class": "box",
+   "seen_as": "grey valve block with a pressure regulator",
+   "bbox": [
+    0.1,
+    0.72,
+    0.52,
+    0.95
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey cast metal",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.filter.gas_line_cylindrical",
+   "class": "filter",
+   "seen_as": "silver cylindrical filter at the bottom",
+   "bbox": [
+    0.46,
+    0.86,
+    0.79,
+    1.0
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "silver metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.cloth_wrapped",
+   "class": "pipe",
+   "seen_as": "cloth-wrapped pipe with a hose clamp",
+   "bbox": [
+    0.58,
+    0.68,
+    0.96,
+    0.76
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "cloth wrap, clamp",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.rag",
+   "class": "kit",
+   "seen_as": "cloth rag stuffed at the top",
+   "bbox": [
+    0.13,
+    0.0,
+    0.53,
+    0.45
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "cloth",
+   "confidence": "high",
+   "notes": "loose, not a fitting"
+  },
+  {
+   "id": "new.unknown.khaki_canvas_right",
+   "class": "unknown",
+   "seen_as": "khaki canvas and a dark frame at the right",
+   "bbox": [
+    0.72,
+    0.4,
+    1.0,
+    0.98
+   ],
+   "zone": "engine",
+   "relations": [],
+   "size_cue": "",
+   "material": "canvas",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "compressed-gas bottles and their pipework"
+ ],
+ "doubts": [
+  "not the compartment, and where in the vehicle this is is not known (zone 'engine' is a guess)"
+ ]
+}

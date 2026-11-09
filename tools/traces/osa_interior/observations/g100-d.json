@@ -1,0 +1,502 @@
+{
+ "photo": "g100-d",
+ "vehicle": "9A33BM3-1 ex-NVA (book's interior session of g097-g100; cabinet labelled 0096-9M2)",
+ "camera": {
+  "stands": "standing in the compartment's rear aisle",
+  "looks": "down at the floor in the rear-left corner: image top = left wall, image left = rear bulkhead, image right = forward",
+  "covers": [
+   "hull.floor",
+   "block.p_0096_10m",
+   "new.duct.bulkhead_outlet_upper",
+   "new.duct.bulkhead_outlet_lower"
+  ],
+  "lens": "normal, flash"
+ },
+ "components": [
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "pale grey floor plates",
+   "bbox": [
+    0.0,
+    0.45,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "lower left wall under the block",
+   "bbox": [
+    0.3,
+    0.13,
+    1.0,
+    0.42
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "below",
+     "block.p_0096_10m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.p_0096_10m",
+   "class": "block",
+   "seen_as": "bottom block of the left-rear rack with three large 90-degree plugs in its lower edge",
+   "bbox": [
+    0.35,
+    0.0,
+    1.0,
+    0.13
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl3m",
+   "relations": [
+    [
+     "on",
+     "rack.sl3m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey enamel",
+   "confidence": "medium",
+   "notes": "identity from the notes (SL-3M's bottom block 0096-10M by the drawing); its label not readable here"
+  },
+  {
+   "id": "new.connector.0096_10m_plugs",
+   "class": "connector",
+   "seen_as": "three large grey-green 90-degree cable plugs",
+   "bbox": [
+    0.38,
+    0.03,
+    0.8,
+    0.12
+   ],
+   "zone": "compartment.left_wall",
+   "on": "block.p_0096_10m",
+   "relations": [
+    [
+     "on",
+     "block.p_0096_10m"
+    ]
+   ],
+   "size_cue": "each about a fist",
+   "material": "cast metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.0096_10m_plug_cables",
+   "class": "loom",
+   "seen_as": "three silver-sleeved cables from the plugs hanging in loops",
+   "bbox": [
+    0.33,
+    0.1,
+    0.85,
+    0.33
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "connects",
+     "new.connector.0096_10m_plugs"
+    ],
+    [
+     "below",
+     "block.p_0096_10m"
+    ]
+   ],
+   "size_cue": "each about two fingers thick",
+   "material": "silver fabric sleeve",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.bulkhead_blue",
+   "class": "hose",
+   "seen_as": "blue hose under the block's lower edge, with a white connector bar",
+   "bbox": [
+    0.4,
+    0.13,
+    0.75,
+    0.2
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "below",
+     "block.p_0096_10m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue plastic",
+   "confidence": "low",
+   "notes": "may be the blue hose of g100-c"
+  },
+  {
+   "id": "new.pipe.left_wall_blue_line",
+   "class": "pipe",
+   "seen_as": "thin blue tube along the wall with a brass union at its aft end",
+   "bbox": [
+    0.28,
+    0.32,
+    1.0,
+    0.35
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "on",
+     "hull.wall_left"
+    ]
+   ],
+   "size_cue": "pencil-thin",
+   "material": "blue tube, brass union",
+   "confidence": "high",
+   "notes": "perhaps the pressure gauge's tube seen in g099-b"
+  },
+  {
+   "id": "new.cable.left_wall_low_white",
+   "class": "cable",
+   "seen_as": "white cable clipped along the wall under the blue tube",
+   "bbox": [
+    0.35,
+    0.33,
+    1.0,
+    0.37
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "on",
+     "hull.wall_left"
+    ],
+    [
+     "below",
+     "new.pipe.left_wall_blue_line"
+    ]
+   ],
+   "size_cue": "finger-thick",
+   "material": "white sheath, clips",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.bulkhead_outlet_upper",
+   "class": "duct",
+   "seen_as": "dark grey tall outlet cover seen from above-forward",
+   "bbox": [
+    0.0,
+    0.03,
+    0.24,
+    0.57
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "aft_of",
+     "block.p_0096_10m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted sheet steel",
+   "confidence": "medium",
+   "notes": "matched to g100-c by its loom and braided hose beside it"
+  },
+  {
+   "id": "new.loom.bulkhead_left_white_sleeve",
+   "class": "loom",
+   "seen_as": "white-sleeved loom going down beside the outlet",
+   "bbox": [
+    0.15,
+    0.0,
+    0.38,
+    0.3
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "left_of",
+     "new.duct.bulkhead_outlet_upper"
+    ]
+   ],
+   "size_cue": "about a wrist thick",
+   "material": "white fabric sleeve",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.bulkhead_braided",
+   "class": "hose",
+   "seen_as": "grey braided hose beside the loom",
+   "bbox": [
+    0.2,
+    0.2,
+    0.3,
+    0.3
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.bulkhead_white_left",
+   "class": "cable",
+   "seen_as": "thin white cable running down the corner",
+   "bbox": [
+    0.23,
+    0.28,
+    0.29,
+    0.48
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "pencil-thin",
+   "material": "white sheath",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.bulkhead_outlet_lower",
+   "class": "duct",
+   "seen_as": "dark grey wedge box at the foot of the bulkhead, spring on its top edge",
+   "bbox": [
+    0.16,
+    0.5,
+    0.4,
+    0.67
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "below",
+     "new.duct.bulkhead_outlet_upper"
+    ]
+   ],
+   "size_cue": "about a shoe's length",
+   "material": "painted sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.bracket_below_outlet",
+   "class": "unknown",
+   "seen_as": "bent white-ended bracket/loop by the outlet's foot",
+   "bbox": [
+    0.0,
+    0.55,
+    0.17,
+    0.68
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "below",
+     "new.duct.bulkhead_outlet_upper"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.floor_plinth_rear_left",
+   "class": "sponson",
+   "seen_as": "raised step/plinth in the floor along the left wall with bolts",
+   "bbox": [
+    0.3,
+    0.37,
+    1.0,
+    0.55
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "below",
+     "new.cable.left_wall_low_white"
+    ],
+    [
+     "right_of",
+     "hull.wall_left"
+    ]
+   ],
+   "size_cue": "about a hand high",
+   "material": "painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.floor_access_oval_rear_left",
+   "class": "cover",
+   "seen_as": "large oval floor access cover held by about ten bolts",
+   "bbox": [
+    0.3,
+    0.55,
+    0.75,
+    0.85
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "new.sponson.floor_plinth_rear_left"
+    ],
+    [
+     "forward_of",
+     "new.duct.bulkhead_outlet_lower"
+    ]
+   ],
+   "size_cue": "wider than the tray",
+   "material": "steel plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.floor_plate_rear_left_fwd",
+   "class": "cover",
+   "seen_as": "raised rectangular floor plate forward of the oval cover",
+   "bbox": [
+    0.8,
+    0.52,
+    1.0,
+    0.7
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "forward_of",
+     "new.cover.floor_access_oval_rear_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel plate",
+   "confidence": "low",
+   "notes": "may be the GA-3 pedestal's base or another cover"
+  },
+  {
+   "id": "new.rail.ga3_guard",
+   "class": "rail",
+   "seen_as": "vertical bent tube frame rising from the floor plinth",
+   "bbox": [
+    0.92,
+    0.12,
+    1.0,
+    0.5
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "new.loom.0096_10m_plug_cables"
+    ]
+   ],
+   "size_cue": "about a thumb thick",
+   "material": "aluminium or painted tube",
+   "confidence": "medium",
+   "notes": "the GA-3's guard by the notes (g099-d)"
+  },
+  {
+   "id": "new.box.floor_tray_rear_left",
+   "class": "box",
+   "seen_as": "removable two-compartment open sheet tray on the floor",
+   "bbox": [
+    0.33,
+    0.73,
+    0.95,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "new.cover.floor_access_oval_rear_left"
+    ]
+   ],
+   "size_cue": "about a forearm long",
+   "material": "sheet steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.tray_strap_tool",
+   "class": "kit",
+   "seen_as": "tan leather strap and a tool in the tray",
+   "bbox": [
+    0.38,
+    0.8,
+    0.56,
+    0.94
+   ],
+   "zone": "compartment.floor",
+   "on": "new.box.floor_tray_rear_left",
+   "relations": [
+    [
+     "in",
+     "new.box.floor_tray_rear_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "leather, steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.control.floor_knob_rear_left",
+   "class": "control",
+   "seen_as": "black knob standing from the floor",
+   "bbox": [
+    0.21,
+    0.72,
+    0.27,
+    0.76
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "right_of",
+     "new.duct.bulkhead_outlet_lower"
+    ]
+   ],
+   "size_cue": "thumb-sized",
+   "material": "black plastic",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "oval floor access cover, the floor plinth along the left wall, the tray",
+  "blue tube and white cable along the lower left wall",
+  "GA-3 guard tube"
+ ],
+ "doubts": [
+  "orientation worked out from the outlets and loom matching g100-c (image left = aft, top = left wall)",
+  "block identity 0096-10M from the notes, not read in this photo",
+  "the white bracket by the outlet's foot and the raised plate at the right are not identified"
+ ]
+}

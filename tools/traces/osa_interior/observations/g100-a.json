@@ -1,0 +1,427 @@
+{
+ "photo": "g100-a",
+ "vehicle": "9A33BM3-1 ex-NVA (book's interior session of g097-g100; cabinet labelled 0096-9M2)",
+ "camera": {
+  "stands": "in the compartment's rear, about eye height, close to the rear bulkhead",
+  "looks": "aft, square-on to the rear bulkhead (image left = vehicle right, image right = vehicle left)",
+  "covers": [
+   "hull.bulkhead_rear",
+   "hull.door_rear",
+   "lamp.blue",
+   "fan.blower_rear"
+  ],
+  "lens": "normal, flash"
+ },
+ "components": [
+  {
+   "id": "hull.bulkhead_rear",
+   "class": "bulkhead",
+   "seen_as": "pale grey-green bulkhead sheet framing the door, grimy at the bottom",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [],
+   "size_cue": "fills the frame round a door about a man's shoulder width",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.door_rear",
+   "class": "door",
+   "seen_as": "tall rounded-corner pressed-steel door in a raised flange, four horizontal pressed ribs",
+   "bbox": [
+    0.12,
+    0.09,
+    0.73,
+    0.75
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "on",
+     "hull.bulkhead_rear"
+    ]
+   ],
+   "size_cue": "about 1.4 times as high as wide; its grab handle about a hand's width and a half",
+   "material": "pressed steel, pale grey",
+   "confidence": "high",
+   "notes": "the plate on it names the engine compartment (motor compartment) behind; hinged on the vehicle's right edge"
+  },
+  {
+   "id": "new.lining.door_rear_seal",
+   "class": "lining",
+   "seen_as": "black rubber seal round the door's edge in the flange",
+   "bbox": [
+    0.12,
+    0.09,
+    0.73,
+    0.75
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "a finger's width",
+   "material": "black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "plate.gom",
+   "class": "plate",
+   "seen_as": "red plate with white lettering, warning against entry to the engine compartment while the chassis moves or the GOM runs",
+   "bbox": [
+    0.29,
+    0.2,
+    0.59,
+    0.29
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ],
+    [
+     "above",
+     "new.handle.door_rear"
+    ]
+   ],
+   "size_cue": "about two hands wide",
+   "material": "enamelled plate, 6 rivets",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.door_seal_positions",
+   "class": "plate",
+   "seen_as": "small black plate with a white lever diagram: open / closed - sealing",
+   "bbox": [
+    0.45,
+    0.57,
+    0.54,
+    0.67
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ],
+    [
+     "right_of",
+     "new.control.door_rear_latch_lower"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black plate, 4 screws",
+   "confidence": "high",
+   "notes": "shows the latch lever's positions; sits on the vehicle's right of the lower latch"
+  },
+  {
+   "id": "new.handle.door_rear",
+   "class": "handle",
+   "seen_as": "horizontal grab handle on a raised rectangular pad at mid-height of the door",
+   "bbox": [
+    0.47,
+    0.38,
+    0.7,
+    0.48
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "a hand's grip long",
+   "material": "pressed steel",
+   "confidence": "high",
+   "notes": "nearer the latch edge (vehicle left) than the hinge edge"
+  },
+  {
+   "id": "new.control.door_rear_latch_upper",
+   "class": "control",
+   "seen_as": "upper cam-lever latch at the door's latch edge, lever angled down",
+   "bbox": [
+    0.57,
+    0.21,
+    0.72,
+    0.34
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ],
+    [
+     "above",
+     "new.control.door_rear_latch_lower"
+    ]
+   ],
+   "size_cue": "lever about a hand and a half long",
+   "material": "steel",
+   "confidence": "high",
+   "notes": "latch edge is the vehicle's left edge of the door"
+  },
+  {
+   "id": "new.control.door_rear_latch_lower",
+   "class": "control",
+   "seen_as": "lower cam-lever latch at the door's latch edge",
+   "bbox": [
+    0.6,
+    0.5,
+    0.77,
+    0.63
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "as the upper latch",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.door_rear_hinges",
+   "class": "bracket",
+   "seen_as": "two small hinge blocks on the door's other edge, top and bottom",
+   "bbox": [
+    0.13,
+    0.18,
+    0.19,
+    0.67
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.door_rear",
+   "relations": [
+    [
+     "on",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "each about a thumb's length",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": "on the vehicle's right edge of the door (image left)"
+  },
+  {
+   "id": "lamp.blue",
+   "class": "lamp",
+   "seen_as": "ceiling/wall lamp with a blue glass dome in a wire cage",
+   "bbox": [
+    0.0,
+    0.0,
+    0.07,
+    0.1
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "above",
+     "hull.door_rear"
+    ],
+    [
+     "right_of",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "smaller than the door handle pad",
+   "material": "blue glass, steel cage",
+   "confidence": "high",
+   "notes": "partly out of frame at the top left; vehicle's right of the door, high up"
+  },
+  {
+   "id": "fan.blower_rear",
+   "class": "fan",
+   "seen_as": "round blower (white impeller, black ring) seen through a tall framed opening in the bulkhead",
+   "bbox": [
+    0.89,
+    0.41,
+    1.0,
+    0.85
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "left_of",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "the opening about a third of the door's width",
+   "material": "sheet-metal frame, black ring, white impeller",
+   "confidence": "high",
+   "notes": "cut by the frame's right edge; g100-c shows the rest"
+  },
+  {
+   "id": "new.cable.bulkhead_white_left",
+   "class": "cable",
+   "seen_as": "thin white cable leaving the blower opening's bottom",
+   "bbox": [
+    0.88,
+    0.83,
+    0.97,
+    0.88
+   ],
+   "zone": "rear_bulkhead",
+   "relations": [
+    [
+     "below",
+     "fan.blower_rear"
+    ]
+   ],
+   "size_cue": "pencil-thin",
+   "material": "white sheath",
+   "confidence": "medium",
+   "notes": "the same cable as in g100-c"
+  },
+  {
+   "id": "new.shelf.bulkhead_angled_hood",
+   "class": "shelf",
+   "seen_as": "angled blue-grey sheet hood/shelf above the blower opening, brass screws",
+   "bbox": [
+    0.72,
+    0.0,
+    1.0,
+    0.33
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "left_of",
+     "hull.door_rear"
+    ],
+    [
+     "above",
+     "fan.blower_rear"
+    ]
+   ],
+   "size_cue": "about as wide as half the door",
+   "material": "painted sheet steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.rail.tube_over_hood",
+   "class": "rail",
+   "seen_as": "bent grey tube running across in front of the angled hood",
+   "bbox": [
+    0.72,
+    0.2,
+    1.0,
+    0.25
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "in_front_of",
+     "new.shelf.bulkhead_angled_hood"
+    ]
+   ],
+   "size_cue": "about a thumb thick",
+   "material": "painted steel tube",
+   "confidence": "low",
+   "notes": "purpose not seen: a guard or grab rail"
+  },
+  {
+   "id": "fan.rear_left",
+   "class": "fan",
+   "seen_as": "equipment above the hood: a panel with brass screws and a white cylinder with brass fittings",
+   "bbox": [
+    0.75,
+    0.0,
+    1.0,
+    0.27
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "above",
+     "new.shelf.bulkhead_angled_hood"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "identity guessed from g100-c, where a round fan housing sits above the same hood"
+  },
+  {
+   "id": "new.cover.bulkhead_lower_flap",
+   "class": "cover",
+   "seen_as": "small blue-grey hatch with a piano hinge at its top, low in the bulkhead under the door",
+   "bbox": [
+    0.2,
+    0.9,
+    0.5,
+    1.0
+   ],
+   "zone": "rear_bulkhead",
+   "on": "hull.bulkhead_rear",
+   "relations": [
+    [
+     "below",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "about half the door's width",
+   "material": "painted sheet steel, brass hinge pin",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.padded_item_right_rear",
+   "class": "unknown",
+   "seen_as": "grey padded item with a tan leather strap at the image's left edge",
+   "bbox": [
+    0.0,
+    0.5,
+    0.07,
+    1.0
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "right_of",
+     "hull.door_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "padded fabric, leather strap",
+   "confidence": "low",
+   "notes": "perhaps a folded seat back or cushion on the vehicle's right of the door"
+  }
+ ],
+ "not_in_register": [
+  "door seal, latches, hinges and handle as their own parts",
+  "small blue-grey hatch low in the bulkhead under the door",
+  "angled hood/shelf over the blower opening and the bent tube in front of it"
+ ],
+ "doubts": [
+  "what stands above the angled hood (fan.rear_left is a guess from g100-c)",
+  "the padded item at the far left (vehicle right) is not identified"
+ ]
+}

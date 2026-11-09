@@ -1,0 +1,228 @@
+{
+ "photo": "g086-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "outside, on the bow ahead of the driver's screen, raised",
+  "looks": "aft into the cab through the left windscreen; image right is the vehicle's left",
+  "covers": [
+   "hull.windscreen_left",
+   "cab.left_wall"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "driver's windscreen in a thick rubber seal, rounded upper outboard corner",
+   "bbox": [
+    0.0,
+    0.21,
+    1.0,
+    0.86
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "fills the frame width",
+   "material": "glass, black rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hull_wall.bow_upper_plate",
+   "class": "hull_wall",
+   "seen_as": "olive hull plate above and round the screen (outside)",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.25
+   ],
+   "zone": "outside",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "olive green paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.shutter_lugs_left",
+   "class": "bracket",
+   "seen_as": "row of box brackets with studs and triangular lugs with holes above the screen",
+   "bbox": [
+    0.33,
+    0.0,
+    0.92,
+    0.18
+   ],
+   "zone": "outside",
+   "on": "new.hull_wall.bow_upper_plate",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "each lug about a hand wide",
+   "material": "olive green steel",
+   "confidence": "high",
+   "notes": "hinges and stops of the armoured screen shutter (by the notes)"
+  },
+  {
+   "id": "new.unknown.wiper_arms_left",
+   "class": "unknown",
+   "seen_as": "two wiper arms with long blades hanging from pivots above the glass",
+   "bbox": [
+    0.13,
+    0.0,
+    0.97,
+    0.75
+   ],
+   "zone": "outside",
+   "on": "new.hull_wall.bow_upper_plate",
+   "relations": [],
+   "size_cue": "blades about half the glass height",
+   "material": "steel",
+   "confidence": "high",
+   "notes": "no class for a wiper arm; motors are inside (see g089-a/b)"
+  },
+  {
+   "id": "new.cover.cab_left_stowage_upper",
+   "class": "cover",
+   "seen_as": "rectangular hinged cover on the cab's left cheek wall, upper",
+   "bbox": [
+    0.69,
+    0.31,
+    0.88,
+    0.47
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.hull_wall.cab_left",
+   "relations": [
+    [
+     "above",
+     "new.cover.cab_left_stowage_lower"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green paint",
+   "confidence": "medium",
+   "notes": "seen through the glass"
+  },
+  {
+   "id": "new.cover.cab_left_stowage_lower",
+   "class": "cover",
+   "seen_as": "rectangular hinged cover with two hinges at its top, lower",
+   "bbox": [
+    0.69,
+    0.49,
+    0.87,
+    0.67
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.hull_wall.cab_left",
+   "relations": [
+    [
+     "below",
+     "new.cover.cab_left_stowage_upper"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hull_wall.cab_left",
+   "class": "hull_wall",
+   "seen_as": "the cab's left cheek wall behind the glass",
+   "bbox": [
+    0.55,
+    0.28,
+    0.97,
+    0.82
+   ],
+   "zone": "cab.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey-green paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.cab_left_web_holes",
+   "class": "frame",
+   "seen_as": "vertical web with two large round lightening holes",
+   "bbox": [
+    0.38,
+    0.29,
+    0.56,
+    0.79
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "right_of",
+     "new.hull_wall.cab_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green paint",
+   "confidence": "medium",
+   "notes": "inboard of the cheek wall"
+  },
+  {
+   "id": "new.instrument.cab_left_small_gauge",
+   "class": "instrument",
+   "seen_as": "small round gauge low on the cheek wall",
+   "bbox": [
+    0.87,
+    0.61,
+    0.94,
+    0.68
+   ],
+   "zone": "cab.left_wall",
+   "on": "new.hull_wall.cab_left",
+   "relations": [
+    [
+     "below",
+     "new.cover.cab_left_stowage_lower"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.wire_holder_cab_left",
+   "class": "bracket",
+   "seen_as": "bent wire basket/holder",
+   "bbox": [
+    0.16,
+    0.58,
+    0.31,
+    0.75
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "hand-sized",
+   "material": "steel wire",
+   "confidence": "low",
+   "notes": "purpose unknown"
+  }
+ ],
+ "not_in_register": [
+  "wiper arms and the shutter lugs outside; two stowage covers and a small gauge on the cab's left cheek"
+ ],
+ "doubts": [
+  "bottom 11% of the scan is the book's caption band, not the vehicle",
+  "no grab handle visible in this crop although the notes mention one",
+  "things behind the glass are blurred by reflections; places inside are rough"
+ ]
+}

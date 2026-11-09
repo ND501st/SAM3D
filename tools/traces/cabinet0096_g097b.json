@@ -1,0 +1,61 @@
+{
+  "name": "cabinet0096_g097b",
+  "notes": "The 0096-9M2's front (tools/blender/cabinet0096_trace.py), flattened from wwp_gecko g097-b (raw scan, slightly oblique, the sharpest). height_mm and width_mm: see the trace's docstring.",
+  "photo_size": [
+    1564,
+    1630
+  ],
+  "height_mm": 680.0,
+  "width_mm": 660.0,
+  "px_per_mm": 4.0,
+  "margin_mm": 40.0,
+  "edges": {
+    "h_top_a": [
+      380,
+      620,
+      238,
+      296
+    ],
+    "h_top_b": [
+      700,
+      1040,
+      298,
+      376
+    ],
+    "v_left": [
+      300,
+      1280,
+      316,
+      346
+    ],
+    "v_right": [
+      430,
+      1150,
+      1030,
+      1078
+    ],
+    "h_bot_a": [
+      470,
+      620,
+      1282,
+      1345
+    ],
+    "h_bot_b": [
+      800,
+      990,
+      1198,
+      1265
+    ]
+  },
+  "offset": [
+    500,
+    100
+  ],
+  "rect": {
+    "top": "h_top_a",
+    "left": "v_left",
+    "right": "v_right",
+    "bottom": "h_bot_a",
+    "bottom_y_mm": 680.0
+  }
+}

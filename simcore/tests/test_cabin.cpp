@@ -227,7 +227,8 @@ SC_TEST("cabin: the Osa operators share the left-wall bench, guidance in front, 
         SC_EXPECT(r != nullptr);
         if (r == nullptr) return;
         SC_EXPECT(r->centre_m.x > 0.0 && Dot(r->Normal(), Vec3{-1.0, 0.0, 0.0}) > 0.99);   // right wall, facing the aisle
-        SC_EXPECT(std::fabs(r->centre_m.y - l->centre_m.y) < 0.05);
+        // SP-3M-2 was re-measured from the book's photos and stands 0.11 m aft of SL-3M, its end at the bulkhead.
+        SC_EXPECT(std::fabs(r->centre_m.y - l->centre_m.y) < 0.15);
     }
 }
 
@@ -399,9 +400,9 @@ SC_TEST("cabin: a crewman up from his seat walks the floor, slides along its edg
     SC_EXPECT_NEAR(at.x, 0.1, 1e-9);
     SC_EXPECT_NEAR(at.y, 3.72, 1e-9);
     // Into the right-hand racks: he slides along them instead.
-    const Vec3 slid = cabin.WalkStep(Vec3{0.3, 3.0, at.z}, Vec3{0.9, 2.8, at.z});
+    const Vec3 slid = cabin.WalkStep(Vec3{0.3, 2.5, at.z}, Vec3{0.9, 2.3, at.z});
     SC_EXPECT_NEAR(slid.x, 0.3, 1e-9);
-    SC_EXPECT_NEAR(slid.y, 2.8, 1e-9);
+    SC_EXPECT_NEAR(slid.y, 2.3, 1e-9);
     // Into a rack straight on: he stays.
     const Vec3 stopped = cabin.WalkStep(Vec3{0.42, 2.0, at.z}, Vec3{0.6, 2.0, at.z});
     SC_EXPECT_NEAR(stopped.x, 0.42, 1e-9);

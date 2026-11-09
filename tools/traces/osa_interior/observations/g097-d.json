@@ -1,0 +1,112 @@
+{
+ "photo": "g097-d",
+ "vehicle": "drawing (0096-9M2)",
+ "camera": {
+  "stands": "drawing (front elevation, opened)",
+  "looks": "square-on at the cabinet with its door swung open to the left and the lid raised",
+  "covers": [
+   "rack.0096_9m"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "drawn cabinet body opened: relays, contactors, chokes, terminal strips",
+   "bbox": [
+    0.49,
+    0.27,
+    0.87,
+    0.97
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.0096_9m_lid",
+   "class": "cover",
+   "seen_as": "lid raised with the tube lamp inside",
+   "bbox": [
+    0.5,
+    0.02,
+    0.88,
+    0.25
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.lamp.0096_9m_lid_tube",
+   "class": "lamp",
+   "seen_as": "tube lamp in two holders inside the lid",
+   "bbox": [
+    0.55,
+    0.06,
+    0.84,
+    0.16
+   ],
+   "zone": "compartment.rear",
+   "on": "new.cover.0096_9m_lid",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.door.0096_9m_face",
+   "class": "door",
+   "seen_as": "the cabinet's face as a door swung open, inside: meter backs, fuse rear wiring",
+   "bbox": [
+    0.04,
+    0.31,
+    0.49,
+    0.9
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [
+    [
+     "left_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": "left_of here is the drawing's left only"
+  },
+  {
+   "id": "new.connector.0096_9m_plugs",
+   "class": "connector",
+   "seen_as": "six connectors under the body",
+   "bbox": [
+    0.5,
+    0.92,
+    0.84,
+    0.98
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "a drawing; the door hinge side matches the photos (left of the face)"
+ ]
+}

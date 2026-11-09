@@ -1,0 +1,19 @@
+{
+  "photo": "g082-b",
+  "image": "clean",
+  "camera_from": "measured", "measured": {"eye_m": [0.081, 0.82, 1.795], "f_px": 3246, "vanish_x_px": 1709, "horizon_px": 380, "how": "horizon from the vanishing point of the mat's two long edges (the mat's width over its distance below the horizon agrees at both ends, 0.97 and 0.96); distance from the seat's 0.50 m width at 657 px; height from the seat tops at 1.54, 333 px below the horizon at the seats' scale; the seats' feet then land on the deck within 4 cm; yaw from the same vanishing point; across, the seats' midpoint (1583 px) at their scale"},
+  "why": "No camera from the solve: the cab group is not to scale. A camera from the photo's own vanishing point and the seat as yardstick.",
+  "anchors": [
+    {"at": "shell:seat_driver@--+", "px": [823.5, 693.4], "what": "driver's seat back, top outboard corner"},
+    {"at": "shell:seat_driver@+-+", "px": [1480.4, 681.1], "what": "driver's seat back, top inboard corner"},
+    {"at": "shell:seat_commander@--+", "px": [1676.5, 739.4], "what": "commander's seat back, top inboard corner"},
+    {"at": "shell:seat_commander@+-+", "px": [2353.0, 739.4], "what": "commander's seat back, top outboard corner"},
+    {"at": "panel:radio_right_panel@bl", "px": [2565.4, 658.1], "what": "the right R-123M's face, bottom forward corner"},
+    {"at": "panel:radio_right_panel@br", "px": [2810.5, 658.1], "what": "the right R-123M's face, bottom aft corner"},
+    {"at": "panel:gyro_panel@0.65,-0.32", "px": [483.7, 704.1], "what": "SL-1M, the 0009-5M block's forward bottom corner"},
+    {"at": "panel:gyro_panel@0.65,-0.114", "px": [483.7, 442.2], "what": "SL-1M, the 0009-5M block's forward top corner"},
+    {"at": "panel:gyro_panel@0.65,0.103", "px": [480.4, 185.7], "what": "SL-1M, the OS51-8M block's forward top corner"},
+    {"at": "shell:steering@000", "px": [1268.0, 592.6], "what": "the steering wheel's middle (its box's centre)", "use": false, "why": "the wheel's box takes in its column; its centre is not the rim's"}
+  ],
+  "notes": "Looking forward into the cab from the aisle behind the front seats. Anchored on the seats' backs, the right R-123M's face and the SL-1M's forward blocks: all placed in the cabin from estimates (the cab is I5's), so the camera is as good as they are until I1 solves it."
+}

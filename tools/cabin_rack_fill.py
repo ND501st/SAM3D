@@ -21,7 +21,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PATH = os.path.join(REPO, 'data', 'cabins', 'osa_ak.json')
 NOTE = 'rack fill (estimate; kinds from rwd_mb3 9a33_41/45/46, positions not measured)'
 MARK = '"notes": "rack fill'
-RACKS = ('sp1m_panel', 'sp2m_panel', 'sp3m_panel')
+RACKS = ('sp1m_panel', 'sp3m_panel')    # SP-2M2 is traced (tools/blender/sp2m_trace.py): its mesh has its parts
 NL = chr(10)
 
 # Extra content for the gyro rack (rwd_mb3 9a33_51/52): the printed tables beside the meters and the label strip
@@ -112,6 +112,8 @@ def rewrite(text):
 
 
 def main():
+    print('Every rack is traced now (tools/blender/*_trace.py): nothing to fill, and a rerun would put the filler back on them.')
+    return
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--check', action='store_true')
     args = ap.parse_args()

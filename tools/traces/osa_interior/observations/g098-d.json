@@ -1,0 +1,107 @@
+{
+ "photo": "g098-d",
+ "vehicle": "drawing (SP-3)",
+ "camera": {
+  "stands": "drawing (front elevation)",
+  "looks": "square-on at the aft right-wall rack with its flap folded down",
+  "covers": [
+   "rack.sp3m"
+  ],
+  "lens": "drawing"
+ },
+ "components": [
+  {
+   "id": "rack.sp3m",
+   "class": "rack",
+   "seen_as": "drawn rack frame with fixing brackets round the edge",
+   "bbox": [
+    0.0,
+    0.08,
+    1.0,
+    0.97
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp3_0094_11m",
+   "class": "block",
+   "seen_as": "top-left power panel, nameplate starting 0094-",
+   "bbox": [
+    0.02,
+    0.13,
+    0.48,
+    0.38
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.block.sp3m_top_right",
+   "class": "block",
+   "seen_as": "top-right panel of 12 large and 12 small numbered sockets behind a frame",
+   "bbox": [
+    0.48,
+    0.13,
+    0.95,
+    0.44
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "this is what sits behind the drawer front of the photos"
+  },
+  {
+   "id": "new.cover.sp3m_front_flap",
+   "class": "cover",
+   "seen_as": "front flap folded out at the bottom as a shelf",
+   "bbox": [
+    0.04,
+    0.84,
+    0.98,
+    0.97
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_sp3m",
+   "class": "loom",
+   "seen_as": "drawn cable runs across the block fronts",
+   "bbox": [
+    0.04,
+    0.62,
+    0.72,
+    0.84
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp3m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "a drawing: the four lower blocks are not named"
+ ]
+}

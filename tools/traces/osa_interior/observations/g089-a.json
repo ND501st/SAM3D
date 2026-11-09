@@ -1,0 +1,305 @@
+{
+ "photo": "g089-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the driver's seat",
+  "looks": "up and forward at the roof's front edge over the left windscreen; image left is the vehicle's left",
+  "covers": [
+   "new.kit.sun_visor_left",
+   "new.periscope.blank_left"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.kit.sun_visor_left",
+   "class": "kit",
+   "seen_as": "pressed visor on a hinge rod with a ball pivot, HB sticker",
+   "bbox": [
+    0.29,
+    0.56,
+    0.81,
+    0.82
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "about half the screen width",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": "part of kit.sun_visors"
+  },
+  {
+   "id": "new.periscope.blank_left",
+   "class": "periscope",
+   "seen_as": "rectangular flanged periscope opening blanked, strap clamp with wing nut",
+   "bbox": [
+    0.43,
+    0.43,
+    0.7,
+    0.58
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "new.kit.sun_visor_left"
+    ]
+   ],
+   "size_cue": "about half the visor's width",
+   "material": "grey steel, glass",
+   "confidence": "high",
+   "notes": "part of periscope.blanks"
+  },
+  {
+   "id": "new.box.cab_roof_junction_left",
+   "class": "box",
+   "seen_as": "olive-brown rectangular box with two round connectors at its lower end",
+   "bbox": [
+    0.34,
+    0.02,
+    0.58,
+    0.32
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "new.loom.cab_header"
+    ]
+   ],
+   "size_cue": "about half the visor's width",
+   "material": "olive-brown paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.cab_roof_relay_left",
+   "class": "box",
+   "seen_as": "black box with screw terminals",
+   "bbox": [
+    0.77,
+    0.44,
+    0.94,
+    0.57
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "right_of",
+     "new.periscope.blank_left"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black plastic",
+   "confidence": "high",
+   "notes": "relay or switch by look"
+  },
+  {
+   "id": "new.motor.wiper_left",
+   "class": "motor",
+   "seen_as": "grey cylinder with a flange and pipe fittings, at the left",
+   "bbox": [
+    0.0,
+    0.42,
+    0.18,
+    0.55
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "left_of",
+     "new.control.wiper_tap_left"
+    ]
+   ],
+   "size_cue": "about a third of the visor's width",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": "fed by pipes, so maybe a pneumatic wiper motor; mirrors the body of g089-b"
+  },
+  {
+   "id": "new.box.pillar_left_junction",
+   "class": "box",
+   "seen_as": "grey cast box with a round connector and blue cables, top left",
+   "bbox": [
+    0.01,
+    0.29,
+    0.18,
+    0.42
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "above",
+     "new.motor.wiper_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey cast",
+   "confidence": "low",
+   "notes": "matched by look to the junction box at the top of the left pillar (g086-a, g084-a)"
+  },
+  {
+   "id": "new.control.wiper_tap_left",
+   "class": "control",
+   "seen_as": "small valve with a black knob and pipe fittings",
+   "bbox": [
+    0.28,
+    0.38,
+    0.46,
+    0.48
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "thumb-sized knob",
+   "material": "steel, black knob",
+   "confidence": "medium",
+   "notes": "purpose not shown; perhaps the wiper's air tap"
+  },
+  {
+   "id": "new.clamp.cab_roof_holder_left",
+   "class": "clamp",
+   "seen_as": "white plastic holder/clip, top left",
+   "bbox": [
+    0.15,
+    0.17,
+    0.29,
+    0.27
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "white plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_header",
+   "class": "loom",
+   "seen_as": "white, black and blue cables clipped along the roof edge",
+   "bbox": [
+    0.0,
+    0.23,
+    1.0,
+    0.44
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.cab_header_left",
+   "class": "pipe",
+   "seen_as": "thin pipes with brass unions along the roof edge, right",
+   "bbox": [
+    0.72,
+    0.59,
+    1.0,
+    0.8
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel, brass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "the screen's top seal and glass at the bottom",
+   "bbox": [
+    0.0,
+    0.67,
+    0.98,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass, rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "dark rim at the bottom",
+   "bbox": [
+    0.0,
+    0.82,
+    0.62,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "black",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.roof.cab",
+   "class": "roof",
+   "seen_as": "the cab roof's front slope",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.65
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.hatch.cab_roof_centre",
+   "class": "hatch",
+   "seen_as": "edge of a roof opening, top right",
+   "bbox": [
+    0.65,
+    0.0,
+    1.0,
+    0.1
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "right_of",
+     "new.box.cab_roof_junction_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the left visor, periscope blank, junction box, terminal box, valve and cylinder over the driver's screen"
+ ],
+ "doubts": [
+  "the grey cylinder at the left: wiper motor (notes) or a valve/actuator",
+  "the opening top right may be a hatch or a roof cut-out"
+ ]
+}

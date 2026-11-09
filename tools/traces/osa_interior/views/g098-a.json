@@ -1,0 +1,7 @@
+{
+ "photo": "g098-a",
+ "image": "clean",
+ "camera_from": "sfm",
+ "why": "Camera from the joint solve of the book's interior photos (tools/recon/holistic_sfm.py), which uses no model point: the check of the roof and floor against the photos themselves. Aligned on SP-2M2's face; the width across the aisle is the solve's own (docs/OSA_INTERIOR_HOLISTIC.md section 16).",
+ "notes": "Looking aft along the right side: the bent post, SP-3M, the wheel-arch fairing, the roof lining and its insulators. Session A."
+}

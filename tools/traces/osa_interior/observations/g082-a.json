@@ -1,0 +1,268 @@
+{
+ "photo": "g082-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "on the hull roof beside the open hatch, looking down at it",
+  "looks": "at the inner face of the raised hatch lid",
+  "covers": [
+   "hull.hatch_compartment",
+   "outside"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "hull.hatch_compartment",
+   "class": "hatch",
+   "seen_as": "square hatch lid with well-rounded corners, raised near vertical, inner face shown: pressed rim, horizontal stiffening rib, latch lever at top, two riveted plates, hinge strip along the lower edge",
+   "bbox": [
+    0.3,
+    0.04,
+    0.8,
+    0.86
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "lid fills about half the frame; much bigger than the cans beside it (a man-sized opening)",
+   "material": "olive green painted steel, inner face brighter yellow-green",
+   "confidence": "medium",
+   "notes": "Caption calls it the early roof hatch; which roof hatch is not stated. The missile containers above it suggest the hatch near the launcher; the register id is the best fit, not proven."
+  },
+  {
+   "id": "new.plate.hatch_instruction",
+   "class": "plate",
+   "seen_as": "black riveted instruction plate on the lid, text unreadable",
+   "bbox": [
+    0.43,
+    0.4,
+    0.58,
+    0.52
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.hatch_compartment",
+   "relations": [
+    [
+     "on",
+     "hull.hatch_compartment"
+    ]
+   ],
+   "size_cue": "about a quarter of the lid width",
+   "material": "black anodised metal",
+   "confidence": "high",
+   "notes": "Text not legible at scan resolution."
+  },
+  {
+   "id": "new.plate.hatch_diagram",
+   "class": "plate",
+   "seen_as": "small square plate with a diagram, right of the instruction plate",
+   "bbox": [
+    0.6,
+    0.39,
+    0.66,
+    0.51
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.hatch_compartment",
+   "relations": [
+    [
+     "on",
+     "hull.hatch_compartment"
+    ],
+    [
+     "beside",
+     "new.plate.hatch_instruction"
+    ]
+   ],
+   "size_cue": "about half the instruction plate",
+   "material": "metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.hatch_latch",
+   "class": "handle",
+   "seen_as": "latch handle with lever at the lid top centre",
+   "bbox": [
+    0.46,
+    0.1,
+    0.52,
+    0.31
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.hatch_compartment",
+   "relations": [
+    [
+     "on",
+     "hull.hatch_compartment"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "steel, rusted",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.control.hatch_prop",
+   "class": "control",
+   "seen_as": "telescopic prop rod from the lid edge down to the roof opening",
+   "bbox": [
+    0.08,
+    0.53,
+    0.32,
+    0.98
+   ],
+   "zone": "outside",
+   "on": "hull.hatch_compartment",
+   "relations": [
+    [
+     "connects",
+     "hull.hatch_compartment"
+    ],
+    [
+     "connects",
+     "hull.roof"
+    ]
+   ],
+   "size_cue": "about as long as the lid is high",
+   "material": "steel rod, rusty",
+   "confidence": "high",
+   "notes": "Holds the lid open."
+  },
+  {
+   "id": "new.frame.hatch_hinge",
+   "class": "frame",
+   "seen_as": "hinge along the lid lower edge, a toothed/cut-out strip",
+   "bbox": [
+    0.34,
+    0.83,
+    0.75,
+    0.93
+   ],
+   "zone": "outside",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "below",
+     "hull.hatch_compartment"
+    ]
+   ],
+   "size_cue": "runs the lid width",
+   "material": "steel, rusted",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.hatch_coaming",
+   "class": "frame",
+   "seen_as": "tubular rim of the hatch opening, with a small blue-grey plate and a red stud",
+   "bbox": [
+    0.08,
+    0.86,
+    0.8,
+    1.0
+   ],
+   "zone": "outside",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "below",
+     "new.frame.hatch_hinge"
+    ]
+   ],
+   "size_cue": "opening as wide as the lid",
+   "material": "painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "hull roof plating left and right of the hatch, riveted sheet at the right",
+   "bbox": [
+    0.0,
+    0.42,
+    1.0,
+    1.0
+   ],
+   "zone": "outside",
+   "relations": [],
+   "size_cue": "",
+   "material": "olive green steel",
+   "confidence": "medium",
+   "notes": "Seen from outside."
+  },
+  {
+   "id": "new.box.roof_cans",
+   "class": "box",
+   "seen_as": "olive-green cans/boxes with red stencils on the roof right, white tag",
+   "bbox": [
+    0.76,
+    0.05,
+    0.98,
+    0.37
+   ],
+   "zone": "outside",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "right_of",
+     "hull.hatch_compartment"
+    ]
+   ],
+   "size_cue": "about a third of the lid width each",
+   "material": "olive painted sheet metal",
+   "confidence": "low",
+   "notes": "Stencils unreadable; may be launcher-side stowage, not compartment."
+  },
+  {
+   "id": "new.unknown.roof_cylinder",
+   "class": "unknown",
+   "seen_as": "cylindrical olive cap/can at upper left",
+   "bbox": [
+    0.09,
+    0.08,
+    0.19,
+    0.22
+   ],
+   "zone": "outside",
+   "relations": [],
+   "size_cue": "hand-sized diameter",
+   "material": "olive painted metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.box.missile_containers",
+   "class": "box",
+   "seen_as": "corrugated missile containers filling the top of the frame",
+   "bbox": [
+    0.08,
+    0.0,
+    0.7,
+    0.18
+   ],
+   "zone": "outside",
+   "relations": [
+    [
+     "above",
+     "hull.hatch_compartment"
+    ]
+   ],
+   "size_cue": "span the frame",
+   "material": "corrugated aluminium (green)",
+   "confidence": "medium",
+   "notes": "Exterior; not part of the compartment."
+  }
+ ],
+ "not_in_register": [
+  "instruction and diagram plates on the hatch lid",
+  "the hatch prop rod",
+  "the hatch hinge strip and coaming rim"
+ ],
+ "doubts": [
+  "Exterior view: which roof hatch this is is not shown; the caption says only \"early roof hatch\".",
+  "The vehicle is taken as the same 9A33BM3-1 by the book layout; nothing in the frame confirms it.",
+  "The camera faces the lid; vehicle left/right cannot be worked out from this frame, so no left/right relations given."
+ ]
+}

@@ -1,0 +1,64 @@
+{
+  "photo": "g093-b",
+  "panel": "sp2m_panel",
+  "what": "SP-2M2's block grid: the outer edges of its blocks (left column's left edges, the top row's tops, the right column's row-2 right edge, the middle column's bottom edge). The book's ex-NVA 9A33BM3-1, square-on from the aisle.",
+  "corners_px": [
+    [
+      73.3,
+      101.5
+    ],
+    [
+      1848.9,
+      168.8
+    ],
+    [
+      1886.2,
+      1265.3
+    ],
+    [
+      46.0,
+      1360.1
+    ]
+  ],
+  "corners_how": "Each edge a line fitted to the white-block/dark-recess step found at 9-37 places along it on the descreened crop (residuals 0.3-1.2 px), corners where the lines meet. Bottom-left lies in the wall's chamfer and bottom-right just outside the print (the rows 3-4 run a few px past its edge), both as line intersections. The right column's row-1 small panels stand about 5 px inside its row-2 edge.",
+  "edge_spans": {
+    "top": [
+      [
+        100,
+        104.5,
+        1800,
+        171.5
+      ]
+    ],
+    "left": [
+      [
+        74.5,
+        150,
+        50.5,
+        1030
+      ]
+    ],
+    "right": [
+      [
+        1856.5,
+        390,
+        1861.5,
+        540
+      ]
+    ],
+    "bottom": [
+      [
+        760,
+        1322.5,
+        1270,
+        1296.5
+      ]
+    ]
+  },
+  "edge_spans_why": "top: the top row's tops, flush across the three columns; left: the left column's rows 1-4 (row 5 is inset by the wall's chamfer); right: the right column's row 2 (row 1's small panels stand 5 px inside it, rows 3-4 run off the print); bottom: the middle column's bottom block (the left one is inset, the right one shorter).",
+  "known": {
+    "width_mm": 1890.0
+  },
+  "known_source": "the layout's width (data/cabins/osa_ak.json sp2m_panel: SL-2M's 1.89 m from mon_2112_80 Fig. 3, taken for SP-2M as 'the same length'): an assumption, not a measurement of this rack",
+  "traced": "2026-11-08, Claude (Opus 5.5), from the clean crop out/recon/<book run>/photos/clean/g093-b.png; corners refined along these spans by the faces stage (interior.refine_quad on the notch-descreened raw crop)"
+}

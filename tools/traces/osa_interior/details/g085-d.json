@@ -1,0 +1,15 @@
+{
+ "photo": "g085-d",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan blurred 3x3, read at a 0.05 grid whole and in crops at 0.02 (0.01 where stated), floor pass; the old cabin's flat plate was not used as a reference",
+ "covers": "the commander's footwell looking down and forward: the bare stained floor, the formed sheet wedge of the heater outlet standing on it, the pipes along the toe board's foot; the fabric duct above",
+ "notes": "Vehicle: the hangar session, ex-NVA 9A33BM3-1 (catalogue g082-g096); nothing in this photo suggests another vehicle. Looking forward. No mat in the commander's footwell except at the image's bottom corners: the floor is bare and stained, flat so far as it shows. The wedge's lower edge shows it stands on the floor or a short plinth. The band across at y 0.55-0.62 is the same transverse beam as g085-c's (pipes clipped along it, the same height on the toe board).",
+ "details": [
+  {"id": "d01", "on": "floor.cab", "kind": "surface", "what": "the bare floor of the footwell, heavily stained: rust-brown and yellow, a dark burn or oil patch at the middle", "bbox": [0.22, 0.62, 0.75, 0.85], "relief": "flush", "build": "texture", "confidence": "high", "status": "blocked"},
+  {"id": "d02", "on": "new.floor.cab_toe_beam", "kind": "profile", "what": "the transverse band across the footwell at the toe board's foot, pipes clipped along it; g085-c's beam on the commander's side, scabbed white paint along its top", "line": [[0.0, 0.565], [0.4, 0.56], [0.75, 0.565]], "relief": "raised", "size_cue": "several times as deep as the pipes clipped to it are wide", "build": "mesh", "confidence": "medium", "status": "absent"},
+  {"id": "d03", "on": "duct.heater_diffuser_cone", "kind": "profile", "what": "the heater's formed sheet outlet standing on the floor: a long wedge, deep at the left, sloping to a point at the right, with a ledge along its side and a rust-stained seam", "line": [[0.32, 0.78], [0.55, 0.84], [0.74, 0.91], [0.73, 0.93], [0.32, 0.93]], "relief": "raised", "size_cue": "about twice as long as the fabric duct above is deep", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d04", "on": "duct.heater_diffuser_cone", "kind": "edge", "what": "the wedge's lower flange on the floor, screws along it", "line": [[0.32, 0.975], [0.5, 0.98], [0.73, 0.945]], "relief": "raised", "pattern": {"count": 2}, "build": "mesh", "confidence": "medium", "status": "absent"},
+  {"id": "d05", "on": "duct.heater_diffuser_cone", "kind": "part", "what": "the cast boss and ring at the wedge's deep end, with a black corrugated hose to the left", "bbox": [0.17, 0.66, 0.32, 1.0], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d06", "on": "cushion.cab_floor_mat", "kind": "edge", "what": "the mat's corner showing at the image's bottom right", "bbox": [0.92, 0.95, 1.0, 1.0], "relief": "raised", "build": "mesh", "confidence": "low", "status": "absent"}
+ ]
+}

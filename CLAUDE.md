@@ -75,6 +75,8 @@ python tools/em_view.py                           # EM overlays in a browser fro
 ./simcore/build/map_dump data maps/kesmark_range.json out/kesmark_range_map.json   # the test map's layout (or --height e_km n_km)
 python tools/map_view.py out/kesmark_range_map.json --png                          # the test map from above: out/map_view/
 python tools/photo_trace.py rectify tools/traces/r123m_front.json PHOTO   # flatten a reference photo to mm (docs/MODELLING_FROM_PHOTOS.md)
+E:/SAM3D-tools/venv-depth/Scripts/python.exe -X utf8 tools/recon/holistic_diff.py all   # Osa interior: model against every photo by depth; findings, poses, surfaces, score (docs/OSA_INTERIOR_HOLISTIC.md section 32)
+E:/SAM3D-tools/venv-depth/Scripts/python.exe -X utf8 tools/recon/holistic_diff.py measure g096-a --poly .38,.42,.65,.42,.65,.74,.38,.74   # a region of a registered photo in metres
 blender --background --python tools/blender/build_pu12m_radios.py         # the R-111 and R-407 meshes (check_pu12m_radios.py proves them)
 
 # Everything at once
@@ -161,7 +163,10 @@ R-407 worked as sets, the regiment's command net and telecode on their frequenci
 `tools/ue_cabin_check.py` (see `unreal/README.md`).
 
 Modelling equipment from photographs: always follow `docs/MODELLING_FROM_PHOTOS.md` (skill `model-from-photos`): flatten the
-photo to mm, trace in 3D with heights, overlap tests, then check the model rendered from the photo's own camera.
+photo to mm, trace in 3D with heights, overlap tests, then check the model rendered from the photo's own camera. For a whole
+space with many photos (the Osa's compartment), `tools/recon/holistic_diff.py` compares the model with the photos by depth and
+surface direction per pixel and says what is wrong, part by part, with a score each edit must raise
+(`docs/OSA_INTERIOR_HOLISTIC.md` section 32).
 
 Multiplayer: the server simulates, clients mirror; players take crew seats (`docs/MULTIPLAYER.md`).
 

@@ -1,0 +1,281 @@
+{
+ "photo": "g089-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the commander's seat",
+  "looks": "up and forward at the roof's front edge over the right windscreen",
+  "covers": [
+   "new.kit.sun_visor_right",
+   "new.periscope.blank_right"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.kit.sun_visor_right",
+   "class": "kit",
+   "seen_as": "visor with the Rothmans sticker on its hinge rod",
+   "bbox": [
+    0.0,
+    0.64,
+    0.55,
+    0.9
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.periscope.blank_right",
+   "class": "periscope",
+   "seen_as": "periscope opening blanked the same way as the left",
+   "bbox": [
+    0.07,
+    0.49,
+    0.46,
+    0.63
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "new.kit.sun_visor_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel, glass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.cab_roof_holder_right",
+   "class": "clamp",
+   "seen_as": "white plastic holder on the roof",
+   "bbox": [
+    0.58,
+    0.21,
+    0.78,
+    0.33
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "white plastic",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.cab_roof_insulated",
+   "class": "duct",
+   "seen_as": "insulated tube fore and aft on the roof, stencilled with a 5937 part number",
+   "bbox": [
+    0.3,
+    0.0,
+    0.43,
+    0.34
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "forearm-thick",
+   "material": "grey insulation",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.lining.cab_roof_padded",
+   "class": "lining",
+   "seen_as": "padded panel at the top left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.27,
+    0.31
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "left_of",
+     "new.duct.cab_roof_insulated"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey padding",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.instrument.cab_roof_gauge_right",
+   "class": "instrument",
+   "seen_as": "small round pressure gauge on a bracket, fed by a pipe",
+   "bbox": [
+    0.76,
+    0.43,
+    0.87,
+    0.53
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.gauge_feed_right",
+   "class": "pipe",
+   "seen_as": "pipe with an orange tag to the gauge",
+   "bbox": [
+    0.86,
+    0.44,
+    1.0,
+    0.48
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "connects",
+     "new.instrument.cab_roof_gauge_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.motor.wiper_right",
+   "class": "motor",
+   "seen_as": "cast cylindrical body with five spigots and a pipe connection, right",
+   "bbox": [
+    0.73,
+    0.6,
+    0.98,
+    0.75
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "below",
+     "new.instrument.cab_roof_gauge_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": "a manifold by the notes; mirrors the cylinder of g089-a"
+  },
+  {
+   "id": "new.control.wiper_tap_right",
+   "class": "control",
+   "seen_as": "small valve with a black knob and pipe fittings",
+   "bbox": [
+    0.48,
+    0.48,
+    0.68,
+    0.66
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel, black knob",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.bracket.cab_roof_right_angle",
+   "class": "bracket",
+   "seen_as": "angle bracket above the cylinder",
+   "bbox": [
+    0.71,
+    0.53,
+    0.98,
+    0.63
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [
+    [
+     "above",
+     "new.motor.wiper_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.cab_header",
+   "class": "loom",
+   "seen_as": "white, black and blue cables along the roof edge",
+   "bbox": [
+    0.0,
+    0.34,
+    1.0,
+    0.5
+   ],
+   "zone": "cab.roof",
+   "on": "new.roof.cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "the screen's top seal at the bottom",
+   "bbox": [
+    0.0,
+    0.86,
+    1.0,
+    1.0
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass, rubber",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.roof.cab",
+   "class": "roof",
+   "seen_as": "the cab roof's front slope",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.85
+   ],
+   "zone": "cab.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "high",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the right visor, periscope blank, insulated roof tube, gauge, valve and cast body over the commander's screen"
+ ],
+ "doubts": [
+  "what the cast body with spigots is (manifold, distributor or pneumatic wiper motor)"
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "photo": "g092-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "not determinable (detail of a panel)",
+  "looks": "square-on at the inner face of a panel; orientation unknown",
+  "covers": [
+   "new.hatch.low_profile_panel"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.hatch.low_profile_panel",
+   "class": "hatch",
+   "seen_as": "large panel seen from inside with a 3 x 3 grid of pressed stiffening bays and chamfered upper corners",
+   "bbox": [
+    0.0,
+    0.02,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "nine bays, each larger than an R-123M face (no scale in frame)",
+   "material": "grey painted pressed sheet",
+   "confidence": "medium",
+   "notes": "the book's text calls it the removable panel for lowering the vehicle; its place in the vehicle is not shown"
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "Where the panel sits (roof over the compartment, rear, or a separate part) and whether it is fitted or removed is not visible; zone compartment.roof is a guess."
+ ]
+}

@@ -127,6 +127,10 @@ python tools/photo_trace.py overlay tools/traces/<name>.json out/traces/<name>/r
   (`tools/blender/radio_front_model.py`); a new set of the kind is a trace module, a colour scheme and a line in
   `build_pu12m_radios.py`.
 
+### When there is a set of photos of a whole space: compare by depth
+
+Edge overlays say where an outline is; they cannot say a surface is at the wrong angle or that a raised floor is missing. For a space photographed from many cameras (the Osa's compartment), after the steps above run the depth comparison, `tools/recon/holistic_diff.py` (`docs/OSA_INTERIOR_HOLISTIC.md` section 32). It renders the model through each photo's camera and compares depth and surface direction per pixel against the photo's depth map, then says in words what is wrong: which part, turned, moved, raised, missing or excess, and by how much. `measure` turns a region of a photo into a plane in metres. Edit from those numbers and re-score: an edit that does not raise the score did not help.
+
 ## 7. Into the cabin
 
 * Export headless (`build_<name>.py`), which also writes `art/cabin_interior/manifest.json` (size, and the face plane).

@@ -1,0 +1,275 @@
+{
+ "photo": "g092-e",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle opposite SP-2M's aft end, a little below eye height, close",
+  "looks": "right (+x) square-on; image left forward, image right aft",
+  "covers": [
+   "block.sp2_m3",
+   "block.sp2_m4",
+   "block.sp2_r3",
+   "block.sp2_r4",
+   "new.sponson.wheel_arch_right_rear"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "aft part of the rack frame",
+   "bbox": [
+    0.0,
+    0.13,
+    0.97,
+    0.92
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_m3",
+   "class": "block",
+   "seen_as": "plate ОР-22М1, hand grips, long red test socket",
+   "bbox": [
+    0.0,
+    0.19,
+    0.28,
+    0.57
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_m4"
+    ],
+    [
+     "forward_of",
+     "block.sp2_r3"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_m4",
+   "class": "block",
+   "seen_as": "plate ОР-13М1, table cover at the left",
+   "bbox": [
+    0.0,
+    0.59,
+    0.29,
+    0.88
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r3",
+   "class": "block",
+   "seen_as": "plate 0091-17М1: fuse panel with a mA meter and guard rails, aft end chamfered",
+   "bbox": [
+    0.3,
+    0.2,
+    0.94,
+    0.56
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r4",
+   "class": "block",
+   "seen_as": "plate 0091-18: two halves of fuses and knobs, guard rails with canvas-wrapped grips",
+   "bbox": [
+    0.31,
+    0.56,
+    0.74,
+    0.87
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "above",
+     "new.sponson.wheel_arch_right_rear"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_r2",
+   "class": "block",
+   "seen_as": "bottom edge of the block above 0091-17М1",
+   "bbox": [
+    0.3,
+    0.14,
+    0.95,
+    0.19
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.sp2_m2",
+   "class": "block",
+   "seen_as": "bottom edge of the block above ОР-22М1",
+   "bbox": [
+    0.0,
+    0.14,
+    0.27,
+    0.19
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.wheel_arch_right_rear",
+   "class": "sponson",
+   "seen_as": "hull side sloping in over the wheel arch, aft of and below the fuse panels",
+   "bbox": [
+    0.7,
+    0.15,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_right",
+   "class": "hull_wall",
+   "seen_as": "wall surface at the right edge",
+   "bbox": [
+    0.9,
+    0.13,
+    1.0,
+    0.65
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hook.right_wall_rear_holder",
+   "class": "hook",
+   "seen_as": "white-wrapped holder on the wall",
+   "bbox": [
+    0.89,
+    0.37,
+    0.99,
+    0.43
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.t_key_rear_right",
+   "class": "kit",
+   "seen_as": "grey T-handle held on the wall with a white wrap",
+   "bbox": [
+    0.91,
+    0.45,
+    1.0,
+    0.58
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.under_sp2m_rear",
+   "class": "strap",
+   "seen_as": "brown straps with clips under the rack",
+   "bbox": [
+    0.3,
+    0.91,
+    0.62,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "leather",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.items_behind_0091_18",
+   "class": "unknown",
+   "seen_as": "brown and orange items in the gap aft of 0091-18",
+   "bbox": [
+    0.75,
+    0.56,
+    0.82,
+    0.66
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [],
+ "doubts": [
+  "The book's title and a corner of another photo (g092-c) cross the top of the crop; not components.",
+  "Holder and T-handle on the wall may be on the strut seen in g092-a rather than on the hull side."
+ ]
+}

@@ -1,0 +1,20 @@
+{
+  "photo": "g094-a",
+  "image": "clean",
+  "camera_from": "anchors",
+  "k1": {"half_diagonal": -0.1028, "from": "the pipeline's calib stage (out/recon/interior_dryrun/calib.json): plumb lines on the clean scan"},
+  "anchors": [
+    {"at": "panel:so_panel@0.0,0.191", "px": [793, 612], "what": "the PPI's centre (soc_ppi)"},
+    {"at": "panel:so_panel@-0.2345,0.466", "px": [602, 312], "what": "the dial strip's first dial (s_0094_5, from the panel's face)"},
+    {"at": "panel:so_panel@0.1897,0.466", "px": [995, 276], "what": "the dial strip's eighth dial"},
+    {"at": "panel:so_panel@0.038,-0.279", "px": [850, 1063], "what": "the azimuth hand wheel's hub (ssc.az_wheel)"},
+    {"at": "panel:fo_panel@-0.100,0.284", "px": [1340, 537], "what": "the TV screen's centre (tov_monitor)"},
+    {"at": "panel:fo_panel@0.208,0.334", "px": [1692, 466], "what": "the elevation scope's centre (elev_search, yellow filter)"},
+    {"at": "panel:fo_panel@0.030,-0.024", "px": [1482, 847], "what": "the launch block's voltmeter (dts_voltmeter)"},
+    {"at": "panel:fo_panel@0.257,-0.244", "px": [1728, 1097], "what": "the elevation hand wheel's hub (ssc.el_wheel)"},
+    {"at": "panel:op_panel@0.010,0.307", "px": [307, 552], "what": "the range scope's centre (ssc_range)"},
+    {"at": "panel:op_panel@0.135,-0.314", "px": [430, 1023], "what": "the range hand control's hub (ssc.range_wheel)"}
+  ],
+  "notes": "Anchors on the cabin's console columns (samsim_panels, SAM Simulator's straight-on photos): display and control centres, which a photo shows sharply. The BM3-1's console (the book) and the AK's (SAM Simulator) differ in some blocks' splits (D1); the left-out residuals show where.",
+  "state": {"hide": ["seat_deputy", "seat_senior", "seat_operator"], "why": "The BM3-1 photographed has the operators' seat backs folded down (g095-d, g096-a: folded seats with canvas bags on them); the cabin builds them up. The folded form is I5's."}
+}

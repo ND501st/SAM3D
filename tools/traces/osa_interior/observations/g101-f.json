@@ -1,0 +1,124 @@
+{
+ "photo": "g101-f",
+ "vehicle": "9A33BM2/BM3 late Czech Army vehicle (Bouchal, 2000s; not the 1980s fit)",
+ "camera": {
+  "stands": "above and behind the operators' seats",
+  "looks": "down at the seats toward a console",
+  "covers": [
+   "bench.operators"
+  ],
+  "lens": "wide, close"
+ },
+ "components": [
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "light grey tubular steel seat mechanism: two parallel tubes per seat on hinged brackets",
+   "bbox": [
+    0.14,
+    0.28,
+    0.98,
+    0.95
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "light grey painted steel tube",
+   "confidence": "high",
+   "notes": "the book's top text band covers the image's top 0-0.16"
+  },
+  {
+   "id": "new.cushion.operator_seats_black",
+   "class": "cushion",
+   "seen_as": "three square black vinyl seat cushions with rounded corners",
+   "bbox": [
+    0.0,
+    0.28,
+    0.77,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "on",
+     "bench.operators"
+    ]
+   ],
+   "size_cue": "each about a seat's width",
+   "material": "black vinyl",
+   "confidence": "high",
+   "notes": "late type; black padding is the late fit"
+  },
+  {
+   "id": "new.cushion.long_black",
+   "class": "cushion",
+   "seen_as": "long black cushion along the row (a backrest folded flat or a bench pad)",
+   "bbox": [
+    0.27,
+    0.19,
+    1.0,
+    0.72
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "beside",
+     "new.cushion.operator_seats_black"
+    ]
+   ],
+   "size_cue": "as long as two to three seats",
+   "material": "black vinyl",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.control.seat_lock_lever",
+   "class": "control",
+   "seen_as": "lever with a black ball knob at the mechanism's end",
+   "bbox": [
+    0.86,
+    0.78,
+    0.99,
+    0.92
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "on",
+     "bench.operators"
+    ]
+   ],
+   "size_cue": "fist-sized knob",
+   "material": "steel, black knob",
+   "confidence": "medium",
+   "notes": "the seat slide/lock by the notes"
+  },
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "white console panels with knobs, lamps and a row of jacks/fuses behind",
+   "bbox": [
+    0.0,
+    0.16,
+    1.0,
+    0.36
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "white panels",
+   "confidence": "low",
+   "notes": "which wall is not certain"
+  }
+ ],
+ "not_in_register": [
+  "the long black cushion"
+ ],
+ "doubts": [
+  "the camera's heading is uncertain: whether the panels behind are the left wall's SŁ-2M or the right wall's SP-2M",
+  "the three cushions cannot be assigned to the deputy commander's, senior operator's and operator's seats",
+  "late Czech seats, not the 1980s fit"
+ ]
+}

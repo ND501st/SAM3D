@@ -198,7 +198,8 @@ SC_TEST("npc systems: the commander has the radios switched on when his set is o
     r->Step(0.1);
     r->PlayerSet("radio.right.power", 0);  // someone switched the commander's set off
     while (!r->Finished() && r->Time() < 180.0 && r->Console().panel.Get("radio.right.power") != 1) r->Step(0.1);
-    SC_EXPECT(Said(*r, "order_radio_on", "commander"));
+    // The set is beside his seat (on ZCzZ1A nr 2, data/cabins/osa_ak.json since the holistic review H3): he may switch
+    // it on himself rather than order the crew. Either way it is on again.
     SC_EXPECT(r->Console().panel.Get("radio.right.power") == 1);
 }
 

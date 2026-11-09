@@ -1,0 +1,715 @@
+{
+ "photo": "g089-a",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan (2412 x 2030) blurred 3x3, overview and tiles with a 0.02 grid, read against g089-b and g089-d",
+ "covers": "the cab roof's forward edge over the driver, looking up and forward: the central opening's left corner and coaming, the pad on its forward face, the roof band with the olive junction box and the white holder, the header loom, the driver's periscope port under its blanking plate, the visor on its rod, the top of the left windscreen",
+ "notes": "VEHICLE: the hangar session, the ex-NVA 9A33BM3-1 (g082-g096). Image top is aft along the roof, image bottom is forward and down to the screen, image left is the vehicle's left (the same as g089-d). Same physical things: the opening's left corner is g089-d's opening d01 at x 0.30-0.35; the pad at x 0.65-1.0 is g089-d's coaming face d02 (x 0.30-0.73, y 0.16-0.26) and continues as g089-b x 0-0.25; the olive box is g089-d d17; the white holder is g089-d d25; the rectangular opening below the loom is the periscope port the book describes, and g089-d's 'dark flat mounting bars' d48 are these ports' strap and wing bolt seen edge-on. The roof here has no quilted or stitched lining and none of the compartment's pale cloth. It is painted surface with soft, irregular wrinkles over much of it, which reads as paint or a sprayed coat over a thin soft layer; whether that layer is padding or just a thick coat is not resolved. The pad on the coaming's face is a distinct shaped pad, thicker and softer, ending in a formed end at x 0.645.",
+ "details": [
+  {
+   "id": "d01",
+   "on": "hatch.cab_roof_centre",
+   "kind": "opening",
+   "what": "the left corner of the central roof opening: a large-radius corner of a rolled lip turning from the forward edge up and aft; beyond the lip only the far surfaces, no second opening to its left",
+   "line": [
+    [
+     0.995,
+     0.088
+    ],
+    [
+     0.82,
+     0.08
+    ],
+    [
+     0.74,
+     0.066
+    ],
+    [
+     0.7,
+     0.045
+    ],
+    [
+     0.685,
+     0.02
+    ],
+    [
+     0.68,
+     0.0
+    ]
+   ],
+   "relief": "through",
+   "size_cue": "corner radius about a tenth of the visor's width",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "blocked",
+   "note": "g089-d d01's left corner; the model has two rectangular hatches, the photo one opening"
+  },
+  {
+   "id": "d02",
+   "on": "hatch.cab_roof_centre",
+   "kind": "edge",
+   "what": "the coaming's rolled lip: a pale rim along the opening's forward edge, rust running along its inner side and heavy rust at the corner",
+   "line": [
+    [
+     0.68,
+     0.0
+    ],
+    [
+     0.695,
+     0.04
+    ],
+    [
+     0.725,
+     0.065
+    ],
+    [
+     0.78,
+     0.082
+    ],
+    [
+     0.9,
+     0.09
+    ],
+    [
+     0.995,
+     0.092
+    ]
+   ],
+   "relief": "raised",
+   "size_cue": "about a finger wide",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d03",
+   "on": "hatch.cab_roof_centre",
+   "kind": "surface",
+   "what": "rust in the corner: a large red-brown patch on the flange inside the lip's curve, paint flaked",
+   "bbox": [
+    0.665,
+    0.01,
+    0.725,
+    0.075
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d04",
+   "on": "hatch.cab_roof_centre",
+   "kind": "part",
+   "what": "seen through the opening: a straight yellow rod across the frame and a yellow-edged flat strip below it, a short vertical pale fitting in each; dull brown-olive surface behind, close to the lip",
+   "bbox": [
+    0.72,
+    0.0,
+    1.0,
+    0.095
+   ],
+   "relief": "recessed",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "the underside of a closed or nearly closed lid and its torsion bar or stay, by the look; not resolved. No central member crosses the opening in g089-d"
+  },
+  {
+   "id": "d05",
+   "on": "hatch.cab_roof_centre",
+   "kind": "profile",
+   "what": "the coaming's forward face under the lip: a pale steel band, grainy with worn paint, about as tall as the visor's rim is wide, a dark groove along its top under the lip; it runs from the formed end at x 0.645 on past the right edge of the frame",
+   "bbox": [
+    0.645,
+    0.093,
+    1.0,
+    0.175
+   ],
+   "relief": "raised",
+   "size_cue": "about as deep as the white holder is long",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d02's upper part"
+  },
+  {
+   "id": "d06",
+   "on": "hatch.cab_roof_centre",
+   "kind": "profile",
+   "what": "a step along the pad at the foot of the band: a sharp shadow from the formed end right across, the pad's upper edge",
+   "line": [
+    [
+     0.652,
+     0.172
+    ],
+    [
+     0.75,
+     0.177
+    ],
+    [
+     0.85,
+     0.178
+    ],
+    [
+     1.0,
+     0.178
+    ]
+   ],
+   "relief": "recessed",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d07",
+   "on": "new.roof.cab_hatch_pad",
+   "kind": "profile",
+   "what": "a soft shaped pad on the coaming's face below the step, covered and painted over, its left end folded and rounded at x 0.64, its body crossed by fine wrinkles and a long rippled crease, its lower edge a rolled seam",
+   "bbox": [
+    0.64,
+    0.175,
+    1.0,
+    0.33
+   ],
+   "relief": "raised",
+   "size_cue": "about as tall as the olive box is wide",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "the bulging lower half of the coaming's face in g089-d (y 0.20-0.26) and g089-b x 0-0.25. Read as a soft pad from its wrinkles and formed end; a thick coat over formed sheet is not excluded"
+  },
+  {
+   "id": "d08",
+   "on": "new.roof.cab_hatch_pad",
+   "kind": "pattern",
+   "what": "wrinkles in the pad's skin: a long horizontal rippled crease and a broad soft dent toward the right",
+   "line": [
+    [
+     0.68,
+     0.26
+    ],
+    [
+     0.74,
+     0.245
+    ],
+    [
+     0.82,
+     0.255
+    ],
+    [
+     0.92,
+     0.275
+    ],
+    [
+     0.975,
+     0.26
+    ]
+   ],
+   "relief": "recessed",
+   "build": "normal",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d09",
+   "on": "new.roof.cab_hatch_pad",
+   "kind": "seam",
+   "what": "the pad's lower seam, a thin raised white line where it meets the roof's front band; it then runs on left along the roof under the box as a rust-edged crack",
+   "line": [
+    [
+     0.65,
+     0.335
+    ],
+    [
+     0.72,
+     0.34
+    ],
+    [
+     0.84,
+     0.345
+    ],
+    [
+     1.0,
+     0.345
+    ]
+   ],
+   "relief": "raised",
+   "build": "normal",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d10",
+   "on": "roof.cab",
+   "kind": "surface",
+   "what": "the cab roof's painted surface to the left of the pad: light grey-green with soft glossy streaks and folds (vertical at x about 0.13 and 0.18-0.21), no stitching, no cloth weave",
+   "bbox": [
+    0.0,
+    0.0,
+    0.64,
+    0.24
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d11-d12; soft or sprayed coat over a stiff roof"
+  },
+  {
+   "id": "d11",
+   "on": "roof.cab",
+   "kind": "seam",
+   "what": "a transverse joint across the roof, a slight step with a yellow rust stain and a strip of paint flaking white, running to the left and under the olive box",
+   "line": [
+    [
+     0.21,
+     0.255
+    ],
+    [
+     0.28,
+     0.275
+    ],
+    [
+     0.36,
+     0.285
+    ],
+    [
+     0.44,
+     0.292
+    ],
+    [
+     0.54,
+     0.298
+    ]
+   ],
+   "relief": "recessed",
+   "build": "normal",
+   "confidence": "high",
+   "status": "absent",
+   "note": "continues right of the opening as g089-b d09; g089-d d13's crease"
+  },
+  {
+   "id": "d12",
+   "on": "box.cab_roof_junction_left",
+   "kind": "part",
+   "what": "the olive-brown junction box on the roof, set at a diagonal, on two rust-capped feet, a stepped lid with a pale strip along its far edge, three white dots on the lid, a black knob and two knurled plugs at its near end",
+   "bbox": [
+    0.335,
+    0.03,
+    0.55,
+    0.27
+   ],
+   "relief": "raised",
+   "size_cue": "about as long as the white holder, twice",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d17"
+  },
+  {
+   "id": "d13",
+   "on": "clamp.cab_roof_holder_left",
+   "kind": "part",
+   "what": "the white moulded holder at the left of the roof band, a lumpy block with a broad U-shaped notch, on two capped pegs; beneath it a stained strip",
+   "bbox": [
+    0.145,
+    0.17,
+    0.31,
+    0.27
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d25; g089-b d11's mirror"
+  },
+  {
+   "id": "d14",
+   "on": "cable.roof_white_left",
+   "kind": "clip",
+   "what": "a thin cream wire coming down the roof with a single stud clip on the way, turning in to join the loom at the left",
+   "line": [
+    [
+     0.128,
+     0.0
+    ],
+    [
+     0.14,
+     0.09
+    ],
+    [
+     0.14,
+     0.13
+    ],
+    [
+     0.125,
+     0.18
+    ],
+    [
+     0.09,
+     0.225
+    ],
+    [
+     0.05,
+     0.235
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d15",
+   "on": "new.cable.cab_roof_orange_strap",
+   "kind": "clip",
+   "what": "a flat orange-brown strap beside the coaming's foot, from the top of the frame down past the box's plugs",
+   "line": [
+    [
+     0.572,
+     0.0
+    ],
+    [
+     0.565,
+     0.1
+    ],
+    [
+     0.565,
+     0.2
+    ],
+    [
+     0.57,
+     0.28
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d23"
+  },
+  {
+   "id": "d16",
+   "on": "new.roof.cab_cable_grommet",
+   "kind": "grommet",
+   "what": "a black round rubber grommet in the roof beside the coaming, a braided lead coming out of it and down, held by two screw-clip plates, joining the loom",
+   "bbox": [
+    0.615,
+    0.0,
+    0.66,
+    0.31
+   ],
+   "relief": "recessed",
+   "size_cue": "grommet about the size of a screw head, three times",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d17",
+   "on": "loom.cab_header",
+   "kind": "clip",
+   "what": "the header loom as it crosses this side: two white cables and one or two black braids in the middle, the left end bending up over the housing, blue wires running with it, plastic band clips at intervals",
+   "line": [
+    [
+     0.0,
+     0.245
+    ],
+    [
+     0.1,
+     0.235
+    ],
+    [
+     0.2,
+     0.28
+    ],
+    [
+     0.3,
+     0.335
+    ],
+    [
+     0.4,
+     0.355
+    ],
+    [
+     0.55,
+     0.385
+    ],
+    [
+     0.7,
+     0.395
+    ],
+    [
+     0.85,
+     0.41
+    ],
+    [
+     1.0,
+     0.43
+    ]
+   ],
+   "pattern": {
+    "count": 5,
+    "note": "band clips"
+   },
+   "relief": "raised",
+   "size_cue": "white cables about finger-thick",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d34-d37"
+  },
+  {
+   "id": "d18",
+   "on": "loom.cab_header",
+   "kind": "part",
+   "what": "a knurled in-line connector in a band clip where the blue cable leaves the loom toward the box",
+   "bbox": [
+    0.535,
+    0.325,
+    0.6,
+    0.375
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d19",
+   "on": "loom.cab_header",
+   "kind": "clip",
+   "what": "the blue cable from that connector running on right above the loom to a white paper tag, then down into it",
+   "line": [
+    [
+     0.6,
+     0.345
+    ],
+    [
+     0.68,
+     0.36
+    ],
+    [
+     0.76,
+     0.385
+    ],
+    [
+     0.84,
+     0.39
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d20",
+   "on": "new.roof.cab_periscope_port_left",
+   "kind": "opening",
+   "what": "the driver's periscope port: a rectangular slot in a broad pressed frame with rounded corners and a hole at each end, closed by a grey blanking plate",
+   "bbox": [
+    0.44,
+    0.44,
+    0.71,
+    0.59
+   ],
+   "relief": "recessed",
+   "size_cue": "the slot about a third as long as the visor, its frame about half",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "the book's text describes these as the holes for periscopes. g089-d d48's 'dark flat mounting bars'"
+  },
+  {
+   "id": "d21",
+   "on": "new.roof.cab_periscope_port_left",
+   "kind": "latch",
+   "what": "a flat strap across the blanking plate with a wing nut, holding it shut",
+   "bbox": [
+    0.545,
+    0.475,
+    0.59,
+    0.585
+   ],
+   "relief": "raised",
+   "size_cue": "wing nut about a thumb's width",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d22",
+   "on": "kit.sun_visor_left",
+   "kind": "hinge",
+   "what": "the visor's hinge rod and its two ball pivots, at the top edge of the visor",
+   "line": [
+    [
+     0.31,
+     0.565
+    ],
+    [
+     0.5,
+     0.59
+    ],
+    [
+     0.83,
+     0.63
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d47. The visor is hanging down, not folded to the roof"
+  },
+  {
+   "id": "d23",
+   "on": "kit.sun_visor_left",
+   "kind": "part",
+   "what": "the visor: a pressed plate hanging against the screen, pale, rounded lower corners, a rolled rim",
+   "bbox": [
+    0.29,
+    0.585,
+    0.83,
+    0.8
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d24",
+   "on": "hull.windscreen_left",
+   "kind": "edge",
+   "what": "the rubber seal of the left windscreen at the image bottom, heavy and black, its corner curving up to the right",
+   "line": [
+    [
+     0.0,
+     0.83
+    ],
+    [
+     0.2,
+     0.85
+    ],
+    [
+     0.45,
+     0.93
+    ],
+    [
+     0.6,
+     0.97
+    ],
+    [
+     0.8,
+     0.84
+    ],
+    [
+     0.85,
+     0.78
+    ]
+   ],
+   "relief": "raised",
+   "size_cue": "about as wide as the white holder's notch",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "g089-d d53's seal"
+  },
+  {
+   "id": "d25",
+   "on": "new.frame.cab_windscreen_header",
+   "kind": "profile",
+   "what": "the header's lower face behind the visor: a pressed sheet from the loom down to the screen's frame, a rusted edge along its left, the stiffening rib from the port's end running on toward the screen corner",
+   "bbox": [
+    0.0,
+    0.5,
+    1.0,
+    0.62
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d26",
+   "on": "new.unknown.roof_fitting_top_left",
+   "kind": "part",
+   "what": "a grey rounded housing with a square gland and a cap, on the header's left end, cables entering it from the loom, a black end cap on the right",
+   "bbox": [
+    0.015,
+    0.3,
+    0.33,
+    0.46
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g082-b d33, g089-d's left box"
+  },
+  {
+   "id": "d27",
+   "on": "new.unknown.roof_fitting_top_left",
+   "kind": "part",
+   "what": "a blue-green cylinder on brackets with a brass-capped end, below the housing, joined to a pipe (the catalogue's wiper motor)",
+   "bbox": [
+    0.0,
+    0.44,
+    0.18,
+    0.56
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d28",
+   "on": "pipe.brass_union_header",
+   "kind": "part",
+   "what": "a thin pipe along the header from a brass union on the right end, leading left under the visor; a blue-sheathed section of it",
+   "line": [
+    [
+     0.72,
+     0.61
+    ],
+    [
+     0.84,
+     0.605
+    ],
+    [
+     0.905,
+     0.6
+    ],
+    [
+     1.0,
+     0.63
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "g082-b d38"
+  },
+  {
+   "id": "d29",
+   "on": "frame.windscreen_centre_post",
+   "kind": "profile",
+   "what": "the centre post's top where it joins the header at the right of the frame, a smooth pressed post with a blue-sleeved wire down it",
+   "bbox": [
+    0.8,
+    0.62,
+    1.0,
+    0.93
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "frame.windscreen_centre_post in g089-d"
+  }
+ ]
+}

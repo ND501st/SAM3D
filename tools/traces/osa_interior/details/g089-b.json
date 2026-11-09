@@ -1,0 +1,527 @@
+{
+ "photo": "g089-b",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan (2412 x 2030) blurred 3x3, overview and tiles with a 0.02 grid, read against g089-a and g089-d",
+ "covers": "the cab roof's forward edge over the commander, looking up and forward: the central opening's right corner, the pad on the coaming's face, the signal flags' white sleeve, the roof band with the white holder, the loom, the commander's periscope port under its blanking plate, the gauge, the pipe fittings, the visor's corner, the top of the right windscreen",
+ "notes": "VEHICLE: the hangar session, the ex-NVA 9A33BM3-1 (g082-g096). Image top is aft along the roof, image left is the vehicle's left (the same as g089-a and g089-d). Same physical things: the pad at x 0-0.25 is the same pad as g089-a x 0.65-1.0, and with it the one coaming face of g089-d x 0.30-0.73: one opening, one forward face. The rust-stained corner at the top left is the opening's right corner. The white double sleeve is g089-d d28 and d29; the book says signal flags are stored here. Port and blanking plate: g089-a d20's mirror. No quilted lining here either; the roof's right part is the same painted, softly wrinkled surface as g089-a.",
+ "details": [
+  {
+   "id": "d01",
+   "on": "hatch.cab_roof_centre",
+   "kind": "opening",
+   "what": "the right corner of the central roof opening: the rolled yellow-rimmed lip turning up and aft at the top left of the frame; the corner reaches the frame's edge at the top, with the rest of the forward edge running off to the left",
+   "line": [
+    [
+     0.0,
+     0.02
+    ],
+    [
+     0.08,
+     0.035
+    ],
+    [
+     0.13,
+     0.03
+    ],
+    [
+     0.17,
+     0.02
+    ],
+    [
+     0.215,
+     0.0
+    ]
+   ],
+   "relief": "through",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "blocked",
+   "note": "g089-d d01's right corner"
+  },
+  {
+   "id": "d02",
+   "on": "hatch.cab_roof_centre",
+   "kind": "surface",
+   "what": "rust on the coaming's flange round the corner",
+   "bbox": [
+    0.13,
+    0.0,
+    0.235,
+    0.045
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d03",
+   "on": "hatch.cab_roof_centre",
+   "kind": "profile",
+   "what": "the coaming's forward face: a pale band under the lip, down to a step at about y 0.16",
+   "bbox": [
+    0.0,
+    0.04,
+    0.245,
+    0.165
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-a d05 continued"
+  },
+  {
+   "id": "d04",
+   "on": "new.roof.cab_hatch_pad",
+   "kind": "profile",
+   "what": "the pad on the coaming's face: a shaped soft pad, its right end formed in a smooth outward curve at x 0.245-0.255, wrinkled across, with a deep crease near its right end, its lower edge a rolled seam",
+   "bbox": [
+    0.0,
+    0.16,
+    0.245,
+    0.33
+   ],
+   "relief": "raised",
+   "size_cue": "as tall as g089-a's",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent",
+   "note": "g089-a d07 continued"
+  },
+  {
+   "id": "d05",
+   "on": "new.roof.cab_hatch_pad",
+   "kind": "pattern",
+   "what": "soft dents and fine wrinkles in the pad's skin toward its right end, glossy",
+   "bbox": [
+    0.08,
+    0.19,
+    0.24,
+    0.3
+   ],
+   "relief": "recessed",
+   "build": "normal",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d06",
+   "on": "kit.signal_flags",
+   "kind": "part",
+   "what": "a thick white double sleeve lying fore and aft on the roof, two rounded tubes side by side; a black stencilled number along it (a short numeric label); its lower ends closed and rounded",
+   "bbox": [
+    0.31,
+    0.0,
+    0.43,
+    0.325
+   ],
+   "relief": "raised",
+   "size_cue": "each tube about as wide as the white holder's notch, twice",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d28-d29; registered as duct.cab_roof_insulated, but the book's text and the olive flag cases' position say it is the flags' sleeve"
+  },
+  {
+   "id": "d07",
+   "on": "kit.signal_flags",
+   "kind": "clip",
+   "what": "a flat plate across the sleeve's lower ends with two slotted screws, holding it to the roof; a smear of rust under it",
+   "bbox": [
+    0.305,
+    0.3,
+    0.415,
+    0.345
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d08",
+   "on": "roof.cab",
+   "kind": "surface",
+   "what": "rust along the sleeve's left side, a long orange streak down the roof from the top of the frame",
+   "line": [
+    [
+     0.335,
+     0.03
+    ],
+    [
+     0.33,
+     0.13
+    ],
+    [
+     0.32,
+     0.22
+    ],
+    [
+     0.315,
+     0.29
+    ]
+   ],
+   "relief": "flush",
+   "build": "texture",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d09",
+   "on": "roof.cab",
+   "kind": "seam",
+   "what": "a transverse joint across the roof: a strip of white flaking paint with an orange-brown rust edge, from the sleeve's foot right toward the white holder",
+   "line": [
+    [
+     0.33,
+     0.345
+    ],
+    [
+     0.45,
+     0.345
+    ],
+    [
+     0.55,
+     0.34
+    ],
+    [
+     0.65,
+     0.355
+    ],
+    [
+     0.72,
+     0.36
+    ]
+   ],
+   "relief": "recessed",
+   "build": "normal",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-a d11 continued across the roof, on the far side of the pad; g089-d d13"
+  },
+  {
+   "id": "d10",
+   "on": "roof.cab",
+   "kind": "fastener",
+   "what": "two round holes or stud sockets in the roof between the pad and the sleeve",
+   "points": [
+    [
+     0.27,
+     0.09
+    ],
+    [
+     0.275,
+     0.245
+    ]
+   ],
+   "pattern": {
+    "count": 2
+   },
+   "relief": "recessed",
+   "size_cue": "smaller than the plate's screws",
+   "build": "normal",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d11",
+   "on": "clamp.cab_roof_holder_right",
+   "kind": "part",
+   "what": "the white moulded holder at the right of the roof band, a lumpy block with a broad U notch on two capped pegs, with a rusty stain beneath",
+   "bbox": [
+    0.59,
+    0.19,
+    0.785,
+    0.32
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d26; mirror of g089-a d13"
+  },
+  {
+   "id": "d12",
+   "on": "cable.roof_white_right",
+   "kind": "clip",
+   "what": "a thin cream wire coming down the roof with one clip, turning aft at a bracket to join the loom",
+   "line": [
+    [
+     0.815,
+     0.0
+    ],
+    [
+     0.8,
+     0.16
+    ],
+    [
+     0.81,
+     0.26
+    ],
+    [
+     0.84,
+     0.32
+    ],
+    [
+     0.87,
+     0.355
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d13",
+   "on": "loom.cab_header",
+   "kind": "clip",
+   "what": "the header loom on this side: two white cables, black braids and three or four blue wires, curving up to the right past the gauge, plastic band clips and cable ties",
+   "line": [
+    [
+     0.0,
+     0.365
+    ],
+    [
+     0.2,
+     0.39
+    ],
+    [
+     0.35,
+     0.42
+    ],
+    [
+     0.5,
+     0.435
+    ],
+    [
+     0.66,
+     0.43
+    ],
+    [
+     0.76,
+     0.385
+    ],
+    [
+     0.88,
+     0.345
+    ],
+    [
+     1.0,
+     0.37
+    ]
+   ],
+   "pattern": {
+    "count": 6,
+    "note": "band clips and tags"
+   },
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "the loom crossing the full width, g089-a d17 continued; g089-d d34-d37"
+  },
+  {
+   "id": "d14",
+   "on": "loom.cab_header",
+   "kind": "part",
+   "what": "a knurled in-line connector in a clip on the blue cable's branch",
+   "bbox": [
+    0.175,
+    0.335,
+    0.27,
+    0.385
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d15",
+   "on": "new.roof.cab_periscope_port_right",
+   "kind": "opening",
+   "what": "the commander's periscope port: a rectangular slot in a broad pressed frame with rounded corners and a hole at each end, a grey blanking plate in the slot",
+   "bbox": [
+    0.065,
+    0.52,
+    0.455,
+    0.685
+   ],
+   "relief": "recessed",
+   "size_cue": "as g089-a d20: the frame about half as long as the visor",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-a d20's mirror, wider in frame"
+  },
+  {
+   "id": "d16",
+   "on": "new.roof.cab_periscope_port_right",
+   "kind": "latch",
+   "what": "the strap across the blanking plate with a wing nut holding it shut",
+   "bbox": [
+    0.215,
+    0.545,
+    0.285,
+    0.68
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d17",
+   "on": "kit.sun_visor_right",
+   "kind": "hinge",
+   "what": "the visor's hinge rod and ball pivot at the right end, its end bracket and wing bolt",
+   "line": [
+    [
+     0.0,
+     0.695
+    ],
+    [
+     0.3,
+     0.7
+    ],
+    [
+     0.55,
+     0.705
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d47, d49"
+  },
+  {
+   "id": "d18",
+   "on": "instrument.cab_roof_gauge_right",
+   "kind": "part",
+   "what": "a small round gauge on a bracket on the header at the upper right, facing the camera, a chrome rim, a short pipe off it at the right",
+   "bbox": [
+    0.77,
+    0.415,
+    1.0,
+    0.54
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent",
+   "note": "g089-d d91"
+  },
+  {
+   "id": "d19",
+   "on": "new.roof.cab_header_fittings_right",
+   "kind": "part",
+   "what": "a grey cylinder and manifold under the gauge on a pressed bracket, with several nozzles and a thin pipe, painted over grey",
+   "bbox": [
+    0.73,
+    0.57,
+    0.975,
+    0.73
+   ],
+   "relief": "raised",
+   "size_cue": "about as long as the gauge's width, twice",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d20",
+   "on": "new.roof.cab_header_fittings_right",
+   "kind": "part",
+   "what": "a thin pipe with a blue-sleeved bend and tee fittings across the header's right part, in a loop from the manifold to the tee",
+   "line": [
+    [
+     0.58,
+     0.72
+    ],
+    [
+     0.65,
+     0.81
+    ],
+    [
+     0.75,
+     0.81
+    ],
+    [
+     0.8,
+     0.77
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "medium",
+   "status": "absent"
+  },
+  {
+   "id": "d21",
+   "on": "new.frame.cab_windscreen_header",
+   "kind": "profile",
+   "what": "a horizontal rib or step in the header sheet at about the height of the hinge rod, from the port's end to the right",
+   "line": [
+    [
+     0.45,
+     0.6
+    ],
+    [
+     0.6,
+     0.61
+    ],
+    [
+     0.85,
+     0.575
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "low",
+   "status": "absent"
+  },
+  {
+   "id": "d22",
+   "on": "kit.sun_visor_right",
+   "kind": "part",
+   "what": "the visor's corner with a dark oval sticker, hanging against the screen",
+   "bbox": [
+    0.0,
+    0.7,
+    0.55,
+    0.875
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  },
+  {
+   "id": "d23",
+   "on": "hull.windscreen_right",
+   "kind": "edge",
+   "what": "the top edge of the right windscreen's frame and rubber at the image bottom, a dark seal running across",
+   "line": [
+    [
+     0.0,
+     0.875
+    ],
+    [
+     0.6,
+     0.89
+    ],
+    [
+     1.0,
+     0.86
+    ]
+   ],
+   "relief": "raised",
+   "build": "mesh",
+   "confidence": "high",
+   "status": "absent"
+  }
+ ]
+}

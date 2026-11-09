@@ -1,0 +1,409 @@
+{
+ "photo": "g095-c",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle at the bench's front end, raised",
+  "looks": "aft and down along the bench, the console on the image's right",
+  "covers": [
+   "seat.deputy_commander",
+   "seat.senior_operator",
+   "seat.operator",
+   "bench.operators",
+   "rack.0096_9m"
+  ],
+  "lens": "normal-wide"
+ },
+ "components": [
+  {
+   "id": "seat.deputy_commander",
+   "class": "seat",
+   "seen_as": "nearest back pan folded down, fold links, coil spring, bag and straps",
+   "bbox": [
+    0.42,
+    0.33,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "forward_of",
+     "seat.senior_operator"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "seat.senior_operator",
+   "class": "seat",
+   "seen_as": "middle back pan folded down",
+   "bbox": [
+    0.23,
+    0.1,
+    0.73,
+    0.55
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "forward_of",
+     "seat.operator"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "seat.operator",
+   "class": "seat",
+   "seen_as": "far back pan folded down, near the cabinet",
+   "bbox": [
+    0.18,
+    0.0,
+    0.53,
+    0.38
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "forward_of",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_deputy_commander",
+   "class": "kit",
+   "seen_as": "canvas bag with leather tab on the nearest back",
+   "bbox": [
+    0.6,
+    0.4,
+    0.9,
+    0.72
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.deputy_commander",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_senior_operator",
+   "class": "kit",
+   "seen_as": "canvas bag on the middle back",
+   "bbox": [
+    0.4,
+    0.12,
+    0.61,
+    0.32
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.senior_operator",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.gas_mask_bag_operator",
+   "class": "kit",
+   "seen_as": "canvas bag on the far back",
+   "bbox": [
+    0.27,
+    0.0,
+    0.44,
+    0.1
+   ],
+   "zone": "compartment.aisle",
+   "on": "seat.operator",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.seat_back_stickers",
+   "class": "plate",
+   "seen_as": "stickers on the back pans' corners",
+   "bbox": [
+    0.45,
+    0.05,
+    0.99,
+    0.7
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "paper",
+   "confidence": "high",
+   "notes": "later additions"
+  },
+  {
+   "id": "belt.operators",
+   "class": "belt",
+   "seen_as": "khaki harness straps over the folded backs",
+   "bbox": [
+    0.17,
+    0.05,
+    0.95,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [],
+   "size_cue": "a hand wide",
+   "material": "khaki webbing",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "bench frame of tubes and links with coil springs, green cushion between",
+   "bbox": [
+    0.25,
+    0.15,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel, green leatherette",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "foot of the console at the top right",
+   "bbox": [
+    0.52,
+    0.0,
+    1.0,
+    0.5
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey frame, white faces",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.s_os52_12m",
+   "class": "block",
+   "seen_as": "block with a large black hand wheel",
+   "bbox": [
+    0.64,
+    0.0,
+    0.88,
+    0.25
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.g_os52_14m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_os52_14m",
+   "class": "block",
+   "seen_as": "block with sockets, nearest",
+   "bbox": [
+    0.86,
+    0.08,
+    1.0,
+    0.32
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_ok81_4m",
+   "class": "block",
+   "seen_as": "block below the hand wheel block",
+   "bbox": [
+    0.66,
+    0.24,
+    0.87,
+    0.38
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_ok51_6m",
+   "class": "block",
+   "seen_as": "block below the socket block",
+   "bbox": [
+    0.85,
+    0.3,
+    1.0,
+    0.5
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "rack.0096_9m",
+   "class": "rack",
+   "seen_as": "foot of the cabinet at the top left",
+   "bbox": [
+    0.0,
+    0.0,
+    0.2,
+    0.04
+   ],
+   "zone": "compartment.rear",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": "by its connectors as in g096-a"
+  },
+  {
+   "id": "new.loom.0096_9m_bottom",
+   "class": "loom",
+   "seen_as": "row of round connectors with silver-sleeved cables",
+   "bbox": [
+    0.03,
+    0.0,
+    0.2,
+    0.2
+   ],
+   "zone": "compartment.rear",
+   "on": "rack.0096_9m",
+   "relations": [
+    [
+     "below",
+     "rack.0096_9m"
+    ]
+   ],
+   "size_cue": "connectors a fist wide",
+   "material": "steel, silver fabric",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.0096_9m_plinth",
+   "class": "box",
+   "seen_as": "white box face under the cables",
+   "bbox": [
+    0.03,
+    0.2,
+    0.21,
+    0.42
+   ],
+   "zone": "compartment.rear",
+   "relations": [
+    [
+     "below",
+     "new.loom.0096_9m_bottom"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "green mat on the aisle floor",
+   "bbox": [
+    0.07,
+    0.45,
+    0.42,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "green rubber or cloth",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "grey floor edges at the left",
+   "bbox": [
+    0.0,
+    0.35,
+    0.1,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey paint",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.floor_aisle_rear",
+   "class": "cable",
+   "seen_as": "brown cable or strap lying across the floor",
+   "bbox": [
+    0.0,
+    0.4,
+    0.2,
+    0.47
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "a finger thick",
+   "material": "brown",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "gas-mask bags lying on the folded backs"
+ ],
+ "doubts": [
+  "the far seat is mostly hidden; three backs counted",
+  "the green floor surface is taken as a mat, not paint"
+ ]
+}

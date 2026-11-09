@@ -1,0 +1,527 @@
+{
+ "photo": "g094-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle by the operators' bench, eye height, a little aft of the console's middle",
+  "looks": "left, at the main console, slightly from the rear",
+  "covers": [
+   "rack.sl2m"
+  ],
+  "lens": "normal-wide"
+ },
+ "components": [
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "the main console: grey frame with three columns of white blocks",
+   "bbox": [
+    0.03,
+    0.13,
+    0.97,
+    0.98
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [],
+   "size_cue": "17 blocks; fills the wall from the bench to the roof's padding",
+   "material": "grey frame, white enamel",
+   "confidence": "high",
+   "notes": "forward is the image's right (looking at the left wall)"
+  },
+  {
+   "id": "block.r_0062_6m",
+   "class": "block",
+   "seen_as": "top block, rear column: three meters",
+   "bbox": [
+    0.04,
+    0.19,
+    0.255,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_os81_9m",
+   "class": "block",
+   "seen_as": "rear column, small square scope",
+   "bbox": [
+    0.045,
+    0.3,
+    0.265,
+    0.44
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_ok62_5m",
+   "class": "block",
+   "seen_as": "rear column, block with a printed table",
+   "bbox": [
+    0.06,
+    0.44,
+    0.27,
+    0.53
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_os61_5m",
+   "class": "block",
+   "seen_as": "rear column, two knobs and a table",
+   "bbox": [
+    0.065,
+    0.53,
+    0.275,
+    0.61
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_os81_18m",
+   "class": "block",
+   "seen_as": "rear column, block with the white hand control",
+   "bbox": [
+    0.075,
+    0.6,
+    0.285,
+    0.76
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.r_0051_7m",
+   "class": "block",
+   "seen_as": "bottom rear block, set in from the frame's chamfer",
+   "bbox": [
+    0.13,
+    0.74,
+    0.295,
+    0.93
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_0094_5",
+   "class": "block",
+   "seen_as": "top of the middle column: strip of eight small dials",
+   "bbox": [
+    0.27,
+    0.15,
+    0.535,
+    0.26
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_op81_16m",
+   "class": "block",
+   "seen_as": "middle column: round PPI with amber filter",
+   "bbox": [
+    0.27,
+    0.24,
+    0.555,
+    0.55
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_op63_6m2",
+   "class": "block",
+   "seen_as": "middle column: block under the PPI with a table",
+   "bbox": [
+    0.285,
+    0.55,
+    0.555,
+    0.63
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_os52_12m",
+   "class": "block",
+   "seen_as": "middle column: block with a large black hand wheel",
+   "bbox": [
+    0.29,
+    0.63,
+    0.555,
+    0.81
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.s_ok81_4m",
+   "class": "block",
+   "seen_as": "bottom middle block with a white cover box",
+   "bbox": [
+    0.3,
+    0.77,
+    0.56,
+    0.95
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_0004_14m",
+   "class": "block",
+   "seen_as": "top block, forward column: four meters",
+   "bbox": [
+    0.56,
+    0.14,
+    0.94,
+    0.25
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_vpu44",
+   "class": "block",
+   "seen_as": "forward column: TV monitor in a dark grey bezel",
+   "bbox": [
+    0.565,
+    0.25,
+    0.77,
+    0.46
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "high",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_os81_10m",
+   "class": "block",
+   "seen_as": "forward column: round scope with yellow filter",
+   "bbox": [
+    0.77,
+    0.24,
+    0.935,
+    0.47
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_0004_11m",
+   "class": "block",
+   "seen_as": "forward column: launch block, button groups and a meter",
+   "bbox": [
+    0.57,
+    0.47,
+    0.94,
+    0.65
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_os52_14m",
+   "class": "block",
+   "seen_as": "forward column: block with a large black hand wheel",
+   "bbox": [
+    0.57,
+    0.64,
+    0.92,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "block.g_ok51_6m",
+   "class": "block",
+   "seen_as": "bottom forward block with a plate strip",
+   "bbox": [
+    0.575,
+    0.81,
+    0.83,
+    0.97
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job"
+  },
+  {
+   "id": "new.plate.sl2m_rack",
+   "class": "plate",
+   "seen_as": "small dark name plate on the frame's top rail above the middle column",
+   "bbox": [
+    0.345,
+    0.15,
+    0.39,
+    0.165
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "above",
+     "block.s_0094_5"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate, white letters",
+   "confidence": "high",
+   "notes": "reads СЛ-2М2 in g095-a"
+  },
+  {
+   "id": "new.fuse_panel.sl2m_front_lower",
+   "class": "fuse_panel",
+   "seen_as": "small group of fuse caps and plugs on the frame beside the bottom forward block",
+   "bbox": [
+    0.83,
+    0.8,
+    0.88,
+    0.95
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.g_ok51_6m"
+    ]
+   ],
+   "size_cue": "each cap a finger wide",
+   "material": "brown and black plastic",
+   "confidence": "medium",
+   "notes": "drawn in g094-c too"
+  },
+  {
+   "id": "new.plate.fuse_table_post_sl2m_sl3m",
+   "class": "plate",
+   "seen_as": "tall plate column of printed tables at the far left edge",
+   "bbox": [
+    0.0,
+    0.24,
+    0.035,
+    0.56
+   ],
+   "zone": "compartment.left_wall",
+   "on": "frame.post_sl2m_sl3m",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "metal plates",
+   "confidence": "medium",
+   "notes": "the same plates as g094-b's, legible there"
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "padded, quilted grey lining across the top with a grey ledge under it",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.15
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "above",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey padded fabric",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "khaki cloth hanging at the top right",
+   "bbox": [
+    0.87,
+    0.0,
+    1.0,
+    0.48
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "khaki cloth",
+   "confidence": "low",
+   "notes": "could be a bag or a coat hanging rather than the curtain"
+  },
+  {
+   "id": "box.panel_indication",
+   "class": "box",
+   "seen_as": "narrow white panel and a small bracket with a plug on the wall beyond the forward column",
+   "bbox": [
+    0.935,
+    0.2,
+    0.99,
+    0.66
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "forward_of",
+     "block.g_0004_14m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "low",
+   "notes": "seen fully in g095-b"
+  },
+  {
+   "id": "new.loom.sl2m_rear_lower",
+   "class": "loom",
+   "seen_as": "grey crumpled sleeves or cloth low at the left edge under the rear column",
+   "bbox": [
+    0.0,
+    0.55,
+    0.1,
+    0.98
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "aft_of",
+     "block.r_0051_7m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey fabric",
+   "confidence": "low",
+   "notes": "cable sleeves or a cover; not settled"
+  },
+  {
+   "id": "bench.operators",
+   "class": "bench",
+   "seen_as": "green cushion along the bottom edge",
+   "bbox": [
+    0.0,
+    0.94,
+    0.5,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "below",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "green leatherette",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the rack's name plate on its top rail",
+  "a small fuse group on the frame at the console's lower forward corner"
+ ],
+ "doubts": [
+  "the register has two OK51-6M ids (g_ok51_6m and g_ok51_6m_2); only one bottom forward block is seen, and the book counts 17 blocks",
+  "the dial strip's plate reads 0094-9 in g095-a; the register calls it 0094-5",
+  "the khaki cloth at the top right may not be the cab curtain"
+ ]
+}

@@ -1,0 +1,427 @@
+{
+ "photo": "g091-a",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle opposite SL-1M, eye height",
+  "looks": "left (-x) square-on at the left wall; image left aft, image right forward",
+  "covers": [
+   "rack.sl1m",
+   "hull.roof",
+   "hull.wall_left"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "riveted rack frame flange with two columns of blocks set into the left wall",
+   "bbox": [
+    0.04,
+    0.23,
+    0.97,
+    0.93
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "each column about 0.5 m wide (notes)",
+   "material": "grey frame, light grey block faces",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.sl1m_rack_plate",
+   "class": "plate",
+   "seen_as": "rack plate on the top rail above the aft column",
+   "bbox": [
+    0.49,
+    0.28,
+    0.55,
+    0.3
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0004_12m",
+   "class": "block",
+   "seen_as": "aft column top block with two hooded meters",
+   "bbox": [
+    0.1,
+    0.27,
+    0.58,
+    0.57
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "above",
+     "block.l_ok81_4m2"
+    ],
+    [
+     "aft_of",
+     "block.l_0005_8m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_ok81_4m2",
+   "class": "block",
+   "seen_as": "aft column bottom block with a vertical red socket and a white cover box",
+   "bbox": [
+    0.1,
+    0.57,
+    0.58,
+    0.84
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "aft_of",
+     "block.l_0009_5m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0005_8m",
+   "class": "block",
+   "seen_as": "forward column top block with a black sub-panel, fuse row and round dial",
+   "bbox": [
+    0.6,
+    0.3,
+    0.92,
+    0.45
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "above",
+     "block.l_os51_8m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_os51_8m",
+   "class": "block",
+   "seen_as": "forward column middle block with a meter and two vertical sockets",
+   "bbox": [
+    0.6,
+    0.46,
+    0.92,
+    0.59
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [
+    [
+     "above",
+     "block.l_0009_5m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0009_5m",
+   "class": "block",
+   "seen_as": "forward column bottom block with oval windows and jack rows",
+   "bbox": [
+    0.6,
+    0.6,
+    0.93,
+    0.76
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.wall_left",
+   "class": "hull_wall",
+   "seen_as": "grey wall round the rack frame",
+   "bbox": [
+    0.0,
+    0.18,
+    1.0,
+    0.95
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "grey roof sloping over the rack",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.24
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.roof_over_sl1m",
+   "class": "duct",
+   "seen_as": "thick grey tube along the roof, bending down at its forward end",
+   "bbox": [
+    0.0,
+    0.0,
+    0.7,
+    0.17
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "about forearm-thick",
+   "material": "grey painted tube",
+   "confidence": "low",
+   "notes": "could be the register's duct.vent_hose or a structural tube"
+  },
+  {
+   "id": "new.control.vent_lever_roof_left",
+   "class": "control",
+   "seen_as": "grey tubular lever on a toothed quadrant, hanging diagonally from the roof",
+   "bbox": [
+    0.15,
+    0.06,
+    0.36,
+    0.34
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "beside",
+     "new.plate.vent_lever_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "mirror of the right-side ventilation lever"
+  },
+  {
+   "id": "new.plate.vent_lever_left",
+   "class": "plate",
+   "seen_as": "black plate with the ventilation lever diagram",
+   "bbox": [
+    0.41,
+    0.1,
+    0.48,
+    0.17
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.roof_left_orange",
+   "class": "connector",
+   "seen_as": "small orange-faced fitting at the lever's root",
+   "bbox": [
+    0.17,
+    0.15,
+    0.25,
+    0.22
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.handle.roof_over_sl1m",
+   "class": "handle",
+   "seen_as": "dark grab handle on brackets at the roof, forward end",
+   "bbox": [
+    0.71,
+    0.09,
+    0.83,
+    0.21
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel, black grip",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.roof_white_left",
+   "class": "cable",
+   "seen_as": "white cable clipped along the roof's edge above the rack",
+   "bbox": [
+    0.15,
+    0.14,
+    0.98,
+    0.27
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.left_wall_fwd_of_sl1m",
+   "class": "loom",
+   "seen_as": "bundle of white cables going down the wall forward of the rack",
+   "bbox": [
+    0.92,
+    0.27,
+    1.0,
+    0.62
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.left_well",
+   "class": "strap",
+   "seen_as": "brown leather strap on a bracket below the aft column",
+   "bbox": [
+    0.27,
+    0.93,
+    0.35,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "below",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "leather",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.switch.left_well_red_lever_box",
+   "class": "switch",
+   "seen_as": "grey switch box with a lever at the lower right",
+   "bbox": [
+    0.74,
+    0.88,
+    0.93,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "below",
+     "block.l_0009_5m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.canister_n542",
+   "class": "kit",
+   "seen_as": "yellow cap at the bottom edge",
+   "bbox": [
+    0.68,
+    0.97,
+    0.72,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.khaki_cloth_aft_of_sl1m",
+   "class": "unknown",
+   "seen_as": "khaki cloth at the left (aft) edge",
+   "bbox": [
+    0.0,
+    0.3,
+    0.03,
+    0.7
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "ventilation lever and its plate on the roof over SL-1M",
+  "thick tube along the roof over SL-1M",
+  "white roof cable"
+ ],
+ "doubts": [
+  "The thick roof tube may be duct.vent_hose; not settled.",
+  "The khaki cloth at the aft edge may be a seat cover or bag."
+ ]
+}

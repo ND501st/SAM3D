@@ -1,0 +1,790 @@
+{
+ "photo": "g101-a",
+ "vehicle": "9A33BM2/BM3 late Czech Army vehicle (Bouchal, 2000s; not the 1980s fit)",
+ "camera": {
+  "stands": "in the operators' compartment on the centreline, about seated-to-standing eye height",
+  "looks": "forward into the cab (image left = vehicle left)",
+  "covers": [
+   "cab",
+   "curtain.cab",
+   "seat.driver",
+   "seat.commander",
+   "control.steering_wheel",
+   "hull.dashboard"
+  ],
+  "lens": "normal-wide"
+ },
+ "components": [
+  {
+   "id": "hull.roof",
+   "class": "roof",
+   "seen_as": "dark blue-grey padded ceiling",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.11
+   ],
+   "zone": "compartment.roof",
+   "relations": [],
+   "size_cue": "",
+   "material": "padded fabric",
+   "confidence": "high",
+   "notes": "late Czech paint scheme"
+  },
+  {
+   "id": "new.frame.cab_opening_beam",
+   "class": "frame",
+   "seen_as": "ceiling beam over the opening to the cab",
+   "bbox": [
+    0.12,
+    0.1,
+    0.92,
+    0.18
+   ],
+   "zone": "compartment.roof",
+   "on": "hull.roof",
+   "relations": [
+    [
+     "below",
+     "hull.roof"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.frame.cab_opening_pillar_left",
+   "class": "frame",
+   "seen_as": "diagonal pillar framing the cab opening on the left",
+   "bbox": [
+    0.08,
+    0.17,
+    0.27,
+    0.98
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": "carries a black data plate"
+  },
+  {
+   "id": "new.frame.cab_opening_pillar_right",
+   "class": "frame",
+   "seen_as": "diagonal pillar framing the cab opening on the right",
+   "bbox": [
+    0.77,
+    0.17,
+    0.93,
+    0.98
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "right_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "high",
+   "notes": "carries a black data plate"
+  },
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "khaki canvas curtain rolled up under the beam, tied with white cord",
+   "bbox": [
+    0.11,
+    0.17,
+    0.94,
+    0.3
+   ],
+   "zone": "cab",
+   "on": "new.frame.cab_opening_beam",
+   "relations": [
+    [
+     "below",
+     "new.frame.cab_opening_beam"
+    ]
+   ],
+   "size_cue": "spans the whole opening",
+   "material": "khaki canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.loudspeaker_front_left",
+   "class": "box",
+   "seen_as": "black flat box angled down at the top left of the opening",
+   "bbox": [
+    0.09,
+    0.13,
+    0.18,
+    0.23
+   ],
+   "zone": "compartment.roof",
+   "relations": [
+    [
+     "left_of",
+     "curtain.cab"
+    ]
+   ],
+   "size_cue": "about the size of a book",
+   "material": "black",
+   "confidence": "low",
+   "notes": "perhaps a loudspeaker"
+  },
+  {
+   "id": "hull.windscreen_left",
+   "class": "window",
+   "seen_as": "driver's windscreen, rounded corners",
+   "bbox": [
+    0.34,
+    0.3,
+    0.55,
+    0.45
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "left_of",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "glass in a blue-grey frame",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.windscreen_right",
+   "class": "window",
+   "seen_as": "commander's windscreen",
+   "bbox": [
+    0.58,
+    0.3,
+    0.78,
+    0.45
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "glass",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "kit.sun_visors",
+   "class": "kit",
+   "seen_as": "domed sheet visor on the right windscreen's top, blue cables along the header",
+   "bbox": [
+    0.3,
+    0.26,
+    0.78,
+    0.37
+   ],
+   "zone": "cab.roof",
+   "relations": [
+    [
+     "above",
+     "hull.windscreen_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "sheet steel, cables",
+   "confidence": "medium",
+   "notes": "may be the inside of a folded armour shutter"
+  },
+  {
+   "id": "new.cable.blue_left_pillar",
+   "class": "cable",
+   "seen_as": "blue spiral-wrapped cable down the cab's left pillar",
+   "bbox": [
+    0.3,
+    0.27,
+    0.36,
+    0.6
+   ],
+   "zone": "cab.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "blue sheath",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "control.steering_wheel",
+   "class": "control",
+   "seen_as": "three-spoke black steering wheel",
+   "bbox": [
+    0.41,
+    0.37,
+    0.55,
+    0.55
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "about half a metre across by the notes",
+   "material": "black plastic, steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "grey dash under the windscreens",
+   "bbox": [
+    0.38,
+    0.44,
+    0.71,
+    0.58
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "below",
+     "hull.windscreen_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey painted",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.driver_dash",
+   "class": "console",
+   "seen_as": "driver's gauges: round gauges, speedometer, a group of small gauges",
+   "bbox": [
+    0.41,
+    0.46,
+    0.62,
+    0.57
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "on",
+     "hull.dashboard"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "console.pu303",
+   "class": "console",
+   "seen_as": "switch panel with a row of small toggles/lamps right of the gauges",
+   "bbox": [
+    0.62,
+    0.46,
+    0.71,
+    0.57
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [
+    [
+     "right_of",
+     "console.driver_dash"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": "identity as PU-303 guessed from the register; late fit"
+  },
+  {
+   "id": "console.commander_dash",
+   "class": "console",
+   "seen_as": "small instrument box with knobs on the dash's right end",
+   "bbox": [
+    0.71,
+    0.47,
+    0.77,
+    0.54
+   ],
+   "zone": "cab.dash",
+   "relations": [
+    [
+     "right_of",
+     "console.pu303"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "radio.r123m_right",
+   "class": "radio",
+   "seen_as": "grey radio set with knobs at the commander's side",
+   "bbox": [
+    0.78,
+    0.39,
+    0.86,
+    0.6
+   ],
+   "zone": "cab.right_wall",
+   "on": "mount.r123m_right",
+   "relations": [
+    [
+     "right_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey enamel",
+   "confidence": "medium",
+   "notes": "R-123-type by its look"
+  },
+  {
+   "id": "mount.r123m_right",
+   "class": "mount",
+   "seen_as": "tubular frame holding the radio",
+   "bbox": [
+    0.78,
+    0.37,
+    0.88,
+    0.62
+   ],
+   "zone": "cab.right_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel tube",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "intercom.a1",
+   "class": "intercom",
+   "seen_as": "black box with a cable hanging below the radio",
+   "bbox": [
+    0.72,
+    0.58,
+    0.77,
+    0.68
+   ],
+   "zone": "cab.right_wall",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "black",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "seat.driver",
+   "class": "seat",
+   "seen_as": "grey sheet backrest with black piping, tubular hoop behind",
+   "bbox": [
+    0.37,
+    0.51,
+    0.52,
+    0.73
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "left_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "sheet steel over green under-paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "seat.commander",
+   "class": "seat",
+   "seen_as": "tubular frame with a green mesh/sheet back",
+   "bbox": [
+    0.57,
+    0.59,
+    0.72,
+    0.8
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel tube, green paint",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.canvas_bag_commander_seat",
+   "class": "kit",
+   "seen_as": "khaki canvas bag hung on the commander's seat back",
+   "bbox": [
+    0.61,
+    0.6,
+    0.68,
+    0.75
+   ],
+   "zone": "cab",
+   "on": "seat.commander",
+   "relations": [
+    [
+     "on",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.box.aisle_front_sling",
+   "class": "box",
+   "seen_as": "grey sheet box with an X-pressed lid in a khaki canvas sling on a tubular frame",
+   "bbox": [
+    0.26,
+    0.6,
+    0.47,
+    0.87
+   ],
+   "zone": "compartment.aisle",
+   "relations": [
+    [
+     "aft_of",
+     "seat.driver"
+    ]
+   ],
+   "size_cue": "about as wide as a seat",
+   "material": "sheet steel, canvas",
+   "confidence": "high",
+   "notes": "may be a spares (ZIP) box; doubt"
+  },
+  {
+   "id": "new.shelf.front_left_console_shelf",
+   "class": "shelf",
+   "seen_as": "sheet shelf/top at the console's front end, left of the opening",
+   "bbox": [
+    0.17,
+    0.52,
+    0.35,
+    0.62
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "new.box.aisle_front_sling"
+    ]
+   ],
+   "size_cue": "",
+   "material": "sheet steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.pozor_pod_napetim",
+   "class": "plate",
+   "seen_as": "yellow live-voltage warning sticker with a lightning triangle (Czech)",
+   "bbox": [
+    0.22,
+    0.64,
+    0.27,
+    0.76
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.shelf.front_left_console_shelf",
+   "relations": [
+    [
+     "on",
+     "new.shelf.front_left_console_shelf"
+    ]
+   ],
+   "size_cue": "palm-sized",
+   "material": "sticker",
+   "confidence": "high",
+   "notes": "late Czech addition"
+  },
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "white panels with meters and a fuse row facing aft, left of the cab opening",
+   "bbox": [
+    0.13,
+    0.25,
+    0.29,
+    0.54
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "left_of",
+     "new.frame.cab_opening_pillar_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white/light grey panels",
+   "confidence": "low",
+   "notes": "identity guessed: the front of the left wall's racks"
+  },
+  {
+   "id": "rack.sl2m",
+   "class": "rack",
+   "seen_as": "left wall's racks seen obliquely at the image edge, lamp strip and knobs",
+   "bbox": [
+    0.0,
+    0.15,
+    0.09,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "on": "hull.wall_left",
+   "relations": [
+    [
+     "aft_of",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "white panels",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.kit.handset_front_left",
+   "class": "kit",
+   "seen_as": "handset on a curly cord beside a white lamp strip",
+   "bbox": [
+    0.1,
+    0.55,
+    0.14,
+    0.72
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "beside",
+     "rack.sl2m"
+    ]
+   ],
+   "size_cue": "hand-sized",
+   "material": "black plastic",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.data_left_pillar",
+   "class": "plate",
+   "seen_as": "large black engraved data table fixed diagonally on the left pillar",
+   "bbox": [
+    0.11,
+    0.49,
+    0.18,
+    0.75
+   ],
+   "zone": "compartment.left_wall",
+   "on": "new.frame.cab_opening_pillar_left",
+   "relations": [
+    [
+     "on",
+     "new.frame.cab_opening_pillar_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black engraved plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.data_small_left",
+   "class": "plate",
+   "seen_as": "small black plate higher on the left",
+   "bbox": [
+    0.085,
+    0.34,
+    0.12,
+    0.38
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "above",
+     "new.plate.data_left_pillar"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.plate.data_right_pillar",
+   "class": "plate",
+   "seen_as": "black data plate on the right pillar",
+   "bbox": [
+    0.87,
+    0.53,
+    0.92,
+    0.6
+   ],
+   "zone": "compartment.right_wall",
+   "on": "new.frame.cab_opening_pillar_right",
+   "relations": [
+    [
+     "on",
+     "new.frame.cab_opening_pillar_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black plate",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "rack.sp1m",
+   "class": "rack",
+   "seen_as": "right wall's front rack seen obliquely: fuse holders, handles, panels",
+   "bbox": [
+    0.91,
+    0.18,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [
+    [
+     "right_of",
+     "new.frame.cab_opening_pillar_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "light grey panels",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.sponson.front_right",
+   "class": "sponson",
+   "seen_as": "sloped grey box at the right of the cab opening's foot",
+   "bbox": [
+    0.72,
+    0.66,
+    0.82,
+    0.95
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "below",
+     "radio.r123m_right"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "cover.floor_tunnel",
+   "class": "cover",
+   "seen_as": "raised floor area in front of the seats",
+   "bbox": [
+    0.44,
+    0.78,
+    0.75,
+    0.92
+   ],
+   "zone": "compartment.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "aft_of",
+     "seat.commander"
+    ]
+   ],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "grey floor plates",
+   "bbox": [
+    0.25,
+    0.78,
+    0.8,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "painted steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.cushion.operator_seats_black",
+   "class": "cushion",
+   "seen_as": "black padded seat cushions in the foreground (late type)",
+   "bbox": [
+    0.1,
+    0.91,
+    0.5,
+    1.0
+   ],
+   "zone": "compartment.aisle",
+   "on": "bench.operators",
+   "relations": [
+    [
+     "aft_of",
+     "new.box.aisle_front_sling"
+    ]
+   ],
+   "size_cue": "",
+   "material": "black vinyl",
+   "confidence": "medium",
+   "notes": "the book's caption remarks on the black padding of the late seats"
+  }
+ ],
+ "not_in_register": [
+  "the opening's pillars and beam",
+  "the aisle box in its canvas sling",
+  "data plates and the Czech warning sticker",
+  "black box (loudspeaker?) at the top left",
+  "the handset at the left"
+ ],
+ "doubts": [
+  "late Czech vehicle: colours, black cushions, stickers and perhaps the aisle box are not the 1980s fit",
+  "which rack the aft-facing white panels left of the opening belong to (rack.sl1m guessed)",
+  "the commander's-side box below the radio as intercom.a1 and the switch panel as console.pu303 are guesses",
+  "the aisle box may be box.zip"
+ ]
+}

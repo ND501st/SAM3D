@@ -1,0 +1,476 @@
+{
+ "photo": "g093-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle opposite SP-2M, eye height",
+  "looks": "right, square on to the right wall's middle rack",
+  "covers": [
+   "rack.sp2m"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "rack.sp2m",
+   "class": "rack",
+   "seen_as": "grey riveted frame holding 18 white blocks in three columns, chamfered lower corners, stepped at the lower forward corner",
+   "bbox": [
+    0.01,
+    0.04,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "on": "hull.wall_right",
+   "relations": [],
+   "size_cue": "fills the frame; 18 blocks",
+   "material": "grey paint frame, white enamel faces",
+   "confidence": "high",
+   "notes": "square on; forward is the image's left (looking at the right wall)"
+  },
+  {
+   "id": "block.sp2_f0",
+   "class": "block",
+   "seen_as": "top block of the forward column (selector knob, three fuse caps)",
+   "bbox": [
+    0.02,
+    0.07,
+    0.37,
+    0.25
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_f1",
+   "class": "block",
+   "seen_as": "second block, forward column (two windows, four black knobs)",
+   "bbox": [
+    0.02,
+    0.25,
+    0.37,
+    0.42
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_f2",
+   "class": "block",
+   "seen_as": "third block, forward column (two connector strips, table cover)",
+   "bbox": [
+    0.02,
+    0.42,
+    0.37,
+    0.6
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_f3",
+   "class": "block",
+   "seen_as": "fourth block, forward column (two connector strips, table cover)",
+   "bbox": [
+    0.02,
+    0.6,
+    0.37,
+    0.78
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_f4",
+   "class": "block",
+   "seen_as": "small bottom block of the forward column, in the frame's stepped corner",
+   "bbox": [
+    0.1,
+    0.78,
+    0.37,
+    0.96
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_m0",
+   "class": "block",
+   "seen_as": "top block, middle column (three windows)",
+   "bbox": [
+    0.39,
+    0.08,
+    0.7,
+    0.26
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_m1",
+   "class": "block",
+   "seen_as": "second block, middle column (two meters, 25-socket cluster)",
+   "bbox": [
+    0.39,
+    0.26,
+    0.7,
+    0.42
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_m2",
+   "class": "block",
+   "seen_as": "third block, middle column (four windows)",
+   "bbox": [
+    0.39,
+    0.42,
+    0.7,
+    0.59
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_m3",
+   "class": "block",
+   "seen_as": "fourth block, middle column (table cover)",
+   "bbox": [
+    0.39,
+    0.59,
+    0.71,
+    0.77
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_m4",
+   "class": "block",
+   "seen_as": "bottom block, middle column (table cover)",
+   "bbox": [
+    0.39,
+    0.77,
+    0.71,
+    0.95
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r0_0",
+   "class": "block",
+   "seen_as": "first of four narrow blocks, top of the rear column",
+   "bbox": [
+    0.715,
+    0.11,
+    0.79,
+    0.27
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r0_1",
+   "class": "block",
+   "seen_as": "second narrow block",
+   "bbox": [
+    0.79,
+    0.11,
+    0.86,
+    0.27
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r0_2",
+   "class": "block",
+   "seen_as": "third narrow block",
+   "bbox": [
+    0.86,
+    0.11,
+    0.93,
+    0.27
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r0_3",
+   "class": "block",
+   "seen_as": "fourth narrow block",
+   "bbox": [
+    0.93,
+    0.11,
+    0.995,
+    0.27
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r1",
+   "class": "block",
+   "seen_as": "wide block under the narrow ones (lamp rows)",
+   "bbox": [
+    0.72,
+    0.27,
+    1.0,
+    0.42
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r2",
+   "class": "block",
+   "seen_as": "wide block, two connector strips",
+   "bbox": [
+    0.72,
+    0.43,
+    1.0,
+    0.59
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r3",
+   "class": "block",
+   "seen_as": "block with a meter and green window between two rows of fuse holders",
+   "bbox": [
+    0.72,
+    0.59,
+    1.0,
+    0.75
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom"
+  },
+  {
+   "id": "block.sp2_r4",
+   "class": "block",
+   "seen_as": "bottom rear block, two fuse groups with guard rails and two plugged cables",
+   "bbox": [
+    0.72,
+    0.76,
+    0.95,
+    0.92
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [],
+   "size_cue": "",
+   "material": "white enamel",
+   "confidence": "medium",
+   "notes": "a block of the rack, named by its place; its face is the trace pipeline's job; mapping f/m/r = forward/middle/rear column, top to bottom; the cables plugged into its foot are part of its face"
+  },
+  {
+   "id": "hull.wall_right",
+   "class": "hull_wall",
+   "seen_as": "grey-green wall surface above and round the rack's top",
+   "bbox": [
+    0.0,
+    0.0,
+    1.0,
+    0.06
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "above",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "grey-green paint",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.connector.sp2m_frame_lower_front",
+   "class": "connector",
+   "seen_as": "round connector on the frame's stepped lower forward corner with a short wire loop",
+   "bbox": [
+    0.065,
+    0.78,
+    0.105,
+    0.85
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "forward_of",
+     "block.sp2_f4"
+    ]
+   ],
+   "size_cue": "about a block's knob wide",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": "the drawing g093-d shows it too"
+  },
+  {
+   "id": "new.connector.sp2m_frame_lower_rear",
+   "class": "connector",
+   "seen_as": "a column of orange and black caps or plugs on the frame aft of the bottom rear block",
+   "bbox": [
+    0.95,
+    0.74,
+    1.0,
+    0.9
+   ],
+   "zone": "compartment.right_wall",
+   "on": "rack.sp2m",
+   "relations": [
+    [
+     "aft_of",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "each cap about a fuse holder's size",
+   "material": "plastic caps",
+   "confidence": "low",
+   "notes": "fuses or plugs; drawn in g093-d as a cluster on the frame"
+  },
+  {
+   "id": "new.cable.sp2m_bottom_rear",
+   "class": "cable",
+   "seen_as": "brown, fabric-like curved run across the bottom rear corner",
+   "bbox": [
+    0.85,
+    0.88,
+    0.97,
+    1.0
+   ],
+   "zone": "compartment.right_wall",
+   "relations": [
+    [
+     "below",
+     "block.sp2_r4"
+    ]
+   ],
+   "size_cue": "about a finger thick",
+   "material": "brown fabric sleeve?",
+   "confidence": "low",
+   "notes": "could be a strap rather than a cable"
+  },
+  {
+   "id": "curtain.cab",
+   "class": "curtain",
+   "seen_as": "yellow cloth just showing at the left edge",
+   "bbox": [
+    0.0,
+    0.33,
+    0.02,
+    0.55
+   ],
+   "zone": "cab",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sp2m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "yellow cloth",
+   "confidence": "low",
+   "notes": "g092-a's notes see the yellow curtain at the forward end"
+  }
+ ],
+ "not_in_register": [
+  "a connector on SP-2M's frame at the stepped lower forward corner",
+  "a column of caps or plugs on the frame aft of 0091-18"
+ ],
+ "doubts": [
+  "block ids by position: the register's f/m/r columns read as forward/middle/rear and top to bottom; the plates are not legible here",
+  "the yellow cloth at the left edge may not be the cab curtain"
+ ]
+}

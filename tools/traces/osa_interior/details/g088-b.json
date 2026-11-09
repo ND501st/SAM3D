@@ -1,0 +1,17 @@
+{
+ "photo": "g088-b",
+ "image": "raw",
+ "observer": "Claude (Opus 5.5), 9 Nov 2026: the raw scan blurred 3x3, read at a 0.05 grid whole and in crops at 0.02 (0.01 where stated), floor pass; the old cabin's flat plate was not used as a reference",
+ "covers": "the commander's seat from above, looking right and down: the channel between the seats with its rod, papers in it, the right wall's foot beside the seat, the A-2 box, the sill under it",
+ "notes": "Vehicle: the hangar session, ex-NVA 9A33BM3-1 (catalogue g082-g096); nothing in this photo suggests another vehicle. Looking right and down (catalogue). The right wall's foot has a horizontal sill along the bottom, its top worn white and dirty, the same sill g088-a sees edge on at x 0.83-0.85 (the blue cable and the A-2 box agree). The channel's floor is a pale strip here, not orange: the orange is seen only ahead of the seat in g088-a, or the light differs.",
+ "details": [
+  {"id": "d01", "on": "hull_wall.cab_right", "kind": "profile", "what": "the wall's bottom edge: a raised sill along the foot of the right wall with a worn white top, dirty, turning down at the aft end to the corner", "line": [[0.0, 0.57], [0.15, 0.525], [0.28, 0.5], [0.46, 0.47]], "relief": "raised", "size_cue": "about as deep in the image as the A-2 box is wide", "build": "mesh", "confidence": "high", "status": "blocked"},
+  {"id": "d02", "on": "hull_wall.cab_right", "kind": "profile", "what": "the sill's dark lower band, stained, heavy white scuffs at its middle", "bbox": [0.13, 0.48, 0.46, 0.62], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d03", "on": "hull_wall.cab_right", "kind": "profile", "what": "a rounded corner where the sill turns down, next to a window post's foot", "line": [[0.0, 0.57], [0.08, 0.545], [0.14, 0.5], [0.17, 0.44]], "relief": "raised", "build": "mesh", "confidence": "medium", "status": "absent"},
+  {"id": "d04", "on": "sponson.channel_between_seats", "kind": "profile", "what": "the channel's floor beside the commander's seat: pale, a long strip running diagonally between the cushions", "line": [[0.53, 0.7], [0.6, 0.8], [0.76, 0.96]], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent", "note": "the strip's edges are those of the two seats' frames; depth not shown"},
+  {"id": "d05", "on": "control.seat_commander_rod_spring", "kind": "part", "what": "a long diagonal rod with a coil spring at its lower end along the channel", "line": [[0.49, 0.62], [0.62, 0.84], [0.72, 0.98]], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d06", "on": "frame.seat_hinges", "kind": "hinge", "what": "the seat's floor bracket at the rod's head: a grey folded plate with bolts", "bbox": [0.47, 0.565, 0.58, 0.67], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d07", "on": "hull.floor", "kind": "fastener", "what": "a large bolt in the floor by the seat's corner", "point": [0.492, 0.515], "relief": "raised", "size_cue": "about as wide as the rod", "build": "mesh", "confidence": "high", "status": "absent"},
+  {"id": "d08", "on": "sponson.channel_between_seats", "kind": "part", "what": "brown wrapping paper and a small white card lying in the channel, litter", "bbox": [0.46, 0.66, 0.68, 0.85], "relief": "raised", "build": "mesh", "confidence": "high", "status": "absent", "note": "not to be modelled"}
+ ]
+}

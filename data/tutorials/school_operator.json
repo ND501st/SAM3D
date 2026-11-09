@@ -28,7 +28,7 @@
       "hint": "J: put it on (or point the cross at it, left click)."
     },
     {
-      "id": "tour_cabinet", "title": "The distribution cabinet 0096-9M1", "look": "pwr_cabinet",
+      "id": "tour_cabinet", "title": "The distribution cabinet 0096-9M2", "look": "pwr_cabinet",
       "lines": [
         "Behind you, at the back of the compartment: the distribution cabinet. Its switches feed the turbine's power to everything else: the equipment, the search antenna's stabilisation, the TV sight, the drives, and the turret's travel lock.",
         "Its lamps tell you what is running."

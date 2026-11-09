@@ -1,0 +1,374 @@
+{
+ "photo": "g091-b",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "in the aisle beside the left radio station, raised, close",
+  "looks": "left (-x) and down at the radio station under SL-1M; image left aft, image right forward",
+  "covers": [
+   "radio.r123m_left",
+   "psu.bp26_left",
+   "rack.sl1m"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "radio.r123m_left",
+   "class": "radio",
+   "seen_as": "R-123M face to the aisle, red tuning knob",
+   "bbox": [
+    0.45,
+    0.3,
+    0.96,
+    0.7
+   ],
+   "zone": "compartment.left_wall",
+   "on": "mount.r123m_left",
+   "relations": [
+    [
+     "forward_of",
+     "psu.bp26_left"
+    ],
+    [
+     "below",
+     "rack.sl1m"
+    ],
+    [
+     "below",
+     "cover.radio_steel"
+    ]
+   ],
+   "size_cue": "R-123M, 406 mm wide",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "psu.bp26_left",
+   "class": "power",
+   "seen_as": "finned grey BP-26 power unit with orange fuse caps and a plate",
+   "bbox": [
+    0.08,
+    0.21,
+    0.43,
+    0.62
+   ],
+   "zone": "compartment.left_wall",
+   "on": "mount.r123m_left",
+   "relations": [
+    [
+     "aft_of",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "a little shorter than the radio, about as high",
+   "material": "grey metal, cooling fins",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "mount.r123m_left",
+   "class": "mount",
+   "seen_as": "common tubular frame and tray under radio and BP-26, round rubber shock mounts",
+   "bbox": [
+    0.03,
+    0.22,
+    0.97,
+    0.8
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cover.r123m_left_canvas",
+   "class": "cover",
+   "seen_as": "khaki canvas cover drawn back over the BP-26",
+   "bbox": [
+    0.07,
+    0.18,
+    0.52,
+    0.45
+   ],
+   "zone": "compartment.left_wall",
+   "on": "psu.bp26_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "khaki canvas",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "cover.radio_steel",
+   "class": "cover",
+   "seen_as": "sloping steel plate over the station at the top of the frame",
+   "bbox": [
+    0.03,
+    0.14,
+    0.98,
+    0.33
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "above",
+     "radio.r123m_left"
+    ],
+    [
+     "below",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "steel plate",
+   "confidence": "medium",
+   "notes": "the step cover of g091-d seen edge-on"
+  },
+  {
+   "id": "new.plate.sticker_step_cover_left",
+   "class": "plate",
+   "seen_as": "red and white paper sticker on the step cover",
+   "bbox": [
+    0.24,
+    0.17,
+    0.42,
+    0.22
+   ],
+   "zone": "compartment.left_wall",
+   "on": "cover.radio_steel",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": "later addition"
+  },
+  {
+   "id": "rack.sl1m",
+   "class": "rack",
+   "seen_as": "lower part of SL-1M along the top",
+   "bbox": [
+    0.0,
+    0.0,
+    0.74,
+    0.26
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0004_12m",
+   "class": "block",
+   "seen_as": "aft block with meter bottoms and two rotaries",
+   "bbox": [
+    0.0,
+    0.0,
+    0.44,
+    0.13
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "block.l_ok81_4m2",
+   "class": "block",
+   "seen_as": "aft lower block's top edge",
+   "bbox": [
+    0.03,
+    0.12,
+    0.44,
+    0.24
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "block.l_0005_8m",
+   "class": "block",
+   "seen_as": "forward block with the black sub-panel and round dial",
+   "bbox": [
+    0.45,
+    0.0,
+    0.73,
+    0.11
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "block.l_os51_8m",
+   "class": "block",
+   "seen_as": "forward block with the meter and two sockets",
+   "bbox": [
+    0.45,
+    0.11,
+    0.73,
+    0.26
+   ],
+   "zone": "compartment.left_wall",
+   "on": "rack.sl1m",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.left_wall_fwd_of_sl1m",
+   "class": "loom",
+   "seen_as": "white and blue cables forward of the rack at the top right",
+   "bbox": [
+    0.76,
+    0.0,
+    0.92,
+    0.28
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.box.left_wall_fwd_of_sl1m",
+   "class": "box",
+   "seen_as": "dark box with connectors on the wall forward of the rack",
+   "bbox": [
+    0.82,
+    0.03,
+    0.94,
+    0.22
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "forward_of",
+     "rack.sl1m"
+    ]
+   ],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.r123m_left_braided",
+   "class": "cable",
+   "seen_as": "braided screened cable from the radio's lower connector looping down",
+   "bbox": [
+    0.33,
+    0.4,
+    0.56,
+    0.86
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [
+    [
+     "connects",
+     "radio.r123m_left"
+    ]
+   ],
+   "size_cue": "",
+   "material": "braided sleeve",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.bp26_left_white",
+   "class": "cable",
+   "seen_as": "white wires from the BP-26's earth terminal down under the tray",
+   "bbox": [
+    0.16,
+    0.42,
+    0.37,
+    0.74
+   ],
+   "zone": "compartment.left_wall",
+   "on": "psu.bp26_left",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.left_well_floor",
+   "class": "loom",
+   "seen_as": "thick grey cables along the bottom of the well at the lower left",
+   "bbox": [
+    0.0,
+    0.7,
+    0.3,
+    1.0
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cover.floor_radio_well",
+   "class": "cover",
+   "seen_as": "grey plates at the well bottom, a grating with debris at right",
+   "bbox": [
+    0.12,
+    0.8,
+    1.0,
+    1.0
+   ],
+   "zone": "compartment.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.strap.r123m_left_frame",
+   "class": "strap",
+   "seen_as": "brown strap at the forward end of the frame",
+   "bbox": [
+    0.93,
+    0.57,
+    1.0,
+    0.7
+   ],
+   "zone": "compartment.left_wall",
+   "relations": [],
+   "size_cue": "",
+   "material": "leather",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "common shock tray for the left R-123M and BP-26"
+ ],
+ "doubts": [
+  "Whether the lower aft block at the top is OK81-4M or still 0004-12M is unclear at this crop."
+ ]
+}

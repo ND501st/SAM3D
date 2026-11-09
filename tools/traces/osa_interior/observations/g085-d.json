@@ -1,0 +1,281 @@
+{
+ "photo": "g085-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "over the commander seat",
+  "looks": "down into the commander footwell under the dash",
+  "covers": [
+   "new.duct.heater_commander_footwell"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "hull.dashboard",
+   "class": "console",
+   "seen_as": "dash underside",
+   "bbox": [
+    0.01,
+    0.0,
+    0.93,
+    0.21
+   ],
+   "zone": "cab.dash",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey steel",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "console.commander_dash",
+   "class": "console",
+   "seen_as": "bottom of the commander panel with the trim-vane label and a blue plate",
+   "bbox": [
+    0.22,
+    0.0,
+    0.8,
+    0.07
+   ],
+   "zone": "cab.dash",
+   "on": "hull.dashboard",
+   "relations": [],
+   "size_cue": "",
+   "material": "light grey, blue plate",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.heater_commander_footwell",
+   "class": "duct",
+   "seen_as": "flattened wide sheet-metal heater duct coming from the right under the dash",
+   "bbox": [
+    0.04,
+    0.16,
+    1.0,
+    0.54
+   ],
+   "zone": "cab.floor",
+   "relations": [
+    [
+     "below",
+     "console.commander_dash"
+    ]
+   ],
+   "size_cue": "wider than a seat",
+   "material": "grey painted sheet",
+   "confidence": "high",
+   "notes": "Caption: heating unit fan exhaust."
+  },
+  {
+   "id": "new.duct.heater_elbow_outlet",
+   "class": "duct",
+   "seen_as": "elbow pipe outlet on top of the duct",
+   "bbox": [
+    0.43,
+    0.18,
+    0.57,
+    0.38
+   ],
+   "zone": "cab.floor",
+   "on": "new.duct.heater_commander_footwell",
+   "relations": [
+    [
+     "on",
+     "new.duct.heater_commander_footwell"
+    ]
+   ],
+   "size_cue": "fist-wide",
+   "material": "bare metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.clamp.heater_duct_band",
+   "class": "clamp",
+   "seen_as": "band clamp round the duct",
+   "bbox": [
+    0.62,
+    0.27,
+    0.67,
+    0.44
+   ],
+   "zone": "cab.floor",
+   "on": "new.duct.heater_commander_footwell",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel band",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.white_heater_duct",
+   "class": "cable",
+   "seen_as": "white cables clamped along the duct",
+   "bbox": [
+    0.3,
+    0.27,
+    1.0,
+    0.54
+   ],
+   "zone": "cab.floor",
+   "on": "new.duct.heater_commander_footwell",
+   "relations": [],
+   "size_cue": "finger-thick",
+   "material": "PVC",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.cable.braided_earth_commander",
+   "class": "cable",
+   "seen_as": "braided earthing straps under the dash",
+   "bbox": [
+    0.1,
+    0.2,
+    0.44,
+    0.32
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "metal braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.teal_under_commander_dash",
+   "class": "hose",
+   "seen_as": "teal hose under the dash at the left",
+   "bbox": [
+    0.05,
+    0.21,
+    0.34,
+    0.27
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "thumb-thick",
+   "material": "rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.heater_diffuser_cone",
+   "class": "duct",
+   "seen_as": "cone-shaped diffuser on the floor, open end left",
+   "bbox": [
+    0.18,
+    0.66,
+    0.75,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [
+    [
+     "below",
+     "new.duct.heater_commander_footwell"
+    ]
+   ],
+   "size_cue": "about a forearm long",
+   "material": "grey sheet metal",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.filter.bowl_commander_footwell",
+   "class": "filter",
+   "seen_as": "filter bowl hanging under a cast head at the right",
+   "bbox": [
+    0.76,
+    0.46,
+    0.9,
+    0.66
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "fist-sized",
+   "material": "grey metal",
+   "confidence": "medium",
+   "notes": "Fluid filter, not the FVU."
+  },
+  {
+   "id": "new.cover.red_caps_commander_footwell",
+   "class": "cover",
+   "seen_as": "two red caps on fittings at the right",
+   "bbox": [
+    0.77,
+    0.68,
+    0.97,
+    0.89
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "palm-sized",
+   "material": "red painted",
+   "confidence": "high",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.under_commander_dash",
+   "class": "loom",
+   "seen_as": "grey cables and rods across the floor",
+   "bbox": [
+    0.0,
+    0.54,
+    1.0,
+    0.66
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "mixed",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "cushion.floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed mat edge at the lower left",
+   "bbox": [
+    0.0,
+    0.68,
+    0.18,
+    0.98
+   ],
+   "zone": "cab.floor",
+   "on": "hull.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "ribbed rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "hull.floor",
+   "class": "floor",
+   "seen_as": "floor in the footwell, stained",
+   "bbox": [
+    0.25,
+    0.55,
+    0.85,
+    1.0
+   ],
+   "zone": "cab.floor",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey painted steel",
+   "confidence": "medium",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "heater duct, elbow outlet and diffuser cone",
+  "filter bowl",
+  "red caps"
+ ],
+ "doubts": [
+  "Vehicle left/right not given for parts in this footwell; the duct is said to come from the right by the caption and notes."
+ ]
+}

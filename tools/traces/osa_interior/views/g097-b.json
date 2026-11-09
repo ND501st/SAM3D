@@ -1,0 +1,7 @@
+{
+ "photo": "g097-b",
+ "image": "clean",
+ "camera_from": "sfm",
+ "why": "Camera from the joint solve of the book's interior photos (tools/recon/holistic_sfm.py): added so that every compartment angle is compared with the model (docs/OSA_INTERIOR_HOLISTIC.md section 31).",
+ "notes": "No anchors: the solve's camera."
+}

@@ -1,0 +1,242 @@
+{
+ "photo": "g086-d",
+ "vehicle": "9A33BM3-1 ex-NVA",
+ "camera": {
+  "stands": "over the driver's footwell",
+  "looks": "down and forward into the footwell",
+  "covers": [
+   "cab"
+  ],
+  "lens": "normal"
+ },
+ "components": [
+  {
+   "id": "new.control.hand_throttle",
+   "class": "control",
+   "seen_as": "lever with a black ball knob on a toothed quadrant, with a rod",
+   "bbox": [
+    0.41,
+    0.22,
+    0.81,
+    0.44
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "knob about golf-ball size",
+   "material": "steel, black plastic",
+   "confidence": "medium",
+   "notes": "hand throttle with ratchet (by look)"
+  },
+  {
+   "id": "new.unknown.cast_housing_driver",
+   "class": "unknown",
+   "seen_as": "large bolted cast housing filling the left half",
+   "bbox": [
+    0.0,
+    0.22,
+    0.7,
+    0.8
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": "gearbox, transfer or steering housing"
+  },
+  {
+   "id": "new.unknown.cast_housing_driver_right",
+   "class": "unknown",
+   "seen_as": "smaller bolted cast body at the lower right",
+   "bbox": [
+    0.63,
+    0.55,
+    0.9,
+    0.75
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.control.pedal_arm_driver",
+   "class": "control",
+   "seen_as": "cast arm with a pivot boss and bolt",
+   "bbox": [
+    0.33,
+    0.39,
+    0.53,
+    0.7
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey cast metal",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.control.linkage_rod_driver",
+   "class": "control",
+   "seen_as": "vertical adjustable rod with clevises and a spring",
+   "bbox": [
+    0.88,
+    0.32,
+    0.97,
+    0.91
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.duct.heater_driver_floor",
+   "class": "duct",
+   "seen_as": "big formed sheet duct across the bottom",
+   "bbox": [
+    0.0,
+    0.67,
+    0.78,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey sheet steel",
+   "confidence": "medium",
+   "notes": "heater air duct by the notes"
+  },
+  {
+   "id": "new.cushion.cab_floor_mat",
+   "class": "cushion",
+   "seen_as": "ribbed black rubber mat at the lower right",
+   "bbox": [
+    0.78,
+    0.76,
+    1.0,
+    1.0
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "black rubber",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.hose.braided_driver",
+   "class": "hose",
+   "seen_as": "braided hose across the top",
+   "bbox": [
+    0.5,
+    0.22,
+    0.97,
+    0.26
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel braid",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.pipe.driver_footwell",
+   "class": "pipe",
+   "seen_as": "pipe run with an in-line valve body and unions",
+   "bbox": [
+    0.3,
+    0.33,
+    0.75,
+    0.47
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "steel",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.loom.driver_footwell",
+   "class": "loom",
+   "seen_as": "grey cables with blue marks, top right",
+   "bbox": [
+    0.68,
+    0.0,
+    1.0,
+    0.35
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey insulation",
+   "confidence": "medium",
+   "notes": ""
+  },
+  {
+   "id": "new.switch.red_knob_driver",
+   "class": "switch",
+   "seen_as": "red-knobbed push or pull fitting, top left",
+   "bbox": [
+    0.03,
+    0.01,
+    0.16,
+    0.1
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "red knob",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.pale_cylinder_driver",
+   "class": "unknown",
+   "seen_as": "pale cylinder with a flange, top left",
+   "bbox": [
+    0.15,
+    0.0,
+    0.33,
+    0.2
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "",
+   "confidence": "low",
+   "notes": ""
+  },
+  {
+   "id": "new.unknown.box_top_centre_driver",
+   "class": "unknown",
+   "seen_as": "pale grey box at the top centre",
+   "bbox": [
+    0.5,
+    0.0,
+    0.68,
+    0.17
+   ],
+   "zone": "cab",
+   "relations": [],
+   "size_cue": "",
+   "material": "grey",
+   "confidence": "low",
+   "notes": ""
+  }
+ ],
+ "not_in_register": [
+  "the driver's footwell linkages, pipes and housings"
+ ],
+ "doubts": [
+  "no fixed reference in frame; the place in the cab is only \"driver's footwell\" from the caption",
+  "identities of the housings and the lever are by look only"
+ ]
+}
