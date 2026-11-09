@@ -184,6 +184,19 @@ class Builder:
             f = self.bm.faces.new((a[i], a[(i + 1) % n], b[(i + 1) % n], b[i]))
             f.material_index = idx
 
+    def loft_x(self, section0, section1, x0, x1, mat):
+        """A solid between a closed section [(y, z)...] at x0 and another with as many points at x1; its sides are triangles, since a twisted side has no one plane."""
+        a = [self.bm.verts.new(P(x0, y, z)) for y, z in section0]
+        b = [self.bm.verts.new(P(x1, y, z)) for y, z in section1]
+        idx = self.mat(mat)
+        n = len(section0)
+        faces = [list(reversed(a)), b]
+        for i in range(n):
+            j = (i + 1) % n
+            faces += [(a[i], a[j], b[j]), (a[i], b[j], b[i])]
+        for v in faces:
+            self.bm.faces.new(v).material_index = idx
+
     def prism_y(self, section, y0, y1, mat):
         """Extrude a closed section [(x, z)...] (body) along y from y0 to y1; going round the section with x to the
         right and z up, the solid is on the left."""
@@ -551,7 +564,7 @@ def build_floor_parts(b, shell):
     ch = sp['channel']
     for a, c, drop in ((x0, ch['x_from_m'], 0.0), (ch['x_from_m'], ch['x_to_m'], ch['drop_m']), (ch['x_to_m'], x1, 0.0)):      # a pressed channel down the walkway
         b.box(a, c, y0, step['y_m'], FLOOR_Z - 0.002, z - drop, 'Floor_Steel')
-        b.box(a, c, step['y_m'], y1, FLOOR_Z - 0.002, step['z_top_m'] - drop, 'Floor_Steel')
+        b.box(a, c, step['y_m'], y1, FLOOR_Z - 0.002, (step['z_top_m'] if a >= step['x_from_m'] else z) - drop, 'Floor_Steel')      # the step is only right of the channel's left edge
     r0, r1 = sorted(x1 - (x1 - x0) * k for k in sp['ribbed_from_right'])
     for x in (r0, r1):                                                  # the ridges bounding the ribbed band
         b.box(x - 0.012, x + 0.012, y0, step['y_m'], z - 0.001, z + 0.006, 'Floor_Steel')
@@ -574,19 +587,41 @@ def build_floor_parts(b, shell):
         b.box(sa['x_from_m'], sa['x_to_m'], s_['y_from_m'], s_['y_to_m'], FLOOR_Z - 0.002, s_['z_top_m'], 'Floor_Steel')
     h = f['hatch_round_aft_left']
     cx, cy = h['centre_xy_m']
-    b.cylinder((cx, cy, FLOOR_Z - 0.002), (cx, cy, FLOOR_Z + h['rim_m']), h['r_m'], 'Paint_Equipment', seg=32, smooth=False)
-    b.cylinder((cx, cy, FLOOR_Z + h['rim_m'] - 0.001), (cx, cy, FLOOR_Z + h['rim_m'] + 0.004), h['r_m'] * 0.55, 'Floor_Steel', seg=24, smooth=False)
+    hz = h['z_top_m']
+    b.cylinder((cx, cy, hz - 0.002), (cx, cy, hz + h['rim_m']), h['r_m'], 'Paint_Equipment', seg=32, smooth=False)
+    b.cylinder((cx, cy, hz + h['rim_m'] - 0.001), (cx, cy, hz + h['rim_m'] + 0.004), h['r_m'] * 0.55, 'Floor_Steel', seg=24, smooth=False)
     for k in range(h['bolts']):
         a = 2 * math.pi * k / h['bolts']
         q = (cx + 0.87 * h['r_m'] * math.cos(a), cy + 0.87 * h['r_m'] * math.sin(a))
-        b.cylinder((q[0], q[1], FLOOR_Z + h['rim_m'] - 0.001), (q[0], q[1], FLOOR_Z + h['rim_m'] + 0.009), 0.012, 'Metal_Steel', seg=6, smooth=False)
+        b.cylinder((q[0], q[1], hz + h['rim_m'] - 0.001), (q[0], q[1], hz + h['rim_m'] + 0.009), 0.012, 'Metal_Steel', seg=6, smooth=False)
     ar = f['arch_forward_right']
     b.prism([tuple(p) for p in ar['section_yz_m']], ar['x_from_m'], ar['x_to_m'], 'Paint_Equipment')
     for r in f['raised']:                                               # what the depth comparison found standing on the floor (docs/OSA_INTERIOR_HOLISTIC.md section 33)
-        if 'section_yz_m' in r:
+        if 'section_at_x_from_yz_m' in r:
+            b.loft_x([tuple(p) for p in r['section_at_x_from_yz_m']], [tuple(p) for p in r['section_at_x_to_yz_m']], r['x_from_m'], r['x_to_m'], r['material'])
+        elif 'section_yz_m' in r:
             b.prism([tuple(p) for p in r['section_yz_m']], r['x_from_m'], r['x_to_m'], r['material'])
         else:
             b.prism_y([tuple(p) for p in r['section_xz_m']], r['y_from_m'], r['y_to_m'], r['material'])
+
+
+def build_aft_fittings(b, shell):
+    """The machine hung under the roof, the cover on the blower's opening and the box below it (docs/OSA_INTERIOR_HOLISTIC.md section 36)."""
+    f = shell['aft_fittings']
+    m = f['hung_motor']
+    x, y = m['axis_xy_m']
+    for part, r_key, mat in (('drum_z_m', 'drum_r_m', 'Paint_Radio'), ('upper_z_m', 'upper_r_m', 'Paint_Radio'), ('flange_z_m', 'flange_r_m', 'Paint_Radio'), ('mount_z_m', 'mount_r_m', 'Duct_Grey')):
+        z0, z1 = m[part]
+        b.cylinder((x, y, z0), (x, y, z1), m[r_key], mat, seg=40)
+    (x0, y0, z0), (x1, y1, z1) = m['box_xyz_m']
+    b.box(x0, x1, y0, y1, z0, z1, 'Paint_Radio')
+    q = f['dark_box']
+    b.box(q['x_m'][0], q['x_m'][1], REAR_Y - 0.002, q['y_front_m'], q['z_m'][0], q['z_m'][1], 'Metal_Dark')
+    c = f['blower_cover']
+    b.box(c['x_m'][0], c['x_m'][1], REAR_Y - 0.002, REAR_Y + c['proud_m'], c['z_m'][0], c['z_m'][1], 'Paint_Radio')
+    q = f['sloped_box']
+    zb, zt = q['z_m']
+    b.prism([(REAR_Y - 0.002, zb), (REAR_Y + q['depth_m'], zb), (REAR_Y + q['depth_m'], zb + q['front_height_m']), (REAR_Y - 0.002, zt)], q['x_m'][0], q['x_m'][1], 'Paint_Radio')
 
 
 def build_posts(b, shell):
@@ -778,6 +813,7 @@ def build_hull():
         seal(b, o, right, up, sc, 'Rubber_Black')
     build_floor_parts(b, shell)
     build_posts(b, shell)
+    build_aft_fittings(b, shell)
     build_cab_corner_posts(b, shell)
     build_cab_floor(b)
     return finish(b, bevel=0.004)
@@ -1299,27 +1335,31 @@ def build_bench():
 
 
 def build_operator_seat():
-    """One operator's place on the bench, built facing forward (yaw -90 faces the console): a cushion with a rounded
-    front, and a padded back on a bent tube frame at the aisle edge (usaf_shaw_2017 -019: olive back, worn brown
-    cushion, tubular frame; mon_2112_80 Fig. 3: rounded-front seats)."""
+    """One operator's place on the bench, built facing forward (yaw -90 faces the console): a green cushion nearly as wide as the seat's pitch, so the row reads as one
+    long cushion, and behind it a pressed-steel pan on a bent tube, a canvas pack strapped to its aisle side, webbing hanging from it (wwp_gecko g094-d, g095-c).
+    usaf_shaw_2017 -019 shows an olive pad and a worn brown cushion, on another vehicle; the book's two photographs are used."""
     b = Builder('SM_OperatorSeat')
     # local frame: x across the seat (right), y forward (towards the console), z up; origin under the seat centre
-    w, d = 0.48, 0.38
-    outline = [(-w / 2, -d / 2), (w / 2, -d / 2)]
-    for k in range(13):
-        a = math.radians(-30 + 240 * k / 12)    # a flattened arc for the front edge
-    front = [(w / 2 * math.cos(math.radians(a)), d / 2 - 0.12 + 0.12 * math.sin(math.radians(a)))
+    w, d = 0.645, 0.38
+    front = [(w / 2 * math.cos(math.radians(a)), d / 2 - 0.08 + 0.08 * math.sin(math.radians(a)))
              for a in [0 + 15 * k for k in range(13)]]
     outline = [(-w / 2, -d / 2), (w / 2, -d / 2)] + front
-    b.slab(Vector((0, 0, 0.075)), Vector((1, 0, 0)), Vector((0, 1, 0)), outline, [], 0.075, 'Vinyl_Brown')
-    # back frame and pad, at the rear edge (the aisle)
-    for x in (-0.19, 0.19):
-        b.tube([(x, -d / 2 + 0.02, 0.0), (x, -d / 2 - 0.02, 0.10), (x, -d / 2 - 0.05, 0.52)], 0.012, 'Metal_Steel')
-    b.tube([(-0.19, -d / 2 - 0.05, 0.52), (0.19, -d / 2 - 0.05, 0.52)], 0.012, 'Metal_Steel')
+    b.slab(Vector((0, 0, 0.075)), Vector((1, 0, 0)), Vector((0, 1, 0)), outline, [], 0.075, 'Vinyl_Olive')
     lean = math.radians(8)
     v = Vector((0, -math.sin(lean), math.cos(lean)))
-    b.rounded_box(Vector((0, -d / 2 - 0.02, 0.33)), (0.40, 0.34, 0.055), 0.05, 'Vinyl_Olive',
-                  u=Vector((1, 0, 0)), v=v, seg=4)
+    n = Vector((0, -math.cos(lean), -math.sin(lean)))               # towards the aisle
+    c = Vector((0, -d / 2 - 0.02, 0.32))
+    b.rounded_box(c + n * 0.004, (0.48, 0.42, 0.012), 0.05, 'Paint_Rack', u=Vector((1, 0, 0)), v=v, seg=4)            # the pan's rim
+    b.rounded_box(c - n * 0.012, (0.42, 0.36, 0.022), 0.05, 'Paint_Rack', u=Vector((1, 0, 0)), v=v, seg=4)            # its pressed centre
+    for k in range(-3, 4):                                                                                            # rivets along its rim
+        for su, sv in ((k * 0.07, 0.195), (k * 0.07, -0.195)):
+            q = c + Vector((su, 0, 0)) + v * sv + n * 0.012
+            b.cylinder(tuple(q), tuple(q + n * 0.004), 0.006, 'Metal_Steel', seg=8, smooth=False)
+    b.rounded_box(c + n * 0.044 + v * 0.01, (0.3, 0.26, 0.07), 0.03, 'Canvas', u=Vector((1, 0, 0)), v=v, seg=3)       # the pack
+    for x in (-0.2, 0.2):                                                                                           # the webbing
+        top = c + Vector((x, 0, 0)) + v * 0.2 + n * 0.012
+        b.tube([tuple(top), tuple(top + n * 0.085 - v * 0.05), tuple(c + Vector((x, 0, 0)) - v * 0.2 + n * 0.09), (x, -d / 2 - 0.1, 0.0)], 0.01, 'Canvas', seg=6)
+    b.tube([(-0.2, -d / 2 + 0.02, 0.0), (-0.21, -d / 2 - 0.02, 0.48), (-0.12, -d / 2 - 0.05, 0.535), (0.12, -d / 2 - 0.05, 0.535), (0.21, -d / 2 - 0.02, 0.48), (0.2, -d / 2 + 0.02, 0.0)], 0.011, 'Metal_Steel')
     return finish(b, reuse=True)
 
 
@@ -1500,21 +1540,29 @@ def build_spare_box():
 
 
 def build_ga3():
-    """GA-3 gyro half-compass on the floor at the rear (plan: a circle 0.335 m across, mon_2112_80 Fig. 3): a round grey unit with
-    a ring of screws on its rim and a round plug with a sleeved cable (wwp_gecko g096-a d91), on a holed pedestal over an olive
-    plate (g100-d, g099-d, session A). The heights are estimates."""
+    """GA-3 gyro half-compass at the rear (plan: a circle 0.335 m across, mon_2112_80 Fig. 3), standing on a tall holed bracket: wwp_gecko
+    g099-d through its depth map puts the flange at z 1.2 and the dome's top near 1.46 (docs/OSA_INTERIOR_HOLISTIC.md section 36; origin at z 0.77).
+    Down the bracket: a plate, a perforated square box, a flange with a ring of screws, the dome; a tube handle beside it. Its foot in the photo stands on a floor hump
+    the hull lacks, so the bracket here runs to the floor."""
     b = Builder('SM_GA3')
     b.lathe(Vector((0, 0, -0.15)), Vector((0, 0, 1)), [(0.0, 0.0), (0.2, 0.0), (0.2, 0.012), (0.0, 0.012)], 'Paint_Equipment', seg=40)
-    b.lathe(Vector((0, 0, -0.138)), Vector((0, 0, 1)), [(0.0, 0.0), (0.13, 0.0), (0.13, 0.13), (0.168, 0.14), (0.168, 0.26), (0.15, 0.288), (0.0, 0.288)],
-            'Paint_LightGrey', seg=40)
-    for k in range(6):                                                                                           # the pedestal's holes
-        a = 2 * math.pi * k / 6
-        c, s = math.cos(a), math.sin(a)
-        b.cylinder((0.128 * c, 0.128 * s, -0.075), (0.133 * c, 0.133 * s, -0.075), 0.022, 'Rubber_Black', seg=14, smooth=False)
+    b.prism_y([(-0.05, -0.138), (0.05, -0.138), (0.15, 0.28), (-0.15, 0.28)], -0.13, 0.13, 'Paint_LightGrey')
+    for sy in (-1, 1):                                                                                          # the bracket's holes
+        for hx, hz, hr in ((0, 0.13, 0.055), (-0.085, 0.2, 0.03), (0.085, 0.2, 0.03)):
+            b.cylinder((hx, sy * 0.13, hz), (hx, sy * 0.134, hz), hr, 'Rubber_Black', seg=20, smooth=False)
+    b.box(-0.2, 0.2, -0.27, 0.17, 0.28, 0.3, 'Paint_LightGrey')
+    b.box(-0.16, 0.16, -0.16, 0.16, 0.3, 0.43, 'Paint_LightGrey')
+    for i in range(9):                                                                                          # the box's perforation, on its two aisle-side faces
+        for k in range(4):
+            u, h = -0.12 + 0.03 * i, 0.325 + 0.027 * k
+            b.cylinder((0.16, u, h), (0.162, u, h), 0.007, 'Rubber_Black', seg=8, smooth=False)
+            b.cylinder((u, 0.16, h), (u, 0.162, h), 0.007, 'Rubber_Black', seg=8, smooth=False)
+    b.lathe(Vector((0, 0, 0.43)), Vector((0, 0, 1)), [(0.0, 0.0), (0.178, 0.0), (0.178, 0.03), (0.168, 0.03), (0.165, 0.13), (0.135, 0.22), (0.06, 0.26), (0.0, 0.26)], 'Paint_LightGrey', seg=40)
     for k in range(16):                                                                                          # the ring of screws
         a = 2 * math.pi * k / 16
-        b.cylinder((0.158 * math.cos(a), 0.158 * math.sin(a), 0.147), (0.158 * math.cos(a), 0.158 * math.sin(a), 0.15), 0.0055, 'Metal_Steel', seg=8, smooth=False)
-    b.cylinder((0.166, 0, 0.06), (0.195, 0, 0.06), 0.024, 'Metal_Dark', seg=16, smooth=False)                    # the round plug
+        b.cylinder((0.17 * math.cos(a), 0.17 * math.sin(a), 0.46), (0.17 * math.cos(a), 0.17 * math.sin(a), 0.464), 0.0055, 'Metal_Steel', seg=8, smooth=False)
+    b.tube([(0.1, -0.25, 0.29), (0.1, -0.25, 0.72), (0.05, -0.22, 0.77), (-0.05, -0.16, 0.77), (-0.1, -0.13, 0.72), (-0.1, -0.13, 0.29)], 0.012, 'Metal_Steel')
+    b.cylinder((-0.16, 0, 0.37), (-0.19, 0, 0.37), 0.024, 'Metal_Dark', seg=16, smooth=False)                      # the round plug
     return finish(b, reuse=True)
 
 

@@ -26,11 +26,14 @@ import subprocess
 import sys
 import time
 
+import zlib
+
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import holistic_depth as D  # noqa: E402
+import holistic_metric as M  # noqa: E402
 import holistic_view as V  # noqa: E402
 
 OUT = os.path.join(V.REPO, 'out', 'recon', 'holistic', 'diff')
@@ -42,6 +45,7 @@ BAND_M, BAND_SHARE = 0.04, 0.025     # depths agree within the larger of 4 cm an
 ANGLE_DEG = 30.0          # surfaces disagree in direction beyond this
 MIN_AREA = 0.003          # a finding covers at least this share of the image
 MIN_ON_MODEL = 0.4        # a view whose traced parts' pixels land on the model less than this is not registered: its sheet is written, its findings are not used
+MAX_HOLDOUT_M = 0.05       # a view is used only if its fused map meets the pins held back from it this well (holistic_metric.py)
 MIN_AGREE_UNANCHORED = 0.3     # a view seeing no traced part has only the solve's camera to go by: used only if it agrees at least this much
 CELL = 0.10               # findings from different views overlap on a grid of this size
 FLOORLIKE = ('hull',)
@@ -250,6 +254,28 @@ def classify(s):
     return 'shape', '%s: the surface differs in shape at %s (median %+.3f m along the ray).' % (part, pos, r)
 
 
+_VIEW_POINTS = {}
+
+
+def view_points(photo):
+    """The joint solve's triangulated points this photo saw."""
+    if not _VIEW_POINTS:
+        for x, y, z, ph in V.load(D.POINTS):
+            for k in ph:
+                _VIEW_POINTS.setdefault(k, []).append([x, y, z])
+    return np.array(_VIEW_POINTS.get(photo, []), float).reshape(-1, 3)
+
+
+def better_camera(solve, registered):
+    """Which camera's fused map meets its withheld pins better; the solve's unless the registration clearly wins."""
+    a, b = solve.get('holdout_after_m'), registered.get('holdout_after_m')
+    if b is None:
+        return 'solve'
+    if a is None:
+        return 'registered'
+    return 'registered' if b < a * 0.95 else 'solve'
+
+
 def compare_view(photo, scene_cache, cams_for_alignment, al):
     """One photo. Returns its score and findings; writes its sheet."""
     import cv2
@@ -273,7 +299,18 @@ def compare_view(photo, scene_cache, cams_for_alignment, al):
         m_ = np.zeros((h, w), np.uint8)
         cv2.fillPoly(m_, [np.array([[a * w, b * h] for a, b in q['poly']], np.int32)], 1)
         keep_px &= m_ == 0
+    traced = np.array([n.startswith(ANCHORS) for n in scene.names])
+
+    def fuse_on(c, z):
+        return M.fuse_map(z, M.point_pins(z, c, view_points(photo)), M.trace_pins(z, c, scene, traced, rays_of, keep_px), seed=zlib.crc32(photo.encode()))
+
+    solve_cam, solve_z = cam, z_ref
+    z_solve, fused_solve = fuse_on(solve_cam, solve_z)
     cam, z_ref, reg = register_view(cam, z_ref, scene, keep_px)
+    z_ref, fused = fuse_on(cam, z_ref)
+    if better_camera(fused_solve, fused) == 'solve':                                 # the pins held back decide between the solve's camera and the registered one
+        cam, z_ref, fused = solve_cam, z_solve, fused_solve
+        reg = dict(reg, kept='solve')
     y, x = np.mgrid[0:h, 0:w]
     ray_c = rays_of(cam, x.astype(float) + 0.5, y.astype(float) + 0.5).reshape(-1, 3)
     norm = np.linalg.norm(ray_c, axis=1, keepdims=True)
@@ -306,6 +343,11 @@ def compare_view(photo, scene_cache, cams_for_alignment, al):
     n_valid = max(1, int(valid.sum()))
     score = {'photo': photo, 'register': reg, 'camera': {'f': float(cam.f), 'R': cam.R.tolist(), 'eye': cam.centre().tolist()}, 'pixels': n_valid, 'agree': round(float(agree.sum()) / n_valid, 4), 'median_abs_m': round(float(np.median(np.abs(r[valid]))), 4) if valid.any() else None,
              'median_angle_deg': round(float(np.nanmedian(ang[valid])), 1) if valid.any() else None}
+    free = valid & (part >= 0) & ~traced[np.maximum(part, 0)]                        # the traced parts' pixels are pinned to the model, so they say nothing about it
+    if free.sum() >= 0.05 * n_valid:
+        score['agree_all'], score['agree'] = score['agree'], round(float((agree & free).sum()) / int(free.sum()), 4)
+        score['median_abs_m'] = round(float(np.median(np.abs(r[free]))), 4)
+    score['fuse'] = fused
     findings = []
     X_ref = eye + (dirs * norm * z_ref.reshape(-1, 1)).reshape(h, w, 3)
     X_mod = eye + (dirs * norm * z_mod.reshape(-1, 1)).reshape(h, w, 3)
@@ -352,7 +394,8 @@ def compare_view(photo, scene_cache, cams_for_alignment, al):
     findings.sort(key=lambda q: -q['pixels'])
     draw_sheet(photo, w, h, z_ref, z_mod, r, tol, valid, ang, canvas_labels, findings, score)
     on = reg.get('on_model')
-    score['used'] = bool((on is not None and on >= MIN_ON_MODEL) or (on is None and score['agree'] >= MIN_AGREE_UNANCHORED))
+    held = fused.get('holdout_after_m')
+    score['used'] = bool(held is not None and held <= max(MAX_HOLDOUT_M, BAND_SHARE * float(np.nanmedian(z_ref))))     # the agreement band's own rule: the larger of a fixed distance and a share of the range
     os.makedirs(os.path.join(OUT, 'ref'), exist_ok=True)
     np.savez_compressed(os.path.join(OUT, 'ref', photo + '.npz'), z=z_ref.astype(np.float32), f=cam.f, cx=cam.cx, cy=cam.cy, R=cam.R, t=cam.t, w=w, h=h, k1=cam.k1, n=n_ref.astype(np.float32))
     return score, findings, {'X': X_ref[valid][::3].astype(np.float32), 'N': n_ref[valid][::3].astype(np.float32), 'Xm': X_mod[valid][::3].astype(np.float32), 'Nm': n_mod[valid][::3].astype(np.float32)}
@@ -531,7 +574,8 @@ def findings_stage():
 
 def write_score(scores):
     used = [v for v in scores.values() if v['used']]
-    t = {'mean_agree': round(float(np.mean([v['agree'] for v in used])), 4), 'median_abs_m': round(float(np.median([v['median_abs_m'] for v in used])), 4), 'views_used': len(used), 'views_not_registered': sorted(k for k, v in scores.items() if not v['used']), 'views': scores}
+    held = [v['fuse'] for v in scores.values() if v.get('fuse', {}).get('holdout_after_m') is not None]
+    t = {'holdout_before_m': round(float(np.median([q['holdout_before_m'] for q in held])), 4) if held else None, 'holdout_after_m': round(float(np.median([q['holdout_after_m'] for q in held])), 4) if held else None, 'mean_agree': round(float(np.mean([v['agree'] for v in used])), 4), 'median_abs_m': round(float(np.median([v['median_abs_m'] for v in used])), 4), 'views_used': len(used), 'views_not_registered': sorted(k for k, v in scores.items() if not v['used']), 'views': scores}
     V.save(os.path.join(OUT, 'score.json'), t)
     return t
 
@@ -543,10 +587,10 @@ def score_stage():
     used = [k for k, v in t['views'].items() if v['used']]
     same = b and [k for k in used if k in b['views']]                                  # the same views on both sides, or the difference is only which views registered
     print('mean agreement %.1f %%, median miss %.3f m over %d registered views' % (100 * t['mean_agree'], t['median_abs_m'], t['views_used']) + ('   (same views at the baseline: %.1f %%, %.3f m)' % (100 * np.mean([b['views'][k]['agree'] for k in same]), np.median([b['views'][k]['median_abs_m'] for k in same])) if same else ''))
-    print('not registered:', ' '.join(t['views_not_registered']))
+    print('not used:', ' '.join(t['views_not_registered']))
     for k, v in sorted(t['views'].items()):
         o = b['views'].get(k) if b else None
-        print('%-7s %5.1f %%%s%s' % (k, 100 * v['agree'], '   was %5.1f %%' % (100 * o['agree']) if o else '', '' if v['used'] else '   (not registered)'))
+        print('%-7s %5.1f %%%s%s' % (k, 100 * v['agree'], '   was %5.1f %%' % (100 * o['agree']) if o else '', '' if v['used'] else '   (not used)'))
 
 
 def write_report(merged, scores):

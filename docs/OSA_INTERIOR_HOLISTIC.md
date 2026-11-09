@@ -1287,3 +1287,50 @@ The first use of section 32, on the differences the owner named in g096-a. Every
 - The cab group is not to scale (section 30).
 
 **To carry on.** Unreal must re-import SM_OsaHull and SM_Cabinet0096 (the cabinet with no Nanite, `PLAIN` in `tools/ue_import_cabin_interior.py`, because its buttons are millimetres thick). After a full `build_cabin_interior.py` run, re-run `build_cabinet0096.py` with the other face builders: a full build drops their manifest entries.
+
+## 34. Depth fused with the traces and the perspective (10 Nov 2026)
+
+**Why.** Section 33's limit was the depth network: right about shape, wrong about distance, so the far wall read 10 to 20 cm off and agreement stayed low even where a render lined up. The traces and the solve are the opposite: exact, but only at places. `tools/recon/holistic_metric.py` puts them together, inside `holistic_diff.py views`.
+
+**How.** Each map is multiplied by a correction field, smooth except across the map's own depth steps, pinned to the **perspective** (the solved camera and every triangulated point this photo saw) and to the **traces** (the parts traced in millimetres, cast through the same camera). Between the pins the shape stays the network's and the distances become the pins'. A pin that disagrees with its neighbours (a cable in front of a rack) is turned down.
+
+**The test is withheld pins.** A quarter of each image's cells keep their pins out of the fit, and the miss on them is measured. Over the 24 compartment views the median miss went from 7.2 cm (the map with a low-order fit) to 2.6 cm at the chosen settings (`SMOOTH` 300, `PRIOR` 0.03, the best of nine). Three things follow:
+
+- Pinned pixels agree with the model by construction, so they are no evidence: the score now counts the other pixels (`agree`; `agree_all` keeps the old figure). **Scores from section 33 and earlier are not comparable with these.**
+- A view is used if its fused map meets its withheld pins within the agreement band's own rule, the larger of 5 cm and 2.5 % of the range, in place of the 'on the model' gate that a wrong camera could pass.
+- Each view keeps whichever camera, the solve's or the registered one, meets its withheld pins better; a tie stays with the solve. 21 of the 24 keep the solve's.
+
+**Limits.** A part with no pin takes its neighbours' correction whole: its shape is the network's, its distance borrowed. g096-a, the owner's example view, is still not used (10 cm on its withheld pins, though better than the 20 cm before); its sheet is still written. One random hold-out per view is a noisy measure for a single view; the median over views is the number to trust. The depth maps were regenerated with the adjusted cameras' lenses (a fresh map of g096-a differed by 2.2 % from the old).
+
+**What it found first.** The walkway's forward step is only right of the channel: forward of y 1.45 the floor reads 0.79-0.80 left of it and 0.675 right of it (`floor.spine.forward_step.x_from_m`). Multi-view findings not yet acted on: the left ledge above the racks at about x -1.04, y 1.7 (26 degrees, 5 views); the post at about x 0.70, y 0.31 (22 degrees, 5 views).
+
+**Score on this measure.** 21 of 24 views used, mean agreement 28.5 %, median miss 0.066 m, after the step (28.1 % before it, on the same views).
+
+**Install.** `setup_tools.ps1`'s depth step was run from nothing on 10 Nov 2026 (`venv-depth` removed, MoGe cloned afresh): it installs, MoGe runs on the GPU, Embree casts, and `holistic_depth.py mono` remade all 76 maps.
+
+## 35. The housing beside the cabinet (10 Nov 2026)
+
+**What was wrong.** `block_beside_cabinet` was one section carried unchanged across the vehicle, read as two stacked boxes. The fused maps show a sheet-metal housing whose height changes across the vehicle: the bright panel's top edge climbs from z 1.00 by the cabinet to 1.12 near the wall, and its lower edge from 0.90 to 0.98. The old block also stood about 17 cm too high forward of y 0.5.
+
+**What changed.** `floor.raised` may now give a loft: `section_at_x_from_yz_m` and `section_at_x_to_yz_m`, joined point to point (`loft_x` in `tools/blender/build_cabin_interior.py`). `housing_beside_cabinet` replaces the block. The plinth under the cabinet's plugs came down 7 cm (top 0.88), and the low casting before the housing was added (`casting_before_housing`, top 0.85, low confidence). All are measured in g096-a alone, through its fused map, and judged against the photo side by side.
+
+**Result.** Mean agreement 28.5 to 28.8 %, median miss 0.066 to 0.059 m over the same 21 views; g095-c, which sees the housing, went from 14.3 to 23.1 % against the baseline. g096-a itself is still outside the mean (its withheld pins are 10 cm out), so its corners carry that uncertainty.
+
+## 36. The rear of the compartment and the seats (10 Nov 2026)
+
+Chosen by the size of `findings` and then by looking at the side-by-sides, which showed more than the numbers.
+
+- **The machine hung under the roof** (`aft_fittings.hung_motor`, finding F002, the largest left: 0.28 m in front of the model in three views): axis at x -0.45, y -0.48, a drum 0.31 m across from z 1.665 to 1.868, a narrower body to 2.03, a flange, a mount to the lining, a box beside it. Its axis and radius come from rays, g099-a's silhouettes and g100-c's rim, not from depth. What the machine is has not been identified.
+- **The GA-3** stands on a tall holed bracket in g099-d: the flange near z 1.2 and the dome's top near 1.46, not a low drum on the floor. The plan's circle (mon_2112_80 Fig. 3) stays. Its foot stands on a floor hump the hull lacks, so the bracket runs to the floor.
+- **The blower's cover and the small sloped box** below it (`aft_fittings.blower_cover`, `sloped_box`), at the blower frame's scale.
+- **The seats** are pressed-steel pans with a canvas pack and webbing, on a green cushion that reads as one along the row (g094-d, g095-c). usaf_shaw_2017's olive pad and brown cushion are on another vehicle; the book is used. The pan's riveted rim and the lower tube frame are simplified.
+
+**Not done.** The left ledge (F001, 26 degrees, 5 views) needs the roof section to differ left from right, which the mirrored half section cannot, and two views disagree on it. The post (F004) stays.
+
+## 37. The rear floor (10 Nov 2026)
+
+The fused cloud puts the rear floor left of the plinth at z 0.70-0.77, where the model had the hull floor at 0.62, rising to 0.79 towards the aisle's stair. `floor.raised` gains `floor_aft_left` and the strip `hump_aft` (0.85); the bolted hatch sits on the raised floor (`hatch_round_aft_left.z_top_m` 0.735); the stair's first plate, an estimate before, goes to 0.79; `aft_fittings.dark_box` is the box on the bulkhead under the hung machine; the GA-3's handle is turned to the photo's angle.
+
+All low confidence: the heights are depth-map medians, and the box's distance from the bulkhead is the network's. The stair's second plate (0.66) stays, so the step between the plates is now larger than the photos suggest. The hung machine stands aft of the walk areas in `data/cabins/osa_ak.json` (they end at y 0.5), so it blocks no one's path. Not modelled: the braided cables, the blue hose, the tray by the hatch, the pressed creases and the bolts on the hump.
+
+**Score.** Sections 35 to 37 together: 28.5 % to 28.6 % over the same 21 views, median miss 0.066 to 0.059 m. After section 36 it stood at 29.0 %. The rear views the new parts stand in fell against the baseline (g099-a 5.8 to 1.9 %, g100-c 49.4 to 43.0 %, g100-a 64.5 to 61.6 %) and g093-b fell too (30.5 to 26.1 %, not explained). The new parts carry no trace pins, so these views cannot confirm them; they were judged side by side.

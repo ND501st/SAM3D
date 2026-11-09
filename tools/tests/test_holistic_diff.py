@@ -62,6 +62,14 @@ class Merge(unittest.TestCase):
         self.assertEqual(len(H.merge_findings([self.one('a'), self.one('a')])), 2)
 
 
+class CameraChoice(unittest.TestCase):
+    def test_the_withheld_pins_choose_the_camera(self):
+        self.assertEqual(H.better_camera({'holdout_after_m': 0.06}, {'holdout_after_m': 0.11}), 'solve')
+        self.assertEqual(H.better_camera({'holdout_after_m': 0.06}, {'holdout_after_m': 0.03}), 'registered')
+        self.assertEqual(H.better_camera({'holdout_after_m': 0.06}, {'holdout_after_m': 0.059}), 'solve')       # a tie stays with the solve
+        self.assertEqual(H.better_camera({'holdout_after_m': None}, {'holdout_after_m': None}), 'solve')
+
+
 class Planes(unittest.TestCase):
     def test_ransac_finds_the_plane_through_outliers(self):
         rng = np.random.default_rng(3)

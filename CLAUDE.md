@@ -166,7 +166,7 @@ Modelling equipment from photographs: always follow `docs/MODELLING_FROM_PHOTOS.
 photo to mm, trace in 3D with heights, overlap tests, then check the model rendered from the photo's own camera. For a whole
 space with many photos (the Osa's compartment), `tools/recon/holistic_diff.py` compares the model with the photos by depth and
 surface direction per pixel and says what is wrong, part by part, with a score each edit must raise
-(`docs/OSA_INTERIOR_HOLISTIC.md` section 32).
+(`docs/OSA_INTERIOR_HOLISTIC.md` section 32); each photo's depth map is first fused with the solve's points and the traces, and judged on pins held back from it (section 34).
 
 Multiplayer: the server simulates, clients mirror; players take crew seats (`docs/MULTIPLAYER.md`).
 

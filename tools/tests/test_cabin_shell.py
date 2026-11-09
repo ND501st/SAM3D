@@ -173,9 +173,11 @@ def test_what_the_depth_comparison_found_on_the_floor_is_closed_and_stands_on_it
     def area(sec):
         return 0.5 * sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(sec, sec[1:] + sec[:1]))
     for r in SHELL['floor']['raised']:
-        sec = r.get('section_yz_m') or r['section_xz_m']
-        assert area(sec) > 0.005, r['id']                       # anticlockwise, so its faces look outwards
-        assert min(p[1] for p in sec) < SHELL['floor']['spine']['z_top_m'], r['id']
+        secs = [r[k] for k in ('section_yz_m', 'section_xz_m', 'section_at_x_from_yz_m', 'section_at_x_to_yz_m') if k in r]
+        assert len({len(q) for q in secs}) == 1, r['id']        # a loft's two sections join point to point
+        for sec in secs:
+            assert area(sec) > 0.005, r['id']                   # anticlockwise, so its faces look outwards
+            assert min(p[1] for p in sec) < SHELL['floor']['spine']['z_top_m'], r['id']
         assert 'holistic_diff' in r['source'] and 'wwp_gecko' in r['source'], r['id']
 
 

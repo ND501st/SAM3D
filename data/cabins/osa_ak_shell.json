@@ -507,6 +507,93 @@
       "confidence": "low"
     }
   },
+  "aft_fittings": {
+    "about": "Fittings at the rear of the compartment that the model lacked (docs/OSA_INTERIOR_HOLISTIC.md section 36)",
+    "hung_motor": {
+      "what": "The round electrical machine hung under the roof left of the centre line: a wide drum, a narrower upper body, a flange and a blue-grey mount up to the lining, a square box beside it. What it is has not been identified",
+      "axis_xy_m": [
+        -0.45,
+        -0.48
+      ],
+      "drum_r_m": 0.155,
+      "drum_z_m": [
+        1.665,
+        1.868
+      ],
+      "upper_r_m": 0.124,
+      "upper_z_m": [
+        1.868,
+        2.03
+      ],
+      "flange_r_m": 0.14,
+      "flange_z_m": [
+        2.03,
+        2.043
+      ],
+      "mount_r_m": 0.08,
+      "mount_z_m": [
+        2.043,
+        2.2
+      ],
+      "box_xyz_m": [
+        [
+          -0.72,
+          -0.62,
+          1.84
+        ],
+        [
+          -0.6,
+          -0.5,
+          2.02
+        ]
+      ],
+      "source": "wwp_gecko g099-a and g100-c, tools/recon/holistic_diff.py: the axis and radius from g099-a's two silhouette rays and five points of g100-c's lower rim, the heights along g099-a's rays at the axis; holistic_diff finding F002 (3 views, the surface 0.28 m in front of the model)",
+      "confidence": "medium"
+    },
+    "dark_box": {
+      "what": "The dark box on the bulkhead under the hung machine",
+      "x_m": [
+        -0.69,
+        -0.46
+      ],
+      "z_m": [
+        1.383,
+        1.626
+      ],
+      "y_front_m": -0.865,
+      "source": "wwp_gecko g099-a, tools/recon/holistic_diff.py: its corners through the depth map (the bulkhead-distance is the network's, not triangulated)",
+      "confidence": "low"
+    },
+    "blower_cover": {
+      "what": "The grey sheet cover standing proud over the outboard part of the blower opening, leaving a slit at the ring",
+      "x_m": [
+        -0.38,
+        -0.25
+      ],
+      "z_m": [
+        1.05,
+        1.555
+      ],
+      "proud_m": 0.06,
+      "source": "wwp_gecko g100-c at the blower frame's scale (its width 0.183 m, bulkhead.blower)",
+      "confidence": "low"
+    },
+    "sloped_box": {
+      "what": "The small sloped-top box low on the bulkhead below the blower",
+      "x_m": [
+        -0.456,
+        -0.298
+      ],
+      "z_m": [
+        0.894,
+        1.0
+      ],
+      "depth_m": 0.1,
+      "front_height_m": 0.05,
+      "source": "wwp_gecko g100-c and g100-d at the blower frame's scale",
+      "confidence": "low"
+    }
+  },
   "floor": {
     "plinth_aft_right": {
       "what": "The stepped plinth at the right, between the wheel arch and the bulkhead: a vertical face and a top sloping down inboard",
@@ -589,6 +676,8 @@
       "source": "wwp_gecko g093-c d01-d08, d11 (its edge at x 0.45 cast through the camera from the joint solve of the book's photos (tools/recon/holistic_sfm.py); the ridges' places as fractions of its width, the ribs' pitch from five in view); g095-d (the same ribs). The bench-side edge is the bench's base, the cabin's; its height: the depth maps' fused cloud (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31) and the triangulated points (0.2 m above the hull floor at its aft part; the first reading of 0.632 came from one camera)",
       "confidence": "medium",
       "forward_step": {
+        "x_from_m": 0.02,
+        "x_from_source": "wwp_gecko photos through the fused depth maps' floor map (tools/recon/holistic_diff.py surfaces, docs/OSA_INTERIOR_HOLISTIC.md section 34): forward of y 1.45 the walkway reads 0.79-0.80 left of the channel (about 22 000 pixels) and 0.675 right of it",
         "y_m": 1.45,
         "z_top_m": 0.69,
         "source": "wwp_gecko g093-c, g095-d, the depth maps' fused cloud (tools/recon/holistic_depth.py, docs/OSA_INTERIOR_HOLISTIC.md section 31) and the triangulated points: 0.82-0.84 up to y 1.4, 0.72-0.74 forward of it",
@@ -637,7 +726,7 @@
         {
           "y_from_m": -0.45,
           "y_to_m": -0.15,
-          "z_top_m": 0.7
+          "z_top_m": 0.79
         },
         {
           "y_from_m": -0.15,
@@ -649,6 +738,7 @@
       "confidence": "low"
     },
     "hatch_round_aft_left": {
+        "z_top_m": 0.735,
       "what": "A round bolted hatch in the floor by the aft left corner, dished in the middle, eight flange bolts",
       "centre_xy_m": [
         -0.39,
@@ -691,6 +781,64 @@
     },
     "raised": [
       {
+        "id": "floor_aft_left",
+        "what": "The rear floor left of the plinth, higher than the aisle's base: level round the bolted hatch, rising towards the aisle's stair",
+        "x_from_m": -0.85,
+        "x_to_m": -0.2,
+        "section_yz_m": [
+          [
+            -1.03,
+            0.62
+          ],
+          [
+            -0.25,
+            0.62
+          ],
+          [
+            -0.25,
+            0.79
+          ],
+          [
+            -0.55,
+            0.74
+          ],
+          [
+            -1.03,
+            0.73
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py cloud (wwp_gecko g099-a, g099-d, g100-a, g100-c, g100-d through their fused depth maps), docs/OSA_INTERIOR_HOLISTIC.md section 37: median z 0.70-0.77 for y -1.0 to -0.5 and 0.79 at y -0.37, x -0.85 to -0.25, where the old floor was 0.62",
+        "confidence": "low",
+        "material": "Floor_Steel"
+      },
+      {
+        "id": "hump_aft",
+        "what": "The raised strip along the inboard side of the rear floor",
+        "x_from_m": -0.2,
+        "x_to_m": -0.1,
+        "section_yz_m": [
+          [
+            -0.85,
+            0.62
+          ],
+          [
+            -0.5,
+            0.62
+          ],
+          [
+            -0.5,
+            0.85
+          ],
+          [
+            -0.85,
+            0.84
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py cloud (wwp_gecko g099-a, g099-d, g100-a, g100-c, g100-d through their fused depth maps), docs/OSA_INTERIOR_HOLISTIC.md section 37: median z 0.84-0.86 for x -0.25 to -0.1, y -0.85 to -0.5",
+        "confidence": "low",
+        "material": "Paint_Interior"
+      },
+      {
         "id": "plinth_under_cabinet",
         "what": "The raised floor directly beneath the 0096-9M2: flat at 0.95, its forward edge sloping down to the walkway; the cabinet's connectors come down on it",
         "x_from_m": -0.5,
@@ -709,30 +857,103 @@
             0.78
           ],
           [
-            0.7,
-            0.89
+            0.69,
+            0.86
           ],
           [
             0.62,
-            0.95
+            0.875
           ],
           [
             0.33,
-            0.95
+            0.88
           ]
         ],
-        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the top at z 0.954 for y 0.53-0.60 (normal within 7 degrees of vertical), the sloped plate with the data plate at y 0.62-0.70, z 0.89-0.95, 41 degrees",
+        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the top at z 0.954 for y 0.53-0.60 (normal within 7 degrees of vertical), the sloped plate with the data plate at y 0.62-0.70, z 0.89-0.95, 41 degrees. Top lowered 7 cm on the fused depth map, docs/OSA_INTERIOR_HOLISTIC.md section 35: z 0.87-0.89 for y 0.40-0.60 (the sloped front at y 0.69-0.73, z 0.81-0.86 as before)",
         "confidence": "medium",
         "material": "Paint_Interior"
       },
       {
-        "id": "block_beside_cabinet",
-        "what": "The stepped block on the right of the cabinet's foot: the lower step, a sloped face, and a near-vertical plate up to 1.18",
-        "x_from_m": 0.03,
-        "x_to_m": 0.36,
+        "id": "casting_before_housing",
+        "what": "The low casting on the floor before the housing, flat on top, its front falling to the floor plate",
+        "x_from_m": 0.1,
+        "x_to_m": 0.3,
         "section_yz_m": [
           [
+            0.45,
+            0.7
+          ],
+          [
+            0.75,
+            0.7
+          ],
+          [
+            0.72,
+            0.8
+          ],
+          [
+            0.65,
+            0.845
+          ],
+          [
+            0.45,
+            0.85
+          ]
+        ],
+        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 35: wwp_gecko g096-a through the fused depth map: flat at z 0.84-0.86 for x 0.11-0.28, y 0.43-0.65 (normal within 4 degrees of vertical), its front near (0.11, 0.71, 0.80)",
+        "confidence": "low",
+        "material": "Paint_Interior"
+      },
+      {
+        "id": "housing_beside_cabinet",
+        "what": "The sheet-metal housing on the right of the cabinet's foot, higher towards the wall: its top falling towards the cabinet, the bright sloped panel below that top's edge, the lower housing with a sloped front, a low flat top before it and the floor plate forward. Each section's points match, in order, the other's",
+        "x_from_m": 0.03,
+        "x_to_m": 0.47,
+        "section_at_x_from_yz_m": [
+          [
+            -0.05,
+            0.7
+          ],
+          [
+            0.78,
+            0.7
+          ],
+          [
+            0.78,
+            0.76
+          ],
+          [
+            0.53,
+            0.76
+          ],
+          [
+            0.52,
+            0.845
+          ],
+          [
+            0.44,
+            0.85
+          ],
+          [
+            0.33,
+            0.885
+          ],
+          [
             0.25,
+            0.9
+          ],
+          [
+            0.23,
+            1.0
+          ],
+          [
+            -0.05,
+            1.0
+          ]
+        ],
+        "section_at_x_to_yz_m": [
+          [
+            -0.05,
             0.7
           ],
           [
@@ -741,30 +962,38 @@
           ],
           [
             0.78,
-            0.93
+            0.76
+          ],
+          [
+            0.53,
+            0.76
+          ],
+          [
+            0.52,
+            0.85
           ],
           [
             0.46,
-            0.93
+            0.855
           ],
           [
-            0.41,
-            1.03
+            0.4,
+            0.995
           ],
           [
-            0.35,
-            1.06
-          ],
-          [
-            0.35,
-            1.18
+            0.33,
+            1.0
           ],
           [
             0.25,
-            1.18
+            1.14
+          ],
+          [
+            -0.05,
+            1.155
           ]
         ],
-        "source": "tools/recon/holistic_diff.py measure, docs/OSA_INTERIOR_HOLISTIC.md section 33: wwp_gecko g096-a registered on the traced racks: the step's top at z 0.93 (x 0.13-0.31, y 0.57-0.73), the sloped face at y 0.41-0.45, z 0.96-1.03 (25 degrees off vertical), the plate at y 0.35, z 1.05-1.18 (x 0.05-0.34)",
+        "source": "tools/recon/holistic_diff.py measure and the fused depth maps, docs/OSA_INTERIOR_HOLISTIC.md section 35: wwp_gecko g096-a: the panel's top edge from (0.01, 0.23, 1.00) to (0.42, 0.25, 1.12), its lower edge from (-0.01, 0.23, 0.90) to (0.38, 0.33, 0.98), the top behind it to (0.42, 0.15, 1.13) and (0.09, -0.06, 1.00), the lower housing's front 38 degrees from the floor at y 0.36-0.44, a flat top at z 0.85 for y 0.43-0.52, the floor at 0.76 forward of y 0.5. The section at x 0.47 is the measured slope carried 5 cm on to the corner plate",
         "confidence": "medium",
         "material": "Paint_Interior"
       },
