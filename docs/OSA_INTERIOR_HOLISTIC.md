@@ -1334,3 +1334,49 @@ The fused cloud puts the rear floor left of the plinth at z 0.70-0.77, where the
 All low confidence: the heights are depth-map medians, and the box's distance from the bulkhead is the network's. The stair's second plate (0.66) stays, so the step between the plates is now larger than the photos suggest. The hung machine stands aft of the walk areas in `data/cabins/osa_ak.json` (they end at y 0.5), so it blocks no one's path. Not modelled: the braided cables, the blue hose, the tray by the hatch, the pressed creases and the bolts on the hump.
 
 **Score.** Sections 35 to 37 together: 28.5 % to 28.6 % over the same 21 views, median miss 0.066 to 0.059 m. After section 36 it stood at 29.0 %. The rear views the new parts stand in fell against the baseline (g099-a 5.8 to 1.9 %, g100-c 49.4 to 43.0 %, g100-a 64.5 to 61.6 %) and g093-b fell too (30.5 to 26.1 %, not explained). The new parts carry no trace pins, so these views cannot confirm them; they were judged side by side.
+
+## 38. The seats lie on the bench; the ledge and the post left (10 Nov 2026)
+
+**Why g093-b fell.** Its sheet showed the seats of section 36 standing 0.55-0.60 m in front of the left rack, where the photo, taken from eye height 1.37 m, sees the rack's lower panels with nothing in front. The depth maps of g094-d and g095-c, profiled across the bench, settle it: the bench's green edge is at z 1.0 by the aisle (x -0.5), the bench top of the model, and the pans span the bench from the console side (x -0.97) to the aisle edge (x -0.51), their pads' tops at 1.18-1.25. No back stands up. A first check that put the pans on the old backs' plane gave them a pitch of 0.32 m, half the seats' 0.645 m, which is what gave it away.
+
+**What changed.** `SM_OperatorSeat` is a pressed pan on the bench, tipped up towards the console about its aisle edge (`SEAT_PAN_TILT_DEG` 12, low confidence: g095-c shows a tilt; at 25 degrees the pan stood round g100-b's lens, which the photographer held at z 1.26 over the bench at x -0.85, and that view scored nothing, so the tilt is kept under that bound), with a canvas pad, a tube hoop at its front, struts under it and webbing over the aisle edge.
+
+**Left to decide.** The photos put the seats about 15 cm higher than the cabin's seat height (SEAT_Z 1.05, from the operators' eye points at 1.83 less a seated eye height). Raising them raises the operators' eyes to about 2.0 m, close to the lining (2.13-2.2 above them), and moves their bodies; it is the project owner's choice, so the seats keep the cabin's height for now.
+
+**Not changed, and why.**
+- The left ledge (F001, 5 views): the joint solve has no triangulated point between x -1.0 and -0.4 above z 1.95, and at the ceiling the depth maps disagree with each other (g093-b's sheet calls the same lining 0.2 m too near). With nothing but the network's depth there, the mirrored section stays.
+- The post (F004): four triangulated points at x 0.70-0.71, y 0.07-0.32, z 1.49-1.71 lie aft of the leg. Carrying the leg to y 0.07 covered the rack's lower ribs that g098-b shows open; g092-a shows a slender raking strut there instead. The leg was put back; the strut is in section 39.
+
+**A trap found on the way.** A reused mesh (the seats, the GA-3) is placed by its bounding box's centre (`centre_m`), and `tools/cabin_mesh_sync.py` keeps that centre unless the part stands on the floor. When the seat's webbing came to hang 0.21 m below the pan, the box grew downwards and the same centre lifted the pans about 0.25 m; g100-b, whose camera the solve puts over the operator's seat, then started inside it and scored nothing. The seats' centres are now set so the pan's underside sits on the bench top (z 0.981). After changing a reused mesh's height, check its centre by hand.
+
+**Score after section 38.** 31.6 % over 20 views, median miss 0.055 m (the same views at the baseline: 29.0 %, 0.062 m). g093-b rose from 30.5 to 53.5 %, g095-c from 14.3 to 27.8 %, g094-d from 16.9 to 22.2 %. g100-b now falls outside its own withheld-pin rule and is not counted.
+
+## 39. The strut by the right post; the rear views checked on the door (10 Nov 2026)
+
+**The strut** (removed again in section 41: the points belong to the cover behind the leg). The four triangulated points aft of the right post's leg (x 0.70-0.71, y 0.07-0.32, z 1.49-1.71, each seen in three or four of g096-a, g098-a, g098-b, g092-a) lie on one line falling about 41 degrees towards the rear, and g092-a shows a slender raking bar there. It is modelled as a flat bar 45 x 10 mm at x 0.705, its broad face to the aisle, from the post (y 0.55, z 1.9) down to the aft plinth's top (y -0.35, z 1.13). The points fix its line; its ends and section are SAM3D's (low confidence).
+
+**The rear views checked.** g099-a, g100-a and g100-c score below the baseline. Comparing the blower's opening by raw pixel positions suggested it sat 0.08 m too near the door; moved, it made those views worse. Registered on the door's edge, which both photo and render show, the original placement agrees within about 0.02 m, so the move was reverted. Renders are offset and scaled a little against their photos: judge a part's place against an anchor seen in both, never by raw pixels. What pulls those views down is not found yet.
+
+**Score after section 39.** 31.7 % over 20 views, median miss 0.054 m (the same views at the baseline: 29.0 %, 0.062 m). g098-b rose from 20.6 to 22.5 %, g092-a from 14.8 to 14.9 %; g098-c fell from 21.3 to 20.7 %.
+
+## 40. The posts as one channel (10 Nov 2026)
+
+The owner saw the right post in g098-a's render as two pieces: the upright part and the leg were two separate solids at different depths (y 0.52-0.64 above the knee, 0.28-0.47 below), with a step between them, and the leg was a solid wedge out to the back line. wwp_gecko g098-a shows one pressed channel: upright beside the rack, bending at the knee into the raking leg with no step, and a thin plate (the gusset, carrying the latch and its bracket) set back behind the leg.
+
+`build_posts` now sweeps one channel along each post's outline, 0.1 m deep from the aisle edge towards the wall (`posts.channel_depth_m`). It runs at the upright's y above the knee and the leg's y below, and at the knee halfway between the two, so the bend is smooth. Behind the leg, a 6 mm gusset 0.06 m behind the leg's forward face fills out to the back line, from the floor to the knee. The outlines, knees and y ranges are unchanged; the channel's depth and the gusset's place and thickness are SAM3D's. The left post is built the same way.
+
+**Score after section 40.** 33.0 % over 19 views, median miss 0.057 m (the same views at the baseline: 30.4 %, 0.059 m; g093-a fell out of the counted set). The views of the right post rose: g098-a from 22.5 to 24.0 %, g098-b from 22.5 to 22.9 %, g098-c from 20.7 to 24.8 %, g099-d from 8.0 to 9.2 %. Views of the left post fell: g092-e from 7.4 to 4.0 %, g093-c from 27.6 to 24.1 %, g092-a from 14.9 to 14.2 %. The left post's channel depth or gusset may want their own values, read from g092 and g093.
+
+## 41. The right post's leg and the cover beside it, from the photo's rays (10 Nov 2026)
+
+The owner judged section 40's post still wrong against the depth: the leg should be more upright, and a cover that follows its curve sits a little to the side, a latch joining the two. g098-a, measured properly, bears that out.
+
+**How it was measured.** The camera of g098-a looks aft along the aisle, so its reference depth fixes how far aft a surface is, but at an edge it mixes the near and far sides. Each edge's pixel was therefore taken as a ray (`registered_camera`, `rays_of`) and cut with the plane that the reference depth gives that surface: the leg's forward face at y 0.47 (depth y 0.45-0.50), the cover's face at y 0.39 (depth 0.38-0.45). The rack panels on the left, seen in photo and render alike, were the anchor for comparing the two.
+
+**The leg** (`posts.right.x_z_m`). Its aisle edge runs x 0.63 at z 1.48, 0.61 at 1.42, 0.59 at 1.35, 0.57 at 1.25, 0.54 at 1.16, 0.51 at 1.06: about 15 degrees off the vertical, where the model had 45 (0.51 at 1.36 down to 0.36 at 0.96). Its forward face is 0.04 m wide (`channel_depth_m` 0.045, was 0.1, for both posts), and only a narrow strip of its aisle-facing side shows, with the rack straight beyond: the leg is 0.06 m deep (y 0.41-0.47), not 0.19. The joint solve's points at y 0.3-0.4 that set the old depth, and section 39's strut, fit the cover instead; the strut is removed. Below z 1.06 the leg is hidden, and the same rake is carried to the floor.
+
+**The cover** (`posts.right.shroud`, `build_shroud`). A pressed cover with its face at y 0.39. Its top is at z 1.40-1.41, rounding over to x 0.54 at z 1.35, and its aisle edge runs down beside the leg 0.05 m further into the aisle (0.525 at 1.28, 0.49 at 1.17, 0.48 at 1.11). The dark band in the photo is its side and top running aft: cut with the edge's x, the side is about 0.1 m deep, so it is built 0.12 m deep. The latch is a bent plate from the leg's face to the cover's (x 0.54-0.65, z 1.28-1.38), with its hasp's wire loop hanging off the leg. A long bracket on the cover's face below it spans x 0.48-0.60, z 1.13-1.31. The left post keeps section 40's gusset.
+
+**Checked from other angles.** g098-b, g096-a and g092-a: the leg stands near upright beside the rack with the cover inboard of it, as the photos show.
+
+**Score after section 41.** 34.1 % over 19 views, median miss 0.039 m (the same views at the baseline: 30.4 %, 0.059 m). g098-a rose from 24.0 to 28.0 %, g098-b from 22.9 to 24.3 %, g098-c from 24.8 to 25.9 %, g093-c from 24.1 to 34.6 %, g092-a from 14.2 to 16.8 %, g092-e from 4.0 to 4.8 %; g099-d fell from 9.2 to 8.9 %.

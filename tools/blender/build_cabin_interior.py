@@ -625,17 +625,67 @@ def build_aft_fittings(b, shell):
 
 
 def build_posts(b, shell):
-    """The bent pressed posts between the racks: the outline on the aisle side against the back line (a closed section)."""
+    """The bent pressed posts between the racks: one channel swept along the outline on the aisle side, upright beside
+    the rack and, below the knee, raking inboard and further aft, with no step between (wwp_gecko g098-a); behind the
+    leg a thin gusset plate out to the back line (docs/OSA_INTERIOR_HOLISTIC.md section 40)."""
+    ps = shell['posts']
+    d, gt, gb = ps['channel_depth_m'], ps['gusset_t_m'], ps['gusset_set_back_m']
     for side in ('right', 'left'):
-        p = shell['posts'][side]
+        p = ps[side]
         outline = [tuple(q) for q in p['x_z_m']]
         back = p['back_x_m']
-        knee = min(range(len(outline)), key=lambda i: abs(outline[i][1] - p['knee_z_m']))    # the upright part, and below the knee the leg, further aft
-        for part, ys in ((outline[knee:], p['y_m']), (outline[:knee + 1], p['leg_y_m'])):
-            sec = part + [(back, part[-1][1]), (back, part[0][1])]
-            if side == 'left':
-                sec = list(reversed(sec))
-            b.prism_y(sec, ys[0], ys[1], 'Paint_Interior')
+        knee = min(range(len(outline)), key=lambda i: abs(outline[i][1] - p['knee_z_m']))
+        up, leg = p['y_m'], p['leg_y_m']
+
+        def ys(i):
+            if i < knee:
+                return leg
+            if i > knee:
+                return up
+            return ((up[0] + leg[0]) / 2, (up[1] + leg[1]) / 2)     # the bend: halfway between leg and upright
+        sgn = 1.0 if back > outline[0][0] else -1.0
+        rings = []
+        for i, (x, z) in enumerate(outline):
+            y0, y1 = ys(i)
+            xw = x + sgn * d
+            xw = min(xw, back) if sgn > 0 else max(xw, back)
+            rings.append([b.bm.verts.new(P(x, y0, z)), b.bm.verts.new(P(x, y1, z)),
+                          b.bm.verts.new(P(xw, y1, z)), b.bm.verts.new(P(xw, y0, z))])
+        idx = b.mat('Paint_Interior')
+        faces = [rings[0], list(reversed(rings[-1]))]
+        for r0, r1 in zip(rings, rings[1:]):
+            for k in range(4):
+                m = (k + 1) % 4
+                faces += [(r0[k], r0[m], r1[m]), (r0[k], r1[m], r1[k])]
+        for f in faces:
+            b.bm.faces.new(f).material_index = idx
+        if 'shroud' in p:
+            build_shroud(b, p['shroud'])
+            continue
+        # the gusset: from the channel's wall-side edge out to the back line, from the floor to the knee
+        sec = [(min(x + sgn * d, back) if sgn > 0 else max(x + sgn * d, back), z) for x, z in outline[:knee + 1]]
+        sec += [(back, outline[knee][1]), (back, outline[0][1])]
+        if side == 'left':
+            sec = list(reversed(sec))
+        yg = leg[1] - gb
+        b.prism_y(sec, yg - gt / 2, yg + gt / 2, 'Paint_Interior')
+
+
+
+def build_shroud(b, sh):
+    """The pressed cover behind the right post's leg (docs/OSA_INTERIOR_HOLISTIC.md section 41): its outline at y facing
+    forward, carried aft by its depth; the latch's bent plate from the leg's face to the cover's, a bracket on the
+    cover's face and the hasp's wire loop."""
+    y = sh['y_m']
+    ol = [tuple(q) for q in sh['outline_x_z_m']]
+    b.prism_y(list(reversed(ol)), y - sh['depth_m'], y, 'Paint_Interior')
+    (x0, z0), (x1, z1) = sh['bracket_x_z_m']
+    b.box(x0, x1, y, y + 0.01, z0, z1, 'Paint_Interior')
+    p0, p1 = Vector(sh['latch_from_xyz_m']), Vector(sh['latch_to_xyz_m'])
+    u = (p1 - p0).normalized()
+    v = Vector((0, 0, 1))
+    b.obox((p0 + p1) * 0.5, u, v, u.cross(v).normalized(), ((p1 - p0).length, sh['latch_h_m'], 0.006), 'Paint_Interior')
+    b.tube([tuple(q) for q in sh['hasp_xyz_m']], 0.005, 'Metal_Steel', seg=8)
 
 
 def build_cab_corner_posts(b, shell):
@@ -1334,32 +1384,41 @@ def build_bench():
     return finish(b, bevel=0.004)
 
 
+SEAT_PAN_TILT_DEG = 12.0      # the pans tipped up towards the console about their aisle edge: g095-c shows a tilt; g100-b, taken from z 1.26 at x -0.85 over the bench, bounds it below about 20 degrees (docs/OSA_INTERIOR_HOLISTIC.md section 38). Low confidence
+
+
 def build_operator_seat():
-    """One operator's place on the bench, built facing forward (yaw -90 faces the console): a green cushion nearly as wide as the seat's pitch, so the row reads as one
-    long cushion, and behind it a pressed-steel pan on a bent tube, a canvas pack strapped to its aisle side, webbing hanging from it (wwp_gecko g094-d, g095-c).
-    usaf_shaw_2017 -019 shows an olive pad and a worn brown cushion, on another vehicle; the book's two photographs are used."""
+    """One operator's place on the bench, built facing forward (yaw -90 faces the console): a pressed-steel pan on the bench, tipped up towards
+    the console about its aisle edge, its rim riveted, a canvas pad on it, a bent tube hoop at its front and two webbing straps hanging over the
+    aisle edge to the floor. wwp_gecko g094-d and g095-c through their depth maps: the pans span the bench from the console side (x -0.97) to the
+    aisle edge (x -0.51) with no back standing up, which is why g093-b sees the rack's lower panels unobstructed (docs/OSA_INTERIOR_HOLISTIC.md
+    section 38). The photos put the pads' tops at z 1.18-1.25; the seat is kept at the cabin's seat height (SEAT_Z) because the operators' eye
+    points and bodies stand on it."""
     b = Builder('SM_OperatorSeat')
     # local frame: x across the seat (right), y forward (towards the console), z up; origin under the seat centre
-    w, d = 0.645, 0.38
-    front = [(w / 2 * math.cos(math.radians(a)), d / 2 - 0.08 + 0.08 * math.sin(math.radians(a)))
-             for a in [0 + 15 * k for k in range(13)]]
-    outline = [(-w / 2, -d / 2), (w / 2, -d / 2)] + front
-    b.slab(Vector((0, 0, 0.075)), Vector((1, 0, 0)), Vector((0, 1, 0)), outline, [], 0.075, 'Vinyl_Olive')
-    lean = math.radians(8)
-    v = Vector((0, -math.sin(lean), math.cos(lean)))
-    n = Vector((0, -math.cos(lean), -math.sin(lean)))               # towards the aisle
-    c = Vector((0, -d / 2 - 0.02, 0.32))
-    b.rounded_box(c + n * 0.004, (0.48, 0.42, 0.012), 0.05, 'Paint_Rack', u=Vector((1, 0, 0)), v=v, seg=4)            # the pan's rim
-    b.rounded_box(c - n * 0.012, (0.42, 0.36, 0.022), 0.05, 'Paint_Rack', u=Vector((1, 0, 0)), v=v, seg=4)            # its pressed centre
-    for k in range(-3, 4):                                                                                            # rivets along its rim
-        for su, sv in ((k * 0.07, 0.195), (k * 0.07, -0.195)):
-            q = c + Vector((su, 0, 0)) + v * sv + n * 0.012
-            b.cylinder(tuple(q), tuple(q + n * 0.004), 0.006, 'Metal_Steel', seg=8, smooth=False)
-    b.rounded_box(c + n * 0.044 + v * 0.01, (0.3, 0.26, 0.07), 0.03, 'Canvas', u=Vector((1, 0, 0)), v=v, seg=3)       # the pack
-    for x in (-0.2, 0.2):                                                                                           # the webbing
-        top = c + Vector((x, 0, 0)) + v * 0.2 + n * 0.012
-        b.tube([tuple(top), tuple(top + n * 0.085 - v * 0.05), tuple(c + Vector((x, 0, 0)) - v * 0.2 + n * 0.09), (x, -d / 2 - 0.1, 0.0)], 0.01, 'Canvas', seg=6)
-    b.tube([(-0.2, -d / 2 + 0.02, 0.0), (-0.21, -d / 2 - 0.02, 0.48), (-0.12, -d / 2 - 0.05, 0.535), (0.12, -d / 2 - 0.05, 0.535), (0.21, -d / 2 - 0.02, 0.48), (0.2, -d / 2 + 0.02, 0.0)], 0.011, 'Metal_Steel')
+    w, d, y0 = 0.54, 0.46, -0.2                     # the pan's width, its depth, its aisle edge
+    a = math.radians(SEAT_PAN_TILT_DEG)
+    v = Vector((0, math.cos(a), math.sin(a)))       # along the pan, towards the console
+    n = Vector((0, -math.sin(a), math.cos(a)))      # out of the pan
+    o = Vector((0, y0, 0.0))
+
+    def on(x, s_, h):
+        """A point on the pan: x across, s_ from its aisle edge, h above its underside."""
+        return o + Vector((x, 0, 0)) + v * s_ + n * h
+
+    b.rounded_box(on(0, d / 2, 0.02), (w, d, 0.04), 0.06, 'Paint_Rack', v=v, seg=4)                                    # the pan
+    b.rounded_box(on(0, d / 2, 0.045), (w - 0.04, d - 0.04, 0.012), 0.05, 'Paint_Rack', v=v, seg=4)                    # its rim's lip
+    for k in range(-3, 4):                                                                                              # rivets along the rim
+        for s_ in (0.012, d - 0.012):
+            b.cylinder(tuple(on(k * 0.075, s_, 0.051)), tuple(on(k * 0.075, s_, 0.055)), 0.006, 'Metal_Steel', seg=8, smooth=False)
+    b.rounded_box(on(0, d / 2 - 0.01, 0.075), (w - 0.1, d - 0.12, 0.06), 0.03, 'Canvas', v=v, seg=3)                 # the canvas pad
+    b.rounded_box(on(0, d / 2 + 0.07, 0.112), (w - 0.2, 0.16, 0.025), 0.012, 'Canvas', v=v, seg=3)                    # its flap
+    b.tube([tuple(on(x, d - s_, h)) for x, s_, h in ((-0.2, 0.03, 0.04), (-0.19, 0.05, 0.1), (-0.08, 0.08, 0.13), (0.08, 0.08, 0.13),
+                                                     (0.19, 0.05, 0.1), (0.2, 0.03, 0.04))], 0.011, 'Metal_Steel')   # the hoop at its front, just over the pad (g094-d)
+    for x in (-0.17, 0.17):                                                                                             # the webbing over the aisle edge
+        b.tube([tuple(on(x, 0.12, 0.09)), tuple(on(x, 0.02, 0.07)), (x, y0 - 0.04, -0.02), (x * 1.1, y0 - 0.07, -0.2)], 0.01, 'Canvas', seg=6)
+    for x in (-0.2, 0.2):                                                                                               # the struts holding the pan up
+        b.tube([(x, y0 + 0.02, 0.0), tuple(on(x, d - 0.05, 0.0))], 0.011, 'Metal_Steel')
     return finish(b, reuse=True)
 
 
