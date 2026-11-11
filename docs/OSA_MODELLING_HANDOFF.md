@@ -448,10 +448,45 @@ Changed from the scores the same day:
   in the views that see it (air 0.81 to 0.92 and 0.35 to 0.62 within 3 px; the lamp better in two of three).
 - Tried and put back: SP-3M's flap (better in three views, worse in two).
 
+**The operators' seats folded upright, the tin, the cab (11 Nov 2026, second pass).**
+- **The seats.** g093-a shows two of them folded upright: an olive vinyl pad (rolled edge, domed studs round its side)
+  standing over the aisle with its top facing the console, a grey pressed shell under it, a grey tube frame down to
+  pivot brackets at the foot of the bench's aisle face, webbing straps. Folded down (g094-d, g095-c, g096-a, g097-b) the
+  same seat lies on the bench shell up, the gas-mask bag on it: section 38's "pans". `SM_OperatorSeat` is now built
+  folded upright: the pad's pose fitted to its outline in g093-a through the certified camera (a 0.50 x 0.44 x 0.07 m
+  pad, 0.93 overlap), centre x -0.20, z 1.475, leaning back 13 degrees, the depth map within 0.09 m. The views whose
+  photos have them folded down hide them (`state.hide`, now also g093-b, g094-d, g095-c, g097-b). **Open:** g093-a puts
+  the two it sees at y 1.88 and 1.27, about 0.3 m aft of the deputy's and senior's stations; the seats stay at the
+  stations because the operators sit at their columns. Seated on the bench (SEAT_Z) the crewman's seat is folded; a seat
+  that comes down when he sits is not built.
+- **Chest 5937** moved (-0.077, +0.346, +0.05) m: the joint solve's points that g092-a, g096-a and g098-a-c see on its
+  lid's inboard edge (x 0.706-0.718, z 1.47-1.49) and forward end (y 0.09-0.14) put it there; it had moved only outboard
+  with the right racks. Its best view went from 15.1 to 12.5 mm, and every view that sees it improved; what is left is
+  its outboard half, hidden in g098-a behind a dark bag.
+- **The first-aid box is left as it was.** No single move fits: g098-a's red cross wants it about 0.1 m inboard, which
+  g092-a and g096-a (the hangar session) refuse, and the forward move the edge scores liked takes the cross further
+  from g098-a's. It is loose kit in a strap holder, carried in different places in the two sessions.
+- **The cab** (no trusted camera sees it; the grade-B cab cameras put their eyes 1.5 m aft or above the roof, and only
+  g082-b's measured camera of section 30, about +-5 cm, can judge a place). Changed: the steering wheel's spokes are
+  thick and black at 3, 11 and 7 o'clock with a large cup hub (g084-c, g084-a; they were thin and steel at 12, 4 and 8);
+  the gear lever is black with a large ball knob over a gate plate (g083-a, g084-c). **Open, from the review:**
+  - The left R-123M: g082-b shows it on a shock tray on the raised deck under a steel tread cover with a Р-123М-1 end
+    plate, about 0.3 m inboard and 0.25 m aft of the model's set in its well under SŁ-1M. The figure assumes the tray
+    stands on the deck at 0.98 m, and there it would cross the deck's edge (x -0.64) and the rack's lower wall (x
+    -0.651), while g091-d puts the set under SŁ-1M's blocks: not moved until a second view settles it.
+  - The box beside the commander's seat reads А-2 in g087-c; the cabin keeps the commander's A-1 there (his chest
+    switch, intercom and headset are A-1's) and the deputy's A-2 on the left.
+  - Missing or flat: the steel box with an X of pressed beads under the right R-123M (now part of SP-1M's mesh); the
+    DP-3B as a cast box on a bracket with its detector (g085-b); the heater duct under the commander's dash (g085-d,
+    g085-b); the dash's raised plates, chrome bezels and three grab handles (g085-a); the khaki and black boxes on the
+    roof over the driver's screen (g089-a); framed visors.
+  - The gear lever's height (1.26 m from g083-a by eye) looks high against g082-b; the pedals hang on long rods where
+    g084-c shows small pads low over the mat; neither is measured.
+  - Reach: the driver's R-123M is 1.05-1.13 m away and behind him; his chest switch, `intercom.pv` and headset sit on
+    `driver_panel` at x +0.2, 1.07 m from him; the dash plane is 0.88 m ahead of both seated eyes, where g084-c has the
+    wheel's rim nearly at the cushion (eyes or dash perhaps 0.1 m apart in y).
+
 Open:
-- Chest 5937 and the first-aid box moved with the right racks in the frame fix and were never re-measured; they score
-  15-22 mm and 10-14 mm off in three views, but the edge fit runs to its search limit (other structure), so they need a
-  triangulated feature each (the first-aid cross was found by colour in one photo only).
 - SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded
   seat; one view, not settled.
 - SŁ-2M's top blocks (0062-6M's gauges, so's counter strip) reach about 3 cm above the 2.10 m top rail (Fig. 3) in

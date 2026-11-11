@@ -1261,10 +1261,12 @@ def build_rack_sl3m(layout):
 
 
 def build_chest_5937():
-    """The stencilled stowage tin hung on the wall under SP-3M-2 (wwp_gecko g098-a, b, c, session A): its front, length and height triangulated
-    through the joint solve to 2-8 mm; how deep it runs back to the wall is the lid's forward corner and an estimate."""
+    """The stencilled stowage tin hung on the wall under SP-3M-2 (wwp_gecko g098-a, b, c, session A). Re-measured 11 Nov 2026 on the joint
+    solve's points that g092-a, g096-a and g098-a-c see on it, through the certified cameras: its lid's inboard edge at x 0.706-0.718 and
+    z 1.47-1.49, its forward end at y 0.09-0.14 (it had been 0.35 m aft, moved only outboard with the right racks); its length and depth are
+    the first triangulation's (0.49, 0.24); how deep it runs back to the wall is an estimate."""
     b = Builder('SM_Chest5937')
-    x0, x1, y0, y1, z0, z1 = 0.49 + RIGHT_SHIFT_X, 0.731 + RIGHT_SHIFT_X, -0.736, -0.246, 1.27, 1.40     # not yet measured again through certified cameras: moved with the right racks
+    x0, x1, y0, y1, z0, z1 = 0.715, 0.956, -0.39, 0.10, 1.32, 1.45
     cx, cy, w, d = (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0
     plan = rrect(cx, cy, w, d, 0.04)
     def layer(grow, top, t, mat):
@@ -1273,8 +1275,8 @@ def build_chest_5937():
     for zb in (z0 + 0.04, z0 + 0.085):      # the two pressed beads round its body
         layer(0.004, zb + 0.005, 0.01, 'Paint_Interior')
     layer(0.008, z1 + 0.024, 0.024, 'Paint_Interior')           # the lid and its rim
-    for y in (-0.365, -0.612):              # the two hasps
-        b.box(x0 - 0.016, x0 - 0.008, y - 0.009, y + 0.009, 1.355, z1 + 0.03, 'Metal_Steel')
+    for y in (y0 + 0.371, y0 + 0.124):      # the two hasps
+        b.box(x0 - 0.016, x0 - 0.008, y - 0.009, y + 0.009, z0 + 0.085, z1 + 0.03, 'Metal_Steel')
     return finish(b, bevel=0.002)
 
 
@@ -1304,6 +1306,9 @@ def build_first_aid():
         tl, tr = Vector(c_ - u_ * size[ui] / 2 + v_ * size[vi] / 2), Vector(c_ + u_ * size[ui] / 2 + v_ * size[vi] / 2)
         bl, br = Vector(c_ - u_ * size[ui] / 2 - v_ * size[vi] / 2), Vector(c_ + u_ * size[ui] / 2 - v_ * size[vi] / 2)
         thick = float(size[k])
+    # 11 Nov 2026: no one move fits the certified cameras: g098-a's red cross wants it about 0.1 m inboard, which g092-a and g096-a (the
+    # hangar session) refuse, and the forward move the edge scores liked takes the cross further from g098-a's. Loose kit, placed
+    # differently between the sessions; left as fitted (docs/OSA_MODELLING_HANDOFF.md section 12)
     centre = (tl + tr + bl + br) / 4
     u = (tr - tl).normalized()
     side = (tl + tr - bl - br)
@@ -1575,41 +1580,65 @@ def build_bench():
     return finish(b, bevel=0.004)
 
 
-SEAT_PAN_TILT_DEG = 12.0      # the pans tipped up towards the console about their aisle edge: g095-c shows a tilt; g100-b, taken from z 1.26 at x -0.85 over the bench, bounds it below about 20 degrees (docs/OSA_INTERIOR_HOLISTIC.md section 38). Low confidence
+SEAT_PAD = (0.50, 0.44, 0.07)       # the seat's padded top: across, deep, thick (the shells' 0.54 x 0.46 of g094-d, less the rim); g095-d's and g093-a's olive vinyl pads
+SEAT_UP_CENTRE_XZ = (-0.20, 1.475)  # the pad's centre folded upright (body x, z): fitted on g093-a's outline through its certified camera at 0.93 overlap, the depth map within 0.09 m
+SEAT_UP_LEAN_DEG = 13.0             # folded upright, its top leans back towards the aisle (the same fit: 12.7 degrees)
+SEAT_PIVOT_XZ = (-0.52, 0.72)       # the frame's pivot brackets at the foot of the bench's aisle face (g094-d)
+BENCH_TOP_Z = 0.981                 # the seats' origin height (the bench's top)
 
 
 def build_operator_seat():
-    """One operator's place on the bench, built facing forward (yaw -90 faces the console): a pressed-steel pan on the bench, tipped up towards
-    the console about its aisle edge, its rim riveted, a canvas pad on it, a bent tube hoop at its front and two webbing straps hanging over the
-    aisle edge to the floor. wwp_gecko g094-d and g095-c through their depth maps: the pans span the bench from the console side (x -0.97) to the
-    aisle edge (x -0.51) with no back standing up, which is why g093-b sees the rack's lower panels unobstructed (docs/OSA_INTERIOR_HOLISTIC.md
-    section 38). The photos put the pads' tops at z 1.18-1.25; the seat is kept at the cabin's seat height (SEAT_Z) because the operators' eye
-    points and bodies stand on it."""
+    """One operator's seat, built facing forward (yaw -90 faces the console), folded upright as wwp_gecko g093-a shows two of them: the
+    olive vinyl pad (a rolled edge, a row of domed studs round its side) standing over the aisle with its top facing the console, the grey
+    pressed shell under it with a riveted rim, a bent tube hoop and the gas-mask bag, carried on a grey tube frame from pivot brackets at the
+    foot of the bench's aisle face, and two webbing straps. Folded down (g094-d, g095-c, g096-a, g097-b) the seat lies on the bench, shell
+    up with the bag on it: the pans of section 38. g093-a puts the two backs it sees about 0.3 m aft of the deputy's and senior's stations;
+    the seats keep their stations' places because the operators sit at their columns (docs/OSA_MODELLING_HANDOFF.md section 12).
+    Origin: under the seat centre at the bench top."""
     b = Builder('SM_OperatorSeat')
-    # local frame: x across the seat (right), y forward (towards the console), z up; origin under the seat centre
-    w, d, y0 = 0.54, 0.46, -0.2                     # the pan's width, its depth, its aisle edge
-    a = math.radians(SEAT_PAN_TILT_DEG)
-    v = Vector((0, math.cos(a), math.sin(a)))       # along the pan, towards the console
-    n = Vector((0, -math.sin(a), math.cos(a)))      # out of the pan
-    o = Vector((0, y0, 0.0))
+    # local frame: x across the seat (right), y forward (towards the console: body -x), z up; origin under the seat centre on the bench top
+    pw, ph, pt_ = SEAT_PAD
+    lean = math.radians(SEAT_UP_LEAN_DEG)
+    up = Vector((0, -math.sin(lean), math.cos(lean)))      # up the standing pad
+    face = Vector((0, math.cos(lean), math.sin(lean)))     # out of the pad, towards the console
+    e = 0.01
+    centre = Vector((0, -(SEAT_UP_CENTRE_XZ[0] + 0.71), SEAT_UP_CENTRE_XZ[1] - BENCH_TOP_Z))    # the pad's middle (the stations' x -0.71)
+    hinge = centre + face * (pt_ / 2) - up * (ph / 2 + e)  # the pad face's bottom edge
+    pivot = Vector((0, -(SEAT_PIVOT_XZ[0] + 0.71), SEAT_PIVOT_XZ[1] - BENCH_TOP_Z))
 
-    def on(x, s_, h):
-        """A point on the pan: x across, s_ from its aisle edge, h above its underside."""
-        return o + Vector((x, 0, 0)) + v * s_ + n * h
+    def at(x, s_, t):
+        """A point on the back: x across, s_ up from the hinge, t behind the pad's face (towards the aisle)."""
+        return hinge + Vector((x, 0, 0)) + up * s_ - face * t
 
-    b.rounded_box(on(0, d / 2, 0.02), (w, d, 0.04), 0.06, 'Paint_Rack', v=v, seg=4)                                    # the pan
-    b.rounded_box(on(0, d / 2, 0.045), (w - 0.04, d - 0.04, 0.012), 0.05, 'Paint_Rack', v=v, seg=4)                    # its rim's lip
+    b.rounded_box(at(0, e + ph / 2, 0), (pw, ph, pt_), 0.06, 'Vinyl_Olive', v=up, seg=5)                               # the pad (grows towards the aisle)
+    ring = rrect(0, 0, pw - 0.014, ph - 0.014, 0.055, 5)                                                                # its rolled edge on the face
+    b.tube([tuple(at(x, e + ph / 2 + y, 0.006)) for x, y in ring + ring[:1]], 0.008, 'Vinyl_Olive', seg=6)
+    for k in range(7):                                                                                                  # domed studs on its sides near the shell
+        s_ = e + 0.03 + k * (ph - 0.06) / 6
+        for sx in (-1, 1):
+            b.cylinder(tuple(at(sx * pw / 2 - sx * 0.002, s_, pt_ - 0.012)), tuple(at(sx * (pw / 2 + 0.006), s_, pt_ - 0.012)), 0.0065, 'Metal_Steel', seg=8)
+    for k in range(-3, 4):
+        b.cylinder(tuple(at(k * 0.065, e + ph - 0.002, pt_ - 0.012)), tuple(at(k * 0.065, e + ph + 0.006, pt_ - 0.012)), 0.0065, 'Metal_Steel', seg=8)
+    sh = pt_                                                                                                            # the shell behind the pad
+    b.rounded_box(at(0, e + ph / 2, sh), (pw + 0.04, ph + 0.02, 0.035), 0.06, 'Paint_Rack', v=up, seg=4)
+    b.rounded_box(at(0, e + ph / 2, sh + 0.035), (pw, ph - 0.02, 0.012), 0.05, 'Paint_Rack', v=up, seg=4)             # its rim's lip
     for k in range(-3, 4):                                                                                              # rivets along the rim
-        for s_ in (0.012, d - 0.012):
-            b.cylinder(tuple(on(k * 0.075, s_, 0.051)), tuple(on(k * 0.075, s_, 0.055)), 0.006, 'Metal_Steel', seg=8, smooth=False)
-    b.rounded_box(on(0, d / 2 - 0.01, 0.075), (w - 0.1, d - 0.12, 0.06), 0.03, 'Canvas', v=v, seg=3)                 # the canvas pad
-    b.rounded_box(on(0, d / 2 + 0.07, 0.112), (w - 0.2, 0.16, 0.025), 0.012, 'Canvas', v=v, seg=3)                    # its flap
-    b.tube([tuple(on(x, d - s_, h)) for x, s_, h in ((-0.2, 0.03, 0.04), (-0.19, 0.05, 0.1), (-0.08, 0.08, 0.13), (0.08, 0.08, 0.13),
-                                                     (0.19, 0.05, 0.1), (0.2, 0.03, 0.04))], 0.011, 'Metal_Steel')   # the hoop at its front, just over the pad (g094-d)
-    for x in (-0.17, 0.17):                                                                                             # the webbing over the aisle edge
-        b.tube([tuple(on(x, 0.12, 0.09)), tuple(on(x, 0.02, 0.07)), (x, y0 - 0.04, -0.02), (x * 1.1, y0 - 0.07, -0.2)], 0.01, 'Canvas', seg=6)
-    for x in (-0.2, 0.2):                                                                                               # the struts holding the pan up
-        b.tube([(x, y0 + 0.02, 0.0), tuple(on(x, d - 0.05, 0.0))], 0.011, 'Metal_Steel')
+        for s_ in (e + 0.012, e + ph - 0.008):
+            b.cylinder(tuple(at(k * 0.075, s_, sh + 0.035)), tuple(at(k * 0.075, s_, sh + 0.05)), 0.006, 'Metal_Steel', seg=8, smooth=False)
+    b.rounded_box(at(0, e + ph * 0.45, sh + 0.047), (pw - 0.12, ph - 0.16, 0.06), 0.03, 'Canvas', v=up, seg=3)       # the gas-mask bag on its back
+    b.rounded_box(at(0, e + ph * 0.62, sh + 0.105), (pw - 0.22, 0.15, 0.022), 0.012, 'Canvas', v=up, seg=3)           # the bag's flap
+    b.tube([tuple(at(x, s_, sh + h)) for x, s_, h in ((-0.2, ph - 0.02, 0.04), (-0.19, ph - 0.04, 0.1), (-0.08, ph - 0.07, 0.13), (0.08, ph - 0.07, 0.13),
+                                                      (0.19, ph - 0.04, 0.1), (0.2, ph - 0.02, 0.04))], 0.011, 'Metal_Steel')   # the hoop over the bag (g094-d)
+    knee = at(0, 0.0, sh + 0.02)                                                                                        # the shell's foot, where the frame takes it
+    b.cylinder(tuple(knee + Vector((-pw / 2 - 0.02, 0, 0))), tuple(knee + Vector((pw / 2 + 0.02, 0, 0))), 0.012, 'Metal_Steel', seg=12)   # the seat's pivot rod
+    for sx in (-1, 1):                                                                                                  # the frame each side (g093-a, g095-d): an arm from the bench's foot,
+        x = sx * (pw / 2 + 0.01)                                                                                        # a stay from the bench's edge, their brackets
+        foot = Vector((x, pivot.y, pivot.z))
+        b.tube([tuple(foot), tuple(knee + Vector((x, 0, 0)))], 0.013, 'Paint_Rack', seg=10)
+        b.tube([(x, -0.2, -0.02), tuple(foot.lerp(knee + Vector((x, 0, 0)), 0.55))], 0.01, 'Paint_Rack', seg=8)
+        b.box(x - 0.02, x + 0.02, pivot.y - 0.01, pivot.y + 0.03, pivot.z - 0.04, pivot.z + 0.04, 'Paint_Rack')
+    for x in (-0.17, 0.17):                                                                                             # the webbing from the shell to the bench's foot
+        b.tube([tuple(at(x, ph * 0.3, sh + 0.06)), tuple(knee + Vector((x, -0.04, -0.15))), (x * 1.1, pivot.y - 0.03, pivot.z - 0.05)], 0.01, 'Canvas', seg=6)
     return finish(b, reuse=True)
 
 
@@ -1634,13 +1663,14 @@ def build_steering():
     axis = Vector((0, -math.cos(tilt), math.sin(tilt)))   # towards the driver
     b.torus(c, axis, 0.235, 0.016, 'Rubber_Black', seg=56, rseg=10)
     ref = Vector((1, 0, 0))
-    e2 = axis.cross(ref).normalized()
-    for ang in (90, 210, 330):
+    e2 = axis.cross(ref).normalized()                     # ang 0 is 3 o'clock as the driver sees it, 90 is 12
+    for ang in (0, 120, 240):                             # thick black spokes at 3, 11 and 7 o'clock (wwp_gecko g084-c, g084-a)
         a = math.radians(ang)
         d = ref * math.cos(a) + e2 * math.sin(a)
-        b.tube([c + axis * 0.012, c + d * 0.12 + axis * 0.01, c + d * 0.225], 0.009, 'Metal_Dark', seg=10)
-    b.lathe(c - axis * 0.02, axis, [(0.0, 0.0), (0.045, 0.0), (0.05, 0.03), (0.035, 0.055), (0.0, 0.06)],
-            'Bakelite_Black', seg=24)
+        b.tube([c + d * 0.055 + axis * 0.02, c + d * 0.13 + axis * 0.008, c + d * 0.225], 0.017, 'Rubber_Black', seg=12)
+    b.lathe(c - axis * 0.02, axis, [(0.0, 0.0), (0.06, 0.0), (0.068, 0.025), (0.06, 0.05), (0.035, 0.062), (0.0, 0.064)],
+            'Bakelite_Black', seg=32)                     # the large cup hub (g084-c)
+    b.cylinder(c + axis * 0.043, c + axis * 0.046, 0.03, 'Metal_Steel', seg=24)   # its emblem disc
     col_end = c - axis * 0.40
     b.cylinder(c - axis * 0.02, col_end, 0.03, 'Metal_Dark', seg=20)
     b.cylinder(c - axis * 0.10, c - axis * 0.32, 0.045, 'Rubber_Black', seg=20)
@@ -1671,9 +1701,10 @@ def build_cab_levers():
     b.lathe(base, Vector((0, 0, 1)), [(0.0, 0.0), (0.06, 0.0), (0.06, 0.02), (0.03, 0.09), (0.0, 0.09)], 'Rubber_Black',
             seg=20)
     top = Vector((-0.02, 4.13, F.GEAR_TOP_Z))
-    b.tube([base + Vector((0, 0, 0.08)), top], 0.009, 'Metal_Steel', seg=10)
-    b.lathe(top, Vector((0, 0.04, 1.0)).normalized(), [(0.0, -0.01), (0.022, 0.0), (0.028, 0.03), (0.018, 0.06), (0.0, 0.065)],
-            'Bakelite_Black', seg=20)
+    b.box(-0.075, 0.035, F.GEAR_BRACKET_Y[0] - 0.01, F.GEAR_BRACKET_Y[1] + 0.01, deck - 0.045, deck - 0.035, 'Metal_Dark')   # the gate plate (g084-c)
+    b.tube([base + Vector((0, 0, 0.08)), top - Vector((0, 0.0, 0.02))], 0.011, 'Rubber_Black', seg=10)                      # a black lever (g083-a, g084-c)
+    b.lathe(top - Vector((0, 0, 0.018)), Vector((0, 0, 1)), [(0.0, 0.0), (0.02, 0.004), (0.029, 0.018), (0.03, 0.03), (0.026, 0.045), (0.015, 0.056), (0.0, 0.06)],
+            'Bakelite_Black', seg=20)                     # its large ball knob
     # handbrake: a ratchet plate on the floor, a lever leaning back to the driver, a rubber grip
     foot = Vector((0.045, 3.92, FLOOR_Z))
     b.box(0.035, 0.055, foot.y - 0.05, foot.y + 0.05, FLOOR_Z, FLOOR_Z + 0.07, 'Metal_Dark')
