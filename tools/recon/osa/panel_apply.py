@@ -133,6 +133,9 @@ class Plan:
         self.old = {p['id']: p for p in cab['panels']}
         self.new = {}
         plane = picks.get('plane', {})
+        if 'measured_fit' in plane:
+            raise ValueError('this flat carries a measured fit (scale %s) that panel_apply does not apply yet: applying it would '
+                             'undo the cabin file's placement (docs/OSA_INTERIOR_HOLISTIC.md section 44)' % plane['measured_fit']['scale'])
         for pp in picks['panels']:
             p = dict(self.old[pp['id']])
             u0, u1 = pp['u_mm']

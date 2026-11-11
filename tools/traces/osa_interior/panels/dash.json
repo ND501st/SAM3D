@@ -1,7 +1,7 @@
 {
  "about": "The cab's dashboard as photographed (wwp_gecko g085-a, laid flat as 'dash'; g084-c, g083-a and g084-a registered on it as dash_g084c, dash_g083a, dash_g084a for the plate behind the steering wheel, which the wheel hides in each view): every part picked by its number on a flat (flat:n) and written into data/cabins/osa_ak.json by tools/recon/osa/panel_apply.py. Millimetres on the dashboard's plane, u right and v up from the instrument plate's centre.",
  "plane": {
-  "x_of_u0_m": 0.027,
+  "x_of_u0_m": 0.027, "measured_fit": {"x_of_u0_m": -0.0406, "scale": 1.1988, "v_rise_m": 0.02, "why": "g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 44): the tachometer, coolant and oil gauges, the switch plate's two top screws and its nine switches cast onto the dash's plane fit body x = -0.0406 + 1.1988 u, v up the plane 0.02 + 1.1988 v (misses under 1 cm; the flat's 445 mm was a guess from the instruments' classes, the plate is about 534 mm); a bar not in the fit lands on the first handle's feet (u 211), and Fig. 3's antenna-lowering board (x 0.457) at 0.475. Applied to the cabin file after panel_apply; panel_apply refuses this file until it carries the fit itself"},
   "x_basis": "mon_2112_80 Fig. 3 puts the antenna-lowering board (ПРОХОД ПОД МОСТОМ, u 430 mm here) at x 0.457 m: the instrument plate's centre is then at x 0.027 m, and the steering wheel's hub, seen at u -385 to -440 in the views, lands at x -0.36 m as the cabin data has it (good to about 30 mm)"
  },
  "offsets": {

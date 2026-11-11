@@ -1,4 +1,6 @@
-"""Build the distribution cabinet 0096-9M2 alone: export art/cabin_interior/SM_Cabinet0096.fbx at the game's size and update its entry in manifest.json (a full build_cabin_interior.py run drops that entry: run this after it), or render the checks.
+"""Build the distribution cabinet 0096-9M2 alone: export art/cabin_interior/SM_Cabinet0096.fbx and SM_Cabinet0096Lid.fbx (the cover over
+the repair toggles, which turns on its hinge) at the game's size and update their entries in manifest.json (a full build_cabin_interior.py
+run drops them: run this after it), or render the checks.
 
     "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" --background --python tools/blender/build_cabinet0096.py
     ... -- --check                     # front ortho, close-ups and the two photos' cameras to out/cabinet0096/check/, no export
@@ -39,14 +41,17 @@ def main():
     bci.reset()
     bci.PREVIEW.update({k: tuple(v * RIG for v in c) for k, c in PREVIEW.items()})
     os.makedirs(bci.OUT, exist_ok=True)
-    obj = model.build(bci.Builder, bci.finish, scale=1.0 if '--check' in argv else T.SCALE)
-    print(obj.name, 'size', [round(v, 4) for v in obj['body_size']], 'bbox centre', [round(v, 4) for v in obj['bbox_centre']],
-          'origin', [round(v, 4) for v in obj['body_centre']], 'triangles', sum(len(p.vertices) - 2 for p in obj.data.polygons))
+    scale = 1.0 if '--check' in argv else T.SCALE
+    objs = [model.build(bci.Builder, bci.finish, scale=scale), model.build_lid_mesh(bci.Builder, bci.finish, scale=scale)]
+    for obj in objs:
+        print(obj.name, 'size', [round(v, 4) for v in obj['body_size']], 'bbox centre', [round(v, 4) for v in obj['bbox_centre']],
+              'origin', [round(v, 4) for v in obj['body_centre']], 'triangles', sum(len(p.vertices) - 2 for p in obj.data.polygons))
     if '--check' not in argv:
-        print('exported', bci.export(obj))
         path = os.path.join(bci.OUT, 'manifest.json')
         manifest = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
-        manifest[obj.name] = {'size_m': [round(v, 4) for v in obj['body_size']]}
+        for obj in objs:
+            print('exported', bci.export(obj))
+            manifest[obj.name] = {'size_m': [round(v, 4) for v in obj['body_size']]}
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=1, sort_keys=True)
         return

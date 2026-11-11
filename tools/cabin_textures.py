@@ -546,10 +546,12 @@ def bake_panel(layout, console, panel, ppm, seed):
         label = fx.get('label', '')
         if not label:
             continue
-        parts = split_parts(label)
-        if kind == 'toggle' and len(parts) == 2:
-            face.label_above(u, v, h, parts[0])
-            face.label_below(u, v, h, parts[1])
+        sides = [p.strip() for p in label.split('—')]
+        if kind == 'toggle' and len(sides) == 2:            # "UP — DOWN"; either side may be empty ("— ГОТ.": below only)
+            if sides[0]:
+                face.label_above(u, v, h, sides[0])
+            if sides[1]:
+                face.label_below(u, v, h, sides[1])
         else:
             face.label_above(u, v, h if kind == 'oval' else max(w, h), label)
     face.scratches(seed, int(panel['size_m'][0] * panel['size_m'][1] * 160))

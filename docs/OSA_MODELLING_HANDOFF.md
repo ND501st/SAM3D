@@ -492,6 +492,28 @@ Changed from the scores the same day:
     `driver_panel` at x +0.2, 1.07 m from him; the dash plane is 0.88 m ahead of both seated eyes, where g084-c has the
     wheel's rim nearly at the cushion (eyes or dash perhaps 0.1 m apart in y).
 
+**The dash round the wheel and the 0096's cover (11 Nov 2026, third pass;** `docs/OSA_INTERIOR_HOLISTIC.md` sections 44-45).
+- **The dash** measured through g082-b's camera: the flat was 20 % small. Body x = -0.0406 + 1.1988 u, with misses under
+  1 cm. Both dash panels were rescaled and the wheel measured (centre (-0.385, 4.30, 1.478), 0.606 m across); its hub
+  now sits between the instrument and switch plates. The DP-3B's face is 0.20 x 0.13 m at (0.737, 4.517, 1.402), and
+  the TA-57 moved inboard off it. The fit lives in `dash.json` `measured_fit`; `panel_apply.py` refuses that flat
+  until it applies the fit itself.
+- **The 0096's repair toggles and cover** (g097-a open, g096-a and g097-b shut, grade A):
+  - 23 toggles in two rows on a cream plate on the slope (`repair_toggles_panel`, fixtures, legible legends printed);
+  - the cover as its own hollow mesh `SM_Cabinet0096Lid`, its inside as g097-a shows it, hinged on its rear top edge
+    and opening 76 degrees like an awning;
+  - the new hinge `repair_lid` (`"hinges"` now take an `axis`, in simcore and Unreal), driven by `pwr.repair_lid` (the
+    right captive screw, a rotary head) through the subsystem `repair_lid_shut`.
+- **The owner's steps:**
+  - build Unreal (`SimCabinComponent.h/.cpp`: hinge axes);
+  - run `python tools/ue_import_cabin_interior.py` (new `SM_Cabinet0096Lid`, rebuilt `SM_Cabinet0096`, `SM_CabUnits`,
+    `SM_DriverUnits`, `SM_SteeringWheel`, the panels).
+- **Open:**
+  - the cover's opening angle is low confidence (72-84 degrees fit);
+  - the slope reads 120-127 mm deep in the casts against the trace's 108;
+  - the stay rod, the plate's notched corners and the group legends are not drawn;
+  - the commander's half of the dash has no grade-A check of its plane's depth and tilt.
+
 Open:
 - SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded
   seat; one view, not settled.

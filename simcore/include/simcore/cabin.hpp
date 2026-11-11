@@ -345,17 +345,22 @@ inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
 }
 
 // A rectangle of floor a crewman can walk on, in plan (body frame x and y, metres).
-// A part that swings on a hinge (the PU-12M's plotting board): its panels (with everything on them) and shell meshes
-// turn about a vertical axis through `pivot_m`, by `folded_rad` (clockwise seen from above) when folded and not at all
-// when open, as the console's `subsystem` goes from off to ready (its progress in between).
+// A part that swings on a hinge (the PU-12M's plotting board, the 0096-9M2's cover): its panels (with everything on them)
+// and shell meshes turn about `axis` (a unit vector, body frame; upright unless given) through `pivot_m`, by `folded_rad`
+// (clockwise seen from the axis's tip: from above for an upright one) when folded and not at all when as built, as the
+// console's `subsystem` goes from off to ready (its progress in between).
 struct CabinHinge {
     std::string id;
     std::string label;
     std::vector<std::string> panels;
     std::vector<std::string> shell;
     Vec3 pivot_m;
+    Vec3 axis{0.0, 0.0, 1.0};
     double folded_rad = 0.0;
     std::string subsystem;
+
+    // A body point of the hinged parts, as built, when they have turned by `turn_rad` (clockwise seen from the axis's tip).
+    Vec3 Turned(const Vec3& p, double turn_rad) const { return pivot_m + RotateAboutAxis(p - pivot_m, axis, -turn_rad); }
 };
 
 struct CabinWalkArea {
@@ -940,13 +945,18 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("hinges", i);
             const json::Value& v = arr->items[i];
-            if (!Keys(v, path, {"id", "label", "panels", "shell", "pivot_m", "folded_deg", "subsystem", "source", "confidence", "notes"})) {
+            if (!Keys(v, path, {"id", "label", "panels", "shell", "pivot_m", "axis", "folded_deg", "subsystem", "source", "confidence", "notes"})) {
                 return false;
             }
             CabinHinge h;
             if (!RequireString(v, path, "id", h.id) || !OptionalString(v, path, "label", h.label) || !Number3(v, path, "pivot_m", h.pivot_m) ||
                 !Degrees(v, path, "folded_deg", h.folded_rad) || !RequireString(v, path, "subsystem", h.subsystem) || !Provenance(v, path)) {
                 return false;
+            }
+            if (v.Find("axis") != nullptr) {
+                if (!Number3(v, path, "axis", h.axis)) return false;
+                if (h.axis.Length() < 1e-6) return Fail(Join(path, "axis"), "must not be zero");
+                h.axis = h.axis.Normalized();
             }
             for (const char* key : {"panels", "shell"}) {
                 const json::Value* list = OptionalArray(v, path, key);

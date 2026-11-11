@@ -79,6 +79,76 @@ HOLDER_SECTION = [(-30.0, -12.0), (-38.0, -22.0), (-60.0, -38.0), (-156.0, 56.0)
 HOLDER_CATCH_X = (252.0, 278.0)        # (m) the tab at the front's middle, g097-b
 HOLDER_HINGE_T = (0.32, 0.50, 0.68)    # (c) three knuckles along the left edge (g097-b; their spacing estimated)
 LID_STUDS = (((441.0, -118.6, -5.1), 'stud'), ((473.9, -104.3, -17.0), 'seal'))   # (m) the tips; what they stand on could not be read (see the model)
+# Checked on 11 Nov 2026 through the certified cameras (tools/traces/osa_interior/cameras.json, grade A): the lip's black plate
+# triangulated from g096-a and g097-b at x 168-381, from (y -4.6, z -6) up to (-22.7, -26); the lid's rear top corner at the hinge
+# side (14, -147, 104). Both within 7 mm of the readings above, which stand.
+
+# ---- under the lid (wwp_gecko g097-a, the lid open; its camera grade A on the door). The lid is a hollow cover (SAM3D's wall)
+# hinged along its rear top edge; it opens forward and up like an awning, held by a stay on the free side, and shows the repair
+# toggles on a light plate over the slope, the plate «ТУМБЛЕРЫ РЕМОНТНЫЕ / РАБОЧЕЕ ПОЛОЖЕНИЕ ВКЛЮЧЕНО» inside it at its free edge,
+# and a lamp in a channel along its middle. s is mm up the slope from the body's front top edge (y = -s/sqrt2, z = s/sqrt2).
+LID_WALL = 1.6                         # (c) the cover's sheet
+LID_HINGE = (-145.0, 104.0)            # (m) the axis (y, z): along the lid's rear top edge (the triangulated corner above)
+LID_HINGE_X = (100.0, 434.0)           # (m, x only) the two brass hinges, cast through g097-a
+LID_OPEN_DEG = 76.0                    # (m) how far it opens: g097-a's free corners fit 72-84 degrees with the axis held (residual 30 px:
+                                       # the open edge reads steeper than any turn about x gives; the stay may hold it twisted)
+LID_STAY_FOOT = (522.0, 129.0)         # (m) the stay's foot on the slope (x, s), cast through g097-a; the rod is not drawn
+LID_INNER_PLATE = (168.0, 385.0, 8.0, 36.0)   # x as the lip's plate (c, g097-a shows it at about x 150-360); s from the free edge (m)
+LID_LAMP = (60.0, 500.0, 70.0, 22.0)   # (m) the lamp channel along the lid: x from, x to, s from the free edge, its width (c)
+# The toggle plate on the slope (m, g097-a's rays on the slope's plane). The rays read the slope 1.2 times long (the plate's top edge
+# at s 178-184, the slope 153 long, beyond the camera's control on the door): s here is scaled by 150 / 181 so that the edge lies at
+# the slope's rear edge, where the photo shows it. x is not scaled. The plate's two lower corners are cut away (x below 88 and above
+# 459 under s 31): not drawn, the plate is a rectangle.
+REPAIR_PLATE = (45.0, 497.0, 12.0, 150.0)     # x0, x1, s0, s1
+REPAIR_ROWS = (113.0, 51.0)                    # s of the upper and the lower row (each row's mean; the rays give 111-116, 50-54)
+REPAIR_TOP_X = (79.0, 108.0, 137.0, 167.0, 195.0, 225.0, 261.0, 297.0, 334.0, 371.0, 407.0, 436.0, 465.0)
+REPAIR_BOTTOM_X = (78.0, 107.0, 137.0, 164.0, 224.0, 260.0, 297.0, 332.0, 386.0, 434.0)
+REPAIR_TOGGLE = (12.0, 18.0)                   # (c) the washer's diameter and the lever's height off the plate (g097-a: about 2 washers high)
+
+
+def slope_point(x, s, off=0.0):
+    """A point s mm up the slope from the body's front top edge, `off` mm out of the slope: (x, y, z) in the trace's frame."""
+    r = s / 2 ** 0.5
+    return (x, -r - off / 2 ** 0.5, r - off / 2 ** 0.5)
+
+
+def _meet(p, d, q, e):
+    """Where the line p + t d meets the line q + u e, (y, z)."""
+    den = d[0] * e[1] - d[1] * e[0]
+    t = ((q[0] - p[0]) * e[1] - (q[1] - p[1]) * e[0]) / den
+    return (p[0] + t * d[0], p[1] + t * d[1])
+
+
+def lid_inner(wall=None):
+    """The cover's inside (y, z): its three walls (lip, top, rear) moved `wall` into the cavity, the ends on the line it stands on
+    (from the lip's foot to the rear's foot)."""
+    wall = LID_WALL if wall is None else wall
+    o = LID_SECTION
+    cy, cz = sum(p[0] for p in o) / 4, sum(p[1] for p in o) / 4
+    lines = []
+    for a, b in zip(o[:3], o[1:]):
+        d = (b[0] - a[0], b[1] - a[1])
+        n = (-d[1], d[0])
+        ln = (n[0] ** 2 + n[1] ** 2) ** 0.5
+        n = (n[0] / ln, n[1] / ln)
+        if n[0] * (cy - a[0]) + n[1] * (cz - a[1]) < 0:
+            n = (-n[0], -n[1])
+        lines.append(((a[0] + wall * n[0], a[1] + wall * n[1]), d))
+    foot = (o[0], (o[3][0] - o[0][0], o[3][1] - o[0][1]))
+    return [_meet(*lines[0], *foot), _meet(*lines[0], *lines[1]), _meet(*lines[1], *lines[2]), _meet(*lines[2], *foot)]
+
+
+def lid_top_point(s, into=0.0):
+    """A point on the cover's top inside, s mm from its free edge towards the hinge, `into` mm further into the cavity: (y, z)."""
+    i = lid_inner()
+    a, b = i[1], i[2]
+    d = (b[0] - a[0], b[1] - a[1])
+    ln = (d[0] ** 2 + d[1] ** 2) ** 0.5
+    d = (d[0] / ln, d[1] / ln)
+    n = (-d[1], d[0])                              # into the cavity: towards the slope
+    if n[0] * (i[0][0] - a[0]) + n[1] * (i[0][1] - a[1]) < 0:
+        n = (-n[0], -n[1])
+    return (a[0] + s * d[0] + into * n[0], a[1] + s * d[1] + into * n[1])
 
 # ---- the side (x = 0), read on g097-b back-projected on the wall (m)
 LOUVRES_UPPER = (24.0, 60.0, 94.0, 129.0, 165.0, 193.0)  # y of each slit, at its rear

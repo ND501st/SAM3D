@@ -295,6 +295,7 @@ void USimCabinComponent::DestroyParts()
 	HingePivots.Reset();
 	HingeSubsystems.Reset();
 	HingeFoldedDeg.Reset();
+	HingeAxes.Reset();
 	HingedPanels.Reset();
 	HingedShell.Reset();
 	Items.Reset();
@@ -1291,6 +1292,7 @@ void USimCabinComponent::BuildHinges(const simcore::CabinLayout& Layout)
 		HingePivots.Add(Pivot);
 		HingeSubsystems.Add(ToF(Hinge.subsystem));
 		HingeFoldedDeg.Add(FMath::RadiansToDegrees(Hinge.folded_rad));
+		HingeAxes.Add(BodyDir(Hinge.axis).GetSafeNormal());
 		UE_LOG(LogSAM3D, Log, TEXT("Cabin: hinge %s swings %d parts"), *ToF(Hinge.id), Hung);
 	}
 }
@@ -1301,8 +1303,9 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 {
 	const simcore::CabinLayout& Layout = *Sim->GetCabinLayout();
 	simcore::ConsoleData& Console = Sim->GetScenarioRunner()->Console();
-	// The hinges: folded at the subsystem's off, open at its ready, swinging in between (clockwise from above = Unreal's
-	// yaw), eased so the board slows into its latch.
+	// The hinges: folded at the subsystem's off, as built at its ready, swinging in between about the hinge's axis
+	// (clockwise seen from its tip: an upright one turns as Unreal's yaw; the body frame to Unreal's swaps x and y, so the
+	// body's left-handed turn is Unreal's FQuat), eased so the board slows into its latch.
 	for (int32 H = 0; H < HingePivots.Num(); ++H)
 	{
 		if (HingePivots[H] == nullptr)
@@ -1312,7 +1315,7 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		const std::string Sub = TCHAR_TO_UTF8(*HingeSubsystems[H]);
 		const double Open = Console.equipment.Has(Sub) ? FMath::Clamp(Console.equipment.Progress(Sub), 0.0, 1.0) : 1.0;
 		const double Eased = Open * Open * (3.0 - 2.0 * Open);
-		HingePivots[H]->SetRelativeRotation(FRotator(0.0, HingeFoldedDeg[H] * (1.0 - Eased), 0.0));
+		HingePivots[H]->SetRelativeRotation(FQuat(HingeAxes[H], FMath::DegreesToRadians(HingeFoldedDeg[H] * (1.0 - Eased))));
 	}
 	for (int32 I = 0; I < Items.Num(); ++I)
 	{

@@ -136,13 +136,13 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 35);  // with АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...) and the driver's (stalk, gear, handbrake, stowage)
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 37);  // with АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...), the driver's (stalk, gear, handbrake, stowage) and the 0096's cover and toggles
     // The R-123M's and the R-124 boxes' faces are bare panels: the meshes carry their own fronts.
     for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel", "gyro_arrest_panel",
                             "air_panel", "bulkhead_panel", "bulkhead_left_panel", "vent_hatch_right", "vent_hatch_left",
                             "fire_panel", "fire_valve_panel", "heater_panel", "dp3b_panel", "post_valve_panel", "radio_well_panel",
                             "header_valve_left", "header_valve_right", "column_stalk_panel", "gear_lever_panel",
-                            "handbrake_panel", "stowage_panel"}) {
+                            "handbrake_panel", "stowage_panel", "repair_lid_panel"}) {
         const CabinPanel* bare = layout.FindPanel(id);
         SC_EXPECT(bare != nullptr && bare->bare);
     }
@@ -279,6 +279,52 @@ SC_TEST("cabin: the 0096 cabinet's voltmeter reads 220 V once a supply is on lin
     console.panel.Set("pwr.gta", 0);
     for (int i = 0; i < 100; ++i) console.equipment.Update(0.1, console.panel);
     SC_EXPECT_NEAR(MeterValue(*volts, console), 0.0, 1e-9);
+}
+
+SC_TEST("cabin: the 0096's cover shuts over the repair toggles and lifts on its rear edge like an awning when opened") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinHinge* lid = nullptr;
+    for (const CabinHinge& h : layout.hinges) {
+        if (h.id == "repair_lid") lid = &h;
+    }
+    SC_EXPECT(lid != nullptr);
+    if (lid == nullptr) return;
+    SC_EXPECT(lid->subsystem == "repair_lid_shut" && lid->shell.size() == 1 && lid->shell[0] == "cabinet_0096_lid");
+    SC_EXPECT(std::fabs(lid->axis.z) < 1e-9 && std::fabs(lid->axis.Length() - 1.0) < 1e-9);   // level, along the cabinet's width
+    // Shut at the start (the session starts with the cover as built); the screw turns it open.
+    SC_EXPECT(console.equipment.IsReady("repair_lid_shut") && console.panel.Get("pwr.repair_lid") == 0);
+    console.panel.Set("pwr.repair_lid", 1);
+    for (int i = 0; i < 200; ++i) console.equipment.Update(0.1, console.panel);
+    SC_EXPECT_NEAR(console.equipment.Progress("repair_lid_shut"), 0.0, 1e-9);
+    // Open: the screw on its free edge rises well above the toggles' plate and stays over the cabinet, and the plate is clear.
+    const CabinPanel* screw = layout.FindPanel("repair_lid_panel");
+    const CabinPanel* plate = layout.FindPanel("repair_toggles_panel");
+    SC_EXPECT(screw != nullptr && plate != nullptr);
+    if (screw == nullptr || plate == nullptr) return;
+    const Vec3 open = lid->Turned(screw->centre_m, lid->folded_rad);
+    std::printf("    the screw: shut z %.3f, open z %.3f (plate %.3f)\n", screw->centre_m.z, open.z, plate->centre_m.z);
+    SC_EXPECT(open.z > plate->centre_m.z + 0.12 && open.z > screw->centre_m.z + 0.1);
+    const Vec3 n = plate->Normal();
+    SC_EXPECT(Dot(open - plate->centre_m, n) > 0.1);                     // in front of the plate's face, out of the way
+    SC_EXPECT(Near(lid->Turned(screw->centre_m, 0.0), screw->centre_m)); // shut: as built
+    int toggles = 0;
+    for (const CabinFixture& f : layout.fixtures) {
+        if (f.panel_id == "repair_toggles_panel" && f.look.kind == CabinLookKind::Toggle) ++toggles;
+    }
+    SC_EXPECT(toggles == 23);                                            // 13 and 10 (wwp_gecko g097-a)
+}
+
+SC_TEST("cabin: an upright hinge turns clockwise seen from above") {
+    CabinHinge h;
+    h.pivot_m = Vec3{1.0, 1.0, 0.0};
+    const Vec3 p = h.Turned(Vec3{1.0, 2.0, 0.5}, DegToRad(90.0));       // a metre ahead of the pivot goes a metre to its right
+    SC_EXPECT(Near(p, Vec3{2.0, 1.0, 0.5}, 1e-12));
+    const std::string hinge = R"(, "hinges": [ {"id": "h", "panels": ["p"], "pivot_m": [0, 0, 0], "axis": [0, 0, 0], "folded_deg": 10,
+                                                 "subsystem": "power", "source": "sam3d", "confidence": "estimate"} ])";
+    SC_EXPECT(ErrorContains(Small(hinge), "hinges[0].axis: must not be zero"));
 }
 
 SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back; РУ needs the hatches closed") {

@@ -317,10 +317,12 @@ private:
 	/** Panels showing a baked face (their labels are in it). */
 	TSet<FString> FacedPanels;
 
-	/** The hinges' pivots, their subsystems and their folded angles (clockwise from above, degrees). */
+	/** The hinges' pivots, their subsystems, their axes (Unreal's frame, unit) and their folded angles (clockwise seen from
+	 *  the axis's tip, degrees: from above for an upright one). */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> HingePivots;
 	TArray<FString> HingeSubsystems;
+	TArray<FVector> HingeAxes;
 	TArray<double> HingeFoldedDeg;
 	/** Panels and shell parts that hang from a hinge (by id): their components are tagged as they are built. */
 	TSet<FString> HingedPanels;

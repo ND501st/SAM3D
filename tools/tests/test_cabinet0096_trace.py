@@ -195,3 +195,51 @@ def test_the_cabin_data_on_the_door_sits_on_traced_parts():
     meter = next(d for d in cabin["displays"] if d["id"] == "pwr_voltmeter")
     assert math.dist(meter["at_m"], dial) < 0.004
     assert meter["size_m"][0] < T.SCALE * 2 * T.VOLT["dial_half_w"] / 1000 + 0.001
+
+
+def _inside(p, poly):
+    """Point (y, z) inside a polygon [(y, z)...] (ray casting)."""
+    y, z = p
+    hit = False
+    for (y0, z0), (y1, z1) in zip(poly, poly[1:] + poly[:1]):
+        if (z0 > z) != (z1 > z) and y < y0 + (z - z0) * (y1 - y0) / (z1 - z0):
+            hit = not hit
+    return hit
+
+
+def test_the_repair_toggles_stand_on_their_plate_in_two_rows_under_the_lid():
+    x0, x1, s0, s1 = T.REPAIR_PLATE
+    assert T.LID_X[0] < x0 < x1 < T.LID_X[1]                     # the cover is wider than the plate
+    slope = 2 ** 0.5 * T.BODY_SECTION[1][1]                       # the slope's length (mm)
+    assert 0 < s0 < s1 <= slope
+    assert len(T.REPAIR_TOP_X) == 13 and len(T.REPAIR_BOTTOM_X) == 10   # g097-a: 23 toggles
+    d, h = T.REPAIR_TOGGLE
+    cavity = T.lid_inner()
+    for s, row in zip(T.REPAIR_ROWS, (T.REPAIR_TOP_X, T.REPAIR_BOTTOM_X)):
+        assert s0 + d / 2 < s < s1 - d / 2
+        assert all(x0 + d / 2 < x < x1 - d / 2 for x in row)
+        assert all(b - a > d for a, b in zip(row, row[1:]))      # washers clear of each other
+        _, y, z = T.slope_point(0.0, s, h)
+        assert _inside((y, z), cavity), s                         # the lever's tip clears the closed cover
+    assert T.REPAIR_ROWS[0] - T.REPAIR_ROWS[1] > d + 2 * h / 3
+
+
+def test_the_cover_is_a_hollow_sheet_hinged_at_its_rear_top_edge():
+    inner, outer = T.lid_inner(), T.LID_SECTION
+    assert all(_inside(p, outer + []) or p in outer for p in inner[1:3])
+    hy, hz = T.LID_HINGE
+    ry, rz = outer[2]
+    assert abs(hy - ry) < 8 and abs(hz - rz) < 4                  # the axis at the rear top corner
+    assert all(T.LID_X[0] < x < T.LID_X[1] for x in T.LID_HINGE_X)
+    assert 60 < T.LID_OPEN_DEG < 100                              # an awning over the plate, not thrown back
+    # the lamp channel and the inside plate lie on the cover's top inside, clear of the toggles below them when it is shut
+    lx0, lx1, ls, lw = T.LID_LAMP
+    ax0, ax1, as0, as1 = T.LID_INNER_PLATE
+    assert T.LID_X[0] < lx0 < lx1 < T.LID_X[1] and T.LID_X[0] < ax0 < ax1 < T.LID_X[1]
+    assert as1 < ls                                               # the plate at the free edge, the lamp further in
+    for s in (ls, ls + lw):
+        y, z = T.lid_top_point(s, 10.0)
+        along = (-y + z) / 2 ** 0.5                               # where that is up the slope
+        assert all(abs(along - r) > T.REPAIR_TOGGLE[0] for r in T.REPAIR_ROWS), along
+    sx, ss = T.LID_STAY_FOOT
+    assert T.REPAIR_PLATE[1] < sx < T.LID_X[1] and T.REPAIR_PLATE[2] < ss < T.REPAIR_PLATE[3]

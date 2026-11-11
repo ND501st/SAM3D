@@ -73,7 +73,7 @@ TEX = '/Game/SAM3D/Cabin/Textures'
 MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
-PLAIN = ('SM_Cabinet0096', 'SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4',
+PLAIN = ('SM_Cabinet0096', 'SM_Cabinet0096Lid', 'SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4',
          'SM_SP2M2Face', 'SM_SP3MFace', 'SM_SP3MFlap', 'SM_SL3MFace', 'SM_SL1MFace', 'SM_SP1MFace', 'SM_CabSeat')   # no Nanite: their details are mm thick
 ONLY = %(only)r
 DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,

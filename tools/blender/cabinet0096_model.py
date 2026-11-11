@@ -101,8 +101,22 @@ def build_body(b):
     rr_slab(b, T.DOOR, 0.0, T.DOOR_PROUD, DOOR, radius=T.DOOR_RADIUS)
 
 
+def yz_dir(a, c):
+    """The local direction from trace (y, z) a to c."""
+    return (at3(0.0, c[0], c[1]) - at3(0.0, a[0], a[1])).normalized()
+
+
 def build_lid(b):
-    b.prism(section(T.LID_SECTION), lx(T.LID_X[1]), lx(T.LID_X[0]), FRAME)
+    """The cover over the repair toggles, its own mesh (SM_Cabinet0096Lid) so that it can turn on its hinge (data/cabins/osa_ak.json
+    hinges): a sheet cover, open underneath, its lip's plate, its two captive screws (the right one's head is the cabin's control
+    pwr.repair_lid), the card holder lying on it, and inside the plate and the lamp g097-a shows."""
+    o, i = T.LID_SECTION, T.lid_inner()
+    x0, x1 = lx(T.LID_X[1]), lx(T.LID_X[0])
+    w = T.LID_WALL * MM
+    for k in range(3):                                           # the lip, the top, the rear
+        b.prism(section([o[k], o[k + 1], i[k + 1], i[k]]), x0, x1, FRAME)
+    for a, c in ((x0, x0 + w), (x1 - w, x1)):                    # the ends
+        b.prism(section(list(o)), a, c, FRAME)
     foot, top, rear = T.LID_SECTION[0], T.LID_SECTION[1], T.LID_SECTION[2]
     lip_up = (at3(0.0, top[0], top[1]) - at3(0.0, foot[0], foot[1]))
     lip_len = lip_up.length
@@ -120,8 +134,11 @@ def build_lid(b):
     n = U.cross(d).normalized()                                 # the lid's top, outwards
     if n.z < 0.0:
         n = -n
-    for tip, height in T.LID_SCREWS:
-        stud_on(b, at3(*tip), height, n, r=4.0, head=7.0)
+    for k, (tip, height) in enumerate(T.LID_SCREWS):
+        if k == len(T.LID_SCREWS) - 1:                          # the right one's post only: its head is the cabin's control
+            b.cylinder(at3(*tip) - n * height * MM, at3(*tip) - n * 0.5 * MM, 0.004, STEEL, seg=10)
+        else:
+            stud_on(b, at3(*tip), height, n, r=4.0, head=7.0)
 
     # the card holder lying on the lid
     b.prism(section(T.HOLDER_SECTION), lx(T.HOLDER_X[1]), lx(T.HOLDER_X[0]), FRAME)
@@ -143,6 +160,57 @@ def build_lid(b):
     b.obox(centre, U, fup, fn, ((a1 - a0) * MM, flen * 0.6, 0.010), DARK)                                  # the catch
     for (tip, what) in T.LID_STUDS:
         stud_on(b, at3(*tip), 40.0, n, r=3.0, head=6.0 if what == 'stud' else 5.0, mat=STEEL if what == 'stud' else BRASS)
+    build_lid_inside(b)
+
+
+def build_lid_inside(b):
+    """What the open cover shows (wwp_gecko g097-a): the plate «ТУМБЛЕРЫ РЕМОНТНЫЕ / РАБОЧЕЕ ПОЛОЖЕНИЕ ВКЛЮЧЕНО» at its free edge,
+    a lamp channel along its middle with a holder at each end and the blue lead between, and the hinges' leaves on its rear."""
+    i = T.lid_inner()
+    along = yz_dir(i[1], i[2])                                    # up the top's inside, from the free edge
+    into = yz_dir(i[1], T.lid_top_point(0.0, 1.0))                # off the top, into the cavity
+    a, c, s0, s1 = T.LID_INNER_PLATE
+    p = at3((a + c) / 2, *T.lid_top_point((s0 + s1) / 2, 0.5))
+    b.obox(p, U, along, into, ((c - a) * MM, (s1 - s0) * MM, 0.001), BLACK)   # its legend is not drawn
+    for x in (a + 8.0, c - 8.0):
+        q = at3(x, *T.lid_top_point((s0 + s1) / 2, 1.0))
+        b.cylinder(q, q + into * 0.0015, 0.002, BRASS, seg=8)
+    lx0, lx1, ls, lw = T.LID_LAMP
+    depth = 8.0
+    mid = (lx0 + lx1) / 2
+    q = at3(mid, *T.lid_top_point(ls + lw / 2, depth / 2))
+    b.obox(q, U, along, into, ((lx1 - lx0) * MM, lw * MM, depth * MM), CREAM)          # the channel
+    for e in (-1, 1):                                                                   # its two rails
+        q = at3(mid, *T.lid_top_point(ls + lw / 2 + e * (lw / 2 + 4.0), 3.0))
+        b.obox(q, U, along, into, ((lx1 - lx0 + 20.0) * MM, 5.0 * MM, 6.0 * MM), FRAME)
+    for xa, xb in ((lx0 + 40.0, lx0 + 66.0), (lx1 - 66.0, lx1 - 40.0)):                 # the lamp holders and their bulbs
+        q0, q1 = at3(xa, *T.lid_top_point(ls + lw / 2, depth + 5.0)), at3(xb, *T.lid_top_point(ls + lw / 2, depth + 5.0))
+        b.cylinder(q0, q1, 0.006, 'Vinyl_Brown', seg=12)
+    for xa, xb in ((lx0 + 66.0, lx0 + 80.0), (lx1 - 80.0, lx1 - 66.0)):
+        b.cylinder(at3(xa, *T.lid_top_point(ls + lw / 2, depth + 5.0)), at3(xb, *T.lid_top_point(ls + lw / 2, depth + 5.0)), 0.004, 'Lamp_Glass', seg=10)
+    b.tube([at3(x, *T.lid_top_point(ls + lw / 2 + 3.0 * math.sin(x / 40.0), depth + 2.0)) for x in range(int(lx0 + 66), int(lx1 - 65), 20)],
+           0.0015, BLUE, seg=6)                                                         # the blue lead between them
+    hy, hz = T.LID_HINGE
+    rear = yz_dir(T.LID_SECTION[2], T.LID_SECTION[3])
+    for x in T.LID_HINGE_X:                                                             # the hinges' leaves on the rear
+        q = at3(x, *T.LID_SECTION[2]) + rear * 0.010
+        b.obox(q, U, rear, U.cross(rear).normalized(), (0.026, 0.018, 0.0015), BRASS)
+
+
+def build_lid_fittings(b):
+    """On the body, for the cover (wwp_gecko g097-a): the hinges' barrels on its axis, standing on the slope's rear edge, and the
+    stay's foot on the slope (the stay's rod, which folds, is not drawn)."""
+    hy, hz = T.LID_HINGE
+    ry, rz = T.BODY_SECTION[1]
+    for x in T.LID_HINGE_X:
+        b.cylinder(at3(x - 15.0, hy, hz), at3(x + 15.0, hy, hz), 0.0045, BRASS, seg=12)
+        d = at3(x, ry, rz) - at3(x, hy, hz)
+        b.obox((at3(x, hy, hz) + at3(x, ry, rz)) / 2, U, d.normalized(), U.cross(d.normalized()).normalized(), (0.026, d.length, 0.0015), BRASS)
+    sx, ss = T.LID_STAY_FOOT
+    out = yz_dir(T.slope_point(0.0, 50.0)[1:], T.slope_point(0.0, 50.0, 1.0)[1:])
+    up = yz_dir(T.slope_point(0.0, 0.0)[1:], T.slope_point(0.0, 100.0)[1:])
+    b.obox(at3(sx, *T.slope_point(sx, ss, 2.0)[1:]), U, up, out, (0.018, 0.024, 0.004), BRASS)
+    b.cylinder(at3(sx - 6.0, *T.slope_point(sx, ss, 8.0)[1:]), at3(sx + 6.0, *T.slope_point(sx, ss, 8.0)[1:]), 0.004, BRASS, seg=10)
 
 
 def build_side(b):
@@ -550,10 +618,9 @@ def build_foot(b):
 
 def build(B, finish, scale=1.0):
     """SM_Cabinet0096 with the interior script's Builder `B` and `finish`; its origin at the old mesh's. `scale` 1 is the trace's millimetres (the check renders against the flats), T.SCALE the game's."""
-    import bpy
     b = B('SM_Cabinet0096')
     build_body(b)
-    build_lid(b)
+    build_lid_fittings(b)
     build_side(b)
     for h in T.HINGES:
         hinge(b, h)
@@ -565,8 +632,19 @@ def build(B, finish, scale=1.0):
     build_volt(b)
     build_dome(b)
     build_foot(b)
-    obj = finish(b, reuse=True)
-    # finish() puts the origin at the bounding box's centre; keep the old mesh's origin, so the layout's centre_m stays valid
+    return place(finish(b, reuse=True), scale)
+
+
+def build_lid_mesh(B, finish, scale=1.0):
+    """SM_Cabinet0096Lid, shut as the photos g096-a and g097-b have it, its origin the cabinet's (it is placed as the cabinet is)."""
+    b = B('SM_Cabinet0096Lid')
+    build_lid(b)
+    return place(finish(b, reuse=True), scale)
+
+
+def place(obj, scale):
+    """finish() puts the origin at the bounding box's centre; keep the old mesh's origin, so the layout's centre_m stays valid."""
+    import bpy
     origin = Vector(P(*T.LOCAL_ORIGIN))
     centre = obj.location.copy()
     obj.data.transform(Matrix.Translation(centre - origin))

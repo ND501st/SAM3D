@@ -1706,20 +1706,27 @@ def build_cab_seat():
 
 # ---------------------------------------------------------------------------------------------- driving controls
 
+# The steering wheel's centre and size through g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 44): its
+# rim's outer edges and top and its hub fit within 4 px at a 30 degree tilt; the depth trades against the size (0.54 m
+# across at y 3.9, 0.63 m at 4.44), and y 4.30 puts the rim's foot just over the cushion's front as g084-c shows it.
+WHEEL_CENTRE = (-0.385, 4.30, 1.478)
+WHEEL_R = 0.287                                           # the rim's centre line; 0.606 m across its outside
+
+
 def build_steering():
-    """Steering wheel and column: a black three-spoke wheel about 0.47 m across (rwd_mb3 9a33_13, 9a33_31), its
-    centre where the plan draws it (x -0.34, y 4.38), tilted 30 degrees back from upright (estimate)."""
+    """Steering wheel and column: a large black three-spoke wheel (wwp_gecko g082-b, g084-c; the book calls it large),
+    its centre and size measured through g082-b's camera, tilted 30 degrees back from upright (the same fit)."""
     b = Builder('SM_SteeringWheel')
-    c = Vector((-0.36, 4.33, 1.47))
+    c = Vector(WHEEL_CENTRE)
     tilt = math.radians(30)
     axis = Vector((0, -math.cos(tilt), math.sin(tilt)))   # towards the driver
-    b.torus(c, axis, 0.235, 0.016, 'Rubber_Black', seg=56, rseg=10)
+    b.torus(c, axis, WHEEL_R, 0.016, 'Rubber_Black', seg=64, rseg=10)
     ref = Vector((1, 0, 0))
     e2 = axis.cross(ref).normalized()                     # ang 0 is 3 o'clock as the driver sees it, 90 is 12
     for ang in (0, 120, 240):                             # thick black spokes at 3, 11 and 7 o'clock (wwp_gecko g084-c, g084-a)
         a = math.radians(ang)
         d = ref * math.cos(a) + e2 * math.sin(a)
-        b.tube([c + d * 0.055 + axis * 0.02, c + d * 0.13 + axis * 0.008, c + d * 0.225], 0.017, 'Rubber_Black', seg=12)
+        b.tube([c + d * 0.055 + axis * 0.02, c + d * 0.15 + axis * 0.008, c + d * (WHEEL_R - 0.01)], 0.017, 'Rubber_Black', seg=12)
     b.lathe(c - axis * 0.02, axis, [(0.0, 0.0), (0.06, 0.0), (0.068, 0.025), (0.06, 0.05), (0.035, 0.062), (0.0, 0.064)],
             'Bakelite_Black', seg=32)                     # the large cup hub (g084-c)
     b.lathe(c + axis * 0.043, axis, [(0.0, 0.0), (0.032, 0.0), (0.032, 0.002), (0.027, 0.004), (0.0, 0.006)], 'Bakelite_Black',
@@ -2056,9 +2063,11 @@ def build_bp26():
 DASH_HANDLES = [('driver_panel', 211, 74, -28, 0.005, 0.030, 'Metal_Steel', True),
                 ('commander_panel', 248, 74, -28, 0.005, 0.030, 'Metal_Steel', True),
                 ('commander_panel', 520, 71, -102, 0.010, 0.040, 'Paint_LightGrey', False)]
-DASH_U0_MM = {'driver_panel': -210.5, 'commander_panel': 496.0}   # each panel's centre on the flat (dash.json 'panels')
+# The flat's mm to the body (g082-b's measured camera, docs/OSA_INTERIOR_HOLISTIC.md section 44): x = X0 + S u, and v up
+# the dash's plane S v from the panels' centres (which carry the fit's 0.02 m rise).
+DASH_FLAT_X0, DASH_FLAT_SCALE = -0.0406, 1.1988
 DASH_SCREWS = ('d_left', 'd_instr', 'c_switch')                    # plates held by four domed screws at their corners
-DASH_SCREW_INSET_M = (0.0071, 0.011)                               # in from the plate's sides and top/bottom (dash.json)
+DASH_SCREW_INSET_M = (0.0071 * DASH_FLAT_SCALE, 0.011 * DASH_FLAT_SCALE)   # in from the plate's sides and top/bottom (dash.json)
 
 
 def dash_hardware(b, layout):
@@ -2067,8 +2076,9 @@ def dash_hardware(b, layout):
     panels = {p['id']: p for p in layout['panels']}
     for pid, u_mm, v_top, v_bot, rod, off, mat, on_plate in DASH_HANDLES:
         c, n, r, u = panel_frame(panels[pid])
-        base = c + r * ((u_mm - DASH_U0_MM[pid]) / 1000.0) + n * (0.0 if on_plate else -0.01)
-        top, bot = base + u * (v_top / 1000.0), base + u * (v_bot / 1000.0)
+        x = DASH_FLAT_X0 + DASH_FLAT_SCALE * u_mm / 1000.0
+        base = c + r * (x - c.x) + n * (0.0 if on_plate else -0.01)
+        top, bot = base + u * (DASH_FLAT_SCALE * v_top / 1000.0), base + u * (DASH_FLAT_SCALE * v_bot / 1000.0)
         bend = 0.6 * off
         b.tube([top, top + n * bend, top + n * off - u * (off - bend), bot + n * off + u * (off - bend), bot + n * bend, bot],
                rod, mat, seg=12)
@@ -2100,12 +2110,13 @@ def build_cab_units(layout):
     f = Vector((0.88, 4.42, 1.58))
     b.obox(f - n * 0.035, r, z, n, (0.15, 0.115, 0.07), 'Paint_LightGrey')
     b.obox(f + r * 0.115 - n * 0.002, r, z, n, (0.06, 0.09, 0.004), 'Bakelite_Black')
-    n, r, z = _frame(195)                                       # the DP-3B
-    f = Vector((0.80, 4.50, 1.40))
-    b.obox(f - n * 0.05 + z * 0.02, r, z, n, (0.13, 0.10, 0.10), 'Paint_Radio')
-    b.obox(f - n * 0.045 - z * 0.055, r, z, n, (0.12, 0.05, 0.09), 'Paint_Radio')
+    n, r, z = _frame(195)                                       # the DP-3B: its face 0.20 x 0.13 m through g082-b (section 44)
+    f = Vector((0.7367, 4.517, 1.402))
+    b.obox(f - n * 0.055, r, z, n, (0.20, 0.13, 0.11), 'Paint_Radio')
+    b.obox(f - n * 0.002 + z * 0.0627, r, z, n, (0.204, 0.004, 0.006), 'Paint_Radio')       # the lid's rim
+    b.obox(f - n * 0.06 + z * 0.082 + r * 0.01, r, z, n, (0.06, 0.035, 0.03), 'Paint_LightGrey')   # its bracket above (g082-b)
     for s in (-1, 1):
-        c = f - z * 0.08 + r * (0.03 * s) - n * 0.03
+        c = f - z * 0.065 + r * (0.06 * s) - n * 0.04
         b.cylinder(tuple(c), tuple(c - z * 0.03), 0.011, 'Metal_Steel', seg=12)
     n, r, z = _frame(90)                                        # the valve on the left front post
     f = Vector((-1.0, 4.0, 1.78))
@@ -2131,11 +2142,11 @@ def build_driver_units():
     gauge low on the outboard side (g086-b, seen through the left windscreen)."""
     b = Builder('SM_DriverUnits')
     # the column stalk: a boss on the column's shroud, the stalk out to the right (the knob is the cabin's)
-    c = Vector((-0.36, 4.33, 1.47))
+    c = Vector(WHEEL_CENTRE)
     axis = Vector((0, -math.cos(math.radians(30)), math.sin(math.radians(30))))
     p = c - axis * 0.14
     b.cylinder(tuple(p + Vector((0.03, 0.0, 0.0))), tuple(p + Vector((0.058, 0.0, 0.0))), 0.018, 'Bakelite_Black', seg=14)
-    b.tube([tuple(p + Vector((0.055, 0.0, 0.0))), tuple(p + Vector((0.11, -0.005, -0.008))), (-0.215, 4.444, 1.386)], 0.0055,
+    b.tube([tuple(p + Vector((0.055, 0.0, 0.0))), tuple(p + Vector((0.11, -0.005, -0.008))), (-0.24, 4.414, 1.394)], 0.0055,
            'Metal_Dark', seg=10)
     # the pillar: a grey box-section column from the wheel housing's height to the roof, off SŁ-1M's front post
     n, r, z = _frame(90)
