@@ -542,6 +542,14 @@ def build_roof(b, shell, y_hatch0, y_hatch1, hatch_xs):
                                                         (bo['r_top_m'] - 0.01, (bz1 - bz0) * 0.75), (bo['r_top_m'], bz1 - bz0), (0.0, bz1 - bz0)], 'Duct_Grey', seg=32)   # dark grey canvas
     b.tube([(bx + bo['r_bottom_m'] * math.cos(2 * math.pi * i / 32), by + bo['r_bottom_m'] * math.sin(2 * math.pi * i / 32), bz0 + 0.012) for i in range(33)],
            bo['hem_r_m'], 'Paint_Equipment', seg=8)
+    col = bo.get('column')
+    if col:         # the turret's central column below the boot, down to its base ring on the floor (g097-b)
+        cz0 = col['z_bottom_m']
+        prof = sorted(col['profile_z_r_m'])
+        pts = [(0.0, 0.0), (prof[0][1], 0.0)] + [(r, z - cz0) for z, r in prof] + [(0.0, prof[-1][0] - cz0)]
+        b.lathe(Vector((bx, by, cz0)), Vector((0, 0, 1)), pts, 'Paint_LightGrey', seg=40)
+        ring = col['base_ring']
+        b.cylinder((bx, by, ring['z_m'][0]), (bx, by, ring['z_m'][1]), ring['r_m'], 'Paint_LightGrey', seg=40, smooth=False)
     build_roof_details(b, shell, half)
     arch = shell['wheel_arch_right']
     b.prism(arch['section_yz_m'], arch['x_from_m'], arch['x_to_m'], 'Paint_Equipment')

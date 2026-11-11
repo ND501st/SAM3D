@@ -61,12 +61,12 @@
   "turret_opening": {
     "what": "The turret's base in the roof, drawn as a dark near-circle until I4 builds the skirt and drive: the lining ends at it in a soft ragged roll round a white-painted metal collar",
     "centre_xy_m": [
-      -0.16,
-      0.02
+      0.002,
+      0.056
     ],
     "half_x_m": 0.78,
     "half_y_m": 0.55,
-    "source": "wwp_gecko g100-b d02-d04, d12: the casting's rim fits one ellipse across the vehicle, 0.63 wide to long, which is a circle seen about 51 degrees off the axis: an inference, the photo cannot prove it (the even gap to the rotating casting favours it). The forward edge at the beam's aft face (0.65), g096-a d06-d08. Forward edge kept on the beam's aft face, so it moved with the beam (9 Nov 2026)",
+    "source": "wwp_gecko g100-b d02-d04, d12: the casting's rim fits one ellipse across the vehicle, 0.63 wide to long, which is a circle seen about 51 degrees off the axis: an inference, the photo cannot prove it (the even gap to the rotating casting favours it). The forward edge at the beam's aft face (0.65), g096-a d06-d08. Forward edge kept on the beam's aft face, so it moved with the beam (9 Nov 2026) Moved (+0.162, +0.036) on 11 Nov 2026 onto the boot's axis as measured through the certified cameras (see boot).",
     "confidence": "low",
     "reread_nov9": "wwp_gecko g096-a (rendered through its registered camera against the photo): the opening spans 720 of the frame's 1000 columns where the model's ring spanned 620, centred 55-60 columns to the left of it, its aft rim at row 0.236 (z about 2.2: y -0.52) and its forward rim behind the band; the boot beside it likewise. half_x 0.78, centre (-0.16, 0.02), half_y 0.55, so its forward rim is behind the band; the lining's padded lip a little over the former roll (holistic_diff render, docs/OSA_INTERIOR_HOLISTIC.md section 33)",
     "lining_roll_r_m": 0.045,
@@ -74,28 +74,36 @@
     "boot": {
       "what": "The grey canvas boot round the turret's central column, hanging from the opening down behind the cabinet, slightly narrower at its foot, the hem laced",
       "centre_xy_m": [
-      -0.16,
-      0.02
+      0.002,
+      0.056
     ],
       "z_top_m": 2.17,
-      "z_bottom_m": 1.72,
-      "r_top_m": 0.24,
-      "r_bottom_m": 0.19,
+      "z_bottom_m": 1.81,
+      "r_top_m": 0.265,
+      "r_bottom_m": 0.234,
       "hem_r_m": 0.012,
-      "source": "wwp_gecko g096-a d06-d23 and g100-b: its edges cast through g096-a's solved camera (tools/recon/holistic_sfm.py) to the plane y -0.1, widths 0.48 and 0.38 m across; on the hull's centre line by symmetry; how far down it hangs is hidden behind the cabinet, an estimate; its foot: the depth maps' fused cloud has almost nothing within 0.3 m of the axis below z 1.8, and g100-a, g100-c and g099-d see past where it would hang (docs/OSA_INTERIOR_HOLISTIC.md section 31)",
+      "column": {
+        "what": "The turret's central column below the boot, painted grey, a little wider towards its foot, standing on a base ring on the floor. What it carries inside is not in the sources",
+        "z_bottom_m": 0.78,
+        "profile_z_r_m": [[1.81, 0.234], [1.76, 0.234], [1.68, 0.243], [1.6, 0.26], [1.45, 0.267], [1.22, 0.27], [0.86, 0.27]],
+        "base_ring": {"z_m": [0.78, 0.86], "r_m": 0.28},
+        "source": "wwp_gecko g097-b through its certified grade-A camera: the column's outboard silhouette, rows 350-1050, stands 0.234 m from the boot's axis at z 1.76, 0.26 at 1.6, 0.267-0.271 from 1.45 down to 1.22 (a ray's plan distance from the axis, at the height where it passes it); the boot's dark canvas ends at row 285 (z 1.81) under a blue-grey strap (rows 220-250); the base ring at rows 1480-1500 (z 0.85-0.87) on the floor (0.78, floor.spine). Coaxial with the boot (one silhouette cannot place it alone); below z 1.22 the radius is kept (a pipe crosses the silhouette there). It stands 12 mm clear of cabinet 0096 at its nearest (the cabinet mesh's vertex at z 0.96, 0.282 m from the axis). It hides the bulkhead door's dog levers in g097-b, as the photo does",
+        "confidence": "low"
+      },
+      "source": "wwp_gecko g096-a d06-d23 and g100-b: its edges cast through g096-a's solved camera (tools/recon/holistic_sfm.py) to the plane y -0.1, widths 0.48 and 0.38 m across; on the hull's centre line by symmetry; how far down it hangs is hidden behind the cabinet, an estimate; its foot: the depth maps' fused cloud has almost nothing within 0.3 m of the axis below z 1.8, and g100-a, g100-c and g099-d see past where it would hang (docs/OSA_INTERIOR_HOLISTIC.md section 31) Moved (+0.162, +0.036) on 11 Nov 2026 with the opening and the base: the boot's silhouette in g096-a and g100-b cast through their certified grade-A cameras (tools/traces/osa_interior/cameras.json) puts the axis at (0.002, 0.056), radius 0.24 m at mid height and 0.27 near the top; the frame_2026_11 rebuild had found it 1.096 m from SL-2M's face (x -0.008) and left the roof unmoved (docs/research/OSA_REBUILD_C_2026-11.md). Its foot re-read the same day in g097-b (certified camera): the dark canvas ends at z 1.81, radius 0.234, and the turret's grey column carries on below it to the floor (column); the earlier \"nothing within 0.3 m of the axis\" was about the old axis 0.16 m to the left.",
       "confidence": "low"
     },
     "base": {
       "what": "Above the opening: the turret's olive base casting with its gearbox housing and a tan drum, drawn as a shallow relief on the opening's plane until the drive is modelled",
       "gearbox_xy_m": [
-        0.22,
-        0.22,
+        0.382,
+        0.256,
         0.32,
         0.2
       ],
       "drum_xy_m": [
-        -0.22,
-        0.25
+        -0.058,
+        0.286
       ],
       "drum_r_m": 0.06,
       "drop_m": 0.05,

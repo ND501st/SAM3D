@@ -424,7 +424,36 @@ overview renders (`view_*.png`, the top view with the roof off) and `contents.js
 assembles the same pieces at run time and never imports it. `tools/tests/test_osa_interior_complete.py` fails if a
 placed mesh is not built or a built one is not placed. `--assemble-only` skips the rebuild.
 
+**Scoring every panel against the photos (11 Nov 2026).** `tools/recon/osa/panel_score.py` renders the assembled
+interior (controls included, `tools/blender/assembled_render.py`) through the nine trusted grade-A cameras (residual
+under 5 px; not g091-a) and, per part and view, measures the median distance from the model's edges to the photo's,
+in px and in mm at the part's range, and the share within 3 px. Parts the eye stands inside are hidden (g094-a's eye is
+14 cm inside SP-1M's box). `panel_fit.py` turns per-view 2D shifts into a 3D move per part (reported, never applied; it
+is noisy on cluttered views, so a move is kept only when re-scoring shows it helps in every view), and `panel_look.py`
+crops one part beside the photo. Best view per panel: air_panel 1.4 mm, sp2m_panel 1.4, sp2m_face 1.4, pwr_cabinet 1.7,
+cabinet_0096 1.9, op_panel 2.1, fo_panel 2.2, sl1m_face 2.3, so_panel 3.1, sl3m_face 3.5, sp3m_face 4.4, R-124 A-3 6.4.
+The big numbers in oblique views (g093-a, g097-a) are the operators' seats folded up in front of the camera, which the
+cabin does not model. **No trusted camera sees** the cab's panels (dash, PU-303, commander, radios, fire system, cab
+units, gyro arrest), the R-124 A-1 and A-2, the vent hatches or the bulkhead's own panels: they stand as placed from
+grade-B views and the book's drawings.
+
+Changed from the scores the same day:
+- **The turret's axis** (`osa_ak_shell.json` `turret_opening`): the boot's silhouette in g096-a and g100-b through the
+  certified cameras puts it at (0.002, 0.056), where the data had (-0.16, 0.02) from the old frame (the frame fix had
+  found it 1.096 m from SŁ-2M's face and left the roof unmoved). The opening, the boot and the base moved (+0.162, +0.036).
+- **The turret's column below the boot** (new, `turret_opening.boot.column`): g097-b shows it grey from the boot's foot
+  (z 1.81, not 1.72) to a base ring on the floor, radius 0.234 m widening to 0.27; it hides the bulkhead's dog levers
+  there as the photo does, which was the 75 mm "error" of `bulkhead_panel`. 12 mm clear of cabinet 0096.
+- `air_panel` (+19, +25, -2 mm), `sp2m_panel` (+6, -2, +4 mm), `lamp_blue_post` (+4, +29, +16 mm): each re-scored better
+  in the views that see it (air 0.81 to 0.92 and 0.35 to 0.62 within 3 px; the lamp better in two of three).
+- Tried and put back: SP-3M's flap (better in three views, worse in two).
+
 Open:
+- Chest 5937 and the first-aid box moved with the right racks in the frame fix and were never re-measured; they score
+  15-22 mm and 10-14 mm off in three views, but the edge fit runs to its search limit (other structure), so they need a
+  triangulated feature each (the first-aid cross was found by colour in one photo only).
+- SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded
+  seat; one view, not settled.
 - SŁ-2M's top blocks (0062-6M's gauges, so's counter strip) reach about 3 cm above the 2.10 m top rail (Fig. 3) in
   g094-a; they are cut at the rail on all three columns. Raising the rack's top is a hull change for the owner.
 - op_panel's width is done (above). SŁ-2M is now 1.99 m long against Fig. 3's 1.89 m, the scale several racks were
