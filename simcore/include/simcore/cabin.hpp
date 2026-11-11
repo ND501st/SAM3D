@@ -139,7 +139,10 @@ struct CabinLook {
     std::string color;      // black, white, grey, chrome, brass, red, green, amber, yellow, orange
     std::string ring;       // lamp_button: the ring's colour
     std::string label;      // nameplate text, or the item's engraved label
-    std::string scale;      // gauge: the printed dial, "linear" (default, 0-10), "compass" (a 0-35 card) or "counters" (a row of lit digit windows)
+    std::string scale;      // gauge: the printed dial, "linear" (default, 0-10), "compass" (a 0-35 card), "counters" (a row of lit digit windows) or "hours" (an hour meter: a grey face with a digit window)
+    std::vector<std::string> marks;  // gauge, linear: the figures printed at its major marks, first to last (as read off a
+                                     // photograph); empty: the generic 0-10
+    std::string unit;                // gauge: the unit printed on its face
 };
 
 // A block (one instrument unit of a console column): its plate on the panel and its type plate.
@@ -866,8 +869,27 @@ private:
         }
         if (!out.scale.empty()) {
             if (out.kind != CabinLookKind::Gauge) return Fail(Join(path, "scale"), "for gauges only");
-            if (out.scale != "linear" && out.scale != "compass" && out.scale != "counters") {
-                return Fail(Join(path, "scale"), "unknown scale '" + out.scale + "' (linear, compass or counters)");
+            if (out.scale != "linear" && out.scale != "compass" && out.scale != "counters" &&
+                out.scale != "hours") {
+                return Fail(Join(path, "scale"), "unknown scale '" + out.scale + "' (linear, compass, counters or hours)");
+            }
+        }
+        if (inline_keys) {
+            if (const json::Value* marks = OptionalArray(v, path, "marks")) {
+                for (std::size_t i = 0; i < marks->items.size(); ++i) {
+                    const json::Value& m = marks->items[i];
+                    if (!m.Is(json::Type::String) || m.string.empty()) return Fail(Index(Join(path, "marks"), i), "expected a non-empty string");
+                    out.marks.push_back(m.string);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (!OptionalString(v, path, "unit", out.unit)) return false;
+            if ((!out.marks.empty() || !out.unit.empty()) && out.kind != CabinLookKind::Gauge) {
+                return Fail(Join(path, out.marks.empty() ? "unit" : "marks"), "for gauges only");
+            }
+            if (!out.marks.empty() && (out.marks.size() < 2 || (!out.scale.empty() && out.scale != "linear"))) {
+                return Fail(Join(path, "marks"), "a linear dial's figures, two or more");
             }
         }
         for (const std::string* c : {&out.color, &out.ring}) {
@@ -1015,7 +1037,7 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("fixtures", i);
             const json::Value& f = arr->items[i];
-            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "scale", "notes"})) return false;
+            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "scale", "marks", "unit", "notes"})) return false;
             CabinFixture fixture;
             if (!Placement(f, path, out, fixture.panel_id, fixture.u_m, fixture.v_m) ||
                 !LoadLook(f, path, true, fixture.look)) {

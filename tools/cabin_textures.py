@@ -312,11 +312,12 @@ class Face:
                     half = (x1 - x0) / cols * rng.uniform(0.15, 0.35)
                     self.draw.line([(cx - half, cy), (cx + half, cy)], fill=DIAGRAM_INK, width=lw)
 
-    def dial(self, u, v, w, h, black, scale=None):
+    def dial(self, u, v, w, h, black, scale=None, marks=None, unit=''):
         """An instrument face under the cabin's bezel: a black (or white) face with a printed scale, its needle at rest
         and a hub. Round when w == h (a 270 degree scale, 0 to 10, as on the vehicle's dash gauges in rwd_mb3
         9a33_31/32), else a rectangular meter with a 100 degree arc. The scale itself is generic: no source gives
-        the dial markings, only that the faces are black with white print."""
+        the dial markings, only that the faces are black with white print. A fixture that gives `marks` (its figures,
+        read from a photo) has them printed evenly over the span, with its `unit` under the hub."""
         face = (22, 22, 21) if black else (222, 220, 208)
         ink = (226, 224, 214) if black else (28, 28, 26)
         lw = max(1, int(round(0.0006 * self.ppm)))
@@ -325,6 +326,8 @@ class Face:
             return self.compass(u, v, w, h, face, ink, lw)
         if scale == 'counters':
             return self.counters(u, v, w, h)
+        if scale == 'hours':
+            return self.hour_meter(u, v, w)
         round_dial = abs(w - h) < 1e-6
         if round_dial:
             cx, cy = self.px(u, v)
@@ -340,22 +343,44 @@ class Face:
             a = math.radians(angle_deg)
             return self.px(pivot[0] + math.sin(a) * rad, pivot[1] + math.cos(a) * rad)
 
+        if marks:
+            n_major = len(marks) - 1
         steps = n_major * 5
         for k in range(steps + 1):
             a = start + span * k / steps
             major = k % 5 == 0
             d.line([at(a, radius * (0.78 if major else 0.89)), at(a, radius)], fill=ink, width=lw * (2 if major else 1))
-        f = self.font((0.07 * w) if round_dial else (0.1 * h))
+        f = self.font((0.085 if marks else 0.07) * w if round_dial else (0.1 * h))
         for k in range(n_major + 1):
             a = start + span * k / n_major
-            x, y = at(a, radius * 0.5)
-            d.text((x, y), str(k * (2 if n_major == 5 else 1)), fill=ink, font=f, anchor='mm')
-        # needle at rest, a little off zero, and the hub
-        a = start + 0.18 * span
+            x, y = at(a, radius * (0.6 if marks else 0.5))   # a photographed dial's figures stand just inside its ticks
+            text = marks[k] if marks else str(k * (2 if n_major == 5 else 1))
+            d.text((x, y), text, fill=ink, font=f, anchor='mm')
+        if unit:
+            x, y = self.px(pivot[0], pivot[1] - (0.2 * w if round_dial else 0.12 * h))
+            d.text((x, y), unit, fill=ink, font=self.font((0.06 * w) if round_dial else (0.08 * h)), anchor='mm')
+        # needle at rest: on the photographed dial's zero (the ammeter's is in the middle), else a little off the stop
+        rest = (marks.index('0') if '0' in marks else 0) / n_major if marks else 0.18
+        a = start + rest * span
         d.line([at(a, 0), at(a, radius * 0.92)], fill=ink if black else (150, 30, 20), width=lw * 2)
         hx, hy = self.px(*pivot)
         hr = (0.05 * w if round_dial else 0.07 * h) * self.ppm
         d.ellipse([hx - hr, hy - hr, hx + hr, hy + hr], fill=(70, 70, 68) if black else (60, 60, 58))
+
+    def hour_meter(self, u, v, w):
+        """The engine-hour meter on the driver's instrument plate (wwp_gecko g085-a): a round grey face with a black
+        window of white digit wheels across its middle. The hours shown are a placeholder."""
+        d = self.draw
+        cx, cy = self.px(u, v)
+        r = 0.45 * w * self.ppm
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(150, 152, 150), outline=(95, 96, 94),
+                  width=max(1, int(round(0.0008 * self.ppm))))
+        (x0, y0), (x1, y1) = self.px(u - 0.27 * w, v + 0.075 * w), self.px(u + 0.27 * w, v - 0.075 * w)
+        d.rectangle([x0, y0, x1, y1], fill=(18, 18, 17))
+        f = self.font(0.11 * w)
+        for k, ch in enumerate('01234'):
+            x, _ = self.px(u - 0.216 * w + 0.108 * w * k, v)
+            d.text((x, cy), ch if k < 4 else '7', fill=(222, 220, 210) if k < 4 else (200, 40, 30), font=f, anchor='mm')
 
     def counters(self, u, v, w, h):
         """The SOC/SSC readout strip (0094-5; opisybroni 54539, and a Polish-modernised console in user_modernised_2,
@@ -513,7 +538,7 @@ def bake_panel(layout, console, panel, ppm, seed):
         if kind in ('nameplate', 'bezel', 'window', 'legend'):
             continue
         if kind == 'gauge':
-            face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'))
+            face.dial(u, v, w, h, fx.get('color') == 'black', fx.get('scale'), fx.get('marks'), fx.get('unit', ''))
             if fx.get('scale') == 'counters':
                 continue
         if kind in ('knob', 'pointer_knob', 'bar_knob', 'trim', 'toggle', 'lever', 'button', 'lamp_button'):

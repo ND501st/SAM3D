@@ -1261,12 +1261,10 @@ def build_rack_sl3m(layout):
 
 
 def build_chest_5937():
-    """The stencilled stowage tin hung on the wall under SP-3M-2 (wwp_gecko g098-a, b, c, session A). Re-measured 11 Nov 2026 on the joint
-    solve's points that g092-a, g096-a and g098-a-c see on it, through the certified cameras: its lid's inboard edge at x 0.706-0.718 and
-    z 1.47-1.49, its forward end at y 0.09-0.14 (it had been 0.35 m aft, moved only outboard with the right racks); its length and depth are
-    the first triangulation's (0.49, 0.24); how deep it runs back to the wall is an estimate."""
+    """The stencilled stowage tin hung on the wall under SP-3M-2 (wwp_gecko g098-a, b, c, session A): its front, length and height triangulated
+    through the joint solve to 2-8 mm; how deep it runs back to the wall is the lid's forward corner and an estimate."""
     b = Builder('SM_Chest5937')
-    x0, x1, y0, y1, z0, z1 = 0.715, 0.956, -0.39, 0.10, 1.32, 1.45
+    x0, x1, y0, y1, z0, z1 = 0.49 + RIGHT_SHIFT_X, 0.731 + RIGHT_SHIFT_X, -0.736, -0.246, 1.27, 1.40     # not yet measured again through certified cameras: moved with the right racks
     cx, cy, w, d = (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0
     plan = rrect(cx, cy, w, d, 0.04)
     def layer(grow, top, t, mat):
@@ -1275,8 +1273,8 @@ def build_chest_5937():
     for zb in (z0 + 0.04, z0 + 0.085):      # the two pressed beads round its body
         layer(0.004, zb + 0.005, 0.01, 'Paint_Interior')
     layer(0.008, z1 + 0.024, 0.024, 'Paint_Interior')           # the lid and its rim
-    for y in (y0 + 0.371, y0 + 0.124):      # the two hasps
-        b.box(x0 - 0.016, x0 - 0.008, y - 0.009, y + 0.009, z0 + 0.085, z1 + 0.03, 'Metal_Steel')
+    for y in (-0.365, -0.612):              # the two hasps
+        b.box(x0 - 0.016, x0 - 0.008, y - 0.009, y + 0.009, 1.355, z1 + 0.03, 'Metal_Steel')
     return finish(b, bevel=0.002)
 
 
@@ -1331,9 +1329,16 @@ def build_first_aid():
     return finish(b, bevel=0.002)
 
 
-RADIO_BOX_TOP = 1.455    # ZCzZ1A nr 2's lid, the right R-123M's frame on it (wwp_gecko g090-a, g090-c; H3, 9 Nov 2026)
-RADIO_LEFT_FRAME_TOP = FLOOR_Z + 0.42   # the left R-123M's floor frame in its well under SŁ-1M (wwp_gecko g091-d)
-LEFT_TRAY_Z = 1.35      # the steel tray over the left R-123M (g091-d; the book's caption: the radios' steel covers)
+# The two R-123Ms and what they stand on, read through g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 30,
+# eye +-0.04 m) with each set's front, 225 mm high (r123m_trace.py), as the yardstick for its distance (section 42).
+RADIO_BOX = (2.62, 3.29, 1.17, 1.545)   # ZCzZ1A nr 2 under the right set: y aft, fore, z foot, lid. Its aft end and inboard
+                                        # face lie in the set's front's plane (g082-b), 0.355 m high (g082-b; g090-a 0.31-0.40);
+                                        # its length Fig. 3's 0.67 m (section A-A), the forward end hidden by the seat
+RADIO_BOX_FACE_X = 0.65                 # measured 0.69 +-0.03; held 0.04 inboard so the set clears SP-1M's face (0.787)
+LEFT_SET_FACE_X = -0.34                 # the left set's front, looking inboard (g082-b, its 225 mm at 347 px)
+LEFT_SET_FOOT_Z = 1.10                  # its foot on the shock tray
+LEFT_TRAY = (-0.64, -0.33, 2.60, 3.28)   # the shock tray on the cab's deck: x out, in, y aft, fore (g082-b; g091-b, g091-d)
+LEFT_COVER = (-0.74, -0.27, 2.55, 3.30, 1.38)   # the tread cover over the set and its BP-26: x, y, its top (g082-b, g091-d)
 
 
 def prism(b, X, ya, yb, section, mat, t=0.004):
@@ -1533,31 +1538,78 @@ def sp1m_extra(b, X):
 
 
 def sp1m_box(b, X):
-    """Spare-parts box ZCzZ1A nr 2 under SP-1M, standing on the floor and reaching into the aisle, with the right
-    R-123M's frame on its lid. Plan from mon_2112_80 Fig. 3 (y 2.72-3.39, section A-A); height from the photos: g090-a
-    shows the box's plate ЗИП №1А ЯЩИК №2 under the set and the box running down to the floor, g090-c its fold-down
-    front. Section A-A draws it 0.19 m high just under the blocks; its heights are squashed (5.74 mm a pixel against
-    4.86 in plan), so the photo is taken (docs/OSA_INTERIOR_HOLISTIC.md section 10)."""
-    b.box(X(-0.03), X(0.245), 2.72, 3.39, FLOOR_Z, RADIO_BOX_TOP, 'Paint_Equipment')
-    b.box(X(0.245), X(0.25), 2.80, 2.98, RADIO_BOX_TOP - 0.10, RADIO_BOX_TOP - 0.04, 'Metal_Dark')   # its nameplate
-    for yy in (2.98, 3.45):                                                                            # the set's frame
-        b.box(X(0.037), X(0.227), yy - 0.01, yy + 0.01, RADIO_BOX_TOP, RADIO_BOX_TOP + 0.03, 'Metal_Steel')
+    """Spare-parts box ZCzZ1A nr 2 (its plate: ЗИП №1Д ЯЩИК №2, g090-a) under the right R-123M: a low steel box lying
+    along the hull with an X of pressed beads on its inboard side, the plate on it, a latch at the top of its aft end, the
+    set's frame on its lid (g082-b, g090-a). Its place and height from g082-b's measured camera (RADIO_BOX); it stands on
+    the lower wall's slope and two legs to the deck (by eye). It ran from the floor to 1.455 before (11 Nov 2026), 0.84 m
+    high: the photos show it 0.355 m high under the set."""
+    y0, y1, z0, z1 = RADIO_BOX
+    xi, xo = RADIO_BOX_FACE_X, X(0.002)
+    b.box(xi, xo, y0, y1, z0, z1, 'Paint_LightGrey')
+    b.box(xi - 0.006, xo, y0 - 0.006, y1 + 0.006, z1 - 0.025, z1 + 0.004, 'Paint_LightGrey')       # the lid's skirt
+    for s in (1, -1):                                                                             # the X of beads
+        za, zb = (z0 + 0.03, z1 - 0.05) if s > 0 else (z1 - 0.05, z0 + 0.03)
+        p0, p1 = Vector((xi, y0 + 0.04, za)), Vector((xi, y1 - 0.04, zb))
+        u = (p1 - p0).normalized()
+        b.obox((p0 + p1) / 2 + Vector((-0.003, 0, 0)), u, Vector((1, 0, 0)).cross(u), Vector((1, 0, 0)),
+               ((p1 - p0).length, 0.012, 0.006), 'Paint_LightGrey')
+    b.box(xi - 0.003, xi, y0 + 0.17, y0 + 0.31, z1 - 0.095, z1 - 0.05, 'Metal_Dark')                # its plate
+    b.box(xi + 0.01, xi + 0.06, y0 - 0.014, y0, z1 - 0.07, z1 - 0.035, 'Metal_Steel')               # the latch
+    for yy in (y0 + 0.04, y1 - 0.04):                                                             # the legs to the deck
+        b.box(xi + 0.005, xi + 0.03, yy - 0.012, yy + 0.012, FLOOR_Z + 0.36, z0, 'Metal_Steel')
+    for yy in (y0 + 0.04, y0 + 0.37):                                                             # the set's frame
+        b.box(xi + 0.015, xo - 0.01, yy - 0.01, yy + 0.01, z1 + 0.004, z1 + 0.034, 'Metal_Steel')
 
 
 def sl1m_extra(b, X):
     sl1m_top(b, X)
-    sl1m_well(b, X)
 
 
-def sl1m_well(b, X):
-    """The left R-123M's well under SŁ-1M: the set's frame on the floor and the steel tray over it on two posts
-    (wwp_gecko g091-d: the set low under the rack's bottom blocks, the tray a perforated steel plate). Plan from
-    mon_2112_80 Fig. 3 (the set at y 3.03); heights from the photo, about +-0.08 m until the camera solve (I1)."""
-    for yy in (2.80, 3.26):
-        b.box(X(0.037), X(0.227), yy - 0.01, yy + 0.01, FLOOR_Z, RADIO_LEFT_FRAME_TOP, 'Metal_Steel')
-    b.box(X(-0.03), X(0.27), 2.68, 3.40, LEFT_TRAY_Z, LEFT_TRAY_Z + 0.006, 'Paint_Rack')
-    for yy in (2.70, 3.38):
-        b.box(X(0.24), X(0.26), yy - 0.01, yy + 0.01, FLOOR_Z, LEFT_TRAY_Z, 'Metal_Steel')
+def build_radio_tray_left():
+    """The left R-123M and its BP-26 on one shock tray on the cab's deck behind the driver's seat, under a steel tread
+    cover (wwp_gecko g082-b: the cover's end plate Р-123М-1 looking aft, a light canvas cloth hanging under the cover,
+    the set's front inboard at the cover's forward end; g091-b: the BP-26 aft of the set on the same tray; g091-d: the
+    cover a plate with pressed beads in an X, its edge turned down). Places from g082-b's measured camera (LEFT_TRAY,
+    LEFT_COVER, about +-0.05 m); the shock mounts, the rails and the cloth's folds by eye. It stood in a well under SŁ-1M
+    before (11 Nov 2026), 0.65 m outboard: g082-b and g091-d put it here."""
+    b = Builder('SM_RadioTrayLeft')
+    x0, x1, y0, y1 = LEFT_TRAY
+    deck = FLOOR_Z + 0.36
+    for yy in (y0 + 0.03, y1 - 0.03):                      # the base's two cross channels on the deck
+        b.box(x0, x1, yy - 0.025, yy + 0.025, deck, deck + 0.02, 'Metal_Steel')
+    for xx in (x0 + 0.03, x1 - 0.03):                      # the shock mounts, rubber under steel cups
+        for yy in (y0 + 0.03, y1 - 0.03):
+            b.cylinder((xx, yy, deck + 0.02), (xx, yy, deck + 0.05), 0.024, 'Rubber_Black', seg=14)
+            b.cylinder((xx, yy, deck + 0.05), (xx, yy, deck + 0.062), 0.03, 'Metal_Steel', seg=14)
+    for xx in (x0 + 0.03, x1 - 0.03):                      # the tray's two rails along the hull, the sets' feet on them
+        b.box(xx - 0.02, xx + 0.02, y0, y1, deck + 0.062, LEFT_SET_FOOT_Z, 'Metal_Steel')
+    b.box(x0, x1, y0, y1, LEFT_SET_FOOT_Z - 0.006, LEFT_SET_FOOT_Z, 'Metal_Steel')
+    cx0, cx1, cy0, cy1, ctop = LEFT_COVER
+    t = 0.003
+    b.box(cx0, cx1, cy0, cy1, ctop - t, ctop, 'Metal_Steel')                     # the tread plate
+    for s in (1, -1):                                                           # its X of pressed beads
+        p0 = Vector((cx0 + 0.04, cy0 + 0.04, ctop)) if s > 0 else Vector((cx1 - 0.04, cy0 + 0.04, ctop))
+        p1 = Vector((cx1 - 0.04, cy1 - 0.04, ctop)) if s > 0 else Vector((cx0 + 0.04, cy1 - 0.04, ctop))
+        u = (p1 - p0).normalized()
+        b.obox((p0 + p1) / 2 + Vector((0, 0, 0.002)), u, Vector((0, 0, 1)).cross(u), Vector((0, 0, 1)),
+               ((p1 - p0).length, 0.012, 0.005), 'Metal_Steel')
+    for x in (cx0, cx1):                                                        # its edges turned down
+        b.box(x - t / 2, x + t / 2, cy0, cy1, ctop - 0.03, ctop, 'Metal_Steel')
+    b.box(cx0, cx1, cy1 - t, cy1, ctop - 0.03, ctop, 'Metal_Steel')
+    # the end plates under the cover's outboard part, aft (Р-123М-1) and forward, narrowing to the tray
+    foot = 1.115
+    for yy, plate in ((cy0, True), (cy1 - 0.02, False)):
+        q = [(-0.70, ctop - t), (-0.47, ctop - t), (-0.52, foot), (-0.69, foot)]
+        b.slab((0, yy, 0), Vector((1, 0, 0)), Vector((0, 0, 1)), q, [], t, "Paint_LightGrey")
+        b.box(-0.695, -0.515, yy, yy + 0.04, foot - 0.006, foot, 'Metal_Steel')
+        if plate:
+            b.box(-0.645, -0.545, yy - 0.002, yy, ctop - 0.06, ctop - 0.035, 'Metal_Dark')
+            for xx in (-0.63, -0.56):                                       # the two pressed ribs down the plate
+                b.box(xx - 0.006, xx + 0.006, yy - 0.003, yy, foot + 0.03, ctop - 0.08, 'Paint_LightGrey')
+    # the canvas cloth hanging under the cover: down its outboard side, and inboard between the end plate and the set
+    b.box(cx0 + 0.004, cx0 + 0.016, cy0 + 0.02, cy1 - 0.02, foot - 0.02, ctop - t, 'Canvas')
+    b.box(-0.47, LEFT_SET_FACE_X - 0.02, cy0 + 0.01, 2.84, foot - 0.03, ctop - t, 'Canvas')
+    return finish(b, bevel=0.0015)
 
 
 # ---------------------------------------------------------------------------------------------- seats and bench
@@ -1670,7 +1722,8 @@ def build_steering():
         b.tube([c + d * 0.055 + axis * 0.02, c + d * 0.13 + axis * 0.008, c + d * 0.225], 0.017, 'Rubber_Black', seg=12)
     b.lathe(c - axis * 0.02, axis, [(0.0, 0.0), (0.06, 0.0), (0.068, 0.025), (0.06, 0.05), (0.035, 0.062), (0.0, 0.064)],
             'Bakelite_Black', seg=32)                     # the large cup hub (g084-c)
-    b.cylinder(c + axis * 0.043, c + axis * 0.046, 0.03, 'Metal_Steel', seg=24)   # its emblem disc
+    b.lathe(c + axis * 0.043, axis, [(0.0, 0.0), (0.032, 0.0), (0.032, 0.002), (0.027, 0.004), (0.0, 0.006)], 'Bakelite_Black',
+            seg=24)                                       # its emblem, moulded in the bakelite in relief (g084-c, g083-a)
     col_end = c - axis * 0.40
     b.cylinder(c - axis * 0.02, col_end, 0.03, 'Metal_Dark', seg=20)
     b.cylinder(c - axis * 0.10, c - axis * 0.32, 0.045, 'Rubber_Black', seg=20)
@@ -1995,14 +2048,54 @@ def build_bp26():
     return finish(b, bevel=0.0015, reuse=True)
 
 
-def build_cab_units():
+# The dash's bow handles, measured on g085-a laid flat (out/recon/osa/panels/flats/dash, 3 px/mm; u mm right of the
+# instrument plate's centre, v mm up; docs/OSA_INTERIOR_HOLISTIC.md section 43): (panel, u of the feet, v top, v bottom,
+# rod radius, stand-off, material, on a plate). Two chrome handles either side of the gap between the instrument plate and
+# the switch plate, a larger painted one on the dash right of the switch plate. The stand-offs are SAM3D's estimates (the
+# flat is square-on and does not show them).
+DASH_HANDLES = [('driver_panel', 211, 74, -28, 0.005, 0.030, 'Metal_Steel', True),
+                ('commander_panel', 248, 74, -28, 0.005, 0.030, 'Metal_Steel', True),
+                ('commander_panel', 520, 71, -102, 0.010, 0.040, 'Paint_LightGrey', False)]
+DASH_U0_MM = {'driver_panel': -210.5, 'commander_panel': 496.0}   # each panel's centre on the flat (dash.json 'panels')
+DASH_SCREWS = ('d_left', 'd_instr', 'c_switch')                    # plates held by four domed screws at their corners
+DASH_SCREW_INSET_M = (0.0071, 0.011)                               # in from the plate's sides and top/bottom (dash.json)
+
+
+def dash_hardware(b, layout):
+    """The dash's bow handles and the domed screws at its plates' corners (wwp_gecko g085-a, g084-c), on the faces of
+    the panels and plates the cabin draws (a plate stands 10 mm proud of its panel, holistic_scene.py, USimCabinComponent)."""
+    panels = {p['id']: p for p in layout['panels']}
+    for pid, u_mm, v_top, v_bot, rod, off, mat, on_plate in DASH_HANDLES:
+        c, n, r, u = panel_frame(panels[pid])
+        base = c + r * ((u_mm - DASH_U0_MM[pid]) / 1000.0) + n * (0.0 if on_plate else -0.01)
+        top, bot = base + u * (v_top / 1000.0), base + u * (v_bot / 1000.0)
+        bend = 0.6 * off
+        b.tube([top, top + n * bend, top + n * off - u * (off - bend), bot + n * off + u * (off - bend), bot + n * bend, bot],
+               rod, mat, seg=12)
+        for foot in (top, bot):                                   # the round foot plates
+            b.cylinder(tuple(foot - n * 0.001), tuple(foot + n * 0.003), 2.2 * rod, mat, seg=14)
+    for blk in layout.get('blocks', []):
+        if blk['id'] not in DASH_SCREWS:
+            continue
+        c, n, r, u = panel_frame(panels[blk['panel']])
+        mid = c + r * blk['at_m'][0] + u * blk['at_m'][1]
+        hw, hh = blk['size_m'][0] / 2 - DASH_SCREW_INSET_M[0], blk['size_m'][1] / 2 - DASH_SCREW_INSET_M[1]
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                b.lathe(mid + r * (sx * hw) + u * (sy * hh), n, [(0.0, 0.0), (0.0055, 0.0), (0.0052, 0.0012), (0.0042, 0.0024),
+                                                                (0.0024, 0.0032), (0.0, 0.0035)], 'Metal_Steel', seg=14)
+
+
+def build_cab_units(layout):
     """Small units round the cab with controls the cabin draws (data/cabins/osa_ak.json), each the body behind its
     panel; places are estimates (no solved camera sees the cab):
     the engine pre-heater's control box and its plate at the right corner post (wwp_gecko g087-c, g087-d);
     the DP-3B's measuring box beside the commander's dash (g087-d); the ВЕНТИЛЯЦИЯ — ОТОПЛЕНИЕ valve on the left
-    front post by SŁ-1M (g086-a); the switch box with the red lever in the left radio well (g091-d); the two valves on
-    the roof header over the windscreens (g089-a, g089-b)."""
+    front post by SŁ-1M (g086-a); the switch box with the red lever by the left radio's tray (g091-d; placed on g082-b's
+    ray, docs/OSA_INTERIOR_HOLISTIC.md section 42); the two valves on the roof header over the windscreens (g089-a,
+    g089-b); the dash's handles and plate screws (dash_hardware)."""
     b = Builder('SM_CabUnits')
+    dash_hardware(b, layout)
     n, r, z = _frame(210)                                       # the pre-heater box
     f = Vector((0.88, 4.42, 1.58))
     b.obox(f - n * 0.035, r, z, n, (0.15, 0.115, 0.07), 'Paint_LightGrey')
@@ -2018,7 +2111,8 @@ def build_cab_units():
     f = Vector((-1.0, 4.0, 1.78))
     b.obox(f - n * 0.03, r, z, n, (0.06, 0.06, 0.06), 'Paint_LightGrey')
     b.obox(f - n * 0.002 - z * 0.17, r, z, n, (0.09, 0.05, 0.004), 'Bakelite_Black')          # its plate
-    f = Vector((-1.04, 3.20, 1.33))                             # the radio well's switch box
+    well = next(p for p in layout['panels'] if p['id'] == 'radio_well_panel')
+    f = Vector(well['centre_m'])                                # the switch box behind its panel (its face the panel's)
     b.obox(f - n * 0.025, r, z, n, (0.09, 0.10, 0.05), 'Paint_LightGrey')
     for x in (-0.45, 0.55):                                     # the header valves, on short pipes
         c = Vector((x, 4.35, 2.0))
@@ -2087,7 +2181,7 @@ def build_all(layout):
     objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_cab_levers(), build_cab_fittings(), build_r123m(),
              build_ta57(), build_spare_box(), build_ga3(), build_capsule(), build_awo(),
              build_dome_lamp(), build_wall_lamp_blue(), build_chest_5937(), build_first_aid(),
-             build_fire_system(), build_bp26(), build_cab_units(), build_driver_units()]
+             build_fire_system(), build_bp26(), build_cab_units(layout), build_driver_units(), build_radio_tray_left()]
     return objs
 
 
@@ -2109,7 +2203,7 @@ def export(obj):
 PREVIEW_PLACES = {
     'SM_OperatorSeat': [((-0.71, y, SEAT_Z - 0.04), -90) for y in (0.875, 1.555, 2.2)],
     'SM_CabSeat': [((-0.36, 3.866, CAB_SEAT_TOP_Z), 0), ((0.33, 3.866, CAB_SEAT_TOP_Z), 0)],
-    'SM_RadioR123M': [((-0.62, 3.28, 1.25), 90), ((0.64, 3.215, 0.80), -90)],
+    'SM_RadioR123M': [((-0.407, 3.043, 1.207), 90), ((0.717, 2.833, 1.737), -90)],
     'SM_PhoneTA57': [((-0.10, 2.37, 1.03), 0)],
     'SM_SpareBox': [((0.51, 2.32, 0.715), 0)],
     'SM_GA3': [((-0.908, -0.345, 0.77), 0)],
@@ -2118,7 +2212,7 @@ PREVIEW_PLACES = {
     'SM_Cabinet0096': [((-0.2816, 0.3804, 1.3049), -15.7)],     # built by build_cabinet0096.py
     'SM_DomeLamp': [((0.12, 2.0, 2.075), 0), ((0.12, 0.6, 2.075), 0), ((0.0, 3.3, 2.075), 0)],
     'SM_WallLampBlue': [((0.605, REAR_Y + 0.025, 1.965), 0)],
-    'SM_PowerBP26': [((0.628, 3.215, 1.82), 0), ((-1.08, 2.659, 1.075), 90)],
+    'SM_PowerBP26': [((0.66, 2.85, 1.962), 0), ((-0.5325, 2.71, 1.1965), 90)],
 }
 
 PREVIEW_VIEWS = {  # name: (eye body xyz, yaw deg clockwise from forward, pitch deg, lens mm)

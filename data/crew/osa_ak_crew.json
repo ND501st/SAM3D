@@ -17,8 +17,8 @@
     { "station": "commander", "number": 0, "title_ru": "Командир боевой машины", "title_en": "Vehicle commander",
       "duties": ["Commands the crew", "Takes designations and orders from the PU-12 on the right R-123M and passes them on", "Decides the target, fire and cease fire", "Hatches and the search antenna's mast", "Reports to the battery"],
       "displays": [], "source": "flak11; wrk; voenizdat_osa_1991 p246", "confidence": "high",
-      "stand_for": [],
-      "notes": "The right R-123M stands on the spare-parts box ZCzZ1A nr 2 behind his seat on the right, its face at about shoulder height when he is seated (data/cabins/osa_ak.json radio_right_panel; wwp_gecko g090-a, the holistic review H3 of 9 Nov 2026): he works it from the seat, turned (the reach check, simcore/crew_body.hpp). Until H3 the set was put on the floor and he stood for it." },
+      "stand_for": ["radio.right.fix_cover", "radio.right.fix1", "radio.right.fix2", "radio.right.fix3", "radio.right.fix4", "radio.right.volume"],
+      "notes": "The right R-123M stands on the spare-parts box ZCzZ1A nr 2 behind his seat on the right (data/cabins/osa_ak.json radio_right_panel; wwp_gecko g090-a, g082-b). Measured through g082-b's camera on 11 Nov 2026 its front runs from y 2.63 to 3.04, 0.7 to 1.1 m behind his eye: he works its fore half (power, mode, channels, squelch) seated and turned, and gets up and turns round for the fixators and the volume at its aft end (stand_for; the reach check, simcore/crew_body.hpp). Until H3 (9 Nov 2026) the set was put on the floor and he stood for all of it." },
     { "station": "deputy_commander", "number": 3, "title_ru": "Заместитель командира (оператор наведения)", "title_en": "Deputy commander (guidance operator)",
       "duties": ["Elevation wheel and the elevation search", "TV sight and tracking modes", "The launch console: missile preparation, the key, launch", "Orients the vehicle at a halt", "Orders the АПУ unlocked and the drives on"],
       "displays": ["tov_monitor", "epsilon_c", "dts_voltmeter", "qc_setter", "lat_scale", "or31_qc", "elev_search"], "source": "flak11; wrk; voenizdat_osa_1991 p246", "confidence": "high",
@@ -38,7 +38,7 @@
       "duties": ["Drives", "The gas-turbine power unit and the take-off generator", "The left R-123M", "Holds the gyro arrest 40 s at start-up"],
       "displays": ["fuel_gauge"], "source": "wrk; voenizdat_osa_1991 p246", "confidence": "high",
       "stand_for": [],
-      "notes": "The left R-123M stands under SŁ-1M beside his seat, at the height of the seat deck's side (data/cabins/osa_ak.json radio_left_panel; wwp_gecko g082-b, g091-d; docs/OSA_INTERIOR_HOLISTIC.md section 26): he reaches it seated." }
+      "notes": "The left R-123M stands on its shock tray on the deck directly behind his seat, its front looking inboard under a tread cover (data/cabins/osa_ak.json radio_left_panel; wwp_gecko g082-b, g091-b, g091-d; docs/OSA_INTERIOR_HOLISTIC.md section 42): he reaches it seated, turned to his right." }
   ],
 
   "callouts": [

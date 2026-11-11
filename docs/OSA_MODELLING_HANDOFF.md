@@ -459,10 +459,8 @@ Changed from the scores the same day:
   the two it sees at y 1.88 and 1.27, about 0.3 m aft of the deputy's and senior's stations; the seats stay at the
   stations because the operators sit at their columns. Seated on the bench (SEAT_Z) the crewman's seat is folded; a seat
   that comes down when he sits is not built.
-- **Chest 5937** moved (-0.077, +0.346, +0.05) m: the joint solve's points that g092-a, g096-a and g098-a-c see on its
-  lid's inboard edge (x 0.706-0.718, z 1.47-1.49) and forward end (y 0.09-0.14) put it there; it had moved only outboard
-  with the right racks. Its best view went from 15.1 to 12.5 mm, and every view that sees it improved; what is left is
-  its outboard half, hidden in g098-a behind a dark bag.
+- **Chest 5937** stays where it was (the owner's call, 11 Nov 2026). A move of (-0.077, +0.346, +0.05) m that the joint
+  solve's points on its lid (g092-a, g096-a, g098-a-c) suggested was tried and put back.
 - **The first-aid box is left as it was.** No single move fits: g098-a's red cross wants it about 0.1 m inboard, which
   g092-a and g096-a (the hangar session) refuse, and the forward move the edge scores liked takes the cross further
   from g098-a's. It is loose kit in a strap holder, carried in different places in the two sessions.
@@ -470,19 +468,27 @@ Changed from the scores the same day:
   g082-b's measured camera of section 30, about +-5 cm, can judge a place). Changed: the steering wheel's spokes are
   thick and black at 3, 11 and 7 o'clock with a large cup hub (g084-c, g084-a; they were thin and steel at 12, 4 and 8);
   the gear lever is black with a large ball knob over a gate plate (g083-a, g084-c). **Open, from the review:**
-  - The left R-123M: g082-b shows it on a shock tray on the raised deck under a steel tread cover with a Р-123М-1 end
-    plate, about 0.3 m inboard and 0.25 m aft of the model's set in its well under SŁ-1M. The figure assumes the tray
-    stands on the deck at 0.98 m, and there it would cross the deck's edge (x -0.64) and the rack's lower wall (x
-    -0.651), while g091-d puts the set under SŁ-1M's blocks: not moved until a second view settles it.
+  - **The radios, done 11 Nov 2026** (docs/OSA_INTERIOR_HOLISTIC.md section 42, through g082-b's measured camera): the
+    left R-123M stands on its shock tray on the deck directly behind the driver's seat, its front inboard at x -0.34,
+    under a tread cover with the Р-123М-1 end plate (new `SM_RadioTrayLeft`); the right one 0.38 m further aft and
+    0.16 m higher, on the frame on ZIP box nr 2, which is rebuilt low and long along the hull (X of beads, legs; it
+    was a tall box across it). Left open: both sides measure 5-10 cm further outboard than the racks' faces allow
+    (held inboard); Fig. 3 puts the right set 0.37 m further forward than the photo (the photo is used).
   - The box beside the commander's seat reads А-2 in g087-c; the cabin keeps the commander's A-1 there (his chest
     switch, intercom and headset are A-1's) and the deputy's A-2 on the left.
-  - Missing or flat: the steel box with an X of pressed beads under the right R-123M (now part of SP-1M's mesh); the
-    DP-3B as a cast box on a bracket with its detector (g085-b); the heater duct under the commander's dash (g085-d,
-    g085-b); the dash's raised plates, chrome bezels and three grab handles (g085-a); the khaki and black boxes on the
-    roof over the driver's screen (g089-a); framed visors.
+  - **The dash, done 11 Nov 2026** (section 43): its gauges carry the figures and units read off g085-a (new `marks`
+    and `unit` on gauge fixtures, simcore `CabinLook`), the hour meter its digit window (scale `hours`); the three bow
+    handles and the plates' corner screws, measured on the dash flat, are in `SM_CabUnits`; the wheel's emblem is
+    dark bakelite; five note-labels that were printed on the face are notes now.
+  - Missing or flat: the DP-3B as a cast box on a bracket with its detector (g085-b); the heater duct under the
+    commander's dash (g085-d, g085-b); the plates' raised frames; the khaki and black boxes on the roof over the
+    driver's screen (g089-a); framed visors; the five unidentified dash controls' names. The commander's right
+    corner: g087-c shows the front wheel housing's inner face flat and steel grey with a round keyed switch on it
+    where the model has a rounded pale bulge (`ARCH_SECTION`); no camera that may judge sees it.
   - The gear lever's height (1.26 m from g083-a by eye) looks high against g082-b; the pedals hang on long rods where
     g084-c shows small pads low over the mat; neither is measured.
-  - Reach: the driver's R-123M is 1.05-1.13 m away and behind him; his chest switch, `intercom.pv` and headset sit on
+  - Reach: the commander now stands to work the right set's fixators and volume at its aft end (`stand_for`, the reach
+    check); the driver's R-123M is 1.05-1.13 m away and behind him; his chest switch, `intercom.pv` and headset sit on
     `driver_panel` at x +0.2, 1.07 m from him; the dash plane is 0.88 m ahead of both seated eyes, where g084-c has the
     wheel's rim nearly at the cushion (eyes or dash perhaps 0.1 m apart in y).
 

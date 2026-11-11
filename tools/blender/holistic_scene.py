@@ -96,6 +96,24 @@ def add_disc(bm, centre, n, r, u, dw, dh, depth, seg=16):
         bm.faces.new([ring0[i], ring0[j], ring1[j], ring1[i]])
 
 
+def add_ring(bm, centre, n, r, u, dw, dh, depth, inner=0.86, seg=32):
+    """A bezel: the annulus between `inner` and 1 of the disc, standing `depth` out of the panel (the dial under it is
+    printed in the panel's baked face, as Unreal draws it with SM_GaugeBezel)."""
+    rings = []
+    for k, (scale, dz) in enumerate(((1.0, 0.0), (1.0, depth), (inner, depth), (inner, 0.0))):
+        ring = []
+        for i in range(seg):
+            a = 2 * math.pi * i / seg
+            ring.append(bm.verts.new(centre + r * (0.5 * dw * scale * math.cos(a)) + u * (0.5 * dh * scale * math.sin(a))
+                                     + n * dz))
+        rings.append(ring)
+    for k in range(4):
+        r0, r1 = rings[k], rings[(k + 1) % 4]
+        for i in range(seg):
+            j = (i + 1) % seg
+            bm.faces.new([r0[i], r0[j], r1[j], r1[i]])
+
+
 def import_mesh(path, cache):
     if path in cache:
         src = cache[path]
@@ -190,6 +208,8 @@ def build(cab, repo):
                 at = Vector(p['centre_m']) + r * fx['at_m'][0] + u * fx['at_m'][1]
                 if fx['kind'] in FLAT:
                     add_box(bm, at + n * 0.001, n, r, u, 0.002, dw, dh)
+                elif fx['kind'] == 'gauge' and os.path.exists(os.path.join(tex, 'T_Panel_%s.png' % pid)):
+                    add_ring(bm, at, n, r, u, dw, dh, 0.006)
                 elif fx['kind'] in ROUND:
                     add_disc(bm, at, n, r, u, dw, dh, 0.012 if fx['kind'] != 'gauge' else 0.006)
                 else:

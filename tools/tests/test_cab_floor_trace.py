@@ -39,8 +39,11 @@ class CabFloor(unittest.TestCase):
         self.assertGreaterEqual(stand, 0.116 + 0.022)    # the cushion frame's underside, then the rail on the deck
 
     def test_the_deck_lies_between_its_neighbours(self):
-        lo, hi = shell('radio_left')
-        self.assertLess(hi[0], F.DECK_X[0])   # the left radio's well is outboard of the deck
+        lo, hi = shell('radio_tray_left')      # the left radio's shock tray stands on the deck (g082-b)
+        tray = [float(v) for v in re.search(r'^LEFT_TRAY = \(([^)]*)\)', BUILDER, re.M).group(1).split(',')]
+        self.assertTrue(F.DECK_X[0] <= tray[0] < tray[1] <= F.DECK_X[1])
+        self.assertTrue(F.DECK_AFT_Y <= tray[2] < tray[3] <= F.DECK_FORE_Y)
+        self.assertAlmostEqual(lo[2], constant('FLOOR_Z') + F.STEP_M, delta=0.01)
         self.assertLess(F.DECK_FORE_Y, shell('rack_sp1m')[1][1])
         self.assertLess(shell('r124_a4')[1][0], F.DECK_X[0] + 0.02)
         self.assertGreater(shell('r124_a1')[0][0], F.DECK_X[1] - 0.02)

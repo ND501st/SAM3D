@@ -1034,9 +1034,9 @@
    "zone": "cab.left_wall",
    "box_m": {
     "centre": [
-     -0.9967,
-     3.03,
-     1.16
+     -0.4071,
+     3.043,
+     1.207
     ],
     "size": [
      0.1658,
@@ -1061,9 +1061,9 @@
     "wwp_gecko photos (3)"
    ],
    "names": [],
-   "parent": "sponson.left_radio_well",
+   "parent": null,
    "conflicts": [
-    "Fig. 3 put it at y 3.03, the cabin data at 3.28 and z 1.24 by estimate; settled in H3 (9 Nov 2026): y 3.03 from Fig. 3, low in a well under SL-1M from g091-d (z 0.80), now in the cabin data"
+    "Fig. 3 put it at y 3.03, the cabin data at 3.28 and z 1.24 by estimate; settled in H3 (9 Nov 2026): y 3.03 from Fig. 3, low in a well under SL-1M from g091-d (z 0.80); moved 11 Nov 2026 through g082-b's measured camera: behind the driver's seat on a shock tray on the deck, its front at x -0.34"
    ],
    "notes": "",
    "plan": {
@@ -1134,9 +1134,9 @@
    "zone": "cab.right_wall",
    "box_m": {
     "centre": [
-     0.6467,
-     3.215,
-     1.6
+     0.7171,
+     2.833,
+     1.737
     ],
     "size": [
      0.1658,
@@ -1163,7 +1163,7 @@
    "names": [],
    "parent": null,
    "conflicts": [
-    "the cabin data had it at z 0.80 by estimate; settled in H3 (9 Nov 2026): on the lid of ZCzZ1A nr 2 (g090-a), z 1.24, now in the cabin data"
+    "the cabin data had it at z 0.80 by estimate; settled in H3 (9 Nov 2026): on the lid of ZCzZ1A nr 2 (g090-a), z 1.24; moved 11 Nov 2026 through g082-b's measured camera: 0.38 m aft, its foot at z 1.64. Fig. 3's plan puts its front's middle at y 3.20, g082-b at 2.83 (its front 410 px high at the aft end, the ZIP box under it 0.355 m high there as g090-a shows it); the photo is used"
    ],
    "notes": "",
    "plan": {
@@ -7314,17 +7314,17 @@
    },
    "box_m": {
     "centre": [
-     0.6467,
-     3.055,
-     1.0375
+     0.7175,
+     2.955,
+     1.3575
     ],
     "size": [
-     0.275,
+     0.135,
      0.67,
-     0.835
+     0.375
     ],
     "sigma_m": 0.05,
-    "from": "H3: plan from Fig. 3 section A-A (y 2.72-3.39), standing on the floor with the right R-123M on its lid (g090-a, g090-c); the cabin builds it in rack_sp1m"
+    "from": "H3: g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 42): its aft end and inboard face in the right R-123M's front's plane, 0.355 m high under the set; its length Fig. 3's 0.67 m; the cabin builds it in rack_sp1m"
    },
    "status": "modelled",
    "sources": [
@@ -7333,7 +7333,7 @@
    ],
    "parent": null,
    "conflicts": [
-    "section A-A draws it 0.19 m high just under the blocks; g090-a shows it standing on the floor, about 0.47 m high, the right R-123M on its lid (used: the photo; the sections' heights are squashed)"
+    "section A-A draws it 0.19 m high just under the blocks; g090-a was read as standing on the floor, about 0.47 m high (9 Nov 2026); g082-b's measured camera gives 0.355 m, its foot at z 1.17, the right R-123M on its lid (11 Nov 2026, used)"
    ],
    "cabin": [
     "rack_sp1m"
@@ -9106,17 +9106,17 @@
    "zone": "cab",
    "box_m": {
     "centre": [
-     -0.9867,
-     3.04,
-     1.353
+     -0.505,
+     2.925,
+     1.3785
     ],
     "size": [
-     0.3,
-     0.72,
+     0.47,
+     0.75,
      0.006
     ],
-    "sigma_m": 0.08,
-    "from": "H3: the steel tray over the left R-123M (g091-d); the cabin builds it in rack_sl1m"
+    "sigma_m": 0.05,
+    "from": "H3: the tread cover over the left R-123M and its BP-26 behind the driver's seat, through g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 42); the cabin builds it as radio_tray_left"
    },
    "status": "modelled",
    "sources": [
@@ -9124,10 +9124,10 @@
     "wwp_gecko photos (5)"
    ],
    "names": [],
-   "parent": "sponson.left_radio_well",
+   "parent": null,
    "conflicts": [],
    "cabin": [
-    "rack_sl1m"
+    "radio_tray_left"
    ],
    "notes": "",
    "seen_in": [

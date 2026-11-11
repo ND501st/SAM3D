@@ -30,7 +30,7 @@ def test_plan_calibration_agrees_with_the_cabin():
     # Fig. 3's boxes of components the cabin data places by other means: within 6 cm (docs/OSA_INTERIOR_HOLISTIC.md 6)
     doc = H.load(H.REGISTER)
     by = {e['id']: e for e in doc['components']}
-    for rid in ('radio.r123m_right', 'box.zczz1a_1', 'box.cgw10p', 'box.awo5m1', 'console.pu303'):
+    for rid in ('box.zczz1a_1', 'box.cgw10p', 'box.awo5m1', 'console.pu303'):
         sheet, px = by[rid]['plan']['sheet'], by[rid]['plan']['px']
         x0, x1, y0, y1 = H.plan_box(sheet, px)
         cx, cy = by[rid]['box_m']['centre'][:2]
@@ -38,7 +38,7 @@ def test_plan_calibration_agrees_with_the_cabin():
         if panel:   # a panel's box reaches back behind its face; Fig. 3 draws the face
             cx, cy = panel[0]['centre_m'][:2]
         assert abs((x0 + x1) / 2 - cx) < 0.06 and abs((y0 + y1) / 2 - cy) < 0.06, (rid, (x0 + x1) / 2, (y0 + y1) / 2, cx, cy)
-    for rid in ('radio.r123m_left', 'rack.0096_9m', 'phone.ta57', 'instrument.ga3'):   # the known disagreements are on record
+    for rid in ('radio.r123m_left', 'radio.r123m_right', 'rack.0096_9m', 'phone.ta57', 'instrument.ga3'):   # the known disagreements are on record
         assert by[rid]['conflicts'], rid
 
 
@@ -110,16 +110,27 @@ def test_review_names_only_registered_ids():
 
 
 def test_radios_sit_where_the_photos_put_them():
-    # H3 (9 Nov 2026): the right R-123M on ZCzZ1A nr 2's lid (g090-a), the left one low under its steel tray (g091-d)
+    # 11 Nov 2026, through g082-b's measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 42): the right R-123M on its
+    # frame on ZCzZ1A nr 2's lid (g090-a) aft of the commander's seat; the left one behind the driver's seat, under its
+    # tread cover, its front looking inboard
     cab = H.load(H.CABIN)
     shell = {p['id']: p for p in cab['shell']}
+    panels = {p['id']: p for p in cab['panels']}
     reg = {e['id']: e for e in H.load(H.REGISTER)['components']}
     right, left = shell['radio_right'], shell['radio_left']
     box = reg['box.zczz1a_2']['box_m']
-    assert abs(right['centre_m'][2] - right['size_m'][2] / 2 - (box['centre'][2] + box['size'][2] / 2)) < 0.05
+    gap = right['centre_m'][2] - right['size_m'][2] / 2 - (box['centre'][2] + box['size'][2] / 2)
+    assert 0.0 < gap < 0.08                                 # the set's frame and shock mounts between them
+    front = panels['radio_right_panel']['centre_m']
+    assert abs(front[1] - 0.203 - 2.63) < 0.02              # its front's aft end
+    assert abs(front[0] - 0.69) < 0.05
     tray = reg['cover.radio_steel']['box_m']
     assert left['centre_m'][2] + left['size_m'][2] / 2 < tray['centre'][2]
-    assert abs(left['centre_m'][1] - 3.03) < 0.01          # Fig. 3's plan
+    front = panels['radio_left_panel']['centre_m']
+    assert abs(front[0] + 0.34) < 0.01 and abs(front[1] - 0.203 - 2.84) < 0.02
+    seat = shell['seat_driver']
+    assert left['centre_m'][1] + left['size_m'][0] / 2 < seat['centre_m'][1] - seat['size_m'][1] / 2   # behind the seat
+    assert abs(left['centre_m'][0] - seat['centre_m'][0]) < 0.15                                        # and in line with it
 
 
 def test_late_vehicle_gives_no_relations():

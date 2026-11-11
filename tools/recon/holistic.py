@@ -196,6 +196,7 @@ CABIN_SHELL = {  # cabin shell id -> (register id, class, zone)
     'r124_a5': ('intercom.a5', 'intercom', 'compartment.left_wall'),
     'radio_left': ('radio.r123m_left', 'radio', 'cab.left_wall'),
     'radio_right': ('radio.r123m_right', 'radio', 'cab.right_wall'),
+    'radio_tray_left': ('cover.radio_steel', 'cover', 'cab'),
     'phone': ('phone.ta57', 'phone', 'compartment.aisle'),
     'spares_1': ('box.zczz1a_1', 'box', 'compartment.right_wall'),
     'ga3': ('instrument.ga3', 'instrument', 'compartment.rear'),
@@ -233,11 +234,15 @@ PANEL_REG = {  # cabin panel -> register id (racks and consoles)
 }
 CONFLICTS = {  # found when Fig. 3 was calibrated against the cabin data (8 Nov 2026); a camera solve settles them (roadmap I1)
     'radio.r123m_left': 'Fig. 3 put it at y 3.03, the cabin data at 3.28 and z 1.24 by estimate; settled in H3 (9 Nov 2026): '
-                        'y 3.03 from Fig. 3, low in a well under SL-1M from g091-d (z 0.80), now in the cabin data',
+                        'y 3.03 from Fig. 3, low in a well under SL-1M from g091-d (z 0.80); moved 11 Nov 2026 through g082-b\'s '
+                        'measured camera: behind the driver\'s seat on a shock tray on the deck, its front at x -0.34',
     'radio.r123m_right': 'the cabin data had it at z 0.80 by estimate; settled in H3 (9 Nov 2026): on the lid of ZCzZ1A nr 2 '
-                         '(g090-a), z 1.24, now in the cabin data',
-    'box.zczz1a_2': 'section A-A draws it 0.19 m high just under the blocks; g090-a shows it standing on the floor, about 0.47 m '
-                    'high, the right R-123M on its lid (used: the photo; the sections\' heights are squashed)',
+                         '(g090-a), z 1.24; moved 11 Nov 2026 through g082-b\'s measured camera: 0.38 m aft, its foot at z 1.64. '
+                         'Fig. 3\'s plan puts its front\'s middle at y 3.20, g082-b at 2.83 (its front 410 px high at the aft end, '
+                         'the ZIP box under it 0.355 m high there as g090-a shows it); the photo is used',
+    'box.zczz1a_2': 'section A-A draws it 0.19 m high just under the blocks; g090-a was read as standing on the floor, about '
+                    '0.47 m high (9 Nov 2026); g082-b\'s measured camera gives 0.355 m, its foot at z 1.17, the right R-123M '
+                    'on its lid (11 Nov 2026, used)',
     'intercom.a1': 'the photos plate the commander\'s box А-2 with a Р-112 / ВС / Р-123 switch (g083-a, g087-c); the cabin calls '
                    'it A-1 (the R-124 kit\'s commander apparatus). Kept as A-1 until a source on the Osa\'s R-124 fit says '
                    'which apparatus the commander has',
@@ -283,7 +288,7 @@ PARENTS = {
     'radio.r123m_left': ['cover.r123m_left_canvas', 'cable.r123m_left_braided', 'psu.bp26_left', 'mount.r123m_left'],
     'radio.r123m_right': ['cover.r123m_right_canvas', 'strap.r123m_right_leather', 'cable.r123m_right_braided',
                           'cable.r123m_right_white', 'psu.bp26_right', 'mount.r123m_right'],
-    'sponson.left_radio_well': ['radio.r123m_left', 'cover.radio_steel', 'strap.left_well', 'hook.left_well_eyebolt',
+    'sponson.left_radio_well': ['strap.left_well', 'hook.left_well_eyebolt',
                                 'bracket.left_well_strip', 'switch.left_well_red_lever_box', 'loom.left_well_floor'],
     'instrument.ga3': ['bracket.ga3_pedestal', 'rail.ga3_guard'],
     'hull.door_rear': ['lining.door_rear_seal', 'control.door_rear_latch_upper', 'control.door_rear_latch_lower',
@@ -311,13 +316,15 @@ NOT_BUILT = {
 }
 # Places a person set from the photos where neither the cabin data nor Fig. 3 gives them (centre, size, sigma, why).
 PLACES = {
-    'box.zczz1a_2': ([0.6467, 3.055, 1.0375], [0.275, 0.67, 0.835], 0.05,
-                     'plan from Fig. 3 section A-A (y 2.72-3.39), standing on the floor with the right R-123M on its lid '
-                     '(g090-a, g090-c); the cabin builds it in rack_sp1m'),
+    'box.zczz1a_2': ([0.7175, 2.955, 1.3575], [0.135, 0.67, 0.375], 0.05,
+                     'g082-b\'s measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 42): its aft end and inboard face in '
+                     'the right R-123M\'s front\'s plane, 0.355 m high under the set; its length Fig. 3\'s 0.67 m; the cabin '
+                     'builds it in rack_sp1m'),
     'sponson.left_radio_well': ([-0.9967, 3.04, 0.82], [0.3, 0.72, 0.4], 0.08,
                                 'the well under SL-1M the left R-123M stands in (g091-d), plan from Fig. 3'),
-    'cover.radio_steel': ([-0.9867, 3.04, 1.353], [0.3, 0.72, 0.006], 0.08,
-                          'the steel tray over the left R-123M (g091-d); the cabin builds it in rack_sl1m'),
+    'cover.radio_steel': ([-0.505, 2.925, 1.3785], [0.47, 0.75, 0.006], 0.05,
+                          'the tread cover over the left R-123M and its BP-26 behind the driver\'s seat, through g082-b\'s '
+                          'measured camera (docs/OSA_INTERIOR_HOLISTIC.md section 42); the cabin builds it as radio_tray_left'),
     'curtain.cab': ([0.0, 2.57, 1.38], [1.5, 0.05, 1.4], 0.1,
                     'hangs from the roof at the posts between SP-1M and SP-2M and between SL-1M and SL-2M: bunched '
                     'against the right wall just aft of the right R-123M (g090-a), at SP-2M\'s forward edge (g093-b), '

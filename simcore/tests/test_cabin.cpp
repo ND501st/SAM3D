@@ -556,10 +556,28 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.05],
                                                    "scale": "counters" } ])"), console, counters, &error));
     SC_EXPECT(counters.fixtures.size() == 1 && counters.fixtures[0].look.scale == "counters");
+    CabinLayout hours;   // the driver's engine-hour meter (wwp_gecko g085-a)
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.06, "scale": "hours" } ])"),
+                        console, hours, &error));
+    SC_EXPECT(hours.fixtures.size() == 1 && hours.fixtures[0].look.scale == "hours");
     SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.05, "scale": "log" } ])"),
                             "fixtures[0].scale: unknown scale 'log'"));
     SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "scale": "linear" } ])"),
                             "fixtures[0].scale: for gauges only"));
+    // A linear dial's figures and unit, as read off a photograph (the driver's speedometer, wwp_gecko g085-a).
+    CabinLayout marked;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.12, "color": "black",
+                                                   "marks": ["0", "20", "40", "60", "80", "100", "120"], "unit": "km/h" } ])"),
+                        console, marked, &error));
+    SC_EXPECT(marked.fixtures.size() == 1 && marked.fixtures[0].look.marks.size() == 7 &&
+              marked.fixtures[0].look.marks.back() == "120" && marked.fixtures[0].look.unit == "km/h");
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "unit": "A" } ])"),
+                            "fixtures[0].unit: for gauges only"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.05, "marks": ["0"] } ])"),
+                            "fixtures[0].marks: a linear dial's figures, two or more"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.05, "scale": "compass",
+                                                       "marks": ["0", "1"] } ])"),
+                            "fixtures[0].marks: a linear dial's figures, two or more"));
     SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [0.3, 0.2],
                                                      "color": "purple" } ])"),
                             "blocks[0].color: unknown colour 'purple'"));
