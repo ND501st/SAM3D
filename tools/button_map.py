@@ -51,6 +51,29 @@ DISPLAY_SOURCES = {
 PLANNED = {
     "osa_ak": [
         ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
+        # The audit of 12 Nov 2026 (docs/OSA_INTERIOR_HOLISTIC.md section 47): drawn but not wired, seen in a
+        # photo, or in the sources only.
+        ('p:fk_meters', '0004-12M1 meters ИП1, ИП2 and lamp КЗ', 'on the model, not wired', 'On SŁ-1M in the mesh; the fk.* switches are placed but nothing reads them (voenizdat_osa_1991 p162).', ['s:function_check'], 'missing'),
+        ('p:0062', '0062-6M1 meter КОНТРОЛЬ and button ПОДЖИГ ГШ', 'on the model, not wired', 'ТОК and МОЩНОСТЬ now read the transmitter mon.tx_select chooses; the noise check (КОНТРОЛЬ, ПОДЖИГ ГШ, КАНАЛЫ, РЕЖИМЫ) is not modelled (voenizdat_osa_1991 p49-51).', ['s:function_check'], 'missing'),
+        ('p:pu303', 'PU-303: the load buttons, СТОП, ХОЛ. ПРОКР., the hour counters', 'on the model, not wired', 'The lamps and the ГТА and ТВГ gauges now work; the loads go on line with their source, so ВКЛЮЧЕНИЕ НАГРУЗОК, ОТКЛ. НАГР., СТОП and ХОЛ. ПРОКР. still do nothing (wiring them changes the power-on drill).', ['c:gta.load_gta', 'c:gta.load_ivp', 'c:gta.stop'], 'missing'),
+        ('p:dash', "Driver's dash: speed, coolant, tacho, oil, ammeter, hours; lamps БОРТ. СЕТЬ, ПОВОРОТ", 'on the model, not wired', 'BAZ dash gauges drawn from g085-a with their scales; only the fuel gauge works.', ['i:vehicle_stopped'], 'missing'),
+        ('p:bort_off', 'БОРТ СПК ОТКЛ. as its own push-button', 'on the model, not wired', 'Drawn beside the guarded БОРТ СПК ВКЛ.; one switch fo.bort_spk stands for both (voenizdat_osa_1991 p119-121).', ['c:fo.bort_spk'], 'missing'),
+        ('p:faults', 'Fault lamps: ОТКАЗ СРП, ОТКАЗ Qc, ОБРЫВ ФАЗЫ, НЕИСПРАВНОСТЬ', 'on the model, not wired', "Drawn and dark, which is right while no such fault is modelled (voenizdat_osa_1991 p50-52, p100, p121); the PU-303's fault lamps light on its lamp test.", ['s:power', 's:gyro_erected'], 'missing'),
+        ('p:stow_lamps', 'Stowing board: ПРЕД. УГОЛ', 'on the model, not wired', 'A drive on its stop (a stabilisation fault, voenizdat_osa_1991 p47-48): not modelled, so dark. ГАБАРИТ 3800 now works.', ['s:stabilisation'], 'missing'),
+        ('p:panel_ind', 'ПАНЕЛЬ ИНДИКАЦИИ box', 'seen in a photo: owner to decide', 'A box with plugs and a cable beside the guidance column (wwp_gecko g095-b, g094-a); possibly the indication panel with АВАР. ОТКЛ. СЭП.', ['s:power'], 'missing'),
+        ('p:deenergised', 'De-energisation indicator box', 'seen in a photo: owner to decide', 'Stencilled box aft of the spares box (wwp_gecko g090-a, g092-a; rwd_mb3 layout).', ['s:power'], 'missing'),
+        ('p:flags', 'March signals: flags and lamps', 'seen in a photo: owner to decide', 'Two signal flags and a bag by the commander (wwp_gecko g089-d); the march signals (voenizdat_osa_1991 p232-239).', ['c:veh.hatches'], 'missing'),
+        ('p:keyed', "Commander's round keyed switch", 'seen in a photo: owner to decide', 'On the front wheel housing (wwp_gecko g087-c); function not identified.', ['s:power'], 'unknown'),
+        ('p:gauges', "Air pressure gauges over the commander's screen and by the right radio", 'seen in a photo: owner to decide', 'With pipe and valve (wwp_gecko g087-d, g089-b, g090-a); what they serve is not sourced.', ['c:press.standard'], 'unknown'),
+        ('p:emerg_off', 'АВАР. ОТКЛ. СЭП (emergency power shutdown)', 'in the sources only: owner to decide', 'On the indication panel (voenizdat_osa_1991 p163-166; rwd_mb3).', ['s:power'], 'missing'),
+        ('p:0091_17', '0091-17M: КОНТРОЛЬ НАПР. and its meter', 'on the model, not wired', "The НАКАЛ lamps now light; the SOC's voltage check (voenizdat_osa_1991 p49) and ПЕРЕКЛ. ИСТОЧНИКОВ are drawn in the mesh, not wired.", ['s:soc_transmitter'], 'missing'),
+        ('p:gyro_sw', '0005-8M КОРРЕКЦИЯ ВКЛ., МК — ГПК — АК', 'in the sources only: owner to decide', 'Gyro correction and compass mode (voenizdat_osa_1991 p49-53); the panel in rwd 9a33_52 is unreadable.', ['s:gyro_erected'], 'missing'),
+        ('p:0051', '0051-7M repetition frequency АВТ., РУЧН. F1-F3', 'in the sources only: owner to decide', "On the operator's bottom block (voenizdat_osa_1991 p96-101); its nameplate is drawn.", ['s:ssc_transmitter'], 'missing'),
+        ('p:ok81', 'OK81-4M ВОЗВРАТ, БАЛАНС', 'in the sources only: owner to decide', "The missile tracker's range units (voenizdat_osa_1991 p104-120).", ['s:auto_tracking'], 'missing'),
+        ('p:0065', '0065-2M АРУ — РРУ and gains', 'in the sources only: owner to decide', 'The MTI canceller on SP-1M, under flaps modelled closed (voenizdat_osa_1991 p49-53).', ['s:soc_transmitter'], 'missing'),
+        ('p:door', 'ДВЕРЬ ЗАКРЫТА lamp', 'in the sources only: owner to decide', 'Checked by the deputy in the drill (voenizdat_osa_1991 p246-248); its place is not given.', ['c:veh.hatches'], 'missing'),
+        ('p:course', 'PPI course-parameter scale', 'in the sources only: owner to decide', "Seven lines 2 km apart in the scope's bezel (voenizdat_osa_1991 p40-41, p256).", ['m:search'], 'missing'),
+        ('p:vision', "Driver's vision and swimming: PNV-57E, TNPO-170A, wave shield", 'in the sources only: owner to decide', 'rwd_mb3; wwp_gecko book pp20-23 (the shield); g089-a/b show only periscope blanks.', ['c:veh.waterjet_left'], 'missing'),
     ],
 }
 

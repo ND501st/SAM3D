@@ -200,6 +200,7 @@ def build(cab, repo):
         groups = {}
         for fx in fxs:
             groups.setdefault(fx.get('color') or 'none', []).append(fx)
+        rings = bmesh.new()     # lamp fixtures' chrome bezels, as Unreal draws them (SM_LampBezel) and the console's own lamps
         for col, items in groups.items():
             bm = bmesh.new()
             for fx in items:
@@ -210,6 +211,14 @@ def build(cab, repo):
                     add_box(bm, at + n * 0.001, n, r, u, 0.002, dw, dh)
                 elif fx['kind'] == 'gauge' and os.path.exists(os.path.join(tex, 'T_Panel_%s.png' % pid)):
                     add_ring(bm, at, n, r, u, dw, dh, 0.006)
+                elif fx['kind'] == 'lamp':
+                    add_disc(rings, at, n, r, u, dw, dh, 0.008)
+                    add_disc(bm, at + n * 0.008, n, r, u, dw / 1.3, dh / 1.3, 0.006)
+                elif fx['kind'] == 'toggle':
+                    # The nut and a lever thrown up the face (on), about 15 mm off the plate (g097-a), as Unreal draws a toggle fixture
+                    add_disc(bm, at, n, r, u, dw, dh, 0.42 * dw, 6)
+                    d = (n * math.cos(math.radians(35.0)) + u * math.sin(math.radians(35.0))).normalized()
+                    add_disc(bm, at + n * (0.42 * dw), d, r, d.cross(r).normalized(), 0.4 * dw, 0.4 * dw, 1.2 * dw, 8)
                 elif fx['kind'] in ROUND:
                     add_disc(bm, at, n, r, u, dw, dh, 0.012 if fx['kind'] != 'gauge' else 0.006)
                 else:
@@ -217,6 +226,12 @@ def build(cab, repo):
             o = new_object('fix_%s_%s' % (pid, col), bm, material('m_fix_%s_%s' % (pid, col), LOOK.get(col, DARK)))
             o['part'] = 'fix:' + pid
             objs.append(o)
+        if rings.verts:
+            o = new_object('fix_%s_lamp_rings' % pid, rings, material('m_fix_%s_lamp_rings' % pid, LOOK['chrome']))
+            o['part'] = 'fix:' + pid
+            objs.append(o)
+        else:
+            rings.free()
     return objs
 
 

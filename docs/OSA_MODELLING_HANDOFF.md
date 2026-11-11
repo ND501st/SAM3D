@@ -513,6 +513,24 @@ Changed from the scores the same day:
   - the slope reads 120-127 mm deep in the casts against the trace's 108;
   - the stay rod, the plate's notched corners and the group legends are not drawn;
   - the commander's half of the dash has no grade-A check of its plane's depth and tilt.
+- **The owner's review (12 Nov 2026, section 46):**
+  - the repair toggles now drawn thrown up the face, as g097-a shows;
+  - the 0096's five button-pair switches given the new look `in_mesh` (the mesh has the buttons, the game keeps the hit area);
+  - КОНТР. ЛАМП a rotary;
+  - the РАБОТАЕТ lamps alike;
+  - the commander panel's unsourced `power_on` and `fault` lamps removed;
+  - the preview draws switch-buttons, unlit lamps and toggle fixtures as Unreal does.
+  - The owner rebuilds Unreal again (`SimCabinComponent.cpp`).
+- **The audit of missing controls (12 Nov 2026, section 47):**
+  - five drawn lamps now work: ПА, ТСЦ on the elevation block, ПОЛУАВТОМАТ, and PU-303's ПОДСВЕТКА domes;
+  - everything else found is in the button map's not-built list, waiting on the owner.
+- **The drawn meters and lamps wired (12 Nov 2026, section 48):**
+  - gauges read the console by `levels`; 0062's ТОК and МОЩНОСТЬ (with the new `mon.tx_select`), 0004-14M's four
+    centre-zero meters, PU-303's gauges and lamps, pressurisation, the compressor, ГАБАРИТ 3800 and the НАКАЛ lamps work;
+  - 0091-18's training toggles un-swapped;
+  - section 48 lists where the photos show the manual-only parts (the ПАНЕЛЬ ИНДИКАЦИИ with АВАР. ОТКЛ. СЭП, OK81-4M's
+    ВОЗВРАТ and БАЛАНС, 0005-8M's МК — ГПК — АК, the PPI's course scale) and two placements to check on fo_panel;
+  - the owner rebuilds Unreal (`SimCabinDisplayComponent.cpp`).
 
 Open:
 - SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded

@@ -82,6 +82,7 @@ inline int CounterReading(const std::string& readout, const ConsoleData& console
 //                 being slaved to the course setter and stops once they agree: voenizdat_osa_1991 p48)
 //   fuel          the tank's level in litres (the driver's fuel gauge; 0 without a fuel model)
 inline double DialReading(const CabinDisplay& display, const ConsoleData& console, double gyro_heading_deg, double fuel_l = -1.0) {
+    if (!display.levels.empty()) return LevelReading(display, console);
     if (display.readout == "gyro_heading") return gyro_heading_deg;
     if (display.readout == "fuel") return fuel_l > 0.0 ? fuel_l : 0.0;
     return console.panel.GetValue(display.control);

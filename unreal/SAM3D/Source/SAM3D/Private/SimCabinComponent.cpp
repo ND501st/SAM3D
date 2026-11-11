@@ -603,7 +603,8 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Place(Item.Base, Item.Location + Item.Normal * (50.0 * Collar.Y), FRotationMatrix::MakeFromZ(Item.Normal).Rotator(),
 			FVector(Collar.X, Collar.X, Collar.Y));
 	}
-	if (!Control.auto_placed && !HasBakedFace(Control.panel_id))
+	const bool bInMesh = Look == simcore::CabinLookKind::InMesh;
+	if (!bInMesh && !Control.auto_placed && !HasBakedFace(Control.panel_id))
 	{
 		AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up,
 			Control.look.width_m > 0.0 ? Control.look.width_m : (Control.style == simcore::CabinStyle::Wheel ? 0.12 : 0.03),
@@ -612,13 +613,25 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	const simcore::ControlDef* Def = Sim->GetScenarioRunner()->Console().panel.Find(Control.control_id);
 	double MarkU = 0.0;
 	double MarkV = 0.0;
-	if (Def != nullptr && simcore::CabinLayout::RedDot(Control, *Def, MarkU, MarkV))
+	if (!bInMesh && Def != nullptr && simcore::CabinLayout::RedDot(Control, *Def, MarkU, MarkV))
 	{
 		// A flat red dot on the panel face (m to cm), clear of the collar.
 		Item.Mark = AddMesh(CylinderMesh, RedDotColor);
 		Item.Mark->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Place(Item.Mark, Item.Location + (Item.Right * MarkU + Item.Up * MarkV) * 100.0 + Item.Normal * 0.15,
 			FRotationMatrix::MakeFromZ(Item.Normal).Rotator(), FVector(0.007, 0.007, 0.002));
+	}
+	if (bInMesh)
+	{
+		// The shell's mesh has this control's part (the 0096's pairs of ВКЛ. and ОТКЛ. buttons): what was built stays only
+		// as the hit area (hidden parts still block the cabin's traces).
+		for (UStaticMeshComponent* Hidden : {Item.Moving.Get(), Item.Base.Get(), Item.Pointer.Get()})
+		{
+			if (Hidden != nullptr)
+			{
+				Hidden->SetVisibility(false);
+			}
+		}
 	}
 	Items.Add(Item);
 }
@@ -1083,11 +1096,12 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 	case CabinLookKind::Toggle:
 		if (PartMesh(TEXT("SM_ToggleLever")) != nullptr && Part(TEXT("SM_ToggleBase"), W, ChromeColor))
 		{
-			// Shown thrown down (off), 3 cm long from the bushing's top.
-			const double A = FMath::DegreesToRadians(-35.0);
+			// Shown thrown up the face (on: the 0096's repair toggles stand in their working position, ВКЛЮЧЕНО, g097-a),
+			// as long as a control's (3 cm) or, on a small bushing, about 15 mm off the plate (g097-a).
+			const double A = FMath::DegreesToRadians(35.0);
 			const FVector Lever = N * FMath::Cos(A) + U * FMath::Sin(A);
 			Place(AddDecor(PartMesh(TEXT("SM_ToggleLever")), ChromeColor), L + N * (42.0 * W),
-				FRotationMatrix::MakeFromZX(Lever, R).Rotator(), FVector(0.03));
+				FRotationMatrix::MakeFromZX(Lever, R).Rotator(), FVector(FMath::Min(0.03, 1.2 * W)));
 			bDone = true;
 		}
 		break;
@@ -1115,8 +1129,8 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 	case CabinLookKind::Toggle:
 	{
 		Disc(W, W, 0.6, ChromeColor);
-		// Shown thrown down (off).
-		const FVector Lever = (N * FMath::Cos(FMath::DegreesToRadians(-35.0)) + U * FMath::Sin(FMath::DegreesToRadians(-35.0)));
+		// Shown thrown up the face (on).
+		const FVector Lever = (N * FMath::Cos(FMath::DegreesToRadians(35.0)) + U * FMath::Sin(FMath::DegreesToRadians(35.0)));
 		UStaticMeshComponent* M = AddDecor(CylinderMesh, ChromeColor);
 		Place(M, L + N * 0.6 + Lever * 1.6, FRotationMatrix::MakeFromZ(Lever).Rotator(), FVector(0.007, 0.007, 0.032));
 		break;

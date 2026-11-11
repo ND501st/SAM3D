@@ -5,6 +5,7 @@
 
 #include "simcore/cabin.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/readouts.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "test_framework.hpp"
@@ -587,7 +588,16 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
                         console, bar, &error));
     SC_EXPECT(bar.fixtures.size() == 1 && bar.fixtures[0].look.kind == CabinLookKind::BarKnob &&
               std::string(ToString(CabinLookKind::BarKnob)) == "bar_knob");
-    // The domed hand wheel, now the last look kind: read by name too.
+    // A control whose part is in the shell's mesh: read by name, the last look kind; never a fixture.
+    CabinLayout in_mesh;
+    SC_EXPECT(LoadCabin(Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0],
+                                                    "look": { "kind": "in_mesh" } } ])"),
+                        console, in_mesh, &error));
+    SC_EXPECT(in_mesh.controls.size() == 1 && in_mesh.controls[0].look.kind == CabinLookKind::InMesh &&
+              std::string(ToString(CabinLookKind::InMesh)) == "in_mesh");
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "in_mesh", "size_m": 0.02 } ])"),
+                            "in_mesh is for controls only"));
+    // The domed hand wheel: read by name too.
     CabinLayout dome;
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "dome", "size_m": 0.135 } ])"),
                         console, dome, &error));
@@ -716,4 +726,117 @@ SC_TEST("cabin: an ammunition lamp flashes while its missile's gyro is overheate
     console.equipment.SetInput("ammo_3_i", false);  // no missile: nothing to flash
     SC_EXPECT(!CabinLayout::LampFlashing(*ammo, console.panel, console.equipment));
     SC_EXPECT(!CabinLayout::LampFlashing(*gta, console.panel, console.equipment));  // a lamp without flash_when never does
+}
+
+SC_TEST("cabin: gauges read the console by their levels: 0062's meters, 0004-14M's centre-zero meters, the PU-303's turbine") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    auto display = [&](const char* id) -> const CabinDisplay* {
+        for (const CabinDisplay& d : layout.displays) {
+            if (d.id == id) return &d;
+        }
+        return nullptr;
+    };
+    const CabinDisplay* current = display("tx_current");
+    const CabinDisplay* error = display("err_target_eps");
+    const CabinDisplay* rpm = display("gta_rpm");
+    SC_EXPECT(current != nullptr && error != nullptr && rpm != nullptr);
+    if (current == nullptr || error == nullptr || rpm == nullptr) return;
+    auto run = [&](double s) {
+        for (double t = 0.0; t < s; t += 0.1) console.equipment.Update(0.1, console.panel);
+    };
+    // The turbine: the rpm runs up with its start and holds running.
+    SC_EXPECT_NEAR(DialReading(*rpm, console, 0.0), 0.0, 1e-9);
+    console.panel.Set("pwr.gta", 1);
+    run(30.0);
+    const double half = DialReading(*rpm, console, 0.0);
+    SC_EXPECT(half > 3.0 && half < 6.5);
+    run(40.0);
+    SC_EXPECT_NEAR(DialReading(*rpm, console, 0.0), 9.5, 1e-9);
+    // 0062-6M1: the selector at СОЦ reads nothing until the SOC radiates, then in tolerance; turned to ССЦ, nothing.
+    console.panel.Set("pwr.equipment", 1);
+    run(200.0);
+    SC_EXPECT(console.panel.Get("mon.tx_select") == 0);
+    SC_EXPECT_NEAR(MeterValue(*current, console), 0.0, 1e-9);
+    console.panel.Set("soc.hv_cover", 1);
+    console.panel.Set("soc.hv", 1);
+    run(1.0);
+    SC_EXPECT(console.equipment.IsReady("soc_transmitter"));
+    SC_EXPECT_NEAR(MeterValue(*current, console), 6.0, 1e-9);
+    console.panel.Set("mon.tx_select", 1);
+    SC_EXPECT_NEAR(MeterValue(*current, console), 0.0, 1e-9);
+    // A centre-zero meter: zero stands mid-scale, the scale runs -10..10.
+    SC_EXPECT_NEAR(MeterValue(*error, console), 0.0, 1e-9);
+    SC_EXPECT_NEAR(MeterFraction(*error, 0.0), 0.5, 1e-9);
+    SC_EXPECT_NEAR(MeterMark(*error, 0), -10.0, 1e-9);
+    SC_EXPECT_NEAR(MeterMark(*error, 4), 10.0, 1e-9);
+    SC_EXPECT_NEAR(MeterFraction(*current, 6.0), 0.6, 1e-9);
+}
+
+SC_TEST("cabin: the compartments' pressurisation lights ПОДКАЧКА ОТСЕКОВ ВКЛ. until 0,23 and Р=0,18 from 0,18 (voenizdat_osa_1991 p172)") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    auto lamp = [&](const char* id) -> const CabinLamp* {
+        for (const CabinLamp& l : layout.lamps) {
+            if (l.id == id) return &l;
+        }
+        return nullptr;
+    };
+    const CabinLamp* filling = lamp("press_on");
+    const CabinLamp* p018 = lamp("press_018");
+    const CabinLamp* compressor = lamp("compressor_on");
+    const CabinLamp* gabarit = lamp("gabarit");
+    SC_EXPECT(filling != nullptr && p018 != nullptr && compressor != nullptr && gabarit != nullptr);
+    if (filling == nullptr || p018 == nullptr || compressor == nullptr || gabarit == nullptr) return;
+    auto lit = [&](const CabinLamp* l) { return CabinLayout::LampLit(*l, console.panel, console.equipment); };
+    auto run = [&](double s) {
+        for (double t = 0.0; t < s; t += 0.1) console.equipment.Update(0.1, console.panel);
+    };
+    console.panel.Set("pwr.gta", 1);
+    run(70.0);
+    // The compressor runs to charge the receiver once 220 V is on line, then stops.
+    SC_EXPECT(lit(compressor));
+    // Stowed and locked with the equipment on: ГАБАРИТ 3800.
+    console.panel.Set("pwr.equipment", 1);
+    run(1.0);
+    SC_EXPECT(lit(gabarit));
+    // ШТАТНАЯ pressed once: the fill runs on with the button released.
+    console.panel.Set("press.standard", 1);
+    run(0.2);
+    console.panel.Set("press.standard", 0);
+    run(0.2);
+    SC_EXPECT(lit(filling) && !lit(p018));
+    run(32.0);
+    SC_EXPECT(lit(filling) && lit(p018));
+    run(10.0);
+    SC_EXPECT(!lit(filling) && lit(p018));
+    run(100.0);
+    SC_EXPECT(!lit(compressor));
+}
+
+SC_TEST("cabin: a gauge's levels are checked on load") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    std::string error;
+    SC_EXPECT(LoadCabin(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.04], "levels": [ { "when": [ { "subsystem": "power", "is": "ready" } ], "value": 3, "ramp": "gta" } ],
+        "scale_from": -5, "full_scale": 5, "source": "sam3d", "confidence": "estimate" } ])"), console, layout, &error));
+    SC_EXPECT(layout.displays.size() == 1 && layout.displays[0].levels.size() == 1 && layout.displays[0].levels[0].ramp == "gta");
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.04], "levels": [ { "value": 1, "ramp": "nope" } ], "source": "sam3d", "confidence": "estimate" } ])"),
+                            "unknown subsystem 'nope'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.04], "control": "soc.mti", "levels": [ { "value": 1 } ], "source": "sam3d", "confidence": "estimate" } ])"),
+                            "a gauge with levels reads nothing else"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.04], "levels": [ { "when": [] } ], "source": "sam3d", "confidence": "estimate" } ])"),
+                            "value: required"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.04], "levels": [ { "value": 1 } ], "scale_from": 2, "full_scale": 1, "source": "sam3d", "confidence": "estimate" } ])"),
+                            "must be below full_scale"));
 }

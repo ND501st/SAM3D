@@ -102,7 +102,9 @@ enum class CabinLookKind {
     Legend,       // legend lamp: black glass with its `label` on it, the letters lit in `color` (lamps only)
     Gauge,        // an instrument the console doesn't model: dark rim, light face, needle (round, or square for [w, h])
     BarKnob,      // bakelite T-bar knob: a round boss with a bar across it, one end longer (the pointer): the R-123M's
-    Dome          // hand wheel: a domed cap in place of the dish, its crank on the dome's flank (SŁ-2M's range wheel)
+    Dome,         // hand wheel: a domed cap in place of the dish, its crank on the dome's flank (SŁ-2M's range wheel)
+    InMesh        // a control whose part is the shell mesh's own (the 0096's pairs of ВКЛ. and ОТКЛ. buttons): nothing
+                  // is drawn for it, only its hit area is kept (controls only)
 };
 
 inline const char* ToString(CabinLookKind k) {
@@ -128,6 +130,7 @@ inline const char* ToString(CabinLookKind k) {
         case CabinLookKind::Gauge: return "gauge";
         case CabinLookKind::BarKnob: return "bar_knob";
         case CabinLookKind::Dome: return "dome";
+        case CabinLookKind::InMesh: return "in_mesh";
     }
     return "?";
 }
@@ -285,6 +288,16 @@ struct ElevationRaster {
     double screen_high = 1.0;
 };
 
+// One reading of a gauge worked out from the console's state (a meter's or a dial's `levels`): the first level whose
+// conditions hold sets the needle, to `value` in the display's units, times the progress (0..1) of the subsystem `ramp`
+// when one is named (a turbine running up and down). No level holding: the needle rests at 0.
+struct CabinNeedleLevel {
+    std::vector<Condition> when;      // all must hold
+    std::vector<Condition> when_any;  // if not empty, at least one must also hold
+    double value = 0.0;
+    std::string ramp;
+};
+
 struct CabinDisplay {
     std::string id;
     std::string label;
@@ -302,13 +315,16 @@ struct CabinDisplay {
     std::string reading;                 // meter: or a reading worked out from the console (radio_sets.hpp), 0..1 of the swing;
                                          // "supply_voltage" reads volts (the 220 V 400 Hz supply, SupplyVoltage)
     std::string readout;                 // dial: or a value the simulation gives (simcore/readouts.hpp, DialReading)
+    std::vector<CabinNeedleLevel> levels;  // meter or dial: or a reading from the console's state (LevelReading)
     int marks = 12;                      // labelled divisions on the scale
     // dial: one needle revolution = value_per_turn; the scale reads 0..labels_per_turn around it
     double value_per_turn = 360.0;
     double labels_per_turn = 360.0;
-    // meter: reading = value * scale, full deflection at full_scale, in `unit`
+    // meter: reading = value * scale, full deflection at full_scale, in `unit`; the scale's left end at scale_from (a
+    // centre-zero meter has scale_from = -full_scale)
     double scale = 1.0;
     double full_scale = 1.0;
+    double scale_from = 0.0;
     std::string unit;
     // ppi
     double sweep_period_s = 2.0;
@@ -336,12 +352,34 @@ inline double SupplyVoltage(const ConsoleData& console) {
     return console.equipment.Has("power") && console.equipment.State("power") == SubsystemState::Ready ? kSupplyVolts : 0.0;
 }
 
-// What a meter's needle reads now, in its display units: its control's value times `scale`, or its reading (0..1 of the
-// swing, radio_sets.hpp) times `full_scale`. Worked out from the console alone, so a mirrored console reads the same.
+// A gauge's reading from its levels (CabinNeedleLevel): the first level that holds, else 0.
+inline double LevelReading(const CabinDisplay& d, const ConsoleData& console) {
+    for (const CabinNeedleLevel& l : d.levels) {
+        if (!console.equipment.AllHold(l.when, console.panel)) continue;
+        if (!l.when_any.empty() && !console.equipment.AnyHolds(l.when_any, console.panel)) continue;
+        return l.ramp.empty() ? l.value : l.value * console.equipment.Progress(l.ramp);
+    }
+    return 0.0;
+}
+
+// What a meter's needle reads now, in its display units: its levels, its control's value times `scale`, or its reading
+// (0..1 of the swing, radio_sets.hpp) times `full_scale`. Worked out from the console alone, so a mirrored console reads
+// the same.
 inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
+    if (!d.levels.empty()) return LevelReading(d, console);
     if (d.reading == "supply_voltage") return SupplyVoltage(console);
     if (!d.reading.empty()) return RadioMeterReading(d.reading, console) * d.full_scale;
     return console.panel.GetValue(d.control) * d.scale;
+}
+
+// Where a meter's needle stands for a value: 0 at the scale's left end (scale_from), 1 at full_scale.
+inline double MeterFraction(const CabinDisplay& d, double value) {
+    return std::clamp((value - d.scale_from) / (d.full_scale - d.scale_from), 0.0, 1.0);
+}
+
+// The value at a meter's mark i (0..marks), left to right.
+inline double MeterMark(const CabinDisplay& d, int i) {
+    return d.scale_from + (d.full_scale - d.scale_from) * static_cast<double>(i) / static_cast<double>(d.marks);
 }
 
 // A rectangle of floor a crewman can walk on, in plan (body frame x and y, metres).
@@ -848,7 +886,7 @@ private:
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
         if (!kind.empty()) {
             bool found = false;
-            for (int k = 0; k <= static_cast<int>(CabinLookKind::Dome); ++k) {
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::InMesh); ++k) {
                 if (kind == ToString(static_cast<CabinLookKind>(k))) {
                     out.kind = static_cast<CabinLookKind>(k);
                     found = true;
@@ -857,6 +895,7 @@ private:
             if (!found || (inline_keys && out.kind == CabinLookKind::Default)) {
                 return Fail(Join(path, "kind"), "unknown look '" + kind + "'");
             }
+            if (inline_keys && out.kind == CabinLookKind::InMesh) return Fail(Join(path, "kind"), "in_mesh is for controls only");
         }
         if (const json::Value* size = v.Find("size_m")) {
             if (size->Is(json::Type::Number)) {
@@ -1067,7 +1106,8 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale",
                                 "unit", "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "readouts", "glass", "reading", "document", "source", "confidence", "notes"})) {
+                                "readouts", "glass", "reading", "document", "levels", "scale_from", "source", "confidence",
+                                "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -1124,10 +1164,10 @@ private:
             }
         } else if (kind == "dial") {
             disp.kind = CabinDisplayKind::Dial;
-            allowed = {"control", "readout", "marks", "value_per_turn", "labels_per_turn"};
+            allowed = {"control", "readout", "levels", "marks", "value_per_turn", "labels_per_turn"};
         } else if (kind == "meter") {
             disp.kind = CabinDisplayKind::Meter;
-            allowed = {"control", "reading", "marks", "scale", "full_scale", "unit"};
+            allowed = {"control", "reading", "levels", "marks", "scale", "full_scale", "scale_from", "unit"};
         } else if (kind == "counters") {
             disp.kind = CabinDisplayKind::Counters;
             allowed = {"readouts"};
@@ -1154,14 +1194,21 @@ private:
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope, "
                                             "status_board, plot_board, keypad_window or document");
         }
-        for (const char* key : {"control", "reading", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale", "unit",
+        for (const char* key : {"control", "reading", "readout", "levels", "marks", "value_per_turn", "labels_per_turn", "scale",
+                                "full_scale", "scale_from", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
                                 "range_window_m", "readouts", "glass", "document"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
         }
-        if (disp.kind == CabinDisplayKind::Meter && d.Find("reading") != nullptr) {
+        if (d.Find("levels") != nullptr) {
+            // A gauge read from the console's state by its levels, not a control, reading or readout.
+            for (const char* key : {"control", "reading", "readout"}) {
+                if (d.Find(key) != nullptr) return Fail(Join(path, key), "a gauge with levels reads nothing else");
+            }
+            if (!LoadLevels(d, path, console, disp)) return false;
+        } else if (disp.kind == CabinDisplayKind::Meter && d.Find("reading") != nullptr) {
             // A meter that reads the set rather than a control: one of the radio sets' readings, and that set on the console.
             if (d.Find("control") != nullptr) return Fail(path, "a meter shows a control or a reading, not both");
             if (!RequireString(d, path, "reading", disp.reading)) return false;
@@ -1190,6 +1237,7 @@ private:
         if (!OptionalInt(d, path, "marks", disp.marks) || !OptionalNumber(d, path, "value_per_turn", disp.value_per_turn) ||
             !OptionalNumber(d, path, "labels_per_turn", disp.labels_per_turn) ||
             !OptionalNumber(d, path, "scale", disp.scale) || !OptionalNumber(d, path, "full_scale", disp.full_scale) ||
+            !OptionalNumber(d, path, "scale_from", disp.scale_from) ||
             !OptionalString(d, path, "unit", disp.unit) ||
             !OptionalNumber(d, path, "sweep_period_s", disp.sweep_period_s) ||
             !OptionalNumber(d, path, "afterglow_s", disp.afterglow_s) ||
@@ -1198,6 +1246,7 @@ private:
             return false;
         }
         if (disp.marks < 1) return Fail(Join(path, "marks"), "must be at least 1");
+        if (!(disp.scale_from < disp.full_scale)) return Fail(Join(path, "scale_from"), "must be below full_scale");
         for (double v : {disp.value_per_turn, disp.full_scale, disp.sweep_period_s, disp.afterglow_s,
                          disp.magnified_window_m, disp.range_window_m}) {
             if (!(v > 0.0)) {
@@ -1207,6 +1256,29 @@ private:
         }
         if (disp.kind == CabinDisplayKind::ElevationScope && !LoadElevationScope(d, path, console, disp)) return false;
         if (disp.kind == CabinDisplayKind::Counters && !LoadCounters(d, path, disp)) return false;
+        return true;
+    }
+
+    bool LoadLevels(const json::Value& d, const std::string& path, const ConsoleData& console, CabinDisplay& disp) {
+        const json::Value* arr = OptionalArray(d, path, "levels");
+        if (arr == nullptr) return message_.empty() ? Fail(Join(path, "levels"), "required") : false;
+        if (arr->items.empty()) return Fail(Join(path, "levels"), "needs at least one level");
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string p = Index(Join(path, "levels"), i);
+            const json::Value& v = arr->items[i];
+            if (!Keys(v, p, {"when", "when_any", "value", "ramp", "notes"})) return false;
+            CabinNeedleLevel level;
+            if (!LoadConditions(v, p, "when", console.panel, console.equipment, level.when) ||
+                !LoadConditions(v, p, "when_any", console.panel, console.equipment, level.when_any)) {
+                return false;
+            }
+            if (v.Find("value") == nullptr) return Fail(Join(p, "value"), "required");
+            if (!OptionalNumber(v, p, "value", level.value) || !OptionalString(v, p, "ramp", level.ramp)) return false;
+            if (!level.ramp.empty() && !console.equipment.Has(level.ramp)) {
+                return Fail(Join(p, "ramp"), "unknown subsystem '" + level.ramp + "'");
+            }
+            disp.levels.push_back(std::move(level));
+        }
         return true;
     }
 

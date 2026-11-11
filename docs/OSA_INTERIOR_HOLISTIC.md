@@ -1435,3 +1435,194 @@ The hinge runs along the rear top edge, at trace (y -145, z 104), with leaves at
 **The hinge in the game.** `data/cabins/osa_ak.json` `"hinges"`: `repair_lid` turns `repair_lid_panel` and `cabinet_0096_lid` 76 degrees about the axis (-0.9593, -0.2823, 0), the cabinet's +x, at pivot (-0.0303, 0.4035, 1.8808). It is built shut, and it opens as the subsystem `repair_lid_shut` stops: enabled while `pwr.repair_lid` is 0 (закрыта), 6 s each way (an estimate). A hinge may now name any `axis` (`simcore::CabinHinge::Turned`, clockwise seen from the axis's tip; `test_cabin.cpp` checks an upright hinge and the cover over the toggles). Unreal turns it with `FQuat(BodyDir(axis), angle)` (`SimCabinComponent`). The cover's right captive screw is the control, a quarter-turn head drawn as a chrome rotary 14 mm across. The left screw is the mesh's, and one control stands for both (SAM3D's choice). `assembled_render.py` takes a job's `"hinges"` to render a photo's state: g097-a with the cover open.
 
 **Left.** The plate's notched corners are drawn square. The stay rod, the group legends (ОТКЛ., АНТЕННА, ЭКВИВАЛЕНТ) and the small labels are not drawn. The two studs on the cover's right stand 40 mm on posts whose footing could not be read (pre-existing). The slope's depth is unresolved, as above.
+
+## 46. The owner's review: the 0096's switches and the PU-303 (12 Nov 2026)
+
+The owner marked up three preview renders (`tools/blender/assembled_render.py`, not Unreal):
+
+1. The repair toggles on the 0096's top looked like buttons.
+2. The door had five levers that no photo shows.
+3. On the PU-303, КОНТР. ЛАМП should be a rotary selector, and ГОМ should match the buttons beside it. The РАБОТАЕТ row should match too.
+4. Two lamps at the commander panel's left edge appear in no photo.
+
+**The repair toggles.**
+- Unreal drew the fixtures thrown down the 45-degree slope, so each lever pointed at the operator's eye and read as a round cap.
+- The preview drew them as discs.
+- g097-a shows them thrown up the face, in their working position (the plate reads РАБОЧЕЕ ПОЛОЖЕНИЕ ВКЛЮЧЕНО). The levers stand about 15 mm off the plate.
+- Toggle fixtures, these 23 being the only ones, are now drawn that way:
+  - in Unreal, `USimCabinComponent::BuildFixture`: thrown up 35 degrees, the lever 1.2 x the bushing's width, at most 3 cm;
+  - in the preview, `holistic_scene.py`: the same nut and lever.
+
+**The door's extra levers** were five working switches drawn as toggles:
+- `pwr.equipment`, `stab.power`, `drv.az`, `drv.el` and `pwr.phase`;
+- on the door, each is a pair of push-buttons (ВКЛ. and ОТКЛ.; АС and ВС), which `SM_Cabinet0096` already has;
+- the lever stood at the point between them.
+
+A new look kind, `in_mesh`, handles them (controls only; `cabin.hpp`, `test_cabin.cpp`):
+- nothing is drawn, because the shell's mesh has the part;
+- Unreal hides what it built but keeps it as the hit area (hidden parts still block the cabin's traces);
+- the preview skips it.
+
+The door's real toggles keep their levers: `soc.rotation_lock`, `apu.lock`, `tov.supply`, `pwr.relay_heat`, `vent.season`, `press.emergency`.
+
+**The PU-303**, against g084-b (the photograph) and g084-d (the book's drawing):
+- `gta.lamp_test` is now `"style": "rotary"`: the photo shows a black pointer knob, the drawing a pointer switch.
+- ПУСК and ГОМ (`pwr.gta`, `pwr.pto`) are switches with a push-button's look. Unreal already drew them as buttons; the preview drew every toggle style as a lever, and now draws these as buttons too.
+- The three РАБОТАЕТ lamps (ГТА, ГОМ, ИВП) are identical black lamp caps in both images. `gta_on` and `pto_on` now carry the ИВП fixture's size (20.5 mm); their source is g084-b and g084-d, and their lit colour is still SAM3D's green.
+- The preview now draws:
+  - every lamp dark, with a hint of its colour, as the game shows an unlit lamp;
+  - every fixture lamp with a chrome bezel, as Unreal does.
+
+**The commander panel's `power_on` and `fault` lamps** are gone. They had no source and appear in neither g082-b nor g085-a, and no procedure, tutorial or crew rule read them.
+
+**Measured or chosen.** The toggles' positions are unchanged (section 45). From the photos: the lever's height (about 15 mm) and its throw (up the face). SAM3D's choices: the 35-degree angle and the green of the РАБОТАЕТ lamps.
+
+**Left.**
+- The door's real toggles have a lever in the mesh as well as the drawn one. The drawn lever moves, the mesh's stays put; where they differ, two show.
+- The PU-303's other small lamps (ДАВЛ. МАСЛА, ПР ВС, ОБРЫВ ФАЗ, ОБРАТ. ЧЕРЕД.) are drawn as red lenses. In g084-b they look like the same black caps as the rest, but the photo is too small to settle it.
+
+## 47. Audit: controls, lamps and systems still missing (12 Nov 2026)
+
+The owner asked for a search across the research, notes and references for buttons, interfaces, controls and systems that are missing. The owner's rules:
+- what can be identified on the current model is built;
+- what is identified only in a reference photo is reported before any work;
+- what appears nowhere is reported with where to look.
+
+Two searches were made:
+- the research: `docs/re/osa.md` and `docs/research/OSA_*`, against `data/procedures/osa_ak.json`;
+- the interior notes and traces: this file, the handoff, `OSA_INTERIOR_COMPONENTS`, the cabin file's fixtures and panel notes.
+
+The button map's "not built" list (`tools/button_map.py` `PLANNED`) now carries the results in three groups: on the model, not wired; seen in a photo; in the sources only.
+
+**Built: five lamps drawn on the model, now working.** Each was a fixture and is lit from state the sim already has:
+- ПА over the elevation block's ПА button: TV angle tracking (`tv_angle_track`; voenizdat_osa_1991 p99).
+- ТСЦ over the elevation block's ТСЦ button: `auto_tracking` (p99-100).
+- ПОЛУАВТОМАТ on the range indicator: `range_semi_auto` (samsim_osa p24; a blank on the photographed vehicle).
+- PU-303's two ПОДСВЕТКА dome lights: switched by `gta.backlight` while ПИТАНИЕ УПРАВЛЕНИЯ is on (g084-b, g084-d).
+
+**On the model but left for a decision** (the function is known, but wiring it needs a model or a reading the sim lacks):
+- the 0004-14M error meters;
+- 0004-12M1's ИП1 and ИП2;
+- 0062-6M1's ТОК and МОЩНОСТЬ;
+- the pressurisation lamps;
+- PU-303's other lamps and gauges;
+- the BAZ dash gauges;
+- БОРТ СПК ОТКЛ. as its own button;
+- the fault lamps (correctly dark while no fault is modelled);
+- the stowing board's ГАБАРИТ 3800 and ПРЕД. УГОЛ (which condition lights which is unclear, p155-157).
+
+**Seen in a photo, not modelled:**
+- the ПАНЕЛЬ ИНДИКАЦИИ box (g095-b, g094-a);
+- the de-energisation indicator box (g090-a, g092-a);
+- the march signal flags (g089-d);
+- the commander's keyed switch (g087-c);
+- the air pressure gauges (g087-d, g089-b, g090-a);
+- some fuse panels, levers and rods (g083-a, g087-c, g088-a/b/c, g100-b/c/d).
+
+**In the sources only:**
+- АВАР. ОТКЛ. СЭП;
+- the НАКАЛ lamps;
+- 0005-8M's КОРРЕКЦИЯ and МК — ГПК — АК;
+- 0051-7M's repetition frequency;
+- OK81-4M's ВОЗВРАТ and БАЛАНС;
+- 0065-2M's АРУ — РРУ;
+- ДВЕРЬ ЗАКРЫТА;
+- the PPI course-parameter scale;
+- the driver's PNV-57E, TNPO-170A and wave shield.
+
+**Stale claims found:**
+- OS81-10M is called "not modelled" in the console map, and was in the cabin's SŁ-2M note (corrected): it is the display `elev_search`.
+- `ssc.slew`, the orientation and IFF controls, and the range and launch selectors are listed as missing or new in `OSA_CONSOLE_MAP_2026-10.md` and `OSA_MANUALS_2026-10.md`: they exist.
+- The research files are dated records and were left as they are.
+
+## 48. The drawn meters and lamps wired; the manual-only parts found in the photos (12 Nov 2026)
+
+The owner asked for everything drawn on the model to be wired and simulated, for the photo-seen parts to be built, and
+for a search of the photos for the parts only the manual names.
+
+### Gauges read from the console by data
+
+A meter or dial display may now carry `levels` instead of a control, reading or readout (`cabin.hpp`
+`CabinNeedleLevel`, `LevelReading`):
+- the first level whose `when` (and `when_any`) hold sets the needle to its `value`;
+- a `ramp` subsystem multiplies the value by its progress, so a needle runs up with a start;
+- no level holding: the needle rests at 0.
+
+A meter's `scale_from` starts its scale below zero, for a centre-zero meter (`MeterFraction`, `MeterMark`). Unreal
+draws both through simcore (`SimCabinDisplayComponent.cpp`). A dial's redraw key now follows its reading, not only its
+control, so the fuel gauge and the gyro's Qc scale redraw too.
+
+Each live gauge sits inside the drawn gauge's rim, at 0.84 of its size, over the baked face.
+
+### Wired
+
+| Part | What it reads or when it lights | Source |
+|---|---|---|
+| 0062-6M1 ТОК, МОЩНОСТЬ (op_panel) | The transmitter `mon.tx_select` picks (СОЦ, ССЦ, СНК, СПК-I, СПК-II), in tolerance (6 and 7 of 10) while it radiates; СНК not modelled | voenizdat_osa_1991 p49-50, p52, p100, p120 |
+| `mon.tx_select` ТОК, МОЩНОСТЬ | New switch, the large black knob between the meters (SAM3D's choice of knob and order) | p49-50 |
+| 0004-14M's four meters (fo_panel) | Centre-zero, -10..10; rest at zero, where ТСЦ puts them | p99, p157-163, p247; g094-a |
+| PU-303 ГТА, ТВГ | Run up with the turbine's start to 9.5 and 550 °C (SAM3D's figures) | g084-b, g084-d |
+| PU-303 lamps | ЛЮКИ ОТКР./ЗАКР. from the new `gta_hatches`; ВКЛЮЧЕНИЕ НАГРУЗОК ГТА, ГОМ, ИВП from their source on line; РАБОТАЕТ ИВП; ДАВЛ. МАСЛА while the turbine is not running; ПР ВС, ОБРЫВ ФАЗ, ОБРАТ. ЧЕРЕД. dark | g084-b, g084-d |
+| PU-303 КОНТР. ЛАМП | Lights the plate's lamps while ПИТАНИЕ УПРАВЛЕНИЯ is on (SAM3D's reading of the switch) | g084-d |
+| 0096-9M1 ПОДКАЧКА ОТСЕКОВ ВКЛ., Р=0,18 | `press.standard` or `press.emergency` starts `press_cycle`; `press_018` after 30 s, `press_023` after 40 s (estimates); the fill lamp goes out at 0,23 | p170-173 |
+| 0096-9M1 КОМПРЕССОР ВКЛ. | While the new `receiver_charged` rises (120 s, an estimate) once 220 V is on line | p172-174 |
+| ГАБАРИТ 3800 | The search antenna stowed and the АПУ locked, the equipment on | p50 |
+| НАКАЛ СПК-I, СПК-II, ССЦ, СОЦ (sp2m_panel) | With АППАРАТУРА ВКЛ. | p49, p100, p150; g092-e |
+
+Not modelled, so not modelled here either:
+- the top-ups that hold the compartments at 0,18-0,23;
+- the chassis's own receiver;
+- the launchers' lowering apart from the АПУ lock.
+
+**Corrected:** 0091-18's ТРЕНИРОВКА — РАБОТА toggles were swapped. g092-e shows ССЦ on the block's left half and СОЦ on
+its right, so `soc.training` now sits at the trace's 1646 mm toggle and `ssc.training` at the 1487 mm one.
+
+**Left on the model, not wired:** see the button map's not-built list.
+- The 0096's fault lamps and ПРЕД. УГОЛ: no such fault is modelled.
+- PU-303's load buttons, СТОП and ХОЛ. ПРОКР.: wiring them changes the power-on drill.
+- 0062's КОНТРОЛЬ meter and ПОДЖИГ ГШ.
+- ИП1 and ИП2 of 0004-12M1.
+- The dash gauges: the chassis's engine is not modelled.
+- 0091-17M's КОНТРОЛЬ НАПР.
+- БОРТ СПК ОТКЛ. as its own button.
+
+### Where the manual-only parts sit (a search of the clean photos, 12 Nov 2026)
+
+Pixel boxes are on `out/recon/dryrun/photos/clean`; the crops are in the session's scratchpad, not the repo.
+
+1. **The ПАНЕЛЬ ИНДИКАЦИИ.** Confirmed, g095-b (1290,355,1440,1460), legend and plug Ш2 legible. It carries:
+   - АВАР. ОТКЛ. СЭП, a red-ringed button (1305,1278,1330,1302);
+   - УКЧ ВКЛ./ОТКЛ., a toggle beside it (voenizdat_osa_1991 p163: the frequency monitor);
+   - ten engraved lamp caps (1293,483,1390,730);
+   - a seven-position rotary;
+   - a red ОТКАЗ lamp.
+
+   It stands on the post forward of fo_panel, between SŁ-2M and SŁ-1M; it is not built.
+2. **НАКАЛ lamps.** Confirmed, g092-e: blue lamps on 0091-17M1 (СПК-I, СПК-II) and 0091-18 (ССЦ); a dark cap under
+   НАКАЛ on 0091-18's СОЦ half. Now wired, above.
+3. **0005-8M.** The block is confirmed, g091-a; its black sub-panel is the ПУ-11 (p48). The switch МК — ГПК — АК is
+   probably the top-centre toggle on ПУ-11 (1090,460,1110,480), about gyro_panel (0.203, 0.219); the trace misses it.
+   The text puts СОГЛАСОВАНИЕ on ПУ-11, where the model has `orient.sync` on the middle row: to be checked.
+4. **0051-7M.** The block is confirmed, g094-a (270,1095,580,1310): one pointer knob (405,1207,435,1237). Its legends are
+   unreadable; the text gives five positions (АВТ., РУЧН. Р-Р, РУЧН. F1-F3, F3, Р). The modelled block is only a 61 mm
+   strip.
+5. **OK81-4M.** Confirmed on both:
+   - g091-a, OK81-4M-II: БАЛАНС, a slotted control (610,817,637,843), and ВОЗВРАТ, a red button (598,938,652,990);
+   - g094-a, OK81-4M-I: the same pair.
+
+   On the model they are the trace's jack and button at about gyro_panel (-0.277,-0.096) and (-0.279,-0.202), with no
+   control bound.
+6. **0065-2M.** Probable. Drawing g090-b: two flaps of four potentiometers (УСИЛЕНИЕ T1-T3, ПК, per channel) and АРУ —
+   РРУ between them; on the model, the sp1m trace's black cap at about (0.288, -0.079).
+7. **ДВЕРЬ ЗАКРЫТА.** Possible: the ПАНЕЛЬ ИНДИКАЦИИ's bottom-right lamp cap (1343,668,1385,708). Its legend has two
+   lines of the right lengths, but is unreadable.
+8. **The PPI's course-parameter scale.** Confirmed, g095-a: seven parallel lines on the rotating cursor disc
+   (365,620,1040,1320), turned by the orange knobs on the bezel.
+9. **Driver's vision.**
+   - PNV-57E and TNPO-170A: only blanked apertures over the driver's and commander's screens (g089-a, g089-b).
+   - The wave shield is folded on the glacis (g022-b).
+   - No cab control for the shield was found.
+10. **The launch-prohibit key.** Already `fo.key` (g095-b, a key cylinder under ИЗДЕЛИЯ).
+11. **0004-14M's controls.** Confirmed, g095-b and g094-a: ВЫВОД — НАВЕДЕНИЕ (a bat lever), РЕЖИМЫ (СМЕНА ЗНАКА, СО Ц,Р,
+    КОМПЕНС. Ц,Р) and ЧАСТОТА. The model has `vent.workplaces` where the photos show ВЫВОД — НАВЕДЕНИЕ, and `tov.freq`
+    where they show a key lock and an ОСВЕЩ. toggle: both to be checked against the flat.

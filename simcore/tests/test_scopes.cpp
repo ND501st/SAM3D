@@ -111,7 +111,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 13);  // with the driver's fuel gauge and the 0096 cabinet's voltmeter
+    SC_EXPECT(layout.displays.size() == 21);  // with the driver's fuel gauge, the 0096 cabinet's voltmeter and the gauges read by levels
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {

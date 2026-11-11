@@ -645,11 +645,12 @@ function showProc(pid) { const c = procEls[pid]; if (!c) return; c.scrollIntoVie
 
 /* ---------- missing ---------- */
 const ml = $("#missinglist");
-const PH_ORDER = ["6.2", "6.3", "6.3 / 6.7", "6.4", "6.5", "6.6", "6.7", "phase 7", "later", "unknown"];
+const PH_ORDER = ["6.2", "6.3", "6.3 / 6.7", "6.4", "6.5", "6.6", "6.7", "phase 7", "later", "on the model, not wired",
+  "seen in a photo: owner to decide", "in the sources only: owner to decide", "unknown"];
 DATA.nodes.filter(n => n.t === "planned").sort((a, b) => PH_ORDER.indexOf(a.phase) - PH_ORDER.indexOf(b.phase)).forEach(n => {
   const from = (inn.get(n.id) || []).map(e => e.s);
   ml.append(h("article", { class: "mcard" },
-    h("span", { class: "ph" }, n.status === "unknown" ? "function unknown" : "roadmap " + n.phase),
+    h("span", { class: "ph" }, n.status === "unknown" ? "function unknown" + (n.phase !== "unknown" ? " · " + n.phase : "") : /^(\d|phase|later)/.test(n.phase) ? "roadmap " + n.phase : n.phase),
     h("h4", {}, n.label), h("p", {}, n.notes),
     from.length ? h("div", { class: "from" }, "Hooks into: ", ...from.flatMap((s, i) => [i ? ", " : "", h("button", { type: "button", onclick: () => select(s, { center: true, scroll: true }) }, N.get(s).label)])) : null,
     h("div", { class: "from" }, h("button", { type: "button", onclick: () => select(n.id, { center: true, scroll: true }) }, "Show on map"))));

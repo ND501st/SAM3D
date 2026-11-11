@@ -108,14 +108,21 @@ def items(cab, console, panels, batch):
                 HS.add_box(batch.get(pid, 'screen', SCREEN), q, n, r, u, 0.002, w, h)
             continue
         if it['what'] == 'lamp':
+            # Dark, as the game shows a lamp that is not lit (USimCabinComponent paints the glass at 4% of its colour):
+            # a hint of the colour only, so that a sim lamp and a fixture lamp beside it read alike (PU-303's РАБОТАЕТ).
             colname = (lamps.get(it['id'], {}).get('look') or {}).get('color') or it.get('color') or 'amber'
+            lens = tuple(0.1 * c for c in LOOK.get(colname, LENS))
             HS.add_disc(batch.get(pid, 'chrome', STEEL), at, n, r, u, w, w, 0.008)
-            HS.add_disc(batch.get(pid, 'lens_' + colname, LOOK.get(colname, LENS)), at + n * 0.008, n, r, u, w / 1.3, w / 1.3, 0.006)
+            HS.add_disc(batch.get(pid, 'lens_' + colname, lens), at + n * 0.008, n, r, u, w / 1.3, w / 1.3, 0.006)
             continue
         look = (rows.get(it['id']) or {}).get('look') or {}
+        if look.get('kind') == 'in_mesh':
+            continue        # the shell's mesh has the part (the 0096's pairs of buttons); the game keeps only its hit area
         colname = look.get('color')
         col = LOOK.get(colname, DARK)
         key = 'c_' + (colname or 'black')
+        if st == 'toggle' and look.get('kind') in ('button', 'lamp_button'):
+            st = 'button'   # a switch with a push-button's look (PU-303's ПУСК and ГОМ), as Unreal draws it
         if st == 'toggle':
             HS.add_disc(batch.get(pid, 'chrome', STEEL), at, n, r, u, 0.013, 0.013, 0.006, 6)
             cyl(batch.get(pid, 'chrome', STEEL), at + n * 0.006, at + n * 0.022 + u * 0.007, 0.002, 8)
