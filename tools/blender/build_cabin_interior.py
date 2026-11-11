@@ -37,6 +37,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 OUT = os.path.join(REPO, 'art', 'cabin_interior')
 LAYOUT = os.path.join(REPO, 'data', 'cabins', 'osa_ak.json')
 SHELL = os.path.join(REPO, 'data', 'cabins', 'osa_ak_shell.json')
+PARTS = os.path.join(REPO, 'data', 'cabins', 'osa_ak_parts.json')     # parts rebuilt from the photographs (docs/OSA_MODELLING_PROCESS.md)
+RIGHT_SHIFT_X = 0.302   # what was measured against the right racks before 11 Nov 2026 stands this much further outboard: the turret's axis is 0.914 m from SP-2M2's face, not Fig. 3's 0.612 (docs/research/OSA_REBUILD_C_2026-11.md)
 COLLECTION = 'OsaInterior'
 
 # ---------------------------------------------------------------------------------------------- the plan (body frame)
@@ -597,6 +599,8 @@ def build_floor_parts(b, shell):
     ar = f['arch_forward_right']
     b.prism([tuple(p) for p in ar['section_yz_m']], ar['x_from_m'], ar['x_to_m'], 'Paint_Equipment')
     for r in f['raised']:                                               # what the depth comparison found standing on the floor (docs/OSA_INTERIOR_HOLISTIC.md section 33)
+        if superseded('floor.raised.' + r['id']):                       # rebuilt from the photographs: data/cabins/osa_ak_parts.json
+            continue
         if 'section_at_x_from_yz_m' in r:
             b.loft_x([tuple(p) for p in r['section_at_x_from_yz_m']], [tuple(p) for p in r['section_at_x_to_yz_m']], r['x_from_m'], r['x_to_m'], r['material'])
         elif 'section_yz_m' in r:
@@ -624,6 +628,38 @@ def build_aft_fittings(b, shell):
     b.prism([(REAR_Y - 0.002, zb), (REAR_Y + q['depth_m'], zb), (REAR_Y + q['depth_m'], zb + q['front_height_m']), (REAR_Y - 0.002, zt)], q['x_m'][0], q['x_m'][1], 'Paint_Radio')
 
 
+def load_parts():
+    """The parts rebuilt by docs/OSA_MODELLING_PROCESS.md: {id: entry}. Each names what of the older shell it replaces (`supersedes`)."""
+    if not os.path.exists(PARTS):
+        return {}
+    with open(PARTS, encoding='utf-8') as f:
+        return {q['id']: q for q in json.load(f)['parts']}
+
+
+def superseded(what):
+    return any(what in q.get('supersedes', []) for q in load_parts().values())
+
+
+def build_osa_parts(b):
+    """Every rebuilt part as its part object's own mesh (tools/recon/osa/parts.py: no bpy there, so the fit, the tests
+    and this builder read one definition). Body-frame vertices; finish() turns the faces outwards."""
+    sys.path.insert(0, os.path.join(REPO, 'tools', 'recon', 'osa'))
+    import parts as osa_parts
+    for q in load_parts().values():
+        if 'mesh' in q:                     # a part that keeps a mesh of its own (the first-aid box): its builder reads the part
+            continue
+        V, F = osa_parts.from_dict(q['shape']).mesh()
+        verts = [b.bm.verts.new(P(*v)) for v in V]
+        idx = b.mat(q['shape'].get('material', 'Paint_Interior'))
+        for tri in F:
+            if len({int(i) for i in tri}) < 3:
+                continue
+            try:
+                b.bm.faces.new([verts[int(i)] for i in tri]).material_index = idx
+            except ValueError:          # the same face twice
+                pass
+
+
 def build_posts(b, shell):
     """The bent pressed posts between the racks: one channel swept along the outline on the aisle side, upright beside
     the rack and, below the knee, raking inboard and further aft, with no step between (wwp_gecko g098-a); behind the
@@ -631,6 +667,8 @@ def build_posts(b, shell):
     ps = shell['posts']
     d, gt, gb = ps['channel_depth_m'], ps['gusset_t_m'], ps['gusset_set_back_m']
     for side in ('right', 'left'):
+        if superseded('posts.' + side):     # rebuilt from the photographs: data/cabins/osa_ak_parts.json
+            continue
         p = ps[side]
         outline = [tuple(q) for q in p['x_z_m']]
         back = p['back_x_m']
@@ -863,6 +901,7 @@ def build_hull():
         seal(b, o, right, up, sc, 'Rubber_Black')
     build_floor_parts(b, shell)
     build_posts(b, shell)
+    build_osa_parts(b)
     build_aft_fittings(b, shell)
     build_cab_corner_posts(b, shell)
     build_cab_floor(b)
@@ -1193,7 +1232,7 @@ def build_rack_sl3m(layout):
         return pz + (T.H_MM / 2.0 - y_mm) * 0.001
 
     wall = -WALL_X
-    aft, post0, post1 = REAR_Y, 0.485, 0.605
+    aft, post0, post1 = REAR_Y, 0.415, 0.535   # the post against SŁ-2M's aft end (g094-a: the range column's plates run to y 0.539)
     y_fwd = Y(T.FRAME_RIGHT[1])
     z_top, z_bot = Z(T.FRAME_TOP[0]), Z(T.FRAME_BOTTOM[1])
     b.box(wall, face - 0.026, aft, post0, z_bot, ROOF_Z, 'Paint_Rack')                # the cabinet, just behind the face's back sheet
@@ -1217,7 +1256,7 @@ def build_chest_5937():
     """The stencilled stowage tin hung on the wall under SP-3M-2 (wwp_gecko g098-a, b, c, session A): its front, length and height triangulated
     through the joint solve to 2-8 mm; how deep it runs back to the wall is the lid's forward corner and an estimate."""
     b = Builder('SM_Chest5937')
-    x0, x1, y0, y1, z0, z1 = 0.49, 0.731, -0.736, -0.246, 1.27, 1.40
+    x0, x1, y0, y1, z0, z1 = 0.49 + RIGHT_SHIFT_X, 0.731 + RIGHT_SHIFT_X, -0.736, -0.246, 1.27, 1.40     # not yet measured again through certified cameras: moved with the right racks
     cx, cy, w, d = (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0
     plan = rrect(cx, cy, w, d, 0.04)
     def layer(grow, top, t, mat):
@@ -1236,15 +1275,34 @@ def build_first_aid():
     g098-a's solved camera on the plane that makes it a rectangle (20 degrees back). Moved 35 mm toward the wall, clear of the crew's walk.
     The hangar BM3-1 (g092-a, g096-a) carries it elsewhere: it is loose kit in a strap holder."""
     b = Builder('SM_FirstAid')
-    tl, tr = Vector((0.504, 0.100, 1.360)), Vector((0.490, -0.159, 1.329))
-    bl, br = Vector((0.427, 0.137, 1.145)), Vector((0.420, -0.119, 1.133))
+    tl, tr = Vector((0.504 + RIGHT_SHIFT_X, 0.100, 1.360)), Vector((0.490 + RIGHT_SHIFT_X, -0.159, 1.329))
+    bl, br = Vector((0.427 + RIGHT_SHIFT_X, 0.137, 1.145)), Vector((0.420 + RIGHT_SHIFT_X, -0.119, 1.133))
+    thick = 0.09
+    fitted = load_parts().get('first_aid')          # fitted to its outline in two photographs (tools/recon/osa/recipes/right_kit.py): the box's front face carries what follows
+    if fitted:
+        import numpy as np
+        sys.path.insert(0, os.path.join(REPO, 'tools', 'recon', 'osa'))
+        import parts as osa_parts
+        box = osa_parts.from_dict(fitted['shape'])
+        R, size = box.rotation(), box.size
+        k = int(np.argmin(size))
+        n_ = R[:, k] * (-1.0 if R[0, k] > 0 else 1.0)                       # its front faces the aisle
+        rest = [i for i in range(3) if i != k]
+        vi = max(rest, key=lambda i: abs(R[2, i]))
+        ui = [i for i in rest if i != vi][0]
+        v_ = R[:, vi] * (1.0 if R[2, vi] > 0 else -1.0)
+        u_ = np.cross(v_, n_)
+        c_ = box.centre + n_ * size[k] / 2
+        tl, tr = Vector(c_ - u_ * size[ui] / 2 + v_ * size[vi] / 2), Vector(c_ + u_ * size[ui] / 2 + v_ * size[vi] / 2)
+        bl, br = Vector(c_ - u_ * size[ui] / 2 - v_ * size[vi] / 2), Vector(c_ + u_ * size[ui] / 2 - v_ * size[vi] / 2)
+        thick = float(size[k])
     centre = (tl + tr + bl + br) / 4
     u = (tr - tl).normalized()
     side = (tl + tr - bl - br)
     v = (side - u * side.dot(u)).normalized()
     n = u.cross(v).normalized()
     W_, H_ = (tl - tr).length, (side / 2).length
-    b.slab(tuple(centre), u, v, rrect(0, 0, W_, H_, 0.03), [], 0.09, 'Paint_Letters')
+    b.slab(tuple(centre), u, v, rrect(0, 0, W_, H_, 0.03), [], thick, 'Paint_Letters')
     b.slab(tuple(centre - n * 0.035), u, v, rrect(0, 0, W_ + 0.004, H_ + 0.004, 0.032), [], 0.004, 'Metal_Steel')   # the seam round the lid
     r0, r1 = 0.082, 0.078                   # the red ring and its cross
     b.slab(tuple(centre + n * 0.0008), u, v, rrect(0, 0, 2 * r0, 2 * r0, r0 - 1e-4, seg=16), [rrect(0, 0, 2 * r1, 2 * r1, r1 - 1e-4, seg=16)], 0.0008, 'Paint_Red')
@@ -1253,10 +1311,10 @@ def build_first_aid():
     # the latch on its forward side, and the black strap and steel bracket that hold it to the wall
     b.obox(tuple(centre - u * (W_ / 2 + 0.004) - n * 0.04), v, n, u, (0.03, 0.02, 0.012), 'Metal_Steel')
     top = (tl + tr) / 2
-    b.tube([tuple(top - n * 0.09 + v * 0.002 + Vector((0.2, 0, 0))), tuple(top + v * 0.012 - n * 0.09), tuple(top + v * 0.012 + n * 0.003), tuple(top - v * 0.05 + n * 0.003)],
+    b.tube([tuple(top - n * thick + v * 0.002 + Vector((0.2, 0, 0))), tuple(top + v * 0.012 - n * thick), tuple(top + v * 0.012 + n * 0.003), tuple(top - v * 0.05 + n * 0.003)],
            0.009, 'Rubber_Black', seg=6)
-    back = centre - n * 0.09
-    b.box(back.x - 0.004, 0.733, back.y - 0.02, back.y + 0.02, back.z - 0.015, back.z + 0.015, 'Metal_Steel')
+    back = centre - n * thick
+    b.box(back.x - 0.004, back.x + 0.24, back.y - 0.02, back.y + 0.02, back.z - 0.015, back.z + 0.015, 'Metal_Steel')
     return finish(b, bevel=0.002)
 
 
@@ -1316,12 +1374,137 @@ def sp1m_top(b, X):
 def sl2m_extra(b, X):
     """SŁ-2M's frame from g094-a: a top rail with a chamfer standing proud of the faces, the posts between the columns standing proud
     of them, a black name plate on the rail over the middle column. Rail height and widths by eye, about +-5 mm; the depth SAM3D's."""
-    ya, yb = 0.605, 2.505
+    ya, yb = 0.535, 2.505
     b.box(X(-0.004), X(0.012), ya, yb, 2.075, ROOF_Z, 'Paint_Rack')
     prism(b, X, ya, yb, [(0.012, 2.075), (0.018, 2.068), (0.0, 2.062)], 'Paint_Rack', t=0.003)
     for yy in (1.8925, 1.2175):
         b.box(X(-0.004), X(0.012), yy - 0.012, yy + 0.012, 1.108, 2.075, 'Paint_Rack')
     b.box(X(0.012), X(0.0135), 1.50, 1.61, 2.078, 2.096, 'Bakelite_Black')
+
+
+def sl2m_housings(b, layout):
+    """SŁ-2M's raised housings round its displays (tools/blender/sl2m_housings.py: what, where and why): each a ring of
+    loops lofted from its foot on the plate, round its front edge and into its hole, or a visor swept over a dial's top,
+    or a flat plate. The foot 2 mm into the block plate, so no gap shows."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sl2m_housings as H
+    panels = {p['id']: p for p in layout['panels']}
+    foot = -0.002
+
+    for h in H.HOUSINGS:
+        c0, n, r, up = panel_frame(panels[h['panel']])
+
+        def at(u, v, d):
+            return c0 + r * u + up * v + n * d
+
+        cx, cy = H.centre(h, layout)
+        hx, hy = H.hole_centre(h, layout)
+        D, mat = h['depth'], h['mat']
+        if h['kind'] == 'ring':
+            ro, rh = h['outer'] / 2, h['hole'] / 2
+            cw, cd = h.get('cone', (0.012, 0.009))
+            if h['style'] == 'flange':     # a drum, its outer edge chamfered, its face sloping in to the screen as a cone
+                prof = [(ro, foot), (ro, D - 0.004), (ro - 0.004, D), (rh + cw, D), (rh + cw - 0.002, D - 0.002),
+                        (rh + 0.001, D - cd), (rh, D - cd), (rh, foot)]
+            else:                          # knurl: a collar at the foot, the knurled drum, a rounded lip
+                prof = [(ro, foot), (ro, 0.006), (ro - 0.003, 0.008), (ro - 0.003, D - 0.004), (ro - 0.006, D),
+                        (rh + 0.004, D), (rh, D - 0.006), (rh, foot)]
+            loops = [[at(u, v, d) for u, v in H.circle(cx, cy, rr, 64)] for rr, d in prof]
+            if h['style'] == 'flange':     # the drum in its paint, the scale cone and the tube's throat dark
+                loft_loops(b, loops[:4], mat)
+                loft_loops(b, loops[3:], 'Metal_Dark')
+            else:
+                loft_loops(b, loops, mat)
+            if h['style'] == 'flange':
+                rs = (ro + rh + cw) / 2
+                for k in range(h.get('screws', 0)):
+                    a = 2 * math.pi * (k + 0.5) / h['screws']
+                    p = at(cx + rs * math.cos(a), cy + rs * math.sin(a), 0.0)
+                    b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.0012), 0.0034, 'Metal_Steel', seg=10)
+                for k in range(h.get('knobs', 0)):
+                    a = math.pi / 2 + 2 * math.pi * k / h['knobs']
+                    p = at(cx + (ro - 0.009) * math.cos(a), cy + (ro - 0.009) * math.sin(a), 0.0)
+                    b.cylinder(p + n * (D - 0.001), p + n * (D + 0.009), 0.0055, 'Paint_Red', seg=12)
+            else:
+                rk = ro - 0.003
+                for k in range(40):
+                    a = 2 * math.pi * k / 40
+                    radial = r * math.cos(a) + up * math.sin(a)
+                    tang = -r * math.sin(a) + up * math.cos(a)
+                    mid = at(cx, cy, 0.0) + radial * rk + n * ((0.009 + D - 0.005) / 2)
+                    b.obox(mid, tang, n, radial, (0.0026, D - 0.014, 0.003), mat)
+        elif h['kind'] == 'arc':
+            a0, a1 = h['arc_deg']
+            ri, ro = h['inner'] / 2, h['outer'] / 2
+            visor(b, at, cx, cy, ri, ro, foot, D, a0, a1, mat)
+        elif h['style'] == 'dial_plate':
+            outline = H.outer_outline(h, layout)
+            b.slab(at(0, 0, D), r, up, outline, [], D - foot, mat)
+            du, dv = h['dial']['at']
+            rd = h['dial']['d'] / 2
+            p = at(cx + du, cy + dv, 0.0)
+            b.cylinder(p + n * (D - 0.001), p + n * (D + 0.001), rd, 'Metal_Dark', seg=40)
+            b.cylinder(p + n * (D + 0.001), p + n * (D + 0.004), 0.006, 'Metal_Steel', seg=16)   # the pointer's boss
+            visor(b, at, cx + du, cy + dv, rd + 0.001, rd + 0.005, D - 0.001, D + 0.03, 8, 172, mat)
+        else:
+            w, ht, rr0 = h['outer'][0], h['outer'][1], h.get('outer_r', 0.0)
+            hw, hh, hr = h['hole'][0], h['hole'][1], h.get('hole_r', 0.0)
+            edge = {'hood': 0.010, 'cast': 0.006, 'frame': 0.002}[h['style']]
+            lip, bevel = {'hood': (0.006, 0.006), 'cast': (0.008, 0.009), 'frame': (0.001, 0.002)}[h['style']]
+            prof = [('o', 0.0, foot)]
+            for k in range(5):            # the front edge rounded, a quarter circle of radius `edge`
+                a = math.radians(90.0 * k / 4)
+                prof.append(('o', edge * (1 - math.cos(a)), D - edge + edge * math.sin(a)))
+            prof += [('h', lip, D), ('h', 0.0, D - bevel), ('h', 0.0, foot)]
+            loops = []
+            for side, off, d in prof:
+                pts = (H.rrect(cx, cy, w - 2 * off, ht - 2 * off, rr0 - off, 8) if side == 'o'
+                       else H.rrect(hx, hy, hw + 2 * off, hh + 2 * off, hr + off, 8))
+                loops.append([at(u, v, d) for u, v in pts])
+            loft_loops(b, loops, mat)
+
+
+def loft_loops(b, loops, mat, smooth=False):
+    """Quads between successive closed loops of body points, all anticlockwise seen from the front and of one length.
+    Run from the outer foot over the front into the hole, the faces look outwards."""
+    idx = b.mat(mat)
+    rows = [[b.bm.verts.new(P(*p)) for p in lp] for lp in loops]
+    for r0, r1 in zip(rows, rows[1:]):
+        m = len(r0)
+        for k in range(m):
+            f = b.bm.faces.new((r0[k], r0[(k + 1) % m], r1[(k + 1) % m], r1[k]))
+            f.material_index = idx
+            f.smooth = smooth
+
+
+def visor(b, at, cx, cy, ri, ro, d0, d1, a0, a1, mat, seg=24):
+    """A visor over a dial's top: a shell ri..ro swept from a0 to a1 degrees (0 = the panel's right, 90 = up), d0 to
+    d1 out from the plate at its top, falling to half that at its ends."""
+    rows = []
+    for k in range(seg + 1):
+        a = math.radians(a0 + (a1 - a0) * k / seg)
+        top = d0 + (d1 - d0) * (0.5 + 0.5 * math.sin(a))
+        ca, sa = math.cos(a), math.sin(a)
+        sec = [(ri, d0), (ro, d0), (ro, top - 0.004), (ro - 0.003, top), (ri, top)]
+        rows.append([at(cx + rr * ca, cy + rr * sa, d) for rr, d in sec])
+    idx = b.mat(mat)
+
+    def put(pts, outward):
+        e1, e2 = pts[1] - pts[0], pts[-1] - pts[0]
+        if e1.cross(e2).dot(outward) < 0:
+            pts = list(reversed(pts))
+        f = b.bm.faces.new([b.bm.verts.new(P(*p)) for p in pts])
+        f.material_index = idx
+
+    for k in range(seg):
+        r0, r1 = rows[k], rows[k + 1]
+        mid = sum(r0 + r1, Vector()) / (2 * len(r0))
+        for j in range(len(r0)):
+            q = [r0[j], r1[j], r1[(j + 1) % len(r0)], r0[(j + 1) % len(r0)]]
+            put(q, sum(q, Vector()) / 4 - mid)
+    for row, k in ((rows[0], 0), (rows[-1], seg)):
+        nxt = rows[1] if k == 0 else rows[-2]
+        put(row, sum(row, Vector()) / len(row) - sum(nxt, Vector()) / len(nxt))
 
 
 def sp2m_extra(b, X):
@@ -1378,7 +1561,7 @@ def build_bench():
     # the top's raised lip (usaf_shaw_2017 -019)
     b.box(x0 - 0.008, x1 + 0.008, y0 - 0.008, y1 + 0.008, base - 0.03, base + 0.006, 'Paint_Bench')
     # a recessed panel in the bench front, under each seat (stowage), with a pull
-    for yc in (0.91, 1.555, 2.2):
+    for yc in (0.875, 1.555, 2.2):   # the seats under the three columns (data/cabins/osa_ak.json stations)
         b.box(x0 - 0.004, x0 + 0.01, yc - 0.22, yc + 0.22, FLOOR_Z + 0.08, base - 0.06, 'Paint_Bench')
         b.box(x0 - 0.016, x0 - 0.004, yc - 0.05, yc + 0.05, base - 0.13, base - 0.11, 'Metal_Steel')
     return finish(b, bevel=0.004)
@@ -1457,9 +1640,10 @@ def build_steering():
 
 
 def build_pedals():
-    """Brake and accelerator pedals in the driver's footwell (estimate: the sources don't show them)."""
+    """The three pedals in the driver's footwell, clutch, brake and accelerator with rubber pads (wwp_gecko g084-c);
+    their places and sizes are estimates."""
     b = Builder('SM_Pedals')
-    for x, w in ((-0.46, 0.09), (-0.20, 0.06)):
+    for x, w in ((-0.53, 0.08), (-0.40, 0.08), (-0.20, 0.06)):
         b.obox(Vector((x, 4.72, 0.80)), Vector((1, 0, 0)), Vector((0, 0.5, 0.866)), Vector((0, -0.866, 0.5)),
                (w, 0.13, 0.015), 'Rubber_Black')
         b.cylinder((x, 4.74, 0.80), (x, 4.86, 1.05), 0.01, 'Metal_Dark', seg=10)
@@ -1666,11 +1850,192 @@ def build_wall_lamp_blue():
     return finish(b, reuse=True)
 
 
+def _frame(facing_deg):
+    """A wall unit's axes from its heading (cabin.hpp): n out of its face, r to the right as one faces it, z up."""
+    f = math.radians(facing_deg)
+    return Vector((math.sin(f), math.cos(f), 0.0)), Vector((-math.cos(f), math.sin(f), 0.0)), Vector((0.0, 0.0, 1.0))
+
+
+# The driver's side window's corner wall (build_hull): from the wall at CAB_Y to the bow, the window 42 % along it.
+CORNER_A0 = Vector((-WALL_X, CAB_Y, 0.0))
+CORNER_ALONG = Vector((WALL_X - BOW_X, BOW_Y - CAB_Y, 0.0)).normalized()
+CORNER_FACING = math.degrees(math.atan2(CORNER_ALONG.y, -CORNER_ALONG.x))   # the inboard normal's heading
+
+
+def corner_point(t, d, zz):
+    """A point t m along the left corner wall from its aft end, d m inboard of its lining, at height zz."""
+    n, _, _ = _frame(CORNER_FACING)
+    p = CORNER_A0 + CORNER_ALONG * t + n * d
+    return Vector((p.x, p.y, zz))
+
+
+def build_fire_system():
+    """The fire-suppression system on the left hull wall beside the driver, under his side window (wwp_gecko g086-c,
+    looking down into the corner by the driver's left knee; voenizdat_osa_1991 p16 names the system): the red control
+    box under a perforated bracket, the bracket's pressure gauge (scale to 250) on top, a pale canister aft of the box;
+    three black bottles below, two lying on the wheel housing's top along the wall and one standing on the floor at the
+    housing's foot with its red hand wheel; braided leads up to the box. Beside the box, forward, the 0-1 gauge in its
+    light-blue square bezel left of PU-303 (g084-b, g086-c). No solved camera sees the cab: places and sizes are
+    estimates. The lamps, the dials and the controls are the cabin's (data/cabins/osa_ak.json fire_panel)."""
+    b = Builder('SM_FireSystem')
+    n, r, z = _frame(CORNER_FACING)
+    face = corner_point(0.27, 0.08, 1.40)                               # the box's face (fire_panel at u -0.09)
+    b.obox(face - n * 0.04, r, z, n, (0.21, 0.13, 0.08), 'Paint_Red')
+    b.obox(face - n * 0.04 + z * 0.069, r, z, n, (0.226, 0.008, 0.08), 'Paint_Red')            # the lid's rim
+    for s_ in (-1, 1):                                                                       # the lid's screw posts
+        p = face - n * 0.04 + r * (0.12 * s_)
+        b.cylinder(tuple(p + z * 0.06), tuple(p + z * 0.08), 0.008, 'Metal_Steel', seg=10)
+    # the perforated bracket over it, from the wall's lining to just proud of the face; u x v looks up
+    shelf = corner_point(0.245, 0.0, 1.485)
+    holes = [rrect(a_, 0.045, 0.03, 0.03, 0.0149, seg=10) for a_ in (-0.10, -0.05, 0.0, 0.05, 0.10)]
+    b.slab(tuple(shelf), r, -n, [(-0.155, 0.0), (-0.155, 0.095), (0.155, 0.095), (0.155, 0.0)], holes, 0.004, 'Paint_LightGrey')
+    for s_ in (-1, 1):                                                                       # its two wall brackets
+        p = shelf + r * (0.145 * s_) + n * 0.002
+        b.obox(p - z * 0.04, r, z, n, (0.004, 0.08, 0.004), 'Paint_LightGrey')
+    # the pressure gauge to 250 on the bracket's aft end (fire_panel at u -0.245): body and rim, face inboard
+    g = corner_point(0.115, 0.06, 1.522)
+    b.obox(corner_point(0.115, 0.045, 1.4885), r, z, n, (0.05, 0.007, 0.03), 'Paint_LightGrey')   # its foot
+    b.cylinder(tuple(g - n * 0.03), tuple(g + n * 0.012), 0.029, 'Metal_Steel', seg=22)
+    # the pale canister aft of the box, standing on the wheel housing
+    c = corner_point(0.075, 0.06, 1.18)
+    b.lathe(c, z, [(0.0, 0.0), (0.035, 0.0), (0.038, 0.01), (0.038, 0.17), (0.03, 0.185), (0.0, 0.19)], 'Paint_LightGrey', seg=20)
+    # the 0-1 gauge's flange and body, forward of the box (fire_panel at u +0.10)
+    g = face + r * 0.19 - z * 0.01
+    b.obox(g - n * 0.006, r, z, n, (0.10, 0.11, 0.012), 'Paint_Radio')
+    b.cylinder(tuple(g - n * 0.012), tuple(g - n * 0.06), 0.045, 'Metal_Steel', seg=24)
+    # two bottles lying on the wheel housing's top along the wall (housing top 1.18 at the wall, cab_floor_trace ARCH)
+    bottle = [(0.0, 0.0), (0.03, 0.0), (0.05, 0.02), (0.055, 0.05), (0.055, 0.30), (0.05, 0.33), (0.03, 0.35), (0.0, 0.352)]
+    feet = []
+    for d_, zz in ((0.07, 1.24), (0.195, 1.215)):
+        p0 = corner_point(0.11, d_, zz)
+        b.lathe(p0, r, bottle, 'Metal_Dark', seg=24)
+        b.cylinder(tuple(p0 + r * 0.352), tuple(p0 + r * 0.38), 0.016, 'Metal_Brass', seg=12)       # the valve head
+        for t_ in (0.08, 0.27):                                                                   # the cradle's straps
+            q = p0 + r * t_
+            b.torus(q, r, 0.058, 0.004, 'Metal_Steel', seg=24, rseg=6)
+        feet.append(p0 + r * 0.38)
+    # the standing bottle at the housing's foot, its red hand wheel the cabin's (fire_valve_panel)
+    base = Vector((-0.775, 4.30, FLOOR_Z))
+    b.lathe(base, z, bottle, 'Metal_Dark', seg=24)
+    b.cylinder(tuple(base + z * 0.352), tuple(base + z * 0.385), 0.016, 'Metal_Brass', seg=12)
+    b.cylinder(tuple(base + z * 0.37 + Vector((0.0, 0.0, 0.0))), tuple(base + z * 0.37 + Vector((0.035, 0.0, 0.0))), 0.008, 'Metal_Brass', seg=10)
+    feet.append(base + z * 0.37 + Vector((0.035, 0.0, 0.0)))
+    # the braided leads from each valve head up to the box's underside
+    for i, foot in enumerate(feet):
+        top = face - n * 0.04 - z * 0.065 + r * (-0.06 + 0.06 * i)
+        if i < 2:                                   # up off the valve head, then aft over the bottles to the box
+            pts = [foot, foot + z * 0.07, top - z * 0.03, top]
+        else:                                       # up the housing's slope, clear of the inboard bottle
+            pts = [foot, foot + z * 0.12, Vector((-0.95, foot.y, 1.315)), top - z * 0.025, top]
+        b.tube([tuple(p) for p in pts], 0.006, 'Metal_Steel', seg=8)
+    return finish(b, bevel=0.0015)
+
+
+def build_bp26():
+    """BP-26, the R-123M's power unit (its plate reads БП-26 in wwp_gecko g091-b): a case with a finned top over its
+    face, four fuse holders with orange caps, the round power connector and the МАССА terminal; on four shock mounts.
+    Built with its face looking forward (+y). Sizes scaled from g090-a, g090-d and g091-b at the R-123M's front
+    (0.406 m): estimates. It has no switch: the set is switched at the R-123M."""
+    b = Builder('SM_PowerBP26')
+    w, d, h = 0.26, 0.34, 0.16
+    b.box(-w / 2, w / 2, -d / 2, d / 2, -h / 2, h / 2, 'Paint_Radio')
+    for i in range(9):                                                              # the fins over the face's end
+        x = -0.11 + 0.0275 * i
+        b.box(x - 0.004, x + 0.004, d / 2 - 0.14, d / 2 - 0.005, h / 2, h / 2 + 0.018, 'Paint_Radio')
+    y = d / 2
+    for x, zc in ((-0.085, 0.035), (-0.045, 0.035), (0.04, 0.035), (0.08, 0.035)):  # the fuse holders
+        b.cylinder((x, y, zc), (x, y + 0.008, zc), 0.014, 'Metal_Steel', seg=14)
+        b.cylinder((x, y + 0.008, zc), (x, y + 0.03, zc), 0.012, 'Lens_Amber', seg=14)
+    b.cylinder((0.01, y, -0.015), (0.01, y + 0.03, -0.015), 0.032, 'Bakelite_Black', seg=20)    # the power connector
+    b.cylinder((0.01, y + 0.03, -0.015), (0.01, y + 0.045, -0.015), 0.024, 'Metal_Steel', seg=20)
+    b.cylinder((-0.09, y, -0.045), (-0.09, y + 0.02, -0.045), 0.008, 'Metal_Steel', seg=10)     # МАССА
+    b.box(-0.075, -0.035, y, y + 0.002, -0.012, 0.008, 'Bakelite_Black')                          # the type plate
+    for x in (-w / 2 + 0.03, w / 2 - 0.03):                                                   # the shock mounts
+        for yy in (-d / 2 + 0.04, d / 2 - 0.04):
+            b.cylinder((x, yy, -h / 2), (x, yy, -h / 2 - 0.015), 0.018, 'Rubber_Black', seg=12)
+    return finish(b, bevel=0.0015, reuse=True)
+
+
+def build_cab_units():
+    """Small units round the cab with controls the cabin draws (data/cabins/osa_ak.json), each the body behind its
+    panel; places are estimates (no solved camera sees the cab):
+    the engine pre-heater's control box and its plate at the right corner post (wwp_gecko g087-c, g087-d);
+    the DP-3B's measuring box beside the commander's dash (g087-d); the ВЕНТИЛЯЦИЯ — ОТОПЛЕНИЕ valve on the left
+    front post by SŁ-1M (g086-a); the switch box with the red lever in the left radio well (g091-d); the two valves on
+    the roof header over the windscreens (g089-a, g089-b)."""
+    b = Builder('SM_CabUnits')
+    n, r, z = _frame(210)                                       # the pre-heater box
+    f = Vector((0.88, 4.42, 1.58))
+    b.obox(f - n * 0.035, r, z, n, (0.15, 0.115, 0.07), 'Paint_LightGrey')
+    b.obox(f + r * 0.115 - n * 0.002, r, z, n, (0.06, 0.09, 0.004), 'Bakelite_Black')
+    n, r, z = _frame(195)                                       # the DP-3B
+    f = Vector((0.80, 4.50, 1.40))
+    b.obox(f - n * 0.05 + z * 0.02, r, z, n, (0.13, 0.10, 0.10), 'Paint_Radio')
+    b.obox(f - n * 0.045 - z * 0.055, r, z, n, (0.12, 0.05, 0.09), 'Paint_Radio')
+    for s in (-1, 1):
+        c = f - z * 0.08 + r * (0.03 * s) - n * 0.03
+        b.cylinder(tuple(c), tuple(c - z * 0.03), 0.011, 'Metal_Steel', seg=12)
+    n, r, z = _frame(90)                                        # the valve on the left front post
+    f = Vector((-1.0, 4.0, 1.78))
+    b.obox(f - n * 0.03, r, z, n, (0.06, 0.06, 0.06), 'Paint_LightGrey')
+    b.obox(f - n * 0.002 - z * 0.17, r, z, n, (0.09, 0.05, 0.004), 'Bakelite_Black')          # its plate
+    f = Vector((-1.04, 3.20, 1.33))                             # the radio well's switch box
+    b.obox(f - n * 0.025, r, z, n, (0.09, 0.10, 0.05), 'Paint_LightGrey')
+    for x in (-0.45, 0.55):                                     # the header valves, on short pipes
+        c = Vector((x, 4.35, 2.0))
+        b.cylinder(tuple(c + Vector((-0.04, 0, 0.02))), tuple(c + Vector((0.04, 0, 0.02))), 0.006, 'Metal_Steel', seg=10)
+        b.cylinder(tuple(c + Vector((0, 0, 0.035))), tuple(c + Vector((0, 0, 0.005))), 0.012, 'Metal_Brass', seg=12)
+    return finish(b, bevel=0.001)
+
+
+def build_driver_units():
+    """The driver's other fittings, built in place (no solved camera sees the cab: places are estimates):
+    the stalk on the steering column's right with its red knob drawn by the cabin (wwp_gecko g084-c); the grey
+    pillar beside SŁ-1M's front end that carries, top to bottom, the cast junction box with its glands, the
+    ВЕНТИЛЯЦИЯ — ОТОПЛЕНИЕ valve (build_cab_units), the plates (drawn by the cabin), the flat ring bracket and the
+    clutch instruction plate (g086-a, g088-a); and the web between the hull wall and that pillar, facing forward
+    into the corner, with two round lightening holes, the two hinged stowage covers one above the other and a small
+    gauge low on the outboard side (g086-b, seen through the left windscreen)."""
+    b = Builder('SM_DriverUnits')
+    # the column stalk: a boss on the column's shroud, the stalk out to the right (the knob is the cabin's)
+    c = Vector((-0.36, 4.33, 1.47))
+    axis = Vector((0, -math.cos(math.radians(30)), math.sin(math.radians(30))))
+    p = c - axis * 0.14
+    b.cylinder(tuple(p + Vector((0.03, 0.0, 0.0))), tuple(p + Vector((0.058, 0.0, 0.0))), 0.018, 'Bakelite_Black', seg=14)
+    b.tube([tuple(p + Vector((0.055, 0.0, 0.0))), tuple(p + Vector((0.11, -0.005, -0.008))), (-0.215, 4.444, 1.386)], 0.0055,
+           'Metal_Dark', seg=10)
+    # the pillar: a grey box-section column from the wheel housing's height to the roof, off SŁ-1M's front post
+    n, r, z = _frame(90)
+    b.obox(Vector((-1.05, 4.0, 1.64)), r, z, n, (0.06, 0.92, 0.09), 'Paint_LightGrey')
+    jb = Vector((-0.985, 4.0, 1.97))                                       # the junction box and its glands
+    b.obox(jb - n * 0.02, r, z, n, (0.08, 0.10, 0.04), 'Paint_LightGrey')
+    for dy in (-0.022, 0.022):
+        b.cylinder(tuple(jb + Vector((0.0, dy, -0.05))), tuple(jb + Vector((0.0, dy, -0.072))), 0.009, 'Metal_Steel', seg=10)
+    b.cylinder(tuple(jb), tuple(jb + n * 0.012), 0.018, 'Bakelite_Black', seg=16)
+    ring = Vector((-1.0, 4.0, 1.47))                                       # the flat ring bracket, open on its inboard side
+    b.torus(ring + n * 0.035, z, 0.045, 0.006, 'Metal_Steel', seg=28, rseg=6)
+    b.obox(ring + n * 0.004, r, z, n, (0.03, 0.03, 0.01), 'Metal_Steel')
+    # the web between the hull wall and the pillar, its face forward (u x v = +y), the holes and covers in it
+    o = Vector((-1.005, 4.065, 1.18))
+    u, v = Vector((-1.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0))
+    holes = [rrect(0.145, 0.62, 0.13, 0.13, 0.0649, seg=10), rrect(0.145, 0.79, 0.11, 0.11, 0.0549, seg=10)]
+    b.slab(tuple(o), u, v, [(0.0, 0.0), (0.315, 0.0), (0.315, 0.90), (0.0, 0.90)], holes, 0.006, 'Paint_Interior')
+    for zc, h in ((1.535, 0.15), (1.33, 0.15)):                           # the stowage covers and their hinges
+        cv = Vector((-1.15, 4.074, zc))
+        b.obox(cv, u, v, Vector((0, 1, 0)), (0.17, h, 0.006), 'Paint_Rack')
+        b.cylinder(tuple(cv + Vector((0.085, 0.004, -h / 2 + 0.01))), tuple(cv + Vector((0.085, 0.004, h / 2 - 0.01))), 0.005,
+                   'Metal_Steel', seg=8)
+    g = Vector((-1.272, 4.07, 1.222))                                     # the small gauge low on the outboard side
+    b.cylinder(tuple(g), tuple(g + Vector((0, 0.025, 0))), 0.024, 'Metal_Steel', seg=18)
+    return finish(b, bevel=0.0012)
+
+
 def build_all(layout):
     objs = [build_hull(), build_glass()]
     objs.append(build_rack('SM_RackSL1M', layout, ['gyro_panel'], -1, [(3.96, 4.06), (2.505, 2.65)], 'wall',
                            extra=sl1m_extra, stops_at_frame=True))
-    objs.append(build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick', extra=sl2m_extra))
+    objs.append(build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick',
+                           extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout))))
     objs.append(build_rack_sl3m(layout))
     have = {p['id'] for p in layout['panels']}
     if 'sp1m_panel' in have:
@@ -1682,7 +2047,8 @@ def build_all(layout):
         objs.append(build_rack_sp3m(layout))
     objs += [build_bench(), build_operator_seat(), build_cab_seat(), build_steering(), build_pedals(), build_cab_levers(), build_cab_fittings(), build_r123m(),
              build_ta57(), build_spare_box(), build_ga3(), build_capsule(), build_awo(),
-             build_dome_lamp(), build_wall_lamp_blue(), build_chest_5937(), build_first_aid()]
+             build_dome_lamp(), build_wall_lamp_blue(), build_chest_5937(), build_first_aid(),
+             build_fire_system(), build_bp26(), build_cab_units(), build_driver_units()]
     return objs
 
 
@@ -1702,7 +2068,7 @@ def export(obj):
 
 # Where the preview puts one copy of each reusable mesh (the layout file places the real ones).
 PREVIEW_PLACES = {
-    'SM_OperatorSeat': [((-0.71, y, SEAT_Z - 0.04), -90) for y in (0.91, 1.555, 2.2)],
+    'SM_OperatorSeat': [((-0.71, y, SEAT_Z - 0.04), -90) for y in (0.875, 1.555, 2.2)],
     'SM_CabSeat': [((-0.36, 3.866, CAB_SEAT_TOP_Z), 0), ((0.33, 3.866, CAB_SEAT_TOP_Z), 0)],
     'SM_RadioR123M': [((-0.62, 3.28, 1.25), 90), ((0.64, 3.215, 0.80), -90)],
     'SM_PhoneTA57': [((-0.10, 2.37, 1.03), 0)],
@@ -1713,6 +2079,7 @@ PREVIEW_PLACES = {
     'SM_Cabinet0096': [((-0.2816, 0.3804, 1.3049), -15.7)],     # built by build_cabinet0096.py
     'SM_DomeLamp': [((0.12, 2.0, 2.075), 0), ((0.12, 0.6, 2.075), 0), ((0.0, 3.3, 2.075), 0)],
     'SM_WallLampBlue': [((0.605, REAR_Y + 0.025, 1.965), 0)],
+    'SM_PowerBP26': [((0.628, 3.215, 1.82), 0), ((-1.08, 2.659, 1.075), 90)],
 }
 
 PREVIEW_VIEWS = {  # name: (eye body xyz, yaw deg clockwise from forward, pitch deg, lens mm)

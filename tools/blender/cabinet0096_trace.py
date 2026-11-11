@@ -35,7 +35,8 @@ LOCAL_DOOR_Y = 0.095   # h = 0 (today's `plate`)
 # the model is built at them and scaled once, about the mesh's origin, so what stands above the door (and the depth) scales with the face. Three readings of the width:
 # the plan of the older 9A33BM2, 0.66 (a different mark of cabinet); the door's corners triangulated from g096-a and g097-b in the adjusted solve, 0.564-0.579 (height 0.597-0.601);
 # g096-a's corner rays on the plane through the solve's own 287 points on the face (rms 4 mm), 0.561-0.570 (height 0.587-0.592). The last two are used.
-SCALE = 0.865
+# (m, 11 Nov 2026) Measured again with the door as a control plate solved together with certified cameras (tools/recon/osa/cameras.py; docs/research/OSA_REBUILD_C_2026-11.md): 0.9199 of the plan's size, the body 0.607 m wide. The 0.865 before it came through cameras the audit found 40-97 px out. It hangs on SP-2M2's assumed 1.89 m like everything else in the compartment.
+SCALE = 0.9199
 LOCAL_ORIGIN = (0.0, 0.01625, 0.0)   # the old mesh's bounding box centre in the old builder's coordinates; the placement point stays here
 
 

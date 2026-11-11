@@ -40,6 +40,7 @@ INK = (24, 24, 22)           # engraved letters filled black
 INK_ON_BLACK = (205, 203, 192)
 DIAGRAM_INK = (52, 48, 40)
 LOOK_COLOURS = {'black': (22, 22, 21), 'white': PLATE, 'grey': (150, 153, 146)}   # grey: the cab dashboards (rwd_mb3 9a33_31/32)
+LOOK_COLOURS.update({'bluegrey': (112, 124, 135), 'lightgrey': (161, 163, 165)})   # Unreal's LookColor in sRGB
 CAP_HEIGHT_M = 0.0034        # letter height (samsim_panels at 1 mm per pixel: 3-4 mm)
 GAP_M = 0.003                # between an item and its label
 
@@ -256,11 +257,23 @@ class Face:
         for i, line in enumerate(lines):
             self.draw.text((x, y + i * line_h), line, fill=ink, font=f, anchor=anchor)
 
+    anchors = ()                     # the labelled items' (u, v) on this face: a label keeps to the room between them
+
+    def room(self, u, v, kw):
+        """A label's width: no wider than the gap to the next labelled item on its row (switches 23 mm apart)."""
+        gaps = [abs(a[0] - u) for a in self.anchors if abs(a[1] - v) < 0.02 and abs(a[0] - u) > 0.004]
+        kw = dict(kw)
+        if gaps:
+            kw['max_w_m'] = min(kw.get('max_w_m', 0.12), 0.95 * min(gaps))
+        return kw
+
     def label_above(self, u, v, height_m, s, **kw):
-        n_lines = 2 if len(s) > 18 and ' ' in s else 1
+        kw = self.room(u, v, kw)
+        n_lines = 2 if (len(s) > 18 or self.font(CAP_HEIGHT_M).getlength(s) > kw.get('max_w_m', 0.12) * self.ppm) and ' ' in s else 1
         self.text(u, v + height_m / 2 + GAP_M + n_lines * CAP_HEIGHT_M * 0.75, s, **kw)
 
     def label_below(self, u, v, height_m, s, **kw):
+        kw = self.room(u, v, kw)
         self.text(u, v - height_m / 2 - GAP_M - CAP_HEIGHT_M * 0.75, s, **kw)
 
     def ticks(self, u, v, radius_m, angles_deg, labels):
@@ -438,6 +451,10 @@ def bake_panel(layout, console, panel, ppm, seed):
     defs = {c['id']: c for c in console['controls']}
     pid = panel['id']
     lamp_labels = [(lp['at_m'], lp.get('look', {}).get('label') or lp['label']) for lp in layout['lamps'] if lp['panel'] == pid]
+    face.anchors = ([c['at_m'] for c in layout['controls'] if c['panel'] == pid and c.get('look', {}).get('label')]
+                    + [lp['at_m'] for lp in layout['lamps'] if lp['panel'] == pid and lp.get('look', {}).get('label')]
+                    + [f['at_m'] for f in layout.get('fixtures', []) if f['panel'] == pid and f.get('label')
+                       and f['kind'] not in ('nameplate', 'bezel', 'window', 'legend', 'diagram')])
     # controls: grime where hands go, then labels
     for ctl in layout['controls']:
         if ctl['panel'] != pid:

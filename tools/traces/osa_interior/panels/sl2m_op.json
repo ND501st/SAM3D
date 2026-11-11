@@ -1,0 +1,1254 @@
+{
+ "about": "SŁ-2M's operator column (op_panel, the range channel ССЦ) as photographed: wwp_gecko g094-a laid on the panel's plane through its certified camera (op_panel_g094a), every part picked by its number on that flat and written into data/cabins/osa_ak.json by tools/recon/osa/panel_apply.py. Millimetres on the panel's plane, u right (forward, +y) and v up from the panel's centre. Which control a part is comes from SAM Simulator's photo of the same column (its texture 8 % larger: the looks' sizes are scaled by 0.923). Raised parts carry h_mm, the height of their seen centre, and are moved back along the camera's ray (the camera stands 1.76 m forward of the panel, so a knob 15 mm proud is seen 14 mm aft). Where the photographed vehicle has a blank (ПОЛУАВТОМАТ and its lamp, СКОРОСТЬ П А: a 9A33BM3-1), SAM Simulator's place is carried onto the photo's block.",
+ "eyes": {
+  "op_panel_g094a": [
+   0.824,
+   2.635,
+   1.924
+  ]
+ },
+ "panels": [
+  {
+   "id": "op_panel",
+   "u_mm": [
+    -340,
+    340
+   ],
+   "v_mm": [
+    -491,
+    491
+   ]
+  }
+ ],
+ "remove": [
+  {
+   "panel": "op_panel",
+   "what": "fixtures"
+  },
+  {
+   "panel": "op_panel",
+   "what": "blocks"
+  }
+ ],
+ "items": [
+  {
+   "is": "block",
+   "id": "r_0062_6m",
+   "label": "0062-6М",
+   "box_mm": [
+    -318,
+    384,
+    297,
+    491
+   ],
+   "color": ""
+  },
+  {
+   "is": "block",
+   "id": "r_os81_9m",
+   "label": "ОС81-9М",
+   "box_mm": [
+    -324,
+    133,
+    299,
+    372
+   ],
+   "color": ""
+  },
+  {
+   "is": "block",
+   "id": "r_ok62_5m",
+   "label": "ОК62-5М",
+   "box_mm": [
+    -318,
+    -13,
+    302,
+    119
+   ],
+   "color": ""
+  },
+  {
+   "is": "block",
+   "id": "r_os61_5m",
+   "label": "ОС61-5М",
+   "box_mm": [
+    -315,
+    -159,
+    305,
+    -28
+   ],
+   "color": ""
+  },
+  {
+   "is": "block",
+   "id": "r_os81_18m",
+   "label": "ОС81-18М",
+   "box_mm": [
+    -311,
+    -406,
+    311,
+    -176
+   ],
+   "color": ""
+  },
+  {
+   "is": "block",
+   "id": "r_0051_7m",
+   "label": "0051-7М",
+   "box_mm": [
+    -311,
+    -491,
+    311,
+    -430
+   ],
+   "color": ""
+  },
+  {
+   "is": "control",
+   "id": "ssc.modes",
+   "look": {
+    "kind": "pointer_knob",
+    "size_m": 0.016,
+    "color": "chrome",
+    "label": "РЕЖИМЫ"
+   },
+   "part": "op_panel_g094a:22",
+   "h_mm": 10
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "test jack 1 of five under the meters",
+   "at_mm": [
+    -46,
+    407
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "test jack 2 of five under the meters",
+   "at_mm": [
+    -33,
+    407
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "test jack 3 of five under the meters",
+   "at_mm": [
+    -20,
+    407
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "test jack 4 of five under the meters",
+   "at_mm": [
+    -7,
+    407
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "test jack 5 of five under the meters",
+   "at_mm": [
+    6,
+    407
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange"
+  },
+  {
+   "is": "control",
+   "id": "ssc.control_sel",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.017,
+    "color": "black",
+    "label": "КОНТРОЛЬ"
+   },
+   "at_mm": [
+    129,
+    413
+   ]
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "size_mm": [
+    86,
+    64
+   ],
+   "what": "the left meter (case 86 x 100 mm, cut at the rail): black case, white scale",
+   "at_mm": [
+    -213,
+    442
+   ],
+   "color": "black"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "size_mm": [
+    89,
+    64
+   ],
+   "what": "the right meter (case 89 x 100 mm, cut at the rail): black case, white scale",
+   "at_mm": [
+    52,
+    442
+   ],
+   "color": "black"
+  },
+  {
+   "is": "fixture",
+   "kind": "gauge",
+   "size_mm": [
+    62,
+    42
+   ],
+   "what": "the third meter, its white scale in the plate (cut at the rail)",
+   "at_mm": [
+    168,
+    453
+   ],
+   "color": "white"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "size_mm": 36,
+   "what": "large black knob",
+   "at_mm": [
+    -146,
+    432
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 18,
+   "color": "black"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "size_mm": 15,
+   "what": "small knob in a chrome ring",
+   "at_mm": [
+    -83,
+    451
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 10,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "size_mm": 15,
+   "what": "small knob in a chrome ring",
+   "at_mm": [
+    -83,
+    431
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 10,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "size_mm": 18,
+   "what": "brass knob",
+   "at_mm": [
+    -36,
+    433
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 12,
+   "color": "brass"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "size_mm": 18,
+   "what": "brass knob",
+   "at_mm": [
+    -9,
+    434
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 12,
+   "color": "brass"
+  },
+  {
+   "is": "fixture",
+   "kind": "knob",
+   "size_mm": 9,
+   "what": "small black knob",
+   "at_mm": [
+    169,
+    434
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 6,
+   "color": "black"
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "size_mm": 14,
+   "what": "green lamp",
+   "at_mm": [
+    193,
+    435
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 6,
+   "color": "green"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:17",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:16",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "display",
+   "id": "ssc_range",
+   "at_mm": [
+    36,
+    247
+   ],
+   "size_mm": [
+    140,
+    111
+   ],
+   "why": "the screen in the hood: its frame seen at u -79..60, v 192..303 on the hood front 50 mm proud (the hood side wall shows 47 mm wide), moved back along the ray 46 mm; SAM Simulator 152 x 120 px"
+  },
+  {
+   "is": "control",
+   "id": "ssc.tx",
+   "look": {
+    "kind": "button",
+    "size_m": 0.026,
+    "color": "grey",
+    "ring": "chrome",
+    "label": "ПЕРЕДАТЧИК ВКЛ."
+   },
+   "part": "op_panel_g094a:31",
+   "h_mm": 15
+  },
+  {
+   "is": "fixture",
+   "kind": "button",
+   "size_mm": 28,
+   "what": "the transmitter off button, red",
+   "part": "op_panel_g094a:32",
+   "h_mm": 12,
+   "color": "red",
+   "label": "ПЕРЕДАТЧИК ОТКЛ."
+  },
+  {
+   "is": "lamp",
+   "id": "ssc_gotov",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.014,
+    "label": "ГОТОВ"
+   },
+   "part": "op_panel_g094a:25",
+   "h_mm": 8
+  },
+  {
+   "is": "lamp",
+   "id": "ssc_vkl_vysok",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.014,
+    "label": "ВКЛ. ВЫСОК."
+   },
+   "part": "op_panel_g094a:24",
+   "h_mm": 8
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "size_mm": 6,
+   "what": "small red lamp",
+   "at_mm": [
+    -241,
+    228
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "red"
+  },
+  {
+   "is": "control",
+   "id": "ssc.afc",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "РЧЧМ — АПЧМ"
+   },
+   "at_mm": [
+    -151,
+    318
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 8
+  },
+  {
+   "is": "control",
+   "id": "ssc.afc_trim",
+   "look": {
+    "kind": "trim",
+    "size_m": 0.013,
+    "color": "chrome",
+    "label": "ССЦ РПЧМ"
+   },
+   "part": "op_panel_g094a:33",
+   "h_mm": 10
+  },
+  {
+   "is": "control",
+   "id": "ssc.gate_bright",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.018,
+    "color": "black",
+    "label": "ЯРКОСТЬ СТРОБА Р"
+   },
+   "part": "op_panel_g094a:43",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.check_mode",
+   "look": {
+    "kind": "pointer_knob",
+    "size_m": 0.036,
+    "color": "black",
+    "label": "РАБОТА — КОНТРОЛЬ — КАЛИБР."
+   },
+   "part": "op_panel_g094a:44",
+   "h_mm": 18
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "jack",
+   "part": "op_panel_g094a:50",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "КОНТРОЛЬ"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "jack",
+   "at_mm": [
+    -141,
+    174
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "КОРПУС"
+  },
+  {
+   "is": "control",
+   "id": "ssc.astig_1",
+   "look": {
+    "kind": "lever",
+    "size_m": [
+     0.018,
+     0.006
+    ],
+    "color": "chrome",
+    "label": "АСТИГМАТ. I"
+   },
+   "at_mm": [
+    -101,
+    333
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 8
+  },
+  {
+   "is": "control",
+   "id": "ssc.vshift_1",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.02,
+    "color": "brass",
+    "label": "ВЕРТ. СМЕЩ."
+   },
+   "at_mm": [
+    -112,
+    305
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.hshift_1",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.02,
+    "color": "brass",
+    "label": "ГОРИЗ. СМЕЩ."
+   },
+   "at_mm": [
+    -112,
+    278
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.bright_1",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.022,
+    "color": "black",
+    "label": "ЯРКОСТЬ"
+   },
+   "part": "op_panel_g094a:41",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.focus_1",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.022,
+    "color": "black",
+    "label": "ФОКУС"
+   },
+   "part": "op_panel_g094a:45",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.astig_2",
+   "look": {
+    "kind": "lever",
+    "size_m": [
+     0.018,
+     0.006
+    ],
+    "color": "chrome",
+    "label": "АСТИГМАТ. II"
+   },
+   "at_mm": [
+    148,
+    333
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 8
+  },
+  {
+   "is": "control",
+   "id": "ssc.vshift_2",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.02,
+    "color": "brass",
+    "label": "ВЕРТ. СМЕЩ."
+   },
+   "part": "op_panel_g094a:26",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.hshift_2",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.02,
+    "color": "brass",
+    "label": "ГОРИЗ. СМЕЩ."
+   },
+   "part": "op_panel_g094a:29",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.bright_2",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.022,
+    "color": "black",
+    "label": "ЯРКОСТЬ"
+   },
+   "part": "op_panel_g094a:42",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.focus_2",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.022,
+    "color": "black",
+    "label": "ФОКУС"
+   },
+   "part": "op_panel_g094a:46",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.target_select",
+   "look": {
+    "kind": "pointer_knob",
+    "size_m": 0.024,
+    "color": "black",
+    "label": "Р I — ЦЕЛЬ — Р II"
+   },
+   "part": "op_panel_g094a:30",
+   "h_mm": 18
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "size_mm": [
+    69,
+    14
+   ],
+   "what": "nameplate",
+   "part": "op_panel_g094a:23",
+   "h_mm": 0,
+   "label": "ОС81-9М",
+   "size": "box"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:34",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:39",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 18,
+   "what": "socket",
+   "part": "op_panel_g094a:51",
+   "h_mm": 6,
+   "color": "black",
+   "label": "СТРОБ I"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 18,
+   "what": "socket",
+   "part": "op_panel_g094a:52",
+   "h_mm": 6,
+   "color": "black",
+   "label": "СТРОБ II"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "jack",
+   "at_mm": [
+    13,
+    72
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "−15В"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "jack",
+   "at_mm": [
+    27,
+    72
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "+6,3В"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 8,
+   "what": "jack",
+   "at_mm": [
+    41,
+    72
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "⊥"
+  },
+  {
+   "is": "fixture",
+   "kind": "diagram",
+   "size_mm": [
+    102,
+    115
+   ],
+   "what": "printed diagram",
+   "part": "op_panel_g094a:54",
+   "h_mm": 0
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "size_mm": [
+    70,
+    14
+   ],
+   "what": "nameplate",
+   "at_mm": [
+    258,
+    105
+   ],
+   "label": "ОК62-5М"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:55",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:58",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "control",
+   "id": "ssc.wind_coarse",
+   "look": {
+    "kind": "pointer_knob",
+    "size_m": 0.026,
+    "color": "black",
+    "label": "КОМПЕНСАЦИЯ ВЕТРА ГРУБО"
+   },
+   "part": "op_panel_g094a:62",
+   "h_mm": 18
+  },
+  {
+   "is": "control",
+   "id": "ssc.wind_fine",
+   "look": {
+    "kind": "knob",
+    "size_m": 0.02,
+    "color": "black",
+    "label": "ТОЧНО"
+   },
+   "part": "op_panel_g094a:63",
+   "h_mm": 15
+  },
+  {
+   "is": "control",
+   "id": "ssc.wind_comp",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "КОМПЕНС. ВЕТРА — ОТКЛ."
+   },
+   "part": "op_panel_g094a:64",
+   "h_mm": 8
+  },
+  {
+   "is": "control",
+   "id": "ssc.mti",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "СДЦ — ШТ."
+   },
+   "at_mm": [
+    42,
+    -84
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 8
+  },
+  {
+   "is": "control",
+   "id": "ssc.rgpo",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "УВ. ПОМЕХА — ОТКЛ."
+   },
+   "part": "op_panel_g094a:74",
+   "h_mm": 8
+  },
+  {
+   "is": "control",
+   "id": "ssc.extra_gain",
+   "look": {
+    "kind": "toggle",
+    "size_m": 0.012,
+    "color": "chrome",
+    "label": "ДОП. УСИЛ. — ОТКЛ."
+   },
+   "part": "op_panel_g094a:73",
+   "h_mm": 8
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 13,
+   "what": "socket",
+   "at_mm": [
+    -219,
+    -122
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 6,
+   "color": "black",
+   "label": "УЧС"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 13,
+   "what": "socket",
+   "at_mm": [
+    -200,
+    -122
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 6,
+   "color": "black",
+   "label": "УЧС"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 13,
+   "what": "socket",
+   "at_mm": [
+    -181,
+    -122
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 6,
+   "color": "black",
+   "label": "УЧС"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    41,
+    -124
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "−6,3В"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    53,
+    -124
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "+6,3В"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    65,
+    -124
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "−15В"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    224,
+    -122
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "orange",
+   "label": "⊥"
+  },
+  {
+   "is": "fixture",
+   "kind": "diagram",
+   "size_mm": [
+    88,
+    120
+   ],
+   "what": "printed diagram",
+   "part": "op_panel_g094a:68",
+   "h_mm": 0
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "size_mm": [
+    72,
+    16
+   ],
+   "what": "nameplate",
+   "part": "op_panel_g094a:59",
+   "h_mm": 0,
+   "label": "ОС61-5М"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:65",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:69",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "lamp",
+   "id": "avtomat",
+   "look": {
+    "kind": "lamp",
+    "size_m": 0.012,
+    "color": "red",
+    "label": "АВТОМАТ"
+   },
+   "part": "op_panel_g094a:76",
+   "h_mm": 8
+  },
+  {
+   "is": "fixture",
+   "kind": "lamp",
+   "size_mm": 13,
+   "what": "lamp; a blank on the photographed vehicle, SAM Simulator's place",
+   "at_mm": [
+    -166,
+    -215
+   ],
+   "color": "red",
+   "label": "ПОЛУАВТОМАТ"
+  },
+  {
+   "is": "control",
+   "id": "ro.auto",
+   "look": {
+    "kind": "lamp_button",
+    "size_m": 0.038,
+    "color": "red",
+    "ring": "yellow",
+    "label": "АВТОМАТ"
+   },
+   "part": "op_panel_g094a:80",
+   "h_mm": 12
+  },
+  {
+   "is": "control",
+   "id": "ro.semi_auto",
+   "look": {
+    "kind": "lamp_button",
+    "size_m": 0.03,
+    "color": "red",
+    "ring": "grey",
+    "label": "ПОЛУАВТОМАТ"
+   },
+   "at_mm": [
+    -166,
+    -254
+   ]
+  },
+  {
+   "is": "lamp",
+   "id": "tsc",
+   "look": {
+    "kind": "lamp_button",
+    "size_m": 0.038,
+    "color": "red",
+    "ring": "yellow",
+    "label": "ТСЦ"
+   },
+   "part": "op_panel_g094a:81",
+   "h_mm": 12
+  },
+  {
+   "is": "control",
+   "id": "ro.manual",
+   "look": {
+    "kind": "button",
+    "size_m": 0.028,
+    "color": "black",
+    "ring": "chrome",
+    "label": "РУЧНОЕ"
+   },
+   "part": "op_panel_g094a:82",
+   "h_mm": 10
+  },
+  {
+   "is": "control",
+   "id": "ro.speed",
+   "look": {
+    "kind": "pointer_knob",
+    "size_m": 0.024,
+    "color": "black",
+    "label": "СКОРОСТЬ П А"
+   },
+   "at_mm": [
+    -217,
+    -345
+   ]
+  },
+  {
+   "is": "control",
+   "id": "ro.balance",
+   "look": {
+    "kind": "trim",
+    "size_m": 0.017,
+    "color": "brass",
+    "label": "БАЛАНС АВТОМАТА"
+   },
+   "part": "op_panel_g094a:90",
+   "h_mm": 12
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    -21,
+    -326
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "red",
+   "label": "КОРПУС"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    -21,
+    -341
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "red",
+   "label": "СИГНАЛ ОШИБКИ"
+  },
+  {
+   "is": "fixture",
+   "kind": "jack",
+   "size_mm": 7,
+   "what": "jack",
+   "at_mm": [
+    -21,
+    -356
+   ],
+   "flat": "op_panel_g094a",
+   "h_mm": 4,
+   "color": "black",
+   "label": "КОНТР. ИМП."
+  },
+  {
+   "is": "control",
+   "id": "ssc.range_wheel",
+   "look": {
+    "size_m": 0.135,
+    "color": "white"
+   },
+   "at_mm": [
+    158,
+    -314
+   ]
+  },
+  {
+   "is": "control",
+   "id": "headset.operator",
+   "look": {
+    "kind": "jack",
+    "size_m": 0.022,
+    "color": "chrome",
+    "label": "ШЛЕМОФОН"
+   },
+   "at_mm": [
+    230,
+    -391
+   ]
+  },
+  {
+   "is": "fixture",
+   "kind": "oval",
+   "size_mm": [
+    42,
+    76
+   ],
+   "what": "oval mount",
+   "at_mm": [
+    281,
+    -365
+   ],
+   "color": "white",
+   "label": "ПЕЛЕНГ"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 16,
+   "what": "socket",
+   "at_mm": [
+    281,
+    -349
+   ],
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "socket",
+   "size_mm": 16,
+   "what": "socket",
+   "at_mm": [
+    281,
+    -381
+   ],
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "size_mm": [
+    74,
+    16
+   ],
+   "what": "nameplate",
+   "part": "op_panel_g094a:75",
+   "h_mm": 0,
+   "label": "ОС81-18М"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:83",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "latch",
+   "size_mm": 28,
+   "what": "latch",
+   "part": "op_panel_g094a:85",
+   "h_mm": 8,
+   "color": "chrome"
+  },
+  {
+   "is": "fixture",
+   "kind": "nameplate",
+   "size_mm": [
+    72,
+    16
+   ],
+   "what": "nameplate",
+   "at_mm": [
+    269,
+    -446
+   ],
+   "label": "0051-7М"
+  }
+ ]
+}

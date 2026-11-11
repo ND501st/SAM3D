@@ -30,7 +30,7 @@
     {
       "id": "tour_pu303", "title": "The power-supply panel ПУ-303", "look": "pu303_panel",
       "lines": [
-        "To your left, by the dashboard: the power-supply panel. Its ГТА switch starts the gas-turbine power unit (9И120); the generator switch puts the engine's power take-off generator on line. A lamp beside each lights when it runs."
+        "To your left, by the dashboard: the gas turbine's panel ПУ-303. Its ПУСК button starts the gas-turbine power unit (9И120) and ОСТАНОВ stops it; the ГОМ button puts the engine's power take-off generator on line. A lamp lights for each when it runs, and the gauges above show the turbine's speed and gas temperature."
       ],
       "hint": "L: look at it.   Enter: next.",
       "continue": true
@@ -38,7 +38,7 @@
     {
       "id": "tour_dash", "title": "Your dashboard", "look": "driver_panel",
       "lines": [
-        "In front of you: the АРРЕТИР. button, which erects the gyro vertical at start-up, and your intercom box (Р-124), on which you hear the crew and they hear you."
+        "In front of you: your dashboard, the instruments and the lights' switches before the wheel; on its right your intercom box (Р-124), on which you hear the crew and they hear you. At your left shoulder, on the rack's gyro block 0005-8M, the АРРЕТИР. button that erects the gyro vertical at start-up."
       ],
       "hint": "Enter: next.",
       "continue": true
@@ -103,7 +103,7 @@
     },
     {
       "id": "arrest", "title": "Erect the gyro: АРРЕТИР.", "control": "gyro.arrest", "position": 1, "procedure": "power_up",
-      "lines": ["Press АРРЕТИР. on your dashboard."],
+      "lines": ["Press АРРЕТИР. on the gyro block 0005-8M, on the rack at your left shoulder."],
       "why": "It frees the gyro vertical to erect itself: the level the antennas are stabilised on and the reference the vehicle is oriented by. It takes 40 s, and the deputy commander can't orient the vehicle until it has.",
       "hint": "Left click presses a button."
     },

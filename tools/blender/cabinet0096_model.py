@@ -23,7 +23,7 @@ N = Vector((0.0, 1.0, 0.0))
 DOOR, FRAME, CREAM, BLACK, STEEL, BRASS, DARK, RED, AMBER, GREEN = 'Paint_Panel', 'Paint_LightGrey', 'Paint_Light', 'Bakelite_Black', 'Metal_Steel', 'Metal_Brass', 'Metal_Dark', 'Paint_Red', 'Lens_Amber', 'Lens_Green'
 OLIVE, BRAID, BLUE, WHITE = 'Vinyl_Olive', 'Paint_LightGrey', 'Paint_BlueGrey', 'Paint_Letters'   # the braid is bright silver in g096-a and g097-b
 
-PLINTH_TOP = -0.41   # (m, built frame) the hull's plinth top, z 0.95, under the placed cabinet: (0.95 - 1.3049) / SCALE
+PLINTH_TOP = -0.387  # (m, built frame) the hull's plinth top, z 0.95, under the placed cabinet: (0.95 - 1.3059) / SCALE (0.9199 since 11 Nov 2026)
 BODY_BOTTOM = T.to_local(0, T.H_MM)[2]
 
 

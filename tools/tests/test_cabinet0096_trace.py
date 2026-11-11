@@ -162,9 +162,36 @@ def test_plugs_fit_under_the_body():
 
 
 def test_the_game_size_is_the_photos_and_the_items_stay_on_the_door():
-    assert 0.56 < T.SCALE * T.W_MM / 1000 < 0.58 and 0.58 < T.SCALE * T.H_MM / 1000 < 0.60    # the two photo readings, against the trace's 660 x 680 mm
+    assert 0.59 < T.SCALE * T.W_MM / 1000 < 0.63 and 0.61 < T.SCALE * T.H_MM / 1000 < 0.65    # the door as a control plate solved with certified cameras (docs/research/OSA_REBUILD_C_2026-11.md), against the trace's 660 x 680 mm; 0.57 x 0.59 before came through cameras the audit found out
     _, (w, h) = T.panel_frame()
     for k in T.CONTROL_READ:
         name = k[:-3] if k.endswith('.on') else k[:-4] if k.endswith('.off') else k
         u, v = T.panel_at(name)
         assert abs(u) < w / 2 and abs(v) < h / 2, k
+
+def test_the_cabin_data_on_the_door_sits_on_traced_parts():
+    """Every control, lamp, lamp fixture and the voltmeter that data/cabins/osa_ak.json puts on pwr_cabinet stands on a
+    part of the trace (a pair of buttons worked as one switch: the point between them), within 3 mm in the game's size."""
+    import json
+    (cx, cz), _ = T.panel_frame()
+
+    def uv(x, y, h):
+        lx, _, lz = T.to_local(x, y, h)
+        return (-T.SCALE * (lx - cx), T.SCALE * (lz - cz))
+    spots = [uv(p["c"][0], p["c"][1], p["h"]) for p in T.PARTS if "c" in p]
+    buttons = T.parts("push") + T.parts("cap_button")
+    for a, b in itertools.combinations(buttons, 2):
+        if math.dist(a["c"], b["c"]) < 50.0:
+            spots.append(uv((a["c"][0] + b["c"][0]) / 2, (a["c"][1] + b["c"][1]) / 2, a["h"]))
+    ax, ay = T.VOLT["axis"]
+    dial = uv(ax, ay + (T.VOLT["dial_top_dy"] + T.VOLT["dial_bottom_dy"]) / 2, T.Z["dial"])
+    cabin = json.loads((REPO / "data" / "cabins" / "osa_ak.json").read_text(encoding="utf-8"))
+    items = [(c["control"], c["at_m"]) for c in cabin["controls"] if c["panel"] == "pwr_cabinet"]
+    items += [(l["id"], l["at_m"]) for l in cabin["lamps"] if l["panel"] == "pwr_cabinet"]
+    items += [(f["label"], f["at_m"]) for f in cabin["fixtures"] if f["panel"] == "pwr_cabinet" and f["kind"] == "lamp"]
+    assert len(items) >= 25
+    for name, at in items:
+        assert min(math.dist(at, s) for s in spots) < 0.003, name
+    meter = next(d for d in cabin["displays"] if d["id"] == "pwr_voltmeter")
+    assert math.dist(meter["at_m"], dial) < 0.004
+    assert meter["size_m"][0] < T.SCALE * 2 * T.VOLT["dial_half_w"] / 1000 + 0.001

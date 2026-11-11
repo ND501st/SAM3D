@@ -65,6 +65,7 @@ python tools/panel_sheet.py                       # draw the cabin panels flat: 
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
 python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
+python tools/build_osa_interior.py                # rebuild every Osa interior mesh, then the whole interior as one model: out/osa_interior/
 python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json from the PU-12M interior's trace (after build_pu12m_interior.py)
 ./simcore/build/crew_balance data 10              # every crew scenario at every skill tier over 10 seeds (docs/crew/11_*)
 ./simcore/build/helper_coverage data docs/crew/generated/helper_coverage.md   # every mission from every seat following the helper vs the NPC crew

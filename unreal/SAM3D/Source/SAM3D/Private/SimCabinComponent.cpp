@@ -59,6 +59,8 @@ namespace
 		if (Name == "bluegrey") return FLinearColor(0.16f, 0.2f, 0.24f);
 		if (Name == "lightgrey") return FLinearColor(0.36f, 0.37f, 0.38f);
 		if (Name == "ivory") return FLinearColor(0.7f, 0.66f, 0.52f);
+		// a blue lamp lens (the cab dash's differential-lock lamp, the book's cab photographs)
+		if (Name == "blue") return FLinearColor(0.03f, 0.08f, 0.4f);
 		return Fallback;
 	}
 
@@ -582,7 +584,9 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	}
 	else if (Control.style == simcore::CabinStyle::Wheel && PartMesh(TEXT("SM_WheelDish")) && PartMesh(TEXT("SM_WheelHandle")))
 	{
-		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_WheelDish")));
+		// A domed wheel (the range wheel) where the layout asks for it and the part is imported; the dish otherwise.
+		Item.Moving->SetStaticMesh(Control.look.kind == simcore::CabinLookKind::Dome && PartMesh(TEXT("SM_WheelDome"))
+			? PartMesh(TEXT("SM_WheelDome")) : PartMesh(TEXT("SM_WheelDish")));
 		Item.Pointer->SetStaticMesh(PartMesh(TEXT("SM_WheelHandle")));
 		Item.bParts = true;
 	}
@@ -1474,8 +1478,10 @@ bool USimCabinComponent::AnimatePart(const simcore::ControlPanel& Panel, const s
 		const FVector Dir = FaceDirection(Item, 360.0 * Turns);
 		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.12;
 		Place(Item.Moving, L + N * 0.5, PartRotation(N, Dir), FVector(D));
-		// The crank handle on the rim, 4.5 cm long.
-		Place(Item.Pointer, L + N * (0.5 + 100.0 * 0.22 * D) + Dir * (100.0 * 0.4 * D), PartRotation(N, Dir), FVector(0.045));
+		// The crank handle on the rim (the dish's) or the flank (the dome's), 0.4 of the wheel across from its axis: 4.5 cm
+		// long, longer on a wheel over 11 cm (the range wheel's 5.4 cm), so a hand has room round the cap.
+		Place(Item.Pointer, L + N * (0.5 + 100.0 * 0.21 * D) + Dir * (100.0 * 0.4 * D), PartRotation(N, Dir),
+			FVector(FMath::Max(0.045, 0.4 * D)));
 		return true;
 	}
 	default:

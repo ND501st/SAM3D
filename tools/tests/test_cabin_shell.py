@@ -141,7 +141,7 @@ def test_the_floor_parts_leave_the_aisle_walkable():
 
 def test_the_0096_cabinet_stands_as_the_photos_have_it_and_its_panel_is_its_door():
     c = _part('cabinet_0096')
-    assert c['yaw_deg'] == -15.7 and 'D1' in c['notes']          # the plane through the joint solve's points on its face (docs/OSA_INTERIOR_HOLISTIC.md section 33)
+    assert c['yaw_deg'] == -16.4 and 'D1' in c['notes']          # its door as a control plate solved with certified cameras (docs/research/OSA_REBUILD_C_2026-11.md); -15.7 before, from the joint solve's points on its face (docs/OSA_INTERIOR_HOLISTIC.md section 33)
     p = [x for x in CAB['panels'] if x['id'] == 'pwr_cabinet'][0]
     assert p['bare'] and p['facing_deg'] == c['yaw_deg']
     n = (math.sin(math.radians(c['yaw_deg'])), math.cos(math.radians(c['yaw_deg'])))

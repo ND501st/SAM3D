@@ -227,6 +227,13 @@ def wheel_dish(bm):
                (0.44, 0.24), (0.38, 0.17), (0.12, 0.13), (0.0, 0.13)])
 
 
+def wheel_dome(bm):
+    # The domed hand wheel (SL-2M's range wheel, samsim_panels and wwp_gecko g094-a): a white cap 0.42 of its width high
+    # on a short skirt, its crown flattened; at 0.4 of the width out from the axis (where the crank stands) it is 0.21 high.
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.05), (0.49, 0.09), (0.46, 0.14), (0.4, 0.21), (0.32, 0.28), (0.22, 0.35),
+               (0.12, 0.40), (0.0, 0.42)])
+
+
 def wheel_handle(bm):
     # The crank handle: 1 m long, a stem and a spinner grip.
     lathe(bm, [(0.0, 0.0), (0.12, 0.0), (0.12, 0.3), (0.2, 0.34), (0.22, 0.9), (0.16, 1.0), (0.0, 1.0)], seg=24)
@@ -244,7 +251,7 @@ PARTS = [
     ('SM_ToggleBase', toggle_base, 0.015), ('SM_ToggleLever', toggle_lever, 0.0), ('SM_LampBezel', lamp_bezel, 0.01),
     ('SM_LampLens', lamp_lens, 0.0), ('SM_ButtonRing', button_ring, 0.01), ('SM_ButtonCap', button_cap, 0.0),
     ('SM_Jack', jack, 0.01), ('SM_Socket', socket, 0.01), ('SM_Latch', latch, 0.01), ('SM_WheelDish', wheel_dish, 0.0),
-    ('SM_WheelHandle', wheel_handle, 0.0), ('SM_Screw', screw, 0.0),
+    ('SM_WheelDome', wheel_dome, 0.0), ('SM_WheelHandle', wheel_handle, 0.0), ('SM_Screw', screw, 0.0),
     ('SM_GaugeBezel', gauge_bezel, 0.006),
     ('SM_MeterHousing', meter_housing, 0.006),
 ]

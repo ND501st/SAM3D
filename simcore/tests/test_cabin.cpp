@@ -136,9 +136,13 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 17);
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 35);  // with АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...) and the driver's (stalk, gear, handbrake, stowage)
     // The R-123M's and the R-124 boxes' faces are bare panels: the meshes carry their own fronts.
-    for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel"}) {
+    for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel", "gyro_arrest_panel",
+                            "air_panel", "bulkhead_panel", "bulkhead_left_panel", "vent_hatch_right", "vent_hatch_left",
+                            "fire_panel", "fire_valve_panel", "heater_panel", "dp3b_panel", "post_valve_panel", "radio_well_panel",
+                            "header_valve_left", "header_valve_right", "column_stalk_panel", "gear_lever_panel",
+                            "handbrake_panel", "stowage_panel"}) {
         const CabinPanel* bare = layout.FindPanel(id);
         SC_EXPECT(bare != nullptr && bare->bare);
     }
@@ -253,6 +257,28 @@ SC_TEST("cabin: lamps light from subsystem states and inputs") {
     console.panel.Set("pwr.gta", 1);
     for (int i = 0; i < 3000 && !console.equipment.IsReady("gta"); ++i) console.equipment.Update(0.1, console.panel);
     SC_EXPECT(CabinLayout::LampLit(*gta, console.panel, console.equipment));
+}
+
+SC_TEST("cabin: the 0096 cabinet's voltmeter reads 220 V once a supply is on line, before АППАРАТУРА ВКЛ.") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinDisplay* volts = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.id == "pwr_voltmeter") volts = &d;
+    }
+    SC_EXPECT(volts != nullptr);
+    if (volts == nullptr) return;
+    SC_EXPECT(volts->kind == CabinDisplayKind::Meter && volts->panel_id == "pwr_cabinet");
+    SC_EXPECT_NEAR(MeterValue(*volts, console), 0.0, 1e-9);   // no source on line
+    console.panel.Set("pwr.gta", 1);
+    for (int i = 0; i < 3000 && !console.equipment.IsReady("power"); ++i) console.equipment.Update(0.1, console.panel);
+    SC_EXPECT(console.panel.Get("pwr.equipment") == 0);
+    SC_EXPECT_NEAR(MeterValue(*volts, console), 220.0, 1e-9);  // the GTA up: the operator reads 220 V (voenizdat_osa_1991 p247)
+    console.panel.Set("pwr.gta", 0);
+    for (int i = 0; i < 100; ++i) console.equipment.Update(0.1, console.panel);
+    SC_EXPECT_NEAR(MeterValue(*volts, console), 0.0, 1e-9);
 }
 
 SC_TEST("cabin: ЦУ lights ЦУ and АЗ and puts out РУ; РУ brings it back; РУ needs the hatches closed") {
@@ -509,12 +535,18 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
           "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": 0.06 } ])"), console, extra, &error));
     SC_EXPECT(extra.blocks.size() == 1 && extra.blocks[0].color == "black" && extra.fixtures.size() == 1 &&
               extra.fixtures[0].look.kind == CabinLookKind::Gauge);
-    // The R-123M's T-bar knob, the last look kind: the loader reads it by name.
+    // The R-123M's T-bar knob: the loader reads it by name.
     CabinLayout bar;
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "bar_knob", "size_m": 0.03 } ])"),
                         console, bar, &error));
     SC_EXPECT(bar.fixtures.size() == 1 && bar.fixtures[0].look.kind == CabinLookKind::BarKnob &&
               std::string(ToString(CabinLookKind::BarKnob)) == "bar_knob");
+    // The domed hand wheel, now the last look kind: read by name too.
+    CabinLayout dome;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "dome", "size_m": 0.135 } ])"),
+                        console, dome, &error));
+    SC_EXPECT(dome.fixtures.size() == 1 && dome.fixtures[0].look.kind == CabinLookKind::Dome &&
+              std::string(ToString(CabinLookKind::Dome)) == "dome");
     // A gauge's printed scale: compass or linear, for gauges only.
     CabinLayout scaled;
     SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0.1, 0.1], "kind": "gauge", "size_m": [0.2, 0.12],
@@ -542,7 +574,13 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
         per_panel[1] += f.panel_id == "so_panel";
         per_panel[2] += f.panel_id == "fo_panel";
     }
-    SC_EXPECT(per_panel[0] > 50 && per_panel[1] > 50 && per_panel[2] > 50);
+    // The knobs and switches nothing reads are inert controls now, no longer fixtures: count both.
+    for (const CabinControl& c : osa.controls) {
+        per_panel[0] += c.panel_id == "op_panel";
+        per_panel[1] += c.panel_id == "so_panel";
+        per_panel[2] += c.panel_id == "fo_panel";
+    }
+    SC_EXPECT(per_panel[0] > 70 && per_panel[1] > 70 && per_panel[2] > 70);
     SC_EXPECT(osa.blocks.size() >= 15);
     // The shell: the modelled compartment (hull, six racks, bench, seats, cab, equipment) and its lamps.
     int lights = 0;

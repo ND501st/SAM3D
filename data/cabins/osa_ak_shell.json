@@ -1,5 +1,5 @@
 {
-  "about": "The fighting compartment's shell above the racks, as sections lofted by tools/blender/build_cabin_interior.py (roadmap I1, docs/OSA_INTERIOR_HOLISTIC.md section 15). Body frame, metres: x right, y forward, z up. Read off the wide photos through their solved cameras (tools/traces/osa_interior/views/): a line along the hull gives one ray in the (x, z) section, a line across it one ray in (y, z). The photos show a 9A33BM3-1 (decision D1: shape from the BM3-1 where the AK shares it).",
+  "about": "The fighting compartment's shell above the racks, as sections lofted by tools/blender/build_cabin_interior.py (roadmap I1, docs/OSA_INTERIOR_HOLISTIC.md section 15). Body frame, metres: x right, y forward, z up. Read off the wide photos through their solved cameras (tools/traces/osa_interior/views/): a line along the hull gives one ray in the (x, z) section, a line across it one ray in (y, z). The photos show a 9A33BM3-1 (decision D1: shape from the BM3-1 where the AK shares it). On 11 Nov 2026 everything here that hangs on the right racks was moved 0.302 m outboard with them (the turret's axis stands 0.914 m from SP-2M2's face, not Fig. 3's 0.612), and the plinth under the 0096-9M2 moved with the cabinet; the right post, its shroud and the housing beside the cabinet are superseded by data/cabins/osa_ak_parts.json (docs/research/OSA_REBUILD_C_2026-11.md). The bulkhead's door and fittings, the roof and the floor's middle have not been measured again.",
   "confidence_scale": "high: measured against a traced face; medium: one ray and a stated constraint; low: read by eye or an estimate kept for closure",
   "roof_section": {
     "about": "The lining's underside, half a section from the rack's top in to the centre line, the same on both sides, from the rear bulkhead forward over the cab to the cab's front band (cab_front). The photos see it only from the rack face inwards; outboard of the racks it is hidden and the old flat lining is kept.",
@@ -105,8 +105,8 @@
   },
   "wheel_arch_right": {
     "what": "The wheel-arch housing at the right wall aft of SP-2M2: a box with a sloped top rising aft, forward face about 0.3 m high, standing inboard of the rack's carcass",
-    "x_from_m": 0.6,
-    "x_to_m": 0.7,
+    "x_from_m": 0.902,
+    "x_to_m": 1.002,
     "section_yz_m": [
       [
         0.4,
@@ -565,7 +565,7 @@
       "confidence": "low"
     },
     "blower_cover": {
-      "what": "The grey sheet cover standing proud over the outboard part of the blower opening, leaving a slit at the ring",
+      "what": "PB-107 (ПБ-107), the TV sight's intermediate block (voenizdat_osa_1991 p101, p103: on the bulkhead between the engine and operators' compartments; p168: its own fan draws the compartment's air in through a slit and blows it back): the grey case standing proud over the outboard part of the blower opening, leaving the slit at the fan's ring. mon_2112_80 Fig. 3 writes PB-55 at this place. No controls",
       "x_m": [
         -0.38,
         -0.25
@@ -601,31 +601,31 @@
       "y_to_m": -0.25,
       "section_xz_m": [
         [
-          0.15,
+          0.452,
           0.62
         ],
         [
-          0.78,
+          1.082,
           0.62
         ],
         [
-          0.78,
+          1.082,
           1.14
         ],
         [
-          0.5,
+          0.802,
           1.13
         ],
         [
-          0.4,
+          0.702,
           1.1
         ],
         [
-          0.3,
+          0.602,
           0.98
         ],
         [
-          0.15,
+          0.452,
           0.9
         ]
       ],
@@ -634,8 +634,8 @@
     },
     "step_forward_right": {
       "what": "The raised step along the right of the aisle under the right R-123M: a dark plate over a light grey aft face",
-      "x_from_m": 0.46,
-      "x_to_m": 0.537,
+      "x_from_m": 0.762,
+      "x_to_m": 0.839,
       "y_from_m": 2.95,
       "y_to_m": 3.5,
       "z_top_m": 0.76,
@@ -656,7 +656,7 @@
     "spine": {
       "what": "The aisle's pressed floor from the rack side to the bench's base: one sheet, slightly proud, with two long pressed ridges bounding a band of transverse ribs, and a plain strip on the bench's side",
       "x_from_m": -0.514,
-      "x_to_m": 0.45,
+      "x_to_m": 0.752,
       "y_from_m": 0.1,
       "y_to_m": 2.75,
       "z_top_m": 0.78,
@@ -695,8 +695,8 @@
     },
     "trough_right": {
       "what": "The dark strip of floor along the right rack's foot: dark plate with a black gap in it under the rack, earth straps over its plate. Not a pit: the camera stands inboard of the edge (eye x -0.13, edge x 0.45), so the dark line at the edge faces the aisle and this strip cannot lie below the spine, as first read",
-      "x_from_m": 0.45,
-      "x_to_m": 0.72,
+      "x_from_m": 0.752,
+      "x_to_m": 1.022,
       "y_from_m": 0.6,
       "y_to_m": 2.5,
       "z_top_m": 0.634,
@@ -752,8 +752,8 @@
     },
     "arch_forward_right": {
       "what": "The forward end of the right wheel-arch housing, reaching into the aisle ahead of the old box: rounded on the aisle side in plan, its top rising aft",
-      "x_from_m": 0.43,
-      "x_to_m": 0.61,
+      "x_from_m": 0.732,
+      "x_to_m": 0.912,
       "section_yz_m": [
         [
           0.85,
@@ -841,31 +841,31 @@
       {
         "id": "plinth_under_cabinet",
         "what": "The raised floor directly beneath the 0096-9M2: flat at 0.95, its forward edge sloping down to the walkway; the cabinet's connectors come down on it",
-        "x_from_m": -0.5,
-        "x_to_m": 0.03,
+        "x_from_m": -0.311,
+        "x_to_m": 0.219,
         "section_yz_m": [
           [
-            0.33,
+            0.379,
             0.7
           ],
           [
-            0.76,
+            0.808,
             0.7
           ],
           [
-            0.76,
+            0.808,
             0.78
           ],
           [
-            0.69,
+            0.738,
             0.86
           ],
           [
-            0.62,
+            0.668,
             0.875
           ],
           [
-            0.33,
+            0.379,
             0.88
           ]
         ],
@@ -1004,23 +1004,23 @@
         "y_to_m": 0.67,
         "section_xz_m": [
           [
-            0.47,
+            0.772,
             0.62
           ],
           [
-            0.62,
+            0.922,
             0.62
           ],
           [
-            0.62,
+            0.922,
             1.16
           ],
           [
-            0.57,
+            0.872,
             1.14
           ],
           [
-            0.47,
+            0.772,
             0.97
           ]
         ],
@@ -1036,12 +1036,12 @@
       "what": "Six white stand-off insulators on short stems along the right lining's lower edge, carrying a grey cable aft to the bulkhead lamp",
       "line_xyz_m": [
         [
-          0.6,
+          0.902,
           0.24,
           2.1
         ],
         [
-          0.72,
+          1.022,
           -0.98,
           2.1
         ]
@@ -1275,7 +1275,7 @@
       "deck_x_m": 0.66
     },
     "aft_right": {
-      "x_foot_m": 0.41
+      "x_foot_m": 0.712
     },
     "source": "wwp_gecko g096-a (posts cast through the joint solve: 0.34), g098-a, g098-c (the first-aid box leaning on that wall, triangulated: 0.36), g082-b (the sloping plates under both front racks, down to the deck's side)",
     "confidence": "medium for the rake, low for where it ends"

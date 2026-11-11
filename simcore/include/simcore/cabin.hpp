@@ -101,7 +101,8 @@ enum class CabinLookKind {
     Oval,         // raised oval mount
     Legend,       // legend lamp: black glass with its `label` on it, the letters lit in `color` (lamps only)
     Gauge,        // an instrument the console doesn't model: dark rim, light face, needle (round, or square for [w, h])
-    BarKnob       // bakelite T-bar knob: a round boss with a bar across it, one end longer (the pointer): the R-123M's
+    BarKnob,      // bakelite T-bar knob: a round boss with a bar across it, one end longer (the pointer): the R-123M's
+    Dome          // hand wheel: a domed cap in place of the dish, its crank on the dome's flank (SŁ-2M's range wheel)
 };
 
 inline const char* ToString(CabinLookKind k) {
@@ -126,6 +127,7 @@ inline const char* ToString(CabinLookKind k) {
         case CabinLookKind::Legend: return "legend";
         case CabinLookKind::Gauge: return "gauge";
         case CabinLookKind::BarKnob: return "bar_knob";
+        case CabinLookKind::Dome: return "dome";
     }
     return "?";
 }
@@ -294,7 +296,8 @@ struct CabinDisplay {
     std::vector<Condition> lit_when;     // dial backlight: all must hold (empty = lit whenever powered)
     // dial and meter
     std::string control;                 // the control whose value the needle shows
-    std::string reading;                 // meter: or a reading worked out from the console (radio_sets.hpp), 0..1 of the swing
+    std::string reading;                 // meter: or a reading worked out from the console (radio_sets.hpp), 0..1 of the swing;
+                                         // "supply_voltage" reads volts (the 220 V 400 Hz supply, SupplyVoltage)
     std::string readout;                 // dial: or a value the simulation gives (simcore/readouts.hpp, DialReading)
     int marks = 12;                      // labelled divisions on the scale
     // dial: one needle revolution = value_per_turn; the scale reads 0..labels_per_turn around it
@@ -322,9 +325,18 @@ struct CabinDisplay {
     std::string document;
 };
 
+// The voltmeter on a vehicle's distribution cabinet (the Osa's 0096-9M1: voenizdat_osa_1991 p163, p247, where the operator
+// checks 220 V 400 Hz before АППАРАТУРА ВКЛ.): the supply's volts while the console's "power" subsystem (a source on line,
+// GTA, engine generator or an external supply) is ready, else none. The supply's own wander is not modelled.
+inline constexpr double kSupplyVolts = 220.0;
+inline double SupplyVoltage(const ConsoleData& console) {
+    return console.equipment.Has("power") && console.equipment.State("power") == SubsystemState::Ready ? kSupplyVolts : 0.0;
+}
+
 // What a meter's needle reads now, in its display units: its control's value times `scale`, or its reading (0..1 of the
 // swing, radio_sets.hpp) times `full_scale`. Worked out from the console alone, so a mirrored console reads the same.
 inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
+    if (d.reading == "supply_voltage") return SupplyVoltage(console);
     if (!d.reading.empty()) return RadioMeterReading(d.reading, console) * d.full_scale;
     return console.panel.GetValue(d.control) * d.scale;
 }
@@ -813,7 +825,7 @@ private:
 
     static bool KnownColour(const std::string& c) {
         for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange", "bluegrey",
-                                  "lightgrey", "ivory"}) {
+                                  "lightgrey", "ivory", "blue"}) {
             if (c == known) return true;
         }
         return false;
@@ -828,7 +840,7 @@ private:
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
         if (!kind.empty()) {
             bool found = false;
-            for (int k = 0; k <= static_cast<int>(CabinLookKind::BarKnob); ++k) {
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::Dome); ++k) {
                 if (kind == ToString(static_cast<CabinLookKind>(k))) {
                     out.kind = static_cast<CabinLookKind>(k);
                     found = true;
@@ -1121,7 +1133,11 @@ private:
             // A meter that reads the set rather than a control: one of the radio sets' readings, and that set on the console.
             if (d.Find("control") != nullptr) return Fail(path, "a meter shows a control or a reading, not both");
             if (!RequireString(d, path, "reading", disp.reading)) return false;
-            if (!KnownRadioReading(disp.reading)) return Fail(Join(path, "reading"), "unknown reading '" + disp.reading + "'");
+            if (disp.reading == "supply_voltage") {
+                if (!console.equipment.Has("power")) return Fail(Join(path, "reading"), "supply_voltage needs the console's power subsystem");
+            } else if (!KnownRadioReading(disp.reading)) {
+                return Fail(Join(path, "reading"), "unknown reading '" + disp.reading + "'");
+            }
             if ((disp.reading == "r111_indicator" && !console.r111.present) || (disp.reading == "r407_meter" && !console.r407.present)) {
                 return Fail(Join(path, "reading"), "the console has no such radio set");
             }
