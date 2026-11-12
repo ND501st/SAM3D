@@ -98,3 +98,25 @@ def test_the_hand_wheels_are_worked_against_a_display():
             assert c["units_per_turn"] > 0, c["control"]
     dome = next(c for c in cabin["controls"] if c["control"] == "ssc.range_wheel")
     assert dome["look"]["kind"] == "dome"
+
+
+def test_the_mounts_hold_their_lamps_and_buttons():
+    """Every SŁ-2M mount (a lamp bank's scalloped plate, a button's stadium, a window, a frame) carries every item on it
+    and runs over no other item by more than a millimetre."""
+    assert H.mount_problems() == []
+
+
+def test_mesh_drawn_fixtures_are_the_mounts():
+    """A fixture the rack's mesh draws ("mesh": SM_RackSL2M) is one of the three columns', has a mount style, and (all but a
+    frame) holds items; the game skips drawing it, so none is left flat."""
+    cabin = H.load_cabin()
+    meshed = [k for k, f in enumerate(cabin["fixtures"]) if f.get("mesh")]
+    assert len(meshed) == 13
+    by_fixture = {m["fixture"]: m for m in H.mounts(cabin)}
+    for k in meshed:
+        f = cabin["fixtures"][k]
+        assert f["mesh"] == H.MESH and f["panel"] in H.PANELS, k
+        m = by_fixture[k]
+        assert m["style"] in ("bank", "stadium", "window", "frame"), k
+        if m["style"] != "frame":
+            assert m["cups"] or m["glass"] is not None, k

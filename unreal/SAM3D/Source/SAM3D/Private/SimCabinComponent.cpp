@@ -1027,6 +1027,10 @@ void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const si
 void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const simcore::CabinFixture& Fixture)
 {
 	using simcore::CabinLookKind;
+	if (!Fixture.mesh.empty())
+	{
+		return;  // the shell's mesh draws it (SŁ-2M's mounts in SM_RackSL2M, tools/blender/sl2m_housings.py)
+	}
 	const simcore::CabinPanel& Panel = *Layout.FindPanel(Fixture.panel_id);
 	const simcore::CabinLook& Look = Fixture.look;
 	const FVector N = BodyDir(Panel.Normal());

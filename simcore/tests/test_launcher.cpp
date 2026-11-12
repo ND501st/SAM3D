@@ -442,7 +442,7 @@ SC_TEST("launcher: the prep_hold block and the container hot inputs are checked"
 
 SC_TEST("launcher: ВОЗВРАТ under a missile in flight returns its range finder and the missile is lost (voenizdat_osa_1991 p120)") {
     ConsoleData c = Osa();
-    SC_EXPECT(c.launcher.channels[1].return_control == "msl.return_2" && c.launcher.channels[0].return_control.empty());
+    SC_EXPECT(c.launcher.channels[1].return_control == "msl.return_2" && c.launcher.channels[0].return_control == "msl.return_1");
     Launcher l(c.launcher);
     c.panel.Set("msl.channels", 0);  // channel II only
     c.equipment.SetInput("target_near_zone", true);
@@ -456,4 +456,22 @@ SC_TEST("launcher: ВОЗВРАТ under a missile in flight returns its range fi
     SC_EXPECT(back.size() == 1 && back[0] == 7);
     l.ShotDone(7);
     SC_EXPECT(l.ShotsFlying().empty() && l.Returned(c).empty());
+    c.panel.Set("msl.return_2", 0);
+}
+
+SC_TEST("launcher: channel I's ВОЗВРАТ on OK81-4M-I returns only channel I's missile (voenizdat_osa_1991 p119; drawing wwp_gecko g094-c)") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    c.equipment.SetInput("target_near_zone", true);
+    c.panel.Set("msl.channels", 1);  // channel I only
+    l.Step(0.0, c);
+    const Launcher::Shot one = l.Launch(1.0, c, 8, 10.0, 450.0);
+    SC_EXPECT(one.channel == 1);
+    l.Step(2.0, c);
+    c.panel.Set("msl.return_2", 1);  // the other channel's button: channel I's missile flies on
+    SC_EXPECT(l.Returned(c).empty());
+    c.panel.Set("msl.return_2", 0);
+    c.panel.Set("msl.return_1", 1);
+    const std::vector<int> back = l.Returned(c);
+    SC_EXPECT(back.size() == 1 && back[0] == 8);
 }

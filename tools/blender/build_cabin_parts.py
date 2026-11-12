@@ -7,6 +7,7 @@ Moving parts are separate meshes: toggle levers, knob bodies, button caps, lamp 
 
     "C:/Program Files/Blender Foundation/Blender 4.2/blender.exe" --background --python tools/blender/build_cabin_parts.py
     ... -- --preview out/parts_preview.png      # also render a contact sheet
+    ... -- --only SM_WheelDome                 # export only these parts (the .blend is saved whole)
 
 Writes art/cabin_parts/<Part>.fbx (one mesh each) and art/cabin_parts/cabin_parts.blend (Git LFS).
 """
@@ -228,10 +229,16 @@ def wheel_dish(bm):
 
 
 def wheel_dome(bm):
-    # The domed hand wheel (SL-2M's range wheel, samsim_panels and wwp_gecko g094-a): a white cap 0.42 of its width high
-    # on a short skirt, its crown flattened; at 0.4 of the width out from the axis (where the crank stands) it is 0.21 high.
-    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.05), (0.49, 0.09), (0.46, 0.14), (0.4, 0.21), (0.32, 0.28), (0.22, 0.35),
-               (0.12, 0.40), (0.0, 0.42)])
+    # The domed hand wheel (SL-2M's range wheel): a white drum with a flat face, six screws round it, and a dome in its
+    # middle (samsim_panels, the AK photo at 4x: the face 132 px across, the screws 62 px out, the dome 71 px across:
+    # 0.47 and 0.27 of the width; heights by eye from its shading, about +-5 mm). The face 0.22 high where the crank
+    # stands (0.4 of the width out, SimCabinComponent::AnimatePart), the dome's crown 0.41.
+    lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.185), (0.49, 0.21), (0.47, 0.22), (0.30, 0.22), (0.28, 0.225),
+               (0.265, 0.245), (0.25, 0.30), (0.21, 0.35), (0.15, 0.385), (0.08, 0.403), (0.0, 0.408)])
+    for k in range(6):
+        a = math.radians(90 + 60 * k + 15)
+        res = bmesh.ops.create_cone(bm, cap_ends=True, segments=16, radius1=0.022, radius2=0.018, depth=0.012)
+        bmesh.ops.translate(bm, verts=res['verts'], vec=(0.47 * math.cos(a), 0.47 * math.sin(a), 0.226))
 
 
 def wheel_handle(bm):
@@ -311,8 +318,10 @@ def main():
     clear()
     os.makedirs(OUT, exist_ok=True)
     objs = [part(name, build, bev) for name, build, bev in PARTS]
+    only = set(argv[argv.index('--only') + 1].split(',')) if '--only' in argv else None   # the others' FBX stay as they are
     for obj in objs:
-        export(obj)
+        if only is None or obj.name in only:
+            export(obj)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, 'cabin_parts.blend'))
     print('exported', len(objs), 'parts to', OUT)
     if preview_path:

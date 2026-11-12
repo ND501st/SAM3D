@@ -1817,3 +1817,110 @@ right column's third and fourth and the left's third have two, and the left's bo
   `p:ind_caps`, `p:ind_select`), so the button map lists them as not built.
 - **In the mesh:** caps right 4 and right 5 are steel rings (the cabin draws their lamps), and left 4 and left 5 are
   tinted blank lenses. `SM_PanelInd` is rebuilt.
+
+## 51. SŁ-2M to its full height; the panel review applied (12 Nov 2026)
+
+The panel review (`docs/research/OSA_PANEL_REVIEW_2026-11.md`, its section 8 lists everything done) found SŁ-2M's three
+columns cut to SAM Simulator's cropped 982 px photo. They now run 0.925-2.143 m: the top row (0062-6M1, 0094-5's eight
+dials, 0004-14M's four meters) and the bottom row (0051-7M, OK81-4M I, one OK51-6M) are placed from drawing g094-c and
+the photos g094-a/b/d and g095-a cast on the panels' plane, and every older item moved up 65 mm in v to keep its place.
+
+- **Heights.** The rack's top rail at 2.14 with its name plate at 2.146-2.164, the posts on to the left roof lining at
+  2.18 (shell section `left_outboard`). Fig. 3's row schematic draws the rail at 2.10: recorded, the photos (2.14-2.17)
+  are used.
+- **Check.** The cabin rendered from g094-a's camera (`holistic_view.py render g094-a`) puts the top meters and the
+  bottom blocks where the photo has them: model edges supported 54 %, photo edges explained 48 %.
+- **Unreal.** Re-import `SM_RackSL2M`, `SM_RackSL3M`, `SM_OsaHull` and the panel textures `T_Panel_{op,so,fo,ind}_panel`.
+
+## 52. SŁ-2M's top and bottom rows read again on the flats (12 Nov 2026, second pass)
+
+Every lamp, switch, button and part of the three columns' top and bottom rows was checked on metric flats, the
+cabin's own items drawn on the photo (`flat_data.py`): `op_panel_g094a`, `so_panel_g094a` and `fo_panel_g094a`
+(grade A, regenerated at the panels' full height), and three new grade-B flats for reading small parts,
+`op_panel_g094b` (0062-6M1), `so_panel_g095a` (0094-5) and `fo_panel_g095b` (0004-14M), each fitted on its block's
+locks, edges or meter windows before a place was taken from it. The middle blocks were placed on the grade-A flat
+before (section 49, about +-5 mm) and still agree.
+
+- **0062-6M1.** ТОК, МОЩНОСТЬ and РЕЖИМЫ moved 30 mm forward onto the stacked knobs (they stood on the МОЩНОСТЬ
+  meter's case); АРУ — РРУ onto the toggle that heads the column. The column holds four black-rimmed sockets (two
+  were drawn); ПОДЖИГ ГШ is a red-capped button with two toggles beside it (ОСН. over the second), drawn as knobs
+  before; a small knob forward of the large pointer knob added; that knob 16 mm forward (raised parts moved back
+  0.9 h along g094-a's ray, as in the first pass).
+- **0094-5.** The eight dials at the photo's even pitch of about 68 mm (u -0.255 to 0.228), 40 mm windows, v 0.572;
+  the bezel ends short of the fuse holder (it ran over it).
+- **0004-14M.** The meter cases, windows and hoods 13-24 mm higher (cases at v 0.535, windows 0.546, hoods 0.589 and
+  80 mm wide, not 170); the three red caps +?В, -150В, КОРПУС added as on the BM3 (low: the AK photo is cropped below
+  them), the plate moved forward of them. The AK's own layout of the controls stays (decision D1).
+- **Bottom row.** 0051-7M's knob, card, test socket and locks 25-50 mm lower and its block fitted to the photo
+  (u -0.168..0.323, v -0.355..-0.606); OK81-4M I's test socket, window, cover box, ВОЗВРАТ, plates and locks
+  10-20 mm; OK51-6M's socket, data plate and locks, and its block's face (v -0.343..-0.582); the fuse unit as three
+  fuses over three columns of two black jacks and two beige jacks (a 2 x 4 grid before).
+- **Left open.** The column of four sockets' and the ПОДЖИГ ГШ toggles' legends (unread); КАНАЛЫ on the large
+  knob (likeliest, PLANNED); the headset jacks on the columns and `vent.workplaces` (on SŁ-2M by p168, no place on
+  any photo: SAM3D's choice); the rack's plate СЛ-2М2 on the top rail. `tools/traces/osa_interior/panels/sl2m_op.json`
+  is now behind the data for 0062-6M1 and 0051-7M: do not rerun `panel_apply.py` on it.
+- **Check.** `holistic_view.py render g094-a`: model edges supported 54 %, photo edges explained 48 % (as before;
+  the parts moved are small). Unreal: re-import the panel textures `T_Panel_*` (this pass and the last changed
+  op, so, fo, ind, commander, dp3b, gyro, pwr_cabinet and both radio panels) besides the meshes of section 51.
+
+## 53. SŁ-2M traced part by part on SAM Simulator's AK photo (12 Nov 2026, third pass)
+
+The owner's call: the three columns' lamps, buttons and selectors are to look as SAM Simulator's AK photo shows them
+(samsim_panels, `reference/samsim/columns_three.jpg`, 1910 x 982), not as bare oval mounts. Each column was read
+on 2.4-4x grids part by part (centre, outer diameter, colour, ring) and written into `data/cabins/osa_ak.json`
+through the column's fit (op 0.90, so 0.99, fo 0.95 mm per px). The so column's fit is now anchored on its blocks'
+faces (x 627-1273): the earlier fit, made on the items, sat 20 px off, which hid the right strip, the PPI and the
+azimuth wheel being 13-26 mm out. Positions where SAM and the data differed by more than a few mm now follow SAM
+(decision D1); everything else stayed.
+
+- **Mounts.** The channels' lamp banks and the middle row of 0004-11M are cream plates (bezel, ivory), not white
+  ovals; the round black legend lamps (26 mm) sit on them in SAM's two rows. The ВЫСОКОЕ/ПОИСК, ЛУЧ, IFF and АВТ.
+  mounts are slim ivory stadia 34-40 mm wide (they were 40-53 mm white ellipses), their buttons chrome-ringed with
+  black caps; the ВЫСОКОЕ and ЛУЧ windows are chrome frames with the legends in them, on the strips' outer side.
+  The ЗАПРОС К frame, the lamp-pair mount of ЛЮКИ ЗАКР./ОТКАЗ СРП and АВАР. ПУСК's mount added or resized.
+- **Selectors.** СМЕНА ЛИТ., КАНАЛЫ, РОД РАБОТЫ and ИЗДЕЛИЯ are black bar knobs, СКОРОСТЬ П А too; РАБОТА —
+  КОНТРОЛЬ — КАЛИБР. a white pointer knob; ГРУБО a pointer knob; ВЕРТ./ГОРИЗ. СМЕЩ. brass.
+- **Lamps and buttons.** OS81-18M: АВТОМАТ and ТСЦ red caps in cream rings, ПОЛУАВТОМАТ in a grey one, РУЧНОЕ black
+  in grey, the two small lamps over them. OS52-14M: ПА in a brass ring, ТСЦ and the ЦУ/АЗ/РУ buttons in grey rings,
+  their red lamps over them. ЗАХ. АПЧ II is the red lamp under 0004-11M's left latch (the second pass read
+  ЗАХ. БПЧ II and drew a fixture beside the lamp, now removed); ЗАХ. АПЧ I the lamp at the right edge (SAM3D's reading
+  by symmetry). The three amber lamps over each bank (from the book's photo, not on the AK) are removed.
+- **Dials.** εс and βс are 40-42 mm windows in a cream collar with a round lug either side (SAM at 4x: collar 60 px,
+  window 42, lugs 25 px at +-31): `sl2m_housings.py` `beta_collar`, `eps_collar` (style `collar`), replacing the
+  124 mm visors; the dials were 100 mm. The range hood is 193 mm wide (SAM's edge at x 422), the TV bezel 276.
+- **Added.** OS81-10M's fourth knob, the ⊥ jack and a sixth supply jack of OS52-14M, the small lamp under АВАРИЙНЫЙ
+  ПУСК. `soc.knob_unid` (photos only, not on SAM) moved clear of the right strip.
+- **Check.** A replica of each column, the data drawn by kind in SAM's pixels beside the photo, was compared after
+  each pass. `sl2m_housings.py`: clear. Tests, citations, `button_map.py` pass; `helper_coverage` 294 runs, 39 gaps,
+  as before. Unreal: re-import `SM_RackSL2M` (built with `--only SM_RackSL2M`) and the panel textures `T_Panel_*`.
+
+## 54. SŁ-2M modelled in Blender and checked against SAM's photo (13 Nov 2026)
+
+The third pass put every item in place; the columns still drew their mounts as flat ovals and bezels from the parts
+library. They are now modelled in the rack's mesh, `SM_RackSL2M`, and the whole column is rendered at SAM's scale and laid
+over SAM's AK photo.
+
+- **Mounts in the mesh.** `sl2m_housings.py` `mounts()` turns each of 13 fixtures into a raised mount from the items on
+  it: a lamp bank's scalloped ivory plate with a cup round each lamp (`bank`), a button's ivory stadium with a chrome
+  hexagon round each cap (`stadium`), a meter or counter window with its dark glass and two screws (`window`), ЗАПРОС К's
+  black frame (`frame`). The outline is the union of the items' shapes, rounded, traced by rays. `build_cabin_interior.py`
+  `sl2m_mounts()` lofts each with a rounded front edge (material `Paint_Ivory`, new; `ue_import_cabin_interior.py`
+  makes `MI_Cabin_Paint_Ivory`). `mount_problems()` checks every item lies on its plate and no plate runs more than 1 mm
+  over another item (АВАР. ПУСК's button touches its mount in SAM too): clear.
+- **The `mesh` key.** A fixture with `"mesh": "SM_RackSL2M"` is drawn by that mesh; `cabin.hpp` loads the key and
+  `SimCabinComponent` skips the fixture, so nothing is drawn twice. so 22, 25, 26, 27, 30, 36, 65; fo 97, 98, 99, 106, 122;
+  op 279.
+- **Range wheel.** SAM's AK shows a drum about 122 mm across with a flat face, a 64 mm dome and six screws; the gecko
+  photos read 135-140 mm. 122 is used (D1: the AK as SAM shows it), both recorded in `ssc.range_wheel`'s notes.
+  `build_cabin_parts.py` rebuilds `SM_WheelDome` as drum, dome and screws (`--only` builds one part).
+- **Check scene.** `tools/blender/sl2m_check.py` builds the rack with its housings and mounts, the panel textures, every
+  part placed as Unreal places it and the fixtures the mesh does not draw, and renders each column orthographic at SAM's
+  pixel scale (the per-column fit u = a + s x, v = b - s y); `tools/sl2m_overlay.py` writes the photo, the render and the
+  two blended side by side, and the render's edges on the photo. The three columns agree with the photo within a few
+  millimetres: banks, stadia and collars, windows, the range hood, the TV bezel and the wheel.
+- **Left.** The latches are the library's chrome oval where SAM shows a cream plate with a lock; ЗАПРЕТ ПУСКА's key is a
+  brass disc; the top rows of 0094-5 and 0062 are cropped in SAM's photo (the second pass's reading stands); the range
+  dial's plate is approximate.
+- **Unreal.** Build the C++ (`SimCabinComponent` skips mesh-drawn fixtures), run `tools/ue_import_cabin_interior.py`
+  (re-imports `SM_RackSL2M`, makes `MI_Cabin_Paint_Ivory`), re-import `SM_WheelDome` and the `T_Panel_*` textures.
+

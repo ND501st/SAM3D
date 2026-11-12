@@ -46,10 +46,15 @@ def test_the_section_is_a_lining_over_the_racks():
     assert half[0]['x_m'] == 0.0 and half[-1]['x_m'] > 0.7
     zs = [p['z_m'] for p in half]
     assert zs == sorted(zs, reverse=True)                    # it rises inboard, to the panel at the centre line
+    left = SHELL['roof_section']['left_outboard']             # raised over SŁ-2M's top rail (g094-a, g094-b, g095-a)
+    assert left['z_m'] == lining(left['x_from_m']) and left['source'] and left['confidence'] in CONF
     for s in CAB['shell']:
         if s['id'].startswith('rack_'):
             top = s['centre_m'][2] + s['size_m'][2] / 2
-            assert top <= SHELL['roof_section']['outboard_z_m'] + 1e-6, s['id']
+            limit = left['z_m'] if s['centre_m'][0] < 0 else SHELL['roof_section']['outboard_z_m']
+            assert top <= limit + 1e-6, s['id']
+    sl2m = next(p for p in CAB['panels'] if p['id'] == 'so_panel')
+    assert sl2m['centre_m'][2] + sl2m['size_m'][1] / 2 < left['z_m'] - 0.03    # the top rail fits under the lining
 
 
 def test_nothing_hangs_clear_of_the_lining_and_nothing_goes_through_it():

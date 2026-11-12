@@ -353,6 +353,7 @@ PREVIEW = {
     'Paint_Panel': (0.72, 0.71, 0.64), 'Canvas': (0.35, 0.33, 0.22),
     'Paint_Letters': (0.8, 0.78, 0.7), 'Paint_Red': (0.62, 0.13, 0.05), 'Metal_Brass': (0.62, 0.48, 0.24),
     'Paint_LightGrey': (0.6, 0.61, 0.62), 'Lens_Amber': (0.75, 0.38, 0.06), 'Lens_Green': (0.1, 0.45, 0.15),
+    'Paint_Ivory': (0.78, 0.72, 0.56),
 }
 
 
@@ -461,8 +462,11 @@ def load_shell():
         return json.load(f)
 
 
-def lining_z(half, x):
-    """The roof lining's height at x across the compartment, from the half section's points."""
+def lining_z(half, x, left=None):
+    """The roof lining's height at x across the compartment, from the half section's points; on the left, outboard of
+    left['x_from_m'], at left['z_m'] (the shell's roof_section left_outboard) when one is given."""
+    if left is not None and x <= -left['x_from_m']:
+        return left['z_m']
     x = abs(x)
     pts = sorted((p['x_m'], p['z_m']) for p in half)
     if x <= pts[0][0]:
@@ -473,11 +477,19 @@ def lining_z(half, x):
     return pts[-1][1]
 
 
-def lining_strip(half, x0, x1, top):
+def lining_strip(half, x0, x1, top, left=None):
     """A closed section of the lining between x0 and x1, up to the roof's top."""
     folds = [s * p['x_m'] for p in half for s in (-1, 1) if x0 < s * p['x_m'] < x1]
+    if left is not None:
+        folds = [f for f in folds if f > -left['x_from_m']] + ([-left['x_from_m']] if x0 < -left['x_from_m'] < x1 else [])
     xs = sorted(set([x0, x1] + folds))
-    return [(x, lining_z(half, x)) for x in xs] + [(x1, top), (x0, top)]
+    return [(x, lining_z(half, x, left)) for x in xs] + [(x1, top), (x0, top)]
+
+
+def left_roof_z():
+    """Where the left racks' carcasses meet the lining: the raised left edge (roof_section left_outboard), else ROOF_Z."""
+    lo = load_shell()['roof_section'].get('left_outboard')
+    return lo['z_m'] if lo else ROOF_Z
 
 
 def build_roof(b, shell, y_hatch0, y_hatch1, hatch_xs):
@@ -488,7 +500,8 @@ def build_roof(b, shell, y_hatch0, y_hatch1, hatch_xs):
     roof = shell['roof_section']
     half = sorted(roof['half'], key=lambda p: -p['x_m'])
     top = max(p['z_m'] for p in half) + T
-    whole = lining_strip(half, -W - T, W + T, top)
+    left = roof.get('left_outboard')
+    whole = lining_strip(half, -W - T, W + T, top, left)
     y_to = roof['y_to_m']
     pocket_ = shell['roof_pocket']
     b.prism_y(whole, roof['y_from_m'], pocket_['y_from_m'], 'Paint_Interior')          # cut for the recess forward of the band (built below)
@@ -496,7 +509,7 @@ def build_roof(b, shell, y_hatch0, y_hatch1, hatch_xs):
     b.prism_y(whole, y_hatch1, y_to, 'Paint_Interior')
     xs = sorted(hatch_xs)
     for a, c in ((-W - T, xs[0]), (xs[1], xs[2]), (xs[3], W + T)):                 # beside and between the hatches
-        b.prism_y(lining_strip(half, a, c, top), y_hatch0 - 0.001, y_hatch1 + 0.001, 'Paint_Interior')
+        b.prism_y(lining_strip(half, a, c, top, left), y_hatch0 - 0.001, y_hatch1 + 0.001, 'Paint_Interior')
     cab = shell['cab_front']                                                       # the band drops to the screens' header
     b.box(-W - T, W + T, y_to, y_to + cab['depth_m'], ROOF_Z, top, 'Paint_Interior')
     lip = cab['lip']
@@ -507,7 +520,8 @@ def build_roof(b, shell, y_hatch0, y_hatch1, hatch_xs):
     pocket = shell['roof_pocket']                                                  # the recess above the band's forward face: a slab higher than the lining, over it
     y0, y1, x0, x1, pz, slab = pocket['y_from_m'], pocket['y_to_m'], pocket['x_from_m'], pocket['x_to_m'], pocket['z_m'], max(top, pocket['z_m'] + T)
     zo = roof['outboard_z_m']
-    b.prism_y([(-W - T, zo), (x0, zo), (x0, pz), (x1, pz), (x1, zo), (W + T, zo), (W + T, slab), (-W - T, slab)], y0, y1, 'Paint_Interior')
+    zl = left['z_m'] if left else zo                                                # the raised left edge
+    b.prism_y([(-W - T, zl), (x0, zl), (x0, pz), (x1, pz), (x1, zo), (W + T, zo), (W + T, slab), (-W - T, slab)], y0, y1, 'Paint_Interior')
     beam = shell['beam']
     bc, bx = beam.get('centre_x_m', 0.0), beam['half_x_m']
     b.box(bc - bx, bc + bx, beam['y_aft_m'], beam['y_forward_m'], beam['z_bottom_m'], slab, 'Paint_Interior')
@@ -1112,7 +1126,7 @@ def build_glass():
 
 # ---------------------------------------------------------------------------------------------- the racks
 
-def build_rack(name, layout, panel_ids, side, posts, lower, extra=None, stops_at_frame=False, hinge_ends=(True, True)):
+def build_rack(name, layout, panel_ids, side, posts, lower, extra=None, stops_at_frame=False, hinge_ends=(True, True), roof_z=ROOF_Z):
     """A rack's carcass behind its console panels: the cabinet back to the side wall, the frame round the panels
     (posts, top and bottom rails, column dividers), and below the blocks either a recessed kick panel with a foot
     grating (lower='kick'), closed doors flush with the frame (lower='doors'), or a bare wall (lower='wall'). A rack that
@@ -1133,7 +1147,7 @@ def build_rack(name, layout, panel_ids, side, posts, lower, extra=None, stops_at
     def X(d):          # depth d (0 at the panel plane, negative behind it) to body x
         return face + n_x * d
 
-    top = zt + 0.03 if stops_at_frame else ROOF_Z
+    top = zt + 0.03 if stops_at_frame else roof_z
     # the cabinet behind the panels (its front 3.5 cm behind the panel plane, where the game draws the panels'
     # dark backing)
     b.box(X(-0.035), wall, ylo, yhi, zb - 0.03, top, 'Paint_Rack')
@@ -1243,6 +1257,7 @@ def build_rack_sl3m(layout):
         return pz + (T.H_MM / 2.0 - y_mm) * 0.001
 
     wall = -WALL_X
+    ROOF_Z = left_roof_z()     # the left lining over it (noqa: the module's ROOF_Z is the right side's and the drawing's)
     aft, post0, post1 = REAR_Y, 0.415, 0.535   # the post against SŁ-2M's aft end (g094-a: the range column's plates run to y 0.539)
     y_fwd = Y(T.FRAME_RIGHT[1])
     z_top, z_bot = Z(T.FRAME_TOP[0]), Z(T.FRAME_BOTTOM[1])
@@ -1392,15 +1407,16 @@ def sp1m_top(b, X):
     rack_brow(b, X, 1, FRONT_RACK_TOP_Z, 2.505, 4.06)
 
 
-def sl2m_extra(b, X):
+def sl2m_extra(b, X, zb=0.925, zr=2.140):
     """SŁ-2M's frame from g094-a: a top rail with a chamfer standing proud of the faces, the posts between the columns standing proud
-    of them, a black name plate on the rail over the middle column. Rail height and widths by eye, about +-5 mm; the depth SAM3D's."""
+    of them, a black name plate (СЛ-2М2 on the BM3, g095-a) on the rail over the middle column. The rail's foot at the top row's
+    top (zr), 3 mm over the blocks, up to the lining (about 2.17 by g094-a's camera); widths by eye, about +-5 mm; the depth SAM3D's."""
     ya, yb = 0.535, 2.505
-    b.box(X(-0.004), X(0.012), ya, yb, 2.075, ROOF_Z, 'Paint_Rack')
-    prism(b, X, ya, yb, [(0.012, 2.075), (0.018, 2.068), (0.0, 2.062)], 'Paint_Rack', t=0.003)
+    b.box(X(-0.004), X(0.012), ya, yb, zr, left_roof_z(), 'Paint_Rack')
+    prism(b, X, ya, yb, [(0.012, zr), (0.018, zr - 0.007), (0.0, zr - 0.013)], 'Paint_Rack', t=0.003)
     for yy in (1.8925, 1.2175):
-        b.box(X(-0.004), X(0.012), yy - 0.012, yy + 0.012, 1.108, 2.075, 'Paint_Rack')
-    b.box(X(0.012), X(0.0135), 1.50, 1.61, 2.078, 2.096, 'Bakelite_Black')
+        b.box(X(-0.004), X(0.012), yy - 0.012, yy + 0.012, zb, zr, 'Paint_Rack')
+    b.box(X(0.012), X(0.0135), 1.50, 1.61, zr + 0.006, zr + 0.024, 'Bakelite_Black')
 
 
 def sl2m_housings(b, layout):
@@ -1427,6 +1443,8 @@ def sl2m_housings(b, layout):
             if h['style'] == 'flange':     # a drum, its outer edge chamfered, its face sloping in to the screen as a cone
                 prof = [(ro, foot), (ro, D - 0.004), (ro - 0.004, D), (rh + cw, D), (rh + cw - 0.002, D - 0.002),
                         (rh + 0.001, D - cd), (rh, D - cd), (rh, foot)]
+            elif h['style'] == 'collar':   # a plain collar, its lip rounded, its face sloping in to the window
+                prof = [(ro, foot), (ro, D - 0.003), (ro - 0.003, D), (rh + 0.003, D), (rh, D - 0.003), (rh, foot)]
             else:                          # knurl: a collar at the foot, the knurled drum, a rounded lip
                 prof = [(ro, foot), (ro, 0.006), (ro - 0.003, 0.008), (ro - 0.003, D - 0.004), (ro - 0.006, D),
                         (rh + 0.004, D), (rh, D - 0.006), (rh, foot)]
@@ -1446,6 +1464,16 @@ def sl2m_housings(b, layout):
                     a = math.pi / 2 + 2 * math.pi * k / h['knobs']
                     p = at(cx + (ro - 0.009) * math.cos(a), cy + (ro - 0.009) * math.sin(a), 0.0)
                     b.cylinder(p + n * (D - 0.001), p + n * (D + 0.009), 0.0055, 'Paint_Red', seg=12)
+            elif h['style'] == 'collar':   # the round lugs either side, a pin in each, and the collar's three screws
+                off, dl = h['lugs']
+                for sx in (-1, 1):
+                    p = at(cx + sx * off, cy, 0.0)
+                    b.cylinder(p + n * foot, p + n * (D - 0.004), dl / 2, mat, seg=24)
+                    b.cylinder(p + n * (D - 0.004), p + n * (D - 0.002), dl / 2 - 0.002, mat, seg=24)
+                    b.cylinder(p + n * (D - 0.002), p + n * D, 0.002, 'Metal_Steel', seg=8)
+                for a in (math.radians(45), math.radians(135), math.radians(270)):
+                    p = at(cx + (ro - 0.004) * math.cos(a), cy + (ro - 0.004) * math.sin(a), 0.0)
+                    b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.001), 0.0025, 'Metal_Steel', seg=10)
             else:
                 rk = ro - 0.003
                 for k in range(40):
@@ -1483,6 +1511,79 @@ def sl2m_housings(b, layout):
                        else H.rrect(hx, hy, hw + 2 * off, hh + 2 * off, hr + off, 8))
                 loops.append([at(u, v, d) for u, v in pts])
             loft_loops(b, loops, mat)
+    sl2m_mounts(b, layout, H, panels, foot)
+
+
+def sl2m_mounts(b, layout, H, panels, foot):
+    """SŁ-2M's mounts (sl2m_housings.mounts): each plate lofted from its outline with a rounded front edge, a cup or a
+    chrome hexagon round each lamp or button on it, a window's dark glass and its two screws, ЗАПРОС К's line."""
+    for m in H.mounts(layout):
+        c0, n, r, up = panel_frame(panels[m['panel']])
+
+        def at(u, v, d):
+            return c0 + r * u + up * v + n * d
+
+        fx = layout['fixtures'][m['fixture']]
+        cu, cv = fx['at_m']
+        D, mat = m['depth'], m['mat']
+        if m['style'] == 'frame':
+            b.slab(at(0, 0, D), r, up, m['outline'], [m['hole']], D - foot, mat)
+            continue
+
+        def inset(pts, e):
+            out = []
+            for (u, v) in pts:
+                du, dv = u - cu, v - cv
+                d = math.hypot(du, dv)
+                k = max(0.0, 1.0 - e / d) if d > 1e-9 else 0.0
+                out.append((cu + du * k, cv + dv * k))
+            return out
+
+        e = min(0.0015, D / 3)
+        prof = [(0.0, foot), (0.0, D - e)] + [(e * (1 - math.cos(math.radians(a))), D - e + e * math.sin(math.radians(a)))
+                                                for a in (30, 60, 90)]
+        loops = [[at(u, v, d) for u, v in inset(m['outline'], s_)] for s_, d in prof]
+        loft_loops(b, loops, mat)
+        b.slab(at(0, 0, D), r, up, inset(m['outline'], e), [], 0.0002, mat, back=False)
+        wall, height = CUP_FOR.get(m['style'], (0.0, 0.0))
+        for (iu, iv, hw, hh, rnd), button in zip(m['cups'], m['hex']):
+            if m['style'] == 'stadium' and button:   # a chrome hexagon round a button, its cap standing out of it
+                ri = hw + 0.0003
+                inner = H.circle(iu, iv, ri, 6)
+                outer = H.circle(iu, iv, ri + wall, 6)
+                cmat = 'Metal_Steel'
+            elif rnd:
+                ri = hw + 0.0003
+                inner = H.circle(iu, iv, ri, 40)
+                outer = H.circle(iu, iv, ri + wall, 40)
+                cmat = mat
+            else:
+                inner = H.rrect(iu, iv, 2 * hw + 0.0006, 2 * hh + 0.0006, min(hw, hh), 8)
+                outer = H.rrect(iu, iv, 2 * hw + 0.0006 + 2 * wall, 2 * hh + 0.0006 + 2 * wall, min(hw, hh) + wall, 8)
+                cmat = mat
+            loft_loops(b, [[at(u, v, d) for u, v in lp] for lp, d in
+                           ((outer, D - 0.0005), (outer, D + height - 0.0008), (inset_ring(outer, iu, iv, 0.0008), D + height),
+                            (inner, D + height), (inner, D - 0.0005))], cmat)
+        if m['glass'] is not None:
+            gu, gv, gw, gh = m['glass']
+            b.slab(at(0, 0, D + 0.0004), r, up, H.rrect(gu, gv, gw, gh, 0.002, 6), [], 0.0012, 'Bakelite_Black', back=False)
+        for (su, sv) in m['screws']:
+            p = at(su, sv, 0.0)
+            b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.0010), 0.0024, 'Metal_Steel', seg=12)
+            b.obox(p + n * (D + 0.0011), r, up, n, (0.0034, 0.0005, 0.0004), 'Metal_Dark')
+
+
+def inset_ring(pts, cu, cv, e):
+    """A loop moved e towards (cu, cv)."""
+    out = []
+    for (u, v) in pts:
+        du, dv = u - cu, v - cv
+        d = math.hypot(du, dv)
+        out.append((cu + du * (1 - e / d), cv + dv * (1 - e / d)) if d > e else (cu, cv))
+    return out
+
+
+CUP_FOR = {'bank': (0.0025, 0.004), 'stadium': (0.003, 0.003)}
 
 
 def loft_loops(b, loops, mat, smooth=False):
@@ -2182,7 +2283,7 @@ def build_all(layout):
     objs.append(build_rack('SM_RackSL1M', layout, ['gyro_panel'], -1, [(3.96, 4.06), (2.505, 2.65)], 'wall',
                            extra=sl1m_extra, stops_at_frame=True, hinge_ends=(False, True)))   # the ПАНЕЛЬ ИНДИКАЦИИ stands on the aft post (g095-b)
     objs.append(build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick',
-                           extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout))))
+                           extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout)), roof_z=left_roof_z()))
     objs.append(build_rack_sl3m(layout))
     have = {p['id'] for p in layout['panels']}
     if 'sp1m_panel' in have:

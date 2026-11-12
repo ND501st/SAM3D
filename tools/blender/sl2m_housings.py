@@ -27,12 +27,13 @@ CLEAR_M = 0.003          # a housing keeps this far from any control, lamp or fi
 HOUSINGS = [
     # ---- the operator's column (range): OS81-9M, OS81-18M
     {'id': 'range_hood', 'panel': 'op_panel', 'on': 'ssc_range', 'kind': 'rrect', 'style': 'hood',
-     'outer': [0.200, 0.176], 'outer_r': 0.034,
+     'outer': [0.193, 0.176], 'outer_r': 0.034,
      'hole': [0.150, 0.120], 'hole_r': 0.012, 'depth': 0.050, 'mat': 'Paint_Panel',
      'why': 'OS81-9M: a white moulded hood round the range tube, its corners well rounded, its front edge soft. On '
             'g094-a\'s flat its foot reaches u 132 on the forward side and its front edge -107 aft, its side wall seen '
-            '47 mm wide: 50 mm deep, 193 x 175 mm (samsim_panels: 220 x 190 px at its 8 % larger scale)'},
-    {'id': 'range_dial', 'panel': 'op_panel', 'at': [0.038, -0.252], 'kind': 'rrect', 'style': 'dial_plate',
+            '47 mm wide: 50 mm deep, 193 x 175 mm (samsim_panels: its right edge at x 422, 107 px from the tube\'s centre, '
+            '0.90 mm per px: 193 mm, the knobs of ВЕРТ. and ГОРИЗ. СМЕЩ. II 3 px clear of it)'},
+    {'id': 'range_dial', 'panel': 'op_panel', 'at': [0.038, -0.187], 'kind': 'rrect', 'style': 'dial_plate',
      'outer': [0.176, 0.106], 'outer_r': 0.012, 'depth': 0.008, 'mat': 'Paint_Panel',
      'dial': {'at': [0.004, 0.012], 'd': 0.07}, 'notch': {'control': 'ssc.range_wheel', 'clear': 0.0045},
      'why': 'OS81-18M: the range dial (Г.О. 1 дел. — 1000 м, Т.О. 1 дел. — 5 м) behind a white raised plate, under a '
@@ -48,21 +49,23 @@ HOUSINGS = [
             'light crescent forward of the screen, adds 26 mm, '
             '46 mm deep at the camera\'s 0.56 mm per mm; the cone shows 35 mm wide aft of the screen and none forward, '
             '17.5 mm wide and 31 mm deep, which puts the screen 15 mm out (the depth map: 25)'},
-    {'id': 'beta_visor', 'panel': 'so_panel', 'on': 'beta_c', 'kind': 'arc', 'style': 'visor',
-     'outer': 0.124, 'inner': 0.108, 'arc_deg': [12, 168], 'depth': 0.026, 'mat': 'Paint_Panel',
-     'why': 'βс: a white visor over the dial\'s top (samsim_panels); its lower half open, the azimuth wheel beside it'},
+    {'id': 'beta_collar', 'panel': 'so_panel', 'on': 'beta_c', 'kind': 'ring', 'style': 'collar',
+     'outer': 0.059, 'hole': 0.042, 'depth': 0.018, 'lugs': [0.031, 0.025], 'mat': 'Paint_Panel',
+     'why': 'βс: a cream collar round the dial\'s window, notched by its three screws, a round lug either side with a '
+            'pin in its centre (samsim_panels, its AK photo at 4x: collar 60 px, window 42, lugs 25 px at +-31; 0.99 mm per '
+            'px). Its depth by eye'},
     # ---- the deputy commander's column (TV, elevation, launch): VPU-44, OS81-10M, 0004-11M, OS52-14M
     {'id': 'tv_bezel', 'panel': 'fo_panel', 'on': 'tov_monitor', 'kind': 'rrect', 'style': 'cast',
-     'outer': [0.282, 0.238], 'outer_r': 0.022, 'offset': [0.0, -0.011],
+     'outer': [0.276, 0.238], 'outer_r': 0.022, 'offset': [0.0, -0.011],
      'hole': [0.247, 0.180], 'hole_r': 0.018, 'crop': 0.014, 'depth': 0.030, 'mat': 'Paint_Radio',
      'why': 'VPU-44: a dark grey hammered cast bezel on the grey block (g094-a; samsim_panels shows it lighter), its mask rounding the screen\'s corners, deeper below the screen '
             '(samsim_panels; g094-a)'},
     {'id': 'elev_ring', 'panel': 'fo_panel', 'on': 'elev_search', 'kind': 'ring', 'style': 'knurl',
      'outer': 0.126, 'hole': 0.098, 'depth': 0.036, 'mat': 'Paint_Panel',
      'why': 'OS81-10M: the yellow elevation tube in a deep knurled white ring (samsim_panels)'},
-    {'id': 'eps_visor', 'panel': 'fo_panel', 'on': 'epsilon_c', 'kind': 'arc', 'style': 'visor',
-     'outer': 0.124, 'inner': 0.108, 'arc_deg': [12, 168], 'depth': 0.026, 'mat': 'Paint_Panel',
-     'why': 'εс: a white visor over the dial\'s top, as βс (samsim_panels)'},
+    {'id': 'eps_collar', 'panel': 'fo_panel', 'on': 'epsilon_c', 'kind': 'ring', 'style': 'collar',
+     'outer': 0.057, 'hole': 0.040, 'depth': 0.018, 'lugs': [0.030, 0.024], 'mat': 'Paint_Panel',
+     'why': 'εс: the collar and lugs of βс (samsim_panels: collar 60 px, window 42, lugs 25 px at +-31; 0.95 mm per px)'},
     {'id': 'dts_housing', 'panel': 'fo_panel', 'on': 'dts_voltmeter', 'kind': 'rrect', 'style': 'frame',
      'outer': [0.084, 0.072], 'outer_r': 0.010, 'offset': [0.001, -0.001], 'hole': [0.072, 0.062], 'hole_r': 0.004,
      'depth': 0.014,
@@ -137,6 +140,16 @@ def outer_outline(h, cabin, seg=8):
     """The housing's outer edge on the plate, anticlockwise. An arc is the annular sector of its visor; a notch cuts the
     outline back round its control (every point inside the circle pushed out to it)."""
     cx, cy = centre(h, cabin)
+    if h['kind'] == 'ring' and 'lugs' in h:
+        off, d = h['lugs']
+        pts = [(x, y) for x, y in circle(cx, cy, h['outer'] / 2, 96) if abs(y - cy) > d / 2 or abs(x - cx) < off - d / 2]
+        right = arc(cx + off, cy, d / 2, -90, 90, 12)
+        left = arc(cx - off, cy, d / 2, 90, 270, 12)
+        upper = [p for p in pts if p[1] > cy]
+        lower = [p for p in pts if p[1] <= cy]
+        upper.sort(key=lambda p: -p[0])
+        lower.sort(key=lambda p: p[0])
+        return right + upper + left + lower
     if h['kind'] == 'ring':
         return circle(cx, cy, h['outer'] / 2, 48)
     if h['kind'] == 'arc':
@@ -287,8 +300,207 @@ def room(h, cabin=None, console=None):
     return sorted(rows)
 
 
+# ------------------------------------------------------------------------------------------------ the mounts
+# The plates the lamps and buttons sit on (samsim_panels, the AK's three columns at 3x): the channels' lamp banks and the
+# small lamp mounts are cream plates whose edge swells round each lamp, every lamp in a raised cup; the buttons' mounts
+# are cream stadia, a waist between buttons, each button in a chrome hexagon; the windows of ВЫСОКОЕ and ЛУЧ are dark
+# glass in a cream lozenge with a screw at either end; ЗАПРОС К is a black line round its lamp and button. A fixture
+# of the cabin file with "mesh": "SM_RackSL2M" is drawn here and not by the game; its kind and colour say which:
+#   oval            -> 'stadium'      bezel, ivory -> 'bank'      bezel, chrome -> 'window'      window, black -> 'frame'
+# Its size is the plate's outer size read off the photo; the outline is grown from the items on it so the swells fall
+# where the lamps are. Depths by eye from the photo's shading, about +-1 mm.
+
+MESH = 'SM_RackSL2M'
+MOUNT_DEPTH = {'bank': 0.006, 'stadium': 0.005, 'window': 0.0105, 'frame': 0.0006}   # the window flush with its legends' glass (the game draws them 12 mm out)
+SCREW_R = 0.0028
+
+
+def mount_style(fx):
+    kind, color = fx.get('kind'), fx.get('color')
+    if kind == 'oval':
+        return 'stadium'
+    if kind == 'bezel':
+        return 'window' if color == 'chrome' else 'bank'
+    if kind == 'window':
+        return 'frame'
+    raise ValueError(f'no mount style for {kind} {color}')
+
+
+def _item_shape(sec, it):
+    """(u, v, half width, half height, round) of a control, lamp or fixture as the game draws it."""
+    look = it.get('look', {}) if sec != 'fixtures' else it
+    s = look.get('size_m')
+    if sec == 'controls':
+        s = s if s is not None else 0.03
+    elif sec == 'lamps':
+        if s is None:
+            s = 0.022
+        if look.get('kind') == 'lamp':
+            s = 1.4 * s if isinstance(s, (int, float)) else s
+    else:
+        s = s if s is not None else 0.02
+        if it.get('kind') == 'lamp':
+            s = 1.4 * s
+    u, v = it['at_m']
+    if isinstance(s, (int, float)):
+        return u, v, s / 2, s / 2, True
+    return u, v, s[0] / 2, s[1] / 2, False
+
+
+def _is_button(sec, it):
+    kind = (it.get('look', {}) if sec != 'fixtures' else it).get('kind')
+    return kind in ('button', 'lamp_button') or (sec == 'controls' and 'look' not in it)
+
+
+def mount_items(cabin, k, buttons=None):
+    """What stands on fixture k's plate: every other control, lamp and fixture of its panel whose centre is on it."""
+    fx = cabin['fixtures'][k]
+    cu, cv = fx['at_m']
+    w, h = fx['size_m']
+    out = []
+    for sec in ('controls', 'lamps', 'fixtures'):
+        for j, it in enumerate(cabin[sec]):
+            if it.get('panel') != fx['panel'] or (sec == 'fixtures' and j == k):
+                continue
+            if sec == 'fixtures' and it.get('mesh') == MESH:
+                continue
+            u, v = it['at_m']
+            if abs(u - cu) <= w / 2 and abs(v - cv) <= h / 2:
+                out.append(_item_shape(sec, it))
+                if buttons is not None:
+                    buttons.append(_is_button(sec, it))
+    return out
+
+
+def _sd_box(px, py, cx, cy, hw, hh, r=0.0):
+    qx, qy = abs(px - cx) - hw + r, abs(py - cy) - hh + r
+    return math.hypot(max(qx, 0.0), max(qy, 0.0)) + min(max(qx, qy), 0.0) - r
+
+
+def _smin(a, b, k):
+    if k <= 0:
+        return min(a, b)
+    h = max(k - abs(a - b), 0.0) / k
+    return min(a, b) - h * h * k * 0.25
+
+
+def _star(cx, cy, sdf, reach, rays=192, step=0.00025):
+    """The outline of a shape star-shaped from (cx, cy): along each ray the farthest point still inside."""
+    pts = []
+    for i in range(rays):
+        a = 2 * math.pi * i / rays
+        ca, sa = math.cos(a), math.sin(a)
+        t, last = 0.0, 0.0
+        while t <= reach:
+            if sdf(cx + ca * t, cy + sa * t) <= 0.0:
+                last = t
+            t += step
+        pts.append((cx + ca * last, cy + sa * last))
+    return pts
+
+
+def mounts(cabin=None):
+    """Every SŁ-2M mount the rack's mesh draws: dicts with the fixture's index, panel, style, outline [(u, v)], cups
+    [(u, v, half w, half h, round)], screws [(u, v)], glass (u, v, w, h) or None, depth and the plate's colour."""
+    cabin = cabin or load_cabin()
+    out = []
+    for k, fx in enumerate(cabin['fixtures']):
+        if fx.get('mesh') != MESH:
+            continue
+        assert fx['panel'] in PANELS, fx
+        style = mount_style(fx)
+        cu, cv = fx['at_m']
+        w, h = fx['size_m']
+        buttons = []
+        items = mount_items(cabin, k, buttons)
+        m = {'fixture': k, 'panel': fx['panel'], 'style': style, 'depth': MOUNT_DEPTH[style],
+             'mat': 'Metal_Steel' if fx.get('color') == 'chrome' and style != 'window' else 'Paint_Ivory',
+             'cups': [], 'screws': [], 'glass': None, 'label': fx.get('label', ''), 'on': items,
+             'hex': buttons}
+        if style in ('bank', 'stadium'):
+            assert items, ('a mount with nothing on it', k)
+            # the margin round each item: what the plate's short side leaves round its largest item
+            big = max(2 * max(hw, hh) if style == 'stadium' else 2 * hh for _, _, hw, hh, _ in items)
+            margin = max(0.002, min(0.008, ((min(w, h) - big) / 2)))
+            us = [i[0] for i in items]
+            vs = [i[1] for i in items]
+            core = (min(us), max(us), min(vs), max(vs))
+            k_blend = 0.006 if style == 'bank' else 0.004
+            radius_core = min(w, h) / 2 - margin - 0.003 if style == 'bank' else 0.0
+
+            def sdf(px, py, items=items, margin=margin, core=core, k_blend=k_blend, rc=radius_core):
+                d = 1e9
+                for (iu, iv, hw, hh, rnd) in items:
+                    di = (math.hypot(px - iu, py - iv) - hw - margin) if rnd else _sd_box(px, py, iu, iv, hw + margin, hh + margin, min(hw, hh) + margin)
+                    d = _smin(d, di, k_blend)
+                if rc > 0:                      # the bank's body between its rows, so the swells stand on a plate
+                    d = _smin(d, _sd_box(px, py, (core[0] + core[1]) / 2, (core[2] + core[3]) / 2,
+                                         (core[1] - core[0]) / 2, max(rc, (core[3] - core[2]) / 2)), k_blend)
+                return d
+            m['outline'] = _star(cu, cv, sdf, max(w, h))
+            m['cups'] = items
+        elif style == 'window':
+            gu = [i[0] for i in items] or [cu]
+            gv = [i[1] for i in items] or [cv]
+            hw = max([i[2] for i in items] or [w / 2 - 0.004])
+            top = max(i[1] + i[3] for i in items) if items else cv + h / 2 - 0.012
+            bot = min(i[1] - i[3] for i in items) if items else cv - h / 2 + 0.012
+            gw = min(w - 0.004, 2 * hw + 0.002)
+            m['glass'] = ((min(gu) + max(gu)) / 2, (top + bot) / 2, gw, top - bot + 0.002)
+            ends = (cv + h / 2 - SCREW_R - 0.002, cv - h / 2 + SCREW_R + 0.002)
+            m['screws'] = [(cu, e) for e in ends]
+            gcu, gcv, gww, ghh = m['glass']
+
+            def sdf(px, py):
+                d = _sd_box(px, py, cu, gcv, w / 2, ghh / 2 + 0.002, 0.003)
+                for (su, sv) in m['screws']:
+                    d = _smin(d, math.hypot(px - su, py - sv) - SCREW_R - 0.0025, 0.012)
+                return d
+            m['outline'] = _star(cu, cv, sdf, max(w, h))
+        else:                                   # frame: a line round a rectangle
+            m['outline'] = rrect(cu, cv, w, h, 0.0005, 2)
+            m['hole'] = rrect(cu, cv, w - 0.0024, h - 0.0024, 0.0, 2)
+            m['mat'] = 'Bakelite_Black'
+        out.append(m)
+    return out
+
+
+def mount_problems(cabin=None):
+    """A mount that doesn't hold its items, or runs over an item of its panel that isn't on it."""
+    cabin = cabin or load_cabin()
+    out = []
+    for m in mounts(cabin):
+        if m['style'] == 'frame':
+            continue
+        poly = m['outline']
+        for (u, v, hw, hh, rnd) in m['cups']:
+            if signed_distance((u, v), poly) > -min(hw, hh):
+                out.append(f"mount #{m['fixture']}: an item at ({u:.3f}, {v:.3f}) not on its plate")
+        fx = cabin['fixtures'][m['fixture']]
+        on = {(round(c[0], 5), round(c[1], 5)) for c in m['on']}
+        us = [p[0] for p in poly]
+        vs = [p[1] for p in poly]
+        for sec in ('controls', 'lamps', 'fixtures'):
+            for j, it in enumerate(cabin[sec]):
+                if it.get('panel') != fx['panel'] or (sec == 'fixtures' and (j == m['fixture'] or it.get('mesh') == MESH)):
+                    continue
+                if (round(it['at_m'][0], 5), round(it['at_m'][1], 5)) in on:
+                    continue
+                u, v, hw, hh, rnd = _item_shape(sec, it)
+                if u + hw < min(us) or u - hw > max(us) or v + hh < min(vs) or v - hh > max(vs):
+                    continue
+                # an item may touch a plate (as on the photo) but not stand more than 1 mm on it
+                if rnd:
+                    over = signed_distance((u, v), poly) < hw - 0.001
+                else:
+                    over = any(abs(pu - u) < hw - 0.001 and abs(pv - v) < hh - 0.001 for pu, pv in poly)
+                if over:
+                    out.append(f"mount #{m['fixture']} {m['label']}: runs over {sec} {it.get('control') or it.get('id') or it.get('label') or j}")
+    return out
+
+
 if __name__ == '__main__':
     cab = load_cabin()
     for hh in HOUSINGS:
         print(hh['id'], [(round(g * 1000, 1), w, i) for g, w, i in room(hh, cab)[:4]])
-    print('\n'.join(problems(cab)) or 'clear')
+    print('\n'.join(problems(cab) + mount_problems(cab)) or 'clear')

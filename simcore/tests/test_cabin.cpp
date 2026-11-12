@@ -318,6 +318,21 @@ SC_TEST("cabin: the 0096's cover shuts over the repair toggles and lifts on its 
     SC_EXPECT(toggles == 23);                                            // 13 and 10 (wwp_gecko g097-a)
 }
 
+SC_TEST("cabin: a fixture drawn by a shell's mesh says so, and the SL-2M's mounts do") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    int meshed = 0;
+    for (const CabinFixture& f : layout.fixtures) {
+        if (f.mesh.empty()) continue;
+        ++meshed;
+        SC_EXPECT(f.mesh == "SM_RackSL2M");
+        SC_EXPECT(f.panel_id == "op_panel" || f.panel_id == "so_panel" || f.panel_id == "fo_panel");
+    }
+    SC_EXPECT(meshed == 13);                                             // so 7, fo 5, op 1 (docs/OSA_INTERIOR_HOLISTIC.md 54)
+}
+
 SC_TEST("cabin: an upright hinge turns clockwise seen from above") {
     CabinHinge h;
     h.pivot_m = Vec3{1.0, 1.0, 0.0};
@@ -726,6 +741,64 @@ SC_TEST("cabin: an ammunition lamp flashes while its missile's gyro is overheate
     console.equipment.SetInput("ammo_3_i", false);  // no missile: nothing to flash
     SC_EXPECT(!CabinLayout::LampFlashing(*ammo, console.panel, console.equipment));
     SC_EXPECT(!CabinLayout::LampFlashing(*gta, console.panel, console.equipment));  // a lamp without flash_when never does
+}
+
+SC_TEST("cabin: 0009-5M's ОШИБКА indicators glow 15-30 s after the stabilisation is switched on; OR-11M repeats the launch табло; OR-31M's ψ and θ read level") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    auto lamp = [&](const char* id) -> const CabinLamp* {
+        for (const CabinLamp& l : layout.lamps) {
+            if (l.id == id) return &l;
+        }
+        return nullptr;
+    };
+    const CabinLamp* psi = lamp("stab_err_psi");
+    const CabinLamp* gamma = lamp("stab_err_gamma");
+    const CabinLamp* zone = lamp("or11_in_zone");
+    const CabinLamp* narrow = lamp("or11_uzkiy_luch");
+    const CabinLamp* k3 = lamp("or11_k3");
+    SC_EXPECT(psi != nullptr && gamma != nullptr && zone != nullptr && narrow != nullptr && k3 != nullptr);
+    if (psi == nullptr || gamma == nullptr || zone == nullptr || narrow == nullptr || k3 == nullptr) return;
+    auto lit = [&](const CabinLamp* l) { return CabinLayout::LampLit(*l, console.panel, console.equipment); };
+    auto run = [&](double s) {
+        for (double t = 0.0; t < s; t += 0.1) console.equipment.Update(0.1, console.panel);
+    };
+    // Voenizdat p52: dark until the system is on, glowing 15-30 s after.
+    console.panel.Set("pwr.gta", 1);
+    run(80.0);
+    console.panel.Set("pwr.equipment", 1);
+    run(5.0);
+    SC_EXPECT(!lit(psi) && !lit(gamma));
+    console.panel.Set("stab.power", 1);
+    run(10.0);
+    SC_EXPECT(!lit(psi) && !lit(gamma));
+    run(20.0);
+    SC_EXPECT(lit(psi) && lit(gamma));
+    console.panel.Set("stab.power", 0);
+    run(1.0);
+    SC_EXPECT(!lit(psi));
+
+    // OR-11M's табло: the launch signals, one lamp for both missile channels.
+    SC_EXPECT(!lit(zone) && !lit(narrow) && !lit(k3));
+    console.equipment.SetInput("target_in_zone", true);
+    console.equipment.SetInput("ch2_uzkiy_luch", true);
+    SC_EXPECT(lit(zone) && lit(narrow) && !lit(k3));
+    console.equipment.SetInput("ch1_k3", true);
+    SC_EXPECT(lit(k3));
+
+    // OR-31M: ψ and θ beside Qc, at zero on a level vehicle while powered.
+    const CabinDisplay* psi_scale = nullptr;
+    const CabinDisplay* theta_scale = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.id == "or31_psi") psi_scale = &d;
+        if (d.id == "or31_theta") theta_scale = &d;
+    }
+    SC_EXPECT(psi_scale != nullptr && theta_scale != nullptr);
+    if (psi_scale == nullptr || theta_scale == nullptr) return;
+    SC_EXPECT(CabinLayout::DisplayOn(*psi_scale, console.panel, console.equipment));
+    SC_EXPECT_NEAR(DialReading(*theta_scale, console, 0.0), 0.0, 1e-9);
 }
 
 SC_TEST("cabin: gauges read the console by their levels: 0062's meters, 0004-14M's centre-zero meters, the PU-303's turbine") {

@@ -166,6 +166,7 @@ struct CabinFixture {
     double u_m = 0.0;
     double v_m = 0.0;
     CabinLook look;
+    std::string mesh;  // a shell mesh that draws this fixture (SŁ-2M's mounts in SM_RackSL2M): the game draws nothing
 };
 
 // A piece of the cabin's shell in the body frame: floor, walls, ceiling, bench, racks ("box"), a window ("glass"), an
@@ -1116,10 +1117,10 @@ private:
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const std::string path = Index("fixtures", i);
             const json::Value& f = arr->items[i];
-            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "scale", "marks", "unit", "notes"})) return false;
+            if (!Keys(f, path, {"panel", "at_m", "kind", "size_m", "color", "ring", "label", "scale", "marks", "unit", "mesh", "notes"})) return false;
             CabinFixture fixture;
             if (!Placement(f, path, out, fixture.panel_id, fixture.u_m, fixture.v_m) ||
-                !LoadLook(f, path, true, fixture.look)) {
+                !LoadLook(f, path, true, fixture.look) || !OptionalString(f, path, "mesh", fixture.mesh)) {
                 return false;
             }
             out.fixtures.push_back(std::move(fixture));

@@ -6,6 +6,13 @@
     "y_from_m": -1.056,
     "y_to_m": 4.2,
     "outboard_z_m": 2.1,
+    "left_outboard": {
+      "x_from_m": 0.65,
+      "z_m": 2.18,
+      "what": "On the left the lining stays at the lip's height outboard of it, over SŁ-2M's top rail (and so over SŁ-3M's and SŁ-1M's tops): it does not come down to 2.10 behind the rack",
+      "source": "wwp_gecko g094-a, g094-b, g095-a through their solved cameras: SŁ-2M's top row of blocks reaches 2.13-2.15 m and its top rail about 2.17 (docs/research/OSA_PANEL_REVIEW_2026-11.md section 1), against mon_2112_80 Fig. 3's racks' tops at 2.10. The photo is used; both recorded. The right side keeps 2.10",
+      "confidence": "medium"
+    },
     "half": [
       {
         "x_m": 0.78,

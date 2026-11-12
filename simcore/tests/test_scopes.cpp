@@ -111,7 +111,27 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 21);  // with the driver's fuel gauge, the 0096 cabinet's voltmeter and the gauges read by levels
+    SC_EXPECT(layout.displays.size() == 30);  // with the driver's fuel gauge, the 0096 cabinet's voltmeter, the gauges read by levels, OR-31M's ψ and θ
+                                               // and 0094-5's eight pointer dials
+    // 0094-5: the antenna's azimuth and elevation each on a coarse dial (60-00 a turn) and a fine one (1-00 a turn), in the
+    // order of the strip's captions (SAM Simulator's AK photo; wwp_gecko g095-a): Δβ, Δε СВР II, azimuth, elevation, СВР I.
+    const char* strip[] = {"svr2_beta", "svr2_eps", "ssc_az_coarse", "ssc_az_fine", "ssc_el_coarse", "ssc_el_fine", "svr1_beta", "svr1_eps"};
+    double last_u = -1.0;
+    for (const char* id : strip) {
+        const CabinDisplay* d = nullptr;
+        for (const CabinDisplay& e : layout.displays) {
+            if (e.id == id) d = &e;
+        }
+        SC_EXPECT(d != nullptr && d->kind == CabinDisplayKind::Dial && d->panel_id == "so_panel");
+        if (d == nullptr) continue;
+        SC_EXPECT(d->u_m > last_u);
+        last_u = d->u_m;
+    }
+    for (const CabinDisplay& e : layout.displays) {
+        if (e.id == "ssc_az_coarse") SC_EXPECT(e.control == "ssc.az_wheel" && e.value_per_turn == 360.0);
+        if (e.id == "ssc_az_fine") SC_EXPECT(e.control == "ssc.az_wheel" && e.value_per_turn == 6.0);
+        if (e.id == "ssc_el_fine") SC_EXPECT(e.control == "ssc.el_wheel" && e.value_per_turn == 6.0);
+    }
     const CabinDisplay* beta = nullptr;
     const CabinDisplay* dts = nullptr;
     for (const CabinDisplay& d : layout.displays) {

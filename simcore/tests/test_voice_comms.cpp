@@ -104,7 +104,7 @@ SC_TEST("voice: the Osa's R-124: A-1 on the radio keeps the intercom; A-2 on the
     SC_EXPECT(r.Voice() != nullptr);
     if (r.Voice() == nullptr) return;
     SC_EXPECT(r.Voice()->HearsIntercom("commander") && r.Voice()->HearsSet("commander", "left"));  // A-1 on Р-123, the left set
-    r.Console().panel.Set("intercom.a2", 1);  // the deputy on the radio
+    r.Console().panel.Set("intercom.a2", 2);  // the deputy on the radio (Р-123)
     Steps(r, 0.2);
     SC_EXPECT(!r.Voice()->HearsIntercom("deputy_commander") && r.Voice()->HearsCall("deputy_commander") &&
               r.Voice()->HearsSet("deputy_commander", "left"));

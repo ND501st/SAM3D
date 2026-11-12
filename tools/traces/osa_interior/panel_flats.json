@@ -159,6 +159,9 @@
   {"id": "pwr_cabinet_g096a", "photo": "g096-a", "what": "the pwr_cabinet through the certified camera of g096-a (grade A), in the data's millimetres", "view": {"panel": "pwr_cabinet"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
   {"id": "pwr_cabinet_g097b", "photo": "g097-b", "what": "the pwr_cabinet through the certified camera of g097-b (grade A), in the data's millimetres", "view": {"panel": "pwr_cabinet"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
   {"id": "sp2m_panel_g092a", "photo": "g092-a", "what": "the sp2m_panel through the certified camera of g092-a (grade A), in the data's millimetres", "view": {"panel": "sp2m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
-  {"id": "sp2m_panel_g092e", "photo": "g092-e", "what": "the sp2m_panel through the certified camera of g092-e (grade A), in the data's millimetres", "view": {"panel": "sp2m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3}
+  {"id": "sp2m_panel_g092e", "photo": "g092-e", "what": "the sp2m_panel through the certified camera of g092-e (grade A), in the data's millimetres", "view": {"panel": "sp2m_panel"}, "extend_mm": [40, 40, 40, 40], "px_per_mm": 3},
+  {"id": "op_panel_g094b", "photo": "g094-b", "what": "the op_panel through the grade-B camera of g094-b (the close-up of 0062-6M1 and OS81-9M), in the data's millimetres: for reading parts, placed only after a fit on the grade-A flat's blocks", "view": {"panel": "op_panel"}, "extend_mm": [40, 60, 40, 60], "px_per_mm": 4},
+  {"id": "so_panel_g095a", "photo": "g095-a", "what": "the so_panel through the grade-B camera of g095-a (straight on, 0094 to OP63), in the data's millimetres: for reading parts, placed only after a fit on the grade-A flat's blocks", "view": {"panel": "so_panel"}, "extend_mm": [40, 60, 40, 60], "px_per_mm": 4},
+  {"id": "fo_panel_g095b", "photo": "g095-b", "what": "the fo_panel through the grade-B camera of g095-b (0004-14M to OS52-14M), in the data's millimetres: for reading parts, placed only after a fit on the grade-A flat's blocks", "view": {"panel": "fo_panel"}, "extend_mm": [40, 60, 40, 60], "px_per_mm": 4}
  ]
 }

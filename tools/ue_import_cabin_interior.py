@@ -57,6 +57,7 @@ MATERIALS = {
     'Grate_Rubber': ((0.045, 0.024, 0.014), 0.8, 0.0, 0.5, 'PaintN', 0.3, 2.0, None),
     'Canvas': ((0.14, 0.13, 0.07), 0.9, 0.0, 0.5, 'VinylN', 0.4, 6.0, None),
     'Paint_Letters': ((0.5, 0.48, 0.42), 0.5, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),   # engraved letters filled cream
+    'Paint_Ivory': ((0.5, 0.45, 0.31), 0.45, 0.0, 0.15, 'PaintN', 0.05, 4.0, None),   # SŁ-2M's cream lamp and button mounts (samsim_panels)
     'Paint_Red': ((0.3, 0.035, 0.012), 0.35, 0.0, 0.05, 'PaintN', 0.05, 4.0, None),
     'Metal_Brass': ((0.42, 0.3, 0.12), 0.38, 1.0, 0.35, 'PaintN', 0.1, 4.0, None),   # brass screw heads (r123_kuzmin)
     'Lens_Amber': ((0.45, 0.17, 0.02), 0.22, 0.0, 0.05, 'PaintN', 0.02, 4.0, None),   # the R-111's lamp lenses, unlit (r111_photos)

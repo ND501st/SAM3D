@@ -40,7 +40,7 @@ COL_GAP = 58
 DISPLAY_SOURCES = {
     "osa_ak": {
         "soc_ppi": ["m:search", "m:iff"], "ssc_range": ["m:track", "m:launcher"], "beta_c": ["c:ssc.az_wheel", "c:ssc.az_light"],
-        "soc_counters": ["m:track"], "tov_monitor": ["m:track", "c:tov.fov"],
+        "ssc_az_coarse": ["m:track"], "ssc_az_fine": ["m:track"], "ssc_el_coarse": ["m:track"], "ssc_el_fine": ["m:track"], "tov_monitor": ["m:track", "c:tov.fov"],
         "epsilon_c": ["c:ssc.el_wheel", "c:ssc.el_light"], "dts_voltmeter": ["m:track"], "qc_setter": ["c:orient.qc"],
         "elev_search": ["m:elev"], "or31_qc": ["m:orient"], "lat_scale": ["c:orient.latitude"], "fuel_gauge": ["m:fuel"],
     },
@@ -67,13 +67,20 @@ PLANNED = {
         ('p:ind_select', 'ПАНЕЛЬ ИНДИКАЦИИ: what the selector 3—II ... 3—I selects', 'on the model, not wired', 'Placed and turning (ind.select), its positions named after the launch табло (voenizdat_osa_1991 p247); its function is in no source.', ['s:power'], 'unknown'),
         ('p:deenergised', 'De-energisation indicator box', 'seen in a photo: owner to decide', 'Stencilled box aft of the spares box (wwp_gecko g090-a, g092-a; rwd_mb3 layout).', ['s:power'], 'missing'),
         ('p:flags', 'March signals: flags and lamps', 'seen in a photo: owner to decide', 'Two signal flags and a bag by the commander (wwp_gecko g089-d); the march signals (voenizdat_osa_1991 p232-239).', ['c:veh.hatches'], 'missing'),
-        ('p:keyed', "Commander's round keyed switch", 'seen in a photo: owner to decide', 'On the front wheel housing (wwp_gecko g087-c); function not identified.', ['s:power'], 'unknown'),
         ('p:gauges', "Air pressure gauges over the commander's screen and by the right radio", 'seen in a photo: owner to decide', 'With pipe and valve (wwp_gecko g087-d, g089-b, g090-a); what they serve is not sourced.', ['c:press.standard'], 'unknown'),
         ('p:0091_17', '0091-17M: КОНТРОЛЬ НАПР. and its meter', 'on the model, not wired', "The НАКАЛ lamps now light; the SOC's voltage check (voenizdat_osa_1991 p49) and ПЕРЕКЛ. ИСТОЧНИКОВ are drawn in the mesh, not wired.", ['s:soc_transmitter'], 'missing'),
-        ('p:gyro_sw', '0005-8M КОРРЕКЦИЯ ВКЛ.', 'in the sources only: owner to decide', 'Gyro correction (voenizdat_osa_1991 p49-53); МК — ГПК — АК is built (gyro.compass_mode), the correction switch not found on g091-a.', ['s:gyro_erected'], 'missing'),
+        ('p:gyro_sw', '0005-8M КОРРЕКЦИЯ ОСН. — КОНТР.', 'in the sources only: owner to decide', "The latitude correction to the ГА-3 (voenizdat_osa_1991 p51); МК — ГПК — АК (gyro.compass_mode) and ПОТРЕБИТЕЛИ ОСН. — КОНТР. (gyro.consumers, on the block's last free toggle) are built; no toggle is left on g091-a for this one. Also 0009-5M's ОШИБКА ψ sector narrowing when the antenna rises (p52): its lamp only glows.", ['s:gyro_erected'], 'missing'),
         ('p:0051', '0051-7M repetition frequency АВТ., РУЧН. F1-F3', 'in the sources only: owner to decide', "On the operator's bottom block (voenizdat_osa_1991 p96-101); its nameplate is drawn.", ['s:ssc_transmitter'], 'missing'),
         ('p:0065', '0065-2M АРУ — РРУ and gains', 'in the sources only: owner to decide', 'The MTI canceller on SP-1M, under flaps modelled closed (voenizdat_osa_1991 p49-53).', ['s:soc_transmitter'], 'missing'),
-        ('p:vision', "Driver's vision and swimming: PNV-57E, TNPO-170A, wave shield", 'in the sources only: owner to decide', 'rwd_mb3; wwp_gecko book pp20-23 (the shield); g089-a/b show only periscope blanks.', ['c:veh.waterjet_left'], 'missing'),
+        ('p:vision', "Driver's vision: PNV-57E, TNPO-170A", 'in the sources only: owner to decide', 'rwd_mb3; g089-a/b show only periscope blanks. The wave shield is built: veh.bilge_pump, ВОДООТРАЖАТЕЛЬНЫЙ ЩИТ (voenizdat_osa_1991 p224).', ['c:veh.waterjet_left'], 'missing'),
+        # The panel review of 12 Nov 2026 (docs/research/OSA_PANEL_REVIEW_2026-11.md section 4): their systems are not built.
+        ('p:fuse_lamps', 'Fuse lamps on every rack (0096-9M1, 0096-10M, SP-1M, 0094-11M, OR-95-1M ПЕРЕГРУЗКА)', 'in the sources only: waits for faults', 'Each fuse holder has a lamp the crew checks dark at start-up (voenizdat_osa_1991 p52-53, p100, p166); no fault class (fuse, lamp, system down) is modelled.', ['s:power'], 'missing'),
+        ('p:engine', 'The main engine: СТАРТЕР, «К маршу готов», the ГОМ engaged off the engine', 'in the sources only: waits for the engine', 'A diesel started electrically or by compressed air (voenizdat_osa_1991 p174, p247); the ГОМ by a кран off the engine, its speed held by the hand fuel-pump lever (Fig. 2.60, p164). pwr.pto stands on PU-303 and pto_generator needs no engine.', ['c:pwr.pto'], 'missing'),
+        ('p:fuel_lever', 'Hand fuel-pump lever on its ratchet quadrant', 'seen in a photo: waits for the engine', 'Ball-knobbed, low left of the column (wwp_gecko g086-d, g083-a).', ['c:pwr.pto'], 'missing'),
+        ('p:diff_fire', 'Differential lock; the fire system on/off', 'in the sources only: owner to decide', 'voenizdat_osa_1991 p175, p221.', ['i:vehicle_stopped'], 'missing'),
+        ('p:iff_1l24', 'IFF 1L24-2 blocks', 'in the sources only: owner to decide', 'On the BM3, not the AK, which carries the РЗМ set (voenizdat_osa_1991 p53-54).', ['s:soc_antenna'], 'missing'),
+        ('p:or14', 'OR-14M: timers, ДЕЛИТЕЛИ НАПРЯЖЕНИЯ knobs and toggles', 'in the sources only: owner to decide', 'Zeroed for ПУСК ГОТОВ (voenizdat_osa_1991 p154).', ['s:fire_control_computer'], 'missing'),
+        ('p:pb107_fan', 'ПБ-107: its own fan on the engine bulkhead', 'in the sources only: owner to decide', 'voenizdat_osa_1991 p168.', ['s:power'], 'missing'),
     ],
 }
 
