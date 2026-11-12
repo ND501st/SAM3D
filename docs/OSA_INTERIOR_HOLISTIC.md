@@ -1777,6 +1777,10 @@ The owner re-imports `SM_PanelInd` (new), `SM_RackSL1M` and `SM_SL1MFace` into U
     same way: in «К бою» the deputy checks that none of 1—II, 2—II, 3—II, 3—I, 2—I, 1—I flashes.
   - So the positions are 3—II, 2—II, 1—II, ОТКЛ., 1—I, 2—I, 3—I: missile and channel, with channel II on the left as
     КАНАЛ II stands left on 0004-11M2 (SAM3D's reading). What it selects is in no source, so nothing reads it.
+  - Its knob is a black bar knob, not a round one (owner, 12 Nov 2026: a round knob shows no direction). On g095-b a
+    bar crosses the round boss, its tapering pointer end up to the arch over ОТКЛ., its broader tail down over the U
+    cut, about 34 mm long. The cabin draws it as the parts library's bar knob (`bar_knob`, size 0.034 m), the
+    pointer's tip 17 mm from the shaft, inside the position marks; the trace's `SEL_KNOB_BAR`, tested.
 - **The bottom-left is a lamp, the bottom-right a switch.**
   - The left is a dark red lens in a red ring, with СЭП over it and АВАР. ОТКЛ. under it. p163 calls the same legend a
     button (кнопка АВАР. ОТКЛ. СЭП), so SAM3D draws it as a lit push-button: the lamp `sep_avar_otkl` (look
@@ -1786,3 +1790,30 @@ The owner re-imports `SM_PanelInd` (new), `SM_RackSL1M` and `SM_SL1MFace` into U
   - panel_sheet lets a lamp and an `in_mesh` control share a place (a lit push-button).
 - **The ten caps:** their three-line legends are not legible at g095-b's resolution. The bottom-right reads like ДВЕРЬ
   ЗАКРЫТ…, which supports the reading of `dver_zakryta`.
+
+### The ten caps' lamps (12 Nov 2026)
+
+The owner noted that the ten caps look like lamps, and that the left column's bottom two have no legend, the lower one
+reddish. The manual places three lamps on this panel. The legends: the top two of each column have three lines, the
+right column's third and fourth and the left's third have two, and the left's bottom two none.
+
+| Cap | Lamp | Source | State |
+|---|---|---|---|
+| right 5 | ДВЕРЬ ЗАКРЫТА (`dver_zakryta`) | p248; its legend reads like ДВЕРЬ ЗАКРЫТ... | built (section 48) |
+| right 4 | ЛЮКИ РТА ЗАКРЫТЫ (`lyuki_rta`) | p168: the closing of the РТА compartments' hatches is shown by a табло on this panel | **built now** |
+| one of the three-line caps | ПЕРЕГРЕВ ОО04-20М1 | p169: lit with any ПЕРЕГРЕВ lamp of the antenna post's transmitters and OC61-3M1 | **not built**: nothing overheats in the model |
+| left 1-3, right 1-3 (one of them the ПЕРЕГРЕВ) | not read | the legends are not legible on g095-b | not built, drawn dark |
+| left 4, left 5 | none: blank lenses, the lower reddish | wwp_gecko g095-b | spares (SAM3D's reading), drawn as tinted blank lenses |
+
+- **ЛЮКИ РТА ЗАКРЫТЫ:** the hatches are the РТА compartments' ventilation hatches, through which the fan-separators draw
+  air (p167-168). These are the levers ЛЮК ВЕНТИЛЯЦИИ ЗАКР.—ОТКР. (`vent.hatch_right` for the commander and
+  `vent.hatch_left` for the deputy), not the turbine's hatches. The lamp is lit with the power on and both levers at
+  ЗАКР. Its legend's words and its cap (right 4, the only two-line cap left beside ДВЕРЬ ЗАКРЫТА) are SAM3D's: the
+  manual names only the signal. Tested in `test_cabin.cpp`.
+- **ПЕРЕГРЕВ ОО04-20М1 waits for overheating.** When the transmitters' heat is modelled, the lamp lights with the
+  antenna post's ПЕРЕГРЕВ lamps.
+- **The five unread caps** are drawn dark, and they wait for a sharper photo or a source that lists the panel's legends.
+- **Noted for later:** these and the selector's function are rows in `tools/button_map.py` (`p:ind_overheat`,
+  `p:ind_caps`, `p:ind_select`), so the button map lists them as not built.
+- **In the mesh:** caps right 4 and right 5 are steel rings (the cabin draws their lamps), and left 4 and left 5 are
+  tinted blank lenses. `SM_PanelInd` is rebuilt.

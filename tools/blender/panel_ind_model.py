@@ -108,8 +108,9 @@ def build_cap_frame(b):
             lathe(b, c['c'], 1.0, [(T.CAP_D / 2, 0.0), (T.CAP_D / 2, 1.2)], STEEL, seg=24)   # the cabin draws its lamp
             continue
         r = T.CAP_D / 2
+        lens = {'red': RED, 'cool': DARK}.get(c.get('blank'), BLACK)     # the spares' tinted blank lenses
         lathe(b, c['c'], 1.0, [(r, 0.0), (r, 1.2), (r - 0.6, 1.6), (r - 0.6, T.CAP_H - 1.0), (r - 1.4, T.CAP_H),
-                               (0.0, T.CAP_H)], BLACK, seg=24)
+                               (0.0, T.CAP_H)], lens, seg=24)
 
 
 def build_selector(b):

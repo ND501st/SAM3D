@@ -849,12 +849,14 @@ SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИ�
     SC_EXPECT(layout.FindPanel("ind_panel") != nullptr && layout.FindControl("pwr.emergency_off") != nullptr);
     const CabinLamp* door = nullptr;
     const CabinLamp* cut = nullptr;
+    const CabinLamp* hatches = nullptr;
     for (const CabinLamp& l : layout.lamps) {
         if (l.id == "dver_zakryta") door = &l;
         if (l.id == "sep_avar_otkl") cut = &l;
+        if (l.id == "lyuki_rta") hatches = &l;
     }
-    SC_EXPECT(door != nullptr && cut != nullptr);
-    if (door == nullptr || cut == nullptr) return;
+    SC_EXPECT(door != nullptr && cut != nullptr && hatches != nullptr);
+    if (door == nullptr || cut == nullptr || hatches == nullptr) return;
     SC_EXPECT(cut->look.kind == CabinLookKind::LampButton);  // a lamp on the vehicle: the lit push-button's lens
     const ControlDef* sel = console.panel.Find("ind.select");
     SC_EXPECT(sel != nullptr && sel->positions == 7);       // 3—II ... ОТКЛ. ... 3—I
@@ -867,6 +869,10 @@ SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИ�
     SC_EXPECT(console.equipment.IsReady("power"));
     SC_EXPECT(CabinLayout::LampLit(*door, console.panel, console.equipment));
     SC_EXPECT(!CabinLayout::LampLit(*cut, console.panel, console.equipment));
+    SC_EXPECT(CabinLayout::LampLit(*hatches, console.panel, console.equipment));   // the РТА's hatches start shut (p168)
+    console.panel.Set("vent.hatch_left", 1);
+    SC_EXPECT(!CabinLayout::LampLit(*hatches, console.panel, console.equipment));
+    console.panel.Set("vent.hatch_left", 0);
     console.panel.Set("hull.door_dog_upper", 0);  // the engine door undogged
     SC_EXPECT(!CabinLayout::LampLit(*door, console.panel, console.equipment));
     console.panel.Set("hull.door_dog_upper", 2);

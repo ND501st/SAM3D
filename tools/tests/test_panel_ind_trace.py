@@ -52,7 +52,11 @@ def test_the_caps_sit_inside_their_frame():
     inner = (x0 + T.CAP_FRAME_RIM, y0 + T.CAP_FRAME_RIM, x1 - T.CAP_FRAME_RIM, y1 - T.CAP_FRAME_RIM)
     for c in T.CAPS:
         assert _inside(inner, c['c'][0], c['c'][1], T.CAP_D / 2), c
-    assert [c['id'] for c in T.CAPS if c.get('lamp')] == ['cap_r5']
+    assert [c['id'] for c in T.CAPS if c.get('lamp')] == ['cap_r4', 'cap_r5']
+    assert [c['id'] for c in T.CAPS if c.get('blank')] == ['cap_l4', 'cap_l5']
+    for c in T.CAPS:
+        if c.get('lamp'):
+            assert T.CONTROL_MM[c['lamp']] == c['c']
 
 
 def test_the_plates_do_not_overlap():
@@ -65,6 +69,17 @@ def test_the_plates_do_not_overlap():
 
 def test_the_selector_knob_turns_in_its_arch():
     assert math.dist(T.SEL_KNOB, T.SEL_ARCH_C) + T.SEL_KNOB_D / 2 < T.SEL_ARCH_R
+    # the bar's pointer reaches the arch (so it points at a position) but stops short of the position marks
+    tip = 0.5 * T.SEL_KNOB_BAR
+    assert abs(tip - T.SEL_KNOB_TIP) <= 0.5 and abs(0.46 * T.SEL_KNOB_BAR - T.SEL_KNOB_TAIL) <= 0.5
+    assert T.SEL_ARCH_R - 1.0 <= tip < T.SEL_MARK_R - 0.5
+    # turned to either end, the bar clears the plate's screws
+    cx, cy = T.SEL_KNOB
+    for a in (T.SEL_POSITIONS_DEG[0], T.SEL_POSITIONS_DEG[-1]):
+        for r in (tip, -0.46 * T.SEL_KNOB_BAR):
+            x, y = cx + r * math.sin(math.radians(a)), cy - r * math.cos(math.radians(a))
+            for s in T.SEL_PLATE_SCREWS:
+                assert math.dist((x, y), s) > SCREW_R + 2.0
     for s in T.SEL_PLATE_SCREWS:
         assert _inside(T.SEL_PLATE, s[0], s[1], SCREW_R)
         assert math.dist(s, T.SEL_ARCH_C) > T.SEL_ARCH_R + SCREW_R

@@ -544,7 +544,11 @@ Changed from the scores the same day:
   - SŁ-1M's trace has МК — ГПК — АК and the moved orientation controls;
   - the owner re-imports `SM_PanelInd`, `SM_RackSL1M` and `SM_SL1MFace`;
   - amended: the selector a seven-position rotary (3—II ... ОТКЛ. ... 3—I, after p247), the bottom-left the lamp of
-    the lit push-button АВАР. ОТКЛ. СЭП, the bottom-right the switch УКЧ.
+    the lit push-button АВАР. ОТКЛ. СЭП, the bottom-right the switch УКЧ;
+  - the selector's knob is now a bar knob whose pointer reaches the arch (`bar_knob`, 34 mm);
+  - the ten caps' lamps: ЛЮКИ РТА ЗАКРЫТЫ is wired to the ЛЮК ВЕНТИЛЯЦИИ levers (p168); ПЕРЕГРЕВ ОО04-20М1 (p169)
+    waits for overheating; five legends are not read; the left column's bottom two are blank spares. The ones not
+    built are rows in the button map. The owner re-imports `SM_PanelInd`.
 
 Open:
 - SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded
