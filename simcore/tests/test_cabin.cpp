@@ -137,7 +137,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 37);  // with АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...), the driver's (stalk, gear, handbrake, stowage) and the 0096's cover and toggles
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 38);  // with the ПАНЕЛЬ ИНДИКАЦИИ, АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...), the driver's (stalk, gear, handbrake, stowage) and the 0096's cover and toggles
     // The R-123M's and the R-124 boxes' faces are bare panels: the meshes carry their own fronts.
     for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel", "gyro_arrest_panel",
                             "air_panel", "bulkhead_panel", "bulkhead_left_panel", "vent_hatch_right", "vent_hatch_left",
@@ -839,4 +839,73 @@ SC_TEST("cabin: a gauge's levels are checked on load") {
     SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
         "size_m": [0.05, 0.04], "levels": [ { "value": 1 } ], "scale_from": 2, "full_scale": 1, "source": "sam3d", "confidence": "estimate" } ])"),
                             "must be below full_scale"));
+}
+
+SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИИ cuts the power until the ГТА and АППАРАТУРА ВКЛ. are off; ДВЕРЬ ЗАКРЫТА lights with it") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    SC_EXPECT(layout.FindPanel("ind_panel") != nullptr && layout.FindControl("pwr.emergency_off") != nullptr);
+    const CabinLamp* door = nullptr;
+    for (const CabinLamp& l : layout.lamps) {
+        if (l.id == "dver_zakryta") door = &l;
+    }
+    SC_EXPECT(door != nullptr);
+    if (door == nullptr) return;
+    auto run = [&](double s) {
+        for (int i = 0; i < static_cast<int>(s * 10.0); ++i) console.equipment.Update(0.1, console.panel);
+    };
+    console.panel.Set("pwr.gta", 1);
+    console.panel.Set("pwr.equipment", 1);
+    run(120.0);
+    SC_EXPECT(console.equipment.IsReady("power"));
+    SC_EXPECT(CabinLayout::LampLit(*door, console.panel, console.equipment));
+    console.panel.Set("hull.door_dog_upper", 0);  // the engine door undogged
+    SC_EXPECT(!CabinLayout::LampLit(*door, console.panel, console.equipment));
+    console.panel.Set("hull.door_dog_upper", 2);
+
+    console.panel.Set("pwr.emergency_off", 1);
+    run(0.2);
+    console.panel.Set("pwr.emergency_off", 0);
+    run(5.0);
+    SC_EXPECT(!console.equipment.IsReady("power"));
+    SC_EXPECT(console.equipment.IsReady("gta"));  // the turbine runs on; its load is cut
+    SC_EXPECT(!CabinLayout::LampLit(*door, console.panel, console.equipment));
+    console.panel.Set("pwr.equipment", 0);
+    run(1.0);
+    SC_EXPECT(!console.equipment.IsReady("power"));  // still cut: the ГТА is on
+    console.panel.Set("pwr.gta", 0);
+    run(1.0);
+    console.panel.Set("pwr.gta", 1);
+    run(120.0);
+    SC_EXPECT(console.equipment.IsReady("power"));
+}
+
+SC_TEST("cabin: the PPI's course-parameter scale is seven chords 2 km apart on the 0-35 km scale, turned by its knob (voenizdat_osa_1991 p41-42)") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinDisplay* ppi = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.id == "soc_ppi") ppi = &d;
+    }
+    SC_EXPECT(ppi != nullptr);
+    if (ppi == nullptr) return;
+    std::vector<CabinScaleLine> lines = CourseScaleLines(*ppi, console);
+    SC_EXPECT(lines.size() == 7);
+    if (lines.size() != 7) return;
+    // At 0 degrees the lines run up the scale: vertical, the middle one through the centre, 2/35 of the radius apart.
+    SC_EXPECT_NEAR(lines[3].x0, 0.0, 1e-12);
+    SC_EXPECT_NEAR(lines[3].y1, 1.0, 1e-12);
+    SC_EXPECT_NEAR(lines[4].x0 - lines[3].x0, 2000.0 / 35000.0, 1e-12);
+    SC_EXPECT_NEAR(lines[0].x0, lines[0].x1, 1e-12);
+    // Each end on the tube's edge.
+    SC_EXPECT_NEAR(std::hypot(lines[6].x1, lines[6].y1), 1.0, 1e-12);
+    // Turned to 90 (east), they run across: horizontal.
+    console.panel.SetValue("soc.course_scale", 90.0);
+    lines = CourseScaleLines(*ppi, console);
+    SC_EXPECT_NEAR(lines[2].y0, lines[2].y1, 1e-12);
+    SC_EXPECT_NEAR(lines[3].x1, 1.0, 1e-12);
 }

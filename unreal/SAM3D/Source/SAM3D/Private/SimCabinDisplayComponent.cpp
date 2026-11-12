@@ -660,7 +660,11 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console) * 1000.0)));
 		return true;
 	case simcore::CabinDisplayKind::Ppi:
-		// Off: the dead tube behind its filter, with the scale round it.
+		// Off: the dead tube behind its filter, with the scale round it and the course-parameter disc as it is turned.
+		if (!Display.course_control.empty())
+		{
+			Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(Console.panel.GetValue(Display.course_control) * 10.0)));
+		}
 		return !bOn;
 	case simcore::CabinDisplayKind::RangeScope:
 	case simcore::CabinDisplayKind::ElevationScope:
@@ -721,9 +725,19 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 		Canvas->K2_DrawTexture(FaceTarget, FVector2D::ZeroVector, Size, FVector2D::ZeroVector, FVector2D::UnitVector, FLinearColor::White,
 			BLEND_Opaque);
 	}
+	// The course-parameter scale: dark lines engraved on the turning disc over the filter (voenizdat_osa_1991 p41-42),
+	// drawn last, on the tube lit or dead.
+	auto CourseScale = [&]()
+	{
+		for (const simcore::CabinScaleLine& L : simcore::CourseScaleLines(Display, Runner.Console()))
+		{
+			Line(Canvas, C + FVector2D(L.x0, -L.y0) * R, C + FVector2D(L.x1, -L.y1) * R, 1.2f, FLinearColor(0.03f, 0.02f, 0.01f));
+		}
+	};
 	if (!bOn)
 	{
 		DeadFilter(Canvas, C, R);
+		CourseScale();
 		return;
 	}
 	const simcore::ConsoleData& Console = Runner.Console();
@@ -910,6 +924,7 @@ void USimCabinDisplayComponent::DrawPpi(UCanvas* Canvas, const FVector2D& Size, 
 			Line(Canvas, Polar(C, Az - 0.06, Rg), Polar(C, Az + 0.06, Rg), 2.0f, Amber);
 		}
 	}
+	CourseScale();
 }
 
 // ---------------------------------------------------------------------------------------------- range indicator

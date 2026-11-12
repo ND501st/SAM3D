@@ -439,3 +439,21 @@ SC_TEST("launcher: the prep_hold block and the container hot inputs are checked"
     SC_EXPECT(bad("\"long_rest_s\": 3600", "\"long_rest_s\": 60", "launcher.prep_hold.long_rest_s"));
     SC_EXPECT(bad("\"hot_input\": \"hot_3_i\"", "\"hot_input\": \"hot_nothing\"", "launcher.containers[0].hot_input"));
 }
+
+SC_TEST("launcher: ВОЗВРАТ under a missile in flight returns its range finder and the missile is lost (voenizdat_osa_1991 p120)") {
+    ConsoleData c = Osa();
+    SC_EXPECT(c.launcher.channels[1].return_control == "msl.return_2" && c.launcher.channels[0].return_control.empty());
+    Launcher l(c.launcher);
+    c.panel.Set("msl.channels", 0);  // channel II only
+    c.equipment.SetInput("target_near_zone", true);
+    l.Step(0.0, c);
+    const Launcher::Shot s = l.Launch(1.0, c, 7, 10.0, 450.0);
+    SC_EXPECT(s.channel == 2);
+    l.Step(2.0, c);
+    SC_EXPECT(l.Returned(c).empty());  // not pressed
+    c.panel.Set("msl.return_2", 1);
+    const std::vector<int> back = l.Returned(c);
+    SC_EXPECT(back.size() == 1 && back[0] == 7);
+    l.ShotDone(7);
+    SC_EXPECT(l.ShotsFlying().empty() && l.Returned(c).empty());
+}

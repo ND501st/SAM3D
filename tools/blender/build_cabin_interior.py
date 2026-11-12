@@ -1112,11 +1112,12 @@ def build_glass():
 
 # ---------------------------------------------------------------------------------------------- the racks
 
-def build_rack(name, layout, panel_ids, side, posts, lower, extra=None, stops_at_frame=False):
+def build_rack(name, layout, panel_ids, side, posts, lower, extra=None, stops_at_frame=False, hinge_ends=(True, True)):
     """A rack's carcass behind its console panels: the cabinet back to the side wall, the frame round the panels
     (posts, top and bottom rails, column dividers), and below the blocks either a recessed kick panel with a foot
     grating (lower='kick'), closed doors flush with the frame (lower='doors'), or a bare wall (lower='wall'). A rack that
-    stops_at_frame ends at its frame's top rail; what is above it is its `extra`'s."""
+    stops_at_frame ends at its frame's top rail; what is above it is its `extra`'s. hinge_ends: whether the aft and the
+    forward end posts carry hinge plates."""
     b = Builder(name)
     panels = [p for p in layout['panels'] if p['id'] in panel_ids]
     wall = side * WALL_X
@@ -1147,7 +1148,9 @@ def build_rack(name, layout, panel_ids, side, posts, lower, extra=None, stops_at
         b.box(fr0, X(-0.002), yy - 0.006, yy + 0.006, zb, zt, 'Paint_Rack')
     # hinge plates on the end posts: the racks swing out on hinges (opisybroni 54334 shows three grey plates on the
     # console's side post); two per end here, at a quarter and three quarters of the panel height (positions: estimate)
-    for yy in (ylo + 0.02, yhi - 0.02):
+    for yy, keep in zip((ylo + 0.02, yhi - 0.02), hinge_ends):
+        if not keep:
+            continue
         for f in (0.2, 0.8):
             zz = zb + f * (zt - zb)
             b.box(fr0, X(0.006), yy - 0.03, yy + 0.03, zz - 0.04, zz + 0.04, 'Metal_Steel')
@@ -2177,7 +2180,7 @@ def build_driver_units():
 def build_all(layout):
     objs = [build_hull(), build_glass()]
     objs.append(build_rack('SM_RackSL1M', layout, ['gyro_panel'], -1, [(3.96, 4.06), (2.505, 2.65)], 'wall',
-                           extra=sl1m_extra, stops_at_frame=True))
+                           extra=sl1m_extra, stops_at_frame=True, hinge_ends=(False, True)))   # the ПАНЕЛЬ ИНДИКАЦИИ stands on the aft post (g095-b)
     objs.append(build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick',
                            extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout))))
     objs.append(build_rack_sl3m(layout))

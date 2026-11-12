@@ -34,7 +34,10 @@ FRAME_TOP, FRAME_BOTTOM = (-30.0, -8.0), (562.0, 640.0)
 DIVIDER = (646.0, 677.0)
 
 # the game draws these itself: the orientation controls and the ЗК-4 dial's face (places: the photo's parts; which part is which: SAM3D's reading of the captions)
-CONTROL_MM = {'orient.ak_zk': (992.0, 85.0), 'orient.relay': (1015.5, 85.0), 'orient.sync': (1041.0, 85.0), 'orient.qc': (1219.0, 85.0), 'orient.latitude': (832.7, 59.0)}
+# (12 Nov 2026) СОГЛАСОВАНИЕ on ПУ-11's bottom button and ШИРОТА's knob in its scale's middle (voenizdat_osa_1991 p48); МК — ГПК — АК the
+# black panel's top-centre toggle (p50)
+CONTROL_MM = {'orient.ak_zk': (992.0, 85.0), 'orient.relay': (1015.5, 85.0), 'orient.sync': (847.1, 131.0), 'orient.qc': (1219.0, 85.0),
+              'orient.latitude': (872.0, 59.0), 'gyro.compass_mode': (841.3, 61.0)}
 DIAL_C, DIAL_R = (1146.4, 91.0), 42.0
 LAT_SCALE_C = (872.0, 59.0)     # the ШИРОТА dial the game draws, on the black panel beside its knob, where the panel's arc is
 
@@ -122,7 +125,7 @@ _screws('R1', [(759.0, 32.0), (900.0, 32.0), (759.0, 140.0), (900.0, 140.0)], d=
 for x in (916.0, 934.0, 953.0, 973.6, 994.0, 1013.6, 1035.0):
     _p('dome', 'R1', x, 40.0, d=19.0)
 _p('dome', 'R1', 1073.6, 40.5, d=23.0)
-for x in (928.0, 949.0, 971.0):
+for x in (928.0, 949.0, 971.0, 1041.0):     # the row's last: where orient.sync stood until 12 Nov 2026, what it is not known
     _p('jack', 'R1', x, 85.0, d=17.0, colour='black')
 for x, c in ((909.0, 'amber'), (928.0, 'amber'), (947.0, 'amber'), (965.5, 'amber'), (984.5, 'amber'), (1002.0, 'amber')):
     _p('lamp', 'R1', x, 142.7, d=15.0, colour=c)

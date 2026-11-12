@@ -261,3 +261,20 @@ SC_TEST("orientation: a player commander starts his compass work from the crew m
     SC_EXPECT(k != nullptr && k->TakeSeat("commander", "player"));
     SC_EXPECT(k->GiveCrewOrder("order_k_boyu") && k->Compass().Running());
 }
+
+SC_TEST("orientation: МК — ГПК — АК off ГПК loses the gyro's heading; back at ГПК it must be oriented again (voenizdat_osa_1991 p50)") {
+    auto r = Load(Osa("deployed", 45.0, "", false));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    Run(*r, 2.0);
+    SC_EXPECT(r->Console().panel.Get("gyro.compass_mode") == 1);
+    SC_EXPECT(r->Engagement().Oriented());
+    SC_EXPECT(std::fabs(Off(r->Engagement().GyroHeadingDeg(), 40.0)) < 0.1);
+    r->Console().panel.Set("gyro.compass_mode", 2);  // АК: not used on the Osa
+    Run(*r, 2.0);
+    SC_EXPECT(!r->Engagement().Oriented());
+    SC_EXPECT(!r->Console().equipment.GetInput("vehicle_oriented"));
+    r->Console().panel.Set("gyro.compass_mode", 1);
+    Run(*r, 2.0);
+    SC_EXPECT(!r->Engagement().Oriented());  // the heading is gone until the crew orients the vehicle again
+}

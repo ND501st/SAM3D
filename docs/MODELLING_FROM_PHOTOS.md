@@ -40,6 +40,8 @@ python tools/photo_trace.py rectify tools/traces/<name>.json PHOTO --check
   into `plate_edges` (keep `"offset": [500, 100]`), set `width_mm` from the flattened right edge, run again: `front_mm.png`
   is the front at 5 px/mm with a 40 mm margin, and `front_mm_grid.jpg` the same with a mm grid.
 * Check: a round part's circle fit (next step) should come out round. The R-123M's band selector was round to 0.6 %.
+  If round parts come out as ellipses, all stretched across alike, set `"aspect"` in the config: two vanishing points
+  fix the flat only up to a stretch across. The ПАНЕЛЬ ИНДИКАЦИИ's caps needed 1.227 (`tools/traces/panel_ind_g095b.json`).
 * **A manual's drawing** of the front (the R-111's ТО fig. 4) is flattened the same way (`tools/traces/r111_drawing.json`)
   and names every control by its number, but take positions from the photograph: the circle fits showed the drawing
   about 4 % wide. Keep both and say which was used.

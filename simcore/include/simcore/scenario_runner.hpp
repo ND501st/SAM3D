@@ -3959,6 +3959,15 @@ private:
     // ВНИМАНИЕ and every lamp.
     void UpdateLauncher() {
         if (!launcher_) return;
+        for (int n : launcher_->Returned(console_)) {  // ВОЗВРАТ pressed under a missile in flight: it is lost
+            const std::string why = "ВОЗВРАТ: the missile range finder reset (Сброс), no guidance";
+            if (engagement_on_) {
+                engagement_.LoseShot(time_, n, log_, why);
+            } else {
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Missile " + std::to_string(n), "range finder", why});
+            }
+            launcher_->ShotDone(n);
+        }
         if (engagement_on_) {
             for (int n : launcher_->ShotsFlying()) {
                 if (engagement_.ShotDone(n)) launcher_->ShotDone(n);

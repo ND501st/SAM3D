@@ -120,7 +120,7 @@ def build_items(console, cabin):
         items.append({
             "what": "display", "id": display["id"], "label": display.get("label", ""), "style": display["kind"],
             "panel": display["panel"], "at": tuple(display["at_m"]), "size": tuple(display["size_m"]),
-            "confidence": display.get("confidence", ""),
+            "confidence": display.get("confidence", ""), "turned_by": [c for c in (display.get("control"), display.get("course_scale", {}).get("control")) if c],
         })
     return items
 
@@ -162,6 +162,8 @@ def find_problems(console, cabin):
         for b in on_face[n + 1:]:
             if a["panel"] != b["panel"]:
                 continue
+            if b["id"] in a.get("turned_by", ()) or a["id"] in b.get("turned_by", ()):
+                continue  # a knob on the scale it turns (ШИРОТА, the PPI's course-parameter disc)
             if _overlap(a, b):
                 problems.append(f"'{a['id']}' and '{b['id']}' overlap on panel '{a['panel']}'")
     return problems

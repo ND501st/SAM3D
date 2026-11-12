@@ -1626,3 +1626,144 @@ Pixel boxes are on `out/recon/dryrun/photos/clean`; the crops are in the session
 11. **0004-14M's controls.** Confirmed, g095-b and g094-a: ВЫВОД — НАВЕДЕНИЕ (a bat lever), РЕЖИМЫ (СМЕНА ЗНАКА, СО Ц,Р,
     КОМПЕНС. Ц,Р) and ЧАСТОТА. The model has `vent.workplaces` where the photos show ВЫВОД — НАВЕДЕНИЕ, and `tov.freq`
     where they show a key lock and an ОСВЕЩ. toggle: both to be checked against the flat.
+
+## 49. The manual-only parts found in the photos, built (12 Nov 2026)
+
+The owner asked for section 48's finds to be built. All page numbers are `voenizdat_osa_1991`.
+
+### OK81-4M and 0005-8M
+
+| Part | Control | What it does | Source |
+|---|---|---|---|
+| ВОЗВРАТ (OK81-4M-II) | `msl.return_2`, on the trace's red button | Pressed while channel II's missile flies, its range finder is reset (Сброс) and the missile is lost (`Launcher::Returned`, `Engagement::LoseShot`) | p104, p120; g091-a |
+| БАЛАНС (OK81-4M-II) | `ok81.balance_2`, on the trace's slotted jack | A setting-up adjustment: nothing reads it | p120; g091-a |
+| МК — ГПК — АК (0005-8M's ПУ-11) | `gyro.compass_mode`, the top-centre toggle | Off ГПК the gyro half-compass holds no heading, as without power: the vehicle must be oriented again (the orientation's `compass_control`) | p50; g091-a |
+
+- OK81-4M-I's pair (channel I) lies below the modelled face of the senior operator's column (g094-a), so it is not placed.
+- **Moved:**
+  - `orient.sync` to ПУ-11's bottom button (p48 puts СОГЛАСОВАНИЕ on ПУ-11);
+  - `orient.latitude` to the middle of its scale ШИРОТА (it stood on the toggle that is МК — ГПК — АК).
+- The deputy stands for МК — ГПК — АК, as for the rest of SŁ-1M (`stand_for`).
+
+### 0004-14M
+
+p162 lists the block's controls: РЕЖИМЫ, ВЫВОД — НАВЕДЕНИЕ, the four meters and ЧАСТОТА (the target channel's quartz
+oscillator). The photos (g095-b, and the flat `fo_panel_g094a`) show where each sits:
+
+| Control | Where | Was |
+|---|---|---|
+| `err.output` ВЫВОД — НАВЕДЕНИЕ | the bat lever right of the meters | `vent.workplaces` |
+| `err.mode` РЕЖИМЫ (five positions from the text) | the bat knob right of it | nothing |
+| `err.freq` ЧАСТОТА | the round knob under РЕЖИМЫ | `tov.freq` stood on the left rotary, on the TV's block after samsim_osa |
+| `err.light` ОСВЕЩ. | the toggle left of the meters, ОСВЕЩ. legible | nothing |
+| `vent.workplaces` ВЕНТИЛЯЦИЯ РАБОЧИХ МЕСТ — ОТКЛ. | the rotary at the block's left end (low confidence) | the bat lever |
+
+- p168 puts the ventilation switch only "on rack SŁ-2M1". The left rotary is the column's one unnamed switch, and the
+  legible end of its arc reads like ОТКЛ.
+- `tov.freq` is now `err.freq`: the manual names one ЧАСТОТА on this column.
+- None of these is read by the simulation: they are function-check settings, and the meters rest at zero.
+
+### The ПАНЕЛЬ ИНДИКАЦИИ
+
+A new panel, `ind_panel`: the narrow box on the post between fo_panel and SŁ-1M. Its face was measured through g095-b's
+registered camera on the depth map (`holistic_diff.py measure`): flush with the racks' faces at x -1.093, from 1.58 to
+2.12 m up, 0.09 m wide. g095-b is grade B, so the place is good to a centimetre or two. (Section 50 traces and models it:
+58 x 545 mm, 4 cm further aft.) Top to bottom:
+
+| Part | Model | Source |
+|---|---|---|
+| Ten legend caps | Nine unlit fixtures (legends not legible); the bottom-right is ДВЕРЬ ЗАКРЫТА | g095-b |
+| ДВЕРЬ ЗАКРЫТА | Lamp `dver_zakryta`: lit with the power on and the engine bulkhead's door dogged (both dogs at ЗАКРЫТО or ГЕРМЕТИЗАЦИЯ). Which cap and which door: SAM3D's reading | p248 (the deputy checks the табло lights in «К бою») |
+| Seven-position selector | `ind.select` (3—6, 2—6, 1—6, ОТКЛ., 1—4, 2—4, 3—4; the outer two read by symmetry); nothing reads it | g095-b |
+| ОТКАЗ | A dark red fixture under its plate: no source says what fault it shows | g095-b |
+| АВАР. ОТКЛ. СЭП | `pwr.emergency_off`: latches `sep_cut`, and `power` needs it off, so the equipment loses its supply whatever source runs (the turbine runs on) | p163-164 |
+| УКЧ ВКЛ. — ОТКЛ. | `pwr.ukch`; nothing reads it (the supply's frequency is not modelled) | p163 |
+
+How the loads go back on (PU-303's load buttons) is not modelled. The cut holds until the ГТА and АППАРАТУРА ВКЛ. are
+both off: SAM3D's restart.
+
+### The PPI's course-parameter scale
+
+p41-42 and p256: a turning scale in the PPI's frame with seven lines 2 km apart, set parallel to the target's course to
+read its course parameter.
+- `soc.course_scale` is the orange knob at the bezel's right (g095-a): the drum's right locking knob, which its mesh
+  already draws (`sl2m_housings.py` ppi_flange's `knob_controls`). The display `soc_ppi` has a `course_scale`.
+- simcore gives the lines (`CourseScaleLines`); Unreal draws them over the tube, lit or dead.
+- On g095-a the lines stand 0.06 of the tube's radius apart: 2 km on the 0-35 km scale, so the spacing is fixed to that
+  scale.
+
+### Not built
+
+The driver's PNV-57E and TNPO-170A: only blanked apertures in the photos (g089-a, g089-b). No device to model.
+
+The owner rebuilds Unreal (`SimCabinDisplayComponent.cpp`) and re-imports the cabin textures (`T_Panel_ind_panel`,
+fo_panel, gyro_panel, so_panel).
+
+## 50. The ПАНЕЛЬ ИНДИКАЦИИ traced and modelled (12 Nov 2026)
+
+The owner asked for section 49's panel to be built from the photo, by docs/MODELLING_FROM_PHOTOS.md. It is now a mesh,
+`SM_PanelInd` (cabin part `panel_ind`), and `ind_panel` is a bare panel on its face.
+
+### The flat and the size
+
+- **One photo:** g095-b, grade B. The flat is `tools/traces/panel_ind_g095b.json`, built on the face's own edges (all
+  within 0.6 degrees of their vanishing points).
+- **The face is turned against SŁ-2M:** fo_panel's top edge lies 6 degrees off the box's vanishing point.
+- **A flat from two vanishing points is right only up to a stretch across.** photo_trace now takes `aspect` for that
+  stretch. Unstretched, the lamp caps came out at 0.80 and 0.83 of round; with `aspect` 1.227 they are round.
+- **Height:** 545 mm, about 5 %. It is the face's corners back-projected through g095-b's registered camera onto the
+  plane measured on its depth map (536-548 mm).
+- **Width:** 58 mm, at the same scale. The old guess of 0.09 m was 50 % too wide.
+
+### The trace
+
+`tools/blender/panel_ind_trace.py` gives every part in mm, about 1 mm. Top to bottom:
+- ten legend caps, 21.5 mm across, in two staggered columns inside a raised frame with two captive screws;
+- the selector's black plate, with its U cut and arch round the pointer knob;
+- ОТКАЗ's plate and the red lamp in its chrome bezel;
+- the СЭП plate with its grey sub-plate, АВАР. ОТКЛ. СЭП in a brass ring and УКЧ in a red ring;
+- the plug Ш2 under the box, and Ш1 off its forward side.
+
+`tools/tests/test_panel_ind_trace.py` (10 tests) checks that every part lies on the face, that no two round parts
+overlap, that the caps sit inside their frame, that the knob turns inside its arch, and that each control stands on its
+part.
+
+Every height out of the face, the box's depth (50 mm) and the plugs' depth are SAM3D's: g095-b shows no side clearly.
+
+### The model and the check
+
+`tools/blender/panel_ind_model.py` builds the mesh and `build_panel_ind.py` builds it (`-- --check` renders it to
+`out/panel_ind/check/`).
+- **On the flat:** the front render's edges fall on the photo's parts to about 1 mm (`photo_trace.py overlay`:
+  `out/traces/panel_ind_g095b/overlay_front_edges.jpg`).
+- **What the cabin draws:** АВАР. ОТКЛ. СЭП, УКЧ, the selector's knob and the lamp ДВЕРЬ ЗАКРЫТА, at the trace's
+  `CONTROL_MM`.
+- **Fixtures gone:** the nine unlit caps and ОТКАЗ's plate and lamp, because the mesh has them.
+- **Unreal import:** `SM_PanelInd` is in the import tool's PLAIN list (no Nanite).
+
+### The place, and what it cleared
+
+On the measured place (centre 2.597 m forward), the box ran 4 cm into SŁ-1M's riveted left frame flange:
+- the flange is 72 mm wide, real on g091-a, and stands aft of 2.588 m in `sl1m_face`;
+- the carcass's guessed hinge plates on SŁ-1M's aft post were also in the way.
+
+What was changed:
+- **The box moves 4 cm aft**, to a centre of 2.557 m. It clears the flange and stands 1.4 cm clear of SŁ-2M. Which of
+  the two places is off is open: SŁ-1M's place along the wall is the drawing's, and the panel's is g095-b's.
+- **Ш1 stands proud of the face,** in front of the flange (SAM3D's).
+- **SŁ-1M's aft post loses its two hinge plates:** `build_rack`'s `hinge_ends`, so the panel stands on that post.
+  `SM_RackSL1M` is rebuilt, and its manifest and cabin entries move 5 mm.
+- **Checked:** a triangle check on the cabin's scene (`holistic_diff.py scene`) finds no other part inside the box or
+  the plug.
+
+### МК — ГПК — АК in SŁ-1M's trace
+
+- `sl1m_trace.CONTROL_MM` now has the places section 49 gave:
+  - `gyro.compass_mode` on the black panel's top-centre toggle;
+  - `orient.sync` on ПУ-11's bottom button;
+  - `orient.latitude` in its scale's middle.
+- The mesh draws none of them: the cabin does.
+- `orient.sync`'s old place, the last of the row of black jacks right of ПУ-11, was drawn by neither. It is now an
+  unnamed jack in the mesh (`SM_SL1MFace` rebuilt).
+
+The owner re-imports `SM_PanelInd` (new), `SM_RackSL1M` and `SM_SL1MFace` into Unreal.

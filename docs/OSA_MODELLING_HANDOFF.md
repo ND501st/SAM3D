@@ -531,6 +531,18 @@ Changed from the scores the same day:
   - section 48 lists where the photos show the manual-only parts (the ПАНЕЛЬ ИНДИКАЦИИ with АВАР. ОТКЛ. СЭП, OK81-4M's
     ВОЗВРАТ and БАЛАНС, 0005-8M's МК — ГПК — АК, the PPI's course scale) and two placements to check on fo_panel;
   - the owner rebuilds Unreal (`SimCabinDisplayComponent.cpp`).
+- **The manual-only parts built (12 Nov 2026, section 49):**
+  - OK81-4M-II's ВОЗВРАТ loses the missile in flight;
+  - 0005-8M's МК — ГПК — АК off ГПК loses the orientation;
+  - 0004-14M's controls are where the photos show them (`vent.workplaces` moved, `tov.freq` became `err.freq`);
+  - the ПАНЕЛЬ ИНДИКАЦИИ is a new panel, `ind_panel`: АВАР. ОТКЛ. СЭП cuts the power, and ДВЕРЬ ЗАКРЫТА lights;
+  - the PPI has its course-parameter scale;
+  - the owner rebuilds Unreal and re-imports the cabin textures.
+- **The ПАНЕЛЬ ИНДИКАЦИИ modelled from g095-b (12 Nov 2026, section 50):**
+  - the mesh is `SM_PanelInd`, with its trace, overlap tests and a check on the flat;
+  - the box moved 4 cm aft to clear SŁ-1M's frame flange (which of the two places is off is open);
+  - SŁ-1M's trace has МК — ГПК — АК and the moved orientation controls;
+  - the owner re-imports `SM_PanelInd`, `SM_RackSL1M` and `SM_SL1MFace`.
 
 Open:
 - SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded

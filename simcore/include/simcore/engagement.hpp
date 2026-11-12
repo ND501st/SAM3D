@@ -1072,6 +1072,16 @@ public:
     int Hits() const { return hits_; }
     int Misses() const { return misses_; }
     // A shot by its launch number: resolved (hit, miss or lost), and how long it was given to fly (0 if unknown).
+    // A shot the crew's own act ends in flight (ВОЗВРАТ resetting its range finder): a miss, logged with `why`.
+    void LoseShot(double t, int number, SessionLog& log, const std::string& why) {
+        for (Shot& s : shots_) {
+            if (s.number != number || s.done) continue;
+            Finish(s, false);
+            log.Record({t, DebriefEntry::Kind::Miss, "Missile " + std::to_string(number), s.target_id, why});
+            events_.push_back({EngagementEvent::Kind::Miss, t, s.target_id, 0.0, 0.0, s.method, why, number});
+        }
+    }
+
     bool ShotDone(int number) const {
         for (const Shot& s : shots_) {
             if (s.number == number) return s.done;
@@ -2083,7 +2093,9 @@ private:
         }
         const OrientationDef& o = console.orientation;
         if (!o.qc_known_input.empty()) console.equipment.SetInput(o.qc_known_input, qc_known_);
-        if (!console.equipment.IsReady(o.gyro)) {
+        // Without power, or with МК — ГПК — АК off ГПК (o.compass_control), the gyro half-compass holds no heading.
+        if (!console.equipment.IsReady(o.gyro) ||
+            (!o.compass_control.empty() && console.panel.Get(o.compass_control) != o.compass_position)) {
             gyro_heading_deg_ = 0.0;
             fast_sync_ = false;
             oriented_ = false;

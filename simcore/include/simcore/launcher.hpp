@@ -205,6 +205,17 @@ public:
         }
     }
 
+    // Shots whose channel's ВОЗВРАТ is pressed while they fly (voenizdat_osa_1991 p120: the button gives the command
+    // «Сброс» and returns the missile range finder to its start): that missile's range is lost, and with it the missile.
+    std::vector<int> Returned(const ConsoleData& console) const {
+        std::vector<int> out;
+        for (std::size_t k = 0; k < channels_.size() && k < def_.channels.size(); ++k) {
+            const std::string& button = def_.channels[k].return_control;
+            if (channels_[k].flying && !button.empty() && console.panel.Get(button) == 1) out.push_back(channels_[k].shot);
+        }
+        return out;
+    }
+
     // Shots still flying (their numbers), for the runner to ask the outcome model about.
     // A channel's command transmitter (roadmap E5, the EM layer's emitter): 0 off, 1 on (ВКЛ ВЫС: a missile selected,
     // the transmitter's high voltage on), 2 guiding its missile in flight. Whether it radiates before the launch is

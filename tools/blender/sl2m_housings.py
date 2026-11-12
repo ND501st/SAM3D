@@ -41,7 +41,7 @@ HOUSINGS = [
     # ---- the senior operator's column (search): 0094-5, OP81-16M, OS52-12M
     {'id': 'ppi_flange', 'panel': 'so_panel', 'on': 'soc_ppi', 'kind': 'ring', 'style': 'flange',
      'outer': 0.378, 'hole': 0.290, 'depth': 0.046, 'cone': [0.0175, 0.031], 'mat': 'Paint_LightGrey',
-     'screws': 16, 'knobs': 4,
+     'screws': 16, 'knobs': 4, 'knob_controls': ['soc.course_scale'],
      'why': 'OP81-16M: a pale grey drum round the search tube, sixteen screws and four red-brown locking knobs on its '
             'face, a dark scale cone from the face down to the screen (samsim_panels; g094-a). On g094-a\'s flat the '
             'drum is 389 mm high (380 without the 9 mm its front edge is seen low; 378 drawn, clear of the oval mount below it) and 419 wide: its side wall, the '
@@ -246,6 +246,8 @@ def problems(cabin=None, console=None):
     for h in HOUSINGS:
         items = footprints(cabin, console, h['panel'])
         for it in items:
+            if it[1] in h.get('knob_controls', []):
+                continue                                  # a control on one of the housing's own knobs (its mesh draws it)
             g = gap(h, it, cabin)
             if g is not None and g < CLEAR_M:
                 out.append(f"{h['id']}: {it[0]} {it[1]} {g * 1000:.1f} mm away")

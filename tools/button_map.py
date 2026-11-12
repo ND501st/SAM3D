@@ -65,14 +65,10 @@ PLANNED = {
         ('p:flags', 'March signals: flags and lamps', 'seen in a photo: owner to decide', 'Two signal flags and a bag by the commander (wwp_gecko g089-d); the march signals (voenizdat_osa_1991 p232-239).', ['c:veh.hatches'], 'missing'),
         ('p:keyed', "Commander's round keyed switch", 'seen in a photo: owner to decide', 'On the front wheel housing (wwp_gecko g087-c); function not identified.', ['s:power'], 'unknown'),
         ('p:gauges', "Air pressure gauges over the commander's screen and by the right radio", 'seen in a photo: owner to decide', 'With pipe and valve (wwp_gecko g087-d, g089-b, g090-a); what they serve is not sourced.', ['c:press.standard'], 'unknown'),
-        ('p:emerg_off', 'АВАР. ОТКЛ. СЭП (emergency power shutdown)', 'in the sources only: owner to decide', 'On the indication panel (voenizdat_osa_1991 p163-166; rwd_mb3).', ['s:power'], 'missing'),
         ('p:0091_17', '0091-17M: КОНТРОЛЬ НАПР. and its meter', 'on the model, not wired', "The НАКАЛ lamps now light; the SOC's voltage check (voenizdat_osa_1991 p49) and ПЕРЕКЛ. ИСТОЧНИКОВ are drawn in the mesh, not wired.", ['s:soc_transmitter'], 'missing'),
-        ('p:gyro_sw', '0005-8M КОРРЕКЦИЯ ВКЛ., МК — ГПК — АК', 'in the sources only: owner to decide', 'Gyro correction and compass mode (voenizdat_osa_1991 p49-53); the panel in rwd 9a33_52 is unreadable.', ['s:gyro_erected'], 'missing'),
+        ('p:gyro_sw', '0005-8M КОРРЕКЦИЯ ВКЛ.', 'in the sources only: owner to decide', 'Gyro correction (voenizdat_osa_1991 p49-53); МК — ГПК — АК is built (gyro.compass_mode), the correction switch not found on g091-a.', ['s:gyro_erected'], 'missing'),
         ('p:0051', '0051-7M repetition frequency АВТ., РУЧН. F1-F3', 'in the sources only: owner to decide', "On the operator's bottom block (voenizdat_osa_1991 p96-101); its nameplate is drawn.", ['s:ssc_transmitter'], 'missing'),
-        ('p:ok81', 'OK81-4M ВОЗВРАТ, БАЛАНС', 'in the sources only: owner to decide', "The missile tracker's range units (voenizdat_osa_1991 p104-120).", ['s:auto_tracking'], 'missing'),
         ('p:0065', '0065-2M АРУ — РРУ and gains', 'in the sources only: owner to decide', 'The MTI canceller on SP-1M, under flaps modelled closed (voenizdat_osa_1991 p49-53).', ['s:soc_transmitter'], 'missing'),
-        ('p:door', 'ДВЕРЬ ЗАКРЫТА lamp', 'in the sources only: owner to decide', 'Checked by the deputy in the drill (voenizdat_osa_1991 p246-248); its place is not given.', ['c:veh.hatches'], 'missing'),
-        ('p:course', 'PPI course-parameter scale', 'in the sources only: owner to decide', "Seven lines 2 km apart in the scope's bezel (voenizdat_osa_1991 p40-41, p256).", ['m:search'], 'missing'),
         ('p:vision', "Driver's vision and swimming: PNV-57E, TNPO-170A, wave shield", 'in the sources only: owner to decide', 'rwd_mb3; wwp_gecko book pp20-23 (the shield); g089-a/b show only periscope blanks.', ['c:veh.waterjet_left'], 'missing'),
     ],
 }
@@ -352,7 +348,9 @@ class MapBuilder:
             outs += [c.get("input") for c in launcher.get("containers", [])]
             outs += [c.get("hot_input") for c in launcher.get("containers", [])]
             for ch in launcher.get("channels", []):
-                outs += list(ch.values())
+                outs += [v for k, v in ch.items() if k != "return"]
+                if ch.get("return"):  # ВОЗВРАТ: the button resets the channel's range finder, losing its missile
+                    self.add_edge("c:" + ch["return"], "m:launcher", "feed", "ВОЗВРАТ: the missile in flight is lost")
             for inp in outs:
                 if inp:
                     self.add_edge("m:launcher", "i:" + inp, "signal", "sets this signal")

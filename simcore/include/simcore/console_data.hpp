@@ -83,6 +83,10 @@ struct OrientationDef {
     // Set while the gyro holds a heading that was set from the crew chief's Qc at this halt (cleared when the gyro
     // stops or the vehicle moves off).
     std::string oriented_input;
+    // The gyro's mode switch (optional; the Osa's МК — ГПК — АК on 0005-8M): the gyro half-compass holds a heading only
+    // with it at `compass_position`; anywhere else its orientation is lost, as without power.
+    std::string compass_control;
+    int compass_position = 0;
 };
 
 struct TrackSensorDef {
@@ -253,6 +257,7 @@ struct LauncherChannelDef {
     std::string medium_input;       // СР.Л
     std::string narrow_input;       // УЗКИЙ ЛУЧ
     std::string fuse_input;         // К3
+    std::string return_control;     // ВОЗВРАТ (optional): resets the channel's missile range finder; a missile in flight is lost
 };
 
 // The command transmitter's frequency letter (roadmap 6.3, optional): moving `control` to `change_position` changes the
@@ -1380,7 +1385,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string cp = Index(Join(lp, "channels"), i);
             const json::Value& c = chans->items[i];
             LauncherChannelDef ch;
-            if (!Keys(c, cp, {"transmitter", "away", "captured", "medium", "narrow", "fuse"}) ||
+            if (!Keys(c, cp, {"transmitter", "away", "captured", "medium", "narrow", "fuse", "return"}) ||
+                !RefControl(c, cp, "return", out.panel, ControlKind::Momentary, false, ch.return_control) ||
                 !RefInput(c, cp, "transmitter", eq, ch.transmitter_input) || !RefInput(c, cp, "away", eq, ch.away_input) ||
                 !RefInput(c, cp, "captured", eq, ch.captured_input) || !RefInput(c, cp, "medium", eq, ch.medium_input) ||
                 !RefInput(c, cp, "narrow", eq, ch.narrow_input) || !RefInput(c, cp, "fuse", eq, ch.fuse_input)) {
@@ -1741,7 +1747,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
                           "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
                           "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
-                          "oriented_input", "source", "confidence", "notes"}) ||
+                          "oriented_input", "compass_control", "compass_position", "source", "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1758,8 +1764,14 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalNumber(o, op, "survey_s", def.survey_s) ||
             !OptionalNumber(o, op, "survey_sigma_deg", def.survey_sigma_deg) ||
             !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
-            !RefInput(o, op, "oriented_input", eq, def.oriented_input)) {
+            !RefInput(o, op, "oriented_input", eq, def.oriented_input) ||
+            !RefControl(o, op, "compass_control", panel, ControlKind::Discrete, false, def.compass_control) ||
+            !OptionalInt(o, op, "compass_position", def.compass_position)) {
             return false;
+        }
+        if (!def.compass_control.empty() &&
+            (def.compass_position < 0 || def.compass_position >= panel.Find(def.compass_control)->positions)) {
+            return Fail(Join(op, "compass_position"), "not a position of " + def.compass_control);
         }
         if (def.earth_rate_deg_h < 0.0 || def.own_drift_deg_h < 0.0 || def.survey_s < 0.0 || def.survey_sigma_deg < 0.0) {
             return Fail(op, "earth_rate_deg_h, own_drift_deg_h, survey_s and survey_sigma_deg must be >= 0");

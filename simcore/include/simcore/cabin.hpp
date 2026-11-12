@@ -329,6 +329,12 @@ struct CabinDisplay {
     // ppi
     double sweep_period_s = 2.0;
     double afterglow_s = 3.0;
+    // ppi (optional): a ruled disc over the screen that a control turns, its parallel lines `course_spacing_m` apart on
+    // the scale `course_span_m` long (the Osa's course-parameter scale); the lines run along the control's azimuth
+    std::string course_control;
+    int course_lines = 0;
+    double course_spacing_m = 2000.0;
+    double course_span_m = 35000.0;
     // range_scope: span of the magnified lower sweep, centred on the range gate
     double magnified_window_m = 1500.0;
     // elevation_scope (also uses afterglow_s): one raster per search beam of the console's elevation search, and
@@ -370,6 +376,30 @@ inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
     if (d.reading == "supply_voltage") return SupplyVoltage(console);
     if (!d.reading.empty()) return RadioMeterReading(d.reading, console) * d.full_scale;
     return console.panel.GetValue(d.control) * d.scale;
+}
+
+// One engraved line of a PPI's course-parameter scale, in units of the tube's radius: the centre at (0, 0), x to the
+// right, y up.
+struct CabinScaleLine {
+    double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
+};
+
+// The course-parameter scale's lines as the console has the disc turned: parallel to the azimuth its control reads
+// (degrees clockwise from the top of the scale), evenly about the centre, each a chord of the tube. Empty without one.
+inline std::vector<CabinScaleLine> CourseScaleLines(const CabinDisplay& d, const ConsoleData& console) {
+    std::vector<CabinScaleLine> out;
+    if (d.course_control.empty() || d.course_lines < 1) return out;
+    const double a = console.panel.GetValue(d.course_control) * 3.14159265358979323846 / 180.0;
+    const double dx = std::sin(a), dy = std::cos(a);  // along the course
+    const double px = std::cos(a), py = -std::sin(a);  // across it, to the right
+    const double step = d.course_spacing_m / d.course_span_m;
+    for (int k = 0; k < d.course_lines; ++k) {
+        const double o = (k - 0.5 * (d.course_lines - 1)) * step;
+        if (std::fabs(o) >= 1.0) continue;
+        const double h = std::sqrt(1.0 - o * o);
+        out.push_back({o * px - h * dx, o * py - h * dy, o * px + h * dx, o * py + h * dy});
+    }
+    return out;
 }
 
 // Where a meter's needle stands for a value: 0 at the scale's left end (scale_from), 1 at full_scale.
@@ -1106,8 +1136,8 @@ private:
             if (!Keys(d, path, {"id", "label", "kind", "panel", "at_m", "size_m", "on_when", "on_when_any", "lit_when",
                                 "control", "readout", "marks", "value_per_turn", "labels_per_turn", "scale", "full_scale",
                                 "unit", "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters", "range_window_m",
-                                "readouts", "glass", "reading", "document", "levels", "scale_from", "source", "confidence",
-                                "notes"})) {
+                                "readouts", "glass", "reading", "document", "levels", "scale_from", "course_scale", "source",
+                                "confidence", "notes"})) {
                 return false;
             }
             CabinDisplay disp;
@@ -1145,7 +1175,7 @@ private:
         std::vector<std::string> allowed;
         if (kind == "ppi") {
             disp.kind = CabinDisplayKind::Ppi;
-            allowed = {"sweep_period_s", "afterglow_s"};
+            allowed = {"sweep_period_s", "afterglow_s", "course_scale"};
             if (!console.has_sensors) return Fail(Join(path, "kind"), "a ppi needs the console's sensors block");
         } else if (kind == "range_scope") {
             disp.kind = CabinDisplayKind::RangeScope;
@@ -1197,7 +1227,7 @@ private:
         for (const char* key : {"control", "reading", "readout", "levels", "marks", "value_per_turn", "labels_per_turn", "scale",
                                 "full_scale", "scale_from", "unit",
                                 "sweep_period_s", "afterglow_s", "magnified_window_m", "rasters",
-                                "range_window_m", "readouts", "glass", "document"}) {
+                                "range_window_m", "readouts", "glass", "document", "course_scale"}) {
             bool ok = d.Find(key) == nullptr;
             for (const std::string& a : allowed) ok = ok || a == key;
             if (!ok) return Fail(Join(path, key), "not used by a " + kind);
@@ -1252,6 +1282,18 @@ private:
             if (!(v > 0.0)) {
                 return Fail(path, "value_per_turn, full_scale, sweep_period_s, afterglow_s, magnified_window_m and "
                                   "range_window_m must be positive");
+            }
+        }
+        if (const json::Value* cs = d.Find("course_scale")) {
+            const std::string p = Join(path, "course_scale");
+            if (!Keys(*cs, p, {"control", "lines", "spacing_m", "span_m", "notes"}) ||
+                !RequireString(*cs, p, "control", disp.course_control) || !OptionalInt(*cs, p, "lines", disp.course_lines) ||
+                !OptionalNumber(*cs, p, "spacing_m", disp.course_spacing_m) || !OptionalNumber(*cs, p, "span_m", disp.course_span_m)) {
+                return false;
+            }
+            if (!console.panel.Has(disp.course_control)) return Fail(Join(p, "control"), "unknown control '" + disp.course_control + "'");
+            if (disp.course_lines < 1 || !(disp.course_spacing_m > 0.0) || !(disp.course_span_m > 0.0)) {
+                return Fail(p, "lines, spacing_m and span_m must be positive");
             }
         }
         if (disp.kind == CabinDisplayKind::ElevationScope && !LoadElevationScope(d, path, console, disp)) return false;
