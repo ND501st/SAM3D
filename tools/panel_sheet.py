@@ -111,10 +111,13 @@ def build_items(console, cabin):
             "guards": guarded[0]["id"],
         })
     for lamp in cabin.get("lamps", []):
+        # a lit push-button: the lamp draws the lens, and an in_mesh control at its place is pressed through it
+        pressed = [e["control"] for e in cabin.get("controls", []) if e.get("look", {}).get("kind") == "in_mesh"
+                   and e["panel"] == lamp["panel"] and max(abs(e["at_m"][0] - lamp["at_m"][0]), abs(e["at_m"][1] - lamp["at_m"][1])) < 0.001]
         items.append({
             "what": "lamp", "id": lamp["id"], "label": lamp.get("label", ""), "style": "lamp",
             "panel": lamp["panel"], "at": tuple(lamp["at_m"]), "size": look_size(lamp, FOOTPRINT_M["lamp"]),
-            "confidence": lamp.get("confidence", ""), "color": lamp.get("color", "white"),
+            "confidence": lamp.get("confidence", ""), "color": lamp.get("color", "white"), "turned_by": pressed,
         })
     for display in cabin.get("displays", []):
         items.append({

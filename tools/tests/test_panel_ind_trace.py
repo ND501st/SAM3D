@@ -24,7 +24,7 @@ def _round_parts():
     out += [('otkaz_screw', s, SCREW_R) for s in T.OTKAZ_PLATE_SCREWS]
     out += [('otkaz_lamp', T.OTKAZ_LAMP, T.OTKAZ_BEZEL_R)]
     out += [('sep_screw', s, SCREW_R) for s in T.SEP_PLATE_SCREWS]
-    out += [('sep_button', T.SEP_BUTTON, T.GUARD_RING[1]), ('ukch', T.UKCH_TOGGLE, T.GUARD_RING[1])]
+    out += [('sep_lamp', T.SEP_LAMP, T.GUARD_RING[1]), ('ukch', T.UKCH_TOGGLE, T.GUARD_RING[1])]
     return out
 
 
@@ -77,7 +77,7 @@ def test_the_selector_knob_turns_in_its_arch():
 
 
 def test_the_button_and_toggle_stand_on_the_sub_plate():
-    for c in (T.SEP_BUTTON, T.UKCH_TOGGLE):
+    for c in (T.SEP_LAMP, T.UKCH_TOGGLE):
         assert _inside(T.SEP_SUBPLATE, c[0], c[1], T.GUARD_RING[1])
     assert T.GUARD_RING[0] < T.GUARD_RING[1]
 
@@ -88,7 +88,7 @@ def test_the_plugs_stand_off_the_face():
 
 
 def test_every_control_stands_on_its_part():
-    assert T.CONTROL_MM['pwr.emergency_off'] == T.SEP_BUTTON
+    assert T.CONTROL_MM['pwr.emergency_off'] == T.SEP_LAMP
     assert T.CONTROL_MM['pwr.ukch'] == T.UKCH_TOGGLE
     assert T.CONTROL_MM['ind.select'] == T.SEL_KNOB
     cap = [c['c'] for c in T.CAPS if c.get('lamp') == 'dver_zakryta'][0]
@@ -103,3 +103,20 @@ def test_to_m_is_centred():
     assert T.to_m(T.W_MM / 2, T.H_MM / 2) == (0.0, 0.0)
     a, b = T.to_m(T.W_MM, 0.0)
     assert a > 0 and b > 0
+
+
+def test_the_selector_has_seven_positions_marked_on_its_plate():
+    assert len(T.SEL_POSITIONS_DEG) == 7 and T.SEL_POSITIONS_DEG[3] == 0.0
+    steps = [b - a for a, b in zip(T.SEL_POSITIONS_DEG, T.SEL_POSITIONS_DEG[1:])]
+    assert all(abs(s - 30.0) < 1e-9 for s in steps)      # as the cabin turns a seven-position rotary
+    cx, cy = T.SEL_KNOB
+    for a in T.SEL_POSITIONS_DEG:
+        x, y = cx + T.SEL_MARK_R * math.sin(math.radians(a)), cy - T.SEL_MARK_R * math.cos(math.radians(a))
+        assert _inside(T.SEL_PLATE, x, y, 1.1)
+        assert math.dist((x, y), T.SEL_ARCH_C) > T.SEL_ARCH_R
+        for s in T.SEL_PLATE_SCREWS:
+            assert math.dist((x, y), s) > SCREW_R + 1.1
+
+
+def test_the_lamp_and_its_button_share_the_left_ring():
+    assert T.CONTROL_MM['sep_avar_otkl'] == T.CONTROL_MM['pwr.emergency_off'] == T.SEP_LAMP

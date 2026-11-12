@@ -48,6 +48,10 @@ SEL_ARCH_R = 16.5
 SEL_PLATE_SCREWS = ((3.5, 224.5), (53.5, 224.5), (3.5, 260.0), (53.5, 260.0))
 SEL_KNOB = (28.5, 251.0)      # (m) the pointer knob's shaft
 SEL_KNOB_D = 20.0             # (m) across its body
+# (m) the seven positions, degrees clockwise from straight up: 3—II, 2—II, 1—II, ОТКЛ., 1—I, 2—I, 3—I (the legends at
+# (4, 253), (7, 238.5), (15, 230), (28, 230) and their mirror; the names voenizdat_osa_1991 p247's); the mesh marks them
+SEL_POSITIONS_DEG = (-90.0, -60.0, -30.0, 0.0, 30.0, 60.0, 90.0)
+SEL_MARK_R = 18.5             # (c) the marks' radius, on the plate just outside the arch
 
 # ОТКАЗ: the black plate and the red lamp under it (m)
 OTKAZ_PLATE = (11.5, 292.0, 45.0, 305.0)
@@ -56,11 +60,12 @@ OTKAZ_LAMP = (28.0, 325.0)
 OTKAZ_BEZEL_R = 13.5          # (m) the chrome ring
 OTKAZ_LENS_R = 10.0           # (m) the red lens
 
-# АВАР. ОТКЛ. СЭП and УКЧ: the black plate, the grey sub-plate the two sit on, their guard rings (m)
+# СЭП АВАР. ОТКЛ. and УКЧ: the black plate, the grey sub-plate the two sit on, their red rings (m). The left is a lamp
+# (a dark red lens: the lit push-button АВАР. ОТКЛ. СЭП, voenizdat_osa_1991 p163), the right a toggle (its lever)
 SEP_PLATE = (1.5, 484.5, 54.0, 533.5)
 SEP_SUBPLATE = (2.0, 497.0, 42.0, 520.0)
 SEP_PLATE_SCREWS = ((4.0, 487.5), (50.5, 487.5), (4.0, 531.0), (50.5, 531.0))
-SEP_BUTTON = (9.5, 508.5)
+SEP_LAMP = (9.5, 508.5)
 UKCH_TOGGLE = (29.5, 508.5)
 GUARD_RING = (6.2, 7.5)       # (m) inner and outer radius of the red and brass rings round them
 
@@ -72,12 +77,13 @@ PLUG_SH1_H = (6.0, 36.0)                       # (c) out of the face: proud of i
 
 # Where the cabin's controls and lamps stand on the face (mm): the mesh leaves them to the cabin
 CONTROL_MM = {
-    'pwr.emergency_off': SEP_BUTTON,
+    'pwr.emergency_off': SEP_LAMP,
+    'sep_avar_otkl': SEP_LAMP,
     'pwr.ukch': UKCH_TOGGLE,
     'ind.select': SEL_KNOB,
     'dver_zakryta': (38.8, 177.5),
 }
-CONTROL_D_MM = {'pwr.emergency_off': 11.0, 'pwr.ukch': 12.0, 'ind.select': 20.0, 'dver_zakryta': 21.5}
+CONTROL_D_MM = {'pwr.emergency_off': 11.0, 'sep_avar_otkl': 11.0, 'pwr.ukch': 12.0, 'ind.select': 20.0, 'dver_zakryta': 21.5}
 
 
 def to_m(x, y):

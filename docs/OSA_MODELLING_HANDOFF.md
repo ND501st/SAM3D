@@ -542,7 +542,9 @@ Changed from the scores the same day:
   - the mesh is `SM_PanelInd`, with its trace, overlap tests and a check on the flat;
   - the box moved 4 cm aft to clear SŁ-1M's frame flange (which of the two places is off is open);
   - SŁ-1M's trace has МК — ГПК — АК and the moved orientation controls;
-  - the owner re-imports `SM_PanelInd`, `SM_RackSL1M` and `SM_SL1MFace`.
+  - the owner re-imports `SM_PanelInd`, `SM_RackSL1M` and `SM_SL1MFace`;
+  - amended: the selector a seven-position rotary (3—II ... ОТКЛ. ... 3—I, after p247), the bottom-left the lamp of
+    the lit push-button АВАР. ОТКЛ. СЭП, the bottom-right the switch УКЧ.
 
 Open:
 - SŁ-3M's rack below its blocks: the model has a perforated plate where g097-b shows a plain grey plate behind a folded

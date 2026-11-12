@@ -1767,3 +1767,22 @@ What was changed:
   unnamed jack in the mesh (`SM_SL1MFace` rebuilt).
 
 The owner re-imports `SM_PanelInd` (new), `SM_RackSL1M` and `SM_SL1MFace` into Unreal.
+
+### Amended on the owner's reading (12 Nov 2026)
+
+- **The selector is a seven-position rotary** (`ind.select`), its positions 30 degrees apart with ОТКЛ. straight up, as
+  the cabin turns any seven-position rotary. The mesh marks the seven positions with white dots on the plate; they fall
+  on the photo's dots to about 1.5 mm.
+  - The legends read 1— and 2— on each side and a 3 at each end. voenizdat_osa_1991 p247 names the launch табло the
+    same way: in «К бою» the deputy checks that none of 1—II, 2—II, 3—II, 3—I, 2—I, 1—I flashes.
+  - So the positions are 3—II, 2—II, 1—II, ОТКЛ., 1—I, 2—I, 3—I: missile and channel, with channel II on the left as
+    КАНАЛ II stands left on 0004-11M2 (SAM3D's reading). What it selects is in no source, so nothing reads it.
+- **The bottom-left is a lamp, the bottom-right a switch.**
+  - The left is a dark red lens in a red ring, with СЭП over it and АВАР. ОТКЛ. under it. p163 calls the same legend a
+    button (кнопка АВАР. ОТКЛ. СЭП), so SAM3D draws it as a lit push-button: the lamp `sep_avar_otkl` (look
+    `lamp_button`) draws the lens and is lit while the emergency cut holds. `pwr.emergency_off` is pressed through it
+    (look `in_mesh`).
+  - The right is the toggle УКЧ ВКЛ. — ОТКЛ., its lever in a red ring; the mesh adds its bushing.
+  - panel_sheet lets a lamp and an `in_mesh` control share a place (a lit push-button).
+- **The ten caps:** their three-line legends are not legible at g095-b's resolution. The bottom-right reads like ДВЕРЬ
+  ЗАКРЫТ…, which supports the reading of `dver_zakryta`.

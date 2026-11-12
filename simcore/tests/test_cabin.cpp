@@ -841,18 +841,23 @@ SC_TEST("cabin: a gauge's levels are checked on load") {
                             "must be below full_scale"));
 }
 
-SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИИ cuts the power until the ГТА and АППАРАТУРА ВКЛ. are off; ДВЕРЬ ЗАКРЫТА lights with it") {
+SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИИ cuts the power until the ГТА and АППАРАТУРА ВКЛ. are off, its lamp lit meanwhile; ДВЕРЬ ЗАКРЫТА lights with the power") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));
     CabinLayout layout;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
     SC_EXPECT(layout.FindPanel("ind_panel") != nullptr && layout.FindControl("pwr.emergency_off") != nullptr);
     const CabinLamp* door = nullptr;
+    const CabinLamp* cut = nullptr;
     for (const CabinLamp& l : layout.lamps) {
         if (l.id == "dver_zakryta") door = &l;
+        if (l.id == "sep_avar_otkl") cut = &l;
     }
-    SC_EXPECT(door != nullptr);
-    if (door == nullptr) return;
+    SC_EXPECT(door != nullptr && cut != nullptr);
+    if (door == nullptr || cut == nullptr) return;
+    SC_EXPECT(cut->look.kind == CabinLookKind::LampButton);  // a lamp on the vehicle: the lit push-button's lens
+    const ControlDef* sel = console.panel.Find("ind.select");
+    SC_EXPECT(sel != nullptr && sel->positions == 7);       // 3—II ... ОТКЛ. ... 3—I
     auto run = [&](double s) {
         for (int i = 0; i < static_cast<int>(s * 10.0); ++i) console.equipment.Update(0.1, console.panel);
     };
@@ -861,6 +866,7 @@ SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИ�
     run(120.0);
     SC_EXPECT(console.equipment.IsReady("power"));
     SC_EXPECT(CabinLayout::LampLit(*door, console.panel, console.equipment));
+    SC_EXPECT(!CabinLayout::LampLit(*cut, console.panel, console.equipment));
     console.panel.Set("hull.door_dog_upper", 0);  // the engine door undogged
     SC_EXPECT(!CabinLayout::LampLit(*door, console.panel, console.equipment));
     console.panel.Set("hull.door_dog_upper", 2);
@@ -872,11 +878,13 @@ SC_TEST("cabin: АВАР. ОТКЛ. СЭП on the ПАНЕЛЬ ИНДИКАЦИ�
     SC_EXPECT(!console.equipment.IsReady("power"));
     SC_EXPECT(console.equipment.IsReady("gta"));  // the turbine runs on; its load is cut
     SC_EXPECT(!CabinLayout::LampLit(*door, console.panel, console.equipment));
+    SC_EXPECT(CabinLayout::LampLit(*cut, console.panel, console.equipment));
     console.panel.Set("pwr.equipment", 0);
     run(1.0);
     SC_EXPECT(!console.equipment.IsReady("power"));  // still cut: the ГТА is on
     console.panel.Set("pwr.gta", 0);
     run(1.0);
+    SC_EXPECT(!CabinLayout::LampLit(*cut, console.panel, console.equipment));
     console.panel.Set("pwr.gta", 1);
     run(120.0);
     SC_EXPECT(console.equipment.IsReady("power"));

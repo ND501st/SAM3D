@@ -76,6 +76,12 @@ def screw(b, c, h, r=1.8):
     thin_bar(b, (c[0] - r * 0.8, c[1]), (c[0] + r * 0.8, c[1]), 0.6, h + 1.2, h + 1.8, DARK)
 
 
+def sel_marks():
+    """The selector's position marks (face mm), at its positions' angles round the knob."""
+    cx, cy = T.SEL_KNOB
+    return [(cx + T.SEL_MARK_R * math.sin(math.radians(a)), cy - T.SEL_MARK_R * math.cos(math.radians(a))) for a in T.SEL_POSITIONS_DEG]
+
+
 def rect_outline(r):
     x0, y0, x1, y1 = r
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
@@ -111,6 +117,8 @@ def build_selector(b):
     for c in T.SEL_PLATE_SCREWS:
         screw(b, c, 1.5)
     lathe(b, T.SEL_KNOB, 0.0, [(5.5, 0.0), (5.5, 2.0), (0.0, 2.0)], STEEL, seg=16)    # the bush the cabin's knob turns on
+    for c in sel_marks():                                                              # its seven positions' marks
+        disc(b, c, 1.1, 1.5, 1.8, CREAM, seg=8)
 
 
 def build_otkaz(b):
@@ -128,8 +136,10 @@ def build_sep(b):
     for c in T.SEP_PLATE_SCREWS:
         screw(b, c, 1.5)
     r0, r1 = T.GUARD_RING
-    lathe(b, T.SEP_BUTTON, 2.5, [(r1, 0.0), (r1, 2.0), (r0, 2.5), (r0, 1.0), (0.0, 1.0)], BRASS, seg=24)
+    # the lamp АВАР. ОТКЛ. СЭП (the cabin draws its lens) and the switch УКЧ (the cabin draws its lever), each in a red ring
+    lathe(b, T.SEP_LAMP, 2.5, [(r1, 0.0), (r1, 2.0), (r0, 2.5), (r0, 1.0), (0.0, 1.0)], RED, seg=24)
     lathe(b, T.UKCH_TOGGLE, 2.5, [(r1, 0.0), (r1, 2.0), (r0, 2.5), (r0, 1.0), (0.0, 1.0)], RED, seg=24)
+    lathe(b, T.UKCH_TOGGLE, 3.5, [(4.0, 0.0), (4.0, 1.5), (3.2, 2.0), (3.2, 5.0), (0.0, 5.0)], STEEL, seg=16)   # the toggle's bushing and nut
 
 
 def build_plugs(b):
