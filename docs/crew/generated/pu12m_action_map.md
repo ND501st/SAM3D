@@ -19,7 +19,7 @@ Lamps: ПРОГРЕВ, РАБОТА, ТК, РЛС, РТК-1, ЛИНИЯ 1, ЛИ�
 | `radio.fug2.power` | R-123M (FuG-2): ПИТАНИЕ | ВЫКЛ / ВКЛ | `fug2` (enable =1); `fug2_tx` (enable =1) | `deploy_command_radios` 1→1 | `order_deploy` |
 | `radio.fug2.mode` | R-123M (FuG-2): режим | Д. ПРИЕМ / СИМПЛЕКС | `fug2_tx` (enable =1) | `silence_commander` 1→0; `silence_off_commander` 1→1 | – |
 | `radio.fug2.preset` | R-123M (FuG-2): ФИКСИР. ЧАСТОТЫ | 1 / 2 / 3 / 4 | – | `fug2_spare` 1→1; `fug2_working` 1→0 | – |
-| `radio.fug2.volume` | R-123M (FuG-2): ГРОМКОСТЬ | минимум / максимум | – | – | – |
+| `radio.fug2.volume` | R-123M (FuG-2): ГРОМКОСТЬ | wheel | – | – | – |
 | `radio.fug2.squelch` | R-123M (FuG-2): ШУМЫ | ВЫКЛ / ВКЛ | – | – | – |
 | `radio.fug3.antenna` | R-111 SAU block: antenna distributor ШТЫРЬ / ТЕЛЕСКОП | ШТЫРЬ / ТЕЛЕСКОП | – | `deploy_command_radios` 6→1; `stow_antenna` 1→0 | `order_deploy`, `order_stow` |
 | `aspd.power` | ASPD-U: power | ВЫКЛ / ВКЛ | `aspd_warm` (enable =1) | `deploy_aspd` 1→1; `stow_aspd` 2→0 | `order_aspd_on`, `order_deploy`, `order_stow` |
@@ -91,7 +91,7 @@ Lamps: КП-4, ГАК ГОТОВ, РАЗГОН, ОРИЕНТИРОВАН, РСТ
 | `radio.fug1.power` | R-123M (FuG-1): ПИТАНИЕ | ВЫКЛ / ВКЛ | `fug1` (enable =1); `fug1_tx` (enable =1) | `deploy_orient` 1→1 | `order_deploy`, `order_orient` |
 | `radio.fug1.mode` | R-123M (FuG-1): режим | Д. ПРИЕМ / СИМПЛЕКС | `fug1_tx` (enable =1) | – | – |
 | `radio.fug1.preset` | R-123M (FuG-1): ФИКСИР. ЧАСТОТЫ | 1 / 2 / 3 / 4 | – | `fug1_spare` 1→1; `fug1_working` 1→0 | `order_fug1_spare`, `order_fug1_working` |
-| `radio.fug1.volume` | R-123M (FuG-1): ГРОМКОСТЬ | минимум / максимум | – | – | – |
+| `radio.fug1.volume` | R-123M (FuG-1): ГРОМКОСТЬ | wheel | – | – | – |
 | `radio.fug1.squelch` | R-123M (FuG-1): ШУМЫ | ВЫКЛ / ВКЛ | – | – | – |
 | `gak.power` | GAK control panel: power | ВЫКЛ / ВКЛ | `gak` (enable =1) | `deploy_orient` 2→1 | `order_deploy`, `order_orient` |
 | `kp4.power` | KP-4: power | ВЫКЛ / ВКЛ | `kp4` (enable =1) | `deploy_orient` 5→1 | `order_deploy`, `order_orient` |
@@ -149,7 +149,7 @@ Lamps: МАЧТА, МАЧТА ПОДНЯТА, ЗАЩИТА ВХОДА, НАСТ�
 | `radio.fug4.power` | R-123M (FuG-4): ПИТАНИЕ | ВЫКЛ / ВКЛ | `fug4` (enable =1); `fug4_tx` (enable =1) | `deploy_mast` 1→1 | `order_deploy`, `order_mast` |
 | `radio.fug4.mode` | R-123M (FuG-4): режим | Д. ПРИЕМ / СИМПЛЕКС | `fug4_tx` (enable =1) | `deploy_mast` 2→1 | `order_deploy`, `order_mast` |
 | `radio.fug4.preset` | R-123M (FuG-4): ФИКСИР. ЧАСТОТЫ | 1 / 2 / 3 / 4 | – | `fug4_spare` 1→1; `fug4_working` 1→0 | `order_fug4_spare`, `order_fug4_working` |
-| `radio.fug4.volume` | R-123M (FuG-4): ГРОМКОСТЬ | минимум / максимум | – | – | – |
+| `radio.fug4.volume` | R-123M (FuG-4): ГРОМКОСТЬ | wheel | – | – | – |
 | `radio.fug4.squelch` | R-123M (FuG-4): ШУМЫ | ВЫКЛ / ВКЛ | – | – | – |
 | `headset.radio_operator` | Headset (шлемофон): radiotelephonist (PVS-1) | СНЯТ / НАДЕТ | `comms_ready` (enable =1) | `headset_on_radio_operator` 1→1 | `order_deploy` |
 | `rk1.rx` | РК-1У: ПРИЕМ | ВЫКЛ / Р-123 / Р-111 / Р-407 / ПРОВОД | – | `deploy_mast` 7→3 | `order_deploy`, `order_mast` |

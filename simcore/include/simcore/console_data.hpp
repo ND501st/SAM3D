@@ -42,7 +42,7 @@ struct SearchSensorDef {
     std::vector<std::string> beam_inputs;
     double rotation_period_s = 0.0;
     // IFF interrogator (optional; query empty = none): each press of `query` (or `control_query`) interrogates for
-    // query_time_s; friendly aircraft within max_range_m reply. With `gate_control` at 1 the replies are gated by the
+    // query_time_s; friendly aircraft within max_range_m reply. With `gate_control` at 0 (КЛАПАН, the lower position) the replies are gated by the
     // search radar's echoes (only targets it sees reply on the scope). `interrogating_input` is set while it runs.
     std::string iff_query;
     std::string iff_control_query;
@@ -115,6 +115,8 @@ struct TrackSensorDef {
     std::string captured_input;   // inputs the model sets (may be empty)
     std::string tv_track_input;   // the TV channel holds the target (manual TV tracking)
     std::string too_low_input;
+    std::string slow_input;       // Vц ≤ 100: the radar holds a target no faster than slow_mps (the lamp of that name)
+    double slow_mps = 100.0;
     std::string near_zone_input;
     std::string in_zone_input;
     std::string crosshair_input;  // the TV-tracked target fills the narrow-lens crosshair (its range judged by its size)
@@ -1057,7 +1059,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RefControl(e, rp, "power", out.panel, ControlKind::Discrete, true, r.power) ||
                 !RefControl(e, rp, "mode", out.panel, ControlKind::Discrete, true, r.mode) ||
                 !RefControl(e, rp, "squelch", out.panel, ControlKind::Discrete, true, r.squelch) ||
-                !RefControl(e, rp, "volume", out.panel, ControlKind::Discrete, true, r.volume) ||
+                !RefControl(e, rp, "volume", out.panel, ControlKind::Continuous, true, r.volume) ||
                 !RefControl(e, rp, "antenna", out.panel, ControlKind::Discrete, true, r.antenna) ||
                 !RefSubsystem(e, rp, "warm", eq, true, r.warm) || !RefSubsystem(e, rp, "transmit", eq, true, r.transmit) ||
                 !RefControl(e, rp, "tone", out.panel, ControlKind::Momentary, false, r.tone) ||
@@ -1226,7 +1228,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (!RefControl(e, sp, "power", out.panel, ControlKind::Discrete, r123, s.power) ||
                 !RefControl(e, sp, "mode", out.panel, ControlKind::Discrete, r123, s.mode) ||
                 !RefControl(e, sp, "preset", out.panel, ControlKind::Discrete, r123, s.preset) ||
-                !RefControl(e, sp, "volume", out.panel, ControlKind::Discrete, false, s.volume) ||
+                !RefControl(e, sp, "volume", out.panel, ControlKind::Continuous, false, s.volume) ||
                 !RefControl(e, sp, "squelch", out.panel, ControlKind::Discrete, false, s.squelch)) {
                 return false;
             }
@@ -1690,7 +1692,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
                             "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
                             "max_range_m", "az_limit_deg", "captured_input", "range_pulled_input", "tv_track_input", "too_low_input", "near_zone_input",
-                            "in_zone_input", "crosshair_input", "elevation_search", "notes"}) ||
+                            "in_zone_input", "crosshair_input", "slow_input", "slow_mps", "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -1710,6 +1712,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefInput(*tr, tp, "captured_input", eq, track.captured_input) ||
             !RefInput(*tr, tp, "tv_track_input", eq, track.tv_track_input) ||
             !RefInput(*tr, tp, "too_low_input", eq, track.too_low_input) ||
+            !RefInput(*tr, tp, "slow_input", eq, track.slow_input) || !OptionalNumber(*tr, tp, "slow_mps", track.slow_mps) ||
             !RefInput(*tr, tp, "near_zone_input", eq, track.near_zone_input) ||
             !RefInput(*tr, tp, "in_zone_input", eq, track.in_zone_input) ||
             !RefInput(*tr, tp, "crosshair_input", eq, track.crosshair_input)) {

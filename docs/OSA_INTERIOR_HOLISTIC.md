@@ -1924,3 +1924,186 @@ over SAM's AK photo.
 - **Unreal.** Build the C++ (`SimCabinComponent` skips mesh-drawn fixtures), run `tools/ue_import_cabin_interior.py`
   (re-imports `SM_RackSL2M`, makes `MI_Cabin_Paint_Ivory`), re-import `SM_WheelDome` and the `T_Panel_*` textures.
 
+## 55. SŁ-2M: every control, lamp, word and print checked against SAM's photo (13 Nov 2026)
+
+Each column was cut into tiles of SAM's AK photo at 3x beside the check render of the same window
+(`sl2m_check.py`, the per-column fit), and every knob, switch, lamp, jack, label and printed mark read off the photo
+(5x crops where the letters are small) and corrected in `data/cabins/osa_ak.json`.
+
+- **New look and fixture keys** (`cabin.hpp`, `cabin_textures.py`, `sl2m_check.py`, `SimCabinComponent`): `label_at`
+  (above, below, left, right: where the engraving stands); fixtures of kind `text` (free engraving, `angle_deg` to turn
+  it, letters stacked with line breaks: ВЫСОКОЕ, ПОИСК), `scale` (a printed arc with a tick and figure at each of
+  `angles_deg`; an empty figure is a bare tick: КОМПЕНСАЦИЯ ВЕТРА's 0-270°, СКОРОСТЬ П А's - +, the locks' ОТКР. / ЗАКР.
+  arcs) and `frame` (a ruled cell: the blocks' charts of their plug-in units). Text, scales and frames are printed on the
+  panel's face texture; Unreal draws them only on a panel without one. Colours `cream` and `copper` (the test jacks).
+- **Parts.** Potentiometer knobs drawn as knobs (were a 45 mm crank); headset jacks as jacks (were toggles); latches as
+  a cream plate (`SM_LatchPlate`, new) under the chrome lock, 22 mm on so and fo where SAM shows the smaller lock;
+  nameplates framed; lamp bezels in their ring's colour.
+- **Words.** РЧЧМ corrected to РПЧМ; the charts of ОК62-5М, ОС61-5М and ОП63-6М2 drawn cell by cell; every test jack's
+  voltage or name (−6,3В, +27В СУ, ПЕРЕБРОС БЛОКИР., МАСШТАБ ТОЦ, СРП, Ш7's eight pins); the legend caps as engraved (КЗ.
+  with a letter З, СР.Д, no channel numbers, ВНИМА-НИЕ); toggle legends raised clear of the lever (16 mm up, 14 down);
+  round legend caps break at the middle space, wide ones stay on one line (Unreal `AddLegend` and the check scene).
+- **Switch sense.** SAM engraves the upper position first; where the console had it the other way round the labels
+  swap: ssc.afc, soc.afc, soc.mti_ext, ssc.emu, tov.check (nothing reads their positions; each keeps its starting
+  state) and iff.gate (КЛАПАН is position 0 now, `engagement.hpp` gates at 0, its test follows).
+- **Read with low confidence.** ГОНβ / ГОНε (the jacks' first letters), ТОЦ, the TV's ЭЛЕКТР. over ЯРКОСТЬ.
+- **Left.** tov.fov's legends read УЗКИЙ up where SAM shows ШИРОКИЙ: its position 1 is УЗКИЙ in the procedures,
+  the tutorial and the engagement model, so it needs a per-control "position 0 up" look key rather than a swap. Panel
+  screws are not drawn; the range dial's window is round where SAM shows a trapezoid cowl; the 0094-5 bezel's captions
+  are under the bezel; the slewing lever is a knob where SAM shows a white bar between two screws; soc.knob_unid (from
+  the book's photo, not on SAM) stays.
+- **Unreal.** Build the C++ (`SimCabinComponent`: knob looks on wheels, jacks, latch plates, nameplates, text fixtures,
+  `AddLegend`), re-import `SM_Latch` and `SM_LatchPlate` (`tools/ue_import_cabin_parts.py`) and the `T_Panel_*` textures.
+
+## 56. SŁ-2M: the owner's review of section 55, and section 55's "Left" (13 Nov 2026)
+
+Checked the same way, tile by tile against SAM's AK photo at 3x.
+
+- **Section 55's "Left", done.** `look.up: 0` stands a toggle's position 0 up (tov.fov: ШИРОКИЙ up, as engraved;
+  nothing that reads its positions changes, `CabinLayout::PositionAngleDeg`). Screws: 84 slotted heads found on the
+  photo (Hough circles plus a template of six heads, filtered by colour, by the items' footprints, the locks' own screws,
+  the printed text and the gaps between blocks; a few rejected by eye), as fixtures of the new kind `screw`, brass,
+  their slots lying either way. The range dial (ОС81-18М) in SAM's trapezoid cowl (`sl2m_housings.py` `cowl`: a window
+  35 mm wide at its top, 71 at its foot, 53 high, the cowl swept down to the plate). 0094-5's captions (Δβ, Δε,
+  1ДЕЛ 0-20, СВР I/II, ГО, ТО, 1ДЕЛ 1-00, 1ДЕЛ 0-02, АЗИМУТ ССЦ, УГОЛ МЕСТА ССЦ) stand on the bezel's front, in
+  the photo's three rows under each dial. ssc.slew is a white bar between two screws.
+- **Locks.** Every lock's printed arc carries its arrowhead (`scale.arrow`: first, last or both) and its ОТКР. / ЗАКР.,
+  fitted on the photo: left-hand locks [-163°, -56°], right-hand ones [10°, 116°]; op's latch plates down from 28 to
+  22 mm (SAM's plate is about 28 mm across the lock, as on so), which showed op's arcs again.
+- **ЗАПРЕТ ПУСКА.** A silver dished barrel 41 mm across with the key cylinder in it, its printed arc on its right with
+  the arrow at the lower end.
+- **СМЕНА ЛИТ.** Its words engraved apart (СМЕНА ЛИТ. over it, СМЕНА and НОРМ. either side of a red mark) and the hinged
+  locking bar over it, a grey block and arm with a roller on the pivot.
+- **ПУСК ГОТОВ.** A cap with round ends (`shape: stadium`) and red letters (`ink`). Sources disagree: the photo's letters
+  are red unlit; samsim_osa gives the lamp green. Lit, it stays green (the written source); both recorded in its notes.
+- **The PPI.** The two copper rollers stand on the drum's face, tangential to its rim, not on its edge; the right one is
+  КУРС. ПАРАМ. and turns the seven course lines (section 52's model). The figures stand inside the dark ring. They read
+  0-59 (thousandths of a turn, as SAM's photo and the Soviet goniometer have them), not 0-360.
+- **Words.** СВЕТОФИЛЬТР 8.6 mm over its knob (it was under the lock); the elevation dial's scale (εс, Г.О. 1 дел. —
+  1-00, Т.О. 1 дел. — 0-02) engraved under it on fo; ЯРКОСТЬ / ВИЗИРА on two lines.
+- **Unreal.** Build the C++ (`SimCabinComponent`: screws, words on a raised bezel, stadium legends and their ink, `up`,
+  the key's collar), re-import `SM_RackSL2M`, `SM_Latch`, `SM_LatchPlate` and every `T_Panel_*` texture.
+
+## 57. SŁ-2M: the locks, the screws, the scale's figures and the scopes' knobs (13 Nov 2026)
+
+- **The block locks** (every `latch` fixture in the Osa). The plate is an upright hexagon with straight sides and
+  chamfered ends, its corners barely rounded, 30 x 46 mm round a 20 mm barrel on a 22 mm lock (SAM's AK photo at 3x;
+  `build_cabin_parts.py` `_latch_outline`). The barrel is matt nickel, its face a ring round a black core with the
+  plug's bit across it (`SM_LatchCore`, which also carries the screws' slots); the plate's two screws are steel
+  (`SM_LatchScrews`). A lock laid on its side turns by the fixture's `angle_deg` (fo's under ЯРКОСТЬ / ФОКУС, 90°): the
+  only one on SAM's photo.
+- **Screws.** One steel for every screw in the Osa (`steel`, 0.42, the 0096 cabinet's Metal_Steel): the SŁ-2M's 84,
+  the locks', the blocks' corner screws (`BuildBlock`) and the air duct's and blower's (were brass).
+- **The search scope's scale.** The figures 0-59 are modelled on the dark cone between the screen and the drum's face,
+  upright for the operator, 6.5 mm along the slope (about 3.5 mm seen face on, as on SAM's photo); the ticks stand at the
+  screen's edge (`DrawPpiFace`). They read 0-59, thousandths of a turn, as the photo and the book have them.
+- **The scopes' knobs.** What they are, from voenizdat_osa_1991: potentiometers, turned without stops, that set each
+  indicator's picture. OP81-16M2: ЯРКОСТЬ, ФОКУС, ЯРКОСТЬ ВИЗИРА, ЯРКОСТЬ МЕТОК, КОНТРАСТНОСТЬ and ОСВЕЩЕНИЕ ШКАЛЫ
+  (p50); OS81-10M: КОНТРАСТ., ЯРКОСТЬ, ФОКУС (p98-99); the TV: КОНТРАСТ., ЯРКОСТЬ, ФОКУС КИНЕСКОПА (p103); the range
+  indicator a ЯРКОСТЬ and a ФОКУС per sweep and ЯРКОСТЬ СТРОБА (p98). The drill (p52): a minute after switching on,
+  ЯРКОСТЬ brings up the sweep, the dark SSC cursor and the range marks; the picture is then set with the others; РРУ
+  stands at full gain in combat. Against a noise jammer the gain and the brightness are turned down to narrow its
+  sector so the cursor goes on its middle (p266).
+  A display's `picture` names its knobs (`data/cabins/osa_ak.json`); `ScopePictureOf` (cabin.hpp) turns them into the
+  picture: dark below a fifth of a turn, set up at the middle, overdriven and blooming towards the end; focus sharp at
+  the middle; contrast 0.3-1.7; the gain and the scale light as turned (the curves are SAM3D's: the book says what each
+  knob is for, not how it responds). Unreal: the tube's gain and halo (every scope), and on the search scope the sweep,
+  noise, echoes, marks, cursor, the scale's light and a jammer's sector; the TV's contrast and its cross. РРУ now starts
+  full. **Left:** the knobs change the picture only: the radar's detection does not follow РРУ, and no drill step turns
+  ЯРКОСТЬ up at switch-on (each knob starts set up); the range indicator's two sweeps share one tube gain.
+- **Unreal.** Build the C++ (`SimCabinComponent`, `SimCabinDisplayComponent`), re-import `SM_Latch`, `SM_LatchPlate`,
+  `SM_LatchCore`, `SM_LatchScrews`, `SM_RackSL2M` and the `T_Panel_*` textures.
+
+## 58. SŁ-2M: the owner's fifth review (14 Nov 2026)
+
+- **ЯРКОСТЬ at switch-on.** The search scope's ЯРКОСТЬ (`soc.bright`) now starts low (0.1, the scope dark), and the
+  senior operator turns it up to the middle once the equipment is warm, as the drill has it (voenizdat_osa_1991 p52: a
+  minute after switching on, "ввести яркость ручкой ЯРКОСТЬ на блоке ОП81-16М2"). It is a crew setting
+  (`data/crew/osa_ak_crew.json` `"settings"`, `crew_data.hpp` `KnobSettingDef`): when its conditions hold and the knob is
+  more than `within` from `to`, the NPC at the seat turns it there at the knob's rate (`turn_s` end to end, times the
+  tier's wheel rate) through `NpcDoes(seat, SeatDuty::Wheel)`; a player at the seat owes it as a duty the helper shows.
+- **The potentiometers.** Every knob in the cabin file that is a continuous control between stops (no `units_per_turn`,
+  a range that doesn't wrap) is now a potentiometer: its whole range is 270 degrees of turn (`CabinLayout::kPotTravelDeg`,
+  SAM3D's figure for the SP-series resistors; no source gives the Osa's), so a drag or a scroll notch turns it a little
+  at a time and its value goes up and down as a sliding scale, the knob pointing from -135 to +135 degrees. Before, a
+  0-1 knob took a 360th of a turn end to end and behaved like a switch. The knob itself (`SM_Knob`) is remodelled: 0.7
+  of its width out of the panel (about 17 mm on a 24 mm knob), eight shallow ribs round its side.
+  **Left:** the R-123M's ГРОМКОСТЬ (`radio.left.volume`, `radio.right.volume`, and the PU-12M's sets') is still a
+  two-position switch in the console data; the set has a volume potentiometer, but its procedures turn it "to the
+  right to the stop" and the radio model reads it as on or off, so making it a potentiometer is its own change.
+- **СМЕНА ЛИТ.'s bar.** What it is: a hinged locking bar that holds the letter switch at НОРМ. in normal work; it is
+  swung open only to change the channel's letter when a channel fails (voenizdat_osa_1991 p150, p248). The console has
+  it already (`spk.letter`: latch closed, НОРМА with the latch open, СМЕНА ЛИТ.); it is now drawn as the photo has it, a
+  flat bar on a hinge block to the knob's left (`SM_LetterBar`, `SM_LetterBarHinge`, the cabin's `"bar"`), lying over
+  the knob while shut and swung 170 degrees clear when opened; the knob's pointer stands at its own angles
+  (`"angles_deg"`). The bar and its hinge are matt satin metal, greyer than the plates.
+- **Screws.** A muted steely brass (`screw`, 0.40/0.36/0.28 linear, SAM's AK photo at its median at half its chroma):
+  every block, lock and panel screw on the three columns and the rack's own (`Metal_Screw`), not the yellow brass of
+  before.
+- **The search scope's scale.** Re-read on samsim_panels at 10x: the screen is 252 mm across; the dark cone runs from its
+  edge out to the drum's face, 27 mm wide; on it a tick every 1.5 degrees (a longer one, r 131-140.5 mm, at each figure,
+  three short ones, r 133.5-139, between) and the figures 0-59 at r 146, about 4.7 mm high seen face on. Ticks and
+  figures are the cone's own geometry in a dark grey (`Paint_Scale`); none are drawn on the screen any more. The cone now
+  runs straight into the tube's throat (no lip at the screen's edge to catch the light) and the throat is closed behind
+  the screen. **Left:** ОСВЕЩ. ШКАЛЫ no longer lights the ticks (they are geometry, not the display's).
+- **The lamp banks and the buttons' mounts, traced.** The plates were grown round their lamps, so their edges swelled
+  round each one; the photo's are cut plates. Each is now traced at 14x on a millimetre grid (`sl2m_housings.TRACED`,
+  about +-1 mm): КАНАЛ I's and КАНАЛ II's banks, straight along the top and bottom, their ends following the rows'
+  stagger, a notch at each end with the screw that holds the plate; the four-lamp strip under the TV, the ЛЮКИ ЗАКР. /
+  ОТКАЗ СРП plate and the АВАР. ПУСК strip, each with its notches and screws. The buttons' mounts are true stadia,
+  straight-sided, every button's hexagon (and ПЕЛЕНГ's sockets) standing in a well 2.5 mm deep. Tests:
+  `test_lamp_banks_and_stadia_are_traced`.
+- **Words and print.** On ОС81-10М's block: РОД РАБОТЫ's and ИЗДЕЛИЯ's printed scales, an arc through a tick at each
+  position with the legends outside, wider than the knobs and not quite centred on them, as printed, their titles
+  above; Ш7's pin legends in a column from one left edge on a bracket (a text fixture's `"label_at": "right"` now runs
+  right from its point); the lock's arc with an arrow at both ends, ОТКР. upright beside the upper one; the fourth knob's
+  ГОРИЗ. (cut by the photo's edge, low confidence); ДЦ and the elevation dial's εс, Г.О., Т.О. at the photo's size. The
+  0094-5's captions on its raised bezel are sized as the photo's (about 4 mm capitals; Unreal counted bytes, not
+  letters). **Left:** the rules either side of АЗИМУТ ССЦ and УГОЛ МЕСТА ССЦ on the 0094-5's bezel; ОС81-10М's
+  graticule on its yellow screen; the meter's face under ДЦ; the panels' letters are still lighter and narrower than the
+  photo's heavy engraving.
+- **Unreal.** Build the C++ (`SimCabinComponent`, `SimCabinDisplayComponent`); re-import `SM_Knob`, `SM_Latch`,
+  `SM_LatchPlate`, `SM_LatchCore`, `SM_LatchScrews`, `SM_LetterBar`, `SM_LetterBarHinge`, `SM_RackSL2M`, `SM_OsaHull`
+  and the `T_Panel_*` textures; `tools/ue_import_cabin_interior.py` makes the new materials `Metal_Screw` and
+  `Paint_Scale`.
+
+## 59. SŁ-2M: the owner's sixth review (14 Nov 2026)
+
+Read again on samsim_panels and on SAM Simulator's own sprites (osa010/011, 020/021, 034/035, 042/043) at 8-14x, and on
+the operators' manual (voenizdat_osa_1991) for the words.
+
+- **Words.** The captions under the 0094-5's meter pairs (СО ε / КАНАЛ Ц / СО β twice, КАНАЛ Р on the right), the lamp
+  ЗАХ. АПЧ I's old place is Vц ≤ 100 (`target_slow`, an input of the engagement model: lit while the target's speed is
+  100 m/s or under), ЗАХ. АПЧ I moved to its own lamp under АВАР. ПУСК. Every caption was re-read against the manual's
+  full words; where the panel abbreviates, the abbreviation is the photo's.
+- **The 0094-5's rules.** Either side of СВР II, АЗИМУТ ССЦ, УГОЛ МЕСТА ССЦ and СВР I, a thin rule with a tick down at its
+  outer end, broken by the caption (16 frame fixtures on the bezel, 0.3 mm by 2.6 mm ticks).
+- **ПЕЛЕНГ.** Its two sockets I and II as the photo has them: a steel hex nut 11.5 mm across standing out of the stadium's
+  well, a red insulator in it and the pin's hole (`sl2m_housings` SOLIDS); drawn only by the rack mesh.
+- **ЗАПРЕТ ПУСКА.** The key barrel is its own part, `SM_KeyBarrel`: polished metal, a flat rim, its side sloping in to a
+  dished top round the key cylinder (the profile read on SAM's AK photo at 12x).
+- **The wheels' locks.** The knurled collar folded across each hand wheel's hub is the lock (`SM_WheelLockCollar`, a
+  flap of 20 degrees); the old toggle under each wheel is gone. The plate hanging over УГОЛ МЕСТА's rim on the photo is
+  not a lock: it is АВАР. ПУСК's cover, open. ВЫСОКОЕ's ВКЛ. at the top of the ВЫСОКОЕ ПОИСК strip is a hinged cover
+  (`soc.hv_cover`, `SM_CoverHv` on its hinge), not the white button that stood there.
+- **The hinge plates.** The silver plate with a black bar next to ОС81-10М was SAM3D's guess at a hinge and is removed
+  (`build_rack(hinge_ends=(False, False))`).
+- **ОС81-10М's graticule.** Its yellow screen carries the photo's scale: a vertical line at 0.63 of the radius left of
+  centre, 21 ticks every 0.075 R (every other one longer), and the horizontal line out to 0.85 R; dark when the scope is
+  off, drawn over the trace when on (`SimCabinDisplayComponent::DrawElevationScope`, `sl2m_check`).
+- **ДЦ's face.** `"face": "arched"` (`CabinDisplay::face`, the only value besides plain): a white window with rounded top
+  corners in the black case, the scale's dots on an arc over the pivot, V in the middle, the needle swinging from under
+  a black hump.
+- **Lettering.** The panels' print is heavier: every caption is stroked by 0.045 of its height (`cabin_textures.STROKE_EM`).
+- **ОСВЕЩ. ШКАЛЫ** lights the PPI's ticks and figures again: the interior meshes' `Paint_Scale` slots become dynamic
+  instances whose emissive follows the scope's `scale_light` while it is on (`SimCabinComponent::ScaleLightMaterials`).
+- **The headset jacks.** The small button by the ПЕЛЕНГ lamps on the owner's image was the ШЛЕМОФОН jack; the jacks are on
+  the R-124 boxes A-3 and A-5 (two new panels).
+- **The lamp fittings.** The protruding lamps in two rows of three are the same lens-capped lamp fitting used across the
+  cabin; no source names the fitting's type, so it stays SAM3D's model of it.
+- **ГРОМКОСТЬ.** The R-123M's volume, on the Osa's two sets and the PU-12M's three, is now a potentiometer (a wheel
+  between stops, 0-1, starting at 0.8, 270 degrees of turn in the cabin); right down it hears nothing, between it scales
+  the set's voices and hiss (`docs/crew/12_COMMUNICATIONS.md` 2.3). The radio-on drill no longer turns it to the stop.
+- **Unreal.** Build the C++ (`SimCabinComponent`, `SimCabinDisplayComponent`, `SimCrewAudioComponent`,
+  `SimCrewVoiceComponent`, and the simcore headers); re-import `SM_KeyBarrel` and the other cabin parts, `SM_RackSL2M`,
+  and the `T_Panel_*` textures.

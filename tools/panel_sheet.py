@@ -96,6 +96,7 @@ def build_items(console, cabin):
             "size": look_size(entry, FOOTPRINT_M[style]),
             "confidence": control.get("confidence", ""), "launch": control["id"] == launch_button,
             "positions": len(control.get("position_labels", [])), "guards": None,
+            "flap": "flap" in entry,
         })
     for control in controls:
         if control["id"] in placed:
@@ -151,7 +152,8 @@ def find_problems(console, cabin):
             problems.append(f"control '{control['id']}' is not placed on any panel")
     # Covers are flaps hinged 4.5 cm in front of the face (SimCabinComponent), so they may hang past a column's edge
     # or over a neighbour, as the guards in the samsim_panels photos do; only items on the face are checked.
-    on_face = [i for i in items if i["style"] != "cover"]
+    # A control drawn as a hinged flap (a wheel's lock collar folded over its hub) stands in front of the face too.
+    on_face = [i for i in items if i["style"] != "cover" and not i.get("flap")]
     for item in items:
         panel = panels.get(item["panel"])
         if panel is None:

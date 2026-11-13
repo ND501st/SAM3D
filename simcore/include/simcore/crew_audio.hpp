@@ -9,7 +9,8 @@
 //     the R-124 sidetone puts in his own ears) or a designation coming in.
 //   * The call tone while ТОН. ВЫЗОВ is pressed (1 s, the runner's).
 // The voices themselves are the callouts (CalloutBus::SpeakingNow) and the designations heard
-// (ScenarioRunner::DesignationsHeard). Levels are 0..1, SAM3D's mix: hiss 0.35 open, 0.05 under a carrier.
+// (ScenarioRunner::DesignationsHeard). Levels are 0..1, SAM3D's mix: hiss 0.35 open, 0.05 under a carrier, each times
+// the set's ГРОМКОСТЬ (`volume`, which the presentation applies to the set's voices too).
 #pragma once
 
 #include "simcore/scenario_runner.hpp"
@@ -22,6 +23,7 @@ struct HeadsetSound {
     bool carrier = false;    // something is on the net now
     bool tone = false;       // the call tone
     bool squelched = false;  // the noise suppressor is on
+    double volume = 1.0;     // the set's ГРОМКОСТЬ, 0..1: the hiss and the voices on the set are heard at this level
 };
 
 inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) {
@@ -32,9 +34,10 @@ inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) {
     const int set = r.C2() != nullptr ? r.C2()->ListeningSet() : 1;
     if (set < 0 || set >= static_cast<int>(c.comms.radios.size())) return out;
     const CommsRadioDef& radio = c.comms.radios[static_cast<std::size_t>(set)];
-    const bool works = c.panel.Get(radio.power) == 1 && c.equipment.IsReady(radio.warm) && c.panel.Get(radio.volume) == 1;
+    const bool works = c.panel.Get(radio.power) == 1 && c.equipment.IsReady(radio.warm) && VolumeUp(c.panel, radio.volume);
     out.on_radio = works && comms->CommanderOnRadio(c);
     if (!out.on_radio) return out;
+    out.volume = VolumeLevel(c.panel, radio.volume);
     out.squelched = c.panel.Get(radio.squelch) == 1;
     const double now = r.Time();
     if (const CalloutBus* bus = r.Callouts()) {
@@ -48,6 +51,7 @@ inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) {
     } else {
         out.hiss = out.squelched ? 0.0 : 0.35;
     }
+    out.hiss *= out.volume;
     return out;
 }
 

@@ -52,6 +52,21 @@ struct SAM3D_API FSimCabinItem
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Pointer;
 
+	/** A locking bar over the control (СМЕНА ЛИТ.'s, SM_LetterBar), swung on its hinge with the control's step; and its bracket. */
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> Bar;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> BarHinge;
+
+	/** A hinged part drawn in the control's place (simcore::CabinFlap): its first moving part is Moving (the one traced),
+	 *  its first fixed part Base; the rest here, swung with it or standing still. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> FlapParts;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> FlapFixed;
+
 	/** Red dot beside the control marking its working position (simcore::CabinLayout::RedDot). May be null. */
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> Mark;
@@ -62,6 +77,8 @@ struct SAM3D_API FSimCabinItem
 
 	FLinearColor BaseColor = FLinearColor::Black;
 	FLinearColor MovingColor = FLinearColor::Black;
+	/** A legend lamp's letters while it is dark (the look's "ink": ПУСК ГОТОВ's red; else unlit white glass). */
+	FLinearColor LegendInk = FLinearColor(0.22f, 0.22f, 0.21f);
 
 	/** simcore::CabinLookKind from the layout's "look" (Default = by style), and its size (m, 0 = the style's). */
 	uint8 LookKind = 0;
@@ -274,6 +291,11 @@ private:
 	/** Blocks, fixtures and nameplate texts: drawn, not operated. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UPrimitiveComponent>> DecorParts;
+
+	/** The interior meshes' Paint_Scale slots (the PPI's azimuth scale on its cone, SM_RackSL2M) as dynamic instances,
+	 *  lit by ОСВЕЩ. ШКАЛЫ (the PPI's picture's scale_light) while the scope is on. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> ScaleLightMaterials;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USimCabinDisplayComponent>> Displays;

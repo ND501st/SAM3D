@@ -130,7 +130,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 495 all targets gone | 254 | 450 | 473 | 1 | 1 | 0 | 0 | 0 | 10 | 0 | 0 | - | 0 |
 | commander | 502 all targets gone | - | 453 | 473 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | duty 7 | 0 |
 | deputy_commander | 497 all targets gone | 254 | 460 | 474 | 1 | 1 | 0 | 0 | 7 | 8 | 0 | 0 | drill 15, duty 8, wheel 186 | 0 |
-| senior_operator | 499 all targets gone | 254 | 464 | 478 | 1 | 1 | 0 | 0 | 14 | 9 | 0 | 0 | drill 11, duty 14, wheel 58 | 0 |
+| senior_operator | 499 all targets gone | 254 | 464 | 478 | 1 | 1 | 0 | 0 | 14 | 9 | 0 | 0 | drill 11, duty 15, wheel 57 | 0 |
 | operator | 495 all targets gone | 253 | 454 | 473 | 1 | 1 | 0 | 0 | 6 | 8 | 0 | 0 | drill 11, duty 6, wheel 370 | 0 |
 | driver | 495 all targets gone | 253 | 450 | 473 | 1 | 1 | 0 | 0 | 1 | 10 | 0 | 0 | drill 2, duty 1 | 0 |
 
@@ -152,7 +152,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 569 all targets gone | 253 | 538 | 552 | 1 | 4 | 0 | 0 | 0 | 6 | 0 | 0 | - | 0 |
 | commander | 592 all targets gone | - | 557 | 571 | 1 | 4 | 0 | 0 | 0 | 5 | 0 | 0 | duty 5 | 78 |
 | deputy_commander | 570 all targets gone | 253 | 537 | 551 | 1 | 4 | 0 | 0 | 7 | 6 | 0 | 0 | drill 15, duty 8, wheel 179 | 0 |
-| senior_operator | 569 all targets gone | 253 | 538 | 552 | 1 | 4 | 0 | 0 | 17 | 6 | 0 | 0 | drill 9, duty 17, wheel 307 | 0 |
+| senior_operator | 569 all targets gone | 253 | 538 | 552 | 1 | 4 | 0 | 0 | 17 | 6 | 0 | 0 | drill 9, duty 18, wheel 316 | 0 |
 | operator | 566 all targets gone | 253 | 534 | 548 | 1 | 4 | 0 | 0 | 6 | 6 | 0 | 0 | drill 11, duty 6, wheel 1264 | 0 |
 | driver | 569 all targets gone | 252 | 538 | 552 | 1 | 4 | 0 | 0 | 1 | 6 | 0 | 0 | drill 2, duty 1 | 0 |
 
@@ -174,7 +174,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 598 all targets gone | 4 | 250 | 269 | 1 | 4 | 0 | 0 | 0 | 9 | 0 | 0 | - | 0 |
 | commander | 647 all targets gone | - | 247 | - | 0 | 4 | 0 | 0 | 0 | 8 | 0 | 0 | duty 8 | 67 |
 | deputy_commander | 598 all targets gone | 4 | 250 | 269 | 1 | 4 | 0 | 0 | 11 | 7 | 0 | 0 | drill 8, duty 12, wheel 1361 | 0 |
-| senior_operator | 598 all targets gone | 2 | 277 | 291 | 1 | 4 | 0 | 0 | 29 | 9 | 0 | 0 | drill 11, duty 29, wheel 815 | 0 |
+| senior_operator | 598 all targets gone | 2 | 277 | 291 | 1 | 4 | 0 | 0 | 29 | 9 | 0 | 0 | drill 11, duty 30, wheel 799 | 0 |
 | operator | 598 all targets gone | 4 | 250 | 269 | 1 | 4 | 0 | 0 | 9 | 9 | 0 | 0 | drill 4, duty 9, wheel 1248 | 0 |
 | driver | 598 all targets gone | 4 | 250 | 269 | 1 | 4 | 0 | 0 | 0 | 9 | 0 | 0 | - | 0 |
 
@@ -196,7 +196,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 441 | 457 | 472 | 1 | 3 | 0 | 0 | 0 | 6 | 0 | 0 | - | 0 |
 | commander | 900 time | - | - | - | 0 | 3 | 0 | 0 | 0 | 1 | 0 | 0 | duty 1 | 114 |
 | deputy_commander | 900 time | 441 | 455 | 470 | 1 | 3 | 0 | 0 | 12 | 6 | 0 | 0 | drill 14, duty 13, wheel 1693 | 0 |
-| senior_operator | 900 time | 440 | 454 | 469 | 1 | 3 | 0 | 0 | 18 | 6 | 0 | 0 | drill 7, duty 21, wheel 1452 | 0 |
+| senior_operator | 900 time | 440 | 454 | 469 | 1 | 3 | 0 | 0 | 18 | 6 | 0 | 0 | drill 7, duty 22, wheel 1451 | 0 |
 | operator | 900 time | 439 | 451 | 467 | 1 | 3 | 0 | 0 | 8 | 5 | 0 | 0 | drill 7, duty 8, wheel 170 | 0 |
 | driver | 900 time | 441 | 457 | 472 | 1 | 3 | 0 | 0 | 2 | 6 | 0 | 0 | duty 2 | 0 |
 
@@ -207,7 +207,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 743 all targets gone | 253 | 274 | 571 | 1 | 3 | 0 | 0 | 0 | 12 | 0 | 0 | - | 0 |
 | commander | 759 all targets gone | 284 | 278 | - | 0 | 3 | 0 | 0 | 0 | 11 | 0 | 0 | duty 11 | 18 |
 | deputy_commander | 743 all targets gone | 253 | 459 | 571 | 1 | 3 | 0 | 0 | 13 | 12 | 0 | 0 | drill 16, duty 14, wheel 2200 | 0 |
-| senior_operator | 743 all targets gone | 253 | 272 | 571 | 1 | 3 | 0 | 0 | 29 | 11 | 0 | 0 | drill 10, duty 31, wheel 1057 | 0 |
+| senior_operator | 743 all targets gone | 253 | 274 | 571 | 1 | 3 | 0 | 0 | 29 | 13 | 0 | 0 | drill 10, duty 32, wheel 1071 | 0 |
 | operator | 743 all targets gone | 252 | 276 | 571 | 1 | 3 | 0 | 0 | 8 | 12 | 0 | 0 | drill 11, duty 8, wheel 575 | 0 |
 | driver | 743 all targets gone | 253 | 276 | 571 | 1 | 3 | 0 | 0 | 1 | 12 | 0 | 0 | drill 2, duty 1 | 0 |
 
@@ -218,7 +218,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time limit | 254 | 452 | 466 | 2 | 2 | 0 | 0 | 0 | 6 | 1 | 0 | - | 0 |
 | commander | 900 time limit | - | 453 | 467 | 1 | 2 | 0 | 0 | 0 | 4 | 1 | 0 | duty 4 | 0 |
 | deputy_commander | 900 time limit | 254 | 453 | 467 | 2 | 2 | 0 | 0 | 17 | 6 | 1 | 0 | drill 21, duty 18, wheel 71 | 0 |
-| senior_operator | 900 time limit | 254 | 449 | 463 | 2 | 2 | 0 | 0 | 7 | 6 | 1 | 0 | drill 9, duty 10, wheel 223 | 0 |
+| senior_operator | 900 time limit | 254 | 449 | 463 | 2 | 2 | 0 | 0 | 7 | 6 | 1 | 0 | drill 9, duty 11, wheel 222 | 0 |
 | operator | 900 time limit | 253 | 451 | 465 | 2 | 2 | 0 | 0 | 4 | 6 | 0 | 0 | drill 11, duty 4, wheel 97 | 0 |
 | driver | 900 time limit | 253 | 452 | 466 | 2 | 2 | 0 | 0 | 1 | 6 | 1 | 0 | drill 2, duty 1 | 0 |
 
@@ -229,7 +229,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 3 | 272 | 286 | 1 | 4 | 0 | 0 | 0 | 12 | 0 | 0 | - | 0 |
 | commander | 900 time | - | 301 | 315 | 1 | 4 | 0 | 0 | 0 | 10 | 0 | 0 | duty 10 | 31 |
 | deputy_commander | 900 time | 3 | 273 | 287 | 1 | 4 | 0 | 0 | 7 | 12 | 0 | 0 | drill 9, duty 9, wheel 485 | 0 |
-| senior_operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 72 | 9 | 5 | 0 | drill 23, duty 187, wheel 556 | 0 |
+| senior_operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 72 | 9 | 5 | 0 | drill 23, duty 188, wheel 555 | 0 |
 | operator | 900 time | 3 | 272 | 286 | 1 | 4 | 0 | 0 | 7 | 12 | 0 | 0 | drill 14, duty 7, wheel 289 | 0 |
 | driver | 900 time | 3 | 272 | 286 | 1 | 4 | 0 | 0 | 2 | 12 | 0 | 0 | drill 1, duty 2 | 0 |
 
@@ -240,7 +240,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 3 | 245 | 270 | 1 | 4 | 0 | 0 | 0 | 12 | 0 | 0 | - | 0 |
 | commander | 900 time | - | 153 | 286 | 1 | 4 | 0 | 0 | 0 | 9 | 1 | 0 | duty 9 | 19 |
 | deputy_commander | 900 time | 3 | 265 | 279 | 1 | 4 | 0 | 0 | 7 | 12 | 0 | 0 | drill 10, duty 9, wheel 1224 | 0 |
-| senior_operator | 900 time | 3 | 263 | 277 | 3 | 4 | 0 | 0 | 69 | 16 | 7 | 0 | drill 26, duty 178, wheel 719 | 0 |
+| senior_operator | 900 time | 3 | 263 | 277 | 3 | 4 | 0 | 0 | 69 | 16 | 7 | 0 | drill 26, duty 179, wheel 718 | 0 |
 | operator | 900 time | 3 | 245 | 270 | 1 | 4 | 0 | 0 | 8 | 12 | 0 | 0 | drill 16, duty 8, wheel 185 | 0 |
 | driver | 900 time | 3 | 245 | 270 | 1 | 4 | 0 | 0 | 2 | 12 | 0 | 0 | drill 1, duty 2 | 0 |
 
@@ -251,7 +251,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 452 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 452 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | deputy_commander | 451 all targets gone | - | 315 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 7, duty 6, wheel 8 | 0 |
-| senior_operator | 451 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 7, wheel 18 | 0 |
+| senior_operator | 451 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 8, wheel 18 | 0 |
 | operator | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 420 | 0 |
 | driver | 452 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
 
@@ -262,7 +262,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 452 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 452 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | deputy_commander | 451 all targets gone | - | 402 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 7, duty 6, wheel 93 | 0 |
-| senior_operator | 451 all targets gone | - | 402 | 426 | 1 | 1 | 0 | 0 | 10 | 0 | 0 | 0 | drill 11, duty 11, wheel 33 | 0 |
+| senior_operator | 451 all targets gone | - | 402 | 426 | 1 | 1 | 0 | 0 | 10 | 0 | 0 | 0 | drill 11, duty 12, wheel 32 | 0 |
 | operator | 452 all targets gone | - | 401 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 160 | 0 |
 | driver | 452 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
 
@@ -273,7 +273,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 30 |
 | deputy_commander | 663 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 10, duty 2, wheel 228 | 0 |
-| senior_operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 1, wheel 119 | 0 |
+| senior_operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 2, wheel 123 | 0 |
 | operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 7, duty 2, wheel 38 | 0 |
 | driver | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
 
@@ -284,7 +284,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | deputy_commander | 900 time limit | - | 321 | 344 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 7, duty 7, wheel 104 | 0 |
-| senior_operator | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 8 | 0 | 0 | 0 | drill 11, duty 10, wheel 29 | 0 |
+| senior_operator | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 8 | 0 | 0 | 0 | drill 11, duty 11, wheel 28 | 0 |
 | operator | 900 time limit | - | 318 | 344 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 69 | 0 |
 | driver | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
 
@@ -295,7 +295,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 411 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 411 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | deputy_commander | 410 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 10 | 0 | 0 | 0 | drill 10, duty 10 | 0 |
-| senior_operator | 411 all targets gone | - | 321 | 384 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 9, wheel 8 | 0 |
+| senior_operator | 411 all targets gone | - | 303 | 383 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 8, wheel 9 | 0 |
 | operator | 410 all targets gone | - | 309 | 385 | 1 | 1 | 0 | 0 | 5 | 0 | 0 | 0 | drill 11, duty 5, wheel 171 | 0 |
 | driver | 411 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
 
@@ -306,7 +306,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 600 time limit | 4 | 120 | 164 | 1 | 1 | 0 | 0 | 0 | 10 | 0 | 0 | - | 0 |
 | commander | 600 time limit | - | 120 | 164 | 1 | 1 | 0 | 0 | 0 | 9 | 0 | 0 | duty 9 | 0 |
 | deputy_commander | 600 time limit | 4 | 120 | 164 | 1 | 1 | 0 | 0 | 7 | 8 | 0 | 0 | drill 8, duty 8, wheel 261 | 0 |
-| senior_operator | 600 time limit | 2 | 117 | 164 | 1 | 1 | 0 | 0 | 10 | 9 | 0 | 0 | drill 10, duty 10, wheel 62 | 0 |
+| senior_operator | 600 time limit | 2 | 117 | 164 | 1 | 1 | 0 | 0 | 10 | 9 | 0 | 0 | drill 10, duty 11, wheel 61 | 0 |
 | operator | 600 time limit | 4 | 112 | 164 | 1 | 1 | 0 | 0 | 6 | 7 | 0 | 0 | drill 6, duty 6, wheel 281 | 0 |
 | driver | 600 time limit | 4 | 120 | 164 | 1 | 1 | 0 | 0 | 0 | 10 | 0 | 0 | - | 0 |
 
@@ -317,7 +317,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 159 all targets gone | 4 | 86 | 146 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | - | 0 |
 | commander | 383 all targets gone | - | 86 | - | 0 | 1 | 0 | 0 | 0 | 5 | 0 | 0 | duty 5 | 15 |
 | deputy_commander | 383 all targets gone | 4 | 86 | - | 0 | 1 | 0 | 0 | 13 | 3 | 0 | 0 | drill 5, duty 14, wheel 551 | 0 |
-| senior_operator | 159 all targets gone | 2 | 88 | 146 | 1 | 1 | 0 | 0 | 8 | 8 | 0 | 0 | drill 9, duty 9, wheel 153 | 0 |
+| senior_operator | 159 all targets gone | 2 | 88 | 146 | 1 | 1 | 0 | 0 | 8 | 8 | 0 | 0 | drill 9, duty 10, wheel 152 | 0 |
 | operator | 383 all targets gone | 4 | 87 | - | 0 | 1 | 0 | 0 | 9 | 12 | 0 | 0 | drill 5, duty 9, wheel 325 | 0 |
 | driver | 159 all targets gone | 4 | 86 | 146 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | - | 0 |
 
@@ -328,7 +328,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | deputy_commander | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 10, duty 1, wheel 8 | 0 |
-| senior_operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 11, wheel 19 | 0 |
+| senior_operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 12, wheel 18 | 0 |
 | operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 3 | 0 | 0 | 0 | drill 11, duty 3, wheel 160 | 0 |
 | driver | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
 
@@ -339,7 +339,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 452 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 452 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 47 |
 | deputy_commander | 451 all targets gone | - | 315 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 7, duty 6, wheel 8 | 0 |
-| senior_operator | 451 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 7, wheel 18 | 0 |
+| senior_operator | 451 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 8, wheel 18 | 0 |
 | operator | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 420 | 0 |
 | driver | 452 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
 
@@ -350,7 +350,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 749 all targets gone | 4 | 698 | 728 | 1 | 1 | 0 | 0 | 0 | 5 | 0 | 0 | - | 0 |
 | commander | 751 all targets gone | - | 695 | 728 | 1 | 1 | 0 | 0 | 0 | 5 | 0 | 0 | duty 5 | 91 |
 | deputy_commander | 754 all targets gone | 4 | 698 | 728 | 1 | 1 | 0 | 0 | 7 | 5 | 0 | 0 | drill 9, duty 8, wheel 658 | 0 |
-| senior_operator | 749 all targets gone | 2 | 688 | 728 | 1 | 1 | 0 | 0 | 10 | 5 | 0 | 0 | drill 9, duty 10, wheel 61 | 0 |
+| senior_operator | 749 all targets gone | 2 | 688 | 728 | 1 | 1 | 0 | 0 | 10 | 5 | 0 | 0 | drill 9, duty 11, wheel 65 | 0 |
 | operator | 749 all targets gone | 4 | 697 | 728 | 1 | 1 | 0 | 0 | 5 | 5 | 0 | 0 | drill 4, duty 5, wheel 1357 | 0 |
 | driver | 749 all targets gone | 4 | 698 | 728 | 1 | 1 | 0 | 0 | 0 | 5 | 0 | 0 | - | 0 |
 
@@ -361,7 +361,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 445 all targets gone | - | 407 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 445 all targets gone | - | 407 | 426 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 34 |
 | deputy_commander | 451 all targets gone | - | 404 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 12, duty 6, wheel 43 | 0 |
-| senior_operator | 445 all targets gone | - | 404 | 426 | 1 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 9, wheel 35 | 0 |
+| senior_operator | 445 all targets gone | - | 404 | 426 | 1 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 10, wheel 34 | 0 |
 | operator | 445 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 4 | 0 | 0 | 0 | drill 11, duty 4, wheel 68 | 0 |
 | driver | 445 all targets gone | - | 407 | 426 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
 
@@ -372,7 +372,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time limit | 4 | 316 | 529 | 1 | 1 | 0 | 0 | 0 | 14 | 0 | 0 | - | 0 |
 | commander | 900 time limit | - | 316 | 529 | 1 | 1 | 0 | 0 | 0 | 12 | 0 | 0 | duty 12 | 50 |
 | deputy_commander | 900 time limit | 4 | 316 | - | 0 | 1 | 0 | 0 | 7 | 8 | 0 | 0 | drill 8, duty 8, wheel 2103 | 0 |
-| senior_operator | 672 all targets gone | 2 | 310 | 364 | 1 | 2 | 0 | 0 | 23 | 11 | 0 | 0 | drill 11, duty 23, wheel 226 | 0 |
+| senior_operator | 672 all targets gone | 2 | 319 | 364 | 1 | 2 | 0 | 0 | 24 | 11 | 0 | 0 | drill 11, duty 25, wheel 229 | 0 |
 | operator | 900 time limit | 4 | 314 | 529 | 1 | 1 | 0 | 0 | 8 | 13 | 1 | 0 | drill 4, duty 8, wheel 883 | 0 |
 | driver | 900 time limit | 4 | 316 | 529 | 1 | 1 | 0 | 0 | 0 | 14 | 0 | 0 | - | 0 |
 
@@ -383,7 +383,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 733 all targets gone | 253 | 484 | 499 | 3 | 2 | 0 | 0 | 0 | 14 | 0 | 0 | - | 0 |
 | commander | 734 all targets gone | - | 484 | 498 | 3 | 2 | 0 | 0 | 0 | 12 | 0 | 0 | duty 12 | 29 |
 | deputy_commander | 743 all targets gone | 253 | 484 | 498 | 4 | 2 | 0 | 0 | 16 | 12 | 0 | 0 | drill 20, duty 17, wheel 1294 | 0 |
-| senior_operator | 751 all targets gone | 253 | 483 | 706 | 2 | 2 | 0 | 0 | 13 | 20 | 0 | 0 | drill 19, duty 13, wheel 499 | 0 |
+| senior_operator | 751 all targets gone | 253 | 483 | 706 | 2 | 2 | 0 | 0 | 13 | 20 | 0 | 0 | drill 19, duty 14, wheel 498 | 0 |
 | operator | 749 all targets gone | 253 | 570 | 706 | 2 | 2 | 0 | 0 | 10 | 12 | 0 | 0 | drill 11, duty 10, wheel 271 | 0 |
 | driver | 733 all targets gone | 252 | 489 | 503 | 3 | 2 | 0 | 0 | 1 | 13 | 0 | 0 | drill 2, duty 1 | 0 |
 
@@ -394,7 +394,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 444 all targets gone | 3 | 145 | 161 | 5 | 2 | 0 | 0 | 0 | 11 | 0 | 0 | - | 0 |
 | commander | 513 all targets gone | - | 145 | 161 | 4 | 2 | 0 | 0 | 0 | 10 | 0 | 0 | duty 10 | 10 |
 | deputy_commander | 446 all targets gone | 3 | 145 | 161 | 6 | 2 | 0 | 0 | 20 | 11 | 0 | 0 | drill 15, duty 21, wheel 758 | 0 |
-| senior_operator | 444 all targets gone | 2 | 147 | 161 | 5 | 2 | 0 | 0 | 10 | 10 | 0 | 0 | drill 9, duty 12, wheel 121 | 0 |
+| senior_operator | 444 all targets gone | 2 | 146 | 161 | 5 | 2 | 0 | 0 | 10 | 10 | 0 | 0 | drill 9, duty 13, wheel 126 | 0 |
 | operator | 444 all targets gone | 3 | 146 | 161 | 5 | 2 | 0 | 0 | 11 | 11 | 0 | 0 | drill 4, duty 11, wheel 243 | 0 |
 | driver | 444 all targets gone | 3 | 145 | 161 | 5 | 2 | 0 | 0 | 0 | 11 | 0 | 0 | - | 0 |
 
@@ -405,7 +405,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 454 all targets gone | 3 | 385 | 399 | 3 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | - | 0 |
 | commander | 600 time limit | - | 386 | 400 | 2 | 0 | 0 | 0 | 0 | 9 | 0 | 0 | duty 9 | 32 |
 | deputy_commander | 458 all targets gone | 3 | 386 | 400 | 3 | 1 | 0 | 0 | 10 | 7 | 0 | 0 | drill 10, duty 11, wheel 1602 | 0 |
-| senior_operator | 453 all targets gone | 2 | 384 | 398 | 3 | 1 | 0 | 0 | 10 | 7 | 0 | 0 | drill 10, duty 10, wheel 998 | 0 |
+| senior_operator | 453 all targets gone | 2 | 384 | 398 | 3 | 1 | 0 | 0 | 10 | 7 | 0 | 0 | drill 10, duty 11, wheel 997 | 0 |
 | operator | 456 all targets gone | 3 | 384 | 398 | 3 | 1 | 0 | 0 | 9 | 7 | 0 | 0 | drill 4, duty 9, wheel 159 | 0 |
 | driver | 454 all targets gone | 3 | 385 | 399 | 3 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | - | 0 |
 
@@ -427,7 +427,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 600 time limit | 3 | 190 | 210 | 1 | 2 | 0 | 0 | 0 | 14 | 0 | 0 | - | 0 |
 | commander | 600 time limit | - | 190 | 210 | 1 | 2 | 0 | 0 | 0 | 7 | 0 | 0 | duty 7 | 67 |
 | deputy_commander | 600 time limit | 3 | 190 | 210 | 1 | 2 | 0 | 0 | 11 | 6 | 0 | 0 | drill 10, duty 12, wheel 1266 | 0 |
-| senior_operator | 600 time limit | 2 | 191 | 210 | 1 | 2 | 0 | 0 | 20 | 9 | 0 | 0 | drill 9, duty 24, wheel 581 | 0 |
+| senior_operator | 600 time limit | 2 | 191 | 210 | 1 | 2 | 0 | 0 | 20 | 9 | 0 | 0 | drill 9, duty 25, wheel 585 | 0 |
 | operator | 600 time limit | 3 | 189 | 210 | 1 | 2 | 0 | 0 | 11 | 12 | 0 | 0 | drill 4, duty 11, wheel 217 | 0 |
 | driver | 600 time limit | 3 | 190 | 210 | 1 | 2 | 0 | 0 | 0 | 14 | 0 | 0 | - | 0 |
 
@@ -438,7 +438,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time limit | 3 | 163 | 206 | 4 | 2 | 0 | 0 | 0 | 19 | 0 | 0 | - | 0 |
 | commander | 900 time limit | - | 165 | 206 | 4 | 2 | 0 | 0 | 0 | 17 | 0 | 0 | duty 17 | 34 |
 | deputy_commander | 900 time limit | 3 | 163 | 206 | 4 | 3 | 0 | 0 | 19 | 14 | 0 | 0 | drill 17, duty 20, wheel 3843 | 0 |
-| senior_operator | 900 time limit | 2 | 168 | 206 | 4 | 2 | 0 | 0 | 31 | 19 | 0 | 0 | drill 12, duty 36, wheel 2724 | 0 |
+| senior_operator | 900 time limit | 2 | 168 | 206 | 4 | 2 | 0 | 0 | 31 | 19 | 0 | 0 | drill 12, duty 37, wheel 2723 | 0 |
 | operator | 900 time limit | 3 | 161 | 206 | 4 | 2 | 0 | 0 | 16 | 19 | 0 | 0 | drill 4, duty 16, wheel 788 | 0 |
 | driver | 900 time limit | 3 | 163 | 206 | 4 | 2 | 0 | 0 | 0 | 19 | 0 | 0 | - | 0 |
 
@@ -449,7 +449,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 600 time limit | 4 | 183 | 201 | 2 | 4 | 0 | 0 | 0 | 13 | 0 | 0 | - | 0 |
 | commander | 600 time limit | - | 182 | 201 | 3 | 4 | 0 | 0 | 0 | 13 | 0 | 0 | duty 13 | 14 |
 | deputy_commander | 600 time limit | 4 | 185 | 201 | 2 | 4 | 0 | 0 | 15 | 12 | 0 | 0 | drill 14, duty 16, wheel 2139 | 0 |
-| senior_operator | 600 time limit | 2 | 180 | 201 | 2 | 4 | 0 | 0 | 35 | 9 | 0 | 0 | drill 9, duty 43, wheel 196 | 0 |
+| senior_operator | 600 time limit | 2 | 180 | 201 | 2 | 4 | 0 | 0 | 35 | 9 | 0 | 0 | drill 9, duty 44, wheel 195 | 0 |
 | operator | 600 time limit | 4 | 183 | 201 | 2 | 4 | 0 | 0 | 13 | 12 | 0 | 0 | drill 4, duty 13, wheel 102 | 0 |
 | driver | 600 time limit | 4 | 183 | 201 | 2 | 4 | 0 | 0 | 0 | 13 | 0 | 0 | - | 0 |
 
@@ -460,7 +460,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 0 | 51 | 0 | 0 | - | 0 |
 | commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 0 | 52 | 2 | 0 | duty 52 | 0 |
 | deputy_commander | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 1 | 51 | 0 | 0 | drill 3, duty 2, wheel 55 | 0 |
-| senior_operator | 900 time | 2 | - | - | 0 | 0 | 0 | 0 | 34 | 51 | 1 | 0 | drill 59, duty 36, wheel 69 | 0 |
+| senior_operator | 900 time | 2 | - | - | 0 | 0 | 0 | 0 | 34 | 53 | 0 | 0 | drill 61, duty 36, wheel 58 | 0 |
 | operator | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 2 | 51 | 0 | 0 | drill 4, duty 2, wheel 50 | 0 |
 | driver | 900 time | 4 | - | - | 0 | 0 | 0 | 0 | 0 | 51 | 0 | 0 | - | 0 |
 
@@ -471,7 +471,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 877 all targets gone | 4 | 413 | 453 | 1 | 1 | 0 | 0 | 0 | 45 | 1 | 0 | - | 0 |
 | commander | 880 all targets gone | - | 402 | 454 | 1 | 1 | 0 | 0 | 0 | 41 | 0 | 0 | duty 41 | 11 |
 | deputy_commander | 891 all targets gone | 4 | 411 | 453 | 2 | 1 | 0 | 0 | 8 | 54 | 1 | 0 | drill 8, duty 9, wheel 122 | 0 |
-| senior_operator | 877 all targets gone | 2 | 408 | 453 | 1 | 1 | 0 | 0 | 31 | 48 | 1 | 0 | drill 47, duty 33, wheel 138 | 0 |
+| senior_operator | 877 all targets gone | 2 | 401 | 453 | 1 | 1 | 0 | 0 | 32 | 47 | 0 | 0 | drill 47, duty 34, wheel 157 | 0 |
 | operator | 877 all targets gone | 4 | 410 | 453 | 1 | 1 | 0 | 0 | 8 | 45 | 1 | 0 | drill 4, duty 8, wheel 57 | 0 |
 | driver | 877 all targets gone | 4 | 413 | 453 | 1 | 1 | 0 | 0 | 0 | 45 | 1 | 0 | - | 0 |
 
@@ -482,7 +482,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 5 | 617 | - | 0 | 1 | 0 | 0 | 0 | 43 | 0 | 0 | - | 0 |
 | commander | 900 time | - | 733 | - | 0 | 1 | 0 | 0 | 0 | 45 | 0 | 0 | duty 45 | 116 |
 | deputy_commander | 900 time | 5 | 619 | - | 0 | 1 | 0 | 0 | 5 | 42 | 0 | 0 | drill 8, duty 6, wheel 3610 | 0 |
-| senior_operator | 900 time | 2 | 618 | - | 0 | 1 | 0 | 0 | 138 | 47 | 2 | 0 | drill 64, duty 151, wheel 142 | 0 |
+| senior_operator | 900 time | 2 | 618 | - | 0 | 1 | 0 | 0 | 98 | 47 | 0 | 0 | drill 59, duty 110, wheel 219 | 0 |
 | operator | 900 time | 5 | 617 | - | 0 | 1 | 0 | 0 | 4 | 46 | 0 | 0 | drill 5, duty 4, wheel 3415 | 0 |
 | driver | 900 time | 5 | 617 | - | 0 | 1 | 0 | 0 | 0 | 43 | 0 | 0 | - | 0 |
 
@@ -493,7 +493,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 776 all targets gone | 3 | 438 | - | 0 | 7 | 0 | 0 | 0 | 40 | 0 | 0 | - | 0 |
 | commander | 776 all targets gone | - | 453 | - | 0 | 7 | 0 | 0 | 0 | 39 | 0 | 0 | duty 39 | 0 |
 | deputy_commander | 776 all targets gone | 3 | 438 | - | 0 | 7 | 0 | 0 | 6 | 42 | 0 | 0 | drill 8, duty 7, wheel 223 | 0 |
-| senior_operator | 776 all targets gone | 2 | 496 | - | 0 | 7 | 0 | 0 | 71 | 42 | 2 | 0 | drill 70, duty 80, wheel 412 | 0 |
+| senior_operator | 776 all targets gone | 2 | 336 | - | 0 | 7 | 0 | 0 | 72 | 49 | 4 | 0 | drill 72, duty 82, wheel 278 | 0 |
 | operator | 776 all targets gone | 3 | 437 | - | 0 | 7 | 0 | 0 | 21 | 43 | 0 | 0 | drill 4, duty 21, wheel 223 | 0 |
 | driver | 776 all targets gone | 3 | 438 | - | 0 | 7 | 0 | 0 | 0 | 40 | 0 | 0 | - | 0 |
 
@@ -504,7 +504,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 4 | 432 | 448 | 1 | 1 | 0 | 0 | 0 | 50 | 1 | 0 | - | 0 |
 | commander | 900 time | 461 | 455 | - | 0 | 0 | 0 | 0 | 0 | 43 | 0 | 0 | duty 43 | 182 |
 | deputy_commander | 900 time | 4 | 431 | 448 | 1 | 1 | 0 | 0 | 10 | 51 | 1 | 0 | drill 15, duty 11, wheel 3639 | 0 |
-| senior_operator | 900 time | 2 | 456 | - | 0 | 0 | 0 | 0 | 47 | 50 | 1 | 0 | drill 47, duty 49, wheel 790 | 0 |
+| senior_operator | 900 time | 2 | 453 | - | 0 | 0 | 0 | 0 | 48 | 57 | 1 | 0 | drill 44, duty 52, wheel 884 | 0 |
 | operator | 900 time | 4 | 433 | 448 | 1 | 1 | 0 | 0 | 10 | 51 | 0 | 0 | drill 4, duty 10, wheel 2606 | 0 |
 | driver | 900 time | 4 | 432 | 448 | 1 | 1 | 0 | 0 | 0 | 50 | 1 | 0 | - | 0 |
 
@@ -515,7 +515,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 4 | 746 | 797 | 2 | 3 | 0 | 0 | 0 | 48 | 1 | 0 | - | 0 |
 | commander | 900 time | - | 745 | 802 | 1 | 2 | 0 | 0 | 0 | 49 | 2 | 0 | duty 49 | 112 |
 | deputy_commander | 900 time | 4 | 745 | 801 | 2 | 3 | 0 | 0 | 23 | 48 | 0 | 0 | drill 15, duty 24, wheel 193 | 0 |
-| senior_operator | 900 time | 2 | 751 | 805 | 2 | 2 | 0 | 0 | 56 | 47 | 1 | 0 | drill 52, duty 63, wheel 48 | 0 |
+| senior_operator | 900 time | 2 | 746 | 797 | 2 | 3 | 0 | 0 | 57 | 48 | 1 | 0 | drill 52, duty 65, wheel 75 | 0 |
 | operator | 900 time | 4 | 744 | 808 | 1 | 2 | 0 | 0 | 13 | 47 | 1 | 0 | drill 4, duty 13, wheel 3783 | 0 |
 | driver | 900 time | 4 | 746 | 797 | 2 | 3 | 0 | 0 | 0 | 48 | 1 | 0 | - | 0 |
 
@@ -526,7 +526,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 4 | 372 | - | 0 | 2 | 0 | 0 | 0 | 24 | 0 | 0 | - | 0 |
 | commander | 900 time | - | 373 | - | 0 | 2 | 0 | 0 | 0 | 23 | 0 | 0 | duty 23 | 204 |
 | deputy_commander | 900 time | 4 | 384 | - | 0 | 2 | 0 | 0 | 2 | 36 | 0 | 0 | drill 8, duty 3, wheel 3864 | 0 |
-| senior_operator | 900 time | 2 | 486 | - | 0 | 2 | 0 | 0 | 72 | 36 | 0 | 0 | drill 48, duty 76, wheel 536 | 0 |
+| senior_operator | 900 time | 2 | 575 | - | 0 | 2 | 0 | 0 | 55 | 44 | 1 | 0 | drill 37, duty 59, wheel 554 | 0 |
 | operator | 900 time | 4 | 371 | - | 0 | 2 | 0 | 0 | 3 | 24 | 0 | 0 | drill 4, duty 3, wheel 1976 | 0 |
 | driver | 900 time | 4 | 372 | - | 0 | 2 | 0 | 0 | 0 | 24 | 0 | 0 | - | 0 |
 
@@ -537,11 +537,11 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 900 time | 253 | 814 | - | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 0 | - | 0 |
 | commander | 900 time | - | 787 | 853 | 1 | 1 | 0 | 0 | 0 | 9 | 0 | 0 | duty 9 | 175 |
 | deputy_commander | 900 time | 253 | 814 | - | 0 | 0 | 0 | 0 | 6 | 3 | 0 | 0 | drill 3, duty 7, wheel 5171 | 0 |
-| senior_operator | 900 time | 253 | 858 | - | 0 | 1 | 0 | 0 | 36 | 3 | 0 | 0 | drill 10, duty 39, wheel 1671 | 0 |
+| senior_operator | 900 time | 253 | 858 | - | 0 | 1 | 0 | 0 | 36 | 3 | 0 | 0 | drill 10, duty 40, wheel 1675 | 0 |
 | operator | 900 time | 253 | - | - | 0 | 1 | 0 | 0 | 2 | 2 | 0 | 0 | drill 7, duty 2, wheel 5163 | 0 |
 | driver | 900 time | 252 | - | - | 0 | 1 | 0 | 0 | 1 | 2 | 0 | 0 | drill 2, duty 1 | 0 |
 
-## Gaps (39)
+## Gaps (38)
 
 - **osa_crew_practice, commander**: ready_halted never reached
 - **osa_battery_fight, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 6203, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
@@ -575,7 +575,6 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 - **air_war_nato_decoys, commander**: ready_halted a minute or more later; launched never reached; fewer kills (0 vs 1); no launch. Last refused: Report: 10, я 21: цель 6204, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
 - **air_war_nato_decoys, senior_operator**: launched never reached; fewer kills (0 vs 1); no launch
 - **air_war_nato_strike, commander**: ready_halted never reached; fewer kills (2 vs 3). Last refused: Report: 10, я 21: цель 6209, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
-- **air_war_nato_strike, senior_operator**: fewer kills (2 vs 3)
 - **air_war_nato_strike, operator**: fewer kills (2 vs 3)
 - **air_war_nato_dead, commander**: ready_halted never reached. Last refused: Report: 10, я 21: цель 6207, понял. Приём.: the chest switch is at receive (hold it at ПРД to talk)
 - **air_war_nato_dead, senior_operator**: captured a minute or more later
@@ -590,7 +589,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | control (deputy_commander): the commander's order: РАБ.РЕЖ. to ВКЛ | 28 |
 | control (radio_operator): the commander's order: R-111 (FuG-3): РЕЖ. РАБОТЫ to МОЩНОСТЬ 1 % | 1 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 43 |
-| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 98 |
+| drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 87 |
 | drill (senior_operator): the least emission against ARMs: both low beams in each burst | 8 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ off between bursts | 105 |
 | drill (senior_operator): the least emission against ARMs: ВЫСОКОЕ on for a two-turn burst | 107 |
@@ -628,15 +627,16 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): К бою: the intercom checked | 34 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
 | report (radio_operator): an air report heard: read it out to the plotter | 99 |
-| report (senior_operator): a new echo on his scope | 111 |
-| report (senior_operator): a report the crew makes when its lamp or input comes on | 273 |
-| report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 1 |
-| report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 8 |
+| report (senior_operator): a new echo on his scope | 104 |
+| report (senior_operator): a report the crew makes when its lamp or input comes on | 274 |
+| report (senior_operator): a sign of the shot on his instrument: the target's mark gone | 2 |
+| report (senior_operator): a small fast mark coming straight at the vehicle: an ARM | 5 |
 | report (senior_operator): a target that came at the battery turns away | 1 |
-| report (senior_operator): no reply mark beside the echo | 198 |
-| report (senior_operator): the nearest echo, every 15 s until a track | 175 |
+| report (senior_operator): no reply mark beside the echo | 160 |
+| report (senior_operator): the nearest echo, every 15 s until a track | 189 |
 | report (senior_operator): К бою: the intercom checked | 34 |
 | report (squad_leader): a report the crew makes when its lamp or input comes on | 2 |
+| wheel (senior_operator): the manual's setting of ЯРКОСТЬ | 34 |
 
 ## Drills the NPC commander hands out that no order of the crew data starts
 

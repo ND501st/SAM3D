@@ -175,6 +175,33 @@ SC_TEST("engagement: a target too low for the radar lights НЛЦ and is never r
     SC_EXPECT(runner.Launches() == 0);  // never in the zone: the crew waits for ЦЕЛЬ В ЗОНЕ
 }
 
+SC_TEST("engagement: Vц ≤ 100 lights only while the radar holds a target no faster than 100 m/s") {
+    // voenizdat_osa_1991 p130: the lamp is one of method φ's conditions. Generic placeholder targets, 80 and 150 m/s.
+    for (const double speed : {80.0, 150.0}) {
+        const std::string t = R"({ "id": "t1", "name": "T", "class": "drone", "start": { "east_m": 1500, "north_m": 20000, "up_m": 1000 },
+            "waypoints": [ { "east_m": 1500, "north_m": -20000, "up_m": 1000 } ], "speed_mps": )" + std::to_string(speed) +
+                              R"(, "appear_at_s": 230 })";
+        ScenarioDef def;
+        ConsoleData console;
+        SC_EXPECT(LoadScenario(Engage(t, kAcquireAndFire), kData, def, console));
+        ScenarioRunner runner(std::move(def), std::move(console));
+        bool slow = false;
+        bool slow_untracked = false;
+        bool radar_tracked = false;
+        for (int i = 0; i < 5000 && !runner.Finished(); ++i) {
+            runner.Step(0.1);
+            const bool lit = runner.Console().equipment.GetInput("target_slow");
+            const bool radar = runner.Engagement().Method() == TrackMethod::Radar;
+            slow = slow || lit;
+            slow_untracked = slow_untracked || (lit && !radar && runner.Engagement().Method() != TrackMethod::RadarOnJam);
+            radar_tracked = radar_tracked || radar;
+        }
+        SC_EXPECT(radar_tracked);
+        SC_EXPECT(slow == (speed <= 100.0));
+        SC_EXPECT(!slow_untracked);
+    }
+}
+
 SC_TEST("engagement: TV-only engagement tracks with the camera and uses the TV factor") {
     const std::string emcon = R"(,
         { "id": "tv", "when": { "target": "t1", "target_within_m": 30000, "conditions": [ { "subsystem": "apu_free", "is": "ready" } ] },
@@ -474,10 +501,10 @@ SC_TEST("engagement: in the gated IFF mode only aircraft on the search scope rep
         runner->Step(0.1);
         return e.IffReplies().size();
     };
-    SC_EXPECT(Query(0, 0) == 1);  // open reception: replies though off the 0-15 km scale
+    SC_EXPECT(Query(1, 0) == 1);  // open reception (up): replies though off the 0-15 km scale
     SC_EXPECT(c.equipment.GetInput("iff_interrogating"));
-    SC_EXPECT(Query(1, 0) == 0);  // КЛАПАН: no echo on the scale, no reply
-    SC_EXPECT(Query(1, 1) == 1);  // on the 0-35 km scale it shows, so it replies
+    SC_EXPECT(Query(0, 0) == 0);  // КЛАПАН (down): no echo on the scale, no reply
+    SC_EXPECT(Query(0, 1) == 1);  // on the 0-35 km scale it shows, so it replies
     for (int i = 0; i < 15; ++i) runner->Step(0.1);  // the interrogation lasts about 1 s
     SC_EXPECT(e.IffReplies().empty() && !c.equipment.GetInput("iff_interrogating"));
 }

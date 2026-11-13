@@ -60,7 +60,7 @@ void USimCrewAudioComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 	const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner);
 	HissLevel.store(static_cast<float>(H.hiss) * Volume);
-	ToneLevel.store(H.tone ? 0.25f * Volume : 0.0f);
+	ToneLevel.store(H.tone ? 0.25f * static_cast<float>(H.volume) * Volume : 0.0f);   // through the set: its ГРОМКОСТЬ
 
 }
 

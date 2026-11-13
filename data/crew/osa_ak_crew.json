@@ -6,6 +6,9 @@
   "source": "voenizdat_osa_1991 pp246-258 (the К бою drill and its reports); flak11 and wrk (seats and duties); sam3d for the rest",
   "confidence": "medium",
 
+  "settings": [
+    {"station": "senior_operator", "control": "soc.bright", "when": [{"subsystem": "equipment_warm", "is": "ready"}], "to": 0.5, "within": 0.2, "turn_s": 1.5, "source": "voenizdat_osa_1991 p52 (switching on, step 3: once the sweep shows on OS81-9M, a minute after the equipment is switched on, bring the brightness up with ЯРКОСТЬ on OP81-16M2; the SOC's sweep line and the SSC's cursor must show, then the picture is set with ЯРКОСТЬ, ЯРКОСТЬ ВИЗИРА, ЯРКОСТЬ МЕТОК, ФОКУС and КОНТРАСТНОСТЬ)", "confidence": "high", "notes": "The knob starts turned down (the scope dark, below a fifth of its turn: data/cabins/osa_ak.json \"picture\"). Where in its turn he leaves it (the middle, within a fifth) and how long his hand takes: SAM3D's."}
+  ],
   "decisions": { "controls": ["fo.launch"],
                  "source": "sam3d: the moment of launch is the deputy commander's judgement (voenizdat_osa_1991 p257: the first missile to meet the target at the far edge of the zone); its delay is the tier's launch_timing_s",
                  "confidence": "estimate" },

@@ -263,6 +263,7 @@ public:
         ArmEmission();
         UpdateGrades();
         UpdateCallouts();
+        UpdateKnobSettings(dt);
         UpdateTvRangeCallout();
         UpdateCounterJamming();
         UpdateStress();
@@ -2170,7 +2171,7 @@ private:
             reason = s->name + " is switched off";
         } else if (!console_.equipment.IsReady(s->warm)) {
             reason = s->name + " is still warming up";
-        } else if (!s->volume.empty() && console_.panel.Get(s->volume) != 1) {
+        } else if (!s->volume.empty() && !VolumeUp(console_.panel, s->volume)) {
             reason = s->name + " has its volume right down";
         } else if (nets_ != nullptr) {
             const RadioNetDef* n = NetOnSet(set);
@@ -5858,6 +5859,41 @@ private:
             }
         }
     }
+
+    // The potentiometers the crew sets by the manual (crew data "settings": ЯРКОСТЬ up once the sweep shows): the
+    // seat's NPC turns the knob to its setting at his hand's pace; a player there owes it as a wheel duty.
+    void UpdateKnobSettings(double dt) {
+        if (!def_.has_crew_data) return;
+        const std::vector<KnobSettingDef>& all = def_.crew_data.settings;
+        knob_turning_.resize(all.size(), 0);
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            const KnobSettingDef& k = all[i];
+            const ControlDef* c = console_.panel.Find(k.control);
+            if (c == nullptr || !console_.equipment.AllHold(k.when, console_.panel)) {
+                knob_turning_[i] = 0;
+                continue;
+            }
+            const double now = console_.panel.GetValue(k.control);
+            if (std::fabs(now - k.to) > k.within) knob_turning_[i] = 1;  // out of its setting: he sets it
+            if (knob_turning_[i] == 0) continue;
+            const SeatDuty duty = SeatDuty::Wheel(k.station, k.control, k.to, k.within, false,
+                                                  "the manual's setting of " + (c->label.empty() ? k.control : c->label));
+            if (!NpcDoes(k.station, duty)) {
+                knob_turning_[i] = 0;  // a player's: owed until he sets it
+                continue;
+            }
+            double rate = (c->max_value - c->min_value) / k.turn_s;
+            for (std::size_t j = 0; j < crew_.size() && j < def_.crew.size(); ++j) {
+                if (crew_[j].Role() != k.station) continue;
+                if (const SkillTier* tier = SkillOf(def_.crew[j])) rate *= tier->wheel_rate_factor;
+            }
+            const double step = rate * dt;
+            const double err = k.to - now;
+            console_.panel.SetValue(k.control, std::fabs(err) <= step ? k.to : now + (err > 0.0 ? step : -step));
+            if (std::fabs(err) <= step) knob_turning_[i] = 0;
+        }
+    }
+    std::vector<char> knob_turning_;
 
     void UpdateCallouts() {
         if (!callouts_) {

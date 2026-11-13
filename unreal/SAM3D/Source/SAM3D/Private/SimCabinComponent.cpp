@@ -42,6 +42,21 @@ namespace
 	const FLinearColor HighlightColor(1.0f, 0.85f, 0.2f);
 
 	// A look colour name (simcore::CabinLook) as a linear colour for the basic-shape material.
+	// A turned control (a potentiometer: SŁ-2M's ВЕРТ. СМЕЩ., ЯРКОСТЬ, a slotted trim) drawn as its knob, not as a hand
+	// wheel with a crank: the part the look names, turned with the control's value.
+	const TCHAR* KnobPart(simcore::CabinLookKind Kind)
+	{
+		switch (Kind)
+		{
+		case simcore::CabinLookKind::Knob: return TEXT("SM_Knob");
+		case simcore::CabinLookKind::PointerKnob: return TEXT("SM_KnobPointer");
+		case simcore::CabinLookKind::BarKnob: return TEXT("SM_KnobBar");
+		case simcore::CabinLookKind::Lever: return TEXT("SM_KnobBar");
+		case simcore::CabinLookKind::Trim: return TEXT("SM_Trim");
+		default: return nullptr;
+		}
+	}
+
 	FLinearColor LookColor(const std::string& Name, const FLinearColor& Fallback)
 	{
 		if (Name == "black") return FLinearColor(0.015f, 0.015f, 0.015f);
@@ -61,6 +76,16 @@ namespace
 		if (Name == "ivory") return FLinearColor(0.7f, 0.66f, 0.52f);
 		// a blue lamp lens (the cab dash's differential-lock lamp, the book's cab photographs)
 		if (Name == "blue") return FLinearColor(0.03f, 0.08f, 0.4f);
+		// SŁ-2M on SAM Simulator's AK photo: the hand wheels and hoods in the plates' own cream, the test jacks' copper-red
+		if (Name == "cream") return FLinearColor(0.55f, 0.54f, 0.47f);
+		if (Name == "copper") return FLinearColor(0.3f, 0.07f, 0.035f);
+		// every screw in the Osa (the 0096 cabinet's and the panels' Metal_Steel) and the locks' matt nickel barrels
+		if (Name == "steel") return FLinearColor(0.42f, 0.42f, 0.43f);
+		// the screws: a muted steely brass (SAM Simulator's AK photo, sRGB 124/108/83 at its median, at half its chroma)
+		if (Name == "screw") return FLinearColor(0.40f, 0.36f, 0.28f);
+		if (Name == "nickel") return FLinearColor(0.5f, 0.5f, 0.49f);
+		// СМЕНА ЛИТ.'s locking bar and its hinge: matt satin metal, greyer than the plates (SAM Simulator's AK photo)
+		if (Name == "satin") return FLinearColor(0.45f, 0.42f, 0.35f);
 		return Fallback;
 	}
 
@@ -70,6 +95,10 @@ namespace
 	{
 		if (C.Equals(ChromeColor) || C.Equals(LookColor("chrome", FLinearColor::Black))) return FVector2D(0.22, 1.0);
 		if (C.Equals(BrassColor) || C.Equals(LookColor("brass", FLinearColor::Black))) return FVector2D(0.35, 1.0);
+		if (C.Equals(LookColor("steel", FLinearColor::Black))) return FVector2D(0.45, 1.0);
+		if (C.Equals(LookColor("screw", FLinearColor::Black))) return FVector2D(0.4, 1.0);
+		if (C.Equals(LookColor("nickel", FLinearColor::Black))) return FVector2D(0.4, 1.0);
+		if (C.Equals(LookColor("satin", FLinearColor::Black))) return FVector2D(0.6, 0.3);
 		if (C.Equals(MetalColor)) return FVector2D(0.4, 0.8);
 		if (C.Equals(PlateColor)) return FVector2D(0.55, 0.0);
 		if (C.Equals(PanelColor)) return FVector2D(0.85, 0.0);
@@ -243,11 +272,22 @@ void USimCabinComponent::DestroyParts()
 {
 	for (FSimCabinItem& Item : Items)
 	{
-		for (UStaticMeshComponent* Part : {Item.Base.Get(), Item.Moving.Get(), Item.Pointer.Get(), Item.Mark.Get()})
+		for (UStaticMeshComponent* Part : {Item.Base.Get(), Item.Moving.Get(), Item.Pointer.Get(), Item.Mark.Get(), Item.Bar.Get(),
+											 Item.BarHinge.Get()})
 		{
 			if (Part != nullptr)
 			{
 				Part->DestroyComponent();
+			}
+		}
+		for (const TArray<TObjectPtr<UStaticMeshComponent>>* Parts : {&Item.FlapParts, &Item.FlapFixed})
+		{
+			for (UStaticMeshComponent* Part : *Parts)
+			{
+				if (Part != nullptr)
+				{
+					Part->DestroyComponent();
+				}
 			}
 		}
 	}
@@ -266,6 +306,7 @@ void USimCabinComponent::DestroyParts()
 		}
 	}
 	DecorParts.Reset();
+	ScaleLightMaterials.Reset();
 	for (USimCabinDisplayComponent* Display : Displays)
 	{
 		if (Display != nullptr)
@@ -510,7 +551,9 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Item.Pointer = AddMesh(CubeMesh, FLinearColor::White);
 		break;
 	case simcore::CabinStyle::Key:
-		Collar = FVector2D(0.032, 0.01);
+		// The lock's barrel in its look's colour (ЗАПРЕТ ПУСКА's is a silver cylinder on SAM's AK photo), brass by default.
+		Collar = FVector2D(Control.look.width_m > 0.0 ? Control.look.width_m : 0.032, 0.018);
+		Item.BaseColor = LookColor(Control.look.color, Item.BaseColor);
 		Item.MovingColor = BrassColor;
 		Item.Moving = AddMesh(CubeMesh, Item.MovingColor);
 		break;
@@ -560,11 +603,24 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	// a hand wheel's dish and handle (AnimateControl places them).
 	UStaticMesh* PartBase = nullptr;
 	double PartBaseSize = 0.0;
-	if (Control.style == simcore::CabinStyle::Toggle && !bCapLook && PartMesh(TEXT("SM_ToggleBase")) && PartMesh(TEXT("SM_ToggleLever")))
+	const bool bJackLook = Look == simcore::CabinLookKind::Jack || Look == simcore::CabinLookKind::Socket;
+	if (Control.style == simcore::CabinStyle::Toggle && bJackLook &&
+		PartMesh(Look == simcore::CabinLookKind::Jack ? TEXT("SM_Jack") : TEXT("SM_Socket")))
+	{
+		Item.Moving->SetStaticMesh(PartMesh(Look == simcore::CabinLookKind::Jack ? TEXT("SM_Jack") : TEXT("SM_Socket")));
+		Item.bParts = true;
+	}
+	else if (Control.style == simcore::CabinStyle::Toggle && !bCapLook && PartMesh(TEXT("SM_ToggleBase")) && PartMesh(TEXT("SM_ToggleLever")))
 	{
 		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_ToggleLever")));
 		PartBase = PartMesh(TEXT("SM_ToggleBase"));
 		PartBaseSize = Control.look.width_m > 0.0 ? Control.look.width_m : 0.016;
+	}
+	else if (Control.style == simcore::CabinStyle::Key && PartMesh(TEXT("SM_KeyBarrel")))
+	{
+		// ЗАПРЕТ ПУСКА's lock: the polished barrel sloping in to its dished top (the key turns in it).
+		PartBase = PartMesh(TEXT("SM_KeyBarrel"));
+		PartBaseSize = Collar.X;
 	}
 	else if ((Control.style == simcore::CabinStyle::Button || (Control.style == simcore::CabinStyle::Toggle && bCapLook)) &&
 			 PartMesh(TEXT("SM_ButtonRing")) && PartMesh(TEXT("SM_ButtonCap")))
@@ -583,6 +639,14 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Item.Pointer->SetVisibility(false);
 		Item.bParts = true;
 	}
+	else if (Control.style == simcore::CabinStyle::Wheel && KnobPart(Control.look.kind) != nullptr &&
+			 PartMesh(KnobPart(Control.look.kind)))
+	{
+		// A potentiometer: its knob or trim, no crank.
+		Item.Moving->SetStaticMesh(PartMesh(KnobPart(Control.look.kind)));
+		Item.Pointer->SetVisibility(false);
+		Item.bParts = true;
+	}
 	else if (Control.style == simcore::CabinStyle::Wheel && PartMesh(TEXT("SM_WheelDish")) && PartMesh(TEXT("SM_WheelHandle")))
 	{
 		// A domed wheel (the range wheel) where the layout asks for it and the part is imported; the dish otherwise.
@@ -597,11 +661,72 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		Item.Base = AddMesh(PartBase, Item.BaseColor);
 		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(PartBaseSize));
 	}
-	else if (Control.style != simcore::CabinStyle::Cover && !(Item.bParts && Control.style == simcore::CabinStyle::Rotary))
+	else if (Control.style != simcore::CabinStyle::Cover &&
+			 !(Item.bParts && (Control.style == simcore::CabinStyle::Rotary || bJackLook ||
+							   (Control.style == simcore::CabinStyle::Wheel && KnobPart(Control.look.kind) != nullptr))))
 	{
 		Item.Base = AddMesh(CylinderMesh, Item.BaseColor);
 		Place(Item.Base, Item.Location + Item.Normal * (50.0 * Collar.Y), FRotationMatrix::MakeFromZ(Item.Normal).Rotator(),
 			FVector(Collar.X, Collar.X, Collar.Y));
+	}
+	if (Control.has_bar && PartMesh(TEXT("SM_LetterBar")) && PartMesh(TEXT("SM_LetterBarHinge")))
+	{
+		// The locking bar (СМЕНА ЛИТ.'s): its bracket fixed on the plate at the hinge, the bar swung by AnimateControl.
+		const FVector Hinge = Item.Location + (Item.Right * Control.bar_hinge_u_m + Item.Up * Control.bar_hinge_v_m) * 100.0;
+		Item.BarHinge = AddMesh(PartMesh(TEXT("SM_LetterBarHinge")), LookColor("satin", ChromeColor));
+		Place(Item.BarHinge, Hinge, PartRotation(Item.Normal, Item.Up), FVector(Control.bar_length_m));
+		Item.Bar = AddMesh(PartMesh(TEXT("SM_LetterBar")), LookColor("satin", ChromeColor));
+	}
+	if (Control.has_flap && !Control.flap.parts.empty() && PartMesh(*ToF(Control.flap.parts[0].part)) != nullptr)
+	{
+		// The real cover or lever (art/cabin_parts, full size) in place of the style's stand-in: built here, swung by
+		// AnimateControl. Its first moving part is the one the cabin's traces find.
+		for (UStaticMeshComponent* Part : {Item.Base.Get(), Item.Moving.Get(), Item.Pointer.Get()})
+		{
+			if (Part != nullptr)
+			{
+				Part->DestroyComponent();
+			}
+		}
+		Item.Base = nullptr;
+		Item.Moving = nullptr;
+		Item.Pointer = nullptr;
+		const FVector Hinge = Item.Location + (Item.Right * Control.flap.hinge_u_m + Item.Up * Control.flap.hinge_v_m) * 100.0 +
+							  Item.Normal * (100.0 * Control.flap.lift_m);
+		const double A = FMath::DegreesToRadians(Control.flap.axis_deg);
+		const FVector Across = Item.Up * FMath::Cos(A) + Item.Right * FMath::Sin(A);
+		for (const simcore::CabinFlapPart& P : Control.flap.fixed)
+		{
+			if (UStaticMesh* M = PartMesh(*ToF(P.part)))
+			{
+				UStaticMeshComponent* C = AddMesh(M, LookColor(P.color, CoverColor));
+				Place(C, Hinge, PartRotation(Item.Normal, Across), FVector(1.0));
+				if (Item.Base == nullptr)
+				{
+					Item.Base = C;
+				}
+				else
+				{
+					Item.FlapFixed.Add(C);
+				}
+			}
+		}
+		for (const simcore::CabinFlapPart& P : Control.flap.parts)
+		{
+			if (UStaticMesh* M = PartMesh(*ToF(P.part)))
+			{
+				UStaticMeshComponent* C = AddMesh(M, LookColor(P.color, CoverColor));
+				if (Item.Moving == nullptr)
+				{
+					Item.Moving = C;
+				}
+				else
+				{
+					Item.FlapParts.Add(C);
+				}
+			}
+		}
+		Item.bParts = true;
 	}
 	const bool bInMesh = Look == simcore::CabinLookKind::InMesh;
 	if (!bInMesh && !Control.auto_placed && !HasBakedFace(Control.panel_id))
@@ -661,11 +786,27 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		// A legend lamp: black glass 1.2 cm proud (clear of the housings it sits in), with the letters on it, which
 		// light up in the lamp's colour (Animate).
 		Item.BaseColor = DarkColor;
+		Item.LegendInk = LookColor(Lamp.look.ink, LegendUnlit);
+		const bool bStadium = Lamp.look.shape == "stadium" && FMath::Abs(W - H) > 1e-6;
 		if (FMath::Abs(W - H) > 1e-6)
 		{
+			// A stadium (ПУСК ГОТОВ on SAM's AK photo): the straight middle and a round end each side.
+			const bool bWide = W > H;
+			const double Mid = bStadium ? FMath::Abs(W - H) : 0.0;
 			Item.Base->SetStaticMesh(CubeMesh);
 			Place(Item.Base, Item.Location + Item.Normal * 0.6, FRotationMatrix::MakeFromXZ(Item.Normal, Item.Up).Rotator(),
-				FVector(0.012, W, H));
+				bStadium ? FVector(0.012, bWide ? Mid : W, bWide ? H : Mid) : FVector(0.012, W, H));
+			if (bStadium)
+			{
+				const double End = FMath::Min(W, H);
+				const FVector Along = (bWide ? Item.Right : Item.Up) * (100.0 * 0.5 * Mid);
+				for (const double Side : {-1.0, 1.0})
+				{
+					UStaticMeshComponent* Cap = AddMesh(CylinderMesh, DarkColor);
+					Place(Cap, Item.Location + Item.Normal * 0.6 + Along * Side, Facing, FVector(End, End, 0.012));
+					Paint(Cap, DarkColor);
+				}
+			}
 		}
 		else
 		{
@@ -674,7 +815,7 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Paint(Item.Base, Item.BaseColor);
 		Item.Legend = AddLegend(Item.Location + Item.Normal * 1.24, Item.Normal, Item.Right, Item.Up, W, H,
 			ToF(Lamp.look.label.empty() ? Lamp.label : Lamp.look.label));
-		Paint(Item.Legend, LegendUnlit);
+		Paint(Item.Legend, Item.LegendInk);
 		Items.Add(Item);
 		return;
 	}
@@ -709,9 +850,9 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 	}
 	else if (PartMesh(TEXT("SM_LampBezel")) && PartMesh(TEXT("SM_LampLens")))
 	{
-		// A lamp from the parts library: the lens in its chrome bezel.
+		// A lamp from the parts library: the lens in its bezel, chrome unless the look's ring says (SŁ-2M's black holders).
 		Item.bParts = true;
-		Item.BaseColor = ChromeColor;
+		Item.BaseColor = LookColor(Lamp.look.ring, ChromeColor);
 		Item.Base->SetStaticMesh(PartMesh(TEXT("SM_LampBezel")));
 		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W * 1.4));
 		Item.Moving = AddMesh(PartMesh(TEXT("SM_LampLens")), Item.MovingColor * 0.08f);
@@ -835,15 +976,26 @@ UProceduralMeshComponent* USimCabinComponent::AddTextPlate(const FVector& Centre
 UProceduralMeshComponent* USimCabinComponent::AddLegend(const FVector& Centre, const FVector& Normal, const FVector& Right,
 	const FVector& Up, double WidthM, double HeightM, const FString& Text)
 {
-	// A long label with a space goes on two lines, as on the caps (e.g. УЗКИЙ / ЛУЧ). The letters keep inside the
-	// glass: a round cap's text area is a rectangle inside its circle.
-	FString Shown = Text;
-	int32 Space = INDEX_NONE;
-	if (Text.Len() > 6 && Text.FindChar(TEXT(' '), Space))
-	{
-		Shown = Text.Left(Space) + TEXT("\n") + Text.Mid(Space + 1);
-	}
+	// On a round cap a long label with a space goes on two lines, broken at the space nearest its middle (УЗКИЙ / ЛУЧ,
+	// ЦЕЛЬ В / ЗОНЕ); a wide cap keeps it on one (ПУСК ГОТОВ), as on SAM Simulator's AK photo. The letters keep inside
+	// the glass: a round cap's text area is a rectangle inside its circle.
 	const bool bRound = FMath::Abs(WidthM - HeightM) < 1e-6;
+	FString Shown = Text;
+	if (bRound && Text.Len() > 6)
+	{
+		int32 Best = INDEX_NONE;
+		for (int32 I = 0; I < Text.Len(); ++I)
+		{
+			if (Text[I] == TEXT(' ') && (Best == INDEX_NONE || FMath::Abs(2 * I - Text.Len()) < FMath::Abs(2 * Best - Text.Len())))
+			{
+				Best = I;
+			}
+		}
+		if (Best != INDEX_NONE)
+		{
+			Shown = Text.Left(Best) + TEXT("\n") + Text.Mid(Best + 1);
+		}
+	}
 	return AddTextPlate(Centre, Normal, Right, Up, bRound ? 0.74 * WidthM : 0.9 * WidthM, bRound ? 0.5 * WidthM : 0.7 * HeightM,
 		Shown, FLinearColor::Black);
 }
@@ -913,6 +1065,16 @@ void USimCabinComponent::BuildShell(const simcore::CabinShellPart& Part)
 		Part3D->RegisterComponent();
 		Part3D->SetRelativeLocationAndRotation(Centre, Yaw);
 		DecorParts.Add(Part3D);
+		// The PPI's azimuth scale (its ticks and figures on the housing's cone, Paint_Scale) is lit by ОСВЕЩ. ШКАЛЫ:
+		// its slots become dynamic instances whose emissive Animate sets.
+		for (int32 Slot = 0; Slot < Part3D->GetNumMaterials(); ++Slot)
+		{
+			const UMaterialInterface* Mat = Part3D->GetMaterial(Slot);
+			if (Mat != nullptr && Mat->GetName() == TEXT("MI_Cabin_Paint_Scale"))
+			{
+				ScaleLightMaterials.Add(Part3D->CreateDynamicMaterialInstance(Slot));
+			}
+		}
 		return;
 	}
 	FLinearColor Color = LookColor(Part.color, CabinPaint);
@@ -1018,7 +1180,7 @@ void USimCabinComponent::BuildBlock(const simcore::CabinLayout& Layout, const si
 		}
 		for (const FVector2D& P : At)
 		{
-			Place(AddDecor(Screw, ChromeColor * 0.7f), BodyPoint(Panel.PointAt(Block.u_m + P.X, Block.v_m + P.Y)),
+			Place(AddDecor(Screw, LookColor("screw", ChromeColor)), BodyPoint(Panel.PointAt(Block.u_m + P.X, Block.v_m + P.Y)),
 				PartRotation(N, U), FVector(0.007));
 		}
 	}
@@ -1059,8 +1221,44 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 	// The engraved label above the item (nameplates and legend lamps show their own text; big surrounds and diagrams
 	// have none). A baked panel face has the labels and the printed diagrams in it.
 	const bool bFaced = HasBakedFace(Fixture.panel_id);
-	if (bFaced && Look.kind == CabinLookKind::Diagram)
+	// Words engraved on a raised bezel's front (0094-5's ГО, 1ДЕЛ 1-00, АЗИМУТ ССЦ under its dials, SAM's AK photo) stand on
+	// the bezel, not in the plate's baked face behind it.
+	if (Look.kind == CabinLookKind::Text || Look.kind == CabinLookKind::Frame)
 	{
+		for (const simcore::CabinFixture& B : Layout.fixtures)
+		{
+			if (B.panel_id == Fixture.panel_id && B.look.kind == CabinLookKind::Bezel && B.mesh.empty() &&
+				FMath::Abs(Fixture.u_m - B.u_m) <= 0.5 * B.look.width_m && FMath::Abs(Fixture.v_m - B.v_m) <= 0.5 * B.look.height_m)
+			{
+				if (Look.kind == CabinLookKind::Frame)
+				{
+					// a rule printed on the bezel (the brackets either side of 0094-5's captions): a dark line on its front
+					Box(L, FMath::Max(W, 0.0003), FMath::Max(H, 0.0003), 0.01, FLinearColor(0.012f, 0.012f, 0.01f), 1.05);
+					return;
+				}
+				// as large as the photo's: about 4 mm capitals, АЗИМУТ ССЦ 45 mm long (3.2 mm a letter, counted in letters, not bytes)
+				const double Th = H > 0.0 ? H : 0.0035;
+				const FString Words = ToF(Look.label);
+				AddTextPlate(L + N * 1.05, N, R, U, W > H ? W : FMath::Min(0.11, 0.0032 * static_cast<double>(Words.Len()) + 0.004),
+					Th * 1.7, Words, FLinearColor::Transparent, true);
+				return;
+			}
+		}
+	}
+	if (bFaced && (Look.kind == CabinLookKind::Diagram || Look.kind == CabinLookKind::Text ||
+				   Look.kind == CabinLookKind::Scale || Look.kind == CabinLookKind::Frame))
+	{
+		return;
+	}
+	if (Look.kind == CabinLookKind::Scale || Look.kind == CabinLookKind::Frame)
+	{
+		return;  // printed: only a baked face has them
+	}
+	if (Look.kind == CabinLookKind::Text)
+	{
+		const double Th = H > 0.0 ? H : 0.0035;
+		AddTextPlate(L + N * 0.05, N, R, U, W > H ? W : FMath::Min(0.11, 0.0013 * static_cast<double>(Look.label.size()) + 0.004), Th * 1.4,
+			ToF(Look.label), FLinearColor::Transparent, true);
 		return;
 	}
 	if (!bFaced && Look.kind != CabinLookKind::Nameplate && Look.kind != CabinLookKind::Bezel &&
@@ -1087,7 +1285,28 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 	case CabinLookKind::Trim: bDone = Part(TEXT("SM_Trim"), W, Color); break;
 	case CabinLookKind::Jack: bDone = Part(TEXT("SM_Jack"), W, Color); break;
 	case CabinLookKind::Socket: bDone = Part(TEXT("SM_Socket"), W, Color); break;
-	case CabinLookKind::Latch: bDone = Part(TEXT("SM_Latch"), W, ChromeColor); break;
+	case CabinLookKind::Latch:
+	{
+		// The plate (the block's paint, SAM Simulator's AK photo: a hexagonal cream plate with two steel screws), the
+		// lock's matt nickel barrel in it and its black core; turned `angle_deg` anticlockwise where the photo lays a
+		// lock on its side.
+		const double A = FMath::DegreesToRadians(Look.angle_deg);
+		const FVector Ut = U * FMath::Cos(A) - R * FMath::Sin(A);
+		auto Turned = [&](const TCHAR* Name, const FLinearColor& C)
+		{
+			UStaticMesh* M = PartMesh(Name);
+			if (M != nullptr)
+			{
+				Place(AddDecor(M, C), L, PartRotation(N, Ut), FVector(W));
+			}
+			return M != nullptr;
+		};
+		Turned(TEXT("SM_LatchPlate"), LookColor("cream", ChromeColor));
+		Turned(TEXT("SM_LatchScrews"), LookColor("screw", ChromeColor));
+		Turned(TEXT("SM_LatchCore"), DarkColor);
+		bDone = Turned(TEXT("SM_Latch"), LookColor("nickel", ChromeColor));
+		break;
+	}
 	case CabinLookKind::Lamp:
 		bDone = PartMesh(TEXT("SM_LampLens")) != nullptr && Part(TEXT("SM_LampBezel"), 1.4 * W, ChromeColor) &&
 				Part(TEXT("SM_LampLens"), 1.4 * W, Color * 0.5f);
@@ -1164,8 +1383,17 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Box(L, 0.25 * W, 0.6 * W, 0.4, DarkColor, 0.8);
 		break;
 	case CabinLookKind::Nameplate:
-		Box(L, W, H, 0.15, FLinearColor(0.7f, 0.69f, 0.62f));
-		AddTextPlate(L + N * 0.2, N, R, U, W, H, ToF(Look.label), FLinearColor(0.8f, 0.79f, 0.72f));
+		if (Look.color == "black")
+		{
+			// a dark plate, light letters (0094-5's)
+			Box(L, W, H, 0.15, DarkColor);
+			AddTextPlate(L + N * 0.2, N, R, U, W, H, ToF(Look.label), FLinearColor(0.02f, 0.02f, 0.02f));
+			break;
+		}
+		// SAM Simulator's AK photo: black letters inside a black rule, 1 mm in from the plate's edge
+		Box(L, W, H, 0.15, FLinearColor(0.02f, 0.02f, 0.02f));
+		AddTextPlate(L + N * 0.2, N, R, U, FMath::Max(0.004, W - 0.0016), FMath::Max(0.003, H - 0.0016), ToF(Look.label),
+			FLinearColor(0.8f, 0.79f, 0.72f));
 		break;
 	case CabinLookKind::Bezel:
 		Box(L, W, H, 1.0, Color);
@@ -1187,7 +1415,7 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		{
 			Disc(W, W, 1.2, DarkColor);
 		}
-		Paint(AddLegend(L + N * 1.24, N, R, U, W, H, ToF(Look.label)), LegendUnlit);
+		Paint(AddLegend(L + N * 1.24, N, R, U, W, H, ToF(Look.label)), LookColor(Look.ink, LegendUnlit));
 		break;
 	case CabinLookKind::Gauge:
 	{
@@ -1230,6 +1458,16 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 			Disc(0.84 * W, 0.84 * W, 0.2, Face, 1.0);
 		}
 		Box(L + U * (12.0 * H) - R * (8.0 * W), 0.0025, 0.36 * H, 0.1, bBlackFace ? FLinearColor(0.75f, 0.75f, 0.7f) : DarkColor, 1.2);
+		break;
+	}
+	case CabinLookKind::Screw:
+	{
+		// A slotted cheese head 1.5 mm proud, dull brass, its slot dark, turned by where it is (SAM's AK photo:
+		// the screws holding SŁ-2M's block plates lie every way).
+		const FLinearColor Head = LookColor(Look.color.empty() ? std::string("screw") : Look.color, DarkColor);
+		Disc(W, W, 0.15, Head);
+		const bool bAcross = FMath::Frac(1000.0 * (Fixture.u_m + Fixture.v_m)) < 0.5;
+		Box(L, bAcross ? 0.8 * W : 0.15 * W, bAcross ? 0.15 * W : 0.8 * W, 0.02, DarkColor, 0.15);
 		break;
 	}
 	case CabinLookKind::Diagram:
@@ -1335,6 +1573,27 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 		const double Eased = Open * Open * (3.0 - 2.0 * Open);
 		HingePivots[H]->SetRelativeRotation(FQuat(HingeAxes[H], FMath::DegreesToRadians(HingeFoldedDeg[H] * (1.0 - Eased))));
 	}
+	if (ScaleLightMaterials.Num() > 0)
+	{
+		// ОСВЕЩЕНИЕ ШКАЛЫ (voenizdat_osa_1991 p49-50): the scale's lamps light its ticks and figures, warm, from dark to
+		// full with the knob, while the scope is on.
+		double Light = 0.0;
+		for (const simcore::CabinDisplay& D : Layout.displays)
+		{
+			if (!D.picture.scale_light.empty() && simcore::CabinLayout::DisplayOn(D, Console.panel, Console.equipment))
+			{
+				Light = FMath::Max(Light, simcore::ScopePictureOf(D, Console.panel).scale_light);
+			}
+		}
+		const FLinearColor Glow = FLinearColor(1.0f, 0.78f, 0.5f) * static_cast<float>(0.8 * Light);
+		for (UMaterialInstanceDynamic* Mid : ScaleLightMaterials)
+		{
+			if (Mid != nullptr)
+			{
+				Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Glow);
+			}
+		}
+	}
 	for (int32 I = 0; I < Items.Num(); ++I)
 	{
 		FSimCabinItem& Item = Items[I];
@@ -1353,7 +1612,7 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 			const FLinearColor Lit = FMath::Lerp(Item.MovingColor * FLinearColor(1.0f, 0.45f, 0.2f), Item.MovingColor, Item.Glow) * Item.Glow;
 			if (Item.Legend != nullptr)
 			{
-				const FLinearColor Letters = FMath::Lerp(LegendUnlit, Item.MovingColor, Item.Glow);
+				const FLinearColor Letters = FMath::Lerp(Item.LegendInk, Item.MovingColor, Item.Glow);
 				Paint(Item.Legend, bHighlighted ? FMath::Lerp(Letters, HighlightColor, 0.4f) : Letters);
 			}
 			const FLinearColor Glass = Item.MovingColor * 0.04f + Lit * 0.96f;
@@ -1387,6 +1646,44 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	const int32 Position = Panel.Get(Control.control_id);
 	const FVector& L = Item.Location;
 	const FVector& N = Item.Normal;
+	if (Item.Bar != nullptr)
+	{
+		// The locking bar on its hinge (an axis up the face, LETTER_BAR_AXIS_Z of its length out of the plate,
+		// tools/blender/build_cabin_parts.py): along the plate to the right over the knob while shut, swung 170 degrees out
+		// and round to the left once opened (SAM Simulator's osa050-052).
+		const double Swing = FMath::DegreesToRadians(Control.BarOpen(Position) ? 170.0 : 0.0);
+		const FVector Out = N * FMath::Cos(Swing) - Item.Right * FMath::Sin(Swing);  // the bar's length, the part's +X, follows
+		const FVector Axis = L + (Item.Right * Control.bar_hinge_u_m + Item.Up * Control.bar_hinge_v_m) * 100.0 +
+							 N * (100.0 * Control.bar_length_m * 16.0 / 46.0);
+		Place(Item.Bar, Axis, PartRotation(Out, Item.Up), FVector(Control.bar_length_m));
+	}
+	if (Control.has_flap && Item.Moving != nullptr)
+	{
+		// The hinged part (simcore::CabinFlap): a lid lifted out of the face about its hinge line, or a lever turned in it.
+		const FVector Hinge = L + (Item.Right * Control.flap.hinge_u_m + Item.Up * Control.flap.hinge_v_m) * 100.0 +
+							  N * (100.0 * Control.flap.lift_m);
+		const double A = FMath::DegreesToRadians(Control.flap.axis_deg);
+		const FVector Y0 = Item.Up * FMath::Cos(A) + Item.Right * FMath::Sin(A);
+		const FVector X0 = Item.Right * FMath::Cos(A) - Item.Up * FMath::Sin(A);
+		const double T = FMath::DegreesToRadians(Control.flap.AngleDeg(Position));
+		FVector Y = Y0;
+		FVector Z = N;
+		if (Control.flap.in_plane)
+		{
+			Y = Y0 * FMath::Cos(T) - X0 * FMath::Sin(T);
+		}
+		else
+		{
+			Y = Y0 * FMath::Cos(T) + N * FMath::Sin(T);
+			Z = N * FMath::Cos(T) - Y0 * FMath::Sin(T);
+		}
+		Place(Item.Moving, Hinge, PartRotation(Z, Y), FVector(1.0));
+		for (UStaticMeshComponent* Part : Item.FlapParts)
+		{
+			Place(Part, Hinge, PartRotation(Z, Y), FVector(1.0));
+		}
+		return;
+	}
 	if (Item.bParts && AnimatePart(Panel, Control, *Def, Position, Item))
 	{
 		return;
@@ -1404,7 +1701,7 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 			break;
 		}
 		// Lever thrown 35 degrees up the face for position 1 ("on"), down for 0.
-		const double Face = simcore::CabinLayout::PositionAngleDeg(Control.style, Def->positions, Position);
+		const double Face = simcore::CabinLayout::ControlAngleDeg(Control, Def->positions, Position);
 		const double A = FMath::DegreesToRadians(Face < 90.0 ? 35.0 : -35.0);
 		const FVector Lever = N * FMath::Cos(A) + Item.Up * FMath::Sin(A);
 		Place(Item.Moving, L + N * 0.8 + Lever * 1.75, FRotationMatrix::MakeFromZ(Lever).Rotator(), FVector(0.008, 0.008, 0.035));
@@ -1413,7 +1710,7 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	case simcore::CabinStyle::Rotary:
 	{
 		// Positions spread symmetrically about "up", at most 30 degrees apart.
-		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::PositionAngleDeg(Control.style, Def->positions, Position));
+		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::ControlAngleDeg(Control, Def->positions, Position));
 		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.03;
 		Place(Item.Moving, L + N * 1.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(D, D, 0.02));
 		Place(Item.Pointer, L + N * 2.05 + Dir * (30.0 * D), FRotationMatrix::MakeFromXZ(Dir, N).Rotator(),
@@ -1437,8 +1734,7 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	}
 	case simcore::CabinStyle::Wheel:
 	{
-		const double Turns = Panel.GetValue(Control.control_id) / Control.units_per_turn;
-		const FVector Dir = FaceDirection(Item, 360.0 * Turns);
+		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::WheelAngleDeg(Control, *Def, Panel.GetValue(Control.control_id)));
 		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.12;
 		Place(Item.Moving, L + N * 2.0, FRotationMatrix::MakeFromZX(N, Dir).Rotator(), FVector(D, D, 0.012));
 		Place(Item.Pointer, L + N * 4.0 + Dir * (42.0 * D), FRotationMatrix::MakeFromZ(N).Rotator(), FVector(0.012, 0.012, 0.04));
@@ -1467,10 +1763,17 @@ bool USimCabinComponent::AnimatePart(const simcore::ControlPanel& Panel, const s
 	switch (Control.style)
 	{
 	case simcore::CabinStyle::Toggle:
+		if (Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::Jack) ||
+			Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::Socket))
+		{
+			// a jack: it doesn't move (the plug is the crewman's)
+			Place(Item.Moving, L, PartRotation(N, Item.Up), FVector(Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.016));
+			return true;
+		}
 		if (!bCap)
 		{
 			// The lever from the bushing's top, thrown 35 degrees up the face for "on", down for "off"; 3 cm long.
-			const double Face = simcore::CabinLayout::PositionAngleDeg(Control.style, Def.positions, Position);
+			const double Face = simcore::CabinLayout::ControlAngleDeg(Control, Def.positions, Position);
 			const double A = FMath::DegreesToRadians(Face < 90.0 ? 35.0 : -35.0);
 			const FVector Lever = N * FMath::Cos(A) + Item.Up * FMath::Sin(A);
 			const double Bushing = 100.0 * 0.42 * (Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.016);
@@ -1488,15 +1791,21 @@ bool USimCabinComponent::AnimatePart(const simcore::ControlPanel& Panel, const s
 	}
 	case simcore::CabinStyle::Rotary:
 	{
-		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::PositionAngleDeg(Control.style, Def.positions, Position));
+		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::ControlAngleDeg(Control, Def.positions, Position));
 		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.026;
 		Place(Item.Moving, L, PartRotation(N, Dir), FVector(D));
 		return true;
 	}
 	case simcore::CabinStyle::Wheel:
 	{
-		const double Turns = Panel.GetValue(Control.control_id) / Control.units_per_turn;
-		const FVector Dir = FaceDirection(Item, 360.0 * Turns);
+		// A potentiometer between its stops (CabinLayout::WheelAngleDeg), a hand wheel round and round.
+		const FVector Dir = FaceDirection(Item, simcore::CabinLayout::WheelAngleDeg(Control, Def, Panel.GetValue(Control.control_id)));
+		if (KnobPart(static_cast<simcore::CabinLookKind>(Item.LookKind)) != nullptr)
+		{
+			// A potentiometer's knob on the plate, turned with its value.
+			Place(Item.Moving, L, PartRotation(N, Dir), FVector(Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.026));
+			return true;
+		}
 		const double D = Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.12;
 		Place(Item.Moving, L + N * 0.5, PartRotation(N, Dir), FVector(D));
 		// The crank handle on the rim (the dish's) or the flank (the dome's), 0.4 of the wheel across from its axis: 4.5 cm

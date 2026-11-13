@@ -101,17 +101,54 @@ def test_the_hand_wheels_are_worked_against_a_display():
 
 
 def test_the_mounts_hold_their_lamps_and_buttons():
-    """Every SŁ-2M mount (a lamp bank's scalloped plate, a button's stadium, a window, a frame) carries every item on it
+    """Every SŁ-2M mount (a lamp bank's cut plate, a button's stadium, a window, a frame) carries every item on it
     and runs over no other item by more than a millimetre."""
     assert H.mount_problems() == []
+
+
+def test_lamp_banks_and_stadia_are_traced():
+    """Every bank and stadium has its plate traced from the photo (sl2m_housings.TRACED), not grown round its lamps:
+    a bank's top and bottom edges run straight; a stadium's buttons stand in wells inside it."""
+    cabin = H.load_cabin()
+    used = set()
+    for m in H.mounts(cabin):
+        if m["style"] not in ("bank", "stadium"):
+            continue
+        fx = cabin["fixtures"][m["fixture"]]
+        tr = H.trace_of(fx)
+        assert tr is not None, m["fixture"]
+        used.add((fx["panel"], round(fx["at_m"][0], 4), round(fx["at_m"][1], 4)))
+        if "pts" in tr:
+            # along its length (across for a bank, up and down for an upright strip) an edge runs straight
+            us = [p[0] for p in m["outline"]]
+            vs = [p[1] for p in m["outline"]]
+            a, b = (0, 1) if max(us) - min(us) > max(vs) - min(vs) else (1, 0)
+            far = max(p[b] for p in m["outline"])
+            run = [p[a] for p in m["outline"] if abs(p[b] - far) < 1e-4]
+            assert max(run) - min(run) > 0.5 * (max(p[a] for p in m["outline"]) - min(p[a] for p in m["outline"])), m["fixture"]
+            for (su, sv, sr) in m["screws"]:
+                if tr.get("screws_on_face"):         # БР's block: its two screws on its face, either side of the lamp
+                    assert H.signed_distance((su, sv), m["outline"]) < -sr, ("a screw off its plate", m["fixture"])
+                    continue
+                assert H.signed_distance((su, sv), m["outline"]) > -sr, ("a notch's screw on the plate", m["fixture"])
+        else:
+            assert m["wells"], m["fixture"]
+            for (wu, wv, wr) in m["wells"]:
+                assert H.signed_distance((wu, wv), m["outline"]) < -wr - 0.0005, ("a well through the edge", m["fixture"])
+    assert used == set(H.TRACED)
 
 
 def test_mesh_drawn_fixtures_are_the_mounts():
     """A fixture the rack's mesh draws ("mesh": SM_RackSL2M) is one of the three columns', has a mount style, and (all but a
     frame) holds items; the game skips drawing it, so none is left flat."""
     cabin = H.load_cabin()
-    meshed = [k for k, f in enumerate(cabin["fixtures"]) if f.get("mesh")]
-    assert len(meshed) == 13
+    meshed = [k for k, f in enumerate(cabin["fixtures"]) if f.get("mesh") and f.get("kind") != "socket"]
+    assert len(meshed) == 14                      # with БР's block (14 Nov 2026)
+    # ПЕЛЕНГ's two sockets: drawn as SOLIDS, standing on its oval
+    sockets = [f for f in cabin["fixtures"] if f.get("mesh") and f.get("kind") == "socket"]
+    assert len(sockets) == 2 and all(f["mesh"] == H.MESH for f in sockets)
+    for f in sockets:
+        assert sum(1 for s in H.SOLIDS if s["panel"] == f["panel"] and s.get("at") == tuple(f["at_m"])) >= 2
     by_fixture = {m["fixture"]: m for m in H.mounts(cabin)}
     for k in meshed:
         f = cabin["fixtures"][k]

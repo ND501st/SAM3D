@@ -2204,7 +2204,7 @@ private:
             }
             return;
         }
-        const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
+        const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 0;  // КЛАПАН, down
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
             if (!g.alive || !g.friendly || !g.los || g.range_m > d.iff_max_range_m) continue;
@@ -2320,6 +2320,11 @@ private:
             eq.SetInput(d.captured_input, method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam);
         }
         if (!d.tv_track_input.empty()) eq.SetInput(d.tv_track_input, method_ == TrackMethod::Tv);
+        // Vц ≤ 100: the radar holds a slow target (one of method φ's conditions, voenizdat_osa_1991 p130).
+        if (!d.slow_input.empty()) {
+            eq.SetInput(d.slow_input, (method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam) && !tracked_.empty() &&
+                                          geo_.at(tracked_).speed_mps <= d.slow_mps);
+        }
         if (!d.range_pulled_input.empty()) eq.SetInput(d.range_pulled_input, em_ != nullptr && em_->RangePulled());
         if (!d.in_zone_input.empty()) eq.SetInput(d.in_zone_input, in_zone);
         // The deputy commander judges the range of a target on the TV by its size in the crosshair (samsim_osa p33-35):

@@ -27,6 +27,19 @@
 
 namespace simcore {
 
+// The R-123M's ГРОМКОСТЬ, a potentiometer (r123m_training): the set's level in the headset, 0..1 of its travel. Under
+// kVolumeDownBelow, turned right down, the headset hears nothing (SAM3D's threshold). A set without the control is full.
+constexpr double kVolumeDownBelow = 0.05;
+
+inline double VolumeLevel(const ControlPanel& panel, const std::string& id) {
+    const ControlDef* d = panel.Find(id);
+    if (d == nullptr) return 1.0;
+    if (d->kind != ControlKind::Continuous) return panel.Get(id) >= 1 ? 1.0 : 0.0;
+    return (panel.GetValue(id) - d->min_value) / (d->max_value - d->min_value);
+}
+
+inline bool VolumeUp(const ControlPanel& panel, const std::string& id) { return VolumeLevel(panel, id) >= kVolumeDownBelow; }
+
 class CrewComms {
 public:
     // Something the debrief should say: who, and what.
@@ -81,7 +94,7 @@ public:
             reason = name + " is switched off";
         } else if (!console.equipment.IsReady(r.warm)) {
             reason = name + " is still warming up (10 min after switching on)";
-        } else if (console.panel.Get(r.volume) != 1) {
+        } else if (!VolumeUp(console.panel, r.volume)) {
             reason = name + " has its volume turned right down";
         } else if (!tuning_[static_cast<std::size_t>(set)].on_frequency) {
             reason = name + " " + tuning_[static_cast<std::size_t>(set)].why;

@@ -49,6 +49,10 @@ MATERIALS = {
     'Vinyl_Olive': ((0.052, 0.054, 0.03), 0.5, 0.0, 0.4, 'VinylN', 0.7, 4.0, None),
     'Vinyl_Brown': ((0.06, 0.042, 0.03), 0.55, 0.0, 0.5, 'VinylN', 0.7, 4.0, None),
     'Metal_Steel': ((0.42, 0.42, 0.43), 0.33, 1.0, 0.25, 'PaintN', 0.1, 4.0, None),
+    # the SŁ-2M's screws: a muted steely brass (SAM Simulator's AK photo, sRGB 124/108/83, at half its chroma)
+    'Metal_Screw': ((0.40, 0.36, 0.28), 0.4, 1.0, 0.25, 'PaintN', 0.1, 4.0, None),
+    # the PPI's azimuth scale on its dark cone: a dim grey (samsim_panels: the figures read about sRGB 90/85/80 on the black)
+    'Paint_Scale': ((0.10, 0.10, 0.095), 0.6, 0.0, 0.05, 'PaintN', 0.04, 3.0, None),
     'Metal_Dark': ((0.03, 0.03, 0.03), 0.5, 0.0, 0.3, 'PaintN', 0.2, 3.0, None),
     'Bakelite_Black': ((0.012, 0.012, 0.012), 0.28, 0.0, 0.1, 'PaintN', 0.05, 4.0, None),
     'Lamp_Glass': ((0.8, 0.78, 0.72), 0.3, 0.0, 0.0, 'PaintN', 0.0, 1.0, (1.0, 0.82, 0.6, 6.0)),

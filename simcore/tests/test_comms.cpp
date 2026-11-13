@@ -139,9 +139,11 @@ SC_TEST("comms: a set hears only when switched on, warmed up (10 min) and turned
     SC_EXPECT(!comms.Receiving(0, c));
     Steps(*r, 20.0);
     SC_EXPECT(comms.Receiving(0, c));
-    c.panel.Set("radio.left.volume", 0);
+    c.panel.SetValue("radio.left.volume", 0.0);             // ГРОМКОСТЬ right down: nothing heard
     SC_EXPECT(!comms.Receiving(0, c, &why) && Has(why, "volume"));
-    c.panel.Set("radio.left.volume", 1);
+    c.panel.SetValue("radio.left.volume", 0.3);             // a little up: heard, quietly
+    SC_EXPECT(comms.Receiving(0, c) && std::fabs(VolumeLevel(c.panel, "radio.left.volume") - 0.3) < 1e-12);
+    c.panel.SetValue("radio.left.volume", 0.8);
     // Duty reception, then back: the transmitter needs 3 min.
     c.panel.Set("radio.right.mode", 0);
     Steps(*r, 1.0);
@@ -347,8 +349,7 @@ SC_TEST("comms: the radio-on procedures bring the sets and the commander's box t
     if (!r) return;
     ConsoleData& c = r->Console();
     c.panel.Set("radio.right.power", 0);
-    c.panel.Set("radio.right.volume", 0);
-    c.panel.Set("intercom.a1", 1);
+    c.panel.Set("intercom.a1", 1);                           // ГРОМКОСТЬ, a potentiometer, stays where it was (up)
     Steps(*r, 2.0);
     SC_EXPECT(!r->Comms()->Receiving(1, c));
     CrewMember* cmd = r->Crew("Commander");
@@ -357,7 +358,7 @@ SC_TEST("comms: the radio-on procedures bring the sets and the commander's box t
     if (cmd == nullptr || p == nullptr) return;
     r->GiveOrder(*cmd, *p, false);
     Steps(*r, 30.0);
-    SC_EXPECT(c.panel.Get("radio.right.power") == 1 && c.panel.Get("radio.right.volume") == 1 && c.panel.Get("intercom.a1") == 2);
+    SC_EXPECT(c.panel.Get("radio.right.power") == 1 && VolumeUp(c.panel, "radio.right.volume") && c.panel.Get("intercom.a1") == 2);
     SC_EXPECT(!cmd->IsBusy());  // the drill is done: the set warms up on its own
     SC_EXPECT(!r->Comms()->Receiving(1, c));  // still warming (10 min)
     Steps(*r, 700.0);
@@ -508,7 +509,11 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     const std::string side = r->C2()->ListeningSet() == 0 ? "left" : "right";
     HeadsetSound h = HeadsetSoundNow(*r);
     SC_EXPECT(h.on_radio && !h.squelched && !h.carrier);
-    SC_EXPECT_NEAR(h.hiss, 0.35, 1e-12);
+    SC_EXPECT_NEAR(h.volume, 0.8, 1e-12);            // ГРОМКОСТЬ where the set starts
+    SC_EXPECT_NEAR(h.hiss, 0.35 * 0.8, 1e-12);       // the hiss through the volume potentiometer
+    c.panel.SetValue("radio." + side + ".volume", 1.0);
+    SC_EXPECT_NEAR(HeadsetSoundNow(*r).hiss, 0.35, 1e-12);
+    c.panel.SetValue("radio." + side + ".volume", 0.8);
     c.panel.Set("radio." + side + ".squelch", 1);  // the suppressor: silence between transmissions
     Steps(*r, 0.5);
     h = HeadsetSoundNow(*r);
@@ -519,7 +524,7 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     Steps(*r, 1.0);
     h = HeadsetSoundNow(*r);
     SC_EXPECT(h.carrier);
-    SC_EXPECT_NEAR(h.hiss, 0.05, 1e-12);
+    SC_EXPECT_NEAR(h.hiss, 0.05 * 0.8, 1e-12);
     // The call tone while ТОН. ВЫЗОВ is pressed.
     c.panel.Set("radio." + side + ".tone", 1);
     r->Step(0.5);

@@ -137,7 +137,7 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 38);  // with the ПАНЕЛЬ ИНДИКАЦИИ, АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...), the driver's (stalk, gear, handbrake, stowage) and the 0096's cover and toggles
+    SC_EXPECT(layout.stations.size() == 5 && layout.panels.size() == 40);  // with the R-124 A-3 and A-5 boxes' faces (the headsets), the ПАНЕЛЬ ИНДИКАЦИИ, АРРЕТИР., the walls' levers, the cab's units (fire, pre-heater, DP-3B...), the driver's (stalk, gear, handbrake, stowage) and the 0096's cover and toggles
     // The R-123M's and the R-124 boxes' faces are bare panels: the meshes carry their own fronts.
     for (const char* id : {"radio_left_panel", "radio_right_panel", "r124_a1_panel", "r124_a2_panel", "gyro_arrest_panel",
                             "air_panel", "bulkhead_panel", "bulkhead_left_panel", "vent_hatch_right", "vent_hatch_left",
@@ -150,8 +150,8 @@ SC_TEST("cabin: the Osa layout loads and places every control of the console") {
     for (const std::string& id : layout.UnplacedControls(console.panel)) std::printf("    unplaced: %s\n", id.c_str());
     SC_EXPECT(layout.UnplacedControls(console.panel).empty());
     // Covers nobody placed sit over the control they guard.
-    const CabinControl* cover = layout.FindControl("soc.hv_cover");
-    const CabinControl* hv = layout.FindControl("soc.hv");
+    const CabinControl* cover = layout.FindControl("fire.cover");
+    const CabinControl* hv = layout.FindControl("fire.button");
     SC_EXPECT(cover != nullptr && hv != nullptr && cover->auto_placed && cover->style == CabinStyle::Cover);
     SC_EXPECT(cover != nullptr && hv != nullptr && Near(layout.PositionOf(*cover), layout.PositionOf(*hv)));
     const CabinControl* wheel = layout.FindControl("ssc.az_wheel");
@@ -330,7 +330,7 @@ SC_TEST("cabin: a fixture drawn by a shell's mesh says so, and the SL-2M's mount
         SC_EXPECT(f.mesh == "SM_RackSL2M");
         SC_EXPECT(f.panel_id == "op_panel" || f.panel_id == "so_panel" || f.panel_id == "fo_panel");
     }
-    SC_EXPECT(meshed == 13);                                             // so 7, fo 5, op 1 (docs/OSA_INTERIOR_HOLISTIC.md 54)
+    SC_EXPECT(meshed == 16);                                             // so 7, fo 6 (with БР's block, 59), op 1 and ПЕЛЕНГ's two sockets (docs/OSA_INTERIOR_HOLISTIC.md 54, 59)
 }
 
 SC_TEST("cabin: an upright hinge turns clockwise seen from above") {
@@ -649,6 +649,34 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
     SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "gauge", "size_m": 0.05, "scale": "compass",
                                                        "marks": ["0", "1"] } ])"),
                             "fixtures[0].marks: a linear dial's figures, two or more"));
+    // Engraved text, a printed scale round a knob, a chart's ruled frame, a label beside its item (SAM's AK photo).
+    CabinLayout printed;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [
+        { "panel": "p", "at_m": [0, 0], "kind": "text", "size_m": 0.004, "label": "ГРУБО", "angle_deg": 90 },
+        { "panel": "p", "at_m": [0.05, 0], "kind": "scale", "size_m": 0.045, "angles_deg": [-135, 0, 135], "marks": ["0°", "", "270°"] },
+        { "panel": "p", "at_m": [0.1, 0], "kind": "frame", "size_m": [0.02, 0.01] },
+        { "panel": "p", "at_m": [0.15, 0], "kind": "jack", "size_m": 0.009, "color": "copper", "label": "+27В", "label_at": "below" },
+        { "panel": "p", "at_m": [0.2, 0], "kind": "latch", "size_m": 0.022, "color": "cream" } ])"),
+                        console, printed, &error));
+    SC_EXPECT(printed.fixtures.size() == 5);
+    if (printed.fixtures.size() == 5) {
+        SC_EXPECT(printed.fixtures[0].look.kind == CabinLookKind::Text && printed.fixtures[0].look.angle_deg == 90.0);
+        SC_EXPECT(printed.fixtures[1].look.kind == CabinLookKind::Scale && printed.fixtures[1].look.angles_deg.size() == 3 &&
+                  printed.fixtures[1].look.marks[1].empty());
+        SC_EXPECT(printed.fixtures[2].look.kind == CabinLookKind::Frame);
+        SC_EXPECT(printed.fixtures[3].look.label_at == "below" && printed.fixtures[3].look.color == "copper");
+        SC_EXPECT(printed.fixtures[4].look.color == "cream");
+    }
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "scale", "size_m": 0.04,
+                                                       "angles_deg": [0], "marks": ["0", "1"] } ])"),
+                            "a scale needs as many angles as marks"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02,
+                                                       "angles_deg": [0] } ])"),
+                            "for scales only"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "marks": [""] } ])"),
+                            "expected a non-empty string"));
+    SC_EXPECT(!LoadCabin(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "label": "X",
+                                                    "label_at": "behind" } ])"), console, printed, &error));
     SC_EXPECT(ErrorContains(Small(R"(, "blocks": [ { "id": "b", "panel": "p", "label": "X", "at_m": [0, 0], "size_m": [0.3, 0.2],
                                                      "color": "purple" } ])"),
                             "blocks[0].color: unknown colour 'purple'"));
@@ -687,6 +715,46 @@ SC_TEST("cabin: blocks, fixtures and looks load and are checked") {
     SC_EXPECT(ErrorContains(Small(R"(, "shell": [ { "id": "w", "label": "W", "kind": "box", "centre_m": [0, 0, 1],
                                                    "size_m": [1, 0, 1], "source": "s", "confidence": "low" } ])"),
                             "shell[0].size_m: must be positive"));
+}
+
+SC_TEST("cabin: a scale's arrowhead, a legend's ink and stadium cap, a toggle that stands up off, screw heads (SAM's AK photo)") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    std::string error;
+    SC_EXPECT(LoadCabin(Small(R"(, "fixtures": [
+        { "panel": "p", "at_m": [0, 0], "kind": "scale", "size_m": 0.06, "angles_deg": [-163, -56], "marks": ["", ""], "arrow": "first" },
+        { "panel": "p", "at_m": [0.1, 0], "kind": "legend", "size_m": [0.05, 0.023], "label": "ПУСК ГОТОВ", "ink": "red",
+          "shape": "stadium" },
+        { "panel": "p", "at_m": [0.2, 0], "kind": "screw", "size_m": 0.007 } ])"), console, layout, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(layout.fixtures.size() == 3);
+    if (layout.fixtures.size() == 3) {
+        SC_EXPECT(layout.fixtures[0].look.arrow == "first");
+        SC_EXPECT(layout.fixtures[1].look.ink == "red" && layout.fixtures[1].look.shape == "stadium");
+        SC_EXPECT(layout.fixtures[2].look.kind == CabinLookKind::Screw && std::string(ToString(CabinLookKind::Screw)) == "screw");
+        SC_EXPECT_NEAR(layout.fixtures[2].look.width_m, 0.007, 1e-12);
+    }
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "arrow": "first" } ])"),
+                            "a scale's arrowhead"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "scale", "size_m": 0.04,
+                                                       "angles_deg": [0, 90], "marks": ["", ""], "arrow": "middle" } ])"),
+                            "a scale's arrowhead"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "knob", "size_m": 0.02, "ink": "red" } ])"),
+                            "for legends only"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "legend", "size_m": 0.02, "label": "X",
+                                                       "shape": "oval" } ])"),
+                            "for legends only"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0],
+                                                       "look": { "kind": "toggle", "size_m": 0.014, "up": 2 } } ])"),
+                            "0 or 1"));
+    // A screw is a fixture: no control looks like one.
+    SC_EXPECT(!LoadCabin(Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0],
+                                                    "look": { "kind": "screw", "size_m": 0.007 } } ])"), console, layout, &error));
+    // A toggle engraved with its off position up (УГОЛ ЗРЕНИЯ's ШИРОКИЙ) points up at 0 and down at 1.
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Toggle, 2, 0, 0), 0.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Toggle, 2, 1, 0), 180.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::PositionAngleDeg(CabinStyle::Toggle, 2, 1), 0.0, 1e-12);
 }
 
 SC_TEST("cabin: shell mesh parts name their mesh, turn by yaw and take no colour; lights can be dim or blue") {
@@ -891,6 +959,68 @@ SC_TEST("cabin: the compartments' pressurisation lights ПОДКАЧКА ОТС�
     SC_EXPECT(!lit(compressor));
 }
 
+SC_TEST("cabin: a scope's knobs set its picture: brightness, focus, contrast, marks, cursor, gain (voenizdat_osa_1991 p50, p52, p266)") {
+    // The curves by hand: dark below a fifth of a turn, set up at the middle, overdriven to 1.8; focus sharp at the middle.
+    SC_EXPECT_NEAR(PictureLevel(0.1), 0.0, 1e-12);
+    SC_EXPECT_NEAR(PictureLevel(0.35), 0.5, 1e-12);
+    SC_EXPECT_NEAR(PictureLevel(0.5), 1.0, 1e-12);
+    SC_EXPECT_NEAR(PictureLevel(1.0), 1.8, 1e-12);
+    SC_EXPECT_NEAR(PictureBlur(0.5), 0.0, 1e-12);
+    SC_EXPECT_NEAR(PictureBlur(0.65), 0.5, 1e-12);
+    SC_EXPECT_NEAR(PictureBlur(0.0), 1.0, 1e-12);
+    // The Osa's search scope names OP81-16M2's knobs and OP63-6M3's РРУ; set up as the console starts, the picture is 1.
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout osa;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, osa));
+    const CabinDisplay* ppi = nullptr;
+    for (const CabinDisplay& d : osa.displays) {
+        if (d.id == "soc_ppi") ppi = &d;
+    }
+    SC_EXPECT(ppi != nullptr);
+    if (ppi == nullptr) return;
+    SC_EXPECT(ppi->picture.brightness == "soc.bright" && ppi->picture.gain == "soc.gain" && ppi->picture.cursor == "soc.cursor_bright");
+    // ЯРКОСТЬ starts turned down (the senior operator brings it up once the sweep shows, p52): the scope dark.
+    ScopePicture p = ScopePictureOf(*ppi, console.panel);
+    SC_EXPECT_NEAR(p.trace, 0.0, 1e-9);
+    console.panel.SetValue("soc.bright", 0.5);
+    p = ScopePictureOf(*ppi, console.panel);
+    SC_EXPECT_NEAR(p.trace, 1.0, 1e-9);
+    SC_EXPECT_NEAR(p.blur, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.contrast, 1.0, 1e-9);
+    SC_EXPECT_NEAR(p.gain, 1.0, 1e-9);          // full gain for combat (p52)
+    SC_EXPECT_NEAR(JamSectorScale(p), 1.0, 1e-9);
+    // ЯРКОСТЬ turned down below the cut-off: the sweep goes out; the gain halved: a jammer's sector narrows (p266).
+    console.panel.SetValue("soc.bright", 0.15);
+    console.panel.SetValue("soc.gain", 0.5);
+    console.panel.SetValue("soc.focus", 0.8);
+    p = ScopePictureOf(*ppi, console.panel);
+    SC_EXPECT_NEAR(p.trace, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.blur, 1.0, 1e-9);
+    SC_EXPECT_NEAR(JamSectorScale(p), 0.2, 1e-9);   // never below its own beam
+    console.panel.SetValue("soc.bright", 0.5);
+    SC_EXPECT_NEAR(JamSectorScale(ScopePictureOf(*ppi, console.panel)), 0.5, 1e-9);
+    // Overdriven: brighter, and the spot blooms.
+    console.panel.SetValue("soc.bright", 1.0);
+    console.panel.SetValue("soc.focus", 0.5);
+    p = ScopePictureOf(*ppi, console.panel);
+    SC_EXPECT_NEAR(p.trace, 1.8, 1e-9);
+    SC_EXPECT_NEAR(p.blur, 0.5, 1e-9);
+    // A display without knobs keeps a set-up picture.
+    CabinDisplay plain;
+    SC_EXPECT_NEAR(ScopePictureOf(plain, console.panel).trace, 1.0, 1e-12);
+    // The loader: knobs only, and known ones.
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { "brightness": "soc.mti" }, "source": "sam3d", "confidence": "estimate" } ])"),
+                            "is not a knob that turns"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { "focus": "soc.nope" }, "source": "sam3d", "confidence": "estimate" } ])"),
+                            "unknown control 'soc.nope'"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { }, "source": "sam3d", "confidence": "estimate" } ])"),
+                            "names no control"));
+}
+
 SC_TEST("cabin: a gauge's levels are checked on load") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));
@@ -995,4 +1125,125 @@ SC_TEST("cabin: the PPI's course-parameter scale is seven chords 2 km apart on t
     lines = CourseScaleLines(*ppi, console);
     SC_EXPECT_NEAR(lines[2].y0, lines[2].y1, 1e-12);
     SC_EXPECT_NEAR(lines[3].x1, 1.0, 1e-12);
+}
+
+SC_TEST("cabin: a rotary's own stop angles; СМЕНА ЛИТ.'s locking bar shut over the knob, swung open from its second step") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinControl* letter = layout.FindControl("spk.letter");
+    SC_EXPECT(letter != nullptr);
+    if (letter == nullptr) return;
+    // НОРМ. with the bar shut and with it opened, СМЕНА when turned (the engraved words' bearings, samsim_panels).
+    SC_EXPECT_NEAR(CabinLayout::ControlAngleDeg(*letter, 3, 0), 28.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::ControlAngleDeg(*letter, 3, 1), 28.0, 1e-12);
+    SC_EXPECT_NEAR(CabinLayout::ControlAngleDeg(*letter, 3, 2), -20.0, 1e-12);
+    SC_EXPECT(letter->has_bar && !letter->BarOpen(0) && letter->BarOpen(1) && letter->BarOpen(2));
+    SC_EXPECT(letter->bar_hinge_u_m < 0.0 && letter->bar_length_m > 0.04 && letter->bar_length_m < 0.05);
+    // The stepwise control: the bar must be opened before the knob turns (osa050-052, one control of three steps).
+    const ControlDef* def = console.panel.Find("spk.letter");
+    SC_EXPECT(def != nullptr && def->stepwise && def->positions == 3);
+    // Without angles a rotary spreads its stops evenly.
+    const CabinControl* range = layout.FindControl("soc.range");
+    SC_EXPECT(range != nullptr && range->angles_deg.empty() && !range->has_bar);
+    if (range != nullptr) SC_EXPECT_NEAR(CabinLayout::ControlAngleDeg(*range, 3, 0), -30.0, 1e-12);
+
+    SC_EXPECT(LoadCabin(Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0], "angles_deg": [-40, 0, 25],
+        "bar": { "hinge_m": [-0.03, 0.01], "length_m": 0.04 } } ])"), console, layout));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0], "angles_deg": [0, 10] } ])"),
+                            "one angle per position"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0], "angles_deg": [0, 10] } ])"),
+                            "for rotaries only"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0],
+        "bar": { "hinge_m": [0, 0], "length_m": 0.04, "open_from": 3 } } ])"), "bar.open_from"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.range", "panel": "p", "at_m": [0, 0],
+        "bar": { "hinge_m": [0, 0] } } ])"), "bar.length_m"));
+}
+
+SC_TEST("cabin: SL-2M's guards are hinged lids and a lever: one angle per position, a lid lifted out, a lever turned in the face") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    // АВАРИЙНЫЙ ПУСК's lid: placed over its button, hinged along its foot, opened through 180 degrees to hang inside out.
+    const CabinControl* avar = layout.FindControl("msl.emergency_cover");
+    const CabinControl* button = layout.FindControl("msl.emergency");
+    SC_EXPECT(avar != nullptr && button != nullptr && avar->has_flap && !avar->auto_placed);
+    if (avar == nullptr || button == nullptr) return;
+    SC_EXPECT(Near(layout.PositionOf(*avar), layout.PositionOf(*button)));
+    SC_EXPECT(!avar->flap.in_plane && avar->flap.hinge_v_m < -0.04 && avar->flap.lift_m > 0.0);
+    SC_EXPECT_NEAR(avar->flap.AngleDeg(0), 0.0, 1e-12);
+    SC_EXPECT_NEAR(avar->flap.AngleDeg(1), 180.0, 1e-12);
+    SC_EXPECT_NEAR(avar->flap.AngleDeg(7), 180.0, 1e-12);  // past the last position: the last angle
+    SC_EXPECT(avar->flap.parts.size() == 2 && avar->flap.parts[1].color == "red" && avar->flap.fixed.size() == 1);
+    // The elevation wheel's lock: the knurled collar on its folded crank, turned in the face, not a toggle.
+    const CabinControl* lock = layout.FindControl("ssc.el_lock");
+    SC_EXPECT(lock != nullptr && lock->has_flap && lock->flap.in_plane && lock->flap.angles_deg.size() == 2 && lock->flap.parts[0].part == "SM_WheelLockCollar");
+    // Every SL-2M guard has its real cover; one placed by nobody (the fire extinguisher's) still has none.
+    for (const char* id : {"soc.hv_cover", "ssc.tx_cover", "fo.bort_spk_cover", "ssc.pa_balance_el_cover"}) {
+        const CabinControl* c = layout.FindControl(id);
+        SC_EXPECT(c != nullptr && c->has_flap);
+    }
+    const CabinControl* fire = layout.FindControl("fire.cover");
+    SC_EXPECT(fire != nullptr && fire->auto_placed && !fire->has_flap);
+
+    SC_EXPECT(LoadCabin(Small(R"(, "controls": [ { "control": "soc.hv_cover", "panel": "p", "at_m": [0, 0],
+        "flap": { "parts": [ { "part": "SM_CoverHv" } ], "hinge_m": [0.01, 0], "axis_deg": -90, "angles_deg": [0, 110] } } ])"), console, layout));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.hv_cover", "panel": "p", "at_m": [0, 0],
+        "flap": { "parts": [ { "part": "SM_CoverHv" } ], "hinge_m": [0, 0], "angles_deg": [0] } } ])"), "one angle per position"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.hv_cover", "panel": "p", "at_m": [0, 0],
+        "flap": { "parts": [ { "part": "SM_CoverHv" } ], "hinge_m": [0, 0], "swing": "sideways", "angles_deg": [0, 90] } } ])"),
+                            "out or plane"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.hv_cover", "panel": "p", "at_m": [0, 0],
+        "flap": { "parts": [ { "part": "CoverHv" } ], "hinge_m": [0, 0], "angles_deg": [0, 90] } } ])"), "SM_"));
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.hv_cover", "panel": "p", "at_m": [0, 0],
+        "flap": { "parts": [], "hinge_m": [0, 0], "angles_deg": [0, 90] } } ])"), "at least one part"));
+}
+
+SC_TEST("cabin: a meter's face is plain or arched (ДЦ), and nothing else") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinDisplay* dc = nullptr;
+    for (const CabinDisplay& d : layout.displays) {
+        if (d.id == "dts_voltmeter") dc = &d;
+    }
+    SC_EXPECT(dc != nullptr && dc->face == "arched");
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "meter", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.04], "control": "soc.mti", "face": "round", "source": "sam3d", "confidence": "estimate" } ])"),
+                            "arched or none"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "m", "label": "M", "kind": "dial", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.05, 0.05], "control": "soc.mti", "face": "arched", "source": "sam3d", "confidence": "estimate" } ])"),
+                            "not used by a dial"));
+}
+
+SC_TEST("cabin: a potentiometer turns between its stops through 270 degrees, a hand wheel round and round") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout));
+    const CabinControl* bright = layout.FindControl("soc.bright");
+    const ControlDef* bright_def = console.panel.Find("soc.bright");
+    SC_EXPECT(bright != nullptr && bright_def != nullptr);
+    if (bright == nullptr || bright_def == nullptr) return;
+    SC_EXPECT(bright->potentiometer);
+    SC_EXPECT_NEAR(bright->units_per_turn, 360.0 / 270.0, 1e-12);  // a whole turn of the hand: more than its travel
+    SC_EXPECT_NEAR(CabinLayout::WheelAngleDeg(*bright, *bright_def, 0.0), -135.0, 1e-9);
+    SC_EXPECT_NEAR(CabinLayout::WheelAngleDeg(*bright, *bright_def, 0.5), 0.0, 1e-9);
+    SC_EXPECT_NEAR(CabinLayout::WheelAngleDeg(*bright, *bright_def, 1.0), 135.0, 1e-9);
+    // A scroll notch (1/24 of a turn) moves it a few hundredths of its range, not end to end.
+    SC_EXPECT_NEAR(bright->units_per_turn / 24.0, 1.0 / 18.0, 1e-12);
+    // The range wheel is a hand wheel with its own units per turn, not a potentiometer.
+    const CabinControl* range = layout.FindControl("ssc.range_wheel");
+    const ControlDef* range_def = console.panel.Find("ssc.range_wheel");
+    SC_EXPECT(range != nullptr && range_def != nullptr && !range->potentiometer);
+    if (range != nullptr && range_def != nullptr) SC_EXPECT_NEAR(CabinLayout::WheelAngleDeg(*range, *range_def, 5000.0), 360.0, 1e-9);
+    // Every knob of the scopes' pictures is a potentiometer.
+    for (const char* id : {"soc.focus", "soc.contrast", "soc.marks_bright", "soc.cursor_bright", "soc.gain", "ssc.bright_1",
+                           "tov.bright", "fo.el_bright"}) {
+        const CabinControl* c = layout.FindControl(id);
+        SC_EXPECT(c != nullptr && c->potentiometer);
+    }
 }

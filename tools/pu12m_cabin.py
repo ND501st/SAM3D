@@ -790,7 +790,8 @@ def r123m_controls(L, p, sid):
     L.control('radio.%s.mode' % sid, p, R123M_AT['mode'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
     L.control('radio.%s.squelch' % sid, p, R123M_AT['squelch'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.026, 'color': 'black'})
     L.control('radio.%s.preset' % sid, p, R123M_AT['preset'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.075, 'color': 'black'})
-    L.control('radio.%s.volume' % sid, p, R123M_AT['volume'], 'rotary', {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
+    # ГРОМКОСТЬ is a potentiometer (a wheel between stops in the console), so no style: the cabin turns it through its travel
+    L.control('radio.%s.volume' % sid, p, R123M_AT['volume'], None, {'kind': 'bar_knob', 'size_m': 0.038, 'color': 'black'})
 
 
 RST_SRC = ('rwd_mb3 (the PVS boxes and the RTK-1: four lamps over РСТ-1 to РСТ-4); lit while that set hears its net (SAM3D: '

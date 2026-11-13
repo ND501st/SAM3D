@@ -72,6 +72,35 @@ def window_x(sign):
 
 # ---------------------------------------------------------------------------------------------- geometry helpers
 
+FONT = r'C:\Windows\Fonts\ARIALN.TTF'
+
+
+def glyphs(text, height_m, extrude_m=0.0003):
+    """Glyph geometry for `text`, centred, in a flat frame (x right, y up, z out): ([Vector], [faces])."""
+    curve = bpy.data.curves.new('glyphs', 'FONT')
+    curve.body = text
+    curve.size = height_m / 0.72          # cap height is about 0.72 of the em
+    curve.extrude = extrude_m / 2.0
+    curve.resolution_u = 2
+    curve.align_x = 'CENTER'
+    curve.align_y = 'CENTER'
+    if os.path.exists(FONT):
+        try:
+            curve.font = bpy.data.fonts.load(FONT, check_existing=True)
+        except Exception:
+            pass
+    obj = bpy.data.objects.new('glyphs', curve)
+    bpy.context.scene.collection.objects.link(obj)
+    ev = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    me = ev.to_mesh()
+    verts = [Vector(v.co) for v in me.vertices]
+    faces = [tuple(p.vertices) for p in me.polygons]
+    ev.to_mesh_clear()
+    bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.data.curves.remove(curve)
+    return verts, faces
+
+
 def P(x, y, z):
     """Body frame (x right, y forward, z up) to Blender (X forward, Y left, Z up): Unreal's FBX import then gives
     X forward, Y right, Z up in centimetres, the cabin component's frame."""
@@ -347,7 +376,7 @@ PREVIEW = {
     'Paint_Interior': (0.62, 0.64, 0.6), 'Paint_Rack': (0.45, 0.47, 0.47), 'Paint_Bench': (0.16, 0.19, 0.15),
     'Paint_Equipment': (0.2, 0.24, 0.18), 'Paint_Radio': (0.33, 0.35, 0.36), 'Floor_Steel': (0.25, 0.25, 0.24),
     'Rubber_Mat': (0.06, 0.06, 0.06), 'Rubber_Black': (0.03, 0.03, 0.03), 'Vinyl_Olive': (0.16, 0.18, 0.08),
-    'Vinyl_Brown': (0.22, 0.09, 0.05), 'Metal_Steel': (0.55, 0.56, 0.57), 'Metal_Dark': (0.12, 0.12, 0.13),
+    'Vinyl_Brown': (0.22, 0.09, 0.05), 'Metal_Steel': (0.55, 0.56, 0.57), 'Metal_Screw': (0.40, 0.36, 0.28), 'Paint_Scale': (0.10, 0.10, 0.095), 'Metal_Dark': (0.12, 0.12, 0.13),
     'Bakelite_Black': (0.02, 0.02, 0.02), 'Glass': (0.2, 0.25, 0.27), 'Lamp_Glass': (1.0, 0.9, 0.7),
     'Lamp_Blue': (0.1, 0.3, 0.6), 'Duct_Grey': (0.35, 0.36, 0.36), 'Grate_Rubber': (0.18, 0.1, 0.06),
     'Paint_Panel': (0.72, 0.71, 0.64), 'Canvas': (0.35, 0.33, 0.22),
@@ -1070,7 +1099,7 @@ def build_bulkhead_details(b, bh, face, front):
 
     b.box(q[0], q[1], on_hood(q[2]) - 0.01, on_hood(q[2]) + 0.006, q[2], q[3], 'Duct_Grey')
     for x, z in h['screws_xz_m']:
-        screw(x, z, on_hood(z), 0.005, 'Metal_Brass', 0.008)
+        screw(x, z, on_hood(z), 0.005, 'Metal_Screw', 0.008)
     b.tube([(x, y1 + h['tube_r_m'], max(z, zb + 0.01)) for x, z in h['tube_xz_m']], h['tube_r_m'], 'Duct_Grey')
     bw = bh['blower']
     x0, x1, z0, z1, fr, pr = bw['x_from_m'], bw['x_to_m'], bw['z_from_m'], bw['z_to_m'], bw['frame_m'], bw['proud_m']
@@ -1084,7 +1113,7 @@ def build_bulkhead_details(b, bh, face, front):
     q = bw['foot_plate_xz_m']
     plate([max(q[0], x0 + fr), min(q[1], x1 - fr), q[2], q[3]], front, front + 0.008, 'Paint_LightGrey')
     for x, z in bw['screws_xz_m']:
-        screw(x, z, front, 0.005, 'Metal_Brass', 0.008)
+        screw(x, z, front, 0.005, 'Metal_Screw', 0.008)
 
 
 def seal(b, origin, u, v, outline, mat, width=0.022, depth=0.012):
@@ -1441,8 +1470,9 @@ def sl2m_housings(b, layout):
             ro, rh = h['outer'] / 2, h['hole'] / 2
             cw, cd = h.get('cone', (0.012, 0.009))
             if h['style'] == 'flange':     # a drum, its outer edge chamfered, its face sloping in to the screen as a cone
+                # (the cone runs straight into the throat: no lip at the screen's edge to catch the light)
                 prof = [(ro, foot), (ro, D - 0.004), (ro - 0.004, D), (rh + cw, D), (rh + cw - 0.002, D - 0.002),
-                        (rh + 0.001, D - cd), (rh, D - cd), (rh, foot)]
+                        (rh, D - cd), (rh, foot)]
             elif h['style'] == 'collar':   # a plain collar, its lip rounded, its face sloping in to the window
                 prof = [(ro, foot), (ro, D - 0.003), (ro - 0.003, D), (rh + 0.003, D), (rh, D - 0.003), (rh, foot)]
             else:                          # knurl: a collar at the foot, the knurled drum, a rounded lip
@@ -1452,6 +1482,8 @@ def sl2m_housings(b, layout):
             if h['style'] == 'flange':     # the drum in its paint, the scale cone and the tube's throat dark
                 loft_loops(b, loops[:4], mat)
                 loft_loops(b, loops[3:], 'Metal_Dark')
+                # the throat closed behind the screen, so nothing light shows round the display's edge
+                b.slab(at(0, 0, 0.001), r, up, H.circle(cx, cy, rh + 0.0005, 64), [], 0.0005, 'Paint_Scale', back=False)
             else:
                 loft_loops(b, loops, mat)
             if h['style'] == 'flange':
@@ -1459,11 +1491,66 @@ def sl2m_housings(b, layout):
                 for k in range(h.get('screws', 0)):
                     a = 2 * math.pi * (k + 0.5) / h['screws']
                     p = at(cx + rs * math.cos(a), cy + rs * math.sin(a), 0.0)
-                    b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.0012), 0.0034, 'Metal_Steel', seg=10)
+                    b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.0012), 0.0034, 'Metal_Screw', seg=10)
+                # the knurled copper rollers on the drum's rim, top, bottom and either side, their axes along the rim, 25 mm
+                # long, 10 mm across, standing 6 mm out of the edge near the face (samsim_panels): the right one is
+                # КУРС. ПАРАМ., turning the course lines (soc.course_scale)
                 for k in range(h.get('knobs', 0)):
                     a = math.pi / 2 + 2 * math.pi * k / h['knobs']
-                    p = at(cx + (ro - 0.009) * math.cos(a), cy + (ro - 0.009) * math.sin(a), 0.0)
-                    b.cylinder(p + n * (D - 0.001), p + n * (D + 0.009), 0.0055, 'Paint_Red', seg=12)
+                    p = at(cx + (ro + 0.001) * math.cos(a), cy + (ro + 0.001) * math.sin(a), D - 0.0065)
+                    t = r * (-math.sin(a)) + up * math.cos(a)
+                    b.cylinder(p - t * 0.0125, p + t * 0.0125, 0.005, 'Paint_Red', seg=16)
+                # the azimuth scale on the dark cone between the screen and the drum's face, in the drum's grey
+                # (samsim_panels, the AK photo at 10x): a tick every 1.5 degrees, a longer one at each figure and three short
+                # ones between, and the figures 0 to 59 clockwise from the top (hundreds of thousandths: 6000 to the circle)
+                # outside the ticks, standing upright for the operator
+                if h.get('scale'):
+                    y0, y1 = (rh, D - cd), (rh + cw - 0.002, D - 0.002)    # the cone's face, as lofted above
+                    sc = h['scale']
+
+                    def on_cone(radial, rr):
+                        t = (rr - y0[0]) / (y1[0] - y0[0])
+                        return at(cx, cy, 0.0) + radial * rr + n * (y0[1] + t * (y1[1] - y0[1]))
+
+                    if sc.get('tick_deg'):
+                        steps = int(round(360.0 / sc['tick_deg']))
+                        per = steps // 60
+                        for k in range(steps):
+                            a = 2 * math.pi * k / steps
+                            radial = r * math.sin(a) + up * math.cos(a)
+                            tang = r * math.cos(a) - up * math.sin(a)
+                            r0, r1 = sc['long'] if k % per == 0 else sc['short']
+                            p0, p1 = on_cone(radial, r0), on_cone(radial, r1)
+                            g = (p1 - p0)
+                            ln = g.length
+                            g = g.normalized()
+                            nn = g.cross(tang).normalized()
+                            if nn.dot(n) < 0:
+                                nn = -nn
+                            b.obox((p0 + p1) / 2 + nn * 0.0002, tang, g, nn, (0.0005, ln, 0.0003), 'Paint_Scale')
+                    for i in range(60):
+                        a = 2 * math.pi * i / 60
+                        radial = r * math.sin(a) + up * math.cos(a)
+                        if 'r' in sc:
+                            rr = sc['r']
+                            tf = (rr - y0[0]) / (y1[0] - y0[0])
+                        else:
+                            tf = sc.get('at', 0.45)
+                            rr = y0[0] + tf * (y1[0] - y0[0])
+                        dd = y0[1] + tf * (y1[1] - y0[1])
+                        nn = (n * (y1[0] - y0[0]) - radial * (y1[1] - y0[1])).normalized()
+                        yv = (up - nn * up.dot(nn)).normalized()
+                        xv = yv.cross(nn)
+                        o = at(cx, cy, 0.0) + radial * rr + n * dd + nn * 0.0002
+                        # h is the figure's height along the cone; seen from in front it shows about 4.7 mm, as on the photo
+                        verts, faces = glyphs(str(i), h['scale'].get('h', 0.004))
+                        idx = b.mat('Paint_Scale')
+                        bmv = [b.bm.verts.new(P(*(o + xv * q.x + yv * q.y + nn * q.z))) for q in verts]
+                        for fc in faces:
+                            try:
+                                b.bm.faces.new([bmv[j] for j in fc]).material_index = idx
+                            except ValueError:
+                                pass
             elif h['style'] == 'collar':   # the round lugs either side, a pin in each, and the collar's three screws
                 off, dl = h['lugs']
                 for sx in (-1, 1):
@@ -1473,7 +1560,7 @@ def sl2m_housings(b, layout):
                     b.cylinder(p + n * (D - 0.002), p + n * D, 0.002, 'Metal_Steel', seg=8)
                 for a in (math.radians(45), math.radians(135), math.radians(270)):
                     p = at(cx + (ro - 0.004) * math.cos(a), cy + (ro - 0.004) * math.sin(a), 0.0)
-                    b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.001), 0.0025, 'Metal_Steel', seg=10)
+                    b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.001), 0.0025, 'Metal_Screw', seg=10)
             else:
                 rk = ro - 0.003
                 for k in range(40):
@@ -1486,6 +1573,29 @@ def sl2m_housings(b, layout):
             a0, a1 = h['arc_deg']
             ri, ro = h['inner'] / 2, h['outer'] / 2
             visor(b, at, cx, cy, ri, ro, foot, D, a0, a1, mat)
+        elif h['style'] == 'dial_plate' and h.get('cowl'):
+            # the plate, the cowl swept up from it to the trapezoid window, the dial's dark face sunk in the window
+            outline = H.outer_outline(h, layout)
+            b.slab(at(0, 0, D), r, up, outline, [], D - foot, mat)
+            cw = h['cowl']
+            w, f_ = cw['window'], cw['foot']
+            wu, wv = cx + w['at'][0], cy + w['at'][1]
+            fu, fv = cx + f_['at'][0], cy + f_['at'][1]
+
+            def win(grow):
+                return H.trapezoid(wu, wv, w['top'] + 2 * grow, w['bottom'] + 2 * grow, w['h'] + 2 * grow, 0.006 + grow)
+
+            def mix(t):
+                a = H.trapezoid(fu, fv, f_['top'], f_['bottom'], f_['h'], 0.012)
+                bb = win(0.004)
+                return [(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t) for p, q in zip(a, bb)]
+
+            rise = cw['rise']
+            loops = [(mix(0.0), D - 0.001), (mix(0.45), D + 0.55 * rise), (mix(0.85), D + 0.95 * rise),
+                     (win(0.004), D + rise), (win(0.0015), D + rise - 0.0005), (win(0.0), D + rise - 0.002),
+                     (win(0.0), D + 0.004)]
+            loft_loops(b, [[at(u, v, d) for u, v in lp] for lp, d in loops], mat, smooth=True)
+            b.slab(at(0, 0, D + 0.004), r, up, win(0.0005), [], 0.001, 'Metal_Dark')
         elif h['style'] == 'dial_plate':
             outline = H.outer_outline(h, layout)
             b.slab(at(0, 0, D), r, up, outline, [], D - foot, mat)
@@ -1512,11 +1622,36 @@ def sl2m_housings(b, layout):
                 loops.append([at(u, v, d) for u, v in pts])
             loft_loops(b, loops, mat)
     sl2m_mounts(b, layout, H, panels, foot)
+    sl2m_solids(b, H, panels)
+
+
+def sl2m_solids(b, H, panels):
+    """SŁ-2M's small solids (sl2m_housings.SOLIDS): Ш7's strip, slits and bosses, БР's lip, ДЦ's bezel."""
+    for s in H.SOLIDS:
+        c0, n, r, up = panel_frame(panels[s['panel']])
+
+        def at(u, v, d):
+            return c0 + r * u + up * v + n * d
+
+        if s['shape'] == 'plate':
+            b.slab(at(0, 0, s['d1']), r, up, s['outline'], s.get('holes', []), s['t'], s['mat'])
+        elif s['shape'] == 'box':
+            u, v = s['at']
+            b.obox(at(u, v, (s['d0'] + s['d1']) / 2), r, up, n, (s['w'], s['h'], s['d1'] - s['d0']), s['mat'])
+        elif s['shape'] == 'hex':
+            u, v = s['at']
+            p = at(u, v, 0.0)
+            b.cylinder(p + n * s['d0'], p + n * s['d1'], s['across'] / math.sqrt(3.0), s['mat'], seg=6, smooth=False)
+        elif s['shape'] == 'disc':
+            u, v = s['at']
+            p = at(u, v, 0.0)
+            b.cylinder(p + n * s['d0'], p + n * s['d1'], s['r'], s['mat'], seg=20)
 
 
 def sl2m_mounts(b, layout, H, panels, foot):
     """SŁ-2M's mounts (sl2m_housings.mounts): each plate lofted from its outline with a rounded front edge, a cup or a
-    chrome hexagon round each lamp or button on it, a window's dark glass and its two screws, ЗАПРОС К's line."""
+    chrome hexagon in a sunk well round each lamp or button on it, the screws in a plate's notches, a window's dark glass
+    and its two screws, ЗАПРОС К's line."""
     for m in H.mounts(layout):
         c0, n, r, up = panel_frame(panels[m['panel']])
 
@@ -1544,9 +1679,15 @@ def sl2m_mounts(b, layout, H, panels, foot):
                                                 for a in (30, 60, 90)]
         loops = [[at(u, v, d) for u, v in inset(m['outline'], s_)] for s_, d in prof]
         loft_loops(b, loops, mat)
-        b.slab(at(0, 0, D), r, up, inset(m['outline'], e), [], 0.0002, mat, back=False)
+        wells = [H.circle(wu, wv, wr, 48) for wu, wv, wr in m.get('wells', [])]
+        b.slab(at(0, 0, D), r, up, inset(m['outline'], e), wells, 0.0002, mat, back=False)
+        wd = H.WELL_DEPTH
+        for wl in wells:                            # a button's well: its wall and its floor
+            loft_loops(b, [[at(u, v, d) for u, v in wl] for d in (D, D - wd)], mat)
+            b.slab(at(0, 0, D - wd), r, up, wl, [], 0.0002, mat, back=False)
         wall, height = CUP_FOR.get(m['style'], (0.0, 0.0))
         for (iu, iv, hw, hh, rnd), button in zip(m['cups'], m['hex']):
+            base = D
             if m['style'] == 'stadium' and button:   # a chrome hexagon round a button, its cap standing out of it
                 ri = hw + 0.0003
                 inner = H.circle(iu, iv, ri, 6)
@@ -1561,16 +1702,24 @@ def sl2m_mounts(b, layout, H, panels, foot):
                 inner = H.rrect(iu, iv, 2 * hw + 0.0006, 2 * hh + 0.0006, min(hw, hh), 8)
                 outer = H.rrect(iu, iv, 2 * hw + 0.0006 + 2 * wall, 2 * hh + 0.0006 + 2 * wall, min(hw, hh) + wall, 8)
                 cmat = mat
+            if wells:                               # standing on its well's floor, its top a millimetre over the plate
+                base = D - wd
+                height = wd + 0.001
             loft_loops(b, [[at(u, v, d) for u, v in lp] for lp, d in
-                           ((outer, D - 0.0005), (outer, D + height - 0.0008), (inset_ring(outer, iu, iv, 0.0008), D + height),
-                            (inner, D + height), (inner, D - 0.0005))], cmat)
+                           ((outer, base - 0.0005), (outer, base + height - 0.0008), (inset_ring(outer, iu, iv, 0.0008), base + height),
+                            (inner, base + height), (inner, base - 0.0005))], cmat)
+            height = CUP_FOR.get(m['style'], (0.0, 0.0))[1]
         if m['glass'] is not None:
             gu, gv, gw, gh = m['glass']
             b.slab(at(0, 0, D + 0.0004), r, up, H.rrect(gu, gv, gw, gh, 0.002, 6), [], 0.0012, 'Bakelite_Black', back=False)
-        for (su, sv) in m['screws']:
+        for s in m['screws']:
+            su, sv = s[0], s[1]
+            rad = s[2] if len(s) > 2 else 0.0024
             p = at(su, sv, 0.0)
-            b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.0010), 0.0024, 'Metal_Steel', seg=12)
-            b.obox(p + n * (D + 0.0011), r, up, n, (0.0034, 0.0005, 0.0004), 'Metal_Dark')
+            if len(s) > 2:                          # a screw in a plate's notch: its shank down to the panel
+                b.cylinder(p + n * foot, p + n * (D - 0.0005), 0.6 * rad, 'Metal_Screw', seg=12)
+            b.cylinder(p + n * (D - 0.0005), p + n * (D + 0.0010), rad, 'Metal_Screw', seg=16)
+            b.obox(p + n * (D + 0.0011), r, up, n, (1.4 * rad, 0.0005, 0.0004), 'Metal_Dark')
 
 
 def inset_ring(pts, cu, cv, e):
@@ -2283,7 +2432,8 @@ def build_all(layout):
     objs.append(build_rack('SM_RackSL1M', layout, ['gyro_panel'], -1, [(3.96, 4.06), (2.505, 2.65)], 'wall',
                            extra=sl1m_extra, stops_at_frame=True, hinge_ends=(False, True)))   # the ПАНЕЛЬ ИНДИКАЦИИ stands on the aft post (g095-b)
     objs.append(build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick',
-                           extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout)), roof_z=left_roof_z()))
+                           extra=lambda b, X: (sl2m_extra(b, X), sl2m_housings(b, layout)), roof_z=left_roof_z(),
+                           hinge_ends=(False, False)))   # no hinge plates on SŁ-2M's face: its blocks run to its edges (samsim_panels)
     objs.append(build_rack_sl3m(layout))
     have = {p['id'] for p in layout['panels']}
     if 'sp1m_panel' in have:

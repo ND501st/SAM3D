@@ -232,7 +232,19 @@ void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const F
 	UAudioComponent* Audio = ChannelComponent(Channel);
 	Audio->Stop();
 	Audio->SetSound(Wave);
-	Audio->SetVolumeMultiplier(FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f));
+	// A line on a radio net is heard through the set the headset is on, at its ГРОМКОСТЬ (simcore::HeadsetSound::volume).
+	float SetLevel = 1.0f;
+	if (Settings.radio)
+	{
+		const UWorld* World = GetWorld();
+		const USimWorldSubsystem* Sim = World ? World->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		if (const simcore::ScenarioRunner* Runner = Sim ? Sim->GetScenarioRunner() : nullptr)
+		{
+			const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner);
+			SetLevel = H.on_radio ? static_cast<float>(H.volume) : 1.0f;
+		}
+	}
+	Audio->SetVolumeMultiplier(FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f) * SetLevel);
 	Audio->SetLowPassFilterEnabled(true);
 	Audio->SetLowPassFilterFrequency(static_cast<float>(Settings.high_hz));
 	Audio->SetHighPassFilterEnabled(true);

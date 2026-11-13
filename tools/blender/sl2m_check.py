@@ -28,13 +28,16 @@ PANELS = ('op_panel', 'so_panel', 'fo_panel')
 PARTS = os.path.join(REPO, 'art', 'cabin_parts', 'cabin_parts.blend')
 
 # SimCabinComponent's look colours (LookColor) and lamp colours, linear
-LOOK = {'black': (0.02, 0.02, 0.02), 'white': (0.8, 0.8, 0.78), 'grey': (0.25, 0.25, 0.25), 'chrome': (0.6, 0.6, 0.62),
-        'brass': (0.55, 0.4, 0.15), 'red': (0.5, 0.02, 0.02), 'green': (0.05, 0.3, 0.05), 'amber': (0.6, 0.3, 0.02),
-        'yellow': (0.7, 0.6, 0.05), 'orange': (0.6, 0.2, 0.02), 'bluegrey': (0.2, 0.25, 0.3), 'lightgrey': (0.5, 0.5, 0.5),
-        'ivory': (0.7, 0.66, 0.52), 'blue': (0.05, 0.1, 0.4), 'dark': (0.03, 0.03, 0.03), 'cover': (0.25, 0.27, 0.2)}
+LOOK = {'black': (0.015, 0.015, 0.015), 'white': (0.62, 0.6, 0.52), 'grey': (0.22, 0.22, 0.21), 'chrome': (0.6, 0.6, 0.62),
+        'brass': (0.55, 0.38, 0.1), 'red': (0.45, 0.02, 0.01), 'green': (0.02, 0.35, 0.04), 'amber': (0.6, 0.28, 0.02),
+        'yellow': (0.65, 0.48, 0.12), 'orange': (0.5, 0.14, 0.03), 'bluegrey': (0.16, 0.2, 0.24), 'lightgrey': (0.36, 0.37, 0.38),
+        'ivory': (0.7, 0.66, 0.52), 'blue': (0.03, 0.08, 0.4), 'cream': (0.55, 0.54, 0.47), 'copper': (0.3, 0.07, 0.035), 'steel': (0.42, 0.42, 0.43), 'nickel': (0.5, 0.5, 0.49), 'screw': (0.40, 0.36, 0.28), 'satin': (0.45, 0.42, 0.35),
+        'dark': (0.03, 0.03, 0.03), 'cover': (0.25, 0.27, 0.2)}
 SCREEN = {'ppi': (0.01, 0.02, 0.015), 'range_scope': (0.12, 0.16, 0.1), 'tv': (0.2, 0.26, 0.2), 'elevation_scope': (0.6, 0.5, 0.05),
           'dial': (0.6, 0.55, 0.4), 'meter': (0.75, 0.75, 0.7)}
 _mats = {}
+KNOB_PART = {'knob': 'SM_Knob', 'pointer_knob': 'SM_KnobPointer', 'bar_knob': 'SM_KnobBar', 'lever': 'SM_KnobBar',
+             'trim': 'SM_Trim'}
 
 
 def mat(name, rgb, metal=0.0, rough=0.5):
@@ -107,7 +110,7 @@ def box(panel, u, v, w, h, d0, d1, rgb, name='box', coll=None, up_rot=0.0):
     o = bpy.data.objects.new(name, me)
     (coll or bpy.context.scene.collection).objects.link(o)
     o.matrix_world = (Matrix.Translation(panel.at(u, v, (d0 + d1) / 2)) @ panel.basis().to_4x4() @
-                      Matrix.Diagonal((w, h, max(d1 - d0, 1e-4), 1.0)))
+                      Matrix.Rotation(up_rot, 4, 'Z') @ Matrix.Diagonal((w, h, max(d1 - d0, 1e-4), 1.0)))
     o.active_material = mat(name, tuple(rgb))
     return o
 
@@ -123,6 +126,48 @@ def disc(panel, u, v, w, h, d0, d1, rgb, name='disc', coll=None, seg=40):
                       Matrix.Diagonal((w, h, max(d1 - d0, 1e-4), 1.0)))
     o.active_material = mat(name, tuple(rgb))
     return o
+
+
+_font = []
+
+
+def text(panel, u, v, d, w, h, string, rgb, name='text'):
+    """Letters fitted in a w x h box as SimCabinComponent's AddTextPlate does: the lines share the height, shrunk to the
+    width (Arial Narrow in place of Roboto)."""
+    if not string:
+        return
+    if not _font:
+        try:
+            _font.append(bpy.data.fonts.load('C:/Windows/Fonts/ARIALN.TTF'))
+        except Exception:
+            _font.append(None)
+    lines = string.split('\n')
+    n = len(lines)
+    for i, line in enumerate(lines):
+        cu = bpy.data.curves.new(name, 'FONT')
+        cu.body = line
+        if _font[0] is not None:
+            cu.font = _font[0]
+        cu.align_x = 'CENTER'
+        cu.align_y = 'CENTER'
+        o = bpy.data.objects.new(name, cu)
+        bpy.context.scene.collection.objects.link(o)
+        bpy.context.view_layer.update()
+        ext = max(o.dimensions.x, 1e-6)            # at size 1
+        k = min(0.8 * h / n, 0.95 * w / ext)
+        vv = v + h / 2 - h * (i + 0.5) / n
+        o.matrix_world = Matrix.Translation(panel.at(u, vv, d)) @ panel.basis().to_4x4() @ Matrix.Diagonal((k, k, k, 1.0))
+        o.active_material = mat(name, tuple(rgb), rough=0.6)
+
+
+def legend_text(panel, u, v, d, W, H, label, ink=None):
+    rnd = abs(W - H) < 1e-6
+    shown = label
+    if rnd and len(label) > 6 and ' ' in label:        # as Unreal's AddLegend: a round cap breaks at the middle space
+        i = min((k for k, ch in enumerate(label) if ch == ' '), key=lambda k: abs(2 * k - len(label)))
+        shown = label[:i] + '\n' + label[i + 1:]
+    text(panel, u, v, d, 0.74 * W if rnd else 0.9 * W, 0.5 * W if rnd else 0.7 * H, shown, ink or (0.22, 0.22, 0.21),
+         'legend_text')
 
 
 def face_plane(panel, pid, size):
@@ -148,6 +193,46 @@ def face_plane(panel, pid, size):
     return o
 
 
+# The covers as SAM's AK photo shows them (samsim_panels): these open, the rest shut.
+FLAP_PHOTO = {'msl.emergency_cover': 1, 'fo.bort_spk_cover': 1, 'ssc.tx_cover': 1}
+
+
+def draw_flap(parts, P, c, position):
+    """As SimCabinComponent::AnimateControl: the parts full size, the hinge's axis at their origin, turned out of the face
+    about it or in the face about the panel's normal."""
+    f = c['flap']
+    u, v = c['at_m']
+    hu, hv = f['hinge_m']
+    hinge = P.at(u + hu, v + hv, f.get('lift_m', 0.0))
+    a = math.radians(f.get('axis_deg', 0.0))
+    y0 = P.up * math.cos(a) + P.r * math.sin(a)
+    x0 = y0.cross(P.n)
+    angles = f['angles_deg']
+    t = math.radians(angles[min(max(position, 0), len(angles) - 1)])
+
+    def put(names, y, z):
+        x = y.cross(z)
+        m = Matrix.Translation(hinge) @ Matrix((x, y, z)).transposed().to_4x4()
+        for p in names:
+            if p['part'] not in parts:
+                continue
+            o = bpy.data.objects.new(p['part'], parts[p['part']])
+            bpy.context.scene.collection.objects.link(o)
+            o.matrix_world = m
+            rgb = colour(p.get('color'), 'cover')
+            metal = 0.8 if p.get('color') in ('chrome', 'satin', 'steel', 'nickel') else 0.0
+            o.active_material = mat(p['part'], tuple(rgb), metal)
+            for sl in o.material_slots:
+                sl.link = 'OBJECT'
+                sl.material = mat(p['part'], tuple(rgb), metal)
+
+    put(f.get('fixed', []), y0, P.n)
+    if f.get('swing', 'out') == 'plane':
+        put(f['parts'], y0 * math.cos(t) - x0 * math.sin(t), P.n)
+    else:
+        put(f['parts'], y0 * math.cos(t) + P.n * math.sin(t), P.n * math.cos(t) - y0 * math.sin(t))
+
+
 def build(layout, console, parts):
     panels = {p['id']: Panel(p) for p in layout['panels'] if p['id'] in PANELS}
     for pid, panel in panels.items():
@@ -165,11 +250,16 @@ def build(layout, console, parts):
         if kind == 'in_mesh':
             continue
         style = styles.get(c['control'], 'button')
+        if 'flap' in c:                       # a cover's real lid or a lock's lever (SimCabinComponent, simcore::CabinFlap)
+            draw_flap(parts, P, c, FLAP_PHOTO.get(c['control'], by_id.get(c['control'], {}).get('initial', 0)))
+            continue
         W = look.get('size_m')
         W = W[0] if isinstance(W, list) else W
         cap = kind in ('button', 'lamp_button')
         rgb = colour(look.get('color'), 'dark')
-        if style == 'toggle' and not cap:
+        if style == 'toggle' and kind in ('jack', 'socket'):      # a jack's look on a two-position control: no lever
+            place(parts, 'SM_Jack' if kind == 'jack' else 'SM_Socket', P, u, v, W or 0.016, rgb)
+        elif style == 'toggle' and not cap:
             Wb = W or 0.016
             place(parts, 'SM_ToggleBase', P, u, v, Wb, LOOK['chrome'], metal=1.0)
             a = math.radians(35)
@@ -189,15 +279,33 @@ def build(layout, console, parts):
         elif style == 'rotary':
             D = W or 0.026
             name = 'SM_KnobBar' if kind == 'bar_knob' else 'SM_KnobPointer'
-            place(parts, name, P, u, v, D, rgb)
+            pos = by_id.get(c['control'], {}).get('initial', 0)
+            angles = c.get('angles_deg')            # as CabinLayout::ControlAngleDeg; the even spread is left as it was
+            a = math.radians(angles[pos]) if angles else 0.0
+            place(parts, name, P, u, v, D, rgb, up=P.up * math.cos(a) + P.r * math.sin(a))
+            bar = c.get('bar')
+            if bar:                                 # the locking bar shut over the knob (SimCabinComponent::AnimateControl)
+                hu, hv = bar['hinge_m']
+                Lb = bar['length_m']
+                place(parts, 'SM_LetterBarHinge', P, u + hu, v + hv, Lb, LOOK['satin'], metal=0.3)
+                place(parts, 'SM_LetterBar', P, u + hu, v + hv, Lb, LOOK['satin'], d=Lb * 16.0 / 46.0, metal=0.3)
+        elif style == 'wheel' and kind in KNOB_PART:     # a potentiometer: its knob, no crank (SimCabinComponent KnobPart)
+            place(parts, KNOB_PART[kind], P, u, v, W or 0.026, rgb)
         elif style == 'wheel':
             D = W or 0.12
             name = 'SM_WheelDome' if kind == 'dome' else 'SM_WheelDish'
             place(parts, name, P, u, v, D, rgb if look.get('color') else LOOK['dark'], d=0.005)
             hand = max(0.045, 0.4 * D)
             place(parts, 'SM_WheelHandle', P, u, v + 0.4 * D, hand, LOOK['chrome'], d=0.005 + 0.21 * D, metal=1.0)
-        elif style == 'key':
-            disc(P, u, v, 0.032, 0.032, 0.0, 0.01, LOOK['brass'], 'key')
+        elif style == 'key':                 # the lock's polished barrel sloping in to its dished top, the cylinder in it
+            D = W or 0.032
+            if 'SM_KeyBarrel' in parts:
+                place(parts, 'SM_KeyBarrel', P, u, v, D, rgb if look.get('color') else LOOK['brass'], metal=1.0)
+                box(P, u, v, 0.0016, 0.0062, 0.0, 0.295 * D + 0.0003, LOOK['black'], 'keyhole')
+            else:
+                disc(P, u, v, D, D, 0.0, 0.01, rgb if look.get('color') else LOOK['brass'], 'key')
+                disc(P, u, v, 0.4 * D, 0.4 * D, 0.0, 0.0125, LOOK['chrome'], 'key_core')
+                box(P, u, v, 0.0016, 0.0062, 0.0, 0.0128, LOOK['black'], 'keyhole')
         elif style == 'cover':
             pass
     # ---- lamps
@@ -211,19 +319,27 @@ def build(layout, console, parts):
         W, H = (s, s) if not isinstance(s, list) else s
         dark = tuple(0.15 * x for x in colour(l.get('color'), 'red'))
         if look.get('kind') == 'legend':
-            if abs(W - H) > 1e-6:
+            if abs(W - H) > 1e-6 and look.get('shape') == 'stadium':     # a straight middle and a round end each side
+                m, e = abs(W - H), min(W, H)
+                box(P, u, v, m if W > H else W, H if W > H else m, 0.0, 0.012, LOOK['dark'], 'legend')
+                for sgn in (-1, 1):
+                    du, dv = (sgn * m / 2, 0.0) if W > H else (0.0, sgn * m / 2)
+                    disc(P, u + du, v + dv, e, e, 0.0, 0.012, LOOK['dark'], 'legend_end')
+            elif abs(W - H) > 1e-6:
                 box(P, u, v, W, H, 0.0, 0.012, LOOK['dark'], 'legend')
             else:
                 disc(P, u, v, W, W, 0.0, 0.012, LOOK['dark'], 'legend')
+            legend_text(P, u, v, 0.0124, W, H, look.get('label') or l.get('label', ''),
+                        colour(look['ink']) if look.get('ink') else None)
         elif look.get('kind') == 'lamp_button':
             place(parts, 'SM_ButtonRing', P, u, v, W, colour(look.get('ring'), 'chrome'), metal=0.8)
-            place(parts, 'SM_ButtonCap', P, u, v, W, colour(look.get('color'), 'red'))
+            place(parts, 'SM_ButtonCap', P, u, v, W, tuple(0.35 * x for x in colour(look.get('color'), 'red')))
         elif abs(W - H) > 1e-6:
             box(P, u, v, W * 1.15, H * 1.4, 0.0, 0.006, LOOK['chrome'], 'lampwin')
             box(P, u, v, W, H, 0.004, 0.01, dark, 'lampglass')
         else:
-            place(parts, 'SM_LampBezel', P, u, v, 1.4 * W, LOOK['chrome'], metal=1.0)
-            place(parts, 'SM_LampLens', P, u, v, 1.4 * W, colour(look.get('color') or l.get('color'), 'red'))
+            place(parts, 'SM_LampBezel', P, u, v, 1.4 * W, colour(look.get('ring'), 'chrome'), metal=1.0)
+            place(parts, 'SM_LampLens', P, u, v, 1.4 * W, tuple(0.25 * x for x in colour(look.get('color') or l.get('color'), 'red')))
     # ---- displays: the screen 1.3 cm out, a dark bezel to 1.2 cm
     for d in layout['displays']:
         if d['panel'] not in panels:
@@ -233,7 +349,15 @@ def build(layout, console, parts):
         w, h = d['size_m']
         rgb = SCREEN.get(d.get('kind', ''), (0.5, 0.5, 0.45))
         if d.get('kind') in ('ppi', 'dial', 'elevation_scope') or abs(w - h) < 1e-6:
-            disc(P, u, v, w, h, 0.0, 0.013, rgb, 'screen')
+            disc(P, u, v, w, h, 0.0, 0.013, rgb, 'screen')   # a PPI's scale is on the housing's cone (build_cabin_interior)
+            if d.get('kind') == 'elevation_scope':           # as SimCabinDisplayComponent: the filter's graticule
+                r = 0.48 * w
+                ink = (0.09, 0.06, 0.0)
+                box(P, u - 0.63 * r, v, 0.0006, 1.5 * r, 0.013, 0.0132, ink, 'grat')
+                for i in range(-10, 11):
+                    t = (0.12 if i % 2 == 0 else 0.06) * r
+                    box(P, u - 0.63 * r + t / 2, v + i * 0.075 * r, t, 0.0004, 0.013, 0.0132, ink, 'grat')
+                box(P, u + 0.11 * r, v, 1.48 * r, 0.0004, 0.013, 0.0132, ink, 'grat')
         else:
             box(P, u, v, w, h, 0.0, 0.013, rgb, 'screen')
     # ---- fixtures the game draws
@@ -251,7 +375,12 @@ def build(layout, console, parts):
         if k in parts_for:
             place(parts, parts_for[k], P, u, v, W, rgb)
         elif k == 'latch':
-            place(parts, 'SM_Latch', P, u, v, W, LOOK['chrome'], metal=1.0)
+            a = math.radians(fx.get('angle_deg', 0.0))      # as SimCabinComponent: a lock laid on its side
+            up = P.up * math.cos(a) - P.r * math.sin(a)
+            place(parts, 'SM_LatchPlate', P, u, v, W, LOOK['cream'], up=up)
+            place(parts, 'SM_LatchScrews', P, u, v, W, LOOK['screw'], up=up, metal=1.0)
+            place(parts, 'SM_LatchCore', P, u, v, W, LOOK['dark'], up=up)
+            place(parts, 'SM_Latch', P, u, v, W, LOOK['nickel'], up=up, metal=1.0)
         elif k == 'lamp':
             place(parts, 'SM_LampBezel', P, u, v, 1.4 * W, LOOK['chrome'], metal=1.0)
             place(parts, 'SM_LampLens', P, u, v, 1.4 * W, tuple(0.5 * x for x in rgb))
@@ -261,7 +390,11 @@ def build(layout, console, parts):
         elif k == 'toggle':
             place(parts, 'SM_ToggleBase', P, u, v, W, LOOK['chrome'], metal=1.0)
         elif k == 'nameplate':
-            box(P, u, v, W, H, 0.0, 0.0015, (0.45, 0.44, 0.38), 'nameplate')
+            dark = fx.get('color') == 'black'
+            box(P, u, v, W, H, 0.0, 0.0015, LOOK['dark'], 'nameplate')
+            if not dark:                           # black letters in a black rule on the light plate
+                box(P, u, v, max(0.004, W - 0.0016), max(0.003, H - 0.0016), 0.0, 0.0017, (0.6, 0.59, 0.52), 'nameplate_face')
+            text(P, u, v, 0.0019, W, H, fx.get('label', ''), (0.6, 0.59, 0.52) if dark else (0.01, 0.01, 0.01), 'plate_text')
         elif k == 'bezel':
             box(P, u, v, W, H, 0.0, 0.01, rgb, 'bezel')
         elif k == 'window':
@@ -270,8 +403,23 @@ def build(layout, console, parts):
             disc(P, u, v, W, H, 0.0, 0.003, rgb, 'oval')
         elif k == 'legend':
             disc(P, u, v, W, H, 0.0, 0.012, LOOK['dark'], 'legend')
+            legend_text(P, u, v, 0.0124, W, H, fx.get('label', ''))
         elif k == 'gauge':
             disc(P, u, v, W, H, 0.0, 0.01, LOOK['dark'], 'gauge')
+        elif k == 'text' and any(b['panel'] == fx['panel'] and b['kind'] == 'bezel' and not b.get('mesh') and
+                                 abs(u - b['at_m'][0]) <= b['size_m'][0] / 2 and abs(v - b['at_m'][1]) <= b['size_m'][1] / 2
+                                 for b in layout['fixtures']):
+            # as SimCabinComponent: words on a raised bezel's front stand on it (0094-5's captions)
+            text(P, u, v, 0.0105, min(0.11, 0.0032 * len(fx['label']) + 0.004), 1.7 * H, fx['label'], (0.04, 0.04, 0.035),
+                 'bezel_text')
+        elif k == 'frame' and any(b['panel'] == fx['panel'] and b['kind'] == 'bezel' and not b.get('mesh') and
+                                  abs(u - b['at_m'][0]) <= b['size_m'][0] / 2 and abs(v - b['at_m'][1]) <= b['size_m'][1] / 2
+                                  for b in layout['fixtures']):
+            box(P, u, v, max(W, 0.0003), max(H, 0.0003), 0.0105, 0.0106, (0.04, 0.04, 0.035), 'bezel_rule')
+        elif k == 'screw':                 # as SimCabinComponent: a cheese head 1.5 mm proud, its slot one way or the other
+            disc(P, u, v, W, W, 0.0, 0.0015, colour(fx.get('color'), 'screw'), 'screw', seg=16)
+            across = (1000.0 * (u + v)) % 1.0 < 0.5
+            box(P, u, v, 0.8 * W if across else 0.15 * W, 0.15 * W if across else 0.8 * W, 0.0015, 0.0017, LOOK['dark'], 'slot')
     return panels
 
 
@@ -329,7 +477,8 @@ def main():
     with open(os.path.join(REPO, 'data', 'procedures', 'osa_ak.json'), encoding='utf-8') as fh:
         console = json.load(fh)
     B.build_rack('SM_RackSL2M', layout, ['fo_panel', 'so_panel', 'op_panel'], -1, [], 'kick',
-                 extra=lambda b, X: (B.sl2m_extra(b, X), B.sl2m_housings(b, layout)), roof_z=B.left_roof_z())
+                 extra=lambda b, X: (B.sl2m_extra(b, X), B.sl2m_housings(b, layout)), roof_z=B.left_roof_z(),
+                 hinge_ends=(False, False))
     parts = load_parts()
     panels = build(layout, console, parts)
     if '--blend' in argv:

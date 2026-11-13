@@ -260,3 +260,28 @@ SC_TEST("helper: every NPC act at a seat goes through NpcDoes, so the helper kno
     if (uses != 24) std::printf("    NpcAt( appears %d times in scenario_runner.hpp, not 24: see the comment above\n", uses);
     SC_EXPECT(uses == 24);
 }
+
+SC_TEST("crew settings: the senior operator turns ЯРКОСТЬ up once the sweep shows; a player there owes it") {
+    // voenizdat_osa_1991 p52: a minute after switching on, the sweep shows and ЯРКОСТЬ is turned up (crew data "settings").
+    std::unique_ptr<ScenarioRunner> npc = Load("scenarios/osa_crew_practice.json");
+    std::unique_ptr<ScenarioRunner> player = Load("scenarios/osa_crew_practice.json");
+    SC_EXPECT(npc != nullptr && player != nullptr);
+    if (!npc || !player) return;
+    SC_EXPECT(!npc->Def().crew_data.settings.empty());
+    SC_EXPECT_NEAR(npc->Console().panel.GetValue("soc.bright"), 0.1, 1e-9);  // starts turned down: the scope dark
+    player->TakeSeat("senior_operator", "Player");
+    player->SetHelper(true);
+    bool owed = false;
+    while (npc->Time() < 600.0 && !npc->Finished()) {
+        npc->Step(0.1);
+        player->Step(0.1);
+        owed = owed || HasDuty(*player, "senior_operator", SeatDuty::Kind::Wheel, "soc.bright");
+        if (!npc->Console().equipment.IsReady("equipment_warm")) {
+            SC_EXPECT_NEAR(npc->Console().panel.GetValue("soc.bright"), 0.1, 1e-9);  // nothing to see yet: left alone
+        }
+    }
+    SC_EXPECT(npc->Console().equipment.IsReady("equipment_warm"));
+    SC_EXPECT_NEAR(npc->Console().panel.GetValue("soc.bright"), 0.5, 1e-6);
+    SC_EXPECT(owed);
+    SC_EXPECT_NEAR(player->Console().panel.GetValue("soc.bright"), 0.1, 1e-9);  // the NPC never turns a player's knob
+}
