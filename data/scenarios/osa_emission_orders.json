@@ -1,0 +1,223 @@
+{
+  "scenario_id": "osa_emission_orders",
+  "setting": "war",
+  "name": "The emission regime: the battery commander's bursts, then the regiment's least emission before a SEAD pair",
+  "description": "A fictional day in a prepared position. The battery commander's combat order puts the battery under the limited regime (the search transmitter in bursts against direction finding): the commander tells his crew how many antenna turns on and off before the radars come on. A minute in, the regiment warns of defence suppression and orders the least emission; the battery commander passes it on over the battery net, and the commander tells the crew again: the search transmitter on for two turns after every three, the tracking transmitter only from Table 7.3's range and off after the burst. Then the SEAD pair comes in low and fast with its Shrike-class anti-radiation missiles, which lose a radar that falls silent, the strike behind it. Take the commander's seat to pass the regime on and remind the radar seats yourself, or the senior operator's to keep the bursts.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "The chain: voenizdat_osa_1991 p243 (the battery commander's decision fixes the measures against jamming and ARMs), p262 (the least emission), Table 7.3 p263; the regimes' turns are data/command/emission_regimes.json's; the times of the chain (relay, pass-on, repeats) are SAM3D estimates (docs/crew/16_EMISSION.md). The raid is osa_arm_drill_shrike.json's (Shrike-class missiles, the ARMs p262's measures were written against), 130 s later: every route, height, speed and launch range is a PLACEHOLDER.",
+  "seed": 1,
+  "origin": {
+    "lat_deg": 46.9,
+    "lon_deg": 19.7,
+    "alt_m": 110
+  },
+  "terrain": {
+    "type": "flat",
+    "height_m": 110
+  },
+  "environment": {
+    "visibility_km": 30,
+    "daylight": true
+  },
+  "doctrine": {
+    "emission": {
+      "regime": "limited",
+      "notes": "The battery commander's combat order: the limited regime (its turns from the data)."
+    },
+    "relocate_after_arm": {
+      "to": {
+        "east_m": 700,
+        "north_m": -600,
+        "up_m": 3
+      },
+      "notes": "The reserve position (placeholder), about 900 m away: some 6 minutes across country at 10 km/h."
+    }
+  },
+  "emission_orders": [
+    {
+      "at_s": 60,
+      "regime": "arm",
+      "from": "regiment",
+      "notes": "The regiment warns of defence suppression: the least emission (p262)."
+    }
+  ],
+  "crew_commander": "npc",
+  "battery_commander": "npc",
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc",
+      "extra_libraries": [
+        "em/nato_1985.json"
+      ]
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 3
+    },
+    "heading_deg": 0,
+    "readiness": "deployed",
+    "inputs": {
+      "vehicle_stopped": true
+    }
+  },
+  "battery": {
+    "drive_own": true,
+    "deployed": true,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 400,
+          "north_m": -200,
+          "up_m": 3
+        }
+      }
+    ]
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class1"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [
+    {
+      "id": "w1",
+      "name": "SEAD aircraft (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "size_m": 5.0,
+      "rwr": "nato_alr46_class_rwr",
+      "start": {
+        "east_m": -500,
+        "north_m": 42000,
+        "up_m": 300
+      },
+      "waypoints": [
+        {
+          "east_m": -500,
+          "north_m": -40000,
+          "up_m": 300
+        }
+      ],
+      "speed_mps": 250,
+      "rcs_m2": 4.0,
+      "appear_at_s": 150,
+      "arms": {
+        "weapon": "agm45_class_shrike",
+        "count": 1,
+        "launch_range_km": 16,
+        "notes": "Pre-briefed: its intelligence has the battery's position."
+      }
+    },
+    {
+      "id": "w2",
+      "name": "SEAD aircraft (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "size_m": 5.0,
+      "rwr": "nato_alr46_class_rwr",
+      "start": {
+        "east_m": 2500,
+        "north_m": 42800,
+        "up_m": 300
+      },
+      "waypoints": [
+        {
+          "east_m": 2500,
+          "north_m": -40000,
+          "up_m": 300
+        }
+      ],
+      "speed_mps": 250,
+      "rcs_m2": 4.0,
+      "appear_at_s": 150,
+      "arms": {
+        "weapon": "agm45_class_shrike",
+        "count": 1,
+        "launch_range_km": 16
+      }
+    },
+    {
+      "id": "s1",
+      "name": "Strike aircraft (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "size_m": 4.5,
+      "start": {
+        "east_m": 3000,
+        "north_m": 40000,
+        "up_m": 600
+      },
+      "waypoints": [
+        {
+          "east_m": 3000,
+          "north_m": -30000,
+          "up_m": 600
+        }
+      ],
+      "speed_mps": 220,
+      "rcs_m2": 3.0,
+      "appear_at_s": 270
+    },
+    {
+      "id": "s2",
+      "name": "Strike aircraft (placeholder)",
+      "type": "Air+FixedWing",
+      "class": "fighter",
+      "size_m": 4.5,
+      "start": {
+        "east_m": -2500,
+        "north_m": 42000,
+        "up_m": 600
+      },
+      "waypoints": [
+        {
+          "east_m": -2500,
+          "north_m": -30000,
+          "up_m": 600
+        }
+      ],
+      "speed_mps": 220,
+      "rcs_m2": 3.0,
+      "appear_at_s": 290
+    }
+  ],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 1200,
+    "when_targets_gone": false
+  }
+}

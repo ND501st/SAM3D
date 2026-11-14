@@ -1,5 +1,6 @@
 {
   "scenario_id": "pu12m_battery",
+  "setting": "war",
   "name": "PU-12M: run the battery from the command post (four NPC launchers)",
   "description": "A fictional raid on an Osa-AK battery, seen from its PU-12M. The post stands deployed at the battery's centre with the four launchers around it. The regiment sends its picture by telecode; the operator-plotter writes the board; the battery commander gives each target to a launcher by voice on the battery net (azimuth and range from the board), and the launchers report back onto the IT-1 and IT-2 boards. The NPC battery commander does it unless you take his seat: then give targets yourself (ScenarioRunner::DesignateBatteryTarget).",
   "source": "sam3d",

@@ -1,0 +1,148 @@
+{
+  "map_id": "pannonia",
+  "kind": "country",
+  "name": "The Pannonian Socialist Federal Republic",
+  "description": "The whole country as a strategic map: its ground at 1 km, its borders and regions, the Rava, the Lenta and the Tisava, its main roads, railways and oil pipelines as networks with their bridges, its capital, cities, towns and the Kesmark district's villages. The Kesmark range (maps/kesmark_range.json) is a district of it.",
+  "status": "First pass, 22 October 2026 (roadmap: the nation on the map, N1; docs/COUNTRY_MAP.md).",
+  "source": "game value: docs/campaign/10_BRIEFING_FORCES_AND_NATION.md (sections 2-3, decisions 5 and 9); positions from data/air_war/theatre_pannonia.json and data/command/places_pannonia.json; the Kesmark district's terrain, Rava and main lines copied from data/maps/kesmark_range.json; shapes, sizes and populations are sam3d estimates",
+  "confidence": "estimate",
+  "notes": "Fictional. Positions in km east and north of the theatre's origin. The borders lie so every enemy entry point and base of the theatre's fronts is outside (the rebels' inside: a civil war), and every theatre object inside.",
+  "origin": {
+    "lat_deg": 46.9,
+    "lon_deg": 19.7,
+    "alt_m": 110
+  },
+  "seed": 1985,
+  "extent_km": {
+    "west": -180,
+    "east": 150,
+    "south": -180,
+    "north": 140
+  },
+  "grid_km": 1,
+  "district": "maps/kesmark_range.json",
+  "terrain": {
+    "base_m": 110,
+    "relief": [{"wavelength_km": 18, "amplitude_m": 10}, {"wavelength_km": 6, "amplitude_m": 4}, {"wavelength_km": 1.5, "amplitude_m": 1.2}],
+    "ridges": [{"id": "pact_border_range", "points": [[-60, 136], [0, 131], [40, 126], [90, 116], [150, 96]], "half_width_km": 16, "height_m": 420, "notes": "The range along the border with the Warsaw Pact: the Rava, the Tisava and the main pipeline come through it in their valleys."}, {"id": "western_ridge", "points": [[-172, 105], [-166, 60], [-163, 20], [-160, -30]], "half_width_km": 14, "height_m": 360, "notes": "The western uplands' crest towards the NATO border; the western road and railway cross it at the border."}, {"id": "noric_ridge", "points": [[-182, -50], [-160, -100], [-140, -140], [-115, -175]], "half_width_km": 18, "height_m": 380, "notes": "The Noric Republic's hills beyond the south-western border."}, {"id": "rebel_hills_west", "points": [[-62, -98], [-40, -135], [-22, -175]], "half_width_km": 12, "height_m": 240, "notes": "The rebels' country west of the lower Rava."}, {"id": "rebel_hills_east", "points": [[48, -96], [62, -132], [82, -172]], "half_width_km": 14, "height_m": 280, "notes": "The rebels' country east of the lower Rava."}, {"id": "hradec_ridge", "points": [[-100, 112], [-75, 106], [-48, 112]], "half_width_km": 10, "height_m": 200, "notes": "Hradec's hills."}],
+    "valleys": [{"id": "upper_rava_valley", "points": [[40, 80], [47, 104], [55, 128], [60, 140]], "half_width_km": 5, "depth_m": 450, "notes": "The Rava's valley through the border range, dammed above Dravec."}, {"id": "lower_rava_valley", "points": [[24, -68], [18, -90], [14, -112], [8, -140], [0, -168]], "half_width_km": 6, "depth_m": 320, "notes": "The lower Rava's valley through the rebels' hills."}, {"id": "lenta_valley", "points": [[-150, -5], [-140, -30], [-125, -55], [-115, -78], [-112, -100], [-118, -125]], "half_width_km": 5, "depth_m": 300, "notes": "The Lenta's valley under the western and Noric hills."}, {"id": "tisava_valley", "points": [[118, 128], [100, 90], [86, 55]], "half_width_km": 5, "depth_m": 450, "notes": "The upper Tisava's valley through the border range."}],
+    "hills": [{"id": "polany_hill", "east_km": 2, "north_km": 14.5, "radius_km": 3.0, "height_m": 55, "notes": "The regiment's P-40 stands above Polany (places_pannonia kesmark_p40)."}, {"id": "ludas_hill", "east_km": -8, "north_km": 22, "radius_km": 3.0, "height_m": 40, "notes": "Radar company Ludas (P-19)."}, {"id": "kesmark_heights", "east_km": 23, "north_km": 5, "radius_km": 5.0, "height_m": 35}, {"id": "dubnik_rise", "east_km": -19, "north_km": 13, "radius_km": 4.0, "height_m": 22}, {"id": "varos_hill", "east_km": -34, "north_km": 36, "radius_km": 4.0, "height_m": 70, "notes": "The air defence sector's bunker (places_pannonia nv_sector_cp)."}, {"id": "noric_hills", "east_km": -150, "north_km": -140, "radius_km": 70, "height_m": 450, "notes": "The neutral neighbour's hills beyond the south-western border."}, {"id": "northern_uplands", "east_km": 20, "north_km": 150, "radius_km": 60, "height_m": 300}, {"id": "pact_border_hills", "east_km": 85, "north_km": 118, "radius_km": 40, "height_m": 380, "notes": "The hills along the Warsaw Pact border, where the main oil pipeline comes in."}, {"id": "hradec_hills", "east_km": -75, "north_km": 105, "radius_km": 30, "height_m": 250}, {"id": "western_uplands", "east_km": -160, "north_km": 60, "radius_km": 55, "height_m": 320, "notes": "Towards the NATO border."}, {"id": "western_uplands_south", "east_km": -150, "north_km": 5, "radius_km": 35, "height_m": 220}, {"id": "rava_valley_west", "east_km": -30, "north_km": -130, "radius_km": 35, "height_m": 200, "notes": "The rebels' country: hills either side of the lower Rava."}, {"id": "rava_valley_east", "east_km": 65, "north_km": -125, "radius_km": 40, "height_m": 260}, {"id": "eastern_rise", "east_km": 130, "north_km": -25, "radius_km": 40, "height_m": 150}],
+    "valley": {"depth_m": 6, "half_width_m": 700, "notes": "The Rava's valley, carved along the river."},
+    "notes": "The Kesmark range's base, relief, hills and valley unchanged (they must stay so: the range is a district of this map and tests/test_country_map.cpp checks the two grounds agree), with the country's hills added where none reaches the range."
+  },
+  "outline": {
+    "points": [[-170, 110], [-70, 128], [30, 132], [100, 120], [140, 80], [145, 0], [130, -90], [80, -160], [-55, -170], [-90, -150], [-140, -100], [-170, -45]],
+    "notes": "Closed: the last point joins the first."
+  },
+  "borders": [
+    {"id": "west", "name": "The western border", "neighbour": "nato", "points": [[-170, -45], [-170, 110], [-70, 128]], "notes": "NATO's front (theatre fronts: entries W1-W3 lie beyond it)."},
+    {"id": "northeast", "name": "The north-eastern border", "neighbour": "warsaw_pact", "points": [[-70, 128], [30, 132], [100, 120], [140, 80], [145, 0]], "notes": "The big Warsaw Pact neighbour: the main oil pipeline and the railway the Soviet missiles come in by."},
+    {"id": "south", "name": "The southern border", "neighbour": "none", "points": [[145, 0], [130, -90], [80, -160], [-55, -170]], "notes": "A neighbour at peace. The rebels hold the country inside it, not across it."},
+    {"id": "southwest", "name": "The south-western border", "neighbour": "neutral", "points": [[-55, -170], [-90, -150], [-140, -100], [-170, -45]], "notes": "The Noric Republic: the smaller oil line comes in here."}
+  ],
+  "regions": [
+    {"id": "capital_region", "name": "The capital", "points": [[10, 40], [60, 40], [60, 82], [10, 82]]},
+    {"id": "industrial_belt", "name": "The industrial belt", "points": [[-50, 22], [10, 38], [10, 72], [-50, 62]]},
+    {"id": "central_plain", "name": "The central plain", "points": [[-60, -30], [0, -60], [60, -70], [130, -90], [145, 0], [140, 80], [60, 40], [10, 38], [-50, 22], [-60, 20]]},
+    {"id": "northern_hills", "name": "The northern hills", "points": [[-70, 85], [140, 80], [100, 120], [30, 132], [-70, 128]]},
+    {"id": "western_uplands", "name": "The western uplands", "points": [[-170, -45], [-110, -30], [-60, 20], [-50, 62], [-70, 128], [-170, 110]]},
+    {"id": "southwest_border_hills", "name": "The south-western border hills", "points": [[-170, -45], [-140, -100], [-90, -150], [-40, -100], [-60, -30], [-110, -30]]},
+    {"id": "rava_valley_south", "name": "The Rava valley in the south", "points": [[-90, -150], [-40, -170], [80, -160], [130, -90], [60, -70], [0, -60], [-40, -100]]}
+  ],
+  "rivers": [
+    {"id": "rava", "name": "Rava", "width_m": 90, "points": [[0, -168], [8, -140], [14, -112], [18, -90], [24, -68], [30, -45], [22, -22], [18, -14], [16, -10], [13.4, -7.8], [12, -6], [12.6, -4.7], [14, -4], [15.6, -2.4], [17, 1], [18, 6], [21, 13], [25, 22], [32, 42], [40, 80], [47, 104], [55, 128], [60, 140]], "notes": "From the Pact border in the north, past the dam above Dravec, through the capital and Kesmark, down the rebels' valley to the southern border. Between (30, -45) and (40, 80) exactly the Kesmark range's Rava."},
+    {"id": "lenta", "name": "Lenta", "width_m": 50, "points": [[-150, -5], [-140, -30], [-125, -55], [-115, -78], [-112, -100], [-118, -125]], "notes": "From the western uplands past the Lenta bridge (theatre lenta_bridge) and out across the neutral border."},
+    {"id": "tisava", "name": "Tisava", "width_m": 70, "points": [[118, 128], [100, 90], [86, 55], [74, 18], [60, -8], [44, -30], [30, -45]], "notes": "From the Pact side past Mezovar and Tiszavar into the Rava below Kesmark."}
+  ],
+  "roads": [
+    {"id": "a_novo_varosd", "name": "Novo Varosd - Kesmark", "class": "main", "points": [[-30, 40], [-24, 26], [-18, 9.6], [-10, 3], [0, 1], [6, 0], [9, -1]]},
+    {"id": "b_ralje", "name": "Kesmark - the road bridge - Horka - Ralje", "class": "main", "points": [[9, -1], [10.8, -3.6], [12, -6], [15.2, -7.6], [17.6, -12.4], [19, -15], [20, -24], [18, -82]]},
+    {"id": "c_lazne", "name": "Lazne - Vrbice crossroads - the road bridge", "class": "secondary", "points": [[-8, -7], [-2, -7.3], [4, -7], [8.5, -6.6], [12, -6]]},
+    {"id": "d_polany", "name": "Kesmark - Polany", "class": "secondary", "points": [[9, -1], [7, 6], [3, 17], [0, 30]]},
+    {"id": "e_kecel", "name": "Lazne - Kecel air base", "class": "secondary", "points": [[-8, -7], [-14, -12], [-19.4, -14.6], [-23.6, -18.8]]},
+    {"id": "f_vrbice", "name": "Kesmark - Vrbice - south", "class": "secondary", "points": [[9, -1], [6, -4], [4, -7], [2.5, -12.5], [1, -20], [-2, -40]]},
+    {"id": "g_tiszavar", "name": "Horka road - Tiszavar", "class": "main", "points": [[15.2, -7.6], [24, -6], [40, -2], [68, 12]]},
+    {"id": "h_dubnik", "name": "Dubnik - Lazne", "class": "secondary", "points": [[-18, 9.6], [-14, 2], [-11.5, -2.5], [-8, -7]]},
+    {"id": "m_capital_kesmark", "name": "The capital - Kesmark", "class": "main", "points": [[36, 58], [28, 40], [20, 22], [14, 8], [9, -1]]},
+    {"id": "m_capital_varosd", "name": "The capital - Novo Varosd", "class": "main", "points": [[36, 58], [20, 56], [0, 50], [-14, 46], [-30, 40]]},
+    {"id": "m_capital_tiszavar", "name": "The capital - Tiszavar", "class": "main", "points": [[36, 58], [45, 55], [60, 40], [68, 12]]},
+    {"id": "m_northeast", "name": "The capital road - Mezovar - the Pact border", "class": "main", "points": [[45, 55], [70, 62], [90, 60], [105, 95], [112, 108]]},
+    {"id": "m_dravec", "name": "The capital - Dravec", "class": "main", "points": [[36, 58], [42, 76], [52, 96]]},
+    {"id": "m_hradec_dravec", "name": "Hradec - Dravec", "class": "secondary", "points": [[-60, 95], [-20, 92], [20, 94], [52, 96]]},
+    {"id": "m_varosd_hradec", "name": "Novo Varosd - Hradec", "class": "main", "points": [[-30, 40], [-45, 68], [-60, 95]]},
+    {"id": "m_west", "name": "Novo Varosd - Kisvar - the NATO border", "class": "main", "points": [[-30, 40], [-70, 38], [-120, 40], [-170, 42]]},
+    {"id": "m_kisvar_zlatno", "name": "Kisvar - Zlatno", "class": "secondary", "points": [[-120, 40], [-150, 75]]},
+    {"id": "m_south_ralje", "name": "Ralje - the Rava bridge - Petrovo", "class": "secondary", "points": [[18, -82], [30, -100], [40, -120]]},
+    {"id": "m_southwest", "name": "Vrbice road - Saldanj - the Lenta bridge - the neutral border", "class": "main", "points": [[-2, -40], [-45, -42], [-90, -40], [-125, -55], [-130, -110]]},
+    {"id": "m_saldanj_hollos", "name": "Saldanj road - Hollos - Ralje", "class": "secondary", "points": [[-45, -42], [-40, -75], [-10, -95], [18, -82]]},
+    {"id": "m_east", "name": "Tiszavar - Belozem", "class": "secondary", "points": [[68, 12], [100, -40]]},
+    {"id": "s_west_group", "name": "The road south from Kisvar", "class": "secondary", "width_m": 6, "points": [[-120, 40], [-123, 25], [-125, 10]], "notes": "Reaches the western group's area off the western main road."},
+    {"id": "s_lenta_valley", "name": "The Lenta valley road", "class": "secondary", "width_m": 6, "points": [[-125, -55], [-117, -64], [-110, -76], [-104, -80], [-96, -80]], "notes": "From the Lenta bridge down the valley to the south-western group and its depot."}
+  ],
+  "railways": [
+    {"id": "rail_main", "name": "Cegled - Kesmark - Horka siding - south", "points": [[-35, 15], [-20, 6], [-6, 1.5], [5, -1.2], [10.6, -2.2], [14, -4], [16.6, -8.6], [19.4, -14.2], [20, -16], [22, -30], [20, -80]]},
+    {"id": "rail_varosd", "name": "Cegled - Novo Varosd", "points": [[-35, 15], [-33, 30], [-31, 41.5], [-28, 60]]},
+    {"id": "r_capital_varosd", "name": "Novo Varosd - the capital", "points": [[-28, 60], [0, 61], [36, 58]]},
+    {"id": "r_northeast", "name": "The capital - Mezovar - the Pact border", "points": [[36, 58], [60, 64], [88, 62], [108, 92], [116, 104]], "notes": "The line the Soviet systems' missiles and spares come in by (the briefing's §3.2)."},
+    {"id": "r_west", "name": "Cegled - Kisvar - the NATO border", "points": [[-35, 15], [-80, 20], [-120, 38], [-170, 40]]},
+    {"id": "r_southwest", "name": "Cegled line - Saldanj", "points": [[-20, 6], [-60, -30], [-90, -40]]},
+    {"id": "r_tiszavar", "name": "Horka line - Tiszavar", "points": [[16.6, -8.6], [40, -6], [68, 10]]}
+  ],
+  "pipelines": [
+    {"id": "p_main", "name": "The main oil pipeline (from the Pact neighbour)", "points": [[106, 114], [95, 100], [70, 72], [45, 50], [34, 40]], "notes": "Most of the country's crude oil (decision 9): closed on the first day of a war with the Pact."},
+    {"id": "p_neutral", "name": "The smaller oil line (from the Noric Republic)", "points": [[-134, -106], [-100, -70], [-60, -30], [-40, 25], [0, 32], [34, 40]], "notes": "The smaller share of the oil: closed in a war with the neutral neighbour. Routed north of the Kesmark range."}
+  ],
+  "settlements": [
+    {"id": "capital", "name": "The capital", "kind": "capital", "east_km": 36, "north_km": 58, "radius_km": 7, "population": 650000, "notes": "On the Rava about 60 km north of Kesmark (decision 5). Its name is the project owner's, to come."},
+    {"id": "novo_varosd", "name": "Novo Varosd", "kind": "city", "east_km": -30, "north_km": 40, "radius_km": 3.2, "population": 140000, "notes": "The 3rd Army's headquarters, the sector bunker on Varos hill, the Csepely works."},
+    {"id": "kesmark", "name": "Kesmark", "kind": "town", "east_km": 9, "north_km": -1, "radius_km": 1.8, "population": 26000},
+    {"id": "tiszavar", "name": "Tiszavar", "kind": "town", "east_km": 68, "north_km": 12, "radius_km": 2.2, "population": 32000},
+    {"id": "saldanj", "name": "Saldanj", "kind": "town", "east_km": -90, "north_km": -40, "radius_km": 2.0, "population": 21000},
+    {"id": "ralje", "name": "Ralje", "kind": "town", "east_km": 18, "north_km": -82, "radius_km": 1.6, "population": 16000},
+    {"id": "hradec", "name": "Hradec Dolni", "kind": "town", "east_km": -60, "north_km": 95, "radius_km": 2.0, "population": 38000},
+    {"id": "dravec", "name": "Dravec", "kind": "town", "east_km": 52, "north_km": 96, "radius_km": 2.0, "population": 19000, "notes": "On the upper Rava below the dam."},
+    {"id": "kisvar", "name": "Kisvar", "kind": "town", "east_km": -120, "north_km": 40, "radius_km": 2.2, "population": 24000},
+    {"id": "zlatno", "name": "Zlatno", "kind": "town", "east_km": -150, "north_km": 75, "radius_km": 1.6, "population": 12000},
+    {"id": "mezovar", "name": "Mezovar", "kind": "town", "east_km": 90, "north_km": 60, "radius_km": 2.0, "population": 22000, "notes": "On the Tisava, on the road and railway to the Pact border."},
+    {"id": "belozem", "name": "Belozem", "kind": "town", "east_km": 100, "north_km": -40, "radius_km": 1.6, "population": 15000},
+    {"id": "hollos", "name": "Hollos", "kind": "town", "east_km": -40, "north_km": -75, "radius_km": 1.4, "population": 11000},
+    {"id": "petrovo", "name": "Petrovo", "kind": "town", "east_km": 40, "north_km": -120, "radius_km": 1.4, "population": 9000, "notes": "In the rebel-held south."},
+    {"id": "vrbice", "name": "Vrbice", "kind": "village", "east_km": 2.5, "north_km": -12.5, "radius_km": 0.6, "population": 600},
+    {"id": "lazne", "name": "Lazne", "kind": "village", "east_km": -8, "north_km": -7, "radius_km": 0.6, "population": 600},
+    {"id": "horka", "name": "Horka", "kind": "village", "east_km": 19, "north_km": -15, "radius_km": 0.55, "population": 600},
+    {"id": "dubnik", "name": "Dubnik", "kind": "village", "east_km": -18, "north_km": 9, "radius_km": 0.6, "population": 600},
+    {"id": "polany", "name": "Polany", "kind": "village", "east_km": 3, "north_km": 17, "radius_km": 0.5, "population": 600}
+  ],
+  "lakes": [
+    {"id": "rava_reservoir", "name": "The Rava reservoir", "points": [[48.95, 108.0], [50.1, 112.0], [51.75, 116.2], [53.2, 120.5], [54.6, 124.8], [53.4, 125.2], [52.0, 120.8], [50.3, 116.5], [48.9, 112.4], [47.85, 108.4]], "level_m": 135, "depth_m": 25, "notes": "The lake the Rava dam holds back in the river's gorge through the border range: the dam's worth (the briefing's \u00a73.2). Level and depth game values."},
+    {"id": "lake_siro", "name": "Lake Siro", "points": [[-71.42, 4.39], [-72.55, 5.46], [-74.75, 5.84], [-77.6, 5.46], [-80.53, 4.4], [-82.96, 2.86], [-84.4, 1.15], [-84.58, -0.39], [-83.45, -1.46], [-81.25, -1.84], [-78.4, -1.46], [-75.47, -0.4], [-73.04, 1.14], [-71.6, 2.85]], "level_m": 110, "depth_m": 4, "notes": "A shallow lake of the western plain, reed-fringed (a marsh round it)."}
+  ],
+  "marshes": [
+    {"id": "tisava_floodplain", "name": "The Tisava floodplain", "points": [[30, -48], [36, -50], [44, -40], [50, -26], [56, -12], [52, -8], [44, -22], [37, -36], [31, -42]], "notes": "Backwaters and reed beds where the Tisava meets the Rava."},
+    {"id": "lower_lenta_marsh", "name": "The lower Lenta's marshes", "points": [[-118, -90], [-110, -92], [-108, -104], [-112, -116], [-119, -112], [-121, -100]], "notes": "The Lenta's wet meadows towards the neutral border."},
+    {"id": "siro_reeds", "name": "The reeds round Lake Siro", "points": [[-69.54, 5.08], [-71.09, 6.73], [-74.01, 7.45], [-77.72, 7.08], [-81.48, 5.71], [-84.56, 3.61], [-86.33, 1.18], [-86.46, -1.08], [-84.91, -2.73], [-81.99, -3.45], [-78.28, -3.08], [-74.52, -1.71], [-71.44, 0.39], [-69.67, 2.82]], "notes": "The reed belt round Lake Siro."}
+  ],
+  "forests": [
+    {"id": "lazne_woods", "name": "The Lazne woods", "points": [[-13.6, -5.6], [-12.4, -0.8], [-10.2, -0.2], [-8.8, -1.8], [-9.0, -4.6], [-9.6, -5.9], [-11.4, -6.4]], "notes": "Hides the regiment command post (places_pannonia rgt_cp, lazne_woods)."},
+    {"id": "dubnik_forest", "name": "The Dubnik forest", "points": [[-23.5, 8.6], [-23, 14.5], [-19.5, 15.8], [-16.6, 13.4], [-17.2, 11.4], [-19.0, 10.2], [-21.0, 8.2]], "notes": "Hides the division's main command post (places_pannonia div_hq)."},
+    {"id": "polany_woods", "name": "The woods on Polany hill", "points": [[-0.6, 12.4], [3.8, 12.2], [5.4, 14.6], [4.0, 16.2], [0.4, 16.0], [-1.0, 14.2]]},
+    {"id": "horka_woods", "name": "The Horka woods", "points": [[20.5, -19.5], [24.5, -19], [25, -15.5], [22, -14.5], [20.8, -16.8]]},
+    {"id": "northern_forest", "name": "The northern forest", "points": [[40, 100], [90, 100], [100, 118], [60, 126], [35, 120]]},
+    {"id": "western_forest", "name": "The forest of the western uplands", "points": [[-168, 30], [-140, 35], [-130, 80], [-160, 100], [-168, 90]]},
+    {"id": "noric_border_forest", "name": "The border forest", "points": [[-150, -75], [-125, -80], [-110, -110], [-130, -108], [-150, -90]]},
+    {"id": "southern_forest", "name": "The rebels' forest", "points": [[40, -110], [80, -120], [90, -150], [50, -150]]},
+    {"id": "tisava_woods", "name": "The Tisava woods", "points": [[95, 10], [120, 0], [125, -40], [100, -30]]}
+  ],
+  "landmarks": [
+    {"id": "refinery", "name": "The refinery on the Rava", "kind": "refinery", "east_km": 34, "north_km": 40, "notes": "Both pipelines end here (the briefing's §3.1)."},
+    {"id": "rava_dam", "name": "The Rava dam above Dravec", "kind": "dam", "east_km": 48.33, "north_km": 108},
+    {"id": "ps_main", "name": "The main pipeline's border station", "kind": "pipeline_station", "east_km": 106, "north_km": 114},
+    {"id": "ps_neutral", "name": "The smaller line's border station", "kind": "pipeline_station", "east_km": -134, "north_km": -106},
+    {"id": "bx_road_west", "name": "The western road crossing", "kind": "border_crossing", "east_km": -170, "north_km": 42},
+    {"id": "bx_rail_west", "name": "The western rail crossing", "kind": "border_crossing", "east_km": -170, "north_km": 40},
+    {"id": "bx_road_ne", "name": "The north-eastern road crossing", "kind": "border_crossing", "east_km": 112, "north_km": 108},
+    {"id": "bx_rail_ne", "name": "The north-eastern rail crossing", "kind": "border_crossing", "east_km": 116, "north_km": 104},
+    {"id": "bx_road_sw", "name": "The south-western road crossing", "kind": "border_crossing", "east_km": -130, "north_km": -110},
+    {"id": "capital_port", "name": "The capital's river port", "kind": "port", "east_km": 35.05, "north_km": 56.5}
+  ]
+}

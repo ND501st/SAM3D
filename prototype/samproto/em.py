@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Sequence, Tuple
 
 from .geo import MEAN_RADIUS
-from .radar import K_STD, TerrainFn, db, undb
+from .radar import K_STD, Footprints, TerrainFn, db, obstacles_along, undb
 
 C = 299792458.0
 BOLTZMANN = 1.380649e-23
@@ -120,8 +120,19 @@ class PathGeometry:
     worst_v_geometry: float = -1e9
 
 
+# Below this a footprint matters to neither the sight nor the edge (simcore em/propagation.hpp kFootprintNearRayM, a game
+# value).
+FOOTPRINT_NEAR_RAY_M = 10.0
+
+
 def analyse_path(terrain: TerrainFn, a_e: float, a_n: float, a_alt: float, b_e: float, b_n: float, b_alt: float,
-                 spacing_m: float = 100.0, max_samples: int = 600, k: float = K_STD) -> PathGeometry:
+                 spacing_m: float = 100.0, max_samples: int = 600, k: float = K_STD,
+                 obstacle: TerrainFn | None = None, obstacle_skip_m: float = 60.0,
+                 footprints: Footprints | None = None) -> PathGeometry:
+    """`obstacle(e, n)`: woods and buildings on the profile beyond `obstacle_skip_m` from either end, as ITU-R
+    P.1812's representative clutter heights (simcore em/propagation.hpp AnalysePath). `footprints`: the same as
+    footprints; each stretch between two samples is looked at at their own spacing where the ray runs within
+    FOOTPRINT_NEAR_RAY_M of what may stand there, and its highest point over the ray joins the profile (roadmap R6)."""
     g = PathGeometry()
     dx, dy = b_e - a_e, b_n - a_n
     g.ground_range_m = math.hypot(dx, dy)
@@ -132,12 +143,38 @@ def analyse_path(terrain: TerrainFn, a_e: float, a_n: float, a_alt: float, b_e: 
     re = k * MEAN_RADIUS
     n = min(int(g.ground_range_m / max(spacing_m, 1.0)), max_samples)
     n = max(n, 2)
-    for i in range(1, n):
-        t = i / n
-        s = t * g.ground_range_m
-        rest = g.ground_range_m - s
-        ray = a_alt + dz * t
-        ground = terrain(a_e + dx * t, a_n + dy * t) + s * rest / (2.0 * re)
+    rng = g.ground_range_m
+
+    def bulge_at(s: float) -> float:
+        return s * (rng - s) / (2.0 * re)
+
+    def ray_at(s: float) -> float:
+        return a_alt + dz * s / rng
+
+    profile = []  # (s, height with the bulge), the ends left out
+    for i in range(1, n + 1):
+        s = i / n * rng
+        if footprints is not None and footprints.spacing_m > 0.0:
+            s0 = (i - 1) / n * rng
+            most = bulge_at(rng / 2) if s0 <= rng / 2 <= s else max(bulge_at(s0), bulge_at(s))
+            below = min(ray_at(s0), ray_at(s)) - most - FOOTPRINT_NEAR_RAY_M
+            worst = None
+            for si, top in obstacles_along(footprints, a_e, a_n, dx / rng, dy / rng, rng, s0, s, below, obstacle_skip_m):
+                h = top + bulge_at(si)
+                if 0.0 < si < rng and (worst is None or h - ray_at(si) > worst[1] - ray_at(worst[0])):
+                    worst = (si, h)
+            if worst is not None:
+                profile.append(worst)
+        if i == n:
+            break
+        x, y = a_e + dx * i / n, a_n + dy * i / n
+        ground = terrain(x, y) + bulge_at(s)
+        if obstacle is not None and s > obstacle_skip_m and rng - s > obstacle_skip_m:
+            ground += obstacle(x, y)
+        profile.append((s, ground))
+    for s, ground in profile:
+        rest = rng - s
+        ray = ray_at(s)
         h = ground - ray
         g.min_clearance_m = min(g.min_clearance_m, -h)
         if h >= 0.0:

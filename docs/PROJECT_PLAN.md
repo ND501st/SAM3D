@@ -88,6 +88,19 @@ Task-level order and status: `docs/DEVELOPMENT_ROADMAP.md`.
 **M4+ — More**
 - Osa-AKM; ZSU-23-4 Shilka; mission editor; multiplayer crew
 
+**M5 — The battery's war** (planned 22 Oct 2026, roadmap phases 13–18, `docs/campaign/`): the systems the Osa and
+PU-12M crews, vehicles and battery fit into, against one enemy at a time.
+- [ ] Battery 21 commanded or crewed through a campaign against one adversary: every task an order with its reasons,
+      every raid, reconnaissance flight, jammer and ambush around the battery with a cause the debrief can show, one
+      continuous mission from the order to the report, and the battery's records deciding what its regiment learns;
+      the debrief showing the two things the battery changed: the assets it kept standing, and what it cost the
+      enemy (SEAD, ARMs, sorties, routes, aircraft) to work near it
+
+**M6 — The battery's life** (roadmap phases 19–21): the same campaign lived by people.
+- [ ] The battery's people tired, hungry, heartened or shaken, and played by the player as different crew members
+      across missions; the battery's day of maintenance, rest, briefings and digging planned against the enemy's habits
+      and broken into by its raids; our doctrine fitted to the enemy and its reach; command that breaks and is rebuilt
+
 ## Open questions for the creator
 
 1. Can he share the VB6 source, or notes on how the Osa's consoles, lamps and guidance phases behave?

@@ -67,8 +67,65 @@ def radar_horizon(h_radar: float, h_target: float, k: float = K_STD) -> float:
     return math.sqrt(2 * re * max(h_radar, 0.0)) + math.sqrt(2 * re * max(h_target, 0.0))
 
 
+# Woods and buildings stand on the profile beyond this from either end (simcore terrain.hpp kObstacleSkipM, a game value).
+OBSTACLE_SKIP_M = 60.0
+
+
+class Footprints:
+    """Woods and buildings as footprints of their own (simcore Terrain::ObstacleSpacingM, ObstacleTopAt,
+    ObstacleTopBoundM; roadmap R6). Subclass: `spacing_m` the narrowest footprint, `top_at(e, n)` the top above sea level
+    of what stands there (None: nothing), `top_bound(e0, n0, e1, n1, below)` -> (a bound on the tops over that ground
+    segment or None, the spacing to look at it at)."""
+    spacing_m: float = 0.0
+
+    def top_at(self, e: float, n: float) -> float | None:
+        return None
+
+    def top_bound(self, e0: float, n0: float, e1: float, n1: float, below: float) -> tuple[float | None, float]:
+        return (1e300, self.spacing_m) if self.spacing_m > 0.0 else (None, 0.0)
+
+    def chords(self, e0: float, n0: float, e1: float, n1: float, below: float) -> list[tuple[float, float, float]] | None:
+        """Mirror of Terrain::ObstacleChords: (t_in, t_out, top) for each footprint the ground segment crosses whose top
+        is no lower than `below`, exactly; None: not known so (looked at at the spacing instead)."""
+        return None
+
+
+def obstacles_along(fp: Footprints | None, ax: float, ay: float, ux: float, uy: float, total: float, s0: float, s1: float,
+                    below: float, skip: float):
+    """Mirror of simcore terrain.hpp ObstaclesAlong: yields (s, top) for the footprints over [s0, s1] of the path (less
+    `skip` at either end), at their cuts when the footprints know them, else at their own spacing, where something there
+    may stand higher than `below`."""
+    if fp is None or fp.spacing_m <= 0.0:
+        return
+    lo, hi = max(s0, skip), min(s1, total - skip)
+    if hi < lo:
+        return
+    bound, spacing = fp.top_bound(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below)
+    if bound is None or bound < below or spacing <= 0.0:
+        return
+    cuts = fp.chords(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below)
+    if cuts is not None:  # each cut at its ends and its middle (R6's second review: a corner cut short is not stepped over)
+        for t_in, t_out, top in cuts:
+            a = lo + (hi - lo) * min(1.0, max(0.0, t_in))
+            b = lo + (hi - lo) * min(1.0, max(0.0, t_out))
+            yield a, top
+            yield 0.5 * (a + b), top
+            yield b, top
+        return
+    steps = int(math.ceil((hi - lo) / spacing))
+    for k in range(steps + 1):
+        s = lo + (hi - lo) * k / steps if steps > 0 else lo
+        top = fp.top_at(ax + ux * s, ay + uy * s)
+        if top is not None:
+            yield s, top
+
+
 def has_line_of_sight(terrain: TerrainFn, a: Vec3, a_alt: float, b: Vec3, b_alt: float,
-                      spacing_m: float = 50.0, k: float = K_STD, clearance_m: float = 0.0) -> bool:
+                      spacing_m: float = 50.0, k: float = K_STD, clearance_m: float = 0.0,
+                      obstacle: TerrainFn | None = None, obstacle_skip_m: float = OBSTACLE_SKIP_M,
+                      footprints: Footprints | None = None) -> bool:
+    """`obstacle(e, n)`: how high woods and buildings stand there (simcore Terrain::ObstacleHeightAt; None: none).
+    `footprints`: the same as footprints, looked at between the samples at their own spacing (roadmap R6)."""
     dx, dy = b.x - a.x, b.y - a.y
     dist = math.hypot(dx, dy)
     if dist < 1.0:
@@ -79,9 +136,29 @@ def has_line_of_sight(terrain: TerrainFn, a: Vec3, a_alt: float, b: Vec3, b_alt:
         t = i / n
         s = t * dist
         ray = a_alt + (b_alt - a_alt) * t
-        ground = terrain(a.x + dx * t, a.y + dy * t) + s * (dist - s) / (2 * re)
+        x, y = a.x + dx * t, a.y + dy * t
+        ground = terrain(x, y) + s * (dist - s) / (2 * re)
+        if obstacle is not None and s > obstacle_skip_m and dist - s > obstacle_skip_m:
+            ground += obstacle(x, y)
         if ground + clearance_m >= ray:
             return False
+    if footprints is None or footprints.spacing_m <= 0.0:
+        return True
+    ux, uy = dx / dist, dy / dist
+
+    def ray_at(s: float) -> float:
+        return a_alt + (b_alt - a_alt) * s / dist
+
+    def bulge_at(s: float) -> float:
+        return s * (dist - s) / (2 * re)
+
+    for i in range(1, n + 1):
+        s0, s1 = dist * (i - 1) / n, dist * i / n
+        most = bulge_at(dist / 2) if s0 <= dist / 2 <= s1 else max(bulge_at(s0), bulge_at(s1))
+        below = min(ray_at(s0), ray_at(s1)) - most - clearance_m
+        for s, top in obstacles_along(footprints, a.x, a.y, ux, uy, dist, s0, s1, below, obstacle_skip_m):
+            if top + bulge_at(s) + clearance_m >= ray_at(s):
+                return False
     return True
 
 

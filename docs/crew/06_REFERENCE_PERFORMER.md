@@ -30,6 +30,11 @@ true, `02`), and the **decisions** (which target, when to launch, which method).
 | World-fact rules: which seats and conditions make each simulation input true | `data/crew/<system>_crew.json` (`facts`) |
 | Tasks: named goals ("ready, halted", "engage") as conditions | `data/crew/<system>_crew.json` (`tasks`) |
 | The reference skill (Master tier, no jitter) | `data/crew/skill_levels.json` |
+| The jobs outside the vehicle and the ways to them: a control worked at a place, each way's time measured on a body of that seat, where each man is now | `data/vehicles/<system>.json` via the runner (`DrillMaster::SetOutside`, roadmap 8.14) |
+
+A job outside is walked in the ideal run as the crew walks it: the man goes out when the step is due, acts once he has
+arrived, stays while its work goes on, and comes back when the next step is inside; a control's cost in the planner
+counts the way there and back (`DrillMaster::WalkFor`). The Osa's crew chief finding Qc: the ideal sets the aiming circle up at 35.0 s (0.6 s when it was worked from his seat) and has Qc at 185.1 s (150.7 s); the way out and back is 68.3 s; the NPC crew chief, a trained man, sets it up at 32.9 s (`test_crew_mobility.cpp`).
 
 ## 3. The algorithm
 

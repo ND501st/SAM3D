@@ -142,7 +142,7 @@
     ],
     "channel_control": "msl.channels", "channel_positions": [ [2], [1], [1, 2] ],
     "attention_input": "target_near_zone", "jam_control": "fo.pomekha", "pair_preparation": "missile_prep",
-    "hold_input": "launch_hold", "reload_input": "tzm_alongside", "stopped_input": "vehicle_stopped", "reload_s_per_missile": 60,
+    "hold_input": "launch_hold", "reload_input": "tzm_alongside", "stopped_input": "vehicle_stopped", "reload_s_per_missile": 60, "reload_traverse": 3,
     "capture_s": 0.8, "medium_s": 2.0, "narrow_s": 4.0, "fuse_range_m": 120, "min_interval_s": 4, "nominal_flight_s": 20,
     "letter": { "control": "spk.letter", "change_position": 2, "lock_inputs": [ "ch1_apch_lock", "ch2_apch_lock" ], "relock_s": 1.0,
                 "source": "voenizdat_osa_1991 p150 (СМЕНА ЛИТЕРЫ — НОРМА changes the transmitter's frequency letter; ЗАХВ. АПЧ-I, -II go out and back within 1 s); mon_2112_80 (a faulty channel: КАНАЛЫ to the good one, single missiles, then СМЕНА ЛИТ.)",
@@ -163,7 +163,7 @@
                    "notes": "Flight time is the middle of the published 24-27 s. The throw uses no channel and no hit chance, and is not a guided launch in the debrief." },
     "source": "flak11 (NVA Osa-AK: at ВНИМАНИЕ the command transmitter comes on and two missiles are selected automatically, outer ones first, left and right; K3 about 120 m before the target); samsim_thread (creator: ЗАХВАТ about 0.8 s / 60 m after launch; ePap: the lamp sequence, К3 with УЗКИЙ ЛУЧ against a jamming target); korovin_tiv_2010 (the two missiles launched 3-5 s apart, each captured by its own wide- and medium-beam antennas); samsim_osa p30 (ПУСК ГОТОВ again for the second missile)",
     "confidence": "medium",
-    "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Reloading: with tzm_alongside set and the vehicle stopped, one missile goes into an empty container every reload_s_per_missile (60 s: flak11's 6 min for six), outer containers first, only once the pair is spent and no channel is guiding; the 60 s per missile is the 6 min divided by six (the crane's three-container traverse is not modelled), the loading order is a sam3d estimate. Gyro overheating (flashing ammunition lamps) and the emergency launch are not modelled."
+    "notes": "Channel 1 = I (right launcher), 2 = II (left). 'Outer first': container 3 is taken as the outer one, from the order of the ИЗДЕЛИЯ selector (3-II ... 1-II, ОТКЛ., 1-I ... 3-I); sam3d estimate. In СОВМ. channel I fires first (sam3d estimate). medium_s and narrow_s (when СР.Л and УЗКИЙ ЛУЧ light) are sam3d estimates; min_interval_s 4 is inside Korovin's 3-5 s. The lamps stay lit as the missile goes through the beams and go out when the shot is over. nominal_flight_s only applies without the outcome model. Reloading: with tzm_alongside set and the vehicle stopped, outer containers first, only once the pair is spent and no channel is guiding; the crane's traverse holds up to 3 containers (flak11), so it lifts one side's empty containers at a time (reload_traverse 3), a lift taking 3 x 60 s: the 6 min for six as two lifts of 3 min (sam3d reading), however many the lift carries, and no more than the TZM still has aboard; the loading order is a sam3d estimate. Gyro overheating (flashing ammunition lamps) is prep_hold, the emergency launch emergency."
   },
 
   "fuel": {
@@ -284,11 +284,12 @@
       "relay_control": "orient.relay", "relay_position": 1, "sync_button": "orient.sync",
       "slew_rate_deg_s": 1.0, "sync_rate_deg_s": 15.0, "synced_input": "heading_synced",
       "latitude_control": "orient.latitude", "earth_rate_deg_h": 15.041, "own_drift_deg_h": 0.5,
-      "survey_s": 180, "survey_sigma_deg": 0.2, "qc_known_input": "qc_known", "oriented_input": "vehicle_oriented",
+      "survey_sigma_deg": 0.2, "survey_procedure": "measure_qc", "survey_subsystem": "qc_measured", "survey_break_procedure": "break_off_qc",
+      "qc_known_input": "qc_known", "oriented_input": "vehicle_oriented",
       "compass_control": "gyro.compass_mode", "compass_position": 1, "consumers_control": "gyro.consumers", "consumers_position": 1,
       "follow_up_control": "gyro.follow_up", "follow_up_position": 1, "qc_fault_input": "gyro_phase_lost", "latitude_switch": "gyro.phi_mode", "latitude_switch_position": 0,
       "source": "voenizdat_osa_1991 p48 (gyro half-compass GA-3 measures the vehicle's heading Qc once oriented; the Qc found with an artillery compass and the TV sight by mutual sighting is set on the setter ЗК-4; with АК — ЗК at ЗК and РЕЛЕ — Qc at Qc the setter is connected and the correction motor turns the GA-3; СОГЛАСОВАНИЕ speeds it up; agreement is checked on the Qc scale of OR-31M, which stops), p50–52 (block 0005-8M; ПОТРЕБИТЕЛИ ОСН. — КОНТР. connects ЗК-4 to the ГА-3 at ОСН., p51), p246 (the deputy crew chief orients the vehicle at a halt), p249 (Qc: clockwise from north to the vehicle's axis); mon_2112_80 pp. 63–68 (orientation is lost when the equipment is switched off)", "confidence": "medium",
-      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Drift (simcore/orientation.hpp): the Earth's rate 15.041 deg/h times sin(latitude) is textbook physics of the directional gyro; the latitude correction (p51: ШИРОТА potentiometer, used with РЕЛЕ — Qc at РЕЛЕ once oriented, p48) cancels the part set on its scale. own_drift_deg_h 0.5 is a SAM3D estimate: no source gives the GA-3's own drift, and this is of the order of a directional gyro of the period, so an hour or two shows it (its sign is drawn per run). The crew chief's compass work (p249-250: the ПАБ 20-50 m ahead, the launcher laid on it with the TV sight, mutual sighting, the compass correction, Qc = α − qв): survey_s 180 and survey_sigma_deg 0.2 (about 0-03) are SAM3D estimates."
+      "notes": "Rates are SAM3D estimates. The GA-3 runs on vehicle power (SAM3D); without it, the frame starts again taking the hull to face north. Holding СОГЛАСОВАНИЕ is one press in SAM3D: the fast turn continues until the scales agree. Drift (simcore/orientation.hpp): the Earth's rate 15.041 deg/h times sin(latitude) is textbook physics of the directional gyro; the latitude correction (p51: ШИРОТА potentiometer, used with РЕЛЕ — Qc at РЕЛЕ once oriented, p48) cancels the part set on its scale. own_drift_deg_h 0.5 is a SAM3D estimate: no source gives the GA-3's own drift, and this is of the order of a directional gyro of the period, so an hour or two shows it (its sign is drawn per run). The crew chief's compass work (p249-250: the ПАБ 20-50 m ahead, the launcher laid on it with the TV sight, mutual sighting, the compass correction, Qc = α − qв) is his drill measure_qc, out at the aiming circle and back (data/vehicles/osa_ak.json): the survey runs from setting it up to the reading (the subsystem qc_measured), and he tells the deputy the Qc once back in earshot; broken off for a target, he stows it (break_off_qc). survey_sigma_deg 0.2 (about 0-03) is a SAM3D estimate."
     }
   },
 
@@ -823,7 +824,7 @@
       "enable": [ { "control": "nav.aiming_circle", "is": 1 }, { "input": "vehicle_stopped", "is": true } ],
       "start_time_s": { "value": 150, "source": "estimate (level the aiming circle, lay it on the TV sight's lens, read it and work out Qc)", "confidence": "estimate" },
       "source": "voenizdat_osa_1991 p250", "confidence": "medium",
-      "notes": "Nothing waits for it yet: the deputy's orient_vehicle takes the crew chief's Qc as given." },
+      "notes": "The crew chief's reading: the compass survey's Qc is taken when it is ready (sensors.orientation survey_subsystem), and he brings it in to the deputy." },
     { "id": "equipment_warm", "name": "Equipment warmed up (anode supplies on, scopes sweeping)",
       "enable": [ { "control": "pwr.equipment", "is": 1 }, { "subsystem": "power", "is": "ready" } ],
       "start_time_s": { "value": 60, "source": "voenizdat_osa_1991 p165 (anode supplies of all systems after 1 min), p52, p99 (sweeps appear after 1 min)", "confidence": "high" },
@@ -1550,15 +1551,23 @@
       ]
     },
     {
+      "id": "break_off_qc", "name": "Break the compass work off: stow the aiming circle", "situational": true,
+      "source": "voenizdat_osa_1991 p249-250 (the aiming circle ahead of the vehicle); breaking off for a target: sam3d", "confidence": "estimate",
+      "notes": "Commander, out at the aiming circle when a target is heard of: he stows it and goes back to his post, and the crew fights in the gyro's frame as it is (simcore/scenario_runner.hpp BreakOffSurvey).",
+      "steps": [
+        { "control": "nav.aiming_circle", "position": 0, "description": "A target: stow the aiming circle and back to the post" }
+      ]
+    },
+    {
       "id": "hv_off", "name": "Search transmitter off, the antenna turning (a burst ends)", "situational": true,
       "source": "sam3d", "confidence": "estimate",
-      "notes": "Senior operator. Emission discipline against direction-finding (scenario doctrine search_bursts): ВЫСОКОЕ off between bursts, the antenna turning on and the guard open, so the next burst is one switch (roadmap E6).",
+      "notes": "Senior operator. Emission discipline against direction-finding (the limited and arm regimes, docs/crew/16_EMISSION.md): ВЫСОКОЕ off between bursts, the antenna turning on and the guard open, so the next burst is one switch (roadmap E6).",
       "steps": [ { "control": "soc.hv", "position": 0, "description": "ВЫСОКОЕ ВЫКЛ, the SOC transmitter off" } ]
     },
     {
       "id": "hv_on", "name": "Search transmitter on again (a burst)", "situational": true,
       "source": "sam3d", "confidence": "estimate",
-      "notes": "Senior operator: the next burst of the search radar (doctrine search_bursts; video_osa: the search radar on for only two turns).",
+      "notes": "Senior operator: the next burst of the search radar (the limited and arm regimes; video_osa: the search radar on for only two turns).",
       "steps": [ { "control": "soc.hv", "position": 1, "description": "ВЫСОКОЕ ВКЛ, the SOC transmitter on", "wait_for": [ { "subsystem": "hv_ready", "is": "ready" } ] } ]
     },
     {
@@ -1800,6 +1809,14 @@
       "steps": [
         { "control": "pwr.gta", "position": 0, "description": "Search antenna stowed: shut down the ГТА",
           "wait_for": [ { "subsystem": "search_antenna", "is": "off" } ] }
+      ]
+    },
+    {
+      "id": "tv_camera_on", "name": "The TV camera working (РАБ.РЕЖ. ВКЛ)",
+      "source": "voenizdat_osa_1991 p247 (in the drill К бою the TV is switched on), p103 (РАБ. РЕЖ. ВКЛ. opens the lens cover); samsim_osa p17 (the switch at the deputy's console)", "confidence": "medium",
+      "notes": "Deputy commander, his first part of К бою: the operator supplies the TV (ТОВ, equipment_on), the deputy puts it to work, so the crew is ready with its TV as well as its radars. Before 30 Oct 2026 no order started it and a player in command could never get the vehicle ready (docs/crew/14_HELPER.md).",
+      "steps": [
+        { "control": "tov.power", "position": 1, "description": "РАБ.РЕЖ. ВКЛ, the TV camera working" }
       ]
     },
     {

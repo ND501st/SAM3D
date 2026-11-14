@@ -1,6 +1,17 @@
 #include "SimWorldSubsystem.h"
 
 #include "SimBasicModels.h"
+#include "SimMunitionModels.h"
+#include "Stats/Stats.h"
+
+// "stat SAM3DFx": the weapons effects' costs (docs/fx/README.md 5); the entity snapshot is one of them. The group is
+// declared once, in the effects' header (a second declaration in the same unity translation unit would not compile).
+#if __has_include("SimFxImpl.h")
+#include "SimFxImpl.h"
+#else
+DECLARE_STATS_GROUP(TEXT("SAM3DFx"), STATGROUP_SAM3DFx, STATCAT_Advanced);
+#endif
+DECLARE_CYCLE_STAT(TEXT("Entity snapshot"), STAT_SimFxEntitySnapshot, STATGROUP_SAM3DFx);
 
 #include "Misc/FileHelper.h"
 
@@ -9,12 +20,18 @@
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
 #include "CesiumSampleHeightResult.h"
+#include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 #include "SimCrewSeatComponent.h"
 #include "SimKnowledgeComponent.h"
+#include "EngineUtils.h"
+#include "GameFramework/Pawn.h"
+#include "SimEntityActor.h"
+#include "SimMapActor.h"
+#include "Subsystems/EngineSubsystem.h"
 
 namespace
 {
@@ -22,6 +39,8 @@ namespace
 	constexpr int32 MissileIdBase = 100000;  // display ids for engagement-model missiles
 	constexpr int32 ArmIdBase = 150000;      // display ids for anti-radiation missiles (EM layer, roadmap E6)
 	constexpr int32 GroundIdBase = 200000;   // display ids for the battery's vehicles and dummy positions
+	constexpr int32 VisitorIdBase = 250000;  // display ids for the chain of command's carriers on the ground (roadmap P1)
+	constexpr int32 MoverIdBase = 300000;    // display ids for the world's movers in sight (roadmap G11): mover * 1000 + vehicle
 
 	ESimEventType ToUnrealEventType(simcore::EventType Type)
 	{
@@ -132,6 +151,31 @@ void USimWorldSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	ResetSimulation(45.0, 25.0, 0.0);
+	StopCesiumSplatSubsystem();
+}
+
+// Cesium for Unreal 2.30's Gaussian splat subsystem (an engine subsystem, alive across maps) keeps raw pointers to its
+// Niagara actor and the world it spawned it in, invisible to the garbage collector. When a map is opened again (the
+// missions menu, a restart) the new world can come at the old one's address, and its Tick then calls IsValid on the
+// freed actor: "Assertion failed: Index >= 0" in UCesiumGaussianSplatSubsystem::Tick. SAM3D draws no Gaussian splats,
+// so the subsystem is stopped in game worlds: its own Deinitialize turns its tick off and drops the pointers (it runs
+// again harmlessly at exit). The class is private to the plugin, so it is found by name.
+void USimWorldSubsystem::StopCesiumSplatSubsystem()
+{
+	static bool bStopped = false;
+	if (bStopped || GEngine == nullptr)
+	{
+		return;
+	}
+	UClass* SplatClass = FindObject<UClass>(nullptr, TEXT("/Script/CesiumRuntime.CesiumGaussianSplatSubsystem"));
+	UEngineSubsystem* Splats = SplatClass != nullptr ? GEngine->GetEngineSubsystemBase(SplatClass) : nullptr;
+	if (Splats == nullptr)
+	{
+		return;
+	}
+	Splats->Deinitialize();
+	bStopped = true;
+	UE_LOG(LogSAM3D, Log, TEXT("Cesium's Gaussian splat subsystem stopped (no splats drawn; it crashes on a map reload)"));
 }
 
 void USimWorldSubsystem::Deinitialize()
@@ -182,8 +226,31 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		{
 			Self->PumpKnowledge();
 			Self->PumpConsole();
+			Self->TickGroundCheck();
 		}
 	} PumpAfterStep{this};
+	// The frame's one entity snapshot, after the steps (docs/fx/README.md 4.3): built right after them, so this tick's own
+	// broadcasts see them, else on the way out (before the pump above). The effects and their sound after this tick and the
+	// entity actors early next frame all read it. Built by the first reader of a new frame instead, the actors' before
+	// this tick, a step then rebuilt it for the effects: two BuildEntityLists on every frame that stepped (the fix-up
+	// review of 1 Nov).
+	struct FSnapshotAfterStep
+	{
+		const USimWorldSubsystem* Self;
+		bool bBuilt;
+		void Build()
+		{
+			Self->RebuildEntityCache();
+			bBuilt = true;
+		}
+		~FSnapshotAfterStep()
+		{
+			if (!bBuilt)
+			{
+				Build();
+			}
+		}
+	} SnapshotAfterStep{this, false};
 
 	const double Scale = GetTimeScale();
 	if (EmLayer && EmLayer->IsRunning())
@@ -231,6 +298,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 			Accumulator -= ScenarioStepSeconds;
 			++Steps;
 		}
+		SnapshotAfterStep.Build();
 		BroadcastNewDebriefEntries();
 		UpdateTutorial(DeltaTime);
 		return;
@@ -251,6 +319,7 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		Accumulator -= FixedStepSeconds;
 		++Steps;
 	}
+	SnapshotAfterStep.Build();
 	BroadcastEvents();
 }
 
@@ -265,6 +334,7 @@ void USimWorldSubsystem::ResetSimulation(double OriginLatitudeDeg, double Origin
 	DemoGround = simcore::FlatTerrain(OriginAltitudeM);
 	SimWorld = MakeUnique<simcore::World>(
 		simcore::GeoPoint::FromDegrees(OriginLatitudeDeg, OriginLongitudeDeg, OriginAltitudeM), &DemoGround);
+	ResetEntityCache();
 	Accumulator = 0.0;
 	bDemoActive = false;
 	bDemoLaunched = false;
@@ -316,6 +386,7 @@ void USimWorldSubsystem::StartDemoScenario()
 	Target.max_turn_rate_rad_s = simcore::DegToRad(4.0);
 	Target.waypoints = {simcore::Vec3(-1500.0, 15000.0, 2500.0), simcore::Vec3(2000.0, -30000.0, 2500.0)};
 	DemoTargetId = SimWorld->AddAircraft(Target);
+	InvalidateEntityCache();
 
 	bDemoActive = true;
 	bDemoLaunched = false;
@@ -374,6 +445,7 @@ void USimWorldSubsystem::ClearScenario()
 	Runner = nullptr;
 	Link.Reset();
 	OwnedRunner.Reset();
+	ResetEntityCache();
 }
 
 bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutError)
@@ -386,9 +458,37 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	const bool bLink = FFileHelper::LoadFileToString(Text, *Path) && Text.Contains(TEXT("\"link_id\""));
 	TUniquePtr<simcore::BatteryLink> NewLink;
 	TUniquePtr<simcore::ScenarioRunner> NewRunner;
+	// The time of day (roadmap R7): the menu's ?SimTime=<preset> (and ?SimHour=<h> for an hour), or -SimTime= on the
+	// command line (a developer's override, even of a mission that holds its time). None: the mission's own.
+	simcore::TimePreset TimeChoice = simcore::TimePreset::Mission;
+	double TimeHour = 0.0;
+	{
+		const FString TimeOption = GetLaunchOption(TEXT("SimTime"));
+		if (!TimeOption.IsEmpty() && !simcore::ParseTimePreset(ToStd(TimeOption.ToLower()), TimeChoice))
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("SimTime=%s is not mission, dawn, day, dusk, night or hour: the mission's own time"), *TimeOption);
+			TimeChoice = simcore::TimePreset::Mission;
+		}
+		FString ShotsFolder;
+		if (TimeOption.IsEmpty() && (FParse::Param(FCommandLine::Get(), TEXT("SimFxShotsNight")) ||
+			FParse::Value(FCommandLine::Get(), TEXT("-SimFxShotsNight="), ShotsFolder)))
+		{
+			TimeChoice = simcore::TimePreset::Night;  // the effects' night photographs (docs/fx/README.md)
+		}
+		const FString HourOption = GetLaunchOption(TEXT("SimHour"));
+		if (!HourOption.IsEmpty())
+		{
+			TimeHour = FCString::Atod(*HourOption);
+			if (TimeOption.IsEmpty())
+			{
+				TimeChoice = simcore::TimePreset::Hour;  // -SimHour=17.5 alone means that hour
+			}
+		}
+	}
+	const auto ApplyTime = [TimeChoice, TimeHour](simcore::ScenarioDef& Def) { simcore::ApplyTimeChoice(Def, TimeChoice, TimeHour); };
 	if (bLink)
 	{
-		std::unique_ptr<simcore::BatteryLink> Loaded = simcore::LoadBatteryLinkFile(ToStd(Path), ToStd(DataDir), &Error);
+		std::unique_ptr<simcore::BatteryLink> Loaded = simcore::LoadBatteryLinkFile(ToStd(Path), ToStd(DataDir), &Error, nullptr, ApplyTime);
 		if (Loaded)
 		{
 			NewLink = TUniquePtr<simcore::BatteryLink>(Loaded.release());
@@ -400,6 +500,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 		simcore::ConsoleData Console;
 		if (simcore::LoadScenarioFile(ToStd(Path), ToStd(DataDir), Def, Console, &Error))
 		{
+			ApplyTime(Def);
 			NewRunner = MakeUnique<simcore::ScenarioRunner>(std::move(Def), std::move(Console));
 		}
 	}
@@ -428,8 +529,15 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	}
 	Accumulator = 0.0;
 	DebriefEntriesSent = 0;
+	ResetEntityCache();
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
 		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
+	{
+		const simcore::SunLight& Light = Runner->LightNow();
+		const FString Chosen = TimeChoice == simcore::TimePreset::Mission ? FString(TEXT("the mission's own")) : ToF(simcore::TimePresetName(TimeChoice));
+		UE_LOG(LogSAM3D, Log, TEXT("Time of day: %s %s (%s, the sun %.1f deg)"), *Chosen,
+			*ToF(simcore::FormatLocalHour(Runner->Clock().start_local_h)), *ToF(simcore::LightPhaseName(Light.phase)), Light.sun_elevation_deg);
+	}
 	ApplyHelperLevel();
 	LoadCrewPresentation(DataDir);
 	BroadcastNewDebriefEntries();
@@ -445,6 +553,7 @@ bool USimWorldSubsystem::SwitchLinkedVehicle()
 		return false;
 	}
 	Runner = Runner == &Link->Osa() ? &Link->Post() : &Link->Osa();
+	ResetEntityCache();  // its world's aircraft and its movers
 	const FString DataDir = ResolveDataDirectory();
 	const FString CabinFile = GetDefaultCabinFile();
 	FString Error;
@@ -650,6 +759,15 @@ ESimPlayerActionResult USimWorldSubsystem::PlayerSetControl(const FString& Contr
 
 bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 {
+	LastWheelRefusal.Reset();
+	// At a held seat simcore says why a turn did nothing: the servo has it, its lock, its stop.
+	auto Turn = [this, &ControlId, Value](const std::string& Role)
+	{
+		std::string Why;
+		const bool bTurned = Runner->SeatTurn(Role, ToStd(ControlId), Value, &Why);
+		LastWheelRefusal = bTurned ? FString() : ToF(Why);
+		return bTurned;
+	};
 	if (USimCrewSeatComponent* Seat = LocalCrewSeat.Get())
 	{
 		if (!Seat->SeatRole.IsEmpty())
@@ -659,8 +777,7 @@ bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 				Seat->TurnWheel(ControlId, Value);
 				return true;
 			}
-			std::string Why;
-			return Runner && Runner->SeatTurn(ToStd(Seat->SeatRole), ToStd(ControlId), Value, &Why);
+			return Runner && Turn(ToStd(Seat->SeatRole));
 		}
 	}
 	if (Runner && !IsMirrorOnly())
@@ -669,8 +786,7 @@ bool USimWorldSubsystem::PlayerTurnWheel(const FString& ControlId, double Value)
 		{
 			if (!Def->station.empty() && !Runner->SeatHolder(Def->station).empty())
 			{
-				std::string Why;
-				return Runner->SeatTurn(Def->station, ToStd(ControlId), Value, &Why);
+				return Turn(Def->station);
 			}
 		}
 	}
@@ -775,6 +891,9 @@ FSimTutorialStep USimWorldSubsystem::GetTutorialStep() const
 	Out.Control = ToF(St.control);
 	Out.ControlLabel = ToF(St.control_label);
 	Out.Station = ToF(St.station);
+	Out.Place = ToF(St.place);
+	Out.PlaceLabel = ToF(St.place_label);
+	Out.Away = ToF(St.away);
 	Out.Position = St.position;
 	Out.PositionLabel = ToF(St.position_label);
 	Out.CurrentPosition = St.current_position;
@@ -1010,6 +1129,16 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 			Out.Level = ToF(M.level);
 			Out.Tutorial = ToF(M.tutorial);
 			Out.Start = ToF(M.start);
+			Out.bTimeFixed = M.time_fixed;
+			Out.StartHour = static_cast<float>(M.clock.start_local_h);
+			for (const simcore::TimePreset P : M.time_options)
+			{
+				Out.TimeOptions.Add(ToF(simcore::TimePresetName(P)));
+			}
+			for (const std::string& Label : simcore::TimeChoiceLabels(M))
+			{
+				Out.TimeLabels.Add(ToF(Label));
+			}
 			for (const simcore::MissionVehicle& V : M.vehicles)
 			{
 				FSimMissionVehicle& OutV = Out.Vehicles.AddDefaulted_GetRef();
@@ -1022,6 +1151,11 @@ bool USimWorldSubsystem::GetMissions(TArray<FSimMission>& OutMissions, FString& 
 					OutS.Id = ToF(S.id);
 					OutS.Label = ToF(S.label);
 					OutS.bCommands = S.commands;
+					OutS.Title = ToF(S.title);
+					for (const std::string& Duty : S.duties)
+					{
+						OutS.Duties.Add(ToF(Duty));
+					}
 				}
 			}
 		}
@@ -1148,6 +1282,11 @@ bool USimWorldSubsystem::SetControlPosition(const FString& ControlId, int32 Posi
 double USimWorldSubsystem::GetWheelValue(const FString& ControlId) const
 {
 	return Runner ? Runner->Console().panel.GetValue(ToStd(ControlId)) : 0.0;
+}
+
+FString USimWorldSubsystem::GetWheelDriven(const FString& ControlId) const
+{
+	return Runner ? ToF(Runner->WheelDriven(ToStd(ControlId))) : FString();
 }
 
 bool USimWorldSubsystem::SetWheelValue(const FString& ControlId, double Value)
@@ -1582,36 +1721,144 @@ TArray<FSimCrewMenuEntry> USimWorldSubsystem::GetCrewMenu(const FString& Station
 	}
 	const simcore::CrewData& Crew = Runner->Def().crew_data;
 	const std::string Seat = ToStd(Station);
-	if (Seat == Crew.commander)
+	const bool bCommander = Seat == Crew.commander;
+	// The seat's lines (after the orders, what the commander says on the air himself: the read-back of a designation),
+	// placed in the crew data's sectors (docs/crew/15_TALK.md section 5).
+	std::vector<std::string> Unplaced;
+	const std::vector<std::string> Lines = simcore::MenuLines(Crew, Seat, Runner->PlayerRadioReports(Seat));
+	const std::vector<std::vector<std::string>> Placed = simcore::PlaceInMenu(Crew, Lines, &Unplaced);
+	const auto Add = [&](const std::string& Id, int32 Sector)
 	{
+		const simcore::CalloutDef* C = Crew.FindCallout(Id);
+		if (C == nullptr)
+		{
+			return;
+		}
+		const simcore::OrderDef* Order = nullptr;
 		for (const simcore::OrderDef& O : Crew.orders)
 		{
-			if (const simcore::CalloutDef* C = Crew.FindCallout(O.callout))
+			if (bCommander && O.callout == Id)
 			{
-				FSimCrewMenuEntry E{ToF(C->id), ToF(C->ru), ToF(C->en), true};
-				const simcore::ScenarioRunner::OrderCheck Check = Runner->CheckOrder(O.callout);
-				E.bAvailable = Check.can;
-				E.Reason = Check.can ? FString() : FString::Printf(TEXT("%s / %s"), *ToF(Check.reason_ru), *ToF(Check.reason_en));
-				Out.Add(E);
+				Order = &O;
+				break;
 			}
 		}
-		// After the orders, what he says on the air himself (the Osa commander's read-back of a designation).
-		for (const std::string& Id : Runner->PlayerRadioReports(Seat))
+		FSimCrewMenuEntry E;
+		E.Id = ToF(Id);
+		E.Sector = Sector;
+		if (Order != nullptr)
 		{
-			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, Id);
-			Out.Add({ToF(Id), ToF(Words.first), ToF(Words.second), false});
+			E.Ru = ToF(C->ru);
+			E.En = ToF(C->en);
+			E.bOrder = true;
+			E.Doer = ToF(simcore::OrderDoer(Crew, *Order));
+			const simcore::ScenarioRunner::OrderCheck Check = Runner->CheckOrder(Id);
+			E.bAvailable = Check.can;
+			E.Reason = Check.can ? FString() : FString::Printf(TEXT("%s / %s"), *ToF(Check.reason_ru), *ToF(Check.reason_en));
 		}
-		return Out;
-	}
-	for (const simcore::CalloutDef& C : Crew.callouts)
-	{
-		if (C.kind == simcore::CalloutKind::Report && (C.from == Seat || C.from == "any"))
+		else
 		{
 			// The words as he would say them: the report he would read out, his seat's number; other blanks «…».
-			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, C.id);
-			Out.Add({ToF(C.id), ToF(Words.first), ToF(Words.second), false});
+			const std::pair<std::string, std::string> Words = Runner->ReportWords(Seat, Id);
+			E.Ru = ToF(Words.first);
+			E.En = ToF(Words.second);
+			const bool bToCrew = C->to.empty() || C->to == "any" || C->to == Seat;
+			E.Doer = C->kind == simcore::CalloutKind::Radio ? FString(TEXT("battery")) : bToCrew ? FString(TEXT("crew")) : ToF(C->to);
+		}
+		Out.Add(E);
+	};
+	for (std::size_t K = 0; K < Placed.size(); ++K)
+	{
+		for (const std::string& Id : Placed[K])
+		{
+			Add(Id, static_cast<int32>(K));
 		}
 	}
+	// A line the menu's data misses (a crew without a layout): after the sectors, eight to a sector "Other".
+	for (std::size_t I = 0; I < Unplaced.size(); ++I)
+	{
+		Add(Unplaced[I], static_cast<int32>(Crew.menu.size() + I / simcore::kMenuSectorLines));
+	}
+	return Out;
+}
+
+TArray<FSimCrewMenuGroup> USimWorldSubsystem::GetCrewMenuSectors() const
+{
+	TArray<FSimCrewMenuGroup> Out;
+	if (Runner && Runner->Def().has_crew_data)
+	{
+		for (const simcore::MenuSectorDef& S : Runner->Def().crew_data.menu)
+		{
+			Out.Add({ToF(S.id), ToF(S.ru), ToF(S.en)});
+		}
+	}
+	return Out;
+}
+
+TArray<FSimCrewMenuGroup> USimWorldSubsystem::GetCrewMenuDoers() const
+{
+	TArray<FSimCrewMenuGroup> Out;
+	if (!Runner || !Runner->Def().has_crew_data)
+	{
+		return Out;
+	}
+	Out.Add({TEXT("crew"), TEXT("Расчёт"), TEXT("The crew")});
+	for (const simcore::CrewSeatDef& S : Runner->Def().crew_data.seats)
+	{
+		Out.Add({ToF(S.station), ToF(S.title_ru), ToF(S.title_en)});
+	}
+	Out.Add({TEXT("battery"), TEXT("Батарея"), TEXT("The battery")});
+	return Out;
+}
+
+bool USimWorldSubsystem::PlayerReply(const FString& Station, const FString& Reply, FString& OutWhy)
+{
+	OutWhy.Reset();
+	if (!Runner)
+	{
+		return false;
+	}
+	const bool bOk = Runner->PlayerReply(ToStd(Station), ToStd(Reply));
+	if (!bOk)
+	{
+		OutWhy = Runner->LastRefusal().empty() ? FString(TEXT("not now")) : ToF(Runner->LastRefusal());
+	}
+	return bOk;
+}
+
+FString USimWorldSubsystem::GlossLine(const FString& Ru) const
+{
+	return CrewVoices.IsValid() ? ToF(simcore::GlossLine(ToStd(Ru), *CrewVoices)) : FString();
+}
+
+TArray<FSimHeardTarget> USimWorldSubsystem::GetSeatPicture(const FString& Station, double MaxAgeSeconds) const
+{
+	TArray<FSimHeardTarget> Out;
+	const simcore::CrewPicture* Picture = Runner ? Runner->PictureOf(ToStd(Station)) : nullptr;
+	if (Picture == nullptr)
+	{
+		return Out;
+	}
+	for (const simcore::KnownTarget& K : Picture->Recent(Runner->Time(), MaxAgeSeconds))
+	{
+		FSimHeardTarget H;
+		H.Number = K.number;
+		if (K.has_azimuth)
+		{
+			const double Deg = FMath::Fmod(FMath::Fmod(K.azimuth_deg, 360.0) + 360.0, 360.0);
+			const int32 Mils = FMath::RoundToInt32(Deg / 360.0 * 6000.0) % 6000;
+			H.Azimuth = FString::Printf(TEXT("%02d-%02d"), Mils / 100, Mils % 100);
+			H.bTrueAzimuth = K.true_azimuth;
+		}
+		H.RangeKm = K.has_range ? K.range_m / 1000.0 : -1.0;
+		H.HeightM = K.has_height ? K.height_m : -1.0;
+		H.AgeSeconds = Runner->Time() - K.time_s;
+		H.Source = ToF(K.source);
+		H.bFriendly = K.friendly;
+		H.bNoReply = K.interrogated && !K.friendly;
+		Out.Add(H);
+	}
+	Out.Sort([](const FSimHeardTarget& A, const FSimHeardTarget& B) { return A.AgeSeconds < B.AgeSeconds; });
 	return Out;
 }
 
@@ -1627,7 +1874,7 @@ TArray<FSimPositionWorkState> USimWorldSubsystem::GetPositionWorks() const
 	for (const simcore::em::ViewWork& K : X->works)
 	{
 		FSimPositionWorkState W;
-		W.Location = ToUnreal(K.position);
+		W.Location = ToUnreal(K.ground);  // its ground point (roadmap R5)
 		W.YawDeg = HeadingToYawDeg(W.Location, K.heading_deg);
 		W.bEmplacement = K.emplacement;
 		W.bNets = K.nets;
@@ -1804,35 +2051,433 @@ FSimEntityState USimWorldSubsystem::MakeState(int32 Id, const FString& Name, boo
 	return S;
 }
 
+simcore::ScenarioRunner* USimWorldSubsystem::GetFxRunner() const
+{
+	// In a battery link the Osa fires, whichever vehicle the player is in (both share an origin: battery_link.hpp).
+	return Link ? &Link->Osa() : Runner;
+}
+
+double USimWorldSubsystem::GetRenderTimeSeconds() const
+{
+	const double Now = GetSimTimeSeconds();
+	if (bPaused || IsMirrorOnly())
+	{
+		return Now;
+	}
+	if (Runner)
+	{
+		// The leftover is under a step while the sim keeps up; a finished scenario no longer steps (its accumulator grows).
+		return (Link ? Link->Finished() : Runner->Finished()) ? Now : Now + FMath::Clamp(Accumulator, 0.0, ScenarioStepSeconds);
+	}
+	return SimWorld ? Now + FMath::Clamp(Accumulator, 0.0, FixedStepSeconds) : Now;
+}
+
+FVector USimWorldSubsystem::GetRenderLocation(const FSimEntityState& State) const
+{
+	if (!State.bAlive)
+	{
+		return State.Location;
+	}
+	// At most 0.15 s ahead: three scenario steps, so a hitch or a clock jump can't throw it far off its path; and never
+	// into the ground (roadmap R5): a diving aircraft or a weapon stops at it until the next step.
+	double Ahead = FMath::Clamp(GetRenderTimeSeconds() - State.SimTimeSeconds, 0.0, 0.15);
+	if (State.GroundClearSeconds >= 0.0)
+	{
+		Ahead = FMath::Min(Ahead, State.GroundClearSeconds);
+	}
+	return State.Location + State.Velocity * Ahead;
+}
+
+// ---------------------------------------------------------------------------------------------- the ground (roadmap R5)
+
+const FName USimWorldSubsystem::GroundTag(TEXT("SimNotGround"));
+
+void USimWorldSubsystem::SetGroundMap(ASimMapActor* Map)
+{
+	GroundMap = Map;
+}
+
+ASimMapActor* USimWorldSubsystem::GetGroundMap() const
+{
+	return GroundMap.Get();
+}
+
+bool USimWorldSubsystem::GroundAt(const FVector& Where, FVector& OutGround, FVector* OutNormal, const AActor* Ignore) const
+{
+	// One ground: on a map's level the drawn triangles themselves, as the sim samples them, with no trace.
+	if (const ASimMapActor* Map = GroundMap.Get())
+	{
+		if (Map->GroundAt(Where, OutGround, OutNormal))
+		{
+			return true;
+		}
+	}
+	return TraceGroundAt(Where, OutGround, OutNormal, Ignore);
+}
+
+bool USimWorldSubsystem::TraceGroundAt(const FVector& Where, FVector& OutGround, FVector* OutNormal, const AActor* Ignore) const
+{
+	// A level without a map actor (Cesium's tiles, docs/ARCHITECTURE.md "Known limitations"): the first static surface
+	// from 3 km over to 3 km under, only the ground's kind (WorldStatic), never a vehicle, a pawn or a site set on it.
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+	const FVector Reach(0.0, 0.0, 300000.0);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimGround), false, Ignore);
+	TArray<FHitResult> Hits;
+	World->LineTraceMultiByObjectType(Hits, Where + Reach, Where - Reach, FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+	for (const FHitResult& Hit : Hits)
+	{
+		const AActor* Actor = Hit.GetActor();
+		if (Actor != nullptr && (Actor->IsA<ASimEntityActor>() || Actor->IsA<APawn>() || Actor->ActorHasTag(GroundTag)))
+		{
+			continue;
+		}
+		OutGround = Hit.ImpactPoint;
+		if (OutNormal != nullptr)
+		{
+			*OutNormal = Hit.ImpactNormal;
+		}
+		return true;
+	}
+	return false;
+}
+
+void USimWorldSubsystem::StartGroundCheck(double Seconds, bool bExitAfter)
+{
+	GroundCheckUntil = GetSimTimeSeconds() + FMath::Max(1.0, Seconds);
+	GroundCheckNext = 0.0;
+	GroundChecks = 0;
+	GroundListings = 0;
+	GroundListed.Reset();
+	bGroundCheckExit = bExitAfter;
+	UE_LOG(LogSAM3D, Log, TEXT("Ground check: started for %.0f s of sim time"), Seconds);
+}
+
+void USimWorldSubsystem::TickGroundCheck()
+{
+	if (!bGroundCheckArgRead)
+	{
+		bGroundCheckArgRead = true;
+		float Seconds = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimGroundCheck="), Seconds) && Seconds > 0.0f)
+		{
+			StartGroundCheck(Seconds, true);
+		}
+	}
+	if (GroundCheckUntil < 0.0)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	const double Now = GetSimTimeSeconds();
+	const bool bOver = Now >= GroundCheckUntil || (Runner != nullptr && (Link ? Link->Finished() : Runner->Finished()));
+	if (World != nullptr && Now >= GroundCheckNext && Runner != nullptr)
+	{
+		GroundCheckNext = Now + 1.0;
+		++GroundChecks;
+		for (TActorIterator<ASimEntityActor> It(World); It; ++It)
+		{
+			const ASimEntityActor* Actor = *It;
+			const FSimEntityState* State = Actor->IsHidden() ? nullptr : FindEntityStateCached(Actor->EntityId);
+			if (State == nullptr || !State->bAlive)
+			{
+				continue;
+			}
+			const FVector At = Actor->GetActorLocation();
+			FVector Ground;
+			// On a map's level judged against the ground tiles' meshes as built (DrawnGroundAt), not GroundAt, which
+			// placed the ground items: a placement and a drawing that disagree show (roadmap R5's review).
+			const ASimMapActor* Map = GroundMap.Get();
+			const bool bHasGround = Map != nullptr ? Map->DrawnGroundAt(At, Ground) : GroundAt(At, Ground, nullptr, Actor);
+			if (!bHasGround)
+			{
+				continue;
+			}
+			double Bottom = At.Z;
+			if (!State->bIsGround && !State->bIsMissile && !State->bIsWeapon)
+			{
+				FVector Origin, Extent;
+				Actor->GetActorBounds(false, Origin, Extent);
+				Bottom = Origin.Z - Extent.Z;  // an aircraft by its model's lowest point
+			}
+			const double BelowM = (Ground.Z - Bottom) / 100.0;
+			const bool bBelow = BelowM > 0.25;
+			const bool bFloats = State->bIsGround && -BelowM > 1.0;
+			if (!bBelow && !bFloats)
+			{
+				continue;
+			}
+			++GroundListings;
+			const FString Name = State->Name.IsEmpty() ? Actor->GetName() : State->Name;
+			bool bSeen = false;
+			GroundListed.Add(Name, &bSeen);
+			if (!bSeen)
+			{
+				const simcore::Vec3 Enu = ToEnu(At);
+				UE_LOG(LogSAM3D, Warning, TEXT("%s: %s by %.2f m at %.0f, %.0f (t %.1f s)"), bBelow ? TEXT("Below ground") : TEXT("Floats"),
+					*Name, FMath::Abs(BelowM), Enu.x, Enu.y, Now);
+			}
+		}
+	}
+	if (bOver)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Ground check: %s, %d checks over %.0f s, %d listings of %d things"),
+			GroundListings == 0 ? TEXT("PASS") : TEXT("FAIL"), GroundChecks, Now, GroundListings, GroundListed.Num());
+		GroundCheckUntil = -1.0;
+		if (bGroundCheckExit)
+		{
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+}
+
+namespace
+{
+FAutoConsoleCommandWithWorldAndArgs GSimGroundCheckCommand(TEXT("sam3d.ground.check"),
+	TEXT("sam3d.ground.check [seconds=60]: every shown entity against the drawn ground once a second, logging what is under it (roadmap R5)."),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+	{
+		USimWorldSubsystem* Sim = World != nullptr ? World->GetSubsystem<USimWorldSubsystem>() : nullptr;
+		if (Sim != nullptr)
+		{
+			Sim->StartGroundCheck(Args.Num() > 0 ? FCString::Atod(*Args[0]) : 60.0, false);
+		}
+	}));
+}
+
+void USimWorldSubsystem::ResetEntityCache()
+{
+	EntityCache.Reset();
+	EntityCachePrev.Reset();
+	EntityIndex.Reset();
+	GoneEntities.Reset();
+	EntityCacheFrame = MAX_uint64;
+	bEntityCacheDirty = true;
+	AircraftLooks.Reset();
+	AircraftLookTargets = 0;
+	ArmModels.Reset();
+	OurMissileModelId.Reset();
+	MissileLaunches.Reset();
+	FxFeedCursor = 0;
+	FxFeedRunner = nullptr;
+}
+
+const FSimAircraftLook& USimWorldSubsystem::AircraftLookOf(const simcore::Aircraft& A) const
+{
+	const size_t TargetCount = Runner ? Runner->Def().targets.size() : 0;
+	if (TargetCount < AircraftLookTargets)
+	{
+		AircraftLooks.Reset();  // another scenario: look them up again (targets joining one only add to it; ids are new)
+	}
+	AircraftLookTargets = TargetCount;
+	if (const FSimAircraftLook* Found = AircraftLooks.Find(A.id))
+	{
+		return *Found;
+	}
+	// Its basic model: its scenario target's own, else its class's (docs/scenery/).
+	FSimAircraftLook Look;
+	Look.Name = ToF(A.name);
+	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
+	if (Runner)
+	{
+		// The newest first: a package's or a wave's aircraft joined at the end (thousands over a testbed's hours).
+		const std::vector<simcore::ScenarioTarget>& Targets = Runner->Def().targets;
+		for (auto It = Targets.rbegin(); It != Targets.rend(); ++It)
+		{
+			const simcore::ScenarioTarget& T = *It;
+			if (T.name == A.name || T.id == A.name)
+			{
+				if (Models != nullptr)
+				{
+					Look.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
+				}
+				Look.bFriendly = T.friendly;
+				Look.bIsWeapon = T.weapon;
+				break;
+			}
+		}
+	}
+	return AircraftLooks.Add(A.id, MoveTemp(Look));
+}
+
+const FString& USimWorldSubsystem::ArmModelOf(const std::string& LibraryName) const
+{
+	const FString Name = ToF(LibraryName);
+	if (const FString* Found = ArmModels.Find(Name))
+	{
+		return *Found;
+	}
+	const simcore::scenery::MunitionSpec* Spec = FSimMunitionModels::Resolve(Name);
+	if (Spec == nullptr && Runner != nullptr && Runner->Em() != nullptr)
+	{
+		// The EM layer lists an ARM by its library name ("AGM-45 Shrike class ..."); the munitions library knows it by its
+		// library id (agm45_class_shrike, an alias).
+		for (const simcore::em::ArmDef& Def : Runner->Em()->World().Scene().lib.arms)
+		{
+			if (Def.name == LibraryName)
+			{
+				Spec = FSimMunitionModels::Resolve(ToF(Def.id));
+				break;
+			}
+		}
+	}
+	return ArmModels.Add(Name, Spec != nullptr && Spec->HasMesh() ? ToF(Spec->id) : FString(TEXT("missile_arm")));
+}
+
+const FString& USimWorldSubsystem::OurMissileModel() const
+{
+	if (OurMissileModelId.IsEmpty())
+	{
+		// Our system's missile (the Osa-AK's 9M33M2, an Osa-AKM's 9M33M3) when the munitions library knows it; else the
+		// 9M33's basic model id, which the library also maps.
+		OurMissileModelId = TEXT("missile_9m33");
+		const simcore::ScenarioRunner* Fx = GetFxRunner();
+		const simcore::scenery::MunitionSpec* Spec = Fx != nullptr ? FSimMunitionModels::Resolve(ToF(Fx->Console().system_id)) : nullptr;
+		if (Spec != nullptr && Spec->kind == "sam" && Spec->HasMesh())
+		{
+			OurMissileModelId = ToF(Spec->id);
+		}
+	}
+	return OurMissileModelId;
+}
+
+void USimWorldSubsystem::ReadFxLaunches(const simcore::ScenarioRunner& FxRunner) const
+{
+	if (FxFeedRunner != &FxRunner)
+	{
+		FxFeedRunner = &FxRunner;  // another runner's feed: its own numbers
+		FxFeedCursor = 0;
+		MissileLaunches.Reset();
+	}
+	const simcore::fx::Feed& Feed = FxRunner.Fx();
+	if (Feed.Last() <= FxFeedCursor)
+	{
+		return;
+	}
+	for (const simcore::fx::Event& E : Feed.Since(FxFeedCursor))
+	{
+		if (E.kind == simcore::fx::EventKind::MissileLaunch)
+		{
+			FSimFxMissileLaunch& L = MissileLaunches.FindOrAdd(E.number);
+			L.Position = E.position;
+			L.Velocity = E.velocity;
+			L.TimeSeconds = E.t_s;
+			L.EndTimeSeconds = E.end_t_s;
+			const simcore::scenery::MunitionSpec* Spec = E.weapon.empty() ? nullptr : FSimMunitionModels::Resolve(ToF(E.weapon));
+			L.Model = Spec != nullptr && Spec->HasMesh() ? ToF(Spec->id) : FString();
+		}
+	}
+	FxFeedCursor = Feed.Last();
+}
+
+bool USimWorldSubsystem::MissileDisplayState(const simcore::ScenarioRunner& FxRunner, int32 Number, const simcore::Vec3& SimPos,
+	const simcore::Vec3& SimVel, simcore::Vec3& OutPos, simcore::Vec3& OutVel) const
+{
+	const FSimFxMissileLaunch* L = MissileLaunches.Find(Number);
+	if (L == nullptr || L->Velocity.Length() < 1e-6)
+	{
+		return false;  // no launch heard: the simulation's line
+	}
+	const double Since = FxRunner.Time() - L->TimeSeconds;
+	OutPos = simcore::fx::MissileDisplayPosition(L->Position, L->Velocity, Since, SimPos);
+	OutVel = simcore::fx::MissileDisplayVelocity(L->Position, L->Velocity, Since, SimPos, SimVel);
+	return true;
+}
+
+const TArray<FSimEntityState>& USimWorldSubsystem::GetEntityStatesCached() const
+{
+	// Tick builds it once a frame after the steps, so last frame's is this frame's until this frame's tick; older than that
+	// (no tick: a world not ticking) it is built here.
+	if (bEntityCacheDirty || EntityCacheFrame == MAX_uint64 || GFrameCounter > EntityCacheFrame + 1)
+	{
+		RebuildEntityCache();
+	}
+	return EntityCache;
+}
+
+const FSimEntityState* USimWorldSubsystem::FindEntityStateCached(int32 Id) const
+{
+	const TArray<FSimEntityState>& States = GetEntityStatesCached();
+	if (const int32* At = EntityIndex.Find(Id))
+	{
+		return &States[*At];
+	}
+	return GoneEntities.Find(Id);
+}
+
 TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 {
-	TArray<FSimEntityState> Out;
-	const simcore::World* W = ActiveWorld();
-	if (W == nullptr)
+	return GetEntityStatesCached();
+}
+
+void USimWorldSubsystem::RebuildEntityCache() const
+{
+	SCOPE_CYCLE_COUNTER(STAT_SimFxEntitySnapshot);
+	EntityCacheFrame = GFrameCounter;
+	bEntityCacheDirty = false;
+	// The last snapshot is kept a moment: whoever has left the list since is remembered where it was.
+	Swap(EntityCache, EntityCachePrev);
+	EntityCache.Reset();
+	EntityIndex.Reset();
+	TArray<FSimEntityState>& Out = EntityCache;
+	if (const simcore::World* W = ActiveWorld())
 	{
-		return Out;
+		BuildEntityList(*W, Out);
 	}
-	// Each aircraft's basic model: its scenario target's own, else its class's (docs/scenery/).
+	const double Now = GetSimTimeSeconds();
+	EntityIndex.Reserve(Out.Num());
+	for (int32 I = 0; I < Out.Num(); ++I)
+	{
+		Out[I].SimTimeSeconds = Now;
+		EntityIndex.Add(Out[I].Id, I);
+	}
+	// A missile that has finished, a mover gone out of sight: its last state, not alive (where it was, not the origin).
+	for (FSimEntityState& Old : EntityCachePrev)
+	{
+		if (Old.Id >= MissileIdBase && Old.bAlive && !EntityIndex.Contains(Old.Id))
+		{
+			Old.bAlive = false;
+			GoneEntities.Add(Old.Id, MoveTemp(Old));
+		}
+	}
+	EntityCachePrev.Reset();
+}
+
+namespace
+{
+// How long something at P moving at V may be carried on before its lowest point (`BottomM` under P) meets the world's
+// ground (roadmap R5): negative when it is not coming down.
+double GroundClearOf(const simcore::World& W, const simcore::Vec3& P, const simcore::Vec3& V, double BottomM)
+{
+	if (V.z >= 0.0)
+	{
+		return -1.0;
+	}
+	const double Gap = W.Frame().AltitudeOf(P) - BottomM - W.GetTerrain().HeightAt(P.x, P.y);
+	return FMath::Max(0.0, Gap) / -V.z;
+}
+}
+
+void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<FSimEntityState>& Out) const
+{
+	const simcore::World* W = &InWorld;
 	const simcore::scenery::ModelLibrary* Models = FSimBasicModels::Library();
 	for (const simcore::Aircraft& A : W->AircraftList())
 	{
-		FSimEntityState S = MakeState(A.id, ToF(A.name), false, A.alive, A.position, A.velocity);
-		if (Models != nullptr && Runner)
-		{
-			for (const simcore::ScenarioTarget& T : Runner->Def().targets)
-			{
-				if (T.name == A.name || T.id == A.name)
-				{
-					S.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
-					break;
-				}
-			}
-		}
-		Out.Add(S);
+		const FSimAircraftLook& Look = AircraftLookOf(A);
+		FSimEntityState& S = Out.Add_GetRef(MakeState(A.id, Look.Name, false, A.alive, A.position, A.velocity));
+		S.Model = Look.Model;
+		S.bFriendly = Look.bFriendly;
+		S.bIsWeapon = Look.bIsWeapon;
+		S.GroundClearSeconds = GroundClearOf(*W, A.position, A.velocity, Look.bIsWeapon ? 0.0 : A.bottom_m);
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
 		FSimEntityState S = MakeState(M.id, TEXT("Missile"), true, M.Active(), M.position, M.velocity);
+		S.bFriendly = true;
 		if (Models != nullptr)
 		{
 			S.Model = ToF(Models->ForTarget(std::string(), "missile", std::string()));
@@ -1847,9 +2492,11 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 			for (int32 I = 0; I < static_cast<int32>(X->battery.size()); ++I)
 			{
 				const simcore::em::ViewVehicle& V = X->battery[static_cast<size_t>(I)];
-				FSimEntityState S = MakeState(GroundIdBase + I, UTF8_TO_TCHAR(V.id.c_str()), false, true, V.position, simcore::Vec3{});
+				// On its ground point (roadmap R5): the row's position is where its antennas are.
+				FSimEntityState S = MakeState(GroundIdBase + I, UTF8_TO_TCHAR(V.id.c_str()), false, true, V.ground, simcore::Vec3{});
 				S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 				S.bIsGround = true;
+				S.bFriendly = true;
 				S.Kind = UTF8_TO_TCHAR(V.kind.c_str());
 				S.bDeployed = V.deployed;
 				if (Models != nullptr)
@@ -1862,15 +2509,78 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 	}
 	if (Runner && !IsMirrorOnly())
 	{
-		for (const simcore::EngagementModel::MissileView& M : Runner->MissilesInFlight())
+		// Our missiles, from the runner that fires them (in a battery link the Osa's, whichever vehicle the player is in),
+		// drawn on their display path: out of the launcher at its angle, gathering onto the simulation's line
+		// (simcore/fx/trajectories.hpp; docs/fx/README.md 3.3).
+		if (simcore::ScenarioRunner* Fx = GetFxRunner())
 		{
-			Out.Add(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number), true, true,
-				M.position, M.velocity));
+			ReadFxLaunches(*Fx);
+			const FString& MissileModel = OurMissileModel();
+			for (const simcore::EngagementModel::MissileView& M : Fx->MissilesInFlight())
+			{
+				simcore::Vec3 Pos = M.position;
+				simcore::Vec3 Vel = M.velocity;
+				MissileDisplayState(*Fx, M.number, M.position, M.velocity, Pos, Vel);
+				FSimEntityState& S = Out.Add_GetRef(MakeState(MissileIdBase + M.number, FString::Printf(TEXT("Missile %d"), M.number),
+					true, true, Pos, Vel));
+				const FSimFxMissileLaunch* Launch = MissileLaunches.Find(M.number);
+				S.Model = Launch != nullptr && !Launch->Model.IsEmpty() ? Launch->Model : MissileModel;
+				S.bFriendly = true;
+			}
 		}
-		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed).
+		// The enemy's anti-radiation missiles in flight, drawn like missiles (one that has burst is no longer listed), each
+		// with its munition's model.
 		for (const simcore::EmSensorLink::ArmView& A : Runner->ArmsInFlight())
 		{
-			Out.Add(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
+			FSimEntityState& S = Out.Add_GetRef(MakeState(ArmIdBase + A.id, UTF8_TO_TCHAR(A.name.c_str()), true, true, A.position, A.velocity));
+			S.Model = ArmModelOf(A.name);
+			S.GroundClearSeconds = GroundClearOf(*W, A.position, A.velocity, 0.0);
+		}
+		// Someone coming over the ground with a message from the chain of command: a runner, a despatch rider, the
+		// courier's car (roadmap P1). Listed while he is in the world; gone, his actor hides.
+		for (const simcore::ScenarioRunner::VisitorState& V : Runner->Visitors())
+		{
+			FSimEntityState S = MakeState(VisitorIdBase + V.index, ToF(V.from.empty() ? V.id : V.from), false, true, V.position,
+				simcore::Vec3{});
+			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
+			S.bIsGround = true;
+			S.Kind = TEXT("visitor");
+			S.bFriendly = true;
+			S.Model = ToF(V.model);
+			Out.Add(S);
+		}
+		// The world's movers inside the visual range (roadmap G11): another unit's column, a convoy, a carrier, each
+		// vehicle where the simulation has it. Out of range they are not listed, and their actors hide.
+		for (const simcore::ScenarioRunner::WorldMover& V : Runner->MoversInView())
+		{
+			FSimEntityState S = MakeState(MoverIdBase + V.id, ToF(V.mover), false, true, V.position, simcore::Vec3{});
+			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
+			S.bIsGround = true;
+			S.Kind = ToF(V.kind);
+			S.bFriendly = true;
+			S.Model = ToF(V.model);
+			Out.Add(S);
+		}
+	}
+}
+
+void USimWorldSubsystem::SetViewPlaces(FName Owner, TArray<FSimViewPlace>&& Places)
+{
+	if (!ViewPlaceOwners.Contains(Owner))
+	{
+		ViewPlaceOwners.Add(Owner);
+	}
+	ViewPlaces.Add(Owner, MoveTemp(Places));
+}
+
+TArray<FSimViewPlace> USimWorldSubsystem::GetViewPlaces() const
+{
+	TArray<FSimViewPlace> Out;
+	for (const FName& Owner : ViewPlaceOwners)
+	{
+		if (const TArray<FSimViewPlace>* Places = ViewPlaces.Find(Owner))
+		{
+			Out.Append(*Places);
 		}
 	}
 	return Out;
@@ -1878,24 +2588,48 @@ TArray<FSimEntityState> USimWorldSubsystem::GetEntityStates() const
 
 bool USimWorldSubsystem::GetEntityState(int32 Id, FSimEntityState& OutState) const
 {
-	for (const FSimEntityState& S : GetEntityStates())
+	if (const FSimEntityState* S = FindEntityStateCached(Id))
 	{
-		if (S.Id == Id)
-		{
-			OutState = S;
-			return true;
-		}
+		OutState = *S;
+		return true;
 	}
-	// A missile that has finished: report it as no longer alive so its actor hides.
+	// A display id this snapshot never listed (a missile that finished before it was seen, a mover after the player
+	// changed vehicle): no longer alive, so its actor hides where it is.
 	if (Id >= MissileIdBase && Runner)
 	{
 		OutState = FSimEntityState();
 		OutState.Id = Id;
-		OutState.bIsMissile = true;
+		OutState.bIsMissile = Id < GroundIdBase;
+		OutState.bIsGround = Id >= GroundIdBase;
 		OutState.bAlive = false;
+		OutState.SimTimeSeconds = GetSimTimeSeconds();
 		return true;
 	}
 	return false;
+}
+
+bool USimWorldSubsystem::GetSunNow(double& ElevationDeg, double& AzimuthDeg, bool& bDaylight, float& NightShare) const
+{
+	if (!Runner)
+	{
+		return false;
+	}
+	const simcore::SunLight& Light = Runner->LightNow();
+	ElevationDeg = Light.sun_elevation_deg;
+	AzimuthDeg = Light.sun_azimuth_deg;
+	bDaylight = Light.daylight;
+	NightShare = static_cast<float>(Light.night_share);
+	return true;
+}
+
+bool USimWorldSubsystem::GetSkyClock(simcore::SkyClock& Out) const
+{
+	if (!Runner)
+	{
+		return false;
+	}
+	Out = Runner->Clock();
+	return true;
 }
 
 double USimWorldSubsystem::GetSimTimeSeconds() const
@@ -2360,7 +3094,10 @@ TArray<int32> USimWorldSubsystem::GetPostTrackNumbers() const
 	});
 	for (const simcore::CommandPost::ScopeMark& M : Marks)
 	{
-		Out.Add(M.number);
+		if (M.number >= 0)  // an echo not taken off has no number
+		{
+			Out.Add(M.number);
+		}
 	}
 	return Out;
 }
@@ -2552,6 +3289,25 @@ TArray<FSimRadioMessage> USimWorldSubsystem::GetRadioMessages(int32 MaxCount) co
 	return Out;
 }
 
+TArray<FSimPaper> USimWorldSubsystem::GetMapCase(const FString& Station) const
+{
+	TArray<FSimPaper> Out;
+	if (!Runner || Station.IsEmpty())
+	{
+		return Out;
+	}
+	for (const simcore::HeldPaper& P : Runner->MapCase(TCHAR_TO_UTF8(*Station)))
+	{
+		FSimPaper Paper;
+		Paper.TimeSeconds = P.time_s;
+		Paper.Title = ToF(P.title);
+		Paper.Text = ToF(P.text);
+		Paper.From = ToF(P.from);
+		Out.Add(Paper);
+	}
+	return Out;
+}
+
 FSimSeatComms USimWorldSubsystem::GetSeatComms(const FString& Station) const
 {
 	FSimSeatComms C;
@@ -2681,6 +3437,72 @@ bool USimWorldSubsystem::AnswerCall(const FString& Station)
 		return ActionMoved(R);
 	}
 	return false;
+}
+
+bool USimWorldSubsystem::JournalBegin(const FString& Role)
+{
+	return Runner && !IsMirrorOnly() && Runner->JournalBegin(ToStd(Role));
+}
+
+bool USimWorldSubsystem::JournalType(const FString& Role, int32 Digit)
+{
+	return Runner && !IsMirrorOnly() && Digit >= 0 && Digit <= 9 && Runner->JournalType(ToStd(Role), static_cast<char>('0' + Digit));
+}
+
+bool USimWorldSubsystem::JournalRub(const FString& Role)
+{
+	return Runner && !IsMirrorOnly() && Runner->JournalRub(ToStd(Role));
+}
+
+bool USimWorldSubsystem::JournalNextBox(const FString& Role, int32 Step)
+{
+	return Runner && !IsMirrorOnly() && Runner->JournalNextBox(ToStd(Role), Step);
+}
+
+bool USimWorldSubsystem::JournalFinish(const FString& Role, bool bBrief)
+{
+	const bool bOk = Runner && !IsMirrorOnly() && Runner->JournalFinish(ToStd(Role), bBrief);
+	if (bOk)
+	{
+		BroadcastNewDebriefEntries();
+	}
+	return bOk;
+}
+
+bool USimWorldSubsystem::IsJournalDrafting() const
+{
+	return Runner && Runner->Journal().Draft() != nullptr;
+}
+
+bool USimWorldSubsystem::GetJournalDraft(FString& Lead, TArray<FString>& Words, TArray<FString>& Typed, TArray<int32>& Widths,
+	int32& Box) const
+{
+	const simcore::JournalDraft* D = Runner ? Runner->Journal().Draft() : nullptr;
+	if (D == nullptr)
+	{
+		return false;
+	}
+	const int32 S = static_cast<int32>(D->message.heard_s);
+	Lead = FString::Printf(TEXT("Ч+%02d:%02d  %s:"), S / 60, S % 60, *ToF(D->message.from));
+	Words.Reset();
+	Typed.Reset();
+	Widths.Reset();
+	for (const std::string& W : D->words)
+	{
+		Words.Add(ToF(W));
+	}
+	for (std::size_t I = 0; I < D->said.size(); ++I)
+	{
+		Typed.Add(ToF(D->typed[I]));
+		Widths.Add(static_cast<int32>(D->said[I].size()));
+	}
+	Box = static_cast<int32>(D->box);
+	return true;
+}
+
+FString USimWorldSubsystem::GetJournalKeeper() const
+{
+	return Runner ? ToF(Runner->Console().post_journal_keeper) : FString();
 }
 
 TArray<FString> USimWorldSubsystem::GetDocumentLines(const FString& Document) const

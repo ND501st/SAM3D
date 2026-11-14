@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "simcore/em/data.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
@@ -967,4 +968,32 @@ SC_TEST("tv: in haze the TV takes the target sooner through the orange filter th
     std::printf("    first TV track: blue %.1f s, orange %.1f s\n", blue, orange);
     SC_EXPECT(orange < 1e8);
     SC_EXPECT(orange + 2.0 < blue);
+}
+
+// Roadmap R6's review: the search radar's line of sight starts at its antenna, 5 m over the ground under the vehicle
+// (data/em/osa_ak.json, an estimate), not at the scenario's point for the vehicle.
+SC_TEST("engagement: the search antenna's height is the EM library's, and the radar looks from it over the ground") {
+    EngagementTuning t;
+    std::string error;
+    SC_EXPECT(LoadEngagementTuningFile(kData + "/gameplay/osa_ak.json", t, &error));
+    em::EmLibrary lib;
+    SC_EXPECT(em::LoadEmLibraryFile(kData + "/em/osa_ak.json", lib).ok);
+    const int soc = lib.Radar("osa_ak_soc");
+    SC_EXPECT(soc >= 0);
+    if (soc < 0) return;
+    SC_EXPECT_NEAR(t.search_antenna_height_m, lib.radars[static_cast<std::size_t>(soc)].antenna_height_m, 1e-9);
+    SC_EXPECT_NEAR(t.search_antenna_height_m, 5.0, 1e-9);
+    // Over flat ground 100 m up a 4 m bank of earth 1 km north (placeholder numbers); a target 6 km north, 10 m up. From
+    // 5 m the ray passes the bank 5.8 m up and clears it; from the vehicle's point on the ground it does not.
+    std::vector<double> heights(41 * 41, 100.0);
+    for (int col = 0; col < 41; ++col) heights[static_cast<std::size_t>(22 * 41 + col)] = 104.0;  // the row 1 km north
+    const GridTerrain bank(-10000.0, -10000.0, 500.0, 41, 41, heights);
+    const LocalFrame frame(GeoPoint::FromDegrees(47.0, 20.0, 0.0));
+    const Vec3 vehicle = GroundPointInFrame(frame, 0.0, 0.0, 100.0);
+    const Vec3 target = GroundPointInFrame(frame, 0.0, 6000.0, 110.0);
+    SC_EXPECT_NEAR(SearchAntennaAltitude(bank, frame, vehicle, 5.0), 105.0, 1e-6);
+    SC_EXPECT(SearchAntennaSees(bank, frame, vehicle, 5.0, target));
+    SC_EXPECT(!SearchAntennaSees(bank, frame, vehicle, 0.0, target));
+    // A tuning without the field (built by hand) keeps the vehicle's own point.
+    SC_EXPECT_NEAR(SearchAntennaAltitude(bank, frame, vehicle, 0.0), frame.AltitudeOf(vehicle), 1e-9);
 }

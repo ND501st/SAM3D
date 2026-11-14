@@ -73,6 +73,8 @@ public:
     TargetPilot(TargetBehaviourDef behaviour, EvadeDef evade) : b_(std::move(behaviour)), e_(evade) {}
 
     bool ControlsHeight() const { return b_.kind != TargetBehaviourDef::Kind::None || diving_; }
+    // A weapon flies into the ground on purpose: no ground floor (GroundFloor) for it.
+    void SetWeapon(bool weapon) { weapon_ = weapon; }
     bool Evading() const { return evading_; }
     // The height above the ground it holds from now on (the instructor's order: a terrain-following pilot).
     void SetAgl(double agl_m) {
@@ -104,6 +106,10 @@ public:
             if (!j.empty()) event = j;
         }
         if (ControlsHeight() && dt > 0.0) HoldHeight(a, terrain, frame, dt);
+        if (dt > 0.0) {
+            const std::string g = GroundFloor(a, terrain, frame, dt, ControlsHeight());
+            if (!g.empty() && event.empty()) event = g;
+        }
         return event;
     }
 
@@ -119,6 +125,10 @@ public:
         if (evading_) return std::string();
         e_.present = true;
         return Evade(a, unit, t);
+    }
+    // Only the ground floor (roadmap R5): an aircraft past its last waypoint, flying on until it leaves the world.
+    void HoldOverGround(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
+        if (a.alive && dt > 0.0) GroundFloor(a, terrain, frame, dt, false);
     }
     // The route it is on: during a jink the one it will go back to, else the aircraft's own.
     std::pair<std::vector<Vec3>, std::size_t> Route(const Aircraft& a) const {
@@ -234,18 +244,76 @@ private:
         a.next_waypoint = 0;
     }
 
+    // The floor every pilot keeps, whatever he is doing (roadmap R5): his belly (Aircraft::bottom_m below his centre) a
+    // metre over the highest ground of the next kFloorLookS; under it he pulls up at his climb limit, and never lets
+    // his belly under the ground here. A weapon has none (it ends on the ground). Returns "pulled up over the ground"
+    // when a pull-up starts.
+    // A pilot who held his own height this step (`held`: HoldHeight ran, for terrain following, a pop-up, a dive) climbed
+    // for the ground ahead within his limit and keeps his belly over the ground here: for him the floor is only a
+    // limit, never a second climb on top of his own in the same step, and no event (roadmap R5's review: TF over a
+    // ridge climbed at twice its rate).
+    std::string GroundFloor(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt, bool held) {
+        if (weapon_ || !a.alive || dt <= 0.0) return std::string();
+        const double here = terrain.HeightAt(a.position.x, a.position.y);
+        if (held) {
+            const double under = here + a.bottom_m - frame.AltitudeOf(a.position);
+            if (under > 0.0) a.position.z += under;  // never the belly under the ground here (HoldHeight keeps it over)
+            pulled_up_ = false;
+            return std::string();
+        }
+        double ground = here;
+        const double vh = std::hypot(a.velocity.x, a.velocity.y);
+        if (vh > 1.0) {
+            const double reach = vh * kFloorLookS;
+            const int samples = std::min(60, 2 + static_cast<int>(reach / 100.0));
+            for (int i = 1; i <= samples; ++i) {
+                const double f = reach * i / samples / vh;
+                ground = std::max(ground, terrain.HeightAt(a.position.x + a.velocity.x * f, a.position.y + a.velocity.y * f));
+            }
+        }
+        const double alt = frame.AltitudeOf(a.position);
+        const double floor_m = ground + a.bottom_m + kFloorClearM;
+        if (alt >= floor_m) {
+            pulled_up_ = false;
+            return std::string();
+        }
+        double dz = std::min(floor_m - alt, std::max(1.0, b_.max_climb_mps) * dt);
+        dz = std::max(dz, here + a.bottom_m - alt);  // never the belly under the ground here
+        a.position.z += dz;
+        a.velocity.z = std::max(a.velocity.z, dz / dt);
+        vz_mps_ = std::max(vz_mps_, dz / dt);
+        const bool started = !pulled_up_;
+        pulled_up_ = true;
+        return started ? "pulled up over the ground" : std::string();
+    }
+    static constexpr double kFloorLookS = 3.0;   // game values
+    static constexpr double kFloorClearM = 1.0;
+
     // Climb or sink toward the wanted height over the highest ground ahead, within the vertical rate; never into the ground.
+    // The height wanted is over the woods and buildings standing there (Terrain::ObstacleHeightAt, roadmap R6/E9): a low
+    // pilot clears the canopy he sees, he does not fly through it.
     void HoldHeight(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
         const double here = terrain.HeightAt(a.position.x, a.position.y);
-        double ground = here;
+        double ground = here + terrain.ObstacleHeightAt(a.position.x, a.position.y);
         const double vh = std::hypot(a.velocity.x, a.velocity.y);
         if (vh > 1.0 && b_.lookahead_s > 0.0) {
             const double reach = vh * b_.lookahead_s;
             const int samples = 2 + static_cast<int>(reach / 100.0);
             for (int i = 1; i <= samples; ++i) {
                 const double f = reach * i / samples / vh;
-                const double h = terrain.HeightAt(a.position.x + a.velocity.x * f, a.position.y + a.velocity.y * f);
+                const double x = a.position.x + a.velocity.x * f, y = a.position.y + a.velocity.y * f;
+                const double h = terrain.HeightAt(x, y) + terrain.ObstacleHeightAt(x, y);
                 if (h > ground) ground = h;
+            }
+            // The buildings between those points, at the terrain's own spacing where one may top what he holds over
+            // already (ObstaclesAlong): a narrow block of flats ahead is not stepped over.
+            const double ux = a.velocity.x / vh, uy = a.velocity.y / vh;
+            for (int i = 1; i <= samples; ++i) {
+                ObstaclesAlong(terrain, a.position.x, a.position.y, ux, uy, reach, reach * (i - 1) / samples, reach * i / samples, ground,
+                               0.0, [&](double, double top) {
+                                   if (top > ground) ground = top;
+                                   return true;
+                               });
             }
         }
         const double alt = frame.AltitudeOf(a.position);
@@ -259,8 +327,8 @@ private:
         const double dv = kVerticalAccelMps2 * dt;
         vz_mps_ += std::max(-dv, std::min(dv, vz_want - vz_mps_));
         double dz = vz_mps_ * dt;
-        if (alt + dz < here + 2.0) {  // no flying into the ground
-            dz = here + 2.0 - alt;
+        if (alt + dz < here + a.bottom_m + kFloorClearM) {  // no flying into the ground: the belly a metre over it
+            dz = here + a.bottom_m + kFloorClearM - alt;
             vz_mps_ = std::min(dz / dt, rate);
         }
         a.position.z += dz;
@@ -285,6 +353,8 @@ private:
     double jink_flip_s_ = 0.0;
     double jink_end_s_ = 0.0;
     double vz_mps_ = 0.0;  // the vertical speed the pilot holds (the world moves the aircraft in the horizontal)
+    bool weapon_ = false;     // a weapon's "pilot": no ground floor
+    bool pulled_up_ = false;  // under the ground floor last step
 };
 
 }  // namespace simcore

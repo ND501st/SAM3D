@@ -10,6 +10,7 @@
 //    "seed": 7, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -86,8 +87,12 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "radars_suppressed", Strings(o.radars_suppressed));
     Put(v, "emissions", Pairs(o.emissions));
     Put(v, "fired", Strings(o.fired));
+    Put(v, "missiles_downed", Strings(o.missiles_downed));
     Put(v, "recce_seen", Strings(o.recce_seen));
     Put(v, "missiles_spent", Num(o.missiles_spent));
+    std::vector<std::pair<std::string, double>> by;
+    for (const auto& m : o.missiles_by) by.push_back({m.first, static_cast<double>(m.second)});
+    Put(v, "missiles_by", Pairs(by));
     Put(v, "arms_fired", Num(o.arms_fired));
     Put(v, "aborted", Bool(o.aborted));
     Put(v, "delivered", Bool(o.delivered));
@@ -97,6 +102,10 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "aborted_flights", Ints(o.aborted_flights));
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
+    Put(v, "reported", Bool(o.reported));
+    Put(v, "reported_destroyed", Num(o.reported_destroyed));
+    Put(v, "reported_missiles", Num(o.reported_missiles));
+    Put(v, "reported_targets", Num(o.reported_targets));
     return v;
 }
 
@@ -209,8 +218,10 @@ public:
         o.radars_suppressed = Strings(v, "radars_suppressed");
         o.emissions = Pairs(v, "emissions");
         o.fired = Strings(v, "fired");
+        o.missiles_downed = Strings(v, "missiles_downed");
         o.recce_seen = Strings(v, "recce_seen");
         o.missiles_spent = Int(v, "missiles_spent");
+        for (const auto& m : Pairs(v, "missiles_by")) o.missiles_by.push_back({m.first, static_cast<int>(std::lround(m.second))});
         o.arms_fired = Int(v, "arms_fired");
         o.aborted = Boolean(v, "aborted");
         o.delivered = Boolean(v, "delivered");
@@ -220,6 +231,10 @@ public:
         o.aborted_flights = Ints(v, "aborted_flights");
         o.truth_applied = Boolean(v, "truth_applied");
         o.played = Boolean(v, "played", true);
+        o.reported = Boolean(v, "reported");
+        o.reported_destroyed = Int(v, "reported_destroyed");
+        o.reported_missiles = Int(v, "reported_missiles");
+        o.reported_targets = Int(v, "reported_targets");
         return o;
     }
 
@@ -252,6 +267,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "kind", Str("relocate"));
                 Put(x, "east_m", Num(a.to.x));
                 Put(x, "north_m", Num(a.to.y));
+                if (a.march_h > 0.0) Put(x, "march_h", Num(a.march_h));
                 break;
             case CampaignAction::Kind::Skip:
                 Put(x, "kind", Str("skip"));
@@ -261,6 +277,19 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "end_h", Num(a.end_h));
                 Put(x, "outcome", save_detail::OutcomeJson(a.outcome));
                 break;
+            case CampaignAction::Kind::Transmit: {
+                Put(x, "kind", Str("transmit"));
+                json::Value calls = Arr();
+                for (const Transmission& t : a.calls) {
+                    json::Value j = Obj();
+                    Put(j, "h", Num(t.h));
+                    Put(j, "intercept", Num(t.intercept));
+                    Put(j, "key", Str(t.key));
+                    Push(calls, j);
+                }
+                Put(x, "calls", calls);
+                break;
+            }
         }
         Put(x, "posture", save_detail::PostureJson(a.posture));
         Push(actions, x);
@@ -297,12 +326,24 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
             } else if (kind == "relocate") {
                 a.kind = CampaignAction::Kind::Relocate;
                 a.to = Vec3{r.Number(x, "east_m"), r.Number(x, "north_m"), 0.0};
+                a.march_h = r.Number(x, "march_h");
             } else if (kind == "skip") {
                 a.kind = CampaignAction::Kind::Skip;
             } else if (kind == "complete") {
                 a.kind = CampaignAction::Kind::Complete;
                 a.end_h = r.Number(x, "end_h");
                 if (const json::Value* o = x.Find("outcome")) a.outcome = r.Outcome(*o);
+            } else if (kind == "transmit") {
+                a.kind = CampaignAction::Kind::Transmit;
+                if (const json::Value* calls = x.Find("calls")) {
+                    for (const json::Value& j : calls->items) {
+                        Transmission t;
+                        t.h = r.Number(j, "h");
+                        t.intercept = r.Number(j, "intercept", 1.0);
+                        t.key = r.String(j, "key");
+                        a.calls.push_back(t);
+                    }
+                }
             } else {
                 if (error != nullptr) *error = "unknown action '" + kind + "'";
                 return false;

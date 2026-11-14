@@ -36,10 +36,16 @@
 //
 // A "strict" lesson lets the learner work only the step's control (Refusal says why not), at the lesson's "seat".
 //
+// The walk (docs/crew/13_OUT_OF_THE_VEHICLE.md): a control worked outside (a job of the vehicle's data: the AB-1 set, the
+// aiming circle, a line's far end) is worked at its place. Once the engine reports the learner's body, the step says
+// where he must go first (TutorialStatus::away: out to the place, or back inside for a control in the cabin), and the
+// instructor doing it leads him there along the vehicle's ways before he works it (nobody is carried).
+//
 // The learner can go back a step (Back): it comes up again to read, and Enter (or doing it again) moves on; what was done
 // stays done, and its start actions don't run twice. He can skip a step (Skip): the instructor does it for him, the
-// switch set, the wheel turned (and held on a moving mark until the step is done), the order given, the report made, as
-// soon as its wait allows; so the drill goes on as if he had done it. A step with nothing to do is just passed.
+// switch set (he is led out to a job's place, or back in, first), the wheel turned (and held on a moving mark until the
+// step is done), the order given, the report made, as soon as its wait allows; so the drill goes on as if he had done
+// it. A step with nothing to do is just passed.
 // The guide never tells the crew anything itself: orders go through the runner as the commander's, moves through the
 // learner's seat like any player's (ScenarioRunner::SeatSet), so the debrief judges them.
 //
@@ -208,6 +214,10 @@ struct TutorialStatus {
     std::string control;          // a control or wheel to work (Act and Wait)
     std::string control_label;
     std::string station;          // whose control it is
+    std::string place;            // a job done outside: the place it is worked at ("" a control inside)
+    std::string place_label;
+    std::string away;             // where the learner's body must go before he can work it, in words ("" he is where it
+                                  // is worked, or the engine doesn't report his body): out to the job's place, or back in
     int position = -1;
     std::string position_label;
     int current_position = -1;
@@ -828,6 +838,9 @@ public:
                     st.position_label = "press";  // a push-button has no positions to name
                 }
             }
+            st.place = r.JobPlace(s->control);
+            if (!st.place.empty()) st.place_label = r.PlaceLabel(st.place);
+            st.away = Away(r, s->control);
         }
         if (!s->wheel.empty()) {
             const ControlDef* d = r.Console().panel.Find(s->wheel);
@@ -1246,6 +1259,7 @@ private:
                 to = now + (s.position > now ? 1 : -1);
             }
             const std::string seat = def_.seat.empty() ? d->station : def_.seat;
+            if (Lead(r, seat, s.control)) return;
             if (r.SeatHolder(seat).empty()) {
                 r.PlayerSet(s.control, to);
             } else {
@@ -1274,6 +1288,26 @@ private:
             // Once; a report refused (nothing to read back yet, the set not on the net) again a little later.
             next_perform_s_ = r.PlayerSay(def_.seat, s.report) ? r.Time() + 1e9 : r.Time() + 2.0;
         }
+    }
+
+    // Where the learner must go before he can work this control from where his body is ("" he can, or the engine doesn't
+    // report his body): out to a job's place, or back inside.
+    std::string Away(const ScenarioRunner& r, const std::string& control) const {
+        const ControlDef* d = r.Console().panel.Find(control);
+        const std::string seat = !def_.seat.empty() ? def_.seat : d != nullptr ? d->station : std::string();
+        if (seat.empty() || r.PlayerJobRefusal(seat, control).empty()) return std::string();
+        const std::string place = r.JobPlace(control);
+        return place.empty() ? std::string("back inside the vehicle") : "out to " + r.PlaceLabel(place);
+    }
+    // The instructor doing a step whose control is worked somewhere else: he leads the learner there first, along the
+    // vehicle's ways (nobody is carried). True while he is on his way.
+    bool Lead(ScenarioRunner& r, const std::string& seat, const std::string& control) const {
+        if (r.PlayerJobRefusal(seat, control).empty()) return false;
+        const CrewMover* m = r.Mover(seat);
+        if (m != nullptr && m->Moving()) return true;
+        const std::string place = r.JobPlace(control);
+        r.PlayerGoTo(seat, place.empty() ? MoveGoal::Seat() : r.PlaceGoal(place));
+        return true;
     }
 
     void BeginStep(ScenarioRunner& r, const TutorialUi& ui) {

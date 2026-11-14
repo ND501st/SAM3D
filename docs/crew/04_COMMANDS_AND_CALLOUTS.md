@@ -25,13 +25,27 @@ the rules and the list in readable form.
 3. **Designations go in a fixed order:** target number, azimuth (mils, `00-00` format on the 6000 circle), range (km),
    height (hectometres), as the PU-12 gives them (`pu12.hpp`) and as the commander passes them on.
 4. **One speaker at a time per channel.** The intercom and each radio net carry one voice at a time; urgent callouts
-   (priority 0) cut in. A listener whose R-124 box is on the radio misses intercom traffic (`crew_comms.hpp`).
-5. **Speaking takes time:** 0.4 s plus 0.35 s per word (about 2.8 words/s; sam3d estimate). The listener acts after
+   (priority 0) cut in. A listener whose R-124 box is on the radio misses intercom traffic (`crew_comms.hpp`). The
+   bus's turn-taking (a moment between speakers, a cut line said again after, stale lines dropped, one caller per fact,
+   an NPC not talking over what is in his ear) is in `15_TALK.md` §2.
+5. **Speaking takes time:** 0.4 s plus 0.35 s per word (about 2.8 words/s; sam3d estimate), or in the game, for a fixed
+   line played from a recording, the recording's length (`10_BODIES_AND_VOICES.md` section 4). The listener acts after
    hearing it and his perception delay (`05`).
 6. **Numbers are spoken as the crew reads them:** mils "пять сорок" for 05-40, ranges in km, heights in hectometres
    on the board, metres otherwise.
 7. **A callout is knowledge.** Its fields (azimuth, range, target number) enter every listener's picture with the time
    and the speaker (`01` §4).
+8. **Nothing is said that tells the listener nothing new** (26 Oct 2026, after a played massed raid where 409 lines in
+   17 minutes buried the orders): a standing order's routine (the search radar's bursts under the limited regime, `16_EMISSION.md`) is
+   ordered aloud once and then kept without a word, unacknowledged and unreported, with "Готов СОЦ!" at most every five
+   minutes; an acknowledgement still waiting its turn when the drill is done is dropped ("Выполнено!" covers it), and one
+   waiting "Есть!" a seat is enough; a drill the commander replaced or called off himself gets no "Не могу"; a target's
+   number is read back on the net once, when first designated; designations are passed on to the crew when they matter
+   (a new target near, the raid's first far out, one coming within half again the tracking radar's reach, the one
+   ordered taken every 15 s); one "Ответа нет!" an interrogation, about the target tracked or ordered taken, else the
+   nearest not reported in the last two minutes (the commander's permission to fire waits on hearing it about his
+   target). `ScenarioRunner` (`ReportNoReply`, the designation relay, `routine_order_`), `crew_callouts.hpp` (`Say`);
+   `tests/test_em_threats.cpp`.
 
 ## 3. The catalogue
 

@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <initializer_list>
 #include <map>
 #include <string>
@@ -118,6 +119,8 @@ struct VehicleWayDown {
     double down_s = 3.0;
     double up_s = 4.0;
 };
+// A way down on the vehicle's `side` (-1 its left, 1 its right; 0 no side): the side the crew keeps off at a road.
+inline bool WayOnSide(const VehicleWayDown& w, int side) { return side != 0 && w.bottom_m.x * side > 0.0; }
 
 // A place round the vehicle (body frame on the ground; z ignored) where a job is done.
 struct VehiclePlace {
@@ -142,6 +145,27 @@ struct VehicleNoise {
     Vec3 at_m;
 };
 
+// Field telephone lines laid from the vehicle (the PU-12M's P-274M to the RTK-1's lines): a man pays the cable out from
+// the vehicle to the line's far end at `lay_mps`, the cable's length the way he walked, at most `cable_m` a line; the far
+// set stands `far_set_m` short of a vehicle at the far end, on the side he comes from. A job at the place "line:<n>" is
+// worked at line n's far end (the runner knows where it is).
+struct VehicleWire {
+    bool present = false;
+    double lay_mps = 1.2;
+    double cable_m = 500.0;
+    double far_set_m = 8.0;
+};
+// "line:3" -> 3 (a job at a line's far end); 0 for any other place.
+inline int LinePlace(const std::string& place) {
+    if (place.size() < 6 || place.compare(0, 5, "line:") != 0) return 0;
+    int n = 0;
+    for (std::size_t i = 5; i < place.size(); ++i) {
+        if (place[i] < '0' || place[i] > '9') return 0;
+        n = n * 10 + (place[i] - '0');
+    }
+    return n >= 1 && n <= 5 ? n : 0;
+}
+
 // "К машинам": the crew lined up beside the vehicle, first man at first_m, each next one step_m on.
 struct VehicleLineup {
     bool present = false;
@@ -164,6 +188,7 @@ struct VehicleDef {
     std::vector<VehicleJob> jobs;
     std::vector<VehicleNoise> noise;
     VehicleLineup lineup;
+    VehicleWire wire;
     double inside_noise_db = 70.0;         // the compartment's own noise (fans) for voices inside
 
     const VehicleSeat* Seat(const std::string& station) const {
@@ -234,7 +259,7 @@ class VehicleLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, const ConsoleData& console, VehicleDef& out) {
         if (!Keys(root, "", {"system_id", "status", "notes", "source", "confidence", "hull", "keep_out", "seats", "exits",
-                             "ways_down", "places", "jobs", "noise", "lineup", "inside_noise_db"}) ||
+                             "ways_down", "places", "jobs", "noise", "lineup", "wire", "inside_noise_db"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -244,7 +269,7 @@ public:
         }
         if (!OptionalNumber(root, "", "inside_noise_db", out.inside_noise_db)) return false;
         return LoadHull(root, out) && LoadKeepOut(root, out) && LoadSeats(root, console, out) && LoadExits(root, console, out) &&
-               LoadWays(root, out) && LoadPlaces(root, out) && LoadJobs(root, console, out) && LoadNoise(root, console, out) &&
+               LoadWays(root, out) && LoadPlaces(root, out) && LoadWire(root, out) && LoadJobs(root, console, out) && LoadNoise(root, console, out) &&
                LoadLineup(root, console, out) && CheckSeats(console, out);
     }
 
@@ -460,12 +485,28 @@ private:
             const ControlDef* c = console.panel.Find(job.control);
             if (c == nullptr) return Fail(Join(p, "control"), "unknown control '" + job.control + "'");
             if (c->station.empty()) return Fail(Join(p, "control"), "'" + job.control + "' has no owner seat");
-            if (out.Place(job.place) == nullptr) return Fail(Join(p, "place"), "unknown place '" + job.place + "'");
+            if (out.Place(job.place) == nullptr && !(out.wire.present && LinePlace(job.place) != 0)) {
+                return Fail(Join(p, "place"), "unknown place '" + job.place + "'" + (LinePlace(job.place) != 0 ? " (a line's far end needs \"wire\")" : ""));
+            }
             if (!out.JobPlace(job.control).empty()) return Fail(Join(p, "control"), "duplicate job '" + job.control + "'");
             job.station = c->station;
             if (!LoadConditions(j, p, "stay_until", console.panel, console.equipment, job.stay_until)) return false;
             out.jobs.push_back(job);
         }
+        return true;
+    }
+
+    bool LoadWire(const json::Value& root, VehicleDef& out) {
+        const json::Value* w = root.Find("wire");
+        if (w == nullptr) return true;
+        if (!Keys(*w, "wire", {"lay_mps", "cable_m", "far_set_m", "source", "confidence", "notes"}) || !Provenance(*w, "wire") ||
+            !NumberOf(*w, "wire", "lay_mps", out.wire.lay_mps) || !NumberOf(*w, "wire", "cable_m", out.wire.cable_m) ||
+            !NumberOf(*w, "wire", "far_set_m", out.wire.far_set_m)) {
+            return false;
+        }
+        if (!(out.wire.lay_mps > 0.0)) return Fail("wire.lay_mps", "must be positive");
+        if (!(out.wire.cable_m > 0.0)) return Fail("wire.cable_m", "must be positive");
+        out.wire.present = true;
         return true;
     }
 
@@ -759,6 +800,7 @@ struct MoveGoal {
     bool run = false;
     bool emergency = false;   // the emergency exits may be used
     bool shut_after = false;  // coming in: shut the hatch behind him (the last man in)
+    double max_mps = 0.0;     // on the ground no faster than this (paying a cable out); 0: his gait's pace
 
     static MoveGoal Seat() { return MoveGoal(); }
     static MoveGoal AtPlace(const std::string& id) {
@@ -776,6 +818,13 @@ struct MoveGoal {
         MoveGoal g;
         g.kind = Kind::Ground;
         g.point = enu;
+        return g;
+    }
+    // A point on the ground he is "at" by name once there (a line's far end, "line:2"), at most `max_mps` on the way.
+    static MoveGoal OnGroundAt(const Vec3& enu, const std::string& name, double max_mps = 0.0) {
+        MoveGoal g = OnGround(enu);
+        g.place = name;
+        g.max_mps = max_mps;
         return g;
     }
     static MoveGoal OnHull(const Vec3& body) {
@@ -863,6 +912,20 @@ public:
     void SetSeatTimes(double stand_up_s, double sit_down_s) {
         stand_up_s_ = stand_up_s;
         sit_down_s_ = sit_down_s;
+    }
+    // The side of the vehicle he keeps off getting down or up (-1 its left, 1 its right, 0 none): the traffic side of a
+    // road it stands at (stroevoy_ustav_1993 art. 147, 154: at a road's right edge nobody gets on or off over the left
+    // side). A way on that side is taken only when the vehicle has no other.
+    void SetKeepOffSide(int side) { keep_off_side_ = side; }
+    int KeepOffSide() const { return keep_off_side_; }
+    // His way on foot across the map (roadmap G2.4): with one given, a walk to a point on the map more than `min_m` from
+    // where he leaves the vehicle goes by it (the route service's foot way: round the pond, along the track) instead of
+    // the straight line, each of its points a ground leg. It gives the way's points from the start to the end (ENU,
+    // both ends included); none: straight.
+    using FootRoute = std::function<std::vector<Vec3>(const Vec3& from_enu, const Vec3& to_enu)>;
+    void SetFootRoute(FootRoute route, double min_m = 150.0) {
+        foot_route_ = std::move(route);
+        foot_min_m_ = min_m;
     }
 
     // Plan the way to a goal from where he is. False (and why) if there is none: the exits shut by the drill, a place
@@ -964,7 +1027,8 @@ public:
                     }
                     const double ue = de / len, un = dn / len;
                     facing_ = std::atan2(ue, un);
-                    const double v = GroundSpeed(gait, ground, map, pos_.x, pos_.y, ue, un, goal_.run);
+                    double v = GroundSpeed(gait, ground, map, pos_.x, pos_.y, ue, un, goal_.run);
+                    if (goal_.max_mps > 0.0 && v > goal_.max_mps) v = goal_.max_mps;
                     if (v <= 0.0) {  // a wall to him: he stops there
                         legs_.clear();
                         stuck_ = true;
@@ -1051,13 +1115,17 @@ private:
             case MoveGoal::Kind::Seat: return std::string();
             case MoveGoal::Kind::Place: return g.place;
             case MoveGoal::Kind::Lineup: return "lineup";
+            case MoveGoal::Kind::Ground: return g.place.empty() ? std::string("point") : g.place;
             default: return "point";
         }
     }
 
     // The exit he takes: his own usual one (open by the drill), else (an emergency) any emergency exit; `near` picks
-    // the nearest of the open ones when he isn't at his seat's way (coming in from the hull).
-    const VehicleExit* ChooseExit(const ConsoleData* console, bool emergency, const Vec3* near_m, std::string* why) const {
+    // the nearest of the open ones when he isn't at his seat's way (coming in from the hull). The drill keeps a hatch
+    // shut against going out (shut_when, voenizdat_osa_1991 p207); a man outside (`coming_in`) still comes in by it to
+    // his post, and it is shut after him.
+    const VehicleExit* ChooseExit(const ConsoleData* console, bool emergency, const Vec3* near_m, std::string* why,
+                                  bool coming_in = false) const {
         const VehicleExit* best = nullptr;
         double best_d = 1e18;
         std::string shut;
@@ -1068,7 +1136,8 @@ private:
                 bool mine = near_m != nullptr;
                 for (const std::string& s : e.stations) mine = mine || s == station_;
                 if (!mine && pass == 0) continue;
-                if (console != nullptr && !e.shut_when.empty() && ConditionsHold(e.shut_when, console->panel, &console->equipment)) {
+                if (!coming_in && console != nullptr && !e.shut_when.empty() &&
+                    ConditionsHold(e.shut_when, console->panel, &console->equipment)) {
                     if (shut.empty()) shut = e.shut_why;
                     continue;
                 }
@@ -1083,15 +1152,19 @@ private:
         return best;
     }
 
-    // The way down nearest to go from the hull point `top` to the ground point `ground_m` (body frame).
+    // The way down nearest to go from the hull point `top` to the ground point `ground_m` (body frame), off the side he
+    // keeps off unless there is no other.
     const VehicleWayDown* ChooseWay(const Vec3& top, const Vec3& ground_m) const {
         const VehicleWayDown* best = nullptr;
         double best_d = 1e18;
-        for (const VehicleWayDown& w : vehicle_->ways) {
-            const double d = (w.top_m - top).HorizontalLength() + (w.bottom_m - ground_m).HorizontalLength();
-            if (d < best_d) {
-                best_d = d;
-                best = &w;
+        for (int pass = 0; pass < 2 && best == nullptr; ++pass) {
+            for (const VehicleWayDown& w : vehicle_->ways) {
+                if (pass == 0 && WayOnSide(w, keep_off_side_)) continue;
+                const double d = (w.top_m - top).HorizontalLength() + (w.bottom_m - ground_m).HorizontalLength();
+                if (d < best_d) {
+                    best_d = d;
+                    best = &w;
+                }
             }
         }
         return best;
@@ -1182,12 +1255,27 @@ private:
 
     void AddGroundWalk(std::vector<MoveLeg>& legs, const Vec3& from_m, const Vec3& to, bool to_map, const VehiclePose& pose) const {
         const Vec3 to_m = to_map ? pose.ToBody(to) : to;
+        Vec3 off_m = from_m;  // where he leaves the vehicle's side
         for (const Vec3& c : AroundHull(from_m, to_m)) {
             MoveLeg l;
             l.kind = LegKind::GroundWalk;
             l.to = Vec3{c.x, c.y, 0.0};
             l.after = BodyPlace::Ground;
             legs.push_back(l);
+            off_m = l.to;
+        }
+        // A long way across the map: by the foot way's points (G2.4).
+        const Vec3 off = pose.ToEnu(off_m);
+        if (to_map && foot_route_ && std::hypot(to.x - off.x, to.y - off.y) > foot_min_m_) {
+            const std::vector<Vec3> way = foot_route_(off, to);
+            for (std::size_t k = 1; k + 1 < way.size(); ++k) {
+                MoveLeg l;
+                l.kind = LegKind::GroundWalk;
+                l.to = Vec3{way[k].x, way[k].y, 0.0};
+                l.to_map = true;
+                l.after = BodyPlace::Ground;
+                legs.push_back(l);
+            }
         }
         MoveLeg l;
         l.kind = LegKind::GroundWalk;
@@ -1285,7 +1373,7 @@ private:
         if (level == 3 && want <= 2) {  // up onto the hull
             const Vec3 here_m = pose.ToBody(here);
             // The way nearest to him and to where he climbs in.
-            const VehicleExit* e = want <= 1 ? ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here_m, why) : nullptr;
+            const VehicleExit* e = want <= 1 ? ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here_m, why, true) : nullptr;
             if (want <= 1 && e == nullptr) return false;
             if (e != nullptr && e->to_ground) {  // in by an emergency window from the ground
                 AddGroundWalk(legs, here_m, e->out_m, false, pose);
@@ -1307,7 +1395,7 @@ private:
             }
         }
         if (level == 2 && want <= 1) {  // in through a hatch
-            const VehicleExit* e = ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here, why);
+            const VehicleExit* e = ChooseExit(console, goal.emergency, want == 0 ? nullptr : &here, why, true);
             if (e == nullptr || e->to_ground) {
                 e = ChooseExit(console, goal.emergency, &here, why);
                 if (e == nullptr) return false;
@@ -1443,6 +1531,9 @@ private:
     double pace_ = 1.0;
     double stand_up_s_ = 1.5;
     double sit_down_s_ = 1.5;
+    FootRoute foot_route_;
+    double foot_min_m_ = 150.0;
+    int keep_off_side_ = 0;
 };
 
 

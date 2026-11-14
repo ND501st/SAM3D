@@ -12,8 +12,11 @@
 // Compass work (p249–250). The crew chief sets up the artillery compass (ПАБ) 20–50 m in front of the vehicle, the crew
 // lay the launcher on it with the TV sight, he reads the launcher's angle and the compass's azimuth on the vehicle by
 // mutual sighting, turns it by 30-00, applies the compass correction and gets Qc: the vehicle's heading, from north,
-// clockwise. In SAM3D this is one activity of the commander's at a halt: it takes `survey_s` and gives the true
-// heading plus a normal error of `survey_sigma_deg`; moving off spoils it. Both values are estimates in the data.
+// clockwise. In SAM3D this is one activity of the commander's at a halt: it gives the true heading plus a normal error
+// of `survey_sigma_deg`; moving off spoils it. With a survey drill in the console's data (`survey_procedure`: the Osa's
+// measure_qc) he works it as a drill, out at the aiming circle and back (docs/crew/13_OUT_OF_THE_VEHICLE.md), and the
+// reading is taken when the console's measurement is done (Finish); without one it takes `survey_s` (Step). Both
+// values are estimates in the data.
 #pragma once
 
 #include <cmath>
@@ -33,7 +36,8 @@ inline double GyroDriftDegPerS(double earth_rate_deg_h, double latitude_deg, dou
 }
 
 // The crew chief's compass survey at a halt: Start, then Step each tick while the vehicle stands; when it is done the
-// measured Qc is ready. Moving off aborts it (the compass and the sighting are for this halt only).
+// measured Qc is ready. Moving off aborts it (the compass and the sighting are for this halt only). A survey of no
+// `survey_s` is timed by its instrument: Step never ends it, Finish does.
 class CompassSurvey {
 public:
     enum class State { Idle, Running, Done };
@@ -52,10 +56,14 @@ public:
             state_ = State::Idle;  // moved off: the survey (or its result) belongs to the halt it was made at
             return false;
         }
-        if (state_ != State::Running || t + 1e-9 < start_s_ + survey_s_) return false;
-        std::normal_distribution<double> error(0.0, sigma_deg_);
-        result_deg_ = Wrap360(true_heading_deg + (sigma_deg_ > 0.0 ? error(rng_) : 0.0));
-        state_ = State::Done;
+        if (state_ != State::Running || survey_s_ <= 0.0 || t + 1e-9 < start_s_ + survey_s_) return false;
+        Read(true_heading_deg);
+        return true;
+    }
+    // The reading taken now (the instrument's measurement is done). False unless running.
+    bool Finish(double true_heading_deg) {
+        if (state_ != State::Running) return false;
+        Read(true_heading_deg);
         return true;
     }
     // Broken off (the crew chief is needed at his post): no result.
@@ -80,6 +88,12 @@ public:
     }
 
 private:
+    void Read(double true_heading_deg) {
+        std::normal_distribution<double> error(0.0, sigma_deg_);
+        result_deg_ = Wrap360(true_heading_deg + (sigma_deg_ > 0.0 ? error(rng_) : 0.0));
+        state_ = State::Done;
+    }
+
     double survey_s_ = 0.0;
     double sigma_deg_ = 0.0;
     std::mt19937 rng_{1u};

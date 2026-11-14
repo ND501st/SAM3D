@@ -173,9 +173,10 @@ SC_TEST("launcher: a unit with empty containers takes the next loaded one") {
     SC_EXPECT(!c.equipment.GetInput("ammo_3_i") && c.equipment.GetInput("ammo_1_i"));
 }
 
-SC_TEST("launcher: the TZM reloads six missiles in 6 min, one container per minute, only at a halt with the pair spent") {
+SC_TEST("launcher: the TZM reloads six missiles in 6 min, a side's three per lift of the crane's traverse, only at a halt with the pair spent") {
     ConsoleData c = Osa();
     SC_EXPECT_NEAR(c.launcher.reload_s_per_missile, 60.0, 1e-12);
+    SC_EXPECT(c.launcher.reload_traverse == 3);
     Launcher l(c.launcher);
     for (const char* id : {"3-I", "2-I", "1-I", "3-II", "2-II", "1-II"}) l.Unload(id);
     SC_EXPECT(l.MissilesLeft() == 0);
@@ -192,19 +193,38 @@ SC_TEST("launcher: the TZM reloads six missiles in 6 min, one container per minu
     c.equipment.SetInput("vehicle_stopped", false);
     run(120.0);
     SC_EXPECT(l.MissilesLeft() == 0);
-    // At a halt: one a minute, outer containers first (firing order).
+    // At a halt: the traverse takes the outer container's side first (firing order), all three of it in one lift of 3 min.
     c.equipment.SetInput("vehicle_stopped", true);
-    run(30.0);
+    run(170.0);
     SC_EXPECT(l.MissilesLeft() == 0 && l.Reloading() >= 0);
-    run(31.0);
-    SC_EXPECT(l.MissilesLeft() == 1 && l.Loaded("3-I"));
-    run(60.0);
-    SC_EXPECT(l.MissilesLeft() == 2 && l.Loaded("3-II"));
-    run(240.0 + 1.0);
+    run(11.0);
+    SC_EXPECT(l.MissilesLeft() == 3 && l.Loaded("3-I") && l.Loaded("2-I") && l.Loaded("1-I"));
+    run(180.0);
     SC_EXPECT(l.MissilesLeft() == 6);
     SC_EXPECT(l.Reloading() < 0);
     // Six missiles, 6 min from the first minute at the halt: flak11.
     SC_EXPECT(t > 120.0 + 120.0 + 360.0 - 5.0);
+}
+
+SC_TEST("launcher: a lift of the traverse takes no more than the TZM still carries, and the crane's whole cycle") {
+    ConsoleData c = Osa();
+    Launcher l(c.launcher);
+    for (const char* id : {"3-I", "2-I", "1-I", "3-II"}) l.Unload(id);
+    double t = 0.0;
+    auto run = [&](double seconds) {
+        for (double end = t + seconds; t < end - 1e-9; t += 0.1) l.Step(t, c);
+    };
+    c.equipment.SetInput("vehicle_stopped", true);
+    c.equipment.SetInput("tzm_alongside", true);
+    l.SetReloadStock(2);  // two missiles left aboard the TZM
+    run(181.0);
+    SC_EXPECT(l.MissilesLeft() == 4 && l.Loaded("3-I") && l.Loaded("2-I") && !l.Loaded("1-I"));
+    // The next lift is side II's outer container (firing order before 1-I), alone on the traverse: still a whole cycle.
+    l.SetReloadStock(-1);
+    run(170.0);
+    SC_EXPECT(l.MissilesLeft() == 4);
+    run(11.0);
+    SC_EXPECT(l.MissilesLeft() == 5 && l.Loaded("3-II") && !l.Loaded("1-I"));
 }
 
 SC_TEST("launcher: the crane waits while a pair is selected or a channel is guiding") {
@@ -224,7 +244,9 @@ SC_TEST("launcher: the crane waits while a pair is selected or a channel is guid
     for (; t < 200.0 + 24.0; t += 0.1) l.Step(t, c);  // both flying
     SC_EXPECT(l.MissilesLeft() == 2 && !l.Loaded("1-I"));
     for (double end = t + 70.0; t < end; t += 0.1) l.Step(t, c);  // flights over, pair spent: the crane gets to work
-    SC_EXPECT(l.MissilesLeft() == 3);
+    SC_EXPECT(l.MissilesLeft() == 2 && l.Reloading() >= 0);
+    for (double end = t + 140.0; t < end; t += 0.1) l.Step(t, c);  // its first lift: side I's two empty containers
+    SC_EXPECT(l.MissilesLeft() == 4 && l.Loaded("1-I") && !l.Loaded("1-II"));
 }
 
 SC_TEST("launcher: СМЕНА ЛИТ. blanks ЗАХВ. АПЧ for 1 s on both channels and holds the launch until they relock") {

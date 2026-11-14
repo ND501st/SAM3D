@@ -107,6 +107,7 @@ inline bool LoadEmLinkDef(const std::string& data_dir, const std::string& librar
     }
     const em::Environment env;
     for (const auto& want : {std::make_pair(&search_id, em::RadarRole::Search), std::make_pair(&track_id, em::RadarRole::Track)}) {
+        if (want.first->empty() && want.second == em::RadarRole::Track) continue;  // a search radar alone (a radar cabled to a post)
         const int idx = lib.Radar(*want.first);
         if (idx < 0) return fail("radar '" + *want.first + "' is not in " + library_file);
         em::RadarDef d = lib.radars[static_cast<std::size_t>(idx)];
@@ -172,9 +173,10 @@ public:
         unit.position = Antenna();
         if (def.unit_rcs_m2 > 0.0) unit.rcs = em::RcsModel{def.unit_rcs_m2, def.unit_rcs_m2, def.unit_rcs_m2};
         unit_id_ = world_.AddPlatform(unit);
+        // No tracking radar: a search radar on its own (a radar cabled to a command post: its "unit" is the radar).
         search_ = world_.AddRadar(unit_id_, def.search_radar, false);
-        track_ = world_.AddRadar(unit_id_, def.track_radar, false);
-        if (search_ == 0 || track_ == 0) {
+        track_ = def.track_radar.empty() ? 0 : world_.AddRadar(unit_id_, def.track_radar, false);
+        if (search_ == 0 || (track_ == 0 && !def.track_radar.empty())) {
             error_ = "radar not found in the library";
             return;
         }
@@ -182,7 +184,7 @@ public:
         // reports from elsewhere (the battery's PU-12, roadmap phase 7 / E4).
         node_ = world_.AddNode("Own unit", unit_id_, em::Side::Red);
         world_.AttachSensor(node_, search_);
-        world_.AttachSensor(node_, track_);
+        if (track_ != 0) world_.AttachSensor(node_, track_);
         if (em::RadarState* sr = Radar(search_)) sr->iff_interrogating = false;  // until the console interrogates
         for (const EmDummyDef& dm : def.dummies) {
             const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
@@ -200,16 +202,27 @@ public:
         jammer_ids_.assign(def.jammers.size(), 0);
         chaff_done_.assign(def.chaff.size(), 0);
         for (std::size_t i = 0; i < def.jammers.size(); ++i) {
-            if (!def.jammers[i].target_id.empty()) continue;  // on a target: made when the target first appears
-            em::Platform sp;
-            sp.name = "Stand-off jammer";
-            sp.side = em::Side::Blue;
-            sp.kind = em::PlatformKind::FixedWing;
-            sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
-            sp.position = def.jammers[i].position;
-            const int pid = world_.AddPlatform(sp);
-            AddScriptedJammer(i, pid);
+            if (def.jammers[i].target_id.empty()) AddStandOffJammer(i);  // on a target: made when the target first appears
         }
+    }
+
+    // More of the library mid-run: the entries of `more` the scene's library lacks (em::EmWorld::MergeLibrary).
+    bool MergeLibrary(const em::EmLibrary& more, std::string* error = nullptr) { return world_.MergeLibrary(more, error); }
+
+    // Jammers entering a running session (a package's, roadmap 15.3), as the scenario's own: one on a target is made when
+    // the target first appears, a stand-off one now. False, adding none, if one is not in the library.
+    bool AddJammers(const std::vector<EmJammerDef>& js, std::string* error = nullptr) {
+        for (const EmJammerDef& j : js) {
+            if (world_.Scene().lib.Jammer(j.jammer_id) >= 0) continue;
+            if (error != nullptr) *error = "jammer '" + j.jammer_id + "' is not in the EM library";
+            return false;
+        }
+        for (const EmJammerDef& j : js) {
+            effects_.jammers.push_back(j);
+            jammer_ids_.push_back(0);
+            if (j.target_id.empty()) AddStandOffJammer(effects_.jammers.size() - 1);
+        }
+        return true;
     }
 
     // A radio source (a PU-12, an EWR site, a neighbour) on the ground at `enu`, on a two-member net with the unit using
@@ -913,9 +926,16 @@ public:
     // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates. Chaff echoes are not drawn here yet.
-    bool EchoVisible(const std::string& target_id) {
+    bool EchoVisible(const std::string& target_id) { return EchoInTrackBeam(PlatformOf(target_id)); }
+    // The same for an anti-radiation missile in flight (its id from ArmsInFlight): its small echo on the indicators.
+    bool ArmEchoVisible(int arm_id) {
+        for (const em::ArmState& a : world_.Scene().arms) {
+            if (a.id == arm_id) return a.outcome == em::ArmOutcome::Flying && EchoInTrackBeam(a.platform_id);
+        }
+        return false;
+    }
+    bool EchoInTrackBeam(int pid) {
         em::RadarState* r = Radar(track_);
-        const int pid = PlatformOf(target_id);
         if (r == nullptr || !r->on || pid == 0) return false;
         em::EmScene& s = world_.Scene();
         const em::Platform* p = s.FindPlatform(unit_id_);
@@ -1049,6 +1069,15 @@ private:
     void AddScriptedJammer(std::size_t index, int platform_id) {
         const int id = world_.AddJammer(platform_id, effects_.jammers[index].jammer_id, false);
         jammer_ids_[index] = id;
+    }
+    void AddStandOffJammer(std::size_t index) {
+        em::Platform sp;
+        sp.name = "Stand-off jammer";
+        sp.side = em::Side::Blue;
+        sp.kind = em::PlatformKind::FixedWing;
+        sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
+        sp.position = effects_.jammers[index].position;
+        AddScriptedJammer(index, world_.AddPlatform(sp));
     }
 
     int PlatformOf(const std::string& id) const {

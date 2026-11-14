@@ -1,5 +1,6 @@
 {
   "scenario_id": "osa_mission_march",
+  "setting": "war",
   "name": "Osa-AK mission: the battery on the march, a raid, the fight, and on again",
   "description": "One mission end to end (roadmap 8.11): the battery marches north in column with our vehicle in it, powered and searching on the move. Contacts close in; inside 20 km the battery makes a short halt and deploys, the crew comes to readiness, the PU-12 distributes the targets, every vehicle fights; when it is quiet the crew stows and the battery marches on. NPC commanders run everything; take any seat of our vehicle, or command it.",
   "source": "sam3d",

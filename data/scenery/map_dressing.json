@@ -1,0 +1,54 @@
+{
+  "dressing_id": "map_dressing",
+  "status": "first pass (roadmap R6, docs/scenery/README.md \"The map's dressing\")",
+  "notes": "How the map's woods are planted and its open ground is coloured (simcore/scenery/map_dressing.hpp, read by LoadDressingRules): presentation only, nothing in the simulation reads it (the sight lines read the map's obstacle heights, which no tree here ever stands above). Trees stand only in the map proper and the detail areas: a wood's block inside a detail area is planted whole, elsewhere in the map proper its open sides get rows of trees and its inside is a mass; the far ground's woods are masses only. Colours are linear RGB.",
+  "source": "game value: sam3d estimate (the look of the Pannonian plain's woods, shelter belts and fields, to be tuned against -SimMapShots)",
+  "confidence": "estimate",
+  "values": {
+    "near_spacing_m": { "value": 7, "source": "game value: sam3d estimate (a wood planted whole in a detail area: a tree every 7 m each way; Kesmark has about 150 000 trees in all, under its budget of 400 000)", "confidence": "estimate" },
+    "edge_spacing_m": { "value": 8, "source": "game value: sam3d estimate (the rows along a wood's open side)", "confidence": "estimate" },
+    "edge_rows": { "value": 2, "source": "game value: sam3d estimate", "confidence": "estimate" },
+    "jitter": { "value": 0.35, "source": "game value: sam3d estimate (of the spacing, each way)", "confidence": "estimate" },
+    "line_clear_m": { "value": 4, "source": "game value: sam3d estimate (no tree within 4 m of a road's, railway's or river's edge)", "confidence": "estimate" },
+    "crown_ratio": { "value": 0.5, "source": "game value: sam3d estimate (a crown's width to the tree's height)", "confidence": "estimate" },
+    "crown_jitter": { "value": 0.2, "source": "game value: sam3d estimate", "confidence": "estimate" },
+    "top_drop": { "value": 0.15, "source": "game value: sam3d estimate (a tree's top up to this share of the wood's height below the wood's top)", "confidence": "estimate" },
+    "poplar_river_m": { "value": 60, "source": "game value: sam3d estimate (poplars along the rivers)", "confidence": "estimate" },
+    "species_shares": {
+      "value": { "oak": 0.55, "poplar": 0.1, "pine": 0.15, "acacia": 0.2 },
+      "source": "game value: sam3d estimate (the plain's oak woods, planted pine and black locust, poplar)",
+      "confidence": "estimate"
+    },
+    "mass_inset_m": { "value": 3, "source": "game value: sam3d estimate (a wood's mass inside its block)", "confidence": "estimate" },
+    "mass_top": { "value": 0.92, "source": "game value: sam3d estimate (the mass's top, of the wood's height)", "confidence": "estimate" },
+    "cover_cell_m": { "value": 25, "source": "game value: sam3d estimate (the land cover raster's cell)", "confidence": "estimate" },
+    "garden_m": { "value": 15, "source": "game value: sam3d estimate (a house's garden round it)", "confidence": "estimate" },
+    "parcel_length_m": { "value": [250, 700], "source": "game value: sam3d estimate (a collective farm's field, along its furrows)", "confidence": "estimate" },
+    "parcel_width_m": { "value": [80, 250], "source": "game value: sam3d estimate", "confidence": "estimate" },
+    "parcel_heading_cell_m": { "value": 3000, "source": "game value: sam3d estimate (the fields' furrows turn from one 3 km square to the next)", "confidence": "estimate" },
+    "crops": {
+      "value": [
+        { "id": "wheat", "share": 0.3, "colour": [0.36, 0.33, 0.14] },
+        { "id": "maize", "share": 0.25, "colour": [0.17, 0.25, 0.08] },
+        { "id": "sunflower", "share": 0.1, "colour": [0.3, 0.29, 0.09] },
+        { "id": "ploughed", "share": 0.15, "colour": [0.24, 0.18, 0.12] },
+        { "id": "pasture", "share": 0.2, "colour": [0.2, 0.27, 0.1] }
+      ],
+      "source": "game value: sam3d estimate (the plain's crops in summer)",
+      "confidence": "estimate"
+    },
+    "cover_colours": {
+      "value": {
+        "forest": [0.07, 0.13, 0.05],
+        "marsh": [0.16, 0.2, 0.12],
+        "town": [0.26, 0.25, 0.2],
+        "military": [0.3, 0.27, 0.19],
+        "road": [0.22, 0.22, 0.21],
+        "water": [0.05, 0.11, 0.15]
+      },
+      "source": "game value: sam3d estimate (the colours the map was drawn in before R6, SimMapActor.cpp)",
+      "confidence": "estimate"
+    },
+    "house_variants": { "value": 4, "source": "game value: sam3d estimate (scenery/map_meshes.hpp's house variants: gable along and across, hipped along and across)", "confidence": "estimate" }
+  }
+}

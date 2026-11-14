@@ -4,22 +4,22 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 
 | State | Meaning | Controls |
 |---|---|---|
-| wired | drives a subsystem or the launch | 32 |
-| model | read by a simulation model | 72 |
+| wired | drives a subsystem or the launch | 38 |
+| model | read by a simulation model | 74 |
 | display | sets a screen's picture or what a meter reads | 0 |
 | indicator | only lights a lamp or turns on a display | 0 |
-| code | named by simcore's source or a system file, not by the console | 8 |
+| code | named by simcore's source or a system file, not by the console | 9 |
 | drill | worked in a drill, lesson or readiness state; changes nothing | 0 |
-| inert | nothing names it | 2 |
-| **all** | | **114** |
+| inert | nothing names it | 1 |
+| **all** | | **122** |
 
-## wired (32): drives a subsystem or the launch
+## wired (38): drives a subsystem or the launch
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
 | driver_panel | G-290B generator (on the move) | `pwr.g290` | Driver-electrician (No. 4) | G-290B generator running (on the move) |
 | driver_panel | AZS-50 battery master switch | `pwr.mass` | Driver-electrician (No. 4) | 27 V network (batteries) |
-| dtp_panel | DTP: parallax to the reference point set | `dtp.parallax` | Squad leader (No. 1) | The regiment's picture received by telecode |
+| dtp_panel | DTP: parallax to the reference point set | `dtp.parallax` | Squad leader (No. 1) | The post sending its picture on by telecode (a transmitting post); The regiment's picture received by telecode |
 | fr_panel | ASPD-U: power | `aspd.power` | Battery commander | ASPD-U warmed up |
 | fr_panel | ФР block: РАБОТА / КОНТРОЛЬ | `fr.mode` | Battery commander | ASPD-U working (ФР on РАБОТА); ФР at КОНТРОЛЬ: the imitated echo on the tube |
 | gak_panel | GAK: enter the measured direction | `gak.enter_heading` | Squad leader (No. 1) | Post oriented (the GAK holds the measured direction) |
@@ -27,7 +27,9 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | kp4_panel | KP-4: power | `kp4.power` | Squad leader (No. 1) | KP-4 plotting the post's position |
 | map_panel | Plotting board: folded / open | `map.board` | Operator-plotter (No. 2) | Plotting board swung open |
 | pab2_panel | PAB-2 aiming circle: stowed / set up outside | `nav.pab2` | Squad leader (No. 1) | Direction measured with the PAB-2 |
+| pab2_panel | Line 2 (P-274M): on the reel / laid and connected | `wire.line2` | Squad leader (No. 1) | Line 2 laid: connected at both ends |
 | pvs1_panel | Headset (шлемофон): radiotelephonist (PVS-1) | `headset.radio_operator` | Radiotelephone operator (No. 3) | Communications ready (the squad leader's check); Voices: the intercom boxes, headsets, sets and telephone |
+| pvs1_second_panel | Headset (шлемофон): operator-plotter (PVS-1, a second headset) | `headset.operator` | Operator-plotter (No. 2) | Communications ready (the squad leader's check); Voices: the intercom boxes, headsets, sets and telephone |
 | pvs2_panel | Headset (шлемофон): squad leader (PVS-2) | `headset.squad_leader` | Squad leader (No. 1) | Communications ready (the squad leader's check); Voices: the intercom boxes, headsets, sets and telephone |
 | pvs3_panel | Headset (шлемофон): driver (PVS-3) | `headset.driver` | Driver-electrician (No. 4) | Communications ready (the squad leader's check); Voices: the intercom boxes, headsets, sets and telephone |
 | r111_panel | R-111: ИНДИКАТОР | `radio.fug3.indicator` | Radiotelephone operator (No. 3) | R-111 tuned to transmit (НАСТРОЙКА УМ pressed at 20 % on telephony, the cathodes warm); The radio sets worked as sets |
@@ -41,16 +43,20 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | r123_fug4_panel | R-123M (FuG-4): режим | `radio.fug4.mode` | Radiotelephone operator (No. 3) | R-123M FuG-4 able to transmit (3 min after Д. ПРИЕМ); Voices: the intercom boxes, headsets, sets and telephone |
 | r123_fug4_panel | R-123M (FuG-4): ПИТАНИЕ | `radio.fug4.power` | Radiotelephone operator (No. 3) | R-123M FuG-4 able to transmit (3 min after Д. ПРИЕМ); R-123M FuG-4 warmed up (the battery net); Voices: the intercom boxes, headsets, sets and telephone |
 | r407_panel | R-407 (FuG-5): ПИТАНИЕ | `radio.fug5.power` | Battery commander | R-407 FuG-5's valves warm (the regiment's telecode); R-407's scales settled (15 min); The radio sets worked as sets; x100 мкА; ПЕРЕДАТЧИК; ПРИЕМНИК |
+| rk1_panel | Radar cable: on the drum / laid to the radar and connected | `cable.radar` | Radiotelephone operator (No. 3) | The radar's cable laid out and connected |
+| rk1_panel | Line 3 (P-274M): on the reel / laid and connected | `wire.line3` | Radiotelephone operator (No. 3) | Line 3 laid: connected at both ends |
 | rtk1_panel | Headset (шлемофон): battery commander (RTK-1) | `headset.battery_commander` | Battery commander | Communications ready (the squad leader's check); Voices: the intercom boxes, headsets, sets and telephone |
 | rtk1_panel | RTK-1 radiotelephone concentrator | `rtk1.power` | Battery commander | RTK-1 concentrator working |
+| s23_panel | Line 4 (P-274M): on the reel / laid and connected | `wire.line4` | Operator-plotter (No. 2) | Line 4 laid: connected at both ends |
 | scr_panel | ŠČR distribution board: 220 V to the equipment | `pwr.equipment` | Radiotelephone operator (No. 3) | 220 V switched to the equipment |
 | scv_panel | AB-1 set: on the vehicle / on the ground and cabled | `pwr.ab1_set` | Driver-electrician (No. 4) | AB-1 set on the ground, earthed and cabled |
 | scv_panel | AB-1 set: start | `pwr.ab1_start` | Driver-electrician (No. 4) | AB-1 set running (220 V 50 Hz) |
 | scv_panel | ŠČV input board: supply | `pwr.input` | Driver-electrician (No. 4) | AB-1 feeding the post; External network feeding the post; G-290B feeding the post |
+| scv_panel | Line 1 (P-274M): on the reel / laid and connected | `wire.line1` | Driver-electrician (No. 4) | Line 1 laid: connected at both ends |
 | vs27_panel | VS-27 rectifier | `pwr.rectifier` | Radiotelephone operator (No. 3) | VS-27 rectifier charging the 27 V network |
 | winch_panel | Telescopic mast: lowered / raised and guyed | `mast.raise` | Radiotelephone operator (No. 3) | Mast raised to 16 m and guyed |
 
-## model (72): read by a simulation model
+## model (74): read by a simulation model
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -74,6 +80,7 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | dch_panel | ДХ: СБР (reset) | `dch.key.reset` | Battery commander | The command post: plotting board, telecode, nets |
 | dt2_panel | DT-2 marker: azimuth | `dt2.azimuth` | Battery commander | The command post: plotting board, telecode, nets |
 | dt2_panel | DT-2 marker: range | `dt2.range` | Battery commander | The command post: plotting board, telecode, nets |
+| dt2_panel | DT-2: СЪЁМ (take off the echo under the marker) | `dt2.take_off` | Battery commander | The command post: plotting board, telecode, nets |
 | fr_panel | Primary radar source switch | `aspd.radar_source` | Battery commander | The command post: plotting board, telecode, nets |
 | fr_panel | ФР block: scale | `fr.scale` | Battery commander | The command post: plotting board, telecode, nets |
 | pvs1_panel | ПВС-1: канал | `intercom.pvs1` | Radiotelephone operator (No. 3) | Voices: the intercom boxes, headsets, sets and telephone |
@@ -117,6 +124,7 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | r407_panel | R-407: УСТАНОВКА ЧАСТОТЫ, ПЕРЕДАТЧИК (MHz) | `radio.fug5.tx_freq` | Battery commander | The radio sets worked as sets |
 | r407_panel | R-407: УРОВНИ ПЕРЕДАЧА | `radio.fug5.tx_level` | Battery commander | The radio sets worked as sets |
 | r407_panel | R-407: СТОПОР (transmitter) | `radio.fug5.tx_lock` | Battery commander | The radio sets worked as sets |
+| radio_journal_panel | Radio journal: write the next message (радиожурнал) | `journal.write` | Radiotelephone operator (No. 3) | The command post: plotting board, telecode, nets |
 | rtk1_panel | РТК-1: канал (передача) | `rtk1.channel` | Battery commander | Voices: the intercom boxes, headsets, sets and telephone |
 | rtk1_panel | РТК-1: ЦИРКУЛЯР | `rtk1.circular` | Battery commander | Voices: the intercom boxes, headsets, sets and telephone |
 | rtk1_panel | РТК-1: линия 1 | `rtk1.line1` | Battery commander | Voices: the intercom boxes, headsets, sets and telephone |
@@ -127,7 +135,7 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | rtk1_panel | РТК-1: второй приём | `rtk1.monitor` | Battery commander | Voices: the intercom boxes, headsets, sets and telephone |
 | sau_panel | R-111 SAU block: antenna distributor ШТЫРЬ / ТЕЛЕСКОП | `radio.fug3.antenna` | Battery commander | The radio sets worked as sets |
 
-## code (8): named by simcore's source or a system file, not by the console
+## code (9): named by simcore's source or a system file, not by the console
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -136,13 +144,13 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | pvs3_panel | ПВС-3: вызов РТК | `pvs3.call` | Driver-electrician (No. 4) | simcore/include/simcore/scenario_runner.hpp |
 | rk1_panel | РК-1У: С-23 / АСПД-У | `rk1.code` | Radiotelephone operator (No. 3) | simcore/include/simcore/scenario_runner.hpp |
 | rk1_panel | РК-1У: ПРИЕМ | `rk1.rx` | Radiotelephone operator (No. 3) | simcore/include/simcore/scenario_runner.hpp |
+| rk1_panel | РК-1У: ПЕРЕДАЧА | `rk1.tx` | Radiotelephone operator (No. 3) | simcore/include/simcore/scenario_runner.hpp |
 | rtk1_panel | РТК-1: вызов ПВС-1 | `rtk1.call_pvs1` | Battery commander | simcore/include/simcore/scenario_runner.hpp |
 | rtk1_panel | РТК-1: вызов ПВС-2 | `rtk1.call_pvs2` | Battery commander | simcore/include/simcore/scenario_runner.hpp |
 | rtk1_panel | РТК-1: вызов ПВС-3 | `rtk1.call_pvs3` | Battery commander | simcore/include/simcore/scenario_runner.hpp |
 
-## inert (2): nothing names it
+## inert (1): nothing names it
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
-| rk1_panel | РК-1У: ПЕРЕДАЧА | `rk1.tx` | Radiotelephone operator (No. 3) | nothing |
 | rtk1_panel | РТК-1: ВЫЗОВ (линия) | `rtk1.ring` | Battery commander | nothing |

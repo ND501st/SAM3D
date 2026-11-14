@@ -1,0 +1,42 @@
+{
+  "recorded_voices_id": "crew_recorded_voices_en",
+  "status": "The voice each seat's lines are recorded in, read by tools/voice_lines.py (not by the game): it writes art/crew_voices/<language>/<seat>/<callout>.wav, which the game plays in place of the speech engine for every fixed line (docs/crew/10_BODIES_AND_VOICES.md section 4).",
+  "source": "sam3d: presentation. The voices were chosen 27 Oct 2026 from Kokoro's male American voices by measured pitch, pace and brightness, so the voices heard together (each crew's seats, and the two commanders on the battery net) are as far apart as possible, and approved by the owner's ear",
+  "confidence": "estimate",
+  "notes": "English first; Russian later. The operator and the driver are one entry each in voices.json for both vehicles, so one voice each. am_santa was left out (a novelty voice, 195 Hz). The closest pairs are am_michael/am_puck (the Osa) and am_adam/am_liam (the PU-12M); am_adam and am_puck are nearly one voice and are never in one crew. heard_right: lines the word check flagged that the owner listened to and heard said right (27 Oct 2026), with the transcript they were flagged for. retakes: lines the owner heard said wrong, given to the engine another way (a speed, phonemes in place of the words, or the voice's style for a longer input), each found by trying the ways and keeping one the transcriber hears right with and without the crew's vocabulary.",
+  "engine": "kokoro",
+  "model": "kokoro-v1.0.onnx",
+  "voice_pack": "voices-v1.0.bin",
+  "language": "en",
+  "accent": "en-us",
+  "speed": 1.0,
+  "crews": ["osa_ak_crew.json", "pu12m_crew.json"],
+  "seats": {
+    "commander": "am_echo",
+    "deputy_commander": "am_michael",
+    "senior_operator": "am_puck",
+    "operator": "am_eric",
+    "driver": "am_onyx",
+    "battery_commander": "am_adam",
+    "squad_leader": "am_liam",
+    "radio_operator": "am_fenrir"
+  },
+  "heard_right": {
+    "operator/lock_lost": "Lost the lug.",
+    "radio_operator/mast_up": "Masked Up",
+    "radio_operator/say_again": "See you again!",
+    "senior_operator/say_again": "See you again.",
+    "senior_operator/soc_ready": "Sertrade are ready."
+  },
+  "retakes": {
+    "commander/air_alert": {"record": false, "why": "Kokoro puts a consonant before the lone vowel in every take tried (phonemes, style lengths, speeds, onset cuts): heard as 'Where?', 'There.', 'Layer.'"},
+    "driver/air_alert": {"record": false, "why": "as the commander's: heard as 'There.' in every take tried"},
+    "operator/air_alert": {"record": false, "why": "as the commander's: heard as 'Lear?', 'Near', 'Clear.' in every take tried"},
+    "commander/order_cease_fire": {"phonemes": "sˈiːsfˈaɪɚ!", "style_length": 45, "speed": 0.95, "why": "said 'sneeze fire' in the line's own style; as one word in a longer input's style it is heard right, and at style lengths 35 to 60"},
+    "commander/order_drop_target": {"style_length": 6, "why": "said 'Drop the targets' in the line's own style; heard right at style lengths 6 and 7 whatever the speed or spelling"},
+    "commander/order_function_check": {"phonemes": "fˈʌŋkʃən ʧˈɛk!", "why": "'check' came out 'track': espeak's tʃ is two symbols to Kokoro, which was trained on misaki's one, ʧ"},
+    "deputy_commander/miss": {"speed": 0.9, "why": "said 'Messer' at full speed"},
+    "driver/halted": {"speed": 0.9, "why": "said 'Halton' at full speed"},
+    "operator/aspd_ready": {"phonemes": "ˈeɪ, ˈɛs, pˈiː, dˈiː ɹˈɛdi!", "style_length": 8, "why": "the A came out 'Oh' run into the S ('Oh yes, P D ready'); a beat after each letter, in a longer input's style"}
+  }
+}

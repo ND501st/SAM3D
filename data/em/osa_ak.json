@@ -19,7 +19,9 @@
     { "id": "fm100_2_3", "title": "US Army FM 100-2-3, The Soviet Army: Troops, Organization and Equipment, 6 June 1991 (distribution unlimited): SA-8 description p. 5-132", "tier": "1 (for what NATO believed)",
       "notes": "Used here only for the command link's band: 'two I-band guidance radars ... each one responding to a different frequency'. What the US Army believed, with 'probably'." },
     { "id": "r123_refs", "title": "R-123 'Magnolia': English Wikipedia; greenradio.de Eastern Mobiles R-123M page", "url": "https://en.wikipedia.org/wiki/R-123", "tier": "4",
-      "notes": "20-51.5 MHz in two sub-bands, 4 preset channels, 25 kHz spacing, ~20 W, 2.5 uV sensitivity." }
+      "notes": "20-51.5 MHz in two sub-bands, 4 preset channels, 25 kHz spacing, ~20 W, 2.5 uV sensitivity." },
+    { "id": "r111_to", "title": "Радиостанция Р-111. Техническое описание и инструкция по эксплуатации (docs/SOURCES.md)", "tier": "1",
+      "notes": "p. 6: 20.0-52.0 MHz, 1281 frequencies 25 kHz apart; both on the move with the 3.4 m whip at least 35 km, one on an 11 m mast 45 km. p. 7: 65-80 W hand-tuned; both on masts at least 60 km." }
   ],
 
   "radars": [
@@ -232,6 +234,26 @@
                         "confidence": "high",
                         "notes": "System loss and co-site desense are fitted to these two ranges over flat open ground." },
       "source": "mon_2112_80 p12-13, p26 (two R-123M); r123_refs", "confidence": "medium"
+    },
+    {
+      "id": "r111", "name": "R-111 VHF radio (the PU-12M's set on the regiment's command net)",
+      "freq_min_hz": { "value": 20.0e6, "source": "r111_to (p. 6: 20.0 to 52.0 MHz)", "confidence": "high" },
+      "freq_max_hz": { "value": 52.0e6, "source": "r111_to (p. 6)", "confidence": "high" },
+      "power_w": { "value": 80, "source": "r111_to (p. 7: 80 W at 28-50 MHz, hand-tuned)", "confidence": "medium" },
+      "antenna_gain_db": { "value": 1.0, "source": "estimate (the 3.4 m whip over the cabin, as the R-123M's)", "confidence": "estimate" },
+      "antenna_height_m": { "value": 3.5, "source": "estimate (as the R-123M's)", "confidence": "estimate" },
+      "sensitivity_dbw": { "value": -131, "source": "estimate (as the R-123M's; the range anchor fits the system loss, so it sets only the jamming floor)", "confidence": "estimate" },
+      "required_snr_db": { "value": 12, "source": "estimate", "confidence": "estimate" },
+      "bandwidth_hz": { "value": 25000, "source": "r111_to (p. 6: 1281 frequencies 25 kHz apart)", "confidence": "high" },
+      "voice": true,
+      "message_s": { "value": 8, "source": "estimate (as the R-123M's)", "confidence": "estimate" },
+      "operator_delay_s": { "value": 4, "source": "estimate", "confidence": "estimate" },
+      "tracks_per_message": { "value": 1, "source": "estimate", "confidence": "estimate" },
+      "range_anchor": { "range_m": 35000, "antenna_height_m": 3.5,
+                        "source": "r111_to (p. 6: both on the move, the 3.4 m whip, at least 35 km)",
+                        "confidence": "medium",
+                        "notes": "The whip to whip range; on masts it reaches 45-60 km (r111_to p. 6-7), which the pipeline does not model yet. The NVA figure for the PU-12's R-111 is 25-30 km (flak11, PU12-1)." },
+      "source": "r111_to; data/systems/pu12m_radios.json (the same set worked at the post)", "confidence": "medium"
     }
   ],
 

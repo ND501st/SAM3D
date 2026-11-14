@@ -9,6 +9,7 @@
 // Positions are in the theatre's own ENU frame (metres, x east, y north) at the theatre origin; heights are separate.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -58,6 +59,20 @@ enum class ObjectKind {
     Troops,  // a formation in the field near the front
     Factory,
     City,  // protected by politics more often than by guns
+    // The nation's infrastructure (the nation on the map, N0; docs/campaign/10_BRIEFING_FORCES_AND_NATION.md §3).
+    Refinery,         // crude oil into fuel: the fuel system's heart
+    PipelineStation,  // a pipeline's border or pumping station: where the oil comes in
+    Substation,       // the grid between the power stations and the consumers (power, like PowerPlant)
+    Dam,              // a hydroelectric dam (power, like PowerPlant)
+    MaterialsDepot,   // spans, pontoons, rails, cable, spares: what rebuilds need (docs/campaign/02_WHAT_WE_DEFEND.md §3)
+    Port,             // a river port
+    Government,       // the ministries, the General Staff
+    Broadcast,        // state radio and television
+    Exchange,         // a telephone exchange or trunk node: the wire the command pipeline runs on
+    // The supply lines' columns on the move (docs/air_war/14_LOGISTICS.md): generated from the theatre's supply_lines.
+    Convoy,  // a road column of trucks: ammunition, fuel, food
+    Train,   // a supply or troop train: wagons, flatcars with tanks, the men
+    Column,  // an armoured column on the march: march replacements, tanks and carriers moving up
     Count
 };
 
@@ -76,6 +91,18 @@ inline const char* ObjectKindName(ObjectKind k) {
         case ObjectKind::Troops: return "troops";
         case ObjectKind::Factory: return "factory";
         case ObjectKind::City: return "city";
+        case ObjectKind::Refinery: return "refinery";
+        case ObjectKind::PipelineStation: return "pipeline_station";
+        case ObjectKind::Substation: return "substation";
+        case ObjectKind::Dam: return "dam";
+        case ObjectKind::MaterialsDepot: return "materials_depot";
+        case ObjectKind::Port: return "port";
+        case ObjectKind::Government: return "government";
+        case ObjectKind::Broadcast: return "broadcast";
+        case ObjectKind::Exchange: return "exchange";
+        case ObjectKind::Convoy: return "convoy";
+        case ObjectKind::Train: return "train";
+        case ObjectKind::Column: return "column";
         case ObjectKind::Count: break;
     }
     return "?";
@@ -94,6 +121,9 @@ inline bool ParseObjectKind(const std::string& s, ObjectKind& out) {
 
 inline bool IsAirDefence(ObjectKind k) { return k == ObjectKind::SamSite || k == ObjectKind::Aaa; }
 
+// A supply line's column on the move: found by armed reconnaissance, not struck where it was last seen.
+inline bool IsColumn(ObjectKind k) { return k == ObjectKind::Convoy || k == ObjectKind::Train || k == ObjectKind::Column; }
+
 // What a package is for. The doctrine's apportionment shares sorties between these.
 enum class MissionKind {
     Strike,      // interdiction or counter-air on a fixed target (bridge, depot, airfield, HQ, troops)
@@ -105,6 +135,9 @@ enum class MissionKind {
     Harassment,  // a night nuisance raid by a few light aircraft
     HeloRaid,    // attack or armed utility helicopters near the line, popping up from cover
     Deception,   // a decoy or demonstration wave to make the defences radiate and fire
+    Missile,     // a cruise missile salvo at a fixed target (no crew: the missiles are spent either way)
+    ArmedRecce,  // armed reconnaissance of a supply line: search a stretch of road or railway, strike what is found on it
+                 // (NATO's interdiction of the follow-on forces, the Soviet "free hunt", свободная охота)
     Count
 };
 
@@ -119,6 +152,8 @@ inline const char* MissionKindName(MissionKind m) {
         case MissionKind::Harassment: return "harassment";
         case MissionKind::HeloRaid: return "helo_raid";
         case MissionKind::Deception: return "deception";
+        case MissionKind::Missile: return "missile";
+        case MissionKind::ArmedRecce: return "armed_recce";
         case MissionKind::Count: break;
     }
     return "?";
@@ -149,6 +184,11 @@ enum class FlightRole {
     Recce,       // reconnaissance (and additional reconnaissance and marking)
     Decoy,       // decoy drones or a demonstration group
     Helicopter,  // armed helicopters
+    Missile,     // cruise missiles: a salvo flown like a flight, from a carrier or a launch area to the target
+    // Support (docs/air_war/11_SUPPORT.md): flown as orbits by the day, not in a package.
+    Awacs,       // airborne early warning and control (E-3, A-50): the defender's fighters met warned and vectored
+    Tanker,      // air refuelling (KC-135, KC-10): deep strikes beyond the receivers' own radius, full loads
+    Elint,       // stand-off electronic intelligence (RC-135, Nimrod R1, Il-20): the defenders' radars heard and fixed
     Count
 };
 
@@ -163,6 +203,10 @@ inline const char* FlightRoleName(FlightRole r) {
         case FlightRole::Recce: return "recce";
         case FlightRole::Decoy: return "decoy";
         case FlightRole::Helicopter: return "helicopter";
+        case FlightRole::Missile: return "missile";
+        case FlightRole::Awacs: return "awacs";
+        case FlightRole::Tanker: return "tanker";
+        case FlightRole::Elint: return "elint";
         case FlightRole::Count: break;
     }
     return "?";
@@ -189,6 +233,87 @@ inline const char* ProfileName(Profile p) {
         case Profile::High: return "high";
     }
     return "?";
+}
+
+// How a flight puts its weapons on the target (docs/air_war/10_WEAPONS.md): the attack profile at the target, after
+// the transit Profile. Each has its release distance short of the target, its exposure to the target's own guns and
+// missiles, and its accuracy (game values in data/gameplay/air_war.json "delivery.*").
+enum class Delivery {
+    Laydown,    // level at low level over the target, retarded bombs or dispensers (JP233, BL755, FAB-500ShN)
+    Loft,       // low ingress, pull-up some km short, the bombs thrown in a climb; no overflight (SAAF toss, Tornado 1991)
+    PopUp,      // low ingress, pop up to a few hundred metres to a km or two, roll in, dive, release, back down
+    Dive,       // from medium altitude, a steep dive to release (computing sights)
+    Level,      // level from medium or high altitude, above the guns and shoulder-fired missiles
+    Standoff,   // a guided weapon launched from its range, turning away (Maverick, Kh-29, GBU-15)
+    HoverFire,  // a helicopter unmasking from cover to fire missiles or rockets, then down again
+    Count
+};
+constexpr int kDeliveries = static_cast<int>(Delivery::Count);
+
+inline const char* DeliveryName(Delivery d) {
+    switch (d) {
+        case Delivery::Laydown: return "laydown";
+        case Delivery::Loft: return "loft";
+        case Delivery::PopUp: return "popup";
+        case Delivery::Dive: return "dive";
+        case Delivery::Level: return "level";
+        case Delivery::Standoff: return "standoff";
+        case Delivery::HoverFire: return "hover_fire";
+        case Delivery::Count: break;
+    }
+    return "?";
+}
+
+inline bool ParseDelivery(const std::string& s, Delivery& out) {
+    for (int i = 0; i < kDeliveries; ++i) {
+        const Delivery d = static_cast<Delivery>(i);
+        if (s == DeliveryName(d)) {
+            out = d;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a delivery is flown from low level (the transit profile Low) or from medium altitude and above.
+inline bool DeliveryIsLow(Delivery d) {
+    return d == Delivery::Laydown || d == Delivery::Loft || d == Delivery::PopUp || d == Delivery::HoverFire;
+}
+
+// What an aim point of a target is, as the weapons see it (docs/air_war/10_WEAPONS.md).
+enum class TargetClass {
+    Soft,      // trucks, aircraft in the open, tents, fuel tanks, rolling stock
+    Light,     // light buildings, radars and launchers, guns, transformers
+    Armour,    // tanks and armoured vehicles
+    Hard,      // bridge spans, bunkers, heavy buildings
+    VeryHard,  // hardened shelters, dams, deep bunkers
+    Runway,    // a runway or taxiway to be cut
+    Count
+};
+constexpr int kTargetClasses = static_cast<int>(TargetClass::Count);
+
+inline const char* TargetClassName(TargetClass c) {
+    switch (c) {
+        case TargetClass::Soft: return "soft";
+        case TargetClass::Light: return "light";
+        case TargetClass::Armour: return "armour";
+        case TargetClass::Hard: return "hard";
+        case TargetClass::VeryHard: return "very_hard";
+        case TargetClass::Runway: return "runway";
+        case TargetClass::Count: break;
+    }
+    return "?";
+}
+
+inline bool ParseTargetClass(const std::string& s, TargetClass& out) {
+    for (int i = 0; i < kTargetClasses; ++i) {
+        const TargetClass c = static_cast<TargetClass>(i);
+        if (s == TargetClassName(c)) {
+            out = c;
+            return true;
+        }
+    }
+    return false;
 }
 
 // Time-of-day buckets the planners think in.
@@ -331,6 +456,13 @@ inline double SegmentDistance2d(const Vec3& p, const Vec3& a, const Vec3& b, dou
     t = Clamp01(t);
     if (along != nullptr) *along = t;
     return std::hypot(a.x + dx * t - p.x, a.y + dy * t - p.y);
+}
+
+// Distance from a point to a front line (polyline), horizontal.
+inline double DistanceToLine(const std::vector<Vec3>& line, const Vec3& p) {
+    double best = 1e18;
+    for (std::size_t i = 0; i + 1 < line.size(); ++i) best = std::min(best, SegmentDistance2d(p, line[i], line[i + 1]));
+    return best;
 }
 
 // Length of the part of segment a-b inside a circle (centre c, radius r), horizontal.

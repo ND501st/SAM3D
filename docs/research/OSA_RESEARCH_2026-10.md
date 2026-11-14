@@ -203,7 +203,14 @@ useful for missions and NPC battery behaviour):
   lens for an approaching aircraft), the search radar on for only two turns, a brief tracking-radar burst to get data
   then off, the radar off once the missile has gone far enough or as soon as it detonates. Consistent with ePap's
   "stop any emission and change position". Decoys for ARMs on the Osa-AKM are rumoured (veterans' forums) and not
-  confirmed.
+  confirmed. **Confirmed (27 Oct 2026) by `voenizdat_osa_1991` p262:** the search transmitter's high voltage on for 2
+  antenna turns in every 3-4, the TV for tracking, the tracking transmitter on only at Table 7.3's ranges and off after
+  the burst (`OSA_MANUALS_2026-10.md`, chapters 6-7).
+- Who sets the emission regime (`voenizdat_osa_1991`): the **battery commander**, whose decision fixes the measures
+  against jamming and ARMs and each launcher's sector and order of search and fire (p243); above him the military
+  district's signal frees the wartime frequencies at higher readiness, and peacetime radiation is limited to permitted
+  frequencies and, for the tracking radar, directions (pp. 208-211); on the march the battery's radios are silent except
+  for fire control (p240). The vehicle commander and crew execute; the book names no seat for each switch.
 - Jamming resistance: the video repeats secondary claims that Israeli EW in Syria and Soviet EW trials at Emba failed
   to stop the Osa. Treat as claims.
 

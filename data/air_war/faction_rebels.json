@@ -12,7 +12,7 @@
   "callsigns": [ "Sokol", "Orao", "Vila", "Jastreb", "Kobac", "Lastavica" ],
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
-    "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3,
+    "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3, "delivery_risk": 0.8, "min_effect": 0.005, "min_value": -0.5,
     "source": "game values: ad hoc planning by a few pilots, night harassment (croatia_1991_migflug: bombs on positions around a besieged town)",
     "confidence": "estimate",
     "phases": [
@@ -37,15 +37,17 @@
     "confidence": "estimate"
   },
   "logistics": {
-    "replacements_per_day": 0.1, "arm_stock": 0, "arm_resupply_per_day": 0, "damaged_return_h": 96,
+    "replacements_per_day": 0.1, "arm_stock": 0, "arm_resupply_per_day": 0, "damaged_return_h": 96, "buildup_initial": 0.8, "buildup_full_by_day": 30, "notes": "buildup: an improvised air arm grows as aircraft are found, captured or defect (croatia_1991_migflug: from An-2s and crop sprayers in October to a founded service in December 1991); here the wing has most of its aircraft when the war starts and the rest within a month (a game value)",
     "source": "game values: a defector now and then, no spares",
     "confidence": "estimate"
   },
   "politics": {
     "support": 0.8, "pressure": 0.5, "loss_tolerance_per_day": 0.3, "pow_sensitivity": 0.6, "collateral_sensitivity": 0.3,
     "no_strike_city_radius_km": 0, "max_depth_km": 80, "banned": [ "city" ], "interference_per_cycle": 0.02,
-    "target_weights": { "headquarters": 1.4, "troops": 1.3, "bridge": 1.0, "depot": 1.0, "airfield": 0.7, "sam_site": 0.5, "ew_radar": 0.6, "power_plant": 0.6 },
-    "source": "game values: targets chosen for effect and propaganda; the faction's own people are not bombed",
+    "target_weights": { "headquarters": 1.4, "troops": 1.3, "bridge": 1.0, "depot": 1.0, "airfield": 0.7, "sam_site": 0.5, "ew_radar": 0.6, "power_plant": 0.6,
+                        "refinery": 0.6, "pipeline_station": 0.8, "substation": 0.7, "dam": 0.3, "materials_depot": 0.6, "port": 0.5,
+                        "government": 1.0, "broadcast": 1.0, "exchange": 0.6 },
+    "source": "game values: targets chosen for effect and propaganda; the faction's own people are not bombed. The nation's infrastructure kinds (refinery to exchange, 22 Oct 2026) are game values by analogy; a kind of the power grid (substation, dam) is banned wherever power_plant is.",
     "confidence": "estimate",
     "events": [
       { "id": "defector", "name": "A defector", "text": "A pilot of the federal air force has flown his light jet over to the Front.",
@@ -59,17 +61,21 @@
   "aircraft": [
     { "id": "an2_bomber", "name": "An-2 crop sprayer with home-made bombs", "roles": [ "strike" ], "class": "default", "rcs_m2": 4, "cruise_mps": 50, "attack_mps": 45,
       "low_agl_m": 80, "medium_alt_m": 1500, "max_turn_deg_s": 6, "night": true, "strike_power": 0.15, "evasion": 0.1,
+      "loads": [["improvised", 4]], "computing": 0.05, "radius_km": 300,
       "source": "croatia_1991_migflug (An-2 crop dusters dropping makeshift bombs); numbers placeholders", "confidence": "low",
       "notes": "Night here means willing to fly by moonlight, not equipped for it: accuracy suffers." },
     { "id": "utva75", "name": "Light aircraft with rockets (UTVA 75 class)", "roles": [ "strike", "recce" ], "class": "default", "rcs_m2": 2, "cruise_mps": 55, "attack_mps": 55,
       "low_agl_m": 60, "medium_alt_m": 1500, "max_turn_deg_s": 8, "strike_power": 0.08, "recce_quality": 0.3, "evasion": 0.15,
+      "loads": [["s5", 2], ["improvised", 2]], "computing": 0.1, "radius_km": 300,
       "source": "croatia_1991_migflug (UTVA and other civil aircraft); numbers placeholders", "confidence": "low" },
     { "id": "mi8_doorgun", "name": "Mi-8 with door guns and rocket pods", "roles": [ "helicopter", "recce" ], "class": "helicopter", "helicopter": true,
       "rcs_m2": 10, "cruise_mps": 55, "attack_mps": 55, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 8, "strike_power": 0.2,
       "recce_quality": 0.25, "evasion": 0.2,
+      "loads": [["s5", 4], ["door_guns", 1]], "computing": 0.1, "radius_km": 200,
       "source": "placeholder: a transport helicopter the faction captured, armed for the game; no value is the real aircraft's", "confidence": "estimate" },
     { "id": "galeb", "name": "Defected light jet (G-2 Galeb class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 180, "attack_mps": 200,
       "low_agl_m": 80, "medium_alt_m": 3000, "max_turn_deg_s": 9, "strike_power": 0.25, "recce_quality": 0.4, "evasion": 0.35,
+      "loads": [["fab250", 2], ["s5", 2]], "computing": 0.3, "radius_km": 300,
       "source": "placeholder: a period light jet named for flavour; no value is the real aircraft's", "confidence": "estimate" }
   ],
   "squadrons": [

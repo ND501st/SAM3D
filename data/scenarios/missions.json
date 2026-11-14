@@ -1,30 +1,30 @@
 {
   "catalog_id": "sam3d_missions",
   "status": "The game's missions menu (roadmap M2: a person plays the whole mission without touching the editor).",
-  "notes": "Loaded by simcore/missions.hpp. Orders and groups the scenarios and gives each a short title; the name, the description, the seats and the seat that commands come from the scenario itself (its console's stations, its crew data's commander_seat). A battery link lists the vehicles the player may start in. Every scenario file of this folder is listed here or is a half of a listed link (test_missions.cpp).",
+  "notes": "Loaded by simcore/missions.hpp. Orders and groups the scenarios and gives each a short title; the name, the description, the seats and the seat that commands come from the scenario itself (its console's stations, its crew data's commander_seat). A battery link lists the vehicles the player may start in. time fixed holds the mission's own time of day (the lessons, the battles on their dates, the air war's raids at the hour the enemy planned); otherwise the menu offers dawn, day, dusk, night or an hour by the scenario's own sun, or the subset in its time_options (roadmap R7, docs/LIGHT.md). Every scenario file of this folder is listed here or is a half of a listed link (test_missions.cpp).",
   "source": "sam3d",
   "groups": [
     {
       "id": "tutorial", "label": "Tutorial",
       "notes": "Start here, then learn the Osa one seat at a time. Each step lights up the switch, button or wheel to use and waits until you have used it; the rest of the crew are NPCs and the commander's orders come at your pace. G shows every key at any time.",
       "missions": [
-        { "file": "scenarios/tutorial_basics.json", "title": "Start here: the camera, the cabin, the controls", "level": "/Game/Maps/KesmarkRange",
+        { "file": "scenarios/tutorial_basics.json", "time": "fixed", "title": "Start here: the camera, the cabin, the controls", "level": "/Game/Maps/KesmarkRange",
           "tutorial": "tutorials/basics.json", "start": "outside" },
-        { "file": "scenarios/school_driver.json", "title": "Seat lesson 1: the driver", "level": "/Game/Maps/KesmarkRange",
+        { "file": "scenarios/school_driver.json", "time": "fixed", "title": "Seat lesson 1: the driver", "level": "/Game/Maps/KesmarkRange",
           "tutorial": "tutorials/school_driver.json", "start": "driver" },
-        { "file": "scenarios/school_operator.json", "title": "Seat lesson 2: the operator", "level": "/Game/Maps/KesmarkRange",
+        { "file": "scenarios/school_operator.json", "time": "fixed", "title": "Seat lesson 2: the operator", "level": "/Game/Maps/KesmarkRange",
           "tutorial": "tutorials/school_operator.json", "start": "operator" },
-        { "file": "scenarios/school_senior_operator.json", "title": "Seat lesson 3: the senior operator", "level": "/Game/Maps/KesmarkRange",
+        { "file": "scenarios/school_senior_operator.json", "time": "fixed", "title": "Seat lesson 3: the senior operator", "level": "/Game/Maps/KesmarkRange",
           "tutorial": "tutorials/school_senior_operator.json", "start": "senior_operator" },
-        { "file": "scenarios/school_deputy_commander.json", "title": "Seat lesson 4: the deputy commander", "level": "/Game/Maps/KesmarkRange",
+        { "file": "scenarios/school_deputy_commander.json", "time": "fixed", "title": "Seat lesson 4: the deputy commander", "level": "/Game/Maps/KesmarkRange",
           "tutorial": "tutorials/school_deputy_commander.json", "start": "deputy_commander" },
-        { "file": "scenarios/school_commander.json", "title": "Seat lesson 5: the commander, in command", "level": "/Game/Maps/KesmarkRange",
+        { "file": "scenarios/school_commander.json", "time": "fixed", "title": "Seat lesson 5: the commander, in command", "level": "/Game/Maps/KesmarkRange",
           "tutorial": "tutorials/school_commander.json", "start": "commander" },
-        {"file": "scenarios/school_pu12m_driver.json", "title": "PU-12M lesson 1: the driver-electrician", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_driver.json", "start": "driver"},
-        {"file": "scenarios/school_pu12m_radio_operator.json", "title": "PU-12M lesson 2: the radiotelephone operator", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_radio_operator.json", "start": "radio_operator"},
-        {"file": "scenarios/school_pu12m_squad_leader.json", "title": "PU-12M lesson 3: the squad leader", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_squad_leader.json", "start": "squad_leader"},
-        {"file": "scenarios/school_pu12m_operator.json", "title": "PU-12M lesson 4: the operator-plotter", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_operator.json", "start": "operator"},
-        {"file": "scenarios/school_pu12m_battery_commander.json", "title": "PU-12M lesson 5: the battery commander, in command", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_battery_commander.json", "start": "battery_commander"}
+        {"file": "scenarios/school_pu12m_driver.json", "time": "fixed", "title": "PU-12M lesson 1: the driver-electrician", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_driver.json", "start": "driver"},
+        {"file": "scenarios/school_pu12m_radio_operator.json", "time": "fixed", "title": "PU-12M lesson 2: the radiotelephone operator", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_radio_operator.json", "start": "radio_operator"},
+        {"file": "scenarios/school_pu12m_squad_leader.json", "time": "fixed", "title": "PU-12M lesson 3: the squad leader", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_squad_leader.json", "start": "squad_leader"},
+        {"file": "scenarios/school_pu12m_operator.json", "time": "fixed", "title": "PU-12M lesson 4: the operator-plotter", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_operator.json", "start": "operator"},
+        {"file": "scenarios/school_pu12m_battery_commander.json", "time": "fixed", "title": "PU-12M lesson 5: the battery commander, in command", "level": "/Game/Maps/KesmarkRange", "tutorial": "tutorials/school_pu12m_battery_commander.json", "start": "battery_commander"}
       ]
     },
     {
@@ -33,6 +33,7 @@
       "missions": [
         { "file": "scenarios/osa_crew_practice.json", "title": "Osa: crew practice, one target" },
         { "file": "scenarios/pu12m_deploy.json", "title": "PU-12M: deploy the command post" },
+        { "file": "scenarios/pu12m_deploy_wire.json", "title": "PU-12M: deploy the post and lay its lines" },
         { "file": "scenarios/osa_battery_fight.json", "title": "Osa: the battery fight" },
         { "file": "scenarios/pu12m_battery.json", "title": "PU-12M: run the battery in a raid" },
         { "file": "scenarios/battery_link_practice.json", "title": "The battery: the Osa 21 and the PU-12M",
@@ -41,7 +42,12 @@
         { "file": "scenarios/osa_decoys.json", "title": "Osa: decoy drones, then the strike" },
         { "file": "scenarios/osa_soj_strike.json", "title": "Osa: a strike under stand-off jamming" },
         { "file": "scenarios/osa_arm_drill.json", "title": "Osa: HARM drill, a SEAD pair ahead of the strike" },
-        { "file": "scenarios/osa_arm_drill_shrike.json", "title": "Osa: Shrike drill, beaten by going silent" }
+        { "file": "scenarios/osa_arm_drill_shrike.json", "title": "Osa: Shrike drill, beaten by going silent" },
+        { "file": "scenarios/osa_emission_orders.json", "title": "Osa: the emission regime, passed down before a SEAD pair" },
+        { "file": "scenarios/osa_battery_orders.json", "title": "Osa: the march order, carried to every vehicle" },
+        { "file": "scenarios/pu12m_battery_orders.json", "title": "PU-12M: give the battery its march order" },
+        { "file": "scenarios/pu12m_battery_march.json", "title": "PU-12M: march the battery to the Lazne woods on the roads" },
+        { "file": "scenarios/pu12m_mission_cover.json", "title": "PU-12M: the regiment's order: cover the Kesmark bridges by its ready-by" }
       ]
     },
     {
@@ -70,9 +76,9 @@
         { "file": "scenarios/osa_range_ustka.json", "title": "Ustka: P-15 targets from the sea, a salvo at each" },
         { "file": "scenarios/osa_range_kapustin_yar.json", "title": "Kapustin Yar: a target at the zone's far edge" },
         { "file": "scenarios/pu12m_range_day.json", "title": "PU-12M range day: the picture by voice, the ASPD-U off" },
-        { "file": "scenarios/osa_bekaa_1982.json", "title": "The Bekaa, 24 July 1982: F-4Es over the mountains" },
-        { "file": "scenarios/osa_angola_night.json", "title": "Angola: dug in, a night raid, a Puma in the canyon" },
-        { "file": "scenarios/osa_cuito_1988.json", "title": "Cuito Cuanavale, 20 February 1988: Mirage F1AZs" }
+        { "file": "scenarios/osa_bekaa_1982.json", "time": "fixed", "title": "The Bekaa, 24 July 1982: F-4Es over the mountains" },
+        { "file": "scenarios/osa_angola_night.json", "time": "fixed", "title": "Angola: dug in, a night raid, a Puma in the canyon" },
+        { "file": "scenarios/osa_cuito_1988.json", "time": "fixed", "title": "Cuito Cuanavale, 20 February 1988: Mirage F1AZs" }
       ]
     },
     {
@@ -92,7 +98,8 @@
       "id": "test_range", "label": "Test range",
       "notes": "The Kesmark test map (data/maps/kesmark_range.json): 40 by 40 km of ground with its towns, woods, roads and military sites, the airspace and the weather beyond it. NPC commanders fight; take any seat to watch or join in.",
       "missions": [
-        { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" }
+        { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" },
+        { "file": "scenarios/dynamic_campaign_test.json", "title": "Dynamic campaign test: the capital's air defences under endless waves (F12 visits every asset)", "level": "/Game/Maps/KesmarkRange" }
       ]
     }
   ]

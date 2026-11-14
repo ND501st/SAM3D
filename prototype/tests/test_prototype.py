@@ -10,9 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from samproto import (AcmiWriter, Aircraft, GeoPoint, LocalFrame, MissileParams, RadarParams, Vec3,  # noqa: E402
                       World, detection_range, evaluate_detection, flat, radar_horizon, snr_db,
                       standard_atmosphere)
+from samproto import em  # noqa: E402
 from samproto.engagement import closest_approach, pn_accel  # noqa: E402
 from samproto.geo import ecef_to_geodetic, geodetic_to_ecef  # noqa: E402
-from samproto.radar import beam_shape_loss_db, has_line_of_sight  # noqa: E402
+from samproto.radar import Footprints, beam_shape_loss_db, has_line_of_sight  # noqa: E402
 from samproto.vec import G0, azimuth_of, elevation_of  # noqa: E402
 
 
@@ -117,3 +118,75 @@ def test_waypoint_inside_turn_circle_is_passed():
     for _ in range(120):
         b.step(0.1)
     assert b.next_wp == 1 and abs(b.position.x) < 1.0
+
+
+def test_line_of_sight_over_woods():
+    # Mirror of test_map_obstacles.cpp: a wood 20 m tall between two points 8 m up blocks them; 40 m up it does not;
+    # woods within 60 m of an end do not hide it.
+    wood = lambda e, n: 20.0 if 200.0 < e < 400.0 else 0.0  # noqa: E731
+    assert not has_line_of_sight(flat(), Vec3(0, 0, 8), 8.0, Vec3(600, 0, 8), 8.0, 50.0, obstacle=wood)
+    assert has_line_of_sight(flat(), Vec3(0, 0, 40), 40.0, Vec3(600, 0, 40), 40.0, 50.0, obstacle=wood)
+    assert has_line_of_sight(flat(), Vec3(0, 0, 8), 8.0, Vec3(600, 0, 8), 8.0, 50.0)
+    around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
+    assert has_line_of_sight(flat(), Vec3(0, 0, 2), 2.0, Vec3(2000, 0, 300), 300.0, 10.0, obstacle=around)
+    assert not has_line_of_sight(flat(), Vec3(0, 0, 2), 2.0, Vec3(2000, 0, 300), 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0)
+
+
+class _OneBox(Footprints):
+    """Mirror of test_map_obstacles.cpp's OneBoxTerrain: 12 m across east, 30 m along north, 20 m tall, at (0, 0)."""
+    spacing_m = 12.0
+
+    def top_at(self, e, n):
+        return 20.0 if abs(e) <= 6.0 and abs(n) <= 15.0 else None
+
+    def top_bound(self, e0, n0, e1, n1, below):
+        apart = max(e0, e1) < -6.0 or min(e0, e1) > 6.0 or max(n0, n1) < -15.0 or min(n0, n1) > 15.0
+        return (None if apart else 20.0), 12.0
+
+
+def test_a_narrow_box_blocks_exactly_where_it_stands():
+    # Mirror of test_map_obstacles.cpp (roadmap R6): no sample of the path falls on the box, yet it blocks 0.5 m inside
+    # its end and not 0.5 m outside, under its roof and not over it.
+    box = _OneBox()
+    for spacing in (50.0, 100.0, 400.0):
+        def los(n, up):
+            return has_line_of_sight(flat(), Vec3(-1013, n, 0), up, Vec3(987, n, 0), up, spacing, footprints=box)
+        assert not los(0.0, 10.0) and not los(14.5, 10.0) and los(15.5, 10.0) and los(-15.5, 10.0)
+        assert not los(0.0, 19.5) and los(0.0, 20.5)
+        assert not em.analyse_path(flat(), -1013, 14.5, 10.0, 987, 14.5, 10.0, spacing, footprints=box).line_of_sight
+        assert em.analyse_path(flat(), -1013, 15.5, 10.0, 987, 15.5, 10.0, spacing, footprints=box).line_of_sight
+    # Without the footprints the samples step over it.
+    assert has_line_of_sight(flat(), Vec3(-1013, 0, 0), 10.0, Vec3(987, 0, 0), 10.0, 50.0)
+
+
+class _OneBoxExact(_OneBox):
+    """Mirror of test_map_obstacles.cpp's OneBoxExact: the same box, its cuts known exactly."""
+
+    def chords(self, e0, n0, e1, n1, below):
+        if 20.0 < below:
+            return []
+        t_in, t_out = 0.0, 1.0
+        for p0, dp, half in ((e0, e1 - e0, 6.0), (n0, n1 - n0, 15.0)):
+            if abs(dp) < 1e-12:
+                if abs(p0) > half:
+                    return []
+                continue
+            ta, tb = (-half - p0) / dp, (half - p0) / dp
+            t_in, t_out = max(t_in, min(ta, tb)), min(t_out, max(ta, tb))
+        return [(t_in, t_out, 20.0)] if t_in <= t_out else []
+
+
+def test_a_ray_cutting_a_corner_short_is_blocked():
+    # Mirror of test_map_obstacles.cpp (R6's second review): cut 0.1 m into the corner, blocked; 0.1 m clear, clear.
+    box = _OneBoxExact()
+    c = math.sqrt(0.5)
+    for spacing in (50.0, 100.0, 400.0):
+        def diagonal(off, path):
+            pe, pn = 6.0 + off * c, 15.0 + off * c
+            a, z = Vec3(pe - 700 * c, pn + 700 * c, 0), Vec3(pe + 700 * c, pn - 700 * c, 0)
+            if path:
+                return em.analyse_path(flat(), a.x, a.y, 10.0, z.x, z.y, 10.0, spacing, footprints=box).line_of_sight
+            return has_line_of_sight(flat(), a, 10.0, z, 10.0, spacing, footprints=box)
+        for path in (False, True):
+            assert not diagonal(-0.1, path) and not diagonal(-2.0, path) and not diagonal(-8.0, path)
+            assert diagonal(0.1, path) and diagonal(1.0, path)

@@ -88,3 +88,10 @@ the mission bridge's weapon effects, and what our side learns. Tuned against the
 (`docs/air_war/09_BALANCE.md`, `simcore/examples/air_war_balance.cpp`).
 Every key is listed with its default in `TuningTable::Defaults` (`simcore/air_war/data.hpp`); an unknown key fails the
 load and `test_air_war` checks the file names them all.
+
+## after_action.json (the combat report from the records)
+
+The battery's combat report compiled from the PU-12M's records and the regiment's check of them
+(`simcore/campaign/report.hpp`, roadmap P9, `docs/command/01_PRINCIPLES.md` 9): how far apart in time two raids are,
+how a journal line or a board mark is matched to the report the radar company said, the agreement each mark of the
+crew's records needs (5 to 3; below it 2), and the regiment's belief in a unit before its first check.

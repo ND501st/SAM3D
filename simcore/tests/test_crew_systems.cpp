@@ -1,6 +1,7 @@
 // The Osa's systems in the NPC crew's decisions: IFF, СДЦ for low targets, emission control (the battery's EMCON, an
 // ambush), the second missile, the radios, the fuel truck. Each system the console has is used by the NPCs where
 // doctrine calls for it, not only by scripted triggers.
+#include <cmath>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -197,10 +198,57 @@ SC_TEST("npc systems: the commander has the radios switched on when his set is o
     if (!r) return;
     r->Step(0.1);
     r->PlayerSet("radio.right.power", 0);  // someone switched the commander's set off
-    while (!r->Finished() && r->Time() < 180.0 && r->Console().panel.Get("radio.right.power") != 1) r->Step(0.1);
-    // The set is beside his seat (on ZCzZ1A nr 2, data/cabins/osa_ak.json since the holistic review H3): he may switch
-    // it on himself rather than order the crew. Either way it is on again.
+    // He has gone out with the aiming circle from the halt (no Qc yet): his seat's work waits for his return. The set
+    // is beside his seat (on ZCzZ1A nr 2, data/cabins/osa_ak.json since the holistic review H3): he may switch it on
+    // himself rather than order the crew. Either way it is on again.
+    double back_s = -1.0;
+    while (!r->Finished() && r->Time() < 290.0 && r->Console().panel.Get("radio.right.power") != 1) {
+        r->Step(0.1);
+        if (back_s < 0.0 && r->Engagement().QcKnown()) back_s = r->Time();
+    }
+    std::printf("    back with the Qc at %.0f s, the set on at %.0f s\n", back_s, r->Time());
     SC_EXPECT(r->Console().panel.Get("radio.right.power") == 1);
+}
+
+SC_TEST("npc systems: a commander's slip passes a designation on with a digit wrong (7.2); the crew has what it was told") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(BatteryFight(""), kData, def, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    // The commander's own tier: a 1st-class man whose every designation passed on has a digit wrong.
+    const SkillTier* class1 = def.skills.Find("class1");
+    SC_EXPECT(class1 != nullptr);
+    if (class1 == nullptr) return;
+    SkillTier slips = *class1;
+    slips.id = "slips";
+    slips.slip_chance = 1.0;
+    def.skills.tiers.push_back(slips);
+    for (ScenarioCrew& c : def.crew) {
+        if (c.role == "commander") c.skill = "slips";
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    while (!r.Finished() && r.Time() < 900.0 && r.DesignationSlips() == 0) r.Step(0.1);
+    SC_EXPECT(r.DesignationSlips() == 1);
+    for (int i = 0; i < 150; ++i) r.Step(0.1);  // the line said and heard
+    // The commander heard it right; the senior operator has what was said, off the commander's in azimuth or range.
+    const CrewPicture* cmdr = r.PictureOf("commander");
+    const CrewPicture* so = r.PictureOf("senior_operator");
+    SC_EXPECT(cmdr != nullptr && so != nullptr);
+    if (cmdr == nullptr || so == nullptr) return;
+    bool differs = false;
+    for (const KnownTarget& k : so->Recent(r.Time(), 30.0)) {
+        if (k.source == "radio" || k.number == 0) continue;
+        for (const KnownTarget& c : cmdr->Recent(r.Time(), 30.0)) {
+            if (c.number != k.number || c.source != "radio") continue;
+            const double daz = std::fabs(c.azimuth_deg - k.azimuth_deg), dr = std::fabs(c.range_m - k.range_m);
+            std::printf("    target %d: the commander %.1f deg %.1f km, the senior operator told %.1f deg %.1f km\n", k.number, c.azimuth_deg,
+                        c.range_m / 1000.0, k.azimuth_deg, k.range_m / 1000.0);
+            differs = differs || daz > 0.5 || dr > 600.0;
+        }
+    }
+    SC_EXPECT(differs);
+    SC_EXPECT(r.Debrief().find("with a digit wrong") != std::string::npos);
 }
 
 SC_TEST("npc systems: at the fuel reserve the commander asks for the fuel truck, and it comes alongside") {

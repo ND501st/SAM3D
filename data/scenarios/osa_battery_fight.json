@@ -1,5 +1,6 @@
 {
   "scenario_id": "osa_battery_fight",
+  "setting": "war",
   "name": "Osa-AK battery fight: four launchers, the PU-12 distributing targets (NPC commanders)",
   "description": "A fictional raid on the battery in its prepared position (docs/crew/07_COMMANDER_MODE.md §3). Four aircraft come in from several directions. The PU-12 plots them; the NPC battery commander gives each to the nearest ready launcher on the battery net, leaving to our own vehicle the ones it is nearest to; our own crew is run by its NPC commander. Take a seat in our vehicle, or command it, or (battery_commander: player) distribute the targets yourself.",
   "source": "sam3d",

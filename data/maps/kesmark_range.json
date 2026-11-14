@@ -10,6 +10,7 @@
   "seed": 1985,
   "extent_km": { "west": -20, "east": 20, "south": -20, "north": 20 },
   "far_km": 150,
+  "far_ground": "maps/pannonia.json",
   "airspace": { "radius_km": 250, "ceiling_m": 25000,
                 "notes": "Aircraft may fly anywhere: the air war's border entries lie 100-185 km out. The weather (data/weather/) covers the whole airspace." },
   "terrain": {
@@ -31,7 +32,15 @@
       { "id": "noric_hills", "east_km": -150, "north_km": -140, "radius_km": 70, "height_m": 450, "notes": "The neutral neighbour's hills beyond the south-western border." },
       { "id": "northern_uplands", "east_km": 20, "north_km": 150, "radius_km": 60, "height_m": 300 }
     ],
-    "valley": { "depth_m": 6, "half_width_m": 700, "notes": "The Rava's valley, carved along the river." }
+    "valley": { "depth_m": 6, "half_width_m": 700, "notes": "The Rava's valley, carved along the river." },
+    "detail": [
+      { "id": "bty21", "east_km": 9.5, "north_km": -6.5, "half_km": 6, "spacing_m": 10, "micro_m": 0.8,
+        "source": "game value: sam3d estimate", "confidence": "estimate",
+        "notes": "Battery 21's district (its position at 6.4, -9.6 and both Kesmark bridges inside): 10 m ground with a little micro relief (roadmap R6). Its edges are nodes of the map proper's 50 m ground." },
+      { "id": "capital", "east_km": 36, "north_km": 58, "half_km": 7.5, "spacing_m": 20, "micro_m": 0.6,
+        "source": "game value: sam3d estimate", "confidence": "estimate",
+        "notes": "The capital (data/maps/pannonia.json settlements.capital, radius 7 km) and the dynamic campaign test round it: 20 m ground (roadmap R6). Its edges are nodes of the far ground's 500 m ground." }
+    ]
   },
   "rivers": [
     { "id": "rava", "name": "Rava", "width_m": 90,
@@ -100,6 +109,10 @@
     { "id": "ralje", "name": "Ralje", "kind": "town", "east_km": 18, "north_km": -82, "radius_km": 1.6, "buildings": 600 },
     { "id": "hradec", "name": "Hradec Dolni", "kind": "town", "east_km": -60, "north_km": 95, "radius_km": 2.0, "buildings": 700 }
   ],
+  "detail_settlements": [
+    { "id": "capital", "name": "The capital", "kind": "city", "east_km": 36, "north_km": 58, "radius_km": 7, "buildings": 12000,
+      "notes": "Laid out in the capital's detail area on its own random stream, its streets along the country's roads through it (roadmap R6). The id is the country's (pannonia.json settlements.capital). The count is a game value: the blocks grid holds about 34000 lots." }
+  ],
   "farmsteads": { "count": 70, "buildings": [2, 4],
                   "notes": "Tanyas: lone farmsteads on the plain, inside the map only." },
   "forests": [
@@ -154,6 +167,38 @@
     { "id": "kesmark_station", "name": "Kesmark station", "kind": "station", "east_km": 10.6, "north_km": -2.2, "heading_deg": 107 },
     { "id": "csepely_works", "name": "Csepely works", "kind": "factory", "east_km": -32, "north_km": 47, "count": 8 },
     { "id": "paksany_power", "name": "Paksany power station", "kind": "power_station", "east_km": -55, "north_km": -60 },
-    { "id": "tiszavar_airbase", "name": "Tiszavar air base", "kind": "airfield", "east_km": 60, "north_km": 20, "heading_deg": 70, "runway_m": [2500, 60], "count": 10 }
+    { "id": "tiszavar_airbase", "name": "Tiszavar air base", "kind": "airfield", "east_km": 60, "north_km": 20, "heading_deg": 70, "runway_m": [2500, 60], "count": 10 },
+    { "id": "capital_bty21_osa", "name": "Battery 21: the player's Osa (the dynamic campaign test)", "kind": "osa_position", "east_km": 42.176, "north_km": 61.534, "notes": "The dynamic campaign test's own (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_bty21_22", "name": "Battery 21: launcher 22", "kind": "osa_position", "east_km": 43.271, "north_km": 62.341, "notes": "The dynamic campaign test's 22 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_bty21_23", "name": "Battery 21: launcher 23", "kind": "osa_position", "east_km": 43.583, "north_km": 60.443, "notes": "The dynamic campaign test's 23 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_bty21_24", "name": "Battery 21: launcher 24", "kind": "osa_position", "east_km": 42.587, "north_km": 59.837, "notes": "The dynamic campaign test's 24 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_osa_22", "name": "Osa-AK battery 22 in the city park", "kind": "osa_position", "east_km": 32.478, "north_km": 61.175, "notes": "The dynamic campaign test's osa_22 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_kub", "name": "Kub battery on the eastern heights", "kind": "sam_site", "east_km": 40.576, "north_km": 61.624, "notes": "The dynamic campaign test's kub_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s75_inner", "name": "S-75M2 fire unit in the old barracks", "kind": "sam_site", "east_km": 30.820, "north_km": 54.365, "notes": "The dynamic campaign test's s75_inner (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s125_inner", "name": "S-125M1 fire unit by the stadium", "kind": "sam_site", "east_km": 41.223, "north_km": 53.929, "notes": "The dynamic campaign test's s125_inner (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_strela10", "name": "Strela-10 platoon at the bridges", "kind": "gun_site", "east_km": 36.313, "north_km": 55.499, "notes": "The dynamic campaign test's strela10_bridges (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_strela1", "name": "Strela-1 platoon by the ministries", "kind": "gun_site", "east_km": 33.604, "north_km": 57.082, "notes": "The dynamic campaign test's strela1_ministries (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_zsu_station", "name": "ZSU-23-4 platoon at the main station", "kind": "gun_site", "east_km": 36.582, "north_km": 60.600, "notes": "The dynamic campaign test's zsu_station (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_zsu_exchange", "name": "ZSU-23-4 platoon at the telephone exchange", "kind": "gun_site", "east_km": 34.186, "north_km": 59.886, "notes": "The dynamic campaign test's zsu_exchange (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_ks30_west", "name": "KS-30 battery in the western park", "kind": "gun_site", "east_km": 29.792, "north_km": 58.959, "notes": "The dynamic campaign test's ks30_west (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_ks30_east", "name": "KS-30 battery at the brickworks", "kind": "gun_site", "east_km": 42.594, "north_km": 58.637, "notes": "The dynamic campaign test's ks30_east (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_zu23_plant", "name": "ZU-23 guns at the radio plant", "kind": "gun_site", "east_km": 39.771, "north_km": 62.320, "notes": "The dynamic campaign test's zu23_plant (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_aaa_rail", "name": "AA machine guns at the marshalling yard", "kind": "gun_site", "east_km": 37.497, "north_km": 58.206, "notes": "The dynamic campaign test's aaa_rail (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_1", "name": "S-60 battery 1", "kind": "gun_site", "east_km": 36.999, "north_km": 61.141, "notes": "The dynamic campaign test's s60_1 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_2", "name": "S-60 battery 2", "kind": "gun_site", "east_km": 40.267, "north_km": 61.138, "notes": "The dynamic campaign test's s60_2 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_3", "name": "S-60 battery 3", "kind": "gun_site", "east_km": 39.298, "north_km": 58.017, "notes": "The dynamic campaign test's s60_3 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_4", "name": "S-60 battery 4", "kind": "gun_site", "east_km": 40.305, "north_km": 54.908, "notes": "The dynamic campaign test's s60_4 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_5", "name": "S-60 battery 5", "kind": "gun_site", "east_km": 37.037, "north_km": 54.865, "notes": "The dynamic campaign test's s60_5 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_7", "name": "S-60 battery 7", "kind": "gun_site", "east_km": 33.340, "north_km": 56.041, "notes": "The dynamic campaign test's s60_7 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_8", "name": "S-60 battery 8", "kind": "gun_site", "east_km": 30.698, "north_km": 57.964, "notes": "The dynamic campaign test's s60_8 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_9", "name": "S-60 battery 9", "kind": "gun_site", "east_km": 33.316, "north_km": 59.920, "notes": "The dynamic campaign test's s60_9 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_s60_10", "name": "S-60 battery 10", "kind": "gun_site", "east_km": 34.329, "north_km": 63.027, "notes": "The dynamic campaign test's s60_10 (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_p14", "name": "P-14 of the radar company Capital West", "kind": "radar_post", "east_km": 28.766, "north_km": 63.153, "notes": "The dynamic campaign test's p14_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_prv11", "name": "PRV-11 of the radar company Capital West", "kind": "radar_post", "east_km": 28.964, "north_km": 63.554, "notes": "The dynamic campaign test's prv11_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_p15", "name": "P-15 on the eastern heights", "kind": "radar_post", "east_km": 42.960, "north_km": 64.139, "notes": "The dynamic campaign test's p15_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_p18", "name": "P-18 in the northern allotments", "kind": "radar_post", "east_km": 33.858, "north_km": 64.584, "notes": "The dynamic campaign test's p18_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_p19", "name": "P-19 of the regiment's radar company", "kind": "radar_post", "east_km": 39.638, "north_km": 51.519, "notes": "The dynamic campaign test's p19_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_p40", "name": "P-40 of the brigade's radar battalion", "kind": "radar_post", "east_km": 29.436, "north_km": 51.857, "notes": "The dynamic campaign test's p40_capital (scenario frame converted to the map's), so it is cleared and levelled." },
+    { "id": "capital_pu12", "name": "PU-12 of the regiment's gun battalion", "kind": "radar_post", "east_km": 33.000, "north_km": 57.678, "notes": "The dynamic campaign test's pu12_regiment (scenario frame converted to the map's), so it is cleared and levelled." }
   ]
 }

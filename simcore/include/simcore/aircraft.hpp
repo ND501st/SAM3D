@@ -27,6 +27,7 @@ struct Aircraft {
     std::size_t next_waypoint = 0;
     double waypoint_capture_radius_m = 500.0;
     bool alive = true;
+    double bottom_m = 1.5;                // its lowest point below `position` (the pilot's ground floor; a game value)
 };
 
 // A waypoint inside one of the aircraft's turn circles (beside it, closer than its turn radius) can't be flown over

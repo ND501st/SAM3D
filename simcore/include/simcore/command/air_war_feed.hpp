@@ -24,6 +24,15 @@
 namespace simcore {
 namespace command {
 
+// The campaign's sky on its information net (roadmap R7, docs/LIGHT.md): on a dated theatre the couriers' night is the
+// sun's at the theatre's origin, as the air war's parts of the day are (airwar::TheatrePartAt); an undated theatre keeps
+// the net's fixed 20:00-06:00. Call after InfoNet::Init with the theatre's start_hour. True when a sky was given.
+inline bool GiveTheatreSky(InfoNet& net, const airwar::TheatreDef& t, const LightValues& values = LightValues()) {
+    if (t.day_of_year <= 0) return false;
+    net.SetSky(airwar::TheatreSky(t), values);
+    return true;
+}
+
 // Who first knows each kind of news, and the air war's effects on the pipeline (game values, docs/command/06).
 struct FeedRoles {
     std::string sector = "sector_cp_duty";            // raid warnings (the national sector sees them coming)
@@ -170,6 +179,25 @@ public:
         net_->AdvanceTo(c.Now());
     }
 
+    // The calls the battery's people have made on the radio by now (the player's own among them), for the enemy's
+    // radio intercept (roadmap P3: AirCampaign::NoteTransmissions; it hears each once). After Pump.
+    std::vector<airwar::Transmission> BatteryCalls() const {
+        std::vector<airwar::Transmission> out;
+        if (net_ == nullptr) return out;
+        const ChainData& d = net_->Data();
+        const SignalMean* radio = d.FindMean("radio_voice");
+        for (const RadioCall& call : net_->RadioCalls()) {
+            const std::string& who = d.positions[static_cast<std::size_t>(call.position)].id;
+            if (std::find(battery_people_.begin(), battery_people_.end(), who) == battery_people_.end()) continue;
+            airwar::Transmission t;
+            t.h = call.h;
+            t.intercept = (radio != nullptr ? radio->intercept : 1.0) * call.heard;  // the EM layer's listeners, when on (P5)
+            t.key = net_->Facts()[static_cast<std::size_t>(call.fact)].key + "@" + who + "@" + std::to_string(call.h);
+            out.push_back(t);
+        }
+        return out;
+    }
+
 private:
     InfoNet* net_ = nullptr;
     FeedRoles roles_;
@@ -222,6 +250,14 @@ private:
             f.need_level = 3;
             f.precedence = Has(j.text, "consider moving") ? 1 : 0;
             f.text = "The regiment's estimate: " + j.text;
+            return true;
+        }
+        if (j.who == "regiment") {  // the regiment's order to its batteries (the ARM drill once ARMs have been fired at us)
+            f.kind = FactKind::Order;
+            f.origin = roles_.staff;
+            f.need_level = 4;  // down to the vehicle commanders, who put their crews to it
+            f.precedence = 1;
+            f.summary = "The regiment's order: the batteries to the ARM drill, the enemy fires anti-radiation missiles at our radars.";
             return true;
         }
         if (j.who == "battery") {
