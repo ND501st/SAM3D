@@ -206,6 +206,44 @@ materials, small parts and Unreal; I9 an optional BM3 cabin. Then the exterior (
 `docs/OSA_EXTERIOR_RECONSTRUCTION.md` (`tools/recon/`), ingestion done. Decision D1 (owner, 8 Nov 2026): the book's interior is a
 9A33BM3-1; the game keeps the 9A33BM2 and takes shapes from the BM3-1 where the blocks are shared.
 
+## Controls still to wire (14 Nov 2026)
+
+The button map (`python tools/button_map.py osa_ak` and `pu12m`) sorts every control by what it reaches and writes the
+list to `docs/generated/osa_ak_controls.md` and `pu12m_controls.md`. **The first wiring pass is done (14 Nov 2026):**
+26 Osa controls that changed nothing now work, from what was already built:
+
+- ТРЕНИРОВКА (SOC and SSC) keeps its transmitter off the air;
+- the stabilisation needs ПРИВОД Ψ, ПРИВОД γ and +27 В;
+- PU-303's СТОП stops the turbine until ПУСК is put off;
+- ОТКЛ. НАГР. takes the loads off until ГТА or ИВП puts them back (`release_any`: a latched mode undone by any one
+  condition, which the drill master plans the cheaper way);
+- АВТОМАТ and РУЧНОЕ set the range's source;
+- СВЯЗЬ feeds the sets and the intercom;
+- ПОТРЕБИТЕЛИ connects the course setter;
+- the A-1's ГРОМКОСТЬ sets the headset's level;
+- the range indicator's astigmatism, shifts, РРУ under АРУ and ДОП. УСИЛ. change its picture;
+- ПРИБОРЫ and ОСВЕЩ. light the fuel gauge and the four error meters;
+- ВЛЕВО — ВПРАВО slews the antenna at 30°/s.
+
+The Osa now counts 64 wired, 71 model, 31 display, 9 indicator, 9 drill and 83 inert controls (before: 52, 68, 22, 7, 15,
+103), with 26 items not built. What is left needs a model that is not there yet. By what each needs:
+
+| # | Group | Controls (ids; *not built* = on the model or in the sources, no control yet) | Needs |
+|---|---|---|---|
+| C1 | The engine and driving | `veh.gear`, `veh.handbrake`, `veh.hand_throttle`, `veh.column_stalk`, `veh.waterjet_left/right`, `veh.bilge_pump` (wave shield), `gta.cold_crank` and the hour counters; *not built:* the starter and «К маршу готов», the ГОМ off the engine, the hand fuel pump, the differential lock, the dash's speed, coolant, tacho, oil, ammeter and hours and its lamps БОРТ. СЕТЬ and ПОВОРОТ | The chassis as a driven vehicle (phase 4's leftover, Chaos Vehicles with the real model): the engine's start, gears, afloat with the water jets; the dash read from it. The march's movers (`nav/movers.hpp`) keep their speeds |
+| C2 | Lights and signals | `veh.lamps_front/rear`, `veh.sidelights`, `veh.light_switch`, `veh.outside_lights`, `veh.inside_lights`, `veh.rear_signal`, `veh.illuminator`; *not built:* the march signals' flags and lamps | Lights drawn in Unreal on the hull and in the cabin, and a rule that a lit vehicle is seen farther at night (`nav/session.hpp`'s visual range, `light.hpp`'s battery dark): the march's light discipline as an order |
+| C3 | Cabin air and heat | `vent.workplaces`, `vent.season`, `vent.cover_left/right` (drill), `veh.heat_vent`, `veh.heater`, `pwr.relay_heat`, `gyro.heat` (drill), `air.cock`, `veh.header_valve_left/right`; *not built:* ПБ-107's fan, the air pressure gauges | A cabin climate: outside temperature, the equipment's heat, the fans and heater; the crew's comfort into their needs (phase 18); the equipment's warm-up by temperature |
+| C4 | Function checks and faults | `fk.anode`, `fk.kz`, `fk.launch`, `fk.letter`, `fk.levels`, `fk.sign`, `fk.systems`, `fk.transients` (drill), `err.mode`, `err.output`, `err.freq`, `soc.mti_check` (drill), `iff.ind_check`, `tov.check`, `pwr.ukch`, `pwr.phase`, `radio.left/right.volt_check`, `radio.left/right.calibrate`; *not built:* 0004-12M1's ИП1, ИП2 and КЗ, OR-14M's timers and ДЕЛИТЕЛИ, 0062-6M1's КОНТРОЛЬ and ПОДЖИГ ГШ, 0091-17M's КОНТРОЛЬ НАПР., the fault lamps (ОТКАЗ СРП, ОТКАЗ Qc, ОБРЫВ ФАЗЫ, НЕИСПРАВНОСТЬ, ПРЕД. УГОЛ, ПЕРЕГРЕВ, the fuses), the de-energisation box | A fault model (what fails, when, how it shows on lamps and meters), the readings of each check position (voenizdat_osa_1991's function-control chapter), the R-123's meter, the IFF's test marks on the PPI; the checks as procedures for the drill master. Ties to G6 (wear and maintenance, on hold) |
+| C5 | Receivers and the radar's picture | `soc.afc`, `soc.afc_trim`, `ssc.afc`, `ssc.afc_trim`, `soc.wind_comp/coarse/fine`, `ssc.wind_comp/coarse/fine`, `soc.sa`, `soc.mti_ext`, `ssc.modes`, `ssc.control_sel`, `svr.beam`, `tov.filter`; *not built:* 0065-2M АРУ — РРУ and its gains, 0051-7M's repetition frequencies | The EM radar's receiver: a magnetron that drifts (АПЧМ follows, РПЧМ by hand), the MTI's wind compensation against clutter moving with the weather's wind (`weather.hpp`, chaff), the repetition frequencies against blind speeds; the TV's filter as a tint by light and haze |
+| C6 | Drives, balances and the gyro | `ssc.pa_balance_az`, `ssc.pa_balance_el` (+ its lid), `ro.balance`, `msl.balance_1`, `ok81.balance_2`, `ro.speed`, `ssc.emu`, `gyro.follow_up` (drill), `gyro.phi_mode` (drill), `gyro.relay_pt` (drill), `gyro.supply` (drill); *not built:* 0005-8M КОРРЕКЦИЯ ОСН. — КОНТР. | The drives as servos that drift off balance (ПА: aided tracking) and hold still with the ЭМУ off; the semi-automatic range's rate; the gyro's follow-up frozen with СС off, its latitude correction |
+| C7 | The vehicle's electrics | `veh.converter`, `veh.interlock`, `veh.protection`, `veh.well_switch`, `gta.volt_gta`, `gta.volt_gom`; *not built:* БОРТ СПК ОТКЛ. as its own button | The 27 V network's sources and protections; the generators' voltage set by hand and read on the PU-303's meters |
+| C8 | Fire and stowage | `fire.disc`, `fire.valve`, `veh.stowage_lower/upper`; *not built:* the fire system on and off | Fire in the vehicle as a damage state (track R), the bottles spent by the crew; stowed kit behind the covers |
+| C9 | Unknown or the owner's call | `fo.mc` (…МЦ), `ind.select`, `veh.strip_4`, `veh.knob_ammeter`, `veh.knob_left`, `veh.knob_tacho`, `veh.lever_box`; *not built:* ПАНЕЛЬ ИНДИКАЦИИ's five legend lamps, the driver's PNV-57E and TNPO-170A, the IFF 1L24-2 blocks (a BM3's, not the AK's) | A source that names them, or the owner's decision |
+| C10 | PU-12M | `rk1.tx` (where the ASPD-U's transmitter sends), `rtk1.ring` (a call down the line) | The telecode's transmitter routed by the RK-1U (`radio_sets.hpp`); the line's far end rung, a bell and ВЫЗОВ at the other telephone (`voice_comms.hpp`) |
+
+Each item, when built: its controls' notes say what they do, `button_map.py` moves them out of inert, a test proves the
+effect, and `helper_coverage` shows no new gap.
+
 ## Electromagnetic (EM) track
 
 Radar, passive sensing, EW, communications and command as one simulated environment
