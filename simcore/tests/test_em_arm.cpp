@@ -68,6 +68,31 @@ struct ArmRange {
 
 }  // namespace
 
+SC_TEST("em arm: a launch that makes the platform list grow still names and places the missile by its carrier") {
+    // The missile's platform is pushed onto the scene's list, which reallocates when it is full: nothing may be read
+    // through the carrier's old pointer, or an aim point given as a platform's own position, after that (a raid's
+    // launches once logged from freed memory, test_air_war A11).
+    ArmRange r(7);
+    SC_EXPECT(r.ok);
+    if (!r.ok) return;
+    EmScene& s = r.world.Scene();
+    s.platforms.shrink_to_fit();  // full: the next push reallocates
+    const Vec3 from = s.FindPlatform(r.shooter)->position;
+    const int id = r.world.FireArm(r.shooter, "agm88a_class_harm", s.FindPlatform(r.radar_platform)->position, 7.0e9, 2800.0);
+    SC_EXPECT(id != 0);
+    const ArmState* a = s.FindArm(id);
+    SC_EXPECT(a != nullptr);
+    if (a == nullptr) return;
+    const Platform* m = s.FindPlatform(a->platform_id);
+    SC_EXPECT(m != nullptr && (m->position - from).Length() < 1e-6);
+    SC_EXPECT(a->loft_s > 0.0 && a->loft_s < 60.0);
+    if (!(a->loft_s > 0.0 && a->loft_s < 60.0))
+        std::printf("    loft %.3f s; from (%.0f, %.0f, %.0f)\n", a->loft_s, from.x, from.y, from.z);
+    bool named = false;
+    for (const EmEvent& e : s.events) named = named || (e.subject == id && e.text.rfind("Carrier fires ", 0) == 0);
+    SC_EXPECT(named);
+}
+
 SC_TEST("em arm: the library's ARM classes load with their bands, memory and ranges") {
     EmLibrary lib;
     const EmLoadResult r = LoadEmLibraryFile(kData + "/em/nato_1985.json", lib);
