@@ -316,6 +316,20 @@ SC_TEST("drill master: from a state halfway through, it plans only what is left"
     SC_EXPECT(!HasAction(tl, "driver", "pwr.gta") && HasAction(tl, "senior_operator", "soc.hv"));
 }
 
+SC_TEST("drill master: a mode latched off is undone the cheaper way: after ОТКЛ. НАГР. the driver presses ГТА") {
+    Osa o;
+    ConsoleData& c = o.console;
+    c.equipment.SetInput("vehicle_stopped", true);
+    c.panel.Set("gta.loads_off", 1);
+    c.equipment.Update(0.1, c.panel);
+    c.panel.ReleaseMomentaries();
+    SC_EXPECT(c.equipment.IsReady("loads_off"));
+    const DrillMaster dm(c, &o.crew);
+    const IdealTimeline tl = dm.Ideal(TaskOf(o, "ready_halted"), c);
+    SC_EXPECT(tl.reached);
+    SC_EXPECT(HasAction(tl, "driver", "gta.load_gta") && !HasAction(tl, "driver", "gta.load_ivp"));
+}
+
 SC_TEST("drill master: a crew's part of a capture is planned; the run then waits for the world (the target)") {
     Osa o;
     o.console.equipment.SetInput("vehicle_stopped", true);

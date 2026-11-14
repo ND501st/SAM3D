@@ -382,9 +382,20 @@ struct CabinPictureControls {
     std::string brightness_2;
     std::string focus_2;
     std::string gate;
+    std::string astig;         // the spot's astigmatism (astig_2): smeared as by focus
+    std::string astig_2;
+    std::string hshift;        // the trace moved across the screen (ГОРИЗ. СМЕЩ.; the second sweep's hshift_2)
+    std::string vshift;        // and up and down (ВЕРТ. СМЕЩ.; vshift_2)
+    std::string hshift_2;
+    std::string vshift_2;
+    std::vector<Condition> gain_when;  // the gain knob works only while these hold (controls only: РРУ, not АРУ);
+                                       // otherwise the automatic gain control holds the set-up picture
+    std::string gain_boost;    // a switch: off its first position the gain is raised (ДОП. УСИЛ.)
     bool Any() const {
         return !(brightness.empty() && focus.empty() && contrast.empty() && marks.empty() && cursor.empty() && gain.empty() &&
-                 scale_light.empty() && brightness_2.empty() && focus_2.empty() && gate.empty());
+                 scale_light.empty() && brightness_2.empty() && focus_2.empty() && gate.empty() && astig.empty() &&
+                 astig_2.empty() && hshift.empty() && vshift.empty() && hshift_2.empty() && vshift_2.empty() &&
+                 gain_boost.empty());
     }
 };
 
@@ -508,8 +519,12 @@ struct ScopePicture {
     double contrast = 1.0;     // echoes against the noise: 0.3 flat .. 1.7 hard
     double blur = 0.0;         // the spot smeared: 0 sharp .. 1 a blur several spots wide (focus off, or overdriven)
     double blur_2 = 0.0;
-    double gain = 1.0;         // the receiver's gain, 0..1 of full
+    double gain = 1.0;         // the receiver's gain, 0..1 of full (more with the extra gain switched in)
     double scale_light = 1.0;  // the scale's lamps, 0 dark .. 1 full
+    double shift_x = 0.0;      // the trace moved right, a fraction of the screen's width (shift_x_2: the second sweep's)
+    double shift_y = 0.0;      // and up, a fraction of its height
+    double shift_x_2 = 0.0;
+    double shift_y_2 = 0.0;
 };
 
 // The curves (SAM3D's choice, not from a source; the sources say only what each knob is for): a brightness knob is dark
@@ -533,6 +548,11 @@ inline double PictureBlur(double k) {
     const double b = std::fabs(k - 0.5) / 0.3;
     return b > 1.0 ? 1.0 : b;
 }
+// A shift knob moves the trace a tenth of the screen either way from its middle; the extra gain raises the gain by half
+// (SAM3D's choices: the sources say only what each control is for).
+inline constexpr double kPictureShift = 0.1;
+inline constexpr double kPictureGainBoost = 1.5;
+inline double PictureShift(double k) { return (k - 0.5) * 2.0 * kPictureShift; }
 
 inline ScopePicture ScopePictureOf(const CabinDisplay& d, const ControlPanel& panel) {
     ScopePicture p;
@@ -554,10 +574,19 @@ inline ScopePicture ScopePictureOf(const CabinDisplay& d, const ControlPanel& pa
     if (!c.contrast.empty()) p.contrast = 0.3 + 1.4 * knob(c.contrast);
     const double focus = c.focus.empty() ? 0.0 : PictureBlur(knob(c.focus));
     const double focus_2 = c.focus_2.empty() ? 0.0 : PictureBlur(knob(c.focus_2));
-    p.blur = std::fmin(1.0, focus + bloom);
-    p.blur_2 = std::fmin(1.0, focus_2 + bloom_2);
-    if (!c.gain.empty()) p.gain = knob(c.gain);
+    const double astig = c.astig.empty() ? 0.0 : PictureBlur(knob(c.astig));
+    const double astig_2 = c.astig_2.empty() ? 0.0 : PictureBlur(knob(c.astig_2));
+    p.blur = std::fmin(1.0, focus + astig + bloom);
+    p.blur_2 = std::fmin(1.0, focus_2 + astig_2 + bloom_2);
+    bool manual_gain = true;
+    for (const Condition& w : c.gain_when) manual_gain = manual_gain && ControlConditionHolds(w, panel);
+    if (!c.gain.empty() && manual_gain) p.gain = knob(c.gain);
+    if (!c.gain_boost.empty() && panel.Get(c.gain_boost) != 0) p.gain *= kPictureGainBoost;
     if (!c.scale_light.empty()) p.scale_light = knob(c.scale_light);
+    if (!c.hshift.empty()) p.shift_x = PictureShift(knob(c.hshift));
+    if (!c.vshift.empty()) p.shift_y = PictureShift(knob(c.vshift));
+    if (!c.hshift_2.empty()) p.shift_x_2 = PictureShift(knob(c.hshift_2));
+    if (!c.vshift_2.empty()) p.shift_y_2 = PictureShift(knob(c.vshift_2));
     return p;
 }
 
@@ -1634,18 +1663,34 @@ private:
             const std::string p = Join(path, "picture");
             CabinPictureControls& c = disp.picture;
             if (!Keys(*pic, p, {"brightness", "focus", "contrast", "marks", "cursor", "gain", "scale_light", "brightness_2",
-                                "focus_2", "gate", "notes"}) ||
+                                "focus_2", "gate", "astig", "astig_2", "hshift", "vshift", "hshift_2", "vshift_2",
+                                "gain_when", "gain_boost", "notes"}) ||
                 !OptionalString(*pic, p, "brightness", c.brightness) || !OptionalString(*pic, p, "focus", c.focus) ||
                 !OptionalString(*pic, p, "contrast", c.contrast) || !OptionalString(*pic, p, "marks", c.marks) ||
                 !OptionalString(*pic, p, "cursor", c.cursor) || !OptionalString(*pic, p, "gain", c.gain) ||
                 !OptionalString(*pic, p, "scale_light", c.scale_light) || !OptionalString(*pic, p, "brightness_2", c.brightness_2) ||
-                !OptionalString(*pic, p, "focus_2", c.focus_2) || !OptionalString(*pic, p, "gate", c.gate)) {
+                !OptionalString(*pic, p, "focus_2", c.focus_2) || !OptionalString(*pic, p, "gate", c.gate) ||
+                !OptionalString(*pic, p, "astig", c.astig) || !OptionalString(*pic, p, "astig_2", c.astig_2) ||
+                !OptionalString(*pic, p, "hshift", c.hshift) || !OptionalString(*pic, p, "vshift", c.vshift) ||
+                !OptionalString(*pic, p, "hshift_2", c.hshift_2) || !OptionalString(*pic, p, "vshift_2", c.vshift_2) ||
+                !OptionalString(*pic, p, "gain_boost", c.gain_boost) ||
+                !LoadConditions(*pic, p, "gain_when", console.panel, console.equipment, c.gain_when)) {
                 return false;
+            }
+            for (const Condition& w : c.gain_when) {
+                if (!IsControlCondition(w)) return Fail(Join(p, "gain_when"), "only controls' positions");
+            }
+            if (!c.gain_when.empty() && c.gain.empty()) return Fail(Join(p, "gain_when"), "needs a gain knob");
+            if (!c.gain_boost.empty()) {
+                const ControlDef* def = console.panel.Find(c.gain_boost);
+                if (def == nullptr) return Fail(Join(p, "gain_boost"), "unknown control '" + c.gain_boost + "'");
+                if (def->kind != ControlKind::Discrete) return Fail(Join(p, "gain_boost"), "'" + c.gain_boost + "' is not a switch");
             }
             const std::pair<const char*, const std::string*> knobs[] = {
                 {"brightness", &c.brightness}, {"focus", &c.focus}, {"contrast", &c.contrast}, {"marks", &c.marks},
                 {"cursor", &c.cursor}, {"gain", &c.gain}, {"scale_light", &c.scale_light}, {"brightness_2", &c.brightness_2},
-                {"focus_2", &c.focus_2}, {"gate", &c.gate}};
+                {"focus_2", &c.focus_2}, {"gate", &c.gate}, {"astig", &c.astig}, {"astig_2", &c.astig_2},
+                {"hshift", &c.hshift}, {"vshift", &c.vshift}, {"hshift_2", &c.hshift_2}, {"vshift_2", &c.vshift_2}};
             for (const auto& k : knobs) {
                 if (k.second->empty()) continue;
                 const ControlDef* def = console.panel.Find(*k.second);

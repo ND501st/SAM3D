@@ -62,7 +62,7 @@ PLANNED = {
         # photo, or in the sources only.
         ('p:fk_meters', '0004-12M1 meters ИП1, ИП2 and lamp КЗ', 'on the model, not wired', 'On SŁ-1M in the mesh; the fk.* switches are placed but nothing reads them (voenizdat_osa_1991 p162).', ['s:function_check'], 'missing'),
         ('p:0062', '0062-6M1 meter КОНТРОЛЬ and button ПОДЖИГ ГШ', 'on the model, not wired', 'ТОК and МОЩНОСТЬ now read the transmitter mon.tx_select chooses; the noise check (КОНТРОЛЬ, ПОДЖИГ ГШ, КАНАЛЫ, РЕЖИМЫ) is not modelled (voenizdat_osa_1991 p49-51).', ['s:function_check'], 'missing'),
-        ('p:pu303', 'PU-303: the load buttons, СТОП, ХОЛ. ПРОКР., the hour counters', 'on the model, not wired', 'The lamps and the ГТА and ТВГ gauges now work; the loads go on line with their source, so ВКЛЮЧЕНИЕ НАГРУЗОК, ОТКЛ. НАГР., СТОП and ХОЛ. ПРОКР. still do nothing (wiring them changes the power-on drill).', ['c:gta.load_gta', 'c:gta.load_ivp', 'c:gta.stop'], 'missing'),
+        ('p:pu303', 'PU-303: ХОЛ. ПРОКР., the hour counters', 'on the model, not wired', 'The lamps, the ГТА and ТВГ gauges, the load buttons (ОТКЛ. НАГР. takes the loads off until ГТА or ИВП puts them back: subsystem loads_off) and СТОП (gta_stopped, until ПУСК is put off) work; the cold cranking and the hour counters wait for a model of the turbine start.', ['c:gta.cold_crank'], 'missing'),
         ('p:dash', "Driver's dash: speed, coolant, tacho, oil, ammeter, hours; lamps БОРТ. СЕТЬ, ПОВОРОТ", 'on the model, not wired', 'BAZ dash gauges drawn from g085-a with their scales; only the fuel gauge works.', ['i:vehicle_stopped'], 'missing'),
         ('p:bort_off', 'БОРТ СПК ОТКЛ. as its own push-button', 'on the model, not wired', 'Drawn beside the guarded БОРТ СПК ВКЛ.; one switch fo.bort_spk stands for both (voenizdat_osa_1991 p119-121).', ['c:fo.bort_spk'], 'missing'),
         ('p:faults', 'Fault lamps: ОТКАЗ СРП, ОТКАЗ Qc, ОБРЫВ ФАЗЫ, НЕИСПРАВНОСТЬ', 'on the model, not wired', "Drawn and dark, which is right while no such fault is modelled (voenizdat_osa_1991 p50-52, p100, p121); the PU-303's fault lamps light on its lamp test.", ['s:power', 's:gyro_erected'], 'missing'),
@@ -231,7 +231,8 @@ class MapBuilder:
                           latching=s.get("latching", False), start_ready=s.get("start_ready", False),
                           start_s=(s.get("start_time_s") or {}).get("value"), stop_s=(s.get("stop_time_s") or {}).get("value"),
                           source=s.get("source"), conf=s.get("confidence"), notes=s.get("notes"))
-            for key, kind in (("enable", "enable"), ("enable_any", "any"), ("prerequisites", "prereq"), ("release", "release")):
+            for key, kind in (("enable", "enable"), ("enable_any", "any"), ("prerequisites", "prereq"), ("release", "release"),
+                              ("release_any", "release")):
                 for cond in s.get(key, []):
                     self.add_cond(cond, "s:" + s["id"], kind)
 
@@ -268,11 +269,13 @@ class MapBuilder:
             self.add_node("d:" + d["id"], t="display", label=d["label"], dkind=d["kind"], panel=d["panel"],
                           panel_label=pnl.get("label"), station=pnl.get("station"),
                           source=d.get("source"), conf=d.get("confidence"), notes=d.get("notes"))
-            for cond in d.get("on_when") or []:
+            for cond in (d.get("on_when") or []) + (d.get("lit_when") or []):   # powered; its own lamps
                 self.add_cond(cond, "d:" + d["id"], "lit")
             for key, val in (d.get("picture") or {}).items():   # the picture's potentiometers (CabinDisplay::picture)
                 if isinstance(val, str) and val in self.ctrl:
                     self.add_edge("c:" + val, "d:" + d["id"], "picture", f"sets the picture's {key.replace('_', ' ')}")
+            for cond in (d.get("picture") or {}).get("gain_when") or []:   # the gain by hand only at РРУ
+                self.add_cond(cond, "d:" + d["id"], "picture")
             cs = d.get("course_scale") or {}
             if cs.get("control") in self.ctrl:
                 self.add_edge("c:" + cs["control"], "d:" + d["id"], "picture", "lights the engraved course scale")
@@ -334,7 +337,7 @@ class MapBuilder:
             self.add_node("m:track", t="model", label="Tracking radar and TV channel", notes=track.get("notes"),
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:track", [("s:", k, track, k) for k in ("transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode")]
-                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control",
+                  + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "slew_control", "fov_control", "mti_control",
                                                          "rgpo_control")])
             if es:
                 self.add_edge("m:elev", "m:track", "feed", "elevation search")
@@ -348,7 +351,8 @@ class MapBuilder:
                                ("c:", "mode_control", orient, "mode switch"), ("c:", "relay_control", orient, "relay switch"),
                                ("c:", "sync_button", orient, "fast sync"),
                                ("c:", "latitude_control", orient, "latitude correction (drift)"),
-                               ("c:", "compass_control", orient, "compass mode: МК — ГПК — АК")])
+                               ("c:", "compass_control", orient, "compass mode: МК — ГПК — АК"),
+                               ("c:", "consumers_control", orient, "ПОТРЕБИТЕЛИ: the setter connected to the gyro")])
             for key in ("synced_input", "qc_known_input", "oriented_input"):
                 if orient.get(key):
                     self.add_edge("m:orient", "i:" + orient[key], "signal", "sets this signal")

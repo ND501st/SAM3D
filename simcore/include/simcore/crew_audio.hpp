@@ -11,6 +11,8 @@
 // The voices themselves are the callouts (CalloutBus::SpeakingNow) and the designations heard
 // (ScenarioRunner::DesignationsHeard). Levels are 0..1, SAM3D's mix: hiss 0.35 open, 0.05 under a carrier, each times
 // the set's ГРОМКОСТЬ (`volume`, which the presentation applies to the set's voices too).
+// A box with its own ГРОМКОСТЬ (the A-1's knob) sets the level of everything its seat hears in the headset, intercom and
+// set alike (HeadsetLevel).
 #pragma once
 
 #include "simcore/scenario_runner.hpp"
@@ -24,7 +26,20 @@ struct HeadsetSound {
     bool tone = false;       // the call tone
     bool squelched = false;  // the noise suppressor is on
     double volume = 1.0;     // the set's ГРОМКОСТЬ, 0..1: the hiss and the voices on the set are heard at this level
+    double box_level = 1.0;  // the A-1's own ГРОМКОСТЬ (HeadsetLevel), already in `hiss`
 };
+
+// The level a seat's box puts its headset at, 0..1: the box's ГРОМКОСТЬ (`volume`) while the headset is on, else 1
+// (no box, no knob, or the headset off: what he hears comes through the air).
+inline double HeadsetLevel(const ConsoleData& c, const std::string& station) {
+    if (!c.has_voice) return 1.0;
+    for (const VoiceBoxDef& b : c.voice.boxes) {
+        if (b.station != station) continue;
+        if (b.volume.empty() || c.panel.Get(b.headset) != 1) return 1.0;
+        return std::clamp(VolumeLevel(c.panel, b.volume), 0.0, 1.0);
+    }
+    return 1.0;
+}
 
 inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) {
     HeadsetSound out;
@@ -52,6 +67,13 @@ inline HeadsetSound HeadsetSoundNow(const ScenarioRunner& r) {
         out.hiss = out.squelched ? 0.0 : 0.35;
     }
     out.hiss *= out.volume;
+    // and the commander's box's own ГРОМКОСТЬ (the A-1's knob), as for every line in his headset
+    if (c.has_voice) {
+        for (const VoiceBoxDef& b : c.voice.boxes) {
+            if (!c.comms.commander.empty() && b.selector == c.comms.commander) out.box_level = HeadsetLevel(c, b.station);
+        }
+    }
+    out.hiss *= out.box_level;
     return out;
 }
 

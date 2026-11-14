@@ -103,7 +103,7 @@ Written by `tools/button_map.py pu12m` from the console (`data/procedures/pu12m.
 | r123_fug4_panel | R-123M (FuG-4): ГРОМКОСТЬ | `radio.fug4.volume` | Radiotelephone operator (No. 3) | Voices: the intercom boxes, headsets, sets and telephone |
 | r407_panel | R-407: АПЧ | `radio.fug5.apch` | Battery commander | The radio sets worked as sets |
 | r407_panel | R-407: УЗКАЯ / ШИРОКАЯ | `radio.fug5.band` | Battery commander | The radio sets worked as sets |
-| r407_panel | R-407: КАЛИБРАТОР – СВЕТ | `radio.fug5.calibrator` | Battery commander | The radio sets worked as sets |
+| r407_panel | R-407: КАЛИБРАТОР – СВЕТ | `radio.fug5.calibrator` | Battery commander | The radio sets worked as sets; ПЕРЕДАТЧИК; ПРИЕМНИК |
 | r407_panel | R-407: ВЫЗОВ | `radio.fug5.call` | Battery commander | The radio sets worked as sets |
 | r407_panel | R-407: the modes switch (the channel's terminals) | `radio.fug5.lines` | Battery commander | The radio sets worked as sets |
 | r407_panel | R-407: ИЗМЕРИТ. УРОВЕНЬ | `radio.fug5.measure` | Battery commander | The radio sets worked as sets |

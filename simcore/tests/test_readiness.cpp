@@ -158,3 +158,139 @@ SC_TEST("readiness: a deployed vehicle's reaction time, detection to launch, is 
     SC_EXPECT(contact > 0.0 && launch > 0.0);
     SC_EXPECT(launch - contact >= 26.0 && launch - contact <= 40.0);
 }
+
+SC_TEST("readiness: the stabilisation's drives, СТОП, the loads and СВЯЗЬ act on a deployed Osa") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    const Equipment& e = c.equipment;
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    auto press = [&](const char* id) {
+        c.panel.Set(id, 1);
+        r->Step(0.1);  // seen once by the equipment, then let go
+    };
+    run(1.0);
+    SC_EXPECT(e.IsReady("stabilisation") && e.IsReady("search_antenna") && e.IsReady("gta") && e.IsReady("power"));
+
+    // 0009-5M (voenizdat_osa_1991 p51): ПРИВОД Ψ, ПРИВОД γ or +27 В off stops the stabilisation, and the search with it.
+    for (const char* sw : {"drv.psi_service", "drv.gamma_service", "drv.plus27"}) {
+        c.panel.Set(sw, 0);
+        run(1.0);
+        SC_EXPECT(!e.IsReady("stabilisation") && !e.IsReady("search_antenna"));
+        c.panel.Set(sw, 1);
+        run(200.0);  // the stabilisation's 3 min start
+        SC_EXPECT(e.IsReady("stabilisation"));
+    }
+
+    // PU-303: СТОП stops the turbine until ПУСК is put off; the take-off generator keeps the power on meanwhile.
+    press("gta.stop");
+    run(5.0);
+    SC_EXPECT(!e.IsReady("gta") && e.IsReady("power"));
+    c.panel.Set("pwr.gta", 0);
+    run(1.0);
+    c.panel.Set("pwr.gta", 1);
+    run(70.0);  // the ГТА's start
+    SC_EXPECT(e.IsReady("gta"));
+
+    // ОТКЛ. НАГР. takes the loads off: no power until ГТА (or ИВП) puts them back.
+    press("gta.loads_off");
+    run(1.0);
+    SC_EXPECT(!e.IsReady("power") && e.IsReady("gta"));
+    press("gta.load_gta");
+    run(1.0);
+    SC_EXPECT(e.IsReady("power"));
+
+    // СВЯЗЬ on the driver's strip: the sets and the intercom lose their 27 V.
+    SC_EXPECT(e.IsReady("r123m_left") && e.IsReady("r124_intercom"));
+    c.panel.Set("veh.comms_power", 0);
+    run(1.0);
+    SC_EXPECT(!e.IsReady("r123m_left") && !e.IsReady("r123m_right") && !e.IsReady("r124_intercom"));
+}
+
+SC_TEST("readiness: ТРЕНИРОВКА keeps the transmitters off the air; АВТОМАТ, ПОЛУАВТОМАТ and РУЧНОЕ set the range's source") {
+    // The console alone, warmed up: a crew would keep a deployed vehicle's radars silent.
+    ConsoleData c;
+    std::string error;
+    SC_EXPECT(LoadConsoleFile(kData + "/procedures/osa_ak.json", c, &error));
+    Equipment& e = c.equipment;
+    e.SetInput("vehicle_stopped", true);
+    for (const char* on : {"pwr.gta", "pwr.equipment", "soc.hv_cover", "soc.hv", "ssc.tx_cover", "ssc.tx"}) {
+        SC_EXPECT(c.panel.Set(on, 1));
+    }
+    for (const std::string& s : e.UnitIds()) {
+        e.Warm(s, c.panel);
+        e.Update(0.0, c.panel);
+    }
+    auto step = [&] {
+        e.Update(0.1, c.panel);
+        c.panel.ReleaseMomentaries();
+    };
+    auto press = [&](const char* id) {
+        c.panel.Set(id, 1);
+        step();
+    };
+    step();
+    SC_EXPECT(e.IsReady("soc_transmitter") && e.IsReady("ssc_transmitter"));
+
+    // 0091-18 (voenizdat_osa_1991 p49, p97): at ТРЕНИРОВКА the high voltage is lowered to train the magnetron.
+    c.panel.Set("soc.training", 0);
+    c.panel.Set("ssc.training", 0);
+    step();
+    SC_EXPECT(!e.IsReady("soc_transmitter") && !e.IsReady("ssc_transmitter"));
+    c.panel.Set("soc.training", 1);
+    c.panel.Set("ssc.training", 1);
+    step();
+    SC_EXPECT(e.IsReady("soc_transmitter") && e.IsReady("ssc_transmitter"));
+
+    // OS81-18M (p98): АВТОМАТ puts the range on the radar as ПОЛУАВТОМАТ does; РУЧНОЕ gives it back to the wheel.
+    SC_EXPECT(!e.IsReady("range_semi_auto"));
+    press("ro.auto");
+    SC_EXPECT(e.IsReady("range_semi_auto"));
+    step();
+    SC_EXPECT(e.IsReady("range_semi_auto"));  // latched
+    press("ro.manual");
+    SC_EXPECT(!e.IsReady("range_semi_auto"));
+    press("ro.semi_auto");
+    SC_EXPECT(e.IsReady("range_semi_auto"));
+    c.panel.Set("ssc.tx", 0);  // and the transmitter off ends it, as before
+    step();
+    SC_EXPECT(!e.IsReady("range_semi_auto"));
+}
+
+SC_TEST("readiness: ВЛЕВО — ВПРАВО slews the antenna at its rate while the drives are on and the wheel unlocked") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("senior_operator", "player"));  // nobody else turns the azimuth
+    ConsoleData& c = r->Console();
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    run(1.0);
+    SC_EXPECT(c.equipment.IsReady("antenna_drives"));
+    SC_EXPECT_NEAR(c.track.slew_rate_deg_s, 30.0, 1e-9);
+    c.panel.Set("ssc.az_lock", 1);
+    const double az0 = c.panel.GetValue("ssc.az_wheel");
+    // OS52-12M1 (voenizdat_osa_1991 p99): the АПУ's fast slew; 30°/s, SAM Simulator's.
+    c.panel.Set("ssc.slew", 2);  // ВПРАВО
+    run(2.0);
+    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 60.0, 1.0);
+    c.panel.Set("ssc.slew", 0);  // ВЛЕВО
+    run(1.0);
+    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
+    c.panel.Set("ssc.slew", 1);  // 0: it stops
+    run(1.0);
+    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
+    // With the wheel locked, or the drives off, the lever does nothing.
+    c.panel.Set("ssc.az_lock", 0);
+    c.panel.Set("ssc.slew", 2);
+    run(1.0);
+    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
+    c.panel.Set("ssc.slew", 1);
+    c.panel.Set("ssc.az_lock", 1);
+    c.panel.Set("drv.az", 0);
+    run(1.0);
+    SC_EXPECT(!c.equipment.IsReady("antenna_drives"));
+    c.panel.Set("ssc.slew", 2);
+    run(1.0);
+    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
+}

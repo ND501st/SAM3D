@@ -9,7 +9,8 @@
 // A subsystem is commanded on when all of `enable` hold and, if `enable_any` is
 // not empty, at least one of `enable_any` holds. A latching subsystem (a mode
 // engaged by a push-button, like the Osa's ЦУ АЗ) stays commanded after its
-// enable conditions pass, until all of `release` hold.
+// enable conditions pass, until all of `release` hold or any one of `release_any` does (the Osa's range finder: a
+// press of РУЧНОЕ ends ПОЛУАВТОМАТ as surely as switching the transmitter off).
 // `prerequisites` must hold while starting or running, otherwise it faults.
 // Progress runs 0..1: it rises over `start_time_s` and falls over `stop_time_s`,
 // so reversing half-way (e.g. lowering a half-raised mast) takes only the time
@@ -112,7 +113,8 @@ struct SubsystemDef {
     double stop_time_s = 0.0;              // cool-down / stow time
     std::vector<Condition> enable_any;     // if not empty, at least one must also hold
     bool latching = false;                 // stays commanded once enabled, until `release`
-    std::vector<Condition> release;        // latching only; all true = commanded off (must not be empty)
+    std::vector<Condition> release;        // latching only; all true = commanded off
+    std::vector<Condition> release_any;    // latching only; any one true = commanded off too (one of the two is needed)
     bool start_ready = false;              // starts the session ready (not for latching subsystems)
 };
 
@@ -154,10 +156,10 @@ public:
     bool AddSubsystem(const SubsystemDef& def, const ControlPanel& panel) {
         if (def.id.empty() || index_.count(def.id) != 0) return false;
         if (def.start_time_s < 0.0 || def.stop_time_s < 0.0) return false;
-        if (def.latching == def.release.empty()) return false;
+        if (def.latching == (def.release.empty() && def.release_any.empty())) return false;
         if (def.start_ready && def.latching) return false;
         if (!RefsValid(def.enable, panel) || !RefsValid(def.prerequisites, panel) ||
-            !RefsValid(def.enable_any, panel) || !RefsValid(def.release, panel)) {
+            !RefsValid(def.enable_any, panel) || !RefsValid(def.release, panel) || !RefsValid(def.release_any, panel)) {
             return false;
         }
         index_[def.id] = units_.size();
@@ -284,11 +286,16 @@ private:
         return true;
     }
 
+    // A latching subsystem's release: all of `release` (when it has any) or one of `release_any`.
+    bool Released(const SubsystemDef& def, const ControlPanel& panel) const {
+        return (!def.release.empty() && AllHold(def.release, panel)) || AnyHolds(def.release_any, panel);
+    }
+
     bool Commanded(Unit& u, const ControlPanel& panel) {
         const bool enabled =
             AllHold(u.def.enable, panel) && (u.def.enable_any.empty() || AnyHolds(u.def.enable_any, panel));
         if (!u.def.latching) return enabled;
-        if (u.latched && AllHold(u.def.release, panel)) {
+        if (u.latched && Released(u.def, panel)) {
             u.latched = false;
         } else if (!u.latched && enabled) {
             u.latched = true;

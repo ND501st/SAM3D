@@ -294,7 +294,11 @@ def build(out_path):
         if s.get("enable_any"):
             on.append("any of: " + " / ".join(condition_text(c) for c in s["enable_any"]))
         if s.get("latching"):
-            on.append("<b>latching</b>; released by " + ", ".join(condition_text(c) for c in s["release"]))
+            released = ", ".join(condition_text(c) for c in s.get("release", []))
+            if s.get("release_any"):
+                released = (released + "; or by " if released else "") + "any of: " + " / ".join(
+                    condition_text(c) for c in s["release_any"])
+            on.append("<b>latching</b>; released by " + released)
         pre = ", ".join(condition_text(c) for c in s.get("prerequisites", [])) or "—"
         t_start = s.get("start_time_s", {}).get("value")
         t_stop = s.get("stop_time_s", {}).get("value")

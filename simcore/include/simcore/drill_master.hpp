@@ -509,7 +509,27 @@ private:
                 }
                 if (c.state == SubsystemState::Off) {
                     if (d->latching) {
-                        for (const Condition& n : d->release) Expand(x, n, up);
+                        // Released by all of `release` or by one of `release_any`: the cheaper way.
+                        double all_cost = d->release.empty() ? 1e18 : 0.0;
+                        for (const Condition& n : d->release) {
+                            std::set<std::string> seen;
+                            all_cost += Cost(x, n, seen);
+                        }
+                        const Condition* best = nullptr;
+                        double best_cost = all_cost;
+                        for (const Condition& n : d->release_any) {
+                            std::set<std::string> seen;
+                            const double cost = Cost(x, n, seen);
+                            if (cost < best_cost) {
+                                best_cost = cost;
+                                best = &n;
+                            }
+                        }
+                        if (best != nullptr) {
+                            Expand(x, *best, up);
+                        } else {
+                            for (const Condition& n : d->release) Expand(x, n, up);
+                        }
                         return;
                     }
                     // Switch it off by its cheapest control: the position a drill sets it back to.

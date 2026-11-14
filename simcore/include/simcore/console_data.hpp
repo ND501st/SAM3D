@@ -87,6 +87,10 @@ struct OrientationDef {
     // with it at `compass_position`; anywhere else its orientation is lost, as without power.
     std::string compass_control;
     int compass_position = 0;
+    // The switch that connects the course setter to the gyro (optional; the Osa's ПОТРЕБИТЕЛИ ОСН. — КОНТР. on 0005-8M):
+    // the gyro is slaved to the setter only with it at `consumers_position`.
+    std::string consumers_control;
+    int consumers_position = 0;
 };
 
 struct TrackSensorDef {
@@ -100,6 +104,11 @@ struct TrackSensorDef {
     std::string el_wheel;
     std::string range_wheel;
     std::string lock_control;    // lock that must be open before the aiming crew can turn the azimuth wheel
+    // The fast slew lever (optional; the Osa's ВЛЕВО — 0 — ВПРАВО on OS52-12M1): three positions; off its middle it turns
+    // the antenna, the azimuth wheel's reading, left (position 0, anticlockwise) or right at slew_rate_deg_s while the
+    // antenna is free to turn, its wheel unlocked and no target held.
+    std::string slew_control;
+    double slew_rate_deg_s = 0.0;
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
     std::string mti_control;     // tracking radar СДЦ / ШТ.: 1 = moving-target indication (may be empty)
     // Counter-jamming (roadmap 9.4): the switch of the circuit against a range-gate pull-off that walks the gate out
@@ -223,6 +232,7 @@ struct VoiceBoxDef {
     std::string circular;              // the circular call button (ЦИРКУЛЯР)
     std::string power;                 // a subsystem this box needs besides the network's ("" : none)
     bool keeps_intercom = false;       // on a set it still hears and talks on the intercom (the commander's A-1, the RTK-1)
+    std::string volume;                // the box's ГРОМКОСТЬ, a knob (the A-1's): the headset's level (crew_audio.hpp)
 };
 
 struct VoicePhoneDef {
@@ -1272,7 +1282,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const json::Value& e = boxes->items[i];
             VoiceBoxDef b;
             if (!Keys(e, bp, {"id", "name", "station", "headset", "selector", "positions", "radio", "radio_select", "radio_select_sets",
-                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "notes"}) ||
+                              "monitor", "monitor_positions", "lines", "circular", "power", "keeps_intercom", "volume", "notes"}) ||
                 !RequireString(e, bp, "id", b.id) || !RequireString(e, bp, "name", b.name) || !RequireString(e, bp, "station", b.station) ||
                 !RefControl(e, bp, "headset", out.panel, ControlKind::Discrete, true, b.headset) ||
                 !RefControl(e, bp, "selector", out.panel, ControlKind::Discrete, false, b.selector) ||
@@ -1280,7 +1290,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !RefControl(e, bp, "radio_select", out.panel, ControlKind::Discrete, false, b.radio_select) ||
                 !RefControl(e, bp, "monitor", out.panel, ControlKind::Discrete, false, b.monitor) ||
                 !RefControl(e, bp, "circular", out.panel, ControlKind::Momentary, false, b.circular) ||
-                !RefSubsystem(e, bp, "power", eq, false, b.power) || !OptionalBool(e, bp, "keeps_intercom", b.keeps_intercom)) {
+                !RefSubsystem(e, bp, "power", eq, false, b.power) || !OptionalBool(e, bp, "keeps_intercom", b.keeps_intercom) ||
+                !RefControl(e, bp, "volume", out.panel, ControlKind::Continuous, false, b.volume)) {
                 return false;
             }
             if (!station_known(b.station)) return Fail(Join(bp, "station"), "unknown station '" + b.station + "'");
@@ -1690,7 +1701,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
+                            "el_wheel", "range_wheel", "lock_control", "slew_control", "slew_rate_deg_s", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
                             "max_range_m", "az_limit_deg", "captured_input", "range_pulled_input", "tv_track_input", "too_low_input", "near_zone_input",
                             "in_zone_input", "crosshair_input", "slow_input", "slow_mps", "elevation_search", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
@@ -1703,6 +1714,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefControl(*tr, tp, "el_wheel", panel, ControlKind::Continuous, true, track.el_wheel) ||
             !RefControl(*tr, tp, "range_wheel", panel, ControlKind::Continuous, true, track.range_wheel) ||
             !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
+            !RefControl(*tr, tp, "slew_control", panel, ControlKind::Discrete, false, track.slew_control) ||
+            !OptionalNumber(*tr, tp, "slew_rate_deg_s", track.slew_rate_deg_s) ||
             !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
             !RefControl(*tr, tp, "mti_control", panel, ControlKind::Discrete, false, track.mti_control) ||
             !RefControl(*tr, tp, "rgpo_control", panel, ControlKind::Discrete, false, track.rgpo_control) ||
@@ -1719,6 +1732,14 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         if (track.max_range_m <= 0.0) return Fail(Join(tp, "max_range_m"), "must be > 0");
+        if (!track.slew_control.empty()) {
+            if (track.slew_rate_deg_s <= 0.0) return Fail(Join(tp, "slew_rate_deg_s"), "must be > 0 with a slew_control");
+            for (const ControlDef& c : panel.Controls()) {
+                if (c.id == track.slew_control && c.positions != 3) {
+                    return Fail(Join(tp, "slew_control"), "needs three positions: left, middle, right");
+                }
+            }
+        }
         if (const json::Value* fov = tr->Find("fov_deg")) {
             if (!fov->Is(json::Type::Array) || fov->items.size() != 2 || !fov->items[0].Is(json::Type::Number) ||
                 !fov->items[1].Is(json::Type::Number) || fov->items[0].number <= 0.0 || fov->items[1].number <= 0.0) {
@@ -1750,7 +1771,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
                           "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
                           "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
-                          "oriented_input", "compass_control", "compass_position", "source", "confidence", "notes"}) ||
+                          "oriented_input", "compass_control", "compass_position", "consumers_control", "consumers_position",
+                          "source", "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1769,8 +1791,14 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
             !RefInput(o, op, "oriented_input", eq, def.oriented_input) ||
             !RefControl(o, op, "compass_control", panel, ControlKind::Discrete, false, def.compass_control) ||
-            !OptionalInt(o, op, "compass_position", def.compass_position)) {
+            !OptionalInt(o, op, "compass_position", def.compass_position) ||
+            !RefControl(o, op, "consumers_control", panel, ControlKind::Discrete, false, def.consumers_control) ||
+            !OptionalInt(o, op, "consumers_position", def.consumers_position)) {
             return false;
+        }
+        if (!def.consumers_control.empty() &&
+            (def.consumers_position < 0 || def.consumers_position >= panel.Find(def.consumers_control)->positions)) {
+            return Fail(Join(op, "consumers_position"), "not a position of " + def.consumers_control);
         }
         if (!def.compass_control.empty() &&
             (def.compass_position < 0 || def.compass_position >= panel.Find(def.compass_control)->positions)) {
@@ -1850,7 +1878,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string path = Index("subsystems", i);
             const json::Value& s = arr->items[i];
             if (!Keys(s, path, {"id", "name", "enable", "enable_any", "prerequisites", "latching", "release",
-                                "start_ready", "start_time_s", "stop_time_s", "source", "confidence", "notes"})) {
+                                "release_any", "start_ready", "start_time_s", "stop_time_s", "source", "confidence", "notes"})) {
                 return false;
             }
             SubsystemDef def;
@@ -1861,12 +1889,16 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !LoadConditions(s, path, "enable_any", panel, eq, def.enable_any) ||
                 !LoadConditions(s, path, "prerequisites", panel, eq, def.prerequisites) ||
                 !LoadConditions(s, path, "release", panel, eq, def.release) ||
+                !LoadConditions(s, path, "release_any", panel, eq, def.release_any) ||
                 !LoadTime(s, path, "start_time_s", def.start_time_s) || !LoadTime(s, path, "stop_time_s", def.stop_time_s)) {
                 return false;
             }
             if (eq.Has(def.id)) return Fail(Join(path, "id"), "duplicate subsystem '" + def.id + "'");
-            if (def.latching && def.release.empty()) return Fail(path, "a latching subsystem needs release conditions");
+            if (def.latching && def.release.empty() && def.release_any.empty()) {
+                return Fail(path, "a latching subsystem needs release conditions");
+            }
             if (!def.latching && !def.release.empty()) return Fail(Join(path, "release"), "only for latching subsystems");
+            if (!def.latching && !def.release_any.empty()) return Fail(Join(path, "release_any"), "only for latching subsystems");
             if (!eq.AddSubsystem(def, panel)) return Fail(path, "invalid subsystem");
         }
         return true;

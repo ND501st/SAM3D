@@ -102,6 +102,10 @@ SC_TEST("comms: the Osa's comms block loads; bad ones are refused with paths") {
     SC_EXPECT(bad("\"shout_noisy_s\": 4.0", "\"shout_noisy_s\": 1.0", "comms.intercom.shout_noisy_s"));
     SC_EXPECT(bad("\"noisy\": [ \"gta\", \"pto_generator\" ]", "\"noisy\": [ \"gta\", \"ghost\" ]", "comms.intercom.noisy[1]"));
     SC_EXPECT(bad("\"antenna\": \"radio.left.antenna\"", "\"antenna\": \"radio.left.power\"", "comms.radios[0].antenna"));
+    // The A-1's ГРОМКОСТЬ is a knob; and a latching mode's release_any only for latching ones.
+    SC_EXPECT(c.has_voice && c.voice.boxes[0].volume == "intercom.a1_volume");
+    SC_EXPECT(bad("\"volume\": \"intercom.a1_volume\"", "\"volume\": \"intercom.a1\"", "voice.boxes[0].volume"));
+    SC_EXPECT(bad("\"latching\": true, \"release\": [ { \"control\": \"ssc.tx\", \"is\": 0 } ], ", "", "release_any: only for latching"));
 }
 
 SC_TEST("comms: the squelch and the antenna become losses from the published ranges (40 log10 of the ratio)") {
@@ -513,6 +517,18 @@ SC_TEST("comms 7.7: the headset hisses with the suppressor off, is quiet with it
     SC_EXPECT_NEAR(h.hiss, 0.35 * 0.8, 1e-12);       // the hiss through the volume potentiometer
     c.panel.SetValue("radio." + side + ".volume", 1.0);
     SC_EXPECT_NEAR(HeadsetSoundNow(*r).hiss, 0.35, 1e-12);
+    // The A-1's own ГРОМКОСТЬ, full up at the start, sets the level of all he hears in the headset (HeadsetLevel);
+    // with the headset off it is the cabin's air, at full level.
+    SC_EXPECT_NEAR(HeadsetLevel(c, "commander"), 1.0, 1e-12);
+    c.panel.SetValue("intercom.a1_volume", 0.5);
+    SC_EXPECT_NEAR(HeadsetLevel(c, "commander"), 0.5, 1e-12);
+    SC_EXPECT_NEAR(HeadsetSoundNow(*r).box_level, 0.5, 1e-12);
+    SC_EXPECT_NEAR(HeadsetSoundNow(*r).hiss, 0.35 * 0.5, 1e-12);
+    SC_EXPECT_NEAR(HeadsetLevel(c, "operator"), 1.0, 1e-12);  // A-4 has no knob
+    c.panel.Set("headset.commander", 0);
+    SC_EXPECT_NEAR(HeadsetLevel(c, "commander"), 1.0, 1e-12);
+    c.panel.Set("headset.commander", 1);
+    c.panel.SetValue("intercom.a1_volume", 1.0);
     c.panel.SetValue("radio." + side + ".volume", 0.8);
     c.panel.Set("radio." + side + ".squelch", 1);  // the suppressor: silence between transmissions
     Steps(*r, 0.5);

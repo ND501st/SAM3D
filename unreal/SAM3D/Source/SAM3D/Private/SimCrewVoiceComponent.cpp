@@ -232,16 +232,24 @@ void USimCrewVoiceComponent::Play(TArray<int16>&& Pcm, int32 SampleRate, const F
 	UAudioComponent* Audio = ChannelComponent(Channel);
 	Audio->Stop();
 	Audio->SetSound(Wave);
-	// A line on a radio net is heard through the set the headset is on, at its ГРОМКОСТЬ (simcore::HeadsetSound::volume).
+	// A line on a radio net is heard through the set the headset is on, at its ГРОМКОСТЬ (simcore::HeadsetSound::volume);
+	// every line in the headset at the player's box's own ГРОМКОСТЬ, the A-1's knob (simcore::HeadsetLevel).
 	float SetLevel = 1.0f;
-	if (Settings.radio)
 	{
 		const UWorld* World = GetWorld();
 		const USimWorldSubsystem* Sim = World ? World->GetSubsystem<USimWorldSubsystem>() : nullptr;
 		if (const simcore::ScenarioRunner* Runner = Sim ? Sim->GetScenarioRunner() : nullptr)
 		{
-			const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner);
-			SetLevel = H.on_radio ? static_cast<float>(H.volume) : 1.0f;
+			if (Settings.radio)
+			{
+				const simcore::HeadsetSound H = simcore::HeadsetSoundNow(*Runner);
+				SetLevel = H.on_radio ? static_cast<float>(H.volume) : 1.0f;
+			}
+			const ASimOsaVehicle* Vehicle = Cast<ASimOsaVehicle>(GetOwner());
+			if (Vehicle != nullptr)
+			{
+				SetLevel *= static_cast<float>(simcore::HeadsetLevel(Runner->Console(), std::string(TCHAR_TO_UTF8(*Vehicle->GetStationId()))));
+			}
 		}
 	}
 	Audio->SetVolumeMultiplier(FMath::Clamp(CVarVoiceVolume.GetValueOnGameThread(), 0.0f, 2.0f) * SetLevel);

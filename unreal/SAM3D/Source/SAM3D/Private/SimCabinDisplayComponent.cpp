@@ -621,7 +621,9 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 			DrawDial(Canvas, Size, Display, Console, bOn, simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
 			break;
 		case simcore::CabinDisplayKind::Meter:
-			DrawMeter(Canvas, Size, Display, Console, bOn);
+			// A meter without lamps of its own is read by the cabin's light, powered or not.
+			DrawMeter(Canvas, Size, Display, Console, bOn,
+				Display.lit_when.empty() || simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment));
 			break;
 		case simcore::CabinDisplayKind::Counters:
 			DrawCounters(Canvas, Size, Display, *Runner, bOn);
@@ -688,6 +690,7 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 			simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) * 100.0)));
 		return true;
 	case simcore::CabinDisplayKind::Meter:
+		Key = HashCombine(Key, GetTypeHash(simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment)));
 		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console) * 1000.0)));
 		return true;
 	case simcore::CabinDisplayKind::Ppi:
@@ -986,12 +989,17 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 	const double MissileRange = SweepChannel != 0 ? Feed.MissileRangeM(SweepChannel) : -1.0;
 	const bool bFollowMissile = SweepChannel != 0 && MissileRange >= 0.0;
 	const double FineCentre = SweepChannel != 0 ? (bFollowMissile ? MissileRange : Gate) : Gate;
-	const double X0 = 0.05 * Size.X;
-	const double X1 = 0.95 * Size.X;
+	// The receiver's gain (simcore::ScopePicture::gain: РРУ by hand, ДОП. УСИЛ.): the grass with it, the echoes until
+	// they saturate. The shift knobs move each sweep (shift_x, shift_y: fractions of the screen).
+	const double NoiseGain = Picture.gain;
+	const double EchoGain = FMath::Min(1.0, 0.25 + Picture.gain);
 
-	// One sweep: baseline, grass while radiating, echo spikes, gate marks. [FromM, ToM] maps to X0..X1.
-	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM, bool bMissileSweep)
+	// One sweep: baseline, grass while radiating, echo spikes, gate marks. [FromM, ToM] maps to X0..X1, moved by Shift.
+	auto Sweep = [&](double Y, double FromM, double ToM, double SpikeH, double TickM, bool bMissileSweep, const FVector2D& Shift)
 	{
+		Y += Shift.Y;
+		const double X0 = 0.05 * Size.X + Shift.X;
+		const double X1 = 0.95 * Size.X + Shift.X;
 		auto XOf = [&](double M) { return X0 + (M - FromM) / (ToM - FromM) * (X1 - X0); };
 		// The graticule: a division every TickM, longer every fifth (op_panel's legend: "1 div = 1000 m" on the rough
 		// sweep, "1 div = 5 m" on the precise one).
@@ -1014,7 +1022,7 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			double PrevY = Y;
 			for (double X = X0; X <= X1; X += 2.5)
 			{
-				const double Ny = bRadiating ? Grass.FRandRange(0.0, 1.0) * Grass.FRandRange(0.0, 9.0) : 0.0;
+				const double Ny = bRadiating ? Grass.FRandRange(0.0, 1.0) * Grass.FRandRange(0.0, 9.0) * NoiseGain : 0.0;
 				if (Back == 0)
 				{
 					Glow(Canvas, FVector2D(PrevX, PrevY), FVector2D(X, Y - Ny), 1.6f, TraceGreen);
@@ -1036,7 +1044,7 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 			// A pulse: its rise and fall a few pixels apart, the top a little rounded, slightly different each
 			// sweep (the receiver's noise rides on it).
 			const double X = XOf(RangeM);
-			const double H = SpikeH * Noise.FRandRange(0.93, 1.0);
+			const double H = SpikeH * EchoGain * Noise.FRandRange(0.93, 1.0);
 			Glow(Canvas, FVector2D(X - 4.0, Y), FVector2D(X - 1.5, Y - H), 1.4f, TraceGreen);
 			Glow(Canvas, FVector2D(X - 1.5, Y - H), FVector2D(X + 1.5, Y - H * 0.97), 1.4f, TraceGreen);
 			Glow(Canvas, FVector2D(X + 1.5, Y - H * 0.97), FVector2D(X + 4.0, Y), 1.4f, TraceGreen);
@@ -1065,10 +1073,12 @@ void USimCabinDisplayComponent::DrawRangeScope(UCanvas* Canvas, const FVector2D&
 		}
 	};
 	++RangeSweeps;  // a new pair of sweeps each picture (the tube's own sweeps are far faster than the redraw)
-	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false);
+	const FVector2D Shift1(Picture.shift_x * Size.X, -Picture.shift_y * Size.Y);
+	const FVector2D Shift2(Picture.shift_x_2 * Size.X, -Picture.shift_y_2 * Size.Y);
+	Sweep(0.42 * Size.Y, 0.0, MaxM, 0.22 * Size.Y, 1000.0, false, Shift1);
 	const double Half = 0.5 * Display.magnified_window_m;
-	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0);
-	Line(Canvas, FVector2D(0.5 * Size.X, 0.6 * Size.Y), FVector2D(0.5 * Size.X, 0.88 * Size.Y), 1.0f, Amber * 0.5f);
+	Sweep(0.85 * Size.Y, FineCentre - Half, FineCentre + Half, 0.25 * Size.Y, 5.0, SweepChannel != 0, Shift2);
+	Line(Canvas, FVector2D(0.5 * Size.X, 0.6 * Size.Y) + Shift2, FVector2D(0.5 * Size.X, 0.88 * Size.Y) + Shift2, 1.0f, Amber * 0.5f);
 
 	// The range counter: where the gate is (it follows the target while tracking in range), as five lit drum digits
 	// like the readout strip's, not a text line painted on the picture.
@@ -1230,10 +1240,11 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 }
 
 void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size, const simcore::CabinDisplay& Display,
-	const simcore::ConsoleData& Console, bool bOn)
+	const simcore::ConsoleData& Console, bool bOn, bool bLit)
 {
-	const FLinearColor Face(0.8f, 0.78f, 0.7f);
-	const FLinearColor Ink(0.05f, 0.05f, 0.05f);
+	// A meter with its own lamps (`lit_when`, the guidance error meters' ОСВЕЩ.) is dim with them off, as a dial is.
+	const FLinearColor Face = bLit ? FLinearColor(0.8f, 0.78f, 0.7f) : FLinearColor(0.07f, 0.07f, 0.06f);
+	const FLinearColor Ink = bLit ? FLinearColor(0.05f, 0.05f, 0.05f) : FLinearColor(0.2f, 0.2f, 0.18f);
 	if (Display.face == "arched")
 	{
 		// ДЦ (samsim_panels at 8x, 14 Nov 2026): a white face in a window with rounded top corners, the black case below

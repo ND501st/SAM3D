@@ -1048,6 +1048,74 @@ SC_TEST("cabin: a scope's knobs set its picture: brightness, focus, contrast, ma
                             "names no control"));
 }
 
+SC_TEST("cabin: the range indicator's astigmatism, shift and gain by hand (voenizdat_osa_1991 p98-99)") {
+    SC_EXPECT_NEAR(PictureShift(0.5), 0.0, 1e-12);
+    SC_EXPECT_NEAR(PictureShift(1.0), kPictureShift, 1e-12);
+    SC_EXPECT_NEAR(PictureShift(0.0), -kPictureShift, 1e-12);
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout osa;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, osa));
+    const CabinDisplay* range = nullptr;
+    for (const CabinDisplay& d : osa.displays) {
+        if (d.id == "ssc_range") range = &d;
+    }
+    SC_EXPECT(range != nullptr);
+    if (range == nullptr) return;
+    // As the console starts: sharp, centred, the automatic gain control's picture.
+    ScopePicture p = ScopePictureOf(*range, console.panel);
+    SC_EXPECT_NEAR(p.blur, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.blur_2, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.shift_x, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.shift_y_2, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.gain, 1.0, 1e-9);
+    // АСТИГМАТ. off its middle smears its own sweep as focus does; the shift knobs move their own sweep.
+    console.panel.SetValue("ssc.astig_2", 0.65);
+    console.panel.SetValue("ssc.hshift_1", 1.0);
+    console.panel.SetValue("ssc.vshift_2", 0.25);
+    p = ScopePictureOf(*range, console.panel);
+    SC_EXPECT_NEAR(p.blur, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.blur_2, 0.5, 1e-9);
+    SC_EXPECT_NEAR(p.shift_x, kPictureShift, 1e-9);
+    SC_EXPECT_NEAR(p.shift_y, 0.0, 1e-9);
+    SC_EXPECT_NEAR(p.shift_y_2, -0.5 * kPictureShift, 1e-9);
+    // РРУ КШ ОСН. works only at РРУ; at АРУ the automatic control holds the gain whatever the knob.
+    console.panel.SetValue("ssc.rru_main", 0.3);
+    SC_EXPECT_NEAR(ScopePictureOf(*range, console.panel).gain, 1.0, 1e-9);
+    console.panel.Set("ssc.agc", 1);
+    SC_EXPECT_NEAR(ScopePictureOf(*range, console.panel).gain, 0.3, 1e-9);
+    // ДОП. УСИЛ. raises it by half.
+    console.panel.Set("ssc.extra_gain", 1);
+    SC_EXPECT_NEAR(ScopePictureOf(*range, console.panel).gain, 0.3 * kPictureGainBoost, 1e-9);
+    // The loader: gain_when names controls only and needs a gain knob; gain_boost is a switch.
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { "gain": "soc.gain", "gain_when": [ { "subsystem": "power", "is": "ready" } ] },
+        "source": "sam3d", "confidence": "estimate" } ])"), "only controls' positions"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { "brightness": "soc.bright", "gain_when": [ { "control": "soc.mti", "is": 1 } ] },
+        "source": "sam3d", "confidence": "estimate" } ])"), "needs a gain knob"));
+    SC_EXPECT(ErrorContains(Small(R"(, "displays": [ { "id": "s", "label": "S", "kind": "ppi", "panel": "p", "at_m": [0, 0],
+        "size_m": [0.2, 0.2], "picture": { "gain_boost": "soc.gain" }, "source": "sam3d", "confidence": "estimate" } ])"),
+                            "is not a switch"));
+}
+
+SC_TEST("cabin: ПРИБОРЫ lights the driver's fuel gauge and ОСВЕЩ. the guidance error meters") {
+    ConsoleData console;
+    SC_EXPECT(LoadOsaConsole(console));
+    CabinLayout osa;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, osa));
+    auto lit = [&](const std::string& id) {
+        for (const CabinDisplay& d : osa.displays) {
+            if (d.id == id) return CabinLayout::DisplayLit(d, console.panel, console.equipment);
+        }
+        return false;
+    };
+    SC_EXPECT(!lit("fuel_gauge") && !lit("err_target_eps") && !lit("err_missile_beta"));
+    console.panel.Set("veh.instr_lights", 1);
+    console.panel.Set("err.light", 1);
+    SC_EXPECT(lit("fuel_gauge") && lit("err_target_eps") && lit("err_missile_beta"));
+}
+
 SC_TEST("cabin: a gauge's levels are checked on load") {
     ConsoleData console;
     SC_EXPECT(LoadOsaConsole(console));

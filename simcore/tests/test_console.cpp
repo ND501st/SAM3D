@@ -209,6 +209,53 @@ SC_TEST("equipment: a button latches a mode until its release; inputs and any-of
     SC_EXPECT(eq.IsReady("prep"));
 }
 
+SC_TEST("equipment: a latched mode is released by all of `release` or by any one of `release_any`") {
+    ControlPanel p;
+    ControlDef on{"on", "ON", 2, 0};
+    on.kind = ControlKind::Momentary;
+    ControlDef a = on;
+    a.id = "a";
+    ControlDef b = on;
+    b.id = "b";
+    p.AddControl(on);
+    p.AddControl(a);
+    p.AddControl(b);
+    p.AddControl({"power", "POWER", 2, 1});
+    Equipment eq;
+    SubsystemDef mode{"mode", "Mode", {Condition::Control("on", 1)}, {}, 0.0, 0.0};
+    mode.latching = true;
+    mode.release_any = {Condition::Control("a", 1), Condition::Control("b", 1)};
+    SC_EXPECT(eq.AddSubsystem(mode, p));  // release_any alone is enough for a latch
+    SubsystemDef both = mode;
+    both.id = "both";
+    both.release = {Condition::Control("power", 0)};
+    SC_EXPECT(eq.AddSubsystem(both, p));
+    SubsystemDef plain{"plain", "Plain", {Condition::Control("power", 1)}, {}, 0.0, 0.0};
+    plain.release_any = {Condition::Control("a", 1)};
+    SC_EXPECT(!eq.AddSubsystem(plain, p));  // only for latching modes
+    SubsystemDef ghost = mode;
+    ghost.id = "ghost";
+    ghost.release_any = {Condition::Control("nope", 1)};
+    SC_EXPECT(!eq.AddSubsystem(ghost, p));
+    auto press = [&](const char* id) {
+        p.Set(id, 1);
+        eq.Update(0.1, p);
+        p.ReleaseMomentaries();
+    };
+    press("on");
+    SC_EXPECT(eq.IsReady("mode") && eq.IsReady("both"));
+    eq.Update(0.1, p);
+    SC_EXPECT(eq.IsReady("mode") && eq.IsReady("both"));  // latched
+    press("b");
+    SC_EXPECT(eq.State("mode") == SubsystemState::Off && eq.State("both") == SubsystemState::Off);
+    press("on");
+    p.Set("power", 0);
+    eq.Update(0.1, p);
+    SC_EXPECT(eq.IsReady("mode") && eq.State("both") == SubsystemState::Off);  // all of `release` held
+    press("a");
+    SC_EXPECT(eq.State("mode") == SubsystemState::Off);
+}
+
 SC_TEST("json: values, escapes, UTF-8 and errors with positions") {
     json::Value v;
     std::string error;

@@ -868,7 +868,10 @@ public:
         if (em_ != nullptr) StepEm(dt, world, console, targets);
         UpdateSearch(t, console, log);
         UpdateIff(t, console, log);
-        if (method_ == TrackMethod::None) Aim(dt, console, aim_crew);
+        if (method_ == TrackMethod::None) {
+            Aim(dt, console, aim_crew);
+            Slew(dt, console);
+        }
         UpdateTvRange();
         UpdateTrack(t, dt, console, log, aim_crew);
         UpdateTrackReturns(console);
@@ -1822,6 +1825,18 @@ private:
     // follows the target a little behind it and no faster than the wheel turns; a wheel in the player's hands stays
     // where the player puts it. A target masked by terrain is carried on at the last rates until the memory runs out.
     // Returns false (and logs why) when the lock is lost.
+    // The fast slew lever (ВЛЕВО — 0 — ВПРАВО): off its middle, the drive turns the antenna at its rate, left
+    // anticlockwise. Only with no target held (a track drives the antenna itself), the antenna free to turn and the
+    // azimuth wheel unlocked (SetValue keeps to the wheel's lock and its ±330° stops).
+    void Slew(double dt, ConsoleData& console) {
+        const TrackSensorDef& d = console.track;
+        if (d.slew_control.empty() || !console.equipment.IsReady(d.slew)) return;
+        const int lever = console.panel.Get(d.slew_control);
+        if (lever == 1) return;
+        const double sign = lever == 0 ? -1.0 : 1.0;
+        console.panel.Nudge(d.az_wheel, sign * d.slew_rate_deg_s * dt);
+    }
+
     bool TrackTvByHand(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
         const TrackSensorDef& d = console.track;
         const Equipment& eq = console.equipment;
@@ -2127,7 +2142,9 @@ private:
             if (qc_known_) turn_to(o.setter, qc_commanded_deg_, true);
             if (!o.latitude_control.empty()) turn_to(o.latitude_control, site_latitude_deg_, false);
         }
-        const bool slaved = setting && console.panel.Get(o.relay_control) == o.relay_position;
+        // The setter reaches the gyro only through ПОТРЕБИТЕЛИ at ОСН. (o.consumers_control).
+        const bool connected = o.consumers_control.empty() || console.panel.Get(o.consumers_control) == o.consumers_position;
+        const bool slaved = setting && connected && console.panel.Get(o.relay_control) == o.relay_position;
         bool synced = false;
         if (slaved) {
             if (console.panel.Get(o.sync_button) == 1) fast_sync_ = true;

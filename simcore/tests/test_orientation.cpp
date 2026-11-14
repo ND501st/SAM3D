@@ -147,6 +147,28 @@ SC_TEST("orientation: an oriented vehicle keeps north while the latitude is set;
     SC_EXPECT(std::fabs(Off(relay->Engagement().GyroHeadingDeg(), 40.0) - (-10.636)) <= 0.5 + 0.01);
 }
 
+SC_TEST("orientation: ПОТРЕБИТЕЛИ at КОНТР. takes the course setter off the gyro: it is not slaved (p51)") {
+    for (const int consumers : {1, 0}) {
+        auto r = Load(Osa("deployed", 45.0, "", false));
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        SC_EXPECT(r->TakeSeat("deputy_commander", "player"));  // nobody else turns the setter
+        ConsoleData& c = r->Console();
+        SC_EXPECT(c.orientation.consumers_control == "gyro.consumers" && c.orientation.consumers_position == 1);
+        c.panel.Set("gyro.consumers", consumers);
+        c.panel.SetValue("orient.qc", 50.0);
+        c.panel.Set("orient.ak_zk", 1);
+        c.panel.Set("orient.relay", 1);
+        Run(*r, 5.0);
+        const double g = r->Engagement().GyroHeadingDeg();
+        if (consumers == 1) {
+            SC_EXPECT(std::fabs(Off(g, 45.0)) < 0.1);  // slaved: 1 deg/s towards the setter
+        } else {
+            SC_EXPECT(std::fabs(Off(g, 40.0)) < 0.1);  // off the gyro: it keeps its heading
+        }
+    }
+}
+
 SC_TEST("orientation: at a halt the NPC commander finds Qc with the compass, commands it, and the deputy orients the gyro") {
     // Cold at a halt: the commander's compass work runs while the equipment warms up.
     auto r = Load(Osa("", 50.0, "", true));
