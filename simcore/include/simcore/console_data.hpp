@@ -643,7 +643,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
             if (!Keys(c, path, {"id", "label", "station", "kind", "positions", "position_labels", "initial", "guard",
-                                "min", "max", "initial_value", "wraps", "unit", "source", "confidence", "notes"})) {
+                                "min", "max", "initial_value", "wraps", "springs_back", "unit", "source", "confidence", "notes"})) {
                 return false;
             }
             ControlDef def;
@@ -678,6 +678,8 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (kind == "switch" || kind == "key") {
                 def.kind = ControlKind::Discrete;
                 def.stepwise = kind == "key";
+                if (!OptionalBool(c, path, "springs_back", def.springs_back)) return false;
+                if (def.springs_back && def.stepwise) return Fail(Join(path, "springs_back"), "for switches only");
             } else if (kind == "button") {
                 def.kind = ControlKind::Momentary;
             } else if (kind == "wheel") {
@@ -696,6 +698,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 (c.Find("min") != nullptr || c.Find("max") != nullptr || c.Find("initial_value") != nullptr ||
                  c.Find("wraps") != nullptr)) {
                 return Fail(path, "min, max, initial_value and wraps are for wheels only");
+            }
+            if (def.kind != ControlKind::Discrete && c.Find("springs_back") != nullptr) {
+                return Fail(Join(path, "springs_back"), "for switches only");
             }
             if (!def.guard_id.empty() && !panel.Has(def.guard_id)) {
                 return Fail(Join(path, "guard"), "unknown control '" + def.guard_id + "' (define the guard first)");

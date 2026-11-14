@@ -166,6 +166,25 @@ SC_TEST("panel: a push-button reads pressed until the step's release") {
     SC_EXPECT(p.Get("fire") == 0);
 }
 
+SC_TEST("panel: a spring lever stays where the hand holds it and returns to its rest when let go") {
+    ControlPanel p;
+    ControlDef lever{"slew", "LEFT - RIGHT", 3, 1};
+    lever.springs_back = true;
+    SC_EXPECT(p.AddControl(lever));
+    ControlDef toggle{"sw", "SW", 2, 0};
+    SC_EXPECT(p.AddControl(toggle));
+    ControlDef bad{"b", "B", 2, 0};
+    bad.kind = ControlKind::Momentary;
+    bad.springs_back = true;
+    SC_EXPECT(!p.AddControl(bad));  // a button lets go by itself already
+    SC_EXPECT(p.Set("slew", 0) && p.Get("slew") == 0);
+    p.ReleaseMomentaries();
+    SC_EXPECT(p.Get("slew") == 0);  // held: the step's release of buttons leaves it
+    SC_EXPECT(p.LetGo("slew") && p.Get("slew") == 1);
+    SC_EXPECT(p.Set("sw", 1) && !p.LetGo("sw") && p.Get("sw") == 1);  // a plain switch stays
+    SC_EXPECT(!p.LetGo("nope"));
+}
+
 SC_TEST("equipment: a button latches a mode until its release; inputs and any-of enables") {
     ControlPanel p;
     ControlDef on{"on", "ON", 2, 0};
@@ -295,6 +314,10 @@ SC_TEST("console loader: strict validation with paths in the messages") {
                                 "controls[0].guard: unknown control 'b'"));
     SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","controls":[{"id":"w","label":"W","kind":"wheel","source":"s","confidence":"low"}]})",
                                 "a wheel needs min and max"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","controls":[{"id":"b","label":"B","kind":"button","springs_back":true,"source":"s","confidence":"low"}]})",
+                                "controls[0].springs_back: for switches only"));
+    SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","controls":[{"id":"k","label":"K","kind":"key","springs_back":true,"source":"s","confidence":"low"}]})",
+                                "controls[0].springs_back: for switches only"));
     SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","subsystems":[{"id":"x","name":"X","enable":[{"subsystem":"y","is":"ready"}],"source":"s","confidence":"low"}]})",
                                 "subsystems[0].enable[0]: unknown subsystem 'y'"));
     SC_EXPECT(LoadErrorContains(R"({"system_id":"t","display_name":"T","procedures":[{"id":"p","name":"P","source":"s","confidence":"low","steps":[{"control":"nope","position":1,"description":"d"}]}]})",

@@ -159,6 +159,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 | Tab | The next seat |
 | Mouse (cabin) | Look round; the cross names the control |
 | Left / right click | Switch on, step forward, press / step back |
+| Hold left / right on a spring lever | Hold it over (ВЛЕВО — ВПРАВО: left, right); let go and it springs back |
 | Drag or wheel on a hand wheel | Turn it; held, your eyes go to the display it is worked against (the scope, the range indicator, the IT-45) and come back when you let go |
 | X | Get up and walk in the cabin (W A S D, the mouse looks round, any control in arm's reach works); X by a seat sits you down in it, T then takes it over |
 | F | Out of the vehicle and back (your seat taken, T): under a hatch, or in the seat below it, the hatch opens and you climb out onto the roof; at the roof's edge by a wheel, down; on the ground by a wheel, up; on the roof by a hatch, in. Each climb takes its real time, seen from your eyes |

@@ -69,10 +69,17 @@ inline CabinStyle DefaultCabinStyle(const ControlDef& def, const ControlPanel& p
 }
 
 // The position a click asks for: two-position controls flip, others step by `direction` (+1 or -1) and stop
-// at the ends, buttons press. -1 for wheels (they turn, they aren't clicked).
+// at the ends, buttons press. -1 for wheels (they turn, they aren't clicked). A spring lever is held, as in SAM
+// Simulator: the left button (+1) to its first position, the right to its last (the other end if that is its rest);
+// letting go of the button lets go of the lever (ControlPanel::LetGo).
 inline int CabinClickTarget(const ControlDef& def, int current, int direction) {
     if (def.kind == ControlKind::Continuous) return -1;
     if (def.kind == ControlKind::Momentary) return 1;
+    if (def.springs_back) {
+        int target = direction >= 0 ? 0 : def.positions - 1;
+        if (target == def.initial) target = direction >= 0 ? def.positions - 1 : 0;
+        return target;
+    }
     if (def.positions == 2) return 1 - current;
     const int target = current + (direction >= 0 ? 1 : -1);
     if (target < 0) return 0;

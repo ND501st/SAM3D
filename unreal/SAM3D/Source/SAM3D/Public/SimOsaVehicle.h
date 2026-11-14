@@ -528,6 +528,9 @@ private:
 	double LookPitchDeg = 0.0;
 	int32 HoveredItem = INDEX_NONE;
 	int32 DraggedWheel = INDEX_NONE;
+	/** A spring lever held by a mouse button (ВЛЕВО — ВПРАВО): let go when that button comes up. */
+	int32 HeldLever = INDEX_NONE;
+	FKey HeldLeverKey;
 	/** Holding a hand wheel turns the head onto the display it is worked against (the layout's "watch"), and back to
 	 *  where it was when the wheel is let go: the look to turn to, and the look to come back to. */
 	bool bWheelWatch = false;

@@ -223,7 +223,7 @@ list to `docs/generated/osa_ak_controls.md` and `pu12m_controls.md`. **The first
 - the A-1's ГРОМКОСТЬ sets the headset's level;
 - the range indicator's astigmatism, shifts, РРУ under АРУ and ДОП. УСИЛ. change its picture;
 - ПРИБОРЫ and ОСВЕЩ. light the fuel gauge and the four error meters;
-- ВЛЕВО — ВПРАВО slews the antenna at 30°/s.
+- ВЛЕВО — ВПРАВО, a spring lever held on the mouse button, slews the antenna at 30°/s in РУ and ЦУ.
 
 The Osa now counts 64 wired, 71 model, 31 display, 9 indicator, 9 drill and 83 inert controls (before: 52, 68, 22, 7, 15,
 103), with 26 items not built. What is left needs a model that is not there yet. By what each needs:

@@ -258,39 +258,71 @@ SC_TEST("readiness: ТРЕНИРОВКА keeps the transmitters off the air; А�
     SC_EXPECT(!e.IsReady("range_semi_auto"));
 }
 
-SC_TEST("readiness: ВЛЕВО — ВПРАВО slews the antenna at its rate while the drives are on and the wheel unlocked") {
+SC_TEST("readiness: ВЛЕВО — ВПРАВО, held, slews the antenna at its rate in РУ and ЦУ, with the drives on and the wheel unlocked") {
     auto r = Load(Osa("deployed", "", "", true));
     SC_EXPECT(r != nullptr);
     if (!r) return;
     SC_EXPECT(r->TakeSeat("senior_operator", "player"));  // nobody else turns the azimuth
     ConsoleData& c = r->Console();
     auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    auto az = [&] { return c.panel.GetValue("ssc.az_wheel"); };
+    const double kStep = 3.1;  // one 0.1 s step at 30°/s: the run may take one step more or fewer
     run(1.0);
     SC_EXPECT(c.equipment.IsReady("antenna_drives"));
     SC_EXPECT_NEAR(c.track.slew_rate_deg_s, 30.0, 1e-9);
     c.panel.Set("ssc.az_lock", 1);
-    const double az0 = c.panel.GetValue("ssc.az_wheel");
-    // OS52-12M1 (voenizdat_osa_1991 p99): the АПУ's fast slew; 30°/s, SAM Simulator's.
+    const double az0 = az();
+    // OS52-12M1 (voenizdat_osa_1991 p99, p87-88): the АПУ's slew; 30°/s, SAM Simulator's. Held: it turns.
     c.panel.Set("ssc.slew", 2);  // ВПРАВО
     run(2.0);
-    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 60.0, 1.0);
+    SC_EXPECT_NEAR(az(), az0 + 60.0, kStep);
     c.panel.Set("ssc.slew", 0);  // ВЛЕВО
     run(1.0);
-    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
-    c.panel.Set("ssc.slew", 1);  // 0: it stops
+    SC_EXPECT_NEAR(az(), az0 + 30.0, kStep);
+    // Let go, the lever springs back to 0 and the antenna stops.
+    SC_EXPECT(c.panel.LetGo("ssc.slew") && c.panel.Get("ssc.slew") == 1);
     run(1.0);
-    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
+    SC_EXPECT_NEAR(az(), az0 + 30.0, kStep);
+    // In ЦУ it slews as in РУ.
+    c.panel.Set("fo.cu_az", 1);
+    run(0.2);
+    SC_EXPECT(c.equipment.IsReady("auto_acquisition"));
+    c.panel.Set("ssc.slew", 2);
+    run(1.0);
+    SC_EXPECT_NEAR(az(), az0 + 60.0, kStep);
+    c.panel.LetGo("ssc.slew");
+    c.panel.Set("fo.ru", 1);  // back to РУ
+    run(0.2);
+    SC_EXPECT(!c.equipment.IsReady("auto_acquisition"));
+    // In ПА (the TV's angle tracking) the lever does nothing (p87-88: РУ or ЦУ only).
+    c.panel.Set("tov.supply", 1);
+    c.panel.Set("tov.power", 1);
+    run(30.0);
+    c.panel.Set("fo.pa", 1);
+    run(0.2);
+    SC_EXPECT(c.equipment.IsReady("tv_angle_track"));
+    double az1 = az();
+    c.panel.Set("ssc.slew", 2);
+    run(1.0);
+    SC_EXPECT_NEAR(az(), az1, 1e-6);
+    c.panel.LetGo("ssc.slew");
+    c.panel.Set("fo.ru", 1);
+    run(0.2);
+    SC_EXPECT(!c.equipment.IsReady("tv_angle_track"));
+    az1 = az();
     // With the wheel locked, or the drives off, the lever does nothing.
     c.panel.Set("ssc.az_lock", 0);
     c.panel.Set("ssc.slew", 2);
     run(1.0);
-    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
-    c.panel.Set("ssc.slew", 1);
+    SC_EXPECT_NEAR(az(), az1, 1e-6);
+    c.panel.LetGo("ssc.slew");
     c.panel.Set("ssc.az_lock", 1);
     c.panel.Set("drv.az", 0);
     run(1.0);
     SC_EXPECT(!c.equipment.IsReady("antenna_drives"));
     c.panel.Set("ssc.slew", 2);
     run(1.0);
-    SC_EXPECT_NEAR(c.panel.GetValue("ssc.az_wheel"), az0 + 30.0, 1.0);
+    SC_EXPECT_NEAR(az(), az1, 1e-6);
+    c.panel.LetGo("ssc.slew");
 }
+

@@ -1826,11 +1826,13 @@ private:
     // where the player puts it. A target masked by terrain is carried on at the last rates until the memory runs out.
     // Returns false (and logs why) when the lock is lost.
     // The fast slew lever (ВЛЕВО — 0 — ВПРАВО): off its middle, the drive turns the antenna at its rate, left
-    // anticlockwise. Only with no target held (a track drives the antenna itself), the antenna free to turn and the
-    // azimuth wheel unlocked (SetValue keeps to the wheel's lock and its ±330° stops).
+    // anticlockwise. In РУ or ЦУ only (voenizdat_osa_1991 p87-88): no target held (a track drives the antenna itself)
+    // and not in ПА, the TV's angle tracking; the antenna free to turn and the azimuth wheel unlocked (SetValue keeps
+    // to the wheel's lock and its ±330° stops).
     void Slew(double dt, ConsoleData& console) {
         const TrackSensorDef& d = console.track;
         if (d.slew_control.empty() || !console.equipment.IsReady(d.slew)) return;
+        if (!d.tv_mode.empty() && console.equipment.IsReady(d.tv_mode)) return;
         const int lever = console.panel.Get(d.slew_control);
         if (lever == 1) return;
         const double sign = lever == 0 ? -1.0 : 1.0;

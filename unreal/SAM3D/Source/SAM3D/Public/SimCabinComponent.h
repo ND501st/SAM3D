@@ -181,6 +181,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	ESimPlayerActionResult ClickItem(int32 Item, int32 Direction);
 
+	/** True for a spring lever (a switch held off its rest only while the hand is on it: ВЛЕВО — ВПРАВО). */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Cabin")
+	bool IsSpringLever(int32 Item) const;
+
+	/** Let go of a spring lever: it returns to its rest. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
+	void LetGoItem(int32 Item);
+
 	/** Turn a hand wheel by a number of turns (negative = anticlockwise). False if it is locked. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Cabin")
 	bool TurnWheel(int32 Item, double Turns);

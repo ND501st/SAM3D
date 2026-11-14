@@ -1504,6 +1504,12 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		ToggleWalking();
 	}
+	// A spring lever (ВЛЕВО — ВПРАВО) is held only while its mouse button is: let go, it springs back.
+	if (HeldLever != INDEX_NONE && (!AutoplayFolder.IsEmpty() || !Pc->IsInputKeyDown(HeldLeverKey)))
+	{
+		Cabin->LetGoItem(HeldLever);
+		HeldLever = INDEX_NONE;
+	}
 	if (Pc->WasInputKeyJustPressed(ClimbKey) && BodySim != nullptr)
 	{
 		Body = bWalking ? EBodyMode::Cabin : EBodyMode::Seat;
@@ -1649,13 +1655,16 @@ void ASimOsaVehicle::HandleCabin(float DeltaSeconds, APlayerController* Pc)
 	{
 		Refuse();
 	}
-	else if (bLeft)
+	else if (bLeft || bRight)
 	{
-		ShowFeedback(ClickOrGoOut(HoveredItem, 1));
-	}
-	else if (bRight)
-	{
-		ShowFeedback(ClickOrGoOut(HoveredItem, -1));
+		const ESimPlayerActionResult Result = ClickOrGoOut(HoveredItem, bLeft ? 1 : -1);
+		ShowFeedback(Result);
+		if (Cabin->IsSpringLever(HoveredItem) && Result != ESimPlayerActionResult::Blocked &&
+			Result != ESimPlayerActionResult::NotYet && Result != ESimPlayerActionResult::Invalid)
+		{
+			HeldLever = HoveredItem;  // held while this button is down
+			HeldLeverKey = bLeft ? EKeys::LeftMouseButton : EKeys::RightMouseButton;
+		}
 	}
 }
 

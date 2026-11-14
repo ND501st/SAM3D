@@ -93,6 +93,10 @@ SC_TEST("cabin: default styles and click targets follow the control") {
     SC_EXPECT(CabinClickTarget(*panel.Find("soc.range"), 0, -1) == 0);
     SC_EXPECT(CabinClickTarget(*panel.Find("fo.launch"), 0, -1) == 1);  // buttons press
     SC_EXPECT(CabinClickTarget(*panel.Find("ssc.az_wheel"), 0, 1) == -1);
+    // A spring lever is held, as in SAM Simulator: the left button to ВЛЕВО, the right to ВПРАВО.
+    SC_EXPECT(panel.Find("ssc.slew")->springs_back);
+    SC_EXPECT(CabinClickTarget(*panel.Find("ssc.slew"), 1, 1) == 0);
+    SC_EXPECT(CabinClickTarget(*panel.Find("ssc.slew"), 1, -1) == 2);
 }
 
 SC_TEST("cabin: red dots mark a control's working position, only where the layout gives one") {

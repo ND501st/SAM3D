@@ -2210,6 +2210,32 @@ ESimPlayerActionResult USimCabinComponent::ClickItem(int32 Item, int32 Direction
 	return Result;
 }
 
+bool USimCabinComponent::IsSpringLever(int32 Item) const
+{
+	const USimWorldSubsystem* Sim = GetSim();
+	if (!Items.IsValidIndex(Item) || Items[Item].ControlId.IsEmpty() || Sim == nullptr || Sim->GetScenarioRunner() == nullptr)
+	{
+		return false;
+	}
+	const simcore::ControlDef* Def = Sim->GetScenarioRunner()->Console().panel.Find(ToStd(Items[Item].ControlId));
+	return Def != nullptr && Def->springs_back;
+}
+
+void USimCabinComponent::LetGoItem(int32 Item)
+{
+	USimWorldSubsystem* Sim = GetSim();
+	if (!IsSpringLever(Item))
+	{
+		return;
+	}
+	const simcore::ControlPanel& Panel = Sim->GetScenarioRunner()->Console().panel;
+	const simcore::ControlDef* Def = Panel.Find(ToStd(Items[Item].ControlId));
+	if (Panel.Get(Def->id) != Def->initial)
+	{
+		Sim->PlayerSetControl(Items[Item].ControlId, Def->initial);  // through the same door as the hand that moved it
+	}
+}
+
 bool USimCabinComponent::TurnWheel(int32 Item, double Turns)
 {
 	USimWorldSubsystem* Sim = GetSim();
