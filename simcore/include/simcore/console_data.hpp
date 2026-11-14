@@ -23,6 +23,27 @@
 
 namespace simcore {
 
+// A radar receiver's settings on the console (a sensor's "receiver" block, roadmap C5): every control optional.
+// The MTI's coherence (internal or external), the wind compensation's Doppler offset (a switch and two knobs, coarse and
+// fine, each 0..1 with the middle at none: the offset at a knob's end in m/s), the magnetron's tuning (a switch to manual
+// and the manual trim, 0..1 with the middle on tune: the mistune at its ends in Hz) and the СА blanker.
+struct ReceiverDef {
+    std::string mti_external_control;
+    int mti_external_position = 1;
+    std::string wind_comp_control;
+    int wind_comp_position = 1;
+    std::string wind_coarse_control;
+    double wind_coarse_mps = 0.0;
+    std::string wind_fine_control;
+    double wind_fine_mps = 0.0;
+    std::string afc_control;
+    int afc_manual_position = 1;
+    std::string afc_trim_control;
+    double afc_trim_span_hz = 0.0;
+    std::string sa_control;
+    int sa_position = 1;
+};
+
 // How a console's radars and sight map onto its controls and equipment (the "sensors" block).
 // Used by the gameplay engagement model (engagement.hpp). Ids refer to this console.
 struct SearchSensorDef {
@@ -32,6 +53,7 @@ struct SearchSensorDef {
     std::vector<std::pair<double, double>> range_scales_m;  // [min, max] per position
     std::string mti_control;   // switch: moving-target indicator (1 = on); may be empty
     double mti_max_range_m = 0.0;
+    ReceiverDef receiver;
     // Range rings on the scope, in metres, for each position of range_control (empty = the display's own).
     std::vector<std::vector<double>> range_rings_m;
     // Elevation beams (optional; beam_control empty = none). Each position of `beam_control` selects a programme: the
@@ -48,6 +70,9 @@ struct SearchSensorDef {
     std::string iff_control_query;
     std::string iff_gate_control;
     std::string iff_ready;           // subsystem the interrogator needs
+    // КОНТР. ИНД. (optional): held, the interrogator's check signal puts marks on the PPI at these ranges on every sweep.
+    std::string iff_check_control;
+    std::vector<double> iff_check_ranges_m;
     std::string iff_interrogating_input;
     double iff_query_time_s = 1.0;
     double iff_max_range_m = 0.0;
@@ -91,9 +116,23 @@ struct OrientationDef {
     // the gyro is slaved to the setter only with it at `consumers_position`.
     std::string consumers_control;
     int consumers_position = 0;
+    // The follow-up systems' switch (optional; the Osa's СС — ОТКЛ. on OR-31M): away from `follow_up_position` the
+    // follow-ups stop and the crew's frame holds the Qc it had, no longer turning with the hull.
+    std::string qc_fault_input;  // a phase of the gyro unit's supply lost (ОТКАЗ Qc): the Qc follow-up stops, as with СС off
+    std::string follow_up_control;
+    int follow_up_position = 1;
+    // The latitude correction's switch (optional; the Osa's φ АВТ. — РУЧН. on 0005-8M): the latitude scale's correction
+    // reaches the gyro only at `latitude_switch_position`.
+    std::string latitude_switch;
+    int latitude_switch_position = 0;
 };
 
 struct TrackSensorDef {
+    ReceiverDef receiver;
+    // The TV's light filter (optional): a position per filter, each with the factor it puts on the visibility the TV
+    // sees through (haze scatters short wavelengths more: an orange filter sees further, a blue one less).
+    std::string filter_control;
+    std::vector<double> filter_visibility;
     std::string transmitter;     // subsystem: tracking radar radiating
     std::string slew;            // subsystem: antenna free to turn
     std::string radar_mode;      // subsystem: radar acquisition mode engaged (e.g. ЦУ АЗ)
@@ -109,6 +148,18 @@ struct TrackSensorDef {
     // antenna is free to turn, its wheel unlocked and no target held.
     std::string slew_control;
     double slew_rate_deg_s = 0.0;
+    // Aided tracking (optional; the Osa's ПА, pa_gain_per_s 0 = absent): while `tv_mode` is ready an integrator holds a
+    // rate per wheel, fed by the wheels' turns (gain per second per degree turned) and turning the antenna on at it, up to
+    // the drives' limits; `pa_balance_az`/`_el` (buttons) clear its rate. Taken over at the target's rate from a radar track.
+    double pa_gain_per_s = 0.0;
+    double pa_max_az_deg_s = 30.0;
+    double pa_max_el_deg_s = 15.0;
+    std::string pa_balance_az;
+    std::string pa_balance_el;
+    // The range automaton's balance (optional; the Osa's БАЛАНС АВТОМАТА): off its middle the radar's range gate sits
+    // off the echo by up to range_balance_m at either end of the knob.
+    std::string range_balance_control;
+    double range_balance_m = 0.0;
     std::string fov_control;     // TV lens selector: 0 wide, 1 narrow (may be empty)
     std::string mti_control;     // tracking radar СДЦ / ШТ.: 1 = moving-target indication (may be empty)
     // Counter-jamming (roadmap 9.4): the switch of the circuit against a range-gate pull-off that walks the gate out
@@ -391,6 +442,33 @@ private:
     }
 };
 
+// What a receiver's controls say now: the coherence, the wind compensation's offset, the magnetron's mistune, СА.
+struct ReceiverReading {
+    bool external = false;
+    double comp_mps = 0.0;
+    double mistune_hz = 0.0;
+    bool sa = false;
+};
+inline ReceiverReading ReadReceiver(const ReceiverDef& d, const ControlPanel& panel) {
+    ReceiverReading out;
+    // A knob 0..1 with its middle at none, to -1..+1.
+    auto centred = [&panel](const std::string& id) {
+        const ControlDef* c = panel.Find(id);
+        if (c == nullptr || !(c->max_value > c->min_value)) return 0.0;
+        return (panel.GetValue(id) - 0.5 * (c->min_value + c->max_value)) / (0.5 * (c->max_value - c->min_value));
+    };
+    out.external = !d.mti_external_control.empty() && panel.Get(d.mti_external_control) == d.mti_external_position;
+    if (!d.wind_comp_control.empty() && panel.Get(d.wind_comp_control) == d.wind_comp_position) {
+        if (!d.wind_coarse_control.empty()) out.comp_mps += centred(d.wind_coarse_control) * d.wind_coarse_mps;
+        if (!d.wind_fine_control.empty()) out.comp_mps += centred(d.wind_fine_control) * d.wind_fine_mps;
+    }
+    if (!d.afc_control.empty() && panel.Get(d.afc_control) == d.afc_manual_position && !d.afc_trim_control.empty()) {
+        out.mistune_hz = centred(d.afc_trim_control) * d.afc_trim_span_hz;
+    }
+    out.sa = !d.sa_control.empty() && panel.Get(d.sa_control) == d.sa_position;
+    return out;
+}
+
 struct ConsoleData {
     std::string system_id;
     std::string display_name;
@@ -643,7 +721,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             const std::string path = Index("controls", i);
             const json::Value& c = arr->items[i];
             if (!Keys(c, path, {"id", "label", "station", "kind", "positions", "position_labels", "initial", "guard",
-                                "min", "max", "initial_value", "wraps", "springs_back", "unit", "source", "confidence", "notes"})) {
+                                "min", "max", "initial_value", "wraps", "springs_back", "cycles", "unit", "source", "confidence", "notes"})) {
                 return false;
             }
             ControlDef def;
@@ -678,8 +756,9 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (kind == "switch" || kind == "key") {
                 def.kind = ControlKind::Discrete;
                 def.stepwise = kind == "key";
-                if (!OptionalBool(c, path, "springs_back", def.springs_back)) return false;
+                if (!OptionalBool(c, path, "springs_back", def.springs_back) || !OptionalBool(c, path, "cycles", def.cycles)) return false;
                 if (def.springs_back && def.stepwise) return Fail(Join(path, "springs_back"), "for switches only");
+                if (def.cycles && (def.stepwise || def.springs_back)) return Fail(Join(path, "cycles"), "for switches that do not spring back");
             } else if (kind == "button") {
                 def.kind = ControlKind::Momentary;
             } else if (kind == "wheel") {
@@ -702,6 +781,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (def.kind != ControlKind::Discrete && c.Find("springs_back") != nullptr) {
                 return Fail(Join(path, "springs_back"), "for switches only");
             }
+            if (def.kind != ControlKind::Discrete && c.Find("cycles") != nullptr) return Fail(Join(path, "cycles"), "for switches only");
             if (!def.guard_id.empty() && !panel.Has(def.guard_id)) {
                 return Fail(Join(path, "guard"), "unknown control '" + def.guard_id + "' (define the guard first)");
             }
@@ -1583,6 +1663,45 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         return true;
     }
 
+    bool LoadReceiver(const json::Value& v, const std::string& p, const ControlPanel& panel, ReceiverDef& d) {
+        if (!Keys(v, p, {"mti_external_control", "mti_external_position", "wind_comp_control", "wind_comp_position",
+                         "wind_coarse_control", "wind_coarse_mps", "wind_fine_control", "wind_fine_mps", "afc_control",
+                         "afc_manual_position", "afc_trim_control", "afc_trim_span_hz", "sa_control", "sa_position", "notes"}) ||
+            !RefControl(v, p, "mti_external_control", panel, ControlKind::Discrete, false, d.mti_external_control) ||
+            !OptionalInt(v, p, "mti_external_position", d.mti_external_position) ||
+            !RefControl(v, p, "wind_comp_control", panel, ControlKind::Discrete, false, d.wind_comp_control) ||
+            !OptionalInt(v, p, "wind_comp_position", d.wind_comp_position) ||
+            !RefControl(v, p, "wind_coarse_control", panel, ControlKind::Continuous, false, d.wind_coarse_control) ||
+            !OptionalNumber(v, p, "wind_coarse_mps", d.wind_coarse_mps) ||
+            !RefControl(v, p, "wind_fine_control", panel, ControlKind::Continuous, false, d.wind_fine_control) ||
+            !OptionalNumber(v, p, "wind_fine_mps", d.wind_fine_mps) ||
+            !RefControl(v, p, "afc_control", panel, ControlKind::Discrete, false, d.afc_control) ||
+            !OptionalInt(v, p, "afc_manual_position", d.afc_manual_position) ||
+            !RefControl(v, p, "afc_trim_control", panel, ControlKind::Continuous, false, d.afc_trim_control) ||
+            !OptionalNumber(v, p, "afc_trim_span_hz", d.afc_trim_span_hz) ||
+            !RefControl(v, p, "sa_control", panel, ControlKind::Discrete, false, d.sa_control) ||
+            !OptionalInt(v, p, "sa_position", d.sa_position)) {
+            return false;
+        }
+        struct Pos { const char* key; const std::string* control; int value; };
+        for (const Pos& pos : {Pos{"mti_external_position", &d.mti_external_control, d.mti_external_position},
+                               Pos{"wind_comp_position", &d.wind_comp_control, d.wind_comp_position},
+                               Pos{"afc_manual_position", &d.afc_control, d.afc_manual_position},
+                               Pos{"sa_position", &d.sa_control, d.sa_position}}) {
+            if (!pos.control->empty() && (pos.value < 0 || pos.value >= panel.Find(*pos.control)->positions)) {
+                return Fail(Join(p, pos.key), "not a position of " + *pos.control);
+            }
+        }
+        if (d.wind_coarse_mps < 0.0 || d.wind_fine_mps < 0.0 || d.afc_trim_span_hz < 0.0) {
+            return Fail(p, "the knobs' spans must be >= 0");
+        }
+        if ((!d.wind_coarse_control.empty() || !d.wind_fine_control.empty()) && d.wind_comp_control.empty()) {
+            return Fail(Join(p, "wind_comp_control"), "the wind compensation's knobs need its switch");
+        }
+        if (!d.afc_trim_control.empty() && d.afc_control.empty()) return Fail(Join(p, "afc_control"), "the trim needs the switch");
+        return true;
+    }
+
     bool LoadSensors(const json::Value& root, ConsoleData& out) {
         const json::Value* s = root.Find("sensors");
         if (s == nullptr) return true;
@@ -1598,13 +1717,16 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string sp = "sensors.search";
         SearchSensorDef& search = out.search;
         if (!Keys(*se, sp, {"antenna", "transmitter", "range_control", "range_scales_m", "range_rings_m", "mti_control",
-                            "mti_max_range_m", "beams", "iff", "notes"}) ||
+                            "mti_max_range_m", "beams", "iff", "receiver", "notes"}) ||
             !RefSubsystem(*se, sp, "antenna", eq, true, search.antenna) ||
             !RefSubsystem(*se, sp, "transmitter", eq, true, search.transmitter) ||
             !RefControl(*se, sp, "range_control", panel, ControlKind::Discrete, true, search.range_control) ||
             !RefControl(*se, sp, "mti_control", panel, ControlKind::Discrete, false, search.mti_control) ||
             !OptionalNumber(*se, sp, "mti_max_range_m", search.mti_max_range_m)) {
             return false;
+        }
+        if (const json::Value* rx = se->Find("receiver")) {
+            if (!LoadReceiver(*rx, Join(sp, "receiver"), panel, search.receiver)) return false;
         }
         const json::Value* scales = OptionalArray(*se, sp, "range_scales_m");
         if (scales == nullptr) return message_.empty() ? Fail(Join(sp, "range_scales_m"), "required") : false;
@@ -1688,7 +1810,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (const json::Value* iff = se->Find("iff")) {
             const std::string ip = Join(sp, "iff");
             if (!Keys(*iff, ip, {"query", "control_query", "gate_control", "ready", "interrogating_input",
-                                 "query_time_s", "max_range_m", "source", "confidence", "notes"}) ||
+                                 "query_time_s", "max_range_m", "check_control", "check_ranges_m", "source", "confidence", "notes"}) ||
                 !Provenance(*iff, ip) ||
                 !RefControl(*iff, ip, "query", panel, ControlKind::Momentary, true, search.iff_query) ||
                 !RefControl(*iff, ip, "control_query", panel, ControlKind::Momentary, false, search.iff_control_query) ||
@@ -1699,6 +1821,18 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                 !OptionalNumber(*iff, ip, "max_range_m", search.iff_max_range_m)) {
                 return false;
             }
+            if (!RefControl(*iff, ip, "check_control", panel, ControlKind::Momentary, false, search.iff_check_control)) return false;
+            if (const json::Value* cr = OptionalArray(*iff, ip, "check_ranges_m")) {
+                for (const json::Value& r : cr->items) {
+                    if (!r.Is(json::Type::Number) || !(r.number > 0.0)) return Fail(Join(ip, "check_ranges_m"), "ranges must be > 0");
+                    search.iff_check_ranges_m.push_back(r.number);
+                }
+            } else if (!message_.empty()) {
+                return false;
+            }
+            if (!search.iff_check_control.empty() && search.iff_check_ranges_m.empty()) {
+                return Fail(Join(ip, "check_ranges_m"), "the check control needs its marks' ranges");
+            }
             if (!(search.iff_query_time_s > 0.0)) return Fail(Join(ip, "query_time_s"), "must be > 0");
             if (!(search.iff_max_range_m > 0.0)) return Fail(Join(ip, "max_range_m"), "required, > 0");
         }
@@ -1706,9 +1840,11 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         const std::string tp = "sensors.track";
         TrackSensorDef& track = out.track;
         if (!Keys(*tr, tp, {"transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode", "az_wheel",
-                            "el_wheel", "range_wheel", "lock_control", "slew_control", "slew_rate_deg_s", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
+                            "el_wheel", "range_wheel", "lock_control", "slew_control", "slew_rate_deg_s", "pa_gain_per_s", "pa_max_az_deg_s",
+                            "pa_max_el_deg_s", "pa_balance_az", "pa_balance_el", "range_balance_control", "range_balance_m", "fov_control", "mti_control", "rgpo_control", "fov_deg", "fov_height_ratio",
                             "max_range_m", "az_limit_deg", "captured_input", "range_pulled_input", "tv_track_input", "too_low_input", "near_zone_input",
-                            "in_zone_input", "crosshair_input", "slow_input", "slow_mps", "elevation_search", "notes"}) ||
+                            "in_zone_input", "crosshair_input", "slow_input", "slow_mps", "elevation_search", "receiver", "filter_control",
+                            "filter_visibility", "notes"}) ||
             !RefSubsystem(*tr, tp, "transmitter", eq, true, track.transmitter) ||
             !RefSubsystem(*tr, tp, "slew", eq, true, track.slew) ||
             !RefSubsystem(*tr, tp, "radar_mode", eq, true, track.radar_mode) ||
@@ -1721,6 +1857,13 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !RefControl(*tr, tp, "lock_control", panel, ControlKind::Discrete, false, track.lock_control) ||
             !RefControl(*tr, tp, "slew_control", panel, ControlKind::Discrete, false, track.slew_control) ||
             !OptionalNumber(*tr, tp, "slew_rate_deg_s", track.slew_rate_deg_s) ||
+            !OptionalNumber(*tr, tp, "pa_gain_per_s", track.pa_gain_per_s) ||
+            !OptionalNumber(*tr, tp, "pa_max_az_deg_s", track.pa_max_az_deg_s) ||
+            !OptionalNumber(*tr, tp, "pa_max_el_deg_s", track.pa_max_el_deg_s) ||
+            !RefControl(*tr, tp, "pa_balance_az", panel, ControlKind::Momentary, false, track.pa_balance_az) ||
+            !RefControl(*tr, tp, "pa_balance_el", panel, ControlKind::Momentary, false, track.pa_balance_el) ||
+            !RefControl(*tr, tp, "range_balance_control", panel, ControlKind::Continuous, false, track.range_balance_control) ||
+            !OptionalNumber(*tr, tp, "range_balance_m", track.range_balance_m) ||
             !RefControl(*tr, tp, "fov_control", panel, ControlKind::Discrete, false, track.fov_control) ||
             !RefControl(*tr, tp, "mti_control", panel, ControlKind::Discrete, false, track.mti_control) ||
             !RefControl(*tr, tp, "rgpo_control", panel, ControlKind::Discrete, false, track.rgpo_control) ||
@@ -1737,6 +1880,27 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             return false;
         }
         if (track.max_range_m <= 0.0) return Fail(Join(tp, "max_range_m"), "must be > 0");
+        if (const json::Value* rx = tr->Find("receiver")) {
+            if (!LoadReceiver(*rx, Join(tp, "receiver"), panel, track.receiver)) return false;
+        }
+        if (!RefControl(*tr, tp, "filter_control", panel, ControlKind::Discrete, false, track.filter_control)) return false;
+        if (const json::Value* fv = OptionalArray(*tr, tp, "filter_visibility")) {
+            for (const json::Value& f : fv->items) {
+                if (!f.Is(json::Type::Number) || !(f.number > 0.0)) return Fail(Join(tp, "filter_visibility"), "factors must be > 0");
+                track.filter_visibility.push_back(f.number);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (!track.filter_control.empty() &&
+            static_cast<int>(track.filter_visibility.size()) != panel.Find(track.filter_control)->positions) {
+            return Fail(Join(tp, "filter_visibility"), "needs one factor per position of " + track.filter_control);
+        }
+        if (track.pa_gain_per_s < 0.0 || track.pa_max_az_deg_s <= 0.0 || track.pa_max_el_deg_s <= 0.0) {
+            return Fail(Join(tp, "pa_gain_per_s"), "the gain must be >= 0 and the limits > 0");
+        }
+        if (track.pa_gain_per_s > 0.0 && track.tv_mode.empty()) return Fail(Join(tp, "pa_gain_per_s"), "needs a tv_mode");
+        if (track.range_balance_m < 0.0) return Fail(Join(tp, "range_balance_m"), "must be >= 0");
         if (!track.slew_control.empty()) {
             if (track.slew_rate_deg_s <= 0.0) return Fail(Join(tp, "slew_rate_deg_s"), "must be > 0 with a slew_control");
             for (const ControlDef& c : panel.Controls()) {
@@ -1777,7 +1941,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
                           "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
                           "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
                           "oriented_input", "compass_control", "compass_position", "consumers_control", "consumers_position",
-                          "source", "confidence", "notes"}) ||
+                          "follow_up_control", "follow_up_position", "latitude_switch", "latitude_switch_position", "qc_fault_input", "source", "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1795,11 +1959,24 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalNumber(o, op, "survey_sigma_deg", def.survey_sigma_deg) ||
             !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
             !RefInput(o, op, "oriented_input", eq, def.oriented_input) ||
+            !RefInput(o, op, "qc_fault_input", eq, def.qc_fault_input) ||
             !RefControl(o, op, "compass_control", panel, ControlKind::Discrete, false, def.compass_control) ||
             !OptionalInt(o, op, "compass_position", def.compass_position) ||
             !RefControl(o, op, "consumers_control", panel, ControlKind::Discrete, false, def.consumers_control) ||
-            !OptionalInt(o, op, "consumers_position", def.consumers_position)) {
+            !OptionalInt(o, op, "consumers_position", def.consumers_position) ||
+            !RefControl(o, op, "follow_up_control", panel, ControlKind::Discrete, false, def.follow_up_control) ||
+            !OptionalInt(o, op, "follow_up_position", def.follow_up_position) ||
+            !RefControl(o, op, "latitude_switch", panel, ControlKind::Discrete, false, def.latitude_switch) ||
+            !OptionalInt(o, op, "latitude_switch_position", def.latitude_switch_position)) {
             return false;
+        }
+        if (!def.follow_up_control.empty() &&
+            (def.follow_up_position < 0 || def.follow_up_position >= panel.Find(def.follow_up_control)->positions)) {
+            return Fail(Join(op, "follow_up_position"), "not a position of " + def.follow_up_control);
+        }
+        if (!def.latitude_switch.empty() &&
+            (def.latitude_switch_position < 0 || def.latitude_switch_position >= panel.Find(def.latitude_switch)->positions)) {
+            return Fail(Join(op, "latitude_switch_position"), "not a position of " + def.latitude_switch);
         }
         if (!def.consumers_control.empty() &&
             (def.consumers_position < 0 || def.consumers_position >= panel.Find(def.consumers_control)->positions)) {

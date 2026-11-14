@@ -369,6 +369,26 @@ SC_TEST("engagement: in ЦУ the tracking antenna scans the search beam and capt
     SC_EXPECT_NEAR(e.AntennaElevationDeg(), c.panel.GetValue(c.track.el_wheel), 1e-9);
 }
 
+SC_TEST("engagement: БАЛАНС АВТОМАТА off its middle holds the radar's range gate off the echo") {
+    std::unique_ptr<ScenarioRunner> runner = Acquisition(24000, 1000);
+    SC_EXPECT(runner != nullptr && RunToDesignation(*runner));
+    if (runner == nullptr) return;
+    ConsoleData& c = runner->Console();
+    const EngagementModel& e = runner->Engagement();
+    for (int i = 0; i < 600 && e.Method() != TrackMethod::Radar && !runner->Finished(); ++i) runner->Step(0.1);
+    SC_EXPECT(e.Method() == TrackMethod::Radar);
+    SC_EXPECT(c.track.range_balance_control == "ro.balance" && c.track.range_balance_m > 0.0);
+    // The range's rate from two balanced steps, then the knob at its end: the gate stands range_balance_m beyond.
+    for (int i = 0; i < 20; ++i) runner->Step(0.1);
+    const double r1 = c.panel.GetValue("ssc.range_wheel");
+    runner->Step(0.1);
+    const double r2 = c.panel.GetValue("ssc.range_wheel");
+    c.panel.SetValue("ro.balance", 1.0);
+    runner->Step(0.1);
+    const double r3 = c.panel.GetValue("ssc.range_wheel");
+    SC_EXPECT_NEAR(r3 - (2.0 * r2 - r1), c.track.range_balance_m, 15.0);
+}
+
 SC_TEST("engagement: searching the wrong beam in ЦУ never captures; the right beam does") {
     std::unique_ptr<ScenarioRunner> runner = Acquisition(24000, 1000);
     SC_EXPECT(runner != nullptr && RunToDesignation(*runner));
@@ -819,9 +839,21 @@ SC_TEST("tv: a distant target is tracked by the NPC operators, and the shot is c
     SC_EXPECT(Has(r, "deg off the crosshair"));
 }
 
-SC_TEST("tv: a target crossing close in leaves the lens field faster than the operators can follow") {
-    const Run r = Play(Engage(Target(6000, 800), kTvOnly));
-    SC_EXPECT(Has(r, "track lost: target left the TV field"));
+SC_TEST("tv: in ПА the operators follow a crossing 1.5 km off; one 100 m off leaves the lens field faster than they can") {
+    // ПА's integrator carries the antenna on at the rate the wheels gave (voenizdat_osa_1991 p87-88): 6°/s at the
+    // nearest is within it.
+    SC_EXPECT(Play(Engage(Target(6000, 800), kTvOnly)).debrief.find("target left the TV field") == std::string::npos);
+    // 100 m off: 86°/s in azimuth at the nearest, far past ПА's 30°/s (p85). The containers empty, so it is not shot
+    // down first.
+    std::string close = Target(6000, 800);
+    for (std::size_t at = close.find("\"east_m\": 1500"); at != std::string::npos; at = close.find("\"east_m\": 1500"))
+        close.replace(at, 14, "\"east_m\": 100");
+    std::string text = Engage(close, kTvOnly);
+    const std::string stopped = "\"inputs\": { \"vehicle_stopped\": true }";
+    text.replace(text.find(stopped), stopped.size(),
+                 stopped + ", \"empty_containers\": [\"1-I\", \"2-I\", \"3-I\", \"1-II\", \"2-II\", \"3-II\"]");
+    const Run near_pass = Play(text);
+    SC_EXPECT(Has(near_pass, "track lost: target left the TV field"));
 }
 
 SC_TEST("tv: terrain hiding the target is carried on in memory for a few seconds, then the track is lost") {
@@ -910,4 +942,29 @@ SC_TEST("tuning: the tracking radar's clutter height is optional and the sensors
     text.replace(at, std::string("\"mti_control\": \"ssc.mti\"").size(), "\"mti_control\": \"ssc.nothing\"");
     ConsoleData c;
     SC_EXPECT(!LoadConsole(text, c, &error) && error.find("sensors.track.mti_control") != std::string::npos);
+}
+
+// Roadmap C5: the TV looks through the light filter on its wheel (voenizdat_osa_1991 p101, p104); in haze the orange one
+// sees further than the blue, so the TV takes the target sooner through it.
+SC_TEST("tv: in haze the TV takes the target sooner through the orange filter than through the blue") {
+    auto first_tv_track_s = [](int filter) {
+        std::string text = Engage(Target(12000, 800), kTvOnly);
+        const std::string own = "\"inputs\": { \"vehicle_stopped\": true }";
+        text.replace(text.find(own), own.size(), own + ", \"controls\": { \"tov.filter\": " + std::to_string(filter) + " }");
+        const std::string terrain = "\"terrain\":";
+        text.replace(text.find(terrain), terrain.size(), "\"environment\": { \"visibility_km\": 16 }, " + terrain);
+        const Run r = Play(text);
+        const std::size_t at = r.debrief.find("TV track");
+        if (at == std::string::npos) {
+            std::printf("%s\n", r.debrief.c_str());
+            return 1e9;
+        }
+        const std::size_t line = r.debrief.rfind('\n', at);
+        return std::strtod(r.debrief.c_str() + (line == std::string::npos ? 0 : line + 1), nullptr);
+    };
+    const double blue = first_tv_track_s(0);
+    const double orange = first_tv_track_s(2);
+    std::printf("    first TV track: blue %.1f s, orange %.1f s\n", blue, orange);
+    SC_EXPECT(orange < 1e8);
+    SC_EXPECT(orange + 2.0 < blue);
 }

@@ -272,8 +272,8 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | NPC crew | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 0 |
 | commander | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | - | 30 |
-| deputy_commander | 663 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 10, duty 2, wheel 228 | 0 |
-| senior_operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 2, wheel 123 | 0 |
+| deputy_commander | 663 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 10, duty 2, wheel 899 | 0 |
+| senior_operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 2, wheel 103 | 0 |
 | operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 7, duty 2, wheel 38 | 0 |
 | driver | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
 
@@ -317,8 +317,8 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | NPC crew | 159 all targets gone | 4 | 86 | 146 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | - | 0 |
 | commander | 383 all targets gone | - | 86 | - | 0 | 1 | 0 | 0 | 0 | 5 | 0 | 0 | duty 5 | 15 |
 | deputy_commander | 383 all targets gone | 4 | 86 | - | 0 | 1 | 0 | 0 | 13 | 3 | 0 | 0 | drill 5, duty 14, wheel 551 | 0 |
-| senior_operator | 159 all targets gone | 2 | 88 | 146 | 1 | 1 | 0 | 0 | 8 | 8 | 0 | 0 | drill 9, duty 10, wheel 152 | 0 |
-| operator | 383 all targets gone | 4 | 87 | - | 0 | 1 | 0 | 0 | 9 | 12 | 0 | 0 | drill 5, duty 9, wheel 325 | 0 |
+| senior_operator | 159 all targets gone | 2 | 88 | 146 | 1 | 1 | 0 | 0 | 8 | 8 | 0 | 0 | drill 9, duty 10, wheel 107 | 0 |
+| operator | 383 all targets gone | 4 | 87 | - | 0 | 1 | 0 | 0 | 8 | 14 | 0 | 0 | drill 5, duty 8, wheel 326 | 0 |
 | driver | 159 all targets gone | 4 | 86 | 146 | 1 | 1 | 0 | 0 | 0 | 7 | 0 | 0 | - | 0 |
 
 ## osa_practice_em_ew: Osa: a drone with a noise pod and chaff
@@ -623,7 +623,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (operator): a sign of the shot on his instrument: the target flying on unchanged | 8 |
 | report (operator): a sign of the shot on his instrument: the target's mark gone | 14 |
 | report (operator): the echo shows through the jamming | 1 |
-| report (operator): the track was lost | 27 |
+| report (operator): the track was lost | 25 |
 | report (operator): К бою: the intercom checked | 34 |
 | report (radio_operator): a report the crew makes when its lamp or input comes on | 9 |
 | report (radio_operator): an air report heard: read it out to the plotter | 99 |

@@ -2,6 +2,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/cabin.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/debrief.hpp"
 #include "simcore/json.hpp"
@@ -676,4 +677,47 @@ SC_TEST("osa data: a player who turns the key before ПУСК ГОТОВ is judg
     c.panel.Set("fo.key", 1);
     SC_EXPECT(tr.Attempt(c.panel, "fo.key", 2, &c.equipment) == StepResult::AcceptedEarly);
     SC_EXPECT(tr.DeviationLog().front().kind == DeviationKind::Early);
+}
+
+SC_TEST("osa data: the receivers' knobs read as the wind compensation's offset, the magnetron's mistune, СДЦ ВНЕШН. and СА") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    ReceiverReading rx = ReadReceiver(c.search.receiver, c.panel);
+    SC_EXPECT(!rx.external && !rx.sa && rx.comp_mps == 0.0 && rx.mistune_hz == 0.0);  // as the crew finds it
+    // The knobs do nothing until their switches are over.
+    SC_EXPECT(c.panel.SetValue("soc.wind_coarse", 1.0) && c.panel.SetValue("soc.wind_fine", 0.0));
+    SC_EXPECT(c.panel.SetValue("soc.afc_trim", 0.75));
+    SC_EXPECT(ReadReceiver(c.search.receiver, c.panel).comp_mps == 0.0);
+    SC_EXPECT(ReadReceiver(c.search.receiver, c.panel).mistune_hz == 0.0);
+    SC_EXPECT(c.panel.Set("soc.wind_comp", 1) && c.panel.Set("soc.afc", 1) && c.panel.Set("soc.mti_ext", 1) && c.panel.Set("soc.sa", 1));
+    rx = ReadReceiver(c.search.receiver, c.panel);
+    SC_EXPECT_NEAR(rx.comp_mps, 30.0 - 5.0, 1e-9);     // coarse at its end, fine at the other
+    SC_EXPECT_NEAR(rx.mistune_hz, 0.5 * 5.0e6, 1e-3);  // halfway to the trim's end
+    SC_EXPECT(rx.external && rx.sa);
+    // The tracking radar's own set: no external coherence, no СА.
+    SC_EXPECT(c.track.receiver.mti_external_control.empty() && c.track.receiver.sa_control.empty());
+    SC_EXPECT(c.panel.Set("ssc.wind_comp", 1) && c.panel.SetValue("ssc.wind_coarse", 0.25));
+    SC_EXPECT_NEAR(ReadReceiver(c.track.receiver, c.panel).comp_mps, -15.0, 1e-9);
+}
+
+SC_TEST("osa data: СВЕТОФИЛЬТР steps its wheel round on each press, blue, clear, orange, and the TV sees through it") {
+    ConsoleData c;
+    SC_EXPECT(LoadConsoleFile(OsaPath(), c));
+    const ControlDef* f = c.panel.Find("tov.filter");
+    SC_EXPECT(f != nullptr && f->cycles && f->positions == 3 && f->initial == 1);
+    if (f == nullptr) return;
+    SC_EXPECT(CabinClickTarget(*f, 1, 1) == 2 && CabinClickTarget(*f, 2, 1) == 0 && CabinClickTarget(*f, 0, -1) == 1);
+    SC_EXPECT(c.track.filter_control == "tov.filter" && c.track.filter_visibility.size() == 3);
+    SC_EXPECT(c.track.filter_visibility[0] < 1.0 && c.track.filter_visibility[1] == 1.0 && c.track.filter_visibility[2] > 1.0);
+    // A cycling switch neither springs back nor is a button.
+    ControlPanel p;
+    ControlDef bad;
+    bad.id = "x";
+    bad.kind = ControlKind::Momentary;
+    bad.cycles = true;
+    SC_EXPECT(!p.AddControl(bad));
+    bad.kind = ControlKind::Discrete;
+    bad.positions = 3;
+    bad.springs_back = true;
+    SC_EXPECT(!p.AddControl(bad));
 }

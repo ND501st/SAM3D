@@ -752,3 +752,70 @@ SC_TEST("em scale: the ESM sites and search radars give the same result on 1 and
     SC_EXPECT(one.events == four.events);
     SC_EXPECT(one.numbers == four.numbers);
 }
+
+// Roadmap C5: in internal coherence the wind compensation moves the canceller's notch to its offset
+// (voenizdat_osa_1991 p36-37): drifting chaff at that radial speed cancels, and the ground clutter, at none, comes back.
+SC_TEST("em scenario: the wind compensation moves the notch onto drifting chaff, and the ground clutter comes back") {
+    int false_plots[2] = {0, 0};
+    double cn_db[2] = {-300.0, -300.0};
+    for (int k = 0; k < 2; ++k) {
+        EmWorld w(kOrigin, nullptr, 9);
+        SC_EXPECT(w.SetLibrary(GenericLib()));
+        Environment env;
+        env.wind_mps = {0.0, -25.0, 0.0};  // blowing straight at the radar: the chaff closes at 25 m/s
+        w.SetEnvironment(env);
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+        const int radar = w.AddRadar(site, "generic_search_c", true);
+        RadarState* r = w.Scene().FindRadar(radar);
+        r->mti = MtiMode::Internal;
+        r->mti_comp_mps = k == 0 ? 0.0 : -25.0;
+        w.AddChaff(EnuAt(0.0, 25000.0, 2000.0), 50.0, 120.0);
+        const int low = AddAircraft(w, "low flier", Side::Blue, 0.0, 8000.0, 30.0, {0.0, -200.0, 0.0});
+        for (int i = 0; i < 300; ++i) {
+            w.Step(0.1);
+            r = w.Scene().FindRadar(radar);
+            for (const RadarPlot& p : r->last_plots) false_plots[k] += p.false_target ? 1 : 0;
+            for (const LookRecord& l : r->last_looks)
+                if (l.platform_id == low && i < 60) cn_db[k] = l.cn_db;  // while it is still far enough out
+        }
+    }
+    std::printf("    chaff plots: no compensation %d, compensated %d; the low flier's clutter %.1f dB, then %.1f dB\n",
+                false_plots[0], false_plots[1], cn_db[0], cn_db[1]);
+    SC_EXPECT(false_plots[0] > 5);
+    SC_EXPECT(false_plots[1] <= 1);
+    SC_EXPECT_NEAR(cn_db[1] - cn_db[0], 25.0, 0.5);  // the generic radar's improvement, lost
+}
+
+// Roadmap C5: a magnetron off its tune (РПЧМ, voenizdat_osa_1991 p33-36) weakens every echo alike, and past the AFC's
+// tolerance the canceller loses its phasing: the clutter is no longer cancelled.
+SC_TEST("em scenario: off its tune the magnetron weakens the echo, and past the AFC's tolerance the MTI stops cancelling") {
+    const double mistune_hz[3] = {0.0, 0.4e6, 1.2e6};
+    double snr_db[3], cn_db[3];
+    for (int k = 0; k < 3; ++k) {
+        EmLibrary lib = GenericLib();
+        const int rd = lib.Radar("generic_search_c");
+        SC_EXPECT(rd >= 0);
+        if (rd < 0) return;
+        lib.radars[static_cast<std::size_t>(rd)].afc_tolerance_hz = 0.5e6;
+        EmWorld w(kOrigin, nullptr, 9);
+        SC_EXPECT(w.SetLibrary(lib));
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+        const int radar = w.AddRadar(site, "generic_search_c", true);
+        RadarState* r = w.Scene().FindRadar(radar);
+        r->mti = MtiMode::Internal;
+        r->mistune_hz = mistune_hz[k];
+        const int low = AddAircraft(w, "low flier", Side::Blue, 0.0, 8000.0, 30.0, {0.0, -200.0, 0.0});
+        snr_db[k] = cn_db[k] = -300.0;
+        for (int i = 0; i < 60; ++i) {
+            w.Step(0.1);
+            for (const LookRecord& l : w.Scene().FindRadar(radar)->last_looks)
+                if (l.platform_id == low) { snr_db[k] = l.snr_db; cn_db[k] = l.cn_db; }
+        }
+    }
+    std::printf("    snr %.1f / %.1f / %.1f dB, clutter %.1f / %.1f / %.1f dB\n", snr_db[0], snr_db[1], snr_db[2], cn_db[0],
+                cn_db[1], cn_db[2]);
+    SC_EXPECT(snr_db[0] > -300.0);
+    SC_EXPECT(snr_db[1] < snr_db[0] - 0.01 && snr_db[2] < snr_db[1]);
+    SC_EXPECT_NEAR((cn_db[1] - snr_db[1]) - (cn_db[0] - snr_db[0]), 0.0, 1e-6);   // within the tolerance: still cancelled
+    SC_EXPECT_NEAR((cn_db[2] - snr_db[2]) - (cn_db[0] - snr_db[0]), 25.0, 1e-6);  // past twice it: not at all
+}

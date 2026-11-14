@@ -401,6 +401,23 @@ public:
         const em::RadarDef& d = DefOf(*r);
         r->mti = d.has_mti && mti ? em::MtiMode::Internal : em::MtiMode::Off;
     }
+    // The receivers' settings (roadmap C5): external coherence (the search radar only: the tracking radar has none,
+    // voenizdat_osa_1991 p27, p72), the wind compensation's offset, the magnetron's mistune, the СА blanker (the search
+    // radar's). Called after SetSearch / SetTrack, which choose the MTI.
+    void SetSearchReceiver(bool external, double comp_mps, double mistune_hz, bool sa) {
+        em::RadarState* r = Radar(search_);
+        if (r == nullptr) return;
+        if (external && r->mti == em::MtiMode::Internal) r->mti = em::MtiMode::External;
+        r->mti_comp_mps = comp_mps;
+        r->mistune_hz = mistune_hz;
+        r->sa_on = sa;
+    }
+    void SetTrackReceiver(double comp_mps, double mistune_hz) {
+        em::RadarState* r = Radar(track_);
+        if (r == nullptr) return;
+        r->mti_comp_mps = comp_mps;
+        r->mistune_hz = mistune_hz;
+    }
 
     // The elevation beams the search antenna steps through, one per revolution (indices into the radar's beams).
     // A new programme takes effect at the next revolution.
@@ -437,6 +454,9 @@ public:
         if (!radiating && r->on) ClearLock();
         r->on = radiating;
         r->prf_staggered = mti;
+        // СДЦ also cancels the clutter in the tracking radar's gate (its canceller is the search radar's, shared:
+        // voenizdat_osa_1991 p40).
+        r->mti = DefOf(*r).has_mti && mti ? em::MtiMode::Internal : em::MtiMode::Off;
         r->rgpo_trailing_blank = rgpo_protect;
     }
     // A repeater holds the tracking radar's range gate (range-gate pull-off): the operator sees the target's mark and

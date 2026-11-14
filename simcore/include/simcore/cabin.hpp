@@ -75,6 +75,7 @@ inline CabinStyle DefaultCabinStyle(const ControlDef& def, const ControlPanel& p
 inline int CabinClickTarget(const ControlDef& def, int current, int direction) {
     if (def.kind == ControlKind::Continuous) return -1;
     if (def.kind == ControlKind::Momentary) return 1;
+    if (def.cycles) return (current + 1) % def.positions;  // each press steps the wheel on, round to the first
     if (def.springs_back) {
         int target = direction >= 0 ? 0 : def.positions - 1;
         if (target == def.initial) target = direction >= 0 ? def.positions - 1 : 0;

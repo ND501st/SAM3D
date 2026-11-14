@@ -4,21 +4,21 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 
 | State | Meaning | Controls |
 |---|---|---|
-| wired | drives a subsystem or the launch | 64 |
-| model | read by a simulation model | 71 |
-| display | sets a screen's picture or what a meter reads | 31 |
-| indicator | only lights a lamp or turns on a display | 9 |
+| wired | drives a subsystem or the launch | 68 |
+| model | read by a simulation model | 90 |
+| display | sets a screen's picture or what a meter reads | 32 |
+| indicator | only lights a lamp or turns on a display | 10 |
 | code | named by simcore's source or a system file, not by the console | 0 |
-| drill | worked in a drill, lesson or readiness state; changes nothing | 9 |
-| inert | nothing names it | 83 |
+| drill | worked in a drill, lesson or readiness state; changes nothing | 7 |
+| inert | nothing names it | 60 |
 | **all** | | **267** |
 
-## wired (64): drives a subsystem or the launch
+## wired (68): drives a subsystem or the launch
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
 | aiming_circle_case | буссоль (aiming circle): stowed / set up ahead | `nav.aiming_circle` | Commander | Qc measured with the aiming circle (mutual sighting) |
-| commander_panel | ПРОХОД ПОД МОСТОМ | `apu.stow` | Commander | Search antenna up and levelled |
+| commander_panel | ПРОХОД ПОД МОСТОМ | `apu.stow` | Commander | A stabilisation drive went to its limit angle: search off, the antenna and the pumps locked (ПРЕД. УГОЛ); Search antenna up and levelled |
 | commander_panel | СВЯЗЬ (communications) | `veh.comms_power` | Commander | R-123M left warmed up (10 min); R-123M right warmed up (10 min); Р-124 intercom working (commander's box on) |
 | commander_panel | люки (hatches) | `veh.hatches` | Commander | Launch circuit armed (live-fire mode, hatches closed, key turned, missile ready); ЛЮКИ ЗАКР.; РУ |
 | dp3b_panel | DP-3B: ПРОВЕРКА | `dp3b.check` | Commander | DP-3B tested |
@@ -39,11 +39,14 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | fo_panel | ТСЦ | `fo.tsc` | Deputy commander | Manual capture (ТСЦ pressed on the target) |
 | fo_panel | guard over АВАРИЙНЫЙ ПУСК | `msl.emergency_cover` | Deputy commander | АВАР. ПУСК ОБЕСТОЧ. |
 | fo_panel | elevation wheel lock | `ssc.el_lock` | Deputy commander | nothing |
+| fo_panel | lid over БАЛАНС ПА (УГОЛ МЕСТА) | `ssc.pa_balance_el_cover` | Deputy commander | nothing |
+| fo_panel | КОНТРОЛЬ — РАБОТА (ВПУ) | `tov.check` | Deputy commander | The TV shows its test chart 0249 (ВПУ at КОНТРОЛЬ); The TV shows the scene through its lens (ВПУ at РАБОТА) |
 | fo_panel | РАБ.РЕЖ. | `tov.power` | Deputy commander | TOV camera on |
 | gyro_arrest_panel | АРРЕТИР. | `gyro.arrest` | Driver | Gyro vertical erected (АРРЕТИР., 40 s) |
 | gyro_panel | ПРИВОД γ | `drv.gamma_service` | Deputy commander | Search-antenna stabilisation (9W611BM2) working |
 | gyro_panel | +27 В | `drv.plus27` | Deputy commander | Search-antenna stabilisation (9W611BM2) working |
 | gyro_panel | ПРИВОД Ψ | `drv.psi_service` | Deputy commander | Search-antenna stabilisation (9W611BM2) working |
+| gyro_panel | АНОД ВКЛ. | `fk.anode` | Deputy commander | The function-check set's anode supply on (АНОД ВКЛ.) |
 | heater_panel | СВЕЧА (pre-heater) | `heat.plug` | Commander | Engine pre-heater burning; pre-heater: glow plug window |
 | heater_panel | pre-heater button | `heat.start` | Commander | Engine pre-heater burning |
 | ind_panel | АВАР. ОТКЛ. СЭП | `pwr.emergency_off` | Deputy commander | The power system cut by АВАР. ОТКЛ. СЭП |
@@ -66,7 +69,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | pwr_cabinet | ПРИВОДЫ εн, СВР-I, СВР-II ВКЛ. — ОТКЛ. | `drv.el` | Operator | Tracking-radar and missile-tracker drives on (АПУ can turn); ПРИВОДЫ εн, СВР; ПРИВОДЫ СВР I; ПРИВОДЫ СВР II |
 | pwr_cabinet | ПОДКАЧКА ОТСЕКОВ АВАРИЙНАЯ — ОТКЛ. | `press.emergency` | Operator | Compartments' pressurisation on (ЭПК opened) |
 | pwr_cabinet | ПОДКАЧКА ОТСЕКОВ ШТАТНАЯ | `press.standard` | Operator | Compartments' pressurisation on (ЭПК opened) |
-| pwr_cabinet | АППАРАТУРА ВКЛ. — ОТКЛ. | `pwr.equipment` | Operator | 0009-5M's ОШИБКА ψ and ОШИБКА γ glowing; Equipment warmed up (anode supplies on, scopes sweeping); Fire-control computer 9С456М3 switched on; I ЛУЧ; II ЛУЧ; III ЛУЧ; Search-antenna stabilisation (9W611BM2) working; The power system cut by АВАР. ОТКЛ. СЭП; Transmitters ready for high voltage (three-minute relay); βн ЗАСТОПОР.; АНТЕННА СОЦ ЗАСТОПОРЕНА; ГАБАРИТ 3800; НАКАЛ СОЦ; НАКАЛ СПК-I; НАКАЛ СПК-II; НАКАЛ ССЦ; ПРИВОД βн; ПРИВОДЫ εн, СВР; ПРИВОДЫ СВР I; ПРИВОДЫ СВР II; РАССТОПОРЕНО Δε, εн; РАССТОПОРЕНО βн; РУ; СТОПОР ПОХОД.; УКЛАДКА ПРОИЗВ.; ЭКВИВАЛЕНТ СОЦ; ЭКВИВАЛЕНТ СПК I; ЭКВИВАЛЕНТ СПК II |
+| pwr_cabinet | АППАРАТУРА ВКЛ. — ОТКЛ. | `pwr.equipment` | Operator | 0009-5M's ОШИБКА ψ and ОШИБКА γ glowing; Equipment warmed up (anode supplies on, scopes sweeping); Fire-control computer 9С456М3 switched on; I ЛУЧ; II ЛУЧ; III ЛУЧ; Search-antenna stabilisation (9W611BM2) working; The power system cut by АВАР. ОТКЛ. СЭП; Transmitters ready for high voltage (three-minute relay); βн ЗАСТОПОР.; АНТЕННА СОЦ ЗАСТОПОРЕНА; ГАБАРИТ 3800; НАКАЛ СОЦ; НАКАЛ СПК-I; НАКАЛ СПК-II; НАКАЛ ССЦ; ОТКАЗ СРП; ПРЕД. УГОЛ; ПРИВОД βн; ПРИВОДЫ εн, СВР; ПРИВОДЫ СВР I; ПРИВОДЫ СВР II; РАССТОПОРЕНО Δε, εн; РАССТОПОРЕНО βн; РУ; СТОПОР ПОХОД.; УКЛАДКА ПРОИЗВ.; ЭКВИВАЛЕНТ СОЦ; ЭКВИВАЛЕНТ СПК I; ЭКВИВАЛЕНТ СПК II |
 | pwr_cabinet | РАССТОПОР. — СТОПОР. | `soc.rotation_lock` | Operator | SOC search antenna rotating; АНТЕННА СОЦ ЗАСТОПОРЕНА |
 | pwr_cabinet | СИСТЕМА СТАБ. ВКЛ. — ОТКЛ. | `stab.power` | Operator | 0009-5M's ОШИБКА ψ and ОШИБКА γ glowing; Search-antenna stabilisation (9W611BM2) working |
 | pwr_cabinet | ТОВ — ОТКЛ. | `tov.supply` | Operator | TOV camera on |
@@ -79,10 +82,11 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | so_panel | ВЫСОКОЕ | `soc.hv` | Senior operator | SOC transmitter radiating |
 | so_panel | guard over ВЫСОКОЕ | `soc.hv_cover` | Senior operator | nothing |
 | so_panel | ПОИСК | `soc.search` | Senior operator | SOC search antenna rotating |
+| so_panel | ЭМУ ОТКЛ. — ВКЛ. | `ssc.emu` | Senior operator | The turret turns in azimuth (the drives on, the ЭМУ's control winding fed) |
 | sp2m_panel | ТРЕНИРОВКА — РАБОТА СОЦ | `soc.training` | Senior operator | SOC transmitter radiating |
 | sp2m_panel | ТРЕНИРОВКА — РАБОТА ССЦ | `ssc.training` | Senior operator | SSC transmitter radiating |
 
-## model (71): read by a simulation model
+## model (90): read by a simulation model
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -97,19 +101,28 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | fo_panel | СМЕНА ЛИТ. — НОРМА | `spk.letter` | Deputy commander | Missiles and guidance channels I / II |
 | fo_panel | ПОДСВЕТКА (εс) | `ssc.el_light` | Deputy commander | εс |
 | fo_panel | УГОЛ МЕСТА | `ssc.el_wheel` | Deputy commander | Tracking radar and TV channel; εс |
+| fo_panel | БАЛАНС ПА (УГОЛ МЕСТА) | `ssc.pa_balance_el` | Deputy commander | Tracking radar and TV channel |
+| fo_panel | СВЕТОФИЛЬТР | `tov.filter` | Deputy commander | Tracking radar and TV channel |
 | fo_panel | УГОЛ ЗРЕНИЯ | `tov.fov` | Deputy commander | TOV monitor; Tracking radar and TV channel |
 | gyro_panel | МК — ГПК — АК | `gyro.compass_mode` | Deputy commander | Heading: gyro half-compass |
 | gyro_panel | ПОТРЕБИТЕЛИ ОСН. — КОНТР. | `gyro.consumers` | Deputy commander | Heading: gyro half-compass |
+| gyro_panel | φ АВТ. — РУЧН. | `gyro.phi_mode` | Deputy commander | Heading: gyro half-compass |
 | gyro_panel | ВОЗВРАТ (II) | `msl.return_2` | Deputy commander | Missiles and guidance channels I / II |
 | gyro_panel | АК — ЗК | `orient.ak_zk` | Deputy commander | Heading: gyro half-compass |
 | gyro_panel | ШИРОТА (φ) | `orient.latitude` | Deputy commander | Heading: gyro half-compass; ШИРОТА |
 | gyro_panel | ЗАДАТЧИК КУРСА ЗК-4 (Qc) | `orient.qc` | Deputy commander | Heading: gyro half-compass; ЗК-4 (Qc) |
 | gyro_panel | РЕЛЕ — Qc | `orient.relay` | Deputy commander | Heading: gyro half-compass |
 | gyro_panel | СОГЛАСОВАНИЕ | `orient.sync` | Deputy commander | Heading: gyro half-compass |
+| op_panel | БАЛАНС АВТОМАТА | `ro.balance` | Operator | Tracking radar and TV channel |
+| op_panel | РПЧМ — АПЧМ (ССЦ) | `ssc.afc` | Operator | Tracking radar and TV channel |
+| op_panel | ССЦ РПЧМ | `ssc.afc_trim` | Operator | Tracking radar and TV channel |
 | op_panel | СДЦ / ШТ. (SSC) | `ssc.mti` | Operator | Tracking radar and TV channel |
 | op_panel | range wheel | `ssc.range_wheel` | Operator | Tracking radar and TV channel |
 | op_panel | УВ. ПОМЕХА — ОТКЛ. | `ssc.rgpo` | Operator | Tracking radar and TV channel |
 | op_panel | Р I — ЦЕЛЬ — Р II | `ssc.target_select` | Operator | Missiles and guidance channels I / II |
+| op_panel | КОМПЕНСАЦИЯ ВЕТРА ГРУБО | `ssc.wind_coarse` | Operator | Tracking radar and TV channel |
+| op_panel | КОМПЕНС. ВЕТРА — ОТКЛ. (ССЦ) | `ssc.wind_comp` | Operator | Tracking radar and TV channel |
+| op_panel | КОМПЕНСАЦИЯ ВЕТРА ТОЧНО | `ssc.wind_fine` | Operator | Tracking radar and TV channel |
 | r124_a1_panel | Headset (шлемофон): commander (A-1) | `headset.commander` | Commander | Voices: the intercom boxes, headsets, sets and telephone |
 | r124_a1_panel | ГРОМКОСТЬ (A-1) | `intercom.a1_volume` | Commander | Voices: the intercom boxes, headsets, sets and telephone |
 | r124_a1_panel | нагрудный переключатель (А-1): ПРМ — ПРД | `radio.chest` | Commander | R-123M sets and R-124 intercom |
@@ -147,21 +160,32 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | radio_right_panel | R-123M right: ТОН. ВЫЗОВ | `radio.right.tone` | Commander | R-123M sets and R-124 intercom |
 | radio_right_panel | R-123M right: ГРОМКОСТЬ | `radio.right.volume` | Commander | R-123M sets and R-124 intercom; Voices: the intercom boxes, headsets, sets and telephone |
 | so_panel | ОТКР. ПРИЕМ — КЛАПАН | `iff.gate` | Senior operator | IFF interrogator |
+| so_panel | КОНТР. ИНД. | `iff.ind_check` | Senior operator | IFF interrogator |
 | so_panel | ЗАПРОС | `iff.query` | Senior operator | IFF interrogator |
 | so_panel | ЗАПРОС К | `iff.query_k` | Senior operator | IFF interrogator |
 | so_panel | ВОЗВРАТ (I) | `msl.return_1` | Senior operator | Missiles and guidance channels I / II |
+| so_panel | РПЧМ — АПЧМ (СОЦ) | `soc.afc` | Senior operator | Search radar picture |
+| so_panel | РЕГ. РПЧМ | `soc.afc_trim` | Senior operator | Search radar picture |
 | so_panel | ЛУЧ | `soc.beam` | Senior operator | Elevation search in the beam (ЦУ); Search radar picture |
 | so_panel | СДЦ / ШТ. (SOC) | `soc.mti` | Senior operator | Search radar picture |
+| so_panel | СДЦ ВНЕШН. — ВНУТР. | `soc.mti_ext` | Senior operator | Search radar picture |
 | so_panel | ДАЛЬНОСТЬ | `soc.range` | Senior operator | Search radar picture |
+| so_panel | СА — ОТКЛ. | `soc.sa` | Senior operator | Search radar picture |
+| so_panel | КОМПЕНСАЦИЯ ВЕТРА ГРУБО (СОЦ) | `soc.wind_coarse` | Senior operator | Search radar picture |
+| so_panel | КОМПЕНС. ВЕТРА — ОТКЛ. (СОЦ) | `soc.wind_comp` | Senior operator | Search radar picture |
+| so_panel | КОМПЕНСАЦИЯ ВЕТРА ТОЧНО (СОЦ) | `soc.wind_fine` | Senior operator | Search radar picture |
 | so_panel | ПОДСВЕТКА (βс) | `ssc.az_light` | Senior operator | βс |
 | so_panel | azimuth wheel lock | `ssc.az_lock` | Senior operator | Tracking radar and TV channel |
 | so_panel | АЗИМУТ | `ssc.az_wheel` | Senior operator | Tracking radar and TV channel; βс |
+| so_panel | БАЛАНС ПА (АЗИМУТ) | `ssc.pa_balance_az` | Senior operator | Tracking radar and TV channel |
 | so_panel | ВЛЕВО — ВПРАВО | `ssc.slew` | Senior operator | Tracking radar and TV channel |
+| sp2m_panel | СС — ОТКЛ. | `gyro.follow_up` | Senior operator | Heading: gyro half-compass |
 
-## display (31): sets a screen's picture or what a meter reads
+## display (32): sets a screen's picture or what a meter reads
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
+| fo_panel | РЕЖИМЫ | `err.mode` | Deputy commander | СО β; СО ε |
 | fo_panel | ЯРКОСТЬ (ε) | `fo.el_bright` | Deputy commander | Elevation-search indicator OS81-10M |
 | fo_panel | КОНТРАСТ (ε) | `fo.el_contrast` | Deputy commander | Elevation-search indicator OS81-10M |
 | fo_panel | ФОКУС (ε) | `fo.el_focus` | Deputy commander | Elevation-search indicator OS81-10M |
@@ -194,7 +218,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | so_panel | ЯРКОСТЬ МЕТОК | `soc.marks_bright` | Senior operator | SOC indicator |
 | so_panel | ОСВЕЩ. ШКАЛЫ | `soc.scale_light` | Senior operator | SOC indicator |
 
-## indicator (9): only lights a lamp or turns on a display
+## indicator (10): only lights a lamp or turns on a display
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -202,13 +226,14 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | bulkhead_panel | engine door: upper dog | `hull.door_dog_upper` | Operator | ДВЕРЬ ЗАКРЫТА |
 | driver_panel | ПРИБОРЫ (instrument lighting) | `veh.instr_lights` | Driver | Топливо (fuel) |
 | fo_panel | ОСВЕЩ. | `err.light` | Deputy commander | СО β; СО ε |
+| gyro_panel | КЗ | `fk.kz` | Deputy commander | КЗ |
 | op_panel | РАБОТА / КОНТРОЛЬ / КАЛИБР. | `ssc.check_mode` | Operator | Range indicator |
 | pu303_panel | ПОДСВЕТКА (the panel's lights) | `gta.backlight` | Driver | ПОДСВЕТКА (left); ПОДСВЕТКА (right) |
 | pu303_panel | КОНТР. ЛАМП (lamp test) | `gta.lamp_test` | Driver | ДАВЛ. МАСЛА; ЛЮКИ ЗАКР.; ЛЮКИ ОТКР.; НАГРУЗКИ ГОМ; НАГРУЗКИ ГТА; НАГРУЗКИ ИВП; ОБРАТ. ЧЕРЕД.; ОБРЫВ ФАЗ; ПР ВС |
 | vent_hatch_left | ЛЮК ВЕНТИЛЯЦИИ ЗАКР. — ОТКР. (left) | `vent.hatch_left` | Deputy commander | ЛЮКИ РТА ЗАКРЫТЫ |
 | vent_hatch_right | ЛЮК ВЕНТИЛЯЦИИ ЗАКР. — ОТКР. (right) | `vent.hatch_right` | Commander | ЛЮКИ РТА ЗАКРЫТЫ |
 
-## drill (9): worked in a drill, lesson or readiness state; changes nothing
+## drill (7): worked in a drill, lesson or readiness state; changes nothing
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -216,13 +241,11 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | bulkhead_panel | ЗИМА — ЛЕТО (right cover) | `vent.cover_right` | Operator | data/crew/osa_ak_crew.json |
 | gyro_panel | ПРОВЕРКА ПЕРЕХОДНЫХ ХАРАКТЕРИСТИК | `fk.transients` | Deputy commander | data/crew/osa_ak_crew.json |
 | gyro_panel | ОБОГРЕВ — ВКЛ. | `gyro.heat` | Deputy commander | data/crew/osa_ak_crew.json |
-| gyro_panel | φ АВТ. — РУЧН. | `gyro.phi_mode` | Deputy commander | data/crew/osa_ak_crew.json |
 | gyro_panel | РЕЛЕ — Ψ, Θ | `gyro.relay_pt` | Deputy commander | data/crew/osa_ak_crew.json |
 | gyro_panel | ПИТАНИЕ ПТ — СЕТЬ | `gyro.supply` | Deputy commander | data/crew/osa_ak_crew.json |
 | gyro_panel | КОНТРОЛЬ РАБОТЫ (ОС51-8М) | `soc.mti_check` | Deputy commander | data/crew/osa_ak_crew.json |
-| sp2m_panel | СС — ОТКЛ. | `gyro.follow_up` | Senior operator | data/crew/osa_ak_crew.json |
 
-## inert (83): nothing names it
+## inert (60): nothing names it
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -252,18 +275,11 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | fire_panel | ПЕРЕВОД ДИСКА — ОСТАТОК БАЛЛОНОВ | `fire.disc` | Driver | nothing |
 | fire_valve_panel | bottle valve (red hand wheel) | `fire.valve` | Driver | nothing |
 | fo_panel | ЧАСТОТА | `err.freq` | Deputy commander | nothing |
-| fo_panel | РЕЖИМЫ | `err.mode` | Deputy commander | nothing |
 | fo_panel | ВЫВОД — НАВЕДЕНИЕ | `err.output` | Deputy commander | nothing |
 | fo_panel | …МЦ | `fo.mc` | Deputy commander | nothing |
-| fo_panel | БАЛАНС ПА (УГОЛ МЕСТА) | `ssc.pa_balance_el` | Deputy commander | nothing |
-| fo_panel | lid over БАЛАНС ПА (УГОЛ МЕСТА) | `ssc.pa_balance_el_cover` | Deputy commander | nothing |
 | fo_panel | ШИР. — СРЕДН. | `svr.beam` | Deputy commander | nothing |
-| fo_panel | КОНТРОЛЬ — РАБОТА (ВПУ) | `tov.check` | Deputy commander | nothing |
-| fo_panel | СВЕТОФИЛЬТР | `tov.filter` | Deputy commander | nothing |
 | fo_panel | ВЕНТИЛЯЦИЯ РАБОЧИХ МЕСТ — ОТКЛ. | `vent.workplaces` | Deputy commander | nothing |
 | gear_lever_panel | gear lever | `veh.gear` | Driver | nothing |
-| gyro_panel | АНОД ВКЛ. | `fk.anode` | Deputy commander | nothing |
-| gyro_panel | КЗ | `fk.kz` | Deputy commander | nothing |
 | gyro_panel | ПУСК — ИСХ. ПОЛОЖ. | `fk.launch` | Deputy commander | nothing |
 | gyro_panel | ПРОВЕРКА СМЕНЫ ЛИТЕРА | `fk.letter` | Deputy commander | nothing |
 | gyro_panel | УРОВНИ КОМАНД | `fk.levels` | Deputy commander | nothing |
@@ -275,15 +291,9 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | header_valve_right | valve over the right screen | `veh.header_valve_right` | Commander | nothing |
 | ind_panel | ПЕРЕКЛЮЧАТЕЛЬ ПАНЕЛИ ИНДИКАЦИИ | `ind.select` | Deputy commander | nothing |
 | ind_panel | УКЧ ВКЛ. — ОТКЛ. | `pwr.ukch` | Deputy commander | nothing |
-| op_panel | БАЛАНС АВТОМАТА | `ro.balance` | Operator | nothing |
 | op_panel | СКОРОСТЬ П А | `ro.speed` | Operator | nothing |
-| op_panel | РПЧМ — АПЧМ (ССЦ) | `ssc.afc` | Operator | nothing |
-| op_panel | ССЦ РПЧМ | `ssc.afc_trim` | Operator | nothing |
 | op_panel | РРУ КШ ДОП. | `ssc.control_sel` | Operator | nothing |
 | op_panel | РЕЖИМЫ | `ssc.modes` | Operator | nothing |
-| op_panel | КОМПЕНСАЦИЯ ВЕТРА ГРУБО | `ssc.wind_coarse` | Operator | nothing |
-| op_panel | КОМПЕНС. ВЕТРА — ОТКЛ. (ССЦ) | `ssc.wind_comp` | Operator | nothing |
-| op_panel | КОМПЕНСАЦИЯ ВЕТРА ТОЧНО | `ssc.wind_fine` | Operator | nothing |
 | post_valve_panel | ВЕНТИЛЯЦИЯ — ОТОПЛЕНИЕ | `veh.heat_vent` | Driver | nothing |
 | pu303_panel | ХОЛ. ПРОКР. (cold cranking) | `gta.cold_crank` | Driver | nothing |
 | pu303_panel | НАПР. ГОМ | `gta.volt_gom` | Driver | nothing |
@@ -296,17 +306,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | radio_right_panel | R-123M right: КАЛИБРОВКА | `radio.right.calibrate` | Commander | nothing |
 | radio_right_panel | R-123M right: КОНТРОЛЬ НАПРЯЖЕНИЙ | `radio.right.volt_check` | Commander | nothing |
 | radio_well_panel | switch box with the red lever (left radio well) | `veh.well_switch` | Driver | nothing |
-| so_panel | КОНТР. ИНД. | `iff.ind_check` | Senior operator | nothing |
 | so_panel | БАЛАНС (I) | `msl.balance_1` | Senior operator | nothing |
-| so_panel | РПЧМ — АПЧМ (СОЦ) | `soc.afc` | Senior operator | nothing |
-| so_panel | РЕГ. РПЧМ | `soc.afc_trim` | Senior operator | nothing |
-| so_panel | СДЦ ВНЕШН. — ВНУТР. | `soc.mti_ext` | Senior operator | nothing |
-| so_panel | СА — ОТКЛ. | `soc.sa` | Senior operator | nothing |
-| so_panel | КОМПЕНСАЦИЯ ВЕТРА ГРУБО (СОЦ) | `soc.wind_coarse` | Senior operator | nothing |
-| so_panel | КОМПЕНС. ВЕТРА — ОТКЛ. (СОЦ) | `soc.wind_comp` | Senior operator | nothing |
-| so_panel | КОМПЕНСАЦИЯ ВЕТРА ТОЧНО (СОЦ) | `soc.wind_fine` | Senior operator | nothing |
-| so_panel | ЭМУ ОТКЛ. — ВКЛ. | `ssc.emu` | Senior operator | nothing |
-| so_panel | БАЛАНС ПА (АЗИМУТ) | `ssc.pa_balance_az` | Senior operator | nothing |
 | stowage_panel | stowage cover (lower) | `veh.stowage_lower` | Driver | nothing |
 | stowage_panel | stowage cover (upper) | `veh.stowage_upper` | Driver | nothing |
 

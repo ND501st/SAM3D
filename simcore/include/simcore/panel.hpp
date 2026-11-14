@@ -35,6 +35,7 @@ struct ControlDef {
     std::string guard_id;  // cover/lock control that must be open (position >= 1) before this one moves
     bool stepwise = false; // Discrete: may only move to an adjacent position
     bool springs_back = false;  // Discrete: a spring lever, off its initial position only while a hand holds it (LetGo)
+    bool cycles = false;        // Discrete: a button that steps a wheel round its positions, the last back to the first
     ControlKind kind = ControlKind::Discrete;
     double min_value = 0.0;      // Continuous: range, in the unit the data file states
     double max_value = 1.0;
@@ -56,12 +57,13 @@ public:
         switch (def.kind) {
             case ControlKind::Discrete:
                 if (def.positions < 1 || def.initial < 0 || def.initial >= def.positions) return false;
+                if (def.cycles && (def.springs_back || def.stepwise)) return false;
                 break;
             case ControlKind::Momentary:
-                if (def.positions != 2 || def.initial != 0 || def.stepwise || def.springs_back) return false;
+                if (def.positions != 2 || def.initial != 0 || def.stepwise || def.springs_back || def.cycles) return false;
                 break;
             case ControlKind::Continuous:
-                if (!(def.max_value > def.min_value) || def.stepwise || def.springs_back) return false;
+                if (!(def.max_value > def.min_value) || def.stepwise || def.springs_back || def.cycles) return false;
                 if (def.initial_value < def.min_value || def.initial_value > def.max_value) return false;
                 break;
         }

@@ -231,7 +231,7 @@ private:
         if (!Keys(v, path, {"id", "name", "role", "emitter", "noise_figure_db", "rx_bandwidth_hz", "pfa", "calibration",
                             "low_altitude_check", "antenna_height_m", "min_range_m", "max_range_m", "min_elevation_deg",
                             "max_elevation_deg", "range_sigma_floor_m", "angle_sigma_floor_deg", "monopulse_slope",
-                            "range_resolution_m", "mti", "clutter", "tracker", "track_gate_m", "max_slew_deg_s", "iff",
+                            "range_resolution_m", "mti", "clutter", "tracker", "track_gate_m", "max_slew_deg_s", "iff", "sa_loss_db",
                             "eccm", "low_target_elevation_deg", "source", "confidence", "notes"})) {
             return false;
         }
@@ -272,14 +272,17 @@ private:
             if (!LoadAnchor(*low, Join(path, "low_altitude_check"), d.low_altitude_check)) return false;
         if (const json::Value* m = v.Find("mti")) {
             const std::string mp = Join(path, "mti");
-            if (!Keys(*m, mp, {"improvement_db", "notch_mps", "notch_attenuation_db", "max_range_m", "notes"})) return false;
+            if (!Keys(*m, mp, {"improvement_db", "notch_mps", "notch_attenuation_db", "max_range_m", "afc_tolerance_hz", "notes"})) return false;
             d.has_mti = true;
             if (!Val(*m, mp, "improvement_db", d.mti_improvement_db, true) || !Val(*m, mp, "notch_mps", d.mti_notch_mps, true) ||
                 !Val(*m, mp, "notch_attenuation_db", d.mti_notch_attenuation_db, false) ||
-                !Val(*m, mp, "max_range_m", d.mti_max_range_m, false))
+                !Val(*m, mp, "max_range_m", d.mti_max_range_m, false) || !Val(*m, mp, "afc_tolerance_hz", d.afc_tolerance_hz, false))
                 return false;
             if (d.mti_max_range_m < 0.0) return Fail(Join(mp, "max_range_m"), "must be >= 0 (0: no limit)");
+            if (d.afc_tolerance_hz < 0.0) return Fail(Join(mp, "afc_tolerance_hz"), "must be >= 0 (0: not modelled)");
         }
+        if (!Val(v, path, "sa_loss_db", d.sa_loss_db, false)) return false;
+        if (d.sa_loss_db < 0.0) return Fail(Join(path, "sa_loss_db"), "must be >= 0");
         if (const json::Value* c = v.Find("clutter")) {
             const std::string cp = Join(path, "clutter");
             if (!Keys(*c, cp, {"cnr_db_at_10km", "max_elevation_deg", "notes"})) return false;
@@ -401,7 +404,7 @@ private:
     bool LoadJammer(const json::Value& v, const std::string& path, EmLibrary& lib) {
         if (!Keys(v, path, {"id", "name", "technique", "emitter", "rgpo_walk_mps", "rgpo_max_m", "rgpo_off_s",
                             "rgpo_js_needed_db", "retune_s", "false_targets", "false_spacing_m", "false_jn_needed_db",
-                            "source", "confidence", "notes"})) {
+                            "synchronous", "source", "confidence", "notes"})) {
             return false;
         }
         JammerDef d;
@@ -426,7 +429,7 @@ private:
         double count = 0.0;
         if (!Val(v, path, "retune_s", d.retune_s, false) || !Val(v, path, "false_targets", count, false) ||
             !Val(v, path, "false_spacing_m", d.false_spacing_m, false) ||
-            !Val(v, path, "false_jn_needed_db", d.false_jn_needed_db, false))
+            !Val(v, path, "false_jn_needed_db", d.false_jn_needed_db, false) || !OptionalBool(v, path, "synchronous", d.synchronous))
             return false;
         if (count < 0.0 || count > 50.0) return Fail(Join(path, "false_targets"), "0 to 50");
         d.false_targets = static_cast<int>(count);

@@ -309,12 +309,21 @@ class MapBuilder:
                 if block and block.get(key):
                     self.add_edge(prefix + block[key], mid, "feed", why)
 
+        def receiver_feeds(block, mid):
+            """The receiver's knobs (roadmap C5): MTI source, wind compensation, AFC and its trim, СА."""
+            rec = block.get("receiver") or {}
+            feeds(mid, [("c:", k, rec, why) for k, why in (
+                ("mti_external_control", "MTI internal/external"), ("wind_comp_control", "wind compensation on"),
+                ("wind_coarse_control", "wind compensation, coarse"), ("wind_fine_control", "wind compensation, fine"),
+                ("afc_control", "AFC automatic/manual"), ("afc_trim_control", "manual tuning"), ("sa_control", "СА blanking"))])
+
         if search:
             self.add_node("m:search", t="model", label="Search radar picture",
                           notes="Detects targets on the PPI with the selected scale and MTI while the antenna turns and the transmitter radiates.",
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:search", [("s:", "antenna", search, "antenna"), ("s:", "transmitter", search, "transmitter"),
                                ("c:", "range_control", search, "range scale"), ("c:", "mti_control", search, "MTI")])
+            receiver_feeds(search, "m:search")
             beams = search.get("beams")
             if beams:  # the beam selector's programme, and the beam lamps it lights (roadmap 6.4)
                 feeds("m:search", [("c:", "control", beams, "beam programme")])
@@ -325,7 +334,8 @@ class MapBuilder:
                 self.add_node("m:iff", t="model", label="IFF interrogator", notes=iff.get("notes"),
                               source=iff.get("source"), conf=iff.get("confidence"))
                 feeds("m:iff", [("c:", "query", iff, "query"), ("c:", "control_query", iff, "control query"),
-                                ("c:", "gate_control", iff, "gated mode"), ("s:", "ready", iff, "needs radiating")])
+                                ("c:", "gate_control", iff, "gated mode"), ("s:", "ready", iff, "needs radiating"),
+                                ("c:", "check_control", iff, "indicator check marks")])
                 if iff.get("interrogating_input"):
                     self.add_edge("m:iff", "i:" + iff["interrogating_input"], "signal", "sets this signal")
         if track:
@@ -338,7 +348,9 @@ class MapBuilder:
                           source=sen.get("source"), conf=sen.get("confidence"))
             feeds("m:track", [("s:", k, track, k) for k in ("transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode")]
                   + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "slew_control", "fov_control", "mti_control",
-                                                         "rgpo_control")])
+                                                         "rgpo_control", "filter_control", "range_balance_control")]
+                  + [("c:", k, track, "ПА balance") for k in ("pa_balance_az", "pa_balance_el")])
+            receiver_feeds(track, "m:track")
             if es:
                 self.add_edge("m:elev", "m:track", "feed", "elevation search")
             for k in ("captured_input", "too_low_input", "near_zone_input", "in_zone_input", "crosshair_input", "range_pulled_input"):
@@ -352,7 +364,11 @@ class MapBuilder:
                                ("c:", "sync_button", orient, "fast sync"),
                                ("c:", "latitude_control", orient, "latitude correction (drift)"),
                                ("c:", "compass_control", orient, "compass mode: МК — ГПК — АК"),
-                               ("c:", "consumers_control", orient, "ПОТРЕБИТЕЛИ: the setter connected to the gyro")])
+                               ("c:", "consumers_control", orient, "ПОТРЕБИТЕЛИ: the setter connected to the gyro"),
+                               ("c:", "follow_up_control", orient, "follow-up: the frame slaved to the gyro"),
+                               ("c:", "latitude_switch", orient, "latitude switch φ")])
+            if orient.get("qc_fault_input"):
+                self.add_edge("i:" + orient["qc_fault_input"], "m:orient", "feed", "ОТКАЗ Qc stops the follow-up")
             for key in ("synced_input", "qc_known_input", "oriented_input"):
                 if orient.get(key):
                     self.add_edge("m:orient", "i:" + orient[key], "signal", "sets this signal")

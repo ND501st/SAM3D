@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "simcore/cabin.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "test_framework.hpp"
@@ -326,3 +327,223 @@ SC_TEST("readiness: ВЛЕВО — ВПРАВО, held, slews the antenna at its 
     c.panel.LetGo("ssc.slew");
 }
 
+
+SC_TEST("readiness: ЭМУ off stops the azimuth drive; in ПА the antenna carries on at the rate the wheel gave until БАЛАНС ПА") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("senior_operator", "player"));
+    SC_EXPECT(r->TakeSeat("deputy_commander", "player"));
+    ConsoleData& c = r->Console();
+    const Equipment& e = c.equipment;
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    auto az = [&] { return c.panel.GetValue("ssc.az_wheel"); };
+    run(1.0);
+    SC_EXPECT(e.IsReady("azimuth_drive") && c.track.slew == "azimuth_drive");
+    // OS52-12M1 (voenizdat_osa_1991 p99): ЭМУ ОТКЛ. cuts the ЭМУ's control winding: the turret stops in azimuth.
+    c.panel.Set("ssc.emu", 1);
+    run(0.5);
+    SC_EXPECT(!e.IsReady("azimuth_drive") && e.IsReady("antenna_drives"));
+    c.panel.Set("ssc.az_lock", 1);
+    c.panel.Set("ssc.slew", 2);
+    const double held = az();
+    run(1.0);
+    SC_EXPECT_NEAR(az(), held, 1e-6);  // the fast slew can't turn it either
+    c.panel.LetGo("ssc.slew");
+    c.panel.Set("ssc.emu", 0);
+    run(0.5);
+    SC_EXPECT(e.IsReady("azimuth_drive"));
+
+    // ПА (p87-88): the TV on, ПА pressed. A hand turns the wheel 4 deg and lets go: the integrator holds 2 deg/s.
+    c.panel.Set("tov.supply", 1);
+    c.panel.Set("tov.power", 1);
+    run(30.0);
+    c.panel.Set("fo.pa", 1);
+    run(0.2);
+    SC_EXPECT(e.IsReady("tv_angle_track"));
+    const double before = az();
+    run(1.0);
+    SC_EXPECT_NEAR(az(), before, 1e-6);  // no rate yet: it stands
+    c.panel.SetValue("ssc.az_wheel", az() + 4.0);
+    run(0.1);
+    const double from = az();
+    run(2.0);
+    SC_EXPECT_NEAR(az() - from, 4.0, 0.3);  // 2 deg/s on its own
+    // БАЛАНС ПА (АЗИМУТ) clears the rate: it stops.
+    c.panel.Set("ssc.pa_balance_az", 1);
+    run(0.2);
+    const double stopped = az();
+    run(1.0);
+    SC_EXPECT_NEAR(az(), stopped, 1e-6);
+    // The rate is held to the drive's 30 deg/s (p85).
+    c.panel.SetValue("ssc.az_wheel", az() + 100.0);
+    run(0.1);
+    const double fast = az();
+    run(1.0);
+    SC_EXPECT_NEAR(az() - fast, 30.0, 3.1);
+    c.panel.Set("ssc.pa_balance_az", 1);
+    run(0.2);
+    // Out of ПА (РУ) nothing carries on.
+    c.panel.Set("fo.ru", 1);
+    run(0.2);
+    SC_EXPECT(!e.IsReady("tv_angle_track"));
+    c.panel.SetValue("ssc.az_wheel", az() - 4.0);
+    run(0.1);
+    const double ru = az();
+    run(1.0);
+    SC_EXPECT_NEAR(az(), ru, 1e-6);
+}
+
+namespace {
+const CabinLamp* LampOf(const CabinLayout& layout, const std::string& id) {
+    for (const CabinLamp& l : layout.lamps)
+        if (l.id == id) return &l;
+    return nullptr;
+}
+const CabinDisplay* DisplayOf(const CabinLayout& layout, const std::string& id) {
+    for (const CabinDisplay& d : layout.displays)
+        if (d.id == id) return &d;
+    return nullptr;
+}
+}  // namespace
+
+// Roadmap C4: the faults a scenario sets (set_input) and how they show: the lamps of 0005-8M, 0096-9M1, the stowing panel and
+// 0004-11M1 light, and each takes out what the textbook says it does.
+SC_TEST("faults: ОТКАЗ Qc, ОБРЫВ ФАЗЫ, ПРЕД. УГОЛ and ОТКАЗ СРП light their lamps and take out what they stand for") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    ConsoleData& c = r->Console();
+    Equipment& e = c.equipment;
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", c, layout));
+    auto lit = [&](const char* id) {
+        const CabinLamp* l = LampOf(layout, id);
+        SC_EXPECT(l != nullptr);
+        return l != nullptr && CabinLayout::LampLit(*l, c.panel, e);
+    };
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    run(1.0);
+    for (const char* id : {"qc_fail", "phase_break_stab", "phase_break_gon", "limit_angle", "srp_fail"}) SC_EXPECT(!lit(id));
+    SC_EXPECT(e.IsReady("stabilisation") && e.IsReady("search_antenna") && e.IsReady("fire_control_computer"));
+    // ОТКАЗ Qc (p51): the follow-up stops, the frame keeps its heading.
+    e.SetInput("gyro_phase_lost", true);
+    run(1.0);
+    SC_EXPECT(lit("qc_fail"));
+    // ОБРЫВ ФАЗЫ ψ, γ (p50): the drives' pumps lose a phase, the stabilisation faults and the search antenna goes down.
+    e.SetInput("hydraulic_phase_break", true);
+    run(1.0);
+    SC_EXPECT(lit("phase_break_stab") && e.State("stabilisation") == SubsystemState::Fault && !e.IsReady("search_antenna"));
+    e.SetInput("hydraulic_phase_break", false);
+    // ОТКАЗ СРП (p137): the computer faults, no missile is prepared.
+    e.SetInput("srp_fault", true);
+    run(1.0);
+    SC_EXPECT(lit("srp_fail") && e.State("fire_control_computer") == SubsystemState::Fault && !e.IsReady("missile_prep"));
+    // ОБРЫВ ФАЗЫ ГОН (p96-97): the lamp; the radar's angle tracking cannot come up.
+    e.SetInput("scanner_phase_break", true);
+    run(1.0);
+    SC_EXPECT(lit("phase_break_gon") && !e.IsReady("auto_tracking"));
+}
+
+SC_TEST("faults: ПРЕД. УГОЛ switches the search off until the antenna is stowed, and trips again while the drive is still at its limit") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("commander", "player"));
+    ConsoleData& c = r->Console();
+    Equipment& e = c.equipment;
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", c, layout));
+    auto lit = [&](const char* id) { const CabinLamp* l = LampOf(layout, id); return l != nullptr && CabinLayout::LampLit(*l, c.panel, e); };
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    run(1.0);
+    SC_EXPECT(e.IsReady("search_antenna"));
+    e.SetInput("stab_limit", true);  // a drive on its hard stop (p48)
+    run(1.0);
+    SC_EXPECT(lit("limit_angle") && !lit("stowed") && !e.IsReady("stabilisation") && !e.IsReady("search_antenna"));
+    c.panel.Set("apu.stow", 0);  // ПРОХОД ПОД МОСТОМ ВКЛ. still on the slope: it trips again
+    run(1.0);
+    SC_EXPECT(lit("limit_angle"));
+    e.SetInput("stab_limit", false);  // moved to level ground
+    TimeUntil(*r, [&] { return e.State("search_antenna") == SubsystemState::Off; }, r->Time() + 60.0);  // stowing
+    if (lit("limit_angle") || !lit("stowed"))
+        std::printf("    stow %d tripped %s stabilisation %s search antenna %s\n", c.panel.Get("apu.stow"),
+                    ToString(e.State("stab_limit_tripped")), ToString(e.State("stabilisation")), ToString(e.State("search_antenna")));
+    SC_EXPECT(!lit("limit_angle") && lit("stowed"));
+    c.panel.Set("apu.stow", 1);  // ВЫКЛ.: the antenna rises and stabilises again
+    run(200.0);
+    SC_EXPECT(e.IsReady("search_antenna"));
+}
+
+SC_TEST("function check: АНОД ВКЛ. and КЗ light the K3 lamp in ФК if the channel is sound; the meters show РЕЖИМЫ's check") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("deputy_commander", "player"));
+    ConsoleData& c = r->Console();
+    Equipment& e = c.equipment;
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", c, layout));
+    auto lit = [&](const char* id) { const CabinLamp* l = LampOf(layout, id); return l != nullptr && CabinLayout::LampLit(*l, c.panel, e); };
+    auto meter = [&](const char* id) { const CabinDisplay* d = DisplayOf(layout, id); return d != nullptr ? LevelReading(*d, c) : -99.0; };
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    run(1.0);
+    c.panel.Set("fk.kz", 1);
+    run(0.2);
+    SC_EXPECT(!lit("fk_k3"));  // not in ФК: the check set has no power (p158)
+    c.panel.Set("fo.mode", 3);  // ФК
+    run(181.0);
+    SC_EXPECT(e.IsReady("function_check"));
+    c.panel.Set("fk.anode", 1);
+    run(0.2);
+    SC_EXPECT(e.IsReady("fk_anode"));
+    SC_EXPECT(c.panel.Set("fk.kz", 1));
+    SC_EXPECT(lit("fk_k3"));  // while it is held (a push-button: the step lets it go)
+    e.SetInput("k3_fault", true);
+    SC_EXPECT(!lit("fk_k3"));
+    c.panel.Set("err.mode", 0);
+    run(0.1);
+    SC_EXPECT_NEAR(meter("err_target_eps"), 5.0, 1e-9);
+    c.panel.Set("err.mode", 1);  // СМЕНА ЗНАКА
+    run(0.1);
+    SC_EXPECT_NEAR(meter("err_missile_beta"), -5.0, 1e-9);
+    e.SetInput("error_channel_fault", true);
+    run(0.1);
+    SC_EXPECT_NEAR(meter("err_target_beta"), 0.0, 1e-9);  // the dead channel
+    c.panel.Set("fo.mode", 1);  // out of ФК: the anode drops
+    run(0.5);
+    SC_EXPECT(!e.IsReady("fk_anode"));
+}
+
+SC_TEST("TV and IFF checks: ВПУ at КОНТРОЛЬ shows the test chart and the TV cannot track; КОНТР. ИНД. puts a check mark on the PPI") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("deputy_commander", "player"));
+    SC_EXPECT(r->TakeSeat("senior_operator", "player"));
+    ConsoleData& c = r->Console();
+    Equipment& e = c.equipment;
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    // The search transmitter on (the interrogator works with it): the senior operator's seat is the test's.
+    SC_EXPECT(c.panel.Set("soc.training", 1) && c.panel.Set("soc.hv_cover", 1) && c.panel.Set("soc.hv", 1));
+    c.panel.Set("tov.supply", 1);
+    c.panel.Set("tov.power", 1);
+    run(30.0);
+    SC_EXPECT(e.IsReady("tv_picture") && !e.IsReady("tv_test_chart"));
+    c.panel.Set("tov.check", 1);
+    run(0.5);
+    SC_EXPECT(!e.IsReady("tv_picture") && e.IsReady("tv_test_chart"));
+    c.panel.Set("fo.pa", 1);
+    run(0.5);
+    SC_EXPECT(!e.IsReady("tv_angle_track"));  // the crosshair is out (p102-104)
+    c.panel.Set("tov.check", 0);
+    // КОНТР. ИНД. (p66) with the interrogator ready: the check mark at 10 km on the sweep.
+    SC_EXPECT(c.search.iff_check_control == "iff.ind_check");
+    TimeUntil(*r, [&] { return e.IsReady(c.search.iff_ready); }, r->Time() + 400.0);
+    SC_EXPECT(e.IsReady(c.search.iff_ready));
+    c.panel.Set("iff.ind_check", 1);
+    run(0.1);
+    bool mark = false;
+    for (const Contact& k : r->Engagement().IffReplies()) mark = mark || (k.target_id == EngagementModel::kIffCheckMark && std::fabs(k.range_m - 10000.0) < 1e-6);
+    SC_EXPECT(mark);
+}
