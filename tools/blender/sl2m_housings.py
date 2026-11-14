@@ -467,15 +467,8 @@ SOLIDS = [
     {'panel': 'fo_panel', 'shape': 'disc', 'at': (0.0426, 0.0206), 'r': 0.0036, 'd0': 0.0143, 'd1': 0.0165, 'mat': 'Bakelite_Black'},
     {'panel': 'fo_panel', 'shape': 'box', 'at': (0.0426, 0.0206), 'w': 0.0052, 'h': 0.0008, 'd0': 0.0160, 'd1': 0.0167,
      'mat': 'Metal_Dark'},
-] + [
-    # ПЕЛЕНГ I / II (op, its oval): in each of its two dark wells, on the light washer (the mount's cup), a steel hex nut
-    # 11.5 mm across its flats with a red insulator in it and the pin's dark hole (samsim_panels at 12x on a millimetre
-    # grid, 14 Nov 2026)
-    p for v in (-0.2791, -0.3133) for p in (
-        {'panel': 'op_panel', 'shape': 'hex', 'at': (0.2627, v), 'across': 0.0115, 'd0': 0.0025, 'd1': 0.0085, 'mat': 'Metal_Steel'},
-        {'panel': 'op_panel', 'shape': 'disc', 'at': (0.2627, v), 'r': 0.0038, 'd0': 0.0083, 'd1': 0.0090, 'mat': 'Paint_Red'},
-        {'panel': 'op_panel', 'shape': 'disc', 'at': (0.2627, v), 'r': 0.0010, 'd0': 0.0089, 'd1': 0.0092, 'mat': 'Rubber_Black'})
 ]
+# ПЕЛЕНГ I / II are hex-nut push-buttons the game draws (SM_HexNut, SM_HexPusher), each in its dark well on the oval.
 
 
 def _area(pts):
@@ -526,7 +519,7 @@ def _item_shape(sec, it):
     elif sec == 'lamps':
         if s is None:
             s = 0.022
-        if look.get('kind') == 'lamp':
+        if look.get('kind') in ('lamp', 'signal'):
             s = 1.4 * s if isinstance(s, (int, float)) else s
     else:
         s = s if s is not None else 0.02
@@ -539,7 +532,11 @@ def _item_shape(sec, it):
 
 
 def _is_button(sec, it):
+    """True for a button the mount rings with a chrome hexagon; 'part' for a hex-nut button that brings its own nut
+    (SM_HexNut): its well only."""
     kind = (it.get('look', {}) if sec != 'fixtures' else it).get('kind')
+    if kind == 'hex_button':
+        return 'part'
     return kind in ('button', 'lamp_button') or (sec == 'controls' and 'look' not in it)
 
 

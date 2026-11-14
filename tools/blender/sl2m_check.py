@@ -28,7 +28,7 @@ PANELS = ('op_panel', 'so_panel', 'fo_panel')
 PARTS = os.path.join(REPO, 'art', 'cabin_parts', 'cabin_parts.blend')
 
 # SimCabinComponent's look colours (LookColor) and lamp colours, linear
-LOOK = {'black': (0.015, 0.015, 0.015), 'white': (0.62, 0.6, 0.52), 'grey': (0.22, 0.22, 0.21), 'chrome': (0.6, 0.6, 0.62),
+LOOK = {'silver': (0.82, 0.82, 0.84), 'gunmetal': (0.1, 0.1, 0.105), 'rubber': (0.02, 0.02, 0.02), 'black': (0.015, 0.015, 0.015), 'white': (0.62, 0.6, 0.52), 'grey': (0.22, 0.22, 0.21), 'chrome': (0.6, 0.6, 0.62),
         'brass': (0.55, 0.38, 0.1), 'red': (0.45, 0.02, 0.01), 'green': (0.02, 0.35, 0.04), 'amber': (0.6, 0.28, 0.02),
         'yellow': (0.65, 0.48, 0.12), 'orange': (0.5, 0.14, 0.03), 'bluegrey': (0.16, 0.2, 0.24), 'lightgrey': (0.36, 0.37, 0.38),
         'ivory': (0.7, 0.66, 0.52), 'blue': (0.03, 0.08, 0.4), 'cream': (0.55, 0.54, 0.47), 'copper': (0.3, 0.07, 0.035), 'steel': (0.42, 0.42, 0.43), 'nickel': (0.5, 0.5, 0.49), 'screw': (0.40, 0.36, 0.28), 'satin': (0.45, 0.42, 0.35),
@@ -41,7 +41,7 @@ KNOB_PART = {'knob': 'SM_Knob', 'pointer_knob': 'SM_KnobPointer', 'bar_knob': 'S
 
 
 def mat(name, rgb, metal=0.0, rough=0.5):
-    key = (name, rgb)
+    key = (name, rgb, metal, rough)
     if key not in _mats:
         m = bpy.data.materials.new(name)
         m.use_nodes = True
@@ -84,7 +84,7 @@ class Panel:
         return Matrix((x, y, z)).transposed()
 
 
-def place(parts, name, panel, u, v, size, rgb, d=0.0, up=None, metal=0.0, coll=None):
+def place(parts, name, panel, u, v, size, rgb, d=0.0, up=None, metal=0.0, coll=None, rough=0.5):
     if name not in parts:
         return None
     o = bpy.data.objects.new(name, parts[name])
@@ -92,11 +92,11 @@ def place(parts, name, panel, u, v, size, rgb, d=0.0, up=None, metal=0.0, coll=N
     o.matrix_world = Matrix.Translation(panel.at(u, v, d)) @ panel.basis(up).to_4x4() @ Matrix.Diagonal((size, size, size, 1.0))
     o.data = parts[name]
     o.material_slots and None
-    o.active_material = mat(name, tuple(rgb), metal)
+    o.active_material = mat(name, tuple(rgb), metal, rough)
     if o.material_slots:
         for sl in o.material_slots:
             sl.link = 'OBJECT'
-            sl.material = mat(name, tuple(rgb), metal)
+            sl.material = mat(name, tuple(rgb), metal, rough)
     return o
 
 
@@ -257,7 +257,11 @@ def build(layout, console, parts):
         W = W[0] if isinstance(W, list) else W
         cap = kind in ('button', 'lamp_button')
         rgb = colour(look.get('color'), 'dark')
-        if style == 'toggle' and kind in ('jack', 'socket'):      # a jack's look on a two-position control: no lever
+        if kind == 'hex_button':            # as SimCabinComponent: the red pusher in its steel hex nut (ВЫСОКОЕ, ПОИСК, ЛУЧ)
+            Wb = W or 0.022
+            place(parts, 'SM_HexNut', P, u, v, Wb, LOOK['steel'], metal=1.0, rough=0.4)
+            place(parts, 'SM_HexPusher', P, u, v, Wb, colour(look.get('color'), 'red'), rough=0.25)
+        elif style == 'toggle' and kind in ('jack', 'socket'):      # a jack's look on a two-position control: no lever
             place(parts, 'SM_Jack' if kind == 'jack' else 'SM_Socket', P, u, v, W or 0.016, rgb)
         elif style == 'toggle' and not cap:
             Wb = W or 0.016
@@ -300,8 +304,11 @@ def build(layout, console, parts):
         elif style == 'key':                 # the lock's polished barrel sloping in to its dished top, the cylinder in it
             D = W or 0.032
             if 'SM_KeyBarrel' in parts:
-                place(parts, 'SM_KeyBarrel', P, u, v, D, rgb if look.get('color') else LOOK['brass'], metal=1.0)
-                box(P, u, v, 0.0016, 0.0062, 0.0, 0.295 * D + 0.0003, LOOK['black'], 'keyhole')
+                place(parts, 'SM_KeyBarrel', P, u, v, D, rgb if look.get('color') else LOOK['brass'], metal=1.0,
+                      rough=0.16 if look.get('color') == 'silver' else 0.5)
+                place(parts, 'SM_KeyPlug', P, u, v, D, LOOK['steel'], metal=1.0, rough=0.45)
+                if not place(parts, 'SM_Keyhole', P, u, v, D, LOOK['black']):
+                    box(P, u, v, 0.0016, 0.0062, 0.0, 0.295 * D + 0.0003, LOOK['black'], 'keyhole')
             else:
                 disc(P, u, v, D, D, 0.0, 0.01, rgb if look.get('color') else LOOK['brass'], 'key')
                 disc(P, u, v, 0.4 * D, 0.4 * D, 0.0, 0.0125, LOOK['chrome'], 'key_core')
@@ -331,6 +338,17 @@ def build(layout, console, parts):
                 disc(P, u, v, W, W, 0.0, 0.012, LOOK['dark'], 'legend')
             legend_text(P, u, v, 0.0124, W, H, look.get('label') or l.get('label', ''),
                         colour(look['ink']) if look.get('ink') else None)
+        elif look.get('kind') == 'signal':      # as SimCabinComponent: the СЛЦ-51-type armature, rubber washer, fluted cap
+            lens = colour(look.get('color') or l.get('color'), 'red')
+            place(parts, 'SM_SignalBase', P, u, v, 1.4 * W, LOOK['rubber'], rough=0.9)
+            ring = look.get('ring') or 'chrome'
+            place(parts, 'SM_SignalCap', P, u, v, 1.4 * W, colour(ring, 'chrome'), metal=0.0 if ring == 'black' else 1.0,
+                  rough={'black': 0.35, 'gunmetal': 0.3}.get(ring, 0.2))
+            place(parts, 'SM_SignalLens', P, u, v, 1.4 * W, tuple(0.35 * x for x in lens), rough=0.1)
+        elif look.get('kind') == 'hex_button':  # a lit push-button in the hex nut (ЗАХ. АПЧ I)
+            place(parts, 'SM_HexNut', P, u, v, W, LOOK['steel'], metal=1.0, rough=0.4)
+            place(parts, 'SM_HexPusher', P, u, v, W, tuple(0.35 * x for x in colour(look.get('color') or l.get('color'), 'red')),
+                  rough=0.1)        # the unlit glass, dark as in the photo
         elif look.get('kind') == 'lamp_button':
             place(parts, 'SM_ButtonRing', P, u, v, W, colour(look.get('ring'), 'chrome'), metal=0.8)
             place(parts, 'SM_ButtonCap', P, u, v, W, tuple(0.35 * x for x in colour(look.get('color'), 'red')))
@@ -354,10 +372,9 @@ def build(layout, console, parts):
                 r = 0.48 * w
                 ink = (0.09, 0.06, 0.0)
                 box(P, u - 0.63 * r, v, 0.0006, 1.5 * r, 0.013, 0.0132, ink, 'grat')
-                for i in range(-10, 11):
-                    t = (0.12 if i % 2 == 0 else 0.06) * r
-                    box(P, u - 0.63 * r + t / 2, v + i * 0.075 * r, t, 0.0004, 0.013, 0.0132, ink, 'grat')
-                box(P, u + 0.11 * r, v, 1.48 * r, 0.0004, 0.013, 0.0132, ink, 'grat')
+                for i in range(-5, 6):           # six long marks, a short one between each, left of the line
+                    t = (0.12 if i % 2 == 1 or i % 2 == -1 else 0.06) * r
+                    box(P, u - 0.63 * r - t / 2, v + i * 0.15 * r, t, 0.0004, 0.013, 0.0132, ink, 'grat')
         else:
             box(P, u, v, w, h, 0.0, 0.013, rgb, 'screen')
     # ---- fixtures the game draws
@@ -384,6 +401,9 @@ def build(layout, console, parts):
         elif k == 'lamp':
             place(parts, 'SM_LampBezel', P, u, v, 1.4 * W, LOOK['chrome'], metal=1.0)
             place(parts, 'SM_LampLens', P, u, v, 1.4 * W, tuple(0.5 * x for x in rgb))
+        elif k == 'hex_button':
+            place(parts, 'SM_HexNut', P, u, v, W, LOOK['steel'], metal=1.0, rough=0.4)
+            place(parts, 'SM_HexPusher', P, u, v, W, colour(fx.get('color'), 'red'), rough=0.25)
         elif k in ('button', 'lamp_button'):
             place(parts, 'SM_ButtonRing', P, u, v, W, colour(fx.get('ring'), 'chrome'), metal=0.8)
             place(parts, 'SM_ButtonCap', P, u, v, W, rgb)

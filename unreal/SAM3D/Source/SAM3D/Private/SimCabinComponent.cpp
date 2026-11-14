@@ -63,6 +63,12 @@ namespace
 		if (Name == "white") return FLinearColor(0.62f, 0.6f, 0.52f);
 		if (Name == "grey") return FLinearColor(0.22f, 0.22f, 0.21f);
 		if (Name == "chrome") return FLinearColor(0.6f, 0.6f, 0.62f);
+		// ЗАПРЕТ ПУСКА's polished lock barrel (the project owner's reading of SAM Simulator's AK photo: brighter than chrome)
+		if (Name == "silver") return FLinearColor(0.82f, 0.82f, 0.84f);
+		// the SŁ-2M's signal lamps' caps: a dark, almost black metal (the project owner's reading of SAM's AK photo),
+		// and the thin rubber washer under them
+		if (Name == "gunmetal") return FLinearColor(0.1f, 0.1f, 0.105f);
+		if (Name == "rubber") return FLinearColor(0.02f, 0.02f, 0.02f);
 		if (Name == "brass") return FLinearColor(0.55f, 0.38f, 0.1f);
 		if (Name == "red") return FLinearColor(0.45f, 0.02f, 0.01f);
 		if (Name == "green") return FLinearColor(0.02f, 0.35f, 0.04f);
@@ -95,6 +101,10 @@ namespace
 	{
 		if (C.Equals(ChromeColor) || C.Equals(LookColor("chrome", FLinearColor::Black))) return FVector2D(0.22, 1.0);
 		if (C.Equals(BrassColor) || C.Equals(LookColor("brass", FLinearColor::Black))) return FVector2D(0.35, 1.0);
+		if (C.Equals(LookColor("silver", FLinearColor::Black))) return FVector2D(0.16, 1.0);
+		if (C.Equals(LookColor("gunmetal", FLinearColor::Black))) return FVector2D(0.3, 1.0);
+		if (C.Equals(LookColor("rubber", FLinearColor::Black))) return FVector2D(0.9, 0.0);
+		if (C.Equals(LookColor("copper", FLinearColor::Black))) return FVector2D(0.35, 1.0);
 		if (C.Equals(LookColor("steel", FLinearColor::Black))) return FVector2D(0.45, 1.0);
 		if (C.Equals(LookColor("screw", FLinearColor::Black))) return FVector2D(0.4, 1.0);
 		if (C.Equals(LookColor("nickel", FLinearColor::Black))) return FVector2D(0.4, 1.0);
@@ -581,7 +591,8 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 	// The layout's look: colours, and the collar scaled to the item's size (a push-button look on a switch draws as
 	// a cap in a ring, see AnimateControl).
 	const simcore::CabinLookKind Look = Control.look.kind;
-	const bool bCapLook = Look == simcore::CabinLookKind::Button || Look == simcore::CabinLookKind::LampButton;
+	const bool bCapLook = Look == simcore::CabinLookKind::Button || Look == simcore::CabinLookKind::LampButton ||
+						  Look == simcore::CabinLookKind::HexButton;
 	if (!Control.look.color.empty())
 	{
 		Item.MovingColor = LookColor(Control.look.color, Item.MovingColor);
@@ -621,6 +632,29 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 		// ЗАПРЕТ ПУСКА's lock: the polished barrel sloping in to its dished top (the key turns in it).
 		PartBase = PartMesh(TEXT("SM_KeyBarrel"));
 		PartBaseSize = Collar.X;
+		if (UStaticMesh* Keyhole = PartMesh(TEXT("SM_Keyhole")))
+		{
+			// the cylinder's keyway: a round head over a widening slot
+			Place(AddDecor(Keyhole, LookColor("black", DarkColor)), Item.Location, PartRotation(Item.Normal, Item.Up),
+				FVector(PartBaseSize));
+		}
+		if (UStaticMesh* Plug = PartMesh(TEXT("SM_KeyPlug")))
+		{
+			// the key cylinder's flat face, duller steel than the barrel
+			Place(AddDecor(Plug, LookColor("steel", ChromeColor)), Item.Location, PartRotation(Item.Normal, Item.Up),
+				FVector(PartBaseSize));
+		}
+	}
+	else if (Look == simcore::CabinLookKind::HexButton && PartMesh(TEXT("SM_HexNut")) && PartMesh(TEXT("SM_HexPusher")) &&
+			 (Control.style == simcore::CabinStyle::Button || Control.style == simcore::CabinStyle::Toggle))
+	{
+		// The SŁ-2M's push-buttons in a steel hex nut, their red pusher standing proud (ВЫСОКОЕ, ПОИСК, ЛУЧ, the
+		// interrogator's: SAM Simulator's AK photo, OSA_CONSOLE_MAP and OSA_MANUALS call them buttons).
+		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_HexPusher")));
+		PartBase = PartMesh(TEXT("SM_HexNut"));
+		PartBaseSize = Control.look.width_m > 0.0 ? Control.look.width_m : 0.022;
+		Item.LookWidthM = PartBaseSize;
+		Item.BaseColor = LookColor("steel", ChromeColor);
 	}
 	else if ((Control.style == simcore::CabinStyle::Button || (Control.style == simcore::CabinStyle::Toggle && bCapLook)) &&
 			 PartMesh(TEXT("SM_ButtonRing")) && PartMesh(TEXT("SM_ButtonCap")))
@@ -848,6 +882,31 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		Place(Item.Moving, Item.Location + Item.Normal * 0.7, FRotationMatrix::MakeFromXZ(Item.Normal, Item.Up).Rotator(),
 			FVector(0.006, W, H));
 	}
+	else if (Lamp.look.kind == simcore::CabinLookKind::Signal && PartMesh(TEXT("SM_SignalBase")) &&
+			 PartMesh(TEXT("SM_SignalCap")) && PartMesh(TEXT("SM_SignalLens")))
+	{
+		// A signal armature of the СЛЦ-51 kind (zapadpribor_slc51; SAM Simulator's AK photo, g084-b): a thin rubber
+		// washer, the fluted cap (in the look's ring: dark metal on the SŁ-2M, black paint on the PU-303) standing about
+		// 14 mm proud, the lens in it.
+		Item.bParts = true;
+		Item.BaseColor = LookColor("rubber", ChromeColor);
+		Item.Base->SetStaticMesh(PartMesh(TEXT("SM_SignalBase")));
+		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W * 1.4));
+		Place(AddDecor(PartMesh(TEXT("SM_SignalCap")), LookColor(Lamp.look.ring, ChromeColor)), Item.Location,
+			PartRotation(Item.Normal, Item.Up), FVector(W * 1.4));
+		Item.Moving = AddMesh(PartMesh(TEXT("SM_SignalLens")), Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W * 1.4));
+	}
+	else if (Lamp.look.kind == simcore::CabinLookKind::HexButton && PartMesh(TEXT("SM_HexNut")) && PartMesh(TEXT("SM_HexPusher")))
+	{
+		// A lit push-button in the SŁ-2M's steel hex nut (ЗАХ. АПЧ I): the pusher is the glass.
+		Item.bParts = true;
+		Item.BaseColor = LookColor("steel", ChromeColor);
+		Item.Base->SetStaticMesh(PartMesh(TEXT("SM_HexNut")));
+		Place(Item.Base, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W));
+		Item.Moving = AddMesh(PartMesh(TEXT("SM_HexPusher")), Item.MovingColor * 0.08f);
+		Place(Item.Moving, Item.Location, PartRotation(Item.Normal, Item.Up), FVector(W));
+	}
 	else if (PartMesh(TEXT("SM_LampBezel")) && PartMesh(TEXT("SM_LampLens")))
 	{
 		// A lamp from the parts library: the lens in its bezel, chrome unless the look's ring says (SŁ-2M's black holders).
@@ -866,7 +925,8 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 	}
 	if (!HasBakedFace(Lamp.panel_id))
 	{
-		AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up, FMath::Max(W, H) * (Item.bParts ? 1.4 : 1.0), ToF(Lamp.look.label));
+		const bool bWide = Item.bParts && Lamp.look.kind != simcore::CabinLookKind::HexButton;
+		AddLabel(Item.Location, Item.Normal, Item.Right, Item.Up, FMath::Max(W, H) * (bWide ? 1.4 : 1.0), ToF(Lamp.look.label));
 	}
 	// The glass glows by itself (unlit), so lit and dark lamps read the same in sun or shade: the screens'
 	// unlit material showing a white texture, tinted with the lamp's colour.
@@ -1311,6 +1371,15 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		bDone = PartMesh(TEXT("SM_LampLens")) != nullptr && Part(TEXT("SM_LampBezel"), 1.4 * W, ChromeColor) &&
 				Part(TEXT("SM_LampLens"), 1.4 * W, Color * 0.5f);
 		break;
+	case CabinLookKind::Signal:
+		bDone = PartMesh(TEXT("SM_SignalCap")) != nullptr && PartMesh(TEXT("SM_SignalLens")) != nullptr &&
+				Part(TEXT("SM_SignalBase"), 1.4 * W, LookColor("rubber", ChromeColor)) &&
+				Part(TEXT("SM_SignalCap"), 1.4 * W, LookColor(Look.ring, ChromeColor)) && Part(TEXT("SM_SignalLens"), 1.4 * W, Color * 0.5f);
+		break;
+	case CabinLookKind::HexButton:
+		bDone = PartMesh(TEXT("SM_HexPusher")) != nullptr && Part(TEXT("SM_HexNut"), W, LookColor("steel", ChromeColor)) &&
+				Part(TEXT("SM_HexPusher"), W, Color);
+		break;
 	case CabinLookKind::LampButton:
 	case CabinLookKind::Button:
 		bDone = PartMesh(TEXT("SM_ButtonCap")) != nullptr && Part(TEXT("SM_ButtonRing"), W, LookColor(Look.ring, ChromeColor)) &&
@@ -1362,11 +1431,13 @@ void USimCabinComponent::BuildFixture(const simcore::CabinLayout& Layout, const 
 		Box(L, W, H, 0.6, Color);
 		break;
 	case CabinLookKind::Lamp:
+	case CabinLookKind::Signal:
 		Disc(W * 1.4, W * 1.4, 0.4, MetalColor);
 		Disc(W, W, 0.6, Color * 0.5f, 0.4);
 		break;
 	case CabinLookKind::LampButton:
 	case CabinLookKind::Button:
+	case CabinLookKind::HexButton:
 		Disc(W, W, 0.8, LookColor(Look.ring, ChromeColor));
 		Disc(0.65 * W, 0.65 * W, 0.8, Color, 0.8);
 		break;
@@ -1693,7 +1764,8 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 	case simcore::CabinStyle::Toggle:
 	{
 		if (Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::Button) ||
-			Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::LampButton))
+			Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::LampButton) ||
+			Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::HexButton))
 		{
 			// Drawn as a push-button (e.g. ВЫСОКОЕ ВКЛ.): the cap sits pressed in while the switch is on.
 			const double D = (Item.LookWidthM > 0.0 ? Item.LookWidthM : 0.025) * 0.65;
@@ -1759,7 +1831,8 @@ bool USimCabinComponent::AnimatePart(const simcore::ControlPanel& Panel, const s
 	const FVector& L = Item.Location;
 	const FVector& N = Item.Normal;
 	const bool bCap = Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::Button) ||
-					  Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::LampButton);
+					  Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::LampButton) ||
+					  Item.LookKind == static_cast<uint8>(simcore::CabinLookKind::HexButton);
 	switch (Control.style)
 	{
 	case simcore::CabinStyle::Toggle:

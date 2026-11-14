@@ -2107,3 +2107,40 @@ the operators' manual (voenizdat_osa_1991) for the words.
 - **Unreal.** Build the C++ (`SimCabinComponent`, `SimCabinDisplayComponent`, `SimCrewAudioComponent`,
   `SimCrewVoiceComponent`, and the simcore headers); re-import `SM_KeyBarrel` and the other cabin parts, `SM_RackSL2M`,
   and the `T_Panel_*` textures.
+
+## 60. SŁ-2M: the owner's seventh review (14 Nov 2026)
+
+- **The red hex-nut items are push-buttons.** The two at ПЕЛЕНГ and those of ВЫСОКОЕ ПОИСК, ЛУЧ and the interrogator's
+  are the same fitting: a steel hex nut with a red domed pusher standing proud of it. The research calls every one of
+  them a button (`OSA_CONSOLE_MAP_2026-10`: "two push-buttons labelled ПЕЛЕНГ"; `OSA_MANUALS_2026-10`: the ВЫСОКОЕ and
+  ПОИСК ВКЛ./ВЫКЛ. pairs and the ЛУЧ buttons), so they are drawn as buttons, not lamps. One new look, `hex_button`
+  (`CabinLookKind::HexButton`, parts `SM_HexNut` and `SM_HexPusher`), replaces the meshed sockets in the rack; the
+  rack keeps only their wells. The pusher stands out about 11 mm and is a stronger red. ЗАХ. АПЧ I is a lamp in the
+  same nut: its glass is the pusher's shape, dark until lit.
+- **The protruding signal lamps** (ПА, ТСЦ, НЛЦ, РУ, ЦУ, АЗ, АПЧ II, the guidance mode lamps, the launcher's and the
+  power cabinet's, the PU-303's РАБОТАЕТ ГТА/ГОМ/ИВП, the СП-2М's НАКАЛ) are one fitting, matched by form and size to
+  the СЛЦ-51 family of airframe signal armatures (`zapadpribor_slc51`, medium confidence: no source names the Osa's):
+  a washer on the panel, a fluted cap standing out about 0.7 of its width and the coloured lens at its end. The caps
+  are black paint on the PU-303 and the power cabinet (g084-b, g096-a); the SŁ-2M's are dark metal (section 61). Look `signal`
+  (lamps only), parts `SM_SignalBase`, `SM_SignalCap`, `SM_SignalLens`.
+- **ЗАПРЕТ ПУСКА.** The barrel is polished silver (`"silver"`, brighter than chrome) and the cylinder carries a keyhole,
+  a round head over a widening slot (`SM_Keyhole`).
+- **ОС81-10М's graticule.** The horizontal line across the middle was a reflection on the photo and is gone. The scale
+  is six long marks with a short one between each, every 0.15 R, standing to the left of the vertical line.
+- **Unreal.** Build the C++ (`SimCabinComponent`, `SimCabinDisplayComponent`, the simcore headers); import the new parts
+  `SM_SignalBase`, `SM_SignalCap`, `SM_SignalLens`, `SM_HexNut`, `SM_HexPusher` and `SM_Keyhole`; re-import
+  `SM_RackSL2M` and `T_Panel_so_panel`.
+
+## 61. SŁ-2M: the owner's eighth review (14 Nov 2026)
+
+- **ВЫСОКОЕ ПОИСК's ВЫКЛ. / ВКЛ. / ВЫКЛ.** stand clear of the strip: their own engraved words, starting 25 mm right of
+  the buttons' middle as measured on SAM's AK photo, in place of the buttons' labels drawn at a fixed gap.
+- **The signal lamps** have a dark, almost black metal cap (`"ring": "gunmetal"`) where they were chrome; the PU-303's
+  and the cabinet's stay black paint. The ring under the cap is a thin rubber washer, nearly invisible (`SM_SignalBase`,
+  `"rubber"`), not copper. The cap stands about 14 mm out (ПА, ТСЦ: 0.7 of 1.4 x 14 mm).
+- **ЗАПРЕТ ПУСКА's words** are engraved letter under letter, upright, 62 mm from З to А with a letter's gap between the
+  words (they had been laid on their side). Their place was measured on the photo at 10x.
+- **The key cylinder** is its own part, `SM_KeyPlug`: its flat face round the keyway in duller steel than the polished
+  barrel, as on the photo.
+- **Unreal.** Build the C++; import `SM_KeyPlug` with the parts of section 60; re-import `SM_KeyBarrel`,
+  `SM_SignalBase`, `T_Panel_fo_panel` and `T_Panel_so_panel`.

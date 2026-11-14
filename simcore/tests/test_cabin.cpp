@@ -330,7 +330,7 @@ SC_TEST("cabin: a fixture drawn by a shell's mesh says so, and the SL-2M's mount
         SC_EXPECT(f.mesh == "SM_RackSL2M");
         SC_EXPECT(f.panel_id == "op_panel" || f.panel_id == "so_panel" || f.panel_id == "fo_panel");
     }
-    SC_EXPECT(meshed == 16);                                             // so 7, fo 6 (with БР's block, 59), op 1 and ПЕЛЕНГ's two sockets (docs/OSA_INTERIOR_HOLISTIC.md 54, 59)
+    SC_EXPECT(meshed == 14);                                             // so 7, fo 6 (with БР's block, 59), op 1; ПЕЛЕНГ's are hex_button parts (docs/OSA_INTERIOR_HOLISTIC.md 54, 59, 60)
 }
 
 SC_TEST("cabin: an upright hinge turns clockwise seen from above") {
@@ -446,6 +446,33 @@ SC_TEST("cabin: the loader rejects bad layouts with a path to the problem") {
     SC_EXPECT(ErrorContains(Small(R"(, "lamps": [ { "id": "l", "label": "L", "panel": "p", "at_m": [0, 0],
         "color": "red", "source": "s", "confidence": "high" } ])"),
                             "needs lit_when"));
+    // The SŁ-2M's signal armature (a lamp's look only, its cap black by the ring) and the hex-nut push-button.
+    CabinLayout armature;
+    std::string error;
+    SC_EXPECT(LoadCabin(Small(R"(, "lamps": [ { "id": "l", "label": "L", "panel": "p", "at_m": [0, 0], "color": "red",
+        "lit_when": [ { "input": "target_in_zone", "is": true } ], "source": "s", "confidence": "high",
+        "look": { "kind": "signal", "size_m": 0.016, "ring": "black" } } ],
+        "controls": [ { "control": "soc.search", "panel": "p", "at_m": [0.1, 0],
+                        "look": { "kind": "hex_button", "size_m": 0.024, "color": "red" } } ],
+        "fixtures": [ { "panel": "p", "at_m": [0.2, 0], "kind": "hex_button", "size_m": 0.02, "color": "red" } ])"),
+                        console, armature, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(armature.lamps.size() == 1 && armature.lamps[0].look.kind == CabinLookKind::Signal &&
+              armature.lamps[0].look.ring == "black" && std::string(ToString(CabinLookKind::Signal)) == "signal");
+    SC_EXPECT(armature.controls.size() == 1 && armature.controls[0].look.kind == CabinLookKind::HexButton &&
+              std::string(ToString(CabinLookKind::HexButton)) == "hex_button");
+    SC_EXPECT(armature.fixtures.size() == 1 && armature.fixtures[0].look.kind == CabinLookKind::HexButton);
+    SC_EXPECT(ErrorContains(Small(R"(, "controls": [ { "control": "soc.search", "panel": "p", "at_m": [0, 0],
+                                                       "look": { "kind": "signal", "size_m": 0.016 } } ])"),
+                            "signal is for lamps only"));
+    SC_EXPECT(ErrorContains(Small(R"(, "fixtures": [ { "panel": "p", "at_m": [0, 0], "kind": "signal", "size_m": 0.016 } ])"),
+                            "signal is for lamps only"));
+    // Silver is a look colour (ЗАПРЕТ ПУСКА's polished barrel).
+    CabinLayout silver;
+    SC_EXPECT(LoadCabin(Small(R"(, "controls": [ { "control": "soc.mti", "panel": "p", "at_m": [0, 0],
+                                                   "look": { "size_m": 0.041, "color": "silver" } } ])"), console, silver, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(silver.controls.size() == 1 && silver.controls[0].look.color == "silver");
 }
 
 SC_TEST("cabin: a hand wheel names the display its crewman watches while turning it") {

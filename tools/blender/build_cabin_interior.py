@@ -1687,6 +1687,8 @@ def sl2m_mounts(b, layout, H, panels, foot):
             b.slab(at(0, 0, D - wd), r, up, wl, [], 0.0002, mat, back=False)
         wall, height = CUP_FOR.get(m['style'], (0.0, 0.0))
         for (iu, iv, hw, hh, rnd), button in zip(m['cups'], m['hex']):
+            if button == 'part':                    # a hex-nut button: the game draws its nut, the mount only its well
+                continue
             base = D
             if m['style'] == 'stadium' and button:   # a chrome hexagon round a button, its cap standing out of it
                 ri = hw + 0.0003

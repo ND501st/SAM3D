@@ -144,12 +144,16 @@ def test_mesh_drawn_fixtures_are_the_mounts():
     cabin = H.load_cabin()
     meshed = [k for k, f in enumerate(cabin["fixtures"]) if f.get("mesh") and f.get("kind") != "socket"]
     assert len(meshed) == 14                      # with БР's block (14 Nov 2026)
-    # ПЕЛЕНГ's two sockets: drawn as SOLIDS, standing on its oval
-    sockets = [f for f in cabin["fixtures"] if f.get("mesh") and f.get("kind") == "socket"]
-    assert len(sockets) == 2 and all(f["mesh"] == H.MESH for f in sockets)
-    for f in sockets:
-        assert sum(1 for s in H.SOLIDS if s["panel"] == f["panel"] and s.get("at") == tuple(f["at_m"])) >= 2
+    assert not [f for f in cabin["fixtures"] if f.get("mesh") and f.get("kind") == "socket"]
     by_fixture = {m["fixture"]: m for m in H.mounts(cabin)}
+    # ПЕЛЕНГ's two push-buttons: hex-nut buttons the game draws, each in a well of its oval with no chrome hexagon
+    peleng = [m for m in by_fixture.values() if m["label"] == "ПЕЛЕНГ"]
+    assert len(peleng) == 1 and peleng[0]["hex"] == ["part", "part"] and len(peleng[0]["wells"]) == 2
+    # every hex-nut button on a stadium brings its own nut: the mount draws its well only
+    for m in by_fixture.values():
+        for (iu, iv, _, _, _), button in zip(m["cups"], m["hex"]):
+            if button == "part":
+                assert any(abs(wu - iu) < 1e-9 and abs(wv - iv) < 1e-9 for (wu, wv, _) in m["wells"]), (m["fixture"], iu, iv)
     for k in meshed:
         f = cabin["fixtures"][k]
         assert f["mesh"] == H.MESH and f["panel"] in H.PANELS, k

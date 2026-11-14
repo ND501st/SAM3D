@@ -636,7 +636,7 @@ def bake_panel(layout, console, panel, ppm, seed):
         look = lamp.get('look', {})
         if look.get('kind') == 'legend' or not look.get('label'):
             continue
-        size = item_height(look, 0.022) * (1.4 if look.get('kind') in (None, 'lamp', 'lamp_button') else 1.0)
+        size = item_height(look, 0.022) * (1.4 if look.get('kind') in (None, 'lamp', 'lamp_button', 'signal') else 1.0)
         face.label_at(look.get('label_at'), lamp['at_m'][0], lamp['at_m'][1], size, size, look['label'])
     # fixtures
     for fx in layout.get('fixtures', []):

@@ -177,6 +177,42 @@ def lamp_lens(bm):
     lathe(bm, [(0.0, 0.70), (0.335, 0.70), (0.335, 0.80), (0.29, 0.88), (0.17, 0.93), (0.0, 0.945)], seg=10)
 
 
+# The signal lamp armature (СЛЦ-51 family of airframe signal armatures by its form and size, 22.5 mm across
+# (zapadpribor_slc51); the type is not named for the Osa, medium confidence). Seen on the SŁ-2M (ПА, ТСЦ, НЛЦ, ЦУ, АЗ, РУ,
+# АВТОМАТ...; samsim_panels at 12x) and side on in the driver's PU-303 (wwp_gecko g084-b): a thin rubber washer on the
+# panel (the project owner's reading, 14 Nov 2026: nearly invisible), a cap with straight flutes along it standing out
+# about 0.7 of its unit, dark metal or black paint, and the coloured lens at its end inside a thin lip. Unit: the
+# lamp's look size times 1.4.
+def signal_base(bm):
+    lathe(bm, [(0.30, 0.0), (0.39, 0.0), (0.39, 0.012), (0.38, 0.02), (0.365, 0.022)], seg=64)
+
+
+def signal_cap(bm):
+    lathe(bm, [(0.36, 0.05), (0.37, 0.065), (0.37, 0.64), (0.37, 0.655), (0.355, 0.685), (0.33, 0.70), (0.275, 0.70),
+               (0.255, 0.685), (0.255, 0.665)], seg=96, ribs=16, rib_depth=0.07, rib_rows=(1, 2, 3))
+
+
+def signal_lens(bm):
+    # The coloured glass at the cap's end, a shallow dome just inside the lip (tinted and lit by the cabin).
+    lathe(bm, [(0.0, 0.66), (0.255, 0.66), (0.255, 0.68), (0.21, 0.692), (0.12, 0.698), (0.0, 0.70)], seg=32)
+
+
+# The hex-nut push-button (ВЫСОКОЕ and ПОИСК ВКЛ. / ВЫКЛ., the ЛУЧ buttons, ЗАПРОС, ЗАПРОС К, ПЕЛЕНГ I / II; also the lamp
+# ЗАХ. АПЧ I's fitting): a steel hex nut on the bushing and a domed red pusher standing out of it (samsim_panels at
+# 14x on a millimetre grid: the nut about 14 mm across its flats, ПЕЛЕНГ's 11.5, the pusher two thirds of that). The
+# manual names them buttons (OSA_MANUALS_2026-10: ВЫСОКОЕ and ПОИСК ВКЛ. / ВЫКЛ. button pairs, ЛУЧ buttons; ПЕЛЕНГ two
+# push-buttons, OSA_CONSOLE_MAP_2026-10). Unit: the item's footprint (its look size), the nut 0.58 of it across its
+# flats (ПОИСК's 24 mm: a 14 mm nut), standing 0.29 out (a millimetre or two proud of a 5 mm mount), the pusher's crown
+# 0.54 out, its dome 0.38 across.
+def hex_nut(bm):
+    lathe(bm, [(0.0, 0.0), (0.335, 0.0), (0.335, 0.26), (0.305, 0.29), (0.0, 0.29)], seg=6)
+    lathe(bm, [(0.0, 0.285), (0.235, 0.285), (0.235, 0.315), (0.215, 0.325), (0.0, 0.325)], seg=48)
+
+
+def hex_pusher(bm):
+    lathe(bm, [(0.0, 0.29), (0.19, 0.29), (0.19, 0.465), (0.18, 0.50), (0.145, 0.525), (0.075, 0.537), (0.0, 0.54)], seg=48)
+
+
 def gauge_bezel(bm):
     # The instrument's chrome rim: a ring with a rolled lip, open in the middle so the printed dial shows.
     lathe(bm, [(0.425, 0.0), (0.5, 0.0), (0.5, 0.09), (0.47, 0.15), (0.44, 0.13), (0.425, 0.06)], cap=False)
@@ -362,14 +398,39 @@ def screw(bm):
 def key_barrel(bm):
     # ЗАПРЕТ ПУСКА's lock (samsim_panels at 12x, the project owner's reading): a grey metal barrel, its side rounding over
     # into a narrow flat rim, its face sloping in from the rim like a shallow cone down to the key cylinder (19 mm across)
-    # at its middle; the cylinder's keyhole and the key are drawn by the control. Unit diameter, 0.40 tall (41 mm across,
-    # 16 mm out at the rim).
+    # at its middle; the cylinder's keyhole is SM_Keyhole, the key is drawn by the control. Unit diameter, 0.40 tall (41 mm
+    # across, 16 mm out at the rim).
     lathe(bm, [(0.0, 0.0), (0.5, 0.0), (0.5, 0.30), (0.49, 0.36), (0.465, 0.39), (0.43, 0.40), (0.40, 0.395),
-               (0.30, 0.32), (0.235, 0.27), (0.22, 0.265), (0.21, 0.28), (0.20, 0.295), (0.0, 0.295)], seg=96)
+               (0.30, 0.32), (0.235, 0.27), (0.22, 0.265), (0.0, 0.265)], seg=96)
+
+
+def key_plug(bm):
+    # The key cylinder standing in SM_KeyBarrel's dish: its flat face round the keyway, a duller steel than the polished
+    # barrel (samsim_panels at 10x, the project owner's reading, 14 Nov 2026). Same unit as SM_KeyBarrel.
+    lathe(bm, [(0.0, 0.25), (0.218, 0.25), (0.218, 0.265), (0.21, 0.28), (0.20, 0.295), (0.0, 0.295)], seg=64)
+
+
+def keyhole(bm):
+    # The key cylinder's keyway as the project owner asked (14 Nov 2026): a round head over a slot widening downwards, the
+    # classic keyhole, about 4 mm across the head and 7 mm tall on the 8 mm cylinder of SM_KeyBarrel, a dark insert
+    # just proud of the cylinder's face. Same unit as SM_KeyBarrel (its diameter), +Y up the panel.
+    import bmesh
+    cy, r, w0, w1, y1 = 0.045, 0.05, 0.02, 0.034, -0.125
+    a0 = math.atan2(-math.sqrt(r * r - w0 * w0), w0)
+    outline = [(-w1, y1), (w1, y1), (w0, cy + r * math.sin(a0))]
+    n = 28
+    for k in range(1, n):
+        a = a0 + (math.pi - 2 * a0) * k / n
+        outline.append((r * math.cos(a), cy + r * math.sin(a)))
+    outline.append((-w0, cy + r * math.sin(a0)))
+    _prism(bm, outline, 0.289, 0.2965)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
 
 
 PARTS = [
-    ('SM_KeyBarrel', key_barrel, 0.006),
+    ('SM_KeyBarrel', key_barrel, 0.006), ('SM_KeyPlug', key_plug, 0.0), ('SM_Keyhole', keyhole, 0.0),
+    ('SM_SignalBase', signal_base, 0.006), ('SM_SignalCap', signal_cap, 0.006), ('SM_SignalLens', signal_lens, 0.0),
+    ('SM_HexNut', hex_nut, 0.0), ('SM_HexPusher', hex_pusher, 0.01),
     ('SM_Knob', knob, 0.012), ('SM_KnobPointer', knob_pointer, 0.012), ('SM_KnobBar', knob_bar, 0.012),
     ('SM_Trim', trim, 0.01),
     ('SM_ToggleBase', toggle_base, 0.015), ('SM_ToggleLever', toggle_lever, 0.0), ('SM_LampBezel', lamp_bezel, 0.01),

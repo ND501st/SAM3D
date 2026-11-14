@@ -1094,20 +1094,19 @@ void USimCabinDisplayComponent::DrawElevationScope(UCanvas* Canvas, const FVecto
 	const FVector2D C = Size * 0.5;
 	const double R = 0.48 * FMath::Min(Size.X, Size.Y);
 	Disc(Canvas, C, R, bOn ? AmberGlass * 0.12f : AmberGlass);
-	// The graticule engraved on the yellow filter (samsim_panels at 8x, 14 Nov 2026): a vertical scale down the left, 0.63
-	// of the radius in from the middle and three quarters of it up and down, ticked to the right every 0.075 R (every
-	// second tick long), and a horizontal line across the middle from the scale to 0.85 R. Dark on the filter, seen
-	// against the tube's light when it is on.
+	// The graticule engraved on the yellow filter (samsim_panels at 8x, 14 Nov 2026; corrected by the project owner the
+	// same day: what looked like a line across the middle is a reflection): a vertical line down the left, 0.63 of the
+	// radius in from the middle and three quarters of it up and down, with six long marks and a short one between each,
+	// every 0.15 R, standing to its left. Dark on the filter, seen against the tube's light when it is on.
 	auto Graticule = [&](const FLinearColor& Ink)
 	{
 		const double Sx = C.X - 0.63 * R;
 		Line(Canvas, FVector2D(Sx, C.Y - 0.75 * R), FVector2D(Sx, C.Y + 0.75 * R), 1.5f, Ink);
-		for (int32 I = -10; I <= 10; ++I)
+		for (int32 I = -5; I <= 5; ++I)
 		{
-			const double Y = C.Y + I * 0.075 * R;
-			Line(Canvas, FVector2D(Sx, Y), FVector2D(Sx + ((I % 2) == 0 ? 0.12 : 0.06) * R, Y), 1.2f, Ink);
+			const double Y = C.Y + I * 0.15 * R;
+			Line(Canvas, FVector2D(Sx - ((I % 2) != 0 ? 0.12 : 0.06) * R, Y), FVector2D(Sx, Y), 1.2f, Ink);
 		}
-		Line(Canvas, FVector2D(Sx, C.Y), FVector2D(C.X + 0.85 * R, C.Y), 1.2f, Ink);
 	};
 	const simcore::ConsoleData& Console = Runner.Console();
 	if (!bOn || !ElevScope.IsValid() || ElevRaster < 0 || ElevRaster >= static_cast<int32>(Display.rasters.size()) ||

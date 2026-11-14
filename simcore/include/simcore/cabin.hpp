@@ -110,7 +110,11 @@ enum class CabinLookKind {
     Scale,        // a printed scale round a knob: an arc of `size_m` across with a tick and a figure at each of
                   // `angles_deg` (clockwise from up), the figures `marks` (fixtures only)
     Frame,        // a ruled rectangle printed on the plate (a block's chart of its units, filled with Text fixtures)
-    Screw         // a slotted screw head holding a block's plate, `size_m` across (fixtures only)
+    Screw,        // a slotted screw head holding a block's plate, `size_m` across (fixtures only)
+    Signal,       // signal lamp armature (lamps only): a copper-red ring, a fluted cap standing out with the lens at its
+                  // end; `ring` the cap's finish (chrome, the default, or black); drawn 1.4 x `size_m` across, as a lamp
+    HexButton     // hex-nut push-button: a steel nut `size_m` across its flats and a domed pusher in `color` standing out
+                  // of it (SŁ-2M's ВЫСОКОЕ, ПОИСК, ЛУЧ, ЗАПРОС, ПЕЛЕНГ); on a lamp, the pusher is its lens (ЗАХ. АПЧ I)
 };
 
 inline const char* ToString(CabinLookKind k) {
@@ -141,6 +145,8 @@ inline const char* ToString(CabinLookKind k) {
         case CabinLookKind::Scale: return "scale";
         case CabinLookKind::Frame: return "frame";
         case CabinLookKind::Screw: return "screw";
+        case CabinLookKind::Signal: return "signal";
+        case CabinLookKind::HexButton: return "hex_button";
     }
     return "?";
 }
@@ -1024,6 +1030,7 @@ private:
             }
             if (const json::Value* look = c.Find("look")) {
                 if (!LoadLook(*look, Join(path, "look"), false, item.look)) return false;
+                if (item.look.kind == CabinLookKind::Signal) return Fail(Join(Join(path, "look"), "kind"), "signal is for lamps only");
             }
             if (!OptionalString(c, path, "watch", item.watch)) return false;
             if (!item.watch.empty() && item.style != CabinStyle::Wheel) return Fail(Join(path, "watch"), "for wheels only");
@@ -1168,7 +1175,8 @@ private:
 
     static bool KnownColour(const std::string& c) {
         for (const char* known : {"black", "white", "grey", "chrome", "brass", "red", "green", "amber", "yellow", "orange", "bluegrey",
-                                  "lightgrey", "ivory", "blue", "cream", "copper", "steel", "nickel", "screw", "satin"}) {
+                                  "lightgrey", "ivory", "blue", "cream", "copper", "steel", "nickel", "screw", "satin",
+                                  "silver", "gunmetal"}) {
             if (c == known) return true;
         }
         return false;
@@ -1185,7 +1193,7 @@ private:
         if (inline_keys && kind.empty()) return Fail(Join(path, "kind"), "required");
         if (!kind.empty()) {
             bool found = false;
-            for (int k = 0; k <= static_cast<int>(CabinLookKind::Screw); ++k) {
+            for (int k = 0; k <= static_cast<int>(CabinLookKind::HexButton); ++k) {
                 if (kind == ToString(static_cast<CabinLookKind>(k))) {
                     out.kind = static_cast<CabinLookKind>(k);
                     found = true;
@@ -1445,6 +1453,7 @@ private:
                 !LoadLook(f, path, true, fixture.look) || !OptionalString(f, path, "mesh", fixture.mesh)) {
                 return false;
             }
+            if (fixture.look.kind == CabinLookKind::Signal) return Fail(Join(path, "kind"), "signal is for lamps only");
             out.fixtures.push_back(std::move(fixture));
         }
         return true;
