@@ -328,6 +328,9 @@ struct RadarState {
     double mti_comp_mps = 0.0;
     double mistune_hz = 0.0;
     bool sa_on = false;
+    // A receiver whose noise figure is worse than its norm (a fault the noise check finds, simcore/checks.hpp): every
+    // echo and the clutter lose this much against the noise (dB).
+    double rx_loss_db = 0.0;
     std::vector<int> beam_program;  // indices into the emitter's beams, one per revolution
     std::size_t program_pos = 0;
     long long last_revolution = 0;

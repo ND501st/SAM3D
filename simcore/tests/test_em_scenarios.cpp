@@ -819,3 +819,27 @@ SC_TEST("em scenario: off its tune the magnetron weakens the echo, and past the 
     SC_EXPECT_NEAR((cn_db[1] - snr_db[1]) - (cn_db[0] - snr_db[0]), 0.0, 1e-6);   // within the tolerance: still cancelled
     SC_EXPECT_NEAR((cn_db[2] - snr_db[2]) - (cn_db[0] - snr_db[0]), 25.0, 1e-6);  // past twice it: not at all
 }
+
+// Roadmap C4: a receiver whose noise figure is worse than its norm (the fault the noise check finds, simcore/checks.hpp)
+// loses that much on every echo and on the clutter alike.
+SC_TEST("em scenario: a degraded receiver loses its loss on the echo and the clutter") {
+    const double loss_db[2] = {0.0, 6.0};
+    double snr_db[2], cn_db[2];
+    for (int k = 0; k < 2; ++k) {
+        EmWorld w(kOrigin, nullptr, 9);
+        SC_EXPECT(w.SetLibrary(GenericLib()));
+        const int site = w.AddGroundPlatform("SAM", Side::Red, 0.0, 0.0, 5.0);
+        const int radar = w.AddRadar(site, "generic_search_c", true);
+        w.Scene().FindRadar(radar)->rx_loss_db = loss_db[k];
+        const int low = AddAircraft(w, "low flier", Side::Blue, 0.0, 8000.0, 30.0, {0.0, -200.0, 0.0});
+        snr_db[k] = cn_db[k] = -300.0;
+        for (int i = 0; i < 60; ++i) {
+            w.Step(0.1);
+            for (const LookRecord& l : w.Scene().FindRadar(radar)->last_looks)
+                if (l.platform_id == low) { snr_db[k] = l.snr_db; cn_db[k] = l.cn_db; }
+        }
+    }
+    SC_EXPECT(snr_db[0] > -300.0);
+    SC_EXPECT_NEAR(snr_db[0] - snr_db[1], 6.0, 1e-6);
+    SC_EXPECT_NEAR(cn_db[0] - cn_db[1], 6.0, 1e-6);
+}

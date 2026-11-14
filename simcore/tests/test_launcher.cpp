@@ -317,7 +317,7 @@ SC_TEST("launcher: an emergency launch of a selected missile leaves the channel 
     SC_EXPECT(l.Selected(1) == "2-I");                   // ВНИМАНИЕ still on: the next outer missile
 }
 
-SC_TEST("launcher: the letter and emergency blocks are refused with paths when they are wrong") {
+SC_TEST("launcher: the letter, emergency and refuse blocks are refused with paths when they are wrong") {
     const std::string text = ReadFile(kData + "/procedures/osa_ak.json");
     auto bad = [&](const std::string& from, const std::string& to, const std::string& expect) {
         std::string s = text;
@@ -332,7 +332,9 @@ SC_TEST("launcher: the letter and emergency blocks are refused with paths when t
     };
     SC_EXPECT(bad("\"change_position\": 2", "\"change_position\": 5", "launcher.letter.change_position"));
     SC_EXPECT(bad("\"lock_inputs\": [ \"ch1_apch_lock\", \"ch2_apch_lock\" ]", "\"lock_inputs\": [ \"ch1_apch_lock\" ]", "launcher.letter.lock_inputs"));
-    SC_EXPECT(bad("\"3-II\", \"2-II\", \"1-II\", \"\"", "\"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.emergency.select_containers[2]"));
+    SC_EXPECT(bad("[ \"3-II\", \"2-II\", \"1-II\", \"\"", "[ \"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.emergency.select_containers[2]"));
+    SC_EXPECT(bad("[\"3-II\", \"2-II\", \"1-II\", \"\"", "[\"3-II\", \"2-II\", \"9-II\", \"\"", "launcher.refuse.select_containers[2]"));
+    SC_EXPECT(bad("\"button\": \"ind.refuse\"", "\"button\": \"ind.nothing\"", "launcher.refuse.button"));
     SC_EXPECT(bad("\"fire_control\": \"msl.emergency\"", "\"fire_control\": \"msl.channels\"", "launcher.emergency.fire_control"));
     SC_EXPECT(bad("\"flight_s\": 25.5", "\"flight_s\": 0", "launcher.emergency.flight_s"));
 }

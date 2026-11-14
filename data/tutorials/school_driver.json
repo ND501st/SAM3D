@@ -52,7 +52,16 @@
       "continue": true
     },
     {
-      "id": "drive", "chapter": "Driving", "title": "Drive forward 40 m", "done_when": ["moved:40"],
+      "id": "engine", "chapter": "Driving", "title": "Start the engine", "control": "veh.starter", "position": 1, "procedure": "engine_start", "look": "driver_panel",
+      "lines": [
+        "First the engine. The gear lever stands in neutral (Н): the 5Д20Б-300 starts only in neutral, and only with the batteries' switch on.",
+        "Press СТАРТЕР on the dash. Watch the tachometer come up to idle, about 750 rpm, and the oil pressure rise."
+      ],
+      "why": "In the cold (below +5 °C) the engine will not start until the pre-heater has warmed its coolant: СВЕЧА, then ПУСК, a few minutes.",
+      "hint": "Left click."
+    },
+    {
+      "id": "drive", "title": "Drive forward 40 m", "done_when": ["moved:40"],
       "lines": [
         "W drives forward, S backwards, A and D steer, Space brakes. The Osa only turns while it moves, like any wheeled vehicle.",
         "Drive about 40 m forward, out of the hide."

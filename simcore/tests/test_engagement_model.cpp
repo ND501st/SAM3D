@@ -135,6 +135,23 @@ SC_TEST("engagement: search contact, aimed radar lock, zone lamps, launch and a 
     SC_EXPECT(r.summary.early_actions == 0 && r.summary.equipment_faults == 0);
 }
 
+// Roadmap C4: a guidance fault set at the meeting costs the shot its factor (outcome.fault_factors), named in the debrief.
+SC_TEST("engagement: a guidance fault the function check would find costs the shot: K3 not passing, the fuse never arms") {
+    const Run r = Play(Engage(Target(24000, 1000), std::string(kAcquireAndFire) +
+                                                       R"(, { "id": "k3", "when": {}, "do": [ { "set_input": "k3_fault", "value": true } ] })"));
+    SC_EXPECT(r.loaded);
+    SC_EXPECT(r.summary.launches == 1 && r.summary.hits == 0 && r.summary.misses == 1);
+    SC_EXPECT(Has(r, "x fault k3_fault 0.00"));
+    SC_EXPECT(Has(r, "MISS: chance 0.00"));
+    EngagementTuning t;
+    std::ifstream f(kData + "/gameplay/osa_ak.json");
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string error;
+    SC_EXPECT(LoadEngagementTuning(ss.str(), t, &error));
+    SC_EXPECT(t.fault_factors.size() == 4);
+}
+
 SC_TEST("engagement: the same seed gives the same outcome; over many seeds hits follow the chance") {
     SC_EXPECT(Play(Engage(Target(24000, 1000), kAcquireAndFire, 3)).debrief ==
               Play(Engage(Target(24000, 1000), kAcquireAndFire, 3)).debrief);

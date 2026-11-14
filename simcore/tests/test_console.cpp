@@ -486,6 +486,7 @@ SC_TEST("osa data: search on the march; tracking needs a halt with the АПУ un
     SC_EXPECT(LoadConsoleFile(OsaPath(), c));
     Seats seats(c);
     seats.Order("power_up");
+    seats.Queue("engine_start");     // the driver, next: the drive engine runs on the march (it drives the ГОМ at the halt)
     seats.Order("equipment_on");     // the operator waits for power
     seats.Order("search_on_march");  // the senior operator waits for the raised, stabilised antenna
     const double t = seats.RunUntilIdle();

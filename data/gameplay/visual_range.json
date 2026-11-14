@@ -8,6 +8,7 @@
     "day_m": { "value": 8000, "source": "game value: a column of vehicles on a road seen across open country by day", "confidence": "estimate" },
     "twilight_m": { "value": 3000, "source": "game value: the same at dusk or dawn", "confidence": "estimate" },
     "night_m": { "value": 1500, "source": "game value: headlights and dimmed lights, or a moon", "confidence": "estimate" },
+    "night_blackout_m": { "value": 150, "source": "vokrachko_1963 (a blacked-out vehicle's rear distance indicator is designed to be seen only from the next vehicle, its figures from 150 m in)", "confidence": "medium", "notes": "A vehicle with no outside lights at night (the light discipline, voenizdat_osa_1991 p222): seen no farther than this (nav/movers.hpp, Mover::lit)." },
     "twilight_deg": { "value": 6, "source": "derived: civil twilight, the sun up to 6 degrees below the horizon (the astronomical definition)", "confidence": "high" },
     "margin": { "value": 0.1, "source": "game value: back to M1 only beyond the range by this share, so a mover at its edge does not flicker", "confidence": "estimate" }
   }

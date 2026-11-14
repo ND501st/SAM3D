@@ -2756,7 +2756,7 @@ void USimWorldSubsystem::PumpKnowledge()
 			V.time_s = Now;
 			if (R != nullptr && R->EngagementOn())
 			{
-				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time(), R->Fuel()), Keys);
+				V.scope = simcore::ToViewScope(simcore::ScopeFeedOf(R->Engagement(), R->GetLauncher(), R->Time(), R->Fuel(), R->OwnDash()), Keys);
 			}
 			if (R != nullptr)
 			{

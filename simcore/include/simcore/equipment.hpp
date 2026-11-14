@@ -199,6 +199,18 @@ public:
         return true;
     }
 
+    // Stretch (or shrink) a subsystem's warm-up from now on: 1 is its data's time. False for unknown ids.
+    bool SetTimeScale(const std::string& id, double scale) {
+        const auto it = index_.find(id);
+        if (it == index_.end() || !(scale > 0.0)) return false;
+        units_[it->second].time_scale = scale;
+        return true;
+    }
+    double TimeScale(const std::string& id) const {
+        const auto it = index_.find(id);
+        return it == index_.end() ? 1.0 : units_[it->second].time_scale;
+    }
+
     // Back to the start of the warm-up, if it is ready or warming up; false otherwise (off, stopping, fault).
     bool Restart(const std::string& id) {
         const auto it = index_.find(id);
@@ -264,6 +276,7 @@ private:
         SubsystemState state = SubsystemState::Off;
         double progress = 0.0;
         bool latched = false;
+        double time_scale = 1.0;  // its warm-up's time stretched (the cold: vehicle_systems.hpp)
     };
 
     static constexpr double kProgressEps = 1e-9;
@@ -309,7 +322,8 @@ private:
     }
 
     void Rise(Unit& u, double dt) {
-        u.progress = u.def.start_time_s > 0.0 ? u.progress + dt / u.def.start_time_s : 1.0;
+        const double start_s = u.def.start_time_s * u.time_scale;
+        u.progress = start_s > 0.0 ? u.progress + dt / start_s : 1.0;
         if (u.progress >= 1.0 - kProgressEps) {
             u.progress = 1.0;
             Go(u, SubsystemState::Ready);

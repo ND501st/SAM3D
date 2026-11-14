@@ -188,10 +188,11 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
     phys.one_way_loss_db = loss.diffraction_db + loss.gas_db;
     phys.multipath_factor = loss.multipath_factor;
     // A magnetron off its tune (РПЧМ set off the middle: voenizdat_osa_1991 p33-36) puts the echo off the IF passband's
-    // centre: every echo loses alike, 3 dB at the band's edge (SAM3D's reading of the passband).
+    // centre: every echo loses alike, 3 dB at the band's edge (SAM3D's reading of the passband). A receiver with a worse
+    // noise figure (rx_loss_db) loses alike against its noise.
     const double half_band = 0.5 * d.RxBandwidthHz();
     const double off_tune = half_band > 0.0 ? std::fabs(r.mistune_hz) / half_band : 0.0;
-    const double tune_gain = DbToLinear(-MinOf(3.0 * off_tune * off_tune, 30.0));
+    const double tune_gain = DbToLinear(-MinOf(3.0 * off_tune * off_tune, 30.0) - MaxOf(0.0, r.rx_loss_db));
     // The СА blanker takes a little of the echo with the asynchronous pulses (SAM3D's estimate).
     const double sa_gain = r.sa_on ? DbToLinear(-d.sa_loss_db) : 1.0;
     double snr = RadarSnr(d, phys) * tune_gain * sa_gain;

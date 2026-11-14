@@ -515,7 +515,7 @@ void USimCabinDisplayComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const bool bMirror = Sim->IsMirrorOnly();
 	const simcore::em::ViewScope* Mirrored = bMirror ? Sim->GetMirroredScope() : nullptr;
 	Feed = Mirrored != nullptr ? simcore::FromViewScope(*Mirrored)
-	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time(), Runner->Fuel());
+	                           : simcore::ScopeFeedOf(Runner->Engagement(), Runner->GetLauncher(), Runner->Time(), Runner->Fuel(), Runner->OwnDash());
 	auto StepSeconds = [&]() {
 		if (bMirror)
 		{
@@ -688,11 +688,11 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 		Key = HashCombine(Key, GetTypeHash(simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment)));
 		// The needle's reading: a control, the simulation's readout (gyro, fuel) or the gauge's levels.
 		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(
-			simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) * 100.0)));
+			simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l, Feed.dash) * 100.0)));
 		return true;
 	case simcore::CabinDisplayKind::Meter:
 		Key = HashCombine(Key, GetTypeHash(simcore::CabinLayout::DisplayLit(Display, Console.panel, Console.equipment)));
-		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console) * 1000.0)));
+		Key = HashCombine(Key, GetTypeHash(FMath::RoundToInt64(simcore::MeterValue(Display, Console, Feed.dash.valid ? Feed.dash.supply_v : -1.0) * 1000.0)));
 		return true;
 	case simcore::CabinDisplayKind::Ppi:
 		// Off: the dead tube behind its filter, with the scale round it and the course-parameter disc as it is turned.
@@ -1246,7 +1246,7 @@ void USimCabinDisplayComponent::DrawDial(UCanvas* Canvas, const FVector2D& Size,
 		return;
 	}
 	// A control's value, or for a readout dial (the OR-31M Qc scale) the simulation's, from the feed (the server's on a client).
-	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l) / Display.value_per_turn;
+	const double A = UE_DOUBLE_TWO_PI * simcore::DialReading(Display, Console, Feed.gyro_heading_deg, Feed.fuel_l, Feed.dash) / Display.value_per_turn;
 	Line(Canvas, C, Polar(C, A, 0.8 * R), 3.0f, FLinearColor(0.7f, 0.05f, 0.02f));
 	Disc(Canvas, C, 0.06 * R, Ink);
 }
@@ -1279,7 +1279,7 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 			Text(Canvas, Label(simcore::MeterMark(Display, I)), Polar(Pivot, A, 0.78 * R), Ink, 1.0f);
 		}
 		Text(Canvas, FString(UTF8_TO_TCHAR(Display.unit.c_str())), FVector2D(0.5 * Size.X, 0.5 * Size.Y), Ink, 1.3f);
-		const double Reading = bOn ? simcore::MeterValue(Display, Console) : 0.0;
+		const double Reading = bOn ? simcore::MeterValue(Display, Console, Feed.dash.valid ? Feed.dash.supply_v : -1.0) : 0.0;
 		const double Fraction = simcore::MeterFraction(Display, Reading);
 		const double A = FMath::DegreesToRadians(-Swing + 2.0 * Swing * Fraction);
 		Line(Canvas, Pivot, Polar(Pivot, A, 0.95 * R), 2.0f, Ink);
@@ -1300,7 +1300,7 @@ void USimCabinDisplayComponent::DrawMeter(UCanvas* Canvas, const FVector2D& Size
 	}
 	Text(Canvas, FString::Printf(TEXT("%s  %s"), *FString(UTF8_TO_TCHAR(Display.label.c_str())), *FString(UTF8_TO_TCHAR(Display.unit.c_str()))),
 		FVector2D(0.5 * Size.X, 0.55 * Size.Y), Ink, 1.3f);
-	const double Reading = bOn ? simcore::MeterValue(Display, Console) : 0.0;
+	const double Reading = bOn ? simcore::MeterValue(Display, Console, Feed.dash.valid ? Feed.dash.supply_v : -1.0) : 0.0;
 	const double Fraction = simcore::MeterFraction(Display, Reading);
 	const double A = FMath::DegreesToRadians(-SwingDeg + 2.0 * SwingDeg * Fraction);
 	Line(Canvas, Pivot, Polar(Pivot, A, 0.95 * R), 2.5f, FLinearColor(0.7f, 0.05f, 0.02f));

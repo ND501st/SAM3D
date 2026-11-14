@@ -48,6 +48,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
+#include "simcore/vehicle_systems.hpp"
 #include "simcore/fx/events.hpp"
 #include "simcore/instructor.hpp"
 #include "simcore/launcher.hpp"
@@ -155,6 +156,7 @@ public:
         }
         // A radar to cable to the post is a fact of the position, there before any readiness (its cable laid in "deployed").
         if (!console_.post_radar_here.empty()) console_.equipment.SetInput(console_.post_radar_here, def_.has_post_radar);
+        if (def_.has_vehicle_systems) StartVehicleSystems(ready_state);
         if (ready_state != nullptr) ApplyReadiness(*ready_state);
         for (const auto& c : def_.initial_controls) console_.panel.Set(c.first, c.second);
         StartLines();
@@ -260,6 +262,8 @@ public:
         UpdateArms();
         UpdateFuel(dt);
         UpdatePositionPower();
+        UpdateVehicleSystems(dt);
+        if (finished_) return;
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
         CheckLaunch();
@@ -533,6 +537,13 @@ public:
 
     // The vehicle's fuel (null when the console has no "fuel" block).
     const FuelModel* Fuel() const { return fuel_.get(); }
+    // The driver's dash and the live supply's volts (vehicle_systems.hpp); not valid without the vehicle's model.
+    VehicleDash OwnDash() const { return own_sys_ ? own_sys_->Dash(OwnWorld().speed_mps) : VehicleDash(); }
+    // The vehicle's own systems (roadmap C1-C3, C7, C8): null when the system has no data/vehicles/<system>_systems.json.
+    const VehicleSystems* OwnSystems() const { return own_sys_.get(); }
+    VehicleSystems* MutableOwnSystems() { return own_sys_.get(); }
+    // The light discipline the crew keeps: told it on a night march (voenizdat_osa_1991 p222: all outside lights off).
+    bool OwnBlackout() const { return own_blackout_; }
 
     // The missile load and guidance channels (null when the console has no "launcher" block).
     Launcher* GetLauncher() { return launcher_.get(); }
@@ -2852,6 +2863,11 @@ private:
             char m[32];
             std::snprintf(m, sizeof(m), "%.0f", r.miss_m);
             const std::string who = r.carrier.empty() ? std::string("ARM") : r.carrier;
+            // Fragments into the hull: a fire may start in the engine or the turbine compartment (roadmap C8).
+            if (own_sys_ && ((r.hit && r.hit_what == "unit") || (!r.hit && r.nearest_what == "unit" && r.miss_m < kFragmentFireM))) {
+                const std::string zone = own_sys_->Hit(time_);
+                if (!zone.empty()) Event(who, "its fragments have set the vehicle burning");
+            }
             if (r.hit && r.hit_what == "unit") {
                 Event(who, std::string("its anti-radiation missile bursts ") + m + " m from the vehicle: out of action");
                 if (!def_.end_on_unit_hit) continue;  // the testbed runs on
@@ -3369,7 +3385,11 @@ private:
         if (!nav_) return;
         const Vec3 eye = battery_ && battery_->Own() != nullptr ? battery_->Own()->position : def_.unit_position;
         const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range());
-        nav_->Step(time_, dt, {{eye.x, eye.y}}, range);
+        // A vehicle of ours under the battery's light discipline drives without lights (roadmap C2): seen at night only
+        // from close by.
+        if (nav::Mover* tzm = tzm_id_.empty() ? nullptr : nav_->GetMovers().Find(tzm_id_)) tzm->lit = !own_blackout_;
+        const double unlit = nav::VisualRangeUnlitM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range());
+        nav_->Step(time_, dt, {{eye.x, eye.y}}, range, unlit);
     }
 
     // The net's picture of each vehicle commander: where his vehicle is, whether radio is his to use (on the march only a
@@ -7161,6 +7181,168 @@ private:
         if (ev.refuelled) log_.Record({time_, DebriefEntry::Kind::Scenario, "Driver", "fuel", "tank full"});
     }
 
+    // ---- The vehicle's own systems (roadmap controls C1-C3, C7, C8; vehicle_systems.hpp)
+
+    // Bound and started before the readiness state warms the subsystems: a state with the engine ready has had it
+    // running (warm coolant), one with the equipment warm has the cabin at its temperatures.
+    void StartVehicleSystems(const ReadinessState* ready_state) {
+        own_sys_ = std::make_unique<VehicleSystems>();
+        own_sys_->Bind(def_.vehicle_systems, console_, def_.seed * 2246822519u + 7u);
+        if (!own_sys_->Active()) {
+            own_sys_.reset();
+            return;
+        }
+        bool engine_warm = false, equipment_running = false;
+        if (ready_state != nullptr) {
+            for (const std::string& id : ready_state->ready) {
+                engine_warm = engine_warm || id == def_.vehicle_systems.engine.subsystem;
+                equipment_running = equipment_running || id == "equipment_warm";
+            }
+        }
+        own_sys_->Start(console_, OwnWorld(), engine_warm, equipment_running);
+    }
+    VehicleSystems::World OwnWorld() const {
+        VehicleSystems::World w;
+        w.outside_c = def_.weather.surface_temperature_c;
+        w.dewpoint_c = def_.weather.surface_dewpoint_c;
+        const Battery::Vehicle* v = battery_ ? battery_->Own() : nullptr;
+        if (v != nullptr) {
+            w.speed_mps = v->speed_mps;
+            w.afloat = v->afloat;
+        } else if (console_.equipment.HasInput("vehicle_stopped") && !console_.equipment.GetInput("vehicle_stopped")) {
+            w.speed_mps = 5.0;  // on the move with no battery to say how fast: a speed to run the engine by
+        }
+        w.dark = light_.dark;
+        if (fuel_) w.fuel_l = fuel_->LevelL();
+        return w;
+    }
+    // A control an NPC at its station sets (a duty the helper shows a player there); true once it stands there.
+    bool DriverSeated() {
+        const ControlDef* g = console_.panel.Find(def_.vehicle_systems.drive.gear_control);
+        return g != nullptr && (MemberAt(g->station) != nullptr || !SeatHolder(g->station).empty());
+    }
+    bool NpcSets(const std::string& control, int position, const std::string& why) {
+        const ControlDef* c = console_.panel.Find(control);
+        if (c == nullptr) return false;
+        const bool button = c->kind == ControlKind::Momentary;
+        if (!button && console_.panel.Get(control) == position) return true;
+        if (!NpcDoes(c->station, SeatDuty::Control(c->station, control, position, why))) return false;
+        return console_.panel.Set(control, position);
+    }
+    void UpdateVehicleSystems(double dt) {
+        if (!own_sys_) return;
+        UpdateLightDiscipline();
+        DriveOwnVehicle(dt);
+        FightOwnFire();
+        const VehicleSystems::World w = OwnWorld();
+        own_sys_->Step(dt, console_, w, time_);
+        // The cap holds only with someone in the driver's seat (an NPC or a player): a scenario whose crew has no driver
+        // keeps the battery's abstract drive, as before the chassis was modelled.
+        if (battery_) battery_->SetOwnSpeedCap(DriverSeated() ? own_sys_->SpeedCapMps(console_, w) : -1.0);
+        engagement_.SetMagnetronDriftHz(own_sys_->MagnetronDriftHz());
+        for (const VehicleSystems::Event& e : own_sys_->TakeEvents()) {
+            log_.Record({time_, DebriefEntry::Kind::Scenario, e.who, e.what, e.text});
+        }
+        if (own_sys_->Destroyed() && def_.end_on_unit_hit) Finish("the vehicle burnt out");
+    }
+    // The light discipline (roadmap C2): on a night march the battery goes blacked out, all outside lights off
+    // (voenizdat_osa_1991 p222, p239); the crew keeps it once its commander has heard the march order (or, with no
+    // battery net, from his own drill on the move at night). By day there is nothing to keep.
+    void UpdateLightDiscipline() {
+        bool told = false;
+        const std::string own = order_net_ ? OwnOnOrderNet() : std::string();
+        if (!own.empty() && battery_order_ >= 0 && battery_order_kind_ == BatteryOrder::Kind::March) {
+            told = order_net_->Heard(battery_order_, own);
+        } else {
+            told = console_.equipment.HasInput("vehicle_stopped") && !console_.equipment.GetInput("vehicle_stopped");
+        }
+        own_blackout_ = told && light_.dark;
+    }
+    // The driver's work on the march (C1, C2): the engine started when the battery moves the vehicle (the pre-heater
+    // first in the cold), the handbrake off and the gear for the speed asked; parked again after a while at rest; the
+    // water-jet flaps and the wave shield before the water; the lights by the light discipline. Through NpcDoes: a
+    // player in the seat is shown each as a duty.
+    void DriveOwnVehicle(double dt) {
+        const VehicleSystemsDef& d = def_.vehicle_systems;
+        const Battery::Vehicle* v = battery_ ? battery_->Own() : nullptr;
+        if (v == nullptr || !d.has_drive || !d.has_engine) return;
+        const bool wants = v->wanted_mps > 0.0;
+        own_still_s_ = wants ? 0.0 : own_still_s_ + dt;
+        const SubsystemState engine = console_.equipment.State(d.engine.subsystem);
+        if (wants && engine == SubsystemState::Off) {
+            if (console_.equipment.GetInput(d.engine.cold_input)) {
+                // Cold: the pre-heater lit and run (its glow plug, then its button) until the coolant is warm enough.
+                if (console_.equipment.State(d.engine.preheater_subsystem) == SubsystemState::Off) {
+                    if (NpcSets("heat.plug", 1, "the engine too cold to start: light the pre-heater")) {
+                        NpcSets("heat.start", 1, "the pre-heater's glow plug on: start it");
+                    }
+                }
+            } else if (console_.panel.Get(d.drive.gear_control) == d.drive.neutral_position) {
+                NpcSets(d.engine.starter_control, 1, "the battery moves: start the engine (in neutral)");
+            } else {
+                NpcSets(d.drive.gear_control, d.drive.neutral_position, "the engine is started in neutral");
+            }
+        }
+        if (engine == SubsystemState::Ready && !console_.equipment.GetInput(d.engine.cold_input) &&
+            console_.equipment.State(d.engine.preheater_subsystem) != SubsystemState::Off) {
+            NpcSets("heat.plug", 0, "the engine is running: the pre-heater off");
+        }
+        if (engine == SubsystemState::Ready && wants) {
+            NpcSets(d.drive.handbrake_control, 1 - d.drive.handbrake_on_position, "moving off: the handbrake off");
+            NpcSets(d.drive.gear_control, own_sys_->GearFor(v->wanted_mps), "the gear for the column's speed");
+        } else if (own_still_s_ > kParkAfterS && v->speed_mps < 0.1) {
+            NpcSets(d.drive.gear_control, d.drive.neutral_position, "halted: the gear in neutral");
+            NpcSets(d.drive.handbrake_control, d.drive.handbrake_on_position, "halted: the handbrake on");
+        }
+        // The water: the wave shield up and both flaps open from the water's edge until out on the far side.
+        const bool water = v->afloat || v->crossing_stage == 1 || v->crossing_stage == 2;
+        if (!d.drive.wave_shield_control.empty()) {
+            NpcSets(d.drive.wave_shield_control, water ? d.drive.wave_shield_up_position : 1 - d.drive.wave_shield_up_position,
+                    water ? "deep water ahead: the wave shield up" : "out of the water: the wave shield down");
+        }
+        for (const std::string& id : d.drive.waterjet_controls) {
+            if (water) NpcSets(id, d.drive.waterjet_open_position, "afloat: the water-jet flaps open");
+        }
+        // The lights: off under the light discipline; by night with none ordered, the headlights on the move.
+        if (d.has_lights && !d.lights.outside_control.empty()) {
+            if (own_blackout_) {
+                NpcSets(d.lights.outside_control, 0, "light discipline: all outside lights off");
+            } else if (light_.dark && wants) {
+                NpcSets(d.lights.outside_control, 1, "driving at night: the outside lights on");
+                NpcSets(d.lights.central_control, d.lights.headlights_position, "driving at night: the headlights");
+            }
+        }
+    }
+    // The fire (C8): the driver backs the «Роса» automat up. Once the automat has had its time, he turns the disc on to
+    // a full bottle, opens the cover and presses the button while the fire burns; after it, the disc on to the next full
+    // bottle and the cover shut.
+    void FightOwnFire() {
+        const VehicleSystemsDef& d = def_.vehicle_systems;
+        if (!d.has_fire || own_sys_->Destroyed()) return;
+        const VehicleFireDef& f = d.fire;
+        const bool burning = own_sys_->AnyBurning();
+        const int next = own_sys_->DiscForNextFull();
+        if (burning) {
+            if (own_fire_seen_s_ < 0.0) own_fire_seen_s_ = time_;
+            if (time_ - own_fire_seen_s_ < f.auto_delay_s + 2.0 || time_ - own_fire_act_s_ < 3.0) return;
+            if (next < 0) return;  // nothing left to fire
+            if (!own_sys_->DiscOnFull(console_)) {
+                NpcSets(f.disc_control, next, "fire: the disc on to a full bottle");
+                return;
+            }
+            if (!f.cover_control.empty() && console_.panel.Get(f.cover_control) != 1) {
+                NpcSets(f.cover_control, 1, "fire: open the cover over the button");
+                return;
+            }
+            if (NpcSets(f.button_control, 1, "fire: press the button")) own_fire_act_s_ = time_;
+            return;
+        }
+        own_fire_seen_s_ = -1.0;
+        if (next >= 0 && !own_sys_->DiscOnFull(console_)) NpcSets(f.disc_control, next, "the fire out: the disc on to the next full bottle");
+        if (!f.cover_control.empty() && console_.panel.Get(f.cover_control) == 1 && time_ - own_fire_act_s_ > 5.0) {
+            NpcSets(f.cover_control, 0, "the fire out: the cover shut");
+        }
+    }
     // The missile load and channels: shots the outcome model has finished free their channel; then selection at
     // ВНИМАНИЕ and every lamp.
     void UpdateLauncher() {
@@ -7342,6 +7524,11 @@ private:
     std::unique_ptr<Launcher> launcher_;
     bool power_supplied_ = false;
     std::unique_ptr<FuelModel> fuel_;
+    std::unique_ptr<VehicleSystems> own_sys_;  // the vehicle's own systems (roadmap C1-C3, C7, C8)
+    double own_still_s_ = 0.0;                 // how long the battery has not asked the own vehicle to move
+    bool own_blackout_ = false;                // the light discipline the crew keeps
+    double own_fire_act_s_ = -1.0e9;           // the driver's last press of the fire button
+    double own_fire_seen_s_ = -1.0;            // the fire lamps lit since (< 0: none burning)
     // ---- The crew's bodies out of their seats (crew_mobility.hpp).
     std::map<std::string, CrewMover> movers_;
     std::map<std::string, bool> hatches_;           // exit id -> standing open
@@ -10144,6 +10331,8 @@ private:
     fx::Feed fx_;
     std::mt19937 fx_rng_{1u};
     bool fx_on_ = true;
+    static constexpr double kFragmentFireM = 50.0;      // sam3d estimate: an ARM bursting this near throws fragments into the hull
+    static constexpr double kParkAfterS = 20.0;         // sam3d: the driver parks (neutral, handbrake) after this long at rest
     static constexpr unsigned kFxSeed = 0xF0E5u;           // sam3d: the presentation generator's seed, after the scenario's
     static constexpr double kFxLaunchUpM = 3.5;            // the missile on its rails above the ground (sam3d)
     static constexpr double kFxLaunchElevationDeg = 27.0;  // voenizdat_osa_1991: the 9M33 leaves at a constant 27 degrees
@@ -12435,7 +12624,11 @@ private:
     std::map<std::string, std::map<std::string, double>> stress_heard_;  // seat -> callout -> when he last heard (or said) it
     double stress_updated_s_ = -1.0;
     double near_burst_s_ = -1e9;
-    static double TierStress(const SkillTier& t, const CrewMember& m) { return 1.0 + (t.stress_factor - 1.0) * m.StressLevel(); }
+    // His tier's stress factor at his stress level, and the cabin's air out of the comfort band (vehicle_systems.hpp, C3).
+    double TierStress(const SkillTier& t, const CrewMember& m) const {
+        const double comfort = own_sys_ ? own_sys_->WorkSlowFactor(console_) : 1.0;
+        return (1.0 + (t.stress_factor - 1.0) * m.StressLevel()) * comfort;
+    }
     void NoteStressHeard(const std::string& seat, const std::string& callout) { stress_heard_[seat][callout] = time_; }
     void UpdateStress() {
         static const StressSign kStressHeard[] = {

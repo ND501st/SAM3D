@@ -92,3 +92,42 @@ detail is AK-true only with that in mind. Where a line says *inference*, it is S
   OC61-3M1's overheating (p169); the fuse lamps (p166, every system's normal-work list). НЕИСПРАВНОСТЬ: silent.
 - **«К бою» (high, p246-247):** the order of the crew's checks before combat; the ФК is not in it.
 - **R-123M КОНТРОЛЬ НАПРЯЖЕНИЙ, КАЛИБРОВКА:** nothing in the local sources.
+
+## The checks' model (15 Nov 2026)
+
+What the sources above give, built as `simcore/checks.hpp` and the console's `"checks"` block
+(`data/procedures/osa_ak.json`). The sources say what each check shows, never its numbers: every reading below is
+SAM3D's (confidence low), chosen so a sound check reads clearly on the scale and a fault reads clearly dead.
+
+- **ИП1 and ИП2 (0004-12M1).** Two centre-zero meters on SŁ-1M (the mesh's two cases, `sl1m_trace` L1). With АНОД ВКЛ.
+  in ФК, КОНТРОЛЬ СИСТЕМ picks the check (its legends are unread: SAM3D's reading of the systems p159-162 lists):
+  1 the СРП's static task, where ПУСК gives K1 0.6 and K2 -0.4 of the swing ("a certain level", p159) and nothing without
+  the computer (ОТКАЗ СРП); 2 the passage of commands, where УРОВНИ КОМАНД or ПРОВЕРКА СМЕНЫ ЛИТЕРА gives both 0.8, negative
+  with СМЕНА ЗНАКА, and nothing held gives the zero levels (p159-160); 3 the transients, the channel ПРОВЕРКА ПЕРЕХОДНЫХ
+  ХАРАКТЕРИСТИК picks settling at 0.5; 4 and 5 read nothing. A new fault, `command_channel_fault` (K1, K2 do not pass),
+  leaves both dead.
+- **0004-14M's four meters.** As before by РЕЖИМЫ (they had the same values as levels); now ВЫВОД swings the missile
+  pair 1.6 times НАВЕДЕНИЕ (the gathering beam's wider scale), and ЧАСТОТА, the target channel's quartz oscillator (p162),
+  drops the target pair linearly to nothing 0.2 of its turn off mid-scale. A new fault, `missile_error_fault`, leaves the
+  missile pair dead as `error_channel_fault` does the target pair.
+- **The noise check (0062-6M1).** РЕЖИМЫ picks the channel (1 the search radar's ГШ-2, 2 and 3 the tracking radar's two
+  ГШ-5 channels, p161 "separately by two channels"; 4 and 5 nothing: КАНАЛЫ, on the large knob, is not a control). Its
+  РРУ КШ knob (ОСН. for the first two, ДОП. for the third: SAM3D's pairing) sets the receiver's own noise on КОНТРОЛЬ, 0.6
+  of the swing at full knob; ПОДЖИГ ГШ held raises it by the Y-factor, twice for a sound receiver, 1 + 1/F for one whose
+  noise figure is F worse (`degraded_db` 6 dB: 1.25). The drill: set the knob so the noise alone sits on a mark, fire the
+  generator, read the rise. The receivers' input stages are on with the three-minute relay (p165), so the check waits for
+  it. New faults `soc_receiver_degraded`, `ssc_receiver_degraded`.
+- **What the faults cost.** A degraded receiver loses `degraded_db` on every echo and on the clutter in the EM layer
+  (`em::RadarState::rx_loss_db`); without it, the radar's reach falls to 10^(-6/40) = 0.71 (the radar equation's fourth
+  root). A guidance fault set at the meeting multiplies the shot's chance (`data/gameplay/osa_ak.json`
+  `outcome.fault_factors`, game values): K3 not passing 0 (the fuse's arming command, p160), K1/K2 not passing 0 (no
+  commands), the target's error signals 0.5, the missile's 0.4. The debrief names the fault.
+- **РЕЛЕ ТЕПЛ. (0096-9M1, p99, p166).** The thermal relays (two phases, 35 A) guard the ЭМУ's drive motor; the switch at
+  ВКЛ. (its start position) keeps them in, ОТКЛ. shunts their block contacts "in case of need". A new fault,
+  `emu_overload` (a binding bearing, ice on the turret), heats them: after 20 s (a game value) they open and the turret
+  stops in azimuth, ПРИВОД βн's lamp going dark; ПРИВОД βн off and on resets them (SAM3D's reading), and with the overload
+  still there they open again after another 20 s. Shunted, the turret turns on through the overload, and after 5 min
+  (a game value) the motor burns out until the fault is cleared (the repair, not modelled).
+- **R-123M (bsuir_r123m_2019, registered since).** КОНТРОЛЬ НАПРЯЖЕНИЙ has a БС position reading the vehicle's network
+  (norm 23-28 V in the meter's shaded sector), and the set is calibrated after 20 min, required at or below 0 °C. Not built:
+  the set's meter is not a display in the cabin and the selector's positions (from the plate) have no БС; left with C7.

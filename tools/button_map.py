@@ -57,21 +57,16 @@ DISPLAY_SOURCES = {
 # Phases follow docs/DEVELOPMENT_ROADMAP.md; notes follow the controls' notes and docs/ARCHITECTURE.md.
 PLANNED = {
     "osa_ak": [
-        ("p:mc", "…МЦ toggle", "unknown", "Toggle at the launch console's top left. The 1991 textbook's launch-console description doesn't name it either; function not known from any source yet.", ["c:fo.mc"], "unknown"),
         # The audit of 12 Nov 2026 (docs/OSA_INTERIOR_HOLISTIC.md section 47): drawn but not wired, seen in a
         # photo, or in the sources only.
-        ('p:fk_meters', '0004-12M1 meters ИП1, ИП2 and lamp КЗ', 'on the model, not wired', 'On SŁ-1M in the mesh; the fk.* switches are placed but nothing reads them (voenizdat_osa_1991 p162).', ['s:function_check'], 'missing'),
-        ('p:0062', '0062-6M1 meter КОНТРОЛЬ and button ПОДЖИГ ГШ', 'on the model, not wired', 'ТОК and МОЩНОСТЬ now read the transmitter mon.tx_select chooses; the noise check (КОНТРОЛЬ, ПОДЖИГ ГШ, КАНАЛЫ, РЕЖИМЫ) is not modelled (voenizdat_osa_1991 p49-51).', ['s:function_check'], 'missing'),
+        ('p:0062', '0062-6M1 switch КАНАЛЫ', 'on the model, not wired', 'The noise check is built (КОНТРОЛЬ, ПОДЖИГ ГШ, РЕЖИМЫ, the РРУ КШ knobs: simcore/checks.hpp); КАНАЛЫ, likeliest the large pointer knob, is not a control: РЕЖИМЫ picks the channel (voenizdat_osa_1991 p98, p161).', ['c:ssc.modes'], 'missing'),
         ('p:pu303', 'PU-303: ХОЛ. ПРОКР., the hour counters', 'on the model, not wired', 'The lamps, the ГТА and ТВГ gauges, the load buttons (ОТКЛ. НАГР. takes the loads off until ГТА or ИВП puts them back: subsystem loads_off) and СТОП (gta_stopped, until ПУСК is put off) work; the cold cranking and the hour counters wait for a model of the turbine start.', ['c:gta.cold_crank'], 'missing'),
-        ('p:dash', "Driver's dash: speed, coolant, tacho, oil, ammeter, hours; lamps БОРТ. СЕТЬ, ПОВОРОТ", 'on the model, not wired', 'BAZ dash gauges drawn from g085-a with their scales; only the fuel gauge works.', ['i:vehicle_stopped'], 'missing'),
         ('p:bort_off', 'БОРТ СПК ОТКЛ. as its own push-button', 'on the model, not wired', 'Drawn beside the guarded БОРТ СПК ВКЛ.; one switch fo.bort_spk stands for both (voenizdat_osa_1991 p119-121).', ['c:fo.bort_spk'], 'missing'),
-        ('p:faults', 'Fault lamps: ОТКАЗ СРП, ОТКАЗ Qc, ОБРЫВ ФАЗЫ, НЕИСПРАВНОСТЬ', 'on the model, not wired', "Drawn and dark, which is right while no such fault is modelled (voenizdat_osa_1991 p50-52, p100, p121); the PU-303's fault lamps light on its lamp test.", ['s:power', 's:gyro_erected'], 'missing'),
+        ('p:faults', 'Fault lamp НЕИСПРАВНОСТЬ', 'in the sources only: silent', "ОТКАЗ СРП, ОТКАЗ Qc and ОБРЫВ ФАЗЫ light with their faults (roadmap C4); НЕИСПРАВНОСТЬ is silent in the sources (voenizdat_osa_1991 p121); the PU-303's fault lamps light on its lamp test.", ['s:power'], 'missing'),
         ('p:stow_lamps', 'Stowing board: ПРЕД. УГОЛ', 'on the model, not wired', 'A drive on its stop (a stabilisation fault, voenizdat_osa_1991 p47-48): not modelled, so dark. ГАБАРИТ 3800 now works.', ['s:stabilisation'], 'missing'),
         # The ПАНЕЛЬ ИНДИКАЦИИ's lamps (12 Nov 2026, docs/OSA_INTERIOR_HOLISTIC.md section 50): ДВЕРЬ ЗАКРЫТА, ЛЮКИ РТА ЗАКРЫТЫ and
         # СЭП АВАР. ОТКЛ. are built; these wait for their systems or their legends.
-        ('p:ind_overheat', 'ПАНЕЛЬ ИНДИКАЦИИ: lamp ПЕРЕГРЕВ ОО04-20М1', 'in the sources only: waits for overheating', "Lights with any of the antenna post's ПЕРЕГРЕВ lamps (its transmitters' and OC61-3M1's thermal sensors, voenizdat_osa_1991 p169). No transmitter heats in the model, so not built; which three-line cap it is is not known.", ['s:soc_transmitter', 's:ssc_transmitter'], 'missing'),
         ('p:ind_caps', 'ПАНЕЛЬ ИНДИКАЦИИ: five legend lamps not read, two blank spares', 'on the model, not wired', 'Drawn dark (wwp_gecko g095-b): four three-line and one two-line legends not legible; the left column\'s bottom two blank, under a cool and a reddish lens (spares, SAM3D\'s reading).', ['s:power'], 'unknown'),
-        ('p:ind_select', 'ПАНЕЛЬ ИНДИКАЦИИ: what the selector 3—II ... 3—I selects', 'on the model, not wired', 'Placed and turning (ind.select), its positions named after the launch табло (voenizdat_osa_1991 p247); its function is in no source.', ['s:power'], 'unknown'),
         ('p:deenergised', 'De-energisation indicator box', 'seen in a photo: owner to decide', 'Stencilled box aft of the spares box (wwp_gecko g090-a, g092-a; rwd_mb3 layout).', ['s:power'], 'missing'),
         ('p:flags', 'March signals: flags and lamps', 'seen in a photo: owner to decide', 'Two signal flags and a bag by the commander (wwp_gecko g089-d); the march signals (voenizdat_osa_1991 p232-239).', ['c:veh.hatches'], 'missing'),
         ('p:gauges', "Air pressure gauges over the commander's screen and by the right radio", 'seen in a photo: owner to decide', 'With pipe and valve (wwp_gecko g087-d, g089-b, g090-a); what they serve is not sourced.', ['c:press.standard'], 'unknown'),
@@ -82,9 +77,8 @@ PLANNED = {
         ('p:vision', "Driver's vision: PNV-57E, TNPO-170A", 'in the sources only: owner to decide', 'rwd_mb3; g089-a/b show only periscope blanks. The wave shield is built: veh.bilge_pump, ВОДООТРАЖАТЕЛЬНЫЙ ЩИТ (voenizdat_osa_1991 p224).', ['c:veh.waterjet_left'], 'missing'),
         # The panel review of 12 Nov 2026 (docs/research/OSA_PANEL_REVIEW_2026-11.md section 4): their systems are not built.
         ('p:fuse_lamps', 'Fuse lamps on every rack (0096-9M1, 0096-10M, SP-1M, 0094-11M, OR-95-1M ПЕРЕГРУЗКА)', 'in the sources only: waits for faults', 'Each fuse holder has a lamp the crew checks dark at start-up (voenizdat_osa_1991 p52-53, p100, p166); no fault class (fuse, lamp, system down) is modelled.', ['s:power'], 'missing'),
-        ('p:engine', 'The main engine: СТАРТЕР, «К маршу готов», the ГОМ engaged off the engine', 'in the sources only: waits for the engine', 'A diesel started electrically or by compressed air (voenizdat_osa_1991 p174, p247); the ГОМ by a кран off the engine, its speed held by the hand fuel-pump lever (Fig. 2.60, p164). pwr.pto stands on PU-303 and pto_generator needs no engine.', ['c:pwr.pto'], 'missing'),
-        ('p:fuel_lever', 'Hand fuel-pump lever on its ratchet quadrant', 'seen in a photo: waits for the engine', 'Ball-knobbed, low left of the column (wwp_gecko g086-d, g083-a).', ['c:pwr.pto'], 'missing'),
-        ('p:diff_fire', 'Differential lock; the fire system on/off', 'in the sources only: owner to decide', 'voenizdat_osa_1991 p175, p221.', ['i:vehicle_stopped'], 'missing'),
+        ('p:fuel_lever', 'Hand fuel-pump lever on its ratchet quadrant', 'seen in a photo: owner to decide', 'Ball-knobbed, low left of the column (wwp_gecko g086-d, g083-a).', ['c:pwr.pto'], 'missing'),
+        ('p:diff_fire', 'Differential lock; the fire system on/off', 'in the sources only: owner to decide', 'voenizdat_osa_1991 p175, p221. The fire bottles, the automat and the driver\'s disc are built (roadmap C8).', ['i:vehicle_stopped'], 'missing'),
         ('p:iff_1l24', 'IFF 1L24-2 blocks', 'in the sources only: owner to decide', 'On the BM3, not the AK, which carries the РЗМ set (voenizdat_osa_1991 p53-54).', ['s:soc_antenna'], 'missing'),
         ('p:or14', 'OR-14M: timers, ДЕЛИТЕЛИ НАПРЯЖЕНИЯ knobs and toggles', 'in the sources only: owner to decide', 'Zeroed for ПУСК ГОТОВ (voenizdat_osa_1991 p154).', ['s:fire_control_computer'], 'missing'),
         ('p:pb107_fan', 'ПБ-107: its own fan on the engine bulkhead', 'in the sources only: owner to decide', 'voenizdat_osa_1991 p168.', ['s:power'], 'missing'),
@@ -109,6 +103,18 @@ BLOCK_MODELS = {
               "its box's selector and a set that is on, warm and on the net's frequency."),
     "post": ("m:post", "The command post: plotting board, telecode, nets", "simcore/pu12.hpp: the post's picture, telecode and nets."),
     "radios": ("m:radio_sets", "The radio sets worked as sets", "simcore/radio_sets.hpp: the R-111 and R-407 as sets."),
+    "checks": ("m:checks", "The BM's checks: the function-check meters, the noise check",
+               "simcore/checks.hpp: ИП1, ИП2 and 0004-14M's meters in ФК, КОНТРОЛЬ of 0062-6M1 with ПОДЖИГ ГШ (roadmap C4)."),
+}
+# The vehicle's own systems (data/vehicles/<system>_systems.json, simcore/vehicle_systems.hpp, roadmap C1-C9): each block
+# a model its controls feed and whose *_input signals it sets.
+VEHICLE_MODELS = {
+    "engine": ("m:veh_engine", "Engine: starter, stop, hand throttle, warm-up and oil"),
+    "drive": ("m:veh_drive", "Drive: gears, handbrake, the water-jets and wave shield"),
+    "electrics": ("m:veh_electrics", "Electrics: batteries, the network, the 220 V supply and УКЧ"),
+    "lights": ("m:veh_lights", "Lights: headlamps, sidelights, blackout, the cabin"),
+    "climate": ("m:veh_climate", "Climate: the cabin, racks and transmitters' heat"),
+    "fire": ("m:veh_fire", "Fire: the compartments, the bottles, the automat"),
 }
 # Where else a control can be named: simcore reads these (code); the crew, the lessons and the scenarios only drill them.
 CODE_GLOBS = ["simcore/include/simcore/**/*.hpp", "unreal/SAM3D/Source/**/*.cpp", "unreal/SAM3D/Source/**/*.h", "data/systems/*.json"]
@@ -140,8 +146,9 @@ def control_ids_in(value, ids):
 
 
 class MapBuilder:
-    def __init__(self, console, cabin, refs=None):
+    def __init__(self, console, cabin, refs=None, vehicle=None):
         self.con, self.cab = console, cabin
+        self.veh = vehicle or {}
         self.refs = refs or {}
         self.ctrl = {c["id"]: c for c in console["controls"]}
         self.subs = {s["id"]: s for s in console.get("subsystems", [])}
@@ -349,6 +356,7 @@ class MapBuilder:
             feeds("m:track", [("s:", k, track, k) for k in ("transmitter", "slew", "radar_mode", "tv_camera", "tv_mode", "range_only_mode")]
                   + [("c:", k, track, k) for k in ("az_wheel", "el_wheel", "range_wheel", "lock_control", "slew_control", "fov_control", "mti_control",
                                                          "rgpo_control", "filter_control", "range_balance_control")]
+                  + [("c:", "small_target_control", track, "МЦ: a small target")]
                   + [("c:", k, track, "ПА balance") for k in ("pa_balance_az", "pa_balance_el")])
             receiver_feeds(track, "m:track")
             if es:
@@ -462,9 +470,26 @@ class MapBuilder:
                 outs += [v for k, v in ch.items() if k != "return"]
                 if ch.get("return"):  # ВОЗВРАТ: the button resets the channel's range finder, losing its missile
                     self.add_edge("c:" + ch["return"], "m:launcher", "feed", "ВОЗВРАТ: the missile in flight is lost")
+            refuse = launcher.get("refuse") or {}
+            feeds("m:launcher", [("c:", "select_control", refuse, "ОТКАЗ: the missile chosen"),
+                                 ("c:", "button", refuse, "ОТКАЗ: the missile on preparation refused")])
+            outs.append(refuse.get("refused_input"))
             for inp in outs:
                 if inp:
                     self.add_edge("m:launcher", "i:" + inp, "signal", "sets this signal")
+
+        for key, (mid, label) in VEHICLE_MODELS.items():
+            block = self.veh.get(key)
+            if not isinstance(block, dict):
+                continue
+            self.add_node(mid, t="model", label=label, notes=block.get("notes") or self.veh.get("notes"),
+                          source=block.get("rule_source") or self.veh.get("source"), conf=self.veh.get("confidence"))
+            for cid in dict.fromkeys(control_ids_in(block, self.ctrl)):
+                self.add_edge("c:" + cid, mid, "feed", label.split(":")[0].lower())
+            for k, v in block.items():
+                if k.endswith("_input") and isinstance(v, str) and v in self.inputs:
+                    self.add_edge(mid, "i:" + v, "signal", "sets this signal")
+            # The subsystems it needs are not drawn: its signals enable them back (the network, the engine), a cycle.
 
     def clean_edges(self):
         seen, kept = set(), []
@@ -654,8 +679,8 @@ class MapBuilder:
         )
 
 
-def build(console, cabin, refs=None):
-    return MapBuilder(console, cabin, refs).build()
+def build(console, cabin, refs=None, vehicle=None):
+    return MapBuilder(console, cabin, refs, vehicle).build()
 
 
 def write_list(mb, path):
@@ -722,7 +747,9 @@ def main(argv=None):
     cabin_path = ROOT / "data" / "cabins" / f"{args.system}.json"  # a system without a cabin yet: no lamps or displays
     cabin = json.loads(cabin_path.read_text(encoding="utf-8")) if cabin_path.exists() else {"panels": []}
     refs = find_refs([c["id"] for c in console["controls"]])
-    mb = build(console, cabin, refs)
+    veh_path = ROOT / "data" / "vehicles" / f"{args.system}_systems.json"  # the vehicle's own systems, where built
+    vehicle = json.loads(veh_path.read_text(encoding="utf-8")) if veh_path.exists() else None
+    mb = build(console, cabin, refs, vehicle)
     data = mb.data()
     write_list(mb, Path(args.list) if args.list else ROOT / "docs" / "generated" / f"{args.system}_controls.md")
     out = Path(args.out) if args.out else ROOT / "out" / "button_map" / f"{args.system}.html"

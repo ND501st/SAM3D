@@ -52,6 +52,7 @@ struct Mover {
     double moved_s = 0.0;          // time spent moving (the route's time along it)
     double arrived_s = -1.0;
     double halt_until_s = -1.0;
+    bool lit = true;               // its lights on at night (false: a column under blackout, roadmap C2)
 
     double Length() const { return std::max(0, vehicles - 1) * spacing_m; }
 };
@@ -157,15 +158,18 @@ public:
 
     // The levels by the viewers' points (the player's eye or optic) and their visual range: M2 within it, M1 beyond its
     // margin, unchanged between; `always_m2` (the battery's own elements) are M2 whatever. Returns the ids handed over.
-    std::vector<std::string> UpdateLevels(const std::vector<MapPoint>& viewers, double range_m, const std::vector<std::string>& always_m2 = {}) {
+    // `unlit_range_m` (>= 0): the range for a mover with its lights off (at night, nav::VisualRangeUnlitM).
+    std::vector<std::string> UpdateLevels(const std::vector<MapPoint>& viewers, double range_m, const std::vector<std::string>& always_m2 = {},
+                                          double unlit_range_m = -1.0) {
         std::vector<std::string> changed;
         for (Mover& m : movers_) {
             if (m.level == MoverLevel::M0) continue;
             const bool own = std::find(always_m2.begin(), always_m2.end(), m.id) != always_m2.end();
             const double d = Nearest(m, viewers);
+            const double r = !m.lit && unlit_range_m >= 0.0 ? std::min(range_m, unlit_range_m) : range_m;
             MoverLevel next = m.level;
-            if (own || d <= range_m) next = MoverLevel::M2;
-            else if (d > range_m * (1.0 + margin_)) next = MoverLevel::M1;
+            if (own || d <= r) next = MoverLevel::M2;
+            else if (d > r * (1.0 + margin_)) next = MoverLevel::M1;
             if (next != m.level) {
                 // The place along the route goes with it; at M1 the time moved is the time to that place.
                 if (next == MoverLevel::M1) m.moved_s = TimeTo(m.route, m.arc_m);

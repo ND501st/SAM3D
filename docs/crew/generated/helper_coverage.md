@@ -209,7 +209,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 900 time | 442 | 456 | 470 | 1 | 3 | 0 | 0 | 12 | 6 | 0 | 0 | drill 10, duty 12 | 0 |
 | senior_operator | 900 time | 440 | 454 | 469 | 1 | 3 | 0 | 0 | 14 | 5 | 0 | 0 | drill 7, duty 18, wheel 1405 | 0 |
 | operator | 900 time | 440 | 452 | 468 | 1 | 3 | 0 | 0 | 8 | 5 | 0 | 0 | drill 7, duty 8, wheel 105 | 0 |
-| driver | 900 time | 442 | 456 | 471 | 1 | 3 | 0 | 0 | 2 | 6 | 0 | 0 | duty 2 | 0 |
+| driver | 900 time | 442 | 456 | 471 | 1 | 3 | 0 | 0 | 2 | 6 | 0 | 0 | duty 10 | 0 |
 
 ## osa_decoys: Osa: decoy drones, then the strike
 
@@ -242,7 +242,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 900 time | 3 | 285 | 299 | 1 | 4 | 0 | 0 | 7 | 14 | 0 | 0 | drill 10, duty 7 | 0 |
 | senior_operator | 132 the vehicle was hit by an anti-radiation missile | 3 | - | - | 0 | 2 | 0 | 0 | 10 | 6 | 3 | 0 | drill 10, duty 42, wheel 20 | 0 |
 | operator | 900 time | 3 | 284 | 299 | 1 | 4 | 0 | 0 | 6 | 14 | 0 | 0 | drill 12, duty 6, wheel 90 | 0 |
-| driver | 900 time | 3 | 285 | 299 | 1 | 4 | 0 | 0 | 2 | 14 | 0 | 0 | drill 1, duty 2 | 0 |
+| driver | 900 time | 3 | 285 | 299 | 1 | 4 | 0 | 0 | 2 | 14 | 0 | 0 | drill 1, duty 6 | 0 |
 
 ## osa_arm_drill_shrike: Osa: Shrike drill, beaten by going silent
 
@@ -253,7 +253,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 7 | 16 | 0 | 0 | drill 12, duty 7 | 0 |
 | senior_operator | 900 time | 3 | 263 | 277 | 1 | 4 | 0 | 0 | 23 | 18 | 5 | 0 | drill 23, duty 124, wheel 751 | 0 |
 | operator | 900 time | 3 | 244 | 270 | 1 | 4 | 0 | 0 | 8 | 16 | 0 | 0 | drill 16, duty 8, wheel 193 | 0 |
-| driver | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 2 | 16 | 0 | 0 | drill 1, duty 2 | 0 |
+| driver | 900 time | 3 | 246 | 270 | 1 | 4 | 0 | 0 | 2 | 16 | 0 | 0 | drill 1, duty 6 | 0 |
 
 ## osa_emission_orders: Osa: the emission regime, passed down before a SEAD pair
 
@@ -264,7 +264,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 7 | 31 | 0 | 0 | drill 12, duty 7 | 0 |
 | senior_operator | 900 time | 3 | 381 | 400 | 1 | 4 | 0 | 0 | 21 | 32 | 3 | 0 | drill 40, duty 110, wheel 631 | 0 |
 | operator | 900 time | 3 | 375 | 400 | 1 | 4 | 0 | 0 | 7 | 30 | 0 | 0 | drill 13, duty 7, wheel 91 | 0 |
-| driver | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 1 | 31 | 0 | 0 | drill 1, duty 1 | 0 |
+| driver | 900 time | 3 | 383 | 400 | 1 | 4 | 0 | 0 | 1 | 31 | 0 | 0 | drill 1, duty 3 | 0 |
 
 ## osa_battery_orders: Osa: the march order, carried to every vehicle
 
@@ -275,7 +275,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
 | senior_operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 1 | 0 | 0 | drill 11, duty 4 | 0 |
 | operator | 900 time | - | - | - | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | duty 1 | 0 |
-| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | duty 3 | 0 |
+| driver | 900 time | - | - | - | 0 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | duty 8 | 0 |
 
 ## pu12m_battery_orders: PU-12M: give the battery its march order
 
@@ -319,7 +319,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 448 all targets gone | - | 315 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 7, duty 6 | 0 |
 | senior_operator | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 8, wheel 11 | 0 |
 | operator | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 59 | 0 |
-| driver | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
+| driver | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 2, duty 2 | 0 |
 
 ## osa_practice_em: Osa: one drone, the radars in full
 
@@ -330,7 +330,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 448 all targets gone | - | 402 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 7, duty 6 | 0 |
 | senior_operator | 449 all targets gone | - | 402 | 426 | 1 | 1 | 0 | 0 | 10 | 0 | 0 | 0 | drill 11, duty 12, wheel 13 | 0 |
 | operator | 449 all targets gone | - | 401 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 74 | 0 |
-| driver | 449 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
+| driver | 449 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 2, duty 2 | 0 |
 
 ## osa_emcon_tv: Osa: radars silent, the TV only
 
@@ -341,7 +341,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 663 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 10, duty 2, wheel 577 | 0 |
 | senior_operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 2, wheel 98 | 0 |
 | operator | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 7, duty 2, wheel 37 | 0 |
-| driver | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
+| driver | 425 all targets gone | - | - | 408 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 1 | 0 |
 
 ## osa_low_level_em: Osa: a low strike and a pop-up helicopter
 
@@ -352,7 +352,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 900 time limit | - | 321 | 344 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 7, duty 7 | 0 |
 | senior_operator | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 8 | 0 | 0 | 0 | drill 11, duty 11, wheel 6 | 0 |
 | operator | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 65 | 0 |
-| driver | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
+| driver | 900 time limit | - | 319 | 344 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 1 | 0 |
 
 ## osa_jamming_em: Osa: a jamming strike aircraft
 
@@ -363,7 +363,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 410 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 10 | 0 | 0 | 0 | drill 10, duty 10 | 0 |
 | senior_operator | 411 all targets gone | - | 303 | 383 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 8, wheel 1 | 0 |
 | operator | 409 all targets gone | - | 309 | 384 | 1 | 1 | 0 | 0 | 5 | 0 | 0 | 0 | drill 11, duty 5, wheel 85 | 0 |
-| driver | 411 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
+| driver | 411 all targets gone | - | 308 | 383 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 1 | 0 |
 
 ## osa_rgpo_em: Osa: a range-gate pull-off, the counter-jamming
 
@@ -396,7 +396,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 5, duty 1 | 0 |
 | senior_operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 12, wheel 11 | 0 |
 | operator | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 3 | 0 | 0 | 0 | drill 11, duty 3, wheel 76 | 0 |
-| driver | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
+| driver | 697 all targets gone | - | - | - | 0 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 2, duty 2 | 0 |
 
 ## osa_practice_c2: Osa: the PU-12 lost, warning from the EWR net
 
@@ -407,7 +407,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 448 all targets gone | - | 315 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 7, duty 6 | 0 |
 | senior_operator | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 7 | 0 | 0 | 0 | drill 11, duty 8, wheel 11 | 0 |
 | operator | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 11, duty 6, wheel 59 | 0 |
-| driver | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 3, duty 2 | 0 |
+| driver | 449 all targets gone | - | 316 | 426 | 1 | 1 | 0 | 0 | 2 | 0 | 0 | 0 | drill 2, duty 2 | 0 |
 
 ## osa_vhf_jamming_em: Osa: the command net jammed, the EWR's net below the band
 
@@ -429,7 +429,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | deputy_commander | 448 all targets gone | - | 404 | 426 | 1 | 1 | 0 | 0 | 6 | 0 | 0 | 0 | drill 12, duty 6, wheel 2 | 0 |
 | senior_operator | 445 all targets gone | - | 404 | 426 | 1 | 1 | 0 | 0 | 9 | 0 | 0 | 0 | drill 11, duty 10, wheel 7 | 0 |
 | operator | 445 all targets gone | - | 405 | 426 | 1 | 1 | 0 | 0 | 4 | 0 | 0 | 0 | drill 11, duty 4, wheel 67 | 0 |
-| driver | 445 all targets gone | - | 407 | 426 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 3, duty 1 | 0 |
+| driver | 445 all targets gone | - | 407 | 426 | 1 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | drill 2, duty 1 | 0 |
 
 ## osa_trainer: Osa: the 9F632 trainer, the instructor's drill
 
@@ -652,6 +652,10 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | control (commander): a halt without the vehicle's Qc: the aiming circle out ahead | 6 |
 | control (commander): the aiming circle read: stow it and bring the Qc in | 6 |
 | control (commander): the words said: the chest switch back to ПРМ, to hear the net | 274 |
+| control (driver): halted: the gear in neutral | 5 |
+| control (driver): halted: the handbrake on | 5 |
+| control (driver): moving off: the handbrake off | 5 |
+| control (driver): the gear for the column's speed | 8 |
 | control (radio_operator): a message heard: write it in the journal | 8 |
 | designate (battery_commander): the nearest ready launcher whose sector covers it | 18 |
 | drill (senior_operator): a new echo in the interrogator's reach: ЗАПРОС | 120 |
@@ -690,7 +694,7 @@ Written by `simcore/build/helper_coverage data docs/crew/generated/helper_covera
 | report (deputy_commander): no missile left on the launcher | 2 |
 | report (deputy_commander): the TV shows a decoy | 2 |
 | report (deputy_commander): К бою: the intercom checked | 37 |
-| report (driver): a report the crew makes when its lamp or input comes on | 9 |
+| report (driver): a report the crew makes when its lamp or input comes on | 11 |
 | report (driver): stowed after the ARM attack: ready to march | 3 |
 | report (driver): the crew is stowed for the battery's march | 1 |
 | report (operator): a mark new, turned or lost on the board: tell the commander | 22 |

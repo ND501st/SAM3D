@@ -236,13 +236,16 @@ inline double BookCrossings(const RoadGraph& g, MovementTable& table, MarchPlan&
 
 // One search of a stretch of road by the enemy's armed reconnaissance: each mover on the move within `search_m` of the
 // point (its head or its tail) is seen at the part of the day's chance. The rolls are the air war's portable generator.
+// At night the chance is for headlights: a mover with its lights off (blackout, roadmap C2) is seen at `blackout_factor`
+// of it (data/vehicles/<system>_systems.json's lights) unless the aircraft has a night attack system.
 inline std::vector<std::string> ArmedRecceSees(const Movers& movers, const MapPoint& at, double search_m, airwar::DayPart part,
                                                airwar::Weather weather, bool night_capable, const airwar::TuningTable& tune,
-                                               airwar::Rng& rng) {
+                                               airwar::Rng& rng, double blackout_factor = 1.0) {
     std::vector<std::string> seen;
-    const double p = airwar::ColumnFindChance(part, weather, night_capable, tune);
+    const double p_lit = airwar::ColumnFindChance(part, weather, night_capable, tune);
     for (const Mover& m : movers.All()) {
         if (m.state != MoverState::Moving) continue;
+        const double p = !m.lit && part == airwar::DayPart::Night && !night_capable ? p_lit * blackout_factor : p_lit;
         const MapPoint h = movers.Head(m), t = movers.Tail(m);
         const double d = std::min(std::hypot(h.east_m - at.east_m, h.north_m - at.north_m), std::hypot(t.east_m - at.east_m, t.north_m - at.north_m));
         if (d > search_m) continue;

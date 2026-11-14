@@ -35,13 +35,13 @@ CAP_FRAME_SCREWS = ((24.0, 71.5), (34.0, 202.0))   # (m) the frame's two captive
 # Legends: the top two of each column three lines, the rest of the right column and the left's third two lines, the
 # left's bottom two blank (the lowest under a reddish lens, the one above a cooler one): spares, SAM3D's reading. The
 # manual puts on this panel ДВЕРЬ ЗАКРЫТА (p248), the РТА's hatches closed (p168) and ПЕРЕГРЕВ ОО04-20М1 (p169); which
-# cap is which: SAM3D's (cap_r5 reads like ДВЕРЬ ЗАКРЫТ..., cap_r4 is given the hatches, ПЕРЕГРЕВ is not built).
+# cap is which: SAM3D's (cap_r5 reads like ДВЕРЬ ЗАКРЫТ..., cap_r4 is given the hatches, cap_r3 ПЕРЕГРЕВ).
 CAP_D = 21.5
 CAP_H = 6.0
 CAPS = [
     {'id': 'cap_l1', 'c': (15.5, 91.2)}, {'id': 'cap_l2', 'c': (15.5, 116.2)}, {'id': 'cap_l3', 'c': (15.5, 141.0)},
     {'id': 'cap_l4', 'c': (15.5, 165.0), 'blank': 'cool'}, {'id': 'cap_l5', 'c': (15.5, 189.5), 'blank': 'red'},
-    {'id': 'cap_r1', 'c': (38.8, 80.8)}, {'id': 'cap_r2', 'c': (38.8, 104.7)}, {'id': 'cap_r3', 'c': (38.8, 129.5)},
+    {'id': 'cap_r1', 'c': (38.8, 80.8)}, {'id': 'cap_r2', 'c': (38.8, 104.7)}, {'id': 'cap_r3', 'c': (38.8, 129.5), 'lamp': 'peregrev'},
     {'id': 'cap_r4', 'c': (38.8, 154.0), 'lamp': 'lyuki_rta'}, {'id': 'cap_r5', 'c': (38.8, 177.5), 'lamp': 'dver_zakryta'},
 ]
 
@@ -93,8 +93,11 @@ CONTROL_MM = {
     'ind.select': SEL_KNOB,
     'dver_zakryta': (38.8, 177.5),
     'lyuki_rta': (38.8, 154.0),
+    'peregrev': (38.8, 129.5),
+    'ind.refuse': OTKAZ_LAMP,
 }
-CONTROL_D_MM = {'pwr.emergency_off': 11.0, 'sep_avar_otkl': 11.0, 'pwr.ukch': 12.0, 'ind.select': SEL_KNOB_BAR, 'dver_zakryta': 21.5, 'lyuki_rta': 21.5}
+CONTROL_D_MM = {'pwr.emergency_off': 11.0, 'sep_avar_otkl': 11.0, 'pwr.ukch': 12.0, 'ind.select': SEL_KNOB_BAR, 'dver_zakryta': 21.5, 'lyuki_rta': 21.5, 'peregrev': 21.5,
+                'ind.refuse': 2 * OTKAZ_LENS_R}
 
 
 def to_m(x, y):

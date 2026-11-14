@@ -4,7 +4,9 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -89,6 +91,43 @@ ASimOsaVehicle::ASimOsaVehicle()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom);
 
+	// The outside lamps at the hull's corners (wwp_gecko g021, g009: a headlamp and a sidelight in each front corner's
+	// box, the tail clusters in the rear plate's upper corners); off until the console lights them.
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		const double Y = Side == 0 ? -110.0 : 110.0;
+		USpotLightComponent* Head = CreateDefaultSubobject<USpotLightComponent>(Side == 0 ? TEXT("HeadlightLeft") : TEXT("HeadlightRight"));
+		Head->SetupAttachment(Root);
+		Head->SetRelativeLocation(FVector(455.0, Y, 130.0));
+		Head->SetRelativeRotation(FRotator(-4.0, 0.0, 0.0));
+		Head->SetIntensityUnits(ELightUnits::Candelas);
+		Head->SetIntensity(20000.0f);
+		Head->SetAttenuationRadius(6000.0f);
+		Head->SetInnerConeAngle(8.0f);
+		Head->SetOuterConeAngle(22.0f);
+		Head->SetLightColor(FLinearColor(1.0f, 0.93f, 0.8f));
+		Head->SetVisibility(false);
+		Headlights.Add(Head);
+		UPointLightComponent* SideLamp = CreateDefaultSubobject<UPointLightComponent>(Side == 0 ? TEXT("SidelightLeft") : TEXT("SidelightRight"));
+		SideLamp->SetupAttachment(Root);
+		SideLamp->SetRelativeLocation(FVector(455.0, Y * 1.18, 150.0));
+		SideLamp->SetIntensityUnits(ELightUnits::Candelas);
+		SideLamp->SetIntensity(30.0f);
+		SideLamp->SetAttenuationRadius(400.0f);
+		SideLamp->SetLightColor(FLinearColor(1.0f, 0.95f, 0.85f));
+		SideLamp->SetVisibility(false);
+		Sidelights.Add(SideLamp);
+		UPointLightComponent* Tail = CreateDefaultSubobject<UPointLightComponent>(Side == 0 ? TEXT("TailLampLeft") : TEXT("TailLampRight"));
+		Tail->SetupAttachment(Root);
+		Tail->SetRelativeLocation(FVector(-457.0, Y * 1.18, 200.0));
+		Tail->SetIntensityUnits(ELightUnits::Candelas);
+		Tail->SetIntensity(15.0f);
+		Tail->SetAttenuationRadius(300.0f);
+		Tail->SetLightColor(FLinearColor(1.0f, 0.05f, 0.02f));
+		Tail->SetVisibility(false);
+		TailLamps.Add(Tail);
+	}
+
 	// The cabin's body frame has its origin at the root (ground under the hull centre), like the hull boxes.
 	Cabin = CreateDefaultSubobject<USimCabinComponent>(TEXT("Cabin"));
 	Cabin->SetupAttachment(Root);
@@ -138,6 +177,29 @@ TArray<FSimCrewHotkey> ASimOsaVehicle::DefaultCrewHotkeys()
 		Hotkey(EKeys::Nine, TEXT("Operator"), TEXT("equipment_off"), true),
 		Hotkey(EKeys::Nine, TEXT("Driver"), TEXT("power_down"), true),
 	};
+}
+
+void ASimOsaVehicle::UpdateOutsideLamps(USimWorldSubsystem* Sim)
+{
+	const simcore::ScenarioRunner* R = Sim != nullptr ? Sim->GetScenarioRunner() : nullptr;
+	simcore::OutsideLamps Lamps;
+	if (R != nullptr && R->Def().has_vehicle_systems)
+	{
+		// From the console, which clients mirror: the lamps need no stepped systems.
+		Lamps = simcore::OutsideLampsOf(R->Def().vehicle_systems, R->Console());
+	}
+	for (USpotLightComponent* L : Headlights)
+	{
+		L->SetVisibility(Lamps.headlights);
+	}
+	for (UPointLightComponent* L : Sidelights)
+	{
+		L->SetVisibility(Lamps.sidelights);
+	}
+	for (UPointLightComponent* L : TailLamps)
+	{
+		L->SetVisibility(Lamps.rear);
+	}
 }
 
 void ASimOsaVehicle::BeginPlay()
@@ -194,6 +256,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 		bAutoBrake = false;  // the lesson autoplay's halt is made
 	}
 	FollowGround();
+	UpdateOutsideLamps(Sim);
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
 		if (Pc != nullptr && !bMenuOpen && Sim->IsBatteryLink() && Pc->WasInputKeyJustPressed(SwitchVehicleKey))

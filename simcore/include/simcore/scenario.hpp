@@ -32,6 +32,7 @@
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/crew_mobility.hpp"
+#include "simcore/vehicle_systems.hpp"
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
@@ -247,6 +248,10 @@ struct ScenarioDef {
     bool has_vehicle = false;
     VehicleDef vehicle;
     WalkingDef walking;
+    // The vehicle's own systems (data/vehicles/<system>_systems.json, vehicle_systems.hpp: the engine and drive, the
+    // network, lights, climate and fire), loaded when the system has the file (roadmap controls C1-C3, C7, C8).
+    bool has_vehicle_systems = false;
+    VehicleSystemsDef vehicle_systems;
     bool has_skills = false;       // a crew member has a "skill": the tiers are loaded
     SkillTable skills;
     std::string tuning_file;       // gameplay tuning, e.g. "gameplay/osa_ak.json"; empty = no engagement model
@@ -791,6 +796,11 @@ private:
             if (!LoadVehicleFile(vehicle_file, console, out.vehicle, &error)) return Fail("own_unit", error);
             if (!LoadWalkingFile(data_dir + "/crew/walking.json", out.walking, &error)) return Fail("own_unit", error);
             out.has_vehicle = true;
+        }
+        const std::string systems_file = data_dir + "/vehicles/" + console.system_id + "_systems.json";
+        if (std::ifstream(systems_file).good()) {
+            if (!LoadVehicleSystemsFile(systems_file, out.vehicle_systems, &error)) return Fail("own_unit", error);
+            out.has_vehicle_systems = true;
         }
         if (!OptionalString(*u, "own_unit", "tuning", out.tuning_file)) return false;
         if (!out.tuning_file.empty()) {

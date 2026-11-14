@@ -431,6 +431,11 @@ public:
         r->mti_comp_mps = comp_mps;
         r->mistune_hz = mistune_hz;
     }
+    // The receivers' noise figures over their norms (dB), from the faults the noise check finds (simcore/checks.hpp).
+    void SetReceiverLossDb(double search_db, double track_db) {
+        if (em::RadarState* r = Radar(search_)) r->rx_loss_db = search_db;
+        if (em::RadarState* r = Radar(track_)) r->rx_loss_db = track_db;
+    }
 
     // The elevation beams the search antenna steps through, one per revolution (indices into the radar's beams).
     // A new programme takes effect at the next revolution.

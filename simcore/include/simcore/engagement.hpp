@@ -64,6 +64,7 @@
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/c2_sources.hpp"
+#include "simcore/checks.hpp"
 #include "simcore/group_designation.hpp"
 #include "simcore/kill_assessment.hpp"
 #include "simcore/orientation.hpp"
@@ -194,6 +195,14 @@ struct EngagementTuning {
     std::map<std::string, double> method_factor;
     // A missile launched with no range known and ПОМЕХА off: the fuse is armed by range, and there is none (1 = no effect).
     double no_range_fuse_factor = 1.0;
+    // The small-target mode (МЦ; the console's track.small_target_control): a target slower than small_target_below_mps
+    // met with the mode off gets small_target_off_factor; a faster one met with it on, small_target_fast_on_factor.
+    double small_target_below_mps = 100.0;
+    double small_target_off_factor = 1.0;
+    double small_target_fast_on_factor = 1.0;
+    // Faults in the guidance (the console's inputs a scenario or the instructor sets): each one set at the meeting
+    // multiplies the chance by its factor (outcome.fault_factors: K3 the fuse never armed, K1 and K2 no commands, ...).
+    std::vector<std::pair<std::string, double>> fault_factors;
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
@@ -499,7 +508,8 @@ public:
         }
         if (!Group(root, "outcome",
                    {"hit_chance", "low_altitude", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
-                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor"},
+                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor",
+                    "small_target_below_mps", "small_target_off_factor", "small_target_fast_on_factor", "fault_factors"},
                    g) ||
             !Factor(*g, "tv_factor", t.tv_factor) || !Factor(*g, "outside_zone_factor", t.outside_zone_factor) ||
             !Num(*g, "outcome", "manoeuvre_penalty_per_deg_s", t.manoeuvre_penalty_per_deg_s, 0.0) ||
@@ -535,6 +545,25 @@ public:
             }
         }
         if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
+        if (g->Find("small_target_below_mps") != nullptr &&
+            !Num(*g, "outcome", "small_target_below_mps", t.small_target_below_mps, 0.0)) {
+            return false;
+        }
+        if (g->Find("small_target_off_factor") != nullptr && !Factor(*g, "small_target_off_factor", t.small_target_off_factor)) return false;
+        if (g->Find("small_target_fast_on_factor") != nullptr &&
+            !Factor(*g, "small_target_fast_on_factor", t.small_target_fast_on_factor)) {
+            return false;
+        }
+        if (const json::Value* ff = g->Find("fault_factors")) {
+            if (!ff->Is(json::Type::Object)) return Fail("outcome.fault_factors", "expected an object of input: factor");
+            for (std::size_t i = 0; i < ff->keys.size(); ++i) {
+                const json::Value& v = ff->items[i];
+                if (!v.Is(json::Type::Number) || v.number < 0.0 || v.number > 1.0) {
+                    return Fail(Join("outcome.fault_factors", ff->keys[i]), "expected a number from 0 to 1");
+                }
+                t.fault_factors.emplace_back(ff->keys[i], v.number);
+            }
+        }
         if (!LoadLowAltitude(*g, t)) return false;
         if (root.Find("kill_assessment") != nullptr && !LoadKillAssessment(root, t.kill)) return false;
         if (root.Find("group") != nullptr && !LoadGroup(root, t.group)) return false;
@@ -1051,6 +1080,8 @@ public:
     void SetSiteLatitude(double latitude_deg) { site_latitude_deg_ = latitude_deg; }
     double SiteLatitudeDeg() const { return site_latitude_deg_; }
     void SetGyroOwnDrift(double deg_h) { gyro_own_drift_deg_h_ = deg_h; }
+    // The magnetrons' drift off tune (Hz, vehicle_systems.hpp): felt by a receiver whose frequency control is on manual.
+    void SetMagnetronDriftHz(double hz) { magnetron_drift_hz_ = hz; }
     double IndicatedToTrueDeg(double indicated_deg) const {
         return Wrap180(indicated_deg + unit_heading_deg_ - frame_heading_deg_);
     }
@@ -1332,9 +1363,10 @@ private:
         em_->SetTrack(eq.IsReady(tr.transmitter), !tr.mti_control.empty() && console.panel.Get(tr.mti_control) == 1,
                       !tr.rgpo_control.empty() && console.panel.Get(tr.rgpo_control) == 1);
         const ReceiverReading srx = ReadReceiver(s.receiver, console.panel);
-        em_->SetSearchReceiver(srx.external, srx.comp_mps, srx.mistune_hz, srx.sa);
+        em_->SetSearchReceiver(srx.external, srx.comp_mps, srx.mistune_hz + (srx.manual_afc ? magnetron_drift_hz_ : 0.0), srx.sa);
         const ReceiverReading trx = ReadReceiver(tr.receiver, console.panel);
-        em_->SetTrackReceiver(trx.comp_mps, trx.mistune_hz);
+        em_->SetTrackReceiver(trx.comp_mps, trx.mistune_hz + (trx.manual_afc ? magnetron_drift_hz_ : 0.0));
+        em_->SetReceiverLossDb(ReceiverLossDb(console, true), ReceiverLossDb(console, false));
         em_->Advance(dt);
     }
 
@@ -1436,7 +1468,23 @@ private:
             const double guidance = tuning_.MethodFactor(EngagementTuning::ToString(s.guidance));
             const bool unfused = !s.range_known && s.guidance != EngagementTuning::GuidanceMethod::Jammer;
             const double fuse = unfused ? tuning_.no_range_fuse_factor : 1.0;
-            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse;
+            // The small-target mode (МЦ): the fuze and the loop set for a small slow target, or not.
+            double mc_factor = 1.0;
+            const std::string& mc = console.track.small_target_control;
+            if (!mc.empty()) {
+                const bool on = console.panel.Get(mc) == console.track.small_target_on_position;
+                const bool slow = g.speed_mps < tuning_.small_target_below_mps;
+                if (slow && !on) mc_factor = tuning_.small_target_off_factor;
+                if (!slow && on) mc_factor = tuning_.small_target_fast_on_factor;
+            }
+            double fault = 1.0;  // the guidance's faults (outcome.fault_factors), the first set one named in the debrief
+            const char* fault_id = nullptr;
+            for (const auto& ff : tuning_.fault_factors) {
+                if (!console.equipment.HasInput(ff.first) || !console.equipment.GetInput(ff.first)) continue;
+                fault *= ff.second;
+                if (fault_id == nullptr) fault_id = ff.first.c_str();
+            }
+            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse * mc_factor * fault;
             char aim_text[160] = "";  // only a TV shot is aimed by hand
             if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
                 std::snprintf(aim_text, sizeof(aim_text), " x TV aim %.2f (%.2f deg off the crosshair)", aim, aim_error_deg);
@@ -1448,6 +1496,14 @@ private:
             if (unfused) {
                 const std::size_t n = std::strlen(aim_text);
                 std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fuse %.2f (no range, ПОМЕХА off)", fuse);
+            }
+            if (mc_factor != 1.0) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x МЦ %.2f", mc_factor);
+            }
+            if (fault_id != nullptr) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fault %s %.2f", fault_id, fault);
             }
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
@@ -1507,9 +1563,13 @@ private:
             }
             return;
         }
+        // A degraded receiver (checks.hpp) sees only so far into the longest scale (the radar equation's fourth root).
+        double reach_m = 0.0;
+        for (const auto& sc : d.range_scales_m) reach_m = std::fmax(reach_m, sc.second);
+        reach_m *= ReceiverRangeFactor(ReceiverLossDb(console, true));
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.los || g.range_m < window.first || g.range_m > window.second) continue;
+            if (!g.alive || !g.los || g.range_m < window.first || g.range_m > window.second || g.range_m > reach_m) continue;
             if (mti ? g.range_m > d.mti_max_range_m : g.agl_m < tuning_.clutter_altitude_m) continue;
             picture_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             if (seen_by_search_.insert(kv.first).second) {
@@ -1746,15 +1806,21 @@ private:
             return;
         }
         const double wheel_az = console.panel.GetValue(d.az_wheel);
+        const double reach_m = TrackReachM(console);
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.los || g.range_m > d.max_range_m) continue;
+            if (!g.alive || !g.los || g.range_m > reach_m) continue;
             const bool in_beam =
                 std::fabs(WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= tuning_.az_tolerance_deg;
             if (in_beam || (kv.first == tracked_ && method_ == TrackMethod::Radar)) {
                 track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             }
         }
+    }
+
+    // The tracking radar's reach without the EM layer: its range, less what a degraded receiver costs (checks.hpp).
+    static double TrackReachM(const ConsoleData& console) {
+        return console.track.max_range_m * ReceiverRangeFactor(ReceiverLossDb(console, false));
     }
 
     // Why a lock on target g by `method` can't be held right now; nullptr if it can.
@@ -1771,7 +1837,7 @@ private:
         if (g.angular_rate_deg_s > tuning_.max_angular_rate_deg_s) return "target crossing too fast";
         if (method == TrackMethod::Radar) {
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
-            if (g.range_m > d.max_range_m) return "beyond tracking range";
+            if (g.range_m > TrackReachM(console)) return "beyond tracking range";
             if (g.agl_m < tuning_.track_min_altitude_m) return "target too low for the radar";
             if (g.agl_m < tuning_.track_clutter_altitude_m && !d.mti_control.empty() && console.panel.Get(d.mti_control) != 1) {
                 return "target lost in ground clutter (СДЦ off)";
@@ -2621,6 +2687,7 @@ private:
     double qc_commanded_deg_ = 0.0;
     double site_latitude_deg_ = 0.0;
     double gyro_own_drift_deg_h_ = 0.0;
+    double magnetron_drift_hz_ = 0.0;
     TrackMethod method_ = TrackMethod::None;
     std::string tracked_;
     std::string candidate_;

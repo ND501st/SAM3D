@@ -264,6 +264,10 @@ public:
         Vec3 goal;
         double heading_deg = 0.0;
         double speed_mps = 0.0;
+        // The own vehicle's own limits (vehicle_systems.hpp: its gear, brake, engine, flaps, lights): never faster than
+        // this (< 0: no cap); and the speed the battery asked of it this step, whatever the cap let it do.
+        double speed_cap_mps = -1.0;
+        double wanted_mps = 0.0;
         bool deployed = false;     // stopped and deployed (short halt or formation slot reached and set up)
         double deploy_done_s = -1.0;
         double stock = 0.0;        // a TZM: missiles aboard; a fuel truck: litres aboard
@@ -380,6 +384,12 @@ public:
     }
     // Whether the battery drives the player's vehicle too (a demo, or an NPC driver). Off: it only gives it a goal.
     void SetDriveOwn(bool on) { drive_own_ = on; }
+    // The own vehicle's speed cap (< 0: none), set each step from its own systems.
+    void SetOwnSpeedCap(double mps) {
+        for (Vehicle& v : vehicles_) {
+            if (v.def.own) v.speed_cap_mps = mps;
+        }
+    }
     void SetNight(bool night) { night_ = night; }
     bool Night() const { return night_; }
     // The battery stands in a prepared position: the first move order costs `seconds` to climb out and clear the nets.
@@ -692,6 +702,7 @@ public:
         const double speed = on_road && mode_ == Mode::Marching ? tactics_.march_speed_mps * 1.3  // a little faster to keep up
                                                                 : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
+            v.wanted_mps = 0.0;
             if (v.def.own && !drive_own_) continue;
             if (v.absent || v.away || v.broken || t < v.hold_until_s) {
                 v.speed_mps = 0.0;
@@ -1140,6 +1151,8 @@ private:
             v.speed_mps = 0.0;
             return;
         }
+        v.wanted_mps = speed;
+        if (v.speed_cap_mps >= 0.0) speed = std::min(speed, v.speed_cap_mps);
         const Vec3 dir = d / dist;
         if (on_road) {
             const double hd = DegToRad(v.heading_deg);

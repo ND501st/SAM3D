@@ -111,7 +111,7 @@ SC_TEST("scopes: the Osa layout's displays load and switch with the console") {
     std::string error;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", console, layout, &error));
     if (!error.empty()) std::printf("    %s\n", error.c_str());
-    SC_EXPECT(layout.displays.size() == 30);  // with the driver's fuel gauge, the 0096 cabinet's voltmeter, the gauges read by levels, OR-31M's ψ and θ
+    SC_EXPECT(layout.displays.size() == 39);  // with the driver's six engine and road dials, the fuel gauge, the 0096 cabinet's voltmeter, the gauges read by levels, OR-31M's ψ and θ, the checks' ИП1, ИП2 and КОНТРОЛЬ
                                                // and 0094-5's eight pointer dials
     // 0094-5: the antenna's azimuth and elevation each on a coarse dial (60-00 a turn) and a fine one (1-00 a turn), in the
     // order of the strip's captions (SAM Simulator's AK photo; wwp_gecko g095-a): Δβ, Δε СВР II, azimuth, elevation, СВР I.

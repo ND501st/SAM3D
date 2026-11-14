@@ -91,8 +91,15 @@ def test_osa_map_is_clean(tmp_path):
     assert "__DATA__" not in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\nconst N =", 1)[0])
     ids = {n["id"] for n in data["nodes"]}
-    assert "c:fo.launch" in ids and "e:launch" in ids and "p:mc" in ids and "m:launcher" in ids
+    assert "c:fo.launch" in ids and "e:launch" in ids and "p:0062" in ids and "m:launcher" in ids
     assert "p:eccm" not in ids and "p:qcscale" not in ids  # built: 9.4 counter-jamming, 6.5 Qc scale and drift
+    assert "p:mc" not in ids and "p:fk_meters" not in ids  # built: МЦ (C9), the function-check meters (C4)
+    # The vehicle's systems (data/vehicles/osa_ak_systems.json) and the checks feed their models: none of it inert.
+    assert {"m:veh_engine", "m:veh_drive", "m:veh_lights", "m:veh_fire", "m:checks"} <= ids
+    status = {n["id"]: n.get("status") for n in data["nodes"]}
+    for cid in ("veh.starter", "veh.gear", "veh.light_switch", "fire.button", "fk.systems", "err.output", "ssc.noise_fire", "fo.mc",
+                "ind.select", "pwr.relay_heat"):
+        assert status["c:" + cid] in ("wired", "model"), (cid, status["c:" + cid])
     assert "c:ssc.rgpo" in ids and "i:range_pulled" in ids and "m:orient" in ids
     assert data["counts"]["controls"] == len(json.loads((ROOT / "data/procedures/osa_ak.json").read_text(encoding="utf-8"))["controls"])
 

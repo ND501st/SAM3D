@@ -34,6 +34,7 @@
 #include "simcore/command_post.hpp"
 #include "simcore/radio_sets.hpp"
 #include "simcore/cabin.hpp"
+#include "simcore/checks.hpp"
 #include "simcore/scopes.hpp"
 #include "simcore/readouts.hpp"
 #include "simcore/world.hpp"

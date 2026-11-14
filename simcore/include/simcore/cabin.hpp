@@ -34,6 +34,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/checks.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/radio_sets.hpp"
 #include "simcore/json.hpp"
@@ -465,10 +466,12 @@ struct CabinDisplay {
 
 // The voltmeter on a vehicle's distribution cabinet (the Osa's 0096-9M1: voenizdat_osa_1991 p163, p247, where the operator
 // checks 220 V 400 Hz before АППАРАТУРА ВКЛ.): the supply's volts while the console's "power" subsystem (a source on line,
-// GTA, engine generator or an external supply) is ready, else none. The supply's own wander is not modelled.
+// GTA, engine generator or an external supply) is ready, else none. With the vehicle's model (vehicle_systems.hpp) the
+// volts are the live source's, as the driver's НАПР. knobs set them (`live_v` > 0); without it a nominal 220 V.
 inline constexpr double kSupplyVolts = 220.0;
-inline double SupplyVoltage(const ConsoleData& console) {
-    return console.equipment.Has("power") && console.equipment.State("power") == SubsystemState::Ready ? kSupplyVolts : 0.0;
+inline double SupplyVoltage(const ConsoleData& console, double live_v = -1.0) {
+    if (!console.equipment.Has("power") || console.equipment.State("power") != SubsystemState::Ready) return 0.0;
+    return live_v > 0.0 ? live_v : kSupplyVolts;
 }
 
 // A gauge's reading from its levels (CabinNeedleLevel): the first level that holds, else 0.
@@ -484,9 +487,10 @@ inline double LevelReading(const CabinDisplay& d, const ConsoleData& console) {
 // What a meter's needle reads now, in its display units: its levels, its control's value times `scale`, or its reading
 // (0..1 of the swing, radio_sets.hpp) times `full_scale`. Worked out from the console alone, so a mirrored console reads
 // the same.
-inline double MeterValue(const CabinDisplay& d, const ConsoleData& console) {
+inline double MeterValue(const CabinDisplay& d, const ConsoleData& console, double live_supply_v = -1.0) {
     if (!d.levels.empty()) return LevelReading(d, console);
-    if (d.reading == "supply_voltage") return SupplyVoltage(console);
+    if (d.reading == "supply_voltage") return SupplyVoltage(console, live_supply_v);
+    if (KnownCheckReading(d.reading)) return CheckReading(d.reading, console) * d.full_scale;  // the BM's checks (checks.hpp)
     if (!d.reading.empty()) return RadioMeterReading(d.reading, console) * d.full_scale;
     return console.panel.GetValue(d.control) * d.scale;
 }
@@ -1616,6 +1620,8 @@ private:
             if (!RequireString(d, path, "reading", disp.reading)) return false;
             if (disp.reading == "supply_voltage") {
                 if (!console.equipment.Has("power")) return Fail(Join(path, "reading"), "supply_voltage needs the console's power subsystem");
+            } else if (KnownCheckReading(disp.reading)) {
+                if (!HasCheckReading(disp.reading, console)) return Fail(Join(path, "reading"), "the console's checks have no such meter");
             } else if (!KnownRadioReading(disp.reading)) {
                 return Fail(Join(path, "reading"), "unknown reading '" + disp.reading + "'");
             }
@@ -1625,7 +1631,14 @@ private:
         } else if (disp.kind == CabinDisplayKind::Dial && d.Find("readout") != nullptr) {
             if (d.Find("control") != nullptr) return Fail(Join(path, "readout"), "a dial reads a control or a readout, not both");
             if (!RequireString(d, path, "readout", disp.readout)) return false;
-            if (disp.readout != "gyro_heading" && disp.readout != "fuel") return Fail(Join(path, "readout"), "must be gyro_heading or fuel");
+            static const char* const kReadouts[] = {"gyro_heading", "fuel", "engine_rpm", "speed_kmh", "coolant_c", "oil_c",
+                                                    "oil_pressure", "ammeter_a"};
+            bool known = false;
+            for (const char* r : kReadouts) known = known || disp.readout == r;
+            if (!known) {
+                return Fail(Join(path, "readout"),
+                            "must be gyro_heading, fuel, engine_rpm, speed_kmh, coolant_c, oil_c, oil_pressure or ammeter_a");
+            }
             if (disp.readout == "gyro_heading" && !console.has_orientation) {
                 return Fail(Join(path, "readout"), "gyro_heading needs the console's orientation block");
             }

@@ -53,6 +53,7 @@ struct Session {
     }
 
     void Order(const Procedure& p) { At(p).Order(p); }
+    void Queue(const Procedure& p) { At(p).Queue(p); }
 
     void RunFor(double seconds) {
         for (const double end = t + seconds; t < end - 1e-9;) Step();
@@ -83,6 +84,7 @@ int main(int argc, char** argv) {
 
     // On the march: power up, switch the equipment on and search while moving (about 4 min to readiness).
     s.Order(s.Proc("power_up"));
+    s.Queue(s.Proc("engine_start"));  // the driver, next: the drive engine runs on the march (it drives the ГОМ at the halt)
     s.Order(s.Proc("equipment_on"));
     s.Order(s.Proc("search_on_march"));
     s.RunFor(270.0);

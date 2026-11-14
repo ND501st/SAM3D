@@ -52,7 +52,7 @@ def test_the_caps_sit_inside_their_frame():
     inner = (x0 + T.CAP_FRAME_RIM, y0 + T.CAP_FRAME_RIM, x1 - T.CAP_FRAME_RIM, y1 - T.CAP_FRAME_RIM)
     for c in T.CAPS:
         assert _inside(inner, c['c'][0], c['c'][1], T.CAP_D / 2), c
-    assert [c['id'] for c in T.CAPS if c.get('lamp')] == ['cap_r4', 'cap_r5']
+    assert [c['id'] for c in T.CAPS if c.get('lamp')] == ['cap_r3', 'cap_r4', 'cap_r5']
     assert [c['id'] for c in T.CAPS if c.get('blank')] == ['cap_l4', 'cap_l5']
     for c in T.CAPS:
         if c.get('lamp'):
@@ -108,6 +108,8 @@ def test_every_control_stands_on_its_part():
     assert T.CONTROL_MM['ind.select'] == T.SEL_KNOB
     cap = [c['c'] for c in T.CAPS if c.get('lamp') == 'dver_zakryta'][0]
     assert T.CONTROL_MM['dver_zakryta'] == cap
+    assert T.CONTROL_MM['peregrev'] == [c['c'] for c in T.CAPS if c.get('lamp') == 'peregrev'][0]
+    assert T.CONTROL_MM['ind.refuse'] == T.OTKAZ_LAMP
     for k, (x, y) in T.CONTROL_MM.items():
         a, b = T.to_m(x, y)
         assert abs(a) < T.W_MM / 2000 and abs(b) < T.H_MM / 2000, k

@@ -485,7 +485,7 @@ SC_TEST("function check: АНОД ВКЛ. and КЗ light the K3 lamp in ФК if 
     CabinLayout layout;
     SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", c, layout));
     auto lit = [&](const char* id) { const CabinLamp* l = LampOf(layout, id); return l != nullptr && CabinLayout::LampLit(*l, c.panel, e); };
-    auto meter = [&](const char* id) { const CabinDisplay* d = DisplayOf(layout, id); return d != nullptr ? LevelReading(*d, c) : -99.0; };
+    auto meter = [&](const char* id) { const CabinDisplay* d = DisplayOf(layout, id); return d != nullptr ? MeterValue(*d, c) : -99.0; };  // levels or the checks' readings
     auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
     run(1.0);
     c.panel.Set("fk.kz", 1);
