@@ -109,6 +109,9 @@ label.tog { font: 13px var(--font-narrow); display: inline-flex; gap: 5px; align
 .pill.wired { color: var(--accent); }
 .pill.model { color: var(--st-operator); }
 .pill.indicator { color: var(--amber); }
+.pill.display { color: var(--green); }
+.pill.code { color: var(--st-commander); border-style: dotted; }
+.pill.drill { color: var(--redline); border-style: dashed; }
 .pill.inert { color: var(--muted); border-style: dashed; }
 .pill.missing, .pill.unknown { color: var(--redline); border-style: dashed; }
 .empty { color: var(--muted); font-size: 14px; }
@@ -143,8 +146,9 @@ svg.focus .node.hl { opacity: 1; }
 .node .l2 { font: 10.5px var(--font-mono); fill: var(--muted); }
 .node .lt { font: 12px var(--font-narrow); }
 .n-control .tab { stroke: none; }
-.n-control.inert rect.box { fill: url(#hatch); stroke-dasharray: 3 2; }
-.n-control.inert .l1 { fill: var(--muted); }
+.n-control.inert rect.box, .n-control.drill rect.box { fill: url(#hatch); stroke-dasharray: 3 2; }
+.n-control.inert .l1, .n-control.drill .l1 { fill: var(--muted); }
+.n-control.code rect.box { stroke-dasharray: 1 2; }
 .n-control.indicator rect.box { stroke-dasharray: 3 2; }
 .n-signal rect.box { fill: var(--surface-2); }
 .n-signal .lt { font-style: italic; }
@@ -281,7 +285,7 @@ footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line);
 
   <footer>
     <p id="status"></p>
-    <p>States: <b>wired</b> drives a subsystem or the launch; <b>model</b> is read by the engagement model (radars, IFF, TV, wheels, orientation); <b>indicator</b> only lights a lamp or turns on a display; <b>inert</b> is placed in the cabin with no function yet. Guards with no own entry in the cabin file are drawn over the control they cover.</p>
+    <p>States: <b>wired</b> drives a subsystem or the launch; <b>model</b> is read by a simulation model (radars, IFF, TV, wheels, orientation, radios and voices); <b>display</b> sets a screen's picture or what a meter reads; <b>indicator</b> only lights a lamp or turns on a display; <b>code</b> is named by simcore's source or a system file rather than the console; <b>drill</b> is worked in a drill, a lesson or a readiness state but changes nothing; <b>inert</b> is placed in the cabin and nothing names it. The same list, control by control, is <code>docs/generated/&lt;system&gt;_controls.md</code>. Guards with no own entry in the cabin file are drawn over the control they cover.</p>
   </footer>
 </div>
 
@@ -295,21 +299,21 @@ const h = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag);
 const stColor = st => `var(--st-${st || "world"})`;
 const ST_LABEL = Object.fromEntries(DATA.stations.map(s => [s.id, s.label]));
 ST_LABEL.world = "World";
-const KIND_TEXT = { enable: "needs", any: "any of", prereq: "must hold", release: "released by", guard: "guard", lit: "lit when", litany: "lit if any", draws: "shows", feed: "feeds", signal: "sets", restart: "restarts", planned: "would drive" };
+const KIND_TEXT = { picture: "sets the picture of", reading: "selects the reading of", enable: "needs", any: "any of", prereq: "must hold", release: "released by", guard: "guard", lit: "lit when", litany: "lit if any", draws: "shows", feed: "feeds", signal: "sets", restart: "restarts", planned: "would drive" };
 const TYPE_TEXT = { control: "Control", signal: "Sim signal", subsystem: "Subsystem", model: "Engagement model", event: "Event", lamp: "Lamp", display: "Display", planned: "Not built" };
 const LAMP = { amber: "var(--amber)", red: "var(--red)", green: "var(--green)", white: "var(--white-lamp)" };
 
 /* ---------- tally ---------- */
 const C = DATA.counts;
 $("#tally").append(
-  h("span", {}, h("b", {}, C.controls), "controls ", h("span", { class: "sub" }, `(${C.wired} wired · ${C.model} model · ${C.indicator} indicator · ${C.inert} inert)`)),
+  h("span", {}, h("b", {}, C.controls), "controls ", h("span", { class: "sub" }, `(${C.wired} wired · ${C.model} model · ${C.display} display · ${C.indicator} indicator · ${C.code} code · ${C.drill} drill only · ${C.inert} inert)`)),
   h("span", {}, h("b", {}, C.subsystems), "subsystems"),
   h("span", {}, h("b", {}, C.models), "sim models"),
   h("span", {}, h("b", {}, C.signals), "sim signals"),
   h("span", {}, h("b", {}, C.lamps), "lamps"),
   h("span", {}, h("b", {}, C.displays), "displays"),
   h("span", {}, h("b", {}, C.procedures), "procedures"),
-  h("span", { class: "miss" }, h("b", {}, C.planned + C.inert), "missing or inert"),
+  h("span", { class: "miss" }, h("b", {}, C.planned + C.inert + C.drill), "missing, inert or drill only"),
 );
 $("#status").textContent = "Console file status: " + DATA.status;
 const SHORT = DATA.system === "osa_ak" ? "Osa-AK" : DATA.display_name;
@@ -402,7 +406,7 @@ for (const n of DATA.nodes) {
     glyph(g, n.kind, 16, p.h / 2 - 1);
     const [l1] = wrap(n.label, 29, 1);
     const t1 = el("text", { class: "l1", x: 30, y: 15 }, g); t1.textContent = l1;
-    const st = n.status === "wired" ? "" : n.status === "model" ? " · model" : n.status === "indicator" ? " · lamp only" : " · INERT";
+    const st = { wired: "", model: " · model", display: " · picture", indicator: " · lamp only", code: " · code", drill: " · DRILL ONLY" }[n.status] ?? " · INERT";
     const t2 = el("text", { class: "l2", x: 30, y: 28 }, g); t2.textContent = (n.cid + st).slice(0, 34);
   } else if (n.t === "lamp") {
     el("circle", { class: "lampdot", cx: 15, cy: p.h / 2, r: 6.5, fill: LAMP[n.color] || "var(--muted)" }, g);
@@ -577,7 +581,7 @@ function renderDetails(id) {
   if (ins.length) det.append(h("div", {}, h("h4", {}, "Comes from"), h("ul", {}, ...ins.map(e => h("li", {}, h("span", { class: "k" }, KIND_TEXT[e.k]), h("span", {}, linkTo(e.s), e.v != null ? h("span", { class: "step-pos" }, " = " + e.v) : e.x ? h("span", { class: "notes" }, " — " + e.x) : null))))));
   const outs = (out.get(id) || []);
   if (outs.length) det.append(h("div", {}, h("h4", {}, "Drives"), h("ul", {}, ...outs.map(e => h("li", {}, h("span", { class: "k" }, KIND_TEXT[e.k]), h("span", {}, linkTo(e.t), e.v != null ? h("span", { class: "step-pos" }, " when = " + e.v) : null))))));
-  else if (n.t === "control") det.append(h("p", { class: "notes" }, "Nothing reads this control yet."));
+  else if (n.t === "control") det.append(h("p", { class: "notes" }, n.status === "code" ? "Named by: " + (n.refs.code || []).join(", ") : n.status === "drill" ? "Worked in drills or lessons (" + ((n.refs.drill || []).join(", ") || "the console's procedures") + "), but nothing reads it." : "Nothing reads this control yet."));
   if (n.procs?.length) det.append(h("div", {}, h("h4", {}, "Used in procedures"), h("ul", {}, ...n.procs.map(pid => h("li", {}, h("button", { type: "button", class: "link", onclick: () => showProc(pid) }, procById[pid].name))))));
   if (n.notes) det.append(h("div", {}, h("h4", {}, "Notes"), h("p", { class: "notes" }, n.notes)));
 }
@@ -586,7 +590,7 @@ function renderStation(st) {
   const ctrls = DATA.nodes.filter(n => n.t === "control" && n.station === st);
   const by = s => ctrls.filter(n => n.status === s).length;
   det.append(h("div", { class: "kind" }, "Crew seat"), h("h3", { style: `color:${stColor(st)}` }, ST_LABEL[st]),
-    h("p", { class: "notes" }, `${ctrls.length} controls: ${by("wired")} wired, ${by("model")} model, ${by("indicator")} lamp only, ${by("inert")} inert. Highlighted: everything this seat can reach.`),
+    h("p", { class: "notes" }, `${ctrls.length} controls: ${by("wired")} wired, ${by("model")} model, ${by("display")} picture, ${by("indicator")} lamp only, ${by("code")} code, ${by("drill")} drill only, ${by("inert")} inert. Highlighted: everything this seat can reach.`),
     h("div", {}, h("h4", {}, "Controls"), h("ul", {}, ...ctrls.map(n => h("li", {}, h("span", { class: "k" }, n.status), linkTo(n.id))))),
     h("div", {}, h("h4", {}, "Procedures"), h("ul", {}, ...DATA.procs.filter(p => p.station === st).map(p => h("li", {}, h("button", { type: "button", class: "link", onclick: () => showProc(p.id) }, p.name))))));
 }
@@ -655,11 +659,11 @@ DATA.nodes.filter(n => n.t === "planned").sort((a, b) => PH_ORDER.indexOf(a.phas
     from.length ? h("div", { class: "from" }, "Hooks into: ", ...from.flatMap((s, i) => [i ? ", " : "", h("button", { type: "button", onclick: () => select(s, { center: true, scroll: true }) }, N.get(s).label)])) : null,
     h("div", { class: "from" }, h("button", { type: "button", onclick: () => select(n.id, { center: true, scroll: true }) }, "Show on map"))));
 });
-const inert = DATA.nodes.filter(n => n.t === "control" && (n.status === "inert" || n.status === "indicator"));
+const inert = DATA.nodes.filter(n => n.t === "control" && (n.status === "inert" || n.status === "drill" || n.status === "indicator"));
 ml.append(h("article", { class: "mcard" },
   h("span", { class: "ph" }, "placed, not wired"),
   h("h4", {}, `${inert.length} controls in the cabin with no function`),
-  h("p", {}, "They can be clicked and hold a position, but no subsystem or model reads them (two only light a lamp or switch a display)."),
+  h("p", {}, "They can be clicked and hold a position, but no subsystem or model reads them (the drill-only ones are worked in a drill or lesson; the indicators only light a lamp or switch a display)."),
   h("div", { class: "from" }, ...inert.flatMap((n, i) => [i ? ", " : "", h("button", { type: "button", onclick: () => select(n.id, { center: true, scroll: true }) }, n.label)]))));
 
 /* ---------- index ---------- */
@@ -687,7 +691,7 @@ function renderIx() {
   ix.append(tb);
 }
 const fBtns = [];
-[["all", "All"], ["wired", "Wired"], ["model", "Model"], ["indicator", "Indicator only"], ["inert", "Inert"]].forEach(([k, l]) => {
+[["all", "All"], ["wired", "Wired"], ["model", "Model"], ["display", "Picture"], ["indicator", "Indicator only"], ["code", "Code"], ["drill", "Drill only"], ["inert", "Inert"]].forEach(([k, l]) => {
   const n = k === "all" ? ctrls.length : ctrls.filter(c => c.status === k).length;
   const b = h("button", { type: "button", class: "chip", "aria-pressed": String(k === "all") }, `${l} · ${n}`);
   b.onclick = () => { ixFilter = k; fBtns.forEach(x => x.setAttribute("aria-pressed", String(x === b))); renderIx(); };

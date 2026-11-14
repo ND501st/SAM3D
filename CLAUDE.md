@@ -63,7 +63,7 @@ python -m pytest prototype tools -q
 python prototype/scripts/run_demo.py out/demo_py.acmi
 python tools/panel_sheet.py                       # draw the cabin panels flat: out/panel_sheets/osa_ak.html
 python tools/check_citations.py                   # every data source registered in docs/SOURCES.md, none tier 5
-python tools/button_map.py                        # flow chart of every control and what's not built: out/button_map/osa_ak.html
+python tools/button_map.py [pu12m]                # every control's state and what's not built: out/button_map/<system>.html, the list docs/generated/<system>_controls.md
 python tools/crew_map.py                          # every crew action and how it connects: docs/crew/generated/osa_ak_action_map.md
 python tools/build_osa_interior.py                # rebuild every Osa interior mesh, then the whole interior as one model: out/osa_interior/
 python tools/pu12m_cabin.py                       # write data/cabins/pu12m.json from the PU-12M interior's trace (after build_pu12m_interior.py)

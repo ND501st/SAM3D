@@ -13,9 +13,15 @@ signals, lamps, displays and the launch. Click a node to trace it up and down. B
 (procedures), the work not built yet, and an index of every control with its state:
 
     wired      drives a subsystem or the launch (a guard over a wired control counts as wired)
-    model      read by the engagement model (radars, IFF, TV, wheels, orientation)
+    model      read by a simulation model (radars, IFF, TV, wheels, orientation, radios and voices, the post)
+    display    sets a screen's picture or what a meter reads (brightness, focus, gain, a meter's selector)
     indicator  only lights a lamp or turns on a display
-    inert      placed in the cabin, nothing reads it
+    code       nothing in the console reads it, but simcore's source or a system file names it
+    drill      worked in a drill, a lesson or a readiness state, but nothing reads it: it changes nothing
+    inert      placed in the cabin, nothing names it
+
+The same states, control by control with what each reaches, are written as a list to
+docs/generated/<system>_controls.md (the map's list; regenerate it with this tool).
 
 Most of the map comes from the data files. Two things are written here by hand and need updating as the sim grows:
 DISPLAY_SOURCES (what each display draws) and PLANNED (work not built yet, with its roadmap phase).
@@ -23,6 +29,7 @@ DISPLAY_SOURCES (what each display draws) and PLANNED (work not built yet, with 
 import argparse
 import collections
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -85,9 +92,57 @@ PLANNED = {
 }
 
 
+STATES = ["wired", "model", "display", "indicator", "code", "drill", "inert"]
+STATE_TEXT = {
+    "wired": "drives a subsystem or the launch",
+    "model": "read by a simulation model",
+    "display": "sets a screen's picture or what a meter reads",
+    "indicator": "only lights a lamp or turns on a display",
+    "code": "named by simcore's source or a system file, not by the console",
+    "drill": "worked in a drill, lesson or readiness state; changes nothing",
+    "inert": "nothing names it",
+}
+# Console blocks read by simcore whose controls the map links by name (any control id inside them feeds the model).
+BLOCK_MODELS = {
+    "voice": ("m:voice", "Voices: the intercom boxes, headsets, sets and telephone",
+              "simcore/voice_comms.hpp, radio_nets.hpp: a seat hears the intercom, a radio or a line only through its headset, "
+              "its box's selector and a set that is on, warm and on the net's frequency."),
+    "post": ("m:post", "The command post: plotting board, telecode, nets", "simcore/pu12.hpp: the post's picture, telecode and nets."),
+    "radios": ("m:radio_sets", "The radio sets worked as sets", "simcore/radio_sets.hpp: the R-111 and R-407 as sets."),
+}
+# Where else a control can be named: simcore reads these (code); the crew, the lessons and the scenarios only drill them.
+CODE_GLOBS = ["simcore/include/simcore/**/*.hpp", "unreal/SAM3D/Source/**/*.cpp", "unreal/SAM3D/Source/**/*.h", "data/systems/*.json"]
+DRILL_GLOBS = ["data/crew/*.json", "data/tutorials/*.json", "data/scenarios/**/*.json", "data/command/*.json"]
+
+
+def find_refs(ids):
+    """Each control id named outside its console and cabin: {id: {"code": [files], "drill": [files]}}."""
+    refs = collections.defaultdict(lambda: collections.defaultdict(list))
+    want = set(ids)
+    for kind, globs in (("code", CODE_GLOBS), ("drill", DRILL_GLOBS)):
+        for g in globs:
+            for f in sorted(ROOT.glob(g)):
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                for cid in set(re.findall(r'"([a-z0-9_]+(?:\.[a-z0-9_]+)+)"', text)) & want:
+                    refs[cid][kind].append(f.relative_to(ROOT).as_posix())
+    return refs
+
+
+def control_ids_in(value, ids):
+    """Every control id in a nested block of data."""
+    if isinstance(value, str):
+        return [value] if value in ids else []
+    if isinstance(value, dict):
+        return [c for v in value.values() for c in control_ids_in(v, ids)]
+    if isinstance(value, list):
+        return [c for v in value for c in control_ids_in(v, ids)]
+    return []
+
+
 class MapBuilder:
-    def __init__(self, console, cabin):
+    def __init__(self, console, cabin, refs=None):
         self.con, self.cab = console, cabin
+        self.refs = refs or {}
         self.ctrl = {c["id"]: c for c in console["controls"]}
         self.subs = {s["id"]: s for s in console.get("subsystems", [])}
         self.inputs = {i["id"]: i for i in console.get("inputs", [])}
@@ -215,6 +270,16 @@ class MapBuilder:
                           source=d.get("source"), conf=d.get("confidence"), notes=d.get("notes"))
             for cond in d.get("on_when") or []:
                 self.add_cond(cond, "d:" + d["id"], "lit")
+            for key, val in (d.get("picture") or {}).items():   # the picture's potentiometers (CabinDisplay::picture)
+                if isinstance(val, str) and val in self.ctrl:
+                    self.add_edge("c:" + val, "d:" + d["id"], "picture", f"sets the picture's {key.replace('_', ' ')}")
+            cs = d.get("course_scale") or {}
+            if cs.get("control") in self.ctrl:
+                self.add_edge("c:" + cs["control"], "d:" + d["id"], "picture", "lights the engraved course scale")
+            for lv in d.get("levels") or []:                    # a meter's reading chosen by a selector
+                for cond in lv.get("when", []):
+                    if "control" in cond:
+                        self.add_cond(cond, "d:" + d["id"], "reading")
         for did, srcs in DISPLAY_SOURCES.get(con["system_id"], {}).items():
             for s in srcs:
                 self.add_edge(s, "d:" + did, "draws", "picture or reading comes from here")
@@ -227,6 +292,7 @@ class MapBuilder:
         self.clean_edges()
         self.set_status()
         self.add_procedures()
+        self.settle_unread()
         self.layout()
         return self
 
@@ -281,7 +347,8 @@ class MapBuilder:
             feeds("m:orient", [("s:", "gyro", orient, "gyro power"), ("c:", "setter", orient, "course setter"),
                                ("c:", "mode_control", orient, "mode switch"), ("c:", "relay_control", orient, "relay switch"),
                                ("c:", "sync_button", orient, "fast sync"),
-                               ("c:", "latitude_control", orient, "latitude correction (drift)")])
+                               ("c:", "latitude_control", orient, "latitude correction (drift)"),
+                               ("c:", "compass_control", orient, "compass mode: МК — ГПК — АК")])
             for key in ("synced_input", "qc_known_input", "oriented_input"):
                 if orient.get(key):
                     self.add_edge("m:orient", "i:" + orient[key], "signal", "sets this signal")
@@ -343,6 +410,19 @@ class MapBuilder:
                 self.add_edge("s:" + ic["subsystem"], "m:comms", "feed", "intercom up")
             self.add_edge("m:comms", "m:c2net", "feed", "which set hears, the loss on the link, who is on the radio")
 
+        for key, (mid, label, notes) in BLOCK_MODELS.items():
+            block = self.con.get(key)
+            if not isinstance(block, dict):
+                continue
+            ids = control_ids_in(block, self.ctrl)
+            if not ids:
+                continue
+            if mid not in self.nodes:
+                self.add_node(mid, t="model", label=label, notes=block.get("notes") or notes,
+                              source=block.get("source"), conf=block.get("confidence"))
+            for cid in ids:
+                self.add_edge("c:" + cid, mid, "feed", label.split(":")[0].lower())
+
         launcher = self.con.get("launcher")
         if launcher:  # the missile load and the guidance channels (roadmap 6.3, simcore/launcher.hpp)
             self.add_node("m:launcher", t="model", label="Missiles and guidance channels I / II", notes=launcher.get("notes"),
@@ -393,6 +473,8 @@ class MapBuilder:
                 n["status"] = "model"
             elif "guard" in ks:
                 n["status"] = "wired"  # settled below
+            elif ks & {"picture", "reading"}:
+                n["status"] = "display"
             elif ks & {"lit", "litany"}:
                 n["status"] = "indicator"
             else:
@@ -402,6 +484,21 @@ class MapBuilder:
                 guarded = [e["t"] for e in self.edges if e["s"] == n["id"] and e["k"] == "guard"]
                 if guarded and all(self.nodes[g]["status"] == "inert" for g in guarded):
                     n["status"] = "indicator" if kinds[n["id"]] & {"lit", "litany"} else "inert"
+
+    def settle_unread(self):
+        """An inert control named elsewhere: by simcore (code) or only by drills, lessons and readiness states (drill)."""
+        drilled = set(control_ids_in(self.con.get("procedures", []), self.ctrl)) | set(control_ids_in(self.con.get("readiness", {}), self.ctrl))
+        for n in self.nodes.values():
+            if n["t"] != "control":
+                continue
+            r = self.refs.get(n["cid"], {})
+            n["refs"] = {k: list(v) for k, v in r.items()}
+            if n["status"] != "inert":
+                continue
+            if r.get("code"):
+                n["status"] = "code"
+            elif r.get("drill") or n["cid"] in drilled:
+                n["status"] = "drill"
 
     def add_procedures(self):
         self.procs = []
@@ -521,7 +618,7 @@ class MapBuilder:
         ctrls = [n for n in nodes if n["t"] == "control"]
         counts = dict(
             controls=len(ctrls),
-            **{s: sum(1 for n in ctrls if n["status"] == s) for s in ("wired", "model", "indicator", "inert")},
+            **{s: sum(1 for n in ctrls if n["status"] == s) for s in STATES},
             subsystems=len(self.subs), lamps=len(self.cab.get("lamps", [])), displays=len(self.cab.get("displays", [])),
             procedures=len(self.procs), planned=sum(1 for n in nodes if n["t"] == "planned"),
             signals=len(self.inputs), models=sum(1 for n in nodes if n["t"] == "model"),
@@ -537,8 +634,55 @@ class MapBuilder:
         )
 
 
-def build(console, cabin):
-    return MapBuilder(console, cabin).build()
+def build(console, cabin, refs=None):
+    return MapBuilder(console, cabin, refs).build()
+
+
+def write_list(mb, path):
+    """The map's list: every control by state with what it reaches, then the work not built."""
+    data = mb.data()
+    nodes = {n["id"]: n for n in data["nodes"]}
+    outs = collections.defaultdict(list)
+    for e in data["edges"]:
+        if e["k"] not in ("planned", "guard"):
+            outs[e["s"]].append(nodes[e["t"]]["label"])
+    st_label = {s["id"]: s["label"] for s in data["stations"]}
+    c = data["counts"]
+    lines = [f"# {data['display_name']}: every control and what it does", "",
+             f"Written by `tools/button_map.py {data['system']}` from the console (`data/procedures/{data['system']}.json`), the cabin "
+             f"(`data/cabins/{data['system']}.json`) and where else simcore names each control; the same states colour "
+             f"`out/button_map/{data['system']}.html`. Do not edit by hand.", "",
+             "| State | Meaning | Controls |", "|---|---|---|"]
+    for s in STATES:
+        lines.append(f"| {s} | {STATE_TEXT[s]} | {c[s]} |")
+    lines.append(f"| **all** | | **{c['controls']}** |")
+    ctrls = [n for n in data["nodes"] if n["t"] == "control"]
+    for s in STATES:
+        group = sorted((n for n in ctrls if n["status"] == s), key=lambda n: (n.get("panel") or "", n["cid"]))
+        if not group:
+            continue
+        lines += ["", f"## {s} ({len(group)}): {STATE_TEXT[s]}", "", "| Panel | Control | Id | Seat | Reaches |", "|---|---|---|---|---|"]
+        for n in group:
+            reach = sorted(set(outs.get(n["id"], [])))
+            if s == "code":
+                reach = n["refs"].get("code", [])
+            elif s == "drill":
+                reach = sorted(set(n["refs"].get("drill", []))) or ["the console's procedures or readiness"]
+            text = "; ".join(reach) if reach else "nothing"
+            label = n["label"].replace("|", "/")
+            lines.append(f"| {n.get('panel') or '-'} | {label} | `{n['cid']}` | {st_label.get(n.get('station'), n.get('station') or '-')} | {text.replace('|', '/')} |")
+    planned = [n for n in data["nodes"] if n["t"] == "planned"]
+    if planned:
+        lines += ["", f"## Not built ({len(planned)})", "", "| Item | Where it stands | Notes |", "|---|---|---|"]
+        for n in planned:
+            lines.append(f"| {n['label'].replace('|', '/')} | {n['phase']} | {(n.get('notes') or '').replace('|', '/')} |")
+    dark = [l for l in mb.cab.get("lamps", []) if not l.get("lit_when") and not l.get("lit_when_any")]
+    if dark:
+        lines += ["", f"## Lamps with no rule to light ({len(dark)})", "", "| Panel | Lamp | Id |", "|---|---|---|"]
+        for l in dark:
+            lines.append(f"| {l['panel']} | {l['label']} | `{l['id']}` |")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def render(data):
@@ -550,21 +694,24 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("system", nargs="?", default="osa_ak")
     ap.add_argument("--out")
+    ap.add_argument("--list", help="where to write the list (default docs/generated/<system>_controls.md)")
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args(argv)
 
     console = json.loads((ROOT / "data" / "procedures" / f"{args.system}.json").read_text(encoding="utf-8"))
     cabin_path = ROOT / "data" / "cabins" / f"{args.system}.json"  # a system without a cabin yet: no lamps or displays
     cabin = json.loads(cabin_path.read_text(encoding="utf-8")) if cabin_path.exists() else {"panels": []}
-    mb = build(console, cabin)
+    refs = find_refs([c["id"] for c in console["controls"]])
+    mb = build(console, cabin, refs)
     data = mb.data()
+    write_list(mb, Path(args.list) if args.list else ROOT / "docs" / "generated" / f"{args.system}_controls.md")
     out = Path(args.out) if args.out else ROOT / "out" / "button_map" / f"{args.system}.html"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(data), encoding="utf-8")
 
     c = data["counts"]
-    print(f"{out}: {c['controls']} controls ({c['wired']} wired, {c['model']} model, {c['indicator']} indicator, "
-          f"{c['inert']} inert), {c['subsystems']} subsystems, {c['lamps']} lamps, {c['displays']} displays, "
+    print(f"{out}: {c['controls']} controls (" + ", ".join(f"{c[s]} {s}" for s in STATES) + "), "
+          f"{c['subsystems']} subsystems, {c['lamps']} lamps, {c['displays']} displays, "
           f"{c['procedures']} procedures, {c['planned']} not built")
     for p in mb.problems:
         print("problem:", p, file=sys.stderr)

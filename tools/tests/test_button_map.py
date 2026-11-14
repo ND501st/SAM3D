@@ -119,3 +119,46 @@ def test_osa_launcher_reads_the_channel_selector_and_lights_the_channel_lamps():
         assert ("m:launcher", "i:" + inp) in edges
     planned = {p[0] for p in button_map.PLANNED["osa_ak"]}
     assert not planned & {"p:containers", "p:select", "p:channels", "p:chanlamps", "p:fuse"}  # built in 6.3
+
+
+def test_picture_knobs_meter_selectors_and_named_elsewhere():
+    con = _console()
+    con["controls"] += [
+        {"id": "bright", "label": "BRIGHT", "kind": "wheel", "station": "operator"},
+        {"id": "meter_sel", "label": "METER", "kind": "rotary", "station": "operator"},
+        {"id": "by_code", "label": "CALL", "kind": "button", "station": "operator"},
+        {"id": "drilled", "label": "HEAT", "kind": "switch", "station": "operator"},
+    ]
+    cab = _cabin()
+    cab["displays"] = [
+        {"id": "scope", "label": "Scope", "kind": "ppi", "panel": "panel", "picture": {"brightness": "bright"}},
+        {"id": "meter", "label": "Meter", "kind": "meter", "panel": "panel",
+         "levels": [{"when": [{"control": "meter_sel", "is": 1}], "value": 3}]},
+    ]
+    refs = {"by_code": {"code": ["simcore/include/simcore/x.hpp"]}, "drilled": {"drill": ["data/crew/test_crew.json"]}}
+    mb = button_map.build(con, cab, refs)
+    nodes = _nodes(mb)
+    assert nodes["c:bright"]["status"] == "display"
+    assert nodes["c:meter_sel"]["status"] == "display"
+    assert nodes["c:by_code"]["status"] == "code"
+    assert nodes["c:drilled"]["status"] == "drill"
+    assert nodes["c:spare"]["status"] == "inert"
+    counts = mb.data()["counts"]
+    assert sum(counts[s] for s in button_map.STATES) == counts["controls"]
+
+
+def test_the_list_names_every_control(tmp_path):
+    mb = button_map.build(_console(), _cabin())
+    out = tmp_path / "list.md"
+    button_map.write_list(mb, out)
+    text = out.read_text(encoding="utf-8")
+    for cid in ("power", "hv", "lamp_test", "spare", "launch"):
+        assert f"`{cid}`" in text
+    assert "## inert (1)" in text
+
+
+def test_find_refs_reads_the_crew_files():
+    refs = button_map.find_refs(["gyro.heat", "pvs1.call", "no.such_control"])
+    assert any("osa_ak_crew.json" in f for f in refs["gyro.heat"]["drill"])
+    assert any("scenario_runner.hpp" in f for f in refs["pvs1.call"]["code"])
+    assert "no.such_control" not in refs
