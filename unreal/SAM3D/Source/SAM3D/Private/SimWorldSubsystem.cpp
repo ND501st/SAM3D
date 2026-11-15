@@ -2473,6 +2473,19 @@ void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<F
 		S.bFriendly = Look.bFriendly;
 		S.bIsWeapon = Look.bIsWeapon;
 		S.GroundClearSeconds = GroundClearOf(*W, A.position, A.velocity, Look.bIsWeapon ? 0.0 : A.bottom_m);
+		if (A.attitude_set && !Look.bIsWeapon)
+		{
+			// The nose, not the track (roadmap R3): yaw and pitch from its heading and pitch, the roll its bank (right
+			// wing down > 0, as Unreal's roll). Taken through the display frame like the velocity above.
+			const double CosPitch = FMath::Cos(A.pitch_rad);
+			const simcore::Vec3 Nose{FMath::Sin(A.heading_rad) * CosPitch, FMath::Cos(A.heading_rad) * CosPitch, FMath::Sin(A.pitch_rad)};
+			const FVector NoseDir = ToUnreal(A.position + Nose * 100.0) - S.Location;
+			if (!NoseDir.IsNearlyZero())
+			{
+				S.Rotation = NoseDir.Rotation();
+				S.Rotation.Roll = FMath::RadiansToDegrees(A.bank_rad);
+			}
+		}
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{

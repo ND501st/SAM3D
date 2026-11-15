@@ -477,6 +477,13 @@ public:
                 const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, std::max(600.0, a->cruise_mps * 1.2)) : a->cruise_mps;
                 Put(t, "speed_mps", Num(std::round(speed)));
                 Put(t, "max_turn_rate_deg_s", Num(a->max_turn_deg_s));
+                // Its type's flight limits (roadmap R3): it flies by bank-to-turn.
+                if (a->max_load_g > 0.0) Put(t, "max_load_g", Num(a->max_load_g));
+                if (a->sustained_turn_deg_s > 0.0) Put(t, "sustained_turn_deg_s", Num(a->sustained_turn_deg_s));
+                if (a->roll_rate_deg_s > 0.0) Put(t, "roll_rate_deg_s", Num(a->roll_rate_deg_s));
+                if (a->max_mps > 0.0) Put(t, "max_mps", Num(a->max_mps));
+                if (a->accel_mps2 > 0.0) Put(t, "accel_mps2", Num(a->accel_mps2));
+                if (a->climb_mps > 0.0) Put(t, "climb_mps", Num(a->climb_mps));
                 Put(t, "rcs_m2", Num(a->rcs_m2));
                 const double appear_s = std::max(0.0, (cl.t_h.front() - m.start_h) * 3600.0);
                 Put(t, "appear_at_s", Num(std::round(appear_s)));

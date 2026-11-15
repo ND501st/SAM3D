@@ -254,6 +254,56 @@ damaged aircraft (R1's moderate and heavy) loses load factor and acceleration by
 `prototype/samproto/engagement.py`'s `Aircraft` (:18-60) gets the same step, wind included (it has none today), and the
 same tests. Flights, pilots and the runner are not mirrored today and stay unmirrored.
 
+### 3.5 As built (R3, 15 Nov 2026)
+
+R3 is built in `simcore/aircraft.hpp` (tests `tests/test_flight.cpp`, mirrored in `prototype/tests/test_flight.py`).
+Where it differs from 3.1-3.4:
+
+- **Two ways of flying.** An aircraft given any of its type's limits (a roll rate, a g limit, or an energy model's
+  acceleration and top speed) flies by bank-to-turn. One given none, as every hand-made scenario's target, flies the
+  old way: constant airspeed, its velocity turned toward the waypoint at its turn rate in 3D. Its heading, path angle
+  and bank are read off the path it flew (the bank for the turn rate, rolled into at 90 deg/s), for the drawing only.
+  So the crew scenarios fly as before. The air war's types give their limits, so the testbed's waves and the raids
+  generated from now on fly by bank-to-turn. The seven sample raids saved in `data/scenarios/air_war_*.json` were
+  generated before R3 and fly the old way until they are generated again.
+- **Speeds.** `speed_mps` stays the speed the aircraft is told to fly. The airspeed it has is the new `airspeed_mps`.
+  The energy model is dv/dt = A (throttle - (v / v_max)^2) - K (n^2 - 1) - g sin(gamma): at full throttle it is
+  3.1's formula. The pilot sets the throttle (-0.5, idle and air brakes, to 1) to hold the speed told within 4 s; when
+  that asks for more than full throttle, the climb or the turn costs speed.
+- **The speed he holds.** A pilot does not bleed his speed away. The speed he keeps is the speed he is told (at most
+  90 % of his top speed). As a turn slows him below it he eases the turn, from the full rate at that speed down to the
+  sustained turn at 85 % of it, K (n^2 - 1) = A (1 - (v / v_max)^2), and no harder below. There he also climbs only
+  on the thrust the turn leaves. The eased limit changes with the speed, so the bank follows it at the roll rate; only
+  the g limit's bank is a hard stop. Without this a MiG-25 hunting radars, its turn rate raised to the ARM
+  turn-away's 12 deg/s, circled down to 48 m/s at 12 km. 85 % is a game value.
+- **K.** The data's instantaneous rates (`max_turn_deg_s`) are low, so most jets' corner speeds lie above their top
+  speeds. K is set at the corner speed or at 90 % of the top speed, whichever is lower.
+- **The pilot's turn.** He asks for a turn rate of the heading error over 1 s (or over his roll time to the bank
+  limit, if longer), within the limits, and no more bank than he can roll out of before the heading he wants:
+  cos(phi) >= exp(-error v p / g), the heading the roll-out turns at roll rate p.
+- **Climb.** With no height layer the step flies a path angle to the waypoint, pulled at the turn rate limit, its
+  climb capped at `climb_mps`. Terrain following (`TargetPilot::HoldHeight`) still sets the height after the step, as
+  before; the step then flies the horizontal at v cos(gamma), and the energy model takes -g sin(gamma) from the
+  vertical speed flown. The type's `climb_mps` caps the height layer's climbs. So a terrain-following climb costs
+  speed, but its rate is not yet asked of the aircraft as a path angle.
+- **Pitch.** The path angle and an angle of attack of 3 deg at 1 g, times n and (the speed told / the airspeed)^2,
+  at most 15 deg. A helicopter's pitch is its lean, -atan((v / v_max)^2 tan 10 deg + (dv/dt) / g).
+- **Helicopters** have no energy model yet: they fly their told speed, as before. A pop-up helicopter stops at its
+  hide on the spot; with an energy model it would slide several hundred metres past it until the pilot plans his stop. Their bank limit
+  is acos(1 / max_load_g); in the hover (under 2 m/s) they turn on the spot at `max_turn_deg_s`, level.
+- **Type data.** The new values are in each aircraft's `"flight"` object, with their own `source` and `confidence`
+  (the type's own source is about its role and numbers, not its flight). All are game values, `estimate`. The
+  ordering held: the MiG-23MLD sustains 6.5 deg/s against the F-4E's 7.5, and has the higher acceleration (7.5 against
+  6 m/s2). No F-5 is in the data; one added must take less acceleration and top speed than the MiG-23MLD's (7.5,
+  375 m/s). `max_turn_deg_s` is unchanged. A helicopter's `"flight"` has no `accel_mps2`. Fuel, stores, seats and
+  jettison are not in R3 (B4).
+- **Not reused.** `fx::WreckFall::Accel`'s banked lift was not needed: the coordinated turn is the two lines of 3.1.
+- **Drawn.** Unreal takes yaw and pitch from the nose (`heading_rad`, `pitch_rad`) and the roll from `bank_rad`, for
+  every aircraft but a weapon (`USimWorldSubsystem::BuildEntityList`). Tacview gets the same attitude.
+- **Left.** Damage (R1's moderate and heavy) does not lower the g limit or the acceleration yet. Helicopters' energy.
+  The terrain-following climb as a path angle. The flight model at altitude (v_max is one number per type, the top
+  speed at the heights it flies).
+
 ## 4. Pilots as people
 
 ### 4.1 Today

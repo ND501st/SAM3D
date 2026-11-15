@@ -46,6 +46,16 @@ public:
         if (seen_.insert(id).second && !properties.empty()) text_ += "," + properties;
         text_ += "\n";
     }
+    // With its attitude (an aircraft's, roadmap R3): roll (right wing down > 0), pitch and heading, radians.
+    void WriteObject(int id, const Vec3& enu, double roll_rad, double pitch_rad, double heading_rad, const std::string& properties) {
+        const GeoPoint g = frame_.EnuToGeodetic(enu);
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "%x,T=%.7f|%.7f|%.1f|%.1f|%.1f|%.1f", static_cast<unsigned>(id), g.LonDeg(),
+                      g.LatDeg(), g.alt_m, RadToDeg(roll_rad), RadToDeg(pitch_rad), RadToDeg(heading_rad));
+        text_ += buf;
+        if (seen_.insert(id).second && !properties.empty()) text_ += "," + properties;
+        text_ += "\n";
+    }
 
     void RemoveObject(int id) {
         char buf[32];
@@ -59,7 +69,12 @@ public:
         BeginFrame(world.Time());
         for (const Aircraft& a : world.AircraftList()) {
             if (a.alive) {
-                WriteObject(a.id, a.position, a.velocity, "Type=" + a.type + ",Name=" + a.name + ",Color=Blue");
+                const std::string props = "Type=" + a.type + ",Name=" + a.name + ",Color=Blue";
+                if (a.attitude_set) {
+                    WriteObject(a.id, a.position, a.bank_rad, a.pitch_rad, a.heading_rad, props);  // where its nose points
+                } else {
+                    WriteObject(a.id, a.position, a.velocity, props);  // not flown yet: along its velocity
+                }
             } else if (removed_.insert(a.id).second) {
                 RemoveObject(a.id);
             }

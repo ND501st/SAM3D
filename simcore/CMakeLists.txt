@@ -75,6 +75,7 @@ add_executable(simcore_tests
   tests/test_orientation.cpp
   tests/test_radio_setup.cpp
   tests/test_threats.cpp
+  tests/test_flight.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp
   tests/test_crew_mobility.cpp

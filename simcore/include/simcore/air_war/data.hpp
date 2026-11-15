@@ -328,7 +328,18 @@ struct AircraftType {
     double attack_mps = 250.0;
     double low_agl_m = 60.0;       // its low-level height
     double medium_alt_m = 4000.0;  // its medium-altitude height above the ground
-    double max_turn_deg_s = 8.0;
+    double max_turn_deg_s = 8.0;   // its instantaneous turn rate, at its corner speed
+    // How it flies (roadmap R3, aircraft.hpp; the data's "flight", with its own source and confidence): bank-to-turn
+    // within its g limit and roll rate, the speed traded in climbs and lost in turns harder than the sustained one.
+    // 0: not given (a helicopter has no accel_mps2: it flies its told speed). docs/air_battle/02_FLIGHTS_AND_PILOTS.md §3.2.
+    double max_load_g = 0.0;
+    double sustained_turn_deg_s = 0.0;
+    double roll_rate_deg_s = 0.0;
+    double max_mps = 0.0;          // its top speed at the heights it flies
+    double accel_mps2 = 0.0;       // level acceleration at full throttle, from slow
+    double climb_mps = 0.0;
+    std::string flight_source;
+    std::string flight_confidence;
     bool night = false;
     bool all_weather = false;
     std::string rwr_em;            // EM library RWR, when it has one
@@ -1345,8 +1356,8 @@ public:
                              "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em",
                              "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
                              "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
-                             "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "source",
-                             "confidence", "notes"}) ||
+                             "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "flight",
+                             "source", "confidence", "notes"}) ||
                 !RequireString(a, p, "id", t.id) || !RequireString(a, p, "name", t.name) ||
                 !StringList(a, p, "roles", roles) || !OptionalString(a, p, "class", t.target_class) ||
                 !OptionalBool(a, p, "helicopter", t.helicopter) || !OptionalBool(a, p, "drone", t.drone) ||
@@ -1371,7 +1382,8 @@ public:
             double arm_km = 0.0, range_km = 0.0, radius_km = 0.0;
             if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0) || !Num(a, p, "range_km", range_km, 0.0, 5000.0) ||
                 !Num(a, p, "radius_km", radius_km, 0.0, 5000.0) || !Num(a, p, "computing", t.computing, 0.0, 1.0) ||
-                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year)) {
+                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year) ||
+                !Flight(a, p, t)) {
                 return false;
             }
             t.arm_range_m = arm_km * 1000.0;
@@ -1398,6 +1410,32 @@ public:
             if (!t.arm_em_by_year.empty() && t.arms <= 0) return Fail(Join(p, "arm_em_by_year"), "only an ARM carrier (arms > 0)");
             if (out.Aircraft(t.id) != nullptr) return Fail(p, "duplicate aircraft id '" + t.id + "'");
             out.aircraft.push_back(std::move(t));
+        }
+        return true;
+    }
+
+    // "flight": the type's flight limits (roadmap R3, aircraft.hpp), with their own source and confidence.
+    bool Flight(const json::Value& a, const std::string& p, AircraftType& t) {
+        const json::Value* f = a.Find("flight");
+        if (f == nullptr) return true;
+        const std::string fp = Join(p, "flight");
+        if (!f->Is(json::Type::Object)) return Fail(fp, "an object");
+        if (!Keys(*f, fp, {"max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s", "max_mps", "accel_mps2", "climb_mps", "source",
+                           "confidence", "notes"}) ||
+            !Num(*f, fp, "max_load_g", t.max_load_g, 1.1, 15.0) ||
+            !Num(*f, fp, "sustained_turn_deg_s", t.sustained_turn_deg_s, 0.1, 40.0) ||
+            !Num(*f, fp, "roll_rate_deg_s", t.roll_rate_deg_s, 1.0, 720.0) || !Num(*f, fp, "max_mps", t.max_mps, 10.0, 1500.0) ||
+            !Num(*f, fp, "accel_mps2", t.accel_mps2, 0.1, 50.0) || !Num(*f, fp, "climb_mps", t.climb_mps, 0.5, 400.0) ||
+            !Provenance(*f, fp) || !OptionalString(*f, fp, "source", t.flight_source) ||
+            !OptionalString(*f, fp, "confidence", t.flight_confidence)) {
+            return false;
+        }
+        if (t.sustained_turn_deg_s > t.max_turn_deg_s) {
+            return Fail(Join(fp, "sustained_turn_deg_s"), "above max_turn_deg_s, the instantaneous rate");
+        }
+        if (t.max_mps > 0.0 && t.max_mps < t.cruise_mps) return Fail(Join(fp, "max_mps"), "below cruise_mps");
+        if (t.helicopter && t.accel_mps2 > 0.0) {
+            return Fail(Join(fp, "accel_mps2"), "a helicopter flies its told speed (no energy model for it yet)");
         }
         return true;
     }

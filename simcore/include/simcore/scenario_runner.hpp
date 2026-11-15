@@ -2026,6 +2026,12 @@ private:
             a.position = t.start;
             a.speed_mps = t.speed_mps;
             a.max_turn_rate_rad_s = t.max_turn_rate_rad_s;
+            a.max_load_g = t.max_load_g;  // its type's limits: with any it flies by bank-to-turn (roadmap R3)
+            a.sustained_turn_rate_rad_s = t.sustained_turn_rate_rad_s;
+            a.roll_rate_rad_s = t.roll_rate_rad_s;
+            a.max_speed_mps = t.max_speed_mps;
+            a.accel_mps2 = t.accel_mps2;
+            a.max_climb_mps = t.max_climb_mps;
             a.rcs_m2 = t.rcs_m2;
             a.waypoints = t.waypoints;
             a.bottom_m = t.BottomM();

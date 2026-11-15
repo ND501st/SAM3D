@@ -1,6 +1,7 @@
 // simcore/target_behaviour.hpp — how a scenario target flies beyond following its waypoints (roadmap 9.3).
 //
-// The Aircraft (aircraft.hpp) steers toward its next waypoint at constant speed. A TargetPilot sits on top of it:
+// The Aircraft (aircraft.hpp) steers toward its next waypoint (bank-to-turn with its type's limits, roadmap R3). A
+// TargetPilot sits on top of it:
 //   * Terrain following: the pilot holds a height above the ground (the behaviour's agl_m, or each waypoint's own),
 //     climbing early for the highest ground `lookahead_s` ahead, within a vertical rate. The aircraft then steers in
 //     the horizontal only. A low strike run is such a route: low ingress, a pull-up point, the attack, a low egress.
@@ -91,7 +92,8 @@ public:
     // Before the world moves it: with the height in the pilot's hands the aircraft steers and moves in the horizontal
     // only (AfterStep then sets the height and the vertical speed).
     void BeforeStep(Aircraft& a) const {
-        if (!ControlsHeight()) return;
+        a.height_held = ControlsHeight();  // a bank-to-turn aircraft then flies the horizontal only (aircraft.hpp)
+        if (!a.height_held) return;
         for (Vec3& w : a.waypoints) w.z = a.position.z;
         a.velocity.z = 0.0;
     }
@@ -110,6 +112,7 @@ public:
             const std::string g = GroundFloor(a, terrain, frame, dt, ControlsHeight());
             if (!g.empty() && event.empty()) event = g;
         }
+        SyncPathAngle(a);  // the attitude follows the height it flew (roadmap R3)
         return event;
     }
 
@@ -128,7 +131,10 @@ public:
     }
     // Only the ground floor (roadmap R5): an aircraft past its last waypoint, flying on until it leaves the world.
     void HoldOverGround(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
-        if (a.alive && dt > 0.0) GroundFloor(a, terrain, frame, dt, false);
+        if (a.alive && dt > 0.0) {
+            GroundFloor(a, terrain, frame, dt, false);
+            SyncPathAngle(a);
+        }
     }
     // The route it is on: during a jink the one it will go back to, else the aircraft's own.
     std::pair<std::vector<Vec3>, std::size_t> Route(const Aircraft& a) const {
@@ -322,7 +328,9 @@ private:
         // The vertical speed changes no faster than a pull-up allows, and eases off in time to level at the height
         // wanted (a sudden climb would read as a hard manoeuvre in the outcome).
         const double gap = want - alt;
-        double vz_want = std::min({rate, std::sqrt(2.0 * kVerticalAccelMps2 * std::fabs(gap)), std::fabs(gap) / kLevelOffS});
+        // Up no faster than its type climbs (a bank-to-turn type's max_climb_mps, aircraft.hpp; 0: not given).
+        const double up = gap > 0.0 && a.max_climb_mps > 0.0 ? std::min(rate, a.max_climb_mps) : rate;
+        double vz_want = std::min({up, std::sqrt(2.0 * kVerticalAccelMps2 * std::fabs(gap)), std::fabs(gap) / kLevelOffS});
         if (gap < 0.0) vz_want = -vz_want;
         const double dv = kVerticalAccelMps2 * dt;
         vz_mps_ += std::max(-dv, std::min(dv, vz_want - vz_mps_));
