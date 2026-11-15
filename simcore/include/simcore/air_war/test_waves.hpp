@@ -339,6 +339,16 @@ private:
         return t;
     }
 
+    // Its type's flight limits (roadmap R3): it flies by bank-to-turn.
+    static void FlightLimits(const AircraftType& a, ScenarioTarget& t) {
+        t.max_load_g = a.max_load_g;
+        t.sustained_turn_rate_rad_s = DegToRad(a.sustained_turn_deg_s);
+        t.roll_rate_rad_s = DegToRad(a.roll_rate_deg_s);
+        t.max_speed_mps = a.max_mps;
+        t.accel_mps2 = a.accel_mps2;
+        t.max_climb_mps = a.climb_mps;
+    }
+
     // Shifts a route sideways for the k-th aircraft of a flight (a line abreast, `spacing_m` apart) and staggers it.
     static void Spread(ScenarioTarget& t, int k, int n, double spacing_m) {
         const Vec3 d = (t.waypoints.empty() ? Vec3{0.0, 1.0, 0.0} : t.waypoints[0] - t.start);
@@ -397,6 +407,7 @@ private:
             const double t0 = at_s + (role == FlightRole::Missile ? 2.0 * k : 0.0);
             ScenarioTarget t = Base(id, name, a.id, a.target_class, a.helicopter, a.cruise_mps, a.max_turn_deg_s, a.rcs_m2, t0, n);
             t.type = a.missile ? "Air+Missile" : t.type;
+            FlightLimits(a, t);
             if (a.drone) {
                 t.decoy = role == FlightRole::Decoy;
                 t.size_m = 4.0;

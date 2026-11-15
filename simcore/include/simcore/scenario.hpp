@@ -87,6 +87,15 @@ struct ScenarioTarget {
     std::vector<Vec3> waypoints;         // ENU [m]
     double speed_mps = 200.0;
     double max_turn_rate_rad_s = DegToRad(6.0);
+    // Its type's flight limits (roadmap R3, aircraft.hpp): "max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s",
+    // "max_mps", "accel_mps2", "climb_mps" (the air war's types give them). 0: not given; with none it flies the old
+    // way (constant speed, its velocity turned at max_turn_rate_rad_s), with any it flies by bank-to-turn.
+    double max_load_g = 0.0;
+    double sustained_turn_rate_rad_s = 0.0;
+    double roll_rate_rad_s = 0.0;
+    double max_speed_mps = 0.0;
+    double accel_mps2 = 0.0;
+    double max_climb_mps = 0.0;
     double rcs_m2 = 5.0;
     double appear_at_s = 0.0;
     bool on_cue = false;                   // held until something releases it (a lesson: ScenarioRunner::ReleaseTarget)
@@ -1281,7 +1290,8 @@ private:
             if (!Keys(t, p, {"id", "name", "type", "class", "start", "waypoints", "speed_mps", "max_turn_rate_deg_s",
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
                              "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
-                             "bottom_m", "notes"})) {
+                             "bottom_m", "max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s", "max_mps", "accel_mps2",
+                             "climb_mps", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1308,6 +1318,18 @@ private:
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
+            double sustained_deg_s = 0.0, roll_deg_s = 0.0;
+            if (!OptionalNumber(t, p, "max_load_g", tg.max_load_g) || !OptionalNumber(t, p, "sustained_turn_deg_s", sustained_deg_s) ||
+                !OptionalNumber(t, p, "roll_rate_deg_s", roll_deg_s) || !OptionalNumber(t, p, "max_mps", tg.max_speed_mps) ||
+                !OptionalNumber(t, p, "accel_mps2", tg.accel_mps2) || !OptionalNumber(t, p, "climb_mps", tg.max_climb_mps)) {
+                return false;
+            }
+            if (tg.max_load_g != 0.0 && tg.max_load_g <= 1.0) return Fail(Join(p, "max_load_g"), "must be > 1 (or left out)");
+            if (sustained_deg_s < 0.0 || roll_deg_s < 0.0 || tg.max_speed_mps < 0.0 || tg.accel_mps2 < 0.0 || tg.max_climb_mps < 0.0) {
+                return Fail(p, "the flight limits (sustained_turn_deg_s, roll_rate_deg_s, max_mps, accel_mps2, climb_mps) must be >= 0");
+            }
+            tg.sustained_turn_rate_rad_s = DegToRad(sustained_deg_s);
+            tg.roll_rate_rad_s = DegToRad(roll_deg_s);
             if (!tg.rwr.empty()) {
                 if (!out.has_em) return Fail(Join(p, "rwr"), "needs own_unit.em: the warning receiver is an EM receiver");
                 const int e = out.em.library.Esm(tg.rwr);
