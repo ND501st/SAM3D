@@ -761,6 +761,7 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 			}
 		}
 		Item.bParts = true;
+		Item.bFlap = true;
 	}
 	const bool bInMesh = Look == simcore::CabinLookKind::InMesh;
 	if (!bInMesh && !Control.auto_placed && !HasBakedFace(Control.panel_id))
@@ -1728,7 +1729,7 @@ void USimCabinComponent::AnimateControl(const USimWorldSubsystem* Sim, FSimCabin
 							 N * (100.0 * Control.bar_length_m * 16.0 / 46.0);
 		Place(Item.Bar, Axis, PartRotation(Out, Item.Up), FVector(Control.bar_length_m));
 	}
-	if (Control.has_flap && Item.Moving != nullptr)
+	if (Item.bFlap && Item.Moving != nullptr)
 	{
 		// The hinged part (simcore::CabinFlap): a lid lifted out of the face about its hinge line, or a lever turned in it.
 		const FVector Hinge = L + (Item.Right * Control.flap.hinge_u_m + Item.Up * Control.flap.hinge_v_m) * 100.0 +

@@ -5,7 +5,9 @@
 // with ECCM drills among its exercises (flak11; ePap in samsim_thread; docs/research/OSA_RESEARCH_2026-10.md section 7).
 // SAM3D's instructor is a second player, or the player between drills, or a scenario's scripted drill (trigger action
 // "instructor"): he takes a target and turns it, sends it up or down, changes its speed, makes it manoeuvre, switches its
-// jammer, lets it go back to its route, or enters a new target into the picture. Everything he does is in the debrief
+// jammer, lets it go back to its route, or enters a new target into the picture. He can also put a fault on the
+// vehicle or take it off ("fault": the target is the console's fault input, 1 on, 0 off; SAM3D's, the textbook's
+// 9Ф632 simulating the air picture and jamming only: voenizdat_osa_1991 p201-204). Everything he does is in the debrief
 // under "Instructor"; the crew knows of it only what its instruments show.
 #pragma once
 
@@ -14,10 +16,11 @@
 namespace simcore {
 
 struct InstructorOrder {
-    enum class Kind { Take, Release, Turn, Height, Speed, Evade, Jam };
+    enum class Kind { Take, Release, Turn, Height, Speed, Evade, Jam, Fault };
     Kind kind = Kind::Take;
     std::string target;
-    // Turn: the true heading, degrees from north; Height: metres above the ground; Speed: m/s; Jam: 1 on, 0 off.
+    // Turn: the true heading, degrees from north; Height: metres above the ground; Speed: m/s; Jam: 1 on, 0 off;
+    // Fault: 1 on, 0 off (the target is the fault's input).
     double value = 0.0;
 };
 
@@ -33,6 +36,7 @@ inline const char* ToString(InstructorOrder::Kind k) {
         case InstructorOrder::Kind::Speed: return "speed";
         case InstructorOrder::Kind::Evade: return "evade";
         case InstructorOrder::Kind::Jam: return "jam";
+        case InstructorOrder::Kind::Fault: return "fault";
     }
     return "?";
 }
@@ -40,7 +44,7 @@ inline const char* ToString(InstructorOrder::Kind k) {
 inline bool InstructorKindFrom(const std::string& s, InstructorOrder::Kind& out) {
     for (InstructorOrder::Kind k : {InstructorOrder::Kind::Take, InstructorOrder::Kind::Release, InstructorOrder::Kind::Turn,
                                     InstructorOrder::Kind::Height, InstructorOrder::Kind::Speed, InstructorOrder::Kind::Evade,
-                                    InstructorOrder::Kind::Jam}) {
+                                    InstructorOrder::Kind::Jam, InstructorOrder::Kind::Fault}) {
         if (s == ToString(k)) {
             out = k;
             return true;
@@ -52,7 +56,7 @@ inline bool InstructorKindFrom(const std::string& s, InstructorOrder::Kind& out)
 // Does the order need a value (a heading, a height, a speed, on or off)?
 inline bool InstructorOrderHasValue(InstructorOrder::Kind k) {
     return k == InstructorOrder::Kind::Turn || k == InstructorOrder::Kind::Height || k == InstructorOrder::Kind::Speed ||
-           k == InstructorOrder::Kind::Jam;
+           k == InstructorOrder::Kind::Jam || k == InstructorOrder::Kind::Fault;
 }
 
 }  // namespace simcore

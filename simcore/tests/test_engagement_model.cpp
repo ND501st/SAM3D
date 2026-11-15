@@ -21,13 +21,15 @@ const std::string kData = SIMCORE_DATA_DIR;
 
 // An Osa scenario with the gameplay engagement model: the unit starts halted; the commander
 // powers up and deploys, the driver puts the generator on line, the senior operator searches.
-// `target` is one target object; `triggers` are extra triggers (with a leading comma).
+// `target` is one target object; `triggers` are extra triggers (with a leading comma). The dice's faults are off: these
+// tests count hits against the chance (faults by themselves: test_faults.cpp).
 std::string Engage(const std::string& target, const std::string& triggers = "", unsigned seed = 1) {
     return R"({
       "scenario_id": "e", "name": "E", "source": "sam3d", "confidence": "estimate", "seed": )" +
            std::to_string(seed) + R"(,
       "origin": { "lat_deg": 45, "lon_deg": 25, "alt_m": 0 },
       "terrain": { "type": "flat", "height_m": 0 },
+      "faults": { "random": false },
       "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json",
                     "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
       "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy", "role": "deputy_commander" },

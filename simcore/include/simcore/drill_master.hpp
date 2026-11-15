@@ -520,7 +520,12 @@ private:
                 if ((c.state == SubsystemState::Ready || c.state == SubsystemState::Starting) &&
                     x.eq.State(c.id) == SubsystemState::Fault) {
                     // Recover a fault: its enabling switch off, then on again once it is off and its prerequisites hold.
+                    // Not while a prerequisite is a world fact no seat makes true and it does not hold (a failed block,
+                    // the console's fault input): switching it off and on again mends nothing, so the plan only waits
+                    // for the fact (sam3d: the NPC crew cycled the equipment switch without end on a failed СРП).
+                    const bool broken = Broken(x, d->prerequisites);
                     for (const Condition& n : d->enable) {
+                        if (broken) break;
                         if (!IsControl(n)) continue;
                         const int off = OffPosition(n);
                         if (off < 0) continue;
@@ -584,6 +589,13 @@ private:
                         }
                         if (best != nullptr) {
                             Expand(x, *best, up);
+                        } else if (Broken(x, d->release)) {
+                            // A trip held by a fault no seat clears (ПРЕД. УГОЛ with the drive still on its stop, p48):
+                            // working the release's switches puts nothing out, so the plan only waits for the fact (sam3d:
+                            // the NPC commander stowed and raised the search antenna every two seconds).
+                            for (const Condition& n : d->release) {
+                                if (n.kind == Condition::Kind::InputIs) Expand(x, n, up);
+                            }
                         } else {
                             for (const Condition& n : d->release) Expand(x, n, up);
                         }
@@ -609,6 +621,17 @@ private:
                 return;
             }
         }
+    }
+
+    // Whether these conditions hold a world fact no seat makes true (a failed block, the console's fault input) that
+    // does not hold: no switch work gets past it.
+    bool Broken(const Expansion& x, const std::vector<Condition>& conds) const {
+        for (const Condition& n : conds) {
+            if (n.kind != Condition::Kind::InputIs || x.eq.Holds(n, x.panel)) continue;
+            const CrewFact* f = crew_ != nullptr ? crew_->FindFact(n.id) : nullptr;
+            if (f == nullptr || (!f->by_action && f->needs.empty())) return true;
+        }
+        return false;
     }
 
     static bool IsControl(const Condition& c) {

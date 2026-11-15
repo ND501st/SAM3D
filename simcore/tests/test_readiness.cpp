@@ -88,7 +88,8 @@ SC_TEST("readiness: a cold start takes the documented switch-on cycle and functi
     std::printf("    cold: equipment warm at %.2f min, function check done at %.2f min\n", warm / 60.0, checked / 60.0);
     SC_EXPECT(warm > 3.8 * 60.0 * 0.9 && warm < 3.8 * 60.0 * 1.1);
     SC_EXPECT(checked > 6.8 * 60.0 * 0.95 && checked < 6.8 * 60.0 * 1.1);
-    TimeUntil(*r, [] { return false; }, checked + 5.0);  // the deputy turns РОД РАБОТЫ back after a moment
+    // He reads the check's instruments (АНОД, КЗ, ПУСК, РЕЖИМЫ: docs/FAULTS.md), then turns РОД РАБОТЫ back.
+    TimeUntil(*r, [] { return false; }, checked + 20.0);
     SC_EXPECT(r->Console().panel.Get("fo.mode") == 1);  // back to ТР after the check
     SC_EXPECT(r->Crew("Deputy")->Tracker().Deviations() == 0);
 }
@@ -473,6 +474,28 @@ SC_TEST("faults: ПРЕД. УГОЛ switches the search off until the antenna is
     c.panel.Set("apu.stow", 1);  // ВЫКЛ.: the antenna rises and stabilises again
     run(200.0);
     SC_EXPECT(e.IsReady("search_antenna"));
+}
+
+SC_TEST("ШИР. — СРЕДН. switches the medium-beam antenna in only in РР, and СР. Л. shows it (p119, p142)") {
+    auto r = Load(Osa("deployed", "", "", true));
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    SC_EXPECT(r->TakeSeat("deputy_commander", "player"));
+    ConsoleData& c = r->Console();
+    CabinLayout layout;
+    SC_EXPECT(LoadCabinFile(kData + "/cabins/osa_ak.json", c, layout));
+    auto lit = [&](const char* id) { const CabinLamp* l = LampOf(layout, id); return l != nullptr && CabinLayout::LampLit(*l, c.panel, c.equipment); };
+    auto run = [&](double s) { TimeUntil(*r, [] { return false; }, r->Time() + s); };
+    run(1.0);
+    c.panel.Set("svr.beam", 1);  // СРЕДН. in ТР: nothing
+    run(1.0);
+    SC_EXPECT(!c.equipment.IsReady("svr_medium_beam") && !lit("ch1_sr_l") && !lit("ch2_sr_l"));
+    c.panel.Set("fo.mode", 2);  // РР
+    run(1.0);
+    SC_EXPECT(c.equipment.IsReady("svr_medium_beam") && lit("ch1_sr_l") && lit("ch2_sr_l"));
+    c.panel.Set("svr.beam", 0);  // ШИР.
+    run(1.0);
+    SC_EXPECT(!lit("ch1_sr_l") && !lit("ch2_sr_l"));
 }
 
 SC_TEST("function check: АНОД ВКЛ. and КЗ light the K3 lamp in ФК if the channel is sound; the meters show РЕЖИМЫ's check") {

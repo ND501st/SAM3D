@@ -88,6 +88,10 @@ struct SAM3D_API FSimCabinItem
 	/** Shown with the cabin parts library's meshes (art/cabin_parts) rather than engine basic shapes. */
 	bool bParts = false;
 
+	/** The layout's hinged part was built (its meshes imported); without them the style's stand-in is drawn and moved
+	 *  as any other control, never placed at a full-size part's scale of 1. */
+	bool bFlap = false;
+
 	/** A lamp's filament brightness, 0..1, easing towards lit or dark. */
 	float Glow = 0.0f;
 };

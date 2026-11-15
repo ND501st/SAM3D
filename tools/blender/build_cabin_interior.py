@@ -2452,17 +2452,47 @@ def build_all(layout):
     return objs
 
 
+def export_mesh(obj):
+    """The object's mesh with its modifiers applied and its degenerate faces gone: the bevels on millimetre parts (SŁ-2M's
+    screws and hex nuts) leave edges of a few microns and zero-area slivers, about half of SŁ-2M's faces, and Unreal's
+    static mesh build never finished on them (sam3d, 16 Nov 2026). Nothing visible goes: what is dissolved is under 1 µm."""
+    deps = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(obj.evaluated_get(deps), preserve_all_data_layers=True, depsgraph=deps)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.dissolve_degenerate(bm, dist=1e-6, edges=bm.edges[:])
+    slivers = [f for f in bm.faces if f.calc_area() < 1e-12]
+    if slivers:
+        bmesh.ops.delete(bm, geom=slivers, context='FACES_ONLY')
+    loose = [v for v in bm.verts if not v.link_faces]
+    if loose:
+        bmesh.ops.delete(bm, geom=loose, context='VERTS')
+    bm.to_mesh(me)
+    bm.free()
+    return me
+
+
 def export(obj):
+    name = obj.name
+    me = export_mesh(obj)
+    obj.name = name + '_src'
+    tmp = bpy.data.objects.new(name, me)
+    tmp.matrix_world = obj.matrix_world
+    tmp.location = (0, 0, 0)
+    for i, slot in enumerate(obj.material_slots):   # materials linked to the object, not its mesh
+        if slot.link == 'OBJECT' and i < len(me.materials):
+            me.materials[i] = slot.material
+    bpy.context.scene.collection.objects.link(tmp)
     bpy.ops.object.select_all(action='DESELECT')
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    loc = obj.location.copy()
-    obj.location = (0, 0, 0)       # export around the origin (the bounding box centre)
-    path = os.path.join(OUT, obj.name + '.fbx')
+    tmp.select_set(True)
+    bpy.context.view_layer.objects.active = tmp   # exported around the origin (the bounding box centre)
+    path = os.path.join(OUT, name + '.fbx')
     bpy.ops.export_scene.fbx(filepath=path, use_selection=True, apply_unit_scale=True, apply_scale_options='FBX_SCALE_ALL',
-                             axis_forward='-Y', axis_up='Z', use_mesh_modifiers=True, mesh_smooth_type='FACE',
+                             axis_forward='-Y', axis_up='Z', use_mesh_modifiers=False, mesh_smooth_type='FACE',
                              add_leaf_bones=False, bake_anim=False, use_tspace=True)
-    obj.location = loc
+    bpy.data.objects.remove(tmp)
+    bpy.data.meshes.remove(me)
+    obj.name = name
     return path
 
 

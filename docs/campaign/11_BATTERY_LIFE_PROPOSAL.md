@@ -713,7 +713,7 @@ On hold (the owner, 28 Oct 2026). Kept as designed for when it resumes.
 
 | # | Task |
 |---|---|
-| G6.1 | Wear clocks and fault chances |
+| G6.1 | Wear clocks and fault chances. Begun 15 Nov 2026 at the owner's request: per-session clocks of each fault's circuit hours, heat and maintenance, lives drawn from the seed, found by instruments, mended by the crew (`simcore/faults.hpp`, `docs/FAULTS.md`); left: the clocks carried between missions, kilometres and launches as clocks |
 | G6.2 | The kinds of maintenance as jobs at the vehicle's places; the maintenance vehicle's capacity; ZIP spares |
 | G6.3 | Repairs: by drill, by the maintenance crew, by evacuation on tow |
 | G6.4 | Playable maintenance with the helper's steps |

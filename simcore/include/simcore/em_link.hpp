@@ -932,6 +932,12 @@ public:
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates. Chaff echoes are not drawn here yet.
     bool EchoVisible(const std::string& target_id) { return EchoInTrackBeam(PlatformOf(target_id)); }
+    // While the elevation search scans (target designation), the beam sweeps a span of elevations in a step: the echo
+    // flashes on the indicator if the sweep crossed the target, judged with the beam on it (sam3d: judged only where the
+    // antenna ended the step, a 1-degree beam moving 2.4 degrees a step showed a high target's echo once in a minute).
+    bool EchoVisible(const std::string& target_id, double swept_low_deg, double swept_high_deg) {
+        return EchoInTrackBeam(PlatformOf(target_id), swept_low_deg, swept_high_deg);
+    }
     // The same for an anti-radiation missile in flight (its id from ArmsInFlight): its small echo on the indicators.
     bool ArmEchoVisible(int arm_id) {
         for (const em::ArmState& a : world_.Scene().arms) {
@@ -939,7 +945,8 @@ public:
         }
         return false;
     }
-    bool EchoInTrackBeam(int pid) {
+    // `swept_low_deg` < `swept_high_deg`: the elevations the beam swept this step (else where it points now).
+    bool EchoInTrackBeam(int pid, double swept_low_deg = 0.0, double swept_high_deg = 0.0) {
         em::RadarState* r = Radar(track_);
         if (r == nullptr || !r->on || pid == 0) return false;
         em::EmScene& s = world_.Scene();
@@ -951,14 +958,19 @@ public:
         const Vec3 tl = t->position - p->position;
         const double range = tl.Length();
         if (range > d.max_range_m || range < d.min_range_m) return false;
-        const Vec3 boresight = DirectionFromAzEl(e->pointing_az_rad, e->pointing_el_rad);
+        double el_rad = e->pointing_el_rad;
+        if (swept_high_deg - swept_low_deg > 1e-3) {  // the sweep's elevation nearest the target's
+            const double ground = std::sqrt(tl.x * tl.x + tl.y * tl.y);
+            const double target_el = std::atan2(tl.z, ground > 1.0 ? ground : 1.0);
+            el_rad = Clamp(target_el, DegToRad(swept_low_deg), DegToRad(swept_high_deg));
+        }
+        const Vec3 boresight = DirectionFromAzEl(e->pointing_az_rad, el_rad);
         if (AngleBetween(tl, boresight) > 1.5 * d.emitter.antenna.beamwidth_az_rad) return false;
-        const em::ElevationBeam beam{e->pointing_el_rad, d.emitter.antenna.beamwidth_el_rad};
+        const em::ElevationBeam beam{el_rad, d.emitter.antenna.beamwidth_el_rad};
         const double rcs = em::RcsToward(t->rcs, t->velocity, (p->position - t->position).Normalized());
         const double vr = em::RadialSpeed(p->position, p->velocity, t->position, t->velocity);
         const long long bucket = 1000000000LL + static_cast<long long>(s.time_s * 2.0);
-        return em::EvaluateLook(s, *r, d, *e, *p, *t, rcs, vr, beam, e->pointing_az_rad, e->pointing_el_rad,
-                                em::LookKey(r->id, t->id, bucket))
+        return em::EvaluateLook(s, *r, d, *e, *p, *t, rcs, vr, beam, e->pointing_az_rad, el_rad, em::LookKey(r->id, t->id, bucket))
             .detected;
     }
 

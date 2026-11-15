@@ -1707,6 +1707,25 @@ private:
                 for (const Contact& c : track_returns_) {
                     if (c.target_id == best_id) want_r = c.range_m;
                 }
+                // The echo shows on his indicator only as the elevation search's beam crosses the target (once a sweep);
+                // between, he keeps the gate where he saw it, led on as he saw it close (sam3d: back on the range he was
+                // told, up to a report old, the gate swung off the echo between sweeps and a high target was never
+                // captured).
+                IndicatorEcho& seen = indicator_echo_[best_id];
+                if (want_r >= 0.0) {
+                    const double gap_s = time_ - seen.t;
+                    if (seen.t >= 0.0 && gap_s > 0.05 && gap_s <= kIndicatorMemoryS) {
+                        const double rate = (want_r - seen.range_m) / gap_s;
+                        seen.rate_mps = seen.has_rate ? 0.5 * (seen.rate_mps + rate) : rate;
+                        seen.has_rate = true;
+                    } else if (gap_s > kIndicatorMemoryS) {
+                        seen.has_rate = false;
+                    }
+                    seen.range_m = want_r;
+                    seen.t = time_;
+                } else if (seen.t >= 0.0 && time_ - seen.t <= kIndicatorMemoryS) {
+                    want_r = std::fmax(0.0, seen.range_m + (seen.has_rate ? seen.rate_mps * (time_ - seen.t) : 0.0));
+                }
                 const auto led = board_range.find(best_id);
                 if (want_r < 0.0 && led != board_range.end()) want_r = led->second;
                 if (want_r < 0.0) {
@@ -1741,6 +1760,15 @@ private:
         double t = 0.0;
     };
     std::map<std::string, WheelWant> wanted_;
+    // Where the range operator last saw each target's echo on his range indicator, and how fast it moved there.
+    struct IndicatorEcho {
+        double range_m = 0.0;
+        double t = -1.0;
+        double rate_mps = 0.0;
+        bool has_rate = false;
+    };
+    std::map<std::string, IndicatorEcho> indicator_echo_;
+    static constexpr double kIndicatorMemoryS = 6.0;  // sam3d: three sweeps of the elevation search
     // A want not renewed this long is gone (the NPC would leave the wheel). One on the target the commander ordered taken
     // isn't replaced by another target's for kOrderedHoldS: the ordered target out of the picture for a few scans (a low
     // flier in the clutter) leaves the wheel where it was last seen, it doesn't send it to the next echo (sam3d: an NPC's
@@ -1795,7 +1823,7 @@ private:
             for (const auto& kv : geo_) {
                 const Geometry& g = kv.second;
                 if (!g.alive || g.range_m > d.max_range_m) continue;
-                if ((is_locked && kv.first == locked) || em_->EchoVisible(kv.first)) {
+                if ((is_locked && kv.first == locked) || em_->EchoVisible(kv.first, swept_low_deg_, swept_high_deg_)) {
                     track_returns_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
                     if (kv.first == tracked_) {
                         range_echo_for_ = tracked_;

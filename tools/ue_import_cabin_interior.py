@@ -79,7 +79,8 @@ MAT = '/Game/SAM3D/Cabin/Materials'
 INT = '/Game/SAM3D/Cabin/Interior'
 STEPS = %(steps)r
 PLAIN = ('SM_Cabinet0096', 'SM_Cabinet0096Lid', 'SM_RadioR123M', 'SM_IntercomA1', 'SM_IntercomA2', 'SM_IntercomA4',
-         'SM_SP2M2Face', 'SM_SP3MFace', 'SM_SP3MFlap', 'SM_SL3MFace', 'SM_SL1MFace', 'SM_SP1MFace', 'SM_CabSeat', 'SM_PanelInd')   # no Nanite: their details are mm thick
+         'SM_SP2M2Face', 'SM_SP3MFace', 'SM_SP3MFlap', 'SM_SL3MFace', 'SM_SL1MFace', 'SM_SP1MFace', 'SM_CabSeat', 'SM_PanelInd',
+         'SM_RackSL2M')   # no Nanite: their details are mm thick (SŁ-2M's screws and hex nuts: its Nanite build never finished)
 ONLY = %(only)r
 DF_SCALE = {'SM_OsaHull': 8.0, 'SM_RackSL1M': 2.0, 'SM_RackSL2M': 2.0, 'SM_RackSL3M': 2.0, 'SM_RackSP1M': 2.0,
             'SM_RackSP2M': 2.0, 'SM_RackSP3M': 2.0, 'SM_OperatorBench': 2.0}

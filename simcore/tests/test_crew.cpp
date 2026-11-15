@@ -490,8 +490,7 @@ SC_TEST("npc commander: with no triggers the crew comes to readiness from cold, 
         if (d.find(std::string("started    ") + drill) == std::string::npos) std::printf("    no %s\n", drill);
         SC_EXPECT(d.find(std::string("started    ") + drill) != std::string::npos);
     }
-    SC_EXPECT(d.find("Пуск разрешаю!") != std::string::npos);
-}
+    SC_EXPECT(d.find("Пуск разрешаю!") != std::string::npos);}
 
 SC_TEST("npc commander: the player in the operator's seat gets his orders; the crew waits for him, reminds him, and fires only with him") {
     std::unique_ptr<ScenarioRunner> r = CrewPractice();

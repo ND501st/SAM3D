@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cctype>
 #include <array>
+#include <limits>
 #include <map>
 #include <memory>
 #include <random>
@@ -49,6 +50,7 @@
 #include "simcore/engagement.hpp"
 #include "simcore/fuel.hpp"
 #include "simcore/vehicle_systems.hpp"
+#include "simcore/faults.hpp"
 #include "simcore/fx/events.hpp"
 #include "simcore/instructor.hpp"
 #include "simcore/launcher.hpp"
@@ -142,6 +144,7 @@ public:
         }
         UpdateLight();  // the sun at second 0 (roadmap R7): the TV's daylight from here, the battery's night below
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
+        if (def_.has_faults) faults_.Configure(def_.faults, def_.fault_options, noise::Mix64(def_.seed + 0xFA175u));
         fx_rng_.seed(def_.seed + kFxSeed);  // the presentation's own draws (fx/events.hpp): never a model's generator
         rwr_warned_.assign(def_.targets.size(), 0);
         fired_.assign(def_.triggers.size(), false);
@@ -263,6 +266,8 @@ public:
         UpdateFuel(dt);
         UpdatePositionPower();
         UpdateVehicleSystems(dt);
+        UpdateFaults(dt);
+        DropStaleNoiseChecks();
         if (finished_) return;
         EvaluateTriggers();
         console_.equipment.Update(dt, console_.panel);
@@ -542,6 +547,31 @@ public:
     // The vehicle's own systems (roadmap C1-C3, C7, C8): null when the system has no data/vehicles/<system>_systems.json.
     const VehicleSystems* OwnSystems() const { return own_sys_.get(); }
     VehicleSystems* MutableOwnSystems() { return own_sys_.get(); }
+
+    // The faults that come about by themselves (faults.hpp, docs/FAULTS.md). The missions menu's Faults off turns the
+    // dice off before the first step; faults the scenario or the instructor sets come regardless.
+    void SetRandomFaults(bool on) {
+        if (!faults_started_ && faults_.Configured()) faults_.SetRandom(on);
+    }
+    bool RandomFaults() const { return faults_.Configured() && faults_.Random(); }
+    const FaultModel& Faults() const { return faults_; }
+    // A fault's story, for the debrief (the truth: when it came about) and the tests: when and by whom the crew found
+    // it, who repaired it. One record each time it comes about.
+    struct FaultRecord {
+        std::string input, what;
+        bool scripted = false;  // set by the scenario or the instructor, not by the dice
+        double came_s = -1.0, found_s = -1.0, repair_from_s = -1.0, repaired_s = -1.0, gone_s = -1.0;
+        std::string found_by, repaired_by;
+    };
+    const std::vector<FaultRecord>& FaultRecords() const { return fault_records_; }
+    // The faults the crew has found and not yet repaired (what reached the commander by its reports).
+    std::vector<std::string> KnownFaults() const {
+        std::vector<std::string> out;
+        for (const FaultRecord& r : fault_records_) {
+            if (r.found_s >= 0.0 && r.repaired_s < 0.0 && r.gone_s < 0.0) out.push_back(r.input);
+        }
+        return out;
+    }
     // The light discipline the crew keeps: told it on a night march (voenizdat_osa_1991 p222: all outside lights off).
     bool OwnBlackout() const { return own_blackout_; }
 
@@ -1215,6 +1245,11 @@ public:
             if (done) orders_given_.push_back({time_, order_id});
             return done;
         }
+        if (order_id == "order_repair") {  // a fault the crew found, to the man who mends it (docs/FAULTS.md)
+            const bool done = OrderRepair();
+            if (done) orders_given_.push_back({time_, order_id});
+            return done;
+        }
         if (order_id == "order_battery_preliminary" || order_id == "order_battery_combat_order") {  // the task's plan (14.3)
             const bool done = PostGivesOrders() && GiveTaskOrder(order_id, "Battery commander");
             if (done) orders_given_.push_back({time_, order_id});
@@ -1296,6 +1331,9 @@ public:
         const OrderDef* o = def_.has_crew_data ? def_.crew_data.FindOrder(order_id) : nullptr;
         if (o == nullptr) return refuse("нет такого приказа", "no such order");
         if (order_id == "order_lay_lines" && !AnyLineToLay()) return refuse("линий для прокладки нет", "no line to lay");
+        if (order_id == "order_repair" && NextRepair() == nullptr) {
+            return refuse("неисправностей, устранимых расчётом, нет", "no fault the crew knows of and can repair");
+        }
         // The orders on the nets: whoever must talk on the net can (his box on its set, the set transmitting).
         const auto net_of = [&]() -> std::string {
             if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex") return "battery";
@@ -8643,16 +8681,54 @@ private:
     }
     double npc_thought_s_ = -1.0;  // when the NPC commander last thought (NpcSurvey decides with him)
     bool shadow_breaks_check_ = false;  // the shadow's next orders count the deputy's function check as broken off
-    // The deputy's NPC in the function check (its drill, РОД РАБОТЫ at ФК).
+    // A seat's NPC in the function check: the deputy's drill (РОД РАБОТЫ at ФК), or the operator's noise check in it.
+    static bool IsCheckDrill(const CrewMember& m) {
+        return m.IsBusy() && (m.Tracker().GetProcedure().id == "function_check" || m.Tracker().GetProcedure().id == "noise_check");
+    }
     bool InFunctionCheck(const std::string& seat) const {
         const CrewMember* m = MemberAtConst(seat);
-        return m != nullptr && SeatHolder(seat).empty() && m->IsBusy() && m->Tracker().GetProcedure().id == "function_check";
+        return m != nullptr && SeatHolder(seat).empty() && IsCheckDrill(*m);
     }
+    // The check broken off: the deputy's РОД РАБОТЫ back to ТР, and with it the noise checks it was running for.
     void BreakOffFunctionCheck(const std::string& seat) {
         CrewMember* m = MemberAt(seat);
         if (m == nullptr || !InFunctionCheck(seat)) return;
+        const bool deputy = m->Tracker().GetProcedure().id == "function_check";
         m->CancelOrder();
+        if (!deputy) return;
         console_.panel.Set("fo.mode", 1);
+        EndNoiseChecks(false);
+    }
+    // The noise checks the function check was running for, ended with it: an NPC's order cancelled, a player's drill
+    // put by for the next one he was ordered (else none). `only_waiting`: only those not yet begun.
+    void EndNoiseChecks(bool only_waiting) {
+        for (CrewMember& c : crew_) {
+            if (!SeatHolder(c.Role()).empty() || !c.IsBusy() || c.Tracker().GetProcedure().id != "noise_check") continue;
+            if (!only_waiting || c.Tracker().NextIndex() == 0) c.CancelOrder();
+        }
+        for (Seat& st : seats_) {
+            if (st.tracker.GetProcedure().id != "noise_check" || st.tracker.IsComplete()) continue;
+            if (only_waiting && st.tracker.NextIndex() != 0) continue;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, st.player, "noise_check", std::string("the function check is over")});
+            const Procedure* next = nullptr;
+            while (next == nullptr && !st.queued.empty()) {
+                next = console_.FindProcedure(st.queued.front());
+                st.queued.erase(st.queued.begin());
+            }
+            st.tracker.Reset(next != nullptr ? *next : Procedure{});
+        }
+    }
+    // A noise check still waiting for the function check once it has run and РОД РАБОТЫ is back from ФК (its man was
+    // busy until then): it has nothing to look at, so it is dropped.
+    void DropStaleNoiseChecks() {
+        if (!console_.equipment.IsReady("function_checked") || console_.panel.Get("fo.mode") == 3) return;
+        for (const CrewMember& c : crew_) {
+            if (c.IsBusy() && c.Tracker().GetProcedure().id == "function_check") return;  // the deputy's check is under way
+        }
+        for (const Seat& st : seats_) {
+            if (st.tracker.GetProcedure().id == "function_check" && !st.tracker.IsComplete()) return;  // a player deputy's
+        }
+        EndNoiseChecks(true);
     }
     void ThinkAsCommander() {
         npc_next_think_s_ = time_ + 1.0;
@@ -8947,8 +9023,26 @@ private:
             // НЛЦ with the azimuth line on it (the deputy's "НЛЦ!"): the radar can't take it, so the angles by the TV
             // (track_low_target: samsim_osa p25-26), the range then by ПОЛУАВТОМАТ (below).
             if (console_.equipment.GetInput("target_too_low") && NpcGive("order_low_target", 30.0)) return;
-            if (NpcGive("order_take_target", 60.0) && k.number == 0 && callouts_ && !shadow_) {  // no number from the PU-12: by its azimuth
-                callouts_->Say(time_, "order_take_contact", Cmdr(), {{"azimuth", MilsText(k.azimuth_deg)}});
+            // Once a minute for the same target: NpcGive remembers only his last order, and an «Запрос!» between would have
+            // him give it again at once, the capture started over every few seconds (sam3d).
+            const bool take_due = npc_take_for_ != k.target || time_ - npc_take_s_ >= 60.0;
+            if (take_due && NpcGive("order_take_target", 60.0)) {
+                if (!shadow_) {
+                    npc_take_for_ = k.target;
+                    npc_take_s_ = time_;
+                }
+                if (k.number == 0 && callouts_ && !shadow_) {  // no number from the PU-12: by its azimuth
+                    callouts_->Say(time_, "order_take_contact", Cmdr(), {{"azimuth", MilsText(k.azimuth_deg)}});
+                }
+                return;
+            }
+            // While the tracking radar takes it: who is it? The interrogator rides on the search antenna, and a target
+            // closing high leaves the search radar's cover, so he asks before the lock, not only after it (sam3d: asked
+            // after, a high drone at Ashuluk was out of the search beam at every ЗАПРОС and never fired at).
+            const SearchSensorDef& sd = console_.search;
+            if (!k.interrogated && k.number == 0 && !NpcSilent() && !sd.iff_query.empty() && console_.equipment.IsReady(sd.iff_ready) &&
+                k.range_m <= sd.iff_max_range_m) {
+                NpcGive("order_iff", 10.0);
             }
             return;
         }
@@ -9929,12 +10023,174 @@ private:
     int npc_permit_launches_ = -1;
     double npc_permit_s_ = -1e9;
     std::string npc_target_;
+    std::string npc_take_for_;  // the target he last ordered taken, and when
+    double npc_take_s_ = -1e9;
     bool npc_prepared_ = false;
     std::string npc_choice_for_;
     bool npc_choice_slip_ = false;
     std::string npc_branch_for_;
     double npc_branch_at_ = 0.0;
     bool npc_halt_ordered_ = false;
+    // The faults (faults.hpp, docs/FAULTS.md): the truth's model, each one's story, the repairs under way, the reports
+    // of repairs done that a seat still owes.
+    FaultModel faults_;
+    bool faults_started_ = false;
+    std::vector<FaultRecord> fault_records_;
+    struct RepairJob {
+        std::string input, seat;
+        double done_s = 0.0;
+    };
+    std::vector<RepairJob> repairs_;
+    std::vector<std::pair<std::string, std::string>> repaired_reports_;  // seat, fault input
+    bool npc_recheck_ = false;  // a fault the check had found is mended: the check again
+
+    FaultRecord* OpenFault(const std::string& input) {
+        for (auto it = fault_records_.rbegin(); it != fault_records_.rend(); ++it) {
+            if (it->input == input) return it->repaired_s < 0.0 && it->gone_s < 0.0 ? &*it : nullptr;
+        }
+        return nullptr;
+    }
+    std::string SeatTitle(const std::string& seat, bool en) const {
+        for (const CrewSeatDef& s : def_.crew_data.seats) {
+            if (s.station == seat) return en ? s.title_en : s.title_ru;
+        }
+        return seat;
+    }
+    std::map<std::string, std::string> FaultWords(const FaultDef& f) const {
+        return {{"what", f.name_ru}, {"what_en", f.name_en}, {"fault", f.input}};
+    }
+    // The truth moves on (the dice, the scenario's and the instructor's faults); the crew learns of a fault only when an
+    // instrument of a seat shows it, and that seat reports it; repairs go on.
+    void UpdateFaults(double dt) {
+        if (!def_.has_faults || !faults_.Configured()) return;
+        const double rack = own_sys_ ? own_sys_->RackC() : std::numeric_limits<double>::quiet_NaN();
+        std::vector<std::string> came;
+        if (!faults_started_) {
+            faults_started_ = true;
+            came = faults_.Start(console_);
+        }
+        for (std::string& in : faults_.Step(time_, dt, console_, rack)) came.push_back(std::move(in));
+        for (const FaultDef& f : def_.faults.faults) {
+            const bool there = console_.equipment.GetInput(f.input);
+            FaultRecord* r = OpenFault(f.input);
+            if (!there) {
+                if (r != nullptr) {  // cleared without a repair: the scenario or the instructor
+                    r->gone_s = time_;
+                    log_.Record({time_, DebriefEntry::Kind::Scenario, "Faults", f.input, f.name_en + ": cleared by the scenario"});
+                }
+                continue;
+            }
+            if (r == nullptr) {
+                const bool dice = std::find(came.begin(), came.end(), f.input) != came.end();
+                FaultRecord n;
+                n.input = f.input;
+                n.what = f.name_en;
+                n.scripted = !dice;
+                n.came_s = time_;
+                fault_records_.push_back(n);
+                r = &fault_records_.back();
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Faults", f.input,
+                             f.name_en + (!dice ? ": set by the scenario" : time_ <= 0.0 ? ": there at the start, unknown to the crew" : ": failed by itself")});
+            }
+            if (r->found_s >= 0.0) continue;
+            for (const FaultFinding& w : f.found_by) {
+                if (!FaultModel::Shows(f, w, console_)) continue;
+                SeatDuty d = SeatDuty::Report(w.seat, "fault", "an instrument shows a fault (" + w.shows_en + "): report it", FaultWords(f));
+                if (NpcDoes(w.seat, d)) {
+                    Say("fault", w.seat, d.fields);
+                    FaultFound(*r, w.seat, w.shows_en);
+                }
+                break;
+            }
+        }
+        UpdateRepairs();
+    }
+    void FaultFound(FaultRecord& r, const std::string& seat, const std::string& shows) {
+        r.found_s = time_;
+        r.found_by = seat;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Faults", r.input, "found by the " + seat + " (" + shows + ") and reported"});
+    }
+    // The commander's next repair: the fault the crew found first that it can mend and nobody is at.
+    const FaultDef* NextRepair() const {
+        const FaultRecord* best = nullptr;
+        const FaultDef* out = nullptr;
+        for (const FaultRecord& r : fault_records_) {
+            if (r.found_s < 0.0 || r.repaired_s >= 0.0 || r.gone_s >= 0.0 || r.repair_from_s >= 0.0) continue;
+            const FaultDef* f = def_.faults.Find(r.input);
+            if (f == nullptr || f->repair.by != FaultRepair::By::Crew) continue;
+            if (best == nullptr || r.found_s < best->found_s) {
+                best = &r;
+                out = f;
+            }
+        }
+        return out;
+    }
+    bool OrderRepair() {
+        const FaultDef* f = NextRepair();
+        FaultRecord* r = f != nullptr ? OpenFault(f->input) : nullptr;
+        if (r == nullptr) return false;
+        const std::string& seat = f->repair.seat;
+        BreakOffFunctionCheck(seat);
+        std::map<std::string, std::string> words = FaultWords(*f);
+        words["who"] = SeatTitle(seat, false);
+        words["who_en"] = SeatTitle(seat, true);
+        Say("order_repair", Cmdr(), words);
+        r->repair_from_s = time_;
+        r->repaired_by = seat;
+        repairs_.push_back({f->input, seat, time_ + f->repair.time_s});
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Faults", f->input,
+                     "the commander orders the " + seat + " to repair it" + (f->repair.kit.empty() ? std::string() : " from " + f->repair.kit)});
+        return true;
+    }
+    // A repair takes its time; a hostile known breaks it off (the man back at his post, the commander orders it again
+    // after the fight); done, the block is new and the man reports it.
+    void UpdateRepairs() {
+        bool hostile = false;
+        for (const KnownTarget& k : pictures_[Cmdr()].Recent(time_, 30.0)) hostile = hostile || (!k.friendly && k.has_range);
+        hostile = hostile || engagement_.Method() != TrackMethod::None || engagement_.ShotsInFlight();
+        for (std::size_t i = 0; i < repairs_.size();) {
+            const RepairJob j = repairs_[i];
+            FaultRecord* r = OpenFault(j.input);
+            if (r == nullptr) {  // cleared meanwhile
+                repairs_.erase(repairs_.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            if (hostile) {
+                r->repair_from_s = -1.0;
+                r->repaired_by.clear();
+                log_.Record({time_, DebriefEntry::Kind::Scenario, "Faults", j.input, "the repair broken off: the " + j.seat + " back at his post"});
+                repairs_.erase(repairs_.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            if (time_ < j.done_s) {
+                ++i;
+                continue;
+            }
+            faults_.Repaired(j.input, console_);
+            r->repaired_s = time_;
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Faults", j.input, "repaired by the " + j.seat});
+            if (const FaultDef* f = def_.faults.Find(j.input)) {
+                for (const FaultFinding& w : f->found_by) npc_recheck_ = npc_recheck_ || w.in_check;
+            }
+            repaired_reports_.push_back({j.seat, j.input});
+            repairs_.erase(repairs_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        for (std::size_t i = 0; i < repaired_reports_.size();) {
+            const FaultDef* f = def_.faults.Find(repaired_reports_[i].second);
+            const std::string seat = repaired_reports_[i].first;
+            if (f == nullptr) {
+                repaired_reports_.erase(repaired_reports_.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            SeatDuty d = SeatDuty::Report(seat, "repaired", "his repair is done: report it", FaultWords(*f));
+            if (NpcDoes(seat, d)) {
+                Say("repaired", seat, d.fields);
+                repaired_reports_.erase(repaired_reports_.begin() + static_cast<std::ptrdiff_t>(i));
+                continue;
+            }
+            ++i;
+        }
+    }
     bool npc_checked_ = false;
     bool started_cold_ = false;  // the vehicle had no power at the session's start
     bool npc_fought_ = false;
@@ -9963,6 +10219,15 @@ private:
         if (!hostile && is_ready && !npc_checked_ && !npc_fought_ && started_cold_) {
             npc_checked_ = NpcGive("order_function_check", 600.0);
             return npc_checked_;
+        }
+        // A fault the crew found that it can mend from the vehicle's spares (ЗИП-1А): the man to it while nothing hostile
+        // is known; once a fault the check had found is mended, the check again (docs/FAULTS.md).
+        if (!hostile && NextRepair() != nullptr && NpcGive("order_repair", 5.0)) return true;
+        if (!hostile && is_ready && npc_recheck_ && repairs_.empty() && !InFunctionCheck("deputy_commander")) {
+            if (NpcGive("order_function_check", 30.0)) {
+                npc_recheck_ = false;
+                return true;
+            }
         }
         // Attacked by ARMs, with the regiment's standing order to change position after it (doctrine relocate_after_arm;
         // the battery commander changes position only on the regiment commander's order, voenizdat_osa_1991 p238): when
@@ -10282,7 +10547,8 @@ private:
                     break;
                 case CrewReport::Kind::EquipmentFault: {
                     const SubsystemDef* d = console_.equipment.Def(r.detail);
-                    Say("fault", c.Role(), {{"what", d != nullptr && !d->name.empty() ? d->name : r.detail}});
+                    const std::string what = d != nullptr && !d->name.empty() ? d->name : r.detail;
+                    Say("fault", c.Role(), {{"what", what}, {"what_en", what}});
                     break;
                 }
                 default: break;
@@ -11220,6 +11486,19 @@ public:
             if (why != nullptr) *why = w;
             return false;
         };
+        if (o.kind == InstructorOrder::Kind::Fault) {  // a fault on the vehicle or off it (faults.hpp)
+            const FaultDef* f = def_.has_faults ? def_.faults.Find(o.target) : nullptr;
+            if (f == nullptr) return fail("no fault '" + o.target + "'");
+            const bool on = o.value != 0.0;
+            if (console_.equipment.GetInput(f->input) == on) return fail(f->name_en + (on ? " is faulty already" : " is sound already"));
+            if (on) {
+                console_.equipment.SetInput(f->input, true);
+            } else {
+                faults_.Repaired(f->input, console_);  // put right: a sound block, its clock from nought
+            }
+            Instructed(f->input, on ? "puts a fault on " + f->name_en : "puts " + f->name_en + " right");
+            return true;
+        }
         std::size_t i = 0;
         while (i < def_.targets.size() && def_.targets[i].id != o.target) ++i;
         if (i == def_.targets.size()) return fail("no target '" + o.target + "'");
@@ -12967,6 +13246,8 @@ public:
             if (owed == nullptr && d.kind == SeatDuty::Kind::Report && d.seat == station && d.id == callout_id) owed = &d;
         }
         std::string about_target;
+        std::string owed_fault;
+        if (owed != nullptr && owed->fields.count("fault") != 0) owed_fault = owed->fields.at("fault");
         if (owed != nullptr) {
             const std::map<std::string, std::string> fields = owed->fields;
             const KnownTarget about = owed->about;
@@ -12978,6 +13259,18 @@ public:
         }
         reports_made_.push_back({time_, station, callout_id});
         if (callout_id == "contact" && station == "senior_operator") next_contact_update_s_ = time_ + 15.0;
+        if (callout_id == "fault" && !owed_fault.empty()) {  // the crew learns of it from his report
+            FaultRecord* r = OpenFault(owed_fault);
+            const FaultDef* f = def_.faults.Find(owed_fault);
+            if (r != nullptr && f != nullptr && r->found_s < 0.0) FaultFound(*r, station, "his instrument");
+        }
+        if (callout_id == "repaired") {
+            for (auto it = repaired_reports_.begin(); it != repaired_reports_.end(); ++it) {
+                if (it->first != station || it->second != owed_fault) continue;
+                repaired_reports_.erase(it);
+                break;
+            }
+        }
         SettleOwedReport(station, callout_id, about_target);
         return true;
     }

@@ -4,16 +4,16 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 
 | State | Meaning | Controls |
 |---|---|---|
-| wired | drives a subsystem or the launch | 74 |
+| wired | drives a subsystem or the launch | 75 |
 | model | read by a simulation model | 130 |
 | display | sets a screen's picture or what a meter reads | 30 |
 | indicator | only lights a lamp or turns on a display | 7 |
 | code | named by simcore's source or a system file, not by the console | 0 |
 | drill | worked in a drill, lesson or readiness state; changes nothing | 3 |
-| inert | nothing names it | 27 |
+| inert | nothing names it | 26 |
 | **all** | | **271** |
 
-## wired (74): drives a subsystem or the launch
+## wired (75): drives a subsystem or the launch
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -35,13 +35,14 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | fo_panel | ЦУ | `fo.cu_az` | Deputy commander | Auto-capture (АЗ) armed; Target designation (ЦУ): tracking antenna to the search beam, elevation search |
 | fo_panel | ЗАПРЕТ ПУСКА | `fo.key` | Deputy commander | Launch circuit armed (live-fire mode, hatches closed, key turned, missile ready) |
 | fo_panel | ПУСК | `fo.launch` | Deputy commander | ПУСК: missile away |
-| fo_panel | РОД РАБОТЫ | `fo.mode` | Deputy commander | Function check (ФК) running; Launch circuit armed (live-fire mode, hatches closed, key turned, missile ready); БР |
+| fo_panel | РОД РАБОТЫ | `fo.mode` | Deputy commander | Function check (ФК) running; Launch circuit armed (live-fire mode, hatches closed, key turned, missile ready); The missile tracker's medium-beam antenna switched in by hand (РР, ШИР. — СРЕДН. at СРЕДН.); БР |
 | fo_panel | ПА | `fo.pa` | Deputy commander | TOV angle tracking (ПА) |
 | fo_panel | РУ | `fo.ru` | Deputy commander | Auto-capture (АЗ) armed; Manual capture (ТСЦ pressed on the target); TOV angle tracking (ПА); Target designation (ЦУ): tracking antenna to the search beam, elevation search |
 | fo_panel | ТСЦ | `fo.tsc` | Deputy commander | Manual capture (ТСЦ pressed on the target) |
 | fo_panel | guard over АВАРИЙНЫЙ ПУСК | `msl.emergency_cover` | Deputy commander | АВАР. ПУСК ОБЕСТОЧ. |
 | fo_panel | elevation wheel lock | `ssc.el_lock` | Deputy commander | nothing |
 | fo_panel | lid over БАЛАНС ПА (УГОЛ МЕСТА) | `ssc.pa_balance_el_cover` | Deputy commander | nothing |
+| fo_panel | ШИР. — СРЕДН. | `svr.beam` | Deputy commander | The missile tracker's medium-beam antenna switched in by hand (РР, ШИР. — СРЕДН. at СРЕДН.) |
 | fo_panel | КОНТРОЛЬ — РАБОТА (ВПУ) | `tov.check` | Deputy commander | The TV shows its test chart 0249 (ВПУ at КОНТРОЛЬ); The TV shows the scene through its lens (ВПУ at РАБОТА) |
 | fo_panel | РАБ.РЕЖ. | `tov.power` | Deputy commander | TOV camera on |
 | gear_lever_panel | gear lever | `veh.gear` | Driver | Drive engine 5Д20Б-300 running; Drive: gears, handbrake, the water-jets and wave shield |
@@ -73,7 +74,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | pwr_cabinet | ПРИВОДЫ εн, СВР-I, СВР-II ВКЛ. — ОТКЛ. | `drv.el` | Operator | Tracking-radar and missile-tracker drives on (АПУ can turn); ПРИВОДЫ εн, СВР; ПРИВОДЫ СВР I; ПРИВОДЫ СВР II |
 | pwr_cabinet | ПОДКАЧКА ОТСЕКОВ АВАРИЙНАЯ — ОТКЛ. | `press.emergency` | Operator | Compartments' pressurisation on (ЭПК opened) |
 | pwr_cabinet | ПОДКАЧКА ОТСЕКОВ ШТАТНАЯ | `press.standard` | Operator | Compartments' pressurisation on (ЭПК opened) |
-| pwr_cabinet | АППАРАТУРА ВКЛ. — ОТКЛ. | `pwr.equipment` | Operator | 0009-5M's ОШИБКА ψ and ОШИБКА γ glowing; Climate: the cabin, racks and transmitters' heat; Equipment warmed up (anode supplies on, scopes sweeping); Fire-control computer 9С456М3 switched on; I ЛУЧ; II ЛУЧ; III ЛУЧ; Search-antenna stabilisation (9W611BM2) working; The power system cut by АВАР. ОТКЛ. СЭП; Transmitters ready for high voltage (three-minute relay); βн ЗАСТОПОР.; АНТЕННА СОЦ ЗАСТОПОРЕНА; ГАБАРИТ 3800; НАКАЛ СОЦ; НАКАЛ СПК-I; НАКАЛ СПК-II; НАКАЛ ССЦ; ОТКАЗ СРП; ПРЕД. УГОЛ; ПРИВОД βн; ПРИВОДЫ εн, СВР; ПРИВОДЫ СВР I; ПРИВОДЫ СВР II; РАССТОПОРЕНО Δε, εн; РАССТОПОРЕНО βн; РУ; СТОПОР ПОХОД.; УКЛАДКА ПРОИЗВ.; ЭКВИВАЛЕНТ СОЦ; ЭКВИВАЛЕНТ СПК I; ЭКВИВАЛЕНТ СПК II |
+| pwr_cabinet | АППАРАТУРА ВКЛ. — ОТКЛ. | `pwr.equipment` | Operator | 0009-5M's ОШИБКА ψ and ОШИБКА γ glowing; Climate: the cabin, racks and transmitters' heat; Equipment warmed up (anode supplies on, scopes sweeping); Fire-control computer 9С456М3 switched on; I ЛУЧ; II ЛУЧ; III ЛУЧ; Search-antenna stabilisation (9W611BM2) working; The missile tracker's medium-beam antenna switched in by hand (РР, ШИР. — СРЕДН. at СРЕДН.); The power system cut by АВАР. ОТКЛ. СЭП; Transmitters ready for high voltage (three-minute relay); βн ЗАСТОПОР.; АНТЕННА СОЦ ЗАСТОПОРЕНА; ГАБАРИТ 3800; НАКАЛ СОЦ; НАКАЛ СПК-I; НАКАЛ СПК-II; НАКАЛ ССЦ; ОТКАЗ СРП; ПРЕД. УГОЛ; ПРИВОД βн; ПРИВОДЫ εн, СВР; ПРИВОДЫ СВР I; ПРИВОДЫ СВР II; РАССТОПОРЕНО Δε, εн; РАССТОПОРЕНО βн; РУ; СТОПОР ПОХОД.; УКЛАДКА ПРОИЗВ.; ЭКВИВАЛЕНТ СОЦ; ЭКВИВАЛЕНТ СПК I; ЭКВИВАЛЕНТ СПК II |
 | pwr_cabinet | РЕЛЕ ТЕПЛ. ВКЛ. — ОТКЛ. | `pwr.relay_heat` | Operator | The turret turns in azimuth (the drives on, the ЭМУ's control winding fed); The ЭМУ's drive motor overloaded with its relays shunted; The ЭМУ's thermal relays open: the azimuth drive's motor off; ПРИВОД βн |
 | pwr_cabinet | РАССТОПОР. — СТОПОР. | `soc.rotation_lock` | Operator | SOC search antenna rotating; АНТЕННА СОЦ ЗАСТОПОРЕНА |
 | pwr_cabinet | СИСТЕМА СТАБ. ВКЛ. — ОТКЛ. | `stab.power` | Operator | 0009-5M's ОШИБКА ψ and ОШИБКА γ glowing; Search-antenna stabilisation (9W611BM2) working |
@@ -282,7 +283,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | gyro_panel | ПИТАНИЕ ПТ — СЕТЬ | `gyro.supply` | Deputy commander | data/crew/osa_ak_crew.json |
 | gyro_panel | КОНТРОЛЬ РАБОТЫ (ОС51-8М) | `soc.mti_check` | Deputy commander | data/crew/osa_ak_crew.json |
 
-## inert (27): nothing names it
+## inert (26): nothing names it
 
 | Panel | Control | Id | Seat | Reaches |
 |---|---|---|---|---|
@@ -299,7 +300,6 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | driver_panel | lever in the box under the gauges (unidentified) | `veh.lever_box` | Driver | nothing |
 | driver_panel | СИГНАЛ (the fourth lighting switch) | `veh.rear_signal` | Driver | nothing |
 | fire_valve_panel | bottle valve (red hand wheel) | `fire.valve` | Driver | nothing |
-| fo_panel | ШИР. — СРЕДН. | `svr.beam` | Deputy commander | nothing |
 | gyro_panel | БАЛАНС (II) | `ok81.balance_2` | Deputy commander | nothing |
 | header_valve_left | valve over the left screen | `veh.header_valve_left` | Driver | nothing |
 | header_valve_right | valve over the right screen | `veh.header_valve_right` | Commander | nothing |
@@ -314,7 +314,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | stowage_panel | stowage cover (lower) | `veh.stowage_lower` | Driver | nothing |
 | stowage_panel | stowage cover (upper) | `veh.stowage_upper` | Driver | nothing |
 
-## Not built (20)
+## Not built (19)
 
 | Item | Where it stands | Notes |
 |---|---|---|
@@ -322,7 +322,6 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | PU-303: ХОЛ. ПРОКР., the hour counters | on the model, not wired | The lamps, the ГТА and ТВГ gauges, the load buttons (ОТКЛ. НАГР. takes the loads off until ГТА or ИВП puts them back: subsystem loads_off) and СТОП (gta_stopped, until ПУСК is put off) work; the cold cranking and the hour counters wait for a model of the turbine start. |
 | БОРТ СПК ОТКЛ. as its own push-button | on the model, not wired | Drawn beside the guarded БОРТ СПК ВКЛ.; one switch fo.bort_spk stands for both (voenizdat_osa_1991 p119-121). |
 | Fault lamp НЕИСПРАВНОСТЬ | in the sources only: silent | ОТКАЗ СРП, ОТКАЗ Qc and ОБРЫВ ФАЗЫ light with their faults (roadmap C4); НЕИСПРАВНОСТЬ is silent in the sources (voenizdat_osa_1991 p121); the PU-303's fault lamps light on its lamp test. |
-| Stowing board: ПРЕД. УГОЛ | on the model, not wired | A drive on its stop (a stabilisation fault, voenizdat_osa_1991 p47-48): not modelled, so dark. ГАБАРИТ 3800 now works. |
 | ПАНЕЛЬ ИНДИКАЦИИ: five legend lamps not read, two blank spares | on the model, not wired | Drawn dark (wwp_gecko g095-b): four three-line and one two-line legends not legible; the left column's bottom two blank, under a cool and a reddish lens (spares, SAM3D's reading). |
 | De-energisation indicator box | seen in a photo: owner to decide | Stencilled box aft of the spares box (wwp_gecko g090-a, g092-a; rwd_mb3 layout). |
 | March signals: flags and lamps | seen in a photo: owner to decide | Two signal flags and a bag by the commander (wwp_gecko g089-d); the march signals (voenizdat_osa_1991 p232-239). |
@@ -332,7 +331,7 @@ Written by `tools/button_map.py osa_ak` from the console (`data/procedures/osa_a
 | 0051-7M repetition frequency АВТ., РУЧН. F1-F3 | in the sources only: owner to decide | On the operator's bottom block (voenizdat_osa_1991 p96-101); its nameplate is drawn. |
 | 0065-2M АРУ — РРУ and gains | in the sources only: owner to decide | The MTI canceller on SP-1M, under flaps modelled closed (voenizdat_osa_1991 p49-53). |
 | Driver's vision: PNV-57E, TNPO-170A | in the sources only: owner to decide | rwd_mb3; g089-a/b show only periscope blanks. The wave shield is built: veh.bilge_pump, ВОДООТРАЖАТЕЛЬНЫЙ ЩИТ (voenizdat_osa_1991 p224). |
-| Fuse lamps on every rack (0096-9M1, 0096-10M, SP-1M, 0094-11M, OR-95-1M ПЕРЕГРУЗКА) | in the sources only: waits for faults | Each fuse holder has a lamp the crew checks dark at start-up (voenizdat_osa_1991 p52-53, p100, p166); no fault class (fuse, lamp, system down) is modelled. |
+| Fuse lamps in 0096-9M1, on SP-1M, 0094-11M; OR-95-1M ПЕРЕГРУЗКА | in the sources only: owner to decide | 0096-10M's four (СОЦ, ССЦ, СВР, СПК) light with their faults (fuse_*, docs/FAULTS.md); 0096-9M1's twins and the racks' own lamps are not drawn: their legends and places are not in the sources (voenizdat_osa_1991 p166). |
 | Hand fuel-pump lever on its ratchet quadrant | seen in a photo: owner to decide | Ball-knobbed, low left of the column (wwp_gecko g086-d, g083-a). |
 | Differential lock; the fire system on/off | in the sources only: owner to decide | voenizdat_osa_1991 p175, p221. The fire bottles, the automat and the driver's disc are built (roadmap C8). |
 | IFF 1L24-2 blocks | in the sources only: owner to decide | On the BM3, not the AK, which carries the РЗМ set (voenizdat_osa_1991 p53-54). |
