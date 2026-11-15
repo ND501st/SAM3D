@@ -48,7 +48,9 @@ research is `docs/research/AIR_BATTLE_RESEARCH_2026-11.md`, with its ten topic r
 | 9 | **People.** Pilots below the squadron leader become people: skill from flying hours and combat, nerve, stress and fatigue. Officers' traits move a faction's hot-phase values by up to about ±0.2, and pilots by about ±0.15 | `factions_cases.md`, `perception.md` |
 | 10 | **Our fighters are live actors under our ground control.** Their duty and scrambles follow a rule table, and they share the sky with the SAMs by zones or by height. The battery learns of them only by notices and IFF codes, so friendly fire is possible and traceable. Our air force as a planner stays unplanned | `our_side_air.md` (Mitronin 1976, Druzhba-76, Kremniy-2M); widens roadmap 17.2 |
 
-The owner is asked to confirm decisions 2 and 10 and the track's place in the order (`11_IMPLEMENTATION_PLAN.md` §1).
+The owner left decisions 2 and 10 and the track's place in the order to Claude (15 Nov 2026). All three stand as
+written: gameplay level, our fighters as live actors, and track B after R3 in place of R4
+(`11_IMPLEMENTATION_PLAN.md` §1).
 
 ## What the research changed
 

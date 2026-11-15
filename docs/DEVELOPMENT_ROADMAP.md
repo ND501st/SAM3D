@@ -376,8 +376,9 @@ Research: `docs/research/AIR_BATTLE_RESEARCH_2026-11.md`, with ten checked topic
 6. B10.
 7. B14 last. B11 and B12 run alongside every task, and B13 follows each simcore task.
 
-Proposed to replace R4 as track R's last item, not gated. Decisions for the owner: the place in the order, the
-gameplay level for air combat, and our fighters as live actors (`docs/air_battle/README.md`).
+Replaces R4 as track R's last item, after R3, not gated. The owner left the three open decisions to Claude
+(15 Nov 2026): this place in the order, the gameplay level for air combat, and our fighters as live actors, all as
+proposed (`docs/air_battle/README.md`).
 
 **Done when (milestone M-B):** the owner plays a NATO morning and a Pact afternoon on the nation's map and sees:
 - low routes along valleys through corridors;

@@ -15,9 +15,9 @@ The tasks, their order, what each rests on and when each is done. Design: files 
 - 16.3, ELINT and COMINT: the enemy's calls become emissions (doc 9).
 - 17.2, our fighters: they become live actors (doc 8).
 
-**Proposed order.** R3 is finished first, as track R planned. Track B then replaces R4 as track R's last item,
-before the leftovers and the battery's war, and is not gated. The owner decides this, with decisions 2 (gameplay
-level) and 10 (our fighters as live actors) of the README.
+**The order (decided 15 Nov 2026).** R3 is finished first, as track R planned. Track B then replaces R4 as track
+R's last item, before the leftovers and the battery's war, and is not gated. The owner left this and decisions 2
+(gameplay level) and 10 (our fighters as live actors) of the README to Claude, and all three stand as proposed.
 
 **What stays as built.**
 - The planner's choice of targets, packages and timing (`docs/air_war/04_PLANNING.md`).
