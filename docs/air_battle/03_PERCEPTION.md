@@ -332,6 +332,12 @@ found"); its slot is designed now so it can be filled.
 | AN/PVS-5, ANVIS | US Army helicopters | **open** | the eye at night to a game-value range | not sourced |
 | PNV-57E infrared goggles | Mi-8 | Afghanistan war years | night hunts with a flare to light the target | `markovsky_afghan_sky` |
 
+- **Built (B7, 15 Nov 2026):** `data/air_war/sensors.json` holds the sensors above with a year (17: the three Sapfirs, TP-23 and
+  TP-23M, APG-63, APG-66 and RP-21/RP-22 as placeholders, APQ-120, TISEO, the SPO-10, ALR-46 and ALR-69 by type, the MLD's
+  flares, the Lazur links) and a `slots` list for those without one (SPO-15L, Eagle Eye, the pods, the AGM-65 as a finder,
+  radar ground mapping, Kaira-23, Klen-PS, the night-vision goggles, the AMRAAM's guidance). A radar entry names its EM
+  `RadarDef` and carries the published ranges; `AirWarData::sensors.Of(type, kind, year, allied)` is what a war offers. The
+  receivers' display data and `rwr_by_year` (section 3.2) are still B3's.
 - **Fighter radars** are `em::RadarDef` on air platforms and **IR sets** a new optical sensor: `07_AIR_TO_AIR.md` builds
   them. What this doc adds is where their contacts go: into the same picture as a sighting (§5.1), with
   `InfoSource`-style origin `Radar` or `Irst`, and a fighter's single-target lock is heard by its target's receiver

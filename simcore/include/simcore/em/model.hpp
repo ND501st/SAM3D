@@ -118,6 +118,12 @@ struct RadarDef {
     RadarAnchor calibration;         // sets the loop gain (Calibrate)
     RadarAnchor low_altitude_check;  // reported by CheckCalibration, not fitted
     double antenna_height_m = 4.0;   // above the ground when deployed (the platform position includes it)
+    // An airborne radar (docs/air_battle/07_AIR_TO_AIR.md section 5.2): antenna_height_m is then the carrier's height, and
+    // the published range is a free-space figure, so the anchor's look has no ground reflection or diffraction.
+    bool airborne = false;
+    // Pulse-Doppler look-down: the ground clutter in the main lobe is cut by this much (a game value per radar until
+    // sourced); 0: no look-down mode (the APQ-120). The air combat layer reads it (B8); the radar equation does not.
+    double look_down_db = 0.0;
     double min_range_m = 0.0;
     double max_range_m = 0.0;
     double min_elevation_rad = -0.05;

@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/country_map.hpp"
@@ -2076,6 +2077,8 @@ struct AirWarData {
     std::vector<QuirkDef> quirks;
     TuningTable tuning;
     WeaponsDef weapons;  // empty: every type strikes by its strike_power (the model before the weapons)
+    AirCombatDef air_combat;  // the air-to-air missiles, guns and fits, the chain's numbers (data/air_war/air_combat.json, track B7)
+    SensorsDef sensors;       // the airborne sensors by type and year (data/air_war/sensors.json)
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
 
     const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
@@ -2104,6 +2107,8 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadQuirksFile(data_dir + "/air_war/traits.json", d.quirks, error)) return false;
     if (!LoadTuningFile(data_dir + "/gameplay/air_war.json", d.tuning, error)) return false;
     if (!LoadWeaponsFile(data_dir + "/air_war/weapons.json", d.weapons, error)) return false;
+    if (!LoadAirCombatFile(data_dir + "/air_war/air_combat.json", d.air_combat, error)) return false;
+    if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;
     if (!d.theatre.country_map.empty()) {
         d.country = LoadCountryMap(data_dir, d.theatre.country_map, error);
         if (d.country == nullptr) {
@@ -2161,3 +2166,6 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
 
 }  // namespace airwar
 }  // namespace simcore
+
+// The air-to-air loaders need AirWarLoader above; AirWarData needs their types and declarations (air_combat_types.hpp).
+#include "simcore/air_war/air_combat_data.hpp"

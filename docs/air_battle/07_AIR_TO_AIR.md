@@ -343,6 +343,38 @@ press-on, rigidity the dependence on the controller, composure the ejection and 
 flight's cohesion when its net is jammed, airmanship the skill; the weights are `10_FACTIONS.md` §8.2's), pilots' state
 by ±0.15 (`factions_cases.md` §1).
 
+**As built (B7, 15 Nov 2026).** The file has the five sections above, with these differences from the table:
+- `doctrine` is a list with one entry per faction (`nato`, `warsaw_pact`, `neutral`, `rebels`, `ours`); `strikers_answer` is
+  `{jettison, press_on, abort}`.
+- Each missile and gun names its game values in `game_values` (keys of the entry that are SAM3D's, not the source's); the loader
+  refuses a name that is not a key. The `munition` key is empty until B13 gives the air-to-air shapes in `munitions.json`.
+- `loads_by_year` is a list of eras, `{"from": year, "aams": [[id, count], ...], "gun": id}`: the latest era at or before the
+  war's year is the fit, each missile checked against the year for the shooter's side (`AirCombatDef::LoadOutFor(type, year,
+  allied)`; `allied` is true for the Pact's allies and our side). `aliases` let the order of battle's `mig21` find
+  `mig21mf`'s fit; `export_fit` names another fit (`mig23ml_export`, the Bekaa's lower bound).
+- `calibration` has `chain` (the numbers of section 3: judgement spread, switch error, guidance bases, the sun, the beam
+  against the ground, the break, the miss), `mix` (the 1967 engagement: where shots were taken from and what the target did)
+  and `targets` (each rate with its tolerance, source and confidence). All of `chain` and `mix` are game values.
+- Types are in `air_war/air_combat_types.hpp` (included first by `data.hpp`), loaders in `air_combat_data.hpp`, the shot in
+  `air_war/air_combat.hpp`; `AirWarData` holds `air_combat` and `sensors`.
+- Left out of the data: the AMRAAM (no guidance class: its slot is in `sensors.json`), the AIM-9P, Sky Flash, Magic 1 and
+  Super 530F (no date or envelope found). The R-27 and R-73 are present with their real years and carried by no 1985 fit.
+
+**The chain as built** (`air_combat.hpp`). `ShotOdds` gives the four links for a truth geometry; `ResolveShot` draws each from
+its own keyed stream (`em::Stream::AirCombat`, link number) so the answer is independent of order. In envelope: `CheckEnvelope`
+on the truth (reasons: too close, too far, aspect, off boresight, launch g); the pilot's belief is `Believe` (a lognormal
+range error, normal errors in aspect, angle and load, all scaled by `JudgementScale`: (1 - 0.8 skill) x (1 + 0.5 stress),
+larger for a radar round) and he fires on `PilotFires`; `EnvelopeProbability` is the expectation for the planner. Works:
+reliability x (1 - switch error), the error 0.12 x (1 - 0.7 skill) x (1 + stress), a fifth of it with no change of mode.
+Guides: the class's base (infrared rear 0.85, all-aspect 0.8, semi-active 0.6) x aspect x sun (zero inside the exclusion,
+a soft edge to 1.667 times it) x ground (`clutter_below`, and a half more in the beam for a radar round) x countermeasure
+(1 - strength x (1 - rejection)) x break (1 - 0.6 x timing x load/limit) x lock (a radar round needs the lock to impact,
+or within `autonomous_s` of it). Lethal: `design_pk` x the ratio of the chance to put the miss inside the lethal radius with
+the break's added miss (rms 6 m x effectiveness, on a nominal 1.5 m) to that with none. A miss carries its reason; guidance
+failures are attributed in proportion to the losses each cause made. A gun pass is `1 - exp(-kill_per_s x seconds x aim)`,
+the seconds capped by the magazine, the aim by skill, range and the target's load. `SimulateLaunches` plays launches at the
+mix and is what holds the chain to the targets: 1967 crews (skill 0.3, stress 0.4) hit 11.0 % with the AIM-7E and 18.7 % with the AIM-9B per launch and launch 35.0 % and 26.8 % outside the parameters, against 11.1 %, 18.6 %, 35 % and 26 % (`test_air_combat.cpp`).
+
 ### 5.2 Airborne radar, infrared and the warning receiver in the EM layer
 
 - **Radars as `em::RadarDef`.** Each fighter radar is a `RadarDef` placed on the aircraft's platform by
@@ -352,6 +384,16 @@ by ±0.15 (`factions_cases.md` §1).
   `apq120_class` (no look-down). RP-21/RP-22 and APG-66 stay placeholders, labelled, until a source is found. Two new
   fields: `look_down` (pulse-Doppler clutter rejection in the main lobe, a game value per radar until sourced) and an
   airborne anchor form, since `AnchorLook` assumes an antenna over flat ground (`radar_system.hpp:77`).
+- **As built (B7).** `data/em/fighter_radars_1985.json` (per value) holds seven `RadarDef`s with `role: search`, a sector scan
+  and `airborne: true`: `sapfir_23ml` (anchor 52.5 km, 85 km on paper), `sapfir_23d` (55 km), `apg63_class` (80 km looking up,
+  the Soviet view; lock to 92.6 km), `apq120_class` (an estimated anchor, no look-down) and the labelled placeholders
+  `apg66_placeholder`, `rp21_placeholder` and `rp22_placeholder`. The two new fields are `RadarDef::airborne` (the antenna
+  height is the carrier's, and `AnchorLook` leaves out the ground reflection and diffraction: the published figures are
+  free-space) and `look_down_db` (called `look_down` above: the clutter cut in the main lobe, a game value until sourced,
+  read by the air combat layer in B8, not by the radar equation). `sensors.json` names each radar's `RadarDef` and gives the
+  by-hand, cued, lock and clutter ranges; `test_air_combat.cpp` checks the radar equation gives each anchor back. Placing the
+  radars on aircraft platforms in a session (`EmSensorLink::SyncTarget`), the cue narrowing the sector and the RWR libraries'
+  new entries are B8's and B3's.
 - **Under ground control** the controller's cue narrows the search to a sector and a height band: the radar's anchor
   becomes its cued figure (Sapfir-23ML 80-85 km), with no change to the radar equation's code.
 - **The lock is heard.** A single-target track is a steady main-beam illumination, which is exactly what sets the

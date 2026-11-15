@@ -9,6 +9,7 @@ loaded by `simcore/em/data.hpp` (`LoadEmLibraryFile`) and used by the EM layer
 | `osa_ak.json` | `per_value` | 9K33M2 Osa-AK search and tracking radars, R-123M radio, NATO's view of the SA-8 (blue threat library). Every value cited; spec and open items in `docs/research/OSA_EM_SPEC_2026-10.md` |
 | `nato_1985.json` | `per_value` | NATO-era fighter radar, RWR, ESM station and stand-off jammer classes, and each side's threat library about the other; band/year facts cited, the rest labelled estimates (`docs/research/EM_E1_NATO_DATA_2026-10.md`) |
 | `p19.json` | `per_value` | The P-19 early-warning radar as cabled to a PU-12M (a scenario's `post.em`): transmitter, receiver and antenna from its Soviet technical description (`p19_to`), calibrated to the published 160 km (`docs/research/PU12_RESEARCH_2026-10.md`) |
+| `fighter_radars_1985.json` | `per_value` | The fighter radars of the 1985 air battle as airborne radars (`airborne: true`: the carrier's height and a free-space anchor): Sapfir-23ML and -23D, APG-63 and APQ-120 classes calibrated to the published figures, and labelled placeholders for the APG-66, RP-21 and RP-22 (`docs/air_battle/07_AIR_TO_AIR.md` 5.2, track B7). `look_down_db` is a game value until sourced |
 | `generic.json` | `placeholder` | Round generic numbers for tests, the MVP demo and the viewer. **Not data for any real system** |
 
 ## Rules

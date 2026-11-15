@@ -112,6 +112,7 @@ add_executable(simcore_tests
   tests/test_picture_lost.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
+  tests/test_air_combat.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp
   tests/test_world_map.cpp

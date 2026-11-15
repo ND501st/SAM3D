@@ -86,6 +86,18 @@ inline RadarLookPhysics AnchorLook(const RadarDef& d, const Environment& env, do
                                    ? BeamFor(d.emitter, el)
                                    : ElevationBeam{MaxOf(el, d.low_target_elevation_rad), 0.0};
     const AntennaDef ant = d.role == RadarRole::Search ? BeamAntenna(d.emitter, beam) : d.emitter.antenna;
+    if (d.airborne) {
+        // An airborne radar's published range is a free-space figure (target and carrier high above the ground): the beam's
+        // pattern and the air's absorption only, no ground reflection and no diffraction.
+        const double f_air = d.emitter.waveform.freq_hz;
+        l.range_m = range_m;
+        l.rcs_m2 = rcs_m2;
+        const double peak_air_db = ant.gain_db - d.emitter.antenna.gain_db;
+        l.pattern_db = 2.0 * (AntennaGainDb(ant, 0.0, el - beam.centre_rad) - ant.gain_db + peak_air_db);
+        l.one_way_loss_db = GaseousLossDb(range_m, hr, target_alt_m, f_air) + RainLossDb(range_m, f_air, env.rain_rate_mmh);
+        l.multipath_factor = 1.0;
+        return l;
+    }
     const FlatTerrain flat(0.0);
     const PathGeometry g =
         AnalysePath(flat, Vec3{0.0, 0.0, hr}, hr, Vec3{0.0, ground, target_alt_m}, target_alt_m, env.profile_spacing_m,
