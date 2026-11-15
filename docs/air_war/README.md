@@ -108,3 +108,9 @@ answer to the enemy's next raid. A package played in a battery's mission session
 war aims to its file and one term to its officers' target picking (what a target's loss would cut, as their picture
 believes it: `docs/campaign/01_WAR_AIMS_AND_TARGETS.md`), and turns the raids through the battery's area into parts of
 the battery's own missions, each with its reasons on both sides (`docs/campaign/04_WHAT_HAPPENS_AND_WHY.md`).
+
+**The air battle** (`docs/air_battle/`, roadmap track B, planned 15 Nov 2026) is what happens once a package is
+flying. It covers routes as they were flown round the believed defences, flights with leaders and wingmen, what pilots
+see and hear, reactions under fire, retasking by the enemy's C2 posts, targets of opportunity, air combat and our
+fighters, and the enemy's radio, which our posts can intercept. All of it is bounded to the war's year, 1985. It
+changes how this command's packages are routed and flown and what comes back from them, not how they are planned.
