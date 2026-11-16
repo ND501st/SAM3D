@@ -78,7 +78,7 @@ struct DressingRules {
     double crown_jitter = 0.2;
     double top_drop = 0.15;      // a tree's top up to this share of the wood's height below the wood's top
     double poplar_river_m = 60.0;
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> species_shares{{0.55, 0.1, 0.15, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> species_shares{{0.55, 0.1, 0.15, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
     // Stands (docs/scenery/VEGETATION.md): a wood is cut into compartments on a stand_m grid, each of one stand type drawn
     // by its site (wet: within wet_m of water; dry elsewhere) and of one age (its trees' height times a factor in
     // age_min..1). A plantation's trees stand in rows (jitter times plantation_jitter). With no stand types the species
@@ -101,8 +101,8 @@ struct DressingRules {
     double edge_setback_min_m = 0.0, edge_setback_max_m = 7.0;
     double edge_wave_m = 35.0;
     double shrub_belt_min_m = 1.0, shrub_belt_max_m = 7.0;
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> edge_mix{{0.4, 0.0, 0.0, 0.25, 0.15, 0.0, 0.0, 0.2, 0.0, 0.0}};
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> shrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.4}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> edge_mix{{0.4, 0.0, 0.0, 0.25, 0.15, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> shrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.4, 0.0}};
     double shrub_spacing_m = 3.0;
     double shrub_inset_m = 1.5;
     double shrub_keep = 0.75;
@@ -120,6 +120,7 @@ struct DressingRules {
     double shrub_crown = 1.8;    // a bush's crown this much wider than a tree's of its height: about as wide as tall (A.3.24)
     double row_bush_share = 0.3;  // of a field's tree row's gaps between trees, the share with a bush (a hedge under the row, A.3.24)
     double brook_bush_share = 0.15;  // of what is left, the share a bush (hazel, elder) instead of an alder
+    double brook_willow_share = 0.25;  // of a brook's trees, the share a white willow instead of an alder (A.3.37)
     double cover_cell_m = 25.0;
     double pond_reeds_m = 3.0;         // a village pond's reed margin out from its water's edge (A.3.35)
     double pond_reeds_in_m = 1.5;      // and in from it, the reeds standing in the shallows
@@ -245,6 +246,7 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("shrub_crown", r.shrub_crown, 0.5, 3.0);
     number("row_bush_share", r.row_bush_share, 0.0, 1.0);
     number("brook_bush_share", r.brook_bush_share, 0.0, 1.0);
+    number("brook_willow_share", r.brook_willow_share, 0.0, 1.0);
     number("cover_cell_m", r.cover_cell_m, 5.0, 100.0);
     number("pond_reeds_m", r.pond_reeds_m, 0.0, 20.0);
     number("pond_reeds_in_m", r.pond_reeds_in_m, 0.0, 10.0);
@@ -791,16 +793,23 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
                 for (int j = 0; j < count_w; ++j) {
                     double e = 0.0, n = 0.0;
                     jittered(b, (i + 0.5) * step_l - 0.5 * b.length_m, (j + 0.5) * step_w - 0.5 * b.width_m, std::min(step_l, step_w), e, n);
+                    if (b.by_pond) {
+                        // A village pond's waterside tree (A.3.37): a white willow, its height and crown uneven.
+                        plant(b, e, n, static_cast<int>(TreeKind::Willow), 0.75 + 0.25 * At(seed ^ 0xA1D6ull, e, n), 1.0 + 0.3 * At(seed ^ 0xA1D7ull, e, n));
+                        continue;
+                    }
                     if (b.by_water) {
                         // An alder line grows wild (A.3.22): gone where the bank is grazed or cut (a smooth wave, so
-                        // gaps run tens of metres), a bush here and there, the trees of uneven height and crown.
+                        // gaps run tens of metres), a bush here and there, the trees of uneven height and crown; and
+                        // a white willow among the alders (A.3.37).
                         if (wave(0xA1D0ull, e, n) < brook_gap_cut) continue;
                         const double u = At(seed ^ 0xA1D1ull, e, n);
                         if (u < rules.brook_bush_share) {
                             plant(b, e, n, draw(rules.shrub_mix, At(seed ^ 0xA1D2ull, e, n)));
                             continue;
                         }
-                        plant(b, e, n, kind, 0.6 + 0.4 * At(seed ^ 0xA1D3ull, e, n), 0.8 + 0.4 * At(seed ^ 0xA1D4ull, e, n));
+                        const int brook_kind = At(seed ^ 0xA1D5ull, e, n) < rules.brook_willow_share ? static_cast<int>(TreeKind::Willow) : kind;
+                        plant(b, e, n, brook_kind, 0.6 + 0.4 * At(seed ^ 0xA1D3ull, e, n), 0.8 + 0.4 * At(seed ^ 0xA1D4ull, e, n));
                         continue;
                     }
                     plant(b, e, n, kind);

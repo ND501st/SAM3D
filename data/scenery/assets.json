@@ -574,6 +574,20 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git. (from /Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D; as drawn 4.4 m across, 11.5 m tall; 121467 triangles)"
+    },
+    {
+      "id": "willow_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/willow_card/willow_card/StaticMeshes/willow_card.willow_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "sha256": "f1261f1da7f224243fd91e316c5f29820cda7d589cf877d0789c7ab64b5f7290",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A white willow by a village pond or a brook in October, a broad loose dome of narrow silvery grey-green leaves, a few gone yellow: three crossed cards, our own drawing (A.3.37)."
     }
   ],
   "parts": {
@@ -716,6 +730,9 @@
     },
     "clutter_swath": {
       "asset": null
+    },
+    "tree_willow": {
+      "asset": "willow_card"
     }
   }
 }

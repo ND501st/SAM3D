@@ -288,6 +288,37 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
         }
         return false;
     };
+    // A village pond's trees (A.3.37): each a white willow; willows otherwise only among the brooks' alders.
+    std::vector<const MapBox*> pond_boxes;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part == MapPart::TreeRow && b.by_pond) pond_boxes.push_back(&b);
+    }
+    const auto at_box = [](const TreeInstance& t, const MapBox& b) {
+        return std::hypot(t.east_m - b.east_m, t.north_m - b.north_m) < 0.5 * std::max(b.length_m, b.width_m) + 3.0;
+    };
+    int willow = 0, willow_brook = 0, willow_brook_dry = 0, willow_pond = 0, willow_stray = 0, pond_not_willow = 0;
+    for (const TreeInstance& t : d.trees) {
+        bool at_pond = false;
+        for (const MapBox* b : pond_boxes) at_pond = at_pond || at_box(t, *b);
+        const bool is_willow = static_cast<TreeKind>(t.kind) == TreeKind::Willow;
+        if (at_pond) {
+            pond_not_willow += is_willow || IsShrub(static_cast<TreeKind>(t.kind)) ? 0 : 1;
+            willow_pond += is_willow ? 1 : 0;
+            continue;
+        }
+        if (!is_willow) continue;
+        ++willow;
+        const bool wet = m->NearWater(t.east_m, t.north_m, r.wet_m);
+        const bool brook = in_brook_row(t) || wet;
+        willow_brook_dry += !wet && in_brook_row(t) ? 1 : 0;
+        willow_brook += brook ? 1 : 0;
+        willow_stray += brook ? 0 : 1;
+    }
+    std::printf("    %zu pond trees, %d willows by the ponds (%d other trees there), %d willows along the brooks, %d elsewhere\n", pond_boxes.size(),
+                willow_pond, pond_not_willow, willow_brook, willow_stray);
+    SC_EXPECT(!pond_boxes.empty() && willow_pond >= static_cast<int>(pond_boxes.size()));
+    SC_EXPECT(pond_not_willow == 0);
+    SC_EXPECT(willow_stray == 0);
     int alder_dry = 0, alder = 0, alder_brook = 0, pine_wet = 0, shrubs = 0, shrubs_deep = 0;
     for (const TreeInstance& t : d.trees) {
         const TreeKind k = static_cast<TreeKind>(t.kind);
@@ -322,6 +353,10 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
                 alder_brook, brook_rows.size(), alder_dry, pine_wet, shrubs);
     SC_EXPECT(alder > 100);
     SC_EXPECT(brook_rows.size() > 100 && alder_brook > 1000);
+    // About a quarter of a brook's trees are willows (brook_willow_share).
+    const double willow_share = static_cast<double>(willow_brook_dry) / static_cast<double>(willow_brook_dry + alder_brook);
+    std::printf("    willows among the brooks' trees %.2f (share %.2f)\n", willow_share, r.brook_willow_share);
+    SC_EXPECT(std::fabs(willow_share - r.brook_willow_share) < 0.1);
     // A brook's alder line grows wild (A.3.22): of its lattice's places (every 7 m), some left open in runs, a few bushes.
     {
         std::size_t slots = 0;

@@ -35,6 +35,6 @@
     "pond_drop_m": { "value": 0.4, "source": "game value: sam3d estimate (the water below the lowest of its rim)", "confidence": "estimate" },
     "pond_shore_m": { "value": 4, "source": "game value: sam3d estimate (its bank's run from the water up to the ground round it)", "confidence": "estimate" },
     "pond_max_dam_m": { "value": 1.5, "source": "game value: sam3d estimate (no village pond needing a higher dam)", "confidence": "estimate" },
-    "pond_trees": { "value": 2, "source": "game value: sam3d estimate (the look target's K-f: a willow by the pond; drawn as alders until the asset kit has a willow)", "confidence": "estimate" }
+    "pond_trees": { "value": 2, "source": "game value: sam3d estimate (the look target's K-f: a willow by the pond; each a white willow since A.3.37)", "confidence": "estimate" }
   }
 }

@@ -1016,7 +1016,7 @@ pale silt.
   - p22 still frames the fields, not the village (K-f).
   - Still no willow kind.
 
-#### A.3.36 The pond's grassed bank, and p22 toward its village (9 Nov 2026)
+### A.3.36 The pond's grassed bank, and p22 toward its village (9 Nov 2026)
 
 A.3.35's Left: the margin's grass stood among the field's stubble, and p22 framed the fields.
 
@@ -1038,6 +1038,46 @@ A.3.35's Left: the margin's grass stood among the field's stubble, and p22 frame
     is still the field's (the 25 m mask), so the ring is not green. It needs a grass texture on the ground there, on
     the tiles' vertex colours like the wet margin.
   - Still no willow kind.
+
+### A.3.37 The white willow (16 Nov 2026)
+
+A.3.34-A.3.36's Left: no willow kind. The look target's K-f has a willow by the village pond, and A.5 step 4 has
+"willows and alders along the brooks".
+
+- **A new tree kind, `TreeKind::Willow`** (`scenery/map_meshes.hpp`):
+  - a broad, loose dome on a short trunk;
+  - a grey-green crown colour, `kWillowCrown` (#566149);
+  - late autumn colour in `tree_seasons.json`: turning from day 298, yellowing only a little.
+  - Each kind's species, edge and shrub shares gain a 0 for it, so the woods never plant one.
+- **Where it stands** (`scenery/map_dressing.hpp`):
+  - A village pond's trees (`MapBox::by_pond`, set by `LayPonds`) are each a white willow, of uneven height and
+    crown, never gapped.
+  - Along the brooks, `brook_willow_share` (0.25, a game value in `map_dressing.json`) of the alder line's trees are
+    willows. The gaps and bushes are as before.
+- **The pond's bank trees were mostly dropped (since A.3.34).** Each pond enters the layout's water index as a capsule:
+  its axis runs ±rx, its half-width is ry. So the water reached rx + ry along the axis, and a bank tree away from the
+  long sides counted as standing in it. Only 4 of the 10 pond trees were planted. `NearWater` now asks the rivers by
+  their strips and the ponds by their ellipses (`PondEdgeDistance`). The layout's own clearances keep the capsule.
+  - `test_map_dressing.cpp` checks that every pond tree is a willow, that no willow stands off the ponds and the
+    brooks, and that the brooks' share of willows is within 0.1 of the rule.
+- **Its card** (`willow_card`):
+  - Three crossed cards of our own drawing (`tools/make_cards.py`): narrow silvery leaves in clumps, a few gone
+    yellow.
+  - Picked as `tree_willow` and imported to `/Game/SAM3D/Map/Cards/willow_card`, registered in `assets.json`.
+  - `build_cards.py` now takes the cards to build as arguments; it builds all of them when none is named.
+- **Seen (l8).**
+  - p22: both willows stand on the pond's bank, one on each side, where l7 had one tree. From above, one stands at
+    the pond's end, which the capsule had cut.
+  - p20: along the brook, broad grey-green willows stand among the darker alders. They are lighter than the alders
+    and looser in the crown.
+- **Costs (l8):** p22 eye GPU 12.33 ms, low 9.28, high 8.51. In l7 they were 12.21, 9.12 and 8.54: no change beyond
+  the runs' spread. p20 eye 12.62, low 9.32, high 9.45.
+- **Left:**
+  - Against the sky the willow's crown reads dark green, not silvery. Its leaves' undersides (the white of a white
+    willow) are not drawn.
+  - The willow is a card, as the alder is. A pollarded willow (the village's kind, cut back to a knob) would need its
+    own drawing.
+  - The pond's ring still reads weakly (A.3.36).
 
 ### A.4 How a plot is worked (the loop)
 

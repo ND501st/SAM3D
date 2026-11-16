@@ -493,6 +493,11 @@ def tree_cards():
     out.append(tree_card(random.Random(351), "beech_card", lambda t: 0.97 * math.sin(math.pi * min(1.0, 0.08 + 0.92 * t)) ** 0.6,
                          0.26, 1300, 0.036, 0.024, [(88, 100, 44), (100, 108, 48)], [(176, 96, 38), (194, 120, 46), (160, 84, 34), (204, 150, 60)], 0.75,
                          ((104, 104, 98), (150, 148, 140))))
+    # White willow by a village pond and among the brooks' alders (A.3.37): a broad, loose dome of narrow leaves, silvery
+    # grey-green, on a short furrowed trunk; it keeps its leaves late, a few gone yellow.
+    out.append(tree_card(random.Random(361), "willow_card", lambda t: 0.97 * math.sin(math.pi * min(1.0, 0.05 + 0.95 * t)) ** 0.5,
+                         0.22, 1500, 0.035, 0.011, [(132, 144, 112), (146, 158, 126), (116, 128, 96)], [(184, 176, 96)], 0.15,
+                         ((70, 64, 56), (112, 104, 92)), clumps=10, lumps=0.25))
     return out
 
 
@@ -537,7 +542,7 @@ def main():
     ok = [l for l in done.stdout.splitlines() if l.startswith("CARD ")]
     for l in ok:
         print(l)
-    if done.returncode != 0 or len(ok) != 20:
+    if done.returncode != 0 or len(ok) != 21:
         print(done.stdout[-1200:], done.stderr[-1200:])
         raise SystemExit("Blender did not build the cards")
     return 0

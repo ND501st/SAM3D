@@ -464,6 +464,7 @@ struct MapBox {
     // twice as tall downhill). 0 for everything else: a building's roof is level.
     double rise_e = 0.0, rise_n = 0.0;
     bool by_water = false;  // a tree row along a brook (A.3.20): alders, not the fields' poplars and black locust
+    bool by_pond = false;   // a village pond's waterside tree (A.3.37): one willow, never gapped (by_water too)
     double Top() const { return base_m + height_m; }
     // Its top over (east, north), above sea level.
     double TopAt(double e, double n) const { return base_m + height_m + rise_e * (e - east_m) + rise_n * (n - north_m); }
@@ -1190,7 +1191,16 @@ public:
         return g;
     }
     bool NearLine(double e, double n, double clear_m) const { return lines_.Near(e, n, clear_m); }
-    bool NearWater(double e, double n, double clear_m) const { return water_.Near(e, n, clear_m); }
+    // Whether (east, north) lies within `clear_m` of water: a river's strip, or a village pond's ellipse (A.3.37; the
+    // layout keeps clear of the pond's whole capsule, water_, which reaches past the ellipse's ends onto its bank).
+    bool NearWater(double e, double n, double clear_m) const {
+        if (river_water_.Near(e, n, clear_m)) return true;
+        for (const Pond& p : ponds_) {
+            if (std::hypot(e - p.c.east_m, n - p.c.north_m) > p.rx + clear_m) continue;
+            if (PondEdgeDistance(p, e, n) < clear_m) return true;
+        }
+        return false;
+    }
 
     // The ground's lattices as they are drawn, finest first: the detail areas (roadmap R6), the map proper, the far
     // ground, the country's, the land beyond (those it has). A coarser level leaves out only the cells lying wholly
@@ -2308,12 +2318,14 @@ private:
         for (const MapLineDef& r : def_.railways) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : def_.rivers) {
             water_.Add(r.points, 0.5 * r.width_m);
+            river_water_.Add(r.points, 0.5 * r.width_m);
             lines_.Add(r.points, 0.5 * r.width_m);
         }
         for (const MapLineDef& r : detail_lines_.roads) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : detail_lines_.railways) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : detail_lines_.rivers) {
             water_.Add(r.points, 0.5 * r.width_m);
+            river_water_.Add(r.points, 0.5 * r.width_m);
             lines_.Add(r.points, 0.5 * r.width_m);
         }
         for (const MapSiteDef& s : def_.sites) {
@@ -2448,6 +2460,7 @@ private:
                 const double h = 8.0 + 4.0 * Unit24(Hash32(draw ^ 0x77u ^ static_cast<std::uint32_t>(k)));
                 Box(MapPart::TreeRow, e, n, 7.0, 7.0, h, a, 0.3, true);
                 layout_.boxes.back().by_water = true;
+                layout_.boxes.back().by_pond = true;
             }
         }
     }
@@ -3386,6 +3399,7 @@ private:
     std::vector<Farmstead> farmsteads_;  // the tanyas laid (their groves: LayFarmland)
     mapgeo::SegmentIndex lines_{250.0};
     mapgeo::SegmentIndex water_{250.0};
+    mapgeo::SegmentIndex river_water_{250.0};  // the rivers alone (NearWater asks the ponds by their ellipses)
     mapgeo::Occupancy occupied_{40.0};
     std::unordered_set<long long> canopy_cells_;
     // What blocks sight (BakeObstacles): the footprints, their dense cells (the detail areas', then the map proper's),

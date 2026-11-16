@@ -296,6 +296,21 @@
       "notes": "A beech in October, a broad dome on a smooth grey trunk, its leaves turning copper and orange: three crossed cards, our own drawing (A.3.24)."
     },
     {
+      "id": "willow_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "willow_card.glb",
+      "part": "tree_willow",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "notes": "A white willow by a village pond or a brook in October, a broad loose dome of narrow silvery grey-green leaves, a few gone yellow: three crossed cards, our own drawing (A.3.37)."
+    },
+    {
       "id": "maize_card_c",
       "root": "art/clutter",
       "folder": "",

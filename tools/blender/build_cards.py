@@ -1,7 +1,7 @@
 """Builds the ground clutter's card meshes (tools/make_cards.py): a few crossed quads, each a unit wide and a unit tall with its
 base at z = 0, UV over the whole texture, carrying the card's alpha texture. One GLB per card next to its PNG.
 
-    blender --background --python tools/blender/build_cards.py -- art/clutter
+    blender --background --python tools/blender/build_cards.py -- art/clutter [card ...]
 """
 import math
 import sys
@@ -14,7 +14,8 @@ CARDS = {"grass_card": (3, 60.0), "straw_card": (2, 90.0), "reed_card": (2, 90.0
          "maize_card_c": (2, 90.0), "maize_card_d": (2, 90.0), "maize_card_e": (2, 90.0), "maize_card_f": (2, 90.0),
          "sunflower_card": (2, 90.0), "sunflower_card_b": (2, 90.0), "sunflower_card_c": (2, 90.0),
          "hazel_card": (3, 60.0), "elder_card": (3, 60.0),
-         "poplar_card": (3, 60.0), "alder_card": (3, 60.0), "acacia_card": (3, 60.0), "maple_card": (3, 60.0), "pine_card": (3, 60.0), "beech_card": (3, 60.0)}
+         "poplar_card": (3, 60.0), "alder_card": (3, 60.0), "acacia_card": (3, 60.0), "maple_card": (3, 60.0), "pine_card": (3, 60.0), "beech_card": (3, 60.0),
+         "willow_card": (3, 60.0)}
 
 # A tree card's crown seen from above: (its height, its width, both of the unit), a flat quad carrying the right half of
 # the card's texture (make_cards.py tree_card with top=True). Tried in A.3.24 and left out: from the ground the quad
@@ -23,8 +24,12 @@ TOPS = {}
 
 
 def main():
-    out = Path(sys.argv[sys.argv.index("--") + 1])
+    args = sys.argv[sys.argv.index("--") + 1:]
+    out = Path(args[0])
+    only = set(args[1:])  # the cards to build, all of them when none is named
     for name, (quads, turn) in CARDS.items():
+        if only and name not in only:
+            continue
         bpy.ops.wm.read_factory_settings(use_empty=True)
         verts, faces, uvs = [], [], []
         for q in range(quads):

@@ -34,9 +34,10 @@ namespace scenery {
 
 // The kinds of tree the map's woods, rows and gardens are planted with (the plain's oak, the poplar of the river banks,
 // the planted pine and the black locust of the shelter belts), then the oak-hornbeam and beech woods' hornbeam and beech,
-// the black alder of the wet ground, the field maple of the edges, and the two shrubs of a wood's fringe (hazel, elder):
-// docs/scenery/VEGETATION.md. The first four keep their numbers (a kind is an index into the instance lists).
-enum class TreeKind { Oak, Poplar, Pine, Acacia, Hornbeam, Beech, Alder, Maple, Hazel, Elder, Count };
+// the black alder of the wet ground, the field maple of the edges, the two shrubs of a wood's fringe (hazel, elder), and
+// the white willow of the ponds and brooks (A.3.37): docs/scenery/VEGETATION.md. The first four keep their numbers (a kind
+// is an index into the instance lists).
+enum class TreeKind { Oak, Poplar, Pine, Acacia, Hornbeam, Beech, Alder, Maple, Hazel, Elder, Willow, Count };
 
 // A shrub of a wood's fringe: lower than a tree (data/scenery/map_dressing.json "shrub_height_m"), several stems from the ground.
 inline bool IsShrub(TreeKind k) { return k == TreeKind::Hazel || k == TreeKind::Elder; }
@@ -53,6 +54,7 @@ inline const char* TreeKindName(TreeKind k) {
     case TreeKind::Maple: return "maple";
     case TreeKind::Hazel: return "hazel";
     case TreeKind::Elder: return "elder";
+    case TreeKind::Willow: return "willow";
     case TreeKind::Count: break;
     }
     return "?";
@@ -76,6 +78,7 @@ constexpr Colour kOakCrown{0.045f, 0.093f, 0.024f};     // #3c5629
 constexpr Colour kPoplarCrown{0.060f, 0.120f, 0.030f};  // #456130
 constexpr Colour kPineCrown{0.024f, 0.059f, 0.025f};    // #2b452c
 constexpr Colour kAcaciaCrown{0.070f, 0.115f, 0.035f};  // #4a5f35
+constexpr Colour kWillowCrown{0.096f, 0.120f, 0.068f};  // #566149 a willow's grey-green (its leaves silvery beneath)
 constexpr Colour kGrassBase{0.040f, 0.046f, 0.018f};    // #2e3220 dry grass, the foot of a tuft
 constexpr Colour kGrassTip{0.110f, 0.095f, 0.035f};     // #5e5434 its straw-coloured tips
 constexpr Colour kStrawFoot{0.100f, 0.075f, 0.028f};    // #4f4128 stubble and a maize stump
@@ -294,6 +297,13 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
         profile = {{0.25, 0.3}, {0.55, 0.5}, {0.85, 0.34}, {1.0, 0.0}};
         trunk_top = 0.25;
         trunk_r = 0.04;
+        break;
+    case TreeKind::Willow:
+        // A white willow by the water: a short stout trunk under a broad round head (often pollarded by a village pond).
+        crown = kWillowCrown;
+        profile = {{0.22, 0.38}, {0.5, 0.5}, {0.8, 0.44}, {1.0, 0.0}};
+        trunk_top = 0.3;
+        trunk_r = 0.06;
         break;
     case TreeKind::Hazel:
     case TreeKind::Elder:
