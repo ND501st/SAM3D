@@ -1079,6 +1079,46 @@ A.3.34-A.3.36's Left: no willow kind. The look target's K-f has a willow by the 
     own drawing.
   - The pond's ring still reads weakly (A.3.36).
 
+### A.3.38 Plots 8 and 9: inside a black locust wood and a poplar plantation (16 Nov 2026)
+
+Next in the method's order (`TERRAIN_PROCEDURAL_METHOD_2026-11.md` 6.6, item 4): black locust, the plain's commonest
+tree, then the poplar plantation. Both stands were already in the woods' rules (`map_dressing.json` `stands`). A plot
+could not ask for one stand, though.
+
+- **A plot of one stand.** A `wood_inside` anchor may name a `stand`, a stand type's id in the dressing's rules. The
+  loader refuses a stand on any other kind of anchor.
+- **`StandAt`** (`map_dressing.hpp`) is the stand lookup the dressing used inside `PlaceTrees`, now a function of its
+  own. So the plot resolver (`plots.hpp` `StandWoodSpot`) asks the same question the dressing asks when it plants.
+- **The resolver** finds the nearest wood block of the map proper whose middle is of the stand. Its eye's and low
+  camera's ground and the ground 30 m beyond the middle must also be in a wood and of the stand. It turns the
+  cameras a quarter at a time until they serve.
+  - It looks first for a block with wood on its four sides, away from the edges' mantle, whose maple and oak would
+    stand in the view.
+  - Only if none serves does it take any block. The poplar plantation is a wet stand, within `wet_m` (80 m) of a
+    river: of the 12 030 blocks of the map proper only 50 are wet and 25 poplar plantation, all in strips along the
+    river. So it takes the fallback and looks along the strip.
+  - An unknown stand is missing, with the reason.
+- **The plots** (`plots.json`): `p08_black_locust` (photo P72, a row) and `p09_poplar_plantation` (photo P24, the
+  planted floodplain forest at Algyő), both at +1.5 EV as the wood's inside is. `test_plots.cpp` checks that each
+  plot's middle, eye and low camera are of its stand and in a wood, and that an unknown stand is missing.
+- **Seen (l9, l10).**
+  - p08 (2150, −8950): pale yellow-green crowns of small leaflets on straight thin stems, light on the floor. From
+    above, the locust compartment is a yellow-green patch in a mosaic of oak (red), hornbeam and pine compartments,
+    each 150 m. In l9 the first resolver (any block) put the eye at an edge, where the mantle's maples stood red in
+    the view; the four-sides pass fixed it.
+  - p09 (16 150, −1350): grey boles in a strict lattice, a lane running away between the rows, broad gold-green
+    crowns. From above, the plantation's rows read as a strip along the river between other stands.
+- **Costs (l10):** p08 eye GPU 15.90 ms, low 12.71, high 11.89. p09 eye 20.36, low 19.51, high 9.54. The other plots'
+  eyes run about 12 ms. The near ring's real trees (A.3.26) inside a dense wood cost the most, the poplar's most of
+  all.
+- **Left:**
+  - Black locust grows as thin stems in groups from one stool. Ours are single straight stems, evenly spaced, like a
+    park. Elder under them is not seen.
+  - A hybrid poplar's crown is high and narrow. The near ring's poplar is broad and low-branched.
+  - p09's eye and low cameras cost 20 ms: the near ring in a plantation needs measuring (L10's budgets).
+  - From p09's high camera, the river's bank shows as square steps where the water's strip meets the ground cells.
+  - Plot 12 (a tree row on a farm track), earlier in the method's order, is still not a plot.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.

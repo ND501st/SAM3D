@@ -630,6 +630,36 @@ struct MapDressing {
     std::vector<CanopyMass> masses;
 };
 
+// The stand a point of a wood is in: its compartment's type, drawn by the compartment's site (wet within wet_m of water,
+// dry elsewhere), and its age factor. Null with no stand types. The dressing plants by it; a plot asks it for a wood of
+// one stand (scenery/plots.hpp, A.3.38).
+struct StandPick {
+    const StandType* type = nullptr;
+    double age = 1.0;
+};
+inline StandPick StandAt(const MapData& map, const DressingRules& rules, double e, double n) {
+    using dressing_detail::Bits;
+    using dressing_detail::Unit;
+    StandPick s;
+    if (rules.stands.empty()) return s;
+    const std::uint64_t seed = noise::Mix64(map.Def().seed ^ 0x7EE5ull);
+    const long long ce = static_cast<long long>(std::floor(e / rules.stand_m)), cn = static_cast<long long>(std::floor(n / rules.stand_m));
+    const std::uint64_t h = noise::Mix64(seed ^ 0x57A2Dull ^ Bits(ce) * 0x9E3779B97F4A7C15ull ^ noise::Mix64(Bits(cn)));
+    const bool wet = map.NearWater(e, n, rules.wet_m);
+    double sum = 0.0;
+    for (const StandType& t : rules.stands) sum += t.wet == wet ? t.weight : 0.0;
+    const double pick = Unit(h) * sum;
+    double run = 0.0;
+    for (const StandType& t : rules.stands) {
+        if (t.wet != wet) continue;
+        run += t.weight;
+        s.type = &t;
+        if (pick < run) break;
+    }
+    s.age = rules.age_min + (1.0 - rules.age_min) * Unit(noise::Mix64(h ^ 0xA6Eull));
+    return s;
+}
+
 // Plants the map's woods: a block inside a detail area whole (no mass), a block elsewhere in the map proper with
 // `edge_rows` rows along each side open to the fields and a mass inside, a block of the far ground a mass alone. Each
 // tree stands on the ground 0.3 m into it, its top the wood's top less up to top_drop of its height and never above the
@@ -662,30 +692,9 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         }
         return 0;
     };
-    // The stand a point is in: its compartment's type (by its site) and age factor. Null with no stand types.
-    struct Stand {
-        const StandType* type = nullptr;
-        double age = 1.0;
-    };
-    const auto stand_at = [&](double e, double n) {
-        Stand s;
-        if (rules.stands.empty()) return s;
-        const long long ce = static_cast<long long>(std::floor(e / rules.stand_m)), cn = static_cast<long long>(std::floor(n / rules.stand_m));
-        const std::uint64_t h = noise::Mix64(seed ^ 0x57A2Dull ^ Bits(ce) * 0x9E3779B97F4A7C15ull ^ noise::Mix64(Bits(cn)));
-        const bool wet = map.NearWater(e, n, rules.wet_m);
-        double sum = 0.0;
-        for (const StandType& t : rules.stands) sum += t.wet == wet ? t.weight : 0.0;
-        const double pick = Unit(h) * sum;
-        double run = 0.0;
-        for (const StandType& t : rules.stands) {
-            if (t.wet != wet) continue;
-            run += t.weight;
-            s.type = &t;
-            if (pick < run) break;
-        }
-        s.age = rules.age_min + (1.0 - rules.age_min) * Unit(noise::Mix64(h ^ 0xA6Eull));
-        return s;
-    };
+    // The stand a point is in (StandAt).
+    const auto stand_at = [&](double e, double n) { return StandAt(map, rules, e, n); };
+    using Stand = StandPick;
     // Plants one tree (or, for a shrub's kind, one shrub) of the kind at the point, its height times `height_factor`.
     const auto plant = [&](const MapBox& b, double e, double n, int kind, double height_factor = 1.0, double crown_factor = 1.0) {
         if (!def.InCore(e, n) && !map.InDetail(e, n)) return;

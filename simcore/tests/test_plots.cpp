@@ -79,6 +79,44 @@ SC_TEST("plots: the loader refuses a field_layer without its layer, an unknown k
     SC_EXPECT(!LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"field_layer\", \"layer\": \"ploughed\", \"close_km\": [0, 0]},"
                          " \"photos\": [\"P99999\"]}]}", set, &e, &views));
     SC_EXPECT(LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"road\", \"road\": \"f_vrbice\"}}]}", set, &e));
+    // A stand only on a wood_inside anchor (A.3.38).
+    SC_EXPECT(!LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"road\", \"road\": \"f_vrbice\", \"stand\": \"oak\"}}]}", set, &e));
+    SC_EXPECT(LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"wood_inside\", \"stand\": \"oak\", \"close_km\": [0, 0]}}]}", set, &e));
+}
+
+SC_TEST("plots: a wood plot of one stand stands in that stand, its eye and low camera too; an unknown stand is missing") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (map == nullptr) return;
+    const CoverRaster cover = BakeCover(*map, PlotDressing());
+    const PlotSet set = Plots();
+    for (const char* id : {"p08_black_locust", "p09_poplar_plantation"}) {
+        const PlotDef* p = Find(set, id);
+        SC_EXPECT(p != nullptr && !p->stand.empty());
+        if (p == nullptr) continue;
+        const std::vector<ResolvedView> cams = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, *p);
+        SC_EXPECT(cams.size() == 3);
+        for (const ResolvedView& c : cams) {
+            SC_EXPECT(c.ok);
+            if (!c.ok) {
+                std::printf("    %s: %s\n", c.id.c_str(), c.missing_reason.c_str());
+                continue;
+            }
+            const auto stand_of = [&](double pe, double pn) {
+                const StandPick s = StandAt(*map, PlotDressing(), pe, pn);
+                return s.type != nullptr ? s.type->id : std::string();
+            };
+            SC_EXPECT(stand_of(c.target_e, c.target_n) == p->stand);
+            if (c.eye_up_m < 100.0) SC_EXPECT(stand_of(c.eye_e, c.eye_n) == p->stand);
+            SC_EXPECT(map->ObstacleHeight(c.target_e, c.target_n) > 5.0);  // inside a wood
+        }
+        std::printf("    %s at (%.0f, %.0f)\n", id, cams[0].target_e, cams[0].target_n);
+    }
+    PlotDef odd = *Find(set, "p08_black_locust");
+    odd.stand = "palm_grove";
+    const std::vector<ResolvedView> none = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, odd);
+    SC_EXPECT(none.size() == 3 && !none[0].ok && none[0].missing_reason.find("palm_grove") != std::string::npos);
 }
 
 SC_TEST("plots: the ploughland plot is a whole 50 m square of one ploughed parcel, its cameras at 1.7, 25 and 150 m") {

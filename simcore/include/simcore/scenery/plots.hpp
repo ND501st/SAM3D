@@ -47,6 +47,7 @@ struct PlotDef {
     std::string crop;          // field_layer: only a field of this crop (the dressing's id); empty: any
     double turn_rad = 0.0;     // the cameras' bearing from the anchor's own (field_layer: from the furrows' heading)
     bool edge = false;         // field_layer: look at where the field ends toward the cameras, from outside it (a standing crop's face)
+    std::string stand;         // wood_inside: only a wood of this stand type (the dressing's id, A.3.38); empty: any
     double core_m = 50.0;      // the plot's side: a field_layer plot's whole square is the one layer of one parcel
     double fov_rad = 1.0472;
     std::vector<std::string> photos;
@@ -129,6 +130,8 @@ inline bool LoadPlots(const std::string& path_or_json, PlotSet& out, std::string
             }
         } else {
             if (!ParseAnchor(*a, p.id, p.anchor, error)) return false;  // any other kind is a view's anchor
+            p.stand = plots_detail::Text(*a, "stand");
+            if (!p.stand.empty() && kind != "wood_inside") return Fail(error, p.id + ": only a wood_inside anchor names a stand");
         }
         p.turn_rad = plots_detail::Number(item, "turn_deg", 0.0) * kPi / 180.0;
         p.core_m = plots_detail::Number(item, "core_m", 50.0);
@@ -203,6 +206,72 @@ inline views_detail::Spot FieldLayerSpot(const CoverRaster& cover, const Dressin
     return s;
 }
 
+// A wood_inside plot of one stand (A.3.38): the nearest wood block of the map proper to close_km whose middle is of the
+// stand and, looking along the anchor's bearing turned by a quarter at a time (the first that serves), whose eye's and
+// low camera's ground and the ground 30 m beyond the middle are all in a wood and of the stand. A block with wood on
+// its four sides first, as a wood_inside view asks; failing that, any: a wet stand (a poplar plantation) grows within
+// wet_m of a river, so its woods are strips along it, and the cameras look along the strip.
+inline views_detail::Spot StandWoodSpot(const MapData& map, const DressingRules& dressing, const PlotDef& p) {
+    const MapDef& def = map.Def();
+    const auto in_wood = [&](double e, double n) {
+        for (const MapBox& o : map.Layout().boxes) {
+            if (o.part == MapPart::Canopy && std::fabs(o.east_m - e) <= 0.5 * o.length_m && std::fabs(o.north_m - n) <= 0.5 * o.width_m) return true;
+        }
+        return false;
+    };
+    const auto of_stand = [&](double e, double n) {
+        const StandPick s = StandAt(map, dressing, e, n);
+        return s.type != nullptr && s.type->id == p.stand;
+    };
+    bool known = false;
+    for (const StandType& t : dressing.stands) known = known || t.id == p.stand;
+    if (!known) return views_detail::Missing("no stand type \"" + p.stand + "\" in the dressing's rules");
+    const double base = (p.anchor.has_bearing ? p.anchor.bearing_rad : 0.0) + p.turn_rad;
+    constexpr double kBeyondM = 30.0;
+    const auto block_at = [&](double e, double n, double size) {
+        for (const MapBox& o : map.Layout().boxes) {
+            if (o.part == MapPart::Canopy && o.length_m == size && std::fabs(o.east_m - e) < 1.0 && std::fabs(o.north_m - n) < 1.0) return true;
+        }
+        return false;
+    };
+    const MapBox* wood = nullptr;
+    double best = std::numeric_limits<double>::max(), best_bearing = base;
+    // First a block with wood on its four sides (deep in the wood, away from the edges' mantle); only if none serves, any.
+    for (int pass = 0; pass < 2 && wood == nullptr; ++pass) {
+        for (const MapBox& b : map.Layout().boxes) {
+            if (b.part != MapPart::Canopy || !def.InCore(b.east_m, b.north_m) || map.InDetail(b.east_m, b.north_m)) continue;
+            const double d = std::hypot(b.east_m - p.anchor.close_e_m, b.north_m - p.anchor.close_n_m);
+            if (d >= best || !of_stand(b.east_m, b.north_m)) continue;
+            const double z = b.length_m;
+            if (pass == 0 && (!block_at(b.east_m + z, b.north_m, z) || !block_at(b.east_m - z, b.north_m, z) || !block_at(b.east_m, b.north_m + z, z) ||
+                              !block_at(b.east_m, b.north_m - z, z))) {
+                continue;
+            }
+            for (int turn = 0; turn < 4; ++turn) {
+                const double bearing = base + turn * 0.5 * kPi, ue = std::sin(bearing), un = std::cos(bearing);
+                bool serves = of_stand(b.east_m + kBeyondM * ue, b.north_m + kBeyondM * un) && in_wood(b.east_m + kBeyondM * ue, b.north_m + kBeyondM * un);
+                for (const PlotCamera& c : PlotCameras()) {
+                    if (!serves || c.up_m >= 100.0) continue;
+                    const double ce = b.east_m - c.back_m * ue, cn = b.north_m - c.back_m * un;
+                    serves = of_stand(ce, cn) && in_wood(ce, cn);
+                }
+                if (!serves) continue;
+                best = d;
+                best_bearing = bearing;
+                wood = &b;
+                break;
+            }
+        }
+    }
+    views_detail::Spot s;
+    if (wood == nullptr) return views_detail::Missing("no wood of the map proper of the stand \"" + p.stand + "\" deep enough for the cameras");
+    s.ok = true;
+    s.e = s.eye_e = wood->east_m;
+    s.n = s.eye_n = wood->north_m;
+    s.bearing_rad = best_bearing - p.turn_rad;  // ResolvePlot turns it by turn_rad again
+    return s;
+}
+
 }  // namespace plots_detail
 
 // The plot's three cameras (named <plot>_eye, <plot>_low, <plot>_high), each looking at the plot's middle on the ground
@@ -211,6 +280,7 @@ inline views_detail::Spot FieldLayerSpot(const CoverRaster& cover, const Dressin
 inline std::vector<ResolvedView> ResolvePlot(const MapData& map, const DressingRules& dressing, const CoverRaster& cover,
                                              const GroundLayerRules& layers, int day_of_year, const PlotDef& p) {
     views_detail::Spot s = p.anchor.kind == "field_layer" ? plots_detail::FieldLayerSpot(cover, dressing, layers, day_of_year, p)
+                           : !p.stand.empty()              ? plots_detail::StandWoodSpot(map, dressing, p)
                                                            : ResolveSpot(map, cover, p.anchor);
     if (s.ok && p.edge) {
         // Back toward the cameras, metre by metre, to the field's last point in the layer: the cameras look at its face.

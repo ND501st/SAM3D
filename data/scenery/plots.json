@@ -42,6 +42,30 @@
       "must_see": "Short straw 10-20 cm in the drill's rows, the combine's straw lines, weeds."
     },
     {
+      "id": "p08_black_locust",
+      "name": "Inside a black locust wood on the plain",
+      "anchor": {
+        "kind": "wood_inside",
+        "stand": "black_locust",
+        "close_km": [6.2, -10.1]
+      },
+      "photos": ["P72"],
+      "must_see": "Dense thin stems, many in groups from one stool, 12-20 m; open light crowns of small leaflets turning yellow, light reaching the floor; elder under them (method 6.2 row 8). Never a wall.",
+      "exposure_ev": 1.5
+    },
+    {
+      "id": "p09_poplar_plantation",
+      "name": "Inside a hybrid poplar plantation by the water",
+      "anchor": {
+        "kind": "wood_inside",
+        "stand": "poplar_plantation",
+        "close_km": [6.2, -10.1]
+      },
+      "photos": ["P24"],
+      "must_see": "Straight grey boles in a strict 6 x 6 m lattice, one age, lanes running away between the rows; the crowns high and narrow, gold; grass or bare ground between (method 6.2 row 9).",
+      "exposure_ev": 1.5
+    },
+    {
       "id": "p11_forest_edge",
       "name": "Forest edge against a field",
       "anchor": { "kind": "wood_edge", "close_km": [8.0, -8.0], "bearing_deg": 0 },
