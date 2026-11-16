@@ -182,7 +182,8 @@ def clamp(b, p):
     M.box_mm(b, (cx - w / 2, cy - ht / 2, cx + w / 2, cy - ht / 2 + 8.0), 0.0, p['h'], STEEL)
     M.box_mm(b, (cx - w / 2, cy + ht / 2 - 8.0, cx + w / 2, cy + ht / 2), 0.0, p['h'], STEEL)
     M.box_mm(b, (cx + w / 2 - 7.0, cy - ht / 2, cx + w / 2, cy + ht / 2), 0.0, p['h'] * 0.7, STEEL)
-    M.lathe(b, p['c'], 0.0, [(13.0, 0.0), (13.0, 5.0), (10.0, 7.0), (10.0, 16.0), (0.0, 16.0)], STEEL)
+    if not p.get('game'):       # the game's toggle stands in the bracket in its place
+        M.lathe(b, p['c'], 0.0, [(13.0, 0.0), (13.0, 5.0), (10.0, 7.0), (10.0, 16.0), (0.0, 16.0)], STEEL)
 
 
 def window(b, p):
@@ -234,6 +235,8 @@ def build(B, finish):
     build_blocks(b)
     build_dial(b)
     for p in T.parts():
+        if p.get('game') and p['kind'] != 'clamp':
+            continue        # the cabin draws it (sl1m_trace: `game`)
         DRAW[p['kind']](b, p)
     obj = finish(b, reuse=True)
     mod = obj.modifiers.new('hard_edges', 'EDGE_SPLIT')

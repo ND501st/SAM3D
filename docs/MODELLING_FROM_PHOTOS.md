@@ -139,6 +139,12 @@ Edge overlays say where an outline is; they cannot say a surface is at the wrong
 * In `data/cabins/osa_ak.json`: the shell part (mesh, centre, size, yaw), a **bare** panel in the plane where the
   controls' shafts come out (the mesh carries its own front), the controls and lamps at `CONTROL_MM`; keep the set's back
   where it was when its depth changes.
+* **Each part is drawn once.** A face traced part by part (SŁ-1M, SP-2M) models every switch, knob, lamp and jack it
+  sees. Where the layout puts a control or lamp on one of them, mark the part `game='<the layout's id>'` in the trace: the
+  model leaves it out (a bracket round it may stay) and the cabin draws it, so it moves and lights. Give the layout item
+  the part's look (its size, ring and colour: a black cap read as a jack becomes a lamp with a black ring, a window an
+  oblong lamp of the window's size). `tools/tests/test_face_game_items.py` holds every face to it: an item on a part the
+  mesh still draws is a switch drawn over a switch, or a button drawn over a lamp (found on 28 items on 16 Nov 2026).
 * Unreal: `python tools/ue_import_cabin_interior.py meshes --only SM_...` with the mesh in the import tool's `PLAIN` list
   (no Nanite: its reduced fallback drops millimetre letters and screws), then photograph it in place with
   `tools/ue_panel_shot.py`. Close the editor and revert the material assets it re-saved unchanged before committing.

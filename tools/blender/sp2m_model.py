@@ -96,6 +96,8 @@ def build_parts(b):
     for p in T.parts():
         k = p['kind']
         c = p.get('c')
+        if p.get('game'):
+            continue            # the cabin draws it (sp2m_trace: `game`)
         if k == 'screw':
             screw(b, c, 0.0, p.get('d', 6.2) / 2)
         elif k == 'lock':

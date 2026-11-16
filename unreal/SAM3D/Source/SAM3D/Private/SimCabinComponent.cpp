@@ -36,7 +36,14 @@ namespace
 	const FLinearColor DarkColor(0.02f, 0.02f, 0.02f);
 	const FLinearColor ChromeColor(0.7f, 0.7f, 0.72f);
 	const FLinearColor CoverColor(0.5f, 0.49f, 0.43f);   // guards: painted metal like the plates (samsim_panels)
-	const FLinearColor LegendUnlit(0.22f, 0.22f, 0.21f); // a legend lamp's letters when dark: white glass, unlit
+	// A legend lamp's letters when dark (white glass, unlit) and the smoked glass round them. Both are drawn in the unlit
+	// screen material, where 1.0 shows white in the cabin: at 0.45 the letters read light grey on the dark glass, as on
+	// tools/blender/sl2m_check.py's renders (SAM Simulator's AK photo); the glass about as dark as the lit bezel round it.
+	const FLinearColor LegendUnlit(0.45f, 0.45f, 0.43f);
+	const FLinearColor LegendGlass(0.08f, 0.08f, 0.08f);
+	// An unlit lamp's coloured glass: the share of its lit colour it shows (the screen material does not take the cabin's
+	// light). At 0.2 a dark lens reads as red, green or amber glass, as on sl2m_check.py's renders, and well apart from lit.
+	constexpr float UnlitGlass = 0.2f;
 	const FLinearColor RedDotColor(0.75f, 0.0f, 0.0f);
 	const FLinearColor BrassColor(0.6f, 0.45f, 0.1f);
 	const FLinearColor HighlightColor(1.0f, 0.85f, 0.2f);
@@ -645,12 +652,17 @@ void USimCabinComponent::BuildControl(const USimWorldSubsystem* Sim, int32 Layou
 				FVector(PartBaseSize));
 		}
 	}
-	else if (Look == simcore::CabinLookKind::HexButton && PartMesh(TEXT("SM_HexNut")) && PartMesh(TEXT("SM_HexPusher")) &&
-			 (Control.style == simcore::CabinStyle::Button || Control.style == simcore::CabinStyle::Toggle))
+	else if (Look == simcore::CabinLookKind::HexButton && PartMesh(TEXT("SM_HexNut")) && PartMesh(TEXT("SM_HexPusher")))
 	{
 		// The SŁ-2M's push-buttons in a steel hex nut, their red pusher standing proud (ВЫСОКОЕ, ПОИСК, ЛУЧ, the
-		// interrogator's: SAM Simulator's AK photo, OSA_CONSOLE_MAP and OSA_MANUALS call them buttons).
+		// interrogator's: SAM Simulator's AK photo, OSA_CONSOLE_MAP and OSA_MANUALS call them buttons). Whatever the
+		// console's style: ЛУЧ steps the beam I-II-III with each press, a rotary in the console, a button on the plate
+		// (as tools/blender/sl2m_check.py draws it).
 		Item.Moving->SetStaticMesh(PartMesh(TEXT("SM_HexPusher")));
+		if (Item.Pointer != nullptr)
+		{
+			Item.Pointer->SetVisibility(false);
+		}
 		PartBase = PartMesh(TEXT("SM_HexNut"));
 		PartBaseSize = Control.look.width_m > 0.0 ? Control.look.width_m : 0.022;
 		Item.LookWidthM = PartBaseSize;
@@ -938,7 +950,7 @@ void USimCabinComponent::BuildLamp(const USimWorldSubsystem* Sim, int32 LayoutIn
 		UMaterialInstanceDynamic* Glass = UMaterialInstanceDynamic::Create(ScreenMaterial, this);
 		Glass->SetTextureParameterValue(TEXT("SlateUI"), LampTexture);
 		Item.Moving->SetMaterial(0, Glass);
-		Paint(Item.Moving, Item.MovingColor * 0.04f);
+		Paint(Item.Moving, Item.MovingColor * UnlitGlass);
 	}
 	Items.Add(Item);
 }
@@ -1057,8 +1069,9 @@ UProceduralMeshComponent* USimCabinComponent::AddLegend(const FVector& Centre, c
 			Shown = Text.Left(Best) + TEXT("\n") + Text.Mid(Best + 1);
 		}
 	}
+	// White letters on the smoked glass (not black: a black square would show inside the round cap's dark rim).
 	return AddTextPlate(Centre, Normal, Right, Up, bRound ? 0.74 * WidthM : 0.9 * WidthM, bRound ? 0.5 * WidthM : 0.7 * HeightM,
-		Shown, FLinearColor::Black);
+		Shown, LegendGlass);
 }
 
 void USimCabinComponent::AddLabel(const FVector& Centre, const FVector& Normal, const FVector& Right, const FVector& Up,
@@ -1687,7 +1700,7 @@ void USimCabinComponent::Animate(const USimWorldSubsystem* Sim, float DeltaTime)
 				const FLinearColor Letters = FMath::Lerp(Item.LegendInk, Item.MovingColor, Item.Glow);
 				Paint(Item.Legend, bHighlighted ? FMath::Lerp(Letters, HighlightColor, 0.4f) : Letters);
 			}
-			const FLinearColor Glass = Item.MovingColor * 0.04f + Lit * 0.96f;
+			const FLinearColor Glass = Item.MovingColor * UnlitGlass + Lit * (1.0f - UnlitGlass);
 			Paint(Item.Moving, bHighlighted ? FMath::Lerp(Glass, HighlightColor, 0.4f) : Glass);
 			Paint(Item.Base, bHighlighted ? HighlightColor : Item.BaseColor);
 			continue;

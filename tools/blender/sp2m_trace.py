@@ -150,7 +150,7 @@ PARTS = [
     ('M0', 'bezel', {'c': (1026.9, 44.4), 'plug': (985.2, 44.4), 'studs': ((1001.9, 30), (1049.5, 55))}, None),
     ('M0', 'lock', {'c': (675.7, 110.3), 'd': 22.4}, None),
     ('M0', 'lock', {'c': (1224, 109), 'd': 27.4}, None),
-    ('M0', 'toggle', {'c': (1223.5, 157.7)}, None),
+    ('M0', 'toggle', {'c': (1223.5, 157.7), 'game': 'gyro.follow_up'}, None),
     ('M0', 'fuse', {'c': (676.9, 164.4), 'size': (23.3, 38.3)}, None),
     ('M0', 'lamp', {'c': (704.7, 197.8), 'd': 10.4, 'colour': 'red'}, None),
     ('M0', 'lamp', {'c': (719.5, 197.1), 'd': 9.9, 'colour': 'green'}, None),
@@ -558,8 +558,8 @@ PARTS = [
     ('R3', 'fuse', {'c': (1750, 848.8), 'size': (28.3, 33.3)}, None),
     ('R3', 'fuse', {'c': (1786.7, 848.8), 'size': (28.3, 33.3)}, None),
     ('R3', 'fuse', {'c': (1825, 848.8), 'size': (28.3, 33.3)}, None),
-    ('R3', 'jack', {'c': (1382.8, 803.7), 'd': 25.2, 'colour': 'black'}, None),
-    ('R3', 'jack', {'c': (1824.7, 803.4), 'd': 23.7, 'colour': 'black'}, None),
+    ('R3', 'jack', {'c': (1382.8, 803.7), 'd': 25.2, 'colour': 'black', 'game': 'nakal_spk1'}, None),
+    ('R3', 'jack', {'c': (1824.7, 803.4), 'd': 23.7, 'colour': 'black', 'game': 'nakal_spk2'}, None),
     ('R3', 'meter_white', {'rect': (1551.7, 765.5, 1658.3, 863.8), 'inner': (1565, 780.5, 1651.7, 842.1)}, None),
     ('R3', 'button', {'c': (1635, 854.5), 'size': (20, 18.3), 'colour': 'green'}, None),
     ('R3', 'knob_round', {'c': (1609.7, 853.4), 'd': 13}, None),
@@ -604,12 +604,12 @@ PARTS = [
     ('R4', 'fuse_black', {'c': (1549.1, 1032.4), 'size': (28.3, 30)}, None),
     ('R4', 'fuse_black', {'c': (1587.4, 1034.1), 'size': (28.3, 30)}, None),
     ('R4', 'fuse_black', {'c': (1627.4, 1030.8), 'size': (28.3, 30)}, None),
-    ('R4', 'fuse_black', {'c': (1429.1, 1070.8), 'size': (28.3, 30)}, None),
+    ('R4', 'fuse_black', {'c': (1429.1, 1070.8), 'size': (28.3, 30), 'game': 'nakal_ssc'}, None),
     ('R4', 'fuse_black', {'c': (1569.1, 1072.4), 'size': (28.3, 30)}, None),
     ('R4', 'fuse_black', {'c': (1607.4, 1069.1), 'size': (28.3, 30)}, None),
-    ('R4', 'toggle', {'c': (1487.4, 1060.8)}, None),
+    ('R4', 'toggle', {'c': (1487.4, 1060.8), 'game': 'ssc.training'}, None),
     ('R4', 'toggle', {'c': (1487.4, 1085.8)}, None),
-    ('R4', 'toggle', {'c': (1645.8, 1062.4)}, None),
+    ('R4', 'toggle', {'c': (1645.8, 1062.4), 'game': 'soc.training'}, None),
     ('R4', 'toggle', {'c': (1647.4, 1085.8)}, None),
     ('R4', 'lock', {'c': (1328.3, 1095.8), 'd': 28.5}, None),
     ('R4', 'lock', {'c': (1728.6, 1089.3), 'd': 26.6}, None),
@@ -632,6 +632,9 @@ BLOCK_IDS = {'L0': 'sp2_f0', 'L1': 'sp2_f1', 'L2': 'sp2_f2', 'L3': 'sp2_f3', 'L4
              'R0_0': 'sp2_r0_0', 'R0_1': 'sp2_r0_1', 'R0_2': 'sp2_r0_2', 'R0_3': 'sp2_r0_3',
              'R1': 'sp2_r1', 'R2': 'sp2_r2', 'R3': 'sp2_r3', 'R4': 'sp2_r4'}
 
+# A part whose geometry carries `game` is drawn by the cabin, not the model: the layout's control or lamp of that id
+# (data/cabins/osa_ak.json) stands at its centre, so the mesh leaves it out and nothing is drawn twice
+# (tools/tests/test_face_game_items.py). The НАКАЛ caps read as a jack and a black fuse here are lamps (the book's p100, p150).
 # Where the cabin's simulated controls stand on the face (mm). The OR-31M carries the follow-up systems' scales in its
 # three bezels (voenizdat_osa_1991 p52); which one is the Qc scale the photos don't say: the middle one (SAM3D's choice).
 CONTROL_MM = {'or31_qc': (893.5, 44.4)}

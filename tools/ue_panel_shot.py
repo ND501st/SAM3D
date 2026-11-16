@@ -50,6 +50,8 @@ def main():
     parser.add_argument("--at", default="0,0", help="look at this point of the panel, u,v in metres from its centre")
     parser.add_argument("--set", action="append", default=[], metavar="CONTROL=POS")
     parser.add_argument("--wait", type=float, default=3.0, help="sim seconds to pass after the sets")
+    parser.add_argument("--clean", action="store_true", help="hide the crew's bodies (a seated NPC's head stands between a "
+                                                             "close camera and his panel); the HUD's text still shows")
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
     lamps = lamp_ids()
@@ -79,7 +81,10 @@ def main():
                     "world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world()\n"
                     "car = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.SimOsaVehicle)[0]\n"
                     f"car.set_cabin_view_override(unreal.Vector({eye[0]}, {eye[1]}, {eye[2]}), "
-                    f"unreal.Rotator(roll=0, pitch={pitch}, yaw={yaw}), {args.fov})")
+                    f"unreal.Rotator(roll=0, pitch={pitch}, yaw={yaw}), {args.fov})\n" +
+                    ("for c in car.get_components_by_class(unreal.SimCrewBodiesComponent): c.set_visibility(False, True)\n"
+                     "hud = unreal.GameplayStatics.get_player_controller(world, 0).get_hud()\n"
+                     "hud.set_actor_hidden_in_game(True) if hud else None\n" if args.clean else ""))
                 time.sleep(1.0)
                 dest = os.path.join(args.out, f"{panel}.png")
                 print(("wrote " + dest) if shoot(ue, dest) else f"no screenshot for {panel}")

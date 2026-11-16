@@ -41,6 +41,9 @@ CONTROL_MM = {'orient.ak_zk': (992.0, 85.0), 'orient.relay': (1015.5, 85.0), 'or
 DIAL_C, DIAL_R = (1146.4, 91.0), 42.0
 LAT_SCALE_C = (872.0, 59.0)     # the ШИРОТА dial the game draws, on the black panel beside its knob, where the panel's arc is
 
+# A part marked `game` is drawn by the cabin, not the model: the layout's control or lamp of that id (data/cabins/osa_ak.json)
+# stands at its centre, so the mesh leaves it out (a clamp keeps its bracket) and nothing is drawn twice
+# (tools/tests/test_face_game_items.py).
 PART_LIST = []
 
 
@@ -83,17 +86,17 @@ _r('hood', 'L1', 196.0, 24.0, 280.0, 58.0)
 _r('hood', 'L1', 384.0, 27.0, 466.0, 60.0)
 _p('lamp', 'L1', 95.0, 81.6, d=14.0, colour='dark')
 _p('lamp', 'L1', 95.0, 121.6, d=18.0, colour='amber')
-_p('toggle', 'L1', 331.0, 63.0, d=12.0)
-_p('lamp', 'L1', 332.0, 122.0, d=11.0, colour='dark')
-_p('lamp', 'L1', 117.0, 212.6, d=12.0, colour='dark', ring=True)
-_p('jack', 'L1', 164.0, 212.6, d=17.0, colour='black')
+_p('toggle', 'L1', 331.0, 63.0, d=12.0, game='fk.sign')
+_p('lamp', 'L1', 332.0, 122.0, d=11.0, colour='dark', game='fk.levels')
+_p('lamp', 'L1', 117.0, 212.6, d=12.0, colour='dark', ring=True, game='fk_k3')
+_p('jack', 'L1', 164.0, 212.6, d=17.0, colour='black', game='fk.kz')
 _p('lamp', 'L1', 252.6, 212.6, d=12.0, colour='dark', ring=True)
 _p('jack', 'L1', 305.0, 212.6, d=17.0, colour='black')
-_p('lamp', 'L1', 137.0, 249.0, d=12.0, colour='dark', ring=True)
-_p('lamp', 'L1', 177.0, 249.0, d=12.0, colour='dark', ring=True)
-_p('knob', 'L1', 433.0, 239.0, d=32.0, pointer=-40.0)
-_p('knob', 'L1', 557.0, 239.0, d=32.0, pointer=-40.0)
-_p('toggle', 'L1', 488.0, 246.0, d=12.0)
+_p('lamp', 'L1', 137.0, 249.0, d=12.0, colour='dark', ring=True, game='fk.letter')
+_p('lamp', 'L1', 177.0, 249.0, d=12.0, colour='dark', ring=True, game='fk.anode')
+_p('knob', 'L1', 433.0, 239.0, d=32.0, pointer=-40.0, game='fk.systems')
+_p('knob', 'L1', 557.0, 239.0, d=32.0, pointer=-40.0, game='fk.transients')
+_p('toggle', 'L1', 488.0, 246.0, d=12.0, game='fk.launch')
 _screws('L1', [(93.7, 24.7), (170.0, 26.0), (330.5, 29.0), (487.0, 30.5), (557.0, 30.5), (584.0, 51.6), (65.8, 46.3), (170.0, 184.0), (330.5, 184.0), (487.0, 185.0),
                (67.0, 255.0), (94.7, 278.0), (213.0, 276.0), (330.5, 276.0), (445.0, 275.0), (556.0, 275.0), (583.0, 254.0)])
 _screws('L1', [(205.0, 30.0), (270.0, 30.0), (394.0, 31.6), (458.0, 32.6)], d=5.0)
@@ -117,21 +120,24 @@ _r('tab', 'L2', 594.7, 338.0, 606.8, 350.0, colour='outline')
 _latch('R1', 721.0, 87.0)
 _latch('R1', 1255.5, 87.0)
 _r('black_panel', 'R1', 749.5, 26.4, 909.0, 146.0)
-for x, y in ((779.0, 59.0), (773.6, 93.0), (891.0, 95.5), (832.7, 92.0)):
-    _p('toggle', 'R1', x, y, d=12.0, base=Z['black_panel'])
+for x, y, g in ((779.0, 59.0, 'gyro.phi_mode'), (773.6, 93.0, 'gyro.consumers'), (891.0, 95.5, 'gyro.heat'), (832.7, 92.0, 'gyro.relay_pt')):
+    _p('toggle', 'R1', x, y, d=12.0, base=Z['black_panel'], game=g)
 _p('jack', 'R1', 832.7, 116.0, d=12.0, colour='steel', base=Z['black_panel'])
 _p('jack', 'R1', 773.6, 122.7, d=12.0, colour='black', base=Z['black_panel'])
 _screws('R1', [(759.0, 32.0), (900.0, 32.0), (759.0, 140.0), (900.0, 140.0)], d=7.0)
 for x in (916.0, 934.0, 953.0, 973.6, 994.0, 1013.6, 1035.0):
     _p('dome', 'R1', x, 40.0, d=19.0)
 _p('dome', 'R1', 1073.6, 40.5, d=23.0)
-for x in (928.0, 949.0, 971.0, 1041.0):     # the row's last: where orient.sync stood until 12 Nov 2026, what it is not known
+for x in (928.0, 949.0, 971.0):
     _p('jack', 'R1', x, 85.0, d=17.0, colour='black')
+# the row's last, read as a black jack: where orient.sync stood until 12 Nov 2026; the cabin reads it as ПИТАНИЕ ПТ — СЕТЬ's toggle
+# at the row's right end (wwp_gecko g086-a, g091-a; data/cabins/osa_ak.json)
+_p('jack', 'R1', 1041.0, 85.0, d=17.0, colour='black', game='gyro.supply')
 for x, c in ((909.0, 'amber'), (928.0, 'amber'), (947.0, 'amber'), (965.5, 'amber'), (984.5, 'amber'), (1002.0, 'amber')):
     _p('lamp', 'R1', x, 142.7, d=15.0, colour=c)
 _p('lamp', 'R1', 1022.7, 142.7, d=10.0, colour='dark')
-_p('jack', 'R1', 1057.7, 142.7, d=17.0, colour='black')
-_p('jack', 'R1', 1078.0, 142.7, d=17.0, colour='black')
+_p('jack', 'R1', 1057.7, 142.7, d=17.0, colour='black', game='gyro_fail')      # the black caps under ОТКАЗ: lamps
+_p('jack', 'R1', 1078.0, 142.7, d=17.0, colour='black', game='qc_fail')
 _r('dial_block', 'R1', 1072.7, 70.5, 1096.0, 106.8)
 _p('lamp', 'R1', 1201.8, 63.6, d=11.0, colour='dark')
 _p('lamp', 'R1', 1201.8, 118.0, d=11.0, colour='dark')
@@ -148,7 +154,7 @@ _r('strip', 'R2', 789.5, 225.5, 808.6, 291.0)
 _r('strip', 'R2', 1184.0, 223.0, 1203.0, 287.7)
 _screws('R2', [(798.6, 220.5), (798.6, 296.8), (1194.0, 217.7), (1194.0, 292.0)], d=7.0)
 _r('meter', 'R2', 879.5, 224.5, 957.7, 298.0)
-_p('knob', 'R2', 1107.7, 250.5, d=36.0, pointer=35.0)
+_p('knob', 'R2', 1107.7, 250.5, d=36.0, pointer=35.0, game='soc.mti_check')
 _r('data_plate', 'R2', 895.5, 314.0, 1077.0, 341.4)
 _screws('R2', [(766.8, 206.4), (876.8, 206.0), (985.5, 206.0), (1093.0, 206.0), (1200.0, 206.0), (766.8, 330.5), (876.8, 329.5), (1091.8, 326.8), (1199.0, 325.5)])
 _plates('R2', (1207.0, 190.5, 1266.0, 199.0), None)
@@ -158,12 +164,13 @@ _latch('R3', *_r3(723.6, 457.0))
 _latch('R3', *_r3(1257.7, 446.8))
 x0, y0 = _r3(766.8, 407.0)
 _r('nameplate', 'R3', x0, y0, x0 + 46.8, y0 + 23.0, colour='black')
-for x, y in ((911.0, 402.7), (1068.0, 401.8), (1079.0, 502.7)):
-    _p('clamp', 'R3', *_r3(x, y), w=55.0, ht=41.0)
-for x0, x1, y0, y1 in ((945.0, 970.5, 400.5, 435.5), (998.6, 1024.5, 399.5, 433.6)):
+# the clamps' brackets are the model's; the toggle in each is the game's (its knob left out)
+for x, y, g in ((911.0, 402.7, 'drv.psi_service'), (1068.0, 401.8, 'drv.gamma_service'), (1079.0, 502.7, 'drv.plus27')):
+    _p('clamp', 'R3', *_r3(x, y), w=55.0, ht=41.0, game=g)
+for x0, x1, y0, y1, g in ((945.0, 970.5, 400.5, 435.5, 'stab_err_psi'), (998.6, 1024.5, 399.5, 433.6, 'stab_err_gamma')):
     a = _r3(x0, y0)
     b = _r3(x1, y1)
-    _r('window', 'R3', a[0], a[1], b[0], b[1])
+    _r('window', 'R3', a[0], a[1], b[0], b[1], game=g)
 for x, y in ((761.0, 506.4), (776.8, 506.4), (792.7, 505.5), (809.0, 505.0), (1146.0, 497.7), (1161.0, 497.3), (1177.0, 497.3), (1192.0, 496.8), (1208.0, 496.8)):
     _p('lamp', 'R3', *_r3(x, y), d=10.0, colour='dark')
 for x, y in ((836.4, 505.0), (891.0, 502.7), (941.0, 502.3), (973.6, 501.8), (1036.4, 500.5), (1125.0, 499.0)):
