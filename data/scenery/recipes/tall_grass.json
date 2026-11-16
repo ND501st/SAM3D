@@ -1,0 +1,49 @@
+{
+  "recipe_id": "tall_grass",
+  "notes": "Meadow left uncut or ungrazed in October (terrain roadmap L13 step 1): tall dry grass 0.45-0.9 m in dense clumps over a shorter sward, no bare ground between them. The tall tufts are the grass card drawn taller until the kit's own tall grasses (L13 step 3).",
+  "applies": {
+    "layers": [
+      "tall_grass"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "tall_grass",
+          "process": "thomas",
+          "per_ha": 12000,
+          "kappa_per_ha": 900,
+          "spread_m": 1.0
+        },
+        {
+          "kind": "grass",
+          "process": "uniform",
+          "per_ha": 6000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "tall_grass",
+      "per_ha": [
+        9000,
+        15000
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        4500,
+        7500
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (judged by eye against the look target's K6: grass 0.2-1 m everywhere not worked, dry tall grass at margins)",
+  "confidence": "estimate"
+}

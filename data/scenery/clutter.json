@@ -14,7 +14,8 @@
     "stover": {"part": "clutter_stalk", "height_m": [0.02, 0.035], "width_m": [0.6, 1.4], "brightness": 0.2, "along_rows_deg": 35},
     "maize": {"part": ["clutter_maize", "clutter_maize_b", "clutter_maize_c", "clutter_maize_d", "clutter_maize_e", "clutter_maize_f"], "height_m": [0.90, 1.06], "width_m": [0.55, 0.80], "brightness": 0.15, "along_rows_deg": 20, "near_m": 60, "to_stand": true},
     "sunflower": {"part": ["clutter_sunflower", "clutter_sunflower_b", "clutter_sunflower_c"], "height_m": [0.85, 1.06], "width_m": [0.55, 0.80], "brightness": 0.15, "along_rows_deg": 20, "near_m": 60, "to_stand": true},
-    "swath": {"part": "clutter_swath", "height_m": [0.03, 0.07], "width_m": [1.6, 2.4], "brightness": 0.15, "along_rows_deg": 6}
+    "swath": {"part": "clutter_swath", "height_m": [0.03, 0.07], "width_m": [1.6, 2.4], "brightness": 0.15, "along_rows_deg": 6},
+    "tall_grass": {"part": "clutter_grass", "height_m": [0.45, 0.9], "width_m": [0.5, 0.9], "brightness": 0.25}
   },
   "crop_fade_m": [28, 42]
 }

@@ -177,7 +177,14 @@ struct MapLandUseDef {
     double meadow_wetness = 11.0;     // a valley floor this wet is meadow
     double meadow_slope_deg = 8.0;    // a slope this steep (but not wooded) is pasture, not ploughed
     double brook_row_share = 0.6;     // of a brook's 100 m pieces, the share with a row of alders on one bank (A.3.20)
-    std::string meadow_crop = "pasture";  // the dressing's crop on the meadows
+    std::string meadow_crop = "pasture";  // the dressing's crop on the meadows that are grazed
+    // The meadows' open ground by its use (terrain roadmap L13 step 1, A.3.39): a wet valley floor mown for hay, left
+    // unmown in patches (wet_tall_cut: where the patches' noise is under it); a steep slope grazed within graze_m of a
+    // village or a farmstead (the reach wandering a quarter either way), left to tall grass beyond.
+    std::string hay_crop = "hay";          // the dressing's crop on a mown floor
+    std::string tall_crop = "tall_grass";  // ...on unmown or ungrazed ground
+    double graze_m = 2000.0;
+    double wet_tall_cut = 0.3;
     // The lines fit the ground (A.5 step 5, the look target's K8): no road or railway steeper than its class's grade. Each
     // line's profile is held to the grade (halfway between the highest and the lowest profiles that keep it, so cut and
     // fill balance) and the ground cut or filled to it: the formation level, its sides at `side_slope` (run per rise).
@@ -1696,12 +1703,27 @@ public:
         return bake.Rise(e, n, 250.0) >= u.crest_rise_m && noise::Value(ls + 1, e, n, 900.0) < u.crest_share;
     }
     // Meadow: a wet valley floor, or a slope too steep to plough that is not wooded.
-    bool LandUseMeadow(double e, double n) const {
+    bool LandUseMeadow(double e, double n) const { return LandUseGrass(e, n) != GrassUse::None; }
+    // Which use the meadow there is put to (L13 step 1, A.3.39): a wet floor mown for hay or, in patches, left unmown; a
+    // steep slope grazed near a village or a farmstead, else left to tall grass. None off the meadows.
+    enum class GrassUse { None, Hay, Pasture, Tall };
+    GrassUse LandUseGrass(double e, double n) const {
         const MapLandUseDef& u = def_.land_use;
-        if (!u.laid || !def_.landform.bake) return false;
+        if (!u.laid || !def_.landform.bake) return GrassUse::None;
         const LandformBake& bake = *def_.landform.bake;
-        if (!bake.Inside(e, n) || bake.Height(e, n) < u.min_relief_m) return false;
-        return bake.Wetness(e, n) >= u.meadow_wetness || bake.SlopeDeg(e, n) >= u.meadow_slope_deg;
+        if (!bake.Inside(e, n) || bake.Height(e, n) < u.min_relief_m) return GrassUse::None;
+        const std::uint64_t gs = noise::Mix64(def_.seed ^ 0x4752415353ull);  // "GRASS"
+        if (bake.Wetness(e, n) >= u.meadow_wetness) return noise::Value(gs, e, n, 300.0) < u.wet_tall_cut ? GrassUse::Tall : GrassUse::Hay;
+        if (bake.SlopeDeg(e, n) < u.meadow_slope_deg) return GrassUse::None;
+        return GrazedWithin(e, n, u.graze_m * (0.75 + 0.5 * noise::Value(gs + 1, e, n, 600.0))) ? GrassUse::Pasture : GrassUse::Tall;
+    }
+    // Whether (east, north) lies within `reach_m` of a village's edge or of a farmstead (its stock grazes that far).
+    bool GrazedWithin(double e, double n, double reach_m) const {
+        if (NearSettlement(e, n, reach_m)) return true;
+        for (const Farmstead& f : farmsteads_) {
+            if (std::hypot(e - f.e, n - f.n) < reach_m) return true;
+        }
+        return false;
     }
 
 private:
@@ -4357,14 +4379,15 @@ inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::st
                             {"lane_row_share", &u.lane_row_share, 0.0, 1.0},       {"pond_radius_m", &u.pond_radius_m, 0.0, 100.0},
                             {"pond_aspect", &u.pond_aspect, 0.2, 1.0},             {"pond_depth_m", &u.pond_depth_m, 0.2, 10.0},
                             {"pond_drop_m", &u.pond_drop_m, 0.0, 3.0},             {"pond_shore_m", &u.pond_shore_m, 0.5, 30.0},
-                            {"pond_max_dam_m", &u.pond_max_dam_m, 0.0, 10.0},      {"pond_trees", &u.pond_trees, 0.0, 10.0}};
+                            {"pond_max_dam_m", &u.pond_max_dam_m, 0.0, 10.0},      {"pond_trees", &u.pond_trees, 0.0, 10.0},
+                            {"graze_m", &u.graze_m, 0.0, 20000.0},                 {"wet_tall_cut", &u.wet_tall_cut, 0.0, 1.0}};
     for (std::size_t i = 0; i < values->keys.size(); ++i) {
         const std::string& key = values->keys[i];
         const json::Value& v = values->items[i];
         const json::Value* number = v.Find("value");
-        if (key == "meadow_crop") {
-            if (number == nullptr || !number->Is(json::Type::String) || number->string.empty()) return fail("meadow_crop: a crop's id");
-            u.meadow_crop = number->string;
+        if (key == "meadow_crop" || key == "hay_crop" || key == "tall_crop") {
+            if (number == nullptr || !number->Is(json::Type::String) || number->string.empty()) return fail(key + ": a crop's id");
+            (key == "meadow_crop" ? u.meadow_crop : key == "hay_crop" ? u.hay_crop : u.tall_crop) = number->string;
             continue;
         }
         bool known = false;

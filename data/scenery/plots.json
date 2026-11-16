@@ -146,6 +146,13 @@
       "anchor": { "kind": "sunken_lane", "close_km": [-3.67, 11.71] },
       "photos": [],
       "must_see": "A track worn 1-5 m into the slope between grassed banks, deepest halfway up, shrubs and trees along the banks' tops, the field beyond hidden (A.3.34)."
+    },
+    {
+      "id": "p24_tall_grass",
+      "name": "Tall grass in the hills, left unmown",
+      "anchor": { "kind": "field_layer", "layer": "tall_grass", "close_km": [-12.0, 0.0] },
+      "photos": [],
+      "must_see": "Grass knee-high and gone to seed, pale and dry in October, uneven in tussocks; the hay meadow and pasture beside it mown and grazed short (terrain roadmap L13, A.3.39)."
     }
   ]
 }

@@ -238,6 +238,7 @@ SC_TEST("land use: the hills' steep sides and crests wooded, their wet floors an
     const LandformBake& b = *d.landform.bake;
     // Over the hills inside the map proper, every 100 m.
     int all = 0, wood = 0, meadow = 0, steep = 0, steep_wood = 0, gentle = 0, gentle_wood = 0, wet = 0, wet_meadow = 0;
+    int hay = 0, pasture = 0, tall = 0, wet_floor = 0, wet_tall = 0, pasture_far = 0, tall_near = 0, hay_dry = 0;
     std::vector<double> wetness;
     for (double n = -2000.0; n < 20000.0; n += 100.0) {
         for (double x = -19950.0; x < -9000.0; x += 100.0) {
@@ -260,9 +261,31 @@ SC_TEST("land use: the hills' steep sides and crests wooded, their wet floors an
                 ++wet;
                 wet_meadow += m ? 1 : 0;
             }
+            // The open ground's classes (terrain roadmap L13 step 1): the wet floors mown for hay, a share of them
+            // left tall; the steep slopes grazed near a village or farmstead, the rest left tall.
+            if (!m) continue;
+            const MapData::GrassUse g = map->LandUseGrass(x, n);
+            const bool floor_wet = t >= d.land_use.meadow_wetness;
+            hay += g == MapData::GrassUse::Hay ? 1 : 0;
+            pasture += g == MapData::GrassUse::Pasture ? 1 : 0;
+            tall += g == MapData::GrassUse::Tall ? 1 : 0;
+            wet_floor += floor_wet ? 1 : 0;
+            wet_tall += floor_wet && g == MapData::GrassUse::Tall ? 1 : 0;
+            if (!floor_wet && g == MapData::GrassUse::Pasture && !map->GrazedWithin(x, n, 1.25 * d.land_use.graze_m)) ++pasture_far;
+            if (!floor_wet && g == MapData::GrassUse::Tall && map->GrazedWithin(x, n, 0.75 * d.land_use.graze_m)) ++tall_near;
+            if (g == MapData::GrassUse::Hay && !floor_wet) ++hay_dry;
         }
     }
     const auto share = [](int a, int of) { return of > 0 ? static_cast<double>(a) / of : 0.0; };
+    std::printf("    the meadows: hay %.0f%%, pasture %.0f%%, tall %.0f%% (of %d); wet floors left tall %.0f%% (%d)\n",
+                100.0 * share(hay, meadow), 100.0 * share(pasture, meadow), 100.0 * share(tall, meadow), meadow,
+                100.0 * share(wet_tall, wet_floor), wet_floor);
+    SC_EXPECT(hay > 0 && pasture > 0 && tall > 0);
+    SC_EXPECT(hay + pasture + tall == meadow);
+    // Grazed only within reach of a village or farmstead, tall only beyond it; hay only on the wet floors.
+    SC_EXPECT(pasture_far == 0 && tall_near == 0 && hay_dry == 0);
+    // Most of the wet floors mown; some left.
+    SC_EXPECT(share(wet_tall, wet_floor) > 0.05 && share(wet_tall, wet_floor) < 0.4);
     std::printf("    hills in the map: %d points, wooded %.0f%%, meadow %.0f%%; over 15 deg wooded %.0f%% (%d), under 5 deg wooded %.0f%% (%d); "
                 "wet floors meadow %.0f%% (%d); wetness p10 %.1f, p50 %.1f, p90 %.1f, p99 %.1f\n",
                 all, 100.0 * share(wood, all), 100.0 * share(meadow, all), 100.0 * share(steep_wood, steep), steep,
@@ -517,6 +540,7 @@ SC_TEST("land use: the loader refuses what it should") {
     MapLandUseDef u;
     std::string e;
     SC_EXPECT(LoadLandUseJson(text, u, &e) && u.laid && u.meadow_crop == "pasture");
+    SC_EXPECT(u.hay_crop == "hay" && u.tall_crop == "tall_grass" && u.graze_m > 0.0 && u.wet_tall_cut > 0.0);
     std::string bad = text;
     const std::string share_was = "\"crest_share\": { \"value\": 0.5";
     bad.replace(bad.find(share_was), share_was.size(), "\"crest_share\": { \"value\": 1.5");

@@ -5,7 +5,7 @@
 // (a field's crop state is already its layer), its bands divide a parcel by the distance in from its edge (a field's own
 // rectangle from farm_fields.hpp, exact at every distance: the headlands at its ends, a margin at its sides), and each
 // band scatters kinds of clutter by a point process:
-//   uniform     a Poisson-like scatter, so many a hectare;
+//   uniform     a Poisson-like scatter, so many a hectare, drawn on 4 m squares of its own over the whole plane;
 //   blue_noise  a jittered lattice, no two close together (a crop's clods, single plants);
 //   thomas      clusters: parents kappa_per_ha, offspring per_ha in all, displaced by a normal of spread_m each way;
 //   matern      the same with the offspring uniform in a disc of radius spread_m (shrub clumps, reed tussocks);
@@ -426,11 +426,23 @@ inline void ScatterInCell(const RecipeScatter& s, std::uint64_t salt, std::int64
     const auto inside = [&](double e, double n) { return e >= e0 && e < e1 && n >= n0 && n < n1; };
     switch (s.process) {
         case ScatterProcess::Uniform: {
-            const double expect = s.per_ha * cell_m * cell_m / 10000.0;
-            const int count = static_cast<int>(std::floor(expect + Unit(Hash(cx, cy, salt, 0))));
-            for (int j = 0; j < count; ++j) {
-                const std::uint64_t h = Hash(cx, cy, salt, 16u + static_cast<std::uint64_t>(j));
-                emit(e0 + Unit(h) * cell_m, n0 + Unit(recipe_detail::Mix(h ^ 1u)) * cell_m, Unit(recipe_detail::Mix(h ^ 2u)), h);
+            // On squares of its own over the whole plane, the near ring's 4 m cells (clutter.hpp), so a cell of any size
+            // has the same points (a 4 m cell is one square, as before A.3.39).
+            const double g = 4.0;
+            const double expect = s.per_ha * g * g / 10000.0;
+            const auto i0 = static_cast<std::int64_t>(std::floor(e0 / g)), i1 = static_cast<std::int64_t>(std::ceil(e1 / g)) - 1;
+            const auto j0 = static_cast<std::int64_t>(std::floor(n0 / g)), j1 = static_cast<std::int64_t>(std::ceil(n1 / g)) - 1;
+            for (std::int64_t sj = j0; sj <= j1; ++sj) {
+                for (std::int64_t si = i0; si <= i1; ++si) {
+                    const int count = static_cast<int>(std::floor(expect + Unit(Hash(si, sj, salt, 0))));
+                    const double se = static_cast<double>(si) * g, sn = static_cast<double>(sj) * g;
+                    for (int j = 0; j < count; ++j) {
+                        const std::uint64_t h = Hash(si, sj, salt, 16u + static_cast<std::uint64_t>(j));
+                        const double e = se + Unit(h) * g, n = sn + Unit(recipe_detail::Mix(h ^ 1u)) * g;
+                        if (!inside(e, n)) continue;
+                        emit(e, n, Unit(recipe_detail::Mix(h ^ 2u)), h);
+                    }
+                }
             }
             break;
         }

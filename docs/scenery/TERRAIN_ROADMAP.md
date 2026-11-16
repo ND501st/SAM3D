@@ -124,7 +124,8 @@ L12's foliage shading and colour calibration go with L6 (they are the asset kit'
 **Order from 16 Nov 2026 (the owner: "fields of grass, bushes and low shrubbery", prioritised):** **L13 next**, ahead of
 plot 12 and the road (13). Everything not worked is grass or scrub, on the plain's balks, pastures and embankments and on
 the hills' slopes and valley floors (A.3.17 measured meadow at 27% of the hills), and today it reads as sparse dark
-tufts on a bare texture (A.3.36's Left). L13's steps in A.6's order; then the plots resume (12, 13, the rest).
+tufts on a bare texture (A.3.36's Left). L13's steps in A.6's order; then the plots resume (12, 13, the rest). Step 1
+built (A.3.39, 16 Nov 2026): hay, pasture and tall grass, plot p24.
 
 **Paused:** gathering from Fab (except leaf and ground textures); the Megaplants and GV exports through Blender; the
 hand tuning of `card_tree.py`'s hornbeam (it becomes L6's tree builder's leaves); the Sketchfab landmarks and the AI
@@ -1125,6 +1126,67 @@ could not ask for one stand, though.
   - p09's eye and low cameras cost 20 ms: the near ring in a plantation needs measuring (L10's budgets).
   - From p09's high camera, the river's bank shows as square steps where the water's strip meets the ground cells.
   - Plot 12 (a tree row on a farm track), earlier in the method's order, is still not a plot.
+
+### A.3.39 The open ground's classes: hay, pasture and tall grass (L13 step 1, 16 Nov 2026)
+
+L13's first step (A.6): where each kind of grassland grows. Until now every meadow was one crop, `pasture`, on the
+plain by share and in the hills on the wet floors and the slopes too steep to plough (A.3.17).
+
+- **Three classes** (`MapData::LandUseGrass`, `terrain_map.hpp`), in the hills by the ground:
+  - **hay** on the wet valley floors (wetness at least `meadow_wetness`), mown;
+  - **tall grass** on a share of those floors left unmown, in patches about 300 m across (`wet_tall_cut`);
+  - **pasture** on the steep slopes within reach of a village's edge or a farmstead (`graze_m`, 2000 m, its edge
+    wandering 0.75-1.25 times that in 600 m patches, `GrazedWithin`). In 1985 the cooperatives' flocks still grazed
+    the hills; 1200 m left 60% of the hills' meadow tall, too much for the year;
+  - **tall grass** on the steep slopes beyond that reach, where no flock is driven.
+
+  `LandUseMeadow` is now "any of the three". On the plain the classes are crops by share of the parcels, as pasture
+  was: pasture 10%, hay 6%, tall grass 4% of the fields (pasture was 20%), the colours tan to straw.
+- **The data.** `land_use.json` gains `hay_crop`, `tall_crop`, `graze_m` and `wet_tall_cut`; `map_dressing.json`
+  the crops `hay` and `tall_grass`; `ground_layers.json` the layer `tall_grass` (the 16th and last slot) and the two
+  crops' calendars. Hay mown short wears the meadow's layer; only tall grass needed a layer of its own.
+- **Tall grass in the near ring.** A recipe, `recipes/tall_grass.json`, and a clutter kind `tall_grass`, 0.45-0.9 m:
+  tussocks in Thomas clusters about 12 000 a hectare over short grass 6000 a hectare.
+- **The uniform scatter on its own squares** (`recipes.hpp`). A `uniform` scatter drew its points from the cell's own
+  hash, so a cell of another size had other points. The recipes test's spot (5700, −9100) found it once the new shares
+  had turned its parcel's crop: 4303 of 6460 points kept in 8 m cells, the third lost matching the uniform scatter's
+  share of the tall grass recipe (6000 of 18 000 a hectare). It now draws on 4 m squares over the whole plane, as the
+  clusters draw on their own grid. The near ring's cells are 4 m, so its points are unchanged.
+- **Sight lines unchanged.** No new crop stands (no `stand_m`). Pasture's 20% was split three ways at the end of the
+  crops' list, so the plain's wheat, maize and sunflower parcels are the same parcels as before and so are the standing
+  crops. The balance runs are not re-read; `ground_check` passes (0 of 15 scenarios with anything off the ground).
+- **Plot p24** (`plots.json`), tall grass in the hills, the nearest whole 50 m square of the layer to (−12, 0) km.
+- **Tests.** `test_landform.cpp`: the three classes all present among the hills' meadows and adding up to them; no
+  pasture beyond 1.25 × `graze_m` of a village or farmstead, no steep tall grass within 0.75 × it, hay only on wet
+  floors; the wet floors left tall between 5% and 40%. `test_ground_layers.cpp`: the two crops' October layers.
+  `test_recipes.cpp`, `test_map_dressing.cpp`, `test_plots.cpp`: the counts and the new plot.
+- **Measured** (the tests' prints). The hills' meadow (27% of the hills, 6539 points at 100 m) is hay 18%, pasture
+  41%, tall grass 40%; 19% of the wet floors are left tall. With `graze_m` at 1200 m the tall grass was 60%. On its
+  ground the recipe gives 11 965 tall tussocks and 6001 short tufts a hectare, inside its targets. The whole suite
+  passes, 1082 tests.
+- **Seen (l11).**
+  - p24 at the eye: straw-coloured tussocks knee- to waist-high in clumps up a slope to a wood's edge. It reads as
+    grass left standing, not a lawn.
+  - p24 from the high camera: the classes as patches on the hillside, tall grass pale straw, hay and pasture olive.
+    Their edges run in the 25 m cover cells' steps, with triangles where a cell's corners differ.
+  - p20 and p19 are as before, the brook's floor now hay.
+- **Costs.** l11's first p24 eye measured 37.8 ms of GPU over 39 samples. The ground material had just been rebuilt and
+  its shaders were still compiling. Measured again (l12 and l13): 13.4 ms at 12 000 tussocks a hectare, 13.2 ms at 6000,
+  so the density is not the cost. The low and high cameras take 9.5 ms. p20's eye takes 13.3 ms (l14; 12.6 in l8).
+  p19's eye shows a ploughed field and the wood, nothing this step touched, yet measured 16.2 and 18.7 ms (l11, l14)
+  against 14.3-14.7 in earlier runs: spread, with another editor open on the same GPU.
+- **Left:**
+  - On the plain the classes go by share per parcel. Grazing by distance from the villages is the hills' only.
+  - All 16 of the ground material's layer slots are now used: a further layer needs its slots widened.
+  - The tall grass is the short grass's card stretched, and its layer wears the verges' texture, until step 3's art
+    (or the Megascans grasses on disk: wild grass, dry grass, field poppy).
+  - Margins and balks, the grassy dry slopes, embankments and dykes are not classes yet.
+  - Scrub's share and its planting move to the next batch, with the thickets (step 2) and the bushes' art (step 3).
+  - The ground still shows bare between the tussocks at 1.7 m (K6 not met). The tall tufts' bases are dark, the short
+    card stretched. Both wait on step 3's cards and step 4's recipes.
+  - From above, the classes' edges follow the 25 m cover cells in steps. A meadow's edge should follow a parcel, a
+    track or a hedge (step 5, with the far tints).
+  - `graze_m` and `wet_tall_cut` are estimates. Tall grass at 40% of the hills' meadow wants a source for 1985.
 
 ### A.4 How a plot is worked (the loop)
 

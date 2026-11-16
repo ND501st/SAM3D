@@ -134,7 +134,9 @@ struct DressingRules {
                                {"maize", 0.25, {{0.17f, 0.25f, 0.08f}}},
                                {"sunflower", 0.1, {{0.3f, 0.29f, 0.09f}}},
                                {"ploughed", 0.15, {{0.24f, 0.18f, 0.12f}}},
-                               {"pasture", 0.2, {{0.2f, 0.27f, 0.1f}}}};
+                               {"pasture", 0.1, {{0.2f, 0.27f, 0.1f}}},
+                               {"hay", 0.06, {{0.23f, 0.28f, 0.11f}}},
+                               {"tall_grass", 0.04, {{0.31f, 0.29f, 0.13f}}}};
     // By Cover (a field's colour is its crop's).
     std::array<CoverColour, static_cast<std::size_t>(Cover::Count)> cover_colours{{{{0.26f, 0.28f, 0.12f}},
                                                                                   {{0.07f, 0.13f, 0.05f}},
@@ -534,8 +536,15 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
     const MapDef& def = map.Def();
     CoverRaster raster;
     const double cell = rules.cover_cell_m;
-    int meadow = -1;
-    for (std::size_t i = 0; i < rules.crops.size(); ++i) meadow = rules.crops[i].id == def.land_use.meadow_crop ? static_cast<int>(i) : meadow;
+    // The meadows' crops by their use (L13 step 1, A.3.39): grazed, mown, left tall; a use whose crop the rules lack is grazed.
+    const auto crop_index = [&](const std::string& id, int fallback) {
+        for (std::size_t i = 0; i < rules.crops.size(); ++i) {
+            if (rules.crops[i].id == id) return static_cast<int>(i);
+        }
+        return fallback;
+    };
+    const int meadow = crop_index(def.land_use.meadow_crop, -1);
+    const int hay = crop_index(def.land_use.hay_crop, meadow), tall = crop_index(def.land_use.tall_crop, meadow);
     const auto add = [&](const std::string& id, double west, double south, double east, double north) {
         CoverGrid g;
         g.id = id;
@@ -553,8 +562,12 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
             for (int c = 0; c < g.cols; ++c) {
                 const FieldCell f = FieldAt(g.fields, g.CentreEast(c), g.CentreNorth(r));
                 g.crop[g.Index(c, r)] = CropOf(rules, f.id);
-                // The hill country's meadows (A.5 step 4): wet valley floors and slopes too steep to plough.
-                if (meadow >= 0 && map.LandUseMeadow(g.CentreEast(c), g.CentreNorth(r))) g.crop[g.Index(c, r)] = static_cast<std::uint8_t>(meadow);
+                // The hill country's meadows (A.5 step 4): wet valley floors and slopes too steep to plough, by their use.
+                if (meadow >= 0) {
+                    const MapData::GrassUse use = map.LandUseGrass(g.CentreEast(c), g.CentreNorth(r));
+                    const int crop = use == MapData::GrassUse::Hay ? hay : use == MapData::GrassUse::Tall ? tall : use == MapData::GrassUse::Pasture ? meadow : -1;
+                    if (crop >= 0) g.crop[g.Index(c, r)] = static_cast<std::uint8_t>(crop);
+                }
                 // A field whose centre is near a settlement's edge is the household's: strips, not a collective's field.
                 for (const MapSettlementDef& s : def.settlements) {
                     if (std::hypot(f.centre_e - s.centre.east_m, f.centre_n - s.centre.north_m) < s.radius_m + rules.strip_reach_m) {

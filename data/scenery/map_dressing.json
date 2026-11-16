@@ -82,9 +82,11 @@
         { "id": "maize", "share": 0.25, "colour": [0.17, 0.25, 0.08] },
         { "id": "sunflower", "share": 0.1, "colour": [0.3, 0.29, 0.09] },
         { "id": "ploughed", "share": 0.15, "colour": [0.24, 0.18, 0.12] },
-        { "id": "pasture", "share": 0.2, "colour": [0.2, 0.27, 0.1] }
+        { "id": "pasture", "share": 0.1, "colour": [0.2, 0.27, 0.1] },
+        { "id": "hay", "share": 0.06, "colour": [0.23, 0.28, 0.11] },
+        { "id": "tall_grass", "share": 0.04, "colour": [0.31, 0.29, 0.13] }
       ],
-      "source": "game value: sam3d estimate (the plain's crops in summer)",
+      "source": "game value: sam3d estimate (the plain's crops in summer; the grass's 0.2 split by its use, terrain roadmap L13 step 1: grazed pasture, a hay meadow mown, tall grass uncut or abandoned, its colour paler and straw-coloured)",
       "confidence": "estimate"
     },
     "cover_colours": {

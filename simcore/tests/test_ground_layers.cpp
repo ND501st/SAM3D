@@ -158,6 +158,11 @@ SC_TEST("ground layers: the crop calendar on 15 October is the patchwork of the 
     SC_EXPECT(october(sunflower, {"dry_stalks", "ploughed"}));
     SC_EXPECT(october(ploughed, {"ploughed", "sown"}));
     SC_EXPECT(october(pasture, {"meadow"}));
+    // The open ground's classes (terrain roadmap L13 step 1): hay mown short wears the meadow's layer.
+    const int hay = CropIndex("hay"), tall = CropIndex("tall_grass");
+    SC_EXPECT(hay >= 0 && tall >= 0);
+    SC_EXPECT(october(hay, {"meadow"}));
+    SC_EXPECT(october(tall, {"tall_grass"}));
     // The research (T11): maize mostly in by mid-October (87 percent by the 16th), wheat stubble mostly ploughed under.
     const double maize_standing = CalendarShare(r, maize, day, "dry_stalks");
     SC_EXPECT(maize_standing > 0.05 && maize_standing < 0.25);

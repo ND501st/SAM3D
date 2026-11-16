@@ -116,8 +116,9 @@ bool FindGround(const std::string& recipe, double east, double north, double& e_
 
 SC_TEST("recipes: every recipe loads, and every layer the clutter covered has one") {
     const ClutterRules& rules = Rules();
-    SC_EXPECT(rules.recipes.recipes.size() == 11);
-    for (const char* id : {"ploughed", "sown", "stubble", "maize_stubble", "dry_stalks", "meadow", "verge", "trampled", "bank", "forest_floor", "marsh"}) {
+    SC_EXPECT(rules.recipes.recipes.size() == 12);
+    for (const char* id : {"ploughed", "sown", "stubble", "maize_stubble", "dry_stalks", "meadow", "verge", "trampled", "bank", "forest_floor", "marsh",
+                           "tall_grass"}) {
         const int layer = Layers().Index(id);
         SC_EXPECT(layer >= 0 && rules.recipes.ForLayer(layer) != nullptr);
     }

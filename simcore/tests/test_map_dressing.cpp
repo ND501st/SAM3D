@@ -69,7 +69,7 @@ SC_TEST("map dressing: the rules load from the data and keep their bounds") {
     SC_EXPECT(LoadDressingRules(kData + "/scenery/map_dressing.json", r, &e));
     SC_EXPECT_NEAR(r.near_spacing_m, 7.0, 1e-9);
     SC_EXPECT(r.edge_rows == 2);
-    SC_EXPECT(r.crops.size() == 5);
+    SC_EXPECT(r.crops.size() == 7);  // with hay and tall grass (terrain roadmap L13 step 1)
     SC_EXPECT(r.crops[0].id == "wheat");
     SC_EXPECT_NEAR(r.cover_colours[static_cast<std::size_t>(Cover::Water)][2], 0.15, 1e-6);
     // A bad file leaves the rules as they were.
@@ -79,7 +79,7 @@ SC_TEST("map dressing: the rules load from the data and keep their bounds") {
     SC_EXPECT(!LoadDressingRules(R"({"values": {"species_shares": {"value": {"birch": 1}}}})", kept, &e));
     SC_EXPECT(!LoadDressingRules(R"({"values": {"crops": {"value": [{"id": "rye", "share": 1, "colour": [2, 0, 0]}]}}})", kept, &e));
     SC_EXPECT(!LoadDressingRules(R"({"values": {"cover_colours": {"value": {"field": [0.1, 0.1, 0.1]}}}})", kept, &e));
-    SC_EXPECT(kept.crops.size() == 5);
+    SC_EXPECT(kept.crops.size() == 7);
 }
 
 SC_TEST("map dressing: every field cell grows a crop, its parcel the same each time") {
