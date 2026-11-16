@@ -195,6 +195,88 @@ become orders on a flight of one, so the trainer keeps its behaviour and its two
   (`01_ROUTES.md` §9), and each pilot's fate (section 4).
 - **`test_packages_live.cpp:159`** (a raid injected flies as the same raid played alone) must still pass.
 
+### 2.5 As built (B1, 15 Nov 2026)
+
+B1 is built in `simcore/flights.hpp` (the session's flights and packages, the orders, slot keeping and the pilot's
+override), `AircraftDemand` in `simcore/aircraft.hpp` (mirrored in `prototype/samproto/engagement.py`), the runner, the
+loader, the raid builder, the testbed's waves and the mission bridge (tests `tests/test_flights.cpp`). Where it differs
+from 1.6 and 2.2-2.4:
+
+- **The step.** Before the world moves, `Flights::Steer` sets each aircraft's demand: a pilot overriding flies his
+  override's point at its turn rate; a wingman in contact flies his station; the leader, or one on his own, flies his
+  order (FollowRoute, Rejoin and ReturnHome on his own waypoints, with no demand). After it moves, `AfterMove` ends an
+  override, keeps a wingman's place on the plan (`next_waypoint`) with his leader's and sets the leg's speed from the
+  target's `"legs"`; after the step, `After` delivers the calls and the packages' losses. An aircraft with no demand
+  flies exactly as before, so a flight of one with no order is the old target to the bit.
+- **Slot keeping.** The slot is the faction's (`FormationSlot`: the phase's table, else the transit's, else the first;
+  a place past the table repeats it further back by its depth and 1.5 km; with no table at all an echelon right 800 m
+  apart, a game value), turned to the leader's track. The phase comes from the leader's leg tag (`PhaseOfTag`), his
+  order or his override. A wingman flies for a point 4 s of flight (600 m at least) ahead of his station, at the
+  leader's speed plus 0.05 m/s for every metre he is behind it, within 30 % of the leader's speed. Farther than 10 km
+  from it he has lost the leader and flies his own plan until within 6 km. All game values. After a 90 degree turn a
+  wingman 1-2 km out is back on station within about a minute (the station swings with the leader's track; tactical
+  turns are B8's). **In the attack** (the leader on a leg tagged for it: pull-up, apex, roll-in, target, dive,
+  launch) each flies his own run on his plan's attack points, in trail on the leader's track, and takes his slot again
+  after it: the height layer's loft, pop-up and dive are flown by each aircraft, and each releases at his own point.
+- **A wingman's plan** (the builder's and the waves'): his start is set off by his whole slot, his turn points and his
+  release point only to the side: a man in trail passes the leader's turn point when he gets there (set back by the
+  slot's depth, he would turn inside the leader and release short).
+- **Orders and calls.** `Flights::Order` gives the leader the order now and each member who hears the flight's net
+  after `call_s` (3 s, a game value; `hears` is B9's to clear); one who did not hear keeps the last order he heard.
+  `OrderMember` orders one aircraft (the instructor's, a damaged one's turn for home) and may detach it from the
+  formation. Every order is recorded with its `by` (`FlightState::orders`). `Flights::May` accepts every order until
+  B5.
+- **Succession.** The leader lost, gone or detached: No. 3 takes the flight, else the lowest number left, and the rest
+  close up behind him in their numbers' order; the debrief says why ("lead lost", "the lead has left", "the lead turns
+  for home").
+- **The package's nerve.** A package's commander hears of a loss in his own flight at once, of one in another flight
+  after its call from a survivor (a flight lost whole is not heard of), and counts those lost before it came in
+  (`lost_before`). When the losses he knows reach `turn_back_share` of its size (the resolver's `PackageNerve`,
+  0.25 + 0.3 x boldness, factored out of `resolve.hpp` so both use it) every flight short of its release (not in its
+  egress) is ordered home `by "package"`. A flight with no crew (cruise missiles, decoy drones: a scenario flight's
+  `"crewed": false`) never turns back and is no loss to its package.
+- **The pilot's override.** `TargetPilot`'s `OnLaunch`, `OnLocked` and `EvadeNow` return an `Evasion` (a
+  `PilotOverride` and the debrief's text): break and dive for a beam point, the jink's flips, each until `evade_s`,
+  then back to the slot ("rejoins its flight") or the route ("back on its route"). The ARM carrier's turn-away is an
+  override to a point 40 km away that ends where the point is passed as a waypoint is (`AircraftDemand::capture`) and
+  takes the aircraft out of the session there, as its old one-waypoint route did; a leader's flight follows him home.
+  `Notice` and perception are B3's and B4's.
+- **The overwrites replaced.** Break and dive (`TargetPilot::Evade`'s waypoints), the ARM turn-away's 40 km leg, the
+  damaged aircraft's jump to its last waypoint (now `OrderMember` ReturnHome `by "pilot"`, detached), and the
+  instructor's saved routes (`route_waypoints`, `held_heading_rad`: his Take, Turn and Speed are a heading order on a
+  flight of one `by "instructor"`, Release rejoins the flight). The two-target cap stays as a trainer rule.
+  `engagement.hpp`'s `evade_on_launch` (the gameplay engagement model's own target, not a session's) is untouched.
+  On purpose, the hand-made scenarios with an `evade` fly differently: a break or dive now ends after `evade_s` and the
+  aircraft flies its route again ("back on its route"), and through a jink, break or dive the height layer holds the
+  height of the leg it is on (the old overwrite put it on its first waypoint's, so a terrain follower dived to it).
+- **Talk.** An engagement order of the commander's still waiting its turn on the intercom when he orders the
+  transmitters off against an ARM is taken back (`CalloutBus::Withdraw`): the changed timings had him say «Цель —
+  взять!» after «Излучение выключить!».
+- **The scenario.** `"flights"` (`id`, `callsign`, `package`, `side`, `keep_slots`, `crewed`, `call_s`, `formations` by phase),
+  `"packages"` (`id`, `commander`, `size`, `lost_before`, `turn_back_share`), and a target's `"flight"`, `"slot"` (1-16)
+  and `"legs"` (one per waypoint: `speed_mps`, `agl_m` or `alt_m`, `tag`). Strict keys. A target with no flight is a
+  flight of one named by its id. Flights added in play (`ScenarioRunner::AddFlights`, the package injector and the
+  waves) register with their targets.
+- **The runner's API** is 2.3's with an optional `why` for a refusal, and `AllFlights()`. `RerouteFlight` sends a
+  Divert on the new legs with the aim; the bridge's `MissionBridge::Reroute` moves the members' release and aim in the
+  manifest and re-decides the neighbours' passes on the next step.
+- **The raid builder** writes flights and packages (the planner's flights by callsign, one package with the
+  commander's flight and the nerve), each member's start and waypoints placed on its slot by the leg's phase, and a
+  speed per leg from the leg's planned time (between 20 m/s and the larger of 600 m/s and 1.2 x cruise).
+  `scenario.flight_spacing_m` is gone. The testbed's waves write flights the same way (`Spread` is gone; our own
+  flights an echelon right 100 m and 300 m deep, a game value).
+- **The bridge** takes `aborted_flights` from a flight's ReturnHome order before its release (or every live member
+  sent home on its own), and lists `retasks`: orders from anyone but the leader, the package or the pilot, with their
+  `by`, kept in the save.
+- **Cost.** The layer (`Steer`, `AfterMove`, `After`) takes about 0.01 ms a 0.05 s step for 100 aircraft in 25 flights
+  of four (`test_flights.cpp`'s cost test prints it; one core, Release), well inside 5.2's 0.5 ms.
+- **Left.** B2: `TimeRoute` per leg in the planner (the builder takes speeds from the clipped route's times), the
+  heights per leg as demands. B3/B4: `Notice`, the cue chain, the press-on-or-abort decision for the flight, the
+  break's end on the missile passing, jettison and `jettisoned_flights`, the alternate, escorts staying with a damaged
+  wingman. B5: `C2Authority::May` and who may order what. B8: tactical turns, splits for the attack against several
+  aim points (each element its own target), the fighters' formations in combat. B9: the calls as transmissions (`hears`). Pilots' ids in the
+  manifest and their fates (section 4). The route each flight actually flew in the outcome.
+
 ## 3. The flight model beyond R3
 
 ### 3.1 State and equations

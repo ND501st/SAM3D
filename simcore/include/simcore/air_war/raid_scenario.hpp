@@ -34,6 +34,7 @@
 
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/types.hpp"
+#include "simcore/flights.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/session_deliveries.hpp"
@@ -260,6 +261,7 @@ struct RaidManifest {
     std::vector<std::pair<std::string, Vec3>> dummies;  // theatre dummy ids
     std::vector<std::pair<std::string, Vec3>> objects;  // other theatre objects inside the scenario
     std::vector<RaidAircraft> aircraft;
+    std::vector<std::string> flight_ids;  // per flight: its id in the session (flights.hpp), "" if not in it
     std::vector<double> flight_exit_h;   // per flight: when it leaves the scenario's circle (-1e18: never in it)
     std::vector<bool> flight_in;         // per flight: some of it is in the scenario
     std::vector<RaidNeighbour> neighbours;
@@ -345,8 +347,10 @@ public:
             std::vector<double> agl;
             std::vector<double> t_h;
             std::vector<std::string> tags;
+            std::vector<std::string> leg_tags;  // the tag of the leg flown to each point (an edge's: the leg it cuts)
             bool release = false;
             Vec3 release_pt;
+            int release_i = -1;
         };
         std::vector<Clipped> clipped;
         double first_h = 1e18, last_h = -1e18;
@@ -364,6 +368,7 @@ public:
                 cl.agl.push_back(fl.route[0].agl_m);
                 cl.t_h.push_back(fl.route[0].t_h);
                 cl.tags.push_back(fl.route[0].tag);
+                cl.leg_tags.push_back(fl.route[0].tag);
             }
             for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
                 const Vec3 a = pts[i], b = pts[i + 1];
@@ -376,15 +381,18 @@ public:
                     cl.agl.push_back(Lerp(fl.route[i].agl_m, fl.route[i + 1].agl_m, tc));
                     cl.t_h.push_back(Lerp(fl.route[i].t_h, fl.route[i + 1].t_h, tc));
                     cl.tags.push_back("edge");
+                    cl.leg_tags.push_back(fl.route[i + 1].tag);
                 }
                 if (inside_b) {
                     cl.pts.push_back(b);
                     cl.agl.push_back(fl.route[i + 1].agl_m);
                     cl.t_h.push_back(fl.route[i + 1].t_h);
                     cl.tags.push_back(fl.route[i + 1].tag);
+                    cl.leg_tags.push_back(fl.route[i + 1].tag);
                     if (static_cast<int>(i + 1) == fl.release_index) {
                         cl.release = true;
                         cl.release_pt = b;
+                        cl.release_i = static_cast<int>(cl.pts.size()) - 1;
                     }
                 }
                 inside_prev = inside_b;
@@ -427,7 +435,11 @@ public:
         std::vector<std::string> libraries;
         int n_targets = 0;
         double end_s = 0.0;
-        const double spacing = tune.Get("scenario.flight_spacing_m");
+        // The flights and the package as the session keeps them (flights.hpp, roadmap B1).
+        const std::string pkg_id = "p" + std::to_string(p.id);
+        json::Value flights_json = Arr();
+        std::string commander, first_main;  // where an officer flies, else the first main flight (02_FLIGHTS_AND_PILOTS.md §1.2)
+        m.flight_ids.assign(p.flights.size(), std::string());
         for (const Clipped& cl : clipped) {
             const Flight& fl = p.flights[static_cast<std::size_t>(cl.flight)];
             const AircraftType* a = f.Aircraft(fl.aircraft);
@@ -438,16 +450,64 @@ public:
                 m.flight_exit_h[static_cast<std::size_t>(cl.flight)] = -1e18;
                 continue;
             }
-            const Vec3 dir0 = (cl.pts[1] - cl.pts[0]);
-            const double dl = std::max(1.0, dir0.HorizontalLength());
-            const Vec3 side{-dir0.y / dl, dir0.x / dl, 0.0};
             const bool low = fl.profile == Profile::Low || a->helicopter;
             const bool hide = a->helicopter && std::find(cl.tags.begin(), cl.tags.end(), std::string("hide")) != cl.tags.end();
+            std::string cs = fl.callsign;
+            cs.erase(std::remove(cs.begin(), cs.end(), ' '), cs.end());
+            // Its formation by phase from the faction's "flights" block for its type class (a stream of cruise missiles
+            // keeps none: each flies its own plan, set off by its slot).
+            const std::map<std::string, std::vector<Vec3>> forms = f.FormationsFor(FormationClassOf(a->helicopter, fl.role));
+            {
+                json::Value fj = Obj();
+                Put(fj, "id", Str(cs));
+                Put(fj, "callsign", Str(fl.callsign));
+                Put(fj, "package", Str(pkg_id));
+                if (a->missile) Put(fj, "keep_slots", Bool(false));
+                if (a->missile || a->drone) Put(fj, "crewed", Bool(false));  // no nerve: a decoy drone flies on
+                if (!forms.empty()) {
+                    json::Value fo = Obj();
+                    for (const auto& ph : forms) {
+                        json::Value sl = Arr();
+                        for (const Vec3& v : ph.second) {
+                            json::Value tri = Arr();
+                            Push(tri, Num(v.x));
+                            Push(tri, Num(v.y));
+                            Push(tri, Num(v.z));
+                            Push(sl, tri);
+                        }
+                        Put(fo, ph.first, sl);
+                    }
+                    Put(fj, "formations", fo);
+                }
+                Push(flights_json, fj);
+            }
+            m.flight_ids[static_cast<std::size_t>(cl.flight)] = cs;
+            if (commander.empty() && fl.officer >= 0 && !a->missile && !a->drone) commander = cs;
+            if (first_main.empty() && rank(cl) == 0 && !a->missile && !a->drone) first_main = cs;
+            // Each leg's speed from the route's own times (01_ROUTES.md §6.6), the whole route's where a leg has none.
+            const double route_len = RouteLength(cl.pts);
+            const double dt_s = (cl.t_h.back() - cl.t_h.front()) * 3600.0;
+            const double top_mps = std::max(600.0, a->cruise_mps * 1.2);
+            const double whole_mps = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, top_mps) : a->cruise_mps;
+            std::vector<double> leg_mps(cl.pts.size(), whole_mps);
+            for (std::size_t i = 1; i < cl.pts.size(); ++i) {
+                const double len = (cl.pts[i] - cl.pts[i - 1]).HorizontalLength();
+                const double dt = (cl.t_h[i] - cl.t_h[i - 1]) * 3600.0;
+                if (dt > 1.0 && len > 1.0) leg_mps[i] = ClampTo(len / dt, 20.0, top_mps);
+            }
             for (int k = 0; k < alive; ++k) {
-                const double off = (k - 0.5 * (alive - 1)) * spacing;
-                const Vec3 shift = side * off;
-                std::string cs = fl.callsign;
-                cs.erase(std::remove(cs.begin(), cs.end(), ' '), cs.end());
+                // Its place in the formation of each leg's phase, in that leg's frame: where its own plan runs. Only the
+                // start is set back by the slot's depth: a turn point or a release point is the leader's, passed by a man
+                // in trail when he gets there (set back, he would turn inside the leader and release short).
+                const auto shift_at = [&](std::size_t i, bool back) {
+                    const std::size_t j = std::max<std::size_t>(1, i);
+                    Vec3 dir = cl.pts[j] - cl.pts[j - 1];
+                    dir.z = 0.0;
+                    dir = dir.LengthSquared() > 1.0 ? dir.Normalized() : Vec3{0.0, 1.0, 0.0};
+                    const Vec3 o = FormationSlot(forms, PhaseOfTag(cl.leg_tags[j]), k);
+                    const double ob = back ? o.y : 0.0;
+                    return Vec3{dir.y * o.x - dir.x * ob, -dir.x * o.x - dir.y * ob, o.z};
+                };
                 const std::string tid = cs + "-" + std::to_string(k + 1);
                 json::Value t = Obj();
                 Put(t, "id", Str(tid));
@@ -455,27 +515,35 @@ public:
                 Put(t, "type", Str(a->missile ? "Air+Missile" : (a->helicopter ? "Air+Rotorcraft" : "Air+FixedWing")));
                 Put(t, "class", Str(a->target_class));
                 if (fmt.model) Put(t, "model", Str(a->id));
-                Vec3 start = cl.pts[0] + shift;
-                start.z = low ? std::max(5.0, cl.agl[0]) : cl.agl[0];
+                Put(t, "flight", Str(cs));
+                Put(t, "slot", Num(k + 1));
+                const Vec3 s0 = shift_at(0, true);
+                Vec3 start = cl.pts[0] + Vec3{s0.x, s0.y, 0.0};
+                start.z = (low ? std::max(5.0, cl.agl[0]) : cl.agl[0]) + s0.z;
+                if (low) start.z = std::max(5.0, start.z);
                 Put(t, "start", Pos(start));
                 json::Value wps = Arr();
+                json::Value legs = Arr();
                 for (std::size_t i = 1; i < cl.pts.size(); ++i) {
                     json::Value w = Obj();
-                    const Vec3 q = cl.pts[i] + shift;
+                    const Vec3 sh = shift_at(i, false);
+                    const Vec3 q = cl.pts[i] + Vec3{sh.x, sh.y, 0.0};
                     Put(w, "east_m", Num(std::round(q.x)));
                     Put(w, "north_m", Num(std::round(q.y)));
                     if (low) {
-                        Put(w, "agl_m", Num(std::round(std::max(5.0, cl.agl[i]))));
+                        Put(w, "agl_m", Num(std::round(std::max(5.0, cl.agl[i] + sh.z))));
                     } else {
-                        Put(w, "up_m", Num(std::round(cl.agl[i])));
+                        Put(w, "up_m", Num(std::round(cl.agl[i] + sh.z)));
                     }
                     Push(wps, w);
+                    json::Value l = Obj();
+                    Put(l, "speed_mps", Num(std::round(leg_mps[i])));
+                    Put(l, "tag", Str(cl.leg_tags[i]));
+                    Push(legs, l);
                 }
                 Put(t, "waypoints", wps);
-                const double route_len = RouteLength(cl.pts);
-                const double dt_s = (cl.t_h.back() - cl.t_h.front()) * 3600.0;
-                const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, std::max(600.0, a->cruise_mps * 1.2)) : a->cruise_mps;
-                Put(t, "speed_mps", Num(std::round(speed)));
+                Put(t, "legs", legs);
+                Put(t, "speed_mps", Num(std::round(leg_mps[1])));
                 Put(t, "max_turn_rate_deg_s", Num(a->max_turn_deg_s));
                 // Its type's flight limits (roadmap R3): it flies by bank-to-turn.
                 if (a->max_load_g > 0.0) Put(t, "max_load_g", Num(a->max_load_g));
@@ -570,7 +638,11 @@ public:
                 ra.has_release = cl.release && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
                                                 fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
                                                 fl.role == FlightRole::Missile);
-                ra.release_enu = cl.release_pt + shift;
+                ra.release_enu = cl.release_pt;
+                if (cl.release_i >= 0) {
+                    const Vec3 sh = shift_at(static_cast<std::size_t>(cl.release_i), false);
+                    ra.release_enu = cl.release_pt + Vec3{sh.x, sh.y, 0.0};
+                }
                 ra.aim_enu = to_scen(fl.aim_pos + moved_by(fl.aim_key));
                 ra.arms = arms;
                 ra.arm_range_m = a->arm_range_m;
@@ -831,6 +903,23 @@ public:
         Put(root, "crew_commander", Str("npc"));
         Put(root, "battery_commander", Str("npc"));
         Put(root, "targets", targets);
+        // The flights and their package (flights.hpp, roadmap B1): the package turns back on the losses its commander
+        // knows of, at the abstract resolver's nerve (PackageNerve), counting those it lost before it came in.
+        if (!flights_json.items.empty()) {
+            Put(root, "flights", flights_json);
+            int lost_before = 0;
+            for (const Flight& fl : p.flights) lost_before += fl.role == FlightRole::Missile || fl.role == FlightRole::Decoy ? 0 : fl.lost;
+            json::Value pk = Obj();
+            Put(pk, "id", Str(pkg_id));
+            const std::string cmd = !commander.empty() ? commander : first_main;
+            if (!cmd.empty()) Put(pk, "commander", Str(cmd));
+            Put(pk, "size", Num(std::max(1, p.Aircraft())));
+            Put(pk, "lost_before", Num(lost_before));
+            Put(pk, "turn_back_share", Num(std::round(PackageNerve(p, c.Staff()) * 1000.0) / 1000.0));
+            json::Value pks = Arr();
+            Push(pks, pk);
+            Put(root, "packages", pks);
+        }
         // Our other air defences round the battery: drawn where they stand, plotted on the board. Their fire is the
         // bridge's, except the regiment's other Osa batteries, which fight in the runner's battery fire model with the
         // launchers that work and the missiles they have.

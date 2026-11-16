@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -55,6 +56,7 @@ struct Wave {
     std::vector<ScenarioTarget> aircraft;
     std::vector<EmJammerDef> jammers;
     std::vector<std::string> flights;  // "Hammer 12: 4 F-16A, strike (NATO)" for the log
+    std::vector<ScenarioFlight> flight_defs;  // the flights as the session keeps them (flights.hpp): its aircraft name them
 };
 
 // A load let go: the presentation feed's release and, at impact_t_s, its impact (fx/events.hpp; the runner pushes both).
@@ -349,14 +351,34 @@ private:
         t.max_climb_mps = a.climb_mps;
     }
 
-    // Shifts a route sideways for the k-th aircraft of a flight (a line abreast, `spacing_m` apart) and staggers it.
-    static void Spread(ScenarioTarget& t, int k, int n, double spacing_m) {
-        const Vec3 d = (t.waypoints.empty() ? Vec3{0.0, 1.0, 0.0} : t.waypoints[0] - t.start);
-        const double l = std::max(1.0, d.HorizontalLength());
-        const Vec3 side{-d.y / l, d.x / l, 0.0};
-        const Vec3 off = side * ((k - 0.5 * (n - 1)) * spacing_m);
-        t.start += off;
-        for (Vec3& w : t.waypoints) w += off;
+    // Sets the k-th aircraft of a flight (place k, the leader's 0) on its slot of the formation (flights.hpp), in each
+    // leg's frame: its own plan, which it flies when it has lost its leader (and a stream of weapons always).
+    static void Slot(ScenarioTarget& t, const std::map<std::string, std::vector<Vec3>>& forms, int k) {
+        // The start set back by the slot's depth too; a turn point only to the side (the man in trail passes the
+        // leader's turn point when he gets there).
+        const Vec3 o = FormationSlot(forms, "transit", k);
+        const auto shift = [&o](const Vec3& from, const Vec3& to, bool back) {
+            Vec3 d = to - from;
+            d.z = 0.0;
+            d = d.LengthSquared() > 1.0 ? d.Normalized() : Vec3{0.0, 1.0, 0.0};
+            const double ob = back ? o.y : 0.0;
+            return Vec3{d.y * o.x - d.x * ob, -d.x * o.x - d.y * ob, 0.0};
+        };
+        const Vec3 s0 = t.start;
+        const std::vector<Vec3> w0 = t.waypoints;
+        if (!w0.empty()) t.start += shift(s0, w0[0], true);
+        for (std::size_t i = 0; i < w0.size(); ++i) t.waypoints[i] += shift(i == 0 ? s0 : w0[i - 1], w0[i], false);
+    }
+    // The flight as the session keeps it (flights.hpp): its aircraft name it.
+    static ScenarioFlight FlightDef(const std::string& id, const std::string& callsign, bool ours, bool keep_slots,
+                                    const std::map<std::string, std::vector<Vec3>>& forms) {
+        ScenarioFlight f;
+        f.id = id;
+        f.callsign = callsign;
+        f.side = ours ? "ours" : "enemy";
+        f.keep_slots = keep_slots;
+        f.formations = forms;
+        return f;
     }
 
     void EnemyFlight(double at_s, const WaveScene& s, Wave& w) {
@@ -389,6 +411,8 @@ private:
         const int number = ++flight_no_;
         std::string flight_id = cs + std::to_string(number);
         flight_id.erase(std::remove(flight_id.begin(), flight_id.end(), ' '), flight_id.end());
+        // Its formation (the faction's "flights" block for its type class; a salvo of missiles keeps none).
+        const std::map<std::string, std::vector<Vec3>> forms = f.FormationsFor(FormationClassOf(a.helicopter, role));
         const bool high_strike = Uniform(0.0, 1.0) < 0.4;
         const Vec3 aim = Aim(s, role == FlightRole::Dead || role == FlightRole::Sead || role == FlightRole::Hunter);
         const double low_h = std::max(15.0, a.low_agl_m);
@@ -512,7 +536,9 @@ private:
             }
             // How far its belly is below its centre (the pilot's ground floor, roadmap R5): game values.
             t.bottom_m = t.weapon ? 0.3 : (a.helicopter ? 2.5 : 1.5);
-            Spread(t, k, n, a.helicopter ? 120.0 : (t.weapon ? 400.0 : 250.0));
+            t.flight = flight_id;
+            t.slot = k + 1;
+            Slot(t, forms, k);
             if (!a.drone && !a.missile) {
                 t.evade.present = true;
                 t.evade.on = a.rwr_em.empty() ? EvadeDef::On::Launch : EvadeDef::On::Lock;
@@ -563,6 +589,7 @@ private:
         std::snprintf(line, sizeof(line), "%s %d: %d %s, %s (%s)%s%s", cs.c_str(), number, n, a.name.c_str(), FlightRoleName(role),
                       f.short_name.c_str(), load.first.empty() ? "" : ", ", load.first.c_str());
         w.flights.push_back(line);
+        w.flight_defs.push_back(FlightDef(flight_id, cs + " " + std::to_string(number), false, role != FlightRole::Missile, forms));
     }
 
     void FriendlyFlight(double at_s, const WaveScene& s, Wave& w) {
@@ -596,6 +623,10 @@ private:
             const double r = a.helicopter ? 14000.0 : 35000.0;
             legs = {{s.centre + Toward(from) * r, h}, {CityPoint(s), h}, {s.centre + Toward(from + kPi + Uniform(-0.6, 0.6)) * r, h}};
         }
+        // Our flights in an echelon right, a game value (the Pact pattern's pairs: 02_FLIGHTS_AND_PILOTS.md §1.3).
+        std::map<std::string, std::vector<Vec3>> forms;
+        for (int k = 0; k < std::max(1, n); ++k) forms["transit"].push_back(Vec3{(a.helicopter ? 100.0 : 300.0) * k, 0.0, 0.0});
+        const std::string flight_id = cs + std::to_string(number);
         for (int k = 0; k < n; ++k) {
             const std::string id = cs + std::to_string(number) + "-" + std::to_string(k + 1);
             const std::string name = cs + " " + std::to_string(number) + "-" + std::to_string(k + 1) + ": " + a.name + " (" + role + ", ours)";
@@ -603,9 +634,12 @@ private:
             t.friendly = true;
             t.board_type = 1;
             Route(t, s, legs, low, a.helicopter ? 8.0 : 60.0);
-            Spread(t, k, n, a.helicopter ? 100.0 : 300.0);
+            t.flight = flight_id;
+            t.slot = k + 1;
+            Slot(t, forms, k);
             w.aircraft.push_back(std::move(t));
         }
+        w.flight_defs.push_back(FlightDef(flight_id, cs + " " + std::to_string(number), true, true, forms));
         char line[200];
         std::snprintf(line, sizeof(line), "%s %d: %d %s, %s (ours)", cs.c_str(), number, n, a.name.c_str(), role.c_str());
         w.flights.push_back(line);

@@ -10,6 +10,23 @@
   "notes": "The Noric Republic is fictional. Nothing here is Austrian data: the analogue only gives the scale and the limits. Every aircraft number is a PLACEHOLDER.",
   "em_libraries": [],
   "callsigns": [ "Adler", "Falke", "Gams", "Steinbock", "Bergwind", "Edelweiss" ],
+  "flights": {
+    "source": "sam3d estimate: NATO-style pairs, short low routes by day (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3, a design inference)",
+    "confidence": "estimate",
+    "notes": "Places in number order, the leader's [0, 0, 0] first: No. 2 his wingman, No. 3 the element lead, No. 4 his wingman; a place past the list repeats it further back. Each place is [right_m, back_m, up_m] of the leader. A phase not given flies the transit's. 1985 formations only: no welded wing (anderegg_2001 p. 20 puts Fluid Four before 1975).",
+    "fighter": {
+      "transit": { "slots": [ [0, 0, 0], [1600, 0, 600], [-3200, 0, 0], [-4800, 0, 600] ],
+        "source": "sam3d estimate: as NATO's fighters (anderegg_2001)", "confidence": "estimate" }
+    },
+    "strike": {
+      "transit": { "slots": [ [0, 0, 0], [2000, 0, 0], [0, 3000, 0], [2000, 3000, 0] ],
+        "source": "sam3d estimate: as NATO's strike at low level (rafhs_j20_1999)", "confidence": "estimate" }
+    },
+    "helicopter": {
+      "transit": { "slots": [ [0, 0, 0], [200, 300, 0], [400, 600, 0], [600, 900, 0] ],
+        "source": "sam3d estimate: as NATO's helicopters (fm_17_50_1977)", "confidence": "estimate" }
+    }
+  },
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 4, "on_call_fraction": 0.15, "centralisation": 0.5, "simultaneous_bias": 0.4,
     "sortie_rate_per_day": 2.0, "serviceability": 0.75, "max_packages_per_cycle": 5, "delivery_risk": 0.7, "min_effect": 0.02, "min_value": 0.3,

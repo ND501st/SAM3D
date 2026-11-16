@@ -234,6 +234,34 @@ public:
     // by, as the game draws them: its munition's rate_rpm. Without one the bridge's own table (GunRoundsPerMin).
     void SetMunitions(const scenery::MunitionLibrary* lib) { munitions_ = lib; }
 
+    // A new route for one of the package's flights (ScenarioRunner::RerouteFlight, roadmap B1), its weapons now for
+    // `aim`: its aircraft release there, and the neighbours' passes they are in are decided again on their new track.
+    bool Reroute(ScenarioRunner& r, const std::string& flight, std::vector<RouteLeg> legs, const Vec3& aim, const std::string& by,
+                 std::string* why = nullptr) {
+        int fi = -1;
+        for (std::size_t k = 0; k < m_.flight_ids.size(); ++k) {
+            if (m_.flight_ids[k] == flight) fi = static_cast<int>(k);
+        }
+        if (fi < 0) {
+            if (why != nullptr) *why = "no flight '" + flight + "' in package " + std::to_string(m_.package_id);
+            return false;
+        }
+        if (!r.RerouteFlight(flight, std::move(legs), aim, by, why)) return false;
+        for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+            RaidAircraft& a = m_.aircraft[i];
+            if (a.flight != fi) continue;
+            if (a.has_release) {
+                a.release_enu = aim;
+                a.aim_enu = aim;
+            }
+            for (std::size_t j = 0; j < m_.neighbours.size(); ++j) {
+                Pass& ps = passes_[i * m_.neighbours.size() + j];
+                if (ps.inside && !ps.done) ps.rechord = true;
+            }
+        }
+        return true;
+    }
+
     // What happened, for AirCampaign::CompletePlayerMission.
     PackageOutcome Finish(ScenarioRunner& r) {
         PackageOutcome o;
@@ -292,9 +320,41 @@ public:
             l.captured = rng_.Chance(0.5);
             o.losses.push_back(l);
         }
+        // A flight aborted when it was ordered home before its release (flights.hpp, roadmap B1): by its leader, its
+        // package's commander, or each of its pilots on his own (damaged). Orders from outside it are its retasks.
         for (std::size_t fi = 0; fi < flight_released.size(); ++fi) {
-            if (flight_released[fi]) o.released_flights.push_back(static_cast<int>(fi));
-            else if (flight_has_release[fi] && flight_alive[fi]) o.aborted_flights.push_back(static_cast<int>(fi));
+            const std::string fid = fi < m_.flight_ids.size() ? m_.flight_ids[fi] : std::string();
+            const FlightState* fs = fid.empty() ? nullptr : r.Flight(fid);
+            if (fs != nullptr) {
+                for (const OrderRecord& rec : fs->orders) {
+                    if (rec.by == "leader" || rec.by == "package" || rec.by == "pilot") continue;
+                    RetaskRecord rt;
+                    rt.flight = static_cast<int>(fi);
+                    rt.kind = OrderKindId(rec.kind);
+                    rt.by = rec.by;
+                    rt.t_s = rec.t_s;
+                    o.retasks.push_back(rt);
+                }
+            }
+            if (flight_released[fi]) {
+                o.released_flights.push_back(static_cast<int>(fi));
+            } else if (flight_has_release[fi] && flight_alive[fi]) {
+                bool home = fs == nullptr;  // a manifest without its flights (an older save): broke away as before
+                if (fs != nullptr) {
+                    std::vector<int> member_home;
+                    for (const OrderRecord& rec : fs->orders) {
+                        if (rec.kind != OrderKind::ReturnHome) continue;
+                        if (rec.target < 0) home = true;
+                        else member_home.push_back(rec.target);
+                    }
+                    bool all = !fs->slots.empty();
+                    for (const FlightSlot& sl : fs->slots) {
+                        if (sl.alive && std::find(member_home.begin(), member_home.end(), sl.target) == member_home.end()) all = false;
+                    }
+                    home = home || all;
+                }
+                if (home) o.aborted_flights.push_back(static_cast<int>(fi));
+            }
         }
         o.delivered = delivered_;
         o.hit_nothing = delivered_ && !hit_something_;
@@ -353,6 +413,7 @@ private:
         bool hit = false;
         double flown_m = 0.0;
         double hit_at_m = 0.0;
+        bool rechord = false;  // its flight was rerouted inside the zone: the rest of its chord on its new track
         // The presentation (fx): a missile neighbour's round is shown launched so that its flight ends where the pass is
         // decided (half way through the zone), however long the pass.
         bool sam = false;
@@ -415,8 +476,8 @@ private:
     // When an aircraft releases its load (docs/air_war/05_EXECUTION.md "release"). Rockets, missiles, guns, a weapon not
     // known and a recce's camera: within `scenario.release_capture_m` of its release point. A load that falls goes where
     // the aircraft's state throws it (weapon_flight.hpp), so it is released where the throw from here best meets the aim
-    // ahead along its track (the aim within the capture of its line: a flight's aircraft fly up to
-    // `scenario.flight_spacing_m` apart and aim at one point): at the step where the throw comes to reach the aim (the
+    // ahead along its track (the aim within the capture of its line: a flight's aircraft fly their formation's slots
+    // apart and aim at one point): at the step where the throw comes to reach the aim (the
     // aim's distance ahead over the throw crosses 1), or, where it never quite does, at the step after the two came
     // closest. The window for it is the attack run: where the plan puts the release point over the target (level,
     // laydown: a throw short of it is where the bombs go), its farthest throw (in a vacuum) and kReleaseMarginM more;
@@ -518,6 +579,18 @@ private:
                     Engage(r, i, j, step, step_m);
                 } else if (ps.inside) {
                     ps.flown_m += step_m;
+                    if (ps.rechord && inside && step_m > 1.0) {  // rerouted: the hit half way through what it has left
+                        ps.rechord = false;
+                        const Vec3 d = nb.enu - s.last_pos;
+                        const double along = (d.x * step.x + d.y * step.y) / step_m;
+                        const double cross2 = std::max(0.0, d.x * d.x + d.y * d.y - along * along);
+                        const double left = std::max(0.0, along + std::sqrt(std::max(0.0, nb.defence.radius_m * nb.defence.radius_m - cross2)));
+                        if (ps.hit) ps.hit_at_m = ps.flown_m + 0.5 * left;
+                        if (ps.sam) {
+                            ps.sam_end_at_m = ps.hit_at_m > 0.0 ? ps.hit_at_m : ps.flown_m + 0.5 * left;
+                            ps.sam_launch_at_m = std::max(ps.flown_m, ps.sam_launch_at_m);
+                        }
+                    }
                 }
                 if (!ps.inside || ps.done) continue;
                 FxPass(r, i, j, inside);  // the feed: its missile leaving the site, and bursting where the pass is decided

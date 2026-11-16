@@ -77,6 +77,23 @@ the logistics' `"buildup_initial"` and `"buildup_full_by_day"` (a squadron's own
 `high` for a dive from height, `low` for terrain following) and a share in the phases. The Pact has the Kh-22M (1970s);
 NATO the BGM-109C Tomahawk (1986) and AGM-86C CALCM (1988).
 
+A faction's **`"flights"`** block (track B, B1; `docs/air_battle/02_FLIGHTS_AND_PILOTS.md` sections 1.3 and 2) is its
+formations: per class (`fighter`, `strike`, `helicopter`) and phase (`transit`, `ingress`, `attack`, `egress`,
+`defensive`, `orbit`), `"slots"` as `[right_m, back_m, up_m]` of the leader in number order (the leader's `[0, 0, 0]`
+first, then No. 2, the element lead No. 3, his wingman No. 4; a place past the list repeats it further back), each phase
+with its `source` and `confidence`, and the block's own. A phase not given flies the transit's; a class is picked from
+the flight's role (`FormationClassOf`: escort, SEAD, hunter, jammer and the support roles fly as fighters, helicopters as
+helicopters, the rest as strike). Strict keys; 1985's formations only. `RaidScenarioBuilder` and the testbed's waves
+write a raid's flights with them (the scenario's `"flights"` and `"packages"`, `scenario.hpp`); the runner keeps the
+flights and each wingman flies his slot on his leader (`simcore/flights.hpp`).
+
+```json
+"flights": { "source": "...", "confidence": "low", "notes": "...",
+  "fighter": { "transit": { "slots": [ [0, 0, 0], [1600, 0, 600], [-3200, 0, 0], [-4800, 0, 600] ], "source": "anderegg_2001 ...", "confidence": "medium" } },
+  "strike": { "transit": { "slots": [...], "source": "...", "confidence": "low" }, "ingress": {...}, "attack": {...} },
+  "helicopter": { "transit": {...} } }
+```
+
 Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`, `missile`,
 `armed_recce`. Flight roles: `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`,
 `missile`, and the support roles `awacs`, `tanker`, `elint`. Object kinds: `sam_site`, `aaa`,

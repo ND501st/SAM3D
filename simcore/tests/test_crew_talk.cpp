@@ -230,7 +230,9 @@ SC_TEST("crew talk: silent against the ARM, the commander orders nothing that ra
     for (const SpokenCallout& s : log) {
         if (s.start_s < off->start_s || s.start_s > off->start_s + 60.0) continue;
         if (s.id == "order_emcon_off") ++offs;
-        SC_EXPECT(s.id != "order_jammer" && s.id != "order_take_target" && s.id != "order_prepare");
+        const bool radiates = s.id == "order_jammer" || s.id == "order_take_target" || s.id == "order_prepare";
+        if (radiates) std::printf("    %s at %.1f s (radiation off at %.1f s)\n", s.id.c_str(), s.start_s, off->start_s);
+        SC_EXPECT(!radiates);
         if (s.id == "order_drop_target") std::printf("    radiation off at %.1f s, the target let go at %.1f s\n", off->start_s, s.start_s);
     }
     std::printf("    «Излучение выключить!» %d time(s) in the minute after the first\n", offs);

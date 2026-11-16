@@ -345,14 +345,14 @@ Research: `docs/research/AIR_BATTLE_RESEARCH_2026-11.md`, with ten checked topic
 - Every route is one template: entry, an IP offset to the left, the target, an egress to the left, and an exit that
   is the entry. Believed threats price a route and size its SEAD, but never shape it. The planner has no terrain.
 - In a session a package is lone aircraft with an id prefix and a sideways shift. There are no leaders, no radio, no
-  reroute, and no air combat.
+  reroute, and no air combat. (Since B1: flights with leaders, formations and a package's nerve, and a reroute call.)
 - Our fighters are one number per front.
 - A package is resolved whole when it takes off, and the campaign clock stops while one is live.
 
 | # | Task |
 |---|---|
 | B0 | **Research.** **Done 15 Nov 2026** (`docs/research/AIR_BATTLE_RESEARCH_2026-11.md`). Ten topics, each checked against its sources and bounded to 1985: routes, reactions, C2 and retasking, targets of opportunity, air-to-air weapons, air combat, our fighters with the SAMs, perception, radio and intercept, the factions. Left: the open items its §6 lists |
-| B1 | **Flights in the session**: leader, wingmen, package commander and formations kept; a command layer between the pilot and the aircraft; a runner call that re-routes a flight (`02_FLIGHTS_AND_PILOTS.md`). Needs R3 |
+| B1 | **Flights in the session**: leader, wingmen, package commander and formations kept; a command layer between the pilot and the aircraft; a runner call that re-routes a flight (`02_FLIGHTS_AND_PILOTS.md`). Needs R3. **Done 15 Nov 2026** (`simcore/flights.hpp`, `AircraftDemand`, the scenario's `"flights"` and `"packages"`, each faction's `"flights"` block, raids and waves written as flights, `test_flights.cpp`; `02_FLIGHTS_AND_PILOTS.md` §2.5). Left: perception and the reaction chain (B3, B4), authority (B5), the calls as transmissions (B9), per-leg timing and heights (B2), splits and tactical turns (B8), jettison and escorts (B4), pilots' ids and fates |
 | B2 | **Routes as flown**: turn points on features over the believed threats and the ground, corridors at time windows, IPs on features, a different way home, heights and speeds per faction (`01_ROUTES.md`) |
 | B3 | **Perception**: the eye on the optics, light, weather and line of sight; warning receivers as they were; the neighbours' radars radiating; the truth cues removed (`03_PERCEPTION.md`) |
 | B4 | **Reactions under fire** (was R4): cue, delay, call, manoeuvre, chaff and flares by year, jettison, press on or abort, report; R1's damage states for played raids (`04_REACTIONS.md`) |

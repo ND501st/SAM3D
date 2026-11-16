@@ -27,6 +27,26 @@
 
 namespace simcore {
 
+// What the command layer tells an aircraft to fly (flights.hpp, roadmap B1): while `active` it steers for `point` (its
+// track over the ground to it, crabbed into the wind; not captured unless `capture`: the layer moves it) or, with
+// `by_heading`, holds a heading over the ground, instead of its next waypoint, whose place it keeps. A speed, turn rate
+// or g limit given (> 0) takes the place of its own for the step. Inactive, it follows its waypoints as it always has.
+// With `capture` the point is passed as a waypoint is (within the capture circle, or inside a turn circle): the step
+// flies on straight and sets `reached`, for the layer to end what it was flying for.
+struct AircraftDemand {
+    bool active = false;
+    Vec3 point;
+    bool capture = false;
+    bool reached = false;
+    bool by_heading = false;
+    double heading_rad = 0.0;      // by_heading: the track wanted, clockwise from North
+    double path_angle_rad = 0.0;   // by_heading and not level: the path angle wanted
+    bool level = true;             // by_heading: no climb or dive asked (the height layer's, or level)
+    double speed_mps = 0.0;
+    double turn_rate_rad_s = 0.0;  // a pilot's hard turn (an evasion)
+    double max_load_g = 0.0;
+};
+
 struct Aircraft {
     int id = 0;
     std::string name;
@@ -61,6 +81,7 @@ struct Aircraft {
     bool attitude_set = false;    // the heading and path angle were taken from its velocity on its first step
     // Its height is set by a pilot after each step (TargetPilot, target_behaviour.hpp): the step flies the horizontal.
     bool height_held = false;
+    AircraftDemand demand;  // the command layer's (flights.hpp); inactive: its waypoints
 };
 
 // Game values of the flight model (docs/air_battle/02_FLIGHTS_AND_PILOTS.md §3).
@@ -231,18 +252,30 @@ inline void StepByBank(Aircraft& a, double dt, const Vec3& wind_mps) {
     }
     double v = a.airspeed_mps;
 
-    // Where the pilot steers: the next waypoint (one he can't turn onto passed for the one after), else straight on.
+    // Where the pilot steers: the demand's point, or the next waypoint (one he can't turn onto passed for the one
+    // after), else straight on.
     double want_heading = a.heading_rad;
     double want_gamma = a.path_angle_rad;
-    if (a.next_waypoint < a.waypoints.size()) {
+    const Vec3* steer = nullptr;
+    if (a.demand.active) {
         const Vec3 nose{std::sin(a.heading_rad), std::cos(a.heading_rad), 0.0};
-        const Vec3 to_wp = a.waypoints[a.next_waypoint] - a.position;
-        if (to_wp.Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, nose, a.waypoints[a.next_waypoint])) {
-            ++a.next_waypoint;
+        if (a.demand.capture && ((a.demand.point - a.position).Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, nose, a.demand.point))) {
+            a.demand.reached = true;
+        } else {
+            steer = &a.demand.point;
         }
+    } else {
+        if (a.next_waypoint < a.waypoints.size()) {
+            const Vec3 nose{std::sin(a.heading_rad), std::cos(a.heading_rad), 0.0};
+            const Vec3 to_wp = a.waypoints[a.next_waypoint] - a.position;
+            if (to_wp.Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, nose, a.waypoints[a.next_waypoint])) {
+                ++a.next_waypoint;
+            }
+        }
+        if (a.next_waypoint < a.waypoints.size()) steer = &a.waypoints[a.next_waypoint];
     }
-    if (a.next_waypoint < a.waypoints.size()) {
-        const Vec3 to_wp = a.waypoints[a.next_waypoint] - a.position;
+    if (steer != nullptr) {
+        const Vec3 to_wp = *steer - a.position;
         const double h = to_wp.HorizontalLength();
         if (h > 1e-6) {
             Vec3 want{to_wp.x / h, to_wp.y / h, 0.0};
@@ -320,27 +353,30 @@ inline void StepByBank(Aircraft& a, double dt, const Vec3& wind_mps) {
     a.position += a.velocity * dt;
     SetPitch(a, v, dvdt);
 }
-}  // namespace flight
 
-// One step along the waypoints. `wind_mps` (ENU, the way the air moves) carries the aircraft with it: `velocity` is
-// over the ground, and the pilot crabs into the wind so the track over the ground still runs to the next waypoint
-// (the wind triangle: the air vector a with |a| = speed and a + wind along the track).
-inline void StepAircraft(Aircraft& a, double dt, const Vec3& wind_mps = Vec3{}) {
-    if (!a.alive) return;
+// One step of either way of flying, to the next waypoint or the demand's point.
+inline void StepAlong(Aircraft& a, double dt, const Vec3& wind_mps) {
     if (FliesByBank(a)) {
-        flight::StepByBank(a, dt, wind_mps);
+        StepByBank(a, dt, wind_mps);
         return;
     }
-    // The old way: constant airspeed, the velocity turned toward the waypoint in 3D.
+    // The old way: constant airspeed, the velocity turned toward the waypoint (or the demand's point) in 3D.
     const bool windy = wind_mps.LengthSquared() > 0.0;
     Vec3 dir = (windy ? a.velocity - wind_mps : a.velocity).Normalized();  // where the nose points
     if (dir.LengthSquared() == 0.0) dir = Vec3{0.0, 1.0, 0.0};
 
-    if (a.next_waypoint < a.waypoints.size()) {
-        const Vec3 to_wp = a.waypoints[a.next_waypoint] - a.position;
-        if (to_wp.Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, dir, a.waypoints[a.next_waypoint])) {
-            ++a.next_waypoint;
-        } else {
+    const bool demanded = a.demand.active;
+    if (demanded || a.next_waypoint < a.waypoints.size()) {
+        const Vec3& p = demanded ? a.demand.point : a.waypoints[a.next_waypoint];
+        const Vec3 to_wp = p - a.position;
+        const bool passed = (!demanded || a.demand.capture) && (to_wp.Length() <= a.waypoint_capture_radius_m || WaypointInsideTurn(a, dir, p));
+        if (passed) {
+            if (demanded) {
+                a.demand.reached = true;
+            } else {
+                ++a.next_waypoint;
+            }
+        } else if (to_wp.LengthSquared() > 0.0) {
             Vec3 want = to_wp.Normalized();
             if (windy) {
                 const double gw = Dot(want, wind_mps);
@@ -352,7 +388,34 @@ inline void StepAircraft(Aircraft& a, double dt, const Vec3& wind_mps = Vec3{}) 
     }
     a.velocity = dir * a.speed_mps + (windy ? wind_mps : Vec3{});
     a.position += a.velocity * dt;
-    flight::ShowAttitude(a, dir, dt);
+    ShowAttitude(a, dir, dt);
+}
+}  // namespace flight
+
+// One step along the waypoints, or by the command layer's demand (AircraftDemand: its point or heading, with its speed,
+// turn rate or g limit in place of the aircraft's own for the step). `wind_mps` (ENU, the way the air moves) carries the
+// aircraft with it: `velocity` is over the ground, and the pilot crabs into the wind so the track over the ground still
+// runs to where he steers (the wind triangle: the air vector a with |a| = speed and a + wind along the track).
+inline void StepAircraft(Aircraft& a, double dt, const Vec3& wind_mps = Vec3{}) {
+    if (!a.alive) return;
+    if (!a.demand.active) {
+        flight::StepAlong(a, dt, wind_mps);
+        return;
+    }
+    AircraftDemand& d = a.demand;
+    if (d.by_heading) {
+        const double far_m = 50000.0;
+        d.point = a.position + Vec3{std::sin(d.heading_rad) * far_m, std::cos(d.heading_rad) * far_m,
+                                    d.level ? 0.0 : std::tan(d.path_angle_rad) * far_m};
+    }
+    const double speed = a.speed_mps, turn = a.max_turn_rate_rad_s, g = a.max_load_g;
+    if (d.speed_mps > 0.0) a.speed_mps = d.speed_mps;
+    if (d.turn_rate_rad_s > 0.0) a.max_turn_rate_rad_s = d.turn_rate_rad_s;
+    if (d.max_load_g > 1.0 && a.max_load_g > 1.0) a.max_load_g = std::min(a.max_load_g, d.max_load_g);
+    flight::StepAlong(a, dt, wind_mps);
+    a.speed_mps = speed;
+    a.max_turn_rate_rad_s = turn;
+    a.max_load_g = g;
 }
 
 // After a pilot set the height (target_behaviour.hpp): the path angle and the pitch from the vertical speed it flew.

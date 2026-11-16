@@ -67,6 +67,25 @@ def _approach(frm: float, to: float, step: float) -> float:
 
 
 @dataclass
+class AircraftDemand:
+    """What the command layer tells an aircraft to fly (simcore flights.hpp, roadmap B1): while `active` it steers for
+    `point` (or, `by_heading`, holds a heading) instead of its next waypoint, whose place it keeps; a speed, turn rate or
+    g limit given (> 0) takes the place of its own for the step. With `capture` the point is passed as a waypoint is: the
+    step flies on straight and sets `reached`. Inactive, it follows its waypoints as it always has."""
+    active: bool = False
+    point: Vec3 = Vec3()
+    capture: bool = False
+    reached: bool = False
+    by_heading: bool = False
+    heading_rad: float = 0.0
+    path_angle_rad: float = 0.0
+    level: bool = True
+    speed_mps: float = 0.0
+    turn_rate_rad_s: float = 0.0
+    max_load_g: float = 0.0
+
+
+@dataclass
 class Aircraft:
     name: str
     position: Vec3
@@ -97,6 +116,7 @@ class Aircraft:
     throttle: float = 0.0
     attitude_set: bool = False
     height_held: bool = False
+    demand: AircraftDemand = field(default_factory=AircraftDemand)
 
     @property
     def rotorcraft(self) -> bool:
@@ -216,13 +236,23 @@ class Aircraft:
             self.attitude_set = True
         v = self.airspeed_mps
         want_heading, want_gamma = self.heading_rad, self.path_angle_rad
-        if self.next_wp < len(self.waypoints):
-            nose = Vec3(math.sin(self.heading_rad), math.cos(self.heading_rad), 0.0)
-            to_wp = self.waypoints[self.next_wp] - self.position
-            if to_wp.length() <= self.capture_radius_m or self.waypoint_inside_turn(nose, self.waypoints[self.next_wp]):
-                self.next_wp += 1
-        if self.next_wp < len(self.waypoints):
-            to_wp = self.waypoints[self.next_wp] - self.position
+        steer = None
+        nose = Vec3(math.sin(self.heading_rad), math.cos(self.heading_rad), 0.0)
+        dm = self.demand
+        if dm.active:
+            if dm.capture and ((dm.point - self.position).length() <= self.capture_radius_m or self.waypoint_inside_turn(nose, dm.point)):
+                dm.reached = True
+            else:
+                steer = dm.point
+        else:
+            if self.next_wp < len(self.waypoints):
+                to_wp = self.waypoints[self.next_wp] - self.position
+                if to_wp.length() <= self.capture_radius_m or self.waypoint_inside_turn(nose, self.waypoints[self.next_wp]):
+                    self.next_wp += 1
+            if self.next_wp < len(self.waypoints):
+                steer = self.waypoints[self.next_wp]
+        if steer is not None:
+            to_wp = steer - self.position
             h = to_wp.horizontal_length()
             if h > 1e-6:
                 want = Vec3(to_wp.x / h, to_wp.y / h, 0.0)
@@ -294,9 +324,31 @@ class Aircraft:
         self._set_pitch(v, dvdt)
 
     def step(self, dt: float, wind: Vec3 = Vec3()) -> None:
-        """One step along the waypoints; `wind` (ENU, the way the air moves) carries it, the pilot crabs into it."""
+        """One step along the waypoints, or by the command layer's demand (its point or heading, with its speed, turn
+        rate or g limit in place of the aircraft's own for the step); `wind` (ENU, the way the air moves) carries it,
+        the pilot crabs into it."""
         if not self.alive:
             return
+        dm = self.demand
+        if not dm.active:
+            self._step_along(dt, wind)
+            return
+        if dm.by_heading:
+            far_m = 50000.0
+            dm.point = self.position + Vec3(math.sin(dm.heading_rad) * far_m, math.cos(dm.heading_rad) * far_m,
+                                            0.0 if dm.level else math.tan(dm.path_angle_rad) * far_m)
+        speed, turn, g = self.speed_mps, self.max_turn_rate_rad_s, self.max_load_g
+        if dm.speed_mps > 0.0:
+            self.speed_mps = dm.speed_mps
+        if dm.turn_rate_rad_s > 0.0:
+            self.max_turn_rate_rad_s = dm.turn_rate_rad_s
+        if dm.max_load_g > 1.0 and self.max_load_g > 1.0:
+            self.max_load_g = min(self.max_load_g, dm.max_load_g)
+        self._step_along(dt, wind)
+        self.speed_mps, self.max_turn_rate_rad_s, self.max_load_g = speed, turn, g
+
+    def _step_along(self, dt: float, wind: Vec3) -> None:
+        """One step of either way of flying, to the next waypoint or the demand's point."""
         if self.flies_by_bank():
             self._step_by_bank(dt, wind)
             return
@@ -304,11 +356,17 @@ class Aircraft:
         d = (self.velocity - wind if windy else self.velocity).normalized()
         if d.length_sq() == 0:
             d = Vec3(0, 1, 0)
-        if self.next_wp < len(self.waypoints):
-            to_wp = self.waypoints[self.next_wp] - self.position
-            if to_wp.length() <= self.capture_radius_m or self.waypoint_inside_turn(d, self.waypoints[self.next_wp]):
-                self.next_wp += 1
-            else:
+        dm = self.demand
+        if dm.active or self.next_wp < len(self.waypoints):
+            p = dm.point if dm.active else self.waypoints[self.next_wp]
+            to_wp = p - self.position
+            passed = (not dm.active or dm.capture) and (to_wp.length() <= self.capture_radius_m or self.waypoint_inside_turn(d, p))
+            if passed:
+                if dm.active:
+                    dm.reached = True
+                else:
+                    self.next_wp += 1
+            elif to_wp.length_sq() > 0.0:
                 want = to_wp.normalized()
                 if windy:
                     gw = want.dot(wind)

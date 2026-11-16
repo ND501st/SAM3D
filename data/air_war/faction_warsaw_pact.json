@@ -16,6 +16,29 @@
       "source": "stemasov_1969 (a SPETSNAZ-A battalion with an army on the main axis, set up 10-15 km from the line of contact, about 25 km of VHF reach, 12-15 km in barrage); gs_lesson12_1977 (the anti-aircraft battalions' command post and warning radio jammed first); ru_wiki_r330 (the R-330B: 30-100 MHz, 1 kW); williamson_1980 (NATO's view in 1980: 1.5-2 kW at 30-76 MHz); follow_s is a sam3d reading",
       "confidence": "low", "notes": "The Soviet figure (1 kW) used, NATO's 1.5-2 kW recorded (docs/research/VOICE_JAMMING_2026-10.md section 2). Fictional against a fictional enemy: here it jams the nets of the Pact's adversary, our side." }
   ],
+  "flights": {
+    "source": "johnson_1986, pennington_1985, fm_100_2_1_1984, mai_tactics_vvs, airwar_mi24_markovsky (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3); spacings no source gives are game values",
+    "confidence": "low",
+    "notes": "Places in number order, the leader's [0, 0, 0] first: No. 2 his wingman, No. 3 the element lead, No. 4 his wingman; a place past the list repeats it further back. Each place is [right_m, back_m, up_m] of the leader. A phase not given flies the transit's. 1985 formations only: no welded wing (anderegg_2001 p. 20 puts Fluid Four before 1975).",
+    "fighter": {
+      "transit": { "slots": [ [0, 0, 0], [1000, 500, 200], [0, 2500, 0], [1000, 3000, 200] ],
+        "source": "johnson_1986, pennington_1985 (pairs inside groups of four to eight under ground control); the spacings a game value", "confidence": "low" }
+    },
+    "strike": {
+      "transit": { "slots": [ [0, 0, 0], [600, 400, 0], [0, 2000, 0], [600, 2400, 0] ],
+        "source": "fm_100_2_1_1984 p. 12-8 (the approach at 50-100 m, radio at a minimum); mai_tactics_vvs section 3.3.3 (a column of pairs); the spacings a game value", "confidence": "low" },
+      "attack": { "slots": [ [0, 0, 0], [0, 1500, 0], [0, 3000, 0], [0, 4500, 0] ],
+        "source": "fm_100_2_1_1984 p. 12-8 (the leader assigns the targets, re-attack from another direction); in trail, the spacings a game value", "confidence": "low" }
+    },
+    "helicopter": {
+      "transit": { "slots": [ [0, 0, 0], [0, 1350, 0], [0, 2700, 0], [0, 4050, 0] ],
+        "source": "airwar_mi24_markovsky (1,200-1,500 m between helicopters on the way, against ambush)", "confidence": "medium" },
+      "ingress": { "slots": [ [0, 0, 0], [210, 670, 0], [420, 1340, 0], [630, 2010, 0] ],
+        "source": "airwar_mi24_markovsky (pairs in echelon at 15-20 degrees, 600-800 m apart, on armed reconnaissance)", "confidence": "medium" },
+      "attack": { "slots": [ [0, 0, 0], [210, 670, 0], [420, 1340, 0], [630, 2010, 0] ],
+        "source": "airwar_mi24_markovsky (pairs in echelon at 15-20 degrees, 600-800 m apart)", "confidence": "medium" }
+    }
+  },
   "doctrine": {
     "planning_cycle_h": 12, "lead_time_h": 3, "on_call_fraction": 0.2, "centralisation": 0.9, "simultaneous_bias": 0.8,
     "sortie_rate_per_day": 2.5, "serviceability": 0.7, "max_packages_per_cycle": 10, "delivery_risk": 0.3,

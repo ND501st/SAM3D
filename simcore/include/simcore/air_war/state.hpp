@@ -133,6 +133,14 @@ struct LossRecord {
     bool captured = false; // the crew came down alive in the player's country
 };
 
+// An order a played package's flight was given from outside it (roadmap B1, flights.hpp): retasked, diverted, held.
+struct RetaskRecord {
+    int flight = -1;     // the package's flight
+    std::string kind;    // the order (flights.hpp OrderKindId)
+    std::string by;      // who gave it (a ground node's id, "instructor", "session")
+    double t_s = 0.0;    // when (the session's seconds)
+};
+
 struct PackageOutcome {
     int package_id = 0;
     std::vector<LossRecord> losses;
@@ -156,6 +164,7 @@ struct PackageOutcome {
     std::vector<std::string> notes;
     std::vector<int> released_flights;  // flights that released their weapons (a played mission)
     std::vector<int> aborted_flights;   // flights that broke away before their release point (a played mission)
+    std::vector<RetaskRecord> retasks;  // orders its flights were given from outside them (a played mission, roadmap B1)
     bool truth_applied = false;  // the damage is already in the truth (the abstract resolver); else the campaign applies it
     bool played = false;         // from a played mission (the mission bridge)
     // What the battery reported of it from its records (roadmap 18.1, campaign/report.hpp): our side's journal states

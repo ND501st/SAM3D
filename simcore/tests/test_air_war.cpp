@@ -963,6 +963,12 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
                 o.decoys_hit.push_back(d.theatre.objects[static_cast<std::size_t>(c.Dummies().front())].id);
                 o.emissions.push_back({l.by, 123.456789});
                 o.released_flights.push_back(0);
+                RetaskRecord rt;  // roadmap B1: a diversion by a ground post, with who ordered it
+                rt.flight = 0;
+                rt.kind = "divert";
+                rt.by = "atoc_test";
+                rt.t_s = 61.25;
+                o.retasks.push_back(rt);
                 c.CompletePlayerMission(o, c.Now() + 0.123456789);
                 ++played;
             } else {
@@ -988,6 +994,12 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
     for (std::size_t i = 0; same && i < c.Journal().size(); ++i) same = loaded.Journal()[i].text == c.Journal()[i].text;
     SC_EXPECT(same);
     SC_EXPECT(loaded.Packages().size() == c.Packages().size() && loaded.AircraftLost() == c.AircraftLost());
+    int retasks = 0, retasks_loaded = 0;
+    for (const auto& a : c.Actions()) retasks += static_cast<int>(a.outcome.retasks.size());
+    for (const auto& a : loaded.Actions()) {
+        for (const RetaskRecord& rt : a.outcome.retasks) retasks_loaded += rt.by == "atoc_test" && rt.kind == "divert" && rt.t_s == 61.25 ? 1 : 0;
+    }
+    SC_EXPECT(retasks == played && retasks_loaded == played);
     const Vec3 a = loaded.Truth()[static_cast<std::size_t>(loaded.PlayerIndex())].pos;
     const Vec3 b = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos;
     SC_EXPECT_NEAR(Dist2d(a, b), 0.0, 0.0);

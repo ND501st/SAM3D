@@ -625,6 +625,38 @@ struct CommsJammerDef {
     std::vector<MissionKind> with; // the packages it comes on with (empty: every package)
 };
 
+// A flight's formation in one phase (the faction's "flights" block; docs/air_battle/02_FLIGHTS_AND_PILOTS.md §1.3): each
+// place as [right, back, up] of the leader in metres, the leader's own first; with its source.
+struct FormationDef {
+    std::vector<Vec3> slots;
+    std::string source;
+    std::string confidence;
+};
+// The type classes and the phases a formation is given for (flights.hpp PhaseOfTag).
+inline const std::vector<std::string>& FormationClasses() {
+    static const std::vector<std::string> k = {"fighter", "strike", "helicopter"};
+    return k;
+}
+inline const std::vector<std::string>& FormationPhases() {
+    static const std::vector<std::string> k = {"transit", "ingress", "attack", "egress", "defensive", "orbit"};
+    return k;
+}
+// The class a flight flies its formation by: helicopters; fighters (escorts, SEAD and hunters, the support orbits); the
+// rest strike.
+inline std::string FormationClassOf(bool helicopter, FlightRole role) {
+    if (helicopter) return "helicopter";
+    switch (role) {
+        case FlightRole::Escort:
+        case FlightRole::Sead:
+        case FlightRole::Hunter:
+        case FlightRole::Jammer:
+        case FlightRole::Awacs:
+        case FlightRole::Tanker:
+        case FlightRole::Elint: return "fighter";
+        default: return "strike";
+    }
+}
+
 struct FactionDef {
     std::string id;
     std::string name;
@@ -643,7 +675,17 @@ struct FactionDef {
     std::vector<std::string> em_libraries;  // EM libraries its jammers and RWRs come from (for scenarios)
     std::vector<std::string> callsigns;     // flight call signs its planners use
     std::vector<CommsJammerDef> comms_jamming;  // its jammers of our voice nets (none: it has none, or none known)
+    // Its flights' formations (the "flights" block): type class -> phase -> the slots (roadmap B1).
+    std::map<std::string, std::map<std::string, FormationDef>> formations;
 
+    // A class's formations by phase, as a flight carries them (flights.hpp FlightState::formations); empty: none given.
+    std::map<std::string, std::vector<Vec3>> FormationsFor(const std::string& cls) const {
+        std::map<std::string, std::vector<Vec3>> out;
+        const auto it = formations.find(cls);
+        if (it == formations.end()) return out;
+        for (const auto& ph : it->second) out[ph.first] = ph.second.slots;
+        return out;
+    }
     const AircraftType* Aircraft(const std::string& id_) const {
         for (const AircraftType& a : aircraft) {
             if (a.id == id_) return &a;
@@ -872,7 +914,6 @@ struct TuningTable {
             {"scenario.clip_m", 70000.0},
             {"scenario.prep_s", 150.0},
             {"scenario.margin_s", 240.0},
-            {"scenario.flight_spacing_m", 800.0},
             {"scenario.max_targets", 24.0},
             {"scenario.release_capture_m", 2000.0},
             {"scenario.weapon_fall_s", 15.0},
@@ -1288,7 +1329,7 @@ public:
         std::string tier;
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
-                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming"}) ||
+                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1301,8 +1342,62 @@ public:
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
-            !LoadCommsJamming(root, out)) {
+            !LoadCommsJamming(root, out) || !LoadFormations(root, out)) {
             return false;
+        }
+        return true;
+    }
+
+    // The "flights" block (roadmap B1): per type class and phase, the slots [right_m, back_m, up_m] from the leader (his
+    // own [0, 0, 0] first), each phase with its source and confidence. Strict keys; 1985 formations only.
+    bool LoadFormations(const json::Value& root, FactionDef& out) {
+        const json::Value* fl = root.Find("flights");
+        if (fl == nullptr) return true;
+        if (!fl->Is(json::Type::Object)) return Fail("flights", "expected an object of type classes");
+        std::vector<std::string> keys = FormationClasses();
+        for (const char* k : {"source", "confidence", "notes"}) keys.push_back(k);
+        if (!KeysOf(*fl, "flights", keys)) return false;
+        for (std::size_t c = 0; c < fl->keys.size() && c < fl->items.size(); ++c) {
+            const std::string& cls = fl->keys[c];
+            if (cls == "source" || cls == "confidence" || cls == "notes") continue;
+            const json::Value& cv = fl->items[c];
+            const std::string cp = Join("flights", cls);
+            if (!cv.Is(json::Type::Object)) return Fail(cp, "expected an object of phases");
+            std::vector<std::string> pk = FormationPhases();
+            pk.push_back("notes");
+            if (!KeysOf(cv, cp, pk)) return false;
+            for (std::size_t ph = 0; ph < cv.keys.size() && ph < cv.items.size(); ++ph) {
+                if (cv.keys[ph] == "notes") continue;
+                const json::Value& v = cv.items[ph];
+                const std::string p = Join(cp, cv.keys[ph]);
+                FormationDef fd;
+                if (!Keys(v, p, {"slots", "source", "confidence", "notes"}) || !Provenance(v, p) ||
+                    !RequireString(v, p, "source", fd.source) || !RequireString(v, p, "confidence", fd.confidence)) {
+                    return false;
+                }
+                const json::Value* slots = OptionalArray(v, p, "slots");
+                if (slots == nullptr || slots->items.empty()) return message_.empty() ? Fail(Join(p, "slots"), "required, the leader's [0, 0, 0] first") : false;
+                for (std::size_t j = 0; j < slots->items.size(); ++j) {
+                    const json::Value& s = slots->items[j];
+                    if (!s.Is(json::Type::Array) || s.items.size() != 3 || !s.items[0].Is(json::Type::Number) ||
+                        !s.items[1].Is(json::Type::Number) || !s.items[2].Is(json::Type::Number)) {
+                        return Fail(Index(Join(p, "slots"), j), "expected [right_m, back_m, up_m]");
+                    }
+                    const Vec3 o{s.items[0].number, s.items[1].number, s.items[2].number};
+                    if (std::fabs(o.x) > 20000.0 || std::fabs(o.y) > 20000.0 || std::fabs(o.z) > 3000.0) {
+                        return Fail(Index(Join(p, "slots"), j), "within 20 km sideways and back, 3 km up or down");
+                    }
+                    if (j == 0 && (o.x != 0.0 || o.y != 0.0 || o.z != 0.0)) return Fail(Index(Join(p, "slots"), j), "the leader's own place, [0, 0, 0]");
+                    fd.slots.push_back(o);
+                }
+                out.formations[cls][cv.keys[ph]] = std::move(fd);
+            }
+        }
+        return true;
+    }
+    bool KeysOf(const json::Value& obj, const std::string& path, const std::vector<std::string>& allowed) {
+        for (const std::string& k : obj.keys) {
+            if (std::find(allowed.begin(), allowed.end(), k) == allowed.end()) return Fail(Join(path, k), "unknown key");
         }
         return true;
     }

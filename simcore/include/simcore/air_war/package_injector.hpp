@@ -124,9 +124,15 @@ inline InjectedPackage InjectPackage(ScenarioRunner& r, const RaidScenario& rs, 
     for (ScenarioTarget t : raid.targets) {
         t.start = MoveFrame(from, to, t.start);
         for (Vec3& w : t.waypoints) w = MoveFrame(from, to, w);
+        for (RouteLeg& l : t.legs) l.to = MoveFrame(from, to, l.to);
         if (t.arms.has_aim) t.arms.aim = MoveFrame(from, to, t.arms.aim);
         t.appear_at_s += at_s;
         ts.push_back(std::move(t));
+    }
+    // Its flights and its package as the session keeps them (flights.hpp, roadmap B1), before the aircraft that name them.
+    if (!r.AddFlights(raid.flights, raid.packages, &e)) {
+        out.error = e;
+        return out;
     }
     if (!r.AddTargets(std::move(ts), who, &e)) {
         out.error = e;

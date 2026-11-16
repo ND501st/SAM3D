@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -37,6 +38,7 @@
 #include "simcore/em/optical.hpp"
 #include "simcore/emission_regime.hpp"
 #include "simcore/engagement.hpp"
+#include "simcore/flights.hpp"
 #include "simcore/instructor.hpp"
 #include "simcore/light.hpp"
 #include "simcore/nav/session.hpp"
@@ -131,6 +133,38 @@ struct ScenarioTarget {
         if (weapon) return 0.3;
         return type.find("Rotorcraft") != std::string::npos ? 2.5 : 1.5;
     }
+    // Its flight (roadmap B1, flights.hpp): one of the scenario's "flights" by id, and its number in it ("slot": 1 the
+    // leader, 3 the element lead; 0: by its order among the flight's targets). No flight: a flight of one.
+    std::string flight;
+    int slot = 0;
+    // Its route's legs ("legs", one per waypoint: the leg flown to it): the speed on it ("speed_mps"; 0: speed_mps), its
+    // height ("agl_m" above the ground, held by the behaviour; or "alt_m" above sea level, the waypoint's height) and its
+    // "tag" (the phase: transit, ingress, attack, egress, defensive, orbit; or the planner's point tag). Empty: speed_mps
+    // the whole way. `to` is the waypoint.
+    std::vector<RouteLeg> legs;
+};
+
+// A flight of the scenario's targets ("flights", roadmap B1): who leads is its targets' slot 1.
+struct ScenarioFlight {
+    std::string id;
+    std::string callsign;
+    std::string package;          // a "packages" entry's id ("" none)
+    std::string side = "enemy";   // "enemy" or "ours"
+    bool keep_slots = true;       // false: each flies its own route (a stream of cruise missiles)
+    bool crewed = true;           // false: drones or weapons: no nerve, never turned back, no loss to its package
+    double call_s = flights::kCallS;  // a call on its net reaching a member
+    // The formation by phase ("formations": {"transit": [[right_m, back_m, up_m], ...], ...}): the leader's place first.
+    // None: each keeps where it started from the leader.
+    std::map<std::string, std::vector<Vec3>> formations;
+};
+// A package ("packages"): its commander's flight and his nerve, the share of its aircraft lost (of those he knows of)
+// at which he turns it back (the air war's PackageNerve; default 0.25 + 0.3 x 0.5).
+struct ScenarioPackage {
+    std::string id;
+    std::string commander;   // a flight id ("" the first of its flights)
+    int size = 0;            // its aircraft (0: those of its flights in the scenario)
+    int lost_before = 0;     // lost before it came into the scenario, known to him
+    double turn_back_share = 0.4;
 };
 
 // How the crew fights, as its orders from above put it (roadmap E6): "doctrine".
@@ -290,6 +324,8 @@ struct ScenarioDef {
     std::vector<std::pair<std::string, int>> initial_controls;  // set after the readiness (own_unit.controls)
     std::vector<ScenarioCrew> crew;
     std::vector<ScenarioTarget> targets;
+    std::vector<ScenarioFlight> flights;    // "flights": the targets' flights (a target with none is a flight of one)
+    std::vector<ScenarioPackage> packages;  // "packages": the flights' packages
     std::vector<ScenarioNeighbour> neighbours;
     std::vector<ScenarioScenery> scenery;
     // "waves": "gameplay/test_waves.json": random waves of every adversary's and our own aircraft for as long as the
@@ -428,7 +464,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves"})) {
+                             "scenery", "waves", "flights", "packages"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -480,7 +516,7 @@ public:
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
-        if (!LoadTargets(root, out)) return false;
+        if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out)) return false;
         if (!LoadScenery(root, out) || !LoadWaves(root, data_dir, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
@@ -1253,6 +1289,142 @@ private:
         return true;
     }
 
+    // "flights" and "packages" (roadmap B1, flights.hpp).
+    bool LoadFlights(const json::Value& root, ScenarioDef& out) {
+        if (const json::Value* arr = OptionalArray(root, "", "flights")) {
+            for (std::size_t i = 0; i < arr->items.size(); ++i) {
+                const json::Value& v = arr->items[i];
+                const std::string p = Index("flights", i);
+                ScenarioFlight f;
+                if (!Keys(v, p, {"id", "callsign", "package", "side", "keep_slots", "crewed", "call_s", "formations", "source", "confidence", "notes"}) ||
+                    !RequireString(v, p, "id", f.id) || !OptionalString(v, p, "callsign", f.callsign) ||
+                    !OptionalString(v, p, "package", f.package) || !OptionalString(v, p, "side", f.side) ||
+                    !OptionalBool(v, p, "keep_slots", f.keep_slots) || !OptionalBool(v, p, "crewed", f.crewed) ||
+                    !OptionalNumber(v, p, "call_s", f.call_s)) {
+                    return false;
+                }
+                if (f.side != "enemy" && f.side != "ours") return Fail(Join(p, "side"), "\"enemy\" or \"ours\"");
+                if (f.call_s < 0.0) return Fail(Join(p, "call_s"), "must be >= 0");
+                if (f.callsign.empty()) f.callsign = f.id;
+                if (const json::Value* fm = v.Find("formations")) {
+                    const std::string fp = Join(p, "formations");
+                    if (!fm->Is(json::Type::Object)) return Fail(fp, "expected an object of phases");
+                    if (!Keys(*fm, fp, {"transit", "ingress", "attack", "egress", "defensive", "orbit"})) return false;
+                    for (std::size_t k = 0; k < fm->keys.size() && k < fm->items.size(); ++k) {
+                        std::vector<Vec3> slots;
+                        if (!LoadSlots(fm->items[k], Join(fp, fm->keys[k]), slots)) return false;
+                        f.formations[fm->keys[k]] = std::move(slots);
+                    }
+                }
+                for (const ScenarioFlight& o : out.flights) {
+                    if (o.id == f.id) return Fail(Join(p, "id"), "duplicate flight '" + f.id + "'");
+                }
+                out.flights.push_back(std::move(f));
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        if (const json::Value* arr = OptionalArray(root, "", "packages")) {
+            for (std::size_t i = 0; i < arr->items.size(); ++i) {
+                const json::Value& v = arr->items[i];
+                const std::string p = Index("packages", i);
+                ScenarioPackage pk;
+                if (!Keys(v, p, {"id", "commander", "size", "lost_before", "turn_back_share", "source", "confidence", "notes"}) ||
+                    !RequireString(v, p, "id", pk.id) || !OptionalString(v, p, "commander", pk.commander) ||
+                    !OptionalInt(v, p, "size", pk.size) || !OptionalInt(v, p, "lost_before", pk.lost_before) ||
+                    !OptionalNumber(v, p, "turn_back_share", pk.turn_back_share)) {
+                    return false;
+                }
+                if (pk.size < 0 || pk.lost_before < 0) return Fail(p, "size and lost_before must be >= 0");
+                if (pk.turn_back_share <= 0.0 || pk.turn_back_share > 1.0) return Fail(Join(p, "turn_back_share"), "between 0 and 1");
+                for (const ScenarioPackage& o : out.packages) {
+                    if (o.id == pk.id) return Fail(Join(p, "id"), "duplicate package '" + pk.id + "'");
+                }
+                out.packages.push_back(std::move(pk));
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        for (std::size_t i = 0; i < out.flights.size(); ++i) {
+            const ScenarioFlight& f = out.flights[i];
+            if (f.package.empty()) continue;
+            bool known = false;
+            for (const ScenarioPackage& pk : out.packages) known = known || pk.id == f.package;
+            if (!known) return Fail(Join(Index("flights", i), "package"), "no package '" + f.package + "' in \"packages\"");
+        }
+        for (std::size_t i = 0; i < out.packages.size(); ++i) {
+            const ScenarioPackage& pk = out.packages[i];
+            if (pk.commander.empty()) continue;
+            bool ok = false;
+            for (const ScenarioFlight& f : out.flights) ok = ok || (f.id == pk.commander && f.package == pk.id);
+            if (!ok) return Fail(Join(Index("packages", i), "commander"), "'" + pk.commander + "' is not a flight of this package");
+        }
+        return true;
+    }
+    // A formation's slots: [[right_m, back_m, up_m], ...], the leader's place first.
+    bool LoadSlots(const json::Value& v, const std::string& p, std::vector<Vec3>& out) {
+        if (!v.Is(json::Type::Array) || v.items.empty()) return Fail(p, "a list of [right_m, back_m, up_m], the leader's first");
+        for (std::size_t j = 0; j < v.items.size(); ++j) {
+            const json::Value& s = v.items[j];
+            if (!s.Is(json::Type::Array) || s.items.size() != 3 || !s.items[0].Is(json::Type::Number) ||
+                !s.items[1].Is(json::Type::Number) || !s.items[2].Is(json::Type::Number)) {
+                return Fail(Index(p, j), "expected [right_m, back_m, up_m]");
+            }
+            out.push_back(Vec3{s.items[0].number, s.items[1].number, s.items[2].number});
+        }
+        return true;
+    }
+    // A target's "flight", "slot" and "legs".
+    bool LoadTargetLegs(const json::Value& t, const std::string& p, ScenarioTarget& tg, bool& any_agl) {
+        if (!OptionalString(t, p, "flight", tg.flight) || !OptionalInt(t, p, "slot", tg.slot)) return false;
+        if (t.Find("slot") != nullptr && (tg.slot < 1 || tg.slot > 16)) return Fail(Join(p, "slot"), "its number in the flight, 1 to 16");
+        if (t.Find("slot") != nullptr && tg.flight.empty()) return Fail(Join(p, "slot"), "needs a flight");
+        const json::Value* legs = OptionalArray(t, p, "legs");
+        if (legs == nullptr) return message_.empty();
+        if (legs->items.size() != tg.waypoints.size()) return Fail(Join(p, "legs"), "one per waypoint (the leg flown to it)");
+        for (std::size_t j = 0; j < legs->items.size(); ++j) {
+            const json::Value& l = legs->items[j];
+            const std::string lp = Index(Join(p, "legs"), j);
+            RouteLeg leg;
+            leg.to = tg.waypoints[j];
+            if (!Keys(l, lp, {"speed_mps", "agl_m", "alt_m", "tag", "notes"}) || !OptionalNumber(l, lp, "speed_mps", leg.speed_mps) ||
+                !OptionalNumber(l, lp, "agl_m", leg.agl_m) || !OptionalNumber(l, lp, "alt_m", leg.alt_m) ||
+                !OptionalString(l, lp, "tag", leg.tag)) {
+                return false;
+            }
+            if (leg.speed_mps < 0.0) return Fail(Join(lp, "speed_mps"), "must be > 0 (or left out)");
+            if (l.Find("agl_m") != nullptr && l.Find("alt_m") != nullptr) return Fail(lp, "agl_m or alt_m, not both");
+            if (l.Find("agl_m") != nullptr) {
+                if (leg.agl_m < 0.0) return Fail(Join(lp, "agl_m"), "must be >= 0");
+                tg.behaviour.waypoint_agl_m[j] = leg.agl_m;
+                any_agl = true;
+            }
+            if (l.Find("alt_m") != nullptr) {
+                leg.has_alt = true;
+                tg.waypoints[j].z = GroundPointInFrame(frame_, tg.waypoints[j].x, tg.waypoints[j].y, leg.alt_m).z;
+                leg.to = tg.waypoints[j];
+            }
+            tg.legs.push_back(leg);
+        }
+        return true;
+    }
+    // Every flight a target names is in "flights", and its slots are its own.
+    bool CheckFlights(ScenarioDef& out) {
+        for (std::size_t i = 0; i < out.targets.size(); ++i) {
+            const ScenarioTarget& t = out.targets[i];
+            if (t.flight.empty()) continue;
+            bool known = false;
+            for (const ScenarioFlight& f : out.flights) known = known || f.id == t.flight;
+            if (!known) return Fail(Join(Index("targets", i), "flight"), "no flight '" + t.flight + "' in \"flights\"");
+            for (std::size_t j = 0; j < i; ++j) {
+                if (t.slot > 0 && out.targets[j].flight == t.flight && out.targets[j].slot == t.slot) {
+                    return Fail(Join(Index("targets", i), "slot"), "slot " + std::to_string(t.slot) + " of " + t.flight + " is taken");
+                }
+            }
+        }
+        return true;
+    }
+
     bool LoadTargets(const json::Value& root, ScenarioDef& out) {
         if (const json::Value* nbs = OptionalArray(root, "", "neighbours")) {
             for (std::size_t i = 0; i < nbs->items.size(); ++i) {
@@ -1291,7 +1463,7 @@ private:
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
                              "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
                              "bottom_m", "max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s", "max_mps", "accel_mps2",
-                             "climb_mps", "notes"})) {
+                             "climb_mps", "flight", "slot", "legs", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1379,6 +1551,7 @@ private:
                 tg.behaviour.waypoint_agl_m.push_back(agl);
             }
             if (!LoadTargetBehaviour(t, p, tg)) return false;
+            if (!LoadTargetLegs(t, p, tg, any_agl)) return false;
             if (any_agl && tg.behaviour.kind == TargetBehaviourDef::Kind::None) {
                 return Fail(Join(p, "waypoints"), "agl_m needs a behaviour that holds the height (terrain_following, pop_up)");
             }

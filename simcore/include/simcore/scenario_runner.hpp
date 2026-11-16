@@ -139,6 +139,8 @@ public:
             e.span_m = t.span_m;
             eng_targets_.push_back(e);
         }
+        flights_ = std::make_unique<Flights>();
+        RegisterFlights(0);
         UpdateLight();  // the sun at second 0 (roadmap R7): the TV's daylight from here, the battery's night below
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
         fx_rng_.seed(def_.seed + kFxSeed);  // the presentation's own draws (fx/events.hpp): never a model's generator
@@ -1926,16 +1928,13 @@ private:
         bool gone = false;
         int world_id = -1;
         TargetPilot pilot;  // terrain following, pop-up, evasion (target_behaviour.hpp)
-        // Held by the instructor (roadmap 10.3): it flies his heading, height and speed; its own pilot and route wait.
+        // Held by the instructor (roadmap 10.3): it flies his heading, height and speed (his orders to it as a flight of
+        // one, flights.hpp); its own pilot waits, and its route, never overwritten, is there when he lets it go.
         bool held = false;
-        double held_heading_rad = 0.0;
         TargetPilot route_pilot;
-        std::vector<Vec3> route_waypoints;
-        std::size_t route_next = 0;
         AircraftDamage damage;  // what the testbed's defences did to it (damage.hpp, roadmap R1)
         Vec3 last_position;     // where the world had it before this step (a weapon's impact between the two)
     };
-    static constexpr double kHeldLegM = 50000.0;  // a held target flies at a point this far along his heading
     // A target added once the session runs (the instructor's, a package's): its state beside the scenario's own.
     void EnterTarget(ScenarioTarget t) {
         EngagementTarget e;
@@ -2051,11 +2050,16 @@ private:
             s.last_position = a->position;
             // A weapon on to its aim, its last waypoint, strikes there: it passes it close, not half a kilometre short.
             if (def_.targets[i].weapon && a->next_waypoint + 1 == a->waypoints.size()) a->waypoint_capture_radius_m = kWeaponAimCaptureM;
-            if (s.held && !s.pilot.Evading()) {  // the instructor's heading (a jink he ordered steers itself)
-                a->waypoints = {a->position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
-                a->next_waypoint = 0;
-            }
-            s.pilot.BeforeStep(*a);
+        }
+        // The command layer (flights.hpp, roadmap B1): each aircraft told what to fly, or left to its route; then each
+        // pilot's height layer.
+        const Flights::Lookup air = FlightLookup();
+        flights_->Steer(time_, air);
+        for (std::size_t i = 0; i < targets_.size(); ++i) {
+            TargetState& s = targets_[i];
+            if (!s.spawned || s.gone) continue;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            if (a != nullptr) s.pilot.BeforeStep(*a);
         }
         world_.Step(dt);
         for (std::size_t i = 0; i < targets_.size(); ++i) {
@@ -2068,6 +2072,12 @@ private:
                 // pilot's work, but still held over the ground (roadmap R5).
                 if (a->alive && !def_.targets[i].weapon) s.pilot.HoldOverGround(*a, world_.GetTerrain(), world_.Frame(), dt);
             } else {
+                if (a->alive) {  // its override's turns and end, its place on the plan, the leg's speed
+                    bool ended = false;
+                    const std::string ev = flights_->AfterMove(static_cast<int>(i), *a, time_, air, ended);
+                    if (ended) s.pilot.OverrideEnded();
+                    if (!ev.empty()) Event(def_.targets[i].id, ev);
+                }
                 const std::string what = s.pilot.AfterStep(*a, world_.GetTerrain(), world_.Frame(), dt, time_);
                 if (!what.empty()) Event(def_.targets[i].id, what);
             }
@@ -2090,6 +2100,13 @@ private:
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr || !a->alive) {
                 s.gone = true;
+                if (def_.targets[i].weapon) {
+                    flights_->Gone(static_cast<int>(i));
+                } else {
+                    std::vector<Flights::Note> notes;
+                    flights_->Down(static_cast<int>(i), time_, &notes);
+                    for (const Flights::Note& n : notes) Event(n.who, n.what);
+                }
             } else if (def_.targets[i].weapon && (a->next_waypoint >= a->waypoints.size() || AboveGround(a->position) <= 1.0)) {
                 // A weapon ends where it strikes: it no longer flies (its actor goes as an inactive one does), and the
                 // presentation feed has its warhead (a cruise missile's: fx/events.hpp). Where it strikes is on the
@@ -2115,16 +2132,182 @@ private:
                     e.fire = true;
                     fx_.Push(e);
                 }
+                flights_->Gone(static_cast<int>(i));
             } else if (a->next_waypoint >= a->waypoints.size()) {
                 s.gone = true;
                 Event(def_.targets[i].id, "passed its last waypoint");
+                a->demand = AircraftDemand();  // it flies on straight, as it is
+                flights_->Gone(static_cast<int>(i));
             }
         }
+        for (const Flights::Note& n : flights_->After(time_)) Event(n.who, n.what);
     }
+
+    // The aircraft of a target in the sky now, for the command layer (flights.hpp).
+    Flights::Lookup FlightLookup() {
+        return [this](int t) -> Aircraft* {
+            if (t < 0 || static_cast<std::size_t>(t) >= targets_.size()) return nullptr;
+            const TargetState& s = targets_[static_cast<std::size_t>(t)];
+            if (!s.spawned || s.gone) return nullptr;
+            Aircraft* a = world_.FindAircraft(s.world_id);
+            return a != nullptr && a->alive ? a : nullptr;
+        };
+    }
+
+    // ---- Flights and packages (flights.hpp, roadmap B1): the scenario's own, and those entering it later. A target named
+    // in no flight is a flight of one, its id the flight's.
+    void RegisterFlights(std::size_t first) {
+        std::map<std::string, std::vector<std::size_t>> members;
+        std::vector<std::string> order;
+        for (std::size_t i = first; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (t.flight.empty()) continue;
+            if (members.find(t.flight) == members.end()) order.push_back(t.flight);
+            members[t.flight].push_back(i);
+        }
+        for (std::size_t i = first; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!t.flight.empty()) {
+                if (order.empty() || t.flight != order.front()) continue;
+                order.erase(order.begin());
+                AddFlightOf(t.flight, members[t.flight]);
+                continue;
+            }
+            AddFlightOf(std::string(), {i});
+        }
+        for (const ScenarioPackage& p : def_.packages) {
+            if (packages_added_.count(p.id) != 0) continue;
+            PackageState ps;
+            ps.id = p.id;
+            ps.size = p.size;
+            ps.lost_before = p.lost_before;
+            ps.turn_back_share = p.turn_back_share;
+            for (std::size_t k = 0; k < flights_->Size(); ++k) {
+                if (flights_->All()[k].package == p.id) ps.flights.push_back(static_cast<int>(k));
+            }
+            if (ps.flights.empty()) continue;  // its flights have not come in yet
+            ps.commander_flight = flights_->Index(p.commander);
+            flights_->AddPackage(std::move(ps));
+            packages_added_.insert(p.id);
+        }
+    }
+    void AddFlightOf(const std::string& id, const std::vector<std::size_t>& targets) {
+        FlightState f;
+        const ScenarioFlight* def = nullptr;
+        for (const ScenarioFlight& d : def_.flights) {
+            if (d.id == id) def = &d;
+        }
+        const ScenarioTarget& lead0 = def_.targets[targets.front()];
+        f.id = id.empty() ? lead0.id : id;
+        if (id.empty() && flights_->Index(f.id) >= 0) f.id = "target " + f.id;
+        f.side = lead0.friendly ? "ours" : "enemy";
+        if (def != nullptr) {
+            f.callsign = def->callsign;
+            f.package = def->package;
+            f.side = def->side;
+            f.keep_slots = def->keep_slots;
+            f.call_s = def->call_s;
+            f.formations = def->formations;
+        }
+        // Its slots in number order (unnumbered: in the order given); where each starts from the leader, in the leader's
+        // first leg's frame (the formation for a flight without one).
+        std::vector<std::size_t> ts = targets;
+        std::vector<int> numbers;
+        for (std::size_t k = 0; k < ts.size(); ++k) numbers.push_back(def_.targets[ts[k]].slot > 0 ? def_.targets[ts[k]].slot : static_cast<int>(k) + 1);
+        std::size_t lead = 0;
+        for (std::size_t k = 1; k < ts.size(); ++k) {
+            if (numbers[k] < numbers[lead]) lead = k;
+        }
+        const ScenarioTarget& L = def_.targets[ts[lead]];
+        Vec3 fwd = L.waypoints.empty() ? Vec3{0.0, 1.0, 0.0} : L.waypoints.front() - L.start;
+        fwd.z = 0.0;
+        fwd = fwd.LengthSquared() > 1.0 ? fwd.Normalized() : Vec3{0.0, 1.0, 0.0};
+        const Vec3 right{fwd.y, -fwd.x, 0.0};
+        bool weapons = true;
+        for (std::size_t k = 0; k < ts.size(); ++k) {
+            const ScenarioTarget& t = def_.targets[ts[k]];
+            weapons = weapons && t.weapon;
+            FlightSlot s;
+            s.target = static_cast<int>(ts[k]);
+            s.number = numbers[k];
+            const Vec3 d = t.start - L.start;
+            s.offset_m = Vec3{Dot(d, right), -Dot(d, fwd), d.z};
+            s.legs = t.legs;
+            f.slots.push_back(std::move(s));
+        }
+        f.weapons = weapons || (def != nullptr && !def->crewed);  // no crew: no nerve, no loss to its package
+        if (weapons) f.keep_slots = false;  // a stream of weapons: each flies its own plan
+        flights_->Add(std::move(f));
+    }
+
+public:
+    // ---- The flights' command (flights.hpp, roadmap B1; docs/air_battle/02_FLIGHTS_AND_PILOTS.md §2.3). Who may give an
+    // order (C2Authority::May) is roadmap B5: every order is accepted until then. Each call is logged with its `by`.
+    bool OrderFlight(const std::string& flight, FlightOrder o, std::string* why = nullptr) {
+        const int fi = flights_->Index(flight);
+        if (fi < 0) {
+            if (why != nullptr) *why = "no flight '" + flight + "'";
+            return false;
+        }
+        if (o.by.empty()) o.by = "the session";
+        if (!flights_->Order(fi, o, time_)) {
+            if (why != nullptr) *why = o.by + " may not order " + flight;
+            return false;
+        }
+        Event(flight, std::string("ordered: ") + ToString(o.kind) + " (by " + o.by + ")");
+        return true;
+    }
+    // A new route for a flight from where it is (a Divert on its legs), toward `aim`, its new release point.
+    bool RerouteFlight(const std::string& flight, std::vector<RouteLeg> legs, const Vec3& aim, const std::string& by, std::string* why = nullptr) {
+        if (legs.empty()) {
+            if (why != nullptr) *why = "a new route needs one leg at least";
+            return false;
+        }
+        FlightOrder o;
+        o.kind = OrderKind::Divert;
+        o.legs = std::move(legs);
+        o.has_aim = true;
+        o.aim = aim;
+        o.by = by;
+        return OrderFlight(flight, std::move(o), why);
+    }
+    const FlightState* Flight(const std::string& id) const { return flights_->Find(id); }
+    std::vector<std::string> FlightsOf(const std::string& package) const { return flights_->FlightsOf(package); }
+    const Flights& AllFlights() const { return *flights_; }
+    // Flights and packages about to enter the running session (a package's, before its AddTargets): their targets name
+    // them. All or none: false, with why, for an id the session has already.
+    bool AddFlights(const std::vector<ScenarioFlight>& fs, const std::vector<ScenarioPackage>& ps, std::string* why = nullptr) {
+        const auto fail = [why](const std::string& w) {
+            if (why != nullptr) *why = w;
+            return false;
+        };
+        // Already the session's: a flight flying in it, a package whose flights are in it. A definition no aircraft has
+        // named yet is replaced.
+        std::set<std::string> ids, pids;
+        for (const ScenarioFlight& f : fs) {
+            if (f.id.empty() || !ids.insert(f.id).second || flights_->Index(f.id) >= 0) return fail("flight '" + f.id + "' is the session's already (or has no id)");
+        }
+        for (const ScenarioPackage& p : ps) {
+            if (p.id.empty() || !pids.insert(p.id).second || packages_added_.count(p.id) != 0) return fail("package '" + p.id + "' is the session's already (or has no id)");
+        }
+        for (const ScenarioFlight& f : fs) {
+            def_.flights.erase(std::remove_if(def_.flights.begin(), def_.flights.end(), [&f](const ScenarioFlight& o) { return o.id == f.id; }), def_.flights.end());
+            def_.flights.push_back(f);
+        }
+        for (const ScenarioPackage& p : ps) {
+            def_.packages.erase(std::remove_if(def_.packages.begin(), def_.packages.end(), [&p](const ScenarioPackage& o) { return o.id == p.id; }), def_.packages.end());
+            def_.packages.push_back(p);
+        }
+        return true;
+    }
+
+private:
 
     // ---- The dynamic campaign testbed's waves (scenario "waves", air_war/test_waves.hpp): a wave when one is due, the
     // strike aircraft's loads released, and the waves' aircraft long gone taken out of the world (first marked dead, so
     // the EM layer and the board let them go, then removed).
+    std::unique_ptr<Flights> flights_;     // the flights and packages in the session (flights.hpp, roadmap B1)
+    std::set<std::string> packages_added_;
     std::unique_ptr<airwar::TestWaves> waves_;
     std::vector<std::size_t> wave_targets_;          // the waves' targets still in the world (indices into def_.targets)
     std::map<std::string, std::size_t> wave_index_;  // a wave aircraft's id -> its index (for its release)
@@ -2663,7 +2846,12 @@ private:
             scene.centre = def_.unit_position;
             for (airwar::WaveRelease& r : waves_->Jettison(id, time_, a->position, a->velocity, scene)) ReleaseWaveLoad(std::move(r));
         }
-        if (c.abort && !a->waypoints.empty()) a->next_waypoint = a->waypoints.size() - 1;  // straight for its way out
+        if (c.abort) {  // the pilot's own: straight for his way out, out of his flight (its lead passes on)
+            FlightOrder home;
+            home.kind = OrderKind::ReturnHome;
+            home.by = "pilot";
+            flights_->OrderMember(static_cast<int>(i), home, time_, true, "the lead turns for home, damaged");
+        }
     }
 
     // The heavily damaged whose time has come fall (burning if they were on fire), credited to who did it.
@@ -2737,7 +2925,10 @@ private:
             std::string e;
             if (em_link_ && !w.jammers.empty() && !AddEmGear(def_.em.library, w.jammers, who, &e)) Event(who, "its jammers stay out: " + e);
             const std::size_t n = w.aircraft.size();
+            const std::size_t first = def_.targets.size();
+            if (!AddFlights(w.flight_defs, {}, &e)) Event(who, "its flights fly without their formations: " + e);
             for (ScenarioTarget& t : w.aircraft) EnterWaveTarget(std::move(t));
+            RegisterFlights(first);
             std::string flights;
             for (const std::string& f : w.flights) flights += (flights.empty() ? "" : "; ") + f;
             log_.Record({time_, DebriefEntry::Kind::Scenario, who, "enters", std::to_string(n) + " aircraft: " + flights});
@@ -2836,6 +3027,7 @@ private:
     int arms_fired_ = 0;
     static constexpr int kArmAcmiBase = 0x7E000;
     static constexpr double kArmBearingTolRad = 0.35;  // sam3d: about 20 degrees, a warning receiver's bearing on the briefed target
+    static constexpr double kArmTurnAwayM = 40000.0;   // sam3d: an ARM carrier, its missiles gone, turns away this far and out
     std::vector<int> arm_acmi_shown_;
 
     void UpdateArms() {
@@ -2896,13 +3088,21 @@ private:
                 Event(t.id, "fires an anti-radiation missile (" + weapon.name + ") at " + (sig.name.empty() ? std::string("a radar") : sig.name) +
                                 ", " + km + " km");
             } else if (t.arms.turn_away && !c.turned && time_ - c.last_s >= 1.0) {
+                // Its missiles gone, a hard turn away from the radar and out, 40 km off: the pilot's own (an override
+                // that ends there; a leader's flight goes home behind him).
                 c.turned = true;
                 Vec3 away = a->position - aim;
                 away.z = 0.0;
                 away = away.LengthSquared() > 1.0 ? away.Normalized() : Vec3{0.0, 1.0, 0.0};
-                a->waypoints = {Vec3{a->position.x + away.x * 40000.0, a->position.y + away.y * 40000.0, a->position.z}};
-                a->next_waypoint = 0;
-                a->max_turn_rate_rad_s = std::max(a->max_turn_rate_rad_s, t.evade_turn_rate_rad_s);  // a hard turn
+                PilotOverride ov;
+                ov.kind = PilotOverride::Kind::TurnAway;
+                ov.end = PilotOverride::End::Point;
+                ov.after = PilotOverride::After::Home;
+                ov.point = Vec3{a->position.x + away.x * kArmTurnAwayM, a->position.y + away.y * kArmTurnAwayM, a->position.z};
+                ov.turn_rate_rad_s = std::max(a->max_turn_rate_rad_s, t.evade_turn_rate_rad_s);  // a hard turn
+                ov.until_s = time_ + 1e6;  // at the point
+                if (flights_->Overriding(static_cast<int>(i))) targets_[i].pilot.OverrideEnded();
+                flights_->Override(static_cast<int>(i), ov);
                 Event(t.id, "turns away from the radar");
             }
         }
@@ -2938,9 +3138,9 @@ private:
             if (def_.targets[i].id != id || !s.spawned || s.gone) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr) return;
-            const std::string what = launch ? s.pilot.OnLaunch(*a, def_.unit_position, time_)
-                                            : s.pilot.OnLocked(*a, def_.unit_position, time_);
-            if (!what.empty()) Event(id, what);
+            const Evasion ev = launch ? s.pilot.OnLaunch(*a, def_.unit_position, time_) : s.pilot.OnLocked(*a, def_.unit_position, time_);
+            if (!ev.what.empty()) Event(id, ev.what);
+            if (ev.steer) flights_->Override(static_cast<int>(i), ev.ov);  // a reflex: it does not wait for the leader
             return;
         }
     }
@@ -8504,6 +8704,11 @@ private:
                 if (acted) {
                     npc_arm_off_s_ = time_;
                     Event(Cmdr(), "radiation off against the ARM");
+                    // An engagement order of his still waiting its turn on the intercom is overtaken: he doesn't say it
+                    // after «Излучение выключить!» (its drills were cancelled above).
+                    if (!shadow_ && callouts_ && SeatHolder(Cmdr()).empty()) {
+                        callouts_->Withdraw(Cmdr(), {"order_take_target", "order_take_contact", "order_prepare", "order_jammer"});
+                    }
                 }
             }
             if (!radiating && engagement_on_ && engagement_.Method() != TrackMethod::None && time_ - npc_arm_off_s_ >= 3.0 &&
@@ -10908,6 +11113,7 @@ public:
             a->velocity = b->velocity;
             a->speed_mps = b->speed_mps;
             a->next_waypoint = b->next_waypoint;
+            a->demand = b->demand;  // what the truth's command layer told it (flights.hpp)
             if (!b->alive) a->alive = false;
             if (o.gone) s.gone = true;
         }
@@ -11028,22 +11234,24 @@ public:
             case InstructorOrder::Kind::Turn: {
                 double deg = std::fmod(o.value, 360.0);
                 if (deg < 0.0) deg += 360.0;
-                s.held_heading_rad = DegToRad(deg);
+                HoldOn(i, DegToRad(deg));
                 std::snprintf(text, sizeof(text), "turns it onto %03.0f degrees", deg);
                 break;
             }
             case InstructorOrder::Kind::Height:
-                s.pilot.SetAgl(o.value);
+                s.pilot.SetAgl(o.value);  // the height layer is the pilot's (target_behaviour.hpp)
                 std::snprintf(text, sizeof(text), "sends it to %.0f m above the ground", o.value);
                 break;
             case InstructorOrder::Kind::Speed:
-                a->speed_mps = o.value;
+                a->speed_mps = o.value;  // it keeps his speed when he lets it go, as it always has
+                HoldOn(i, HeldHeading(i), o.value);
                 std::snprintf(text, sizeof(text), "sets its speed to %.0f m/s", o.value);
                 break;
             case InstructorOrder::Kind::Evade: {
-                const std::string what = s.pilot.EvadeNow(*a, def_.unit_position, time_);
-                if (what.empty()) return fail(id + " is manoeuvring already");
-                std::snprintf(text, sizeof(text), "makes it manoeuvre: %s", what.c_str());
+                const Evasion ev = s.pilot.EvadeNow(*a, def_.unit_position, time_);
+                if (ev.what.empty()) return fail(id + " is manoeuvring already");
+                if (ev.steer) flights_->Override(static_cast<int>(i), ev.ov);
+                std::snprintf(text, sizeof(text), "makes it manoeuvre: %s", ev.what.c_str());
                 break;
             }
             default:
@@ -11072,7 +11280,10 @@ public:
         std::snprintf(text, sizeof(text), "enters %s: %.1f km out at %03.0f degrees, %.0f m up", t.name.c_str(),
                       std::hypot(rel.x, rel.y) / 1000.0, az, t.start.z);
         const std::string id = t.id;
+        t.flight.clear();  // a flight of one
+        const std::size_t first = def_.targets.size();
         EnterTarget(std::move(t));
+        RegisterFlights(first);
         Instructed(id, text);
         return true;
     }
@@ -11095,11 +11306,13 @@ public:
         }
         if (ts.empty()) return fail("no aircraft");
         double first_s = 1e18;
+        const std::size_t first = def_.targets.size();
         for (ScenarioTarget& t : ts) {
             t.appear_at_s = std::max(t.appear_at_s, time_);
             first_s = std::min(first_s, t.appear_at_s);
             EnterTarget(std::move(t));
         }
+        RegisterFlights(first);  // their flights (AddFlights first), or each a flight of one
         char text[160];
         std::snprintf(text, sizeof(text), "%zu aircraft come into the mission, the first at %.0f s", ts.size(), first_s);
         log_.Record({time_, DebriefEntry::Kind::Scenario, from, "enters", text});
@@ -11263,11 +11476,12 @@ private:
         }
         TargetState& s = targets_[i];
         const ScenarioTarget& def = def_.targets[i];
-        const auto route = s.pilot.Route(a);
-        s.route_waypoints = route.first;
-        s.route_next = route.second;
         s.route_pilot = s.pilot;
-        s.held_heading_rad = std::atan2(a.velocity.x, a.velocity.y);
+        if (flights_->Overriding(static_cast<int>(i))) {  // its own manoeuvre ends: he flies it now
+            flights_->EndOverride(static_cast<int>(i));
+            s.route_pilot.OverrideEnded();
+        }
+        HoldOn(i, std::atan2(a.velocity.x, a.velocity.y));
         TargetBehaviourDef hold;
         hold.kind = TargetBehaviourDef::Kind::TerrainFollowing;
         const double agl = world_.Frame().AltitudeOf(a.position) - world_.GetTerrain().HeightAt(a.position.x, a.position.y);
@@ -11288,18 +11502,30 @@ private:
         return true;
     }
 
-    // He lets it go: its own pilot again, and the route it was on (its next waypoint); with none left it flies on.
+    // His heading for a held target: an order to it as a flight of one (a vector, until he says otherwise), out of its
+    // flight's formation while he holds it.
+    void HoldOn(std::size_t i, double heading_rad, double speed_mps = -1.0) {
+        FlightOrder o;
+        o.kind = OrderKind::Divert;
+        o.has_heading = true;
+        o.heading_rad = heading_rad;
+        const FlightSlot* s = flights_->SlotOf(static_cast<int>(i));
+        o.speed_mps = speed_mps >= 0.0 ? speed_mps : (s != nullptr ? s->order.speed_mps : 0.0);
+        o.by = "instructor";
+        flights_->OrderMember(static_cast<int>(i), o, time_, true, "the instructor takes the lead");
+    }
+    double HeldHeading(std::size_t i) const {
+        const FlightSlot* s = flights_->SlotOf(static_cast<int>(i));
+        return s != nullptr ? s->order.heading_rad : 0.0;
+    }
+
+    // He lets it go: its own pilot again, back into its flight, and on along its route from the waypoint it was flying
+    // to when he took it (never overwritten: held, it passes none).
     void ReleaseTarget(TargetState& s, Aircraft& a) {
         s.held = false;
         s.pilot = s.route_pilot;
         a.max_turn_rate_rad_s = std::max(a.max_turn_rate_rad_s, 1e-3);
-        if (s.route_next < s.route_waypoints.size()) {
-            a.waypoints = s.route_waypoints;
-            a.next_waypoint = s.route_next;
-        } else {
-            a.waypoints = {a.position + Vec3{std::sin(s.held_heading_rad), std::cos(s.held_heading_rad), 0.0} * kHeldLegM};
-            a.next_waypoint = 0;
-        }
+        flights_->Rejoin(static_cast<int>(&s - targets_.data()));
     }
 
     std::set<std::string> external_launchers_;

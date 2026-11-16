@@ -20,6 +20,27 @@
       "source": "palii_1989 p. 23 (the AN/ALQ-151 Quick Fix: 2-76 MHz, out to 60 km); dtic_quickfix_tacjam (the EH-1H with the AN/ARQ-33 in airworthiness tests in 1977); its orbit 5 km behind its own line and follow_s are sam3d readings",
       "confidence": "low", "notes": "No source gives its transmitter's power, so within its range it jams weak, never strong (air_war/comms_jamming.hpp). In 1985 most likely the EH-1H (docs/research/VOICE_JAMMING_2026-10.md section 1.1)." }
   ],
+  "flights": {
+    "source": "anderegg_2001, rafhs_j20_1999, dubrov_1983, fm_17_50_1977 (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3); spacings no source gives are game values",
+    "confidence": "low",
+    "notes": "Places in number order, the leader's [0, 0, 0] first: No. 2 his wingman, No. 3 the element lead, No. 4 his wingman; a place past the list repeats it further back. Each place is [right_m, back_m, up_m] of the leader. A phase not given flies the transit's. 1985 formations only: no welded wing (anderegg_2001 p. 20 puts Fluid Four before 1975).",
+    "fighter": {
+      "transit": { "slots": [ [0, 0, 0], [1600, 0, 600], [-3200, 0, 0], [-4800, 0, 600] ],
+        "source": "anderegg_2001 pp. 59-60, 82-84 (pairs line abreast about a mile apart, stacked a couple of thousand feet); the second pair's place a game value", "confidence": "medium" }
+    },
+    "strike": {
+      "transit": { "slots": [ [0, 0, 0], [2000, 0, 0], [0, 3000, 0], [2000, 3000, 0] ],
+        "source": "rafhs_j20_1999 (very loose twos or fours at low level, precise timings); the spacings a game value", "confidence": "low" },
+      "ingress": { "slots": [ [0, 0, 0], [1000, 0, 0], [0, 1500, 0], [1000, 1500, 0] ],
+        "source": "dubrov_1983 (the strike group close to the target, Israel 1982 in a Soviet reading); the spacings a game value", "confidence": "low" },
+      "attack": { "slots": [ [0, 0, 0], [0, 1500, 0], [0, 3000, 0], [0, 4500, 0] ],
+        "source": "dubrov_1983 (split only before the target); in trail for separate attacks, the spacings a game value", "confidence": "low" }
+    },
+    "helicopter": {
+      "transit": { "slots": [ [0, 0, 0], [200, 300, 0], [400, 600, 0], [600, 900, 0] ],
+        "source": "fm_17_50_1977 ch. 3 (low level, contour and NOE along a broad corridor); no pair spacing found: a game value", "confidence": "estimate" }
+    }
+  },
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 12, "on_call_fraction": 0.1, "centralisation": 0.6, "simultaneous_bias": 0.6,
     "sortie_rate_per_day": 2.0, "serviceability": 0.8, "max_packages_per_cycle": 20, "delivery_risk": 0.4,

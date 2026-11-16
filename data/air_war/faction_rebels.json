@@ -10,6 +10,23 @@
   "notes": "The Rava Liberation Front is fictional. The Croatian air arm of 1991 only gives the shape (later than our period). Every aircraft number is a PLACEHOLDER.",
   "em_libraries": [],
   "callsigns": [ "Sokol", "Orao", "Vila", "Jastreb", "Kobac", "Lastavica" ],
+  "flights": {
+    "source": "sam3d estimate: a single aircraft or a loose pair, low, at night (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3, a design inference from biafra_minicoin and katanga_fouga)",
+    "confidence": "estimate",
+    "notes": "Places in number order, the leader's [0, 0, 0] first: No. 2 his wingman, No. 3 the element lead, No. 4 his wingman; a place past the list repeats it further back. Each place is [right_m, back_m, up_m] of the leader. A phase not given flies the transit's. 1985 formations only: no welded wing (anderegg_2001 p. 20 puts Fluid Four before 1975).",
+    "fighter": {
+      "transit": { "slots": [ [0, 0, 0], [1500, 1000, 0] ],
+        "source": "sam3d estimate: a loose pair (biafra_minicoin, katanga_fouga)", "confidence": "estimate" }
+    },
+    "strike": {
+      "transit": { "slots": [ [0, 0, 0], [1500, 1000, 0] ],
+        "source": "sam3d estimate: a loose pair (biafra_minicoin, katanga_fouga)", "confidence": "estimate" }
+    },
+    "helicopter": {
+      "transit": { "slots": [ [0, 0, 0], [500, 800, 0] ],
+        "source": "sam3d estimate: a loose pair", "confidence": "estimate" }
+    }
+  },
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
     "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3, "delivery_risk": 0.8, "min_effect": 0.005, "min_value": -0.5,

@@ -9,7 +9,9 @@
 //     to popup_agl_m for expose_s, sinking back for hidden_s, `cycles` times, then on along the rest of the route low.
 //   * Evasion, on a missile launch at it or when the tracking radar locks it (a radar warning receiver hears the lock;
 //     a TV track gives no warning): break onto a beam heading, break and dive to dive_agl_m, or jink (hard turns left
-//     and right of the course) for evade_s and then back onto the route. A hiding helicopter drops behind its cover.
+//     and right of the course) for evade_s, and then back to its flight's slot or its route. A hiding helicopter drops
+//     behind its cover. The pilot does not steer the aircraft himself: the evasion is a PilotOverride the command
+//     layer flies and ends (flights.hpp, roadmap B1); the pilot keeps the height layer (the dive's height until it ends).
 // Terrain masking is not a behaviour of its own: a target flying low behind a ridge is out of every sensor's line of
 // sight (the gameplay model's and the EM layer's).
 //
@@ -24,6 +26,7 @@
 #include <vector>
 
 #include "simcore/aircraft.hpp"
+#include "simcore/flights.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/terrain.hpp"
 #include "simcore/vec3.hpp"
@@ -56,7 +59,15 @@ struct EvadeDef {
     double turn_rate_rad_s = DegToRad(12.0);
     double dive_agl_m = 30.0;
     double jink_period_s = 4.0;
-    double evade_s = 20.0;  // a jink lasts this long, then the route is resumed
+    double evade_s = 20.0;  // a break, dive or jink lasts this long, then the flight's slot or the route is resumed
+};
+
+// What a pilot's evasion asks of the aircraft: said for the debrief, and the manoeuvre the command layer flies
+// (`steer` false: none, a helicopter dropping behind its cover).
+struct Evasion {
+    std::string what;
+    bool steer = false;
+    PilotOverride ov;
 };
 
 inline const char* ToString(EvadeDef::Kind k) {
@@ -95,18 +106,15 @@ public:
         a.height_held = ControlsHeight();  // a bank-to-turn aircraft then flies the horizontal only (aircraft.hpp)
         if (!a.height_held) return;
         for (Vec3& w : a.waypoints) w.z = a.position.z;
+        if (a.demand.active) a.demand.point.z = a.position.z;
         a.velocity.z = 0.0;
     }
 
-    // After the world moved it: the pop-up's phases, the jink's turns and the height. Returns what happened, for the
-    // debrief ("" if nothing).
+    // After the world moved it: the pop-up's phases and the height. Returns what happened, for the debrief ("" if
+    // nothing).
     std::string AfterStep(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt, double t) {
         if (!a.alive) return std::string();
         std::string event = StepPopUp(a, t);
-        if (evading_ && e_.kind == EvadeDef::Kind::Jink) {
-            const std::string j = StepJink(a, t);
-            if (!j.empty()) event = j;
-        }
         if (ControlsHeight() && dt > 0.0) HoldHeight(a, terrain, frame, dt);
         if (dt > 0.0) {
             const std::string g = GroundFloor(a, terrain, frame, dt, ControlsHeight());
@@ -117,17 +125,25 @@ public:
     }
 
     // A missile was launched at it, or the tracking radar holds it (`radar` false: a TV track, which it can't hear).
-    std::string OnLaunch(Aircraft& a, const Vec3& unit, double t) {
-        return e_.present && e_.on == EvadeDef::On::Launch ? Evade(a, unit, t) : std::string();
+    Evasion OnLaunch(const Aircraft& a, const Vec3& unit, double t) {
+        return e_.present && e_.on == EvadeDef::On::Launch ? Evade(a, unit, t) : Evasion();
     }
-    std::string OnLocked(Aircraft& a, const Vec3& unit, double t) {
-        return e_.present && e_.on == EvadeDef::On::Lock ? Evade(a, unit, t) : std::string();
+    Evasion OnLocked(const Aircraft& a, const Vec3& unit, double t) {
+        return e_.present && e_.on == EvadeDef::On::Lock ? Evade(a, unit, t) : Evasion();
     }
     // The instructor's order to manoeuvre now (and again later, if he likes), whatever would set it off otherwise.
-    std::string EvadeNow(Aircraft& a, const Vec3& unit, double t) {
-        if (evading_) return std::string();
+    Evasion EvadeNow(const Aircraft& a, const Vec3& unit, double t) {
+        if (evading_) return Evasion();
         e_.present = true;
         return Evade(a, unit, t);
+    }
+    // The command layer ended his manoeuvre: he is no longer evading, holds his own height again, and evades only once
+    // (as before roadmap B1; the instructor may order it again).
+    void OverrideEnded() {
+        if (!evading_) return;
+        evading_ = false;
+        diving_ = false;
+        e_.present = false;
     }
     // Only the ground floor (roadmap R5): an aircraft past its last waypoint, flying on until it leaves the world.
     void HoldOverGround(Aircraft& a, const Terrain& terrain, const LocalFrame& frame, double dt) {
@@ -136,12 +152,6 @@ public:
             SyncPathAngle(a);
         }
     }
-    // The route it is on: during a jink the one it will go back to, else the aircraft's own.
-    std::pair<std::vector<Vec3>, std::size_t> Route(const Aircraft& a) const {
-        if (evading_ && e_.kind == EvadeDef::Kind::Jink) return {saved_waypoints_, saved_next_};
-        return {a.waypoints, a.next_waypoint};
-    }
-
     // The height above the ground the pilot is holding now.
     double WantedAglM(const Aircraft& a) const {
         if (diving_) return e_.dive_agl_m;
@@ -188,66 +198,51 @@ private:
         return std::string();
     }
 
-    std::string Evade(Aircraft& a, const Vec3& unit, double t) {
-        if (evading_ || !a.alive) return std::string();
+    // The manoeuvre, as an override for the command layer to fly (flights.hpp): a jink's turns 60 degrees off its course,
+    // 20 km out, flipped every jink_period_s; a break or a dive for a point 30 km along the beam to the line of sight from
+    // the unit; each at the evasion's turn rate, for evade_s.
+    Evasion Evade(const Aircraft& a, const Vec3& unit, double t) {
+        Evasion out;
+        if (evading_ || !a.alive) return out;
         evading_ = true;
         if (b_.kind == TargetBehaviourDef::Kind::PopUp && (phase_ == Phase::Hidden || phase_ == Phase::Exposed)) {
             if (phase_ == Phase::Exposed) ++cycles_done_;
             phase_ = Phase::Hidden;
             until_s_ = t + b_.hidden_s;
-            return "drops behind cover (warned)";
+            out.what = "drops behind cover (warned)";
+            return out;
         }
-        saved_turn_rad_s_ = a.max_turn_rate_rad_s;
-        a.max_turn_rate_rad_s = e_.turn_rate_rad_s;
         Vec3 dir = a.velocity;
         dir.z = 0.0;
         dir = dir.LengthSquared() > 0.0 ? dir.Normalized() : Vec3{0.0, 1.0, 0.0};
+        out.steer = true;
+        PilotOverride& o = out.ov;
+        o.turn_rate_rad_s = e_.turn_rate_rad_s;
+        o.until_s = t + e_.evade_s;
         if (e_.kind == EvadeDef::Kind::Jink) {
-            saved_waypoints_ = a.waypoints;
-            saved_next_ = a.next_waypoint;
-            base_dir_ = dir;
-            jink_sign_ = 1.0;
-            jink_flip_s_ = t + e_.jink_period_s;
-            jink_end_s_ = t + e_.evade_s;
-            SetJinkPoint(a);
-            return "jinks (hard turns left and right)";
+            o.kind = PilotOverride::Kind::Jink;
+            o.base_dir = dir;
+            o.sign = 1.0;
+            o.period_s = e_.jink_period_s;
+            o.flip_s = t + e_.jink_period_s;
+            o.point = Flights::JinkPoint(o, a.position);
+            out.what = "jinks (hard turns left and right)";
+            return out;
         }
         // Break onto a beam heading, away from the missile's line of sight.
         const Vec3 los = (a.position - unit).Normalized();
         Vec3 beam{-los.y, los.x, 0.0};
         if (Dot(beam, a.velocity) < 0.0) beam = -beam;
-        a.waypoints = {a.position + beam.Normalized() * 30000.0};
-        a.next_waypoint = 0;
+        o.point = a.position + beam.Normalized() * 30000.0;
         if (e_.kind == EvadeDef::Kind::Dive) {
+            o.kind = PilotOverride::Kind::Dive;
             diving_ = true;
-            return "breaks onto a beam heading and dives for the ground";
+            out.what = "breaks onto a beam heading and dives for the ground";
+            return out;
         }
-        return "breaks away onto a beam heading";
-    }
-
-    std::string StepJink(Aircraft& a, double t) {
-        if (t >= jink_end_s_) {
-            a.waypoints = saved_waypoints_;
-            a.next_waypoint = saved_next_;
-            a.max_turn_rate_rad_s = saved_turn_rad_s_;
-            evading_ = false;
-            e_.present = false;  // once
-            return "back on its route";
-        }
-        if (t >= jink_flip_s_) {
-            jink_sign_ = -jink_sign_;
-            jink_flip_s_ = t + e_.jink_period_s;
-            SetJinkPoint(a);
-        }
-        return std::string();
-    }
-
-    void SetJinkPoint(Aircraft& a) const {
-        const double ang = jink_sign_ * DegToRad(60.0);
-        const Vec3 d{base_dir_.x * std::cos(ang) + base_dir_.y * std::sin(ang),
-                     -base_dir_.x * std::sin(ang) + base_dir_.y * std::cos(ang), 0.0};
-        a.waypoints = {a.position + d * 20000.0};
-        a.next_waypoint = 0;
+        o.kind = PilotOverride::Kind::Break;
+        out.what = "breaks away onto a beam heading";
+        return out;
     }
 
     // The floor every pilot keeps, whatever he is doing (roadmap R5): his belly (Aircraft::bottom_m below his centre) a
@@ -353,13 +348,6 @@ private:
     double cruise_mps_ = 0.0;
     bool evading_ = false;
     bool diving_ = false;
-    double saved_turn_rad_s_ = 0.0;
-    std::vector<Vec3> saved_waypoints_;
-    std::size_t saved_next_ = 0;
-    Vec3 base_dir_;
-    double jink_sign_ = 1.0;
-    double jink_flip_s_ = 0.0;
-    double jink_end_s_ = 0.0;
     double vz_mps_ = 0.0;  // the vertical speed the pilot holds (the world moves the aircraft in the horizontal)
     bool weapon_ = false;     // a weapon's "pilot": no ground floor
     bool pulled_up_ = false;  // under the ground floor last step

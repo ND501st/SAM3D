@@ -550,6 +550,9 @@ SC_TEST("threats 9.3: warned by the radar lock, a target breaks and dives; a TV 
     const Run r = Play(Engage(Target(24000, 1000, dive), kAcquireAndFire), 450.0);
     SC_EXPECT(Has(r, "radar track"));
     SC_EXPECT(Has(r, "breaks onto a beam heading and dives for the ground"));
+    // Roadmap B1, on purpose: the dive is the pilot's override for evade_s (20 s), then he is back on his route; it
+    // no longer takes his route from him for good. Shot down first, he never gets back.
+    SC_EXPECT(Has(r, "back on its route") || r.summary.hits >= 1);
     // Tracked by the TV alone it never hears a thing.
     const Run tv = Play(Engage(Target(12000, 800, dive), kEmconTv));
     SC_EXPECT(Has(tv, "TV track"));
@@ -562,6 +565,8 @@ SC_TEST("threats 9.3: a jinking target turns hard both ways, which costs hit cha
     SC_EXPECT(Has(r, "jinks (hard turns left and right)"));
     SC_EXPECT(r.summary.launches >= 1);
     SC_EXPECT(Has(r, "manoeuvre 0.40 (15 deg/s)"));
+    // Roadmap B1: the jink is the pilot's override, ended after evade_s with his route again (unless hit first).
+    SC_EXPECT(Has(r, "back on its route") || r.summary.hits >= 1);
 }
 
 SC_TEST("threats 9.3: the loader checks behaviour, evade and waypoint heights with paths") {

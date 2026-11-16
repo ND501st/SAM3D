@@ -100,6 +100,16 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "notes", Strings(o.notes));
     Put(v, "released_flights", Ints(o.released_flights));
     Put(v, "aborted_flights", Ints(o.aborted_flights));
+    json::Value retasks = Arr();
+    for (const RetaskRecord& r : o.retasks) {
+        json::Value x = Obj();
+        Put(x, "flight", Num(r.flight));
+        Put(x, "kind", Str(r.kind));
+        Put(x, "by", Str(r.by));
+        Put(x, "t_s", Num(r.t_s));
+        Push(retasks, x);
+    }
+    Put(v, "retasks", retasks);
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
     Put(v, "reported", Bool(o.reported));
@@ -229,6 +239,16 @@ public:
         o.notes = Strings(v, "notes");
         o.released_flights = Ints(v, "released_flights");
         o.aborted_flights = Ints(v, "aborted_flights");
+        if (const json::Value* rs = v.Find("retasks")) {
+            for (const json::Value& x : rs->items) {
+                RetaskRecord r;
+                r.flight = Int(x, "flight", -1);
+                r.kind = String(x, "kind");
+                r.by = String(x, "by");
+                r.t_s = Number(x, "t_s");
+                o.retasks.push_back(r);
+            }
+        }
         o.truth_applied = Boolean(v, "truth_applied");
         o.played = Boolean(v, "played", true);
         o.reported = Boolean(v, "reported");

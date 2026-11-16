@@ -61,6 +61,19 @@ inline double PackageAirmanship(const Package& p, const AirStaff& staff) {
     return leader != nullptr ? leader->Effective(leader->def.skills.airmanship) : 0.5;
 }
 
+// The package leader's nerve: the share of the package he will lose before turning back (0.25 + 0.3 x boldness, the
+// planner's and his own abort_threshold quirks). One rule for the abstract resolver and the played raid (flights.hpp's
+// package, roadmap B1), so the two turn back alike.
+inline double PackageNerve(const Package& p, const AirStaff& staff) {
+    const Officer* leader = p.leader >= 0 ? &staff.officers[static_cast<std::size_t>(p.leader)] : nullptr;
+    double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
+    if (const Officer* pln = p.planner >= 0 ? &staff.officers[static_cast<std::size_t>(p.planner)] : nullptr) {
+        nerve += 0.1 * pln->Quirk("abort_threshold");
+    }
+    if (leader != nullptr) nerve += 0.15 * leader->Quirk("abort_threshold");
+    return ClampTo(nerve, 0.05, 0.9);
+}
+
 // A share of a route leg, from a to b (fractions 0..1 of it).
 struct LegPiece {
     double a = 0.0;
@@ -111,15 +124,9 @@ public:
         const FrontDef* front = d.theatre.FrontFor(f.front);
         const bool jam = p.Has(FlightRole::Jammer);
         const double supp_base = PackageSuppression(p, *c.staff, tune);
-        const Officer* leader = p.leader >= 0 ? &c.staff->officers[static_cast<std::size_t>(p.leader)] : nullptr;
         const double airmanship = PackageAirmanship(p, *c.staff);
         // The leader's nerve: the share of the package he will lose before turning back.
-        double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
-        if (const Officer* pln = p.planner >= 0 ? &c.staff->officers[static_cast<std::size_t>(p.planner)] : nullptr) {
-            nerve += 0.1 * pln->Quirk("abort_threshold");
-        }
-        if (leader != nullptr) nerve += 0.15 * leader->Quirk("abort_threshold");
-        nerve = ClampTo(nerve, 0.05, 0.9);
+        const double nerve = PackageNerve(p, *c.staff);
         const int package_size = std::max(1, p.Aircraft());
         std::vector<double> suppressed(d.theatre.objects.size(), 0.0);  // 0..1 how much each radar was suppressed
         std::vector<bool> engaged(d.theatre.objects.size(), false);
