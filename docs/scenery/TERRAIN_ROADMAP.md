@@ -79,7 +79,8 @@ Indie (about USD 299 a year) the strongest scripted pipeline (`TERRAIN_ASSET_TOO
 
 ### A.3 The phases
 
-The new phases are **L0-L12** ("land"; L11 and L12 added 6 Nov 2026 for the look target). Part B's T0-T4 and T5.1
+The new phases are **L0-L13** ("land"; L11 and L12 added 6 Nov 2026 for the look target, L13 by the owner on 16 Nov
+2026; L13 answers for K2, K3 and K6). Part B's T0-T4 and T5.1
 stay built and are used by them; Part B's T5-T9 are replaced by the phases named in the last column. The look target's
 traits each phase answers for: L3 K1, K8; L4 K3, K8, K12, K14; L5 K6, K7, K14; L6 K5, K12; L7 K2, K4, K13; L8 all, at
 the views; L9 K9; L10 K14; L11 K1, K2, K13; L12 K10, K11, K12.
@@ -99,6 +100,7 @@ the views; L9 K9; L10 K14; L11 K1, K2, K13; L12 K10, K11, K12.
 | L10 | **Far field and cost.** Impostor rings and the masses meeting without a seam; baked Nanite ground tiles if they measure better; budgets per pass at every view | each view within budget | T9 |
 | L11 | **Hill country** (simcore, A.5). A landform layer (regions of plain, rolling and hilly ground as data, shaped by warped and ridged noise); drainage (pits filled, flow accumulated, brooks and their valleys cut); slope, aspect, wetness and curvature baked; land use placed by them (D12); roads and tracks fitted to grades, cut and fill, sunken lanes in loess; a hill-country detail area and its plots (18-22). The balance runs re-read (sight lines and radar masking move) | the hill plots and a hilltop view against K-a, K-b and K-d at the three cameras: slopes, valleys, wooded crests, fields on the gentle ground; `ground_check`, `nav_check`, `crew_balance`, `air_war_bench`, `air_war_balance`, `em_demo`, `helper_coverage`, `mission_demo` re-read and the moved rows explained; `test_country_map` agreeing | (new) |
 | L12 | **Light and air.** The scenario's clouds shown (today a "cloudy" preset renders clear or as a sheet); volumetric cumulus with shadows on the land; aerial perspective tuned so far ridges go bluer and paler, no brown haze; a fixed exposure for the plot lab, so passes compare; foliage lit as foliage (two-sided, subsurface, occlusion in crowns and grass); albedos and vertex colours calibrated, a neutral grade; a summer date for the plot lab beside October's | the eye and 150 m renders of plots 5, 11 and 19 beside K-b and K-d: cumulus and their shadows, layered blue distance, shadows filled with sky light; a measured albedo range per material (K10-K12) | (new) |
+| L13 | **Grassland and scrub** (simcore and the kit, A.6). Grass as land of its own, not only the near ring's tufts: hay meadows (mown, the aftermath), uncut tall grass (0.3-1 m, dry, seed heads), grazed pasture (tussocks, thistles, sheep tracks), balks and field margins, grassy steep slopes, embankments and dykes. Scrub in the open: lone bushes, clumps and thickets of blackthorn, hawthorn and dog rose (juniper on the sand), on pastures, balks, steep slopes, crests and embankments, as a succession from grass to the wood's edge. Land-use rules for where each grows; thickets as sight-blocking boxes in the map's layout; cards for the bushes and the tall grasses; recipes; the far ground's tint; plots 6, 24, 25 and 26 | plots 6 and 24-26 at the three cameras against their photographs and K6 (grass 0.2-1 m everywhere not worked, never a bare texture); the obstacle heights test with the thickets; `ground_check`, `crew_balance`, `em_demo`, `helper_coverage` re-read and the moved rows explained; the views' costs within the runs' spread of today's | part of L5, L7 |
 
 **Order:** L1 and L2 first, together (the lab is useless without recipes, recipes untestable without the lab). Then
 **one vertical slice: plot 1, ploughland, through L3, L4 and L5**, to prove the whole chain on the October plain's
@@ -118,6 +120,11 @@ ground does. So, next:
    sunken lanes and hill plots alongside L3.
 
 L12's foliage shading and colour calibration go with L6 (they are the asset kit's look). L8 still follows each group.
+
+**Order from 16 Nov 2026 (the owner: "fields of grass, bushes and low shrubbery", prioritised):** **L13 next**, ahead of
+plot 12 and the road (13). Everything not worked is grass or scrub, on the plain's balks, pastures and embankments and on
+the hills' slopes and valley floors (A.3.17 measured meadow at 27% of the hills), and today it reads as sparse dark
+tufts on a bare texture (A.3.36's Left). L13's steps in A.6's order; then the plots resume (12, 13, the rest).
 
 **Paused:** gathering from Fab (except leaf and ground textures); the Megaplants and GV exports through Blender; the
 hand tuning of `card_tree.py`'s hornbeam (it becomes L6's tree builder's leaves); the Sketchfab landmarks and the AI
@@ -1205,6 +1212,71 @@ ground. Re-read: `ground_check`, `nav_check`, `crew_balance`, `air_war_bench`, `
 regions' relief and land use; photographs of Transdanubian hill country (Zala, Somogy, Tolna, the loess lanes of the
 Szekszárd hills) from Wikimedia Commons, registered as `docs/research/TERRAIN_REFERENCES_2026-11.md` registers its
 photographs; the three papers named above, before anything is ported.
+
+### A.6 Grassland and scrub: how (L13)
+
+The owner, 16 Nov 2026: "fields of grass, bushes and low shrubbery", prioritised. **What exists:**
+- Grass only as the near ring's tufts (L5). The meadow recipe (`recipes/meadow.json`) is a grazed sward of about
+  9000 tufts a hectare, and A.3.36 found it dark and sparse on a bare texture.
+- Pasture is one of the plain's crops (20% of the fields) and the hills' wet valley floors (A.3.17). Plot 6 (pasture)
+  is in the catalogue, eighth in the method's order and not built.
+- Bushes only at the woods' edges and inside them (hazel, elder: A.3.23), under the tree rows (A.3.24) and in the
+  brooks' alder lines.
+
+**What is missing:**
+- Grass as land you see: long or mown, at landscape scale.
+- Scrub in the open.
+- The art for both: blackthorn, hawthorn and dog rose are named in `VEGETATION.md` section 5's Left, waiting for art.
+
+**The steps** (each with its tests: determinism, the measured shares and densities against the data's targets, the
+obstacle heights, the time budget):
+
+1. **Where each grows** (simcore, `data/scenery/land_use.json`, `MapData`). The open ground's classes:
+   - **hay meadow**, mown, the aftermath short with the mower's swaths;
+   - **tall grass**, uncut or abandoned, 0.3-1 m, dry, with seed heads and tall dead stalks;
+   - **grazed pasture**, short, with tussocks and thistles, near the villages and farmsteads;
+   - **margins and balks**, grass strips 2-6 m wide between parcels and along tracks;
+   - **grassy slopes**, too steep to plough and too dry for wood;
+   - embankments, dykes and verges.
+
+   Scrub as a share of each class that grows with slope, with distance from the farms (less grazing, more bushes) and
+   by the ground. The stages run from grass with lone bushes, to clumps, to a thicket against the wood's mantle (L7).
+   All numbers are estimates until sourced. Juniper with poplar on the plain's sand only once the map has sand soil
+   (plot 17's relief stamps and the soil class).
+2. **The thickets in the sight lines** (simcore). A thicket (bushes 1.5-4 m tall over 10 m or more) is a box in the
+   map's layout, as a tree row is, so the obstacle heights, the radar's masking and the crews' sight read it. A lone
+   bush is the dressing's alone, presentation only. Re-read the balance runs that read sight lines.
+3. **The art** (L6's kit, our own drawing: `tools/make_cards.py`, as hazel and elder are):
+   - blackthorn, dense and dark, with blue sloes;
+   - hawthorn, red haws;
+   - dog rose, arching, with red hips;
+   - tall dry grass with seed heads;
+   - mown aftermath;
+   - thistle and other tall dead stalks.
+
+   Each is registered in `assets.json`. The bushes are planted by the dressing (a new `scrub_mix`); the grasses by the
+   recipes.
+4. **The recipes** (L2): `hay_meadow`, `tall_grass`, `pasture` (replacing today's meadow for grazed ground), `margin`,
+   `scrub`. Bushes in Thomas clusters, the grass under them taller. Matched by the new classes, by slope and by
+   distance to a parcel's edge. The densities must leave no bare texture between the clumps at 1.7 m (K6).
+5. **Far off.** The classes' tints in the ground's colour (L4: tall grass paler and straw-coloured, pasture greener,
+   scrub dark). Thickets far off as small masses, as the woods' are (L10). There must be no ring where the near
+   ring's grass ends.
+6. **The plots**, judged against their photographs first:
+   - **p06** grazed pasture with lone bushes;
+   - **p24** a tall-grass meadow on a valley floor (K-b);
+   - **p25** a scrubby hillside, clumps of blackthorn and hawthorn between grass and the wood's edge;
+   - **p26** a balk between two fields, with a lone hawthorn.
+
+**What it moves.** The sight lines where thickets stand (crews' horizons, low approaches along scrubby valleys);
+the cost of the near ring (more and taller cards). Re-read `ground_check`, `crew_balance`, `em_demo`,
+`helper_coverage`; the moved rows explained.
+
+**Sources to find** (none read yet; fetching photographs waits for the owner):
+- Hungary's habitat classification (ÁNÉR) for its grassland and scrub types;
+- the grassland's and scrub's shares of the land in the 1980s;
+- photographs of grazed puszta, hay meadows, scrubby slopes and balks from Fortepan and Wikimedia Commons,
+  registered in `docs/research/TERRAIN_REFERENCES_2026-11.md`.
 
 ---
 

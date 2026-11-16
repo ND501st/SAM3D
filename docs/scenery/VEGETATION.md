@@ -120,7 +120,8 @@ Thin, abundant plants (grass, stubble, reeds, crops) stay cards (the owner's rul
 - Field and road trees: solitary oaks, pears and walnuts on field boundaries and crossroads, and fruit trees in the
   villages' gardens (the gardens exist as cover; `garden_m`).
 - Willows on the ditches.
-- The fringe's other shrubs (blackthorn, hawthorn, dog rose) once art for them exists.
+- The fringe's other shrubs (blackthorn, hawthorn, dog rose) once art for them exists: drawn in the terrain roadmap's
+  L13 (grassland and scrub, A.6), which also puts them in the open.
 - Bays in the edge's outline, which is still the block's straight side.
 - Shelter belts with a shrub row on each side (the tree rows exist, roadmap T4).
 - Real models for the new kinds, as the art comes in (section 4).
