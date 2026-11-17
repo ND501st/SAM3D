@@ -188,6 +188,11 @@ struct PackageOutcome {
     std::vector<std::string> notes;
     std::vector<int> released_flights;  // flights that released their weapons (a played mission)
     std::vector<int> aborted_flights;   // flights that broke away before their release point (a played mission)
+    // Under fire (roadmap B4, reaction_chain.hpp): flights that threw their stores off before their release point, and
+    // the drop tanks and loads that fell (a played mission).
+    std::vector<int> jettisoned_flights;
+    int tanks_dropped = 0;
+    int stores_dropped = 0;
     std::vector<RetaskRecord> retasks;  // orders its flights were given from outside them (a played mission, roadmap B1)
     std::vector<HeardRecord> heard;     // what our intercept posts logged of its calls (a played mission, roadmap B9)
     bool truth_applied = false;  // the damage is already in the truth (the abstract resolver); else the campaign applies it

@@ -81,7 +81,7 @@ LiveRun RunFirstPackage(const AirWarData& d, unsigned seed) {
         r.Step(0.1);
         live.Step(r);
         for (const fx::Event& ev : r.Fx().Since(cursor)) {
-            if (ev.kind == fx::EventKind::WeaponRelease) out.releases.push_back(ev);
+            if (ev.kind == fx::EventKind::WeaponRelease && ev.delivery != "jettison") out.releases.push_back(ev);  // not a load thrown off (B4)
             if (ev.kind == fx::EventKind::WeaponImpact) out.impacts.push_back(ev);
             out.ahead += ev.t_s > r.Time() + 1e-9 ? 1 : 0;
         }

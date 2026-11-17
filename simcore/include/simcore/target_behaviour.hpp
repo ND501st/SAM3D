@@ -137,6 +137,21 @@ public:
         e_.present = true;
         return Evade(a, unit, t);
     }
+    // A reaction under fire (roadmap B4, reaction_chain.hpp) has him manoeuvring: the command layer flies its override;
+    // with `dive` he takes the height down to `dive_agl_m` until it ends. A helicopter at its hide drops behind its cover
+    // instead (true: it did; no override then).
+    bool BeginReaction(bool dive, double dive_agl_m, double t) {
+        if (b_.kind == TargetBehaviourDef::Kind::PopUp && (phase_ == Phase::Hidden || phase_ == Phase::Exposed)) {
+            if (phase_ == Phase::Exposed) ++cycles_done_;
+            phase_ = Phase::Hidden;
+            until_s_ = t + b_.hidden_s;
+            return true;
+        }
+        evading_ = true;
+        diving_ = dive;
+        if (dive) e_.dive_agl_m = dive_agl_m;
+        return false;
+    }
     // The command layer ended his manoeuvre: he is no longer evading, holds his own height again, and evades only once
     // (as before roadmap B1; the instructor may order it again).
     void OverrideEnded() {

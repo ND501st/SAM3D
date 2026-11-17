@@ -124,6 +124,7 @@ struct PilotOverride {
     Vec3 point;
     double turn_rate_rad_s = 0.0;
     double until_s = 0.0;
+    double speed_mps = 0.0;  // > 0: the speed he flies it at (a run at full speed, the Pact's programme: roadmap B4); 0: his own
     // A jink: hard turns left and right of base_dir, 60 degrees, flipped every period_s.
     Vec3 base_dir;
     double sign = 1.0;
@@ -464,6 +465,7 @@ public:
                     A->demand.active = true;
                     A->demand.point = s.ov.point;
                     A->demand.turn_rate_rad_s = s.ov.turn_rate_rad_s;
+                    A->demand.speed_mps = s.ov.speed_mps;
                     A->demand.capture = s.ov.end == PilotOverride::End::Point;
                     continue;
                 }

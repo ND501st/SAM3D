@@ -904,6 +904,9 @@ namespace
 				break;
 			case EventKind::AircraftDamaged:
 				break;  // its smoke and fire are silent beside its engines
+			case EventKind::ChaffDrop:
+			case EventKind::FlareDrop:
+				break;  // a dispenser's pop is lost in the engines (roadmap B4)
 			}
 		}
 

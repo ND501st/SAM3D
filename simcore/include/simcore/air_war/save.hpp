@@ -100,6 +100,9 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "notes", Strings(o.notes));
     Put(v, "released_flights", Ints(o.released_flights));
     Put(v, "aborted_flights", Ints(o.aborted_flights));
+    Put(v, "jettisoned_flights", Ints(o.jettisoned_flights));
+    Put(v, "tanks_dropped", Num(o.tanks_dropped));
+    Put(v, "stores_dropped", Num(o.stores_dropped));
     json::Value retasks = Arr();
     for (const RetaskRecord& r : o.retasks) {
         json::Value x = Obj();
@@ -251,6 +254,9 @@ public:
         o.notes = Strings(v, "notes");
         o.released_flights = Ints(v, "released_flights");
         o.aborted_flights = Ints(v, "aborted_flights");
+        o.jettisoned_flights = Ints(v, "jettisoned_flights");
+        o.tanks_dropped = Int(v, "tanks_dropped");
+        o.stores_dropped = Int(v, "stores_dropped");
         if (const json::Value* rs = v.Find("retasks")) {
             for (const json::Value& x : rs->items) {
                 RetaskRecord r;

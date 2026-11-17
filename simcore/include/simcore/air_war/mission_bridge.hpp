@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <random>
 #include <string>
@@ -125,8 +126,10 @@ public:
                 continue;
             }
             // Weapons at the release point.
-            if (a.has_release && !s.released && !a.missile && Releases(r, a, s, pos)) {
+            // (A load thrown off under fire is gone: nothing left to release, roadmap B4.)
+            if (a.has_release && !s.released && !a.missile && !r.StoresJettisoned(a.target_id) && Releases(r, a, s, pos)) {
                 s.released = true;
+                r.NoteReleased(a.target_id);
                 if (a.role == FlightRole::Recce) {
                     photographed_ = true;
                     Log(r, a.target_id, "photographs the area");
@@ -293,12 +296,19 @@ public:
         std::vector<bool> down(m_.aircraft.size(), false);
         const std::string kDestroys = "destroys ", kTakesBack = "takes back the kill of ";
         for (const DebriefEntry& e : r.Log().Entries()) {
-            const bool hit = e.kind == DebriefEntry::Kind::Hit;
+            // Our hit that left it flying, heavily damaged (damage states, roadmap B4), is not a kill: its crash is.
+            const bool hit = e.kind == DebriefEntry::Kind::Hit && e.detail.find("it flies on") == std::string::npos;
             const bool scen = e.kind == DebriefEntry::Kind::Scenario;
             const bool destroyed = scen && e.detail.compare(0, 9, "destroyed") == 0;
             for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
                 const std::string& id = m_.aircraft[i].target_id;
                 if ((hit || destroyed) && id == e.what) down[i] = true;
+                // A neighbour's damage that brought it down later (a decoy shot down is never anyone's kill).
+                if (destroyed && id == e.what && kill_by_[i].empty() && !m_.aircraft[i].drone) {
+                    for (const RaidNeighbour& nb : m_.neighbours) {
+                        if (e.detail == "destroyed by " + nb.name) kill_by_[i] = nb.id;
+                    }
+                }
                 if (scen && e.detail == kDestroys + id) down[i] = true;
                 if (scen && e.detail == kTakesBack + id) down[i] = false;
             }
@@ -362,6 +372,7 @@ public:
                 if (home) o.aborted_flights.push_back(static_cast<int>(fi));
             }
         }
+        Jettisoned(r, flight_released, o);
         o.delivered = delivered_;
         o.hit_nothing = delivered_ && !hit_something_;
         o.damage = damage_;
@@ -392,6 +403,26 @@ public:
         }
         o.notes = notes_;
         return o;
+    }
+
+    // Under fire (roadmap B4): the flights that threw their stores off short of their release point, and the tanks and
+    // loads that fell, from the session's reactions (the truth, for the campaign and the debrief's ledger only).
+    void Jettisoned(const ScenarioRunner& r, const std::vector<bool>& flight_released, PackageOutcome& o) const {
+        const std::vector<ScenarioTarget>& targets = r.Def().targets;
+        for (const JettisonRecord& j : r.Reactions().Jettisons()) {
+            if (j.target < 0 || static_cast<std::size_t>(j.target) >= targets.size()) continue;
+            const std::string& id = targets[static_cast<std::size_t>(j.target)].id;
+            for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                const RaidAircraft& a = m_.aircraft[i];
+                if (a.target_id != id) continue;
+                o.tanks_dropped += j.tanks;
+                if (!j.stores) continue;
+                ++o.stores_dropped;
+                const int fi = a.flight;
+                if (fi < 0 || static_cast<std::size_t>(fi) >= flight_released.size() || flight_released[static_cast<std::size_t>(fi)]) continue;
+                if (std::find(o.jettisoned_flights.begin(), o.jettisoned_flights.end(), fi) == o.jettisoned_flights.end()) o.jettisoned_flights.push_back(fi);
+            }
+        }
     }
 
     // Aircraft the neighbours have shot down so far.
@@ -606,7 +637,17 @@ private:
                 // The hit, half way through the zone, or as it leaves if it turned away sooner.
                 if (ps.hit && (ps.flown_m >= ps.hit_at_m || !inside)) {
                     ps.done = true;
-                    if (r.DestroyTarget(a.target_id, nb.name)) {
+                    // An IR missile (no radar, rounds: a Strela's or a MANPADS') taken by its flares, out in time (B4).
+                    const std::uint64_t shot = (static_cast<std::uint64_t>(j) << 32) ^ (0x5EED0000ull + static_cast<std::uint64_t>(i));
+                    if (!nb.defence.radar && nb.defence.missiles >= 0 && r.FlaresDecoy(a.target_id, shot)) {
+                        notes_.push_back(a.target_id + "'s flares decoy the missile from " + nb.name);
+                        continue;
+                    }
+                    // With damage states (roadmap R1, B4) its kill is drawn into destroyed or heavily damaged: a damaged
+                    // one flies on and may crash later (its credit read from the log in Finish).
+                    const bool down = r.DamageStates() ? r.MissileDamage(a.target_id, true, 0.0, nb.name) : r.DestroyTarget(a.target_id, nb.name);
+                    if (!down && r.DamageStates() && r.TargetAlive(a.target_id)) notes_.push_back(a.target_id + " damaged by " + nb.name);
+                    if (down) {
                         kill_by_[i] = nb.id;
                         notes_.push_back(a.target_id + " shot down by " + nb.name);
                         r.RegimentTellsDestroyed(a.target_id, nb.name, kRegimentTellsS);

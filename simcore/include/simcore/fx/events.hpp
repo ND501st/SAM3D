@@ -73,6 +73,8 @@ enum class EventKind {
     GunPass,         // a defence's guns fire at an aircraft through a pass (system, site, target, duration, rounds)
     FlakBurst,       // a time-fuzed shell fired, and where and when it bursts
     AircraftDamaged, // an aircraft damaged and flying on: smoke, fire
+    ChaffDrop,       // a pilot's chaff salvo (roadmap B4): at the aircraft, `number` cartridges
+    FlareDrop,       // a pilot's flares (roadmap B4): at the aircraft, `number` of them
 };
 
 inline const char* ToString(EventKind k) {
@@ -90,6 +92,8 @@ inline const char* ToString(EventKind k) {
         case EventKind::GunPass: return "gun_pass";
         case EventKind::FlakBurst: return "flak_burst";
         case EventKind::AircraftDamaged: return "aircraft_damaged";
+        case EventKind::ChaffDrop: return "chaff_drop";
+        case EventKind::FlareDrop: return "flare_drop";
     }
     return "?";
 }

@@ -38,6 +38,7 @@
 #include "simcore/crew_training.hpp"
 #include "simcore/em_link.hpp"
 #include "simcore/em/optical.hpp"
+#include "simcore/reactions.hpp"
 #include "simcore/emission_regime.hpp"
 #include "simcore/engagement.hpp"
 #include "simcore/flights.hpp"
@@ -112,6 +113,9 @@ struct ScenarioTarget {
     double span_m = 0.0;                   // its span as the TV sight sees it (0: the gameplay tuning's for its class)
     TargetBehaviourDef behaviour;          // terrain following, pop-up (target_behaviour.hpp)
     EvadeDef evade;                        // evasion on launch or lock (takes the place of evade_on_launch)
+    // Its pilot's reactions under fire (roadmap B4, reactions.hpp; "reactions"): his faction's profile, his type's
+    // countermeasures and tanks, his load, the programme's zones. Takes the place of "evade" (one or the other).
+    ReactionPilotDef reactions;
     double size_m = 4.5;                   // critical dimension for the TV sight (em/optical.hpp; estimate for a fighter)
     // Its radar warning receiver: an ESM receiver of the EM library (kind rwr). With one, the pilot evades when it warns
     // of the lock or the launch (the command link heard: roadmap E5), not on the truth.
@@ -412,6 +416,13 @@ struct ScenarioDef {
     int year = 1985;           // the "date"'s year (the default's)
     LightValues light_values;  // data/gameplay/light.json
     airwar::PerceptionData perception;  // data/gameplay/perception.json and the receivers' displays (roadmap B3)
+    // The reactions under fire (roadmap B4): data/gameplay/reactions.json and data/air_war/countermeasures.json, loaded
+    // whenever they are in the data folder (a package entering the session may bring pilots who react).
+    ReactionTable reactions;
+    // Damage states for every aircraft of the session ("damage": the damage table's path, data/gameplay/damage.json;
+    // roadmap R1 in played raids, B4): a hit, a burst or a crash by damage.hpp, not only in the testbed's waves.
+    bool has_damage = false;
+    DamageTable damage;
     bool battery_drive_own = false;
     bool battery_night = false;
     bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
@@ -473,7 +484,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages", "air_radio"})) {
+                             "scenery", "waves", "flights", "packages", "air_radio", "damage"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -530,6 +541,7 @@ public:
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
         if (!LoadEnd(root, out)) return false;
+        if (!LoadReactionsAndDamage(root, data_dir, out)) return false;
         return LoadSky(root, data_dir, out);
     }
 
@@ -1233,6 +1245,64 @@ private:
     }
 
     // A target's "arms" (ArmCarrierDef): its warning receiver tells it what to fire at, so it needs one.
+    // A target's "reactions" (roadmap B4, reactions.hpp): {"profile", "aircraft", "chaff", "flares", "tanks", "stores",
+    // "nerve", "zones": [{"east_m", "north_m", "radius_m"}]}. Not with "evade" or "evade_on_launch".
+    bool LoadReactionPilot(const json::Value& t, const std::string& tp, ScenarioTarget& tg) {
+        const json::Value* r = t.Find("reactions");
+        if (r == nullptr) return true;
+        const std::string p = Join(tp, "reactions");
+        if (t.Find("evade") != nullptr || t.Find("evade_on_launch") != nullptr) return Fail(p, "a target has \"reactions\" or \"evade\", not both");
+        ReactionPilotDef& d = tg.reactions;
+        if (!Keys(*r, p, {"profile", "aircraft", "chaff", "flares", "tanks", "stores", "nerve", "zones", "notes"}) ||
+            !RequireString(*r, p, "profile", d.profile) || !OptionalString(*r, p, "aircraft", d.aircraft) ||
+            !OptionalInt(*r, p, "chaff", d.chaff) || !OptionalInt(*r, p, "flares", d.flares) || !OptionalInt(*r, p, "tanks", d.tanks) ||
+            !OptionalString(*r, p, "stores", d.stores) || !OptionalNumber(*r, p, "nerve", d.nerve)) {
+            return false;
+        }
+        if (d.nerve < 0.0 || d.nerve > 1.0) return Fail(Join(p, "nerve"), "0 to 1");
+        if (const json::Value* zs = OptionalArray(*r, p, "zones")) {
+            for (std::size_t i = 0; i < zs->items.size(); ++i) {
+                const std::string zp = Index(Join(p, "zones"), i);
+                const json::Value& z = zs->items[i];
+                ProgrammeZone zn;
+                if (!Keys(z, zp, {"east_m", "north_m", "radius_m"}) || !RequireNumber(z, zp, "east_m", zn.centre.x) ||
+                    !RequireNumber(z, zp, "north_m", zn.centre.y) || !RequireNumber(z, zp, "radius_m", zn.radius_m)) {
+                    return false;
+                }
+                if (zn.radius_m <= 0.0) return Fail(Join(zp, "radius_m"), "must be > 0");
+                d.zones.push_back(zn);
+            }
+        } else if (!message_.empty()) {
+            return false;
+        }
+        d.on = true;
+        return true;
+    }
+
+    // The reaction tables (always, when the data folder has them; required when a target reacts) and the damage table
+    // ("damage", the testbed's own aside).
+    bool LoadReactionsAndDamage(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        bool needed = false;
+        for (const ScenarioTarget& t : out.targets) needed = needed || t.reactions.on;
+        std::string error;
+        if (std::ifstream(data_dir + "/gameplay/reactions.json").good() || needed) {
+            if (!LoadReactionTable(data_dir, out.reactions, &error)) return Fail("", error);
+        }
+        for (std::size_t i = 0; i < out.targets.size(); ++i) {
+            const ReactionPilotDef& d = out.targets[i].reactions;
+            if (d.on && out.reactions.Profile(d.profile) == nullptr) {
+                return Fail(Join(Index("targets", i), "reactions.profile"), "no profile '" + d.profile + "' in gameplay/reactions.json");
+            }
+        }
+        std::string damage;
+        if (!OptionalString(root, "", "damage", damage)) return false;
+        if (!damage.empty()) {
+            if (!LoadDamageFile(data_dir + "/" + damage, out.damage, &error)) return Fail("damage", error);
+            out.has_damage = true;
+        }
+        return true;
+    }
+
     bool LoadArmCarrier(const json::Value& t, const std::string& tp, const ScenarioDef& out, ScenarioTarget& tg) {
         const json::Value* a = t.Find("arms");
         if (a == nullptr) return true;
@@ -1543,7 +1613,7 @@ private:
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
                              "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
                              "bottom_m", "max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s", "max_mps", "accel_mps2",
-                             "climb_mps", "flight", "slot", "legs", "seats", "pilot_skill", "notes"})) {
+                             "climb_mps", "flight", "slot", "legs", "seats", "pilot_skill", "reactions", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1594,6 +1664,7 @@ private:
                 }
             }
             if (!LoadArmCarrier(t, p, out, tg)) return false;
+            if (!LoadReactionPilot(t, p, tg)) return false;
             tg.evade_turn_rate_rad_s = DegToRad(evade_deg_s);
             const json::Value* start = nullptr;
             if (!RequireString(t, p, "id", tg.id) || !RequireString(t, p, "name", tg.name) ||

@@ -529,6 +529,93 @@ the records (P9, `campaign/report.hpp`) carries the jettisons and turn-aways our
 - The same seed gives the same reactions in the game's 0.05 s step on any machine; the fx feed switched off changes
   nothing.
 
+## 15. As built (B4, 17 November 2026)
+
+Branch `tb-b4`. Built: the chain from a cue in the pilot's picture to his manoeuvre, his countermeasures, his call, the
+flight's decision and the ledger; R1's damage states in played and injected raids.
+
+**Files.**
+- `simcore/reactions.hpp`: the classes and enums, `ReactionTable` and its loader (`LoadReactionTable` reads
+  `gameplay/reactions.json` and `air_war/countermeasures.json`), `ReactionPilotDef` (a target's `"reactions"`), keyed
+  draws (`ReactionU`, `ReactionN` on `em::Stream::Reaction` = 20, mirrored in the prototype's `em.py`), and the pure
+  functions: `TierAt`, `NoticeDelayS`, `NoReactionChance`, `ChooseRow`, `DecideFlight`, `StressAdd`, `StressDecay`,
+  `DrawDispense`, `JinkPeriodS`, `LateBreakWaitS`, `ClockOf`.
+- `simcore/reaction_chain.hpp`: `ReactionChain` (one per session), `ThreatCue`, the `ThreatRadio` interface and
+  `AirRadioThreats` (B9's radio), `ReactionAct`, `JettisonRecord`.
+- `scenario.hpp`: a target's `"reactions"` (`profile`, `aircraft`, `chaff`, `flares`, `tanks`, `stores`, `nerve`,
+  `zones`); with `"evade"` or `"evade_on_launch"` it is a load error. A scenario's top-level `"damage"` (a damage file).
+- `scenario_runner.hpp`, one block: `UpdateReactions` after `UpdatePerception`, `ApplyReaction`, `JettisonLoad`,
+  `FxJettison`, `FxDispense`; the public `Reactions`, `DamageStates`, `UseDamageStates`, `UseReactionTable`,
+  `SurvivedHit`, `NoteReleased`, `StoresJettisoned`, `MissileDamage`, `FlaresDecoy`. `ReactToSighting` hands a reacting
+  pilot's sightings to the chain; a wingman down is a cue (`Lost`); his own damage is a call (`Damaged`).
+- `flights.hpp`: `PilotOverride::speed_mps` (full speed in an extension or the programme). `target_behaviour.hpp`:
+  `TargetPilot::BeginReaction` (the dive's height; a pop-up helicopter drops behind cover).
+- `engagement.hpp`: `NoteChaff` (chaff without the EM layer: the hit chance times `chaff_factor` within
+  `chaff_window_s`), `SetHitSurvives` (a hit drawn into destroyed or heavily damaged), the tuning's optional
+  `manoeuvre_window_s`. `em_link.hpp`: `DropChaff` (a chaff cloud in the EM layer, on the Osa's scope).
+- `fx/events.hpp`: `chaff_drop`, `flare_drop`; a jettison is a `weapon_release` with delivery `"jettison"` (tanks as
+  `"drop_tank"`). Unreal's `SimFxAudio.cpp` and `SimFxEffects.cpp` accept both new kinds and draw nothing yet.
+- `perception_feed.hpp`: a launch's sign and trail carry the eye's class (`"large SAM"`, `"shoulder SAM"`, `"SAM"`).
+- `air_war/test_waves.hpp` and `raid_scenario.hpp` write `"reactions"` (the faction's id as the profile, the type, the
+  load) in place of `"evade"`; the raid builder writes the believed SAM zones (from its intelligence, in the scenario's
+  frame) and `"damage": "gameplay/damage.json"` (`ScenarioFormat::reactions`, `damage_states`).
+  `package_injector.hpp` moves the zones into the session's frame and brings the tables and damage states.
+- `mission_bridge.hpp`: no release after a jettison, `NoteReleased`, the neighbours' hits through `MissileDamage`, an IR
+  neighbour's hit taken by flares, a damaged aircraft's later crash credited from the log, and `Jettisoned` filling the
+  outcome. `state.hpp`, `save.hpp`: `PackageOutcome::jettisoned_flights`, `tanks_dropped`, `stores_dropped`.
+  `campaign/outcomes.hpp`: `PackageLedger::prevented_jettisoned`, in `Prevented()`.
+- Data: `data/gameplay/reactions.json`, `data/air_war/countermeasures.json`.
+- Tests: `tests/test_reactions.cpp` (15 tests), `prototype/tests/test_em.py` (stream 20).
+
+**The chain.**
+- **Cue.** Only from the pilot's picture: a receiver's lock or launch (a search paint adds stress only), a launch sign
+  or trail he saw (its class from the eye's word), a flak burst or tracer, a recognised fighter of ours (by model id), a
+  wingman going down within `loss_seen_m`, his own damage. Nothing reads the truth.
+- **Delay.** `NoticeDelayS`: the tier's range by skill, times the source's factor, the workload's (low and fast, or in the
+  attack run), a second seat's and the stress's. `NoReactionChance` by tier and stress; damage and a programmed cue are
+  always answered. A refractory time per situation unless the cue's level rises.
+- **Manoeuvre.** The profile's row as a `PilotOverride` the command layer flies: break, dive, jink (period by height),
+  break into a fighter, extend at full speed, NATO's late pull (he watches the missile, then pulls at the believed
+  time less the lead), the Pact's programme (full speed, down, out by the briefed zone's nearest edge; a site not on the
+  brief is an unplanned break). Each ends in a rejoin. A helicopter always dives.
+- **Countermeasures.** Chaff against a radar SAM, flares against an IR one, from the type's fit in the war's year; on
+  time, early, late or never by the tier. Chaff goes to the EM layer when the session has it, else to the engagement
+  model. Flares decoy the testbed's and the bridge's IR shots by a keyed draw within `flare_window_s`.
+- **Call.** On the flight's net through B9 (`ThreatCall`, or `Report` for "I'm hit"); a profile with `package_net`
+  (NATO) is heard by the package's flights within `package_call_range_m`. Who hears it gets a cue of source radio with
+  the clock code's error. The rebels make no calls.
+- **Decision.** Once per flight and situation (SAMs, flak, fighters, a loss), by its leader: jettison (tanks only, or
+  all) said on the net, then press on, abort (`ReturnHome` by the leader) or go round the believed zone (a `Divert`, or
+  press on if there is no way round). A wingman who heard nothing decides alone after `decision_wait_s`. Who may order
+  a flight stays `Flights::May` (B5's hook, accepts all).
+- **Damage.** The Osa's hit is drawn into destroyed or heavy (`missile_heavy_share`); a heavy one flies on and crashes
+  in its time. The debrief says "heavily damaged, it flies on"; the bridge counts it only when it crashes.
+
+**Test results** (`test_reactions.cpp`): the delays and no-reaction shares match the tiers within 1 %; the decision's
+shares within 2 %; 20 of 20 briefed Pact pilots flew the programme within the veteran's delay and none of 20 facing a
+moved battery did (15 broke unplanned later, 5 did not react); a NATO pilot watched, then pulled 12 s later; one fighter
+call on a package's frequency made two or more of five flights jettison in 7 of 9 seeds (22 flights in all), a jammed
+frequency none but the caller's; a played session gave the same debrief with the fx feed off.
+
+`test_fx_bridge.cpp` builds its raid with `fmt.reactions = false` (it tests the loads' timing, and a reacting level
+striker may now jettison instead of releasing); `test_packages_live.cpp` counts a jettison's `weapon_release` apart from
+the releases.
+
+**Balance and cost** (against the base `6025a17`). `crew_balance data 10`, `air_war_bench data 400`,
+`air_war_balance data 20 7` and `em_bench`'s checksum are byte-identical: none of their scenarios has a reacting pilot.
+`helper_coverage`: only the dynamic campaign test's rows moved, and its 19 Gaps are the same. There the NPC crew's
+launches fell from 6 to 3 and the kills from 24 to 14: in the testbed's 900 s the defences launched about a third less
+(114 to 76 lines), aircraft brought down by the neighbours fell from 13 to 6, the pilots broke, jinked, dived and pulled
+late (about 500 manoeuvres, 130 chaff and 15 flare salvoes), 22 jettisons replaced 7 and the loads released fell from 6
+to 4 or 5; 3 aborts and a go-round. `ground_check data 3600`: PASS, 0 of 15. The testbed hour costs more: 122 s wall
+before, 217 s after (3600 s simulated, timed back to back on one machine), from aircraft living longer, more pilots
+diving (perception's fast rate) and chaff clouds in the EM layer; not yet profiled by part.
+
+**Shortcuts.** A hand-written `"evade"` still flies its old code (`CueTarget`), not a scripted profile: the 15 files play
+as before and `test_threats.cpp` is unchanged. The late-window factor (`manoeuvre_window_s`) exists but is 0 (the whole
+flight, as before) until roadmap 6.7's totals are re-tuned with it. The enemy's pilots' reports of what they believed
+(`InFlightReport`) and our crews' records of a jettison or chaff are not written yet.
+
 ## Left open
 
 - **The ALE-40's load per type** and the ASO-2V's cartridge count per unit: no tier 1-4 source reached

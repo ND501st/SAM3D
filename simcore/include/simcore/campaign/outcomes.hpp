@@ -59,8 +59,9 @@ struct PackageLedger {
     int released = 0;              // ... that released
     int prevented_downed = 0;      // ... that released nothing, all shot down first
     int prevented_broke_away = 0;  // ... that released nothing and broke away
+    int prevented_jettisoned = 0;  // ... that released nothing, their stores thrown off under fire (roadmap B4)
     std::vector<std::string> why;  // the enemy's own reasons
-    int Prevented() const { return prevented_downed + prevented_broke_away; }
+    int Prevented() const { return prevented_downed + prevented_broke_away + prevented_jettisoned; }
 };
 
 // Whether the battery's entry in the enemy's picture holds the enemy's present phase open.
@@ -132,6 +133,8 @@ inline PackageLedger LedgerOf(const airwar::Package& p, const airwar::PackageOut
         ++l.release_flights;
         if (has(o.released_flights, f)) {
             ++l.released;
+        } else if (has(o.jettisoned_flights, f)) {
+            ++l.prevented_jettisoned;  // its stores thrown off short of the release point (it may have turned for home too)
         } else if (has(o.aborted_flights, f)) {
             ++l.prevented_broke_away;
         } else {
@@ -227,6 +230,7 @@ public:
             if (l.release_flights > 0) {
                 out += "; of " + std::to_string(l.release_flights) + " flights to release here " + std::to_string(l.released) + " released, " +
                        std::to_string(l.prevented_downed) + " shot down first, " + std::to_string(l.prevented_broke_away) + " broke away";
+                if (l.prevented_jettisoned > 0) out += ", " + std::to_string(l.prevented_jettisoned) + " threw their stores off";
             }
             out += "\n";
             for (const std::string& w : l.why) out += "      its reason: " + w + "\n";

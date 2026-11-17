@@ -793,6 +793,15 @@ public:
         }
         return false;
     }
+    // A pilot's own chaff (roadmap B4, reaction_chain.hpp): a cloud where the target is now, drifting on the wind. False
+    // if the target is not in the EM world.
+    bool DropChaff(const std::string& target_id, double rcs_m2, double lifetime_s) {
+        const int pid = PlatformOf(target_id);
+        const em::Platform* p = pid != 0 ? world_.Scene().FindPlatform(pid) : nullptr;
+        if (p == nullptr || !p->alive) return false;
+        world_.AddChaff(p->position, rcs_m2, lifetime_s);
+        return true;
+    }
 
     // ---- What the target's receiver heard (roadmap B3, docs/air_battle/03_PERCEPTION.md 3.2): every contact of the last
     // second with what the set could make of it. The set's display (a quadrant, no type, no launch) is the pilot's

@@ -206,6 +206,11 @@ struct ScenarioFormat {
     // posts (in the scenario's frame) listening to them. Off: the flights keep B1's fixed delay and nobody hears them.
     bool air_radio = false;
     std::vector<AirRadioPostDef> intercept_posts;
+    // Its pilots react under fire by their faction's tables (roadmap B4, simcore/reactions.hpp: "reactions", the
+    // briefed SAM zones its intelligence believes in for the Pact's programme); off: the old scripted "evade".
+    bool reactions = true;
+    // R1's damage states for every aircraft in it (data/gameplay/damage.json, roadmap B4); off: a hit destroys.
+    bool damage_states = true;
 };
 
 // One scenario target, and the flight and aircraft it is.
@@ -423,6 +428,22 @@ public:
         m.flight_in.assign(p.flights.size(), false);
         m.scenario_id = "air_war_" + f.id + "_" + std::to_string(p.id);
 
+        // The SAM zones its intelligence believes in near the battery (the Pact's briefed programme, roadmap B4): where
+        // it believes them, with the reach it believes, in the scenario's frame. A battery that has moved since is not
+        // where its zone is briefed.
+        json::Value briefed_zones = jsonb::Arr();
+        if (fmt.reactions) {
+            for (const IntelEntry& e : c.Intel().entries) {
+                if (e.kind != ObjectKind::SamSite || e.threat_radius_m <= 0.0 || e.exists < 0.5) continue;
+                const Vec3 at = to_scen(e.pos + moved_by(e.key));
+                if (std::hypot(at.x, at.y) > clip + e.threat_radius_m) continue;
+                json::Value z = jsonb::Obj();
+                jsonb::Put(z, "east_m", jsonb::Num(std::round(at.x)));
+                jsonb::Put(z, "north_m", jsonb::Num(std::round(at.y)));
+                jsonb::Put(z, "radius_m", jsonb::Num(std::round(e.threat_radius_m)));
+                jsonb::Push(briefed_zones, z);
+            }
+        }
         // Each flight's part inside the circle.
         struct Clipped {
             int flight = -1;
@@ -663,7 +684,17 @@ public:
                 const std::string& rwr_em = a->RwrEm(d.theatre.year);
                 const bool has_rwr = !rwr_em.empty();
                 if (a->seats > 1) Put(t, "seats", Num(a->seats));
-                if (!a->drone && !a->missile) {
+                if (!a->drone && !a->missile && fmt.reactions) {
+                    // Its pilot's reactions (roadmap B4, 04_REACTIONS.md 12.3): his faction's profile, his type's
+                    // countermeasures and tanks by the year, the load he would throw off, the zones briefed.
+                    json::Value rx = Obj();
+                    Put(rx, "profile", Str(f.id));
+                    Put(rx, "aircraft", Str(a->id));
+                    const bool strike = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
+                    if (strike && !fl.weapon.empty()) Put(rx, "stores", Str(fl.weapon));
+                    if (!briefed_zones.items.empty()) Put(rx, "zones", briefed_zones);
+                    Put(t, "reactions", rx);
+                } else if (!a->drone && !a->missile) {
                     json::Value e = Obj();
                     if (a->helicopter) {
                         Put(e, "on", Str("lock"));
@@ -798,6 +829,7 @@ public:
         Put(root, "terrain", terrain);
         if (fmt.weather) Put(root, "weather", Str(WeatherName(c.WeatherNow())));  // winds and cloud (weather.hpp)
         Put(root, "command_post", Str("command/pu12.json"));
+        if (fmt.damage_states) Put(root, "damage", Str("gameplay/damage.json"));  // roadmap B4: R1's states in a played raid
 
         // C2: the warning nets of the theatre, and the regiment's radars that still stand.
         json::Value c2 = Obj();

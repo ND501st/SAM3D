@@ -22,6 +22,12 @@ def test_random_streams_match_cpp_bit_for_bit():
     assert sum(x * x for x in xs) / len(xs) == pytest.approx(1.0, abs=0.04)
 
 
+def test_reaction_stream_matches_cpp():
+    # Roadmap B4: the pilots' reactions draw on stream 20 (simcore em::Stream::Reaction, tests/test_reactions.cpp).
+    assert em.STREAMS["reaction"] == 20
+    assert em.uniform01(em.draw_hash(42, 20, 7, 3, 1)) == pytest.approx(0.08319907501352408, abs=1e-15)  # C++
+
+
 def test_free_space_and_knife_edge():
     assert em.free_space_loss_db(10000.0, 1e9) == pytest.approx(112.45, abs=0.01)
     assert em.knife_edge_loss_db(0.0) == pytest.approx(6.03, abs=0.01)
