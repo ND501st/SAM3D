@@ -463,6 +463,14 @@ public:
             if (fl.route.size() < 2) continue;
             Clipped cl;
             cl.flight = static_cast<int>(fi);
+            // The leg's tag as the flight flies it: the route planner's turn points, gates and climb after the release
+            // are the way home (flights.hpp PastRelease reads the egress phase).
+            const int past = RouteIndexOf(fl.route, "target");
+            const auto leg_tag = [&](std::size_t i) {
+                const std::string& t = fl.route[i].tag;
+                if (past >= 0 && static_cast<int>(i) > past && (t == "turn" || t == "gate" || t == "climb")) return std::string("egress");
+                return t;
+            };
             std::vector<Vec3> pts;
             const Vec3 aim_moved = moved_by(fl.aim_key);  // a run at the battery or a dummy follows it to where it stands
             for (const RoutePoint& r : fl.route) pts.push_back(to_scen(r.pos + aim_moved));
@@ -485,14 +493,14 @@ public:
                     cl.agl.push_back(Lerp(fl.route[i].agl_m, fl.route[i + 1].agl_m, tc));
                     cl.t_h.push_back(Lerp(fl.route[i].t_h, fl.route[i + 1].t_h, tc));
                     cl.tags.push_back("edge");
-                    cl.leg_tags.push_back(fl.route[i + 1].tag);
+                    cl.leg_tags.push_back(leg_tag(i + 1));
                 }
                 if (inside_b) {
                     cl.pts.push_back(b);
                     cl.agl.push_back(fl.route[i + 1].agl_m);
                     cl.t_h.push_back(fl.route[i + 1].t_h);
                     cl.tags.push_back(fl.route[i + 1].tag);
-                    cl.leg_tags.push_back(fl.route[i + 1].tag);
+                    cl.leg_tags.push_back(leg_tag(i + 1));
                     if (static_cast<int>(i + 1) == fl.release_index) {
                         cl.release = true;
                         cl.release_pt = b;
@@ -556,6 +564,15 @@ public:
             }
             const bool low = fl.profile == Profile::Low || a->helicopter;
             const bool hide = a->helicopter && std::find(cl.tags.begin(), cl.tags.end(), std::string("hide")) != cl.tags.end();
+            // The height it follows the ground at: the route planner's low legs (from its let-down, gate or first turn
+            // point; its first point is at transit height), else its first point's.
+            double follow_agl = cl.agl.empty() ? 0.0 : cl.agl[0];
+            for (const RoutePoint& rp : fl.route) {
+                if (rp.tag == "letdown" || rp.tag == "gate" || rp.tag == "turn") {
+                    follow_agl = rp.agl_m;
+                    break;
+                }
+            }
             std::string cs = fl.callsign;
             cs.erase(std::remove(cs.begin(), cs.end(), ' '), cs.end());
             // Its formation by phase from the faction's "flights" block for its type class (a stream of cruise missiles
@@ -676,7 +693,8 @@ public:
                 } else if (low) {
                     json::Value b = Obj();
                     Put(b, "kind", Str("terrain_following"));
-                    Put(b, "agl_m", Num(std::round(std::max(5.0, cl.agl[0]))));
+                    Put(b, "agl_m", Num(std::round(std::max(5.0, follow_agl))));
+
                     Put(b, "max_climb_mps", Num(a->helicopter ? 8 : 120));  // a jet's pop-up climbs at 100 m/s and more
                     Put(b, "lookahead_s", Num(6));
                     Put(t, "behaviour", b);

@@ -35,6 +35,12 @@ struct TacticMemory {
 inline std::string TacticKey(const std::string& entry, Profile p, DayPart d, MissionKind k) {
     return entry + "|" + ProfileName(p) + "|" + DayPartName(d) + "|" + MissionKindName(k);
 }
+// The route planner's (docs/air_battle/01_ROUTES.md §7.3): the way in by its corridor (the gate and the feature of
+// greatest lateral offset) and the way home. A key of the old form read from memory is an unknown corridor.
+inline std::string TacticKey(const std::string& gate, const std::string& corridor, const std::string& exit, Profile p, DayPart d,
+                             MissionKind k) {
+    return gate + "|" + corridor + "|" + exit + "|" + ProfileName(p) + "|" + DayPartName(d) + "|" + MissionKindName(k);
+}
 
 struct Officer {
     OfficerDef def;
@@ -51,6 +57,7 @@ struct Officer {
     std::map<std::string, double> grudges;      // what he believes shot his men down (intel entry key) -> weight
     std::map<std::string, TacticMemory> tactics;
     std::string last_entry;       // the entry point of his last package
+    std::string last_corridor;    // and its corridor (route.mode 1, route_planner.hpp)
     double lesson_sead = 0.0;     // more SEAD per threat, learnt from losses to radar defences
     int packages_planned = 0;
     int aircraft_lost = 0;        // under his plans (planner) or his command (leader)

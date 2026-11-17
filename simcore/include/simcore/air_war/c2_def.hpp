@@ -138,6 +138,7 @@ inline const std::vector<std::string>& C2Hops() {
 // The game values of the command in the air (data/gameplay/air_war.json "c2"), every one in TuningTable::Defaults.
 inline std::vector<std::pair<std::string, double>> C2TuningDefaults() {
     return {
+        {"c2.mode", 1.0},                  // 1: B5's command in the air and the packages flown in time; 0: before it (a save of version 1)
         {"c2.step_h", 1.0 / 12.0},          // the campaign's step while a package is in the air or a message on its way
         {"c2.retry_s", 60.0},               // a jammed hop is said again after this
         {"c2.max_retries", 3.0},            // and given up after this many tries

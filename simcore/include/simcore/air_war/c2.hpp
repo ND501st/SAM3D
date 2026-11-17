@@ -268,7 +268,8 @@ public:
         next_pool_ = 1;
         next_decision_ = 0;
         const FactionC2& c2 = d.faction.c2;
-        if (!c2.present) return;
+        enabled_ = c2.present && d.tuning.Get("c2.mode") >= 1.0;
+        if (!enabled_) return;
         const FrontDef* front = d.theatre.FrontFor(d.faction.front);
         if (front == nullptr) return;
         for (std::size_t k = 0; k < c2.posts.size(); ++k) {
@@ -303,7 +304,8 @@ public:
         d_ = &d;
         staff_ = &staff;
     }
-    bool On() const { return d_ != nullptr && d_->faction.c2.present; }
+    // On: the faction has posts and the campaign runs B5's command in the air (c2.mode 1; 0 replays a save made before it).
+    bool On() const { return d_ != nullptr && enabled_; }
     void SetJam(Jam j) { jam_ = std::move(j); }
     const std::vector<C2PostState>& Posts() const { return posts_; }
     const std::vector<AlertPool>& Pools() const { return pools_; }
@@ -592,6 +594,7 @@ public:
 
 private:
     const AirWarData* d_ = nullptr;
+    bool enabled_ = false;
     Rng root_{1};
     Jam jam_;
     std::vector<C2PostState> posts_;

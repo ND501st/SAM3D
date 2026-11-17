@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -113,6 +114,8 @@ class AirCampaign {
 public:
     bool Init(const AirWarData& data, unsigned seed, std::string* error = nullptr) {
         data_ = data;
+        ground_.reset();
+
         seed_ = seed;
         actions_.clear();
         rng_ = Rng(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 1234567u);
@@ -338,6 +341,10 @@ public:
         Record(CampaignAction::Kind::Skip);
         const int i = pending_;
         pending_ = -1;
+        if (Legacy()) {
+            ResolveAbstract(packages_[static_cast<std::size_t>(i)]);
+            return;
+        }
         TakeOff(i);  // it flies on in time like any other
     }
 
@@ -632,6 +639,17 @@ public:
 private:
     AirWarData data_;
     Rng rng_{1};
+    // The map's features and ground for the route planner and the resolver (route.mode 1, route_planner.hpp), built on
+    // first use; caches only, so a copy may share it.
+    std::shared_ptr<RouteGround> ground_;
+    const RouteGround* RouteGroundPtr() {
+        if (data_.tuning.Get("route.mode") < 1.0) return nullptr;
+        if (!ground_) {
+            ground_ = std::make_shared<RouteGround>();
+            ground_->Build(data_);
+        }
+        return ground_.get();
+    }
     bool ok_ = false;
     double now_h_ = 0.0;
     bool marching_ = false;  // the player's battery on the march to a new position (G9.5)
@@ -719,6 +737,7 @@ private:
         rc.weather = WeatherAt(now_h_);
         rc.rng = &rng_;
         rc.awacs = support_.awacs;
+        rc.ground = RouteGroundPtr();
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -778,47 +797,67 @@ private:
             next_plan_h_ += data_.faction.doctrine.planning_cycle_h;
         }
         Collect(t0, t1);
-        // The FACs' eyes on our troops, once an hour.
-        const int hour = static_cast<int>(std::floor(t0 + 1e-9));
-        if (hour != last_fac_hour_) {
-            last_fac_hour_ = hour;
-            C2Context cx = C2Ctx();
-            c2_.Hourly(t0, cx);
-        }
-        // The packages: each takes off at its first aircraft's hour and flies in time; while any is in the air (or about to
-        // be) or a message is on its way, the step is cut to c2.step_h (roadmap B5's A0).
-        const double sub = std::max(1.0 / 120.0, data_.tuning.Get("c2.step_h"));
-        double t = t0;
-        while (t < t1 - 1e-12) {
-            const double ts = AirBusy(t1) ? std::min(t1, t + sub) : t1;
-            for (int round = 0; round < 4; ++round) {
-                bool began = false;
-                for (std::size_t i = 0; i < packages_.size(); ++i) {
-                    Package& p = packages_[i];
-                    if (p.resolved || p.played || Flying(static_cast<int>(i))) continue;
-                    if (p.FirstH() >= ts) continue;
-                    if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
-                        pending_ = static_cast<int>(i);
-                        player_candidates_.erase(static_cast<int>(i));
-                        ++player_missions_today_;
-                        now_h_ = std::max(t, p.FirstH());
-                        last_player_mission_h_ = now_h_;
-                        C2Context cx = C2Ctx();
-                        c2_.Brief(p, now_h_, cx);  // close support aimed by the FAC's own sighting (never the truth)
-                        Log("player_mission", "warning", "Raid warning: aircraft approaching the battery's sector from " + p.entry + ".", true);
-                        return true;
-                    }
-                    now_h_ = std::max(t, std::min(ts, p.FirstH()));
-                    TakeOff(static_cast<int>(i));
-                    began = true;
+        if (Legacy()) {
+            // Before roadmap B5 (a save of version 1 replayed, c2.mode 0): each package resolved whole at its first hour.
+            for (std::size_t i = 0; i < packages_.size(); ++i) {
+                Package& p = packages_[i];
+                if (p.resolved || p.played) continue;
+                if (p.FirstH() >= t1) continue;
+                if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
+                    pending_ = static_cast<int>(i);
+                    player_candidates_.erase(static_cast<int>(i));
+                    ++player_missions_today_;
+                    now_h_ = std::max(t0, p.FirstH());
+                    last_player_mission_h_ = now_h_;
+                    AimOnCall(p);
+                    Log("player_mission", "warning", "Raid warning: aircraft approaching the battery's sector from " + p.entry + ".", true);
+                    return true;
                 }
-                now_h_ = ts;
-                StepAir(ts);
-                if (!began && !Launched()) break;
+                ResolveAbstract(p);
             }
-            t = ts;
+        } else {
+            // The FACs' eyes on our troops, once an hour.
+            const int hour = static_cast<int>(std::floor(t0 + 1e-9));
+            if (hour != last_fac_hour_) {
+                last_fac_hour_ = hour;
+                C2Context cx = C2Ctx();
+                c2_.Hourly(t0, cx);
+            }
+            // The packages: each takes off at its first aircraft's hour and flies in time; while any is in the air (or about to
+            // be) or a message is on its way, the step is cut to c2.step_h (roadmap B5's A0).
+            const double sub = std::max(1.0 / 120.0, data_.tuning.Get("c2.step_h"));
+            double t = t0;
+            while (t < t1 - 1e-12) {
+                const double ts = AirBusy(t1) ? std::min(t1, t + sub) : t1;
+                for (int round = 0; round < 4; ++round) {
+                    bool began = false;
+                    for (std::size_t i = 0; i < packages_.size(); ++i) {
+                        Package& p = packages_[i];
+                        if (p.resolved || p.played || Flying(static_cast<int>(i))) continue;
+                        if (p.FirstH() >= ts) continue;
+                        if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
+                            pending_ = static_cast<int>(i);
+                            player_candidates_.erase(static_cast<int>(i));
+                            ++player_missions_today_;
+                            now_h_ = std::max(t, p.FirstH());
+                            last_player_mission_h_ = now_h_;
+                            C2Context cx = C2Ctx();
+                            c2_.Brief(p, now_h_, cx);  // close support aimed by the FAC's own sighting (never the truth)
+                            Log("player_mission", "warning", "Raid warning: aircraft approaching the battery's sector from " + p.entry + ".", true);
+                            return true;
+                        }
+                        now_h_ = std::max(t, std::min(ts, p.FirstH()));
+                        TakeOff(static_cast<int>(i));
+                        began = true;
+                    }
+                    now_h_ = ts;
+                    StepAir(ts);
+                    if (!began && !Launched()) break;
+                }
+                t = ts;
+            }
+            now_h_ = t0;  // the hour's own processes as before the air was stepped
         }
-        now_h_ = t0;  // the hour's own processes as before the air was stepped
         const double dt = t1 - t0;
         intel_.Decay(dt, data_.tuning);
         Repair(dt);
@@ -941,6 +980,7 @@ private:
         tanker_left_ = support_.tanker_receivers * data_.faction.doctrine.planning_cycle_h / 24.0;
         pc.tanker_receivers = &tanker_left_;
         pc.supply = &supply_;
+        pc.ground = RouteGroundPtr();
         // The sorties the plan holds back for on-call work (doctrine.on_call_fraction), squadron by squadron, before the
         // planner spends the rest (roadmap B5: the alert pools fly them).
         std::vector<double> held;
@@ -993,6 +1033,26 @@ private:
     // controllers (mai_tactics_vvs: control passes to controllers with the ground troops): at check-in the FAC briefs
     // them where he last saw our troops, with that sighting's age (c2.hpp AirC2::Brief), never where they are now.
     // Then the package flies, its draws from a fork keyed by its id.
+    // Before roadmap B5 (c2.mode 0, a save of version 1 replayed to the bit): the package resolved whole at its first hour
+    // from the campaign's stream, close support aimed where our troops really were (the FAC's sighting came with B5).
+    bool Legacy() const { return data_.tuning.Get("c2.mode") < 1.0; }
+    void AimOnCall(Package& p) {
+        if (p.kind != MissionKind::Cas && p.kind != MissionKind::HeloRaid) return;
+        const int i = p.target_object.empty() ? -1 : data_.theatre.IndexOf(p.target_object);
+        if (i < 0 || data_.theatre.objects[static_cast<std::size_t>(i)].kind != ObjectKind::Troops) return;
+        const Vec3 at = truth_[static_cast<std::size_t>(i)].pos + Vec3{rng_.Normal(0.0, 300.0), rng_.Normal(0.0, 300.0), 0.0};
+        for (Flight& fl : p.flights) {
+            if (fl.aim_key == p.target_key) fl.aim_pos = at;
+        }
+    }
+    void ResolveAbstract(Package& p) {
+        AimOnCall(p);
+        ResolveContext rc = Context();
+        rc.weather = WeatherAt(p.tot_h);
+        PackageOutcome o = Resolver().Resolve(p, rc, true);
+        ApplyOutcome(p, o);
+    }
+
     void TakeOff(int i) {
         Package& p = packages_[static_cast<std::size_t>(i)];
         C2Context cx = C2Ctx();
@@ -1115,6 +1175,7 @@ private:
             pc.awacs = support_.awacs;
             pc.tanker_receivers = &tanker_left_;
             pc.supply = &supply_;
+            pc.ground = RouteGroundPtr();  // the route planner's ground (route.mode 1, roadmap B2)
             Planner planner;
             return planner.OnCall(pc, mk, e, pool.squadron, pool.aircraft, takeoff_h, out);
         };
@@ -1250,7 +1311,7 @@ private:
         const IntelDef& in = f.intel;
         const TuningTable& tune = data_.tuning;
         // Seen at the time over the target (the package resolved in the air ends after it: roadmap B5).
-        const double t = p.played ? std::max(now_h_, p.tot_h) : p.tot_h;
+        const double t = p.played || Legacy() ? std::max(now_h_, p.tot_h) : p.tot_h;
         const Officer* io = staff_.HolderPtr(StaffRole::Intelligence);
         const Officer* cdr = staff_.HolderPtr(StaffRole::Commander);
         const double skeptic = 0.5 * ((io != nullptr ? io->def.traits.skepticism : 0.5) + (cdr != nullptr ? cdr->def.traits.skepticism : 0.5));
@@ -1259,7 +1320,7 @@ private:
         double pirep_h = t + in.pirep_delay_h;
         // A faction whose crews report on landing (the Pact: 5-10 min to the regiment's staff, markovsky_afghan_sky): the
         // debrief report after its last aircraft is home (roadmap B5, c2.debrief_s).
-        if (f.c2.present && f.c2.debrief_s.Set() && !p.flights.empty()) {
+        if (f.c2.present && !Legacy() && f.c2.debrief_s.Set() && !p.flights.empty()) {
             Rng r = c2_root_.Fork(0xDEB21EF000ull + static_cast<std::uint64_t>(p.id));
             pirep_h = p.LastH() + r.Uniform(f.c2.debrief_s.lo, f.c2.debrief_s.hi) / 3600.0;
         }
