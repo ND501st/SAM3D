@@ -581,6 +581,13 @@ private:
                     p.delivery = DeliveryFor(*wd, low, a.helicopter);
                     p.count = load.second;
                     p.release_m = std::max(kind->release_m, wd->standoff_m);
+                    // A gun or rockets from a fixed-wing aircraft: a pass that opens fire at its slant range (roadmap B6,
+                    // attack_pass.hpp), a strafe or a gentle dive.
+                    if (wd->pass.present && !a.helicopter) {
+                        p.release_m = wd->pass.open_fire_m;
+                        if (wd->Can(Delivery::Strafe)) p.delivery = DeliveryName(Delivery::Strafe);
+                        else if (wd->Can(Delivery::GentleDive)) p.delivery = DeliveryName(Delivery::GentleDive);
+                    }
                     p.not_before_s = t0;
                     p.give_up_s = t0 + 3600.0;
                     pending_.push_back(p);

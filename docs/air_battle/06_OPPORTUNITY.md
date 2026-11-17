@@ -373,6 +373,98 @@ can re-attack it at A2.
   night hunting, no OA-10 FAC role (1987), no airborne holding with pop-up tasking as the default (a 1986 NATO
   evaluation: at most an officer's quirk, `opportunity.md` §4 item 5).
 
+## 10. As built (B6, 18 November 2026, branch `tb-b6`)
+
+**Files.** `simcore/air_war/opportunity_def.hpp` (the faction's `"opportunity_rules"` block with a source per rule, a
+weapon's `"pass"`, the `"opportunity"` game values), `opportunity.hpp` (the chain: `RunChain`, `MayAttack`,
+`AbleToAttack`, `OppWorth`, `ActShare`, `Reattack`, `Claim`), `attack_pass.hpp` (`AttackPass`, `GunPassEffect`),
+`opportunity_session.hpp` (`OpportunityRun`: the chain and the passes in a played raid), small hooks in
+`mission_bridge.hpp`, `resolve.hpp` (`FindOpportunity`), `campaign.hpp`, `package_injector.hpp`, `raid_scenario.hpp`,
+`flights.hpp` (`PilotOverride::Kind::Attack`, `OverrideOf`), `scenario_runner.hpp` (`FlyPass`, `PassOf`, `EndPass`,
+`StrikeMover`, and the dummies and the roads' movers as things a pilot can see), `state.hpp`
+(`PackageOutcome::OpportunityRecord`), `save.hpp`; the data in each `faction_*.json`, `weapons.json` and
+`data/gameplay/air_war.json`; `tests/test_opportunity.cpp`; case 9 of `air_war_bench`. The chain's draws use
+`em::Stream::Opportunity` (21), mirrored in `prototype/samproto/em.py`.
+
+**The chain (§3).** One leader per flight runs it, at `opportunity.tick_s` (1 s), staggered by a keyed draw.
+- *Seen.* The flight's members' own sightings (B3's `PilotPicture`): ground objects, launch signs, the origin of a
+  trail. Sightings within `opportunity.merge_m` are one contact. A contact within 1,500 m of a member's own aim is his
+  target, not an opportunity.
+- *Identified.* A contact less sure than `min_confidence` waits. Identification takes a log-normal time about
+  `identify_s` (4.5 s), sooner for a skilled pilot, an easy type and a calm one. He may take it for what it is not
+  (`misidentify_day` 0.05, `misidentify_night` 0.15): then he believes it a battery.
+- *Authorised.* The faction's rules (`MayAttack`): own troops' keep-out; fired on (NATO, the rebels) he may hit back
+  at that site only; a village keep-out; the Pact's helicopter night hunt waits for the ground post; armed
+  reconnaissance by the faction's rule (NATO and the rebels: its area; the Pact: the free hunt's zone and phase, from
+  B5's `c2.free_hunt`; the neutral: near the line); close support by the FAC, beyond NATO's FSCL, or in an A-10
+  squadron's area; any other task reports, unless the faction attacks what it finds (the rebels).
+- *Able.* Not damaged; a gun, rockets, or bombs no longer owed to his target; above bingo fuel (estimated from the time
+  flown); time before his slot; room for a pass (`MinimumRunM`: 2.5 s at his speed plus his open-fire range, never under
+  3,000 ft). Too close, he looks again on a later tick.
+- *Worth it.* The value of what he believes it is, by his confidence, less the threat he has seen near it times his
+  delivery's exposure, times `reattack_risk` for each pass already flown, by his nerve.
+- *Act.* On a hunting task (armed reconnaissance, close support, a helicopter raid) he acts at 0.85 moved by his traits
+  and pilots; on any other at the faction's `tendency` moved the same way, times `0.4 + 1.2 x ease` of his type. If not,
+  an unsure pilot on an easy type flies a recce pass; the rest report.
+
+**Reports.** A faction with `report_in_flight` (the Pact) says it on the flight's net (`AirRadio`), and
+`LivePackages` passes it to the posts (`NoteReport`: a column, parked vehicles as troops, a battery as a launch). NATO,
+the neutral and the rebels report at the debrief: the record is written, and the campaign reads it after the mission.
+
+**Attack passes (§5).** An attack or gun run puts every member with stores on a pass in trail (`trail_m` apart); a recce
+pass is the leader alone. A pass is a `PilotOverride` of kind `Attack` on B1's layer (`ScenarioRunner::FlyPass`): out to a
+setup point `run_in_m` back if he has no room, the run at the aim, and the recovery past it and to the right. It opens
+fire within the weapon's `open_fire_m` and 15 degrees of his nose. A break, a dive or a jink (B4) takes the layer and
+ends the pass. Re-attacks (`Reattack`) come from `reattack_heading_deg` off at `reattack_separation_m`, at most
+`max_passes`. A fixed-wing aircraft whose planned load is a gun or rockets flies its planned attack as passes too, from
+`run_in_m` out: its first burst or salvo is its release, and the one-shot release gate is skipped for it. Bombs keep
+the release gate.
+
+**Effect.** At the burst the pilot lines up on what is really there within `find_m` (300 m) of where he believed it:
+our vehicle, the battery's vehicles, a dummy, a theatre object or a mover on the roads. One keyed draw against the
+weapon's `pass.per_pass` for its class (`GunPassEffect`), halved or so if it moves, times `gun_burst_under_fire` under
+fire, worse by eye at night. A hit puts it out of action through the bridge's existing damage (R1's states for our
+vehicles and objects; a mover is `BrokenDown`). The fx feed gets a release and an impact with delivery `strafe` or
+`gentle_dive`.
+
+**Claims (§7).** `Claim`: a miss is claimed a kill at `claim_on_miss_day` (0.25) or `_night` (0.6); a kill claims
+`claim_extra_*` more. The record (`OpportunityRecord`) holds the belief, the act, where the chain stopped and why, the
+passes, the claim, the object the enemy takes it to be about, and the truth. The campaign's `BeliefsFrom` reads the
+claim, not the kill: a claimed object reads as destroyed, unless a skeptical staff doubts a lone claim (function 0.5).
+
+**The abstract level (A0).** `Resolver::FindOpportunity`: a flight that is not on armed reconnaissance may find a
+column on the move its leg passes within `logistics.search_m`, at `ColumnFindChance x a0_find_scale x ease`. It runs
+the same chain. An attack removes `a0_column_hit` of the column per aircraft and loses one to its guns at
+`a0_column_guns`. Draws are keyed by the campaign's seed, the package and the column: the main stream is not moved,
+and with `a0_find_scale` 0 a campaign runs as before B6 (`test_opportunity`).
+
+**Old saves.** The save writes `opportunity_mode`; a save without it loads with mode 0 and replays as before. Records
+are written only when present.
+
+**Shortcuts.** Passes are flown level at the pilot's held height: the dive is only in the open-fire range and the
+effect. Opportunistic attacks use guns and rockets only, never bombs, in a session. Fuel is estimated from the time
+flown. No FAC designation reaches the session's chain yet. The tendency stays in `opportunity_rules` until B11's
+`hot_phase`. The claim has day and night factors, no `claim_factor` per class. The test waves gate on the open-fire
+range but fly no passes. A contact's chain draws are fixed per contact.
+
+**Balance.** `air_war_bench` case 9 (400 runs): ten GAU-8 passes on ten known, stationary, undefended tanks put 7.9
+out of action (4-10), 2.9 burnt, against Array 20's 8 and 3; on a column on the move under fire 2.5 (0-7). Cases 1-8
+do not move (the bench's resolver has no campaign seed, so no finds). The weaponeer never picks `strafe` or
+`gentle_dive` in the campaigns: no attack line moves for them. In `air_war_balance` (20 seeds) the A0 finds move our
+columns' losses: the rebels 0 to 1 vehicle a campaign, the neutral 0 to 3-4, the Pact 28 to 32-42, NATO 48-50 to 50-54
+(on the nation, 10 seeds: the neutral 0 to 13-21, NATO 20-33 to 60). The rest moves within the seeds' noise (packages
+and losses a few per cent either way), because a column hit on the way changes what the staff plans next. NATO's attacks
+on unbriefed columns outnumber the Pact's (its A-10 beyond the FSCL against the Pact's strikes that only report); the
+rebels attack least, for want of aircraft with guns or rockets near our lines, not of will. `crew_balance`,
+`helper_coverage` and `ground_check data 3600` do not move (nothing under the ground). `test_air_war`'s NATO check of a
+strike with SEAD past a known radar was judged over four seeds; such strikes are 3 in 100, and the finds moved seeds 1-4
+to none, so it is now judged over sixteen.
+
+**Left:** the FAC's `designate` into the session chain (B5's left item); a jammed net stopping a strike;
+`TestWaves::Releases` through `AttackPass`; bombs dropped on targets of opportunity in a session; the dive flown
+in the pass; A1 (the coarse flown level); a check that a silent battery is found less often than one on the march;
+the 24 h `mission_demo` counts per faction (§ Done when 3) as a test; `AimOnCall` (already legacy only).
+
 ## Done when
 
 1. `tests/test_opportunity.cpp` passes:

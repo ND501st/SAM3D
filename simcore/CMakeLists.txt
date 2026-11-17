@@ -102,6 +102,7 @@ add_executable(simcore_tests
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
   tests/test_c2.cpp
+  tests/test_opportunity.cpp
   tests/test_routes.cpp
   tests/test_flights.cpp
   tests/test_air_radio.cpp

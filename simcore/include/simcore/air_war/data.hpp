@@ -20,6 +20,7 @@
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/c2_def.hpp"
+#include "simcore/air_war/opportunity_def.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/country_map.hpp"
@@ -286,6 +287,7 @@ struct WeaponDef {
     double reliability = 0.95;     // it arms and goes off
     double laydown_reliability = -1.0;   // dropped unretarded from low level the fuze has no time (Falklands): -1 as above
     std::vector<Delivery> deliveries;    // how it can be put on a target
+    GunPassDef pass;                     // a gun's or rockets' pass as flown (roadmap B6, attack_pass.hpp); not present: none
     int in_service_year = 0;
     std::string source;
     std::string confidence;
@@ -380,6 +382,13 @@ struct AircraftType {
     double recce_quality = 0.0;    // camera or sensor, 0..1
     double air_to_air = 0.0;       // value as an escort, 0..1
     double evasion = 0.3;          // how well its crews survive a pass (with the pilot's skill), 0..1
+    // Targets of opportunity (roadmap B6, docs/air_battle/06_OPPORTUNITY.md §4; the data's "opportunity", with its own
+    // source): how easily its crews act on what they find, 0..1 (it scales the find-to-act steps, not the find), and the
+    // share of its fuel it turns home at.
+    double opportunity_ease = 0.3;
+    double bingo_share = 0.3;
+    std::string opportunity_source;
+    std::string opportunity_confidence;
     int in_service_year = 0;       // flies only in a war of this year or later (TheatreDef::year); 0: always
     // A cruise missile (role "missile"): flown like an aircraft from where it is launched to its target, never a crew
     // lost; its stock is spent and resupplied.
@@ -758,6 +767,7 @@ struct FactionDef {
     std::map<std::string, std::map<std::string, FormationDef>> formations;
     FactionRadio radio;  // its air radio and discipline (the "radio" block, roadmap B9)
     FactionC2 c2;        // its command posts in the air, their authority, timings and alert pools (the "c2" block, roadmap B5)
+    OpportunityRulesDef opportunity;  // what its flights may do with what they find (the "opportunity_rules" block, roadmap B6)
 
     // A class's formations by phase, as a flight carries them (flights.hpp FlightState::formations); empty: none given.
     std::map<std::string, std::vector<Vec3>> FormationsFor(const std::string& cls) const {
@@ -920,6 +930,16 @@ struct TuningTable {
             {"delivery.release_level_m", 0.0},
             {"delivery.release_standoff_m", 5000.0},
             {"delivery.release_hover_fire_m", 4000.0},
+            // roadmap B6: the gun's and the rockets' passes (docs/air_battle/06_OPPORTUNITY.md 5.2)
+            {"delivery.cep_strafe_m", 45.0},
+            {"delivery.cep_gentle_dive_m", 50.0},
+            {"delivery.exposure_strafe", 0.8},
+            {"delivery.exposure_gentle_dive", 0.7},
+            {"delivery.release_strafe_m", 1115.0},
+            {"delivery.release_gentle_dive_m", 1500.0},
+            {"delivery.gentle_dive_pull_m", 4000.0},
+            {"delivery.gentle_dive_apex_m", 600.0},
+            {"delivery.gentle_dive_release_m", 300.0},
             // support orbits (docs/air_war/11_SUPPORT.md)
             {"delivery.runway_strip_m", 25.0},
             {"delivery.popup_pull_m", 6000.0},     // a pop-up's pull-up, short of the target
@@ -1054,6 +1074,7 @@ struct TuningTable {
         };
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
         for (const auto& kv : C2TuningDefaults()) m.insert(kv);        // its command in the air (roadmap B5, c2_def.hpp)
+        for (const auto& kv : OpportunityTuningDefaults()) m.insert(kv);  // targets of opportunity (roadmap B6, opportunity_def.hpp)
         return m;
         }();
         return d;
@@ -1456,7 +1477,8 @@ public:
         std::string tier;
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
-                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2"}) ||
+                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2",
+                             "opportunity_rules"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1471,6 +1493,10 @@ public:
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
             !LoadCommsJamming(root, out) || !LoadFormations(root, out) || !LoadRadioBlock(root, out) || !LoadC2Block(root, out)) {
             return false;
+        }
+        if (const json::Value* op = root.Find("opportunity_rules")) {
+            std::string why;
+            if (!LoadOpportunityRules(*op, out.opportunity, &why)) return Fail("opportunity_rules", why);
         }
         return true;
     }
@@ -1735,7 +1761,7 @@ public:
                              "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
                              "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
                              "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "flight",
-                             "low_level", "source", "confidence", "notes"}) ||
+                             "low_level", "opportunity", "source", "confidence", "notes"}) ||
                 !RequireString(a, p, "id", t.id) || !RequireString(a, p, "name", t.name) ||
                 !StringList(a, p, "roles", roles) || !OptionalString(a, p, "class", t.target_class) ||
                 !OptionalBool(a, p, "helicopter", t.helicopter) || !OptionalBool(a, p, "drone", t.drone) ||
@@ -1761,7 +1787,7 @@ public:
             if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0) || !Num(a, p, "range_km", range_km, 0.0, 5000.0) ||
                 !Num(a, p, "radius_km", radius_km, 0.0, 5000.0) || !Num(a, p, "computing", t.computing, 0.0, 1.0) ||
                 !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year) || !ReceiversByYear(a, p, t.rwr_by_year) || !Int(a, p, "seats", t.seats, 1, 2) ||
-                !Flight(a, p, t) || !LowLevel(a, p, t)) {
+                !Flight(a, p, t) || !LowLevel(a, p, t) || !OpportunityOf(a, p, t)) {
                 return false;
             }
             t.arm_range_m = arm_km * 1000.0;
@@ -1803,6 +1829,21 @@ public:
             !Num(*f, fp, "night_agl_m", t.low_agl_night_m, 2.0, 1000.0) || !Num(*f, fp, "mps", t.low_mps, 10.0, 1000.0) ||
             !Provenance(*f, fp) || !OptionalString(*f, fp, "source", t.low_level_source) ||
             !OptionalString(*f, fp, "confidence", t.low_level_confidence)) {
+            return false;
+        }
+        return true;
+    }
+
+    // "opportunity": how easily its crews act on a target of opportunity and the fuel share they turn home at (roadmap B6,
+    // docs/air_battle/06_OPPORTUNITY.md §4), with their own source and confidence.
+    bool OpportunityOf(const json::Value& a, const std::string& p, AircraftType& t) {
+        const json::Value* f = a.Find("opportunity");
+        if (f == nullptr) return true;
+        const std::string fp = Join(p, "opportunity");
+        if (!f->Is(json::Type::Object)) return Fail(fp, "an object");
+        if (!Keys(*f, fp, {"ease", "bingo_share", "source", "confidence", "notes"}) || !Num(*f, fp, "ease", t.opportunity_ease, 0.0, 1.0) ||
+            !Num(*f, fp, "bingo_share", t.bingo_share, 0.0, 0.9) || !Provenance(*f, fp) ||
+            !OptionalString(*f, fp, "source", t.opportunity_source) || !OptionalString(*f, fp, "confidence", t.opportunity_confidence)) {
             return false;
         }
         return true;
@@ -2379,7 +2420,7 @@ public:
             std::vector<std::string> deliveries;
             double standoff_km = 0.0;
             if (!Keys(v, p, {"id", "name", "kind", "mass_kg", "guidance", "standoff_km", "footprint_m", "effect", "reliability",
-                             "laydown_reliability", "deliveries", "in_service_year", "source", "confidence", "notes"}) ||
+                             "laydown_reliability", "deliveries", "pass", "in_service_year", "source", "confidence", "notes"}) ||
                 !RequireString(v, p, "id", w.id) || !RequireString(v, p, "name", w.name) || !RequireString(v, p, "kind", w.kind) ||
                 !Num(v, p, "mass_kg", w.mass_kg, 0.0, 10000.0) || !OptionalString(v, p, "guidance", w.guidance) ||
                 !Num(v, p, "standoff_km", standoff_km, 0.0, 200.0) || !Num(v, p, "footprint_m", w.footprint_m, 0.5, 500.0) ||
@@ -2414,6 +2455,15 @@ public:
                 w.deliveries.push_back(dl);
             }
             if (w.Can(Delivery::Standoff) && w.standoff_m <= 0.0) return Fail(Join(p, "standoff_km"), "a stand-off weapon needs its range");
+            if (const json::Value* ps = v.Find("pass")) {  // a gun's or rockets' pass as flown (roadmap B6)
+                std::string why;
+                const auto cls = [](const std::string& n) {
+                    TargetClass c;
+                    return ParseTargetClass(n, c) ? static_cast<int>(c) : -1;
+                };
+                if (w.kind != "gun" && w.kind != "rockets") return Fail(Join(p, "pass"), "only a gun or rockets fly a pass");
+                if (!LoadGunPass(*ps, Join(p, "pass"), w.pass, cls, &why)) return Fail(Join(p, "pass"), why);
+            }
             if (out.Find(w.id) != nullptr) return Fail(p, "duplicate weapon id '" + w.id + "'");
             out.weapons.push_back(std::move(w));
         }
