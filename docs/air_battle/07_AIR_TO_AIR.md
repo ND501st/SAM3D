@@ -549,3 +549,121 @@ match the anchors.
 - Helicopters against fighters (J-CATCH); RAF and Luftwaffe air combat practice of 1980-85.
 - How far the Pact's 1984 reform reached the average unit; the Lazur's ranges and commands.
 - The Pact's own identification rule before a radar shot (the controller's word is SAM3D's assumption).
+
+## 8. As built (B8, 18 November 2026, branch `tb-b8`)
+
+**The abstract fight (A0), `simcore/air_war/air_fight.hpp`.** `AbstractAirFight` replaces the resolver's flat fighter
+roll in both the time-stepped `Begin`/`StepTo` and the atomic `Resolve` (they share the leg code). It runs once a
+package, when its first strike flight reaches the leg our fighters meet it on (B2's IP leg):
+
+- **Sent and found.** The front's fighter threat times `fight.a0_intercept` gives the chance a group is sent. Our
+  ground radar finds the package by day (0.85), by night (0.45), in poor weather (×0.6) and low (×0.6).
+- **Our group.** A pair or a four from one of our three regiments (`air_combat.json`'s `ours`, from
+  `oob_pannonia.json`: two of MiG-21MFs, one of MiG-21bis and MiG-23MLs), drawn by strength.
+- **Our GCI jammed.** A package with a jammer jams our nets half the time. Our green pilots then go home (30 %) and the
+  surprise is lost (0.6 → 0.2).
+- **Their cover first.** Sweep, then CAP, then close escort; each meets our group by its chance (0.6, 0.4, 0.5), ×1.5
+  under an E-3A that controls fighters. A leader who commits himself (NATO) needs the odds of his doctrine. A met group
+  fights them; it reaches the strikers only if the cover is down or broke off.
+- **The strikers.** Those shot at or that saw the attack answer by their doctrine: jettison, then press on or abort.
+  Armed strikers defend themselves when they saw ours first. An aborted flight goes home in the resolver; a jettisoned
+  one delivers nothing.
+- **Rounds** (`a0_rounds` 2). The side with the first sight fires first. Each shooter tries his weapons in his
+  doctrine's order at the round's range (lognormal about 15 km, 5 km, 3 km and 600 m for a radar missile beyond sight,
+  a radar missile at sight, an infrared missile and a gun). A radar missile beyond sight goes only where his rules
+  clear it: the controller's word for ours and the Pact, the E-3A for NATO. Each shot is B7's chain: `Believe`,
+  `PilotFires`, then `ResolveShot` or `ResolveGunPass`.
+- **The record.** A loss is written `LossRecord::by` = the regiment's id with the new `fighter` flag; ours lost go to
+  `PackageOutcome::our_fighters_lost`; `air_fights` counts the fights. Both are saved. The debrief's ledger
+  (`campaign/outcomes.hpp`) counts `downed_by_fighters` apart, with ours lost beside it.
+- **The planner.** `ExpectedLosses` uses `AbstractAirFight::ExpectedMainLoss`, the same model in closed form: the
+  chance of finding, times the chance no cover meets our group, times what our mean group kills with its nominal shot.
+
+**The live fight, `simcore/air_war/air_fight_session.hpp`.** A scenario's `"air_fight"` (`air_fight_def.hpp`) names
+the targets that fight, their type, faction, role, regiment, controller and skill, and the controllers (a GCI post or
+an AWACS, ours or the enemy's, with a range and an `air_radio` post). The runner steps it after the reactions
+(`UpdateAirFight`, one small block in `scenario_runner.hpp`) and hands it callbacks: the aircraft, each pilot's B3
+picture, height and height above the ground, steering through B1's `PilotOverride`, `DestroyTarget`, events and B9's
+radio.
+
+- **What a fighter knows.** His pilot's picture (a type recognised inside `vid_m`, 5.5 km, is friend or foe), his own
+  radar (`sensors.json`: by hand, or cued after a vector; the clutter figure looking down below 3 km; a 60° sector;
+  range scaled by the fourth root of the RCS) and his controller's vectors. Decisions use these. The truth is read
+  only to resolve a shot and to match a believed place to an aircraft.
+- **Rules of engagement.** A `vid` doctrine (NATO, the neutral) fires only on a type recognised by eye. Under an E-3A
+  that controls it in the war's year, a radar contact with no friendly within 20 km is cleared. A `controller`
+  doctrine (the Pact) fires on what its controller called hostile; ours the same.
+- **GCI and its loss.** A controller vectors his fighters every 20 s to the nearest opposed aircraft in his range, with
+  1 km of error, said on his post's net (`AirRadio::SayFrom`, B9) and heard or not (`Reaches`): jammed, out of range or
+  the net busy. A bound fighter that hears nothing for 60 s has lost control. By his doctrine and skill he aborts (the
+  Pact's and ours when green, the neutral's always), goes on in pairs with his own radar (the Pact's and ours when
+  skilled), or continues (NATO).
+- **Commit and disengage.** Bingo after 900 s of fight, joker after 600 s unless engaged, Winchester when empty, and a
+  leader who commits himself goes home when his believed odds fall below his doctrine's.
+- **Modes.** Patrol (his own route), Vectored, Search (free after control is lost), Identify (closes on an unknown),
+  Engage (leads the hostile and fires), Home.
+- **The shot.** One missile in the air at a time per target. A radar missile needs a lock (`lock_m`, else 0.8 of the
+  range by hand) held to impact. The missile flies its time and is resolved at arrival: the target breaks if its
+  pilot knew, and a lost lock fails it. A gun fires in its cone (10°), its range and an aspect within 60° of the tail.
+- **Strikers** fire back only in self-defence, close in. Their break and jettison on seeing a fighter come from B4's
+  reaction chain, which already reads a recognised fighter in the picture.
+- **Kills and claims.** A kill goes to `DestroyTarget` with the regiment's id for ours and the type for the enemy's. A
+  miss is claimed 30 % of the time (`claims`). The mission bridge writes our fighters' kills with the regiment and the
+  `fighter` flag, and our fighters lost into the outcome.
+
+**Data.** `air_combat.json` gains `fight` (the game values above, each anchored in its notes), `ours`, and per
+doctrine `skill`, `on_control_lost` (green and skilled), `commit_odds` and `fighter_plan` (the shares of close escort,
+sweep and CAP and the sweep's lead). NATO plans sweep and CAP at half each with a 5-minute lead; the Pact close escort
+and its clearing group (a sweep 3 minutes ahead) at half each; the neutral close escort only; the rebels have no
+fighters to send. `FlightRole` gains `Sweep` and `Cap`. The planner splits a
+package's fighters into one flight, or two pairs in the two likeliest roles. A sweep flies the strike's route ahead by
+the lead; a CAP holds an orbit off the target (`OrbitRoute`).
+
+**Keyed draws.** No new random stream. The fight reuses `Stream::AirCombat` (15) with keys apart from B7's:
+`0xB8000000+n` for the abstract fight's shooters, `0xF1600000+i` for the session's fighters, `0xF16C0000+i` for its
+controllers, links 31-32 (radar noise) and 41 (claims). The resolver's fight seeds from a fork of the package's stream,
+so it takes no draw from it. The prototype has no air combat, so nothing there changes.
+
+**B7's data list for B11, settled here.** B3 and B5 had done none of it.
+
+- The Draken from 1988 (`draken_gun` in service 1988, its `air_to_air` gone); the neutral's 1985 escort is the
+  gun-armed Saab 105 (`escort` added to its roles).
+- The MiG-23ML as the Pact's 1985 standard: a new type `mig23ml_wp` (SPO-10, its own sensors), the MLD from 1984 with
+  the SPO-15L. The regiments are 20 MLs and 10 MLDs.
+- The F-16A's escort value with no radar missile: its fit has AIM-9s and the gun only. In the abstract fight it can
+  fire beyond sight only with a radar missile, so it fights at sight.
+- The A-50 controls no fighters in 1985 (`AwacsControlsFighters`: the faction's airborne warning post's year). The
+  planner's AWACS cut and the abstract fight's E-3A factors apply only where it does.
+- `AircraftType::air_to_air` is retired (the loader and the struct).
+- Our order of battle's `mig21` is `mig21mf` or `mig21bis` by regiment, with basic models, sounds and the reaction
+  table's fighter models.
+- Fits for f111f, tornado_ids, a10a, ah1s, mig25bm, mi24 and the helicopters, and an `unarmed` fit for the support,
+  jamming, reconnaissance and light types. Each is sourced or a labelled SAM3D assumption.
+- `rwr_by_year`: not needed. A type's receiver is its `rwr_em`, and a later receiver is a later type (the MLD).
+- Guns for the MiG-27 (GSh-6-30, `hushkit_2020_mig27`), Su-24 (GSh-6-23), Su-25 (GSh-30-2) and Su-17M3 (two NR-30s),
+  with their R-60s, from `airwar_ru`.
+
+**Tests**, `simcore/tests/test_air_fight.cpp`: the data and doctrines; the A-50 and E-3A year gate; the abstract fight
+deterministic by seed with its kills named by regiment; how often a package is found; exchange ratios (NATO's F-15
+sweep at least 2:1 against our fighters and twice the Pact's; the Pact's MiG-23MLs near even); a sweep and an escort
+cutting the strikers' losses, an E-3A more; the strikers answering; the planner's expectation within a factor of three
+of the fight; night, weather and height hiding a package; the resolver writing fighter losses with the regiment. Live:
+a NATO pilot without an E-3A holds his fire until he recognises the type; under an E-3A he fires an AIM-7 beyond sight;
+the same seed gives the same fight; a Pact pilot whose vectors are jammed goes home if green, on in pairs if skilled; in
+a session our MiG-21 under GCI closes on an enemy jet and fires, and the scenario loader refuses bad fighters. `test_perception_em.cpp` now holds the MLD to its SPO-15L from its year, and `test_air_combat.cpp` gives every type a fit.
+
+**Balance** (`docs/air_war/09_BALANCE.md` §15). Our fighters now shoot down 4 of the Pact's and 4 of NATO's aircraft a week on the district (8-10 and 5-6 a campaign on the nation) and lose 2.5-3 and 4.3-4.8. The Pact's and NATO's loss rates rise by 0.3-0.8 points; the district stays at or under the period's 2 % a sortie. Against the Pact our side comes out ahead (1.2-1.8:1, mostly strikers caught); against NATO's sweeps and E-3A it loses more than it kills (0.7-0.9:1), as the period suggests. The Pact, its A-50 no longer counted, escorts more and flies bigger strike groups. Old saves (version 1 and 2) still load and replay to the bit on a reload, but to a new war: the Pact's order of battle and the fight changed (`test_routes.cpp`'s fixture fingerprint is now B8's).
+
+**Left.**
+
+- For B10: our fighters as live actors in raids (the raid builder writes no `"air_fight"` yet, so a played raid has no
+  live air fight; the testbed has none either), our GCI on our picture, alert and scrambles, corridors, IFF. Until
+  then our side in the session is the minimal fighter of a hand-written scenario, heard at once with no radio.
+- Fighter radars as EM emitters on aircraft (`EmSensorLink::SyncTarget`); the session uses `sensors.json`'s ranges and
+  its clutter figure, not `look_down_db`.
+- Authority lines for vectors (B5's `C2Authority`): the controllers' vectors are the session's own calls on B9's nets.
+- The doctrine's tactics (beam, slash, one or two circles, drag) are not told apart; the live fight steers by lead
+  pursuit and the abstract one by range bands.
+- The strikers' chaff and flares and the escort's station on its strikers (B1's formation layer) in the fight.
+- `air_combat_bench` (§5.10) against Vietnam, Linebacker, the Bekaa, the Falklands and ACEVAL; the A1 far fight.
+- AAM shapes and their smoke in Unreal (B13); claims into the enemy's records and ours through the pipeline.

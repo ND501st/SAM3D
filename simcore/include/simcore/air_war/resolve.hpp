@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/planner.hpp"
@@ -159,6 +160,11 @@ struct PackageRun {
     int package_size = 1;
     bool jam = false;
     bool begun = false;
+    // The air battle (roadmap B8, air_fight.hpp): fought once, when the first strike flight reaches its fighter leg; the
+    // strike flights it sent home and those that threw their stores off.
+    bool fought = false;
+    std::vector<bool> fight_home;
+    std::vector<bool> fight_jettisoned;
 
     Rng& R() { return ext != nullptr ? *ext : rng; }
     bool FlightDone(const Package& p, std::size_t fi) const { return next_leg[fi] + 1 >= p.flights[fi].route.size(); }
@@ -304,6 +310,8 @@ public:
         run.pending_dist.assign(p.flights.size(), std::vector<double>(per, 1e18));
         run.next_leg.assign(p.flights.size(), 0);
         run.arms_left.assign(p.flights.size(), 0);
+        run.fight_home.assign(p.flights.size(), false);
+        run.fight_jettisoned.assign(p.flights.size(), false);
         for (std::size_t fi = 0; fi < p.flights.size(); ++fi) {
             const Flight& fl = p.flights[fi];
             run.arms_left[fi] = fl.arms;
@@ -360,6 +368,55 @@ private:
         if (a != nullptr && fl.role == FlightRole::Recce && !fl.released && fl.release_index < 0 && fl.lost < fl.count) Photograph(fl, *a, run_->out);
     }
 
+    // The air battle over the package at `t_h` (roadmap B8): our fighters against its fighters and its strikers, the losses
+    // written to each flight where it is then, with our regiment as the one that shot it down. Its draws come from a fork
+    // of the package's stream (taking none from it) and the chain's keyed draws.
+    void AirBattle(Package& p, double t_h) {
+        ResolveContext& c = *c_;
+        PackageRun& run = *run_;
+        PackageOutcome& out = run.out;
+        const AirWarData& d = *c.data;
+        const AbstractAirFight fight(d);
+        const AbstractFightSetup setup = AbstractAirFight::SetupFor(d, p, c.awacs, c.weather);
+        std::vector<int> alive(p.flights.size(), 0);
+        for (std::size_t fi = 0; fi < p.flights.size(); ++fi) alive[fi] = std::max(0, p.flights[fi].count - p.flights[fi].lost);
+        Rng fork = R().Fork(0xB8F16B47ull ^ static_cast<std::uint64_t>(p.id));
+        const std::uint64_t seed = fork.Next();
+        const AbstractFightResult res = fight.Resolve(p, alive, setup, seed);
+        if (!res.found) return;
+        ++out.air_fights;
+        Rng more(seed ^ 0x5EEDB8ull);
+        for (const AbstractFightResult::Loss& l : res.enemy_lost) {
+            if (l.flight < 0 || static_cast<std::size_t>(l.flight) >= p.flights.size()) continue;
+            Flight& fl = p.flights[static_cast<std::size_t>(l.flight)];
+            if (fl.lost >= fl.count) continue;
+            LossRecord lr;
+            lr.flight = l.flight;
+            lr.by = l.by;
+            lr.fighter = true;
+            lr.where = PackageRun::PlaceOf(fl, t_h);
+            lr.officer = fl.officer >= 0 && fl.lost == 0;
+            lr.captured = more.Chance(0.5);
+            out.losses.push_back(lr);
+            ++fl.lost;
+            Event(AirEvent::Kind::Loss, t_h, static_cast<std::size_t>(l.flight), l.by, lr.where, fl.count - fl.lost);
+        }
+        for (const std::string& by : res.ours_lost) out.our_fighters_lost.push_back(by);
+        for (const int fi : res.aborted) {
+            run.fight_home[static_cast<std::size_t>(fi)] = true;
+            out.aborted_flights.push_back(fi);
+        }
+        for (const int fi : res.jettisoned) {
+            run.fight_jettisoned[static_cast<std::size_t>(fi)] = true;
+            out.jettisoned_flights.push_back(fi);
+        }
+        std::string note = "our fighters (" + std::to_string(res.ours_up) + ") found it";
+        if (res.met_cover) note += ", met its fighters";
+        if (res.reached) note += ", reached its strikers";
+        note += ": " + std::to_string(res.enemy_lost.size()) + " of its aircraft and " + std::to_string(res.ours_lost.size()) + " of ours shot down";
+        out.notes.push_back(note);
+    }
+
     // One leg of one flight: the defences it passes, the defender's fighters, the leader's nerve, the release.
     void Leg(Package& p, std::size_t oi) {
         ResolveContext& c = *c_;
@@ -381,7 +438,8 @@ private:
         const RoutePoint& r0 = fl.route[si];
         const RoutePoint& r1 = fl.route[si + 1];
         const bool before_release = fl.release_index < 0 || static_cast<int>(si) < fl.release_index;
-        if (main && run.abort_now && before_release) {
+        const bool sent_home = oi < run.fight_home.size() && run.fight_home[oi];
+        if (main && (run.abort_now || sent_home) && before_release) {
             fl.aborted = true;
             Finish(p, oi);
             return;
@@ -505,23 +563,11 @@ private:
                 }
             }
         }
-        // The defender's fighters, where the package has no escort.
-        if (front != nullptr && main && static_cast<int>(si) == fighter_leg && alive > 0) {
-            const double ff = front->friendly_fighters * (1.0 - tune.Get("support.awacs_fighter_cut") * Clamp01(c.awacs));
-            const double pk = ff * tune.Get("attrition.escort_fighter_kill") * (p.Has(FlightRole::Escort) ? 0.3 : 1.0) *
-                              (p.part == DayPart::Night ? 0.5 : 1.0);
-            for (int n = 0; n < alive; ++n) {
-                if (R().Chance(pk)) {
-                    LossRecord lr;
-                    lr.flight = static_cast<int>(oi);
-                    lr.where = r1.pos;
-                    lr.officer = fl.officer >= 0 && fl.lost == 0;
-                    lr.captured = R().Chance(0.5);
-                    out.losses.push_back(lr);
-                    ++fl.lost;
-                    Event(AirEvent::Kind::Loss, r1.t_h, oi, std::string(), lr.where, fl.count - fl.lost);
-                }
-            }
+        // The defender's fighters (roadmap B8, air_fight.hpp): the air battle over the whole package, once, when its first
+        // strike flight reaches the leg they meet it on.
+        if (front != nullptr && main && static_cast<int>(si) == fighter_leg && alive > 0 && !run.fought) {
+            run.fought = true;
+            AirBattle(p, r1.t_h);
             alive = fl.count - fl.lost;
         }
         // The leader's nerve: on the losses so far in time.
@@ -532,7 +578,8 @@ private:
             Event(AirEvent::Kind::TurnedBack, r1.t_h, oi, p.target_object, r1.pos, alive);
         }
         // Weapons at the release point.
-        if (static_cast<int>(si + 1) == fl.release_index && alive > 0 && !fl.aborted && !fl.released) {
+        const bool jettisoned = oi < run.fight_jettisoned.size() && run.fight_jettisoned[oi];
+        if (static_cast<int>(si + 1) == fl.release_index && alive > 0 && !fl.aborted && !fl.released && !jettisoned) {
             if (main || fl.role == FlightRole::Missile) {
                 Deliver(p, fl, oi, *a, alive, run.airmanship, out, r1.t_h);
                 alive = fl.count - fl.lost;

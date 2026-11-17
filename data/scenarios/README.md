@@ -116,6 +116,17 @@ the march, a raid, the fight, stowing and marching on). It starts with one missi
 comes within the mission. A battery vehicle may have a sector of fire, `"sector_deg": [from, to]` (true azimuths,
 clockwise): in free fire it takes only targets there, and the NPC battery commander gives it targets there first.
 
+**The air battle (track B, B8; `simcore/air_war/air_fight_session.hpp`, `docs/air_battle/07_AIR_TO_AIR.md`).** An
+optional `"air_fight"` makes some targets fight in the air: `{ "year": 1985, "combat": "air_war/air_combat.json",
+"sensors": "air_war/sensors.json", "fighters": [ { "target", "type", "faction", "role", "regiment", "controller",
+"skill" } ], "controllers": [ { "id", "side", "kind", "east_m", "north_m", "alt_m", "range_m", "post" } ] }`. A
+fighter's `type` needs a fit and its `faction` a doctrine in the combat file (`"ours"` for our side, with its
+`regiment`); `role` is escort, sweep, cap, intercept or strike (a striker only defends itself). A controller is a GCI
+post (`radar_control`) or an AWACS (`airborne_warning`) of `ours` or `enemy`; with a `post` of `"air_radio"` its vectors
+go out on that post's net and may be jammed or lost (B9), else they are heard at once. The fighters find, identify and
+fire by what they know (their pilots' picture, their radar, the controller's word); kills come back through the
+runner's `DestroyTarget`, ours with the regiment's id.
+
 **The Osa and the PU-12M in one battery (a battery link, `simcore/battery_link.hpp`, docs/PU12_DEVELOPMENT.md P8).** A
 link file names two scenarios that share a battery and a sky, `{ "link_id", "name", "description", "osa", "post",
 "callsign", "source", "confidence", "notes" }`:

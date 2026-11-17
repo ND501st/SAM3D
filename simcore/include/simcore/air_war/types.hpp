@@ -189,6 +189,9 @@ enum class FlightRole {
     Awacs,       // airborne early warning and control (E-3, A-50): the defender's fighters met warned and vectored
     Tanker,      // air refuelling (KC-135, KC-10): deep strikes beyond the receivers' own radius, full loads
     Elint,       // stand-off electronic intelligence (RC-135, Nimrod R1, Il-20): the defenders' radars heard and fixed
+    // Fighters with a package but not beside it (docs/air_battle/07_AIR_TO_AIR.md, B8): any type that can escort may fly them.
+    Sweep,       // a fighter sweep ahead of the package on its route: clears the air before the strikers come
+    Cap,         // a combat air patrol held over the target area or a barrier while the package is in
     Count
 };
 
@@ -207,6 +210,8 @@ inline const char* FlightRoleName(FlightRole r) {
         case FlightRole::Awacs: return "awacs";
         case FlightRole::Tanker: return "tanker";
         case FlightRole::Elint: return "elint";
+        case FlightRole::Sweep: return "sweep";
+        case FlightRole::Cap: return "cap";
         case FlightRole::Count: break;
     }
     return "?";

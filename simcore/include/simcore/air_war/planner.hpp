@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/logistics.hpp"
@@ -66,9 +67,11 @@ struct PlanContext {
     // own from the data).
     const RouteGround* ground = nullptr;
 
-    // The defender's fighter threat over the front, less what an AWACS on station takes away (warning, vectoring).
+    // The defender's fighter threat over the front, less what an AWACS on station takes away (warning, vectoring): only
+    // an AWACS that controls fighters in the war's year (roadmap B8: the Pact's A-50 not before 1989).
     double FriendlyFighters(const FrontDef& f) const {
-        return f.friendly_fighters * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * Clamp01(awacs));
+        const double up = AwacsControlsFighters(*data) ? Clamp01(awacs) : 0.0;
+        return f.friendly_fighters * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * up);
     }
 
     Weather WeatherAt(double h) const {
@@ -1001,19 +1004,28 @@ private:
             const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * c_->FriendlyFighters(*front_) * 2.0));
             if (want > 0) {
                 const int n = std::min(want, 4);
-                const int sq = PickSquadron(FlightRole::Escort, n, Profile::Medium, o.part, w, reserved);
-                if (sq >= 0) {
+                // How the faction sends them (roadmap B8, air_combat.json's fighter_plan): close escort, a sweep ahead on the
+                // route, a CAP held off the target. Four go as two pairs in the two likeliest roles; fewer go as one.
+                for (const auto& part : FighterParts(n)) {
+                    const int sq = PickSquadron(FlightRole::Escort, part.second, Profile::Medium, o.part, w, reserved);
+                    if (sq < 0) continue;
                     const AircraftType& ea = *TypeOf((*c_->squadrons)[static_cast<std::size_t>(sq)]);
-                    reserved[static_cast<std::size_t>(sq)] += n;
+                    reserved[static_cast<std::size_t>(sq)] += part.second;
                     Flight fl;
                     fl.callsign = callsign(cs++);
-                    fl.role = FlightRole::Escort;
+                    fl.role = part.first;
                     fl.squadron = (*c_->squadrons)[static_cast<std::size_t>(sq)].id;
                     fl.aircraft = ea.id;
-                    fl.count = n;
+                    fl.count = part.second;
                     fl.profile = Profile::Medium;
-                    fl.route = routed ? FollowRoute(main_pr, ea, Profile::Medium, o.part, o.tot_h)
-                                      : MainRoute(entry, exit, e.pos, ProfileHeight(ea, Profile::Medium), o.tot_h, ea, ip_dist, false);
+                    const AirDoctrineDef* doc = d.air_combat.Doctrine(d.faction.id);
+                    const double lead_h = part.first == FlightRole::Sweep && doc != nullptr ? doc->sweep_lead_s / 3600.0 : 0.0;
+                    if (part.first == FlightRole::Cap) {
+                        fl.route = OrbitRoute(entry, e.pos, ProfileHeight(ea, Profile::Medium), o.tot_h, ea.cruise_mps);
+                    } else {
+                        fl.route = routed ? FollowRoute(main_pr, ea, Profile::Medium, o.part, o.tot_h - lead_h)
+                                          : MainRoute(entry, exit, e.pos, ProfileHeight(ea, Profile::Medium), o.tot_h - lead_h, ea, ip_dist, false);
+                    }
                     p.flights.push_back(fl);
                 }
             }
@@ -1217,6 +1229,20 @@ private:
         return r;
     }
 
+    // The package's fighters by the faction's plan (roadmap B8): `n` aircraft as (role, count) flights. Fewer than four fly
+    // as one flight in the likeliest role; four as two pairs in the two likeliest (a tie: close escort, then the sweep,
+    // then the CAP). A faction with no plan sends close escort.
+    std::vector<std::pair<FlightRole, int>> FighterParts(int n) const {
+        const AirWarData& d = *c_->data;
+        const AirDoctrineDef* doc = d.air_combat.Doctrine(d.faction.id);
+        std::vector<std::pair<double, FlightRole>> share = {{doc != nullptr ? doc->plan_close : 1.0, FlightRole::Escort},
+                                                            {doc != nullptr ? doc->plan_sweep : 0.0, FlightRole::Sweep},
+                                                            {doc != nullptr ? doc->plan_cap : 0.0, FlightRole::Cap}};
+        std::stable_sort(share.begin(), share.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        if (n >= 4 && share[1].first > 0.0) return {{share[0].second, n / 2}, {share[1].second, n - n / 2}};
+        return {{share[0].first > 0.0 ? share[0].second : FlightRole::Escort, n}};
+    }
+
     // A stand-off orbit on the own side of the line, on the axis to the target.
     std::vector<RoutePoint> OrbitRoute(const EntryPoint& entry, const Vec3& target, double agl, double tot_h, double speed) const {
         const Vec3 back = entry.pos - target;
@@ -1370,8 +1396,10 @@ private:
                 main += fl_loss;
             }
         }
-        const double fighters = c_->FriendlyFighters(*front_) * tune.Get("attrition.escort_fighter_kill") *
-                                (p.Has(FlightRole::Escort) ? 0.3 : 1.0) * p.Main();
+        // Our fighters (roadmap B8): the abstract air battle's expectation, its escorts' cover and the AWACS where it
+        // controls fighters.
+        const AbstractAirFight air_fight(*c_->data);
+        const double fighters = air_fight.ExpectedMainLoss(p, AbstractAirFight::SetupFor(*c_->data, p, c_->awacs, w));
         total += fighters;
         main += fighters;
         if (main_loss != nullptr) *main_loss = main;

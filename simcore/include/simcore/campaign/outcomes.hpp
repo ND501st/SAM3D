@@ -55,6 +55,8 @@ struct PackageLedger {
     int arms_fired = 0;            // anti-radiation missiles it fired in the session
     int downed_by_battery = 0;     // its aircraft and missiles the battery shot down
     int downed_by_others = 0;      // by our other defences
+    int downed_by_fighters = 0;    // by our fighters (roadmap B8; counted apart from downed_by_others)
+    int our_fighters_lost = 0;     // our fighters its aircraft shot down
     int release_flights = 0;       // flights with their release point in the session
     int released = 0;              // ... that released
     int prevented_downed = 0;      // ... that released nothing, all shot down first
@@ -124,9 +126,10 @@ inline PackageLedger LedgerOf(const airwar::Package& p, const airwar::PackageOut
     l.sead = p.Count(FlightRole::Sead) + p.Count(FlightRole::Hunter);
     l.jammers = p.Count(FlightRole::Jammer);
     l.decoys = p.Count(FlightRole::Decoy);
-    l.escorts = p.Count(FlightRole::Escort);
+    l.escorts = p.Count(FlightRole::Escort) + p.Count(FlightRole::Sweep) + p.Count(FlightRole::Cap);
     l.arms_fired = o.arms_fired;
-    for (const airwar::LossRecord& loss : o.losses) (loss.by == own_object ? l.downed_by_battery : l.downed_by_others) += 1;
+    for (const airwar::LossRecord& loss : o.losses) (loss.fighter ? l.downed_by_fighters : loss.by == own_object ? l.downed_by_battery : l.downed_by_others) += 1;
+    l.our_fighters_lost = static_cast<int>(o.our_fighters_lost.size());
     for (const std::string& by : o.missiles_downed) (by == own_object ? l.downed_by_battery : l.downed_by_others) += 1;
     const auto has = [](const std::vector<int>& v, int f) { return std::find(v.begin(), v.end(), f) != v.end(); };
     for (int f : release_flights) {
@@ -227,6 +230,9 @@ public:
             if (!brought.empty()) out += " (" + brought + ")";
             out += "; " + std::to_string(l.arms_fired) + " anti-radiation missiles fired; " + std::to_string(l.downed_by_battery) +
                    " shot down by the battery, " + std::to_string(l.downed_by_others) + " by our others";
+            if (l.downed_by_fighters > 0 || l.our_fighters_lost > 0) {
+                out += ", " + std::to_string(l.downed_by_fighters) + " by our fighters (" + std::to_string(l.our_fighters_lost) + " of ours lost)";
+            }
             if (l.release_flights > 0) {
                 out += "; of " + std::to_string(l.release_flights) + " flights to release here " + std::to_string(l.released) + " released, " +
                        std::to_string(l.prevented_downed) + " shot down first, " + std::to_string(l.prevented_broke_away) + " broke away";

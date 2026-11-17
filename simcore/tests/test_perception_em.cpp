@@ -132,7 +132,7 @@ SC_TEST("perception em: a neighbour battery's radars now warn a receiver: its se
     SC_EXPECT(!nato.link->SiteSearchRadiating("n:1"));
 }
 
-SC_TEST("perception em: no type of any faction carries generic_rwr; the MLD's receiver changes with the war's year; seats are read") {
+SC_TEST("perception em: no type of any faction carries generic_rwr; the MLD has its SPO-15L from its year; seats are read") {
     for (const char* f : {"nato", "warsaw_pact", "neutral", "rebels"}) {
         AirWarData d;
         std::string e;
@@ -149,8 +149,9 @@ SC_TEST("perception em: no type of any faction carries generic_rwr; the MLD's re
     for (const AircraftType& t : pact.faction.aircraft) {
         if (t.id == "mig23mld") {
             saw_mld = true;
-            SC_EXPECT(t.RwrEm(1985) == "pact_spo15l_class_rwr");
-            SC_EXPECT(t.RwrEm(1980) == "pact_spo10_class_rwr");
+            // Since B8 the MLD is its own type from 1984 with the SPO-15L, beside the MiG-23ML with the SPO-10, so the
+            // receiver changes with the type, not the year (rwr_by_year stays for a type refitted in service).
+            SC_EXPECT(t.RwrEm(1985) == "pact_spo15l_class_rwr" && t.in_service_year == 1984 && !t.InService(1983));
         } else if (!t.rwr_em.empty()) {
             SC_EXPECT(t.RwrEm(1985) == "pact_spo10_class_rwr");
         }

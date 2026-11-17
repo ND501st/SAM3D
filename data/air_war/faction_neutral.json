@@ -130,7 +130,7 @@
     ]
   },
   "aircraft": [
-    { "id": "saab105", "name": "Light attack jet (Saab 105 class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 200, "attack_mps": 220,
+    { "id": "saab105", "name": "Light attack jet (Saab 105 class)", "roles": [ "strike", "recce", "escort" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 200, "attack_mps": 220,
       "low_agl_m": 60, "medium_alt_m": 3000, "max_turn_deg_s": 10, "strike_power": 0.3, "recce_quality": 0.5, "evasion": 0.45,
       "low_level": { "agl_m": 60, "mps": 200, "source": "game value: design inference, no period source on the neutral's routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
       "flight": { "max_load_g": 6, "sustained_turn_deg_s": 6, "roll_rate_deg_s": 150, "max_mps": 270, "accel_mps2": 3, "climb_mps": 70, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
@@ -143,7 +143,7 @@
       "loads": [["sneb68", 2], ["door_guns", 1]], "computing": 0.2, "radius_km": 150,
       "source": "austrian_af_wiki (about two dozen Agusta-Bell 212, from 1980); armed here for the game; numbers placeholders", "confidence": "low" },
     { "id": "draken_gun", "name": "Gun-armed interceptor (Draken class)", "roles": [ "escort" ], "class": "fighter", "rcs_m2": 4, "cruise_mps": 260, "attack_mps": 280,
-      "low_agl_m": 150, "medium_alt_m": 6000, "max_turn_deg_s": 12, "air_to_air": 0.5, "evasion": 0.5,
+      "low_agl_m": 150, "medium_alt_m": 6000, "max_turn_deg_s": 12, "in_service_year": 1988, "evasion": 0.5,
       "flight": { "max_load_g": 7, "sustained_turn_deg_s": 8, "roll_rate_deg_s": 200, "max_mps": 400, "accel_mps2": 7, "climb_mps": 200, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
       "radius_km": 600,
       "source": "austrian_af_wiki (Draken interceptors with guns only under the ban on guided missiles; delivered 1988, later than this war, so here an analogue); numbers placeholders", "confidence": "low" },

@@ -22,6 +22,8 @@
 #include <vector>
 
 #include "simcore/air_radio_def.hpp"
+#include "simcore/air_war/air_combat_data.hpp"
+#include "simcore/air_war/air_fight_def.hpp"
 #include "simcore/air_war/perception.hpp"
 #include "simcore/air_war/test_waves_data.hpp"
 #include "simcore/battery.hpp"
@@ -338,6 +340,7 @@ struct ScenarioDef {
     std::vector<ScenarioFlight> flights;    // "flights": the targets' flights (a target with none is a flight of one)
     std::vector<ScenarioPackage> packages;  // "packages": the flights' packages
     AirRadioDef air_radio;                  // "air_radio": the enemy's flights' calls as transmissions, our intercept posts (B9)
+    airwar::AirFightDef air_fight;          // "air_fight": the air battle's fighters and controllers (B8, air_fight_session.hpp)
     std::vector<ScenarioNeighbour> neighbours;
     std::vector<ScenarioScenery> scenery;
     // "waves": "gameplay/test_waves.json": random waves of every adversary's and our own aircraft for as long as the
@@ -484,7 +487,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages", "air_radio", "damage"})) {
+                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -537,6 +540,7 @@ public:
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
         if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out) || !LoadAirRadio(root, data_dir, out)) return false;
+        if (!LoadAirFight(root, data_dir, out)) return false;
         if (!LoadScenery(root, out) || !LoadWaves(root, data_dir, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
@@ -1509,6 +1513,72 @@ private:
         if (!res.ok) return Fail(Join(p, "library"), res.error);
         a.library_file = library;
         a.on = true;
+        return true;
+    }
+    // "air_fight" (roadmap B8): the targets that fight in the air, for which side, under which controller, and the data
+    // they fight by (air_war/air_fight_def.hpp).
+    bool LoadAirFight(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* v = root.Find("air_fight");
+        if (v == nullptr) return true;
+        const std::string p = "air_fight";
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        airwar::AirFightDef& a = out.air_fight;
+        std::string combat = "air_war/air_combat.json", sensors = "air_war/sensors.json";
+        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "source", "confidence", "notes"}) ||
+            !OptionalInt(*v, p, "year", a.year) || !OptionalString(*v, p, "combat", combat) || !OptionalString(*v, p, "sensors", sensors) ||
+            !Provenance(*v, p)) {
+            return false;
+        }
+        std::string e;
+        if (!airwar::LoadAirCombatFile(data_dir + "/" + combat, a.combat, &e)) return Fail(Join(p, "combat"), e);
+        if (!airwar::LoadSensorsFile(data_dir + "/" + sensors, a.sensors, &e)) return Fail(Join(p, "sensors"), e);
+        if (const json::Value* arr = OptionalArray(*v, p, "controllers")) {
+            for (std::size_t i = 0; i < arr->items.size(); ++i) {
+                const json::Value& cv = arr->items[i];
+                const std::string cp = Index(Join(p, "controllers"), i);
+                airwar::AirFightControllerDef c;
+                double east = 0.0, north = 0.0, alt = 0.0;
+                if (!Keys(cv, cp, {"id", "side", "kind", "east_m", "north_m", "alt_m", "range_m", "post", "notes"}) || !RequireString(cv, cp, "id", c.id) ||
+                    !OptionalString(cv, cp, "side", c.side) || !OptionalString(cv, cp, "kind", c.kind) || !OptionalNumber(cv, cp, "east_m", east) ||
+                    !OptionalNumber(cv, cp, "north_m", north) || !OptionalNumber(cv, cp, "alt_m", alt) || !OptionalNumber(cv, cp, "range_m", c.range_m) ||
+                    !OptionalString(cv, cp, "post", c.post)) {
+                    return false;
+                }
+                if (c.side != "ours" && c.side != "enemy") return Fail(Join(cp, "side"), "ours or enemy");
+                if (c.kind != "radar_control" && c.kind != "airborne_warning") return Fail(Join(cp, "kind"), "radar_control or airborne_warning");
+                if (!c.post.empty()) {
+                    bool post = false;
+                    for (const AirRadioPostDef& rp : out.air_radio.posts) post = post || rp.id == c.post;
+                    if (!post) return Fail(Join(cp, "post"), "no air_radio post '" + c.post + "'");
+                }
+                c.pos = Vec3{east, north, alt};
+                a.controllers.push_back(std::move(c));
+            }
+        }
+        const json::Value* arr = OptionalArray(*v, p, "fighters");
+        if (arr == nullptr || arr->items.empty()) return Fail(Join(p, "fighters"), "required: the targets that fight");
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& fv = arr->items[i];
+            const std::string fp = Index(Join(p, "fighters"), i);
+            airwar::AirFightFighterDef f;
+            if (!Keys(fv, fp, {"target", "type", "faction", "role", "regiment", "controller", "skill", "notes"}) || !RequireString(fv, fp, "target", f.target) ||
+                !RequireString(fv, fp, "type", f.type) || !RequireString(fv, fp, "faction", f.faction) || !OptionalString(fv, fp, "role", f.role) ||
+                !OptionalString(fv, fp, "regiment", f.regiment) || !OptionalString(fv, fp, "controller", f.controller) ||
+                !OptionalNumber(fv, fp, "skill", f.skill)) {
+                return false;
+            }
+            bool known = false;
+            for (const ScenarioTarget& t : out.targets) known = known || t.id == f.target;
+            if (!known) return Fail(Join(fp, "target"), "no target '" + f.target + "'");
+            if (a.combat.Doctrine(f.faction) == nullptr) return Fail(Join(fp, "faction"), "no doctrine for '" + f.faction + "' in " + combat);
+            if (a.combat.Fit(f.type) == nullptr) return Fail(Join(fp, "type"), "no fit for '" + f.type + "' in " + combat);
+            if (!f.controller.empty() && a.Controller(f.controller) == nullptr) return Fail(Join(fp, "controller"), "no controller '" + f.controller + "'");
+            if (f.role != "escort" && f.role != "sweep" && f.role != "cap" && f.role != "intercept" && f.role != "strike") {
+                return Fail(Join(fp, "role"), "escort, sweep, cap, intercept or strike");
+            }
+            a.fighters.push_back(std::move(f));
+        }
+        a.present = true;
         return true;
     }
     // A formation's slots: [[right_m, back_m, up_m], ...], the leader's place first.

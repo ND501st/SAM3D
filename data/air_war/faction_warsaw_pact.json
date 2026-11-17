@@ -180,8 +180,15 @@
     ]
   },
   "aircraft": [
+    { "id": "mig23ml_wp", "name": "MiG-23ML", "roles": [ "escort", "decoy" ], "class": "fighter", "rcs_m2": 4, "cruise_mps": 250, "attack_mps": 280,
+      "low_agl_m": 100, "medium_alt_m": 5000, "max_turn_deg_s": 12, "rwr_em": "pact_spo10_class_rwr", "evasion": 0.5,
+      "low_level": { "agl_m": 100, "mps": 260, "source": "fm_100_2_1_1984 p. 12-8 (50-100 m over enemy territory); opp_85 section 45 (0-200 m above the ground is extremely low, PMV); the speed a game value (no period figure)", "confidence": "medium", "notes": "A fighter flying strike: the top of the sourced band." },
+      "flight": { "max_load_g": 7, "sustained_turn_deg_s": 6.5, "roll_rate_deg_s": 150, "max_mps": 375, "accel_mps2": 7.5, "climb_mps": 240, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
+      "radius_km": 700,
+      "source": "fm100_2_3 (fighter regiments of the air forces of the front); airwar_ru (MiG-23ML from 1976 the regiments' standard; the MLD only from 1984, in few units); numbers placeholders", "confidence": "low",
+      "notes": "The Pact's standard fighter of 1985 (roadmap B8, B11's list): SPO-10 warning receiver, Sapfir-23ML. The id is not 'mig23ml', which is our own regiment's model (own grey)." },
     { "id": "mig23mld", "name": "MiG-23MLD", "roles": [ "escort", "decoy" ], "class": "fighter", "rcs_m2": 4, "cruise_mps": 250, "attack_mps": 280,
-      "low_agl_m": 100, "medium_alt_m": 5000, "max_turn_deg_s": 12, "rwr_em": "pact_spo10_class_rwr", "rwr_by_year": [["pact_spo15l_class_rwr", 1984]], "air_to_air": 0.7, "evasion": 0.5,
+      "low_agl_m": 100, "medium_alt_m": 5000, "max_turn_deg_s": 12, "rwr_em": "pact_spo15l_class_rwr", "in_service_year": 1984, "evasion": 0.5,
       "low_level": { "agl_m": 100, "mps": 260, "source": "fm_100_2_1_1984 p. 12-8 (50-100 m over enemy territory); opp_85 section 45 (0-200 m above the ground is extremely low, PMV); the speed a game value (no period figure)", "confidence": "medium", "notes": "A fighter flying strike: the top of the sourced band." },
       "flight": { "max_load_g": 7, "sustained_turn_deg_s": 6.5, "roll_rate_deg_s": 150, "max_mps": 375, "accel_mps2": 7.5, "climb_mps": 240, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
       "radius_km": 700,
@@ -249,7 +256,8 @@
       "source": "wiki_support_aircraft", "confidence": "low", "notes": "Soviet stand-off electronic and radio intelligence aircraft; the Pact's frontal aviation had no tankers in 1985 (the Il-78 came in 1987)" }
   ],
   "squadrons": [
-    { "id": "iap_mig23", "name": "Fighter regiment (MiG-23), two squadrons", "aircraft": "mig23mld", "count": 30, "leader": "wp_ldr_fighter" },
+    { "id": "iap_mig23", "name": "Fighter regiment (MiG-23ML), two squadrons", "aircraft": "mig23ml_wp", "count": 20, "leader": "wp_ldr_fighter" },
+    { "id": "iap_mig23_mld", "name": "Fighter squadron (MiG-23MLD)", "aircraft": "mig23mld", "count": 10 },
     { "id": "apib_mig27", "name": "Fighter-bomber regiment (MiG-27), two squadrons", "aircraft": "mig27", "count": 30 },
     { "id": "bap_su24", "name": "Bomber squadron (Su-24)", "aircraft": "su24", "count": 15, "leader": "wp_ldr_su24" },
     { "id": "shap_su25", "name": "Assault squadron (Su-25)", "aircraft": "su25", "count": 15 },

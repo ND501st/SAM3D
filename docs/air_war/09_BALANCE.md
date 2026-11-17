@@ -779,3 +779,92 @@ losses a 100 sorties, the runways cut 51 % → 52 %, ARMs for each radar destroy
 package destroying the battery in 62 % → 65 % of runs with 7.6 → 6.3 lost a 100 sorties); every other row is B2's.
 Wall times on a machine with another build running: the district 295 s (B2's own run took 2090 s under a heavier
 load), the nation 1103 s with the test suite running beside it (B2: 1457 s), the bench 0.21 s (0.19 s).
+
+## 15. The air battle (track B, B8, 18 November 2026)
+
+B8 (`docs/air_battle/07_AIR_TO_AIR.md` §8) replaced the resolver's flat fighter roll with the abstract air battle
+(`air_war/air_fight.hpp`). The planner now sends sweep and CAP flights by each doctrine's plan and expects its losses to
+our fighters from the same model. The 1985 data list of B7 changed the Pact's MiG-23 regiments (20 MLs and 10 MLDs, not
+30 MLDs), the neutral's escorts (the Saab 105; the Draken only from 1988) and the A-50, which no longer cuts our fighter
+threat in 1985. `air_war_balance` gained an "Air battle" line: fights a campaign, the enemy's aircraft our fighters shot
+down, ours lost. Against §14's runs (the same code without B8; district 20 seeds, nation 10, 7 days; base → B8):
+
+| District | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | Air battle: fights, theirs down, ours lost |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 13.1 → 12.8 | 20.6 → 20.2 | 0.2 → 0.5 | 1.2% → 2.2% | 100%, 100% → 100%, 100% | 1.6 → 1.6 | 0.1, 0.1, 0.0 |
+| Rebels, careful | 13.9 → 13.7 | 22.2 → 21.8 | 0.5 → 0.7 | 2.3% → 3.2% | 100%, 100% → 100%, 100% | 0.8 → 0.8 | 0.2, 0.2, 0.0 |
+| Neutral, careless | 19.5 → 17.6 | 45.9 → 40.0 | 1.6 → 1.1 | 3.4% → 2.9% | 100%, 100% → 100%, 100% | 8.9 → 8.3 | 0.5, 0.2, 0.1 |
+| Neutral, careful | 17.1 → 15.4 | 38.1 → 34.4 | 0.8 → 1.2 | 2.0% → 3.6% | 100%, 100% → 100%, 100% | 5.0 → 3.4 | 0.5, 0.5, 0.1 |
+| Warsaw Pact, careless | 97.8 → 96.4 | 568.5 → 563.0 | 9.3 → 10.4 | 1.6% → 1.9% | 31%, 80% → 37%, 73% | 7.2 → 7.5 | 6.5, 3.8, 3.1 |
+| Warsaw Pact, careful | 99.2 → 94.4 | 578.3 → 567.1 | 7.8 → 11.5 | 1.4% → 2.0% | 44%, 78% → 43%, 81% | 8.2 → 8.8 | 6.1, 4.3, 2.5 |
+| NATO, careless | 94.7 → 94.8 | 528.0 → 533.7 | 5.2 → 8.4 | 1.0% → 1.6% | 39%, 54% → 35%, 60% | 5.4 → 5.2 | 5.8, 4.1, 4.8 |
+| NATO, careful | 95.2 → 94.5 | 533.7 → 524.0 | 4.7 → 8.2 | 0.9% → 1.6% | 49%, 62% → 47%, 67% | 6.9 → 7.2 | 5.5, 4.0, 4.3 |
+
+| Nation | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | Air battle: fights, theirs down, ours lost |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 10.1 → 10.6 | 14.9 → 15.8 | 1.6 → 1.7 | 10.7% → 10.8% | 100%, 100% → 100%, 100% | 7.3 → 7.6 | 0.2, 0.1, 0.0 |
+| Rebels, careful | 10.2 → 10.2 | 15.3 → 15.2 | 2.1 → 2.1 | 13.7% → 13.8% | 100%, 100% → 100%, 100% | 2.6 → 2.5 | 0, 0, 0 |
+| Neutral, careless | 16.7 → 15.6 | 28.2 → 25.5 | 0.9 → 0.8 | 3.2% → 3.1% | 100%, 100% → 100%, 100% | 8.5 → 7.3 | 0.4, 0.1, 0.0 |
+| Neutral, careful | 14.0 → 12.7 | 23.7 → 21.4 | 0.8 → 1.0 | 3.4% → 4.7% | 100%, 100% → 100%, 100% | 4.0 → 3.6 | 0.5, 0.4, 0.0 |
+| Warsaw Pact, careless | 183.2 → 171.3 | 989.9 → 996.7 | 30.1 → 35.8 | 3.0% → 3.6% | 37%, 66% → 44%, 71% | 8.4 → 10.8 | 11.6, 8.0, 5.1 |
+| Warsaw Pact, careful | 189.1 → 164.6 | 1016.7 → 971.8 | 28.2 → 36.6 | 2.8% → 3.8% | 41%, 69% → 45%, 70% | 8.9 → 10.8 | 12.8, 10.4, 5.7 |
+
+The base run of the nation stopped after the Pact's campaigns (the `MakeColumns` fault §14 fixed was still in the base
+binary), so NATO's nation rows are compared with §14's own: careless 129.7 → 124.9 packages, 725.9 → 726.8 sorties,
+15.0 → 18.5 lost (2.1 % → 2.5 %), 9.6 fights, 5.9 down, 9.0 of ours lost; careful 128.7 → 128.3, 721.3 → 739.3,
+14.5 → 17.3 lost (2.0 % → 2.3 %), 7.4 fights, 5.2 down, 6.2 of ours lost.
+
+**What moved, and why.**
+
+- **Our fighters kill more, and lose aircraft.** The flat roll killed a strike aircraft at its fighter leg with a chance
+  of the front's threat (0.15-0.4) × 0.03, a third of that with an escort, half at night: about one or two aircraft a
+  week for the Pact and NATO on the district. The air battle shoots down 3.8-4.3 a week of the Pact's and 4.0-4.1 of
+  NATO's on the district, 8-10 and 5-6 a campaign on the nation; it costs us 2.5-3.1 and 4.3-4.8 on the district, 5-6
+  and 6-9 on the nation. So the Pact and NATO lose 1-4 more aircraft a week, and their loss rates rise by 0.3-0.8 points
+  (the Pact 1.4-1.6 % → 1.9-2.0 % on the district, 2.8-3.0 % → 3.6-3.8 % on the nation; NATO 0.9-1.0 % → 1.6 %, and
+  2.0-2.1 % → 2.3-2.5 % on the nation). The district's rates stay at the period's 2 % a sortie or under it; the nation's
+  were above it before (§8) and stay the highest.
+- **The exchange.** Against the Pact our fighters come out ahead, 1.2-1.8 of theirs for one of ours: most of the
+  Pact's losses are strikers our pairs reach, while its MiG-23MLs beat our MiG-21MFs one against one (2.8:1 in
+  `test_air_fight`) and its clearing group and close escort meet us first 60 % and 50 % of the time. Against NATO we lose more than
+  we kill, 0.7-0.9 of theirs for one of ours: NATO sends sweeps and CAPs, not close escort, its E-3A controls them and
+  warns its strikers (the meet chance ×1.5, the strikers warned 90 % of the time against 20 % by eye), and its F-15
+  sweep shoots our MiG-21s down at 4.8:1 alone. That is the period's order: Linebacker's 2:1 for the USAF against
+  MiG-21s with Teaball's warning, ACEVAL near parity without it, the Bekaa far beyond with an E-2C and the Syrian GCI
+  jammed; ours, a Pact-style air force of MiG-21s with a third of its regiments' MiG-23MLs, against NATO's F-15s and
+  E-3A, should lose the fighter-on-fighter fight and make the strikers pay.
+- **The Pact plans for our fighters.** With the A-50 out of 1985 its planner no longer halves our fighter threat
+  (`support.awacs_fighter_cut`), so it escorts more and gathers its strikers into bigger groups: on the nation 6.5-6.6 →
+  7.0-7.1 attackers a package, 30-32 % → 36-37 % of eight or more, and 171-165 packages a campaign against 183-189 with
+  the same sorties (990-1017 → 972-997). DEAD falls from 27-29 % of the mix to 25 %, helicopter raids rise from 10-12 %
+  to 15-16 %. On the district the Pact's packages move 97.8-99.2 → 94.4-96.4.
+- **The neutral flies less.** Its Draken is out of service in 1985, so it fields fewer jets: 45.9-38.1 → 40.0-34.4
+  sorties a week on the district, 28.2-23.7 → 25.5-21.4 on the nation; its losses move by what one aircraft is worth
+  (0.8-1.6 → 1.1-1.2).
+- **The rebels** have no fighters to send and almost nothing changes. A fight now and then (0.1-0.2 a week) is a light
+  aircraft our pair catches; their loss rate moves 1.2-2.3 % → 2.2-3.2 % on the district, within what one aircraft is
+  worth in a dozen packages (§13).
+- **A reshuffle.** The flat roll drew from the package's stream for every strike aircraft even at no threat; the air
+  battle forks its own stream, so every package after the first fight takes another, equally likely course. The battery
+  raids (7.2-8.2 → 7.5-8.8 for the Pact on the district, 8.4-8.9 → 10.8 on the nation) and the defences working move
+  within the seeds' noise.
+
+`air_war_bench data 400` has no fighters in its cases; only the reshuffle moves it, on the rows that §13 and §14 named:
+JP233 Tornados against medium-altitude F-16s 5.5 against 2.0 → 6.2 against 1.9 losses a 100 sorties, the runways cut
+52 % → 54 %, ARMs for each radar destroyed 3.8 → 3.5 against 12.8 → 12.6, the Thanh Hoa analogue's span down in 29 % →
+28 % of campaigns, the F-4Es popping up behind the Kub belt 25.8 → 25.2, the Bekaa package destroying the battery in
+65 % → 62 % with 6.3 → 6.5 lost a 100 sorties. `crew_balance data 10`, `helper_coverage` (its page byte for byte),
+`ground_check data 3600` and `em_bench` give the base's results.
+
+**No rebalance is needed.** The shapes of §2 hold, the district stays within the period's 2 % a sortie, and the
+fighters' share of the enemy's losses (a third to a half on the district) is new and wanted: our fighters now count.
+
+**Cost.** The abstract fight runs once a package and only where our fighters find it: a few dozen keyed
+draws and chain products, nothing per step. `air_war_balance data 5 7`, the base on its own data and B8 back to back on a
+quiet machine, twice: 76.9 s and 70.7 s for the base, 78.0 s and 70.7 s for B8, the same within the noise.
+`crew_balance data 3` back to back: 20.2 s and 20.1 s (the runner's `UpdateAirFight` returns at once in a scenario
+without `"air_fight"`). The full runs above were made while another worktree compiled with thirteen compilers and this
+one built at `-j 2`, so their wall times (the district 5m03 → 5m12, `crew_balance` 1m15 → 8m48, `helper_coverage`
+16m → 53m, `ground_check` 4m → 5m) measure the load, not B8; the base's nation run stopped before NATO's campaigns, so
+its 10m49 against 19m39 is not a comparison either. `em_bench` 11.4 s → 10.9 s. The live fight is not in any raid yet
+(B10); in `test_air_fight` a two-aircraft session of 155 s steps it at the runner's 10 Hz with no measurable cost.
