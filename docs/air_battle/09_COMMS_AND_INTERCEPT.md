@@ -473,3 +473,98 @@ into the summary, the journal and the regiment's estimate like any other.
   small nation's GCI in 1985 is a SAM3D reading of it.
 - **Our order of battle**: the nation's `oob_pannonia.json` has no radio intercept unit; its size and posts follow the
   NPIC company until a source for a small Pact army's air intercept is found.
+
+## As built (B9, 17 November 2026, branch `tb-b9`)
+
+**Files.** `simcore/air_war/air_radio.hpp` (the calls, the discipline, the opsec draw, `AirRadio`), `simcore/air_radio_def.hpp` (what a
+scenario says: the block, the flight's radio, the call tuning), `simcore/em/comms_intercept.hpp` (`RunCommsIntercept`, called by
+`RunComms`), `simcore/command/intercept.hpp` (the desk, the linguists, continuity, the facts, the bridge to the pipeline),
+`FactKind::Intercept` in `command/info_net.hpp`, `Flights::SetRadio` and the `FlightRadio` hook in `flights.hpp`, the scenario's
+`"air_radio"` block and a flight's `"radio"` block (`scenario.hpp`), `ScenarioRunner::EnableAirRadio`, `AirRadio()`,
+`AddDeliveries`, the mission session's intercept service (`campaign/mission_session.hpp`), `HeardRecord` and
+`PackageOutcome::heard` with its save, a `radio` block in each faction file, the `radio` group of `data/gameplay/air_war.json`, the
+quirks `chatterbox` and `silent_runner`, `data/em/air_radios_1985.json`, `data/command/intercept.json`, seven posts and places in
+the chain, and `tests/test_air_radio.cpp`. A new random stream, `Stream::AirRadio` (16), is mirrored in the prototype's table; it
+draws only for the calls and our posts, so no other stream moves.
+
+**Transmissions.** Each aircraft of an enemy flight is a platform and a node of a session-level EM world that `AirRadio` owns,
+each flight a net (one channel above the last), each ground post (`gci`, `crc`, `fac`, `awacs`) a node and a net of its own. A leader's
+act (`Flights::Order`, by `"leader"` or `"package"`) or a post's call (`SayFrom`) becomes a voice `em::Message` with the call's number
+in `Message::payload`. Its length is its kind's (`radio.call_<kind>_s`) times `1 + stress_repeat x stress` (a threat call 1, an attack
+0.5); its turn is `max(now, busy_until)`, a threat call after the call on the air only, and a call older than `stale_*` is dropped
+(`kDropped`). A member acts on it only if the EM link budget from the speaker's platform to his clears the receiver's
+(`em::EvaluateLink` and the layer's own delivery draw, `Stream::CommsDelivery`): the call's end plus the flight's `call_s`, else he
+keeps the last order he heard. Without an `air_radio` block, B1's fixed delay stands. Every aircraft is a node (the A2 level); A1 and A0
+are not told apart. A flight whose aircraft are all gone leaves the world 30 s after its last call.
+
+**Discipline.** The faction's `radio.discipline`, plus the flight's `discipline_adjust` (the officer's quirks: `chatterbox` and
+`silent_runner` through `radio_chatter`, `comsec_leak` through `radio.discipline_loose_lips`), held to 0..1. A flight is comm-out when
+its builder says so, or when it is a strike, DEAD or recce flight and a keyed draw falls under its discipline (faction discipline
+at least 0.5). A comm-out flight says no routine call (`check_in`, `report`, `admin`, `request`) before its attack; the act goes by
+signal (`kSignalled`): only to those within `radio.signal_range_m` of the leader, `radio.signal_factor` later than a call.
+Threat calls are always said. A strike flight past its attack keeps routine calls off the air with the discipline's chance. After
+its attack a comm-out flight says its unit's codeword once (`codeword`, `AirRadio::Watch` on the phase change from `attack`).
+At the front (phase `ingress`) a flight not flying silent checks in. HAVE QUICK and secure voice are per unit flags, both 0 in the
+data. Call signs rotate by the faction's interval (`CallsignAt`; a careless planner doubles it; 0 never).
+
+**Our posts.** The scenario's `air_radio.posts` of kind `intercept` are ESM receivers of kind `comms_intercept` (the library's
+`air_intercept_vhf_uhf`, 100-400 MHz, and `air_intercept_hf`, 2-30 MHz) on a platform at a 30 m mast. At each call's start
+`RunCommsIntercept` asks each receiver once: free-space power first, then the cached path loss (terrain, ground, gases; HF is the sky
+wave with a flat loss), against its sensitivity; past the 4/3-earth horizon (no line of sight) a VHF or UHF call is not heard at all, whatever the diffraction leaves of it (a game rule, section 4.2's table); with a bearing error keyed on (receiver, message). The mission session places the
+chain's posts (`intercept_post_1` and `_2` at their places, with a VHF/UHF and an HF receiver each) in the session's frame. The
+posts' hearing is what `AirRadio::HeardLog` holds: time, bearing, length, level, which call.
+
+**Understanding.** `InterceptDesk::Process` writes each heard call up as the post's linguists would: a call in a language the post
+has no linguist for goes untranslated to the post it relays to (`relay_untranslated_s` later), else it is logged as traffic (time,
+bearing, length, "not read"); a secure net is never read, a hopping one with chance `radio.have_quick_content`; the form is done
+`delay_s` of the tier after the call, plus `doubt_check_s` when a doubt is checked by telephone; a digit may be written wrong and a
+word dropped by the tier's chances. A written square is read back from the form (`FindGrid`). Continuity is per (post, unit) and
+runs by the time heard under an unchanged call sign, `1 - exp(-hours / tau)`, restarting at a change; from `continuity_name_at`
+the post names the unit. A codeword is traffic ("meaning not known") until it has been heard `habit_after` times or
+`LearnHabit` has been told, then "strike complete".
+
+**Two roads.** The fast road: a read call that names a place (`CallNamesTarget`) is a `FactKind::Intercept` fact from the post's
+liaison at the form's time plus `liaison_s`, for `div_ad_chief`'s tree down to level 3, precedence 2 within `area_m` of the battery
+(the session's launchers' middle, updated each minute), else 1; `InterceptBridge` runs the chain's `InfoNet` for the session and
+gives when the battery commander learns it, and the mission session says it once per call (several posts hearing one call make one telling) on the
+battery's net (`ScenarioRunner::SayOnBatteryNet`), where the post's journal keeper writes it down as heard. A heard `report` that names the battery's square also makes an
+`EnemyKnowsBattery` fact for `rgt_chief_of_staff`. The slow road: `InterceptDesk::DailySummary` (calls, read and unread, units and
+their continuity, the busiest hour, more call signs than units, codewords, two posts' bearings as fixes) is a `FactKind::Intsum`
+document from `army_intel` at the day's `daily_summary_hour`, delivered to the commander as a paper by the means the pipeline
+gives (`AddDeliveries`). The hours warning: `DrawOpsecAlert(opsec)` maps opsec 0..1 in a straight line from 34 % with 8.5 h to 5 %
+with 0.4 h, keyed on the seed and the package; the campaign's feed puts it into the net as a fact at the intercept centre
+(`CampaignFeed::AddOpsecAlert`), and the raid builder uses it in place of the fixed leak warning when `ScenarioFormat::air_radio`
+is on (`loose_lips`, the `comsec_leak` quirk, lowers opsec by `radio.opsec_loose_lips`). `PackageOutcome::heard` holds what the
+posts logged of a played package as they wrote it, and is saved.
+
+**The enemy's listeners.** `data/command/intercept.json` gives each faction's receivers (theatre km); `PlaceEnemyListeners` adds
+them to a `command::EmRadio`, so our nets are heard by link margin and, with some placed and none in reach, not at all. With none
+placed the abstract service still hears everything (P3), as before.
+
+**Cost (measured).** `test_air_radio.cpp` times `AirRadio::Step` with 100 aircraft in 25 flights, five intercept posts and a call every
+20 s (30 calls in a 600 s run, steps of 0.5 s): 0.34 ms a step on a machine busy with three other builds, so about 0.1 ms on a quiet one
+is likely but was not measured. This is the whole world's step (its EM links and nodes), above the design's 0.1 ms for the calls alone, and far
+inside the 0.5 ms per-step brief of section 4.5. The test fails only above 5 ms. `em_bench` does not use the radio and is unchanged.
+
+**Balance.** `air_war_balance data 20 7` against the tree before B9 (run on the old data, as the first baseline file was made with new data and
+an old binary): the six non-NATO blocks and the NATO blocks' first five days are unchanged; NATO days 6-7 move by tenths (a loss rate of 1.0% to 1.3%,
+'enemy knows battery' 0.52 to 0.55, one in 47 columns). Cause: the opsec alert and intercept facts are new facts in our pipeline, which the regiment's
+tasking reads on its estimates, so the battery's posture shifts a little in the long NATO campaigns. `air_war_bench` and `crew_balance` are identical.
+`helper_coverage` differs only in the `dynamic_campaign_test` rows, which could not start in the first baseline (new data, old binary).
+
+**Left.**
+- **A0 and A1.** Abstract packages' calls (`radio.abstract_calls`, section 2.4) are not rolled in the resolver: that needs B5's
+  time-stepped resolver. An aircraft is a node at every level.
+- **The campaign's rebuild.** `PackageOutcome::heard` is saved, but the campaign's feed does not yet rebuild the intercept facts
+  from it on a load; only the hours warning is replayed from the seed.
+- **Who speaks.** A controller's call is made by `SayFrom` and by an order whose `by` names a post of the scenario; B5 gives the
+  posts their decisions and maps its `C2Message` kinds onto the call kinds. The command link's ground transmitter (a carrier with timing only),
+  the FAC and ASOC request nets and the E-3A's orbit are posts the data can place; none is placed by the raid builder yet, and
+  the builder puts no GCI posts in a session (B5, B8).
+- **The enemy's listeners** are data and a function; no caller places them in the campaign screen's `EmRadio` yet, and the
+  Teaball-type relay of section 6 and the dummy traffic of section 8 are not built.
+- **Posts under attack.** A post is not bombed, jammed or moved in the session; its chief and liaison are the chain's.
+- **A canary.** No test yet proves that nothing outside the debrief shows the intercepts; the session's only outputs are the journal's
+  entry, the delivery's paper and `MissionSession::Desk()` for the debrief.
+- **The word of 1985.** The words are generic plain language with call signs and clock codes; the TRADOC glossary's words are not used
+  (the words a flight says are its kind's), and none of section 1's open items has moved.

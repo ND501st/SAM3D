@@ -10,6 +10,23 @@
   "notes": "The Rava Liberation Front is fictional. The Croatian air arm of 1991 only gives the shape (later than our period). Every aircraft number is a PLACEHOLDER.",
   "em_libraries": [],
   "callsigns": [ "Sokol", "Orao", "Vila", "Jastreb", "Kobac", "Lastavica" ],
+  "radio": {
+    "air_radio": "rebel_air_vhf_am",
+    "ground_radio": "air_ground_uhf_am",
+    "band_mhz": 125.0,
+    "modulation": "AM",
+    "language": "pannonian",
+    "callsign_rotation_h": 0.0,
+    "opsec": 0.15,
+    "have_quick_share": 0.0,
+    "secure_voice_share": 0.0,
+    "gci_channels_per_post": 1,
+    "discipline": 0.3,
+    "discipline_gci_fighters": 0.0,
+    "source": "nsa_purple_dragon_1993 p. 68 (a guerrilla army's intercept service lives on plain voice); estimate (their few aircraft talk in our language on civil or captured sets)",
+    "confidence": "estimate",
+    "notes": "Call signs never change (a game value, rotation 0 = never); low opsec."
+  },
   "flights": {
     "source": "sam3d estimate: a single aircraft or a loose pair, low, at night (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3, a design inference from biafra_minicoin and katanga_fouga)",
     "confidence": "estimate",

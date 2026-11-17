@@ -14,6 +14,10 @@
 #define interface struct
 
 #include "simcore/simcore.hpp"
+#include "simcore/air_radio_def.hpp"
+#include "simcore/air_war/air_radio.hpp"
+#include "simcore/command/intercept.hpp"
+#include "simcore/em/comms_intercept.hpp"
 
 int simcore_header_check_symbol() {
     simcore::World world(simcore::GeoPoint::FromDegrees(0.0, 0.0, 0.0));

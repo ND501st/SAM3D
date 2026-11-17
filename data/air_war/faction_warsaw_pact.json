@@ -16,6 +16,23 @@
       "source": "stemasov_1969 (a SPETSNAZ-A battalion with an army on the main axis, set up 10-15 km from the line of contact, about 25 km of VHF reach, 12-15 km in barrage); gs_lesson12_1977 (the anti-aircraft battalions' command post and warning radio jammed first); ru_wiki_r330 (the R-330B: 30-100 MHz, 1 kW); williamson_1980 (NATO's view in 1980: 1.5-2 kW at 30-76 MHz); follow_s is a sam3d reading",
       "confidence": "low", "notes": "The Soviet figure (1 kW) used, NATO's 1.5-2 kW recorded (docs/research/VOICE_JAMMING_2026-10.md section 2). Fictional against a fictional enemy: here it jams the nets of the Pact's adversary, our side." }
   ],
+  "radio": {
+    "air_radio": "pact_air_r832m",
+    "ground_radio": "air_ground_uhf_am",
+    "band_mhz": 300.0,
+    "modulation": "AM",
+    "language": "ru",
+    "callsign_rotation_h": 12.0,
+    "opsec": 0.8,
+    "have_quick_share": 0.0,
+    "secure_voice_share": 0.0,
+    "gci_channels_per_post": 3,
+    "discipline": 0.8,
+    "discipline_gci_fighters": 0.2,
+    "source": "mt_1964_air_army p. 6 (complete radio silence on the move); fm_100_2_1_1984 p. 12-8 (radio reduced to a minimum or prohibited on the attack); mt_1962_front_aviation (30-40 groups for twelve command posts: about three per post); valka_r832m; lawrence_1982 (planning on landlines and couriers)",
+    "confidence": "low",
+    "notes": "discipline: strike groups keep radio silence on the way in and the attack; fighters talk to GCI (discipline_gci_fighters). Call signs change per planning cycle (a game value, 12 h). Staff opsec high: planning on landlines and couriers."
+  },
   "flights": {
     "source": "johnson_1986, pennington_1985, fm_100_2_1_1984, mai_tactics_vvs, airwar_mi24_markovsky (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3); spacings no source gives are game values",
     "confidence": "low",

@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,6 +32,7 @@
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/package_injector.hpp"
+#include "simcore/command/intercept.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
@@ -89,7 +91,10 @@ public:
         h0_ = static_cast<double>(d.day - 1) * 24.0 + clock_start_s / 3600.0 - campaign_->Data().theatre.start_hour;
         if (h0_ < 0.0) h0_ += 24.0;
         while (campaign_->Advance(h0_)) campaign_->SkipPlayerMission();
-        live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_);
+        airwar::ScenarioFormat fmt;
+        fmt.air_radio = war.faction.radio.present;  // the enemy's calls as transmissions in the session (roadmap B9)
+        live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_, fmt);
+        SetUpIntercept(data_dir, war, d.seed);
         outcomes_.Check(CheckSuppression(*campaign_, h0_));
         JoinOurPosts();
         JoinOurBridges();
@@ -101,6 +106,7 @@ public:
         runner_->Step(dt);
         if (live_) live_->Step(*runner_);
         CarryTheMove();
+        PumpIntercept();
         KeepOutcomes(dt);
         if (campaign_) FollowOurPosts(false);
         if (campaign_) FollowOurBridges(false);
@@ -168,6 +174,17 @@ public:
         int downs = 0;
     };
     const std::vector<OurBridge>& OurBridges() const { return bridges_; }
+    // Our radio intercept service in the session (roadmap B9): what its posts wrote of the enemy's calls, for the debrief only.
+    bool InterceptOn() const { return intercept_on_; }
+    const command::InterceptDesk& Desk() const { return desk_; }
+    // What reached the battery of it, and when: the fast road's messages and the day summaries (session seconds).
+    struct Told {
+        double at_s = 0.0;
+        std::string key;
+        std::string text;
+        bool paper = false;
+    };
+    const std::vector<Told>& InterceptTold() const { return told_; }
     // The runner's debrief, then the two outcomes (from the truth: for the debrief and the reveal only), the enemy's
     // phase checked now.
     std::string Debrief() const {
@@ -178,6 +195,129 @@ public:
     }
 
 private:
+    // The enemy's radio, and our intercept service listening to it (roadmap B9): the posts of data/command/intercept.json at
+    // their places, hearing by link budget; what they write goes down the pipeline to the battery's journal.
+    void SetUpIntercept(const std::string& data_dir, const airwar::AirWarData& war, unsigned seed) {
+        const airwar::FactionRadio& fr = war.faction.radio;
+        if (!fr.present) return;
+        std::string e;
+        command::ChainData chain;
+        if (!command::LoadInterceptData(data_dir, "command/intercept.json", idata_, &e) ||
+            !command::LoadChainData(data_dir, "command/chain_pannonia.json", chain, &e)) {
+            Note("no intercept service: " + e);
+            return;
+        }
+        AirRadioDef def;
+        def.on = true;
+        def.faction = war.faction.id;
+        def.library_file = "em/air_radios_1985.json";
+        const em::EmLoadResult res = em::LoadEmLibraryFile(data_dir + "/" + def.library_file, def.library);
+        if (!res.ok) {
+            Note("no intercept service: " + res.error);
+            return;
+        }
+        def.air_radio = fr.air_radio;
+        def.ground_radio = fr.ground_radio;
+        def.freq_hz = fr.band_mhz * 1e6;
+        def.language = fr.language;
+        def.discipline = fr.discipline;
+        def.callsign_rotation_h = fr.callsign_rotation_h;
+        def.have_quick_share = fr.have_quick_share;
+        def.secure_voice_share = fr.secure_voice_share;
+        def.opsec = fr.opsec;
+        for (const auto& kv : AirRadioTuningDefaults()) def.tune[kv.first] = war.tuning.Get(kv.first);
+        for (const command::InterceptPostData& p : idata_.posts) {
+            const command::Position* pos = chain.FindPosition(p.position);
+            const command::Place* pl = pos != nullptr ? chain.FindPlace(pos->place) : nullptr;
+            if (pl == nullptr) continue;
+            const Vec3 at = FromTheatre(pl->pos);
+            for (int hf = 0; hf < 2; ++hf) {  // a VHF and UHF receiver and an HF one at each post
+                AirRadioPostDef d;
+                d.id = p.id + (hf != 0 ? "_hf" : "");
+                d.name = pl->name;
+                d.kind = "intercept";
+                d.at = at;
+                d.mast_m = kInterceptMastM;
+                d.esm = hf != 0 ? "air_intercept_hf" : "air_intercept_vhf_uhf";
+                d.chain_post = p.id;
+                def.posts.push_back(d);
+            }
+        }
+        if (!runner_->EnableAirRadio(def, &e)) {
+            Note("no intercept service: " + e);
+            return;
+        }
+        const double clock = runner_->Def().clock_start_s;
+        desk_.Init(&idata_, seed, clock);
+        if (!ibridge_.Init(data_dir, "command/chain_pannonia.json", seed, clock, &e)) {
+            Note("the intercept service has no pipeline: " + e);
+            return;
+        }
+        intercept_on_ = true;
+        live_->SetHeardSource([this](double from_s, double to_s) {
+            std::vector<airwar::HeardRecord> out;
+            for (const command::Logged& l : desk_.Log()) {
+                if (l.heard_s < from_s || l.heard_s > to_s) continue;
+                airwar::HeardRecord h;
+                h.post = l.post;
+                h.t_s = l.heard_s;
+                h.kind = l.understood ? airwar::CallKindId(l.kind) : "traffic";
+                h.text = l.text;
+                h.understood = l.understood;
+                if (l.fast) h.fact = "intercept:" + std::to_string(l.call) + ":" + l.post;
+                out.push_back(h);
+            }
+            return out;
+        });
+    }
+    // What our posts heard since the last step is written up; the fast road's messages are said on the battery's net and
+    // reach its radiotelephonist's journal; the day's summary comes by the pipeline's courier to the commander.
+    void PumpIntercept() {
+        const airwar::AirRadio* ar = runner_->AirRadio();
+        if (!intercept_on_ || ar == nullptr) return;
+        const double now = runner_->Time();
+        if (now + 1e-9 >= next_watch_s_) {  // where the battery stands now is the square it would be named by
+            next_watch_s_ = now + kDecideEveryS;
+            desk_.ClearWatch();
+            desk_.Watch(BatteryCentre());
+        }
+        const std::vector<command::Logged> fresh = desk_.Process(*ar);
+        for (const command::InterceptBridge::Arrival& a : ibridge_.Feed(fresh, idata_, *ar)) {
+            const std::string call_key = a.key.substr(0, a.key.rfind(':'));  // one call heard by several posts is told once
+            if (!told_calls_.insert(call_key).second) continue;
+            const double after = std::max(0.0, a.at_s - now);
+            runner_->SayOnBatteryNet("Regiment", a.text, after);
+            told_.push_back({now + after, a.key, a.text, false});
+        }
+        // The air section's summary of the day, at its hour: a paper to the battery commander by the means the pipeline has.
+        if (runner_->Def().clock_start_s >= 0.0) {
+            const double local_h = std::fmod((runner_->Def().clock_start_s + now) / 3600.0, 24.0);
+            const bool due = now + 1e-9 >= next_summary_s_ && local_h >= idata_.daily_summary_hour && local_h < idata_.daily_summary_hour + 0.5;
+            if (due) {
+                next_summary_s_ = now + 20.0 * 3600.0;
+                const std::string text = desk_.DailySummary(summary_from_s_, now, ar->Def().Tune("radio.continuity_name_at"), *ar);
+                summary_from_s_ = now;
+                const command::Fact f = command::SummaryFact(text, ++summaries_, now);
+                command::InterceptBridge::Arrival a;
+                if (ibridge_.Add(f, a)) {
+                    DeliveryDef d;
+                    d.id = f.key;
+                    d.after_s = std::max(now, a.at_s);
+                    d.from = "Army intelligence, air section";
+                    d.words = "The air section's radio intercept summary.";
+                    d.paper_title = "Radio intercept summary";
+                    d.paper_text = text;
+                    DeliveryMeans m = DeliveryMeans::Courier;
+                    if (!ParseDeliveryMeans(a.mean, m) || !Carried(m)) m = DeliveryMeans::Courier;
+                    d.means = m;
+                    runner_->AddDeliveries({d});
+                    told_.push_back({d.after_s, f.key, text, true});
+                }
+            }
+        }
+    }
+    static constexpr double kInterceptMastM = 30.0;  // sam3d: the posts' antennas (docs/air_battle/09 section 4.2)
+
     // The battery at the position its task names (the task's march over, or in its area from the start): the
     // campaign's battery is there from then (between packages), and the regiment's estimates count from then.
     void CarryTheMove() {
@@ -393,6 +533,16 @@ private:
     std::string covered_object_;    // its theatre object
     std::size_t ledgered_ = 0;      // played packages in the ledger
     double next_seen_s_ = 0.0;
+    command::InterceptData idata_;       // our radio intercept service (roadmap B9)
+    command::InterceptDesk desk_;
+    command::InterceptBridge ibridge_;
+    bool intercept_on_ = false;
+    std::vector<Told> told_;
+    std::set<std::string> told_calls_;  // the calls the fast road has told already
+    double next_watch_s_ = 0.0;
+    double next_summary_s_ = 0.0;
+    double summary_from_s_ = 0.0;
+    int summaries_ = 0;
 };
 
 }  // namespace campaign

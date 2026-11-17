@@ -74,6 +74,12 @@
     { "id": "lazne_woods", "name": "The Lazne woods", "kind": "countryside", "east_km": -11, "north_km": -3 },
     { "id": "vrbice_crossroads", "name": "Vrbice crossroads (traffic control post)", "kind": "countryside", "east_km": 4, "north_km": -7,
       "notes": "The garrison commandant's traffic regulators: who passes, which roads are cut." },
-    { "id": "rava_marshes", "name": "The Rava marshes", "kind": "countryside", "east_km": 16, "north_km": -10 }
+    { "id": "rava_marshes", "name": "The Rava marshes", "kind": "countryside", "east_km": 16, "north_km": -10 },
+    { "id": "nv_intercept_centre", "name": "The army's radio intercept company (air section)", "kind": "military_post", "settlement": "novo_varosd", "east_km": -26, "north_km": 44,
+      "notes": "Near the army's headquarters: telephone, teleprinter and the despatch rider. Game placement." },
+    { "id": "intercept_hill_1", "name": "Forward intercept and DF post 1 (the high ground east of Kesmark)", "kind": "military_post", "east_km": 15, "north_km": 11,
+      "notes": "A hill nearest the front on the east flank; with the division's air defence liaison. Game placement." },
+    { "id": "intercept_hill_2", "name": "Forward intercept and DF post 2 (the high ground south-west of the battery)", "kind": "military_post", "east_km": -5, "north_km": -17,
+      "notes": "A hill nearest the front on the south-west flank. Game placement." }
   ]
 }

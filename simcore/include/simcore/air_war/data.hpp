@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/console_data.hpp"
@@ -657,6 +658,28 @@ inline std::string FormationClassOf(bool helicopter, FlightRole role) {
     }
 }
 
+// A faction's air radio (docs/air_battle/09 section 3.1): the sets its aircraft and controllers use (ids in the EM library), the
+// band its nets sit in, its language, how often it changes call signs, how careful its staff is, the share of its units with
+// HAVE QUICK and secure voice (0 until a USAFE fielding date is found), the groups a GCI post can guide at once, and its
+// radio discipline: the silence its strike flights keep on the attack (0..1), and for its fighters under ground control.
+struct FactionRadio {
+    bool present = false;
+    std::string air_radio;
+    std::string ground_radio;
+    double band_mhz = 300.0;
+    std::string modulation = "AM";
+    std::string language = "en";
+    double callsign_rotation_h = 24.0;
+    double opsec = 0.5;
+    double have_quick_share = 0.0;
+    double secure_voice_share = 0.0;
+    double gci_channels_per_post = 3.0;
+    double discipline = 0.5;
+    double discipline_gci_fighters = 0.0;
+    std::string source;
+    std::string confidence;
+};
+
 struct FactionDef {
     std::string id;
     std::string name;
@@ -677,6 +700,7 @@ struct FactionDef {
     std::vector<CommsJammerDef> comms_jamming;  // its jammers of our voice nets (none: it has none, or none known)
     // Its flights' formations (the "flights" block): type class -> phase -> the slots (roadmap B1).
     std::map<std::string, std::map<std::string, FormationDef>> formations;
+    FactionRadio radio;  // its air radio and discipline (the "radio" block, roadmap B9)
 
     // A class's formations by phase, as a flight carries them (flights.hpp FlightState::formations); empty: none given.
     std::map<std::string, std::vector<Vec3>> FormationsFor(const std::string& cls) const {
@@ -749,6 +773,7 @@ inline const std::vector<std::string>& KnownQuirkEffects() {
         "sead_ratio",       // more SEAD per package
         "recce_first",      // recce before strikes
         "risk",             // accepts higher expected losses
+        "radio_chatter",    // + talks more on the air (a chatterbox), - keeps radio discipline (a silent runner) (roadmap B9)
     };
     return k;
 }
@@ -766,7 +791,8 @@ struct TuningTable {
     }
 
     static const std::map<std::string, double>& Defaults() {
-        static const std::map<std::string, double> d = {
+        static const std::map<std::string, double> d = [] {
+        std::map<std::string, double> m = {
             // utility (planner)
             {"utility.value_weight", 10.0},
             {"utility.loss_cost", 4.0},          // per aircraft expected lost, before the faction's tolerance
@@ -930,6 +956,9 @@ struct TuningTable {
             {"own_intel.warning_s", 300.0},
             {"own_intel.leak_warning_s", 900.0},
         };
+        for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
+        return m;
+        }();
         return d;
     }
 };
@@ -1329,7 +1358,7 @@ public:
         std::string tier;
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
-                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights"}) ||
+                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1342,12 +1371,33 @@ public:
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
-            !LoadCommsJamming(root, out) || !LoadFormations(root, out)) {
+            !LoadCommsJamming(root, out) || !LoadFormations(root, out) || !LoadRadioBlock(root, out)) {
             return false;
         }
         return true;
     }
 
+    // The "radio" block (roadmap B9, docs/air_battle/09 section 3.1): the faction's air radio and how it keeps discipline.
+    bool LoadRadioBlock(const json::Value& root, FactionDef& out) {
+        const json::Value* r = root.Find("radio");
+        if (r == nullptr) return true;
+        const std::string p = "radio";
+        if (!r->Is(json::Type::Object)) return Fail(p, "expected an object");
+        FactionRadio& b = out.radio;
+        if (!Keys(*r, p, {"air_radio", "ground_radio", "band_mhz", "modulation", "language", "callsign_rotation_h", "opsec", "have_quick_share",
+                          "secure_voice_share", "gci_channels_per_post", "discipline", "discipline_gci_fighters", "source", "confidence", "notes"}) ||
+            !Provenance(*r, p) || !RequireString(*r, p, "source", b.source) || !RequireString(*r, p, "confidence", b.confidence) ||
+            !RequireString(*r, p, "air_radio", b.air_radio) || !OptionalString(*r, p, "ground_radio", b.ground_radio) ||
+            !OptionalString(*r, p, "modulation", b.modulation) || !RequireString(*r, p, "language", b.language) ||
+            !Num(*r, p, "band_mhz", b.band_mhz, 3.0, 1000.0) || !Num(*r, p, "callsign_rotation_h", b.callsign_rotation_h, 0.0, 720.0) ||
+            !Num(*r, p, "opsec", b.opsec, 0.0, 1.0) || !Num(*r, p, "have_quick_share", b.have_quick_share, 0.0, 1.0) ||
+            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0) ||
+            !Num(*r, p, "discipline", b.discipline, 0.0, 1.0) || !Num(*r, p, "discipline_gci_fighters", b.discipline_gci_fighters, 0.0, 1.0)) {
+            return false;
+        }
+        b.present = true;
+        return true;
+    }
     // The "flights" block (roadmap B1): per type class and phase, the slots [right_m, back_m, up_m] from the leader (his
     // own [0, 0, 0] first), each phase with its source and confidence. Strict keys; 1985 formations only.
     bool LoadFormations(const json::Value& root, FactionDef& out) {

@@ -65,3 +65,19 @@ replay: nothing about the net needs saving.
 | `NextContacts(post, h, horizon)` | The coming briefings, visits, courier runs and bulletins a person is part of |
 | `RadioCalls()` | Every radio call made: what the enemy's intercept service heard |
 | `Describe(delivery)` | "D2 19:20, Major Imre Sallai (Chief of staff ...), in person at the regiment command post" |
+
+## 6. What our radio intercept service puts in (track B, B9)
+
+A new kind of fact, `FactKind::Intercept`, is what our posts heard of the enemy's air radio and read
+(`simcore/command/intercept.hpp`, `docs/air_battle/09_COMMS_AND_INTERCEPT.md` section 5). Its origin is the post's air
+defence liaison (`ad_liaison_1`, `ad_liaison_2`) or, for the hours warning drawn from the enemy staff's opsec, the
+intercept centre (`intercept_centre`, under `army_intel`). A call that names a time and a place is a fact of precedence 2
+when the place is within `area_m` of the battery, else 1; it is meant for the division's air defence chief's tree down to
+the battery commander (`need_level` 3), carried by the liaison's direct telephone to `div_ad_cp_duty` and from there by the
+warning net or the regiment's command net. Its text is what the linguist wrote on the form, slips and all; the truth of the
+call is in the call log for the debrief only. A heard report that names the battery's square is also an
+`EnemyKnowsBattery` fact for `rgt_chief_of_staff`. Everything the posts logged, read or not, goes into the day's summary
+(`FactKind::Intsum`, a document from `army_intel`, routine, down to the battery commanders). In a session
+(`campaign/mission_session.hpp`) the fast road's arrival is said on the battery's net (`ScenarioRunner::RegimentSays`) and
+written in the radiotelephonist's journal as heard; the summary comes as a paper by the means the pipeline picks
+(`ScenarioRunner::AddDeliveries`). Nothing appears on a panel.

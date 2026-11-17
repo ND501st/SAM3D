@@ -141,6 +141,18 @@ struct RetaskRecord {
     double t_s = 0.0;    // when (the session's seconds)
 };
 
+// One call our intercept posts logged of a played package's flights (roadmap B9, docs/air_battle/09 section 5.4): as the
+// post wrote it, right or wrong, never the truth. The save keeps it so a loaded campaign rebuilds the intercept facts
+// without replaying the session.
+struct HeardRecord {
+    std::string post;        // the intercept post that logged it
+    double t_s = 0.0;        // when it was heard (the session's seconds)
+    std::string kind;        // the call's kind (air_radio.hpp CallKindId) when it was read, "traffic" when not
+    std::string text;        // what the post wrote
+    bool understood = false;
+    std::string fact;        // the key of the fact made of it in our side's pipeline ("" none)
+};
+
 struct PackageOutcome {
     int package_id = 0;
     std::vector<LossRecord> losses;
@@ -165,6 +177,7 @@ struct PackageOutcome {
     std::vector<int> released_flights;  // flights that released their weapons (a played mission)
     std::vector<int> aborted_flights;   // flights that broke away before their release point (a played mission)
     std::vector<RetaskRecord> retasks;  // orders its flights were given from outside them (a played mission, roadmap B1)
+    std::vector<HeardRecord> heard;     // what our intercept posts logged of its calls (a played mission, roadmap B9)
     bool truth_applied = false;  // the damage is already in the truth (the abstract resolver); else the campaign applies it
     bool played = false;         // from a played mission (the mission bridge)
     // What the battery reported of it from its records (roadmap 18.1, campaign/report.hpp): our side's journal states

@@ -110,6 +110,18 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Push(retasks, x);
     }
     Put(v, "retasks", retasks);
+    json::Value heard = Arr();
+    for (const HeardRecord& h : o.heard) {
+        json::Value x = Obj();
+        Put(x, "post", Str(h.post));
+        Put(x, "t_s", Num(h.t_s));
+        Put(x, "kind", Str(h.kind));
+        Put(x, "text", Str(h.text));
+        Put(x, "understood", Bool(h.understood));
+        Put(x, "fact", Str(h.fact));
+        Push(heard, x);
+    }
+    Put(v, "heard", heard);
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
     Put(v, "reported", Bool(o.reported));
@@ -247,6 +259,18 @@ public:
                 r.by = String(x, "by");
                 r.t_s = Number(x, "t_s");
                 o.retasks.push_back(r);
+            }
+        }
+        if (const json::Value* hs = v.Find("heard")) {
+            for (const json::Value& x : hs->items) {
+                HeardRecord h;
+                h.post = String(x, "post");
+                h.t_s = Number(x, "t_s");
+                h.kind = String(x, "kind");
+                h.text = String(x, "text");
+                h.understood = Boolean(x, "understood");
+                h.fact = String(x, "fact");
+                o.heard.push_back(h);
             }
         }
         o.truth_applied = Boolean(v, "truth_applied");

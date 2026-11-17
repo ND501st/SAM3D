@@ -35,7 +35,8 @@ enum class Stream : std::uint64_t {
     TdoaNoise = 12,
     Doctrine = 13,
     ArmSeeker = 14,
-    AirCombat = 15  // the air battle's shot: one draw per link of the chain (air_war/air_combat.hpp)
+    AirCombat = 15,  // the air battle's shot: one draw per link of the chain (air_war/air_combat.hpp)
+    AirRadio = 16    // the enemy's calls and our intercept of them: one draw per call and listener (air_war/air_radio.hpp)
 };
 
 inline std::uint64_t Mix64(std::uint64_t x) {
