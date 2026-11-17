@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/test_waves_data.hpp"
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
@@ -156,6 +157,7 @@ struct ScenarioFlight {
     // The formation by phase ("formations": {"transit": [[right_m, back_m, up_m], ...], ...}): the leader's place first.
     // None: each keeps where it started from the leader.
     std::map<std::string, std::vector<Vec3>> formations;
+    FlightRadioInfo radio;        // "radio": its unit, role and discipline for the enemy's radio (roadmap B9)
 };
 // A package ("packages"): its commander's flight and his nerve, the share of its aircraft lost (of those he knows of)
 // at which he turns it back (the air war's PackageNerve; default 0.25 + 0.3 x 0.5).
@@ -326,6 +328,7 @@ struct ScenarioDef {
     std::vector<ScenarioTarget> targets;
     std::vector<ScenarioFlight> flights;    // "flights": the targets' flights (a target with none is a flight of one)
     std::vector<ScenarioPackage> packages;  // "packages": the flights' packages
+    AirRadioDef air_radio;                  // "air_radio": the enemy's flights' calls as transmissions, our intercept posts (B9)
     std::vector<ScenarioNeighbour> neighbours;
     std::vector<ScenarioScenery> scenery;
     // "waves": "gameplay/test_waves.json": random waves of every adversary's and our own aircraft for as long as the
@@ -464,7 +467,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages"})) {
+                             "scenery", "waves", "flights", "packages", "air_radio"})) {
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -516,7 +519,7 @@ public:
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
-        if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out)) return false;
+        if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out) || !LoadAirRadio(root, data_dir, out)) return false;
         if (!LoadScenery(root, out) || !LoadWaves(root, data_dir, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
@@ -1296,7 +1299,7 @@ private:
                 const json::Value& v = arr->items[i];
                 const std::string p = Index("flights", i);
                 ScenarioFlight f;
-                if (!Keys(v, p, {"id", "callsign", "package", "side", "keep_slots", "crewed", "call_s", "formations", "source", "confidence", "notes"}) ||
+                if (!Keys(v, p, {"id", "callsign", "package", "side", "keep_slots", "crewed", "call_s", "formations", "radio", "source", "confidence", "notes"}) ||
                     !RequireString(v, p, "id", f.id) || !OptionalString(v, p, "callsign", f.callsign) ||
                     !OptionalString(v, p, "package", f.package) || !OptionalString(v, p, "side", f.side) ||
                     !OptionalBool(v, p, "keep_slots", f.keep_slots) || !OptionalBool(v, p, "crewed", f.crewed) ||
@@ -1306,6 +1309,17 @@ private:
                 if (f.side != "enemy" && f.side != "ours") return Fail(Join(p, "side"), "\"enemy\" or \"ours\"");
                 if (f.call_s < 0.0) return Fail(Join(p, "call_s"), "must be >= 0");
                 if (f.callsign.empty()) f.callsign = f.id;
+                if (const json::Value* rd = v.Find("radio")) {
+                    const std::string rp = Join(p, "radio");
+                    if (!rd->Is(json::Type::Object)) return Fail(rp, "expected an object");
+                    if (!Keys(*rd, rp, {"unit", "role", "discipline_adjust", "have_quick", "secure_voice", "comm_out", "codeword", "notes"}) ||
+                        !OptionalString(*rd, rp, "unit", f.radio.unit) || !OptionalString(*rd, rp, "role", f.radio.role) ||
+                        !OptionalNumber(*rd, rp, "discipline_adjust", f.radio.discipline_adjust) ||
+                        !OptionalBool(*rd, rp, "have_quick", f.radio.have_quick) || !OptionalBool(*rd, rp, "secure_voice", f.radio.secure_voice) ||
+                        !OptionalBool(*rd, rp, "comm_out", f.radio.comm_out) || !OptionalString(*rd, rp, "codeword", f.radio.codeword)) {
+                        return false;
+                    }
+                }
                 if (const json::Value* fm = v.Find("formations")) {
                     const std::string fp = Join(p, "formations");
                     if (!fm->Is(json::Type::Object)) return Fail(fp, "expected an object of phases");
@@ -1359,6 +1373,66 @@ private:
             for (const ScenarioFlight& f : out.flights) ok = ok || (f.id == pk.commander && f.package == pk.id);
             if (!ok) return Fail(Join(Index("packages", i), "commander"), "'" + pk.commander + "' is not a flight of this package");
         }
+        return true;
+    }
+    // "air_radio" (roadmap B9): the enemy's flights' calls on the air and our intercept posts, from a library of sets.
+    bool LoadAirRadio(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* v = root.Find("air_radio");
+        if (v == nullptr) return true;
+        const std::string p = "air_radio";
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        AirRadioDef& a = out.air_radio;
+        std::string library;
+        double freq_mhz = a.freq_hz / 1e6, channel_khz = a.channel_hz / 1e3;
+        if (!Keys(*v, p, {"faction", "library", "radio", "ground_radio", "freq_mhz", "channel_khz", "language", "discipline", "callsign_rotation_h",
+                          "have_quick_share", "secure_voice_share", "opsec", "tune", "posts", "source", "confidence", "notes"}) ||
+            !OptionalString(*v, p, "faction", a.faction) || !RequireString(*v, p, "library", library) || !RequireString(*v, p, "radio", a.air_radio) ||
+            !OptionalString(*v, p, "ground_radio", a.ground_radio) || !OptionalNumber(*v, p, "freq_mhz", freq_mhz) ||
+            !OptionalNumber(*v, p, "channel_khz", channel_khz) || !OptionalString(*v, p, "language", a.language) ||
+            !OptionalNumber(*v, p, "discipline", a.discipline) || !OptionalNumber(*v, p, "callsign_rotation_h", a.callsign_rotation_h) ||
+            !OptionalNumber(*v, p, "have_quick_share", a.have_quick_share) || !OptionalNumber(*v, p, "secure_voice_share", a.secure_voice_share) ||
+            !OptionalNumber(*v, p, "opsec", a.opsec) || !Provenance(*v, p)) {
+            return false;
+        }
+        a.freq_hz = freq_mhz * 1e6;
+        a.channel_hz = channel_khz * 1e3;
+        if (a.discipline < 0.0 || a.discipline > 1.0 || a.opsec < 0.0 || a.opsec > 1.0) return Fail(p, "discipline and opsec are between 0 and 1");
+        if (const json::Value* t = v->Find("tune")) {
+            const std::string tp = Join(p, "tune");
+            if (!t->Is(json::Type::Object)) return Fail(tp, "expected an object of numbers");
+            for (std::size_t k = 0; k < t->keys.size() && k < t->items.size(); ++k) {
+                const std::string key = "radio." + t->keys[k];
+                if (AirRadioTuningDefaults().count(key) == 0) return Fail(Join(tp, t->keys[k]), "unknown tuning value");
+                if (!t->items[k].Is(json::Type::Number)) return Fail(Join(tp, t->keys[k]), "expected a number");
+                a.tune[key] = t->items[k].number;
+            }
+        }
+        if (const json::Value* arr = OptionalArray(*v, p, "posts")) {
+            for (std::size_t i = 0; i < arr->items.size(); ++i) {
+                const json::Value& pv = arr->items[i];
+                const std::string pp = Index(Join(p, "posts"), i);
+                AirRadioPostDef d;
+                double e = 0.0, n = 0.0, freq = 0.0;
+                if (!Keys(pv, pp, {"id", "name", "kind", "east_m", "north_m", "mast_m", "esm", "radio", "freq_mhz", "channels", "chain_post", "notes"}) ||
+                    !RequireString(pv, pp, "id", d.id) || !OptionalString(pv, pp, "name", d.name) || !OptionalString(pv, pp, "kind", d.kind) ||
+                    !OptionalNumber(pv, pp, "east_m", e) || !OptionalNumber(pv, pp, "north_m", n) || !OptionalNumber(pv, pp, "mast_m", d.mast_m) ||
+                    !OptionalString(pv, pp, "esm", d.esm) || !OptionalString(pv, pp, "radio", d.radio) || !OptionalNumber(pv, pp, "freq_mhz", freq) ||
+                    !OptionalInt(pv, pp, "channels", d.channels) || !OptionalString(pv, pp, "chain_post", d.chain_post)) {
+                    return false;
+                }
+                if (d.kind != "intercept" && d.kind != "gci" && d.kind != "crc" && d.kind != "fac" && d.kind != "awacs") {
+                    return Fail(Join(pp, "kind"), "intercept, gci, crc, fac or awacs");
+                }
+                if (d.kind == "intercept" && d.esm.empty()) return Fail(pp, "an intercept post needs its receiver (the esm key)");
+                d.at = Vec3{e, n, 0.0};
+                d.freq_hz = freq * 1e6;
+                a.posts.push_back(std::move(d));
+            }
+        }
+        const em::EmLoadResult res = em::LoadEmLibraryFile(data_dir + "/" + library, a.library);
+        if (!res.ok) return Fail(Join(p, "library"), res.error);
+        a.library_file = library;
+        a.on = true;
         return true;
     }
     // A formation's slots: [[right_m, back_m, up_m], ...], the leader's place first.

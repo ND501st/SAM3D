@@ -20,6 +20,7 @@
 
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/command/info_net.hpp"
+#include "simcore/command/intercept.hpp"
 
 namespace simcore {
 namespace command {
@@ -40,6 +41,7 @@ struct FeedRoles {
     std::string army_intel = "army_intel";            // intercepts, the analysts
     std::string div_intel = "div_intel";              // prisoners' interrogations
     std::string police = "kesmark_police";            // airmen picked up in the district
+    std::string intercept = "intercept_centre";       // the hours warning from the enemy's administrative traffic (roadmap B9)
     std::string staff = "rgt_chief_of_staff";         // the regiment's estimate of what the enemy knows of the battery
     std::string battery = "bty21_commander";          // the battery's own news and fights
     std::string announcer = "army_ad_chief";          // the war itself
@@ -61,6 +63,20 @@ public:
         battery_people_.clear();
         battery_places_.clear();
         if (net_ != nullptr) regiment_ = net_->Data().unit_regiment;
+    }
+
+    // The staff's operational security shows (or not) in its administrative traffic hours before a raid (roadmap B9,
+    // docs/air_battle/09 section 5.3): a draw keyed on the package, so a loaded campaign replays it. Our centre has it as a fact.
+    void AddOpsecAlert(const airwar::AirCampaign& c, const airwar::Package& p, int target_index) {
+        const airwar::FactionRadio& fr = c.Data().faction.radio;
+        if (!fr.present || net_->Data().PositionIndex(roles_.intercept) < 0) return;
+        AirRadioDef td;
+        for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = c.Data().tuning.Get(kv.first);
+        double leak = 0.0;
+        if (p.planner >= 0 && static_cast<std::size_t>(p.planner) < c.Staff().officers.size()) leak = c.Staff().officers[static_cast<std::size_t>(p.planner)].Quirk("comsec_leak");
+        const airwar::OpsecAlert alert = airwar::DrawOpsecAlert(airwar::StaffOpsec(fr.opsec, leak, td), c.Seed(), static_cast<std::uint64_t>(p.id), td);
+        const std::string where = target_index >= 0 ? c.Data().theatre.objects[static_cast<std::size_t>(target_index)].name : std::string("the district");
+        for (const Fact& f : OpsecAlertFacts(alert, p.id, p.tot_h, where, roles_.intercept)) net_->AddFact(f);
     }
 
     // Read what the campaign added since the last call, then bring the net up to the campaign's hour.
@@ -100,6 +116,7 @@ public:
             dz.chance = roles_.danger_chance;
             dz.known_h = std::min(p.FirstH(), p.tot_h);
             net_->AddDanger(dz);
+            AddOpsecAlert(c, p, ti);
             bool released = false;
             for (const airwar::Flight& fl : p.flights) released = released || fl.released;
             if (!released) continue;

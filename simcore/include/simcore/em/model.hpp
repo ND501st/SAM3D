@@ -529,6 +529,28 @@ struct Message {
     int hops = 0;
     std::vector<KnowledgeTrack> tracks;
     bool done = false;
+    // What the call says, for whoever may read it (B9): an index into the session's call log (air_war/air_radio.hpp),
+    // -1 for a message that says nothing a listener can read. The EM layer only times and radiates it.
+    int payload = -1;
+    bool intercept_done = false;  // the comms intercept receivers have been asked once, at its start
+};
+
+// One call a comms intercept receiver (an EsmDef of kind CommsIntercept) heard at its start (em/comms_intercept.hpp):
+// when, from what bearing, how strongly. What it says is read through `payload` by the post's linguist, not here.
+struct CommsHeard {
+    long long message = 0;
+    int esm = 0;           // the receiver's EsmState id
+    int platform = 0;      // its platform
+    int from_node = 0;     // the transmitting node
+    int net = 0;
+    int payload = -1;
+    double start_s = 0.0;
+    double end_s = 0.0;
+    double freq_hz = 0.0;
+    double rx_dbw = -300.0;
+    double margin_db = -300.0;  // above the receiver's sensitivity
+    double bearing_rad = 0.0;   // as measured (true, from the receiver), with the receiver's error
+    bool line_of_sight = false;
 };
 
 // The fate of a voice message at its addressee, for whoever sent it.
@@ -751,6 +773,7 @@ struct EmScene {
     std::vector<NodeState> nodes;
     std::vector<NetState> nets;
     std::vector<Message> messages;  // queued or on the air
+    std::vector<CommsHeard> heard;  // calls the comms intercept receivers heard (em/comms_intercept.hpp), for whoever collects them
     std::vector<VoiceResult> voice_results;
     std::vector<DecoyLink> decoys;
     std::vector<DummyTraffic> dummy_traffic;  // outcomes of voice messages (the sender collects them)

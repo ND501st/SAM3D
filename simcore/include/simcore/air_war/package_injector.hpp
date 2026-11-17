@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -199,6 +200,7 @@ public:
             landing_ = false;
             PackageOutcome o = bridge_->Finish(r);
             ReportedFromRecords(r, played_.back().in_s, o);
+            if (heard_source_) o.heard = heard_source_(played_.back().in_s, r.Time());  // what our intercept posts logged (B9)
             c_->CompletePlayerMission(o, HourOf(r.Time()));
             played_.back().out_s = r.Time();
             played_.back().lost = o.Lost();
@@ -243,6 +245,10 @@ public:
             return;
         }
     }
+
+    // What our intercept posts logged between two session times, as they wrote it (roadmap B9: the session owns the desk).
+    using HeardSource = std::function<std::vector<HeardRecord>(double from_s, double to_s)>;
+    void SetHeardSource(HeardSource f) { heard_source_ = std::move(f); }
 
     bool Active() const { return bridge_ != nullptr; }
     const MissionBridge* Bridge() const { return bridge_.get(); }
@@ -292,6 +298,7 @@ private:
         }
     }
 
+    HeardSource heard_source_;
     AirCampaign* c_;
     std::string data_dir_;
     double h0_ = 0.0;

@@ -252,8 +252,25 @@ struct PackageState {
     std::vector<double> reports;   // when each loss reaches him
 };
 
+// The flights' calls on the air (roadmap B9, air_war/air_radio.hpp implements it): a leader's act is a transmission with its
+// turn on the flight's net, and a member acts on it only if he heard it (or was signalled, in a flight flying silent).
+// Without one the call is B1's fixed delay (`FlightState::call_s`) to every member the net reaches (`FlightSlot::hears`).
+struct FlightRadio {
+    static constexpr int kNoModel = -2;  // Say: no radio model for this order (the fixed delay)
+    static constexpr int kSignalled = -1;  // Say: not said on the air (silent): passed by signal to those who see the leader
+    static constexpr int kDropped = -3;  // Say: said too late to be of use: nobody heard it
+    virtual ~FlightRadio() = default;
+    // The order `o` given to flight `fi` at t: its call's number (>= 0), or one of the codes above.
+    virtual int Say(int fi, const FlightState& f, const FlightOrder& o, double t) = 0;
+    // When member `slot` acts on the call (t_s; `react_s` after he heard it), or < 0 if he did not hear it.
+    virtual double Reaches(int call, int fi, int slot, double t, double react_s) = 0;
+};
+
 class Flights {
 public:
+    void SetRadio(FlightRadio* radio) { radio_ = radio; }
+    FlightRadio* Radio() const { return radio_; }
+
     // The aircraft of a target in the sky now (spawned, not gone, alive), else null.
     using Lookup = std::function<Aircraft*(int target)>;
     struct Note {
@@ -336,13 +353,15 @@ public:
         o.at_s = t;
         Record(f, o, -1);
         f.order = o;
+        const int call = radio_ != nullptr ? radio_->Say(fi, f, o, t) : FlightRadio::kNoModel;
         for (std::size_t k = 0; k < f.slots.size(); ++k) {
             FlightSlot& s = f.slots[k];
             if (!s.alive || s.gone || s.detached) continue;
             if (static_cast<int>(k) == f.leader_slot) {
                 Hear(s, o);
             } else if (s.hears) {
-                s.calls.push_back({t + f.call_s, o});
+                const double at = call == FlightRadio::kNoModel ? t + f.call_s : radio_->Reaches(call, fi, static_cast<int>(k), t, f.call_s);
+                if (at >= 0.0) s.calls.push_back({at, o});  // a member who did not hear it keeps the last order he heard
             }
         }
         return true;
@@ -797,6 +816,7 @@ public:
     }
 
 private:
+    FlightRadio* radio_ = nullptr;  // the calls on the air (B9); null: the fixed delay
     std::vector<FlightState> flights_;
     std::vector<PackageState> packages_;
     std::vector<std::pair<int, int>> of_target_;  // target -> (flight, slot)

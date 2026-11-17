@@ -55,7 +55,8 @@ enum class FactKind {
     BatteryNews,
     Press,
     Rumour,
-    Mail
+    Mail,
+    Intercept  // what our radio intercept posts heard of the enemy's air radio and read (roadmap B9, command/intercept.hpp)
 };
 
 inline const char* FactKindName(FactKind k) {
@@ -74,6 +75,7 @@ inline const char* FactKindName(FactKind k) {
         case FactKind::Press: return "press";
         case FactKind::Rumour: return "rumour";
         case FactKind::Mail: return "mail";
+        case FactKind::Intercept: return "intercept";
     }
     return "?";
 }

@@ -13,10 +13,12 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 | `faction_neutral.json` | Near peer: the Noric Republic's small air force |
 | `faction_warsaw_pact.json` | Peer: the Warsaw Pact's air forces of the front |
 | `faction_nato.json` | Superior: a composite allied tactical air force |
-| `traits.json` | The eight traits and the 31 quirks with their named effects, signatures and our analysts' phrases |
+| `traits.json` | The eight traits and the 33 quirks with their named effects, signatures and our analysts' phrases (`chatterbox` and `silent_runner` move a unit's radio discipline, B9) |
 | `air_combat.json` | **The air battle's air-to-air data** (track B, B7; `docs/air_battle/07_AIR_TO_AIR.md`): `aams` (18 missiles by guidance class with `in_service_year` and `allies_year`, ranges, limits, reliability, design kill chance, lethal radius, and `game_values` naming what is not sourced), `guns`, `fits` (what each type carries by year, `loads_by_year`; ours, the Pact's, NATO's, the neutral's and the rebels'), `doctrine` (rules of engagement, commit, formation, shot order and the strikers' answer per faction and ours) and `calibration` (the chain's numbers, the 1967 engagement mix and the period's rates they are held to). Loaded by `air_war/air_combat_data.hpp` into `AirWarData::air_combat`; the shot is `air_war/air_combat.hpp`. Nothing later than the war's year is offered (`AirCombatDef::LoadOutFor`) |
 | `sensors.json` | The airborne sensors by type and year (`03_PERCEPTION.md` section 4): fighter radars (each naming its EM `RadarDef` in `data/em/fighter_radars_1985.json`, with the published ranges), infrared search sets, optical aids, warning receivers by type, flares and command links; `slots` are sensors the research has no year for, out of every war until a source fills them. `AirWarData::sensors` |
 | `weapons.json` | The weapons (facts from `wiki_weapons`; footprint and effect by target class are calibrated game values) and every object kind as a target: its class and aim points (`docs/air_war/10_WEAPONS.md`) |
+
+Each faction file also has a `"radio"` block (track B, B9; `docs/air_battle/09_COMMS_AND_INTERCEPT.md` section 3.1): the EM library ids of its aircraft and controllers' sets, the band of its nets, `language`, `callsign_rotation_h` (0: never), the staff's `opsec` 0..1, `have_quick_share` and `secure_voice_share` (0 until a USAFE fielding date is found), `gci_channels_per_post`, and `discipline`, the share of a strike flight's routine calls kept off the air. Its `source` and `confidence` are required. The call lengths and the rest are the `"radio"` group of `data/gameplay/air_war.json`.
 
 ## Faction format (summary; `docs/air_war/01_FACTIONS.md` has it all)
 

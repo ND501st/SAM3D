@@ -41,6 +41,7 @@
 
 #include "simcore/board_reading.hpp"
 #include "simcore/acmi.hpp"
+#include "simcore/air_war/air_radio.hpp"
 #include "simcore/air_war/test_waves.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_comms.hpp"
@@ -140,6 +141,17 @@ public:
             eng_targets_.push_back(e);
         }
         flights_ = std::make_unique<Flights>();
+        if (def_.air_radio.on) {  // the enemy's calls as transmissions (roadmap B9)
+            air_radio_ = std::make_unique<airwar::AirRadio>();
+            std::string radio_error;
+            if (air_radio_->Init(def_.air_radio, def_.origin, &world_.GetTerrain(), def_.seed, &radio_error)) {
+                air_radio_->SetFlights(flights_.get());
+                air_radio_->SetClockStart(def_.clock_start_s > 0.0 ? def_.clock_start_s : 0.0);
+                flights_->SetRadio(air_radio_.get());
+            } else {
+                air_radio_.reset();  // the loader checked the library; fall back to the fixed delay rather than crash
+            }
+        }
         RegisterFlights(0);
         UpdateLight();  // the sun at second 0 (roadmap R7): the TV's daylight from here, the battery's night below
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
@@ -427,6 +439,7 @@ public:
     void SetTerrain(const Terrain* terrain) {
         world_.SetTerrain(terrain != nullptr ? terrain : (map_ground_ ? static_cast<const Terrain*>(map_ground_.get()) : &ground_));
         if (em_link_) em_link_->SetTerrain(&world_.GetTerrain());
+        if (air_radio_) air_radio_->World().SetTerrain(&world_.GetTerrain());
         if (battery_fire_) battery_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());
         if (neighbour_fire_) neighbour_fire_->SetGround(&world_.GetTerrain(), &world_.Frame());
     }
@@ -2141,6 +2154,7 @@ private:
             }
         }
         for (const Flights::Note& n : flights_->After(time_)) Event(n.who, n.what);
+        if (air_radio_) air_radio_->Step(time_, dt, air);  // the calls on the air; what our intercept posts heard of them
     }
 
     // The aircraft of a target in the sky now, for the command layer (flights.hpp).
@@ -2237,7 +2251,15 @@ private:
         }
         f.weapons = weapons || (def != nullptr && !def->crewed);  // no crew: no nerve, no loss to its package
         if (weapons) f.keep_slots = false;  // a stream of weapons: each flies its own plan
-        flights_->Add(std::move(f));
+        const int fi = flights_->Add(std::move(f));
+        RadioJoin(fi, def != nullptr ? def->radio : FlightRadioInfo());
+    }
+    // A flight's aircraft take their places on the enemy's radio (roadmap B9).
+    void RadioJoin(int fi, const FlightRadioInfo& info) {
+        if (!air_radio_) return;
+        std::vector<Vec3> starts;
+        for (const FlightSlot& s : flights_->All()[static_cast<std::size_t>(fi)].slots) starts.push_back(def_.targets[static_cast<std::size_t>(s.target)].start);
+        air_radio_->AddFlight(fi, flights_->All()[static_cast<std::size_t>(fi)], info, starts);
     }
 
 public:
@@ -2274,6 +2296,29 @@ public:
     const FlightState* Flight(const std::string& id) const { return flights_->Find(id); }
     std::vector<std::string> FlightsOf(const std::string& package) const { return flights_->FlightsOf(package); }
     const Flights& AllFlights() const { return *flights_; }
+    // The enemy's radio (roadmap B9): its calls as transmissions and what our intercept posts heard; null without "air_radio".
+    // Put the enemy's calls on the air in a session whose scenario did not (a battery mission with the air war beside it):
+    // the flights it has join, and those that enter later. False, with why, if the library lacks a set or a receiver.
+    bool EnableAirRadio(const AirRadioDef& def, std::string* error = nullptr) {
+        if (air_radio_) return true;
+        auto radio = std::make_unique<airwar::AirRadio>();
+        if (!radio->Init(def, def_.origin, &world_.GetTerrain(), def_.seed, error)) return false;
+        def_.air_radio = def;
+        air_radio_ = std::move(radio);
+        air_radio_->SetFlights(flights_.get());
+        air_radio_->SetClockStart(def_.clock_start_s > 0.0 ? def_.clock_start_s : 0.0);
+        flights_->SetRadio(air_radio_.get());
+        for (std::size_t fi = 0; fi < flights_->Size(); ++fi) {
+            FlightRadioInfo info;
+            for (const ScenarioFlight& d : def_.flights) {
+                if (d.id == flights_->All()[fi].id) info = d.radio;
+            }
+            RadioJoin(static_cast<int>(fi), info);
+        }
+        return true;
+    }
+    const airwar::AirRadio* AirRadio() const { return air_radio_.get(); }
+    airwar::AirRadio* AirRadio() { return air_radio_.get(); }
     // Flights and packages about to enter the running session (a package's, before its AddTargets): their targets name
     // them. All or none: false, with why, for an id the session has already.
     bool AddFlights(const std::vector<ScenarioFlight>& fs, const std::vector<ScenarioPackage>& ps, std::string* why = nullptr) {
@@ -2307,6 +2352,7 @@ private:
     // strike aircraft's loads released, and the waves' aircraft long gone taken out of the world (first marked dead, so
     // the EM layer and the board let them go, then removed).
     std::unique_ptr<Flights> flights_;     // the flights and packages in the session (flights.hpp, roadmap B1)
+    std::unique_ptr<airwar::AirRadio> air_radio_;  // the enemy's calls on the air (air_war/air_radio.hpp, roadmap B9)
     std::set<std::string> packages_added_;
     std::unique_ptr<airwar::TestWaves> waves_;
     std::vector<std::size_t> wave_targets_;          // the waves' targets still in the world (indices into def_.targets)
@@ -4877,7 +4923,31 @@ private:
     }
 
     // ---- once a step
+    struct NetSay {
+        double at_s = 0.0;
+        std::string from;
+        std::string text;
+    };
+    std::vector<NetSay> net_says_;  // lines to be said on the battery net (SayOnBatteryNet)
+    void UpdateNetSays() {
+        for (std::size_t i = 0; i < net_says_.size();) {
+            if (time_ + 1e-9 < net_says_[i].at_s) {
+                ++i;
+                continue;
+            }
+            const NetSay n = net_says_[i];
+            net_says_.erase(net_says_.begin() + static_cast<std::ptrdiff_t>(i));
+            Radio("battery net", n.from, n.text);
+            // A battery whose post keeps no journal that hears the net: the commander's own page takes it, as it takes his orders.
+            bool kept = false;
+            if (post_ && !console_.post_journal_keeper.empty()) {
+                for (const std::string& h : HeardBy("battery net")) kept = kept || h == console_.post_journal_keeper;
+            }
+            if (!kept && order_net_) GiverJournal().Heard(time_, "battery net", n.from, n.text);
+        }
+    }
     void UpdateVoice() {
+        UpdateNetSays();
         if (voice_) voice_->Update(console_);
         UpdateBoxCalls();
         if (!nets_) return;
@@ -6156,6 +6226,11 @@ public:
         Event("C2 source", id + (down ? " out of action: " : " working again: ") + reason);
         return true;
     }
+    // More of the chain of command's deliveries for the running session, `after_s` counted from its start (roadmap B9).
+    void AddDeliveries(const std::vector<DeliveryDef>& more) { deliveries_.Add(more); }
+    // Something said on the battery's net `after_s` from now (roadmap B9: our intercept's fast road, said by the liaison): it is on the
+    // net like the commander's own lines, so whoever keeps the post's journal and hears the net writes it down as heard.
+    void SayOnBatteryNet(const std::string& from, const std::string& text, double after_s) { net_says_.push_back({time_ + after_s, from, text}); }
     // The regiment says something to the battery on its command net `after_s` from now: heard on the post's R-111 when
     // it is on the net, said again until the post receipts it, as the scenario's own messages. False without the R-111
     // worked as a set.

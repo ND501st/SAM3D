@@ -37,6 +37,7 @@
 #include "simcore/flights.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
+#include "simcore/air_war/air_radio.hpp"
 #include "simcore/session_deliveries.hpp"
 #include "simcore/terrain_map.hpp"
 
@@ -201,6 +202,10 @@ struct ScenarioFormat {
     // warning comes when it reached the vehicle through the chain, and the messages the vehicle's people get during the
     // raid are played in it (roadmap P1). Without it, the warning comes own_intel.warning_s ahead of the first aircraft.
     const DeliverySource* deliveries = nullptr;
+    // The enemy's radio (roadmap B9, air_radio.hpp): the flights' calls as transmissions in the session, and our intercept
+    // posts (in the scenario's frame) listening to them. Off: the flights keep B1's fixed delay and nobody hears them.
+    bool air_radio = false;
+    std::vector<AirRadioPostDef> intercept_posts;
 };
 
 // One scenario target, and the flight and aircraft it is.
@@ -282,6 +287,84 @@ struct RaidScenario {
 
 class RaidScenarioBuilder {
 public:
+    // A flight's "radio" block (roadmap B9): its squadron, its role, and how its people move the faction's discipline
+    // (its officer's quirks; loose lips lower it). HAVE QUICK and secure voice are per squadron, drawn from the faction's
+    // shares (both 0 in the 1985 data until a USAFE fielding date is found).
+    static json::Value FlightRadioJson(const AirCampaign& c, const FactionDef& f, const Flight& fl, const TuningTable& tune) {
+        using namespace jsonb;
+        AirRadioDef td;
+        for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = tune.Get(kv.first);
+        double chatter = 0.0, leak = 0.0;
+        if (fl.officer >= 0 && static_cast<std::size_t>(fl.officer) < c.Staff().officers.size()) {
+            const Officer& o = c.Staff().officers[static_cast<std::size_t>(fl.officer)];
+            chatter = o.Quirk("radio_chatter");
+            leak = o.Quirk("comsec_leak");
+        }
+        const double faction = f.radio.present ? f.radio.discipline : td.discipline;
+        json::Value r = Obj();
+        Put(r, "unit", Str(fl.squadron));
+        Put(r, "role", Str(FlightRoleName(fl.role)));
+        Put(r, "discipline_adjust", Num(std::round((RadioDiscipline(faction, 0.0, chatter, leak, td) - faction) * 1000.0) / 1000.0));
+        const std::size_t sq = std::hash<std::string>()(fl.squadron);
+        const em::Random rng(c.Seed() ^ 0x5EC0DEull);
+        if (f.radio.present) {
+            if (rng.Uniform(em::Stream::AirRadio, sq, 31) < f.radio.have_quick_share) Put(r, "have_quick", Bool(true));
+            if (rng.Uniform(em::Stream::AirRadio, sq, 32) < f.radio.secure_voice_share) Put(r, "secure_voice", Bool(true));
+        }
+        static const char* words[] = {"SUPERFUSE", "LONGBOW", "REDWING", "SLEDGE", "TIDEWATER"};
+        Put(r, "codeword", Str(words[sq % 5]));
+        return r;
+    }
+    // The scenario's "air_radio" block from the faction's radio block, the planner's habits and the tuning table.
+    static json::Value AirRadioJson(const AirCampaign& c, const Package& p, const ScenarioFormat& fmt) {
+        using namespace jsonb;
+        const FactionDef& f = c.Data().faction;
+        const TuningTable& tune = c.Data().tuning;
+        AirRadioDef td;
+        for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = tune.Get(kv.first);
+        double leak = 0.0, rotation = f.radio.callsign_rotation_h;
+        if (p.planner >= 0 && static_cast<std::size_t>(p.planner) < c.Staff().officers.size()) {
+            const Officer& pln = c.Staff().officers[static_cast<std::size_t>(p.planner)];
+            leak = pln.Quirk("comsec_leak");
+            if (pln.Quirk("punctuality") < 0.0) rotation *= 2.0;  // a careless planner doubles the call signs' interval
+        }
+        json::Value a = Obj();
+        Put(a, "faction", Str(f.id));
+        Put(a, "library", Str("em/air_radios_1985.json"));
+        Put(a, "radio", Str(f.radio.air_radio));
+        if (!f.radio.ground_radio.empty()) Put(a, "ground_radio", Str(f.radio.ground_radio));
+        Put(a, "freq_mhz", Num(f.radio.band_mhz));
+        Put(a, "language", Str(f.radio.language));
+        Put(a, "discipline", Num(f.radio.discipline));
+        Put(a, "callsign_rotation_h", Num(rotation));
+        Put(a, "have_quick_share", Num(f.radio.have_quick_share));
+        Put(a, "secure_voice_share", Num(f.radio.secure_voice_share));
+        Put(a, "opsec", Num(StaffOpsec(f.radio.opsec, leak, td)));
+        json::Value tn = Obj();
+        for (const auto& kv : AirRadioTuningDefaults()) Put(tn, kv.first.substr(6), Num(tune.Get(kv.first)));
+        Put(a, "tune", tn);
+        json::Value posts = Arr();
+        for (const AirRadioPostDef& d : fmt.intercept_posts) {
+            json::Value v = Obj();
+            Put(v, "id", Str(d.id));
+            Put(v, "name", Str(d.name));
+            Put(v, "kind", Str(d.kind));
+            Put(v, "east_m", Num(d.at.x));
+            Put(v, "north_m", Num(d.at.y));
+            Put(v, "mast_m", Num(d.mast_m));
+            if (!d.esm.empty()) Put(v, "esm", Str(d.esm));
+            if (!d.radio.empty()) Put(v, "radio", Str(d.radio));
+            if (d.freq_hz > 0.0) Put(v, "freq_mhz", Num(d.freq_hz / 1e6));
+            Put(v, "channels", Num(d.channels));
+            if (!d.chain_post.empty()) Put(v, "chain_post", Str(d.chain_post));
+            Push(posts, v);
+        }
+        Put(a, "posts", posts);
+        Put(a, "source", Str(f.radio.source));
+        Put(a, "confidence", Str(f.radio.confidence));
+        return a;
+    }
+
     RaidScenario Build(const AirCampaign& c, const Package& p, const ScenarioFormat& fmt = ScenarioFormat()) {
         using namespace jsonb;
         RaidScenario out;
@@ -464,6 +547,7 @@ public:
                 Put(fj, "package", Str(pkg_id));
                 if (a->missile) Put(fj, "keep_slots", Bool(false));
                 if (a->missile || a->drone) Put(fj, "crewed", Bool(false));  // no nerve: a decoy drone flies on
+                if (!a->missile && !a->drone) Put(fj, "radio", FlightRadioJson(c, f, fl, tune));
                 if (!forms.empty()) {
                     json::Value fo = Obj();
                     for (const auto& ph : forms) {
@@ -907,6 +991,7 @@ public:
         // knows of, at the abstract resolver's nerve (PackageNerve), counting those it lost before it came in.
         if (!flights_json.items.empty()) {
             Put(root, "flights", flights_json);
+            if (fmt.air_radio && f.radio.present) Put(root, "air_radio", AirRadioJson(c, p, fmt));
             int lost_before = 0;
             for (const Flight& fl : p.flights) lost_before += fl.role == FlightRole::Missile || fl.role == FlightRole::Decoy ? 0 : fl.lost;
             json::Value pk = Obj();
@@ -947,7 +1032,16 @@ public:
         json::Value triggers = Arr();
         double warn_s = tune.Get("own_intel.warning_s");
         if (const Officer* pln = p.planner >= 0 ? &c.Staff().officers[static_cast<std::size_t>(p.planner)] : nullptr) {
-            if (pln->Quirk("comsec_leak") > 0.0) warn_s = std::max(warn_s, tune.Get("own_intel.leak_warning_s"));
+            if (fmt.air_radio && f.radio.present) {
+                // The hours warning of the staff's opsec (roadmap B9, docs/air_battle/09 section 5.3): a draw keyed on the
+                // package, replacing the fixed leak warning. Alerted, our side could have known the raid hours ahead.
+                AirRadioDef td;
+                for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = tune.Get(kv.first);
+                const OpsecAlert alert = DrawOpsecAlert(StaffOpsec(f.radio.opsec, pln->Quirk("comsec_leak"), td), c.Seed(), static_cast<std::uint64_t>(p.id), td);
+                if (alert.alerted) warn_s = std::max(warn_s, alert.lead_h * 3600.0);
+            } else if (pln->Quirk("comsec_leak") > 0.0) {
+                warn_s = std::max(warn_s, tune.Get("own_intel.leak_warning_s"));
+            }
         }
         const double first_s = std::max(0.0, (first_h - m.start_h) * 3600.0);
         double warn_after_s = std::max(0.0, first_s - warn_s);
