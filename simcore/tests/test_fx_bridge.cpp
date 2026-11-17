@@ -156,6 +156,7 @@ void BuildRaid(Raid& raid) {
                  strike("Viper 10", "f16a", Profile::Medium, 4500.0, "mk82", 6, Delivery::Level, 0.02), sead};
     ScenarioFormat fmt;
     fmt.target_arms = false;  // the Weasels' ARMs are the bridge's model
+    fmt.reactions = false;    // its pilots fly the scripted evasion: the loads' timing is tested here, not the reactions (B4)
     RaidScenarioBuilder builder;
     raid.rs = builder.Build(raid.c, p, fmt);
     SC_EXPECT(raid.rs.ok);

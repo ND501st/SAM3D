@@ -69,6 +69,7 @@
 #include "simcore/pu12.hpp"
 #include "simcore/radio_journal.hpp"
 #include "simcore/radio_setup.hpp"
+#include "simcore/reaction_chain.hpp"
 #include "simcore/command/people.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/seat_duty.hpp"
@@ -155,6 +156,7 @@ public:
             }
         }
         RegisterFlights(0);
+        ConfigureReactions();
         UpdateLight();  // the sun at second 0 (roadmap R7): the TV's daylight from here, the battery's night below
         kill_.Configure(def_.tuning.kill, def_.seed * 6007u + 3u);
         fx_rng_.seed(def_.seed + kFxSeed);  // the presentation's own draws (fx/events.hpp): never a model's generator
@@ -270,6 +272,7 @@ public:
         UpdateGuidanceEm();
         CueFromWarnings();
         UpdatePerception();
+        UpdateReactions();
         UpdateArms();
         UpdateFuel(dt);
         UpdatePositionPower();
@@ -2048,6 +2051,9 @@ private:
             a.bottom_m = t.BottomM();
             targets_[i].pilot = TargetPilot(t.behaviour, t.evade);
             targets_[i].pilot.SetWeapon(t.weapon);
+            if (t.reactions.on && !t.weapon && !t.friendly) {  // roadmap B4: he reacts by his faction's tables
+                reactions_.Register(static_cast<int>(i), t.id, t.reactions, t.pilot_skill, t.seats > 1);
+            }
             targets_[i].pilot.OnSpawn(a);
             targets_[i].world_id = world_.AddAircraft(std::move(a));
             targets_[i].spawned = true;
@@ -2118,6 +2124,7 @@ private:
                     std::vector<Flights::Note> notes;
                     flights_->Down(static_cast<int>(i), time_, &notes);
                     for (const Flights::Note& n : notes) Event(n.who, n.what);
+                    reactions_.Lost(static_cast<int>(i), a != nullptr ? a->position : s.last_position, time_, *flights_, ReactionContext());
                 }
             } else if (def_.targets[i].weapon && (a->next_waypoint >= a->waypoints.size() || AboveGround(a->position) <= 1.0)) {
                 // A weapon ends where it strikes: it no longer flies (its actor goes as an inactive one does), and the
@@ -2380,6 +2387,7 @@ private:
 
     // A load let go: the feed's release (the game flies and bursts it), its landing kept for its time.
     void ReleaseWaveLoad(airwar::WaveRelease r) {
+        if (r.delivery != "jettison") NoteReleased(r.carrier);
         Event(r.carrier, "releases " + std::to_string(r.count) + " " + r.weapon_name + (r.delivery.empty() ? "" : " (" + r.delivery + ")"));
         if (fx_on_) {
             fx::Event e;
@@ -2596,7 +2604,7 @@ private:
             if (st.missiles == 0) st.reload_s = time_ + kNbReloadS;
             nb_shots_.push_back({j, fresh_i, time_ + flight_s, hit, true, st.launches});
             Event(nb.id, "launches at " + def_.targets[fresh_i].id);
-            PerceiveSiteLaunch(nb.id, st.launches, nb.position, fresh_a->position, flight_s);
+            PerceiveSiteLaunch(nb.id, st.launches, nb.position, fresh_a->position, flight_s, EyeSamWord(*d));
             if (fx_on_) {
                 fx::Event e;
                 e.kind = fx::EventKind::SamLaunch;
@@ -2633,7 +2641,7 @@ private:
     // whose aircraft is already down, flies on and destroys itself.
     void EndNeighbourShots() {
         for (std::size_t k = 0; k < nb_shots_.size();) {
-            const NeighbourShot s = nb_shots_[k];
+            NeighbourShot s = nb_shots_[k];
             if (s.end_s > time_ + 1e-9) {
                 ++k;
                 continue;
@@ -2642,6 +2650,11 @@ private:
             const ScenarioNeighbour& nb = def_.neighbours[s.neighbour];
             const std::string id = def_.targets[s.target].id;
             const Aircraft* a = targets_[s.target].spawned ? world_.FindAircraft(targets_[s.target].world_id) : nullptr;
+            if (s.missile && s.hit && IrDefence(def_.waves->Defence(nb.system)) &&
+                FlaresDecoy(id, (static_cast<std::uint64_t>(s.neighbour) << 32) ^ static_cast<std::uint64_t>(s.number))) {
+                s.hit = false;  // roadmap B4: its flares, out in time, took the IR missile
+                Event(id, "its flares decoy the missile from " + nb.name);
+            }
             if (s.missile && def_.waves->has_damage) {
                 EndNeighbourMissile(s, a);
                 continue;
@@ -2862,10 +2875,11 @@ private:
         TargetState& ts = targets_[i];
         const std::string id = def_.targets[i].id;
         if (c.after == DamageLevel::Destroyed) {
-            if (DestroyTarget(id, ts.damage.by)) ++nb_kills_;
+            if (DestroyTarget(id, ts.damage.by) && def_.waves) ++nb_kills_;
             return;
         }
         ++nb_damaged_[ToString(c.after)];
+        if (reactions_.On(static_cast<int>(i))) reactions_.Damaged(static_cast<int>(i), c.after, time_, *flights_, ReactionContext());
         if (c.after < DamageLevel::Moderate) return;
         Aircraft* a = ts.spawned ? world_.FindAircraft(ts.world_id) : nullptr;
         if (a == nullptr || !a->alive) return;
@@ -2889,12 +2903,11 @@ private:
             e.falls = ts.damage.smoke;
             fx_.Push(e);
         }
-        if (c.jettison && waves_) {
-            airwar::WaveScene scene;
-            scene.frame = &world_.Frame();
-            scene.terrain = &world_.GetTerrain();
-            scene.centre = def_.unit_position;
-            for (airwar::WaveRelease& r : waves_->Jettison(id, time_, a->position, a->velocity, scene)) ReleaseWaveLoad(std::move(r));
+        if (c.jettison) {
+            const bool had_stores = !reactions_.On(static_cast<int>(i)) || !reactions_.StoresGone(static_cast<int>(i));
+            if (reactions_.On(static_cast<int>(i)) && reactions_.Tanks(static_cast<int>(i)) > 0) FxJettison(i, *a, "drop_tank", reactions_.Tanks(static_cast<int>(i)));
+            if (had_stores) JettisonLoad(i, *a);
+            reactions_.RecordJettison(static_cast<int>(i), time_, "damaged");
         }
         if (c.abort) {  // the pilot's own: straight for his way out, out of his flight (its lead passes on)
             FlightOrder home;
@@ -2906,15 +2919,20 @@ private:
 
     // The heavily damaged whose time has come fall (burning if they were on fire), credited to who did it.
     void CrashDamaged() {
-        for (std::size_t i : wave_targets_) {
+        const auto crash = [this](std::size_t i) {
             TargetState& ts = targets_[i];
-            if (ts.damage.crash_at_s < 0.0 || time_ < ts.damage.crash_at_s || !ts.spawned) continue;
+            if (ts.damage.crash_at_s < 0.0 || time_ < ts.damage.crash_at_s || !ts.spawned) return;
             ts.damage.crash_at_s = -1.0;
             const Aircraft* a = world_.FindAircraft(ts.world_id);
-            if (a == nullptr || !a->alive) continue;
+            if (a == nullptr || !a->alive) return;
             const std::string id = def_.targets[i].id;
             FxDown(id, ts.damage.by, ts.damage.fire, true);
-            if (DestroyTarget(id, ts.damage.by, false)) ++nb_kills_;
+            if (DestroyTarget(id, ts.damage.by, false) && def_.waves) ++nb_kills_;
+        };
+        if (def_.waves) {
+            for (std::size_t i : wave_targets_) crash(i);
+        } else {
+            for (std::size_t i = 0; i < targets_.size(); ++i) crash(i);  // roadmap B4: damage states in played raids
         }
     }
 
@@ -3081,11 +3099,11 @@ private:
     }
     // A launch from another site (a battery's launcher, a neighbour, the testbed's missile site): the same sign, and a trail
     // along the line to where its target was, at the missile's average speed.
-    void PerceiveSiteLaunch(const std::string& owner, int number, const Vec3& at, const Vec3& toward, double flight_s) {
+    void PerceiveSiteLaunch(const std::string& owner, int number, const Vec3& at, const Vec3& toward, double flight_s, const char* what = "SAM") {
         if (!percep_on_) return;
         airwar::PerceptionFeed& pf = Percep();
         const Vec3 site = GroundEnu(at.x, at.y);
-        pf.Launch(number, owner, site, time_, PerceptionNight());
+        pf.Launch(number, owner, site, time_, PerceptionNight(), what);
         const double f = std::max(flight_s, 1.0);
         pf.Synthetic(owner, number, toward, f, (toward - site).Length() / f);
     }
@@ -3216,6 +3234,7 @@ private:
             ob.agl_m = ob.alt_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             ob.two_seat = t.seats > 1;
             ob.skill = t.pilot_skill;
+            ob.stress = reactions_.Stress(static_cast<int>(i), time_);
             ob.defensive = targets_[i].pilot.Evading();
             if (!t.legs.empty()) {
                 const std::size_t k = std::min(a->next_waypoint, t.legs.size() - 1);
@@ -3249,6 +3268,10 @@ private:
     // and the jettison are B4's): a lock or a launch on his receiver, or a launch seen by eye (its dust and flash, its
     // smoke trail), turns him with the place he believes it to be, never the unit's true one.
     void ReactToSighting(std::size_t i, const airwar::Sighting& sg) {
+        if (reactions_.On(static_cast<int>(i))) {  // roadmap B4: the chain (reaction_chain.hpp); "evade" targets below
+            reactions_.Sighted(static_cast<int>(i), sg, time_, ReactionContext());
+            return;
+        }
         const std::string& id = def_.targets[i].id;
         if (sg.by == airwar::SightBy::Rwr && sg.kind == airwar::SightKind::Emitter) {
             if (sg.rwr == airwar::RwrState::Launch) CueTarget(id, true, &sg.believed_enu);
@@ -3258,6 +3281,233 @@ private:
         }
     }
 
+    // ---- Reactions under fire (roadmap B4, reaction_chain.hpp, docs/air_battle/04_REACTIONS.md). A target with
+    // "reactions" reacts by its faction's tables to what its picture holds (ReactToSighting), to a wingman going down
+    // (UpdateTargets) and to its own damage (OnDamage); the chain gives its acts here each step, and its calls go on the
+    // enemy's radio (B9) when the session has it. A target with "evade" flies the old scripted evasion (CueTarget).
+    // Damage states (roadmap R1) run for every aircraft of a session that has them ("damage", the testbed's tables, a
+    // package that brought them): our missile's hit may leave its aircraft heavily damaged, a damaged aircraft crashes in
+    // its time, the mission bridge's neighbours' missiles draw damage.
+    ReactionChain reactions_;
+    std::unique_ptr<AirRadioThreats> threat_radio_;
+    const airwar::AirRadio* threat_radio_of_ = nullptr;
+    static constexpr unsigned kDamageSeed = 0xDA3Au;
+    std::mt19937 damage_rng_{kDamageSeed};
+    std::vector<std::pair<std::size_t, int>> hit_heavy_;  // our missile's hits that left their aircraft flying, heavily damaged
+    std::set<std::string> survived_hits_;
+
+    void ConfigureReactions() {
+        ConfigureReactionChain();
+        damage_rng_.seed(def_.seed + kDamageSeed);
+        if (DamageStatesOn()) SplitOsaHits();
+    }
+    void ConfigureReactionChain() {
+        reactions_.Configure(&def_.reactions, static_cast<std::uint64_t>(def_.seed) * 0x9E3779B97F4A7C15ull + 0xB4ull, def_.year);
+    }
+    bool DamageStatesOn() const { return def_.has_damage || (def_.waves && def_.waves->has_damage); }
+    const DamageTable& DamageTab() const { return def_.waves && def_.waves->has_damage ? def_.waves->damage : def_.damage; }
+    // Our missile's hit (the engagement model's chance) is drawn into destroyed or heavily damaged (DAMAGE.md 5).
+    void SplitOsaHits() {
+        engagement_.SetHitSurvives([this](const std::string& id, int number) {
+            const std::size_t i = TargetIndexOf(id);
+            if (i >= def_.targets.size() || def_.targets[i].weapon) return false;
+            if (!(Uniform01(damage_rng_) < DamageTab().missile_heavy_share)) return false;
+            hit_heavy_.push_back({i, number});
+            survived_hits_.insert(id);
+            return true;
+        });
+    }
+    ReactionChain::Context ReactionContext() {
+        ReactionChain::Context c;
+        c.air = FlightLookup();
+        c.agl_m = [this](int t) {
+            const bool in = t >= 0 && static_cast<std::size_t>(t) < targets_.size() && targets_[static_cast<std::size_t>(t)].spawned;
+            const Aircraft* a = in ? world_.FindAircraft(targets_[static_cast<std::size_t>(t)].world_id) : nullptr;
+            return a != nullptr ? AboveGround(a->position) : 1000.0;
+        };
+        c.attacking = [this](int t) {
+            if (t < 0 || static_cast<std::size_t>(t) >= targets_.size() || !targets_[static_cast<std::size_t>(t)].spawned) return false;
+            const ScenarioTarget& d = def_.targets[static_cast<std::size_t>(t)];
+            const Aircraft* a = world_.FindAircraft(targets_[static_cast<std::size_t>(t)].world_id);
+            if (a == nullptr || d.legs.empty()) return false;
+            return PhaseOfTag(d.legs[std::min(a->next_waypoint, d.legs.size() - 1)].tag) == "attack";
+        };
+        if (air_radio_) {
+            if (threat_radio_of_ != air_radio_.get()) {
+                threat_radio_ = std::make_unique<AirRadioThreats>(air_radio_.get());
+                threat_radio_of_ = air_radio_.get();
+            }
+            c.radio = threat_radio_.get();
+        }
+        return c;
+    }
+
+    void UpdateReactions() {
+        if (DamageStatesOn() && !def_.waves) CrashDamaged();  // the testbed's run in FireNeighbourDefences
+        for (const std::pair<std::size_t, int>& h : hit_heavy_) {
+            DamageDraw d;
+            d.blast_heavy = true;
+            OnDamage(h.first, ApplyDamage(DamageTab(), targets_[h.first].damage, d, time_, damage_rng_, "missile " + std::to_string(h.second)));
+        }
+        hit_heavy_.clear();
+        if (!reactions_.Configured() || !reactions_.Pending()) return;
+        for (const ReactionAct& act : reactions_.Step(time_, *flights_, ReactionContext())) ApplyReaction(act);
+    }
+
+    void ApplyReaction(const ReactionAct& act) {
+        if (act.target < 0 || static_cast<std::size_t>(act.target) >= def_.targets.size()) return;
+        const std::size_t i = static_cast<std::size_t>(act.target);
+        const std::string& id = def_.targets[i].id;
+        Aircraft* a = targets_[i].spawned && !targets_[i].gone ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+        if (a == nullptr || !a->alive) return;
+        switch (act.kind) {
+            case ReactionAct::Kind::Manoeuvre:
+                if (flights_->Overriding(act.target)) targets_[i].pilot.OverrideEnded();
+                if (targets_[i].pilot.BeginReaction(act.dive, act.dive_agl_m, time_)) {
+                    Event(id, "drops behind cover (warned)");
+                    return;
+                }
+                flights_->Override(act.target, act.ov);  // a reflex: it does not wait for the leader
+                Event(id, act.what);
+                return;
+            case ReactionAct::Kind::Chaff:
+                Event(id, act.what);
+                if (em_link_ && em_link_->Ok()) {
+                    em_link_->DropChaff(id, def_.reactions.chaff_rcs_m2, def_.reactions.chaff_life_s);
+                } else if (engagement_on_) {
+                    engagement_.NoteChaff(id, time_, def_.reactions.chaff_factor, def_.reactions.chaff_window_s);
+                }
+                FxDispense(fx::EventKind::ChaffDrop, i, *a, act.count);
+                return;
+            case ReactionAct::Kind::Flares:
+                Event(id, act.what);
+                FxDispense(fx::EventKind::FlareDrop, i, *a, act.count);
+                return;
+            case ReactionAct::Kind::JettisonTanks:
+                Event(id, act.what);
+                FxJettison(i, *a, "drop_tank", act.count);
+                return;
+            case ReactionAct::Kind::JettisonStores:
+                Event(id, act.what);
+                JettisonLoad(i, *a);
+                return;
+            case ReactionAct::Kind::Abort: {
+                FlightOrder home;
+                home.kind = OrderKind::ReturnHome;
+                home.by = "pilot";
+                flights_->OrderMember(act.target, home, time_, true, "the lead turns for home");
+                Event(id, act.what);
+                return;
+            }
+            case ReactionAct::Kind::Event:
+                Event(id, act.what);
+                return;
+        }
+    }
+
+    // A load thrown off: the testbed's waves let theirs fall inert (TestWaves::Jettison); any other target's "stores"
+    // falls in the feed as a jettison.
+    void JettisonLoad(std::size_t i, const Aircraft& a) {
+        const std::string& id = def_.targets[i].id;
+        if (waves_) {
+            airwar::WaveScene scene;
+            scene.frame = &world_.Frame();
+            scene.terrain = &world_.GetTerrain();
+            scene.centre = def_.unit_position;
+            for (airwar::WaveRelease& r : waves_->Jettison(id, time_, a.position, a.velocity, scene)) ReleaseWaveLoad(std::move(r));
+            return;
+        }
+        FxJettison(i, a, def_.targets[i].reactions.stores, 1);
+    }
+    // The feed's jettison: it falls from the aircraft along its track, by its fall time, onto the ground below.
+    void FxJettison(std::size_t i, const Aircraft& a, const std::string& weapon, int count) {
+        if (!fx_on_ || weapon.empty()) return;
+        const double h = std::max(1.0, AboveGround(a.position));
+        const double fall_s = std::sqrt(2.0 * h / kStandardGravity);
+        const Vec3 ahead = a.position + Vec3{a.velocity.x, a.velocity.y, 0.0} * (0.8 * fall_s);
+        fx::Event e;
+        e.kind = fx::EventKind::WeaponRelease;
+        e.t_s = time_;
+        e.end_t_s = time_ + fall_s;
+        e.position = a.position;
+        e.velocity = a.velocity;
+        e.aim = GroundEnu(ahead.x, ahead.y);
+        e.source = def_.targets[i].id;
+        e.world_id = a.id;
+        e.number = count;
+        e.weapon = weapon;
+        e.delivery = "jettison";
+        fx_.Push(e);
+    }
+    void FxDispense(fx::EventKind kind, std::size_t i, const Aircraft& a, int count) {
+        if (!fx_on_) return;
+        fx::Event e;
+        e.kind = kind;
+        e.t_s = e.end_t_s = time_;
+        e.position = e.aim = a.position;
+        e.velocity = a.velocity;
+        e.source = def_.targets[i].id;
+        e.world_id = a.id;
+        e.number = count;
+        fx_.Push(e);
+    }
+    // What the eye makes of a defence's launch by its size (reaction_chain.hpp EyeSamClass): a shoulder or Strela SAM
+    // (IR, no radar), a large SAM (a long reach), else one of the Osa's size.
+    static const char* EyeSamWord(const airwar::DefenceDef& d) {
+        return !d.radar ? "shoulder SAM" : d.radius_m > 20000.0 ? "large SAM" : "SAM";
+    }
+    static bool IrDefence(const airwar::DefenceDef* d) { return d != nullptr && !d->radar && d->missiles >= 0; }
+
+public:
+    // The reactions under fire (roadmap B4): every pilot's chain, its jettisons and its counts.
+    const ReactionChain& Reactions() const { return reactions_; }
+    // Damage states in this session.
+    bool DamageStates() const { return DamageStatesOn(); }
+    // Bring damage states into a session that had none (a package's raid that brought them, package_injector.hpp).
+    void UseDamageStates(const DamageTable& t) {
+        if (DamageStatesOn()) return;
+        def_.damage = t;
+        def_.has_damage = true;
+        SplitOsaHits();
+    }
+    // Bring the reaction tables into a session that had none (a package's raid, package_injector.hpp).
+    void UseReactionTable(const ReactionTable& t) {
+        if (def_.reactions.loaded) return;
+        def_.reactions = t;
+        ConfigureReactionChain();
+    }
+    // Our missile hit it and it flew on, heavily damaged (DAMAGE.md 5): not a kill unless it crashes later.
+    bool SurvivedHit(const std::string& id) const { return survived_hits_.count(id) != 0; }
+    // Its load is gone by its own release (the mission bridge's): only its tanks are left to jettison.
+    void NoteReleased(const std::string& id) {
+        const std::size_t i = TargetIndexOf(id);
+        if (i < def_.targets.size()) reactions_.Released(static_cast<int>(i));
+    }
+    // Its stores went by a jettison (reaction_chain.hpp): it has nothing left to release.
+    bool StoresJettisoned(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        return i < def_.targets.size() && (reactions_.StoresGone(static_cast<int>(i)) || targets_[i].damage.jettison);
+    }
+    // A defence missile at its end at a target (the mission bridge's neighbours): with damage states its kill drawn into
+    // destroyed or heavily damaged (damage.hpp ApplyMissile); without, a kill destroys it. True if it is destroyed now.
+    bool MissileDamage(const std::string& id, bool kill, double charge_kg, const std::string& by) {
+        const std::size_t i = TargetIndexOf(id);
+        if (i >= def_.targets.size()) return false;
+        if (!DamageStatesOn()) return kill && DestroyTarget(id, by);
+        const Aircraft* a = targets_[i].spawned ? world_.FindAircraft(targets_[i].world_id) : nullptr;
+        if (a == nullptr || !a->alive) return false;
+        const DamageTable& t = DamageTab();
+        OnDamage(i, ApplyMissile(t, targets_[i].damage, kill, charge_kg, PresentedAreaM2(t, def_.targets[i].size_m), time_, damage_rng_, by));
+        return !TargetAlive(id);
+    }
+    // Did its flares decoy an IR missile at it (a keyed draw per shot), flares out within their window before now?
+    bool FlaresDecoy(const std::string& id, std::uint64_t shot) const {
+        const std::size_t i = TargetIndexOf(id);
+        const int t = static_cast<int>(i);
+        return i < def_.targets.size() && reactions_.FlaresOut(t, time_) && reactions_.FlareDecoys(t, shot);
+    }
+
+private:
 public:
     // Perception off (the cost bench's baseline): no pilot sees or hears anything, no event is recorded.
     void SetPerception(bool on) { percep_on_ = on; }

@@ -127,6 +127,7 @@ inline InjectedPackage InjectPackage(ScenarioRunner& r, const RaidScenario& rs, 
         for (Vec3& w : t.waypoints) w = MoveFrame(from, to, w);
         for (RouteLeg& l : t.legs) l.to = MoveFrame(from, to, l.to);
         if (t.arms.has_aim) t.arms.aim = MoveFrame(from, to, t.arms.aim);
+        for (ProgrammeZone& z : t.reactions.zones) z.centre = MoveFrame(from, to, z.centre);
         t.appear_at_s += at_s;
         ts.push_back(std::move(t));
     }
@@ -135,6 +136,9 @@ inline InjectedPackage InjectPackage(ScenarioRunner& r, const RaidScenario& rs, 
         out.error = e;
         return out;
     }
+    // Its pilots' reaction tables and R1's damage states, if the session had none (roadmap B4).
+    if (raid.reactions.loaded) r.UseReactionTable(raid.reactions);
+    if (raid.has_damage) r.UseDamageStates(raid.damage);
     if (!r.AddTargets(std::move(ts), who, &e)) {
         out.error = e;
         return out;

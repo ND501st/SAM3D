@@ -26,11 +26,13 @@ public:
     // A launch at `site` (the ground under the launcher), launch number `launch_id` of `owner`: the sign (dust and smoke,
     // or by night a flash) and the trail the missile will lay (extended by TrailHead or a synthetic flight). `night`: the
     // sign is a flash of a second or two.
-    void Launch(int launch_id, const std::string& owner, const Vec3& site, double now_s, bool night) {
+    // `what`: the class the eye gives it by its size and smoke (roadmap B4): "SAM" (the Osa's size), "large SAM",
+    // "shoulder SAM".
+    void Launch(int launch_id, const std::string& owner, const Vec3& site, double now_s, bool night, const std::string& what = "SAM") {
         const PerceptionData& d = hub.Data();
         VisibleEvent sign;
         sign.kind = SightKind::LaunchSign;
-        sign.what = "SAM launch";
+        sign.what = what + " launch";
         sign.owner = owner;
         sign.pos = site;
         sign.start_s = now_s;
@@ -47,7 +49,7 @@ public:
         hub.AddEvent(sign);
         VisibleEvent trail;
         trail.kind = SightKind::Trail;
-        trail.what = "SAM trail";
+        trail.what = what + " trail";
         trail.owner = owner;
         trail.pos = site;
         trail.start_s = now_s;

@@ -5,6 +5,13 @@ memory of a picture (`simcore/air_war/perception.hpp`, `docs/air_battle/03_PERCE
 Navy models (`nwc_tp5709_1974` for aircraft, `nwc_tp6005_1978` for ground targets) where they give a number, a labelled game
 value where they do not.
 
+`reactions.json` (track B, B4) is the pilots' reactions under fire (`simcore/reactions.hpp`, `simcore/reaction_chain.hpp`,
+`docs/air_battle/04_REACTIONS.md`): the skill tiers (delay, no reaction, dispense misuse), the values (stress, the
+manoeuvres, chaff and flares, going round, the flight's decision), the receivers' names by threat class, our fighters by
+model, and one profile per faction (its rows: manoeuvre, countermeasure, and the flight's jettison, press-on and abort
+shares). Each value cites its source or says it is a game value or an estimate. A target names its profile in
+`"reactions"`.
+
 One file per system with the game-balance numbers used by `simcore/engagement.hpp`: when zone lamps light, how close
 an operator must aim for the tracking radar to capture, how fast NPC crew turn the wheels, how long a missile takes
 to arrive, and the chance of a hit.

@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <map>
 #include <random>
@@ -194,6 +195,10 @@ struct EngagementTuning {
     std::map<std::string, double> method_factor;
     // A missile launched with no range known and ПОМЕХА off: the fuse is armed by range, and there is none (1 = no effect).
     double no_range_fuse_factor = 1.0;
+    // The manoeuvre counts over the last manoeuvre_window_s before the missile's arrival only (roadmap B4,
+    // docs/air_battle/04_REACTIONS.md 6.3: a pull in the last seconds gains most, a break flown at launch little).
+    // 0: over the whole flight (as before).
+    double manoeuvre_window_s = 0.0;
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
@@ -499,7 +504,8 @@ public:
         }
         if (!Group(root, "outcome",
                    {"hit_chance", "low_altitude", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
-                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor"},
+                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor",
+                    "manoeuvre_window_s"},
                    g) ||
             !Factor(*g, "tv_factor", t.tv_factor) || !Factor(*g, "outside_zone_factor", t.outside_zone_factor) ||
             !Num(*g, "outcome", "manoeuvre_penalty_per_deg_s", t.manoeuvre_penalty_per_deg_s, 0.0) ||
@@ -535,6 +541,7 @@ public:
             }
         }
         if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
+        if (g->Find("manoeuvre_window_s") != nullptr && !Num(*g, "outcome", "manoeuvre_window_s", t.manoeuvre_window_s, 0.0)) return false;
         if (!LoadLowAltitude(*g, t)) return false;
         if (root.Find("kill_assessment") != nullptr && !LoadKillAssessment(root, t.kill)) return false;
         if (root.Find("group") != nullptr && !LoadGroup(root, t.group)) return false;
@@ -1041,6 +1048,12 @@ public:
         qc_commanded_deg_ = Wrap360(qc_deg);
     }
     void ClearCommandedQc() { qc_known_ = false; }
+    // A target's pilot dispensed chaff at `t_s` (roadmap B4, without the EM layer): a missile reaching it within
+    // `window_s` after has its chance times `factor`.
+    void NoteChaff(const std::string& target_id, double t_s, double factor, double window_s) { chaff_[target_id] = ChaffNote{t_s, factor, window_s}; }
+    // Damage states (roadmap R1, B4): asked at each hit whether it leaves the aircraft flying on, heavily damaged (the
+    // runner draws it); unset, every hit destroys.
+    void SetHitSurvives(std::function<bool(const std::string&, int)> f) { hit_survives_ = std::move(f); }
     bool QcKnown() const { return qc_known_; }
     double CommandedQcDeg() const { return qc_commanded_deg_; }
     // The site's latitude (degrees, north positive), for the gyro's drift, and the gyro's own drift (deg/h, signed).
@@ -1388,7 +1401,8 @@ private:
                                    MeetingOf(console, s.target_id, g)});
                 continue;
             }
-            if (g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
+            const bool in_window = tuning_.manoeuvre_window_s <= 0.0 || t + 1e-9 >= s.launch_t + s.flight_time_s - tuning_.manoeuvre_window_s;
+            if (in_window && g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
             if (t + 1e-9 < s.launch_t + s.flight_time_s) continue;
             if (s.out_of_reach) {
                 Finish(s, false);
@@ -1416,7 +1430,11 @@ private:
             const double guidance = tuning_.MethodFactor(EngagementTuning::ToString(s.guidance));
             const bool unfused = !s.range_known && s.guidance != EngagementTuning::GuidanceMethod::Jammer;
             const double fuse = unfused ? tuning_.no_range_fuse_factor : 1.0;
-            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse;
+            // Chaff the target dispensed in the window before the missile's arrival (roadmap B4; without the EM layer).
+            double chaff = 1.0;
+            const auto ch = chaff_.find(s.target_id);
+            if (ch != chaff_.end() && ch->second.t_s <= t + 1e-9 && t - ch->second.t_s <= ch->second.window_s) chaff = ch->second.factor;
+            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse * chaff;
             char aim_text[160] = "";  // only a TV shot is aimed by hand
             if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
                 std::snprintf(aim_text, sizeof(aim_text), " x TV aim %.2f (%.2f deg off the crosshair)", aim, aim_error_deg);
@@ -1429,19 +1447,29 @@ private:
                 const std::size_t n = std::strlen(aim_text);
                 std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fuse %.2f (no range, ПОМЕХА off)", fuse);
             }
+            if (chaff != 1.0) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x chaff %.2f", chaff);
+            }
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
+            // With damage states (roadmap R1, B4) a hit may leave it heavily damaged and flying on (the runner's draw).
+            const bool survives = hit && hit_survives_ && hit_survives_(s.target_id, s.number);
             char detail[480];
             std::snprintf(detail, sizeof(detail),
                           "%s: chance %.2f = %s %.2f x %s track %.2f x zone %.2f x manoeuvre %.2f (%.0f deg/s) x "
                           "crew %.2f (%d mistakes) x height %.2f (%.0f m up)%s; draw %.2f",
                           hit ? "HIT" : "MISS", p, g.target_class.c_str(), base, ToString(s.method), method, zone,
                           manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim_text, draw);
+            if (survives) {
+                const std::size_t n = std::strlen(detail);
+                std::snprintf(detail + n, sizeof(detail) - n, "; heavily damaged, it flies on");
+            }
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
             events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method,
                                std::string(), s.number, MeetingOf(console, s.target_id, g)});
-            if (hit) {
+            if (hit && !survives) {
                 Aircraft* a = TargetAircraft(world, targets, s.target_id);
                 if (a != nullptr) a->alive = false;
             }
@@ -2535,6 +2563,13 @@ private:
     double beam_turn_ = 0.0;
     std::size_t beam_step_ = 0;
     std::vector<Shot> shots_;
+    struct ChaffNote {
+        double t_s = 0.0;
+        double factor = 1.0;
+        double window_s = 0.0;
+    };
+    std::map<std::string, ChaffNote> chaff_;
+    std::function<bool(const std::string&, int)> hit_survives_;
     int hits_ = 0;
     int misses_ = 0;
     bool range_known_now_ = false;  // the system has a range for the tracked target (set each step)

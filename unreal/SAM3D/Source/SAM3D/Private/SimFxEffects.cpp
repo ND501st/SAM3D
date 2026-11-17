@@ -870,6 +870,9 @@ void FSimFxWorld::OnEvent(const simcore::fx::Event& E)
 	case EventKind::AircraftDamaged:
 		AircraftDamaged(E);
 		break;
+	case EventKind::ChaffDrop:
+	case EventKind::FlareDrop:
+		break;  // roadmap B4: not drawn yet (a chaff cloud and a flare string are Left)
 	}
 }
 

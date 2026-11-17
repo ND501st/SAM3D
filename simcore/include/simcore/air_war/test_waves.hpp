@@ -540,10 +540,12 @@ private:
             t.slot = k + 1;
             Slot(t, forms, k);
             if (!a.drone && !a.missile) {
-                t.evade.present = true;
-                t.evade.on = a.RwrEm(def_->theatre.year).empty() ? EvadeDef::On::Launch : EvadeDef::On::Lock;
-                t.evade.kind = a.helicopter ? EvadeDef::Kind::Dive : (low ? EvadeDef::Kind::Jink : EvadeDef::Kind::Break);
-                t.evade.turn_rate_rad_s = DegToRad(std::min(20.0, a.max_turn_deg_s * 1.5));
+                // Its pilot reacts by his faction's tables to what his picture holds (roadmap B4, 04_REACTIONS.md
+                // 12.3): the faction's id names its profile; countermeasures and tanks come by its type and the year.
+                t.reactions.on = true;
+                t.reactions.profile = f.id;
+                t.reactions.aircraft = a.id;
+                if (release_aim_m > 0.0) t.reactions.stores = load.first;
             }
             t.board_type = role == FlightRole::Jammer ? 0 : 9;
             t.seats = a.seats;

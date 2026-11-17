@@ -39,7 +39,8 @@ enum class Stream : std::uint64_t {
     AirRadio = 16,   // the enemy's calls and our intercept of them: one draw per call and listener (air_war/air_radio.hpp)
     Sight = 17,         // a pilot's glimpse draws and the offset of his perception tick (air_war/perception.hpp)
     SightError = 18,    // the eye's bearing and range errors
-    GroundAcquire = 19  // the ground law's draw, one per observer, object and pass
+    GroundAcquire = 19,  // the ground law's draw, one per observer, object and pass
+    Reaction = 20        // a pilot's reaction under fire: one draw per aircraft, cue and purpose (reactions.hpp)
 };
 
 inline std::uint64_t Mix64(std::uint64_t x) {
