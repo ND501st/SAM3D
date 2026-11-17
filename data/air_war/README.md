@@ -35,6 +35,19 @@ values are the `"c2"` group of `data/gameplay/air_war.json`; its `mode` 0 sets e
 campaign as before B5, for an old save's replay). Its officers come from the pool's ranks `cp_controller`,
 `gci_controller` and `fac`.
 
+Each faction file also has an `"opportunity_rules"` block (track B, B6; `docs/air_battle/06_OPPORTUNITY.md`, loaded into
+`FactionDef::opportunity` by `opportunity_def.hpp`): what its flights may do with what they find. Each rule is
+`{"value", "source", "confidence"}`: `tendency` (how readily a flight on another task acts, before the type's ease),
+`report_in_flight` (at once by radio, or at the debrief), `fired_on_may_attack` (the protective reaction: that site
+only), `night_hunt_clearance` (`ground_post`: a helicopter's night hunt waits for it), `own_troops_keepout_m`,
+`road_corridor_m` and `village_keepout_m` (0: off), `reattack`, `armed_recce` (`attack`, `free_hunt_zone` or
+`near_line` with `near_line_km`), `strike_on_task` (`report` or `attack`), `cas` (`fac` or `attack`), and NATO's
+`fscl_km` and `squadron_area_km`. Each aircraft type has an `"opportunity"` object: `ease` (0..1, how readily its crews
+change target: the A-10's 0.8, the F-111's 0.12) and `bingo_share`, with a source. In `weapons.json` a gun or rockets has
+a `"pass"`: `open_fire_m`, `dive_deg`, `burst_s`, `rounds`, `per_pass` (the chance one pass puts a thing of each class out
+of action), `catastrophic_share` and `moving_factor`, with a source (the GAU-8's from Array 20, `cdat_array20_1980`); the
+deliveries `strafe` and `gentle_dive` are flown as passes.
+
 ## Faction format (summary; `docs/air_war/01_FACTIONS.md` has it all)
 
 ```json

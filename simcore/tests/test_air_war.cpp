@@ -198,11 +198,13 @@ SC_TEST("air war: each adversary flies its own kind of war") {
     // NATO: most DEAD packages carry SEAD (one against a radar with no SAM known on its way goes without), and so does a
     // strike whose route meets a radar threat it knows of (one on a depot behind the lines, or loosing stand-off weapons
     // short of the target's own SAM, goes without); packages carry jamming; power plants and towns are off limits at the
-    // start. Judged over four campaigns: on Ubuntu one seed's maths library plans no strike that meets a known radar.
+    // start. Judged over sixteen campaigns: a strike that meets a known radar is rare (some 3 in 100 strikes over 24
+    // seeds, with and without B6's finds on the way), so four campaigns could hold none: on Ubuntu one seed's maths
+    // library plans none, and B6's columns found on the way move seeds 1-4 to none too (seeds 14 and 16 have them).
     {
         const AirWarData nato = Load("nato");
         std::vector<Package> ps;
-        for (unsigned seed = 1; seed <= 4; ++seed) {
+        for (unsigned seed = 1; seed <= 16; ++seed) {
             const std::vector<Package> one = PlanDays(nato, seed, 2.0);
             ps.insert(ps.end(), one.begin(), one.end());
         }
@@ -220,7 +222,7 @@ SC_TEST("air war: each adversary flies its own kind of war") {
                     dead_sead, strike, strike_sead, strike_no_arms, with_jam);
         SC_EXPECT(dead > 0 && dead_sead * 2 > dead && with_jam > 0);
         // A strike past a known radar takes SEAD, unless the DEAD packages have the ARMs. Built with GCC (Ubuntu's CI)
-        // these four campaigns plan no strike past a known radar at all (MSVC and Clang plan 3 of 33 with SEAD): not yet
+        // the first four campaigns planned no strike past a known radar at all (MSVC and Clang 3 of 33 with SEAD): not yet
         // understood, so there the reasons of a few strikes are printed instead of failing.
         if (strike_sead == 0 && strike_no_arms == 0) {
             int shown = 0;

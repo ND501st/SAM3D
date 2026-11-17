@@ -246,6 +246,9 @@ enum class Delivery {
     Level,      // level from medium or high altitude, above the guns and shoulder-fired missiles
     Standoff,   // a guided weapon launched from its range, turning away (Maverick, Kh-29, GBU-15)
     HoverFire,  // a helicopter unmasking from cover to fire missiles or rockets, then down again
+    // Roadmap B6 (docs/air_battle/06_OPPORTUNITY.md 5.2): the gun's and the rockets' passes, flown (attack_pass.hpp).
+    Strafe,      // a low-angle gun pass: the A-10's from the 1979 test, open fire at about 1.1 km in a 3 deg dive (cdat_array20_1980)
+    GentleDive,  // cannon and rockets from a shallow 10-25 deg dive, the Pact's conventional attack (mt_1970_bukhantsev)
     Count
 };
 constexpr int kDeliveries = static_cast<int>(Delivery::Count);
@@ -259,6 +262,8 @@ inline const char* DeliveryName(Delivery d) {
         case Delivery::Level: return "level";
         case Delivery::Standoff: return "standoff";
         case Delivery::HoverFire: return "hover_fire";
+        case Delivery::Strafe: return "strafe";
+        case Delivery::GentleDive: return "gentle_dive";
         case Delivery::Count: break;
     }
     return "?";
@@ -277,7 +282,8 @@ inline bool ParseDelivery(const std::string& s, Delivery& out) {
 
 // Whether a delivery is flown from low level (the transit profile Low) or from medium altitude and above.
 inline bool DeliveryIsLow(Delivery d) {
-    return d == Delivery::Laydown || d == Delivery::Loft || d == Delivery::PopUp || d == Delivery::HoverFire;
+    return d == Delivery::Laydown || d == Delivery::Loft || d == Delivery::PopUp || d == Delivery::HoverFire || d == Delivery::Strafe ||
+           d == Delivery::GentleDive;
 }
 
 // What an aim point of a target is, as the weapons see it (docs/air_war/10_WEAPONS.md).

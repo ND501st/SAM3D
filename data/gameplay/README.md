@@ -104,6 +104,13 @@ jammed hop's retry, the depth of BAI, how far an officer's traits bend a post's 
 posts' cover of a low flight, the spread of a FAC's and a pilot's report, the reach of hunters and diverts, our
 listeners' chance, a second report's wait, the corps' refusal and a FAC's requests per hour; the posts, authority, hop
 times and alert shares themselves are each faction's `"c2"` block in `data/air_war/`, with sources.
+The `"opportunity"` group (track B, B6, `simcore/air_war/opportunity.hpp`, `docs/air_battle/06_OPPORTUNITY.md`): targets
+of opportunity, its switch (`mode`: 0 as before B6, kept so an old save replays), the leader's tick, identification
+time and misidentification, the room a pass needs, the slot's slack, the gun's burst under fire, re-attacks, the bounds
+of the traits' and pilots' moves, the threat's radius and age, the claims by day and night, a report's spread, the
+pass's run-in, find, recovery and trail distances, and the abstract level's find scale and a column's hit and guns.
+The `"delivery"` group gains `strafe` and `gentle_dive` (their CEP, exposure, release, and the gentle dive's pull-up,
+apex and release heights).
 Every key is listed with its default in `TuningTable::Defaults` (`simcore/air_war/data.hpp`); an unknown key fails the
 load and `test_air_war` checks the file names them all.
 

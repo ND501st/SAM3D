@@ -1124,6 +1124,13 @@ private:
                     add(rq.target - dir * room(tune_.Get("delivery.dive_roll_in_m")), agl_, "roll_in");
                     release_agl = std::min(agl_, tune_.Get("delivery.dive_release_m"));
                     break;
+                case Delivery::GentleDive: {  // roadmap B6: a shallow climb to a low apex and a 10-25 deg dive (mt_1970_bukhantsev)
+                    const double pull = room(tune_.Get("delivery.gentle_dive_pull_m"));
+                    add(rq.target - dir * pull + side * 800.0, agl_, "pull_up");
+                    add(rq.target - dir * (0.5 * (pull + rs)) + side * 400.0, tune_.Get("delivery.gentle_dive_apex_m"), "apex");
+                    release_agl = tune_.Get("delivery.gentle_dive_release_m");
+                    break;
+                }
                 default: break;
             }
         } else if (rq.delivery == Delivery::HoverFire) {
