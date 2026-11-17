@@ -607,9 +607,26 @@ the releases.
 launches fell from 6 to 3 and the kills from 24 to 14: in the testbed's 900 s the defences launched about a third less
 (114 to 76 lines), aircraft brought down by the neighbours fell from 13 to 6, the pilots broke, jinked, dived and pulled
 late (about 500 manoeuvres, 130 chaff and 15 flare salvoes), 22 jettisons replaced 7 and the loads released fell from 6
-to 4 or 5; 3 aborts and a go-round. `ground_check data 3600`: PASS, 0 of 15. The testbed hour costs more: 122 s wall
-before, 217 s after (3600 s simulated, timed back to back on one machine), from aircraft living longer, more pilots
-diving (perception's fast rate) and chaff clouds in the EM layer; not yet profiled by part.
+to 4 or 5; 3 aborts and a go-round. `ground_check data 3600`: PASS, 0 of 15.
+
+**The testbed hour's cost, profiled** (18 Nov 2026). The first timing (122 s before, 217 s after, run back to back) was
+partly the machine's other load. Run side by side, so that both share it, and read as process CPU time, the hour costs
+133 s before and 170 s after (+28%), or 159 s and 213 s in a busier run (+34%). Timers round each part of the runner's
+step and the EM world's phases, with counters, put the extra 37 s here:
+
+| Part | Before | After | Why |
+|---|---|---|---|
+| ESM (the aircraft's warning receivers) | 38 s | 54 s | aircraft with a receiver fly 58% longer (307,000 to 484,000 aircraft-steps; all aircraft only +8%): they break, dispense and turn home instead of being shot down. ESM site-runs rose by the same 56%. 49 of the 52 s is the path profile (`LinkLossCached`), and 77% of evaluations are real intercepts, so no exact cull is left. |
+| Perception | 17 s | 29 s | defensive ticks at 5 Hz (`03_PERCEPTION.md` §5.3) rose from 8,500 to 163,000: a reacting pilot is evading 43% of his flying time. The cost per tick barely moved (66 to 74 µs). |
+| The rest of the engagement model | 48 s | 53 s | more targets alive |
+| Radars (chaff in the cell, chaff's ghost echoes) | 2.7 s | 4.2 s | about 5.6 clouds alive on average |
+| The flights, the radio calls (`UpdateTargets`) and the reaction chain (`UpdateReactions`) | 7.0 s | 8.5 s | the chain itself 0.4 s |
+
+The growth is in how often things happen, not in what each costs. One exact saving is made: a perception tick's
+`Age` sorted the picture's keys once instead of searching the picture for every object held (-3 s in the hour). The
+testbed's trace is byte-identical. What would save more changes outcomes, so it is left to a decision: capping the
+defensive rate at the threat rate (2 Hz) would save about 7 s, and the EM layer's ESM period at 0.4 s instead of 0.2 s
+about 25 s, both in this hour. Culling chaff early would save under 1.5 s.
 
 **Shortcuts.** A hand-written `"evade"` still flies its old code (`CueTarget`), not a scripted profile: the 15 files play
 as before and `test_threats.cpp` is unchanged. The late-window factor (`manoeuvre_window_s`) exists but is 0 (the whole
