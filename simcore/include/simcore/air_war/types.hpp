@@ -373,7 +373,8 @@ inline const char* WeatherName(Weather w) {
 }
 
 // Where an item of the enemy's knowledge came from (docs/air_war/03_INTELLIGENCE.md).
-enum class IntelSource { None, Satellite, AirRecce, Elint, Comint, Humint, PilotReport, LaunchSighting, Prior };
+// InFlightReport (roadmap B5): a flight's report in the air through a post, there in minutes (c2.hpp).
+enum class IntelSource { None, Satellite, AirRecce, Elint, Comint, Humint, PilotReport, LaunchSighting, Prior, InFlightReport };
 
 inline const char* IntelSourceName(IntelSource s) {
     switch (s) {
@@ -386,6 +387,7 @@ inline const char* IntelSourceName(IntelSource s) {
         case IntelSource::PilotReport: return "pilot reports";
         case IntelSource::LaunchSighting: return "launch sighting";
         case IntelSource::Prior: return "pre-war survey";
+        case IntelSource::InFlightReport: return "in-flight report";
     }
     return "?";
 }

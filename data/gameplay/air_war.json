@@ -95,6 +95,13 @@
     "reveal_per_observation": 0.12, "pow_chance": 0.4, "warning_s": 300.0, "leak_warning_s": 900.0,
     "notes": "What the player's side learns: a prisoner talks with pow_chance; the warning net gives warning_s before the first aircraft, leak_warning_s when the enemy's planner has loose lips."
   },
+  "c2": {
+    "mode": 1, "step_h": 0.0833333333, "retry_s": 60.0, "max_retries": 3.0, "bai_depth_m": 30000.0, "trait_bound": 0.2, "commit_risk": 0.15,
+    "low_cover": 0.4, "fac_sigma_m": 300.0, "report_sigma_m": 700.0, "hunter_reach_m": 30000.0, "divert_reach_m": 40000.0,
+    "intercept": 0.3, "intercept_reach_m": 60000.0, "second_report_h": 0.5, "second_report_m": 3000.0, "army_refusal": 0.1,
+    "fac_request_per_h": 0.1,
+    "notes": "Game values of the command in the air (air_war/c2.hpp, track B, B5; docs/air_battle/05_C2_AND_RETASKING.md): mode 1 the posts and the packages flown in time, 0 as before B5 (a save of version 1 replays with it); the campaign's step while a package is airborne (step_h, 5 min), a jammed hop said again after retry_s up to max_retries, BAI within bai_depth_m of the front, a post officer's traits moving a decision by at most trait_bound, an alert pool committed below commit_risk of expected loss, a post's cover of a low flight (low_cover of its reach), the spread of a FAC's and a pilot's report (fac_sigma_m, report_sigma_m), hunters told within hunter_reach_m and flights diverted within divert_reach_m of a reported place, our listeners' chance (intercept, times 1 - the faction's opsec) within intercept_reach_m of the battery, a methodical officer's wait for a second report (second_report_h, second_report_m), the corps' refusal of a CAS divert (army_refusal) and a FAC's requests per hour with our troops in sight (fac_request_per_h). The posts, their authority, hops' times and alert shares are the factions' \"c2\" blocks, with their sources."
+  },
   "route": {
     "mode": 1, "start_before_gate_m": 80000.0, "bend_deg": 30.0, "fallback_grid_m": 15000.0, "view_step_m": 1000.0, "mask_antenna_m": 6.0,
     "final_cone_m": 20000.0, "corridor_share": 0.35, "corridor_min_m": 30000.0, "max_features": 120, "neighbours": 8, "min_leg_turns": 1.5,

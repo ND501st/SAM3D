@@ -119,33 +119,171 @@ inline std::vector<LegPiece> ResolvedPieces(const RoutePoint& r0, const RoutePoi
     return out;
 }
 
+// What a package does in the air that its own side can hear of (roadmap B5, docs/air_battle/05_C2_AND_RETASKING.md
+// §4.6): a launch its aircraft saw, a loss, a column found, a release, the package turning back. The abstract command
+// posts (c2.hpp) read them as their flights' reports; each is dated when it happened.
+struct AirEvent {
+    enum class Kind { LaunchSeen, Loss, ColumnFound, Release, TurnedBack };
+    Kind kind = Kind::LaunchSeen;
+    double t_h = 0.0;
+    int flight = -1;        // index into the package's flights
+    std::string object_id;  // the defence that fired, the column found, the target
+    Vec3 where;             // where it happened (the defence's place, the column's)
+    int alive = 0;          // the flight's aircraft still flying then (somebody to report it)
+};
+
+// A package in the air (roadmap B5, A0): walked leg by leg in the order of time, so it has a place at every hour and its
+// posts can act while it flies. Resolver::Begin sets it up, Resolver::StepTo walks every leg that ends by then.
+struct PackageRun {
+    PackageOutcome out;
+    Rng rng{1};
+    Rng* ext = nullptr;  // draw from this stream instead (Resolver::Resolve: the caller's)
+    std::vector<double> suppressed;  // 0..1 how much each radar was suppressed
+    std::vector<bool> engaged;
+    bool abort_now = false;
+    std::vector<std::size_t> order;     // the flights by their time over the target (decoys and SEAD first)
+    std::vector<std::size_t> next_leg;  // per flight: the leg it flies next (its route's size: done)
+    std::vector<int> arms_left;
+    std::vector<AirEvent> events;       // since the last read (the posts take them)
+    // The route planner's routes (route.mode 1, roadmap B2): one engagement a pass through a defence's reach however many
+    // legs it takes (each flight's chord carried on to the pass's end, with the nearest it came for the ARMs), a low flight
+    // seen only where the ground lets the site see it, and the corps' suppression at the package's gate.
+    bool routed = false;
+    bool on_ground = false;
+    std::vector<double> corridor_supp;
+    std::vector<std::vector<double>> pending;       // per flight, per object
+    std::vector<std::vector<double>> pending_dist;  // per flight, per object
+    double supp_base = 0.0;
+    double airmanship = 0.5;
+    double nerve = 0.5;
+    int package_size = 1;
+    bool jam = false;
+    bool begun = false;
+
+    Rng& R() { return ext != nullptr ? *ext : rng; }
+    bool FlightDone(const Package& p, std::size_t fi) const { return next_leg[fi] + 1 >= p.flights[fi].route.size(); }
+    bool Done(const Package& p) const {
+        for (std::size_t fi = 0; fi < p.flights.size() && fi < next_leg.size(); ++fi) {
+            if (!FlightDone(p, fi)) return false;
+        }
+        return true;
+    }
+    // Where a flight is at `t_h` on its route (its last point past the end).
+    static Vec3 PlaceOf(const Flight& fl, double t_h) {
+        if (fl.route.empty()) return Vec3{};
+        for (std::size_t i = 0; i + 1 < fl.route.size(); ++i) {
+            const RoutePoint& a = fl.route[i];
+            const RoutePoint& b = fl.route[i + 1];
+            if (t_h > b.t_h) continue;
+            if (t_h <= a.t_h || b.t_h <= a.t_h) return a.pos;
+            return a.pos + (b.pos - a.pos) * ((t_h - a.t_h) / (b.t_h - a.t_h));
+        }
+        return fl.route.back().pos;
+    }
+};
+
+// Send a flight in the air somewhere new from where it is now (a post's divert, a hunter's own leave: roadmap B5): its
+// route from the leg it flies goes from its place at `now_h` to `place` and then on to the rest of its route (its last
+// point, with `release_there`: its weapons are for the new place), the times moved by the detour at `speed_mps`.
+inline bool RedirectFlight(Package& p, PackageRun& run, std::size_t fi, const Vec3& place, double now_h, double speed_mps, bool release_there) {
+    if (fi >= p.flights.size() || fi >= run.next_leg.size() || run.FlightDone(p, fi) || speed_mps <= 0.0) return false;
+    Flight& fl = p.flights[fi];
+    const std::size_t si = run.next_leg[fi];
+    const RoutePoint& r0 = fl.route[si];
+    if (now_h < r0.t_h) now_h = r0.t_h;
+    RoutePoint here;
+    here.pos = PackageRun::PlaceOf(fl, now_h);
+    here.pos.z = r0.pos.z;
+    here.agl_m = r0.agl_m;
+    here.t_h = now_h;
+    here.tag = "divert";
+    RoutePoint there = here;
+    there.pos = Vec3{place.x, place.y, r0.pos.z};
+    there.t_h = now_h + Dist2d(here.pos, there.pos) / speed_mps / 3600.0;
+    there.tag = release_there ? "target" : "divert";
+    std::vector<RoutePoint> route(fl.route.begin(), fl.route.begin() + static_cast<std::ptrdiff_t>(si + 1));
+    route.push_back(here);
+    route.push_back(there);
+    if (release_there) {
+        RoutePoint home = fl.route.back();
+        home.t_h = there.t_h + Dist2d(there.pos, home.pos) / speed_mps / 3600.0;
+        route.push_back(home);
+        fl.release_index = static_cast<int>(si + 2);
+        fl.aim_pos = there.pos;
+        fl.released = false;
+    } else {
+        // On to where it was going, late by the detour.
+        const std::size_t next = si + 1;
+        const double back_h = there.t_h + Dist2d(there.pos, fl.route[next].pos) / speed_mps / 3600.0;
+        const double shift = std::max(0.0, back_h - fl.route[next].t_h);
+        for (std::size_t k = next; k < fl.route.size(); ++k) {
+            RoutePoint q = fl.route[k];
+            q.t_h += shift;
+            route.push_back(q);
+        }
+        if (fl.release_index > static_cast<int>(si)) fl.release_index += 2;
+    }
+    fl.route = route;
+    return true;
+}
+
 class Resolver {
 public:
-    PackageOutcome Resolve(Package& p, ResolveContext& c) {
-        c_ = &c;
-        PackageOutcome out;
-        out.package_id = p.id;
-        out.truth_applied = true;
+    // The whole package at once, drawing from `c.rng` (the bench's and the tests' way; the campaign steps it in time).
+    // `by_flight`: each flight's whole route before the next's, in the order over the target, as the resolver walked them
+    // before roadmap B5 (a campaign replaying a save of version 1, c2.mode 0); else every leg in the order of time.
+    PackageOutcome Resolve(Package& p, ResolveContext& c, bool by_flight = false) {
+        PackageRun run;
+        Begin(p, c, run, Rng(1));
+        run.ext = c.rng;
+        if (by_flight) {
+            for (std::size_t i = 0; i < run.order.size(); ++i) run.order[i] = i;
+            std::sort(run.order.begin(), run.order.end(), [&](std::size_t a, std::size_t b) {
+                return TargetTime(p.flights[a]) < TargetTime(p.flights[b]);
+            });
+            c_ = &c;
+            run_ = &run;
+            for (const std::size_t fi : run.order) {
+                while (!run.FlightDone(p, fi)) Leg(p, fi);
+            }
+        } else {
+            StepTo(p, c, run, 1e18);
+        }
+        run.ext = nullptr;
+        p.resolved = true;
+        return run.out;
+    }
+
+    // A package taking off: its draws from `rng` (a fork keyed by the package: interleaving packages in time changes none
+    // of one package's draws).
+    void Begin(Package& p, ResolveContext& c, PackageRun& run, Rng rng) {
         const AirWarData& d = *c.data;
-        const TuningTable& tune = d.tuning;
-        const FactionDef& f = d.faction;
-        const FrontDef* front = d.theatre.FrontFor(f.front);
-        const bool jam = p.Has(FlightRole::Jammer);
-        const double supp_base = PackageSuppression(p, *c.staff, tune);
-        const double airmanship = PackageAirmanship(p, *c.staff);
-        // The leader's nerve: the share of the package he will lose before turning back.
-        const double nerve = PackageNerve(p, *c.staff);
-        const int package_size = std::max(1, p.Aircraft());
-        std::vector<double> suppressed(d.theatre.objects.size(), 0.0);  // 0..1 how much each radar was suppressed
-        std::vector<bool> engaged(d.theatre.objects.size(), false);
-        bool abort_now = false;
+        run = PackageRun();
+        run.rng = rng;
+        run.out.package_id = p.id;
+        run.out.truth_applied = true;
+        run.jam = p.Has(FlightRole::Jammer);
+        run.supp_base = PackageSuppression(p, *c.staff, d.tuning);
+        run.airmanship = PackageAirmanship(p, *c.staff);
+        run.nerve = PackageNerve(p, *c.staff);  // the share of the package he will lose before turning back
+        run.package_size = std::max(1, p.Aircraft());
+        run.suppressed.assign(d.theatre.objects.size(), 0.0);
+        run.engaged.assign(d.theatre.objects.size(), false);
+        // Decoys and SEAD go first in time; a tie keeps the plan's order.
+        run.order.resize(p.flights.size());
+        for (std::size_t i = 0; i < run.order.size(); ++i) run.order[i] = i;
+        std::stable_sort(run.order.begin(), run.order.end(), [&](std::size_t a, std::size_t b) {
+            return TargetTime(p.flights[a]) < TargetTime(p.flights[b]);
+        });
         // The route planner's routes (route.mode 1): a defence engages once a pass however many legs the pass takes, sees a
         // low flight only where the ground lets it, and the corps suppresses the defences at a gate where the land forces
         // face each other when the package asked for it (jsead_1982).
-        const bool routed = tune.Get("route.mode") >= 1.0;
-        const bool on_ground = routed && c.ground != nullptr && c.ground->HasGround();
-        std::vector<double> corridor_supp(d.theatre.objects.size(), 0.0);
-        if (routed && p.corridor_suppression && front != nullptr) {
+        const TuningTable& tune = d.tuning;
+        const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+        run.routed = tune.Get("route.mode") >= 1.0;
+        run.on_ground = run.routed && c.ground != nullptr && c.ground->HasGround();
+        run.corridor_supp.assign(d.theatre.objects.size(), 0.0);
+        if (run.routed && p.corridor_suppression && front != nullptr) {
             for (const EntryPoint& g : front->entries) {
                 if (g.id != p.entry) continue;
                 bool land = false;
@@ -157,191 +295,255 @@ public:
                     }
                 }
                 for (std::size_t oj = 0; land && oj < d.theatre.objects.size(); ++oj) {
-                    if (Dist2d((*c.truth)[oj].pos, g.pos) < tune.Get("route.corridor_halfwidth_m")) corridor_supp[oj] = tune.Get("route.corridor_suppression");
+                    if (Dist2d((*c.truth)[oj].pos, g.pos) < tune.Get("route.corridor_halfwidth_m")) run.corridor_supp[oj] = tune.Get("route.corridor_suppression");
                 }
             }
         }
+        const std::size_t per = run.routed ? d.theatre.objects.size() : 0;
+        run.pending.assign(p.flights.size(), std::vector<double>(per, 0.0));
+        run.pending_dist.assign(p.flights.size(), std::vector<double>(per, 1e18));
+        run.next_leg.assign(p.flights.size(), 0);
+        run.arms_left.assign(p.flights.size(), 0);
+        for (std::size_t fi = 0; fi < p.flights.size(); ++fi) {
+            const Flight& fl = p.flights[fi];
+            run.arms_left[fi] = fl.arms;
+            if (d.faction.Aircraft(fl.aircraft) == nullptr || fl.count <= 0) run.next_leg[fi] = fl.route.empty() ? 0 : fl.route.size() - 1;
+        }
+        run.begun = true;
+    }
 
-        // Decoys and SEAD go first in time; walk flights in order of their time over the target.
-        std::vector<std::size_t> order(p.flights.size());
-        for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
-        std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
-            return TargetTime(p.flights[a]) < TargetTime(p.flights[b]);
-        });
-        for (std::size_t oi : order) {
-            Flight& fl = p.flights[oi];
-            const AircraftType* a = f.Aircraft(fl.aircraft);
-            if (a == nullptr || fl.count <= 0) continue;
-            int alive = fl.count - fl.lost;
-            const bool main = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
-            int arms_left = fl.arms;
-            const int fighter_leg = FighterLeg(fl.route);
-            const bool masked = on_ground && (fl.profile == Profile::Low || a->helicopter);
-            std::vector<double> pending(routed ? d.theatre.objects.size() : 0, 0.0), pending_dist(routed ? d.theatre.objects.size() : 0, 1e18);
-            for (std::size_t si = 0; si + 1 < fl.route.size() && alive > 0; ++si) {
-                const RoutePoint& r0 = fl.route[si];
-                const RoutePoint& r1 = fl.route[si + 1];
-                const bool before_release = fl.release_index < 0 || static_cast<int>(si) < fl.release_index;
-                if (main && abort_now && before_release) {
-                    fl.aborted = true;
-                    break;
-                }
-                const std::vector<LegPiece> pieces = ResolvedPieces(r0, r1, c);
-                for (std::size_t pi = 0; pi < pieces.size(); ++pi) {
-                    const LegPiece& piece = pieces[pi];
-                    const Vec3 p0 = piece.a <= 0.0 ? r0.pos : r0.pos + (r1.pos - r0.pos) * piece.a;
-                    const Vec3 p1 = piece.b >= 1.0 ? r1.pos : r0.pos + (r1.pos - r0.pos) * piece.b;
-                    for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
-                        const TheatreObject& def = d.theatre.objects[oj];
-                        ObjectState& st = (*c.truth)[oj];
-                        if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
-                        if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
-                        if (st.missiles == 0) continue;
-                        if (def.defence.max_target_mps > 0.0 && a->cruise_mps > def.defence.max_target_mps) continue;  // too fast for it
-                        double chord = ChordInCircle2d(p0, p1, st.pos, def.defence.radius_m);
-                        double arm_dist = -1.0;
-                        if (routed) {
-                            if (chord > 0.0 && masked) {
-                                chord = c.ground->Seen(def.id, st.pos, def.defence.radius_m, p0, p1, r0.agl_m + (r1.agl_m - r0.agl_m) * piece.a,
-                                                       r0.agl_m + (r1.agl_m - r0.agl_m) * piece.b, true);
-                            }
-                            if (chord > 0.0) {
-                                const double dist = SegmentDistance2d(st.pos, p0, p1);
-                                // The pass goes on into the next leg: one engagement for the whole pass, where it ends.
-                                const bool last_piece = pi + 1 == pieces.size();
-                                const bool at_release = static_cast<int>(si + 1) == fl.release_index;
-                                if (last_piece && !at_release && si + 2 < fl.route.size()) {
-                                    const RoutePoint& r2 = fl.route[si + 2];
-                                    double next = ChordInCircle2d(r1.pos, r2.pos, st.pos, def.defence.radius_m);
-                                    if (next > 0.0 && masked) next = c.ground->Seen(def.id, st.pos, def.defence.radius_m, r1.pos, r2.pos, r1.agl_m, r2.agl_m, true);
-                                    if (next > 0.0) {
-                                        pending[oj] += chord;
-                                        pending_dist[oj] = std::min(pending_dist[oj], dist);
-                                        continue;
-                                    }
-                                }
-                                chord += pending[oj];
-                                arm_dist = std::min(pending_dist[oj], dist);
-                            }
-                            pending[oj] = 0.0;
-                            pending_dist[oj] = 1e18;
-                        }
-                        if (chord <= 0.0) continue;
-                        const bool radar = def.defence.radar;
-                        const bool emcon = def.player ? c.posture->fight_silent : false;
-                        // A radar defence radiates while it engages (not under EMCON): ELINT hears it; SEAD fires at it.
-                        if (radar && !emcon) {
-                            out.AddEmission(def.id, chord / std::max(50.0, a->cruise_mps) + 30.0);
-                            if (arms_left > 0 && (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter)) {
-                                const double dist = arm_dist >= 0.0 ? arm_dist : SegmentDistance2d(st.pos, p0, p1);
-                                if (dist <= a->arm_range_m) {
-                                    FireArms(fl, *a, def, st, arms_left, out, suppressed[oj]);
-                                }
-                            }
-                        }
-                        if (a->drone && fl.role == FlightRole::Decoy) {
-                            // A decoy draws fire: the defence wastes rounds and shows itself, and the SEAD behind the
-                            // decoys knows where to aim (the Bekaa, 1982).
-                            if (!engaged[oj]) {
-                                engaged[oj] = true;
-                                Spend(st, 1 + c.rng->Index(2), out);
-                                if (radar && supp_base > 0.0) suppressed[oj] = std::max(suppressed[oj], tune.Get("attrition.decoy_exposure"));
-                                out.fired.push_back(def.id);
-                                if (c.rng->Chance(0.6)) ++fl.lost;  // drones are meant to be lost; not counted as losses
-                            }
-                            continue;
-                        }
-                        double env = 1.0;
-                        if (!radar && p.part == DayPart::Night) env *= tune.Get("attrition.night");
-                        if (!radar && c.weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");
-                        if (emcon) env *= tune.Get("attrition.emcon_lethality");
-                        double supp = radar && !emcon ? std::max(supp_base, suppressed[oj]) : 0.0;
-                        if (radar && !emcon && routed) supp = std::max(supp, corridor_supp[oj]);
-                        if (st.function < 1.0) env *= st.function;
-                        const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
-                                                        def.defence.low_cover, def.defence.medium_cover, radar, supp,
-                                                        jam && radar ? tune.Get("attrition.jamming") : 0.0, env,
-                                                        Clamp01(a->evasion + 0.3 * (airmanship - 0.5)), tune, masked);
-                        if (k <= 0.0) continue;
-                        engaged[oj] = true;
-                        int shots = 0;
-                        for (int n = 0; n < EngagedAircraft(def.defence.channels, st.function, alive); ++n) {
-                            ++shots;
-                            if (a->missile) {
-                                // A cruise missile shot down: the defence's, never a crew lost.
-                                if (c.rng->Chance(k)) {
-                                    ++fl.lost;
-                                    out.missiles_downed.push_back(def.id);
-                                }
-                                continue;
-                            }
-                            if (c.rng->Chance(k)) {
-                                LossRecord lr;
-                                lr.flight = static_cast<int>(oi);
-                                lr.by = def.id;
-                                double along = 0.0;
-                                SegmentDistance2d(st.pos, p0, p1, &along);
-                                lr.where = p0 + (p1 - p0) * along;
-                                lr.officer = fl.officer >= 0 && fl.lost == 0;
-                                lr.captured = c.rng->Chance(0.5);
-                                out.losses.push_back(lr);
-                                ++fl.lost;
-                            } else if (c.rng->Chance(0.5 * k)) {
-                                ++fl.damaged;
-                                ++out.damaged;
-                            }
-                        }
-                        alive = fl.count - fl.lost;
-                        if (shots > 0) {
-                            Spend(st, std::min(shots, 2), out);
-                            out.fired.push_back(def.id);
-                        }
-                    }
-                }
-                // The defender's fighters, where the package has no escort.
-                if (front != nullptr && main && static_cast<int>(si) == fighter_leg && alive > 0) {
-
-                    const double ff = front->friendly_fighters * (1.0 - tune.Get("support.awacs_fighter_cut") * Clamp01(c.awacs));
-                    const double pk = ff * tune.Get("attrition.escort_fighter_kill") *
-                                      (p.Has(FlightRole::Escort) ? 0.3 : 1.0) * (p.part == DayPart::Night ? 0.5 : 1.0);
-                    for (int n = 0; n < alive; ++n) {
-                        if (c.rng->Chance(pk)) {
-                            LossRecord lr;
-                            lr.flight = static_cast<int>(oi);
-                            lr.where = r1.pos;
-                            lr.officer = fl.officer >= 0 && fl.lost == 0;
-                            lr.captured = c.rng->Chance(0.5);
-                            out.losses.push_back(lr);
-                            ++fl.lost;
-                        }
-                    }
-                    alive = fl.count - fl.lost;
-                }
-                // The leader's nerve.
-                if (main && before_release && static_cast<double>(out.Lost()) / package_size >= nerve && !abort_now) {
-                    abort_now = true;
-                    out.aborted = true;
-                    out.notes.push_back("the package turned back after losing " + std::to_string(out.Lost()) + " of " +
-                                        std::to_string(package_size));
-                }
-                // Weapons at the release point.
-                if (static_cast<int>(si + 1) == fl.release_index && alive > 0 && !fl.aborted && !fl.released) {
-                    if (main || fl.role == FlightRole::Missile) {
-                        Deliver(p, fl, oi, *a, alive, airmanship, out);
-                        alive = fl.count - fl.lost;
-                    }
-                    if (fl.role == FlightRole::Recce) Photograph(fl, *a, out);
-                    fl.released = true;
+    // Walk every leg that ends by `t_h`, in the order of time (a tie: the flights' order over the target).
+    void StepTo(Package& p, ResolveContext& c, PackageRun& run, double t_h) {
+        c_ = &c;
+        run_ = &run;
+        for (;;) {
+            int best = -1;
+            double best_t = 0.0;
+            for (std::size_t k = 0; k < run.order.size(); ++k) {
+                const std::size_t fi = run.order[k];
+                if (run.FlightDone(p, fi)) continue;
+                const double te = p.flights[fi].route[run.next_leg[fi] + 1].t_h;
+                if (te > t_h) continue;
+                if (best < 0 || te < best_t) {
+                    best = static_cast<int>(fi);
+                    best_t = te;
                 }
             }
-            if (fl.role == FlightRole::Recce && !fl.released && fl.release_index < 0 && fl.lost < fl.count) Photograph(fl, *a, out);
+            if (best < 0) break;
+            Leg(p, static_cast<std::size_t>(best));
         }
-        p.resolved = true;
-        return out;
     }
 
 private:
     ResolveContext* c_ = nullptr;
+    PackageRun* run_ = nullptr;
+
+    Rng& R() { return run_->R(); }
+
+    void Event(AirEvent::Kind kind, double t_h, std::size_t fi, const std::string& id, const Vec3& where, int alive) {
+        AirEvent e;
+        e.kind = kind;
+        e.t_h = t_h;
+        e.flight = static_cast<int>(fi);
+        e.object_id = id;
+        e.where = where;
+        e.alive = alive;
+        run_->events.push_back(e);
+    }
+
+    // The flight is done with its route (shot down, turned back, home): reconnaissance without a release point
+    // photographs what was along it.
+    void Finish(Package& p, std::size_t fi) {
+        Flight& fl = p.flights[fi];
+        run_->next_leg[fi] = fl.route.empty() ? 0 : fl.route.size() - 1;
+        const AircraftType* a = c_->data->faction.Aircraft(fl.aircraft);
+        if (a != nullptr && fl.role == FlightRole::Recce && !fl.released && fl.release_index < 0 && fl.lost < fl.count) Photograph(fl, *a, run_->out);
+    }
+
+    // One leg of one flight: the defences it passes, the defender's fighters, the leader's nerve, the release.
+    void Leg(Package& p, std::size_t oi) {
+        ResolveContext& c = *c_;
+        PackageRun& run = *run_;
+        PackageOutcome& out = run.out;
+        const AirWarData& d = *c.data;
+        const TuningTable& tune = d.tuning;
+        const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+        Flight& fl = p.flights[oi];
+        const AircraftType* a = d.faction.Aircraft(fl.aircraft);
+        const std::size_t si = run.next_leg[oi];
+        int alive = fl.count - fl.lost;
+        if (a == nullptr || alive <= 0) {
+            Finish(p, oi);
+            return;
+        }
+        const bool main = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
+        int& arms_left = run.arms_left[oi];
+        const RoutePoint& r0 = fl.route[si];
+        const RoutePoint& r1 = fl.route[si + 1];
+        const bool before_release = fl.release_index < 0 || static_cast<int>(si) < fl.release_index;
+        if (main && run.abort_now && before_release) {
+            fl.aborted = true;
+            Finish(p, oi);
+            return;
+        }
+        const int fighter_leg = FighterLeg(fl.route);
+        const bool masked = run.on_ground && c.ground != nullptr && (fl.profile == Profile::Low || a->helicopter);
+        const std::vector<LegPiece> pieces = ResolvedPieces(r0, r1, c);
+        for (std::size_t pi = 0; pi < pieces.size(); ++pi) {
+            const LegPiece& piece = pieces[pi];
+            const Vec3 p0 = piece.a <= 0.0 ? r0.pos : r0.pos + (r1.pos - r0.pos) * piece.a;
+            const Vec3 p1 = piece.b >= 1.0 ? r1.pos : r0.pos + (r1.pos - r0.pos) * piece.b;
+            for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
+                const TheatreObject& def = d.theatre.objects[oj];
+                ObjectState& st = (*c.truth)[oj];
+                if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
+                if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
+                if (st.missiles == 0) continue;
+                if (def.defence.max_target_mps > 0.0 && a->cruise_mps > def.defence.max_target_mps) continue;  // too fast for it
+                double chord = ChordInCircle2d(p0, p1, st.pos, def.defence.radius_m);
+                double arm_dist = -1.0;
+                if (run.routed) {
+                    double& pending = run.pending[oi][oj];
+                    double& pending_dist = run.pending_dist[oi][oj];
+                    if (chord > 0.0 && masked) {
+                        chord = c.ground->Seen(def.id, st.pos, def.defence.radius_m, p0, p1, r0.agl_m + (r1.agl_m - r0.agl_m) * piece.a,
+                                               r0.agl_m + (r1.agl_m - r0.agl_m) * piece.b, true);
+                    }
+                    if (chord > 0.0) {
+                        const double dist = SegmentDistance2d(st.pos, p0, p1);
+                        // The pass goes on into the next leg: one engagement for the whole pass, where it ends.
+                        const bool last_piece = pi + 1 == pieces.size();
+                        const bool at_release = static_cast<int>(si + 1) == fl.release_index;
+                        if (last_piece && !at_release && si + 2 < fl.route.size()) {
+                            const RoutePoint& r2 = fl.route[si + 2];
+                            double next = ChordInCircle2d(r1.pos, r2.pos, st.pos, def.defence.radius_m);
+                            if (next > 0.0 && masked) next = c.ground->Seen(def.id, st.pos, def.defence.radius_m, r1.pos, r2.pos, r1.agl_m, r2.agl_m, true);
+                            if (next > 0.0) {
+                                pending += chord;
+                                pending_dist = std::min(pending_dist, dist);
+                                continue;
+                            }
+                        }
+                        chord += pending;
+                        arm_dist = std::min(pending_dist, dist);
+                    }
+                    pending = 0.0;
+                    pending_dist = 1e18;
+                }
+                if (chord <= 0.0) continue;
+                double along = 0.0;
+                SegmentDistance2d(st.pos, p0, p1, &along);
+                const double when_h = r0.t_h + (piece.a + along * (piece.b - piece.a)) * (r1.t_h - r0.t_h);
+                const bool radar = def.defence.radar;
+                const bool emcon = def.player ? c.posture->fight_silent : false;
+                // A radar defence radiates while it engages (not under EMCON): ELINT hears it; SEAD fires at it.
+                if (radar && !emcon) {
+                    out.AddEmission(def.id, chord / std::max(50.0, a->cruise_mps) + 30.0);
+                    if (arms_left > 0 && (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter)) {
+                        const double dist = arm_dist >= 0.0 ? arm_dist : SegmentDistance2d(st.pos, p0, p1);
+                        if (dist <= a->arm_range_m) {
+                            FireArms(fl, *a, def, st, arms_left, out, run.suppressed[oj]);
+                        }
+                    }
+                }
+                if (a->drone && fl.role == FlightRole::Decoy) {
+                    // A decoy draws fire: the defence wastes rounds and shows itself, and the SEAD behind the
+                    // decoys knows where to aim (the Bekaa, 1982).
+                    if (!run.engaged[oj]) {
+                        run.engaged[oj] = true;
+                        Spend(st, 1 + R().Index(2), out);
+                        if (radar && run.supp_base > 0.0) run.suppressed[oj] = std::max(run.suppressed[oj], tune.Get("attrition.decoy_exposure"));
+                        out.fired.push_back(def.id);
+                        if (R().Chance(0.6)) ++fl.lost;  // drones are meant to be lost; not counted as losses
+                    }
+                    continue;
+                }
+                double env = 1.0;
+                if (!radar && p.part == DayPart::Night) env *= tune.Get("attrition.night");
+                if (!radar && c.weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");
+                if (emcon) env *= tune.Get("attrition.emcon_lethality");
+                double supp = radar && !emcon ? std::max(run.supp_base, run.suppressed[oj]) : 0.0;
+                if (radar && !emcon && run.routed) supp = std::max(supp, run.corridor_supp[oj]);
+                if (st.function < 1.0) env *= st.function;
+                const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
+                                                def.defence.low_cover, def.defence.medium_cover, radar, supp,
+                                                run.jam && radar ? tune.Get("attrition.jamming") : 0.0, env,
+                                                Clamp01(a->evasion + 0.3 * (run.airmanship - 0.5)), tune, masked);
+                if (k <= 0.0) continue;
+                run.engaged[oj] = true;
+                int shots = 0;
+                for (int n = 0; n < EngagedAircraft(def.defence.channels, st.function, alive); ++n) {
+                    ++shots;
+                    if (a->missile) {
+                        // A cruise missile shot down: the defence's, never a crew lost.
+                        if (R().Chance(k)) {
+                            ++fl.lost;
+                            out.missiles_downed.push_back(def.id);
+                        }
+                        continue;
+                    }
+                    if (R().Chance(k)) {
+                        LossRecord lr;
+                        lr.flight = static_cast<int>(oi);
+                        lr.by = def.id;
+                        lr.where = p0 + (p1 - p0) * along;
+                        lr.officer = fl.officer >= 0 && fl.lost == 0;
+                        lr.captured = R().Chance(0.5);
+                        out.losses.push_back(lr);
+                        ++fl.lost;
+                        Event(AirEvent::Kind::Loss, when_h, oi, def.id, lr.where, fl.count - fl.lost);
+                    } else if (R().Chance(0.5 * k)) {
+                        ++fl.damaged;
+                        ++out.damaged;
+                    }
+                }
+                alive = fl.count - fl.lost;
+                if (shots > 0) {
+                    Spend(st, std::min(shots, 2), out);
+                    out.fired.push_back(def.id);
+                    if (!a->missile) Event(AirEvent::Kind::LaunchSeen, when_h, oi, def.id, st.pos, alive);
+                }
+            }
+        }
+        // The defender's fighters, where the package has no escort.
+        if (front != nullptr && main && static_cast<int>(si) == fighter_leg && alive > 0) {
+            const double ff = front->friendly_fighters * (1.0 - tune.Get("support.awacs_fighter_cut") * Clamp01(c.awacs));
+            const double pk = ff * tune.Get("attrition.escort_fighter_kill") * (p.Has(FlightRole::Escort) ? 0.3 : 1.0) *
+                              (p.part == DayPart::Night ? 0.5 : 1.0);
+            for (int n = 0; n < alive; ++n) {
+                if (R().Chance(pk)) {
+                    LossRecord lr;
+                    lr.flight = static_cast<int>(oi);
+                    lr.where = r1.pos;
+                    lr.officer = fl.officer >= 0 && fl.lost == 0;
+                    lr.captured = R().Chance(0.5);
+                    out.losses.push_back(lr);
+                    ++fl.lost;
+                    Event(AirEvent::Kind::Loss, r1.t_h, oi, std::string(), lr.where, fl.count - fl.lost);
+                }
+            }
+            alive = fl.count - fl.lost;
+        }
+        // The leader's nerve: on the losses so far in time.
+        if (main && before_release && static_cast<double>(out.Lost()) / run.package_size >= run.nerve && !run.abort_now) {
+            run.abort_now = true;
+            out.aborted = true;
+            out.notes.push_back("the package turned back after losing " + std::to_string(out.Lost()) + " of " + std::to_string(run.package_size));
+            Event(AirEvent::Kind::TurnedBack, r1.t_h, oi, p.target_object, r1.pos, alive);
+        }
+        // Weapons at the release point.
+        if (static_cast<int>(si + 1) == fl.release_index && alive > 0 && !fl.aborted && !fl.released) {
+            if (main || fl.role == FlightRole::Missile) {
+                Deliver(p, fl, oi, *a, alive, run.airmanship, out, r1.t_h);
+                alive = fl.count - fl.lost;
+            }
+            if (fl.role == FlightRole::Recce) Photograph(fl, *a, out);
+            fl.released = true;
+        }
+        run.next_leg[oi] = si + 1;
+        if (alive <= 0 || run.FlightDone(p, oi)) Finish(p, oi);
+    }
+
 
     static double TargetTime(const Flight& fl) {
         for (const RoutePoint& r : fl.route) {
@@ -353,7 +555,7 @@ private:
     // Armed reconnaissance (logistics.hpp): the flight searches its stretch of road or railway and attacks the first
     // column it sees on the move there, nearest first; a column loading or unloading is inside its depot or with its
     // troops. Nothing found, it brings its weapons home.
-    bool FindColumn(Package& p, Flight& fl, const AircraftType& a, PackageOutcome& out) {
+    bool FindColumn(Package& p, Flight& fl, std::size_t fi, const AircraftType& a, PackageOutcome& out, double t_h) {
         const AirWarData& d = *c_->data;
         const double reach = d.tuning.Get("logistics.search_m");
         const double find = ColumnFindChance(p.part, c_->weather, a.night, d.tuning);
@@ -366,13 +568,14 @@ private:
         }
         std::sort(on_road.begin(), on_road.end());
         for (const auto& c : on_road) {
-            if (!c_->rng->Chance(find)) continue;
+            if (!R().Chance(find)) continue;
             const TheatreObject& o = d.theatre.objects[c.second];
             fl.aim_pos = (*c_->truth)[c.second].pos;
             p.target_object = o.id;
             p.found = o.id;
             out.recce_seen.push_back(o.id);
             out.notes.push_back(fl.callsign + " found " + o.name + (o.kind == ObjectKind::Train ? " on the railway" : " on the road"));
+            Event(AirEvent::Kind::ColumnFound, t_h, fi, o.id, fl.aim_pos, fl.count - fl.lost);
             return true;
         }
         out.hit_nothing = true;
@@ -396,10 +599,10 @@ private:
         // The defenders' discipline: the player's battery by his posture, others by an average crew.
         const double discipline = def.player ? c_->posture->emcon_discipline : 0.5;
         for (int s = 0; s < shots; ++s) {
-            const bool switched_off = c_->rng->Chance(discipline);
+            const bool switched_off = R().Chance(discipline);
             const double pk = switched_off ? tune.Get(a.arm_memory ? "attrition.arm_kill_memory_off" : "attrition.arm_kill_no_memory_off")
                                            : tune.Get("attrition.arm_kill");
-            if (c_->rng->Chance(pk)) {
+            if (R().Chance(pk)) {
                 // One of its fire-control radars is gone; with the last, the battery is out of the fight.
                 const double before = st.function;
                 st.function = std::max(0.0, st.function - 1.0 / std::max(1, def.defence.radars));
@@ -423,10 +626,11 @@ private:
         }
     }
 
-    void Deliver(Package& p, Flight& fl, std::size_t flight_index, const AircraftType& a, int alive, double airmanship, PackageOutcome& out) {
+    void Deliver(Package& p, Flight& fl, std::size_t flight_index, const AircraftType& a, int alive, double airmanship, PackageOutcome& out,
+                 double t_h) {
         const AirWarData& d = *c_->data;
         const TuningTable& tune = d.tuning;
-        if (p.kind == MissionKind::ArmedRecce && !a.missile && !FindColumn(p, fl, a, out)) return;
+        if (p.kind == MissionKind::ArmedRecce && !a.missile && !FindColumn(p, fl, flight_index, a, out, t_h)) return;
         out.delivered = true;
         // What is really near the aim point: the target where they aimed, a dummy, or nothing.
         int hit_obj = -1;
@@ -453,7 +657,7 @@ private:
             bool lost = false;
             if (wd->guidance == "laser") {
                 lost = c_->weather == Weather::Poor || (night && !a.night) ||
-                       (c_->weather == Weather::Cloudy && !c_->rng->Chance(tune.Get("delivery.cloudy_laser")));
+                       (c_->weather == Weather::Cloudy && !R().Chance(tune.Get("delivery.cloudy_laser")));
             }
             if (wd->guidance == "tv") lost = night || c_->weather == Weather::Poor;
             if (lost) {
@@ -491,13 +695,13 @@ private:
                                               env * st.function, tune);
             const int attacking = alive;
             for (int n = 0; n < attacking && k > 0.0; ++n) {
-                if (!c_->rng->Chance(k)) continue;
+                if (!R().Chance(k)) continue;
                 LossRecord lr;
                 lr.flight = static_cast<int>(flight_index);
                 lr.by = o.id;
                 lr.where = st.pos;
                 lr.officer = fl.officer >= 0 && fl.lost == 0;
-                lr.captured = c_->rng->Chance(0.5);
+                lr.captured = R().Chance(0.5);
                 out.losses.push_back(lr);
                 ++fl.lost;
                 --alive;
@@ -533,7 +737,7 @@ private:
             int killed = 0;
             for (int n = 0; n < alive && working > 0; ++n) {
                 for (int k = 0; k < per_aircraft && working > 0; ++k) {
-                    if (!c_->rng->Chance(kill)) continue;
+                    if (!R().Chance(kill)) continue;
                     --working;
                     ++killed;
                 }
@@ -541,7 +745,7 @@ private:
             removed = static_cast<double>(killed) / aim;
         } else {
             for (int n = 0; n < alive; ++n) {
-                if (c_->rng->Chance(acc)) removed += a.strike_power * (1.0 - 0.7 * o.hardness);
+                if (R().Chance(acc)) removed += a.strike_power * (1.0 - 0.7 * o.hardness);
             }
         }
         if (removed <= 0.0) {
@@ -574,7 +778,7 @@ private:
             double pd = a.recce_quality * (1.0 - best / corridor * 0.5);
             if (o.player && c_->posture->nets) pd *= 0.6;
             if (c_->weather == Weather::Poor) pd *= 0.4;
-            if (c_->rng->Chance(pd)) out.recce_seen.push_back(o.id);
+            if (R().Chance(pd)) out.recce_seen.push_back(o.id);
         }
     }
 };

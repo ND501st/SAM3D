@@ -485,3 +485,117 @@ Kept out of the 1985 war's data, available to a later war only through `from_yea
 - HAVE QUICK's fielding in USAFE by 1985 (`09_COMMS_AND_INTERCEPT.md`), which decides how well our jammers break NATO's diverts.
 - Johnson (1986) and Red Baron, not re-read: the Pact's "no target change in the air" rests on them and on FM 100-2-1's
   direction only.
+
+## 9. As built (B5, 17 November 2026, branch `tb-b5`)
+
+**Files.** `simcore/air_war/c2_def.hpp` (the faction's `"c2"` block: posts, authority, timing, alert, the act and kind
+lists, `C2TuningDefaults`), `c2.hpp` (`C2Authority`, `AirC2`: the posts, messages, pools and decisions),
+`package_control.hpp` (`PackageControl`: the session's flights asking the authority table), `Flights::SetAuthority` and
+`ScenarioRunner::SetFlightAuthority` (two lines), the time-stepped resolver in `resolve.hpp` (`Resolver::Begin`,
+`StepTo`, `PackageRun`, `AirEvent`), the campaign flying its packages in `campaign.hpp`, `LivePackages` holding several
+session packages in `package_injector.hpp`, the save's `take` and `report` actions (`save.hpp`, version 2, which loads
+version 1), each faction's `"c2"` block, the `"c2"` group of `data/gameplay/air_war.json`, `tests/test_c2.cpp`.
+
+**Posts as people (§4.1).** Every post of the faction's list is placed at the campaign's start (`bases`, `entries`, the
+front's `line` `back_km` behind it, or `line_points`, one at each vertex of the line: the FACs and авианаводчики with our
+troops in sight), with a duty officer appointed from the pool (ranks `cp_controller`, `gci_controller`, `fac`) on a fork
+of the campaign's stream, so the campaign's own draws are not moved. NATO: the ATOC at the bases (250 km), the ASOC at
+the entries (80 km), the CRC 60 km behind the line (200 km), the E-3A (from 1982: warning and fighter control only),
+the FACs (40 km, sight 50 km, a game value standing for the abstract troops objects), the wings' operations. The Pact:
+the air army's post (150 km), the ПУА at the entries (60 km), the ГБУ/КП on the line (150 km), авианаводчики (30 km), the
+regiments' posts; the A-50's line has `from_year` 1989 and is off in 1985. The neutral: a national post, a GCI and the
+bases. The rebels: none. Posts are never destroyed (left).
+
+**Authority (§4.2).** `C2Authority::May(post kind, act, mission, where, year)` reads the faction's table: a FAC
+designates for CAS; NATO's ASOC diverts CAS in its own corps' area only with the army's yes or after
+`silence_consent_s` (300 s) and scrambles CAS; the ATOC diverts BAI anywhere, redirects a strike before its IP at
+chance 0.1, diverts recovery and recalls; the CRC and E-3A warn, and scramble fighters; the Pact's ПУА approves within
+the division's allocation, the air army's and regiments' posts scramble, armed reconnaissance is diverted at chance 0.2
+(«изредка»), and free hunting waits for phase 1 and stays within 30 km of the front; the neutral warns, scrambles
+fighters and recalls. `test_c2` lists every entry and fails on one past 1985 that is active. In a session,
+`PackageControl::Rule` gives `Flights` an `Authority`: a flight's own command (leader, package commander, pilot,
+instructor, the session, or no sender) and our side's flights always may; `FollowRoute` and `Rejoin` always may; a post's
+`Divert`, `Hold` or `Orbit` needs `divert_airborne`, `ReturnHome` `recall`, `Attack` `designate`, `Evade` `warn`
+(`C2ActOf`). `LivePackages` sets the rule once, the first time it injects a package.
+
+**Messages (§4.3).** A `C2Message` (warning, in-flight report, request, approval, refusal, divert, scramble, check-in,
+brief, recall, codeword, debrief report) carries its sender, receiver, the place, the sigma, the observed time and its
+sent and arrival times. A hop's delay is its relay, decide and encode bands in the faction's `timing` (NATO's report
+30-120 + 60-300 + 10-30 s; the Pact's 20-60 + 60-180 + 20-40 s), the decide part bent by the duty officer's traits and
+the queue at the post. A hop said on a jammed net is said again after `c2.retry_s`, at most `c2.max_retries` times,
+then lost. Within `c2.intercept_reach_m` of our battery a hop may be heard by our listeners (chance `c2.intercept`
+times 1 - the faction's opsec) and becomes a call in the outcome's `heard` (B9's records). The post decides in §4.3's
+order: a hunter there with leave is warned (the Weasel's own leader turns it, a `hunt` retask by `leader`); an airborne
+flight within `c2.divert_reach_m` that the post may divert is diverted (`SendDivert`: the flight's `aim_pos` becomes
+the reported place); an alert pool within authority whose expected loss share is under `c2.commit_risk` is
+scrambled; otherwise the report goes to intelligence as an in-flight report. A methodical officer waits for a second
+report within `c2.second_report_m` and `c2.second_report_h`; a mobile target reported more than `max_report_age_h`
+ago is not struck. A report out of every post's radio cover (`c2.low_cover` of the reach for a low flight) goes in only
+with the pilots' reports after the mission: the faction's `pirep_delay_h`, the Pact's 5-10 min after the last aircraft
+is home (`debrief_s`). Everything starts from a report: B4's
+`InFlightReport` (a flight that saw a launch, from the resolver's `LaunchSeen` and `Loss` events, a gun's fire being
+flak and no launch to report, or a played package's
+pilots' sightings through `NoteReport`) and a FAC's own sighting of our troops, drawn each hour with the sighting's
+sigma and moved into the brief: `AimOnCall`'s read of the truth is gone.
+
+**Pools (§4.4).** The planner holds back `on_call_fraction` of each squadron's sorties for the cycle; `BuildPools` sums
+them per alert kind with a fractional carry (so a faction of many small squadrons still stands whole flights), takes
+whole flights from the squadrons holding most back and stands them on their shifts. A pool not scrambled by its shift's
+end stands down. A scramble builds an on-call package (`rationale` "on call from the alert") on the place reported,
+taking off after the pool's `takeoff_s` (the Pact's readiness 1 3-5 min) and flying it at once; the Pact's
+`phase_scale` makes the pools a quarter as big in its first phase.
+
+**Time-stepped resolver (A0, §4.6).** `Resolver::Resolve` is now `Begin` + `StepTo(end)`; a `PackageRun` holds the
+package's state between steps and gives `AirEvent`s (launch seen, loss, column found, release, turned back). The
+campaign takes off the cycle's packages at their take-off times, steps every airborne package and the posts by
+`c2.step_h` (5 min) while anything is in the air or a message is on its way, and applies a package's outcome when it
+lands. The draws are keyed by package (`c2_root_.Fork(0x9AC4A6E000 + id)`), so the order packages fly in never moves a
+draw, and the stepped resolver with every authority off gives the atomic one's outcome (`test_c2`). A played package no
+longer freezes the clock: `TakePlayerMission` hands it to the session and the campaign goes on; packages elsewhere
+resolve while it is in the session, and its outcome is applied at `CompleteLiveMission`.
+
+**With B2's routes (merged 18 November 2026).** B2 (routes as flown, `01_ROUTES.md`) landed beside B5 and both live in
+the one stepped resolver: `Begin` notes whether the package is routed (`route.mode` 1) and over the route ground, and
+works out the corridor's suppression at its gate; each `Leg` keeps B2's one engagement per pass through a zone (a chord
+held pending into the next leg until the pass ends, at release or the route's last leg), the ground-masked chord for a
+low flight or a helicopter, and the fighters met on the leg from the IP. The planner's reach check by the route's
+length is B2's as it was, and an on-call package is planned on routes too (`Planner::OnCall` sets up the route ground
+and rules when `route.mode` is 1). The atomic `Resolve` is the same `Begin` and `Leg`, so a whole package and a stepped one agree as before. A switch,
+`c2.mode` in `data/gameplay/air_war.json` (1 by default), turns B5 off: at 0 the posts are not built, each package is
+resolved whole at its first hour from the campaign's own stream, its flights walked in turn as before, and
+`AimOnCall` aims the on-call missions on the truth again. It exists so a save from before B2 and B5 replays to the bit.
+
+**Saves (§4.7).** The save (version 2, shared with B2: it also writes `route_mode` and `c2_mode`; a version 1 save
+loads with both at 0 and replays as it was, `tests/fixtures/air_war_save_v1.json`) records `take` (the package handed to a session), `report` (a played flight's
+report with its place, the reporter's place, sigma and observed time) and `complete` with its package id, and the
+outcome's `calls` and `reports`; a replay of the actions rebuilds the posts' decisions, since every C2 draw is keyed by
+message or by post and hour from a root fixed at the start. A seed replays exactly and a save after a played package
+that reported loads to the same campaign (`test_c2`).
+
+**What our side hears (§4.8).** Only the hops our listeners intercept, as B9's calls, and the effects on the raids. No
+post, pool or decision is shown to the player.
+
+**Tests.** `tests/test_c2.cpp`, 11 cases: the 1985 table; the session's authority and `Flights::SetAuthority`; stepped
+equals atomic; a jammed hop retried, lost, heard, and out of cover; the FAC's brief at the sighting, not the truth; a
+stale mobile report not struck; pools (on-call share above zero and at most `on_call_fraction`, unused pools stood down,
+the Pact's first phase smaller, three seeds of four days, Pact and NATO); the Pact's report near the ПУА (approval, up
+3-5 min after the scramble, over the place 10-45 min after the report: the test prints the times); NATO's CAS divert
+after the corps or silence, BAI's at once, a Weasel warned and no strike diverted; a package elsewhere resolved while a
+raid is taken; a seed replayed, and a save with take, report and complete loaded.
+
+**Differences from the design.**
+- §7's "over the reported place 17-30 min after the report" is tested as 10-45 min: the place is 10 km from the ПУА
+  and the pool's base may be nearer or farther than the design's example.
+- `nomination_h` is loaded but does not gate the planner yet.
+- The rest of a package taken into a session resolves atomically at `Complete`; diverts of a played flight are not given
+  in the session yet (the authority rule is in place, the posts do not yet send the order into the session).
+- While any raid is live in a session, the player's battery is left out of the abstract fights.
+- Our side does not jam the enemy's nets in the abstract campaign (the hook exists for the tests).
+- An on-call package a post launches while a raid is in the session is not injected into it.
+- `PackageControl`'s `WhereOf` uses the leader's position for the whole flight.
+
+**Left.** B6: targets of opportunity on the posts' authority (the FAC's `designate` is in the table, the opportunity
+chain is not). B8: the fighters' scrambles and GCI vectors as air combat (the pools stand fighters but the abstract
+fight is still the flat roll), the E-3A's fighter control. Posts under attack and destroyed; the posts' orders sent
+into a session's flights; on-call packages injected live; our jamming of the enemy's nets in the campaign; the open
+items of §8.

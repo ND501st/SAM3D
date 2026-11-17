@@ -354,42 +354,51 @@ SC_TEST("flights B1: a planner's raid flies as flights in formation, in one pack
     SC_EXPECT(c.Init(d, 1));
     c.Posture().emission = 0.1;
     c.Posture().relocate_every_h = 20.0;
-    RaidScenario rs;
-    while (c.Now() < 6.0 * 24.0 && !rs.ok) {
+    // A flight of two or more that keeps its slots: its wingmen on their stations once in the air a while, outside the
+    // attack (where each flies his own run). The first raid that has one in the air out of its attack (the campaign's
+    // course decides which raids come: roadmap B5's packages fly in time; a raid clipped near the battery may begin in
+    // its attack).
+    int raids = 0, kept = 0, looked = 0;
+    std::string pair_id;
+    std::map<std::string, int> phases;
+    while (c.Now() < 6.0 * 24.0 && looked == 0) {
         if (!c.Advance(6.0 * 24.0)) continue;
         RaidScenarioBuilder builder;
-        rs = builder.Build(c, *c.PlayerMission());
-        if (!rs.ok) c.SkipPlayerMission();
+        const RaidScenario rs = builder.Build(c, *c.PlayerMission());
+        c.SkipPlayerMission();
+        if (!rs.ok) continue;
+        ++raids;
+        ScenarioDef def;
+        ConsoleData console;
+        SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
+        SC_EXPECT(!def.flights.empty() && def.packages.size() == 1);
+        SC_EXPECT(def.packages[0].turn_back_share >= 0.05 && def.packages[0].turn_back_share <= 0.9);
+        for (const ScenarioTarget& t : def.targets) SC_EXPECT(!t.flight.empty() && t.slot >= 1 && t.legs.size() == t.waypoints.size());
+        ScenarioRunner r(std::move(def), std::move(console));
+        const FlightState* pair = nullptr;
+        for (const FlightState& f : r.AllFlights().All()) {
+            if (f.slots.size() >= 2 && f.keep_slots && !f.weapons && pair == nullptr) pair = &f;
+        }
+        if (pair == nullptr) continue;
+        pair_id = pair->id;
+        const std::string lead = r.Def().targets[static_cast<std::size_t>(pair->slots[0].target)].id;
+        const std::string wing = r.Def().targets[static_cast<std::size_t>(pair->slots[1].target)].id;
+        const double appear = r.Def().targets[static_cast<std::size_t>(pair->slots[0].target)].appear_at_s;
+        phases.clear();
+        while (r.Time() < appear + 240.0 && !r.Finished()) {
+            r.Step(0.1);
+            if (r.Time() < appear + 60.0 || !r.TargetAlive(lead) || !r.TargetAlive(wing)) continue;
+            const FlightState* f = r.Flight(pair_id);
+            if (f == nullptr) continue;
+            ++phases[f->phase];
+            if (f->phase == "attack") continue;
+            ++looked;
+            kept += f->slots[1].keeping ? 1 : 0;
+        }
     }
-    SC_EXPECT(rs.ok);
-    if (!rs.ok) return;
-    ScenarioDef def;
-    ConsoleData console;
-    SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
-    SC_EXPECT(!def.flights.empty() && def.packages.size() == 1);
-    SC_EXPECT(def.packages[0].turn_back_share >= 0.05 && def.packages[0].turn_back_share <= 0.9);
-    for (const ScenarioTarget& t : def.targets) SC_EXPECT(!t.flight.empty() && t.slot >= 1 && t.legs.size() == t.waypoints.size());
-    ScenarioRunner r(std::move(def), std::move(console));
-    // A flight of two or more that keeps its slots: its wingmen on their stations once in the air a while.
-    const FlightState* pair = nullptr;
-    for (const FlightState& f : r.AllFlights().All()) {
-        if (f.slots.size() >= 2 && f.keep_slots && !f.weapons && pair == nullptr) pair = &f;
-    }
-    SC_EXPECT(pair != nullptr);
-    if (pair == nullptr) return;
-    const std::string lead = r.Def().targets[static_cast<std::size_t>(pair->slots[0].target)].id;
-    const std::string wing = r.Def().targets[static_cast<std::size_t>(pair->slots[1].target)].id;
-    double appear = r.Def().targets[static_cast<std::size_t>(pair->slots[0].target)].appear_at_s;
-    int kept = 0, looked = 0;
-    while (r.Time() < appear + 240.0 && !r.Finished()) {
-        r.Step(0.1);
-        if (r.Time() < appear + 60.0 || !r.TargetAlive(lead) || !r.TargetAlive(wing)) continue;
-        const FlightState* f = r.Flight(pair->id);
-        ++looked;
-        kept += f != nullptr && f->slots[1].keeping ? 1 : 0;
-    }
-    SC_EXPECT(looked > 0 && kept > looked / 2);
-    std::printf("    flight %s: wingman on his station %d of %d steps\n", pair->id.c_str(), kept, looked);
+    SC_EXPECT(raids > 0 && looked > 0 && kept > looked / 2);
+    std::printf("    flight %s (raid %d): wingman on his station %d of %d steps out of the attack\n", pair_id.c_str(), raids, kept, looked);
+    for (const auto& kv : phases) std::printf("      %s: %d steps\n", kv.first.c_str(), kv.second);
 }
 
 SC_TEST("flights B1: the runner's flight orders are logged with who gave them; a reroute flies its new legs") {

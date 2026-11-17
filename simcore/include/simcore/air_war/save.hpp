@@ -2,15 +2,19 @@
 //
 // A campaign is deterministic for its data and seed, so a save is small: the data files, the seed and the player's
 // actions in order (each Advance with the posture then in force, each move of the battery, each raid let pass, each raid
-// played with its outcome). Loading starts the campaign again from the seed and replays the actions; the result is the
+// played with its outcome; from version 2 (roadmap B5) each raid a session took, each of its pilots' reports and its end).
+// Loading starts the campaign again from the seed and replays the actions; the result is the
 // same campaign, to the bit. Numbers are written with 17 significant digits so that the replay sees exactly the times
 // and outcomes the original saw.
 //
 //   {"save_version": 2, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
-//    "seed": 7, "route_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//    "seed": 7, "route_mode": 1, "c2_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
 //
-// Version 2 (roadmap B2) adds the routes' mode the campaign was planned with (route.mode: 1 the route planner); a version 1
-// save was planned with the old shapes and replays with route.mode 0, to the bit.
+// Version 2 (roadmap B2 and B5) adds the routes' mode the campaign was planned with (route.mode: 1 the route planner), its
+// command in the air's (c2.mode: 1 the posts and the packages flown in time), the raids a session took ("take", the
+// campaign going on while they flew) and their pilots' reports to the posts ("report"), and a "complete" naming its
+// package; a version 1 save was planned with the old shapes, its packages resolved whole at their first hour with no
+// posts, and replays with route.mode 0 and c2.mode 0, to the bit.
 #pragma once
 
 #include <cmath>
@@ -128,6 +132,31 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Push(heard, x);
     }
     Put(v, "heard", heard);
+    json::Value calls = Arr();
+    for (const PackageOutcome::CallRecord& c : o.calls) {
+        json::Value x = Obj();
+        Put(x, "kind", Str(c.kind));
+        Put(x, "from", Str(c.from));
+        Put(x, "to", Str(c.to));
+        Put(x, "net", Str(c.net));
+        Put(x, "t_h", Num(c.t_h));
+        Put(x, "lost", Bool(c.lost));
+        Put(x, "heard", Bool(c.heard));
+        Push(calls, x);
+    }
+    Put(v, "calls", calls);
+    json::Value reports = Arr();
+    for (const PackageOutcome::ReportRecord& r : o.reports) {
+        json::Value x = Obj();
+        Put(x, "flight", Num(r.flight));
+        Put(x, "what", Str(r.what));
+        Put(x, "east_m", Num(r.east_m));
+        Put(x, "north_m", Num(r.north_m));
+        Put(x, "sigma_m", Num(r.sigma_m));
+        Put(x, "observed_h", Num(r.observed_h));
+        Push(reports, x);
+    }
+    Put(v, "reports", reports);
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
     Put(v, "reported", Bool(o.reported));
@@ -282,6 +311,31 @@ public:
                 o.heard.push_back(h);
             }
         }
+        if (const json::Value* cs = v.Find("calls")) {
+            for (const json::Value& x : cs->items) {
+                PackageOutcome::CallRecord c;
+                c.kind = String(x, "kind");
+                c.from = String(x, "from");
+                c.to = String(x, "to");
+                c.net = String(x, "net");
+                c.t_h = Number(x, "t_h");
+                c.lost = Boolean(x, "lost");
+                c.heard = Boolean(x, "heard");
+                o.calls.push_back(c);
+            }
+        }
+        if (const json::Value* rs2 = v.Find("reports")) {
+            for (const json::Value& x : rs2->items) {
+                PackageOutcome::ReportRecord rr;
+                rr.flight = Int(x, "flight", -1);
+                rr.what = String(x, "what");
+                rr.east_m = Number(x, "east_m");
+                rr.north_m = Number(x, "north_m");
+                rr.sigma_m = Number(x, "sigma_m");
+                rr.observed_h = Number(x, "observed_h");
+                o.reports.push_back(rr);
+            }
+        }
         o.truth_applied = Boolean(v, "truth_applied");
         o.played = Boolean(v, "played", true);
         o.reported = Boolean(v, "reported");
@@ -308,6 +362,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "faction_file", Str(faction_file));
     Put(root, "seed", Num(static_cast<double>(c.Seed())));
     Put(root, "route_mode", Num(c.Data().tuning.Get("route.mode")));
+    Put(root, "c2_mode", Num(c.Data().tuning.Get("c2.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -328,6 +383,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 break;
             case CampaignAction::Kind::Complete:
                 Put(x, "kind", Str("complete"));
+                if (a.package_id >= 0) Put(x, "package_id", Num(a.package_id));
                 Put(x, "end_h", Num(a.end_h));
                 Put(x, "outcome", save_detail::OutcomeJson(a.outcome));
                 break;
@@ -344,6 +400,23 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "calls", calls);
                 break;
             }
+            case CampaignAction::Kind::Take:
+                Put(x, "kind", Str("take"));
+                Put(x, "package_id", Num(a.package_id));
+                break;
+            case CampaignAction::Kind::Report:
+                Put(x, "kind", Str("report"));
+                Put(x, "package_id", Num(a.package_id));
+                Put(x, "flight", Num(a.flight));
+                Put(x, "what", Str(a.what));
+                Put(x, "east_m", Num(a.to.x));
+                Put(x, "north_m", Num(a.to.y));
+                Put(x, "from_east_m", Num(a.from.x));
+                Put(x, "from_north_m", Num(a.from.y));
+                Put(x, "from_up_m", Num(a.from.z));
+                Put(x, "sigma_m", Num(a.sigma_m));
+                Put(x, "observed_h", Num(a.observed_h));
+                break;
         }
         Put(x, "posture", save_detail::PostureJson(a.posture));
         Push(actions, x);
@@ -363,12 +436,14 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     }
     save_detail::Reader r;
     const int version = r.Int(root, "save_version");
-    if (version != 1 && version != 2) {
+    if (version != 1 && version != 2) {  // 1: before roadmap B2 (the old route shapes, route.mode 0) and B5 (no raids taken by a session), replayed the same
         if (error != nullptr) *error = "save_version 1 or 2 expected";
         return false;
     }
     // The routes' mode it was planned with: a version 1 save, the old shapes.
     const double route_mode = version == 1 ? 0.0 : r.Number(root, "route_mode", 1.0);
+    // And its command in the air (roadmap B5): a version 1 save, packages resolved whole at their first hour, no posts.
+    const double c2_mode = version == 1 ? 0.0 : r.Number(root, "c2_mode", 1.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -388,6 +463,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
                 a.kind = CampaignAction::Kind::Skip;
             } else if (kind == "complete") {
                 a.kind = CampaignAction::Kind::Complete;
+                a.package_id = r.Int(x, "package_id", -1);
                 a.end_h = r.Number(x, "end_h");
                 if (const json::Value* o = x.Find("outcome")) a.outcome = r.Outcome(*o);
             } else if (kind == "transmit") {
@@ -401,6 +477,18 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
                         a.calls.push_back(t);
                     }
                 }
+            } else if (kind == "take") {
+                a.kind = CampaignAction::Kind::Take;
+                a.package_id = r.Int(x, "package_id", -1);
+            } else if (kind == "report") {
+                a.kind = CampaignAction::Kind::Report;
+                a.package_id = r.Int(x, "package_id", -1);
+                a.flight = r.Int(x, "flight", -1);
+                a.what = r.String(x, "what");
+                a.to = Vec3{r.Number(x, "east_m"), r.Number(x, "north_m"), 0.0};
+                a.from = Vec3{r.Number(x, "from_east_m"), r.Number(x, "from_north_m"), r.Number(x, "from_up_m")};
+                a.sigma_m = r.Number(x, "sigma_m");
+                a.observed_h = r.Number(x, "observed_h");
             } else {
                 if (error != nullptr) *error = "unknown action '" + kind + "'";
                 return false;
@@ -416,6 +504,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     AirWarData data;
     if (!LoadAirWarData(data_dir, theatre, faction, data, error)) return false;
     data.tuning.values["route.mode"] = route_mode;
+    data.tuning.values["c2.mode"] = c2_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

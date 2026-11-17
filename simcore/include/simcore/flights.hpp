@@ -281,8 +281,11 @@ public:
         std::string what;
     };
 
-    // Who may give a flight an order (roadmap B5, C2Authority::May): every order is accepted until then.
-    static bool May(const FlightState&, const FlightOrder&) { return true; }
+    // Who may give a flight an order (roadmap B5): a rule set by the session (air_war/package_control.hpp, from the
+    // faction's authority table, C2Authority::May); without one every order is accepted. An order's `by` is its giver.
+    using Authority = std::function<bool(const FlightState&, const FlightOrder&)>;
+    void SetAuthority(Authority a) { authority_ = std::move(a); }
+    bool May(const FlightState& f, const FlightOrder& o) const { return !authority_ || authority_(f, o); }
 
     int Add(FlightState f) {
         std::stable_sort(f.slots.begin(), f.slots.end(), [](const FlightSlot& a, const FlightSlot& b) { return a.number < b.number; });
@@ -821,6 +824,7 @@ public:
 
 private:
     FlightRadio* radio_ = nullptr;  // the calls on the air (B9); null: the fixed delay
+    Authority authority_;           // who may order a flight (B5); empty: anyone
     std::vector<FlightState> flights_;
     std::vector<PackageState> packages_;
     std::vector<std::pair<int, int>> of_target_;  // target -> (flight, slot)

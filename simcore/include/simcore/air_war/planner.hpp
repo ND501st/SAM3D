@@ -402,6 +402,75 @@ public:
         return out_;
     }
 
+    // An on-call package from an alert pool (roadmap B5, docs/air_battle/05_C2_AND_RETASKING.md §4.4): the main flights
+    // of `mk` from the pool's squadron only (its `aircraft`, nothing else of the cycle's), against `target` as the report
+    // has it (its place, sigma and age), in at the front's entry nearest it, its first aircraft up at `takeoff_h` (the
+    // alert airfield behind that entry). Its expected loss is the planner's estimate; the cycle's books are not touched
+    // (the pool's sorties were held back from them). False if the squadron can't man it.
+    bool OnCall(PlanContext& c, MissionKind mk, const IntelEntry& target, const std::string& squadron, int aircraft, double takeoff_h,
+                Package& out) {
+        c_ = &c;
+        out_.clear();
+        const AirWarData& d = *c.data;
+        const FactionDef& f = d.faction;
+        front_ = d.theatre.FrontFor(f.front);
+        if (front_ == nullptr || front_->entries.empty() || c.staff->HolderPtr(StaffRole::Planner) == nullptr) return false;
+        // The route planner's caches are this call's (route.mode 1, roadmap B2): the pool flies a route like the plan's.
+        legs_.clear();
+        routes_.clear();
+        route_threats_.clear();
+        chords_.clear();
+        if (Mode() >= 1) {
+            Ground();
+            SetRules();
+        }
+        const PackageTemplate& t = f.doctrine.packages[static_cast<int>(mk)];
+        Option o;
+        double best = 1e18;
+        for (std::size_t i = 0; i < front_->entries.size(); ++i) {
+            const double dist = Dist2d(front_->entries[i].pos, target.pos);
+            if (dist < best) {
+                best = dist;
+                o.entry = o.exit = static_cast<int>(i);
+            }
+        }
+        o.profile = t.profiles.empty() ? Profile::Low : t.profiles.front();
+        o.tot_h = takeoff_h + 0.5;
+        o.part = TheatrePartAt(d.theatre, d.theatre.start_hour + o.tot_h);
+        o.size = 0.01;  // one main flight
+        std::vector<double> saved;
+        for (SquadronState& s : *c.squadrons) {
+            saved.push_back(s.sorties_left);
+            s.sorties_left = s.id == squadron ? static_cast<double>(aircraft) : 0.0;
+        }
+        std::vector<std::string> why;
+        Package p;
+        const bool ok = Build(mk, target, o, p, why);
+        for (std::size_t i = 0; i < saved.size(); ++i) (*c.squadrons)[i].sorties_left = saved[i];
+        if (!ok || p.flights.empty()) return false;
+        const double shift = takeoff_h - p.FirstH();
+        for (Flight& fl : p.flights) {
+            for (RoutePoint& rp : fl.route) rp.t_h += shift;
+        }
+        p.tot_h += shift;
+        p.part = TheatrePartAt(d.theatre, d.theatre.start_hour + p.tot_h);
+        p.expected_losses = ExpectedLosses(p, target, nullptr);
+        p.rationale = {"on call from the alert"};
+        p.commander = c.staff->Holder(StaffRole::Commander);
+        p.planner = c.staff->Holder(StaffRole::Planner);
+        p.id = (*c.next_id)++;
+        const Officer* so = SeadOfficer();
+        p.coordination = Clamp01(0.45 + 0.25 * PlannerOfficer().def.traits.methodical + 0.2 * (so != nullptr ? so->Effective(so->def.skills.sead) : 0.3));
+        const int lead = c.staff->LeaderOf(squadron);
+        if (lead >= 0 && c.staff->officers[static_cast<std::size_t>(lead)].active) {
+            p.flights.front().officer = lead;
+            p.leader = lead;
+        }
+        p.name = p.flights.front().callsign;
+        out = p;
+        return true;
+    }
+
 private:
     PlanContext* c_ = nullptr;
     const FrontDef* front_ = nullptr;

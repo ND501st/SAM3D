@@ -204,6 +204,17 @@ public:
     }
 
     bool UnitDestroyed() const { return unit_destroyed_; }
+    // The raid as it came into the session, and the launches its pilots have seen so far (roadmap B5: each goes to the
+    // enemy's posts as an in-flight report, LivePackages).
+    const RaidManifest& Manifest() const { return m_; }
+    const std::vector<PackageOutcome::LaunchSighting>& Sightings() const { return sightings_; }
+    // The package's flight (index into its flights) an aircraft of the session flies in, or -1 (not this raid's).
+    int FlightOfTarget(const std::string& target_id) const {
+        for (const RaidAircraft& a : m_.aircraft) {
+            if (a.target_id == target_id) return a.flight;
+        }
+        return -1;
+    }
     // Is the package done in the session: every aircraft of it appeared and gone (down, or past its last waypoint at the
     // scenario's circle), its bombs and missiles landed; or the session past the raid's end, or our vehicle destroyed?
     // A package that entered a running mission is then finished and handed back (package_injector.hpp, roadmap 15.3).

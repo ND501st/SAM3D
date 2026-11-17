@@ -11,7 +11,9 @@
 // so a MissionBridge on it reads the session as it would the raid's own scenario.
 //
 // LivePackages runs the air war in step with a session: the campaign advanced to the session's clock, each package it
-// hands to the player's battery injected and followed by its bridge, and its outcome handed back when it is over.
+// hands to the player's battery taken (AirCampaign::TakePlayerMission), injected and followed by its bridge, and its
+// outcome handed back when it is over. The campaign goes on meanwhile (roadmap B5): other packages fly, its posts
+// decide, and the played package's pilots' sightings go to them as in-flight reports.
 #pragma once
 
 #include <algorithm>
@@ -26,6 +28,7 @@
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/comms_jamming.hpp"
 #include "simcore/air_war/mission_bridge.hpp"
+#include "simcore/air_war/package_control.hpp"
 #include "simcore/air_war/raid_scenario.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/scenario.hpp"
@@ -165,11 +168,14 @@ inline InjectedPackage InjectPackage(ScenarioRunner& r, const RaidScenario& rs, 
 }
 
 // The air war run in step with a session. The campaign is advanced to the session's clock every `every_s`; a package it
-// hands to the player's battery is built as a raid and enters the session on its own time (at once if that is past),
-// its bridge follows it, and once it is over (MissionBridge::Over) and its last load still falling has landed (a
+// hands to the player's battery is taken from it, built as a raid and enters the session on its own time (at once if that
+// is past), its bridge follows it, and once it is over (MissionBridge::Over) and its last load still falling has landed (a
 // package over by its clock may still have bombs in the air: they land in the session at their own times) the
-// campaign takes its outcome and goes on. One package at a time, as the campaign keeps one player mission pending:
-// another that comes due meanwhile waits for it.
+// campaign takes its outcome (AirCampaign::CompleteLiveMission). The campaign never stands still for it (roadmap B5):
+// another package that comes due meanwhile enters beside it. What the package's pilots see of our launches goes to the
+// enemy's posts as their in-flight reports (AirCampaign::NoteReport), said on the flight's net where the session has the
+// enemy's radio; and the session's flights take orders from those posts only by the faction's authority table
+// (package_control.hpp).
 class LivePackages {
 public:
     struct Played {
@@ -180,6 +186,7 @@ public:
         std::size_t aircraft = 0;
         std::size_t jammers = 0;
         int lost = 0;
+        int reports = 0;                   // its pilots' sightings sent to the posts
         std::vector<int> release_flights;  // its flights whose release point was in the session (indices into its flights)
         PackageOutcome outcome;            // as handed back to the campaign (once out)
     };
@@ -190,52 +197,43 @@ public:
 
     // After every runner.Step().
     void Step(ScenarioRunner& r) {
-        if (bridge_) {
-            if (!landing_) {
-                bridge_->Step(r);
-                if (!bridge_->Over(r)) return;
-                landing_ = true;
+        for (std::size_t k = 0; k < live_.size();) {
+            if (Follow(r, live_[k])) {
+                live_.erase(live_.begin() + static_cast<std::ptrdiff_t>(k));
+                next_s_ = r.Time();
             } else {
-                bridge_->LandFalling(r);
+                ++k;
             }
-            // Over by its clock with loads still falling: they land in the session at their own times, and the package
-            // is handed back once the last has (MissionBridge::FallingUntil).
-            if (r.Time() < bridge_->FallingUntil()) return;
-            landing_ = false;
-            PackageOutcome o = bridge_->Finish(r);
-            ReportedFromRecords(r, played_.back().in_s, o);
-            if (heard_source_) o.heard = heard_source_(played_.back().in_s, r.Time());  // what our intercept posts logged (B9)
-            c_->CompletePlayerMission(o, HourOf(r.Time()));
-            played_.back().out_s = r.Time();
-            played_.back().lost = o.Lost();
-            played_.back().outcome = o;
-            bridge_.reset();
-            next_s_ = r.Time();
-            return;
         }
         if (r.Time() < next_s_ - 1e-9) return;
         next_s_ = r.Time() + every_s_;
         while (c_->Advance(HourOf(r.Time()))) {
             const Package& p = *c_->PlayerMission();
+            const int id = p.id;
+            const std::string name = p.name;
             const RaidScenario rs = RaidScenarioBuilder().Build(*c_, p, fmt_);
             if (!rs.ok) {
-                notes_.push_back("package " + std::to_string(p.id) + " resolved off the scene: " + rs.error);
+                notes_.push_back("package " + std::to_string(id) + " resolved off the scene: " + rs.error);
                 c_->SkipPlayerMission();
                 continue;
             }
             const double at_s = std::max(r.Time(), (rs.manifest.start_h - h0_) * 3600.0);
             InjectedPackage inj = InjectPackage(r, rs, data_dir_, at_s);
             if (!inj.ok) {
-                notes_.push_back("package " + std::to_string(p.id) + " resolved off the scene: " + inj.error);
+                notes_.push_back("package " + std::to_string(id) + " resolved off the scene: " + inj.error);
                 c_->SkipPlayerMission();
                 continue;
             }
-            for (const std::string& n : inj.notes) notes_.push_back("package " + std::to_string(p.id) + ": " + n);
-            JamTheBatteryNet(r, p);
-            bridge_ = std::make_unique<MissionBridge>(inj.manifest, c_->Data(), r.Def().seed ^ static_cast<unsigned>(p.id));
+            for (const std::string& n : inj.notes) notes_.push_back("package " + std::to_string(id) + ": " + n);
+            JamTheBatteryNet(r, *c_->PlayerMission());
+            c_->TakePlayerMission();  // flown here; the campaign goes on
+            Authority(r);
+            Live l;
+            l.bridge = std::make_unique<MissionBridge>(inj.manifest, c_->Data(), r.Def().seed ^ static_cast<unsigned>(id));
+            l.played = played_.size();
             Played pl;
-            pl.package_id = p.id;
-            pl.name = p.name;
+            pl.package_id = id;
+            pl.name = name;
             pl.in_s = at_s;
             pl.aircraft = inj.aircraft;
             pl.jammers = inj.jammers;
@@ -246,7 +244,7 @@ public:
                 }
             }
             played_.push_back(pl);
-            return;
+            live_.push_back(std::move(l));
         }
     }
 
@@ -254,8 +252,10 @@ public:
     using HeardSource = std::function<std::vector<HeardRecord>(double from_s, double to_s)>;
     void SetHeardSource(HeardSource f) { heard_source_ = std::move(f); }
 
-    bool Active() const { return bridge_ != nullptr; }
-    const MissionBridge* Bridge() const { return bridge_.get(); }
+    bool Active() const { return !live_.empty(); }
+    // The bridge of the package in the session longest (null: none).
+    const MissionBridge* Bridge() const { return live_.empty() ? nullptr : live_.front().bridge.get(); }
+    std::size_t InSession() const { return live_.size(); }
 
     // The battery's report of a package from its records since it came in (roadmap 18.1): what our side's journal says
     // of it. Without a post (the Osa's crew writes no journal) nothing: our side takes the truth.
@@ -272,6 +272,93 @@ public:
     double HourOf(double t_s) const { return h0_ + t_s / 3600.0; }
 
 private:
+    struct Live {
+        std::unique_ptr<MissionBridge> bridge;
+        bool landing = false;      // the package is over; its loads still falling land before it is handed back
+        std::size_t played = 0;    // index into played_
+        std::size_t sighted = 0;   // its bridge's sightings already sent
+    };
+
+    // One package's step in the session; true once it is handed back.
+    bool Follow(ScenarioRunner& r, Live& l) {
+        if (!l.landing) {
+            l.bridge->Step(r);
+            Report(r, l);
+            if (!l.bridge->Over(r)) return false;
+            l.landing = true;
+        } else {
+            l.bridge->LandFalling(r);
+        }
+        // Over by its clock with loads still falling: they land in the session at their own times, and the package
+        // is handed back once the last has (MissionBridge::FallingUntil).
+        if (r.Time() < l.bridge->FallingUntil()) return false;
+        Played& pl = played_[l.played];
+        PackageOutcome o = l.bridge->Finish(r);
+        ReportedFromRecords(r, pl.in_s, o);
+        if (heard_source_) o.heard = heard_source_(pl.in_s, r.Time());  // what our intercept posts logged (B9)
+        c_->CompleteLiveMission(pl.package_id, o, HourOf(r.Time()));
+        pl.out_s = r.Time();
+        pl.lost = o.Lost();
+        pl.outcome = o;
+        return true;
+    }
+
+    // A pilot of the package saw a launch (B3's sightings): his flight reports it to the posts (05 §4.7), from where he is,
+    // dated when he saw it; said on his flight's net where the session has the enemy's radio (B9).
+    void Report(ScenarioRunner& r, Live& l) {
+        const std::vector<PackageOutcome::LaunchSighting>& seen = l.bridge->Sightings();
+        const LocalFrame session(r.Def().origin), theatre(c_->Data().theatre.origin);
+        for (; l.sighted < seen.size(); ++l.sighted) {
+            const PackageOutcome::LaunchSighting& s = seen[l.sighted];
+            const int flight = l.bridge->FlightOfTarget(s.by);
+            if (flight < 0) continue;  // another package's pilot
+            Played& pl = played_[l.played];
+            const Vec3 at_s{s.east_m, s.north_m, 0.0};
+            Vec3 at = MoveFrame(session, theatre, at_s);
+            at.z = 0.0;
+            const Vec3 from = MoveFrame(session, theatre, r.TargetPosition(s.by));
+            c_->NoteReport(pl.package_id, flight, "launch", at, s.sigma_m, HourOf(s.time_s), from);
+            ++pl.reports;
+            if (AirRadio* radio = r.AirRadio()) {
+                const RaidManifest& m = l.bridge->Manifest();
+                if (flight < static_cast<int>(m.flight_ids.size()) && !m.flight_ids[static_cast<std::size_t>(flight)].empty()) {
+                    radio->SayAs(m.flight_ids[static_cast<std::size_t>(flight)], CallKind::Report, "launch, reporting the site", r.Time(), true, at_s);
+                }
+            }
+        }
+    }
+
+    // Who may order the session's enemy flights: their own command, and the campaign's posts by the faction's table, a
+    // post's own area judged where the flight's leader is (in the theatre's frame).
+    void Authority(ScenarioRunner& r) {
+        if (authority_set_ || !c_->Data().faction.c2.present) return;
+        authority_set_ = true;
+        AirCampaign* c = c_;
+        ScenarioRunner* rp = &r;
+        const PackageControl::MissionOf mission_of = [c](const FlightState& f) {
+            const Package* p = c->PackageById(SessionPackageId(f.package));
+            return p != nullptr ? C2MissionOf(*p, c->Data()) : std::string("any");
+        };
+        const PackageControl::PostKind kind_of = [c](const std::string& by) {
+            const C2PostState* p = c->C2().Post(by);
+            return p != nullptr ? p->kind : std::string();
+        };
+        const PackageControl::WhereOf where_of = [c, rp](const std::string& by, const FlightState& f, const FlightOrder& o) {
+            C2Where w;
+            const C2PostState* p = c->C2().Post(by);
+            if (p == nullptr) return w;
+            Vec3 at;
+            if (o.has_aim) {
+                at = o.aim;
+            } else if (const FlightSlot* s = f.Leader()) {
+                if (s->target >= 0 && static_cast<std::size_t>(s->target) < rp->Def().targets.size()) at = rp->TargetPosition(rp->Def().targets[static_cast<std::size_t>(s->target)].id);
+            }
+            const Vec3 t = MoveFrame(LocalFrame(rp->Def().origin), LocalFrame(c->Data().theatre.origin), at);
+            return c->C2().WhereFor(*p, t, c->Phase());
+        };
+        r.SetFlightAuthority(PackageControl::Rule(c_->Data(), kind_of, mission_of, where_of));
+    }
+
     // The faction's jammers of our voice nets with the package (comms_jamming.hpp), against the battery where the session
     // has it: each that reaches the battery net is on it on the package's times; the rest are noted with why not.
     void JamTheBatteryNet(ScenarioRunner& r, const Package& p) {
@@ -309,8 +396,8 @@ private:
     ScenarioFormat fmt_;
     double every_s_ = 30.0;
     double next_s_ = 0.0;
-    std::unique_ptr<MissionBridge> bridge_;
-    bool landing_ = false;  // the package is over; its loads still falling land before it is handed back
+    std::vector<Live> live_;  // the packages in the session now
+    bool authority_set_ = false;
     std::vector<Played> played_;
     std::vector<std::string> notes_;
 };

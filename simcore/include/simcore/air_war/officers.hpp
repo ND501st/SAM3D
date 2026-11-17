@@ -160,6 +160,22 @@ public:
         }
     }
 
+    // The duty officers of the command posts in the air (roadmap B5, c2.hpp): not one of the staff's single posts.
+    static bool IsPostRole(StaffRole r) { return r == StaffRole::CpController || r == StaffRole::GciController || r == StaffRole::Fac; }
+
+    // A command post's duty officer (roadmap B5): generated from the pool with his role's rank and trait means, after the
+    // staff (so the staff's own draws are not moved), kept apart from the single posts' holders (a faction has many posts
+    // of a kind). `post` is the post's id (his def.squadron). Returns his index.
+    int AppointPost(StaffRole role, const std::string& post, const AirWarData& data, Rng& rng, double now_h) {
+        OfficerDef od = Generate(role, post, data, rng, nullptr);
+        od.flies = false;
+        Officer o = Make(od, data);
+        o.appointed_h = now_h;
+        o.Note(now_h, data.theatre.start_hour, "on duty at " + post);
+        officers.push_back(std::move(o));
+        return static_cast<int>(officers.size()) - 1;
+    }
+
     // Put a new officer in a post (generated from the faction's pool). Returns his index.
     int Appoint(StaffRole role, const std::string& squadron, const AirWarData& data, Rng& rng, double now_h,
                 const std::string& why, const Officer* predecessor = nullptr) {
