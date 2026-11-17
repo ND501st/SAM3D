@@ -158,9 +158,90 @@ struct AirDoctrineDef {
     double strikers_jettison = 0.0;    // a striker's answer to an interceptor, trained crews (04_REACTIONS.md section 8)
     double strikers_press_on = 0.0;
     double strikers_abort = 0.0;
+    // The fight (roadmap B8; 07 sections 4.2, 4.5, 5.5). skill: the faction's air_combat_skill (10_FACTIONS.md 7.2).
+    double skill = 0.5;
+    // What a flight does when it loses its controller, a green pilot's and a skilled one's: abort, pairs, continue.
+    std::string control_lost_green = "abort";
+    std::string control_lost_skilled = "pairs";
+    // The believed ratio of own to enemy fighters a leader who commits himself needs (0: the controller commits).
+    double commit_odds = 0.0;
+    // How its planner shares the fighters it sends with a package: close escort, a sweep ahead, a detached CAP; the sweep's
+    // lead on the strike's time over target.
+    double plan_close = 1.0;
+    double plan_sweep = 0.0;
+    double plan_cap = 0.0;
+    double sweep_lead_s = 0.0;
     std::string source;
     std::string confidence;
     std::string notes;
+
+    // A radar shot needs the target identified by eye (vid), else the controller's word clears it.
+    bool NeedsVid() const { return roe == "vid"; }
+    bool ControllerBound() const { return commit_by == "controller"; }
+    // What a pilot of this skill does when he loses his controller (green below 0.5).
+    const std::string& OnControlLost(double pilot_skill) const { return pilot_skill < 0.5 ? control_lost_green : control_lost_skilled; }
+};
+
+// The fight's game values (data/air_war/air_combat.json "fight"; 07 sections 5.3, 5.6): the live fight's and the abstract
+// one's. Every one is a game value; the data's notes give the period anchor where there is one.
+struct FightParams {
+    // Live.
+    double think_s = 0.5;
+    double radar_scan_s = 2.0;
+    double radar_az_rad = 1.0472;
+    double contact_hold_s = 10.0;
+    double vid_m = 5500.0;
+    double friendly_clear_m = 20000.0;
+    double gci_vector_s = 20.0;
+    double gci_update_s = 10.0;
+    double gci_error_m = 1000.0;
+    double control_lost_s = 60.0;
+    double joker_s = 600.0;
+    double bingo_s = 900.0;
+    double break_g = 6.0;
+    double gun_cone_rad = 0.1745;
+    double gun_aspect_rad = 1.0472;
+    double extend_s = 20.0;
+    double claim_on_miss = 0.3;
+    double slow_target_mps = 120.0;
+    // Abstract (A0).
+    double a0_intercept = 0.5;
+    double a0_detect_day = 0.85;
+    double a0_detect_night = 0.45;
+    double a0_detect_poor = 0.6;
+    double a0_detect_low = 0.6;
+    double a0_rounds = 2.0;
+    double a0_meet_sweep = 0.6;
+    double a0_meet_cap = 0.4;
+    double a0_meet_close = 0.5;
+    double a0_awacs_meet = 1.5;
+    double a0_surprise_gci = 0.6;
+    double a0_surprise_jammed = 0.2;
+    double a0_seen_awacs = 0.9;
+    double a0_seen_eye = 0.2;
+    double a0_gci_jammed = 0.5;
+    double a0_green_home = 0.3;
+    double a0_sarh_bvr_m = 15000.0;
+    double a0_sarh_vid_m = 5000.0;
+    double a0_ir_m = 3000.0;
+    double a0_gun_m = 600.0;
+    double a0_range_sigma = 0.4;
+};
+
+// Our fighter regiments as the abstract fight sees them (data/air_war/air_combat.json "ours"), until B10 makes them actors.
+struct OurRegimentDef {
+    std::string id;                                  // the order of battle's regiment (data/command/oob_pannonia.json)
+    std::vector<std::pair<std::string, int>> types;  // fit id, count
+};
+struct OursDef {
+    std::vector<OurRegimentDef> regiments;
+    int Total() const {
+        int n = 0;
+        for (const OurRegimentDef& r : regiments) {
+            for (const auto& t : r.types) n += t.second;
+        }
+        return n;
+    }
 };
 
 // The numbers of the chain of chances (air_combat.hpp). Game values calibrated until the period's rates come out
@@ -247,6 +328,8 @@ struct AirCombatDef {
     std::vector<FitDef> fits;
     std::vector<AirDoctrineDef> doctrines;
     CalibrationDef calibration;
+    FightParams fight;  // "fight" (B8)
+    OursDef ours;       // "ours" (B8)
 
     const AamDef* Aam(const std::string& id) const {
         for (const AamDef& a : aams) {

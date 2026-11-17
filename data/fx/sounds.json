@@ -107,7 +107,7 @@
   },
 
   "models": {
-    "mig21": "turbojet_fighter", "mig23ml": "turbojet_fighter", "mig23mld": "turbojet_fighter", "mig25rb": "turbojet_fighter",
+    "mig21": "turbojet_fighter", "mig21mf": "turbojet_fighter", "mig21bis": "turbojet_fighter", "mig23ml": "turbojet_fighter", "mig23ml_wp": "turbojet_fighter", "mig23mld": "turbojet_fighter", "mig25rb": "turbojet_fighter",
     "mig25bm": "turbojet_fighter", "mig27": "turbojet_fighter", "su17m3": "turbojet_fighter", "su22m3": "turbojet_fighter",
     "su24": "turbojet_fighter", "su25": "turbojet_fighter", "yak28pp": "turbojet_fighter", "f4e": "turbojet_fighter",
     "f4g": "turbojet_fighter", "rf4c": "turbojet_fighter", "draken_gun": "turbojet_fighter", "galeb": "turbojet_fighter",

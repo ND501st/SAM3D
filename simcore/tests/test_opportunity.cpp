@@ -575,16 +575,20 @@ SC_TEST("opportunity (A0): with no finds a campaign runs as before B6; with them
         const AirCampaign a = RunDays(d0, 7u, 5.0);
         const AirCampaign b = RunDays(d1, 7u, 5.0);
         SC_EXPECT(JournalText(a) == JournalText(b));
-        const AirCampaign on = RunDays(LoadOpp(f), 7u, 5.0);
+        // A find is rare (a column on the road under a flight's route): the seeds are tried until one campaign has one,
+        // so the property is tested, not one seed's course (B8's air battle changes every campaign's course).
         int found = 0;
-        for (const JournalEntry& j : on.Journal()) {
-            std::size_t pos = 0;
-            while ((pos = j.text.find("on its way and attacked it", pos)) != std::string::npos) {
-                ++found;
-                ++pos;
+        for (unsigned seed = 7u; seed < 12u && total + found == 0; ++seed) {
+            const AirCampaign on = RunDays(LoadOpp(f), seed, 5.0);
+            for (const JournalEntry& j : on.Journal()) {
+                std::size_t pos = 0;
+                while ((pos = j.text.find("on its way and attacked it", pos)) != std::string::npos) {
+                    ++found;
+                    ++pos;
+                }
             }
+            std::printf("    %s, seed %u: %d columns attacked on the way in five days\n", f, seed, found);
         }
-        std::printf("    %s: %d columns attacked on the way in five days\n", f, found);
         total += found;
     }
     SC_EXPECT(total > 0);

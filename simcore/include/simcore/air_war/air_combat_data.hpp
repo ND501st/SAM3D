@@ -17,7 +17,8 @@ class AirCombatLoader : public AirWarLoader {
 public:
     bool LoadAirCombat(const json::Value& root, AirCombatDef& out) {
         if (!root.Is(json::Type::Object)) return Fail("", "expected an object");
-        if (!Keys(root, "", {"air_combat_id", "status", "source", "confidence", "notes", "aams", "guns", "fits", "doctrine", "calibration"}) ||
+        if (!Keys(root, "", {"air_combat_id", "status", "source", "confidence", "notes", "aams", "guns", "fits", "doctrine", "calibration", "fight",
+                             "ours"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -69,7 +70,14 @@ public:
         }
         const json::Value* cal = root.Find("calibration");
         if (cal == nullptr) return Fail("calibration", "required");
-        return Calibration(*cal, "calibration", out.calibration);
+        if (!Calibration(*cal, "calibration", out.calibration)) return false;
+        if (const json::Value* fj = root.Find("fight")) {
+            if (!Fight(*fj, "fight", out.fight)) return false;
+        }
+        if (const json::Value* oj = root.Find("ours")) {
+            if (!Ours(*oj, "ours", out)) return false;
+        }
+        return true;
     }
 
     bool LoadSensors(const json::Value& root, SensorsDef& out) {
@@ -216,7 +224,8 @@ private:
 
     bool Doctrine(const json::Value& v, const std::string& p, AirDoctrineDef& d) {
         if (!Keys(v, p, {"faction", "roe", "commit_by", "initiative_at_contact", "formation", "sort", "shot_order", "tactic", "cooperative_id",
-                         "strikers_answer", "source", "confidence", "notes"}) ||
+                         "strikers_answer", "skill", "on_control_lost", "commit_odds", "fighter_plan", "source", "confidence", "notes"}) ||
+            !Num(v, p, "skill", d.skill, 0.0, 1.0) || !Num(v, p, "commit_odds", d.commit_odds, 0.0, 10.0) ||
             !OneOf(v, p, "faction", d.faction, {"nato", "warsaw_pact", "neutral", "rebels", "ours"}) ||
             !OneOf(v, p, "roe", d.roe, {"vid", "cleared_bvr", "controller"}) ||
             !OneOf(v, p, "commit_by", d.commit_by, {"leader", "controller"}) ||
@@ -238,6 +247,96 @@ private:
         if (!Keys(*sa, sp, {"jettison", "press_on", "abort", "source", "confidence", "notes"}) || !Num(*sa, sp, "jettison", d.strikers_jettison, 0.0, 1.0) ||
             !Num(*sa, sp, "press_on", d.strikers_press_on, 0.0, 1.0) || !Num(*sa, sp, "abort", d.strikers_abort, 0.0, 1.0) || !Provenance(*sa, sp)) {
             return false;
+        }
+        if (const json::Value* cl = v.Find("on_control_lost")) {
+            const std::string cp = Join(p, "on_control_lost");
+            if (!Keys(*cl, cp, {"green", "skilled", "source", "confidence", "notes"}) || !Provenance(*cl, cp) ||
+                !OneOf(*cl, cp, "green", d.control_lost_green, {"abort", "pairs", "continue"}) ||
+                !OneOf(*cl, cp, "skilled", d.control_lost_skilled, {"abort", "pairs", "continue"})) {
+                return false;
+            }
+        }
+        if (const json::Value* fp = v.Find("fighter_plan")) {
+            const std::string pp = Join(p, "fighter_plan");
+            if (!Keys(*fp, pp, {"close", "sweep", "cap", "sweep_lead_s", "source", "confidence", "notes"}) || !Provenance(*fp, pp) ||
+                !Num(*fp, pp, "close", d.plan_close, 0.0, 1.0) || !Num(*fp, pp, "sweep", d.plan_sweep, 0.0, 1.0) ||
+                !Num(*fp, pp, "cap", d.plan_cap, 0.0, 1.0) || !Num(*fp, pp, "sweep_lead_s", d.sweep_lead_s, 0.0, 3600.0)) {
+                return false;
+            }
+            if (d.plan_close + d.plan_sweep + d.plan_cap <= 0.0) return Fail(pp, "close, sweep and cap may not all be 0");
+        }
+        return true;
+    }
+
+    bool Fight(const json::Value& v, const std::string& p, FightParams& f) {
+        const std::vector<Slot> slots = {
+            {"think_s", &f.think_s, 1.0, 0.05, 10.0},
+            {"radar_scan_s", &f.radar_scan_s, 1.0, 0.1, 30.0},
+            {"radar_az_deg", &f.radar_az_rad, kDegToRad, 5.0, 180.0},
+            {"contact_hold_s", &f.contact_hold_s, 1.0, 0.5, 120.0},
+            {"vid_m", &f.vid_m, 1.0, 100.0, 50000.0},
+            {"friendly_clear_m", &f.friendly_clear_m, 1.0, 0.0, 200000.0},
+            {"gci_vector_s", &f.gci_vector_s, 1.0, 1.0, 300.0},
+            {"gci_update_s", &f.gci_update_s, 1.0, 1.0, 600.0},
+            {"gci_error_m", &f.gci_error_m, 1.0, 0.0, 20000.0},
+            {"control_lost_s", &f.control_lost_s, 1.0, 5.0, 1800.0},
+            {"joker_s", &f.joker_s, 1.0, 10.0, 7200.0},
+            {"bingo_s", &f.bingo_s, 1.0, 10.0, 7200.0},
+            {"break_g", &f.break_g, 1.0, 1.0, 12.0},
+            {"gun_cone_deg", &f.gun_cone_rad, kDegToRad, 1.0, 90.0},
+            {"gun_aspect_deg", &f.gun_aspect_rad, kDegToRad, 1.0, 180.0},
+            {"extend_s", &f.extend_s, 1.0, 1.0, 300.0},
+            {"claim_on_miss", &f.claim_on_miss, 1.0, 0.0, 1.0},
+            {"slow_target_mps", &f.slow_target_mps, 1.0, 0.0, 400.0},
+            {"a0_intercept", &f.a0_intercept, 1.0, 0.0, 1.0},
+            {"a0_detect_day", &f.a0_detect_day, 1.0, 0.0, 1.0},
+            {"a0_detect_night", &f.a0_detect_night, 1.0, 0.0, 1.0},
+            {"a0_detect_poor", &f.a0_detect_poor, 1.0, 0.0, 1.0},
+            {"a0_detect_low", &f.a0_detect_low, 1.0, 0.0, 1.0},
+            {"a0_rounds", &f.a0_rounds, 1.0, 1.0, 6.0},
+            {"a0_meet_sweep", &f.a0_meet_sweep, 1.0, 0.0, 1.0},
+            {"a0_meet_cap", &f.a0_meet_cap, 1.0, 0.0, 1.0},
+            {"a0_meet_close", &f.a0_meet_close, 1.0, 0.0, 1.0},
+            {"a0_awacs_meet", &f.a0_awacs_meet, 1.0, 0.0, 5.0},
+            {"a0_surprise_gci", &f.a0_surprise_gci, 1.0, 0.0, 1.0},
+            {"a0_surprise_jammed", &f.a0_surprise_jammed, 1.0, 0.0, 1.0},
+            {"a0_seen_awacs", &f.a0_seen_awacs, 1.0, 0.0, 1.0},
+            {"a0_seen_eye", &f.a0_seen_eye, 1.0, 0.0, 1.0},
+            {"a0_gci_jammed", &f.a0_gci_jammed, 1.0, 0.0, 1.0},
+            {"a0_green_home", &f.a0_green_home, 1.0, 0.0, 1.0},
+            {"a0_sarh_bvr_m", &f.a0_sarh_bvr_m, 1.0, 100.0, 100000.0},
+            {"a0_sarh_vid_m", &f.a0_sarh_vid_m, 1.0, 100.0, 100000.0},
+            {"a0_ir_m", &f.a0_ir_m, 1.0, 100.0, 100000.0},
+            {"a0_gun_m", &f.a0_gun_m, 1.0, 50.0, 5000.0},
+            {"a0_range_sigma", &f.a0_range_sigma, 1.0, 0.0, 3.0},
+        };
+        if (!Group(v, p, slots)) return false;
+        if (f.bingo_s < f.joker_s) return Fail(Join(p, "bingo_s"), "not before joker_s");
+        return true;
+    }
+
+    bool Ours(const json::Value& v, const std::string& p, AirCombatDef& out) {
+        if (!Keys(v, p, {"regiments", "source", "confidence", "notes"}) || !Provenance(v, p)) return false;
+        const json::Value* arr = OptionalArray(v, p, "regiments");
+        if (arr == nullptr) return message_.empty() ? Fail(Join(p, "regiments"), "required") : false;
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& r = arr->items[i];
+            const std::string rp = Index(Join(p, "regiments"), i);
+            OurRegimentDef rg;
+            if (!Keys(r, rp, {"id", "types", "notes"}) || !RequireString(r, rp, "id", rg.id)) return false;
+            const json::Value* ts = OptionalArray(r, rp, "types");
+            if (ts == nullptr || ts->items.empty()) return message_.empty() ? Fail(Join(rp, "types"), "required: [[fit id, count], ...]") : false;
+            for (std::size_t k = 0; k < ts->items.size(); ++k) {
+                const json::Value& pair = ts->items[k];
+                const std::string tp = Index(Join(rp, "types"), k);
+                if (!pair.Is(json::Type::Array) || pair.items.size() != 2 || !pair.items[0].Is(json::Type::String) ||
+                    !pair.items[1].Is(json::Type::Number) || pair.items[1].number < 1.0) {
+                    return Fail(tp, "[fit id, count >= 1]");
+                }
+                if (out.Fit(pair.items[0].string) == nullptr) return Fail(tp, "no fit '" + pair.items[0].string + "'");
+                rg.types.push_back({pair.items[0].string, static_cast<int>(pair.items[1].number)});
+            }
+            out.ours.regiments.push_back(std::move(rg));
         }
         return true;
     }

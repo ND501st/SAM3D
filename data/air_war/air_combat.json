@@ -737,6 +737,107 @@
       "source": "game value: the rebels' defected light jet carries guns (the theatre's data, docs/air_battle/07_AIR_TO_AIR.md 2.5); no calibre or load found",
       "confidence": "estimate",
       "notes": "A placeholder gun for the rebels' Galeb class."
+    },
+    {
+      "id": "gsh6_30",
+      "name": "GSh-6-30 30 mm six-barrel gun (MiG-27)",
+      "firing_s": 3.0,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1975,
+      "game_values": [
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "hushkit_2020_mig27 (an Indian Air Force MiG-27 pilot: 260 rounds, 'just over 3 seconds to expend' at 5000 rounds a minute)",
+      "confidence": "medium",
+      "notes": "The firing window is the pilot's 3 s. The effective range and the kill rate are game values; the year is the MiG-27's, a SAM3D estimate."
+    },
+    {
+      "id": "gsh6_23",
+      "name": "GSh-6-23 23 mm six-barrel gun (Su-24)",
+      "firing_s": 3.3,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1975,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (Su-24 and Su-24M: a GSh-6-23 with 500 rounds, read 18 Nov 2026, the page's text partly garbled)",
+      "confidence": "low",
+      "notes": "firing_s is derived from the 500 rounds at a rate of about 9000 a minute, a SAM3D assumption (the rate was not read)."
+    },
+    {
+      "id": "gsh30_2",
+      "name": "GSh-30-2 30 mm twin-barrel gun (Su-25)",
+      "firing_s": 5.0,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1981,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (Su-25: a GSh-30-2 with 250 rounds, read 18 Nov 2026)",
+      "confidence": "medium",
+      "notes": "firing_s is derived from the 250 rounds at about 3000 a minute, a SAM3D assumption (the rate was not read)."
+    },
+    {
+      "id": "nr30",
+      "name": "Two NR-30 30 mm guns (Su-17M3)",
+      "firing_s": 5.6,
+      "effective_m": 1000,
+      "kill_per_s": 0.15,
+      "in_service_year": 1976,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (Su-17M3: two 30 mm guns, 80 rounds a barrel; read 18 Nov 2026, the designation garbled in the page's text)",
+      "confidence": "low",
+      "notes": "firing_s is derived from 80 rounds a barrel at about 850 a minute, a SAM3D assumption."
+    },
+    {
+      "id": "bk27",
+      "name": "Two Mauser BK-27 27 mm guns (Tornado IDS)",
+      "firing_s": 4.0,
+      "effective_m": 900,
+      "kill_per_s": 0.2,
+      "in_service_year": 1980,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "sam3d assumption: the Tornado IDS's two 27 mm Mauser guns are public reference knowledge not read from a registered source (unverified)",
+      "confidence": "estimate",
+      "notes": "Every number a game value."
+    },
+    {
+      "id": "gau8_air",
+      "name": "GAU-8/A 30 mm gun used against aircraft (A-10A)",
+      "firing_s": 10.0,
+      "effective_m": 1200,
+      "kill_per_s": 0.1,
+      "in_service_year": 1977,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "wiki_guns (GAU-8 Avenger, a pointer: the A-10's gun); its use against aircraft is a SAM3D assumption (unverified)",
+      "confidence": "estimate",
+      "notes": "A ground-attack gun: offered only against helicopters and slow aircraft (fight.slow_target_mps). Game values."
     }
   ],
   "fits": [
@@ -859,7 +960,10 @@
       "export_fit": "mig23ml_export",
       "source": "mis (R-24: adopted for the MiG-23ML by the decree of 6 April 1981); airwar_ru (MiG-23ML; the MiG-23MLD's typical load of two R-24 and four R-60, taken for the ML)",
       "confidence": "low",
-      "notes": "The Soviet frontal aviation's MiG-23ML of the Pact's 1985 war and our 3rd Fighter Regiment's twelve. The R-24T or R-23 are alternatives, not modelled. SRO-2M IFF, Lazur-SML link. export_fit is the stripped client variant (Bekaa's lower bound)."
+      "notes": "The Soviet frontal aviation's MiG-23ML of the Pact's 1985 war and our 3rd Fighter Regiment's twelve. The R-24T or R-23 are alternatives, not modelled. SRO-2M IFF, Lazur-SML link. export_fit is the stripped client variant (Bekaa's lower bound). The Pact's own MiG-23ML (type mig23ml_wp, B8) takes this fit: Soviet frontal aviation, the R-24 from 1981.",
+      "aliases": [
+        "mig23ml_wp"
+      ]
     },
     {
       "id": "mig23ml_export",
@@ -921,12 +1025,12 @@
               2
             ]
           ],
-          "gun": ""
+          "gun": "gsh6_30"
         }
       ],
-      "source": "airwar_ru (R-60: carried by the MiG-27)",
+      "source": "airwar_ru (R-60: carried by the MiG-27); hushkit_2020_mig27 (the gun)",
       "confidence": "medium",
-      "notes": "Self-defence. The gun is not a fighter's: no gun entry."
+      "notes": "Self-defence: two R-60 and the six-barrel gun (B8 gave the strike types their guns)."
     },
     {
       "id": "su24",
@@ -942,12 +1046,12 @@
               2
             ]
           ],
-          "gun": ""
+          "gun": "gsh6_23"
         }
       ],
-      "source": "airwar_ru (R-60: carried by the Su-24 for self-defence)",
+      "source": "airwar_ru (R-60: carried by the Su-24 for self-defence); airwar_ru (Su-24M: up to two R-60 or R-60M; the GSh-6-23)",
       "confidence": "medium",
-      "notes": "Self-defence."
+      "notes": "Self-defence: two R-60 and the six-barrel gun."
     },
     {
       "id": "su25",
@@ -963,12 +1067,12 @@
               2
             ]
           ],
-          "gun": ""
+          "gun": "gsh30_2"
         }
       ],
-      "source": "airwar_ru (R-60: carried by the Su-25 for self-defence)",
+      "source": "airwar_ru (R-60: carried by the Su-25 for self-defence); airwar_ru (Su-25: the GSh-30-2, an R-3 or R-60 class missile)",
       "confidence": "medium",
-      "notes": "Self-defence."
+      "notes": "Self-defence: two R-60 and the twin-barrel gun."
     },
     {
       "id": "su17m3",
@@ -984,12 +1088,12 @@
               2
             ]
           ],
-          "gun": ""
+          "gun": "nr30"
         }
       ],
-      "source": "airwar_ru (R-60: carried by the Su-17)",
+      "source": "airwar_ru (R-60: carried by the Su-17); airwar_ru (Su-17M3: two 30 mm guns, an R-60)",
       "confidence": "medium",
-      "notes": "Self-defence."
+      "notes": "Self-defence: two R-60 and two guns."
     },
     {
       "id": "f15c",
@@ -1168,6 +1272,121 @@
       "source": "game value: the rebels' defected light jet's guns",
       "confidence": "estimate",
       "notes": "No guided air-to-air weapon."
+    },
+    {
+      "id": "tornado_ids",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1980,
+          "aams": [
+            [
+              "aim9l",
+              2
+            ]
+          ],
+          "gun": "bk27"
+        }
+      ],
+      "source": "sam3d assumption: two AIM-9L for self-defence and the two guns (parsch_dusrm for the AIM-9L's year; the Tornado's carriage not read in a registered source, unverified)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: self-defence only; it never escorts."
+    },
+    {
+      "id": "f111f",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no air-to-air fit (no source read gives the F-111F an AIM-9 or a gun in 1985)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: it carries nothing for air combat; its defence is speed and low level."
+    },
+    {
+      "id": "a10a",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1977,
+          "aams": [],
+          "gun": "gau8_air"
+        }
+      ],
+      "source": "sam3d assumption: the AIM-9 on the A-10 is not dated in a source read (unverified), so only its gun",
+      "confidence": "estimate",
+      "notes": "Decided in B8: the gun against helicopters and slow aircraft only."
+    },
+    {
+      "id": "ah1s",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no air-to-air missile on the AH-1S in 1985 (none in a source read)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: nothing."
+    },
+    {
+      "id": "mig25bm",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no source read gives the suppression variant an air-to-air missile (mig25bm_refs names only the Kh-58)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: nothing; speed and height are its defence."
+    },
+    {
+      "id": "mi24",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "docs/air_battle/07_AIR_TO_AIR.md 2.5 (whether a Mi-24 could carry the R-60 is unverified)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: nothing until a source dates the R-60 on it."
+    },
+    {
+      "id": "helicopters",
+      "aliases": [
+        "mi8_doorgun",
+        "ab212",
+        "alouette3"
+      ],
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no armed helicopter of the four factions carries an air-to-air weapon in 1985",
+      "confidence": "estimate",
+      "notes": "Decided in B8: every other helicopter (Mi-8, AB 212, Alouette III) carries nothing for air combat."
+    },
+    {
+      "id": "unarmed",
+      "aliases": [
+        "ef111a",
+        "rf4c",
+        "e3a",
+        "kc135",
+        "rc135",
+        "mig25rb",
+        "yak28pp",
+        "a50",
+        "il20",
+        "an2_bomber",
+        "utva75"
+      ],
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: the support, jamming and reconnaissance types and the rebels' light aircraft carry no air-to-air weapon in 1985",
+      "confidence": "estimate",
+      "notes": "Decided in B8 so every type has a fit: the EF-111A, RF-4C, E-3A, KC-135, RC-135, MiG-25RB, Yak-28PP, A-50, Il-20, the rebels' An-2 and UTVA 75 carry nothing for air combat. Their defence is distance, height, speed or their escorts. The IFF is left 'none' here: these are never shooters, and our side's identification of them goes by the faction's own IFF rules in perception."
     }
   ],
   "doctrine": [
@@ -1192,9 +1411,25 @@
         "source": "docs/air_battle/04_REACTIONS.md section 8 (NATO trained crews); design estimates",
         "confidence": "estimate"
       },
+      "skill": 0.8,
+      "on_control_lost": {
+        "green": "continue",
+        "skilled": "continue",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 0.5,
+      "fighter_plan": {
+        "close": 0.0,
+        "sweep": 0.5,
+        "cap": 0.5,
+        "sweep_lead_s": 300,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
       "source": "afit_1982_vid (visual identification before a radar missile in central Europe); anderegg_2001 pp. 59, 82-84, 160 (pairs line abreast about a mile apart; 'left, low, lead'); checo_1969_a2a (the shot order of F-4E units: Sparrow, Sidewinder, gun); lambeth_1984 (the Bekaa's beam attacks)",
       "confidence": "medium",
-      "notes": "Commit by the flight leader, or the E-3A or CRC vectoring defence fighters. The cooperative identification of the enemy's IFF (Combat Tree in 1972) is off: its 1985 status in Europe is not known (air_combat.md nato-06, unverified)."
+      "notes": "Commit by the flight leader, or the E-3A or CRC vectoring defence fighters. The cooperative identification of the enemy's IFF (Combat Tree in 1972) is off: its 1985 status in Europe is not known (air_combat.md nato-06, unverified). B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
     },
     {
       "faction": "warsaw_pact",
@@ -1217,9 +1452,25 @@
         "source": "game value: Pact attackers keep to the plan (docs/air_battle/07_AIR_TO_AIR.md 4.6)",
         "confidence": "estimate"
       },
+      "skill": 0.5,
+      "on_control_lost": {
+        "green": "abort",
+        "skilled": "pairs",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 0.0,
+      "fighter_plan": {
+        "close": 0.5,
+        "sweep": 0.5,
+        "cap": 0.0,
+        "sweep_lead_s": 180,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
       "source": "lambeth_1984 (Skinner 1983: the mission is aborted if contact is lost); pennington_1985; johnson_1986 (initiative to the flight leaders only at contact); checo_1969_a2a (the MiG-21's hit-and-run under GCI); mt_turchin_coop (the rear-hemisphere attack)",
       "confidence": "medium",
-      "notes": "The average Pact unit of 1985 is GCI-bound, aborting or falling back to rote pairs when control is lost; the best units pass initiative to the flight leader at contact (a skill rule, air_combat.md section 4.3). The controller's word is the identification rule: SAM3D's assumption."
+      "notes": "The average Pact unit of 1985 is GCI-bound, aborting or falling back to rote pairs when control is lost; the best units pass initiative to the flight leader at contact (a skill rule, air_combat.md section 4.3). The controller's word is the identification rule: SAM3D's assumption. B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
     },
     {
       "faction": "neutral",
@@ -1240,9 +1491,25 @@
         "source": "docs/air_battle/04_REACTIONS.md section 8 (the neutral); design estimates",
         "confidence": "estimate"
       },
+      "skill": 0.5,
+      "on_control_lost": {
+        "green": "abort",
+        "skilled": "abort",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 1.0,
+      "fighter_plan": {
+        "close": 1.0,
+        "sweep": 0.0,
+        "cap": 0.0,
+        "sweep_lead_s": 0,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
       "source": "docs/research/air_battle_2026-11/air_combat.md neu-01 (visual identification always, by day, guns, breaks off on any threat; no period source on its tactics)",
       "confidence": "low",
-      "notes": "Low confidence: no period source on its tactics."
+      "notes": "Low confidence: no period source on its tactics. B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
     },
     {
       "faction": "rebels",
@@ -1263,9 +1530,25 @@
         "source": "game value: a rebel aircraft hides low, runs or lands (docs/air_battle/07_AIR_TO_AIR.md 4.4)",
         "confidence": "estimate"
       },
+      "skill": 0.2,
+      "on_control_lost": {
+        "green": "continue",
+        "skilled": "continue",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 1.0,
+      "fighter_plan": {
+        "close": 1.0,
+        "sweep": 0.0,
+        "cap": 0.0,
+        "sweep_lead_s": 0,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
       "source": "docs/research/air_battle_2026-11/air_combat.md reb-01 (the rebels have no fighters: a rebel aircraft hides low, runs or lands)",
       "confidence": "low",
-      "notes": "Game values."
+      "notes": "Game values. B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
     },
     {
       "faction": "ours",
@@ -1288,9 +1571,25 @@
         "source": "game value: ours are interceptors, not strikers",
         "confidence": "estimate"
       },
+      "skill": 0.45,
+      "on_control_lost": {
+        "green": "abort",
+        "skilled": "pairs",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 0.0,
+      "fighter_plan": {
+        "close": 1.0,
+        "sweep": 0.0,
+        "cap": 0.0,
+        "sweep_lead_s": 0,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
       "source": "docs/research/air_battle_2026-11/air_combat.md our-01 (Soviet control practice: the national air defence's GCI brings them in; their own initiative begins at contact); reactions.md section 2.6 (30 per cent of green crews go home under jamming: a design estimate)",
       "confidence": "low",
-      "notes": "Fall back to independent search in pairs, or go home, when the command post is lost or the nets jammed (08_OUR_FIGHTERS.md)."
+      "notes": "Fall back to independent search in pairs, or go home, when the command post is lost or the nets jammed (08_OUR_FIGHTERS.md). B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
     }
   ],
   "calibration": {
@@ -1453,5 +1752,87 @@
         "notes": "For the bench."
       }
     }
+  },
+  "fight": {
+    "source": "game values for the live and the abstract fight (docs/air_battle/07_AIR_TO_AIR.md 5.3, 5.6); the period anchors each names in its notes",
+    "confidence": "estimate",
+    "notes": "Live: think_s the mode and shot check (2 Hz, staggered by a fixed key); radar_scan_s a radar's look; radar_az_deg its scan either side of the nose; contact_hold_s how long a contact is kept unseen; vid_m the eye's identification of a fighter (aam_weapons.md section 8: about 5-6 km by day); friendly_clear_m no friendly aircraft this near a contact for a BVR shot on the E-3A's word; gci_vector_s a controller's vector; gci_update_s and gci_error_m his radar picture; control_lost_s without a vector this long a flight has lost its controller; joker_s and bingo_s seconds of fight after the commit (no period number: air_combat.md nato-16); break_g a defender's break; gun_cone_deg and gun_aspect_deg the gun's angle off and the target's aspect a gun pass needs; extend_s an extension; claim_on_miss the share of misses claimed as kills (lambeth_1985: two shots called for every one observed at TOPGUN in 1980); slow_target_mps a target slow enough for a ground-attack gun. Abstract (A0): a0_intercept the share of our fighter threat that reaches a package; a0_detect_* our ground control finding it by day, by night, in poor weather and when the package is low; a0_rounds the passes fought; a0_meet_* the chance one escort flight of that kind engages our pair first, a0_awacs_meet its factor under the E-3A; a0_surprise_* our first pass from the rear under GCI and with GCI jammed; a0_seen_* the enemy sees the attack in time (the E-3A's warning; the eye alone: red_baron_vol2, 13 of 16 MiG attacks on F-105 flights first seen with no warning); a0_gci_jammed our GCI's nets jammed when the package brings a jammer; a0_green_home green crews going home under jamming (reactions.md section 2.6: 30 per cent); a0_sarh_bvr_m, a0_sarh_vid_m, a0_ir_m and a0_gun_m the median ranges each weapon is fired from, with a0_range_sigma their lognormal spread.",
+    "think_s": 0.5,
+    "radar_scan_s": 2.0,
+    "radar_az_deg": 60,
+    "contact_hold_s": 10,
+    "vid_m": 5500,
+    "friendly_clear_m": 20000,
+    "gci_vector_s": 20,
+    "gci_update_s": 10,
+    "gci_error_m": 1000,
+    "control_lost_s": 60,
+    "joker_s": 600,
+    "bingo_s": 900,
+    "break_g": 6,
+    "gun_cone_deg": 10,
+    "gun_aspect_deg": 60,
+    "extend_s": 20,
+    "claim_on_miss": 0.3,
+    "slow_target_mps": 120,
+    "a0_intercept": 0.5,
+    "a0_detect_day": 0.85,
+    "a0_detect_night": 0.45,
+    "a0_detect_poor": 0.6,
+    "a0_detect_low": 0.6,
+    "a0_rounds": 2,
+    "a0_meet_sweep": 0.6,
+    "a0_meet_cap": 0.4,
+    "a0_meet_close": 0.5,
+    "a0_awacs_meet": 1.5,
+    "a0_surprise_gci": 0.6,
+    "a0_surprise_jammed": 0.2,
+    "a0_seen_awacs": 0.9,
+    "a0_seen_eye": 0.2,
+    "a0_gci_jammed": 0.5,
+    "a0_green_home": 0.3,
+    "a0_sarh_bvr_m": 15000,
+    "a0_sarh_vid_m": 5000,
+    "a0_ir_m": 3000,
+    "a0_gun_m": 600,
+    "a0_range_sigma": 0.4
+  },
+  "ours": {
+    "source": "derived from data/command/oob_pannonia.json (the fighter division's three regiments, briefing decision 2) and docs/air_battle/08_OUR_FIGHTERS.md",
+    "confidence": "estimate",
+    "notes": "Our fighter regiments as the abstract fight sees them until B10 makes them actors: each regiment's types and counts. A loss to our fighters is written with the regiment's id (LossRecord::by), so the debrief counts it apart.",
+    "regiments": [
+      {
+        "id": "fighter_rgt_1",
+        "types": [
+          [
+            "mig21mf",
+            36
+          ]
+        ]
+      },
+      {
+        "id": "fighter_rgt_2",
+        "types": [
+          [
+            "mig21mf",
+            36
+          ]
+        ]
+      },
+      {
+        "id": "fighter_rgt_3",
+        "types": [
+          [
+            "mig21bis",
+            24
+          ],
+          [
+            "mig23ml",
+            12
+          ]
+        ]
+      }
+    ]
   }
 }

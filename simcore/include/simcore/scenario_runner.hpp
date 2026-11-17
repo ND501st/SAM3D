@@ -41,6 +41,7 @@
 
 #include "simcore/board_reading.hpp"
 #include "simcore/acmi.hpp"
+#include "simcore/air_war/air_fight_session.hpp"
 #include "simcore/air_war/air_radio.hpp"
 #include "simcore/air_war/perception_feed.hpp"
 #include "simcore/air_war/test_waves.hpp"
@@ -273,6 +274,7 @@ public:
         CueFromWarnings();
         UpdatePerception();
         UpdateReactions();
+        UpdateAirFight();
         UpdateArms();
         UpdateFuel(dt);
         UpdatePositionPower();
@@ -3372,6 +3374,58 @@ private:
         return c;
     }
 
+    // ---- The air battle (roadmap B8, air_war/air_fight_session.hpp): the scenario's "air_fight" fighters find, identify,
+    // close and fire by what they know; a kill comes back through DestroyTarget with our regiment's id.
+    std::unique_ptr<airwar::AirFightSession> air_fight_;
+    bool air_fight_failed_ = false;
+
+    void UpdateAirFight() {
+        if (!def_.air_fight.present || air_fight_failed_) return;
+        if (!air_fight_) {
+            std::vector<std::string> ids;
+            for (const ScenarioTarget& t : def_.targets) ids.push_back(t.id);
+            air_fight_ = std::make_unique<airwar::AirFightSession>();
+            std::string e;
+            if (!air_fight_->Init(def_.air_fight, ids, static_cast<std::uint64_t>(def_.seed) ^ 0xB8F16ull, &e)) {
+                Event("air fight", e);
+                air_fight_.reset();
+                air_fight_failed_ = true;
+                return;
+            }
+        }
+        airwar::AirFightWorld w;
+        const Flights::Lookup look = FlightLookup();
+        w.air = [look](int t) -> const Aircraft* { return look(t); };
+        w.picture = [this](int t) -> const std::vector<airwar::Sighting>* { return &PilotPicture(def_.targets[static_cast<std::size_t>(t)].id); };
+        w.altitude = [this](const Vec3& p) { return world_.Frame().AltitudeOf(p); };
+        w.agl = [this](const Vec3& p) { return world_.Frame().AltitudeOf(p) - world_.GetTerrain().HeightAt(p.x, p.y); };
+        w.steer = [this](int t, const PilotOverride& ov) { flights_->Override(t, ov); };
+        w.release = [this](int t) { flights_->EndOverride(t); };
+        w.destroy = [this](int t, const std::string& by) { return DestroyTarget(def_.targets[static_cast<std::size_t>(t)].id, by); };
+        w.event = [this](const std::string& who, const std::string& what) { Event(who, what); };
+        if (air_radio_) {
+            w.say = [this](const std::string& post, int t, const std::string& words, double at) {
+                const int fi = flights_->FlightOf(t);
+                if (fi < 0) return -1;
+                return air_radio_->SayFrom(post, airwar::CallKind::Vector, flights_->All()[static_cast<std::size_t>(fi)].id, words, at);
+            };
+            w.heard = [this](int call, int t, double at) {
+                const int fi = flights_->FlightOf(t);
+                if (fi < 0) return -1.0;
+                const std::vector<FlightSlot>& sl = flights_->All()[static_cast<std::size_t>(fi)].slots;
+                for (std::size_t k = 0; k < sl.size(); ++k) {
+                    if (sl[k].target == t) return air_radio_->Reaches(call, fi, static_cast<int>(k), at, 2.0);
+                }
+                return -1.0;
+            };
+        }
+        air_fight_->Step(time_, w);
+    }
+
+public:
+    const airwar::AirFightSession* AirFight() const { return air_fight_.get(); }
+
+private:
     void UpdateReactions() {
         if (DamageStatesOn() && !def_.waves) CrashDamaged();  // the testbed's run in FireNeighbourDefences
         for (const std::pair<std::size_t, int>& h : hit_heavy_) {

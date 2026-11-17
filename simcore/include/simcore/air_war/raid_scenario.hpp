@@ -1226,7 +1226,8 @@ public:
             Put(root, "environment", env);
         }
         json::Value end = Obj();
-        Put(end, "time_limit_s", Num(std::round(m.end_s)));
+        // Rounded up: a session that stopped before the raid's end would leave it unfinished (MissionBridge::Over).
+        Put(end, "time_limit_s", Num(std::ceil(m.end_s)));
         Put(end, "when_targets_gone", Bool(true));
         Put(root, "end", end);
         out.json_text = Dump(root);

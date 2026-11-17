@@ -80,6 +80,8 @@ struct RunStats {
     double c2_reports = 0.0, c2_out_of_cover = 0.0, c2_diverts = 0.0, c2_warnings = 0.0, c2_scrambles = 0.0, c2_on_call = 0.0;
     double c2_on_call_sorties = 0.0, c2_pool_aircraft = 0.0, c2_pools = 0.0, c2_stood_down = 0.0, c2_heard = 0.0, c2_refusals = 0.0;
     double c2_briefs = 0.0, c2_requests = 0.0, c2_to_intel = 0.0, c2_on_call_sorties_d1 = 0.0, c2_sorties_d1 = 0.0;
+    // The air battle (roadmap B8, air_fight.hpp): fights, the enemy's aircraft our fighters shot down, ours lost.
+    double air_fights = 0.0, air_enemy_lost = 0.0, air_ours_lost = 0.0;
 };
 
 void Posture(BatteryPosture& p, bool careful) {
@@ -207,6 +209,17 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
             acc.staff_changes += 1.0;
         }
         if (j.kind == "decision" && Contains(j.text, "claimed destroyed is working again")) acc.false_claims += 1.0;
+        // The resolver's note on an air battle: "our fighters (N) found it ...: A of its aircraft and B of ours shot down".
+        const std::size_t af = j.text.find("our fighters (");
+        if (j.kind == "result" && af != std::string::npos) {
+            const std::size_t colon = j.text.find(": ", af);
+            const std::size_t mid = colon == std::string::npos ? std::string::npos : j.text.find(" of its aircraft and ", colon);
+            if (mid != std::string::npos) {
+                acc.air_fights += 1.0;
+                acc.air_enemy_lost += static_cast<double>(std::strtol(j.text.c_str() + colon + 2, nullptr, 10));
+                acc.air_ours_lost += static_cast<double>(std::strtol(j.text.c_str() + mid + 21, nullptr, 10));
+            }
+        }
     }
     for (const PoliticalEventDef& e : data.faction.politics.events) {
         if (c.Politics().fired_events.count(e.id) == 0) continue;
@@ -307,6 +320,10 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
             if (g.second.first >= 0.5 * n) std::printf(" %s %.1f", g.first.c_str(), g.second.second / g.second.first);
         }
         std::printf(".\n");
+    }
+    if (r.air_fights > 0.0) {
+        std::printf("Air battle: %.1f fights a campaign, %.1f of the enemy's aircraft shot down by our fighters, %.1f of ours lost (%.1f:1).\n",
+                    r.air_fights / n, r.air_enemy_lost / n, r.air_ours_lost / n, r.air_ours_lost > 0.0 ? r.air_enemy_lost / r.air_ours_lost : 0.0);
     }
     std::printf("Support: AWACS on station %.0f%%, %.1f aircraft refuelled and %.1f support sorties a campaign. Force: %.0f aircraft on day 1, %.0f at the end.\n",
                 100.0 * r.awacs / n, r.refuelled / n, r.support_sorties / n, r.aircraft_day1 / n, r.aircraft_end / n);

@@ -390,12 +390,17 @@ SC_TEST("air combat data: AirWarData loads both files for every faction, and eve
         if (!ok) continue;
         SC_EXPECT(!d.air_combat.aams.empty() && !d.sensors.sensors.empty());
         SC_EXPECT(d.air_combat.Doctrine(f) != nullptr);
-        // A type the faction files give an air-to-air value has a fit (B11 retires `air_to_air` once every fighter has one).
+        // Every aircraft type has a fit (roadmap B8 retired `air_to_air`: a fighter's worth in the air is its fit), and a type
+        // that can escort carries a gun or a missile in the war's year.
         for (const AircraftType& a : d.faction.aircraft) {
-            if (a.air_to_air > 0.0) {
-                const bool has = d.air_combat.Fit(a.id) != nullptr;
-                if (!has) std::printf("    %s: %s has air_to_air %.2f and no fit\n", f, a.id.c_str(), a.air_to_air);
-                SC_EXPECT(has);
+            if (a.missile || a.drone) continue;
+            const bool has = d.air_combat.Fit(a.id) != nullptr;
+            if (!has) std::printf("    %s: %s has no fit\n", f, a.id.c_str());
+            SC_EXPECT(has);
+            if (a.Has(FlightRole::Escort) && a.InService(d.theatre.year)) {
+                const LoadOut lo = d.air_combat.LoadOutFor(a.id, d.theatre.year, false);
+                if (lo.Empty()) std::printf("    %s: escort %s carries nothing in %d\n", f, a.id.c_str(), d.theatre.year);
+                SC_EXPECT(!lo.Empty());
             }
         }
     }

@@ -380,7 +380,6 @@ struct AircraftType {
     double computing = 0.5;        // its bombing computer and sight, 0 (iron sight) .. 1 (CCIP and a laser rangefinder)
     double radius_m = 0.0;         // combat radius with a load, high-low-high (0: unlimited in the theatre)
     double recce_quality = 0.0;    // camera or sensor, 0..1
-    double air_to_air = 0.0;       // value as an escort, 0..1
     double evasion = 0.3;          // how well its crews survive a pass (with the pilot's skill), 0..1
     // Targets of opportunity (roadmap B6, docs/air_battle/06_OPPORTUNITY.md §4; the data's "opportunity", with its own
     // source): how easily its crews act on what they find, 0..1 (it scales the find-to-act steps, not the find), and the
@@ -713,6 +712,8 @@ inline std::string FormationClassOf(bool helicopter, FlightRole role) {
     if (helicopter) return "helicopter";
     switch (role) {
         case FlightRole::Escort:
+        case FlightRole::Sweep:
+        case FlightRole::Cap:
         case FlightRole::Sead:
         case FlightRole::Hunter:
         case FlightRole::Jammer:
@@ -1759,7 +1760,7 @@ public:
             if (!Keys(a, p, {"id", "name", "roles", "class", "helicopter", "drone", "rcs_m2", "cruise_mps", "attack_mps",
                              "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em", "rwr_by_year", "seats",
                              "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
-                             "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
+                             "recce_quality", "evasion", "in_service_year", "missile", "launch", "range_km",
                              "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "flight",
                              "low_level", "opportunity", "source", "confidence", "notes"}) ||
                 !RequireString(a, p, "id", t.id) || !RequireString(a, p, "name", t.name) ||
@@ -1774,7 +1775,7 @@ public:
                 !OptionalString(a, p, "standoff_jammer_em", t.standoff_jammer_em) || !Int(a, p, "arms", t.arms, 0, 8) ||
                 !OptionalBool(a, p, "arm_memory", t.arm_memory) || !OptionalString(a, p, "arm_em", t.arm_em) ||
                 !Num(a, p, "strike_power", t.strike_power, 0.0, 2.0) ||
-                !Num(a, p, "recce_quality", t.recce_quality, 0.0, 1.0) || !Num(a, p, "air_to_air", t.air_to_air, 0.0, 1.0) ||
+                !Num(a, p, "recce_quality", t.recce_quality, 0.0, 1.0) ||
                 !Num(a, p, "evasion", t.evasion, 0.0, 1.0) || !Int(a, p, "in_service_year", t.in_service_year, 0, 2050) ||
                 !OptionalBool(a, p, "missile", t.missile) || !OptionalString(a, p, "launch", t.launch) ||
                 !Num(a, p, "hit_chance", t.hit_chance, 0.0, 1.0) || !Int(a, p, "stock", t.stock, 0, 100000) ||

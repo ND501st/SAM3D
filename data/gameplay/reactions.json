@@ -101,7 +101,7 @@
     { "match": "SA-2", "class": "sam_high" },
     { "match": "fighter fire-control", "class": "fighter" }
   ],
-  "fighter_models": ["mig21", "mig23ml"],
+  "fighter_models": ["mig21", "mig21mf", "mig21bis", "mig23ml"],
   "profiles": {
     "nato": {
       "skill": 0.7, "initiative": 0.7, "calls": true, "package_net": true,

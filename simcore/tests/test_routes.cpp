@@ -562,10 +562,19 @@ SC_TEST("routes (B2): a save made before B2 replays to the bit with the old shap
     std::string e;
     SC_EXPECT(LoadCampaignJson(text, kData, c, &e));
     if (!e.empty()) std::printf("    %s\n", e.c_str());
-    // The fingerprint the code before B2 wrote (pact, the district theatre, seed 21, three days).
-    SC_EXPECT(c.Journal().size() == 170);
-    SC_EXPECT(JournalFnv(c) == 17720618632243727934ull);
-    SC_EXPECT(c.Packages().size() == 57);
+    // The fingerprint (pact, the district theatre, seed 21, three days). The code before B2 wrote 170 entries, FNV
+    // 17720618632243727934, 57 packages, and B2 and B5 replayed it to the bit. B8 (18 Nov 2026) changed the Pact's 1985
+    // order of battle (the MiG-23ML regiments beside the MLD's) and replaced the flat fighter roll with the air battle, so
+    // the same actions now make another war; this is B8's fingerprint, and a reload replays it to the bit.
+    std::printf("    replay: journal %zu, fnv %llu, packages %zu\n", c.Journal().size(), static_cast<unsigned long long>(JournalFnv(c)), c.Packages().size());
+    SC_EXPECT(c.Journal().size() == 107);
+    SC_EXPECT(JournalFnv(c) == 1375944258174313379ull);
+    SC_EXPECT(c.Packages().size() == 41);
+    {
+        AirCampaign again;
+        SC_EXPECT(LoadCampaignJson(text, kData, again, &e));
+        SC_EXPECT(JournalFnv(again) == JournalFnv(c));
+    }
     SC_EXPECT_NEAR(c.Data().tuning.Get("route.mode"), 0.0, 1e-12);
     // A save now is version 2 with the mode it was planned in, and replays to the same journal.
     const AirWarData d = LoadOn("theatre_pannonia.json", "warsaw_pact");

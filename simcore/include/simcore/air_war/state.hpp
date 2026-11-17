@@ -152,10 +152,11 @@ struct Package {
 // What a package did and suffered, as it truly happened (from the abstract resolver or from a played mission).
 struct LossRecord {
     int flight = -1;
-    std::string by;   // the truth object id of the defence that shot it down ("" : fighters or unknown)
+    std::string by;   // the truth object id of the defence that shot it down; our fighter regiment's id when `fighter`; "": unknown
     Vec3 where;
     bool officer = false;  // a staff officer was in it
     bool captured = false; // the crew came down alive in the player's country
+    bool fighter = false;  // shot down by our fighters (roadmap B8, air_fight.hpp): `by` is the regiment
 };
 
 // An order a played package's flight was given from outside it (roadmap B1, flights.hpp): retasked, diverted, held.
@@ -207,6 +208,10 @@ struct PackageOutcome {
     std::vector<std::string> missiles_downed;             // the enemy's cruise missiles shot down: by which defence, one each
     std::vector<std::pair<std::string, int>> missiles_by;  // (a played mission) rounds our other defences spent: the neighbours
     int arms_fired = 0;
+    // The air battle (roadmap B8, air_fight.hpp): our fighters that met it, one entry per our fighter it shot down (the
+    // regiment's id), and the fights it had with them.
+    std::vector<std::string> our_fighters_lost;
+    int air_fights = 0;
     bool aborted = false;
     bool delivered = false;
     double collateral = 0.0;

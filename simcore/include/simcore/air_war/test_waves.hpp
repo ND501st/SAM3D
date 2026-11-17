@@ -460,7 +460,9 @@ private:
                     legs = {{entry, mid_h}, {shot, mid_h}, {side, mid_h}, {home, mid_h}};
                     break;
                 }
-                case FlightRole::Escort: {
+                case FlightRole::Escort:
+                case FlightRole::Sweep:
+                case FlightRole::Cap: {
                     const Vec3 over = s.centre + Toward(bearing + 0.5 * kPi) * Uniform(-8000.0, 8000.0);
                     const Vec3 out = s.centre + Toward(bearing + kPi + DegToRad(Uniform(-30.0, 30.0))) * 45000.0;
                     legs = {{entry, mid_h}, {over, mid_h}, {out, mid_h}, {home, mid_h}};

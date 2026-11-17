@@ -331,6 +331,19 @@ public:
             Explode(r, *imp, imp->t);
         }
         ReadNeighbourKills(r);
+        // Our fighters' kills in the air battle (roadmap B8): written with the regiment, counted apart.
+        std::vector<bool> by_fighter(m_.aircraft.size(), false);
+        if (const AirFightSession* af = r.AirFight()) {
+            for (const AirFightSession::Kill& k : af->Kills()) {
+                for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                    if (m_.aircraft[i].target_id != k.target || !kill_by_[i].empty() || !af->IsOurs(k.shooter)) continue;
+                    kill_by_[i] = k.by;
+                    by_fighter[i] = true;
+                }
+                if (af->IsOurs(k.target)) o.our_fighters_lost.push_back(af->RegimentOf(k.target));
+            }
+            if (!af->Kills().empty() || !af->Shots().empty()) ++o.air_fights;
+        }
         // Which aircraft went down: our missiles' hits (the engagement model's HIT), a neighbour's ("destroyed by
         // <neighbour>"), the battery's launchers ("<launcher> destroys <target>", unless it "takes back the kill of" it)
         // and anything else the world destroyed ("destroyed").
@@ -372,6 +385,7 @@ public:
             LossRecord l;
             l.flight = a.flight;
             l.by = kill_by_[i].empty() ? m_.own_object : kill_by_[i];
+            l.fighter = by_fighter[i];
             l.where = state_[i].last_pos;
             l.officer = a.officer;
             l.captured = rng_.Chance(0.5);

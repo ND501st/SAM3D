@@ -82,6 +82,7 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Put(x, "north_m", Num(l.where.y));
         Put(x, "officer", Bool(l.officer));
         Put(x, "captured", Bool(l.captured));
+        Put(x, "fighter", Bool(l.fighter));
         Push(losses, x);
     }
     Put(v, "losses", losses);
@@ -101,6 +102,8 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     for (const auto& m : o.missiles_by) by.push_back({m.first, static_cast<double>(m.second)});
     Put(v, "missiles_by", Pairs(by));
     Put(v, "arms_fired", Num(o.arms_fired));
+    Put(v, "our_fighters_lost", Strings(o.our_fighters_lost));
+    Put(v, "air_fights", Num(o.air_fights));
     Put(v, "aborted", Bool(o.aborted));
     Put(v, "delivered", Bool(o.delivered));
     Put(v, "collateral", Num(o.collateral));
@@ -286,6 +289,7 @@ public:
                 l.where = Vec3{Number(x, "east_m"), Number(x, "north_m"), 0.0};
                 l.officer = Boolean(x, "officer");
                 l.captured = Boolean(x, "captured");
+                l.fighter = Boolean(x, "fighter");
                 o.losses.push_back(l);
             }
         }
@@ -303,6 +307,8 @@ public:
         o.missiles_spent = Int(v, "missiles_spent");
         for (const auto& m : Pairs(v, "missiles_by")) o.missiles_by.push_back({m.first, static_cast<int>(std::lround(m.second))});
         o.arms_fired = Int(v, "arms_fired");
+        o.our_fighters_lost = Strings(v, "our_fighters_lost");
+        o.air_fights = Int(v, "air_fights");
         o.aborted = Boolean(v, "aborted");
         o.delivered = Boolean(v, "delivered");
         o.collateral = Number(v, "collateral");
