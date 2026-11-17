@@ -1301,12 +1301,13 @@ public:
             for (std::size_t vi = 0; vi < l.via.size(); ++vi) {
                 if (out.Find(l.via[vi]) == nullptr) return Fail(Index(Join(p, "via"), vi), "no object '" + l.via[vi] + "'");
             }
+            const Vec3 depot = from->pos;  // `from` points into out.objects, which the columns' push_back may move
             for (int k = 0; k < l.columns; ++k) {
                 TheatreObject o;
                 o.id = l.id + "_" + std::to_string(k + 1);
                 o.name = l.name + ", column " + std::to_string(k + 1);
                 o.kind = l.column;
-                o.pos = from->pos;
+                o.pos = depot;
                 o.value = l.value;
                 o.hardness = l.hardness;
                 o.repair_h = l.replace_h;

@@ -749,7 +749,8 @@ public:
             for (std::size_t k = 1; k + 1 < best_home.size(); ++k) {
                 const Node& nd = nodes_[static_cast<std::size_t>(best_home[k])];
                 pt(nd.pos, agl_, home_mps, "turn", nd.id);
-                if (RealTurn(best_home, k)) out.home.push_back(nd.id);
+                // The home path starts at the egress point, whose node was removed with its side's search.
+                if (RealTurn(best_home, k, &best_egress)) out.home.push_back(nd.id);
             }
         }
         pt(gate_out, agl_, home_mps_, "gate", "gate:" + gx->id);
@@ -1084,8 +1085,10 @@ private:
         return kept;
     }
     // Whether the path turns at its k-th point by more than route.straight_deg: a turn point, not a feature flown over.
-    bool RealTurn(const std::vector<int>& p, std::size_t k) const {
-        return TurnDeg(nodes_[static_cast<std::size_t>(p[k - 1])].pos, nodes_[static_cast<std::size_t>(p[k])].pos,
+    // `first`: the path's first point's place, when its node is gone.
+    bool RealTurn(const std::vector<int>& p, std::size_t k, const Vec3* first = nullptr) const {
+        const Vec3& before = k == 1 && first != nullptr ? *first : nodes_[static_cast<std::size_t>(p[k - 1])].pos;
+        return TurnDeg(before, nodes_[static_cast<std::size_t>(p[k])].pos,
                        nodes_[static_cast<std::size_t>(p[k + 1])].pos) > tune_.Get("route.straight_deg");
     }
 

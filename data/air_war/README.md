@@ -31,7 +31,8 @@ for which `missions`, `where` and with what `needs` or `chance`), `timing` (each
 seconds), `alert` (the alert pools' shares of the planner's on-call sorties, take-off times, shifts, an airborne pool, a
 `phase_scale`), `report_missions`, `hunter_leave` (`any`, `free_hunt_zone` with `free_hunt`, or `none`),
 `silence_consent_s`, `max_report_age_h`, `nomination_h` and the Pact's `debrief_s`. The rebels have no posts. The game
-values are the `"c2"` group of `data/gameplay/air_war.json`. Its officers come from the pool's ranks `cp_controller`,
+values are the `"c2"` group of `data/gameplay/air_war.json`; its `mode` 0 sets every faction's block aside (the
+campaign as before B5, for an old save's replay). Its officers come from the pool's ranks `cp_controller`,
 `gci_controller` and `fac`.
 
 ## Faction format (summary; `docs/air_war/01_FACTIONS.md` has it all)

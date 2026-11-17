@@ -720,3 +720,62 @@ Desert Storm's about 4 times), the runways cut 54 % → 53 %, ARMs for each rada
 against 12.3, the F-4Es popping up behind the Kub belt 25.0 → 25.3, and the Bekaa package destroying the battery in
 66 % → 64 % of runs with 4.5 → 5.1 lost a 100 sorties (the F-4Gs' shots now reach the Kub only as early as they are
 flown, not before every other flight's legs). Every other row is the same. `crew_balance data 10`, `helper_coverage` (the same 19 gaps, its page byte for byte), `ground_check data 3600` and `em_bench` give the base's results; only their wall times differ, with the load.
+
+## 14. B2 and B5 together (track B, 18 November 2026)
+
+B2 (routes as flown) and B5 were built side by side and merged on `tb-b5`: the stepped resolver keeps B2's one
+engagement a pass, its ground-masked chord, its fighters on the IP's leg and its corridor suppression, and on-call
+packages are planned on routes (`docs/air_battle/05_C2_AND_RETASKING.md`, "With B2's routes"). Three faults were found
+by the runs and fixed in the merge: a flight under flak reported "a launch seen", so the Pact's posts scrambled DEAD
+at the guns (the nation's rule that guns are never hunted, §8; a gun's fire is no longer reported); B2's route planner
+read the egress point's node after its side's search had removed it (`RealTurn`, a wrong home turn when the first side
+won); and the loader's columns were made at their depot through a pointer the next column's `push_back` could move
+(`MakeColumns`, from N7), which crashed `air_war_balance` on the nation when the Pact's campaigns had run before NATO's.
+Against B2's own runs (district 20 seeds, nation 10, 7 days; B2 → B2 and B5):
+
+| District | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | On-call sorties (share) |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 13.3 → 13.1 | 21.0 → 20.6 | 0.3 → 0.2 | 1.7% → 1.2% | 100%, 100% | 1.7 → 1.6 | none (no posts) |
+| Rebels, careful | 14.3 → 13.9 | 23.1 → 22.2 | 0.3 → 0.5 | 1.5% → 2.3% | 100%, 100% | 1.1 → 0.8 | none (no posts) |
+| Neutral, careless | 20.9 → 19.5 | 48.2 → 45.9 | 1.1 → 1.6 | 2.4% → 3.4% | 100%, 100% | 10.2 → 8.9 | 0 (pools stood down) |
+| Neutral, careful | 16.1 → 17.1 | 32.8 → 38.1 | 1.4 → 0.8 | 4.4% → 2.0% | 100%, 100% | 5.6 → 5.0 | 0 (pools stood down) |
+| Warsaw Pact, careless | 94.5 → 97.8 | 552.1 → 568.5 | 6.5 → 9.3 | 1.2% → 1.6% | 30%, 78% → 31%, 80% | 7.5 → 7.2 | 13.8 (2.4%) |
+| Warsaw Pact, careful | 93.5 → 99.2 | 555.2 → 578.3 | 7.8 → 7.8 | 1.4% → 1.4% | 38%, 79% → 44%, 78% | 8.4 → 8.2 | 18.8 (3.3%) |
+| NATO, careless | 93.8 → 94.7 | 518.5 → 528.0 | 4.8 → 5.2 | 0.9% → 1.0% | 34%, 61% → 39%, 54% | 5.8 → 5.4 | 10.2 (1.9%) |
+| NATO, careful | 92.9 → 95.2 | 498.6 → 533.7 | 5.2 → 4.7 | 1.0% → 0.9% | 39%, 71% → 49%, 62% | 7.7 → 6.9 | 17.0 (3.2%) |
+
+| Nation | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | On-call sorties (share) |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 9.4 → 10.1 | 13.4 → 14.9 | 1.9 → 1.6 | 14.2% → 10.7% | 100%, 100% | 5.7 → 7.3 | none (no posts) |
+| Rebels, careful | 8.5 → 10.2 | 12.2 → 15.3 | 2.4 → 2.1 | 19.7% → 13.7% | 100%, 100% | 2.5 → 2.6 | none (no posts) |
+| Neutral, careless | 16.0 → 16.7 | 26.9 → 28.2 | 0.8 → 0.9 | 3.0% → 3.2% | 100%, 100% | 7.0 → 8.5 | 0 (no pools) |
+| Neutral, careful | 12.7 → 14.0 | 20.5 → 23.7 | 1.3 → 0.8 | 6.3% → 3.4% | 100%, 100% | 5.3 → 4.0 | 0 (no pools) |
+| Warsaw Pact, careless | 182.6 → 183.2 | 992.3 → 989.9 | 28.3 → 30.1 | 2.9% → 3.0% | 36%, 72% → 37%, 66% | 9.3 → 8.4 | 41.2 (4.2%) |
+| Warsaw Pact, careful | 173.8 → 189.1 | 947.8 → 1016.7 | 27.7 → 28.2 | 2.9% → 2.8% | 41%, 69% → 41%, 69% | 9.1 → 8.9 | 35.6 (3.5%) |
+| NATO, careless | 129.2 → 129.7 | 722.0 → 725.9 | 11.9 → 15.0 | 1.6% → 2.1% | 73%, 71% → 73%, 74% | 8.6 → 7.6 | 17.6 (2.4%) |
+| NATO, careful | 131.1 → 128.7 | 724.4 → 721.3 | 13.1 → 14.5 | 1.8% → 2.0% | 76%, 75% → 76%, 78% | 8.4 → 8.0 | 18.0 (2.5%) |
+
+**What B5 moves on top of B2.** The same three things as on the base (§13), and nothing new from the meeting of the two:
+
+- **The posts and the alert pools.** The Pact and NATO fly 2-4 % of their sorties on call from the pools, on the
+  district as on the base (2.4-3.3 % against 2.5-3.5 %). On the nation the Pact's posts hear more: 146-154 in-flight
+  reports a campaign, three quarters of them out of every post's cover and kept for the debrief, 34-37 scrambles of
+  which 24-28 refused as too dangerous for the alert, and 9-10 on-call packages; NATO's come from the FACs' requests
+  (15 a campaign, 11 scrambles, 4-5 packages). The rebels have no posts and the neutral's pools find nothing they may
+  scramble for, so their rows move only within the noise.
+- **Packages flying together.** A package's damage now counts when it lands, so packages in the air at the same time
+  meet the defences as they stand. On the nation NATO loses 1.4-3.1 aircraft a week more (2.0-2.1 % against 1.6-1.8 %),
+  and the Pact careless 1.8 more; the Pact careful and the district's rows hardly move. All stay inside the period's
+  2 % a sortie or close to it, as on the base.
+- **A reshuffle of the seeds.** Every package draws from its own fork, so every campaign takes another, equally likely
+  course. The light air arms' rows (a loss or two a week, a dozen packages) swing by what one aircraft is worth: the
+  rebels on the nation 1.6-2.1 lost against 1.9-2.4, the neutral careful 0.8 against 1.3 in both theatres; §13 showed
+  how much such rows swing between 20 and 60 seeds of the same code.
+
+B2's own shapes hold: one engagement a pass, low flights masked by the ground, the Pact's checkpoint and
+counter-SAM programme, NATO's gates and corridors. **No rebalance is needed.** `air_war_bench data 400` moves the same
+rows as B5 did on the base and by the same amounts (JP233 Tornados against medium-altitude F-16s 5.5 against 1.8 → 2.0
+losses a 100 sorties, the runways cut 51 % → 52 %, ARMs for each radar destroyed 3.6 → 3.8 against 11.8 → 12.8, the Bekaa
+package destroying the battery in 62 % → 65 % of runs with 7.6 → 6.3 lost a 100 sorties); every other row is B2's.
+Wall times on a machine with another build running: the district 295 s (B2's own run took 2090 s under a heavier
+load), the nation 1103 s with the test suite running beside it (B2: 1457 s), the bench 0.21 s (0.19 s).

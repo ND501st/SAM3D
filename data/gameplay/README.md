@@ -98,7 +98,8 @@ abstract attrition and strike model (with the guns around targets), the intellig
 politics, the repair of what is wrecked, the day's weather, the pacing of the player's missions, the raid scenarios and
 the mission bridge's weapon effects, and what our side learns. Tuned against the period's shapes in the balance pass
 (`docs/air_war/09_BALANCE.md`, `simcore/examples/air_war_balance.cpp`). The `"c2"` group (track B, B5,
-`simcore/air_war/c2.hpp`): the command in the air's game values, the campaign's step while a package is airborne, a
+`simcore/air_war/c2.hpp`): the command in the air's game values, its switch (`mode`: 0 resolves each package whole at its
+first hour without posts, as before B5, kept so an old save replays), the campaign's step while a package is airborne, a
 jammed hop's retry, the depth of BAI, how far an officer's traits bend a post's decision, the pools' commit risk, the
 posts' cover of a low flight, the spread of a FAC's and a pilot's report, the reach of hunters and diverts, our
 listeners' chance, a second report's wait, the corps' refusal and a FAC's requests per hour; the posts, authority, hop

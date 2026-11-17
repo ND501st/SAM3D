@@ -533,7 +533,8 @@ report within `c2.second_report_m` and `c2.second_report_h`; a mobile target rep
 ago is not struck. A report out of every post's radio cover (`c2.low_cover` of the reach for a low flight) goes in only
 with the pilots' reports after the mission: the faction's `pirep_delay_h`, the Pact's 5-10 min after the last aircraft
 is home (`debrief_s`). Everything starts from a report: B4's
-`InFlightReport` (a flight that saw a launch, from the resolver's `LaunchSeen` and `Loss` events, or a played package's
+`InFlightReport` (a flight that saw a launch, from the resolver's `LaunchSeen` and `Loss` events, a gun's fire being
+flak and no launch to report, or a played package's
 pilots' sightings through `NoteReport`) and a FAC's own sighting of our troops, drawn each hour with the sighting's
 sigma and moved into the brief: `AimOnCall`'s read of the truth is gone.
 
@@ -553,7 +554,19 @@ draw, and the stepped resolver with every authority off gives the atomic one's o
 longer freezes the clock: `TakePlayerMission` hands it to the session and the campaign goes on; packages elsewhere
 resolve while it is in the session, and its outcome is applied at `CompleteLiveMission`.
 
-**Saves (§4.7).** The save (version 2) records `take` (the package handed to a session), `report` (a played flight's
+**With B2's routes (merged 18 November 2026).** B2 (routes as flown, `01_ROUTES.md`) landed beside B5 and both live in
+the one stepped resolver: `Begin` notes whether the package is routed (`route.mode` 1) and over the route ground, and
+works out the corridor's suppression at its gate; each `Leg` keeps B2's one engagement per pass through a zone (a chord
+held pending into the next leg until the pass ends, at release or the route's last leg), the ground-masked chord for a
+low flight or a helicopter, and the fighters met on the leg from the IP. The planner's reach check by the route's
+length is B2's as it was, and an on-call package is planned on routes too (`Planner::OnCall` sets up the route ground
+and rules when `route.mode` is 1). The atomic `Resolve` is the same `Begin` and `Leg`, so a whole package and a stepped one agree as before. A switch,
+`c2.mode` in `data/gameplay/air_war.json` (1 by default), turns B5 off: at 0 the posts are not built, each package is
+resolved whole at its first hour from the campaign's own stream, its flights walked in turn as before, and
+`AimOnCall` aims the on-call missions on the truth again. It exists so a save from before B2 and B5 replays to the bit.
+
+**Saves (§4.7).** The save (version 2, shared with B2: it also writes `route_mode` and `c2_mode`; a version 1 save
+loads with both at 0 and replays as it was, `tests/fixtures/air_war_save_v1.json`) records `take` (the package handed to a session), `report` (a played flight's
 report with its place, the reporter's place, sigma and observed time) and `complete` with its package id, and the
 outcome's `calls` and `reports`; a replay of the actions rebuilds the posts' decisions, since every C2 draw is keyed by
 message or by post and hour from a root fixed at the start. A seed replays exactly and a save after a played package

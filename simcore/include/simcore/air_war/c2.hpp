@@ -494,6 +494,9 @@ public:
             const int oi = d_->theatre.IndexOf(e.object_id);
             if (oi < 0) continue;
             const TheatreObject& o = d_->theatre.objects[static_cast<std::size_t>(oi)];
+            // Guns' fire is flak, not a launch: nothing for a DEAD or hunter scramble (the guns are flown round or over, never
+            // hunted, docs/air_war/09_BALANCE.md section 8).
+            if (e.kind == AirEvent::Kind::LaunchSeen && (o.decoy ? o.looks_like : o.kind) == ObjectKind::Aaa) continue;
             Rng r = Draw(0x5E500000ull + static_cast<std::uint64_t>(p.id), static_cast<std::uint64_t>(oi));
             const double sigma = d_->tuning.Get("c2.report_sigma_m");
             const Vec3 seen = e.where + Vec3{r.Normal(0.0, sigma * 0.7), r.Normal(0.0, sigma * 0.7), 0.0};
