@@ -736,6 +736,7 @@ private:
     std::uint64_t ticks_ = 0;
     std::uint64_t looks_ = 0;
     std::uint64_t los_calls_ = 0;
+    std::vector<std::uint64_t> held_keys_;  // Age's scratch: the picture's keys, sorted
 
     double Normal(const View& v, std::uint64_t obj_key, std::uint64_t tag) const {
         return em::StandardNormal(em::DrawHash(seed_, em::Stream::SightError, v.ob->key, obj_key, obs_.at(v.ob->key).tick_index, tag));
@@ -1251,7 +1252,11 @@ private:
                                        }),
                         o.picture.end());
         // A forgotten object may be found again as new: its state goes with its sighting; an event that has been pruned
-        // takes its state with it (the events' serials run up in the order they were made).
+        // takes its state with it (the events' serials run up in the order they were made). The picture's keys are sorted
+        // once, not searched again for every object held (a defensive pilot ticks five times a second: cost, 5.7).
+        held_keys_.clear();
+        for (const Sighting& s : o.picture) held_keys_.push_back(s.debug_truth_key);
+        std::sort(held_keys_.begin(), held_keys_.end());
         for (auto it = o.objs.begin(); it != o.objs.end();) {
             const std::uint64_t key = it->first;
             if ((key & kEventBit) != 0) {
@@ -1263,8 +1268,7 @@ private:
                     continue;
                 }
             }
-            bool held = false;
-            for (const Sighting& s : o.picture) held = held || s.debug_truth_key == key;
+            const bool held = std::binary_search(held_keys_.begin(), held_keys_.end(), key);
             if (!held && it->second.tracked) {
                 it->second.tracked = false;
                 it->second.miss = 1.0;
