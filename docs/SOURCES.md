@@ -132,6 +132,7 @@ because that is what the Western side believed.
 | `nato_radar_refs` | 4 | Wikipedia: [AN/APG-63](https://en.wikipedia.org/wiki/AN/APG-63), [AN/APG-66](https://en.wikipedia.org/wiki/AN/APG-66), [P-19 radar](https://en.wikipedia.org/wiki/P-19_radar) (read 11 Oct 2026) | NATO fighter radar bands, scan and years; P-19 "Flat Face B" UHF band and power (`data/em/nato_1985.json`) |
 | `nato_ew_refs` | 4 | Wikipedia: [AN/ALQ-99](https://en.wikipedia.org/wiki/AN/ALQ-99), [AN/ALR-46](https://en.wikipedia.org/wiki/AN/ALR-46) (read 11 Oct 2026) | Jammer band plan and maximum output; RWR band |
 | `ew_textbooks` | textbook | Adamy *EW 101/102*; Wiley *ELINT*; Schleher (see the textbook table below) | Class values behind labelled estimates only (sensitivity, bearing accuracy, PRF windows, ERP) |
+| `snellen_acuity` | textbook | Normal visual acuity, Snellen 20/20: a gap of one minute of arc (2.9e-4 rad), as in any vision-science or optics textbook | The eye's resolution in `data/gameplay/perception.json` (`eye.resolution_rad`; track B, B3) |
 | `games_ew` | — | [Skynet IADS](https://github.com/walder/Skynet-IADS); [MIXR](https://github.com/doughodson/mixr) and Garland et al., CSCI 2020 ([record](https://scholar.afit.edu/facpub/1857)); [Stone Soup](https://github.com/dstl/Stone-Soup); [DCS ECM analysis](https://flyandwire.com/2022/11/11/electronic-countermeasures-f-14-avionics/); [Sea Power EMCON](https://sea-power.pmctactical.org/emcon.php) | Design lessons only (`EM_RESEARCH` §12) |
 
 ## Crew and human-factors sources (added 17 October 2026)

@@ -71,6 +71,24 @@
       "source": "airwar_ru (MiG-23MLD: the Lazur command link)", "confidence": "low", "notes": "As the Lazur-SML." }
   ],
 
+  "rwr_sets": [
+    { "em_esm": "nato_alr46_class_rwr", "name": "NATO RWR display (AN/ALR-46 and ALR-69 class)", "shows_name": true, "bearing": "measured",
+      "range_class": true, "launch_indication": true, "bearing_sigma_deg": 10, "false_alarms_per_h": 2, "max_display": 8,
+      "near_dbw": -65, "mid_dbw": -80, "near_m": 6000, "mid_m": 16000, "far_m": 35000,
+      "source": "gao_masad_82_23 (type, the radar's range and direction of arrival on a TV screen; faults in azimuth accuracy, threat ambiguities, false alarms and detection ranges); nato_ew_refs; the display's size, the false alarm rate and the range classes are game values",
+      "confidence": "low",
+      "notes": "A launch is shown only for a contact the library calls missile guidance (the Osa's command link, sa8_command_guidance). It is a bearing and a class of range, never a place (03_PERCEPTION.md 3.2)." },
+    { "em_esm": "pact_spo10_class_rwr", "name": "Pact RWR display (SPO-10 class)", "shows_name": false, "bearing": "quadrant",
+      "range_class": false, "launch_indication": false, "false_alarms_per_h": 3, "max_display": 4,
+      "source": "spo10_tulin (an intermittent 800 Hz tone and a light on the S3M indicator giving the direction of attack; four antenna units; the signal's character shows the radar's mode); airwar_ru; the false alarm rate and the display's room are game values",
+      "confidence": "low",
+      "notes": "It tells a search from a lock and gives the quadrant of the four antenna units; no type, no range, no launch indication: a command link steady along the tracking antenna reads as a lock." },
+    { "em_esm": "pact_spo15l_class_rwr", "name": "Pact RWR display (SPO-15L Beryoza class)", "shows_name": false, "bearing": "measured",
+      "range_class": false, "launch_indication": false, "bearing_sigma_deg": 6, "false_alarms_per_h": 2, "max_display": 6,
+      "source": "airwar_ru (SPO-15: more accurate bearings; not legible on re-reading, aam_weapons.md aam-wp-10); the bearing error and the rest are SAM3D estimates until a source gives them",
+      "confidence": "low",
+      "notes": "As the SPO-10 class until a source says more; its date and its tie to the MiG-23MLD are unverified (03_PERCEPTION.md 8)." }
+  ],
   "slots": [
     { "id": "spo15l", "name": "SPO-15L Beryoza radar warning receiver", "kind": "rwr", "carriers": ["mig23mld"],
       "needs": "its in-service year and its tie to the MLD (not legible in airwar_ru; aam_weapons.md aam-wp-10)" },

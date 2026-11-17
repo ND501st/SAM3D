@@ -153,6 +153,18 @@ struct PackageOutcome {
     std::vector<std::string> radars_suppressed;           // switched off under ARM attack
     std::vector<std::pair<std::string, double>> emissions;  // truth object id -> seconds it radiated during the raid
     std::vector<std::string> fired;                       // defences seen to launch
+    // What the raid's pilots made of our launches (roadmap B3): each is one pilot's first sight of one (the dust and flash,
+    // or the smoke trail), where he believed it to be and how far off that may be, never the truth. A launch no pilot saw
+    // (night, cloud, behind the beam, a ridge) leaves none, and `fired` does not hold the battery.
+    struct LaunchSighting {
+        double time_s = 0.0;
+        double east_m = 0.0;     // where he believed the launch was (ENU, the scenario's)
+        double north_m = 0.0;
+        double sigma_m = 0.0;    // his error
+        double confidence = 0.0;
+        std::string by;          // the aircraft
+    };
+    std::vector<LaunchSighting> sightings;
     std::vector<std::string> recce_seen;                  // objects the reconnaissance photographed
     int missiles_spent = 0;                               // the player's side's missiles, all defences
     std::vector<std::string> missiles_downed;             // the enemy's cruise missiles shot down: by which defence, one each

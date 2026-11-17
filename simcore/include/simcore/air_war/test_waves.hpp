@@ -541,13 +541,14 @@ private:
             Slot(t, forms, k);
             if (!a.drone && !a.missile) {
                 t.evade.present = true;
-                t.evade.on = a.rwr_em.empty() ? EvadeDef::On::Launch : EvadeDef::On::Lock;
+                t.evade.on = a.RwrEm(def_->theatre.year).empty() ? EvadeDef::On::Launch : EvadeDef::On::Lock;
                 t.evade.kind = a.helicopter ? EvadeDef::Kind::Dive : (low ? EvadeDef::Kind::Jink : EvadeDef::Kind::Break);
                 t.evade.turn_rate_rad_s = DegToRad(std::min(20.0, a.max_turn_deg_s * 1.5));
             }
             t.board_type = role == FlightRole::Jammer ? 0 : 9;
-            if (s.em != nullptr && !a.rwr_em.empty() && s.em->Esm(a.rwr_em) >= 0) {
-                t.rwr = a.rwr_em;
+            t.seats = a.seats;
+            if (s.em != nullptr && !a.RwrEm(def_->theatre.year).empty() && s.em->Esm(a.RwrEm(def_->theatre.year)) >= 0) {
+                t.rwr = a.RwrEm(def_->theatre.year);
                 const std::string& arm = a.ArmEm(def_->theatre.year);
                 if (a.arms > 0 && (role == FlightRole::Sead || role == FlightRole::Hunter) && !arm.empty() && s.em->Arm(arm) >= 0) {
                     t.arms.weapon = arm;

@@ -463,6 +463,122 @@ the neighbours' new emitters is measured with `em_bench` as E8 does.
 `simcore/tests/test_perception.cpp` (area `threats`), with generic placeholder objects and numbers. The eye law is
 mirrored in `prototype/samproto/em.py` beside the TV optics it extends, with the same tests.
 
+### 5.9 As built (B3, 17 November 2026)
+
+Branch `tb-b3`. Built: the eye, the ground law, each pilot's picture, the warning receivers' displays by faction and year,
+the visible events the runner records, the neighbours' and the PU-12M's radars radiating, and the truth cues removed.
+
+**Files.**
+- `simcore/air_war/perception.hpp`: the laws (pure functions), `PerceptionData` and its loader, `Sighting`, `VisibleEvent`,
+  `PerceptionHub` (the pilots' pictures).
+- `simcore/air_war/perception_feed.hpp`: `PerceptionFeed`, the events the runner records from the simulation's own sources.
+- `em_link.hpp`: `RwrPictureOf`, `SetOsaSite`, `SetForeignEmitter`. `em/random.hpp`: `Stream::Sight`, `SightError`,
+  `GroundAcquire`.
+- `scenario_runner.hpp`: `UpdatePerception`, `ReactToSighting`, `SyncEmSites`, `PerceiveOwnLaunch`, `PerceiveSiteLaunch`,
+  and the accessors `Perception`, `PerceivedLaunches`, `LaunchSightings`, `PilotPicture`, `SetPerception`.
+- `air_war/data.hpp`: `AircraftType::rwr_by_year`, `RwrEm(year)`, `seats`; the loader refuses `generic_rwr` on a faction's type.
+  `ScenarioTarget::seats` and `pilot_skill` (`scenario.hpp`).
+- `air_war/mission_bridge.hpp`, `state.hpp`: `PackageOutcome::sightings`; the proximity rule `revealed_by_launch_m` is gone.
+- Data: `data/gameplay/perception.json`, `data/em/pact_1985.json`, `data/air_war/sensors.json` (`rwr_sets`),
+  `data/em/nato_1985.json` (the Pact's fighter radar in NATO's library), the Pact faction file (SPO-10 and SPO-15L class,
+  `seats`).
+- Tests: `tests/test_perception.cpp`, `tests/test_perception_em.cpp`, `tests/test_threats.cpp` (changed), the prototype's
+  `em.py` eye law and `tests/test_em.py`. Bench: `examples/perception_bench.cpp`.
+
+**The component.**
+- Each A2 aircraft has an observer state in the hub, keyed by a hash of its id. Its first tick is offset by a keyed draw
+  within its period; the period is 1 s in transit, 2 s with a receiver contact or a launch sighted, 0.2 s while evading or
+  on an attack leg (data `hz`).
+- A tick looks at the aircraft of the other side, the live visible events, the ground objects, and the receiver's picture.
+  Same-side aircraft are not looked at (formation keeping is the command layer's).
+- **Aircraft** use the eye law on the presented area by aspect. The area comes from the target's `size_m`: nose 0.5, beam
+  2.4 and plan 3.6 times its square (a 4.5 m fighter: 10, 49, 73 m2). The contrast is 30 % against the sky, 15 % against
+  the ground, lowered at twilight, cut inside the sun's glare. Haze is Koschmieder, cloud is `Weather::CloudTransmission`,
+  the sight line is `HasLineOfSight` cached per pair (0.5 s near, 2 s far). Empty-field myopia halves the range for an
+  aircraft or a point against clear sky, not for a trail, a contrail or a light.
+- **The glimpse** is an inverse draw: each object has one keyed uniform `u`; the chance that no glimpse has found it so far
+  is multiplied by (1 - g) per glimpse, and it is seen when one minus that passes `u`. `g` is the lobe over the solid angle
+  searched; the lobe is zero at the threshold and 0.35 sr at a wide margin (a game value: TP 5709's lobe is not read yet),
+  the search is pi sr, or the cued sector (+-15 degrees, from a receiver's bearing) when cued. Glimpses per tick are the
+  period over 1.65 s times the lookout share (0.9 transit, 0.5 low level, 0.2 attack, 0.7 evading, a second seat adds 0.3).
+  A single seat does not see inside a 25 degree cone about its tail.
+- **Ground objects and launch signs** use TP 6005: one keyed draw per pass; P_max by pattern and contrast, scaled by 0.7 for
+  an unbriefed object and by 0.0033 per degree off the track; R* is the smallest of the unmask range (where the sight line
+  first opens on the run in), the visibility and, a SAM3D addition, the range the eye law gives for the object's area and
+  contrast. A pass ends when the range has opened to 1.5 times the closest approach plus 2 km. The Osa battery and the other
+  deployed launchers and the neighbours are ground objects of class `osa_battery_silent` (small, low). A launch adds a
+  `LaunchSign` event (large, high) for 25 s (2 s of flash by night).
+- **Trails** are polylines laid from the missile's flown positions (our own: the engagement model's; other sites': a straight
+  synthetic flight at the missile's average speed). Points are 150 m apart, hang 40 s, the area is 1.5 m times the live length
+  up to 500 m, the contrast 20 %. By night only a burning motor's tail shows (tracer range 8 km). The nearest live point is
+  looked at; if it is masked, the head is tried.
+- **Flak and tracer** come from the testbed's guns (`EndGunRounds`, `FireGunPass`): a puff by day (8 s), a flash by night
+  (0.3 s), a tracer stream (1.5 s, at most one record per site per half second).
+- **Contrails** form by `fx::ContrailAt` (a function of the weather and the height only) above 4 km, seen as a large object
+  up to 37 km.
+- **The receiver.** `EmSensorLink::RwrPictureOf` lists what the set heard in the last second with the library's name, the
+  true azimuth as the receiver measured it, and the power. The display (`sensors.json` `rwr_sets`) turns that into a
+  sighting: NATO's shows the library's name, the measured bearing and a class of range from the power; the SPO-10 class shows
+  search or lock, the quadrant of four antenna units, no range, and no launch (a command link reads as a lock); the SPO-15L
+  class the same with a measured bearing. The display holds at most `max_display` contacts (the strongest) and has false
+  alarms at a rate per hour. The believed point is the bearing at the class's range from the aircraft, never the emitter's
+  place. A receiver's bearing is also a cue: the search sector shrinks and the unknown-location factor falls away.
+- **What radiates.** `SyncEmSites` runs each step: the battery's other launchers and every fighting neighbour are ground
+  platforms with the Osa's search radar (on while deployed), tracking radar (on while engaging, pointed at its target) and
+  command link (from the launch); the PU-12M's P-19 is an emitter at the post's radar position (in a battery link,
+  `BatteryLink::Step` puts the post's emitter in the Osa runner's world). The P-19 radiates below the receivers' band.
+
+**The truth cues removed.**
+
+| Was | Now |
+|---|---|
+| `CueTarget(false)` on our lock for a target with no receiver | removed: nothing is felt without a receiver |
+| `CueTarget(true)` on our launch for a target with no receiver | removed: the launch is seen (its sign, its trail) or not |
+| `CueFromWarnings` cued from `WarningOf` | it keeps the debrief lines; the reaction comes from the display's sighting |
+| `Evade` turned on `def_.unit_position` | on the believed point of the sighting that cued it (`CueTarget`'s `believed`) |
+| `MissionBridge` `launch_seen_` within `revealed_by_launch_m` | some enemy pilot's picture holds the launch's sign or trail; `PackageOutcome::sightings` holds each pilot's first sight with where he believed it was |
+| the instructor's `EvadeNow` | kept |
+
+**Differences from the design.**
+- No A1 or A0 level: every aircraft in the session runs the full tick (B12).
+- Only our own launches count toward the report that goes up; the neighbours' and the testbed's launches make signs and trails
+  the pilots see, and cue them, but are not counted in `PackageOutcome`.
+- A sighting reaches no wingman: the picture is per pilot (B9 carries it by voice, B4 reacts to it).
+- Skill is the data's default (0.7) until `ScenarioTarget::pilot_skill` or B1's pilots give it.
+- Blind arcs are one rule (a rear cone for a single seat); the cockpit's own arcs are not in the data.
+- The weather's share by month, TISEO and the pods are not built.
+- **Shortcut for B4/B5: the battery's other launchers' radars.** A launcher of the battery fire model has no crew, so its
+  radars go silent by `SyncEmSites` reading the battery commander's state: his regime (`CommanderRegime()`, silent under
+  EMCON) and the time the NPC commander gave the ARM drill's order (`npc_arm_off_s_`, for `arm_silence_s`). No call is
+  carried to the launcher on the battery net, and a player commander's order is not read. While silent, such a launcher
+  neither searches, tracks nor sends its command link, though the fire model still engages for it.
+- **The attackers now hear the unit's lock.** The faction receivers (`rwr_by_year`, `pact_1985.json`, NATO's ALR-46 class)
+  hear the SA-8 tracking radar where `generic_rwr` heard nothing, so the aircraft of a raid jink or break on the lock
+  before they release. `test_fx_bridge.cpp`'s release-geometry test clears the aircraft's receivers for that reason.
+- **The tests that moved.** The ARM drill's scenarios hold a second launcher (22, 400 m off) that engages the raid and so
+  radiates; the ARMs go to it. `test_arm_drill.cpp` takes it out (`Alone()`) to test the own vehicle's drill; the crew-talk
+  stress test's peak is 0.80 (the sign alone) where it was 1.00 (a burst near this vehicle), stable alone and in the suite.
+  The release-geometry test of `test_fx_bridge.cpp` clears the aircraft's receivers.
+- **Balance, measured against the unchanged tree.** The air war's balance and bench tables are identical (they resolve raids
+  abstractly). The crew balance moved in `osa_battery_fight` (3 of 7 rows) and `osa_mission_march` (5 of 7): other launchers
+  radiate and pilots turn on what they hear or see, not on the truth. The helper's gaps went from 21 to 19: new at
+  `air_war_nato_strike` deputy commander and `osa_angola_night` commander, gone at `air_war_pact_dead` (three seats).
+- **Stream numbers.** `Stream::Sight` 17, `SightError` 18, `GroundAcquire` 19 (16 is B9's `AirRadio`).
+- **Cost, measured.** In the dynamic testbed's runner perception adds 0.08 ms mean a step (budget 0.15 ms). The hub alone, in
+  the synthetic bench (100 aircraft, 60 live flak and tracer events), takes about 0.3 ms: the sight line is walked only
+  after the eye law passes, sight lines are cached 1 s near and 3 s far, and an aircraft out of any eye's reach is
+  skipped before the look.
+
+**Calibration.**
+- TP 5709's example (55 ft2 at 30 %, no haze, factors off): 6.5 nmi, within 2 %. Halved by the empty field. The product of the four field
+  factors is 5.12 (the ordinary 1.2 is a fifth factor in the code).
+- A small SAM's trail in the reference haze (5 nmi): 4.0 km cued and trained, 2.7 km uncued (target 3-6 km).
+- A fighter, unwarned, against the sky, skill 0.7: the eye law's threshold is 0.8-1.5 nm head-on and 1.0-2.4 nm from the side
+  in 10-40 km visibility. That is the low end of the period's band (1-5 nm, WSEG 116); the glimpses make the first sighting
+  later still. The area ratios are the lever if the owner wants more; they are game values.
+- A silent camouflaged battery on a 450 kt pass at 150 m: found in 17 % of 500 passes (P_max 0.25 scaled to 0.175); once it
+  fires, its sign or trail is found in 71 %.
+
 ## 6. Numbers for data
 
 Into `data/gameplay/perception.json` unless named; each value with `source` and `confidence`.

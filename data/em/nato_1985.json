@@ -123,6 +123,10 @@
     { "id": "blue_rwr_nato_view", "name": "What NATO RWRs believed about Soviet emitters (US Army FM 100-2-3, 1991)", "owner": "blue",
       "notes": "From the US Army's own handbook of Soviet equipment: radar names, the old NATO/ECM letter bands and the ranges FM 100-2-3 gives (p. 5-138). The manual gives letters, not GHz; they are read here with the contemporary scheme (C 0.5-1, E 2-3, G 4-6, H 6-8, I 8-10, J 10-20 GHz; A below 0.25), which is the reader's conversion, not the manual's, so every window is low confidence. It is what NATO believed in 1991, not proof of what the Soviet radars did (the manual says 'probably' for the SA-8's bands): wider than the truth on purpose. PRF and pulse width are not given: not constrained. Do not treat these figures as gospel.",
       "entries": [
+        { "id": "pact_fighter_fcr_x", "name": "Pact fighter fire-control radar (Sapfir class, X band)", "kind": "fire_control", "owner": "red", "platform": "air",
+          "freq_min_hz": 8.5e9, "freq_max_hz": 10.5e9, "prf_min_hz": 1000, "prf_max_hz": 300000,
+          "source": "estimate (B3, docs/air_battle/03_PERCEPTION.md 3.4): the X band of 1970s Soviet fighter radars (data/em/fighter_radars_1985.json, airwar_ru for the sets), the PRF window as for the NATO fighter set (ew_textbooks); listed first so a fighter radar with a PRF in its window is not read as a guidance link", "confidence": "low",
+          "notes": "A fighter radar in single-target track is steady illumination from a fire_control entry: the target's RWR reads it as a lock (the same as for ground radars)." },
         { "id": "sa8_land_roll_search", "name": "SA-8 search (Land Roll, H band)", "kind": "search", "owner": "red", "platform": "ground",
           "freq_min_hz": 6.0e9, "freq_max_hz": 8.0e9, "source": "fm100_2_3 p. 5-132 ('probably operates in the H band', ~30 km), p. 5-138 (H acquisition)", "confidence": "low" },
         { "id": "sa8_land_roll_track", "name": "SA-8 track (Land Roll, J band)", "kind": "track", "owner": "red", "platform": "ground",

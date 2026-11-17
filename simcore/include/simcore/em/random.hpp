@@ -35,7 +35,10 @@ enum class Stream : std::uint64_t {
     TdoaNoise = 12,
     Doctrine = 13,
     ArmSeeker = 14,
-    AirCombat = 15  // the air battle's shot: one draw per link of the chain (air_war/air_combat.hpp)
+    AirCombat = 15,  // the air battle's shot: one draw per link of the chain (air_war/air_combat.hpp)
+    Sight = 17,         // a pilot's glimpse draws and the offset of his perception tick (air_war/perception.hpp)
+    SightError = 18,    // the eye's bearing and range errors
+    GroundAcquire = 19  // the ground law's draw, one per observer, object and pass
 };
 
 inline std::uint64_t Mix64(std::uint64_t x) {

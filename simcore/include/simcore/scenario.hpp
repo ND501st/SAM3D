@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/perception.hpp"
 #include "simcore/air_war/test_waves_data.hpp"
 #include "simcore/battery.hpp"
 #include "simcore/c2_sources.hpp"
@@ -114,6 +115,10 @@ struct ScenarioTarget {
     // Its radar warning receiver: an ESM receiver of the EM library (kind rwr). With one, the pilot evades when it warns
     // of the lock or the launch (the command link heard: roadmap E5), not on the truth.
     std::string rwr;
+    // Its crew (roadmap B3, docs/air_battle/03_PERCEPTION.md 2.2): a second seat adds his glimpses to the lookout. And the
+    // pilot's skill at seeing, 0 untrained to 1 trained (< 0: perception.json's default).
+    int seats = 1;
+    double pilot_skill = -1.0;
     // The model it is drawn with (data/scenery/basic_models.json; "" its class's): presentation only.
     std::string model;
     // A decoy (roadmap E6): a drone whose echo is made to look like an aircraft's (radar reflectors). The radar can't
@@ -403,6 +408,7 @@ struct ScenarioDef {
     bool clock_given = false;  // "clock_start" was in the file
     int year = 1985;           // the "date"'s year (the default's)
     LightValues light_values;  // data/gameplay/light.json
+    airwar::PerceptionData perception;  // data/gameplay/perception.json and the receivers' displays (roadmap B3)
     bool battery_drive_own = false;
     bool battery_night = false;
     bool battery_deployed = false;  // "deployed": every vehicle starts set up where it stands
@@ -1463,7 +1469,7 @@ private:
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
                              "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
                              "bottom_m", "max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s", "max_mps", "accel_mps2",
-                             "climb_mps", "flight", "slot", "legs", "notes"})) {
+                             "climb_mps", "flight", "slot", "legs", "seats", "pilot_skill", "notes"})) {
                 return false;
             }
             ScenarioTarget tg;
@@ -1490,6 +1496,9 @@ private:
                 return false;
             }
             if (tg.size_m <= 0.0) return Fail(Join(p, "size_m"), "must be > 0");
+            if (!OptionalInt(t, p, "seats", tg.seats) || !OptionalNumber(t, p, "pilot_skill", tg.pilot_skill)) return false;
+            if (tg.seats < 1 || tg.seats > 2) return Fail(Join(p, "seats"), "1 or 2");
+            if (t.Find("pilot_skill") != nullptr && (tg.pilot_skill < 0.0 || tg.pilot_skill > 1.0)) return Fail(Join(p, "pilot_skill"), "0 to 1");
             double sustained_deg_s = 0.0, roll_deg_s = 0.0;
             if (!OptionalNumber(t, p, "max_load_g", tg.max_load_g) || !OptionalNumber(t, p, "sustained_turn_deg_s", sustained_deg_s) ||
                 !OptionalNumber(t, p, "roll_rate_deg_s", roll_deg_s) || !OptionalNumber(t, p, "max_mps", tg.max_speed_mps) ||
@@ -2323,6 +2332,7 @@ private:
             !LoadLightValues(data_dir, "gameplay/light.json", out.light_values, &error)) {
             return Fail("", error);  // there but wrong; a data folder without it keeps the code's thresholds
         }
+        if (!airwar::LoadPerceptionData(data_dir, out.perception, &error)) return Fail("", error);
         const json::Value* env = root.Find("environment");
         const json::Value* bat = root.Find("battery");
         const bool daylight_given = env != nullptr && env->Find("daylight") != nullptr;

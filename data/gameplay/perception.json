@@ -1,0 +1,655 @@
+{
+  "perception_id": "perception",
+  "status": "B3 data set (16 November 2026): the pilot's eye, the ground law, the launch's signs and the memory of a picture (docs/air_battle/03_PERCEPTION.md section 6; simcore/air_war/perception.hpp).",
+  "notes": "Each value has its source. Many are game values: the period evidence for the eye is two US Navy models (nwc_tp5709_1974 for aircraft, nwc_tp6005_1978 for ground targets); using them for every faction's pilots is a SAM3D assumption.",
+  "source": "nwc_tp5709_1974; nwc_tp6005_1978; game values where marked",
+  "confidence": "medium",
+  "eye": {
+    "rm_constant_m": {
+      "value": 1006,
+      "source": "nwc_tp5709_1974 (R_M = 0.1655 sqrt((C0-1.565)A) nmi, A in ft2; 1006 m with A in m2)",
+      "confidence": "medium",
+      "notes": "Formula high confidence; applying it to other air forces' pilots is a SAM3D assumption."
+    },
+    "threshold_offset_pct": {
+      "value": 1.565,
+      "source": "nwc_tp5709_1974",
+      "confidence": "high"
+    },
+    "factor_confidence": {
+      "value": 1.64,
+      "source": "nwc_tp5709_1974 (Taylor)",
+      "confidence": "medium"
+    },
+    "factor_unknown_location": {
+      "value": 1.31,
+      "source": "nwc_tp5709_1974 (Taylor)",
+      "confidence": "medium",
+      "notes": "Falls away when the pilot is cued to the object's place."
+    },
+    "factor_vigilance": {
+      "value": 1.19,
+      "source": "nwc_tp5709_1974 (Taylor)",
+      "confidence": "medium"
+    },
+    "factor_untrained": {
+      "value": 2.0,
+      "source": "nwc_tp5709_1974 (Taylor)",
+      "confidence": "medium",
+      "notes": "Moved by the pilot's skill: 1.0 at skill 1, this at skill 0."
+    },
+    "factor_ordinary": {
+      "value": 1.2,
+      "source": "nwc_tp5709_1974 (about 1.2 more for ordinary seeing)",
+      "confidence": "medium"
+    },
+    "fatigue_vigilance_gain": {
+      "value": 0.5,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): stress or fatigue raises the vigilance factor by at most this share (to 1.19 x 1.5)",
+      "confidence": "estimate"
+    },
+    "empty_field_range_factor": {
+      "value": 0.5,
+      "source": "nwc_tp5709_1974",
+      "confidence": "medium",
+      "notes": "Applied to aircraft and missiles seen against empty sky, not to a search of the ground."
+    },
+    "glimpse_s": {
+      "value": 1.65,
+      "source": "nwc_tp5709_1974",
+      "confidence": "medium"
+    },
+    "search_solid_angle_sr": {
+      "value": 3.14159,
+      "source": "nwc_tp5709_1974 (example: +-90 deg azimuth and +-30 deg elevation, pi sr)",
+      "confidence": "medium"
+    },
+    "cue_sector_deg": {
+      "value": 15,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a cue shrinks the search to +-15 deg about the called bearing",
+      "confidence": "estimate"
+    },
+    "lobe_max_sr": {
+      "value": 0.35,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the glimpse lobe's solid angle at a wide margin over threshold; falls to zero at the threshold range (TP 5709's lobe figure is not read into data yet)",
+      "confidence": "estimate"
+    },
+    "resolution_rad": {
+      "value": 0.00029,
+      "source": "snellen_acuity (20/20: one minute of arc)",
+      "confidence": "high"
+    },
+    "recognise_lines": {
+      "value": 2.8,
+      "source": "game value set on cbo_1986_amraam (identification 3-4 miles): a 4.5 m fighter recognised at about 5.5 km",
+      "confidence": "estimate",
+      "notes": "Johnson's 8 lines stay the TV's (em/optical.hpp)."
+    },
+    "aircraft_contrast_pct": {
+      "value": 30,
+      "source": "nwc_tp5709_1974 (example)",
+      "confidence": "estimate",
+      "notes": "Against the sky."
+    },
+    "aircraft_ground_contrast_pct": {
+      "value": 15,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): an aircraft seen against the ground",
+      "confidence": "estimate"
+    },
+    "afterburner_contrast_pct": {
+      "value": 60,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): by night or twilight an afterburner or a fire",
+      "confidence": "estimate"
+    },
+    "afterburner_area_m2": {
+      "value": 6,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the glow of an afterburner as an area against the dark",
+      "confidence": "estimate"
+    },
+    "twilight_contrast_loss": {
+      "value": 0.7,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the contrast falls by this share of the night share (dawn and dusk)",
+      "confidence": "estimate"
+    },
+    "contrail_cap_m": {
+      "value": 37000,
+      "source": "wseg_116_1967 vol. 1 (contrails seen at 20 miles and over)",
+      "confidence": "medium"
+    },
+    "contrail_contrast_pct": {
+      "value": 25,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a contrail against the sky",
+      "confidence": "estimate"
+    },
+    "contrail_width_m": {
+      "value": 60,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a contrail's seen width",
+      "confidence": "estimate"
+    },
+    "sun_glare_deg": {
+      "value": 15,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): an object within this angle of the sun is seen late",
+      "confidence": "estimate"
+    },
+    "sun_glare_contrast_factor": {
+      "value": 0.3,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): its apparent contrast is multiplied by this inside the glare",
+      "confidence": "estimate"
+    },
+    "max_range_m": {
+      "value": 60000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): nothing beyond is looked at (a cull; the eye law already says no)",
+      "confidence": "estimate"
+    },
+    "los_sample_m": {
+      "value": 150,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the line-of-sight profile's spacing for a pilot's long sight lines",
+      "confidence": "estimate"
+    },
+    "los_cache_near_s": {
+      "value": 1.0,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (as the battery fire model's 0.5 s sight cache, battery_fire.hpp)",
+      "confidence": "estimate"
+    },
+    "los_cache_far_s": {
+      "value": 3.0,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "default_skill": {
+      "value": 0.7,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a trained pilot (02_FLIGHTS_AND_PILOTS.md will give it by faction and hours)",
+      "confidence": "estimate"
+    },
+    "area_nose_per_size2": {
+      "value": 0.5,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): presented area from the TV's critical dimension size_m (a 4.5 m fighter: 10 m2 nose-on; an F-4's head-on view is about that)",
+      "confidence": "estimate"
+    },
+    "area_beam_per_size2": {
+      "value": 2.4,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (a 4.5 m fighter: 49 m2 from the side; an F-4's side view is about 50 m2)",
+      "confidence": "estimate"
+    },
+    "area_plan_per_size2": {
+      "value": 3.6,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (a 4.5 m fighter: 73 m2 from above)",
+      "confidence": "estimate"
+    }
+  },
+  "lookout": {
+    "transit": {
+      "value": 0.9,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "low_level": {
+      "value": 0.5,
+      "source": "agard_cp267_1979 (Lee B3: loss of lookout at high speed and low level)",
+      "confidence": "low"
+    },
+    "attack": {
+      "value": 0.2,
+      "source": "nwc_tp6005_1978 (TV Maverick lock about 9 s); agard_cp267_1979 (DeHart B4)",
+      "confidence": "low"
+    },
+    "defensive": {
+      "value": 0.7,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): all toward the threat's sector",
+      "confidence": "estimate"
+    },
+    "second_seat_extra": {
+      "value": 0.3,
+      "source": "jones_atg_1974 (Schohan 1965: pilots found 61 % of targets and observers 73 %): the back seat adds this to the lookout share",
+      "confidence": "low"
+    },
+    "low_level_agl_m": {
+      "value": 300,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): below this height above the ground a pilot is navigating low",
+      "confidence": "estimate"
+    },
+    "check_six_share": {
+      "value": 0.1,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a single seat spends this share of its glimpses behind the beam",
+      "confidence": "estimate"
+    }
+  },
+  "blind": {
+    "rear_half_deg": {
+      "value": 25,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a single seat does not see inside this cone about its tail; a second seat does",
+      "confidence": "estimate"
+    }
+  },
+  "ground": {
+    "pmax_large_high": {
+      "value": 1.0,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_large_medium": {
+      "value": 0.75,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_large_low": {
+      "value": 0.5,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_medium_high": {
+      "value": 0.75,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_medium_medium": {
+      "value": 0.56,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_medium_low": {
+      "value": 0.37,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_small_high": {
+      "value": 0.5,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_small_medium": {
+      "value": 0.37,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "pmax_small_low": {
+      "value": 0.25,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium"
+    },
+    "zero_at_rstar": {
+      "value": 0.75,
+      "source": "nwc_tp6005_1978 (an interpolation, not the report's)",
+      "confidence": "low",
+      "notes": "Acquisition probability is zero beyond 0.75 R*."
+    },
+    "at_0625": {
+      "value": 0.2,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium",
+      "notes": "of P_max at 0.625 R*"
+    },
+    "at_05": {
+      "value": 0.5,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium",
+      "notes": "of P_max at 0.5 R*"
+    },
+    "at_0375": {
+      "value": 0.8,
+      "source": "nwc_tp6005_1978",
+      "confidence": "medium",
+      "notes": "of P_max at 0.375 R*"
+    },
+    "full_at_rstar": {
+      "value": 0.25,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): P_max is reached at this share of R* (the report gives points down to 0.375 R*)",
+      "confidence": "estimate"
+    },
+    "off_angle_loss_per_deg": {
+      "value": 0.0033,
+      "source": "nwc_tp6005_1978 (about 1 % per 3 deg off the target line)",
+      "confidence": "low"
+    },
+    "off_track_limit_deg": {
+      "value": 30,
+      "source": "nwc_tp6005_1978 and 03_PERCEPTION.md 5.7: only objects within +-30 deg of the track are looked for",
+      "confidence": "low"
+    },
+    "unbriefed_scale": {
+      "value": 0.7,
+      "source": "jones_atg_1974 (a target of opportunity is a harder problem than a briefed one); the scale is a game value",
+      "confidence": "estimate"
+    },
+    "pass_gap_factor": {
+      "value": 1.5,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a new pass starts once the range has opened to this times the closest approach plus the gap",
+      "confidence": "estimate"
+    },
+    "pass_gap_m": {
+      "value": 2000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "recognise_good_m": {
+      "value": 3000,
+      "source": "crawford_1977_rand (sensors, by inference to the eye)",
+      "confidence": "medium"
+    },
+    "recognise_poor_m": {
+      "value": 1000,
+      "source": "crawford_1977_rand (sensors, by inference to the eye)",
+      "confidence": "medium"
+    },
+    "max_range_m": {
+      "value": 40000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a ground object is not looked for beyond this",
+      "confidence": "estimate"
+    }
+  },
+  "classes": {
+    "osa_battery_silent": {
+      "pattern": "small",
+      "contrast": "low",
+      "area_m2": {
+        "value": 60,
+        "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+        "confidence": "estimate"
+      },
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (perception.md 4 item 2: a camouflaged site was seldom seen unless firing: agard_cp100_1972)",
+      "confidence": "estimate"
+    },
+    "launch_sign": {
+      "pattern": "large",
+      "contrast": "high",
+      "area_m2": {
+        "value": 400,
+        "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+        "confidence": "estimate"
+      },
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (checo_1967_tactics p. 31: a site found by the cloud of dust of the launch)",
+      "confidence": "estimate"
+    },
+    "column_moving": {
+      "pattern": "large",
+      "contrast": "medium",
+      "area_m2": {
+        "value": 300,
+        "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+        "confidence": "estimate"
+      },
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (jones_atg_1974: moving vehicles at slightly greater range)",
+      "confidence": "estimate"
+    },
+    "vehicles_parked": {
+      "pattern": "small",
+      "contrast": "low",
+      "area_m2": {
+        "value": 40,
+        "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+        "confidence": "estimate"
+      },
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "bridge_or_works": {
+      "pattern": "large",
+      "contrast": "high",
+      "area_m2": {
+        "value": 500,
+        "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+        "confidence": "estimate"
+      },
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    }
+  },
+  "trail": {
+    "contrast_pct": {
+      "value": 20,
+      "source": "game value set so a small SAM's trail is seen at 3-6 km in day VMC (reactions.md 2.6 design estimate; no source gives a number)",
+      "confidence": "estimate"
+    },
+    "width_m": {
+      "value": 1.5,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the smoke's seen width",
+      "confidence": "estimate"
+    },
+    "max_length_m": {
+      "value": 500,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the length of trail that counts toward its seen area",
+      "confidence": "estimate"
+    },
+    "point_gap_m": {
+      "value": 150,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a trail is kept as points this far apart",
+      "confidence": "estimate"
+    },
+    "max_points": {
+      "value": 48,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "tracer_night_range_m": {
+      "value": 8000,
+      "source": "voenizdat_osa_1991 (tracers in the missile's tail for the TV sight); the range is a game value",
+      "confidence": "estimate"
+    },
+    "flame_night_range_m": {
+      "value": 6000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the motor's flame by night",
+      "confidence": "estimate"
+    },
+    "night_area_m2": {
+      "value": 2,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the tail's seen area by night",
+      "confidence": "estimate"
+    },
+    "night_contrast_pct": {
+      "value": 100,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a light against the dark",
+      "confidence": "estimate"
+    }
+  },
+  "launch": {
+    "sign_life_s": {
+      "value": 25,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): how long the dust and smoke hang at the launcher (no source: 03_PERCEPTION.md 8)",
+      "confidence": "estimate"
+    },
+    "flash_night_range_m": {
+      "value": 15000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the flash by night",
+      "confidence": "estimate"
+    }
+  },
+  "burst": {
+    "life_s": {
+      "value": 8,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a flak puff's visible life by day",
+      "confidence": "estimate"
+    },
+    "area_m2": {
+      "value": 40,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "contrast_pct": {
+      "value": 35,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "flash_life_s": {
+      "value": 0.3,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "flash_area_m2": {
+      "value": 40,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a flash is a light: its seen area is its glare, not its size",
+      "confidence": "estimate"
+    },
+    "flash_contrast_pct": {
+      "value": 100,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "night_range_m": {
+      "value": 6000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md) (no period number: perception.md 7)",
+      "confidence": "estimate"
+    }
+  },
+  "tracer": {
+    "life_s": {
+      "value": 1.5,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "area_m2": {
+      "value": 25,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a stream of tracers seen as a light, its glare as an area",
+      "confidence": "estimate"
+    },
+    "contrast_pct": {
+      "value": 100,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "night_range_m": {
+      "value": 8000,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    }
+  },
+  "fire": {
+    "life_s": {
+      "value": 120,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a damaged aircraft's smoke or fire as a wingman sees it",
+      "confidence": "estimate"
+    },
+    "area_m2": {
+      "value": 8,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "contrast_pct": {
+      "value": 50,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "night_area_m2": {
+      "value": 6,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    }
+  },
+  "errors": {
+    "bearing_sigma_deg": {
+      "value": 2.0,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the eye's bearing to an aircraft or a trail",
+      "confidence": "estimate"
+    },
+    "elevation_sigma_deg": {
+      "value": 2.0,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "range_sigma_frac": {
+      "value": 0.3,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the eye's range error to an object in the air, as a share of the range",
+      "confidence": "estimate"
+    },
+    "ground_bearing_sigma_deg": {
+      "value": 2.0,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "ground_range_sigma_frac": {
+      "value": 0.15,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a ground object's range, as a share of the range",
+      "confidence": "estimate"
+    }
+  },
+  "memory": {
+    "aircraft_s": {
+      "value": 20,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "trail_s": {
+      "value": 60,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "launch_sign_s": {
+      "value": 600,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): a site is remembered for minutes",
+      "confidence": "estimate"
+    },
+    "burst_s": {
+      "value": 30,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "tracer_s": {
+      "value": 20,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "ground_object_s": {
+      "value": 600,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "fire_s": {
+      "value": 120,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "contrail_s": {
+      "value": 60,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "rwr_s": {
+      "value": 6,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "event_keep_s": {
+      "value": 30,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md): the hub keeps an event this long past its end so a slow tick cannot miss it",
+      "confidence": "estimate"
+    }
+  },
+  "hz": {
+    "transit": {
+      "value": 1,
+      "source": "docs/air_battle/03_PERCEPTION.md 5.3 (decision 8)",
+      "confidence": "estimate"
+    },
+    "threat": {
+      "value": 2,
+      "source": "docs/air_battle/03_PERCEPTION.md 5.3 (decision 8)",
+      "confidence": "estimate"
+    },
+    "defensive": {
+      "value": 5,
+      "source": "docs/air_battle/03_PERCEPTION.md 5.3 (decision 8)",
+      "confidence": "estimate"
+    }
+  },
+  "confidence_levels": {
+    "seen": {
+      "value": 0.4,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "watched": {
+      "value": 0.6,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "recognised": {
+      "value": 0.8,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    },
+    "two_senses": {
+      "value": 0.95,
+      "source": "game value (docs/air_battle/03_PERCEPTION.md)",
+      "confidence": "estimate"
+    }
+  }
+}

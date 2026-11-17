@@ -280,7 +280,10 @@ SC_TEST("crew talk: stress graded from what each man heard; it fades; a war star
     }
     std::printf("    ARM sign heard at %.0f s; the commander's stress peaked at %.2f, %.2f five minutes on\n", launch_heard, peak, after);
     SC_EXPECT(launch_heard > 0.0);
-    SC_EXPECT(peak >= 0.9 - 1e-9);
+    // Near the top: 0.8 from the sign alone, 1.0 when a missile also bursts close to this vehicle. Since roadmap B3 the
+    // battery's other launcher (22, 400 m off) radiates while it engages the raid, so the ARMs burst at it (121 m and 303 m
+    // from it in this scenario), not at this vehicle. Stable at 0.80 run alone or in the suite; the baseline's 1.00 had one emitter.
+    SC_EXPECT(peak >= 0.8 - 1e-9);
     if (after >= 0.0) SC_EXPECT(after < 0.5);
 }
 

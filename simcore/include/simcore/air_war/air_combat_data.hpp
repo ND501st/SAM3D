@@ -74,7 +74,7 @@ public:
 
     bool LoadSensors(const json::Value& root, SensorsDef& out) {
         if (!root.Is(json::Type::Object)) return Fail("", "expected an object");
-        if (!Keys(root, "", {"sensors_id", "status", "source", "confidence", "notes", "sensors", "slots"}) || !Provenance(root, "")) return false;
+        if (!Keys(root, "", {"sensors_id", "status", "source", "confidence", "notes", "sensors", "slots", "rwr_sets"}) || !Provenance(root, "")) return false;
         const json::Value* arr = OptionalArray(root, "", "sensors");
         if (arr == nullptr || arr->items.empty()) return message_.empty() ? Fail("sensors", "required, a non-empty list") : false;
         for (std::size_t i = 0; i < arr->items.size(); ++i) {

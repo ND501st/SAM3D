@@ -794,6 +794,105 @@ public:
         return false;
     }
 
+    // ---- What the target's receiver heard (roadmap B3, docs/air_battle/03_PERCEPTION.md 3.2): every contact of the last
+    // second with what the set could make of it. The set's display (a quadrant, no type, no launch) is the pilot's
+    // perception (air_war/perception.hpp); this is the receiver's physics. Jammers and emitters of its own side are not
+    // listed; one the library does not know is a search contact with no name.
+    struct RwrContactView {
+        std::uint64_t key = 0;
+        int state = 0;             // 0 search, 1 lock (steady illumination from a track or fire-control entry), 2 launch (guidance)
+        std::string name;          // the library's, "" if it matched none
+        bool known = false;
+        double bearing_rad = 0.0;  // true azimuth as measured
+        double sigma_rad = 0.0;
+        double power_dbw = -300.0;
+    };
+    std::vector<RwrContactView> RwrPictureOf(const std::string& target_id) const {
+        std::vector<RwrContactView> out;
+        for (const auto& r : rwrs_) {
+            if (r.target != target_id || r.esm == 0) continue;
+            const em::EsmState* es = world_.Scene().FindEsm(r.esm);
+            if (es == nullptr || !es->on) continue;
+            for (const em::EsmContact& c : es->contacts) {
+                if (world_.Time() - c.last_seen_s > 1.0) continue;
+                const bool known = !c.sig.library_id.empty();
+                if (known && !c.sig.hostile) continue;
+                if (c.sig.library_kind == "jammer") continue;
+                RwrContactView v;
+                v.key = static_cast<std::uint64_t>(c.id);
+                v.known = known;
+                v.name = c.sig.library_name;
+                v.bearing_rad = c.bearing_rad;
+                v.sigma_rad = c.bearing_sigma_rad;
+                v.power_dbw = c.power_dbw;
+                if (c.sig.library_kind == "missile_guidance") v.state = 2;
+                else if (c.sig.steady && (c.sig.library_kind == "track" || c.sig.library_kind == "fire_control")) v.state = 1;
+                out.push_back(v);
+            }
+        }
+        return out;
+    }
+
+    // ---- The emitters of other sites (roadmap B3, 03_PERCEPTION.md 3.4): the battery's other launchers and the
+    // regiment's neighbours radiate the Osa's emitters from where they stand, so a receiver hears them. A site is a
+    // ground platform with no echo; its search radar radiates while it is on duty, its tracking radar and its command
+    // link point at the target it engages. `key` names the site (a callsign).
+    const em::EmitterDef* SearchEmitterDef() const {
+        const em::RadarState* r = Radar(search_);
+        return r != nullptr ? &DefOf(*r).emitter : nullptr;
+    }
+    const em::EmitterDef* TrackEmitterDef() const {
+        const em::RadarState* r = Radar(track_);
+        return r != nullptr ? &DefOf(*r).emitter : nullptr;
+    }
+    void SetOsaSite(const std::string& key, const Vec3& position, bool search_on, bool track_on, const std::string& target_id, bool link_on) {
+        if (!Ok()) return;
+        Site* s = EnsureSite(key, position);
+        if (s == nullptr) return;
+        if (s->search == 0) {
+            if (const em::EmitterDef* d = SearchEmitterDef()) s->search = world_.AddEmitter(s->platform, *d);
+        }
+        if (s->track == 0) {
+            if (const em::EmitterDef* d = TrackEmitterDef()) s->track = world_.AddEmitter(s->platform, *d);
+        }
+        if (s->link == 0) {
+            if (const em::EmitterDef* d = LibraryEmitter(em::EmitterKind::MissileUplink, 0)) s->link = world_.AddEmitter(s->platform, *d);
+        }
+        SetSiteEmitter(s->search, search_on, nullptr);
+        const em::Platform* me = world_.Scene().FindPlatform(s->platform);
+        const int tp = target_id.empty() ? 0 : PlatformOf(target_id);
+        const em::Platform* tg = tp != 0 ? world_.Scene().FindPlatform(tp) : nullptr;
+        const Vec3* toward = tg != nullptr && tg->alive && me != nullptr ? &tg->position : nullptr;
+        SetSiteEmitter(s->track, track_on && toward != nullptr, toward, me, tp);
+        SetSiteEmitter(s->link, link_on && toward != nullptr, toward, me, tp);
+    }
+    // An emitter of some other equipment of ours (the PU-12M's P-19): one emitter of the given definition at `position`.
+    void SetForeignEmitter(const std::string& key, const Vec3& position, const em::EmitterDef& def, bool on) {
+        if (!Ok()) return;
+        Site* s = EnsureSite(key, position);
+        if (s == nullptr) return;
+        if (s->search == 0) s->search = world_.AddEmitter(s->platform, def);
+        SetSiteEmitter(s->search, on, nullptr);
+    }
+    std::size_t SiteCount() const { return sites_.size(); }
+    // Is the site's search emitter (or its tracking emitter) in the air now?
+    bool SiteSearchRadiating(const std::string& key) const {
+        for (const Site& s : sites_) {
+            if (s.key != key || s.search == 0) continue;
+            const em::EmitterState* e = world_.Scene().FindEmitter(s.search);
+            return e != nullptr && e->InAir();
+        }
+        return false;
+    }
+    bool SiteTrackRadiating(const std::string& key) const {
+        for (const Site& s : sites_) {
+            if (s.key != key || s.track == 0) continue;
+            const em::EmitterState* e = world_.Scene().FindEmitter(s.track);
+            return e != nullptr && e->InAir();
+        }
+        return false;
+    }
+
     // ---- Anti-radiation missiles (roadmap E6, em/arm.hpp). A carrier's warning receiver hears a radar in its weapon's
     // band on the bearing of the place its briefing gives (within `bearing_tol_rad` of `aim_bearing_rad`): the signal it
     // measured, from the strongest such contact heard in the last second that its threat library calls a hostile search,
@@ -1227,6 +1326,50 @@ private:
         int esm;
     };
     std::vector<Rwr> rwrs_;
+    struct Site {
+        std::string key;
+        int platform = 0;
+        int search = 0;
+        int track = 0;
+        int link = 0;
+    };
+    std::vector<Site> sites_;
+
+    Site* EnsureSite(const std::string& key, const Vec3& position) {
+        for (Site& s : sites_) {
+            if (s.key == key) {
+                if (em::Platform* p = world_.Scene().FindPlatform(s.platform)) {
+                    const Vec3 at = AntennaAt(position);
+                    if ((p->position - at).LengthSquared() > 1.0) world_.SetPlatformState(s.platform, at, Vec3{});
+                }
+                return &s;
+            }
+        }
+        Site s;
+        s.key = key;
+        const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
+        s.platform = world_.AddGroundPlatform("Site " + key, em::Side::Red, position.x, position.y, mast, em::RcsModel{0.0, 0.0, 0.0});
+        sites_.push_back(s);
+        return &sites_.back();
+    }
+    // Turn a site emitter on or off; on, with `toward` it points there (a tracking antenna, a command link).
+    void SetSiteEmitter(int id, bool on, const Vec3* toward, const em::Platform* me = nullptr, int target_platform = 0) {
+        if (id == 0) return;
+        em::EmitterState* e = world_.Scene().FindEmitter(id);
+        if (e == nullptr) return;
+        const bool was = e->InAir();
+        e->radiating = on;
+        e->dummy_load = false;
+        if (on && toward != nullptr && me != nullptr) {
+            const Vec3 d = *toward - me->position;
+            if (d.LengthSquared() > 1.0) {
+                e->pointing_az_rad = AzimuthOf(d);
+                e->pointing_el_rad = ElevationOf(d);
+            }
+            e->track_target_platform = target_platform;
+        }
+        if (e->InAir() && !was) e->on_since_s = world_.Time();
+    }
 
     // The library's `index`-th emitter of a kind (null if it has none).
     const em::EmitterDef* LibraryEmitter(em::EmitterKind kind, int index) const {

@@ -13,7 +13,7 @@
     "tuning": "gameplay/osa_ak.json",
     "em": {
       "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc",
-      "extra_libraries": [ "em/generic.json" ],
+      "extra_libraries": [ "em/nato_1985.json", "em/generic.json" ],
       "jammers": [
         { "jammer": "generic_selfscreen_noise_ku", "target": "t1", "on_at_s": 0,
           "notes": "A self-screening noise pod in the tracking radar's band, on all the way: the radar never gets a range until it burns through at a few km." }
@@ -32,7 +32,7 @@
   ],
   "targets": [
     {
-      "id": "t1", "name": "Strike aircraft with a noise pod (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "id": "t1", "name": "Strike aircraft with a noise pod (placeholder)", "type": "Air+FixedWing", "class": "fighter", "rwr": "nato_alr46_class_rwr",
       "start": { "east_m": 3000, "north_m": 50000, "up_m": 1500 },
       "waypoints": [ { "east_m": 3000, "north_m": -30000, "up_m": 1500 } ],
       "speed_mps": 220, "rcs_m2": 3.0, "appear_at_s": 220,

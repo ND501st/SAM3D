@@ -77,6 +77,7 @@ public:
         if (Finished()) return;
         osa_->Step(dt);
         post_->Step(dt);
+        osa_->HearPostRadarOf(*post_);  // the post's radar is an emitter the aircraft's receivers can hear (roadmap B3)
         Sync();
     }
     bool RunToEnd(double dt, double max_s = 1e9) {
