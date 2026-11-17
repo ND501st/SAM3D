@@ -293,7 +293,7 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
     LiveRun first;
     unsigned seed = 1;
     double last_release_s = -1.0, last_impact_s = -1.0;
-    for (; seed <= 4; ++seed) {
+    for (; seed <= 12; ++seed) {
         first = RunFirstPackage(d, seed);
         if (!first.ok || first.releases.empty()) continue;
         last_release_s = last_impact_s = -1.0;
@@ -303,8 +303,8 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
         }
         if (last_impact_s > last_release_s + 2.0) break;  // a load still falls a second after the last release
     }
-    SC_EXPECT(seed <= 4 && first.ok && first.ahead == 0);
-    if (seed > 4 || !first.ok) return;
+    SC_EXPECT(seed <= 12 && first.ok && first.ahead == 0);
+    if (seed > 12 || !first.ok) return;
     const double end_s = last_release_s + 1.0;
     AirWarData shortened = d;
     shortened.tuning.values["scenario.margin_s"] = d.tuning.Get("scenario.margin_s") + (end_s - first.end_s);

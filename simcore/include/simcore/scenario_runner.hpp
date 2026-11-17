@@ -2270,7 +2270,9 @@ private:
 
 public:
     // ---- The flights' command (flights.hpp, roadmap B1; docs/air_battle/02_FLIGHTS_AND_PILOTS.md §2.3). Who may give an
-    // order (C2Authority::May) is roadmap B5: every order is accepted until then. Each call is logged with its `by`.
+    // order is the authority rule set here (roadmap B5: air_war/package_control.hpp's AuthorityRule); without one every
+    // order is accepted. Each call is logged with its `by`.
+    void SetFlightAuthority(Flights::Authority a) { flights_->SetAuthority(std::move(a)); }
     bool OrderFlight(const std::string& flight, FlightOrder o, std::string* why = nullptr) {
         const int fi = flights_->Index(flight);
         if (fi < 0) {

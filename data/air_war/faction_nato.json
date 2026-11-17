@@ -58,6 +58,65 @@
         "source": "fm_17_50_1977 ch. 3 (low level, contour and NOE along a broad corridor); no pair spacing found: a game value", "confidence": "estimate" }
     }
   },
+  "c2": {
+    "source": "docs/air_battle/05_C2_AND_RETASKING.md §2.1, §4 (hoak_1987_retasking; rippe_1985_airland; tradoc_jaat_1983; smart_1985_tacs)",
+    "confidence": "medium",
+    "notes": "Central Region, 1985 (roadmap B5). Reach and back_km are SAM3D estimates; the posts stand on the faction's own front. Deep (AI) strikes fly comm-out and report at the debrief.",
+    "posts": [
+      { "id": "atoc", "name": "ATOC (its FIDO)", "kind": "tasking", "at": "bases", "reach_km": 250, "net": "nato_air_uhf_am",
+        "source": "rippe_1985_airland pp. 31-35; rifenburg_1989_c2; reach a SAM3D estimate (voice relayed by a CRC, CRP or the E-3A)", "confidence": "medium" },
+      { "id": "asoc", "name": "ASOC", "kind": "support_centre", "at": "entries", "back_km": 30, "reach_km": 80, "net": "air_ground_uhf_am",
+        "source": "hoak_1987_retasking ch. 3-4 (TACR 55-46, 1986); tradoc_jaat_1983; one per corps sector, back_km and reach SAM3D estimates", "confidence": "medium" },
+      { "id": "crc", "name": "CRC", "kind": "radar_control", "at": "line", "back_km": 60, "reach_km": 200, "net": "nato_air_uhf_am",
+        "source": "smart_1985_tacs ch. 3; reach a SAM3D estimate (UHF line of sight to aircraft at height)", "confidence": "medium" },
+      { "id": "e3a", "name": "NATO E-3A orbit", "kind": "airborne_warning", "at": "line", "back_km": 150, "reach_km": 350, "net": "nato_air_uhf_am", "from_year": 1982,
+        "source": "afmag_1984_nato (12 of 18 delivered by late 1984); reach a SAM3D estimate", "confidence": "medium" },
+      { "id": "fac", "name": "FAC with the corps' troops", "kind": "fac", "at": "line_points", "back_km": 2, "reach_km": 40, "sight_km": 50, "net": "air_ground_uhf_am",
+        "source": "tradoc_jaat_1983; hoover_1979_fac; ground or Army helicopter FACs only (skattum_1988_oa10); reach a SAM3D estimate; sight a game value: a troops object stands for a whole group, its forward units at the line", "confidence": "medium" },
+      { "id": "wing_ops", "name": "wing operations", "kind": "squadron", "at": "bases", "reach_km": 60, "net": "nato_air_uhf_am",
+        "source": "hoak_1987_retasking (ground alert at the wings); reach a SAM3D estimate", "confidence": "low" }
+    ],
+    "authority": [
+      { "post": "fac", "act": "designate", "missions": ["cas"], "where": "own_corps", "source": "tradoc_jaat_1983; skattum_1988_oa10", "confidence": "high" },
+      { "post": "support_centre", "act": "divert_airborne", "missions": ["cas"], "where": "own_corps", "needs": "army",
+        "source": "morrow_1977_tacs (TACR 55-46 TEST 1976); hoak_1987_retasking", "confidence": "medium" },
+      { "post": "support_centre", "act": "scramble", "missions": ["cas"], "where": "own_corps", "source": "hoak_1987_retasking; tradoc_jaat_1983", "confidence": "medium" },
+      { "post": "tasking", "act": "divert_airborne", "missions": ["bai"], "where": "any", "source": "rippe_1985_airland (J-SAK 1984)", "confidence": "high" },
+      { "post": "tasking", "act": "scramble", "missions": ["any"], "where": "any", "source": "rippe_1985_airland pp. 31-35 (outside one corps' allocation)", "confidence": "medium" },
+      { "post": "tasking", "act": "redirect_before_ip", "missions": ["strike"], "where": "any", "chance": 0.1,
+        "source": "schoeck_1987_ai_retasking; the chance a game value", "confidence": "low" },
+      { "post": "tasking", "act": "divert_recovery", "missions": ["any"], "where": "any", "source": "afmag_1983_usafe; schoeck_1987_ai_retasking", "confidence": "medium" },
+      { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "rippe_1985_airland (tactical control of the offensive aircraft)", "confidence": "medium" },
+      { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "smart_1985_tacs", "confidence": "high" },
+      { "post": "radar_control", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "smart_1985_tacs ch. 3 (with TACC concurrence)", "confidence": "medium" },
+      { "post": "airborne_warning", "act": "warn", "missions": ["any"], "where": "any", "source": "afmag_1984_nato; rippe_1985_airland; no strike retasking by the E-3A in a period source", "confidence": "medium" }
+    ],
+    "timing": {
+      "report": { "relay_s": [30, 120], "decide_s": [60, 300], "encode_s": [10, 30],
+        "source": "SAM3D estimate composed to the 3-10 min retask band (docs/air_battle/05_C2_AND_RETASKING.md §2.5); a relay by CRC, CRP or E-3A (hoak_1987_retasking)", "confidence": "low" },
+      "request": { "relay_s": [60, 180], "decide_s": [120, 420], "encode_s": [20, 60],
+        "source": "SAM3D estimate: request to bombs 20-50 min (luke_2002_cas, hindsight; hoak_1987_retasking)", "confidence": "low" },
+      "army": { "relay_s": [60, 180], "decide_s": [60, 300], "encode_s": [10, 30],
+        "source": "SAM3D estimate; the corps' agreement to an airborne divert (morrow_1977_tacs)", "confidence": "low" },
+      "order": { "relay_s": [30, 90], "decide_s": [30, 120], "encode_s": [15, 45],
+        "source": "SAM3D estimate; voice to flights, direct or relayed (hoak_1987_retasking)", "confidence": "low" },
+      "scramble": { "relay_s": [30, 120], "decide_s": [30, 120],
+        "source": "SAM3D estimate; land line or teletype to the wing (rippe_1985_airland)", "confidence": "low" }
+    },
+    "alert": [
+      { "id": "airborne", "share": 0.3, "airborne": true, "hold_h": [1.5, 2.0],
+        "source": "tradoc_jaat_1983 (an A-10 sortie about 2 h); mt_1986_dobedin (attention flags after 30 min at low level); share a game value", "confidence": "medium" },
+      { "id": "ground_5", "share": 0.35, "takeoff_s": [300, 300], "hold_h": [2, 4],
+        "source": "hoak_1987_retasking (5 min ground alert); hold and share game values", "confidence": "medium" },
+      { "id": "ground_15", "share": 0.35, "takeoff_s": [900, 900], "hold_h": [4, 8],
+        "source": "hoak_1987_retasking (15 min ground alert); hold and share game values", "confidence": "medium" }
+    ],
+    "report_missions": ["cas", "bai"],
+    "hunter_leave": "any",
+    "silence_consent_s": 300,
+    "max_report_age_h": 6,
+    "nomination_h": 48
+  },
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 12, "on_call_fraction": 0.1, "centralisation": 0.6, "simultaneous_bias": 0.6,
     "sortie_rate_per_day": 2.0, "serviceability": 0.8, "max_packages_per_cycle": 20, "delivery_risk": 0.4,
@@ -237,7 +296,7 @@
  ],
   "officer_pool": {
     "ranks": { "commander": "Major General", "planner": "Colonel", "intelligence": "Lieutenant Colonel", "sead": "Lieutenant Colonel",
-               "squadron_leader": "Lieutenant Colonel" },
+               "squadron_leader": "Lieutenant Colonel", "cp_controller": "Lieutenant Colonel", "gci_controller": "Major", "fac": "Captain" },
     "first_names": [ "James", "Robert", "William", "Michael", "David", "Richard", "Hans", "Klaus", "Peter", "Jan", "Pieter", "Geoffrey", "Ian", "Marco", "Luc", "Erik" ],
     "last_names": [ "Miller", "Carter", "Hughes", "Brandt", "Vogel", "de Vries", "Jansen", "Thompson", "Walsh", "Reid", "Morgan", "Lefebvre", "Rossi", "Andersen", "Holt", "Baker" ],
     "backgrounds": [ "USAF fighter pilot", "RAF navigator", "Luftwaffe staff officer", "Dutch F-16 pilot", "USAF weapons officer", "Belgian Mirage pilot", "Weapons School instructor" ],

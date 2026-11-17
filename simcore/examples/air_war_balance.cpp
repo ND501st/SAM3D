@@ -76,6 +76,10 @@ struct RunStats {
     // Our supply lines (logistics.hpp): what they brought and lost, how long they were cut, the troops' stocks at the end.
     double lines = 0.0, delivered = 0.0, strength = 0.0, cargo_lost = 0.0, vehicles_lost = 0.0, columns_destroyed = 0.0;
     double hours_cut = 0.0, reroutes = 0.0, stocks_end = 0.0, armed_recce = 0.0, columns_found = 0.0;
+    // Command in the air (roadmap B5, c2.hpp): reports, diverts, alert pools, the calls our listeners heard.
+    double c2_reports = 0.0, c2_out_of_cover = 0.0, c2_diverts = 0.0, c2_warnings = 0.0, c2_scrambles = 0.0, c2_on_call = 0.0;
+    double c2_on_call_sorties = 0.0, c2_pool_aircraft = 0.0, c2_pools = 0.0, c2_stood_down = 0.0, c2_heard = 0.0, c2_refusals = 0.0;
+    double c2_briefs = 0.0, c2_requests = 0.0, c2_to_intel = 0.0, c2_on_call_sorties_d1 = 0.0, c2_sorties_d1 = 0.0;
 };
 
 void Posture(BatteryPosture& p, bool careful) {
@@ -145,6 +149,7 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
             if (c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].function <= 0.0) battery_wrecked = true;
         }
         DayStats& s = acc.days[static_cast<std::size_t>(d)];
+        if (d == 0) acc.c2_on_call_sorties_d1 += c.C2().Stats().on_call_sorties;
         s.battery_raids += raids;
         s.iads += IadsShare(c);
         s.believed += c.Intel().BelievedIadsShare();
@@ -225,6 +230,24 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
     double stocks = 0.0;
     for (int j : c.Supply().Served()) stocks += c.Truth()[static_cast<std::size_t>(j)].supply;
     acc.stocks_end += c.Supply().Served().empty() ? 1.0 : stocks / static_cast<double>(c.Supply().Served().size());
+    {
+        const C2Stats& cs = c.C2().Stats();
+        acc.c2_reports += cs.reports;
+        acc.c2_out_of_cover += cs.out_of_cover;
+        acc.c2_diverts += cs.diverts;
+        acc.c2_warnings += cs.warnings;
+        acc.c2_scrambles += cs.scrambles;
+        acc.c2_on_call += cs.on_call_packages;
+        acc.c2_on_call_sorties += cs.on_call_sorties;
+        acc.c2_pool_aircraft += cs.pool_aircraft;
+        acc.c2_pools += cs.pools;
+        acc.c2_stood_down += cs.pools_stood_down;
+        acc.c2_heard += cs.heard;
+        acc.c2_refusals += cs.refusals;
+        acc.c2_briefs += cs.briefs;
+        acc.c2_requests += cs.requests;
+        acc.c2_to_intel += cs.to_intel;
+    }
     for (const Package& p : c.Packages()) {
         if (p.kind != MissionKind::ArmedRecce || !p.resolved) continue;
         acc.armed_recce += 1.0;
@@ -287,6 +310,16 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
     }
     std::printf("Support: AWACS on station %.0f%%, %.1f aircraft refuelled and %.1f support sorties a campaign. Force: %.0f aircraft on day 1, %.0f at the end.\n",
                 100.0 * r.awacs / n, r.refuelled / n, r.support_sorties / n, r.aircraft_day1 / n, r.aircraft_end / n);
+    if (r.c2_pools > 0.0 || r.c2_reports > 0.0) {
+        double sorties = 0.0;
+        for (const DayStats& s : r.days) sorties += s.sorties;
+        const double d1 = r.days.empty() ? 0.0 : r.days[0].sorties;
+        std::printf("Command in the air: %.1f in-flight reports (%.1f out of cover), %.1f requests, %.1f warnings to hunters, %.1f diverts, %.1f scrambles, %.1f refused, %.1f to intelligence, %.1f FAC briefs; our listeners heard %.1f calls a campaign. Alert: %.1f pools of %.1f aircraft, %.1f stood down unused; %.1f on-call packages, %.1f sorties (%.1f%% of the sorties; day 1 %.1f%%).\n",
+                    r.c2_reports / n, r.c2_out_of_cover / n, r.c2_requests / n, r.c2_warnings / n, r.c2_diverts / n, r.c2_scrambles / n, r.c2_refusals / n,
+                    r.c2_to_intel / n, r.c2_briefs / n, r.c2_heard / n, r.c2_pools / n, r.c2_pool_aircraft / n, r.c2_stood_down / n, r.c2_on_call / n,
+                    r.c2_on_call_sorties / n, sorties > 0.0 ? 100.0 * r.c2_on_call_sorties / sorties : 0.0,
+                    d1 > 0.0 ? 100.0 * r.c2_on_call_sorties_d1 / d1 : 0.0);
+    }
     if (r.lines > 0.0) {
         std::printf("Our supply lines (%.0f): %.2f stocks and %.2f strength delivered, %.2f stocks lost on the way, %.1f columns destroyed (%.0f vehicles), %.0f line-hours cut, %.1f reroutes a campaign; the troops' stocks at the end %.0f%%. Armed reconnaissance: %.1f searches a campaign, a column found in %.0f%%.\n",
                     r.lines, r.delivered / n, r.strength / n, r.cargo_lost / n, r.columns_destroyed / n, r.vehicles_lost / n, r.hours_cut / n,

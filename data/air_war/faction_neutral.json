@@ -44,6 +44,39 @@
         "source": "sam3d estimate: as NATO's helicopters (fm_17_50_1977)", "confidence": "estimate" }
     }
   },
+  "c2": {
+    "source": "SAM3D assumption: a small, centralised national system (docs/air_battle/05_C2_AND_RETASKING.md §2.3; no period source found)",
+    "confidence": "low",
+    "notes": "Fighters ground-controlled; ground attack flies planned missions only; no FACs; no in-air retasking beyond recall. Its ground alert stands down unused for ground attack.",
+    "posts": [
+      { "id": "national_cp", "name": "the national air operations centre", "kind": "tasking", "at": "bases", "reach_km": 200, "net": "neutral_air_vhf_am",
+        "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §2.3)", "confidence": "low" },
+      { "id": "gci", "name": "GCI post", "kind": "radar_control", "at": "line", "back_km": 30, "reach_km": 150, "net": "neutral_air_vhf_am",
+        "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §2.3)", "confidence": "low" },
+      { "id": "base", "name": "the base's operations", "kind": "squadron", "at": "bases", "reach_km": 60, "net": "neutral_air_vhf_am",
+        "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §2.3)", "confidence": "low" }
+    ],
+    "authority": [
+      { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
+      { "post": "tasking", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
+      { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" }
+    ],
+    "timing": {
+      "report": { "relay_s": [60, 180], "decide_s": [300, 900], "encode_s": [20, 60],
+        "source": "SAM3D estimate: slow and careful (docs/air_battle/05_C2_AND_RETASKING.md §2.5)", "confidence": "low" },
+      "order": { "relay_s": [60, 180], "decide_s": [120, 600], "encode_s": [20, 60],
+        "source": "SAM3D estimate: recall only, 5-15 min (docs/air_battle/05_C2_AND_RETASKING.md §2.5)", "confidence": "low" },
+      "scramble": { "relay_s": [60, 180], "decide_s": [300, 600],
+        "source": "SAM3D estimate (docs/air_battle/05_C2_AND_RETASKING.md §3)", "confidence": "low" }
+    },
+    "alert": [
+      { "id": "ground", "share": 1.0, "takeoff_s": [900, 900], "hold_h": [4, 8],
+        "source": "SAM3D assumption: assumed to follow NATO's 15 min ground alert (hoak_1987_retasking); hold a game value", "confidence": "low" }
+    ],
+    "report_missions": ["any"],
+    "hunter_leave": "none",
+    "max_report_age_h": 6
+  },
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 4, "on_call_fraction": 0.15, "centralisation": 0.5, "simultaneous_bias": 0.4,
     "sortie_rate_per_day": 2.0, "serviceability": 0.75, "max_packages_per_cycle": 5, "delivery_risk": 0.7, "min_effect": 0.02, "min_value": 0.3,
@@ -126,7 +159,7 @@
     { "id": "liaison", "name": "Liaison flight", "aircraft": "alouette3", "count": 4 }
   ],
   "officer_pool": {
-    "ranks": { "commander": "Brigadier", "planner": "Oberst", "intelligence": "Oberstleutnant", "squadron_leader": "Major" },
+    "ranks": { "commander": "Brigadier", "planner": "Oberst", "intelligence": "Oberstleutnant", "squadron_leader": "Major", "cp_controller": "Oberstleutnant", "gci_controller": "Major" },
     "first_names": [ "Franz", "Karl", "Josef", "Anton", "Rudolf", "Ernst", "Walter", "Herbert", "Leopold", "Friedrich", "Johann", "Alois" ],
     "last_names": [ "Gruber", "Huber", "Bauer", "Wagner", "Pichler", "Steiner", "Moser", "Mayer", "Hofer", "Leitner", "Berger", "Fuchs" ],
     "backgrounds": [ "light-jet pilot", "helicopter pilot", "staff officer", "former display-team pilot", "border service officer" ],

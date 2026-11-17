@@ -44,6 +44,13 @@
         "source": "sam3d estimate: a loose pair", "confidence": "estimate" }
     }
   },
+  "c2": {
+    "source": "SAM3D assumption: no posts; each sortie flies its own plan and the leader is his own retasker (docs/air_battle/05_C2_AND_RETASKING.md §2.4)",
+    "confidence": "low",
+    "notes": "No warning system beyond their eyes and agents; what the pilots saw goes in at the debrief.",
+    "report_missions": [],
+    "hunter_leave": "none"
+  },
   "doctrine": {
     "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
     "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3, "delivery_risk": 0.8, "min_effect": 0.005, "min_value": -0.5,

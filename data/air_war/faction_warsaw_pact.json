@@ -56,6 +56,62 @@
         "source": "airwar_mi24_markovsky (pairs in echelon at 15-20 degrees, 600-800 m apart)", "confidence": "medium" }
     }
   },
+  "c2": {
+    "source": "docs/air_battle/05_C2_AND_RETASKING.md §2.2, §4 (fm_100_2_1_1984 ch. 12; mt_1962_kontsevoy; markovsky_afghan_sky)",
+    "confidence": "medium",
+    "notes": "1985: no A-50 fighter control (in service later); radio minimal on the attack, so a low flight is often out of a post's cover. Reach and back_km are SAM3D estimates.",
+    "posts": [
+      { "id": "air_army_kp", "name": "the air army's KP", "kind": "tasking", "at": "bases", "reach_km": 150, "net": "pact_air_r832m",
+        "source": "fm_100_2_1_1984 pp. 12-5, 12-7; reach a SAM3D estimate", "confidence": "medium" },
+      { "id": "pua", "name": "the division's aviation control element (ПУА)", "kind": "support_centre", "at": "entries", "back_km": 15, "reach_km": 60, "net": "pact_air_r832m",
+        "source": "fm_100_2_1_1984 p. 12-5 (two sections in BTR-60s); back_km and reach SAM3D estimates", "confidence": "medium" },
+      { "id": "gci", "name": "GCI post", "kind": "radar_control", "at": "line", "back_km": 40, "reach_km": 150, "net": "pact_air_r832m",
+        "source": "mt_1962_front_aviation (a channel limit); reach a SAM3D estimate", "confidence": "low" },
+      { "id": "a50", "name": "A-50 orbit", "kind": "airborne_warning", "at": "line", "back_km": 150, "reach_km": 300, "net": "pact_air_r832m", "from_year": 1989,
+        "source": "SAM3D assumption: not used for 1985 control (docs/air_battle/07_AIR_TO_AIR.md §2.7); a later war's option", "confidence": "low" },
+      { "id": "avianavodchik", "name": "the regiment's FAC (авианаводчик) and target-identification post", "kind": "fac", "at": "line_points", "back_km": 2, "reach_km": 30, "sight_km": 50, "net": "pact_air_r832m",
+        "source": "fm_100_2_1_1984 pp. 12-2 to 12-5 (an air forces officer at regiment); reach a SAM3D estimate; sight a game value: a troops object stands for a whole group, its forward units at the line", "confidence": "medium" },
+      { "id": "regiment_kp", "name": "the air regiment's KP", "kind": "squadron", "at": "bases", "reach_km": 60, "net": "pact_air_r832m",
+        "source": "fm_100_2_1_1984 p. 12-7 (readiness at the regiment); reach a SAM3D estimate", "confidence": "medium" }
+    ],
+    "authority": [
+      { "post": "fac", "act": "designate", "missions": ["cas", "helo_raid"], "where": "own_area", "source": "fm_100_2_1_1984 pp. 12-2 to 12-5", "confidence": "high" },
+      { "post": "support_centre", "act": "approve", "missions": ["any"], "where": "within_allocation", "source": "fm_100_2_1_1984 p. 12-5", "confidence": "medium" },
+      { "post": "tasking", "act": "scramble", "missions": ["any"], "where": "any", "source": "fm_100_2_1_1984 pp. 12-5, 12-7 (readiness 1 and 2)", "confidence": "medium" },
+      { "post": "squadron", "act": "scramble", "missions": ["any"], "where": "own_area", "source": "fm_100_2_1_1984 p. 12-7", "confidence": "medium" },
+      { "post": "tasking", "act": "divert_airborne", "missions": ["armed_recce"], "where": "own_area", "chance": 0.2,
+        "source": "fm_100_2_1_1984 p. 12-7 (\"occasionally\"); the chance a game value", "confidence": "low" },
+      { "post": "squadron", "act": "divert_airborne", "missions": ["armed_recce"], "where": "own_area", "chance": 0.2,
+        "source": "fm_100_2_1_1984 p. 12-7 (\"occasionally\"); the chance a game value", "confidence": "low" },
+      { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "fm_100_2_1_1984 p. 12-8 (ground control); lambeth_1984", "confidence": "medium" },
+      { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "mt_1962_front_aviation; lambeth_1984", "confidence": "medium" },
+      { "post": "radar_control", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "mt_1962_front_aviation", "confidence": "medium" }
+    ],
+    "timing": {
+      "report": { "relay_s": [20, 60], "decide_s": [60, 180], "encode_s": [20, 40],
+        "source": "SAM3D estimate: brief coded messages (fm_100_2_1_1984 p. 12-4), composed to 20-30 min request to strike (mt_1962_kontsevoy)", "confidence": "low" },
+      "request": { "relay_s": [30, 90], "decide_s": [60, 240], "encode_s": [20, 40],
+        "source": "SAM3D estimate: the division's element to the KP (fm_100_2_1_1984 p. 12-5), composed to mt_1962_kontsevoy's 17-28 min", "confidence": "low" },
+      "order": { "relay_s": [20, 60], "decide_s": [30, 120], "encode_s": [10, 30],
+        "source": "SAM3D estimate; command radio (fm_100_2_1_1984 p. 12-5)", "confidence": "low" },
+      "scramble": { "relay_s": [10, 30],
+        "source": "SAM3D estimate: a command signal to crews in the cockpit (fm_100_2_1_1984 p. 12-7)", "confidence": "low" }
+    },
+    "alert": [
+      { "id": "readiness_1", "share": 0.4, "takeoff_s": [180, 300], "hold_h": [1, 2], "phase_scale": [0.25, 1.0],
+        "source": "fm_100_2_1_1984 p. 12-7; small in the opening air operation (dia_1977_fa_support), the scale a game value; share a game value", "confidence": "medium" },
+      { "id": "readiness_2", "share": 0.4, "takeoff_s": [900, 900], "hold_h": [2, 4], "phase_scale": [0.25, 1.0],
+        "source": "fm_100_2_1_1984 p. 12-7; phase scale and share game values", "confidence": "medium" },
+      { "id": "readiness_3", "share": 0.2, "takeoff_s": [3600, 7200], "hold_h": [48, 96], "phase_scale": [0.25, 1.0],
+        "source": "fm_100_2_1_1984 p. 12-7; phase scale and share game values", "confidence": "medium" }
+    ],
+    "report_missions": ["any"],
+    "hunter_leave": "free_hunt_zone",
+    "free_hunt": { "from_phase": 1, "depth_km": 30,
+      "source": "fm_100_2_1_1984 p. 12-6 (free hunting waits for air superiority); the depth a game value", "confidence": "low" },
+    "max_report_age_h": 6,
+    "debrief_s": [300, 600]
+  },
   "doctrine": {
     "planning_cycle_h": 12, "lead_time_h": 3, "on_call_fraction": 0.2, "centralisation": 0.9, "simultaneous_bias": 0.8,
     "sortie_rate_per_day": 2.5, "serviceability": 0.7, "max_packages_per_cycle": 10, "delivery_risk": 0.3,
@@ -201,7 +257,7 @@
  ],
   "officer_pool": {
     "ranks": { "commander": "General-Major of Aviation", "planner": "Colonel", "intelligence": "Colonel", "sead": "Lieutenant-Colonel",
-               "political": "Colonel (deputy for political affairs)", "squadron_leader": "Lieutenant-Colonel" },
+               "political": "Colonel (deputy for political affairs)", "squadron_leader": "Lieutenant-Colonel", "cp_controller": "Lieutenant-Colonel", "gci_controller": "Major", "fac": "Captain" },
     "first_names": [ "Aleksandr", "Sergei", "Vladimir", "Nikolai", "Yuri", "Mikhail", "Andrei", "Igor", "Dmitri", "Valery", "Anatoly", "Boris", "Konstantin" ],
     "last_names": [ "Ivanov", "Smirnov", "Popov", "Vasiliev", "Petrov", "Sokolov", "Mikhailov", "Novikov", "Fyodorov", "Morozov", "Volkov", "Alekseev",
                     "Lebedev", "Semyonov", "Egorov", "Pavlov", "Kozlov", "Stepanov", "Nikolaev" ],

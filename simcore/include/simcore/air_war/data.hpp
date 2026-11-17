@@ -19,6 +19,7 @@
 
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
+#include "simcore/air_war/c2_def.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/country_map.hpp"
@@ -567,7 +568,8 @@ struct Skills {
     double politics = 0.5;
 };
 
-enum class StaffRole { Commander, Planner, Intelligence, Sead, Political, SquadronLeader };
+// CpController, GciController and Fac (roadmap B5): the duty officers of the command posts in the air (c2_def.hpp).
+enum class StaffRole { Commander, Planner, Intelligence, Sead, Political, SquadronLeader, CpController, GciController, Fac };
 
 inline const char* StaffRoleName(StaffRole r) {
     switch (r) {
@@ -577,13 +579,16 @@ inline const char* StaffRoleName(StaffRole r) {
         case StaffRole::Sead: return "sead";
         case StaffRole::Political: return "political";
         case StaffRole::SquadronLeader: return "squadron_leader";
+        case StaffRole::CpController: return "cp_controller";
+        case StaffRole::GciController: return "gci_controller";
+        case StaffRole::Fac: return "fac";
     }
     return "?";
 }
 
 inline bool ParseStaffRole(const std::string& s, StaffRole& out) {
-    for (StaffRole r : {StaffRole::Commander, StaffRole::Planner, StaffRole::Intelligence, StaffRole::Sead,
-                        StaffRole::Political, StaffRole::SquadronLeader}) {
+    for (StaffRole r : {StaffRole::Commander, StaffRole::Planner, StaffRole::Intelligence, StaffRole::Sead, StaffRole::Political,
+                        StaffRole::SquadronLeader, StaffRole::CpController, StaffRole::GciController, StaffRole::Fac}) {
         if (s == StaffRoleName(r)) {
             out = r;
             return true;
@@ -714,6 +719,7 @@ struct FactionDef {
     // Its flights' formations (the "flights" block): type class -> phase -> the slots (roadmap B1).
     std::map<std::string, std::map<std::string, FormationDef>> formations;
     FactionRadio radio;  // its air radio and discipline (the "radio" block, roadmap B9)
+    FactionC2 c2;        // its command posts in the air, their authority, timings and alert pools (the "c2" block, roadmap B5)
 
     // A class's formations by phase, as a flight carries them (flights.hpp FlightState::formations); empty: none given.
     std::map<std::string, std::vector<Vec3>> FormationsFor(const std::string& cls) const {
@@ -969,6 +975,7 @@ struct TuningTable {
             {"own_intel.leak_warning_s", 900.0},
         };
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
+        for (const auto& kv : C2TuningDefaults()) m.insert(kv);        // its command in the air (roadmap B5, c2_def.hpp)
         return m;
         }();
         return d;
@@ -1370,7 +1377,7 @@ public:
         std::string tier;
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
-                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio"}) ||
+                             "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1383,7 +1390,7 @@ public:
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
-            !LoadCommsJamming(root, out) || !LoadFormations(root, out) || !LoadRadioBlock(root, out)) {
+            !LoadCommsJamming(root, out) || !LoadFormations(root, out) || !LoadRadioBlock(root, out) || !LoadC2Block(root, out)) {
             return false;
         }
         return true;
@@ -1407,6 +1414,141 @@ public:
             !Num(*r, p, "discipline", b.discipline, 0.0, 1.0) || !Num(*r, p, "discipline_gci_fighters", b.discipline_gci_fighters, 0.0, 1.0)) {
             return false;
         }
+        b.present = true;
+        return true;
+    }
+    // The "c2" block (roadmap B5, docs/air_battle/05_C2_AND_RETASKING.md §4.9, air_war/c2_def.hpp): strict keys, every
+    // post, authority line, hop and alert pool with its source and confidence.
+    bool Band(const json::Value& obj, const std::string& path, const char* key, C2Band& out, double lo, double hi) {
+        const json::Value* v = obj.Find(key);
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Array) || v->items.size() != 2 || !v->items[0].Is(json::Type::Number) || !v->items[1].Is(json::Type::Number)) {
+            return Fail(Join(path, key), "expected [lo, hi]");
+        }
+        out.lo = v->items[0].number;
+        out.hi = v->items[1].number;
+        if (out.lo < lo || out.hi > hi || out.lo > out.hi) return Fail(Join(path, key), "lo <= hi, within " + Fmt(lo) + " .. " + Fmt(hi));
+        return true;
+    }
+    static bool OneOf(const std::string& s, const std::vector<std::string>& list) {
+        return std::find(list.begin(), list.end(), s) != list.end();
+    }
+    static bool C2Mission(const std::string& m) {
+        MissionKind k;
+        return m == "any" || m == "bai" || m == "fighters" || ParseMissionKind(m, k);
+    }
+    bool LoadC2Block(const json::Value& root, FactionDef& out) {
+        const json::Value* c = root.Find("c2");
+        if (c == nullptr) return true;
+        const std::string p = "c2";
+        if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
+        FactionC2& b = out.c2;
+        if (!Keys(*c, p, {"posts", "authority", "timing", "alert", "report_missions", "hunter_leave", "free_hunt", "silence_consent_s",
+                          "max_report_age_h", "nomination_h", "debrief_s", "source", "confidence", "notes"}) ||
+            !Provenance(*c, p) || !RequireString(*c, p, "source", b.source) || !RequireString(*c, p, "confidence", b.confidence) ||
+            !OptionalString(*c, p, "notes", b.notes) || !StringList(*c, p, "report_missions", b.report_missions) ||
+            !OptionalString(*c, p, "hunter_leave", b.hunter_leave) || !Num(*c, p, "silence_consent_s", b.silence_consent_s, 0.0, 3600.0) ||
+            !Num(*c, p, "max_report_age_h", b.max_report_age_h, 0.0, 240.0) || !Num(*c, p, "nomination_h", b.nomination_h, 0.0, 240.0) ||
+            !Band(*c, p, "debrief_s", b.debrief_s, 0.0, 86400.0)) {
+            return false;
+        }
+        if (!OneOf(b.hunter_leave, {"any", "free_hunt_zone", "none"})) return Fail(Join(p, "hunter_leave"), "any, free_hunt_zone or none");
+        for (std::size_t i = 0; i < b.report_missions.size(); ++i) {
+            if (!C2Mission(b.report_missions[i])) return Fail(Index(Join(p, "report_missions"), i), "not a mission");
+        }
+        if (const json::Value* fh = c->Find("free_hunt")) {
+            const std::string fp = Join(p, "free_hunt");
+            if (!Keys(*fh, fp, {"from_phase", "depth_km", "source", "confidence", "notes"}) || !Provenance(*fh, fp) ||
+                !RequireString(*fh, fp, "source", b.free_hunt.source) || !RequireString(*fh, fp, "confidence", b.free_hunt.confidence) ||
+                !Int(*fh, fp, "from_phase", b.free_hunt.from_phase, -1, 20) || !Num(*fh, fp, "depth_km", b.free_hunt.depth_km, 0.0, 1000.0)) {
+                return false;
+            }
+        }
+        if (const json::Value* posts = OptionalArray(*c, p, "posts")) {
+            for (std::size_t i = 0; i < posts->items.size(); ++i) {
+                const json::Value& v = posts->items[i];
+                const std::string pp = Index(Join(p, "posts"), i);
+                C2PostDef d;
+                if (!Keys(v, pp, {"id", "name", "kind", "at", "back_km", "reach_km", "sight_km", "net", "from_year", "source", "confidence", "notes"}) ||
+                    !Provenance(v, pp) || !RequireString(v, pp, "source", d.source) || !RequireString(v, pp, "confidence", d.confidence) ||
+                    !RequireString(v, pp, "id", d.id) || !OptionalString(v, pp, "name", d.name) || !RequireString(v, pp, "kind", d.kind) ||
+                    !OptionalString(v, pp, "at", d.at) || !Num(v, pp, "back_km", d.back_km, 0.0, 1000.0) ||
+                    !Num(v, pp, "reach_km", d.reach_km, 0.0, 2000.0) || !Num(v, pp, "sight_km", d.sight_km, 0.0, 100.0) ||
+                    !OptionalString(v, pp, "net", d.net) || !Int(v, pp, "from_year", d.from_year, 0, 2100) || !OptionalString(v, pp, "notes", d.notes)) {
+                    return false;
+                }
+                if (!OneOf(d.kind, C2PostKinds())) return Fail(Join(pp, "kind"), "not a post kind");
+                if (!OneOf(d.at, {"bases", "entries", "line", "line_points"})) return Fail(Join(pp, "at"), "bases, entries, line or line_points");
+                if (b.Post(d.id) != nullptr) return Fail(Join(pp, "id"), "duplicate post '" + d.id + "'");
+                b.posts.push_back(d);
+            }
+        }
+        if (const json::Value* auth = OptionalArray(*c, p, "authority")) {
+            for (std::size_t i = 0; i < auth->items.size(); ++i) {
+                const json::Value& v = auth->items[i];
+                const std::string ap = Index(Join(p, "authority"), i);
+                C2AuthorityDef a;
+                if (!Keys(v, ap, {"post", "act", "missions", "where", "needs", "chance", "from_year", "source", "confidence", "notes"}) ||
+                    !Provenance(v, ap) || !RequireString(v, ap, "source", a.source) || !RequireString(v, ap, "confidence", a.confidence) ||
+                    !RequireString(v, ap, "post", a.post) || !RequireString(v, ap, "act", a.act) || !StringList(v, ap, "missions", a.missions) ||
+                    !OptionalString(v, ap, "where", a.where) || !OptionalString(v, ap, "needs", a.needs) ||
+                    !Num(v, ap, "chance", a.chance, 0.0, 1.0) || !Int(v, ap, "from_year", a.from_year, 0, 2100) ||
+                    !OptionalString(v, ap, "notes", a.notes)) {
+                    return false;
+                }
+                if (!OneOf(a.post, C2PostKinds())) return Fail(Join(ap, "post"), "not a post kind");
+                if (!OneOf(a.act, C2Acts())) return Fail(Join(ap, "act"), "not an act");
+                if (!OneOf(a.where, C2Wheres())) return Fail(Join(ap, "where"), "not a where");
+                if (!a.needs.empty() && a.needs != "army") return Fail(Join(ap, "needs"), "\"army\" or nothing");
+                if (a.missions.empty()) return Fail(Join(ap, "missions"), "required, a list of missions or [\"any\"]");
+                for (std::size_t m = 0; m < a.missions.size(); ++m) {
+                    if (!C2Mission(a.missions[m])) return Fail(Index(Join(ap, "missions"), m), "not a mission");
+                }
+                b.authority.push_back(a);
+            }
+        }
+        if (const json::Value* t = c->Find("timing")) {
+            const std::string tp = Join(p, "timing");
+            if (!t->Is(json::Type::Object)) return Fail(tp, "expected an object of hops");
+            for (std::size_t k = 0; k < t->keys.size() && k < t->items.size(); ++k) {
+                const std::string hp = Join(tp, t->keys[k]);
+                if (!OneOf(t->keys[k], C2Hops())) return Fail(hp, "not a hop (report, request, army, order, scramble)");
+                const json::Value& v = t->items[k];
+                C2HopDef h;
+                if (!Keys(v, hp, {"relay_s", "decide_s", "encode_s", "source", "confidence", "notes"}) || !Provenance(v, hp) ||
+                    !RequireString(v, hp, "source", h.source) || !RequireString(v, hp, "confidence", h.confidence) ||
+                    !Band(v, hp, "relay_s", h.relay_s, 0.0, 86400.0) || !Band(v, hp, "decide_s", h.decide_s, 0.0, 86400.0) ||
+                    !Band(v, hp, "encode_s", h.encode_s, 0.0, 86400.0) || !OptionalString(v, hp, "notes", h.notes)) {
+                    return false;
+                }
+                b.timing[t->keys[k]] = h;
+            }
+        }
+        if (const json::Value* al = OptionalArray(*c, p, "alert")) {
+            for (std::size_t i = 0; i < al->items.size(); ++i) {
+                const json::Value& v = al->items[i];
+                const std::string lp = Index(Join(p, "alert"), i);
+                C2AlertDef a;
+                if (!Keys(v, lp, {"id", "share", "takeoff_s", "hold_h", "airborne", "phase_scale", "source", "confidence", "notes"}) ||
+                    !Provenance(v, lp) || !RequireString(v, lp, "source", a.source) || !RequireString(v, lp, "confidence", a.confidence) ||
+                    !RequireString(v, lp, "id", a.id) || !Num(v, lp, "share", a.share, 0.0, 1.0) ||
+                    !Band(v, lp, "takeoff_s", a.takeoff_s, 0.0, 86400.0) || !Band(v, lp, "hold_h", a.hold_h, 0.0, 240.0) ||
+                    !OptionalBool(v, lp, "airborne", a.airborne) || !OptionalString(v, lp, "notes", a.notes)) {
+                    return false;
+                }
+                if (const json::Value* ps = OptionalArray(v, lp, "phase_scale")) {
+                    for (std::size_t k = 0; k < ps->items.size(); ++k) {
+                        if (!ps->items[k].Is(json::Type::Number) || ps->items[k].number < 0.0 || ps->items[k].number > 1.0) {
+                            return Fail(Index(Join(lp, "phase_scale"), k), "a number 0 .. 1");
+                        }
+                        a.phase_scale.push_back(ps->items[k].number);
+                    }
+                }
+                if (!a.hold_h.Set()) return Fail(Join(lp, "hold_h"), "required, [lo, hi] hours");
+                b.alert.push_back(a);
+            }
+        }
+        if (!message_.empty()) return false;  // a list that is not a list
         b.present = true;
         return true;
     }

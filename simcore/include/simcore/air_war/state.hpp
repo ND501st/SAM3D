@@ -195,6 +195,28 @@ struct PackageOutcome {
     int stores_dropped = 0;
     std::vector<RetaskRecord> retasks;  // orders its flights were given from outside them (a played mission, roadmap B1)
     std::vector<HeardRecord> heard;     // what our intercept posts logged of its calls (a played mission, roadmap B9)
+    // Command in the air (roadmap B5, c2.hpp): each message sent about it (its kind, the hour, the net, from and to; lost
+    // to jamming; heard by our listeners) and each in-flight report its aircraft made (the place, its sigma, the hour it
+    // was seen: every position has an age).
+    struct CallRecord {
+        std::string kind;
+        std::string from;
+        std::string to;
+        std::string net;
+        double t_h = 0.0;
+        bool lost = false;
+        bool heard = false;
+    };
+    std::vector<CallRecord> calls;
+    struct ReportRecord {
+        int flight = -1;
+        std::string what;  // "launch", "column"
+        double east_m = 0.0;
+        double north_m = 0.0;
+        double sigma_m = 0.0;
+        double observed_h = 0.0;
+    };
+    std::vector<ReportRecord> reports;
     bool truth_applied = false;  // the damage is already in the truth (the abstract resolver); else the campaign applies it
     bool played = false;         // from a played mission (the mission bridge)
     // What the battery reported of it from its records (roadmap 18.1, campaign/report.hpp): our side's journal states

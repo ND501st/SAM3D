@@ -21,6 +21,19 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 
 Each faction file also has a `"radio"` block (track B, B9; `docs/air_battle/09_COMMS_AND_INTERCEPT.md` section 3.1): the EM library ids of its aircraft and controllers' sets, the band of its nets, `language`, `callsign_rotation_h` (0: never), the staff's `opsec` 0..1, `have_quick_share` and `secure_voice_share` (0 until a USAFE fielding date is found), `gci_channels_per_post`, and `discipline`, the share of a strike flight's routine calls kept off the air. Its `source` and `confidence` are required. The call lengths and the rest are the `"radio"` group of `data/gameplay/air_war.json`.
 
+Each faction file also has a `"c2"` block (track B, B5; `docs/air_battle/05_C2_AND_RETASKING.md` section 4.9, loaded
+into `FactionDef::c2` by `c2_def.hpp`): `posts` (id, `kind` of `tasking`, `support_centre`, `radar_control`,
+`airborne_warning`, `fac` or `squadron`; `at` places them at the faction's `bases`, `entries`, along the front's `line`
+`back_km` behind it, or one at every vertex of the line with `line_points`; `reach_km` its radio cover, a FAC's
+`sight_km`, `from_year` for a post not yet there in the war's year: NATO's E-3A 1982, the Pact's A-50 1989), `authority`
+(which post may `designate`, `warn`, `divert_airborne`, `scramble`, `approve`, `redirect_before_ip`, `divert_recovery` or `recall`,
+for which `missions`, `where` and with what `needs` or `chance`), `timing` (each hop's relay, decide and encode bands in
+seconds), `alert` (the alert pools' shares of the planner's on-call sorties, take-off times, shifts, an airborne pool, a
+`phase_scale`), `report_missions`, `hunter_leave` (`any`, `free_hunt_zone` with `free_hunt`, or `none`),
+`silence_consent_s`, `max_report_age_h`, `nomination_h` and the Pact's `debrief_s`. The rebels have no posts. The game
+values are the `"c2"` group of `data/gameplay/air_war.json`. Its officers come from the pool's ranks `cp_controller`,
+`gci_controller` and `fac`.
+
 ## Faction format (summary; `docs/air_war/01_FACTIONS.md` has it all)
 
 ```json

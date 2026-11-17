@@ -5,9 +5,13 @@
 //   * every planning cycle the staff plans an air tasking order (planner.hpp);
 //   * the collection disciplines feed the picture: satellite passes, agents, ELINT on what radiates, radio intercept
 //     of the battery's traffic (and of its dummy traffic), reconnaissance flights; reports arrive late;
-//   * every package is flown when its time comes: resolved abstractly (resolve.hpp), or, when it comes through the
-//     player's sector and the pacing allows, handed to the game as the player's mission (raid_scenario.hpp builds the
-//     scenario, mission_bridge.hpp brings the outcome back to CompletePlayerMission);
+//   * every package is flown when its time comes: in the air leg by leg in time (resolve.hpp, roadmap B5's A0: the
+//     clock steps c2.step_h while anything is in the air), or, when it comes through the player's sector and the pacing
+//     allows, handed to the game as the player's mission (raid_scenario.hpp builds the scenario, mission_bridge.hpp
+//     brings the outcome back to CompletePlayerMission; a session that takes it, TakePlayerMission, lets the campaign
+//     go on while it flies there);
+//   * the enemy's command in the air (c2.hpp, roadmap B5): its posts hear their flights' reports, warn hunters, divert
+//     what they may, scramble the alert pools the plan held back, and pass the rest to intelligence in minutes;
 //   * what the enemy believes happened (pilots' claims, inflated; launch sightings; ELINT fixes) goes into its picture
 //     and into its officers: what they remember of each tactic, their stress, reputation and grudges;
 //   * each day: politics (pressure, support, events), replacements and ARM resupply, careers (relief, promotion,
@@ -27,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/c2.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/logistics.hpp"
@@ -73,7 +78,9 @@ struct Transmission {
 };
 
 struct CampaignAction {
-    enum class Kind { Advance, Relocate, Skip, Complete, Transmit };
+    // Take: a session took the raid waiting (the campaign goes on while it is flown there); Report: a played package's
+    // pilot's report that reached the enemy's posts while the session ran (roadmap B5 §4.7).
+    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report };
     Kind kind = Kind::Advance;
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
@@ -82,6 +89,12 @@ struct CampaignAction {
     PackageOutcome outcome;  // Complete
     double end_h = 0.0;      // Complete
     std::vector<Transmission> calls;  // Transmit
+    int package_id = -1;     // Take, Report; Complete of a taken raid (else -1: the raid waiting)
+    int flight = -1;         // Report: the flight whose pilot saw it
+    std::string what;        // Report: "launch"
+    Vec3 from;               // Report: where he was
+    double sigma_m = 0.0;    // Report
+    double observed_h = 0.0; // Report: when he saw it (the place is `to`)
 };
 
 // The evidence our analysts gather from the raids they see.
@@ -155,6 +168,14 @@ public:
         politics_.max_depth_m = pd.max_depth_m;
         Rng staff_rng = rng_.Fork(17);
         staff_.Build(data_, staff_rng, 0.0);
+        // The command posts in the air and their duty officers (roadmap B5), after the staff; every C2 and in-the-air draw
+        // from forks of a root fixed here, never from the campaign's stream.
+        airborne_.clear();
+        live_.clear();
+        last_fac_hour_ = -1000000;
+        c2_root_ = Rng(static_cast<std::uint64_t>(seed) * 0xD6E8FEB86659FD93ull + 0xB5B5B5ull);
+        Rng post_rng = rng_.Fork(23);
+        c2_.Init(data_, staff_, post_rng, c2_root_, 0.0);
         weather_.clear();
         const double clear = data_.tuning.Get("weather.clear_share");
         const double poor = data_.tuning.Get("weather.poor_share");
@@ -202,6 +223,69 @@ public:
         a.outcome = outcome;
         a.end_h = end_h;
         Package& p = packages_[static_cast<std::size_t>(pending_)];
+        CompletePlayed(p, outcome, now_h_, end_h);
+        last_player_mission_h_ = now_h_;
+        pending_ = -1;
+    }
+
+    // A session takes the raid waiting (package_injector.hpp's LivePackages, roadmap B5 §4.6): it is flown there, and
+    // the campaign no longer stands still meanwhile; other packages fly and resolve while it does. Recorded.
+    bool TakePlayerMission() {
+        if (pending_ < 0) return false;
+        Package& p = packages_[static_cast<std::size_t>(pending_)];
+        Record(CampaignAction::Kind::Take).package_id = p.id;
+        p.played = true;
+        live_[p.id] = now_h_;
+        pending_ = -1;
+        return true;
+    }
+    // A raid a session took, still flying there.
+    bool LiveMission(int package_id) const { return live_.count(package_id) > 0; }
+    const Package* PackageById(int id) const {
+        for (const Package& p : packages_) {
+            if (p.id == id) return &p;
+        }
+        return nullptr;
+    }
+    // A taken raid is over in the session: its outcome, as CompletePlayerMission's, the rest of it resolved from where the
+    // session left it. Recorded.
+    void CompleteLiveMission(int package_id, PackageOutcome outcome, double end_h) {
+        const auto it = live_.find(package_id);
+        if (it == live_.end()) return;
+        CampaignAction& a = Record(CampaignAction::Kind::Complete);
+        a.outcome = outcome;
+        a.end_h = end_h;
+        a.package_id = package_id;
+        const double from_h = it->second;
+        live_.erase(it);
+        for (Package& p : packages_) {
+            if (p.id == package_id) CompletePlayed(p, outcome, from_h, end_h);
+        }
+    }
+    // A played package's pilot saw a launch while the session ran (roadmap B5 §4.7): his report goes to the enemy's posts
+    // now (in flight, where a post's radio covers him). Recorded, so a save replays it at the same hour.
+    void NoteReport(int package_id, int flight, const std::string& what, const Vec3& where, double sigma_m, double observed_h, const Vec3& from) {
+        CampaignAction& a = Record(CampaignAction::Kind::Report);
+        a.package_id = package_id;
+        a.flight = flight;
+        a.what = what;
+        a.to = where;
+        a.sigma_m = sigma_m;
+        a.observed_h = observed_h;
+        a.from = from;
+        ApplyReport(a);
+    }
+
+    // The enemy's command in the air (roadmap B5): its posts, pools, messages and what they did.
+    const AirC2& C2() const {
+        c2_.Bind(data_, staff_);  // a copied campaign's posts read its own data
+        return c2_;
+    }
+    // Packages in the air now (the abstract ones, stepped in time).
+    int AirborneCount() const { return static_cast<int>(airborne_.size()); }
+
+private:
+    void CompletePlayed(Package& p, const PackageOutcome& outcome, double from_h, double end_h) {
         p.played = true;
         for (const LossRecord& l : outcome.losses) {
             if (l.flight >= 0 && l.flight < static_cast<int>(p.flights.size())) ++p.flights[static_cast<std::size_t>(l.flight)].lost;
@@ -238,23 +322,23 @@ public:
         rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         rc.played_centre = truth_[static_cast<std::size_t>(player_)].pos;
         rc.played_radius_m = data_.tuning.Get("scenario.clip_m");
-        rc.played_from_h = now_h_;
+        rc.played_from_h = from_h;
         rc.played_to_h = end_h;
         Resolver r;
         PackageOutcome rest = r.Resolve(p, rc);
         if (!rest.losses.empty() || rest.delivered || !rest.recce_seen.empty()) ApplyOutcome(p, rest, false);
         ++player_missions_;
-        last_player_mission_h_ = now_h_;
-        pending_ = -1;
     }
+
+public:
 
     // The player declined the mission: it is resolved abstractly like any other.
     void SkipPlayerMission() {
         if (pending_ < 0) return;
         Record(CampaignAction::Kind::Skip);
-        Package& p = packages_[static_cast<std::size_t>(pending_)];
+        const int i = pending_;
         pending_ = -1;
-        ResolveAbstract(p);
+        TakeOff(i);  // it flies on in time like any other
     }
 
     // ------------------------------------------------------------------ the player's side
@@ -335,17 +419,37 @@ public:
                 case CampaignAction::Kind::Advance: Advance(a.until_h); break;
                 case CampaignAction::Kind::Relocate: RelocateBattery(a.to, a.march_h); break;
                 case CampaignAction::Kind::Transmit: NoteTransmissions(a.calls); break;
-                case CampaignAction::Kind::Skip:
+                case CampaignAction::Kind::Take:
+                    if (pending_ < 0 || packages_[static_cast<std::size_t>(pending_)].id != a.package_id) {
+                        if (error != nullptr) *error = "action " + std::to_string(i) + ": the raid taken is not the one waiting (the save doesn't fit the data)";
+                        return false;
+                    }
+                    TakePlayerMission();
+                    break;
+                case CampaignAction::Kind::Report:
+                    NoteReport(a.package_id, a.flight, a.what, a.to, a.sigma_m, a.observed_h, a.from);
+                    break;
                 case CampaignAction::Kind::Complete:
+                    if (a.package_id >= 0) {
+                        if (!LiveMission(a.package_id)) {
+                            if (error != nullptr) *error = "action " + std::to_string(i) + ": raid " + std::to_string(a.package_id) + " is not in a session";
+                            return false;
+                        }
+                        CompleteLiveMission(a.package_id, a.outcome, a.end_h);
+                        break;
+                    }
                     if (pending_ < 0) {
                         if (error != nullptr) *error = "action " + std::to_string(i) + ": no raid was waiting (the save doesn't fit the data)";
                         return false;
                     }
-                    if (a.kind == CampaignAction::Kind::Skip) {
-                        SkipPlayerMission();
-                    } else {
-                        CompletePlayerMission(a.outcome, a.end_h);
+                    CompletePlayerMission(a.outcome, a.end_h);
+                    break;
+                case CampaignAction::Kind::Skip:
+                    if (pending_ < 0) {
+                        if (error != nullptr) *error = "action " + std::to_string(i) + ": no raid was waiting (the save doesn't fit the data)";
+                        return false;
                     }
+                    SkipPlayerMission();
                     break;
             }
         }
@@ -573,6 +677,18 @@ private:
     std::set<std::string> noted_;
     std::vector<Transmission> on_air_;  // noted, not yet heard
     int comint_heard_ = 0;
+    // In the air (roadmap B5): the packages flying now, each walked in time; the raids a session took (package id ->
+    // the hour it took them); the command posts; the root every in-the-air and C2 draw is forked from.
+    struct Airborne {
+        int package = -1;  // index into packages_
+        Weather weather = Weather::Clear;
+        PackageRun run;
+    };
+    std::vector<Airborne> airborne_;
+    std::map<int, double> live_;
+    mutable AirC2 c2_;
+    Rng c2_root_{1};
+    int last_fac_hour_ = -1000000;
 
     CampaignAction& Record(CampaignAction::Kind kind) {
         actions_.emplace_back();
@@ -603,7 +719,8 @@ private:
         rc.weather = WeatherAt(now_h_);
         rc.rng = &rng_;
         rc.awacs = support_.awacs;
-        if (marching_) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;  // on the march: not in the fight
+        // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
+        if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
     }
 
@@ -661,23 +778,47 @@ private:
             next_plan_h_ += data_.faction.doctrine.planning_cycle_h;
         }
         Collect(t0, t1);
-        // Packages whose first aircraft takes off in this step.
-        for (std::size_t i = 0; i < packages_.size(); ++i) {
-            Package& p = packages_[i];
-            if (p.resolved || p.played) continue;
-            if (p.FirstH() >= t1) continue;
-            if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
-                pending_ = static_cast<int>(i);
-                player_candidates_.erase(static_cast<int>(i));
-                ++player_missions_today_;
-                now_h_ = std::max(t0, p.FirstH());
-                last_player_mission_h_ = now_h_;
-                AimOnCall(p);
-                Log("player_mission", "warning", "Raid warning: aircraft approaching the battery's sector from " + p.entry + ".", true);
-                return true;
-            }
-            ResolveAbstract(p);
+        // The FACs' eyes on our troops, once an hour.
+        const int hour = static_cast<int>(std::floor(t0 + 1e-9));
+        if (hour != last_fac_hour_) {
+            last_fac_hour_ = hour;
+            C2Context cx = C2Ctx();
+            c2_.Hourly(t0, cx);
         }
+        // The packages: each takes off at its first aircraft's hour and flies in time; while any is in the air (or about to
+        // be) or a message is on its way, the step is cut to c2.step_h (roadmap B5's A0).
+        const double sub = std::max(1.0 / 120.0, data_.tuning.Get("c2.step_h"));
+        double t = t0;
+        while (t < t1 - 1e-12) {
+            const double ts = AirBusy(t1) ? std::min(t1, t + sub) : t1;
+            for (int round = 0; round < 4; ++round) {
+                bool began = false;
+                for (std::size_t i = 0; i < packages_.size(); ++i) {
+                    Package& p = packages_[i];
+                    if (p.resolved || p.played || Flying(static_cast<int>(i))) continue;
+                    if (p.FirstH() >= ts) continue;
+                    if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
+                        pending_ = static_cast<int>(i);
+                        player_candidates_.erase(static_cast<int>(i));
+                        ++player_missions_today_;
+                        now_h_ = std::max(t, p.FirstH());
+                        last_player_mission_h_ = now_h_;
+                        C2Context cx = C2Ctx();
+                        c2_.Brief(p, now_h_, cx);  // close support aimed by the FAC's own sighting (never the truth)
+                        Log("player_mission", "warning", "Raid warning: aircraft approaching the battery's sector from " + p.entry + ".", true);
+                        return true;
+                    }
+                    now_h_ = std::max(t, std::min(ts, p.FirstH()));
+                    TakeOff(static_cast<int>(i));
+                    began = true;
+                }
+                now_h_ = ts;
+                StepAir(ts);
+                if (!began && !Launched()) break;
+            }
+            t = ts;
+        }
+        now_h_ = t0;  // the hour's own processes as before the air was stepped
         const double dt = t1 - t0;
         intel_.Decay(dt, data_.tuning);
         Repair(dt);
@@ -800,13 +941,29 @@ private:
         tanker_left_ = support_.tanker_receivers * data_.faction.doctrine.planning_cycle_h / 24.0;
         pc.tanker_receivers = &tanker_left_;
         pc.supply = &supply_;
+        // The sorties the plan holds back for on-call work (doctrine.on_call_fraction), squadron by squadron, before the
+        // planner spends the rest (roadmap B5: the alert pools fly them).
+        std::vector<double> held;
+        {
+            const PhaseDef& ph = data_.faction.doctrine.phases[static_cast<std::size_t>(std::max(0, std::min(phase_, static_cast<int>(data_.faction.doctrine.phases.size()) - 1)))];
+            const DoctrineDef& dd = data_.faction.doctrine;
+            for (const SquadronState& s : squadrons_) {
+                held.push_back(s.Serviceable(now_h_, dd.serviceability) * dd.sortie_rate_per_day * ph.tempo * std::min(1.0, dd.planning_cycle_h / 24.0) *
+                               dd.on_call_fraction);
+            }
+        }
         Planner planner;
         std::vector<Package> plan = planner.Plan(pc);
+        int planned = 0;
         for (Package& p : plan) {
+            planned += p.Aircraft();
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
             if (TouchesPlayer(p)) player_candidates_.insert(idx);
         }
+        c2_.Bind(data_, staff_);
+        const double begin = now_h_ + data_.faction.doctrine.lead_time_h;
+        c2_.BuildPools(squadrons_, held, planned, begin, begin + data_.faction.doctrine.planning_cycle_h, phase_);
     }
 
     // Does the raid come through the player's battery's sector (or at it)?
@@ -830,26 +987,147 @@ private:
         return false;
     }
 
+    // ------------------------------------------------------------------ in the air (roadmap B5)
+
     // Close support and helicopter raids against troops are talked onto the target by the own troops' forward air
-    // controllers (mai_tactics_vvs: control passes to controllers with the ground troops), so they aim at where the
-    // troops really are, not at the morning's picture.
-    void AimOnCall(Package& p) {
-        if (p.kind != MissionKind::Cas && p.kind != MissionKind::HeloRaid) return;
-        const int i = p.target_object.empty() ? -1 : data_.theatre.IndexOf(p.target_object);
-        if (i < 0 || data_.theatre.objects[static_cast<std::size_t>(i)].kind != ObjectKind::Troops) return;
-        const Vec3 at = truth_[static_cast<std::size_t>(i)].pos + Vec3{rng_.Normal(0.0, 300.0), rng_.Normal(0.0, 300.0), 0.0};
-        for (Flight& fl : p.flights) {
-            if (fl.aim_key == p.target_key) fl.aim_pos = at;
+    // controllers (mai_tactics_vvs: control passes to controllers with the ground troops): at check-in the FAC briefs
+    // them where he last saw our troops, with that sighting's age (c2.hpp AirC2::Brief), never where they are now.
+    // Then the package flies, its draws from a fork keyed by its id.
+    void TakeOff(int i) {
+        Package& p = packages_[static_cast<std::size_t>(i)];
+        C2Context cx = C2Ctx();
+        c2_.Brief(p, now_h_, cx);
+        Airborne a;
+        a.package = i;
+        a.weather = WeatherAt(p.tot_h);
+        ResolveContext rc = Context();
+        rc.weather = a.weather;
+        Resolver().Begin(p, rc, a.run, c2_root_.Fork(0x9AC4A6E000ull + static_cast<std::uint64_t>(p.id)));
+        airborne_.push_back(std::move(a));
+    }
+    bool Flying(int i) const {
+        for (const Airborne& a : airborne_) {
+            if (a.package == i) return true;
+        }
+        return false;
+    }
+    // Anything in the air, or taking off, before t1, or a message on its way: the step is cut.
+    bool AirBusy(double t1) const {
+        if (!airborne_.empty() || c2_.Busy()) return true;
+        for (std::size_t i = 0; i < packages_.size(); ++i) {
+            const Package& p = packages_[i];
+            if (!p.resolved && !p.played && p.FirstH() < t1) return true;
+        }
+        return false;
+    }
+    // A package the posts launched this step that should already be in the air.
+    bool Launched() const {
+        for (std::size_t i = 0; i < packages_.size(); ++i) {
+            const Package& p = packages_[i];
+            if (!p.resolved && !p.played && !Flying(static_cast<int>(i)) && p.FirstH() < now_h_) return true;
+        }
+        return false;
+    }
+    // Every package in the air to `ts`: its legs, its flights' reports to their posts, the posts' messages and decisions;
+    // a package home is applied.
+    void StepAir(double ts) {
+        for (Airborne& a : airborne_) {
+            ResolveContext rc = Context();
+            rc.weather = a.weather;
+            Resolver().StepTo(packages_[static_cast<std::size_t>(a.package)], rc, a.run, ts);
+        }
+        C2Context cx = C2Ctx();
+        for (Airborne& a : airborne_) c2_.OnEvents(packages_[static_cast<std::size_t>(a.package)], a.run, ts, cx);
+        c2_.StepTo(ts, cx);
+        for (std::size_t k = 0; k < airborne_.size();) {
+            Package& p = packages_[static_cast<std::size_t>(airborne_[k].package)];
+            if (!airborne_[k].run.Done(p)) {
+                ++k;
+                continue;
+            }
+            PackageOutcome o = std::move(airborne_[k].run.out);
+            airborne_.erase(airborne_.begin() + static_cast<std::ptrdiff_t>(k));
+            p.resolved = true;
+            TakeC2(p, o);
+            ApplyOutcome(p, o);
         }
     }
-
-    void ResolveAbstract(Package& p) {
-        AimOnCall(p);
-        ResolveContext rc = Context();
-        rc.weather = WeatherAt(p.tot_h);
-        Resolver r;
-        PackageOutcome o = r.Resolve(p, rc);
-        ApplyOutcome(p, o);
+    // What the posts did about a package, into its outcome.
+    void TakeC2(const Package& p, PackageOutcome& o) {
+        for (const RetaskRecord& r : c2_.TakeRetasks(p.id)) o.retasks.push_back(r);
+        for (const C2Message& m : c2_.TakeCalls(p.id)) {
+            PackageOutcome::CallRecord cr;
+            cr.kind = C2KindName(m.kind);
+            cr.from = m.from;
+            cr.to = m.to;
+            cr.net = m.net;
+            cr.t_h = m.sent_h;
+            cr.lost = m.lost;
+            cr.heard = m.heard;
+            o.calls.push_back(cr);
+        }
+        for (const C2Message& m : c2_.TakeReports(p.id)) {
+            PackageOutcome::ReportRecord rr;
+            rr.flight = m.flight;
+            rr.what = m.what;
+            rr.east_m = m.where.x;
+            rr.north_m = m.where.y;
+            rr.sigma_m = m.sigma_m;
+            rr.observed_h = m.observed_h;
+            o.reports.push_back(rr);
+        }
+    }
+    // A played package's pilot's report (CampaignAction::Report), to the posts now.
+    void ApplyReport(const CampaignAction& a) {
+        const Package* p = PackageById(a.package_id);
+        if (p == nullptr) return;
+        const Profile prof = a.flight >= 0 && a.flight < static_cast<int>(p->flights.size()) ? p->flights[static_cast<std::size_t>(a.flight)].profile : p->profile;
+        C2Context cx = C2Ctx();
+        c2_.Report(*p, a.flight, a.what, std::string(), ObjectKind::SamSite, true, a.to, a.sigma_m, a.observed_h, a.from, prof, now_h_, cx);
+    }
+    // The posts' view of the campaign: what they may read and do.
+    C2Context C2Ctx() {
+        C2Context c;
+        c.data = &data_;
+        c.truth = &truth_;
+        c.staff = &staff_;
+        c.packages = &packages_;
+        for (Airborne& a : airborne_) c.airborne.push_back({a.package, &a.run});
+        c.phase = phase_;
+        c.battery = truth_[static_cast<std::size_t>(player_)].pos;
+        c.on_call = [this](MissionKind mk, const IntelEntry& e, const AlertPool& pool, double takeoff_h, Package& out) {
+            PlanContext pc;
+            pc.data = &data_;
+            pc.staff = &staff_;
+            pc.intel = &intel_;
+            pc.squadrons = &squadrons_;
+            pc.politics = &politics_;
+            pc.weather = weather_;
+            pc.now_h = now_h_;
+            pc.phase = phase_;
+            pc.arm_stock = &arm_stock_;
+            pc.missile_stock = &missile_stock_;
+            Rng r = c2_root_.Fork(0x0CA11000ull + static_cast<std::uint64_t>(next_package_id_));
+            pc.rng = &r;
+            pc.next_id = &next_package_id_;
+            pc.journal = &journal_;
+            pc.truth = &truth_;
+            pc.awacs = support_.awacs;
+            pc.tanker_receivers = &tanker_left_;
+            pc.supply = &supply_;
+            Planner planner;
+            return planner.OnCall(pc, mk, e, pool.squadron, pool.aircraft, takeoff_h, out);
+        };
+        c.launch = [this](Package& p) {
+            packages_.push_back(p);
+            const int idx = static_cast<int>(packages_.size()) - 1;
+            if (TouchesPlayer(p)) player_candidates_.insert(idx);
+        };
+        c.intel = [this](const IntelReport& r) { intel_.Queue(r); };
+        c.believed = [this](const std::string& key) -> const IntelEntry* { return key.empty() ? nullptr : intel_.Find(key); };
+        c.log = [this](const std::string& kind, const std::string& who, const std::string& text, bool visible) { Log(kind, who, text, visible); };
+        c2_.Bind(data_, staff_);
+        return c;
     }
 
     // ------------------------------------------------------------------ what happened, and what they believe happened
@@ -971,13 +1249,20 @@ private:
         const FactionDef& f = data_.faction;
         const IntelDef& in = f.intel;
         const TuningTable& tune = data_.tuning;
-        const double t = std::max(now_h_, p.tot_h);
+        // Seen at the time over the target (the package resolved in the air ends after it: roadmap B5).
+        const double t = p.played ? std::max(now_h_, p.tot_h) : p.tot_h;
         const Officer* io = staff_.HolderPtr(StaffRole::Intelligence);
         const Officer* cdr = staff_.HolderPtr(StaffRole::Commander);
         const double skeptic = 0.5 * ((io != nullptr ? io->def.traits.skepticism : 0.5) + (cdr != nullptr ? cdr->def.traits.skepticism : 0.5));
         int survivors = 0;
         for (const Flight& fl : p.flights) survivors += fl.count - fl.lost;
-        const double pirep_h = t + in.pirep_delay_h;
+        double pirep_h = t + in.pirep_delay_h;
+        // A faction whose crews report on landing (the Pact: 5-10 min to the regiment's staff, markovsky_afghan_sky): the
+        // debrief report after its last aircraft is home (roadmap B5, c2.debrief_s).
+        if (f.c2.present && f.c2.debrief_s.Set() && !p.flights.empty()) {
+            Rng r = c2_root_.Fork(0xDEB21EF000ull + static_cast<std::uint64_t>(p.id));
+            pirep_h = p.LastH() + r.Uniform(f.c2.debrief_s.lo, f.c2.debrief_s.hi) / 3600.0;
+        }
         // The target, as the pilots saw it.
         if (o.delivered && !p.target_key.empty()) {
             double true_d = 0.0;
