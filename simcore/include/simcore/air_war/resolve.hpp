@@ -44,7 +44,15 @@ struct ResolveContext {
     double played_from_h = 0.0;
     double played_to_h = 0.0;
     double awacs = 0.0;  // the share of the day the enemy's AWACS is on station (docs/air_war/11_SUPPORT.md)
+    // The map's ground (route.mode 1, route_planner.hpp): a low flight is seen only where the ground lets a site see it.
+    const RouteGround* ground = nullptr;
 };
+
+// The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
+inline int FighterLeg(const std::vector<RoutePoint>& r) {
+    const int ip = std::max(RouteIndexOf(r, "ip"), RouteIndexOf(r, "hide"));
+    return ip >= 0 ? ip : 1;
+}
 
 // How much a package's SEAD suppresses a radar defence it meets: its SEAD and hunter aircraft, its SEAD officer's skill
 // and how well the package keeps together. Shared by the resolver and a played raid's neighbours (mission_bridge.hpp).
@@ -131,6 +139,28 @@ public:
         std::vector<double> suppressed(d.theatre.objects.size(), 0.0);  // 0..1 how much each radar was suppressed
         std::vector<bool> engaged(d.theatre.objects.size(), false);
         bool abort_now = false;
+        // The route planner's routes (route.mode 1): a defence engages once a pass however many legs the pass takes, sees a
+        // low flight only where the ground lets it, and the corps suppresses the defences at a gate where the land forces
+        // face each other when the package asked for it (jsead_1982).
+        const bool routed = tune.Get("route.mode") >= 1.0;
+        const bool on_ground = routed && c.ground != nullptr && c.ground->HasGround();
+        std::vector<double> corridor_supp(d.theatre.objects.size(), 0.0);
+        if (routed && p.corridor_suppression && front != nullptr) {
+            for (const EntryPoint& g : front->entries) {
+                if (g.id != p.entry) continue;
+                bool land = false;
+                for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
+                    const TheatreObject& o = d.theatre.objects[oj];
+                    if (o.kind == ObjectKind::Troops && (*c.truth)[oj].function > 0.05 &&
+                        Dist2d((*c.truth)[oj].pos, g.pos) < tune.Get("route.land_front_m")) {
+                        land = true;
+                    }
+                }
+                for (std::size_t oj = 0; land && oj < d.theatre.objects.size(); ++oj) {
+                    if (Dist2d((*c.truth)[oj].pos, g.pos) < tune.Get("route.corridor_halfwidth_m")) corridor_supp[oj] = tune.Get("route.corridor_suppression");
+                }
+            }
+        }
 
         // Decoys and SEAD go first in time; walk flights in order of their time over the target.
         std::vector<std::size_t> order(p.flights.size());
@@ -145,6 +175,9 @@ public:
             int alive = fl.count - fl.lost;
             const bool main = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
             int arms_left = fl.arms;
+            const int fighter_leg = FighterLeg(fl.route);
+            const bool masked = on_ground && (fl.profile == Profile::Low || a->helicopter);
+            std::vector<double> pending(routed ? d.theatre.objects.size() : 0, 0.0), pending_dist(routed ? d.theatre.objects.size() : 0, 1e18);
             for (std::size_t si = 0; si + 1 < fl.route.size() && alive > 0; ++si) {
                 const RoutePoint& r0 = fl.route[si];
                 const RoutePoint& r1 = fl.route[si + 1];
@@ -153,7 +186,9 @@ public:
                     fl.aborted = true;
                     break;
                 }
-                for (const LegPiece& piece : ResolvedPieces(r0, r1, c)) {
+                const std::vector<LegPiece> pieces = ResolvedPieces(r0, r1, c);
+                for (std::size_t pi = 0; pi < pieces.size(); ++pi) {
+                    const LegPiece& piece = pieces[pi];
                     const Vec3 p0 = piece.a <= 0.0 ? r0.pos : r0.pos + (r1.pos - r0.pos) * piece.a;
                     const Vec3 p1 = piece.b >= 1.0 ? r1.pos : r0.pos + (r1.pos - r0.pos) * piece.b;
                     for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
@@ -163,7 +198,34 @@ public:
                         if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
                         if (st.missiles == 0) continue;
                         if (def.defence.max_target_mps > 0.0 && a->cruise_mps > def.defence.max_target_mps) continue;  // too fast for it
-                        const double chord = ChordInCircle2d(p0, p1, st.pos, def.defence.radius_m);
+                        double chord = ChordInCircle2d(p0, p1, st.pos, def.defence.radius_m);
+                        double arm_dist = -1.0;
+                        if (routed) {
+                            if (chord > 0.0 && masked) {
+                                chord = c.ground->Seen(def.id, st.pos, def.defence.radius_m, p0, p1, r0.agl_m + (r1.agl_m - r0.agl_m) * piece.a,
+                                                       r0.agl_m + (r1.agl_m - r0.agl_m) * piece.b, true);
+                            }
+                            if (chord > 0.0) {
+                                const double dist = SegmentDistance2d(st.pos, p0, p1);
+                                // The pass goes on into the next leg: one engagement for the whole pass, where it ends.
+                                const bool last_piece = pi + 1 == pieces.size();
+                                const bool at_release = static_cast<int>(si + 1) == fl.release_index;
+                                if (last_piece && !at_release && si + 2 < fl.route.size()) {
+                                    const RoutePoint& r2 = fl.route[si + 2];
+                                    double next = ChordInCircle2d(r1.pos, r2.pos, st.pos, def.defence.radius_m);
+                                    if (next > 0.0 && masked) next = c.ground->Seen(def.id, st.pos, def.defence.radius_m, r1.pos, r2.pos, r1.agl_m, r2.agl_m, true);
+                                    if (next > 0.0) {
+                                        pending[oj] += chord;
+                                        pending_dist[oj] = std::min(pending_dist[oj], dist);
+                                        continue;
+                                    }
+                                }
+                                chord += pending[oj];
+                                arm_dist = std::min(pending_dist[oj], dist);
+                            }
+                            pending[oj] = 0.0;
+                            pending_dist[oj] = 1e18;
+                        }
                         if (chord <= 0.0) continue;
                         const bool radar = def.defence.radar;
                         const bool emcon = def.player ? c.posture->fight_silent : false;
@@ -171,7 +233,7 @@ public:
                         if (radar && !emcon) {
                             out.AddEmission(def.id, chord / std::max(50.0, a->cruise_mps) + 30.0);
                             if (arms_left > 0 && (fl.role == FlightRole::Sead || fl.role == FlightRole::Hunter)) {
-                                const double dist = SegmentDistance2d(st.pos, p0, p1);
+                                const double dist = arm_dist >= 0.0 ? arm_dist : SegmentDistance2d(st.pos, p0, p1);
                                 if (dist <= a->arm_range_m) {
                                     FireArms(fl, *a, def, st, arms_left, out, suppressed[oj]);
                                 }
@@ -194,11 +256,12 @@ public:
                         if (!radar && c.weather == Weather::Poor) env *= tune.Get("attrition.poor_weather");
                         if (emcon) env *= tune.Get("attrition.emcon_lethality");
                         double supp = radar && !emcon ? std::max(supp_base, suppressed[oj]) : 0.0;
+                        if (radar && !emcon && routed) supp = std::max(supp, corridor_supp[oj]);
                         if (st.function < 1.0) env *= st.function;
                         const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
                                                         def.defence.low_cover, def.defence.medium_cover, radar, supp,
                                                         jam && radar ? tune.Get("attrition.jamming") : 0.0, env,
-                                                        Clamp01(a->evasion + 0.3 * (airmanship - 0.5)), tune);
+                                                        Clamp01(a->evasion + 0.3 * (airmanship - 0.5)), tune, masked);
                         if (k <= 0.0) continue;
                         engaged[oj] = true;
                         int shots = 0;
@@ -236,7 +299,8 @@ public:
                     }
                 }
                 // The defender's fighters, where the package has no escort.
-                if (front != nullptr && main && si == 1 && alive > 0) {
+                if (front != nullptr && main && static_cast<int>(si) == fighter_leg && alive > 0) {
+
                     const double ff = front->friendly_fighters * (1.0 - tune.Get("support.awacs_fighter_cut") * Clamp01(c.awacs));
                     const double pk = ff * tune.Get("attrition.escort_fighter_kill") *
                                       (p.Has(FlightRole::Escort) ? 0.3 : 1.0) * (p.part == DayPart::Night ? 0.5 : 1.0);

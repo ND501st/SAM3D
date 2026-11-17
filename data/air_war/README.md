@@ -97,6 +97,21 @@ flights and each wingman flies his slot on his leader (`simcore/flights.hpp`).
   "helicopter": { "transit": {...} } }
 ```
 
+**Routes as flown** (track B, B2; `docs/air_battle/01_ROUTES.md`). An aircraft type's **`"low_level"`** says how low and
+how fast it flies over enemy ground: `"agl_m"` by day, `"night_agl_m"` on terrain-following radar (only a type that has
+one), `"mps"` (default its `attack_mps`). Each block has its own `source` and `confidence`. NATO's come from
+`rafhs_j20_1999`, `afm_51_40_1973`, `agard_cp267_1979`, `crandall_twz` and `napier_hushkit_2022`. The Pact's heights
+come from `fm_100_2_1_1984` and `opp_85`; its speeds are game values. A doctrine's **`"routing"`** block is the
+faction's route rules: `"crossing"` (`gate` NATO, `checkpoint_gate` the Pact, `entry` the neutral, `none` the rebels),
+`"cas_free"`, `"gate_window_s"`, `"gate_separation_s"`, `"letdown_m"`, `"max_turn_points"`, `"variants"` (`covered`
+first, then `other_flank` and `direct`), the leg cost's weights `"w_exp"`, `"w_cont"`, `"w_low"` and `"lines_bonus"`,
+`"return"` (`other_gate`, `planned_departure`, `same_entry`), the group ahead's `"blast_lead_s"` and
+`"blast_exposure_s"`, `"zone_escapes"` (the Pact's counter-SAM programme), `"helo_umbrella"`, `"corridor_suppression"`,
+and who may leave the route in flight: `"deviation"` (`leader`, `ground_control`, `eye`, `any`) with
+`"deviation_lateral_m"` and `"deviation_tot_slip_s"` (for B4 and B5). Strict keys. The route planner
+(`simcore/air_war/route_planner.hpp`) reads both when the tuning's `route.mode` is 1. A save made before B2 loads with
+mode 0 and flies the old shapes.
+
 Mission kinds: `strike`, `dead`, `hunter`, `recce`, `bda`, `cas`, `harassment`, `helo_raid`, `deception`, `missile`,
 `armed_recce`. Flight roles: `strike`, `dead`, `sead`, `hunter`, `escort`, `jammer`, `recce`, `decoy`, `helicopter`,
 `missile`, and the support roles `awacs`, `tanker`, `elint`. Object kinds: `sam_site`, `aaa`,

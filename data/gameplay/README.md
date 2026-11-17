@@ -101,6 +101,12 @@ the mission bridge's weapon effects, and what our side learns. Tuned against the
 Every key is listed with its default in `TuningTable::Defaults` (`simcore/air_war/data.hpp`); an unknown key fails the
 load and `test_air_war` checks the file names them all.
 
+The `"route"` group is the route planner's (track B, B2; `simcore/air_war/route_planner.hpp`,
+`docs/air_battle/01_ROUTES.md` sections 6 and 10). `mode` 0 flies the old four shapes; a save made before B2 replays
+with it. `mode` 1 plans routes over the believed threats and the ground. The rest shape the graph of map features, the
+leg cost, the variants, the corridor suppression and the helicopters' holding areas and battle positions. All are game
+values except `continuous_s` (`crawford_1977_rand`) and `egress_clear_s` (`fm_100_2_1_1984`).
+
 ## after_action.json (the combat report from the records)
 
 The battery's combat report compiled from the PU-12M's records and the regiment's check of them

@@ -19,7 +19,23 @@ struct RoutePoint {
     Vec3 pos;          // theatre ENU [m]; z unused
     double agl_m = 0;  // height above the ground there
     double t_h = 0;    // campaign hour at this point
-    std::string tag;   // "entry", "ip", "target", "egress", "exit", "orbit", "loiter"
+    std::string tag;   // "entry", "letdown", "checkpoint", "gate", "turn", "ip", "target", "egress", "climb", "exit",
+                       // "orbit", "loiter" (docs/air_battle/01_ROUTES.md §6.1)
+    double leg_mps = 0;   // the speed on the leg from this point to the next (0: the route's one speed, TimeRoute's old form)
+    std::string feature;  // the map feature it is on (route_planner.hpp: "settlement:<id>", "crossing:<id>"...), "" computed
+};
+
+// The Pact's planned counter-SAM programme for one believed zone its route crosses (01_ROUTES.md §9; flown by B4): full
+// speed to the zone's nearest boundary, down, the jammers on, back on the route at `rejoin`.
+struct ZoneEscape {
+    std::string threat;        // the intel entry's key
+    int first = -1;            // the first route index whose leg is inside the believed ring
+    int last = -1;             // the last such index
+    double heading_rad = 0.0;  // to the nearest boundary from where it enters, clockwise from North
+    double dz_m = 0.0;         // the height change (down)
+    bool full_speed = true;
+    bool jam = true;
+    int rejoin = -1;           // the route point it is back on
 };
 
 struct Flight {
@@ -40,6 +56,7 @@ struct Flight {
     std::string weapon;
     int weapons = 0;          // on each aircraft
     Delivery delivery = Delivery::Count;
+    std::vector<ZoneEscape> escapes;  // the Pact's counter-SAM programme, one per believed zone crossed (route_planner.hpp)
     // What happened (filled by the resolution).
     int lost = 0;
     int damaged = 0;
@@ -72,6 +89,14 @@ struct Package {
     int refuelled = 0;          // aircraft that need the tankers to reach the target and back (docs/air_war/11_SUPPORT.md)
     bool interference = false;  // higher authority set the time on target
     std::string tactic;         // TacticKey
+    // The route planner's (docs/air_battle/01_ROUTES.md, route.mode 1): the main flights' corridor ("S2 via
+    // settlement:kovar"), the variant flown (0 covered, 1 other flank, 2 direct), the gate's crossing as planned (before
+    // the punctuality error) and its window (NATO), and a request for corridor suppression there (jsead_1982).
+    std::string corridor;
+    int variant = 0;
+    double gate_h = -1.0;
+    double gate_window_s = 0.0;
+    bool corridor_suppression = false;
     std::vector<std::string> rationale;
     bool resolved = false;
     bool played = false;        // flown as the player's mission
