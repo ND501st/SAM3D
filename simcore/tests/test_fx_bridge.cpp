@@ -999,6 +999,9 @@ SC_TEST("fx (bridge): each attack the planner flies lets its bombs go where thei
         ConsoleData console;
         SC_EXPECT(LoadScenario(built.json_text, kData, def, console, &e));
         def.has_crew_data = false;
+        // This test is about the release geometry of an undisturbed attack: the pilots carry no receiver here, so none of
+        // them jinks or breaks on hearing the unit's lock (those reactions are tested with B3's perception tests).
+        for (ScenarioTarget& pilot : def.targets) pilot.rwr.clear();
         ScenarioRunner runner(std::move(def), std::move(console));
         MissionBridge bridge(built.manifest, c.Data(), 3u);
         std::size_t released = 0;

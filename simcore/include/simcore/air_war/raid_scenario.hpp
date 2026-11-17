@@ -660,7 +660,9 @@ public:
                     Put(b, "lookahead_s", Num(6));
                     Put(t, "behaviour", b);
                 }
-                const bool has_rwr = !a->rwr_em.empty();
+                const std::string& rwr_em = a->RwrEm(d.theatre.year);
+                const bool has_rwr = !rwr_em.empty();
+                if (a->seats > 1) Put(t, "seats", Num(a->seats));
                 if (!a->drone && !a->missile) {
                     json::Value e = Obj();
                     if (a->helicopter) {
@@ -678,7 +680,7 @@ public:
                 const std::string& arm_em = a->ArmEm(d.theatre.year);
                 const bool em_arms = fmt.em && fmt.target_rwr && fmt.target_arms && has_rwr && arms > 0 && !arm_em.empty();
                 if (fmt.em && fmt.target_rwr && has_rwr) {
-                    Put(t, "rwr", Str(a->rwr_em));
+                    Put(t, "rwr", Str(rwr_em));
                     for (const std::string& lib : f.em_libraries) {
                         if (std::find(libraries.begin(), libraries.end(), lib) == libraries.end()) libraries.push_back(lib);
                     }

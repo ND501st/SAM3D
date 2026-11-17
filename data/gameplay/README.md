@@ -1,5 +1,10 @@
 # Gameplay tuning
 
+`perception.json` (track B, B3) is not a system's tuning: it is the pilot's eye, the ground law, the launch's signs and the
+memory of a picture (`simcore/air_war/perception.hpp`, `docs/air_battle/03_PERCEPTION.md`). Each value has its source: the two US
+Navy models (`nwc_tp5709_1974` for aircraft, `nwc_tp6005_1978` for ground targets) where they give a number, a labelled game
+value where they do not.
+
 One file per system with the game-balance numbers used by `simcore/engagement.hpp`: when zone lamps light, how close
 an operator must aim for the tracking radar to capture, how fast NPC crew turn the wheels, how long a missile takes
 to arrive, and the chance of a hit.

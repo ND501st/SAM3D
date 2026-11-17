@@ -42,7 +42,9 @@
 #include "simcore/board_reading.hpp"
 #include "simcore/acmi.hpp"
 #include "simcore/air_war/air_radio.hpp"
+#include "simcore/air_war/perception_feed.hpp"
 #include "simcore/air_war/test_waves.hpp"
+#include "simcore/fx/air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_comms.hpp"
 #include "simcore/debrief.hpp"
@@ -261,16 +263,13 @@ public:
             aim_crew_.assigned = assigned_target_;
             aim_crew_.ignore = decoys_known_;
             engagement_.Step(time_, dt, world_, console_, eng_targets_, log_, rng_, aim_crew_);
-            // A radar lock is heard by the target's warning receiver; a TV track is not. With the EM layer, a target with
-            // a warning receiver of its own goes by what it hears (CueFromWarnings).
-            const TrackMethod m = engagement_.Method();
-            if ((m == TrackMethod::Radar || m == TrackMethod::RadarOnJam) && !HasRwr(engagement_.TrackedTarget())) {
-                CueTarget(engagement_.TrackedTarget(), false);
-            }
+            // A radar lock is heard only by a target with a warning receiver (CueFromWarnings, UpdatePerception): a pilot
+            // without one does not feel it (roadmap B3: the truth cue is gone).
         }
         UpdateLauncher();
         UpdateGuidanceEm();
         CueFromWarnings();
+        UpdatePerception();
         UpdateArms();
         UpdateFuel(dt);
         UpdatePositionPower();
@@ -2597,6 +2596,7 @@ private:
             if (st.missiles == 0) st.reload_s = time_ + kNbReloadS;
             nb_shots_.push_back({j, fresh_i, time_ + flight_s, hit, true, st.launches});
             Event(nb.id, "launches at " + def_.targets[fresh_i].id);
+            PerceiveSiteLaunch(nb.id, st.launches, nb.position, fresh_a->position, flight_s);
             if (fx_on_) {
                 fx::Event e;
                 e.kind = fx::EventKind::SamLaunch;
@@ -2735,6 +2735,7 @@ private:
             const PassErrors e = fc != nullptr ? Corrected(st.errors, *fc, fired_s - st.pass_start_s) : PassErrors{};
             const GunAim aim = AimGun(g, muzzle, a->position - a->velocity * (time_ - fired_s), a->velocity, e);
             nb_rounds_fired_ += n;
+            if (percep_on_) Percep().Tracer(nb.id, muzzle, time_);
             if (!g.time_fuze) {
                 GunRoundsInFlight r;
                 r.neighbour = j;
@@ -2789,7 +2790,10 @@ private:
             const ScenarioNeighbour& nb = def_.neighbours[r.neighbour];
             const GunDef* g = def_.waves->aaa.Gun(nb.system);
             const Aircraft* a = targets_[r.target].spawned ? world_.FindAircraft(targets_[r.target].world_id) : nullptr;
-            if (r.shell) ++nb_shell_bursts_;
+            if (r.shell) {
+                ++nb_shell_bursts_;
+                if (percep_on_) Percep().Burst(r.burst, time_, light_.night_share >= 0.9);
+            }
             if (g == nullptr || a == nullptr || !a->alive) continue;
             const Vec3 at = a->position - a->velocity * (time_ - r.arrive_s);
             const double area = PresentedAreaM2(dt, def_.targets[r.target].size_m);
@@ -3053,11 +3057,232 @@ private:
                 rwr_warned_[i] |= 2;
                 Event(t.id, "warning receiver: missile guidance, " + w.launch_by);
             }
-            if (w.launch) CueTarget(t.id, true);
-            if (w.lock) CueTarget(t.id, false);
+            // The pilot's reaction comes from what his display shows him (UpdatePerception), not from this.
         }
     }
 
+    // ---- What the pilots see and hear (roadmap B3, air_war/perception.hpp, docs/air_battle/03_PERCEPTION.md). Each pilot
+    // of the other side keeps a picture of what his eyes and his warning receiver gave him, with their errors; he reacts
+    // to what is in it and to nothing else (the truth cues are gone: no cue from our lock, none from our launch).
+    airwar::PerceptionFeed& Percep() {
+        if (!percep_) {
+            percep_ = std::make_unique<airwar::PerceptionFeed>(def_.perception, static_cast<std::uint64_t>(def_.seed) * 0x9E3779B97F4A7C15ull + 0xB3ull);
+            percep_unit_ground_ = percep_->hub.AddGround("osa_battery_silent", GroundEnu(def_.unit_position.x, def_.unit_position.y), "unit");
+            for (const ScenarioNeighbour& nb : def_.neighbours) percep_->hub.AddGround("osa_battery_silent", GroundEnu(nb.position.x, nb.position.y), nb.id);
+        }
+        return *percep_;
+    }
+    bool PerceptionNight() const { return light_.night_share >= 0.9; }
+
+    // Our launch: its dust and flash at the launcher; the trail is laid as the engagement model flies the missile.
+    void PerceiveOwnLaunch() {
+        if (def_.targets.empty() || !percep_on_) return;
+        Percep().Launch(launches_, "own", GroundEnu(def_.unit_position.x, def_.unit_position.y), time_, PerceptionNight());
+    }
+    // A launch from another site (a battery's launcher, a neighbour, the testbed's missile site): the same sign, and a trail
+    // along the line to where its target was, at the missile's average speed.
+    void PerceiveSiteLaunch(const std::string& owner, int number, const Vec3& at, const Vec3& toward, double flight_s) {
+        if (!percep_on_) return;
+        airwar::PerceptionFeed& pf = Percep();
+        const Vec3 site = GroundEnu(at.x, at.y);
+        pf.Launch(number, owner, site, time_, PerceptionNight());
+        const double f = std::max(flight_s, 1.0);
+        pf.Synthetic(owner, number, toward, f, (toward - site).Length() / f);
+    }
+    void PerceiveSamLaunch(const BatteryFire::Shooter& s, const std::string& target) {
+        if (def_.targets.empty() || !percep_on_) return;
+        const Aircraft* a = AircraftOf(target);
+        const Vec3 site = GroundEnu(s.position.x, s.position.y);
+        PerceiveSiteLaunch(s.callsign, s.launches, s.position, a != nullptr ? a->position : site + Vec3{0.0, 0.0, 4000.0}, s.flight_s > 1.0 ? s.flight_s : 20.0);
+    }
+
+    // The other side's emitters in the EM world: the battery's other launchers and the regiment's neighbours (the Osa's
+    // search radar on duty, the tracking radar and command link on what they engage) and the post's P-19.
+    void SyncEmSites() {
+        if (!em_link_ || !em_link_->Ok()) return;
+        // The battery's other launchers keep the battery commander's emission regime: silent under his EMCON, and for
+        // arm_silence_s from the time he gave the ARM drill's order «Излучение выключить!» (npc_arm_off_s_, his own state,
+        // not the true sign time). SHORTCUT (B4/B5): a launcher of the battery fire model has no crew of its own, so it is
+        // told by reading the commander's order time here, not by a call carried on the battery net to it. A player
+        // commander's order is not read yet (only the NPC's), and the neighbours are another unit's, on the air by their rule.
+        const bool battery_silent = regime_cmdr_.kind == EmissionKind::Silent ||
+                                    (npc_arm_off_s_ > -1e8 && time_ - npc_arm_off_s_ < def_.doctrine.arm_silence_s);
+        auto sync = [&](const BatteryFire* bf, const char* prefix) {
+            if (bf == nullptr) return;
+            const bool silent = battery_silent && prefix[0] == 'b';
+            for (const BatteryFire::Shooter& s : bf->Shooters()) {
+                if (s.external) continue;
+                const bool engaging = s.phase == BatteryFire::Phase::Acquiring || s.phase == BatteryFire::Phase::Tracking ||
+                                      s.phase == BatteryFire::Phase::Preparing || s.phase == BatteryFire::Phase::InFlight;
+                em_link_->SetOsaSite(std::string(prefix) + s.callsign, GroundEnu(s.position.x, s.position.y), s.deployed && !silent,
+                                     !silent && s.deployed && engaging && !s.target.empty(), s.target, !silent && s.deployed && s.phase == BatteryFire::Phase::InFlight);
+            }
+        };
+        sync(battery_fire_.get(), "b:");
+        sync(neighbour_fire_.get(), "n:");
+        if (post_em_ && post_em_->Ok()) {
+            if (const em::EmitterDef* d = post_em_->SearchEmitterDef()) em_link_->SetForeignEmitter("post_radar", def_.post_radar.position, *d, !PostRadarOff());
+        }
+    }
+
+    // The aircraft a pilot may see now.
+    void PerceptionAir(std::vector<airwar::AirObject>& out) {
+        if (percep_contrail_area_m2_.size() < def_.targets.size()) {
+            percep_contrail_area_m2_.resize(def_.targets.size(), 0.0);
+            percep_contrail_next_s_.resize(def_.targets.size(), 0.0);
+        }
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!targets_[i].spawned || targets_[i].gone) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            airwar::AirObject o;
+            o.id = t.id;
+            o.key = airwar::ObjectKeyOf(t.id);
+            o.side = t.friendly ? 1 : 0;
+            o.pos = a->position;
+            o.vel = a->velocity;
+            o.alt_m = world_.Frame().AltitudeOf(a->position);
+            o.size_m = t.size_m;
+            o.type = t.model;
+            o.weapon = t.weapon;
+            o.burning = targets_[i].damage.fire;
+            if (o.alt_m > 4000.0) {  // a contrail is a function of the weather and the height only (fx::ContrailAt, never the feed)
+                if (time_ >= percep_contrail_next_s_[i]) {
+                    percep_contrail_next_s_[i] = time_ + 10.0;
+                    percep_contrail_area_m2_[i] =
+                        fx::ContrailAt(weather_, o.alt_m, 0.30).kind != fx::ContrailKind::None ? def_.perception.eye.contrail_width_m * 3000.0 : 0.0;
+                }
+                o.contrail_area_m2 = percep_contrail_area_m2_[i];
+            }
+            out.push_back(o);
+        }
+    }
+
+    // Each pilot's perception tick: the pilots due now look about them and listen to their receivers; what is new in a
+    // picture sets off his reaction at today's entry points (target_behaviour.hpp). Perception runs on the runner that holds
+    // the sky's truth (a linked post's mirrors none).
+    void UpdatePerception() {
+        if (!percep_on_ || def_.targets.empty() || !external_launchers_.empty()) return;
+        airwar::PerceptionFeed& pf = Percep();
+        pf.Update(time_);
+        if (engagement_on_) {  // our missiles in flight lay their smoke trails
+            for (const EngagementModel::MissileView& m : engagement_.MissilesInFlight(time_, world_, eng_targets_)) {
+                pf.TrailHead("own", m.number, m.position, time_);
+            }
+        }
+        SyncEmSites();
+        if (time_ >= percep_ground_next_s_) {
+            percep_ground_next_s_ = time_ + 2.0;
+            pf.hub.MoveGround(percep_unit_ground_, GroundEnu(def_.unit_position.x, def_.unit_position.y));
+            if (battery_fire_) {
+                for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                    if (s.external || !s.deployed) continue;
+                    const Vec3 g = GroundEnu(s.position.x, s.position.y);
+                    const auto it = percep_shooters_.find(s.callsign);
+                    if (it == percep_shooters_.end()) percep_shooters_[s.callsign] = pf.hub.AddGround("osa_battery_silent", g, s.callsign);
+                    else pf.hub.MoveGround(it->second, g);
+                }
+            }
+        }
+        std::vector<std::size_t> due;
+        for (std::size_t i = 0; i < def_.targets.size(); ++i) {
+            const ScenarioTarget& t = def_.targets[i];
+            if (!targets_[i].spawned || targets_[i].gone || t.weapon) continue;
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr || !a->alive) continue;
+            if (pf.hub.Due(airwar::ObjectKeyOf(t.id), time_)) due.push_back(i);
+        }
+        if (due.empty()) return;
+        std::vector<airwar::AirObject> air;
+        PerceptionAir(air);
+        airwar::EnvIn env;
+        env.terrain = &world_.GetTerrain();
+        env.frame = &world_.Frame();
+        env.weather = &weather_;
+        env.light = light_;
+        env.visibility_m = def_.optics.visibility_m;
+        for (std::size_t i : due) {
+            const ScenarioTarget& t = def_.targets[i];
+            const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
+            if (a == nullptr) continue;
+            airwar::ObserverIn ob;
+            ob.id = t.id;
+            ob.key = airwar::ObjectKeyOf(t.id);
+            ob.side = t.friendly ? 1 : 0;
+            ob.pos = a->position;
+            ob.vel = a->velocity;
+            ob.alt_m = world_.Frame().AltitudeOf(a->position);
+            ob.agl_m = ob.alt_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
+            ob.two_seat = t.seats > 1;
+            ob.skill = t.pilot_skill;
+            ob.defensive = targets_[i].pilot.Evading();
+            if (!t.legs.empty()) {
+                const std::size_t k = std::min(a->next_waypoint, t.legs.size() - 1);
+                ob.attack = PhaseOfTag(t.legs[k].tag) == "attack";
+            }
+            std::vector<airwar::RwrHeard> heard;
+            if (!t.rwr.empty()) {
+                ob.rwr_set = def_.perception.RwrSet(t.rwr);
+                if (ob.rwr_set == nullptr) ob.rwr_set = &default_rwr_set_;  // a receiver with no display of its own in the data
+                if (em_link_) {
+                    for (const EmSensorLink::RwrContactView& c : em_link_->RwrPictureOf(t.id)) {
+                        airwar::RwrHeard h;
+                        h.key = c.key;
+                        h.state = c.state == 2 ? airwar::RwrState::Launch : (c.state == 1 ? airwar::RwrState::Lock : airwar::RwrState::Search);
+                        h.name = c.name;
+                        h.known = c.known;
+                        h.bearing_rad = c.bearing_rad;
+                        h.sigma_rad = c.sigma_rad;
+                        h.power_dbw = c.power_dbw;
+                        heard.push_back(h);
+                    }
+                }
+            }
+            std::vector<airwar::Sighting> fresh;
+            pf.hub.Tick(ob, env, time_, air, heard, &fresh);
+            if (t.friendly) continue;  // our fighters' reactions to what they see are the air battle's (B8, B10)
+            for (const airwar::Sighting& sg : fresh) ReactToSighting(i, sg);
+        }
+    }
+    // A pilot's reaction to what is new in his picture, at today's entry points (the delay by skill and stress, the calls
+    // and the jettison are B4's): a lock or a launch on his receiver, or a launch seen by eye (its dust and flash, its
+    // smoke trail), turns him with the place he believes it to be, never the unit's true one.
+    void ReactToSighting(std::size_t i, const airwar::Sighting& sg) {
+        const std::string& id = def_.targets[i].id;
+        if (sg.by == airwar::SightBy::Rwr && sg.kind == airwar::SightKind::Emitter) {
+            if (sg.rwr == airwar::RwrState::Launch) CueTarget(id, true, &sg.believed_enu);
+            else if (sg.rwr == airwar::RwrState::Lock) CueTarget(id, false, &sg.believed_enu);
+        } else if (sg.by == airwar::SightBy::Eye && (sg.kind == airwar::SightKind::LaunchSign || sg.kind == airwar::SightKind::Trail)) {
+            CueTarget(id, true, sg.has_origin ? &sg.origin_enu : &sg.believed_enu);
+        }
+    }
+
+public:
+    // Perception off (the cost bench's baseline): no pilot sees or hears anything, no event is recorded.
+    void SetPerception(bool on) { percep_on_ = on; }
+    // What the pilots saw (roadmap B3): the hub, for the mission bridge, tests and overlays; null before anything was.
+    const airwar::PerceptionHub* Perception() const { return percep_ ? &percep_->hub : nullptr; }
+    // Our launches the other side's pilots saw (by their eyes), and the first sighting each pilot made of one.
+    int PerceivedLaunches() const { return percep_ ? static_cast<int>(percep_->hub.LaunchesSeen().size()) : 0; }
+    const std::vector<std::pair<std::string, airwar::Sighting>>* LaunchSightings() const {
+        return percep_ ? &percep_->hub.LaunchSightings() : nullptr;
+    }
+    // A target's pilot's picture now (empty for one that has seen nothing).
+    const std::vector<airwar::Sighting>& PilotPicture(const std::string& target_id) const {
+        static const std::vector<airwar::Sighting> kNone;
+        return percep_ ? percep_->hub.Picture(airwar::ObjectKeyOf(target_id)) : kNone;
+    }
+    // The post's radar as an emitter in this runner's EM world (a battery link: the post is another runner, the aircraft's
+    // receivers are in this one).
+    void HearPostRadarOf(const ScenarioRunner& post) {
+        if (!em_link_ || !em_link_->Ok() || !post.post_em_ || !post.post_em_->Ok()) return;
+        if (const em::EmitterDef* d = post.post_em_->SearchEmitterDef()) {
+            em_link_->SetForeignEmitter("post_radar", post.def_.post_radar.position, *d, !post.PostRadarOff());
+        }
+    }
+
+private:
     // ---- Anti-radiation missiles (roadmap E6, em/arm.hpp). A carrier (a target's "arms") fires on what its warning
     // receiver hears: a hostile radar in its weapon's band, with the place it believes the radar is within its launch
     // range; each ARM is set to the signal heard. After its last one it turns away (the sign the crew watches for:
@@ -3178,13 +3403,15 @@ private:
     }
 
     // A missile was launched at a target (`launch`), or the tracking radar holds it: its pilot may evade.
-    void CueTarget(const std::string& id, bool launch) {
+    // `believed`: where he believes the threat is (a sighting's, a receiver's bearing), never the unit's true place.
+    void CueTarget(const std::string& id, bool launch, const Vec3* believed = nullptr) {
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             TargetState& s = targets_[i];
             if (def_.targets[i].id != id || !s.spawned || s.gone) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr) return;
-            const Evasion ev = launch ? s.pilot.OnLaunch(*a, def_.unit_position, time_) : s.pilot.OnLocked(*a, def_.unit_position, time_);
+            const Vec3 from = believed != nullptr ? *believed : def_.unit_position;
+            const Evasion ev = launch ? s.pilot.OnLaunch(*a, from, time_) : s.pilot.OnLocked(*a, from, time_);
             if (!ev.what.empty()) Event(id, ev.what);
             if (ev.steer) flights_->Override(static_cast<int>(i), ev.ov);  // a reflex: it does not wait for the leader
             return;
@@ -7467,6 +7694,7 @@ private:
                 from = " from " + launcher_->Selected(ch) + ", channel " + Launcher::ChannelName(ch);
             }
             ++launches_;
+            PerceiveOwnLaunch();
             if (engagement_on_ && !engagement_.TrackedTarget().empty()) ++npc_launched_at_[engagement_.TrackedTarget()];
             if (engagement_on_) {  // a salvo (doctrine salvo): this launch opens one if nothing is in the air, else adds to it
                 if (!engagement_.ShotsInFlight() || salvo_target_ != engagement_.TrackedTarget()) {
@@ -7484,7 +7712,6 @@ private:
                 const std::string& jam = console_.has_launcher ? console_.launcher.jam_control : std::string();
                 engagement_.OnLaunch(time_, launches_, world_, eng_targets_, log_, !jam.empty() && console_.panel.Get(jam) == 1);
                 FxLaunch(launches_);
-                if (!HasRwr(engagement_.TrackedTarget())) CueTarget(engagement_.TrackedTarget(), true);
             }
             if (launcher_) {
                 const double flight_s = engagement_on_ ? engagement_.ShotFlightTime(launches_) : 0.0;
@@ -7601,6 +7828,15 @@ private:
     RidgeTerrain ground_;  // the scenario's flat ground and its ridges
     std::unique_ptr<MapTerrain> map_ground_;  // or its map's ground (terrain.type "map")
     Weather weather_;      // the scenario's "weather" (still, clear air without one)
+    // What the pilots see and hear (roadmap B3, air_war/perception.hpp): made on first use.
+    std::unique_ptr<airwar::PerceptionFeed> percep_;
+    bool percep_on_ = true;
+    std::uint64_t percep_unit_ground_ = 0;
+    double percep_ground_next_s_ = 0.0;
+    std::map<std::string, std::uint64_t> percep_shooters_;
+    std::vector<double> percep_contrail_area_m2_;
+    std::vector<double> percep_contrail_next_s_;
+    airwar::RwrSetDisplay default_rwr_set_;  // for a receiver the data gives no display (measured bearing, named, a launch shown)
     World world_;
     AcmiWriter acmi_;
     std::mt19937 rng_;
@@ -10978,6 +11214,7 @@ private:
                 ++neighbour_launches_[nb.id];
                 Event(e.target, "missile launched at it by " + nb.name);
                 FxSamLaunch(shooters[k], e.target, FxSystem(nb.system));
+                PerceiveSamLaunch(shooters[k], e.target);
             } else if (e.kind == BatteryFire::Event::Kind::Hit) {
                 FxSamEnd(shooters[k], e.target, FxSystem(nb.system), true);
                 if (DestroyTarget(e.target, nb.name)) neighbour_kills_[e.target] = nb.id;
@@ -11119,7 +11356,10 @@ private:
             const BatteryFire::Shooter* sh = battery_fire_->Find(e.callsign);
             if (sh != nullptr && !sh->external) {  // the feed: its missile, and the wreck of what it hit
                 const std::string sys_id = FxSystem(def_.has_launcher_tuning ? def_.launcher_tuning.system_id : def_.tuning.system_id);
-                if (e.kind == BatteryFire::Event::Kind::Launch) FxSamLaunch(*sh, e.target, sys_id);
+                if (e.kind == BatteryFire::Event::Kind::Launch) {
+                    FxSamLaunch(*sh, e.target, sys_id);
+                    PerceiveSamLaunch(*sh, e.target);
+                }
                 if (e.kind == BatteryFire::Event::Kind::Hit || e.kind == BatteryFire::Event::Kind::Miss) {
                     FxSamEnd(*sh, e.target, sys_id, e.kind == BatteryFire::Event::Kind::Hit);
                 }

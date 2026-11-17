@@ -81,16 +81,22 @@ public:
             emitted_s_ += dt;
             last_radiating_t_ = t;
         }
-        // Launches the enemy sees.
-        if (r.Launches() > launches_seen_) {
-            launches_seen_ = r.Launches();
-            for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
-                if (!r.TargetAlive(m_.aircraft[i].target_id)) continue;
-                if (Dist2d(r.TargetPosition(m_.aircraft[i].target_id), m_.own_enu) < tune.Get("scenario.revealed_by_launch_m")) {
-                    launch_seen_ = true;
-                    break;
-                }
+        // Launches the enemy sees: a launch is seen when some pilot's picture holds its dust and flash or its smoke trail
+        // (roadmap B3: the eyes, the light, the weather and the line of sight; never a distance rule).
+        if (r.PerceivedLaunches() > 0) launch_seen_ = true;
+        if (const std::vector<std::pair<std::string, Sighting>>* seen = r.LaunchSightings()) {
+            for (std::size_t k = sightings_taken_; k < seen->size(); ++k) {
+                const Sighting& sg = (*seen)[k].second;
+                PackageOutcome::LaunchSighting ls;
+                ls.time_s = sg.time_s;
+                ls.east_m = (sg.has_origin ? sg.origin_enu : sg.believed_enu).x;
+                ls.north_m = (sg.has_origin ? sg.origin_enu : sg.believed_enu).y;
+                ls.sigma_m = std::max(300.0, sg.range_sigma_m);
+                ls.confidence = sg.confidence;
+                ls.by = (*seen)[k].first;
+                sightings_.push_back(ls);
             }
+            sightings_taken_ = seen->size();
         }
         for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
             const RaidAircraft& a = m_.aircraft[i];
@@ -366,6 +372,7 @@ public:
         o.arms_fired = arms_fired_ + em_arms_fired_;
         if (emitted_s_ > 0.0) o.AddEmission(m_.own_object, emitted_s_);
         if (launch_seen_) o.fired.push_back(m_.own_object);
+        o.sightings = sightings_;
         if (radar_killed_) {
             o.radars_killed.push_back(m_.own_object);
         } else if (radar_silenced_) {
@@ -455,6 +462,8 @@ private:
     double last_radiating_t_ = -1e9;
     int launches_seen_ = 0;
     bool launch_seen_ = false;
+    std::vector<PackageOutcome::LaunchSighting> sightings_;
+    std::size_t sightings_taken_ = 0;
     bool unit_destroyed_ = false;
     bool radar_killed_ = false;
     bool radar_silenced_ = false;

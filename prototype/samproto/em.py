@@ -25,7 +25,8 @@ M64 = (1 << 64) - 1
 
 STREAMS = {"detection": 1, "range_noise": 2, "azimuth_noise": 3, "elevation_noise": 4, "esm_bearing": 5,
            "esm_frequency": 6, "esm_pri": 7, "esm_pulse_width": 8, "comms_delivery": 9, "iff": 10,
-           "false_alarm": 11, "tdoa_noise": 12, "doctrine": 13, "arm_seeker": 14, "air_combat": 15, "air_radio": 16}
+           "false_alarm": 11, "tdoa_noise": 12, "doctrine": 13, "arm_seeker": 14, "air_combat": 15, "air_radio": 16,
+           "sight": 17, "sight_error": 18, "ground_acquire": 19}
 
 
 def mix64(x: int) -> int:
@@ -642,6 +643,82 @@ def lines_across(size_m: float, range_m: float, fov_height_rad: float, tv_lines:
     if range_m <= 0.0 or fov_height_rad <= 0.0:
         return 1e9
     return (size_m / range_m) / (fov_height_rad / tv_lines)
+
+
+# --------------------------------------------------------- the pilot's eye (air_war/perception.hpp, roadmap B3)
+# Two US Navy models carry the eye, on top of the TV's optics above: NWC TP 5709 (aircraft, October 1974) and NWC TP 6005
+# (ground targets, January 1978). The numbers are data/gameplay/perception.json's.
+
+EYE = {"rm_constant_m": 1006.0, "threshold_offset_pct": 1.565, "factor_confidence": 1.64, "factor_unknown_location": 1.31,
+       "factor_vigilance": 1.19, "factor_untrained": 2.0, "factor_ordinary": 1.2, "fatigue_vigilance_gain": 0.5,
+       "empty_field_range_factor": 0.5, "search_solid_angle_sr": 3.14159, "cue_sector_deg": 15.0, "lobe_max_sr": 0.35}
+
+
+def eye_factor(cued: bool, skill: float, stress: float = 0.0, eye=EYE) -> float:
+    """The product of the field factors: the unknown-location factor falls away when cued; the untrained factor by skill."""
+    sk = min(1.0, max(0.0, skill))
+    st = min(1.0, max(0.0, stress))
+    untrained = 1.0 + (eye["factor_untrained"] - 1.0) * (1.0 - sk)
+    vigilance = eye["factor_vigilance"] * (1.0 + eye["fatigue_vigilance_gain"] * st)
+    return (eye["factor_confidence"] * (1.0 if cued else eye["factor_unknown_location"]) * vigilance * untrained *
+            eye["factor_ordinary"])
+
+
+def eye_threshold_pct(factor: float, range_m: float, area_m2: float, eye=EYE) -> float:
+    """The contrast (per cent) the eye needs at a range for an object of an area: F (1.565 + R^2 / (1006^2 A))."""
+    k = eye["rm_constant_m"]
+    return factor * (eye["threshold_offset_pct"] + range_m * range_m / (k * k * max(area_m2, 1e-9)))
+
+
+def eye_margin(factor: float, inherent_pct: float, area_m2: float, range_m: float, visibility_m: float,
+               cloud_transmission: float = 1.0, empty_field: bool = False, eye=EYE) -> float:
+    """How far above its threshold an object is (>= 1: seen); against empty sky the range counts as twice as far."""
+    eff = range_m / eye["empty_field_range_factor"] if empty_field else range_m
+    th = eye_threshold_pct(factor, eff, area_m2, eye)
+    return 1e9 if th <= 0.0 else apparent_contrast(inherent_pct, eff, visibility_m) * cloud_transmission / th
+
+
+def eye_range_m(factor: float, inherent_pct: float, area_m2: float, visibility_m: float, cloud_transmission: float = 1.0,
+                empty_field: bool = False, eye=EYE) -> float:
+    """The range at which the margin falls to 1 (bisection)."""
+    if eye_margin(factor, inherent_pct, area_m2, 1.0, visibility_m, cloud_transmission, empty_field, eye) < 1.0:
+        return 0.0
+    lo, hi = 1.0, 1.0e6
+    for _ in range(40):
+        mid = 0.5 * (lo + hi)
+        if eye_margin(factor, inherent_pct, area_m2, mid, visibility_m, cloud_transmission, empty_field, eye) >= 1.0:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def eye_glimpse_chance(margin: float, cued: bool, eye=EYE) -> float:
+    """One glimpse's chance: the lobe (zero at the threshold) over the solid angle searched (the cued sector when cued)."""
+    lobe = 0.0 if margin <= 1.0 else eye["lobe_max_sr"] * (1.0 - 1.0 / margin)
+    search = eye["search_solid_angle_sr"]
+    if cued:
+        w = 2.0 * math.radians(eye["cue_sector_deg"])
+        search = min(search, w * w)
+    return 1.0 if search <= 0.0 else min(1.0, lobe / search)
+
+
+def ground_acquire_p(pmax: float, range_m: float, rstar_m: float, zero_at=0.75, at_0625=0.2, at_05=0.5, at_0375=0.8,
+                     full_at=0.25) -> float:
+    """NWC TP 6005: the cumulative chance of having acquired a ground object at a range, given R*: 0.2, 0.5, 0.8 of P_max at
+    0.625, 0.5, 0.375 R*; zero beyond 0.75 R*, P_max by 0.25 R*, linear between."""
+    if rstar_m <= 0.0:
+        return 0.0
+    f = range_m / rstar_m
+    pts = [(zero_at, 0.0), (0.625, at_0625), (0.5, at_05), (0.375, at_0375), (full_at, 1.0)]
+    if f >= pts[0][0]:
+        return 0.0
+    if f <= pts[-1][0]:
+        return pmax
+    for (f0, p0), (f1, p1) in zip(pts, pts[1:]):
+        if f1 <= f <= f0:
+            return pmax * (p0 + (p1 - p0) * (f0 - f) / (f0 - f1))
+    return pmax
 
 
 # ------------------------------------------------------------------------- anti-radiation missiles (em/arm.hpp)

@@ -343,7 +343,11 @@ struct AircraftType {
     std::string flight_confidence;
     bool night = false;
     bool all_weather = false;
-    std::string rwr_em;            // EM library RWR, when it has one
+    std::string rwr_em;            // EM library RWR, when it has one (the one it carries in every year, unless rwr_by_year says more)
+    // The receiver it carries by the war's year, when that changed: (EM library RWR, the year from which it is the one
+    // fitted), in order (docs/air_battle/03_PERCEPTION.md 3.3). RwrEm(year).
+    std::vector<std::pair<std::string, int>> rwr_by_year;
+    int seats = 1;                 // crew: a second seat adds his glimpses to the lookout (03_PERCEPTION.md 2.2)
     std::string self_jammer_em;    // EM library self-protection jammer
     std::string standoff_jammer_em;
     int arms = 0;                  // anti-radiation missiles per sortie
@@ -385,6 +389,15 @@ struct AircraftType {
     const std::string& ArmEm(int year) const {
         const std::string* pick = &arm_em;
         for (const auto& e : arm_em_by_year) {
+            if (e.second <= year) pick = &e.first;
+        }
+        return *pick;
+    }
+    // The warning receiver it carries in a war of `year`: the latest of rwr_by_year in service by then, else rwr_em (and
+    // before the first of them, rwr_em).
+    const std::string& RwrEm(int year) const {
+        const std::string* pick = &rwr_em;
+        for (const auto& e : rwr_by_year) {
             if (e.second <= year) pick = &e.first;
         }
         return *pick;
@@ -949,7 +962,6 @@ struct TuningTable {
             {"scenario.bomb_lethal_m", 150.0},
             {"scenario.bomb_pk_vehicle", 0.5},
             {"scenario.rocket_pk_vehicle", 0.3},
-            {"scenario.revealed_by_launch_m", 15000.0},
             // our own intelligence (what the player learns about the enemy)
             {"own_intel.reveal_per_observation", 0.12},
             {"own_intel.pow_chance", 0.4},
@@ -1498,7 +1510,7 @@ public:
             AircraftType t;
             std::vector<std::string> roles;
             if (!Keys(a, p, {"id", "name", "roles", "class", "helicopter", "drone", "rcs_m2", "cruise_mps", "attack_mps",
-                             "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em",
+                             "low_agl_m", "medium_alt_m", "max_turn_deg_s", "night", "all_weather", "rwr_em", "rwr_by_year", "seats",
                              "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
                              "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
                              "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "flight",
@@ -1527,7 +1539,7 @@ public:
             double arm_km = 0.0, range_km = 0.0, radius_km = 0.0;
             if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0) || !Num(a, p, "range_km", range_km, 0.0, 5000.0) ||
                 !Num(a, p, "radius_km", radius_km, 0.0, 5000.0) || !Num(a, p, "computing", t.computing, 0.0, 1.0) ||
-                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year) ||
+                !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year) || !ReceiversByYear(a, p, t.rwr_by_year) || !Int(a, p, "seats", t.seats, 1, 2) ||
                 !Flight(a, p, t)) {
                 return false;
             }
@@ -1597,6 +1609,31 @@ public:
                 return Fail(Index(Join(p, "loads"), i), "[weapon id, count 1..60]");
             }
             out.push_back({e.items[0].string, static_cast<int>(e.items[1].number + 0.5)});
+        }
+        return true;
+    }
+
+    // "rwr_by_year": [[EM receiver id, from year], ...], years rising. The placeholder generic_rwr is refused: a dated war's
+    // types name their faction's receiver (03_PERCEPTION.md 3.3).
+    bool ReceiversByYear(const json::Value& a, const std::string& p, std::vector<std::pair<std::string, int>>& out) {
+        const json::Value* v = a.Find("rwr_by_year");
+        if (v != nullptr) {
+            if (!v->Is(json::Type::Array)) return Fail(Join(p, "rwr_by_year"), "expected [[EM receiver id, from year], ...]");
+            for (std::size_t i = 0; i < v->items.size(); ++i) {
+                const json::Value& e = v->items[i];
+                if (!e.Is(json::Type::Array) || e.items.size() != 2 || !e.items[0].Is(json::Type::String) || e.items[0].string.empty() ||
+                    !e.items[1].Is(json::Type::Number) || e.items[1].number < 1950.0 || e.items[1].number > 2050.0) {
+                    return Fail(Index(Join(p, "rwr_by_year"), i), "[EM receiver id, from year 1950..2050]");
+                }
+                const int year = static_cast<int>(e.items[1].number + 0.5);
+                if (!out.empty() && year <= out.back().second) return Fail(Index(Join(p, "rwr_by_year"), i), "years in rising order");
+                if (e.items[0].string == "generic_rwr") return Fail(Index(Join(p, "rwr_by_year"), i), "generic_rwr is a placeholder: name the faction's receiver");
+                out.push_back({e.items[0].string, year});
+            }
+        }
+        const json::Value* r = a.Find("rwr_em");
+        if (r != nullptr && r->Is(json::Type::String) && r->string == "generic_rwr") {
+            return Fail(Join(p, "rwr_em"), "generic_rwr is a placeholder: name the faction's receiver (data/em/pact_1985.json, nato_1985.json)");
         }
         return true;
     }

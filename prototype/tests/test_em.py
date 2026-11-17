@@ -172,3 +172,30 @@ def test_obstacles_stand_on_the_profile_like_clutter():
     around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
     assert em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 50.0, obstacle=around).line_of_sight
     assert not em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0).line_of_sight
+
+
+def test_eye_law_matches_cpp():
+    # Mirror of test_perception.cpp: NWC TP 5709's example (55 ft2 at 30 %, no haze, factors off) is 6.5 nmi.
+    area = 55.0 * 0.09290304
+    r = em.eye_range_m(1.0, 30.0, area, 1e12)
+    assert r / 1852.0 == pytest.approx(6.5, rel=0.02)
+    assert em.eye_range_m(1.0, 30.0, area, 1e12, empty_field=True) / r == pytest.approx(0.5, abs=0.005)
+    assert em.eye_threshold_pct(1.0, r, area) == pytest.approx(30.0, abs=0.05)
+    bare = dict(em.EYE, factor_ordinary=1.0)
+    assert em.eye_factor(False, 0.0, eye=bare) == pytest.approx(5.12, abs=0.02)  # 1.64 x 1.31 x 1.19 x 2.00
+    assert em.eye_factor(True, 1.0, eye=bare) == pytest.approx(1.64 * 1.19)
+    assert em.eye_range_m(1.0, 30.0, area, 10000.0) < r
+    assert em.eye_glimpse_chance(1.0, False) == 0.0
+    assert em.eye_glimpse_chance(4.0, True) > 3.0 * em.eye_glimpse_chance(4.0, False)
+    # A small SAM's trail (20 %, 1.5 m x 500 m) in the reference haze (5 nmi), cued and trained: 3-6 km.
+    trail = em.eye_range_m(em.eye_factor(True, 1.0), 20.0, 1.5 * 500.0, 5.0 * 1852.0)
+    assert 3000.0 <= trail <= 6000.0 and trail == pytest.approx(4010.0, abs=60.0)
+
+
+def test_ground_law_matches_cpp():
+    for pmax in (0.25, 0.5, 1.0):
+        assert em.ground_acquire_p(pmax, 6250.0, 10000.0) == pytest.approx(0.2 * pmax)
+        assert em.ground_acquire_p(pmax, 5000.0, 10000.0) == pytest.approx(0.5 * pmax)
+        assert em.ground_acquire_p(pmax, 3750.0, 10000.0) == pytest.approx(0.8 * pmax)
+        assert em.ground_acquire_p(pmax, 7600.0, 10000.0) == 0.0
+        assert em.ground_acquire_p(pmax, 1000.0, 10000.0) == pytest.approx(pmax)

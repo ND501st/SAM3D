@@ -83,7 +83,7 @@
   "scenario": {
     "clip_m": 70000.0, "prep_s": 150.0, "margin_s": 240.0, "max_targets": 24.0, "release_capture_m": 2000.0,
     "weapon_fall_s": 15.0, "arm_speed_mps": 600.0, "arm_pk": 0.45, "arm_memory_s": 20.0, "bomb_lethal_m": 150.0, "bomb_pk_vehicle": 0.5,
-    "rocket_pk_vehicle": 0.3, "revealed_by_launch_m": 15000.0,
+    "rocket_pk_vehicle": 0.3,
     "notes": "A raid as the player's scenario: the flights inside clip_m of the battery, prep_s before the first aircraft appears; the mission bridge's weapon effects (roadmap E6 will replace the ARM with an EM missile)."
   },
   "comms_jam": {

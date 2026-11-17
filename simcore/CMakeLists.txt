@@ -103,6 +103,8 @@ add_executable(simcore_tests
   tests/test_packages_live.cpp
   tests/test_flights.cpp
   tests/test_air_radio.cpp
+  tests/test_perception.cpp
+  tests/test_perception_em.cpp
   tests/test_dynamic_campaign.cpp
   tests/test_ground.cpp
   tests/test_map_obstacles.cpp
@@ -219,6 +221,9 @@ simcore_configure_target(air_war_balance)
 
 add_executable(air_war_bench examples/air_war_bench.cpp)
 simcore_configure_target(air_war_bench)
+# What the pilots' perception costs per step (roadmap B3, docs/air_battle/03_PERCEPTION.md 5.7).
+add_executable(perception_bench examples/perception_bench.cpp)
+simcore_configure_target(perception_bench)
 add_executable(aaa_bench examples/aaa_bench.cpp)
 simcore_configure_target(aaa_bench)
 
