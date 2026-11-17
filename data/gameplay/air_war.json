@@ -85,5 +85,16 @@
   "own_intel": {
     "reveal_per_observation": 0.12, "pow_chance": 0.4, "warning_s": 300.0, "leak_warning_s": 900.0,
     "notes": "What the player's side learns: a prisoner talks with pow_chance; the warning net gives warning_s before the first aircraft, leak_warning_s when the enemy's planner has loose lips."
+  },
+  "route": {
+    "mode": 1, "start_before_gate_m": 80000.0, "bend_deg": 30.0, "fallback_grid_m": 15000.0, "view_step_m": 1000.0, "mask_antenna_m": 6.0,
+    "final_cone_m": 20000.0, "corridor_share": 0.35, "corridor_min_m": 30000.0, "max_features": 120, "neighbours": 8, "min_leg_turns": 1.5,
+    "turn_bank_deg": 60.0, "max_leg_m": 60000.0, "max_turn_deg": 120.0, "straight_deg": 20.0, "simplify_m": 500.0, "ip_snap_m": 8000.0, "run_in_headings": 8, "reuse_penalty_s": 300.0,
+    "direct_exposure_share": 0.25, "direct_slack": 1.25, "prune_ratio": 2.0, "continuous_s": 20.0, "checkpoint_before_gate_m": 25000.0,
+    "corridor_halfwidth_m": 15000.0, "corridor_suppression": 0.3, "land_front_m": 40000.0, "egress_clear_s": 10.0, "egress_turn_deg": 60.0,
+    "egress_m": 12000.0, "loiter_radius_m": 9000.0, "helo_holding_m": 15000.0, "helo_umbrella_m": 15000.0, "helo_beyond_umbrella": 0.5,
+    "helo_night_agl_m": 50.0, "helo_popup_agl_m": 25.0, "helo_hide_agl_m": 5.0, "hide_penalty_s": 600.0,
+    "source": "game value: the route planner's (docs/air_battle/01_ROUTES.md sections 6 and 10); continuous_s from crawford_1977_rand (exposure held to 20 s badly degraded mobile defences); egress_clear_s from fm_100_2_1_1984 p. 12-8 (out of the target area in 10 s)",
+    "notes": "Routes as flown (simcore/air_war/route_planner.hpp, roadmap B2). mode: 0 the old four shapes (a save made before B2 replays with it), 1 the route planner. The graph: map features within corridor_share of the way's length (at least corridor_min_m) of the line gate-target and target-exits, at most max_features, each joined to its neighbours nearest between min_leg_turns turn radii (turn_bank_deg) and max_leg_m, turns of at most max_turn_deg; a feature flown over within straight_deg of straight on is no turn point; features within simplify_m of a straight line between the route's points are left out of them. A leg costs its time, more off the goal's heading (final_cone_m), plus the faction's w_exp x believed lethal seconds in sight (masked by the ground at low level, the site's antenna mask_antenna_m up), w_cont x seconds of one sight past continuous_s, w_low x seconds above the corridor's lowest ground per 100 m. reuse_penalty_s: a feature of the covered route for the other flank, of the way in for the way home. direct_exposure_share: the direct variant's exposure weight. prune_ratio: the other flank dropped when it costs this many times the covered route. corridor_suppression: the corps' suppression of radars within corridor_halfwidth_m of a NATO gate where our troops stand within land_front_m of it. Helicopters: a holding area helo_holding_m behind the gate, a battle position hidden at helo_hide_agl_m and seeing the target at helo_popup_agl_m (hide_penalty_s if not); the Pact scores a target beyond helo_umbrella_m from the front at helo_beyond_umbrella."
   }
 }

@@ -37,7 +37,9 @@ SC_TEST("mission session (15.2): the bridges mission with the Pact's air war on 
     campaign::MissionSessionDef md;
     md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
     md.faction = "warsaw_pact";
-    md.seed = 1;
+    // Seed 2: with the routes as flown (B2) seed 1's package came by a way the regiment's late squares still found every
+    // time, so the «цели не наблюдаю» below was never said; seed 2's raid says it.
+    md.seed = 2;
     md.day = 1;
     campaign::MissionSession s;
     std::string e;

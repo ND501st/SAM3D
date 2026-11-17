@@ -28,6 +28,7 @@
     }
   },
   "doctrine": {
+    "routing": { "crossing": "entry", "letdown_m": 20000, "max_turn_points": 2, "variants": ["covered", "direct"], "w_exp": 6, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0, "return": "same_entry", "deviation": "eye", "deviation_lateral_m": 3000, "source": "game values: design inference, no period source on the neutral's routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
     "planning_cycle_h": 24, "lead_time_h": 4, "on_call_fraction": 0.15, "centralisation": 0.5, "simultaneous_bias": 0.4,
     "sortie_rate_per_day": 2.0, "serviceability": 0.75, "max_packages_per_cycle": 5, "delivery_risk": 0.7, "min_effect": 0.02, "min_value": 0.3,
     "source": "game values: a territorial-defence doctrine shaped like austrian_af_wiki's air arm (support of the own troops, raids near the front)",
@@ -81,6 +82,7 @@
   "aircraft": [
     { "id": "saab105", "name": "Light attack jet (Saab 105 class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 200, "attack_mps": 220,
       "low_agl_m": 60, "medium_alt_m": 3000, "max_turn_deg_s": 10, "strike_power": 0.3, "recce_quality": 0.5, "evasion": 0.45,
+      "low_level": { "agl_m": 60, "mps": 200, "source": "game value: design inference, no period source on the neutral's routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
       "flight": { "max_load_g": 6, "sustained_turn_deg_s": 6, "roll_rate_deg_s": 150, "max_mps": 270, "accel_mps2": 3, "climb_mps": 70, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
       "loads": [["rocket135", 2], ["sneb68", 4], ["gp250", 4]], "computing": 0.3, "radius_km": 350,
       "source": "austrian_af_wiki (40 Saab 105 light jets, trainer and light attack, delivered from 1970); every number a placeholder", "confidence": "low" },

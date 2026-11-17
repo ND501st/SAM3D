@@ -165,5 +165,39 @@ int main(int argc, char** argv) {
     }
     js << "  ],\n  \"enemy_mind\": \"" << Escape(campaign.EnemyMind()) << "\",\n  \"intsum\": \"" << Escape(campaign.Intsum(24.0)) << "\"\n}\n";
     std::printf("Wrote %s\n", jpath.c_str());
+
+    // Each package's main route in the form tools/map_view.py --routes draws (km on the country's map): to the gate
+    // dashed, in to the release solid, home in blue (roadmap B2, docs/air_battle/01_ROUTES.md).
+    const std::string rpath = out_dir + "/air_war_" + faction + "_routes.json";
+    std::ofstream rs(rpath, std::ios::binary);
+    rs << "{\n  \"routes\": [\n";
+    bool first = true;
+    for (const Package& p : campaign.Packages()) {
+        const Flight* main = nullptr;
+        for (const Flight& fl : p.flights) {
+            if (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter || fl.role == FlightRole::Hunter) {
+                main = &fl;
+                break;
+            }
+        }
+        if (main == nullptr || main->route.size() < 2) continue;
+        const int gate = RouteIndexOf(main->route, "gate");
+        const int release = RouteIndexOf(main->route, "target");
+        rs << (first ? "" : ",\n") << "    {\"to\": \"" << Escape(p.name + " " + p.corridor) << "\", \"time_s\": "
+           << (main->route.back().t_h - main->route.front().t_h) * 3600.0 << ", \"points_km\": [";
+        for (std::size_t i = 0; i < main->route.size(); ++i) {
+            rs << (i == 0 ? "" : ", ") << "[" << main->route[i].pos.x / 1000.0 << ", " << main->route[i].pos.y / 1000.0 << "]";
+        }
+        rs << "], \"stretches\": [";
+        for (std::size_t i = 0; i + 1 < main->route.size(); ++i) {
+            const int k = static_cast<int>(i);
+            const char* kind = (gate >= 0 && k < gate) ? "off_road" : ((release >= 0 && k >= release) ? "swim" : "road");
+            rs << (i == 0 ? "" : ", ") << "\"" << kind << "\"";
+        }
+        rs << "]}";
+        first = false;
+    }
+    rs << "\n  ]\n}\n";
+    std::printf("Wrote %s\n", rpath.c_str());
     return failed == 0 ? 0 : 1;
 }

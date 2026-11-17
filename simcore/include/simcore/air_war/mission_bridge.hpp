@@ -626,6 +626,24 @@ private:
             const double cross2 = std::max(0.0, d.x * d.x + d.y * d.y - along * along);
             chord = 2.0 * std::sqrt(std::max(0.0, radius * radius - cross2));
         }
+        // The route planner's routes turn inside a zone (route.mode 1): the pass is what is left of its planned route
+        // inside the zone from here, to where the route leaves it.
+        if (tune.Get("route.mode") >= 1.0) {
+            const int wid = r.TargetWorldId(a.target_id);
+            const Aircraft* ac = wid >= 0 ? r.GetWorld().FindAircraft(wid) : nullptr;
+            if (ac != nullptr && ac->next_waypoint < ac->waypoints.size()) {
+                double planned = 0.0;
+                Vec3 from = state_[i].last_pos;
+                for (std::size_t k = ac->next_waypoint; k < ac->waypoints.size(); ++k) {
+                    const Vec3& to = ac->waypoints[k];
+                    planned += ChordInCircle2d(from, to, nb.enu, radius);
+                    if (planned > 0.0 && Dist2d(to, nb.enu) >= radius) break;
+                    from = to;
+                }
+                if (planned > 0.0) chord = std::min(planned, 2.0 * radius);
+            }
+        }
+
         const bool radar = nb.defence.radar;
         if (radar) ns.emitted_s += chord / 250.0 + 30.0;
         ns.fired = true;

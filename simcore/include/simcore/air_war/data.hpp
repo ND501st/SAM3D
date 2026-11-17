@@ -327,6 +327,14 @@ struct AircraftType {
     double cruise_mps = 220.0;
     double attack_mps = 250.0;
     double low_agl_m = 60.0;       // its low-level height
+    // Low over enemy ground as the period flew it (the data's "low_level", docs/air_battle/01_ROUTES.md §2, with its own
+    // source): the height by day and at night on terrain-following radar, and the speed; 0 not given (low_agl_m, no
+    // night height, attack_mps). Read by the route planner (route.mode 1) only.
+    double low_level_agl_m = 0.0;
+    double low_agl_night_m = 0.0;
+    double low_mps = 0.0;
+    std::string low_level_source;
+    std::string low_level_confidence;
     double medium_alt_m = 4000.0;  // its medium-altitude height above the ground
     double max_turn_deg_s = 8.0;   // its instantaneous turn rate, at its corner speed
     // How it flies (roadmap R3, aircraft.hpp; the data's "flight", with its own source and confidence): bank-to-turn
@@ -438,7 +446,37 @@ struct PhaseDef {
     std::string notes;
 };
 
+// A faction's rules for its routes (docs/air_battle/01_ROUTES.md §6.7, §9; the doctrine's "routing"). Without a block:
+// one variant, home by the way in, no gate and no group ahead.
+struct RouteRules {
+    bool present = false;
+    std::string crossing = "entry";     // "gate" (NATO), "checkpoint_gate" (the Pact), "entry" (the neutral), "none" (rebels)
+    bool cas_free = false;              // close support does not use the gates (fm_100_42_1976)
+    double gate_window_s = 0.0;         // the crossing time ± this
+    double gate_separation_s = 0.0;     // two packages through one gate at least this far apart (0: no gate book)
+    double letdown_m = 20000.0;         // down to low level this far before the gate
+    int max_turn_points = 4;
+    std::vector<int> variants{0};       // 0 covered, 1 other flank, 2 direct
+    double w_exp = 8.0;                 // a believed lethal second in sight against a second of flight
+    double w_cont = 1.0;                // a second of continuous exposure past route.continuous_s
+    double w_low = 0.1;                 // a second flown 100 m above the corridor's lowest ground
+    double lines_bonus = 0.0;           // legs between features on roads, railways and rivers cost this share less
+    std::string ret = "same_entry";     // "other_gate", "planned_departure", "same_entry"
+    double blast_lead_s = 0.0;          // the suppression group ahead of the strike (hines_1981)
+    double blast_exposure_s = -1.0;     // the corridor's believed exposure above which it goes ahead (< 0: never)
+    bool zone_escapes = false;          // the planned counter-SAM programme per zone (the Pact, sve_prm)
+    bool helo_umbrella = false;         // helicopter targets beyond the own air defence's umbrella score lower (the Pact)
+    bool corridor_suppression = false;  // the corps suppresses the defences along the gate at its time (jsead_1982)
+    std::string deviation = "leader";   // who may leave the route (§9): leader, ground_control, eye, any
+    double deviation_lateral_m = 0.0;
+    double deviation_tot_slip_s = 0.0;
+    std::string source;
+    std::string confidence;
+    std::string notes;
+};
+
 struct DoctrineDef {
+    RouteRules routing;
     double planning_cycle_h = 24.0;
     double lead_time_h = 6.0;           // from the plan to the first time on target
     double on_call_fraction = 0.0;      // sorties held back for on-call strikes (mai_tactics_vvs: "по вызову")
@@ -929,6 +967,46 @@ struct TuningTable {
             {"own_intel.pow_chance", 0.4},
             {"own_intel.warning_s", 300.0},
             {"own_intel.leak_warning_s", 900.0},
+            // routes as flown (route_planner.hpp, docs/air_battle/01_ROUTES.md): game values
+            {"route.mode", 1.0},                    // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner
+            {"route.start_before_gate_m", 80000.0}, // the route starts this far behind its gate (at most at the bases)
+            {"route.bend_deg", 30.0},               // a river vertex turning more is a bend, a turn point
+            {"route.fallback_grid_m", 15000.0},     // the lattice of a theatre without a map
+            {"route.view_step_m", 1000.0},          // the viewsheds' range step (the country grid's)
+            {"route.mask_antenna_m", 6.0},          // a site's antenna above its ground
+            {"route.final_cone_m", 20000.0},        // nearer the goal than this a leg may turn 45 deg off it, not 90
+            {"route.corridor_share", 0.35},         // the graph: features this share of the way's length off it
+            {"route.corridor_min_m", 30000.0},      // and at least this far
+            {"route.max_features", 120.0},
+            {"route.neighbours", 8.0},
+            {"route.min_leg_turns", 1.5},           // a leg at least this many turn radii
+            {"route.turn_bank_deg", 60.0},          // the turn radius's bank
+            {"route.max_leg_m", 60000.0},
+            {"route.max_turn_deg", 120.0},
+            {"route.straight_deg", 20.0},
+            {"route.simplify_m", 500.0},
+            {"route.ip_snap_m", 8000.0},            // the IP on a feature this near the run-in's point
+            {"route.run_in_headings", 8.0},         // run-in headings tried round the target
+            {"route.reuse_penalty_s", 300.0},       // a feature of the other route (the other flank, the way home)
+            {"route.direct_exposure_share", 0.25},  // the direct variant's exposure weight
+            {"route.direct_slack", 1.25},           // with no threats a route is at most this much longer than the line
+            {"route.prune_ratio", 2.0},             // an option whose route costs more than this times the covered one's
+            {"route.continuous_s", 20.0},           // continuous exposure beyond this costs more (crawford_1977_rand)
+            {"route.checkpoint_before_gate_m", 25000.0},
+            {"route.corridor_halfwidth_m", 15000.0},
+            {"route.corridor_suppression", 0.3},
+            {"route.land_front_m", 40000.0},        // troops this near a front: land forces face each other there
+            {"route.egress_clear_s", 10.0},         // out of the target area in 10 s (fm_100_2_1_1984)
+            {"route.egress_turn_deg", 60.0},
+            {"route.egress_m", 12000.0},
+            {"route.loiter_radius_m", 9000.0},
+            {"route.helo_holding_m", 15000.0},
+            {"route.helo_umbrella_m", 15000.0},
+            {"route.helo_beyond_umbrella", 0.5},    // the worth of a Pact helicopter target beyond the umbrella
+            {"route.helo_night_agl_m", 50.0},
+            {"route.helo_hide_agl_m", 5.0},
+            {"route.helo_popup_agl_m", 25.0},
+            {"route.hide_penalty_s", 600.0},        // a battle position seen, or not seeing its target
         };
         return d;
     }
@@ -1452,7 +1530,7 @@ public:
                              "self_jammer_em", "standoff_jammer_em", "arms", "arm_range_km", "arm_memory", "arm_em", "arm_em_by_year", "strike_power",
                              "recce_quality", "air_to_air", "evasion", "in_service_year", "missile", "launch", "range_km",
                              "hit_chance", "stock", "resupply_per_day", "loads", "designator", "computing", "radius_km", "flight",
-                             "source", "confidence", "notes"}) ||
+                             "low_level", "source", "confidence", "notes"}) ||
                 !RequireString(a, p, "id", t.id) || !RequireString(a, p, "name", t.name) ||
                 !StringList(a, p, "roles", roles) || !OptionalString(a, p, "class", t.target_class) ||
                 !OptionalBool(a, p, "helicopter", t.helicopter) || !OptionalBool(a, p, "drone", t.drone) ||
@@ -1478,7 +1556,7 @@ public:
             if (!Num(a, p, "arm_range_km", arm_km, 0.0, 300.0) || !Num(a, p, "range_km", range_km, 0.0, 5000.0) ||
                 !Num(a, p, "radius_km", radius_km, 0.0, 5000.0) || !Num(a, p, "computing", t.computing, 0.0, 1.0) ||
                 !OptionalString(a, p, "designator", t.designator) || !Loads(a, p, t.loads) || !ArmsByYear(a, p, t.arm_em_by_year) ||
-                !Flight(a, p, t)) {
+                !Flight(a, p, t) || !LowLevel(a, p, t)) {
                 return false;
             }
             t.arm_range_m = arm_km * 1000.0;
@@ -1505,6 +1583,71 @@ public:
             if (!t.arm_em_by_year.empty() && t.arms <= 0) return Fail(Join(p, "arm_em_by_year"), "only an ARM carrier (arms > 0)");
             if (out.Aircraft(t.id) != nullptr) return Fail(p, "duplicate aircraft id '" + t.id + "'");
             out.aircraft.push_back(std::move(t));
+        }
+        return true;
+    }
+
+    // "low_level": the type's height and speed low over enemy ground (docs/air_battle/01_ROUTES.md §2), with their own
+    // source and confidence.
+    bool LowLevel(const json::Value& a, const std::string& p, AircraftType& t) {
+        const json::Value* f = a.Find("low_level");
+        if (f == nullptr) return true;
+        const std::string fp = Join(p, "low_level");
+        if (!f->Is(json::Type::Object)) return Fail(fp, "an object");
+        if (!Keys(*f, fp, {"agl_m", "night_agl_m", "mps", "source", "confidence", "notes"}) || !Num(*f, fp, "agl_m", t.low_level_agl_m, 2.0, 1000.0) ||
+            !Num(*f, fp, "night_agl_m", t.low_agl_night_m, 2.0, 1000.0) || !Num(*f, fp, "mps", t.low_mps, 10.0, 1000.0) ||
+            !Provenance(*f, fp) || !OptionalString(*f, fp, "source", t.low_level_source) ||
+            !OptionalString(*f, fp, "confidence", t.low_level_confidence)) {
+            return false;
+        }
+        return true;
+    }
+
+    // "routing": the faction's rules for its routes (docs/air_battle/01_ROUTES.md §6.7, §9).
+    bool Routing(const json::Value& d, const std::string& p, RouteRules& r) {
+        const json::Value* v = d.Find("routing");
+        if (v == nullptr) return true;
+        const std::string rp = Join(p, "routing");
+        if (!v->Is(json::Type::Object)) return Fail(rp, "an object");
+        r.present = true;
+        std::vector<std::string> variants;
+        if (!Keys(*v, rp, {"crossing", "cas_free", "gate_window_s", "gate_separation_s", "letdown_m", "max_turn_points", "variants",
+                           "w_exp", "w_cont", "w_low", "lines_bonus", "return", "blast_lead_s", "blast_exposure_s", "zone_escapes",
+                           "helo_umbrella", "corridor_suppression", "deviation", "deviation_lateral_m", "deviation_tot_slip_s",
+                           "source", "confidence", "notes"}) ||
+            !Provenance(*v, rp) || !RequireString(*v, rp, "crossing", r.crossing) || !OptionalBool(*v, rp, "cas_free", r.cas_free) ||
+            !Num(*v, rp, "gate_window_s", r.gate_window_s, 0.0, 3600.0) || !Num(*v, rp, "gate_separation_s", r.gate_separation_s, 0.0, 3600.0) ||
+            !Num(*v, rp, "letdown_m", r.letdown_m, 0.0, 300000.0) || !Int(*v, rp, "max_turn_points", r.max_turn_points, 0, 12) ||
+            !Num(*v, rp, "w_exp", r.w_exp, 0.0, 1000.0) || !Num(*v, rp, "w_cont", r.w_cont, 0.0, 1000.0) ||
+            !Num(*v, rp, "w_low", r.w_low, 0.0, 100.0) || !Num(*v, rp, "lines_bonus", r.lines_bonus, 0.0, 0.9) ||
+            !RequireString(*v, rp, "return", r.ret) || !Num(*v, rp, "blast_lead_s", r.blast_lead_s, 0.0, 1800.0) ||
+            !Num(*v, rp, "blast_exposure_s", r.blast_exposure_s, -1.0, 100000.0) || !OptionalBool(*v, rp, "zone_escapes", r.zone_escapes) ||
+            !OptionalBool(*v, rp, "helo_umbrella", r.helo_umbrella) ||
+            !OptionalBool(*v, rp, "corridor_suppression", r.corridor_suppression) || !OptionalString(*v, rp, "deviation", r.deviation) ||
+            !Num(*v, rp, "deviation_lateral_m", r.deviation_lateral_m, 0.0, 100000.0) ||
+            !Num(*v, rp, "deviation_tot_slip_s", r.deviation_tot_slip_s, 0.0, 3600.0) || !StringList(*v, rp, "variants", variants) ||
+            !OptionalString(*v, rp, "source", r.source) || !OptionalString(*v, rp, "confidence", r.confidence) ||
+            !OptionalString(*v, rp, "notes", r.notes)) {
+            return false;
+        }
+        if (r.crossing != "gate" && r.crossing != "checkpoint_gate" && r.crossing != "entry" && r.crossing != "none") {
+            return Fail(Join(rp, "crossing"), "gate, checkpoint_gate, entry or none");
+        }
+        if (r.ret != "other_gate" && r.ret != "planned_departure" && r.ret != "same_entry") {
+            return Fail(Join(rp, "return"), "other_gate, planned_departure or same_entry");
+        }
+        if (r.deviation != "leader" && r.deviation != "ground_control" && r.deviation != "eye" && r.deviation != "any") {
+            return Fail(Join(rp, "deviation"), "leader, ground_control, eye or any");
+        }
+        if (!variants.empty()) {
+            r.variants.clear();
+            for (const std::string& s : variants) {
+                const int k = s == "covered" ? 0 : (s == "other_flank" ? 1 : (s == "direct" ? 2 : -1));
+                if (k < 0) return Fail(Join(rp, "variants"), "covered, other_flank or direct");
+                if (std::find(r.variants.begin(), r.variants.end(), k) == r.variants.end()) r.variants.push_back(k);
+            }
+            std::sort(r.variants.begin(), r.variants.end());
+            if (r.variants.front() != 0) return Fail(Join(rp, "variants"), "covered first: the other flank is planned against it");
         }
         return true;
     }
@@ -1617,8 +1760,8 @@ public:
         const std::string p = "doctrine";
         if (!Keys(*d, p, {"planning_cycle_h", "lead_time_h", "on_call_fraction", "centralisation", "simultaneous_bias",
                           "sortie_rate_per_day", "serviceability", "max_packages_per_cycle", "delivery_risk", "min_effect", "min_value",
-                          "phases", "packages", "source", "confidence", "notes"}) ||
-            !Provenance(*d, p) || !Num(*d, p, "planning_cycle_h", doc.planning_cycle_h, 1.0, 96.0) ||
+                          "phases", "packages", "routing", "source", "confidence", "notes"}) ||
+            !Provenance(*d, p) || !Routing(*d, p, doc.routing) || !Num(*d, p, "planning_cycle_h", doc.planning_cycle_h, 1.0, 96.0) ||
             !Num(*d, p, "lead_time_h", doc.lead_time_h, 0.0, 72.0) ||
             !Num(*d, p, "on_call_fraction", doc.on_call_fraction, 0.0, 0.9) ||
             !Num(*d, p, "centralisation", doc.centralisation, 0.0, 1.0) ||

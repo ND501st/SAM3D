@@ -487,6 +487,110 @@ and `docs/air_war/09_BALANCE.md` §8-10; every moved row is explained in the PR.
 14. `python tools/map_view.py` (or `air_war_view.py`) draws a NATO and a Pact package's routes on the nation's map, and
     they follow valleys, cross at their gates and come home another way: the first item of milestone M-B.
 
+## As built (B2, 17 Nov 2026, branch `tb-b2`)
+
+**Files.** `simcore/air_war/route_planner.hpp` (new): `TimeRoute`, the heights and speeds (`RouteLowAgl`,
+`RouteProfileAgl`, `RouteLowMps`), `RouteGround`, `RoutePlanner`, `BelievedRouteThreats`. Changed: `state.hpp`
+(`RoutePoint::leg_mps` and `feature`, `ZoneEscape`, `Flight::escapes`, the package's `corridor`, `variant`, `gate_h`,
+`gate_window_s`, `corridor_suppression`), `data.hpp` (`RouteRules`, the type's `low_level`, the `route.*` defaults),
+`officers.hpp` (`TacticKey`, `last_corridor`), `planner.hpp`, `resolve.hpp`, `campaign.hpp`, `save.hpp`,
+`mission_bridge.hpp`, `raid_scenario.hpp`, `flights.hpp` (`PhaseOfTag`), `examples/air_war_demo.cpp` (the routes as
+`map_view.py --routes` draws them). Tests: `simcore/tests/test_routes.cpp` and the fixture
+`tests/fixtures/air_war_save_v1.json`.
+
+**The mode.** The tuning's `route.mode`: 1 (the default) plans routes; 0 keeps every pre-B2 path to the bit. A save is
+`save_version` 2 and writes its `route_mode`; a version 1 save loads with mode 0 and replays exactly (the fixture test).
+
+**The ground.** `RouteGround` takes the country map's features when the theatre names one: settlements, crossings,
+landmarks, and road and rail junctions of three ways or more (named after the nearest settlement). Without a map it
+takes the theatre's fixed objects that are no threat and a lattice (`route.fallback_grid_m`). A site's viewshed is the
+least height it sees per ray and range step (`route.view_step_m`, the earth's curvature at 4/3, the antenna
+`route.mask_antenna_m` up), cached by site and ring. Masking counts only for Low flights and helicopters on ground.
+
+**The search.** The graph is the features near the lines gate-target and target-exits (`route.corridor_share`, at least
+`route.corridor_min_m`, at most `route.max_features`). Each joins its `route.neighbours` nearest between
+`route.min_leg_turns` turn radii and `route.max_leg_m`. A leg costs
+`t (1 + w_heading) (1 - lines_bonus if on a road or river) + w_exp Σ weight seen/v + w_cont Σ max(0, run/v - route.continuous_s) + w_low t (ground - lowest)/100 m`.
+`w_heading` is 1 when the leg turns more than 90° off the goal (45° inside `route.final_cone_m`). Dijkstra runs with
+`route.max_turn_deg` and the faction's `max_turn_points`, ties by node index. IP candidates sit at
+`route.run_in_headings` headings round the target, snapped to a feature within `route.ip_snap_m`. The run-in from the
+IP is straight and the target's own zone is not charged from the IP on. The egress turns `route.egress_turn_deg` to
+the cheaper side for `route.egress_m`. Home is a second search from there to the cheapest exit the faction's `return`
+allows, with the way in's features charged `route.reuse_penalty_s`. A helicopter has a holding area
+(`route.helo_holding_m`) and a battle position hidden at `route.helo_hide_agl_m` that sees the target at
+`route.helo_popup_agl_m` (`route.hide_penalty_s` if not). A hunter's loiter circle keeps its shape; its way in is
+planned and its way out is the way in reversed. The planner officer's traits scale `w_exp` (methodical up, bold down).
+A feature flown over within `route.straight_deg` (20°) of straight on is no turn point: it does not count against
+`max_turn_points` and is not listed as a turn point, but the route still flies over it. Only features within
+`route.simplify_m` (500 m) of a straight line between the kept points are left out of the points, so the shape flown
+is the one searched to that much. Without this, over the country's
+dense villages every feature passed counted as a turn, far targets (most SAM sites) could not be reached, and DEAD
+packages lost their SEAD.
+
+**Variants.** 0 covered. 1 the other flank: variant 0's turn points charged the reuse penalty; dropped if it costs more
+than `route.prune_ratio` times variant 0 or comes out the same. 2 direct: `w_exp` times `route.direct_exposure_share`.
+Each variant the faction allows is an option in `BestPackage`; its noise is drawn from its own forked stream, so the
+main stream does not move with the number of options. `TacticKey` is `gate|corridor|exit|profile|part|kind`; `axis_repeat`
+and `axis_vary` compare corridors. To keep the cost down, variants 1 and 2 are weighed only on each target's best
+variant 0 option (gate, profile, part of day, size). A route is cached per cycle by its flown height, not the part of
+day, so two parts of day at one height share one plan.
+
+**In the planner.** The main flights fly the option's route, timed by `TimeRoute` at the ToT. Escorts, jammers, decoys
+and recce follow it at their own heights and speeds. A feint is planned like a main route. A Pact or NATO group ahead
+(`blast_lead_s`) aims at the worst believed threat on the route when the covered route is still exposed beyond
+`blast_exposure_s`. Every Pact flight carries a `ZoneEscape` per believed zone its route crosses. The gate book keeps
+crossings of one gate `gate_separation_s` apart in a cycle (NATO's CAS free of it). NATO's corridor suppression thins
+our radars within `route.corridor_halfwidth_m` of its gate where our troops stand within `route.land_front_m`. Reach is
+half the route's length from the bases and back.
+
+**In the resolver and the bridge.** With mode 1 the resolver merges consecutive legs through one zone into one pass,
+uses the ground-masked chord for Low flights on ground (`PassKillChance`'s masked flag drops
+`attrition.low_vs_long_range_sam`), applies the corridor suppression, and rolls the fighters on the leg from the `ip`
+or `hide` point (`FighterLeg`). `MissionBridge::Engage` takes the chord of the remaining planned waypoints inside the
+zone. The raid builder tags the legs after the target as egress and follows the terrain at the first low point's height.
+
+**Section 8's fixes.** All done under mode 1: `TimeRoute` anchored on the release, the fighter roll by tag, the
+stand-off jammer by tag, `radar_threats` over all main flights, reach by the route's length, the bridge's chord. The
+raid builder's per-waypoint speeds and offsets came with B1.
+
+**The cost (§10).** Measured as the planning thread's CPU cycles over two days of a campaign (seed 5), because other
+work loaded the machine and wall times moved by half. On the nation's theatre mode 1 costs 1.30 times mode 0 for NATO
+(35.4 against 27.3 Gcycles) and 1.44 times for the Pact (52.9 against 36.6): within the budget of 1.5. What got it
+there: variants weighed on the best shape only; the routes cached by height; the leg cache's hash mixed to the last bit
+(the standard library took its bucket from the low bits, where every leg of one flight has the same height, so the
+lookups ran down long chains); the masked chord sampled only inside the ring and cached by route and site; the features
+near a corridor cached; the expected losses skipping a site whose ring the route's box misses. On the tuned district's
+theatre, with no map, the planner was cheap before and is not now: 6 to 8 times mode 0 (4.5 against 0.7 Gcycles), most
+of it the Dijkstra searches over the lattice. Its balance run took 92 s before B2 and 1396 s after, on a loaded
+machine. The nation's balance run took 1978 s before and 1405 s after, under loads too different to compare.
+
+**The balance (base against B2, `air_war_balance` on the nation over 10 seeds and on the district over 20).**
+`crew_balance` is identical. `ground_check` passes, 0 of 15. `em_bench` changed only in its timings. The helper's
+coverage is the same with and without B2 on every mission whose rows differ from the committed table (that table is
+older than this branch). `air_war_bench` with `route.mode` 0 is identical to the base, line for line.
+
+- **The bench in mode 1.** One engagement a pass means one ARM salvo (two missiles) a pass, where the old resolver fired
+  one a leg. Suppression is thinner. Medium-altitude F-16s over the airfield lose 1.8 a 100 sorties (0.4 before). Low
+  against medium is now 3.0 times, nearer the history's 4. The Bekaa package loses 7.6 a 100 (4.5 before; history:
+  none) and kills its battery in 62 % (66 %). Yom Kippur's pop-up: 25.8 (25.0).
+- **Rebels on the nation**: losses 1.0 to 1.9 aircraft a campaign careless (6 % to 14 %), 1.3 to 2.4 careful (8 % to
+  20 %); raids through the battery's sector 1.5 to 5.7 and 0.5 to 2.5; more SAM sites among the targets (1.3 to 2.2).
+  **Out of the band** ("a few per cent, few in number, raids that keep away from the battery"). The likely cause: the
+  planner now prices the route it would fly, which it believes covered, so targets near defences look cheaper than the
+  truth makes them. Small numbers, but to tune (Left below). On the district the rebels are in band (2 %).
+- **Neutral on the nation**: losses 4.9 % to 3.0 % careless, 4.4 % to 6.3 % careful; more helicopter raids (45 % to 56 %
+  of its packages careless). In band.
+- **The Pact on the nation**: losses 2.0 % to 2.9 % and 1.7 % to 2.9 %; the same surge on days 1-2 (the air defences at
+  42 % working after day 2, 40 % before); more dive attacks (34 to 56 flights a campaign) and fewer pop-ups (28 to 12).
+  Our battery wrecked in 80 % of careless runs (50 %) and 20 % of careful ones (10 %). In band.
+- **NATO on the nation**: losses 1.8 % to 1.6 % and 1.6 % to 1.8 %; the rollback a little slower (66 % working after day
+  4, 60 % before). The careless battery is wrecked in 90 % of runs (10 % before), as on the district (90 % before and
+  after); the careful one in none. The likely cause: SEAD now goes with every DEAD whose route crosses a believed radar
+  (§8's `radar_threats` over all main flights), and DEAD reaches sites the old straight lines did not. In band: the
+  shape is a methodical rollback that takes a careless battery.
+- **The district** moves less: the neutral flies more (16.6 to 20.9 packages careless) and loses less (4.4 % to 2.4 %);
+  the Pact wrecks the careless battery in 75 % (90 %) and the careful in 40 % (25 %); NATO 95 % and 10 % (90 %, 5 %).
+
 ## Left open
 
 - **Numbers no period source gives**: leg lengths, turn-point counts, the IP's distance, the let-down's distance, a
@@ -505,5 +609,9 @@ and `docs/air_war/09_BALANCE.md` §8-10; every moved row is explained in the PR.
   whether the long-range SAMs' masking then matches `docs/air_war/09_BALANCE.md` §8, is for the balance pass to show.
 - **The Tornado GR1's night height** rests on an undated account that may be after 1985 (`napier_hushkit_2022`).
 - **The 35 s helicopter rule** (`fm_17_50_1977`) is garbled in the scan; 20 s (`crawford_1977_rand`) is used for all.
+- **The rebels' losses on the nation** (14-20 %, see "As built"): their exposure weight or their target choice against
+  believed defences needs a tuning pass.
+- **The cost on a theatre without a map**: the lattice searches make the district's balance run many times slower than
+  before; a coarser lattice or fewer IP headings there would cut it.
 - **Weights.** Small changes to a leg's weight can give an entirely different route (`dorsett_1980`). That is true to
   the period's planning, but it means the routes move with any tuning; the tests pin them only on synthetic maps.

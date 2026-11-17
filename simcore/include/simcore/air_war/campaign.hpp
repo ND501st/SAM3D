@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -100,6 +101,8 @@ class AirCampaign {
 public:
     bool Init(const AirWarData& data, unsigned seed, std::string* error = nullptr) {
         data_ = data;
+        ground_.reset();
+
         seed_ = seed;
         actions_.clear();
         rng_ = Rng(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 1234567u);
@@ -528,6 +531,17 @@ public:
 private:
     AirWarData data_;
     Rng rng_{1};
+    // The map's features and ground for the route planner and the resolver (route.mode 1, route_planner.hpp), built on
+    // first use; caches only, so a copy may share it.
+    std::shared_ptr<RouteGround> ground_;
+    const RouteGround* RouteGroundPtr() {
+        if (data_.tuning.Get("route.mode") < 1.0) return nullptr;
+        if (!ground_) {
+            ground_ = std::make_shared<RouteGround>();
+            ground_->Build(data_);
+        }
+        return ground_.get();
+    }
     bool ok_ = false;
     double now_h_ = 0.0;
     bool marching_ = false;  // the player's battery on the march to a new position (G9.5)
@@ -603,6 +617,7 @@ private:
         rc.weather = WeatherAt(now_h_);
         rc.rng = &rng_;
         rc.awacs = support_.awacs;
+        rc.ground = RouteGroundPtr();
         if (marching_) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;  // on the march: not in the fight
         return rc;
     }
@@ -800,6 +815,7 @@ private:
         tanker_left_ = support_.tanker_receivers * data_.faction.doctrine.planning_cycle_h / 24.0;
         pc.tanker_receivers = &tanker_left_;
         pc.supply = &supply_;
+        pc.ground = RouteGroundPtr();
         Planner planner;
         std::vector<Package> plan = planner.Plan(pc);
         for (Package& p : plan) {

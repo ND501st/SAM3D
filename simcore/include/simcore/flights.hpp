@@ -82,14 +82,16 @@ struct RoutePlan {
 };
 
 // The phase a route tag is flown in: the phases themselves, or the air war planner's point tags (planner.hpp
-// MainRoute): to the entry transit; to the IP or the hide ingress; the attack's points and the release attack; out
-// egress; orbits and loiters orbit.
+// MainRoute, route_planner.hpp): to the entry, the let-down, the checkpoint and the climb transit; to a gate, a turn
+// point, the IP or the hide ingress (a gate or turn point on the way home is tagged egress by the raid's builder); the
+// attack's points and the release attack; out egress; orbits and loiters orbit.
 inline std::string PhaseOfTag(const std::string& tag) {
     static const char* const kPhases[] = {"transit", "ingress", "attack", "egress", "defensive", "orbit"};
     for (const char* p : kPhases) {
         if (tag == p) return tag;
     }
-    if (tag == "ip" || tag == "hide") return "ingress";
+    if (tag == "ip" || tag == "hide" || tag == "gate" || tag == "turn") return "ingress";
+
     if (tag == "pull_up" || tag == "apex" || tag == "roll_in" || tag == "target" || tag == "dive" || tag == "launch") return "attack";
     if (tag == "egress" || tag == "exit") return "egress";
     if (tag == "loiter") return "orbit";

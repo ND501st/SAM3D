@@ -6,8 +6,11 @@
 // same campaign, to the bit. Numbers are written with 17 significant digits so that the replay sees exactly the times
 // and outcomes the original saw.
 //
-//   {"save_version": 1, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
-//    "seed": 7, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//   {"save_version": 2, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
+//    "seed": 7, "route_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//
+// Version 2 (roadmap B2) adds the routes' mode the campaign was planned with (route.mode: 1 the route planner); a version 1
+// save was planned with the old shapes and replays with route.mode 0, to the bit.
 #pragma once
 
 #include <cmath>
@@ -270,10 +273,11 @@ private:
 inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& theatre_file, const std::string& faction_file) {
     using namespace jsonb;
     json::Value root = Obj();
-    Put(root, "save_version", Num(1));
+    Put(root, "save_version", Num(2));
     Put(root, "theatre_file", Str(theatre_file));
     Put(root, "faction_file", Str(faction_file));
     Put(root, "seed", Num(static_cast<double>(c.Seed())));
+    Put(root, "route_mode", Num(c.Data().tuning.Get("route.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -328,10 +332,13 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
         return false;
     }
     save_detail::Reader r;
-    if (r.Int(root, "save_version") != 1) {
-        if (error != nullptr) *error = "save_version 1 expected";
+    const int version = r.Int(root, "save_version");
+    if (version != 1 && version != 2) {
+        if (error != nullptr) *error = "save_version 1 or 2 expected";
         return false;
     }
+    // The routes' mode it was planned with: a version 1 save, the old shapes.
+    const double route_mode = version == 1 ? 0.0 : r.Number(root, "route_mode", 1.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -378,7 +385,9 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     }
     AirWarData data;
     if (!LoadAirWarData(data_dir, theatre, faction, data, error)) return false;
+    data.tuning.values["route.mode"] = route_mode;
     AirCampaign c;
+
     if (!c.Init(data, seed, error)) return false;
     if (!c.Replay(actions, error)) return false;
     out = c;

@@ -28,6 +28,7 @@
     }
   },
   "doctrine": {
+    "routing": { "crossing": "none", "letdown_m": 10000, "max_turn_points": 4, "variants": ["covered"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0.5, "return": "same_entry", "deviation": "any", "source": "game values: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate", "notes": "At night, low, by roads, rivers and villages; clear of known guns; home the way they came." },
     "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
     "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3, "delivery_risk": 0.8, "min_effect": 0.005, "min_value": -0.5,
     "source": "game values: ad hoc planning by a few pilots, night harassment (croatia_1991_migflug: bombs on positions around a besieged town)",
@@ -95,6 +96,7 @@
       "source": "placeholder: a transport helicopter the faction captured, armed for the game; no value is the real aircraft's", "confidence": "estimate" },
     { "id": "galeb", "name": "Defected light jet (G-2 Galeb class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 180, "attack_mps": 200,
       "low_agl_m": 80, "medium_alt_m": 3000, "max_turn_deg_s": 9, "strike_power": 0.25, "recce_quality": 0.4, "evasion": 0.35,
+      "low_level": { "agl_m": 80, "mps": 180, "source": "game value: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
       "flight": { "max_load_g": 6, "sustained_turn_deg_s": 6, "roll_rate_deg_s": 120, "max_mps": 225, "accel_mps2": 2.5, "climb_mps": 30, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
       "loads": [["fab250", 2], ["s5", 2]], "computing": 0.3, "radius_km": 300,
       "source": "placeholder: a period light jet named for flavour; no value is the real aircraft's", "confidence": "estimate" }
