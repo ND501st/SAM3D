@@ -217,6 +217,7 @@ SC_TEST("packages live (15.3): a raid injected into a running session flies as t
     const PackageOutcome o = bridge.Finish(rb);
     SC_EXPECT(o.package_id == rs.manifest.package_id && o.played);
     SC_EXPECT(bridge.EmittedSeconds() > 0.0);
+    if (!bridge.Over(rb)) std::printf("    not over at %.1f s (the raid ends at %.1f s): %s\n", rb.Time(), inj.manifest.end_s, rb.EndReason().c_str());
     SC_EXPECT(bridge.Over(rb));
     // Its warning and its jammers came with it, on the session's clock.
     std::size_t raid_triggers = 0, raid_jammers = 0;

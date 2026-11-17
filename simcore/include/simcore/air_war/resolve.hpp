@@ -21,6 +21,7 @@
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/logistics.hpp"
+#include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/planner.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
@@ -47,6 +48,10 @@ struct ResolveContext {
     double awacs = 0.0;  // the share of the day the enemy's AWACS is on station (docs/air_war/11_SUPPORT.md)
     // The map's ground (route.mode 1, route_planner.hpp): a low flight is seen only where the ground lets a site see it.
     const RouteGround* ground = nullptr;
+    // Targets of opportunity at the abstract level (roadmap B6, FindOpportunity): the campaign's seed for their keyed
+    // draws (0: none, as before B6) and its phase (the Pact's free hunt).
+    std::uint64_t opportunity_seed = 0;
+    int phase = 0;
 };
 
 // The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
@@ -587,8 +592,141 @@ private:
             if (fl.role == FlightRole::Recce) Photograph(fl, *a, out);
             fl.released = true;
         }
+        if (alive > 0 && !fl.aborted) FindOpportunity(p, fl, oi, *a, r0, r1, out);
         run.next_leg[oi] = si + 1;
         if (alive <= 0 || run.FlightDone(p, oi)) Finish(p, oi);
+    }
+
+    // Targets of opportunity at the abstract level (roadmap B6, docs/air_battle/06_OPPORTUNITY.md section 8's A0): a flight
+    // that is not on an armed reconnaissance (FindColumn) may find a column on the move its leg passes within
+    // logistics.search_m, at the column find chance times opportunity.a0_find_scale times its type's ease; its leader then
+    // runs the chain (opportunity.hpp) on it: identified, his faction's rules, his stores (a built-in gun, or rockets no
+    // longer owed to his target), worth and his tendency. An attack takes opportunity.a0_column_hit of the column's
+    // working share per aircraft and loses one to its guns at opportunity.a0_column_guns; a report goes to the posts
+    // (its faction's report_in_flight) or waits for the debrief. One find a leg. Every draw keyed (em::Stream::Opportunity:
+    // the campaign's seed, the package, the flight, the column): the resolver's own stream falls as without it.
+    void FindOpportunity(Package& p, Flight& fl, std::size_t oi, const AircraftType& a, const RoutePoint& r0, const RoutePoint& r1,
+                         PackageOutcome& out) {
+        const ResolveContext& c = *c_;
+        const AirWarData& d = *c.data;
+        const TuningTable& tune = d.tuning;
+        if (c.opportunity_seed == 0 || tune.Get("opportunity.mode") < 1.0) return;
+        if (p.kind == MissionKind::ArmedRecce || a.missile || a.drone || a.opportunity_ease <= 0.0) return;
+        if (fl.role == FlightRole::Missile || fl.role == FlightRole::Decoy || fl.role == FlightRole::Jammer || fl.role == FlightRole::Awacs ||
+            fl.role == FlightRole::Tanker || fl.role == FlightRole::Elint)
+            return;
+        const int alive = fl.count - fl.lost;
+        if (alive <= 0) return;
+        // A leg through a played raid's circle at its time was the session's (opportunity_session.hpp).
+        if (c.played_radius_m > 0.0 && SegmentDistance2d(c.played_centre, r0.pos, r1.pos) < c.played_radius_m && r1.t_h >= c.played_from_h &&
+            r0.t_h <= c.played_to_h)
+            return;
+        // His stores: a gun built in, or rockets no longer owed to his target.
+        const bool due = !fl.released && fl.release_index >= 0;
+        const WeaponDef* gun = nullptr;
+        for (const auto& ld : a.loads) {
+            const WeaponDef* w = d.Weapon(ld.first);
+            if (w != nullptr && w->kind == "gun" && w->pass.present) gun = w;
+        }
+        const WeaponDef* planned = fl.weapon.empty() ? nullptr : d.Weapon(fl.weapon);
+        const bool rockets = planned != nullptr && planned->kind == "rockets" && planned->pass.present && fl.released;
+        const double reach = tune.Get("logistics.search_m");
+        const double find = ColumnFindChance(p.part, c.weather, a.night, tune) * tune.Get("opportunity.a0_find_scale") * a.opportunity_ease;
+        const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+        const std::uint64_t pkey = static_cast<std::uint64_t>(p.id) * 64u + oi;
+        for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
+            const TheatreObject& o = d.theatre.objects[i];
+            ObjectState& st = (*c.truth)[i];
+            if (!IsColumn(o.kind) || st.function <= 0.05 || (st.leg != 1 && st.leg != 3) || o.id == p.target_object) continue;
+            if (SegmentDistance2d(st.pos, r0.pos, r1.pos) > reach) continue;
+            if (OppDraw(c.opportunity_seed, pkey, i + 1u, 50, 0) >= find) continue;
+            OppSituation s;
+            s.mission = p.kind;
+            s.role = fl.role;
+            s.helicopter = a.helicopter;
+            s.ease = a.opportunity_ease;
+            s.bingo_share = a.bingo_share;
+            s.target = OppTarget::Column;
+            s.confidence = 0.8;
+            s.watched_s = 60.0;
+            s.range_m = 1e5;  // the abstract level: room for a pass
+            s.moving = true;
+            s.depth_km = front != nullptr ? DistanceToLine(front->line, st.pos) / 1000.0 : 0.0;
+            const C2FreeHuntDef& fh = d.faction.c2.free_hunt;
+            s.free_hunt_zone = fh.from_phase >= 0 && c.phase >= fh.from_phase && s.depth_km <= fh.depth_km;
+            s.night = p.part == DayPart::Night;
+            s.primary_due = due;
+            s.has_gun = gun != nullptr;
+            s.has_rockets = rockets;
+            s.fuel_share = 0.7;
+            s.slot_slack_s = due ? tune.Get("opportunity.slot_slack_s") : 1e9;
+            s.speed_mps = a.cruise_mps;
+            s.release_m = gun != nullptr ? gun->pass.open_fire_m : (rockets ? planned->pass.open_fire_m : 0.0);
+            s.exposure = tune.Get(gun != nullptr ? "delivery.exposure_strafe" : "delivery.exposure_gentle_dive");
+            const OppLeader ld = LeaderOf(p, fl);
+            const OppDecision dec = RunChain(d.faction.opportunity, s, ld, tune, c.opportunity_seed, pkey, i + 1u);
+            PackageOutcome::OpportunityRecord rec;
+            rec.flight = static_cast<int>(oi);
+            rec.t_h = 0.5 * (r0.t_h + r1.t_h);
+            rec.believed = OppTargetName(s.target);
+            rec.east_m = st.pos.x;
+            rec.north_m = st.pos.y;
+            rec.act = OppActName(dec.act);
+            rec.stopped = OppStepName(dec.stopped);
+            rec.why = dec.why;
+            rec.object = o.id;
+            rec.truth = o.id;
+            rec.misidentified = dec.misidentified;
+            if (dec.act == OppAct::Attack || dec.act == OppAct::GunRun) {
+                const double before = st.function;
+                int lost = 0;
+                for (int n = 0; n < alive; ++n) {
+                    if (OppDraw(c.opportunity_seed, pkey, i + 1u, 51, static_cast<std::uint64_t>(n)) < tune.Get("opportunity.a0_column_guns")) ++lost;
+                }
+                st.function = std::max(0.0, st.function - tune.Get("opportunity.a0_column_hit") * alive);
+                out.AddDamage(o.id, before - st.function);
+                if (st.function <= 0.05 && before > 0.05) {
+                    st.function = 0.0;
+                    out.destroyed.push_back(o.id);
+                }
+                for (int n = 0; n < lost; ++n) {
+                    LossRecord lr;
+                    lr.flight = static_cast<int>(oi);
+                    lr.by = o.id;
+                    lr.where = st.pos;
+                    lr.officer = fl.officer >= 0 && fl.lost == 0;
+                    lr.captured = OppDraw(c.opportunity_seed, pkey, i + 1u, 52, static_cast<std::uint64_t>(n)) < 0.5;
+                    out.losses.push_back(lr);
+                    ++fl.lost;
+                }
+                rec.passes = 1;
+                rec.kills = before - st.function > 0.0 ? 1 : 0;
+                rec.claimed = Claim(rec.kills, s.night, OppDraw(c.opportunity_seed, pkey, i + 1u, 53, 0), OppDraw(c.opportunity_seed, pkey, i + 1u, 54, 0), tune);
+                out.notes.push_back(fl.callsign + " found " + o.name + " on its way and attacked it");
+            } else if (dec.act == OppAct::Report || dec.act == OppAct::ReccePass) {
+                rec.reported_in_flight = d.faction.opportunity.report_in_flight;
+                if (rec.reported_in_flight) Event(AirEvent::Kind::ColumnFound, rec.t_h, oi, o.id, st.pos, fl.count - fl.lost);
+            }
+            out.opportunities.push_back(rec);
+            return;  // one find a leg
+        }
+    }
+
+    // The leader of a flight as the chain reads him: its own officer, else the package's leader, else its planner.
+    OppLeader LeaderOf(const Package& p, const Flight& fl) const {
+        OppLeader ld;
+        const int oi = fl.officer >= 0 ? fl.officer : (p.leader >= 0 ? p.leader : p.planner);
+        if (c_->staff != nullptr && oi >= 0 && static_cast<std::size_t>(oi) < c_->staff->officers.size()) {
+            const Officer& o = c_->staff->officers[static_cast<std::size_t>(oi)];
+            ld.traits = o.def.traits;
+            ld.press_on = o.HasQuirk("press_on");
+            ld.by_the_book = o.HasQuirk("by_the_book");
+            ld.loss_shy = o.HasQuirk("loss_shy");
+            ld.chases_kills = o.HasQuirk("chases_kills");
+            ld.stress = o.stress;
+            ld.skill = o.def.skills.airmanship;
+        }
+        return ld;
     }
 
 

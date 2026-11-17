@@ -738,6 +738,8 @@ private:
         rc.rng = &rng_;
         rc.awacs = support_.awacs;
         rc.ground = RouteGroundPtr();
+        rc.opportunity_seed = static_cast<std::uint64_t>(seed_) * 0x9E3779B97F4A7C15ull + 0xB6A0ull;  // roadmap B6's keyed draws
+        rc.phase = phase_;
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -1143,7 +1145,10 @@ private:
         if (p == nullptr) return;
         const Profile prof = a.flight >= 0 && a.flight < static_cast<int>(p->flights.size()) ? p->flights[static_cast<std::size_t>(a.flight)].profile : p->profile;
         C2Context cx = C2Ctx();
-        c2_.Report(*p, a.flight, a.what, std::string(), ObjectKind::SamSite, true, a.to, a.sigma_m, a.observed_h, a.from, prof, now_h_, cx);
+        // A launch or a battery seen is a SAM site; a column, a column; parked vehicles, troops (roadmap B6).
+        const ObjectKind kind = a.what == "column" ? ObjectKind::Column : a.what == "vehicles" ? ObjectKind::Troops : ObjectKind::SamSite;
+        const std::string what = a.what == "battery" ? std::string("launch") : a.what;
+        c2_.Report(*p, a.flight, what, std::string(), kind, true, a.to, a.sigma_m, a.observed_h, a.from, prof, now_h_, cx);
     }
     // The posts' view of the campaign: what they may read and do.
     C2Context C2Ctx() {
@@ -1396,6 +1401,24 @@ private:
             r.claim_destroyed = true;
             r.claim_false = truth_[static_cast<std::size_t>(i)].function > 0.4;
             r.note = "radar went silent under ARM attack";
+            intel_.Queue(r);
+        }
+        // Targets of opportunity (roadmap B6): what its flights found and claimed, as their pilots claimed it (never the
+        // kills): a claim reads as the thing there destroyed, unless a skeptical staff doubts a lone claim; a report
+        // without a claim, that something is there. No draw: the main stream falls as without them.
+        for (const PackageOutcome::OpportunityRecord& op : o.opportunities) {
+            if (op.object.empty() || (op.claimed <= 0 && op.act != "report")) continue;
+            const int i = data_.theatre.IndexOf(op.object);
+            if (i < 0) continue;
+            IntelReport r = ReportAbout(i, IntelSource::PilotReport, t, pirep_h, tune.Get("opportunity.report_sigma_m"));
+            if (op.claimed > 0) {
+                r.function = skeptic > 0.6 && op.claimed < 2 ? 0.5 : 0.0;
+                r.claim_destroyed = r.function < 0.2;
+                r.claim_false = truth_[static_cast<std::size_t>(i)].function > 0.4;
+                r.note = "claimed by a flight that found it";
+            } else {
+                r.note = "reported by a flight that passed it";
+            }
             intel_.Queue(r);
         }
         // Launches seen by the survivors: where the defences are, and who shot whom.

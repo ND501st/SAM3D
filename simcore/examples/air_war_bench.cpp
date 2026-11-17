@@ -19,11 +19,15 @@
 //   6. bombs dropped unretarded from low level (the Falklands: 11 of 25 went off);
 //   7. a SAM belt without suppression (Yom Kippur's first three days: 50 aircraft in about 1,220 sorties, 4 %);
 //   8. a full suppression package against batteries that radiate (the Bekaa, 9 June 1982: 17 of 19 batteries, no
-//      aircraft lost to them).
+//      aircraft lost to them);
+//   9. the gun pass (roadmap B6, attack_pass.hpp GunPassEffect): two A-10s' ten GAU-8 passes on ten known, stationary,
+//      undefended tanks (Array 20, 19 September 1979: 8 put out of action, 3 of them burnt), and the same on a column on
+//      the move whose guns fire back.
 // The figures are what the model makes of the analogue, not a claim it reproduces the battle: the settings are stated
 // with each line. Exits non-zero if the data fail to load.
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -384,6 +388,35 @@ int main(int argc, char** argv) {
         nato.posture = BatteryPosture();
         std::printf("| A package of four decoys, a jammer, four F-4Gs and four F-4Es with Rockeye against a Kub battery that radiates, four more round it (each package) | the battery destroyed in %.0f%%; %.1f lost a 100 sorties | the Bekaa, 9 June 1982: 17 of 19 batteries in an afternoon, none of the aircraft lost to them |\n",
                     100.0 * destroyed / runs, 100.0 * lost / std::max(1.0, sort));
+        Why();
+    }
+    // 9. The gun pass: each pass one keyed draw against the GAU-8's per_pass for armour (the session's PassFired).
+    {
+        const WeaponDef* gau8 = nato.d.Weapon("gau8");
+        if (gau8 != nullptr && gau8->pass.present) {
+            const PassEffect still = GunPassEffect(gau8->pass, TargetClass::Armour, false, false, false, nato.d.tuning);
+            const PassEffect hot = GunPassEffect(gau8->pass, TargetClass::Armour, true, true, false, nato.d.tuning);
+            double out[2] = {0, 0}, burnt[2] = {0, 0};
+            int lo[2] = {10, 10}, hi[2] = {0, 0};
+            for (int k = 0; k < 2; ++k) {
+                const PassEffect& e = k == 0 ? still : hot;
+                for (int r = 0; r < runs; ++r) {
+                    int n = 0;
+                    for (int pass = 0; pass < 10; ++pass) {
+                        const std::uint64_t key = static_cast<std::uint64_t>(r) * 16u + static_cast<std::uint64_t>(pass);
+                        if (OppDraw(1979, static_cast<std::uint64_t>(k), key, 40, 0) < e.kill) {
+                            ++n;
+                            burnt[k] += OppDraw(1979, static_cast<std::uint64_t>(k), key, 41, 0) < e.catastrophic ? 1.0 : 0.0;
+                        }
+                    }
+                    out[k] += n;
+                    lo[k] = std::min(lo[k], n);
+                    hi[k] = std::max(hi[k], n);
+                }
+            }
+            std::printf("| Two A-10s' ten GAU-8 passes on ten tanks: known, stationary and undefended; against a column on the move whose guns fire back (out of action, of them burnt) | %.1f (%d-%d), %.1f burnt; %.1f (%d-%d), %.1f burnt | Array 20, 19 September 1979: 8 of 10 put out of action, 3 of them burnt (no figure for a moving, defended column) |\n",
+                        out[0] / runs, lo[0], hi[0], burnt[0] / runs, out[1] / runs, lo[1], hi[1], burnt[1] / runs);
+        }
         Why();
     }
     return 0;

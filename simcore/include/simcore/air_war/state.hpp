@@ -247,6 +247,28 @@ struct PackageOutcome {
         double observed_h = 0.0;
     };
     std::vector<ReportRecord> reports;
+    // Targets of opportunity (roadmap B6, opportunity.hpp): each thing a flight leader acted on or stopped at, as his
+    // flight knew it (what he believed it was and where, what he did, where the chain stopped, his passes and his pilots'
+    // claims), and beside it what was really there and what the passes did (the truth: the debrief's and the balance's,
+    // never the enemy's records, which hold the claims).
+    struct OpportunityRecord {
+        int flight = -1;
+        double t_h = 0.0;
+        std::string believed;     // OppTargetName: what he believed it was
+        double east_m = 0.0;      // where he believed it (the scenario's ENU, or the theatre's for the abstract level)
+        double north_m = 0.0;
+        std::string act;          // OppActName
+        std::string stopped;      // OppStepName: where the chain stopped ("act": it acted)
+        std::string why;
+        bool reported_in_flight = false;
+        int passes = 0;
+        int claimed = 0;          // kills his pilots claim
+        std::string object;       // the theatre object his report or claim is taken to be about ("" none: the debrief only)
+        std::string truth;        // what was really there ("" nothing; a theatre or scenario id, "mover:<id>", "dummy:<n>")
+        int kills = 0;            // what the passes really did
+        bool misidentified = false;
+    };
+    std::vector<OpportunityRecord> opportunities;
     bool truth_applied = false;  // the damage is already in the truth (the abstract resolver); else the campaign applies it
     bool played = false;         // from a played mission (the mission bridge)
     // What the battery reported of it from its records (roadmap 18.1, campaign/report.hpp): our side's journal states

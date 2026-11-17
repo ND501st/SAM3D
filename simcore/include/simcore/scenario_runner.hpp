@@ -3181,6 +3181,33 @@ private:
         }
     }
 
+    // What the other side's pilots may see on the ground besides the batteries (roadmap B6): the prepared position's dummies
+    // (a dummy looks like a silent battery) and the movers on the session's roads, a column or convoy on the move as one,
+    // the rest as parked vehicles. A mover put out of action stays where it is, seen as parked vehicles.
+    void PerceiveGroundMovers(airwar::PerceptionFeed& pf) {
+        if (percep_dummies_.empty()) {
+            for (std::size_t k = 0; k < def_.prepared.dummies.size(); ++k) {
+                const Vec3& at = def_.prepared.dummies[k].position;
+                percep_dummies_.push_back(pf.hub.AddGround("osa_battery_silent", GroundEnu(at.x, at.y), "dummy:" + std::to_string(k)));
+            }
+        }
+        if (!nav_) return;
+        for (const nav::Mover& m : nav_->GetMovers().All()) {
+            if (m.state == nav::MoverState::Waiting || m.state == nav::MoverState::Arrived || m.route.path.empty()) continue;
+            const MapPoint at = nav::PointAlong(m.route, m.arc_m);
+            const Vec3 g = GroundEnu(at.east_m, at.north_m);
+            const bool column = m.state == nav::MoverState::Moving && (m.kind == "column" || m.kind == "convoy" || m.vehicles > 2);
+            const std::string cls = column ? "column_moving" : "vehicles_parked";
+            const auto it = percep_movers_.find(m.id);
+            if (it != percep_movers_.end()) {
+                if (airwar::GroundObject* o = pf.hub.FindGround(it->second)) o->cls = cls;  // halted, or on the move again
+                pf.hub.MoveGround(it->second, g);
+                continue;
+            }
+            percep_movers_[m.id] = pf.hub.AddGround(cls, g, "mover:" + m.id);
+        }
+    }
+
     // Each pilot's perception tick: the pilots due now look about them and listen to their receivers; what is new in a
     // picture sets off his reaction at today's entry points (target_behaviour.hpp). Perception runs on the runner that holds
     // the sky's truth (a linked post's mirrors none).
@@ -3206,6 +3233,7 @@ private:
                     else pf.hub.MoveGround(it->second, g);
                 }
             }
+            PerceiveGroundMovers(pf);  // roadmap B6: the dummies and the roads' movers, for the opportunity chain
         }
         std::vector<std::size_t> due;
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
@@ -3543,6 +3571,33 @@ public:
     bool StoresJettisoned(const std::string& id) const {
         const std::size_t i = TargetIndexOf(id);
         return i < def_.targets.size() && (reactions_.StoresGone(static_cast<int>(i)) || targets_[i].damage.jettison);
+    }
+    // ---- Attack passes (roadmap B6, air_war/attack_pass.hpp): a pilot's pass at a ground target, flown on the flights'
+    // override layer (PilotOverride::Kind::Attack); and a mover on the roads put out of action by one.
+    bool FlyPass(const std::string& id, const PilotOverride& ov) {
+        const std::size_t i = TargetIndexOf(id);
+        if (i >= def_.targets.size() || !targets_[i].spawned || targets_[i].gone || !TargetAlive(id)) return false;
+        if (flights_->Overriding(static_cast<int>(i)) && flights_->OverrideOf(static_cast<int>(i))->kind != PilotOverride::Kind::Attack)
+            return false;  // breaking, diving or jinking: no pass now
+        flights_->Override(static_cast<int>(i), ov);
+        return true;
+    }
+    // The pass he is flying (null: none; a break under fire ends it).
+    const PilotOverride* PassOf(const std::string& id) const {
+        const std::size_t i = TargetIndexOf(id);
+        if (i >= def_.targets.size()) return nullptr;
+        const PilotOverride* o = flights_->OverrideOf(static_cast<int>(i));
+        return o != nullptr && o->kind == PilotOverride::Kind::Attack ? o : nullptr;
+    }
+    void EndPass(const std::string& id) {
+        if (PassOf(id) != nullptr) flights_->EndOverride(static_cast<int>(TargetIndexOf(id)));
+    }
+    bool StrikeMover(const std::string& mover, const std::string& by) {
+        nav::Mover* m = nav_ ? nav_->GetMovers().Find(mover) : nullptr;
+        if (m == nullptr || m->state == nav::MoverState::BrokenDown) return false;
+        m->state = nav::MoverState::BrokenDown;
+        Event(by, "puts " + mover + " out of action on the road");
+        return true;
     }
     // A defence missile at its end at a target (the mission bridge's neighbours): with damage states its kill drawn into
     // destroyed or heavily damaged (damage.hpp ApplyMissile); without, a kill destroys it. True if it is destroyed now.
@@ -8611,6 +8666,8 @@ private:
     std::unique_ptr<Battery> battery_;
     std::unique_ptr<command::BatteryOrderNet> order_net_;  // battery orders carried by a means (G10.5)
     std::unique_ptr<nav::SessionNav> nav_;                 // the roads, the places and the world's movers (G2.3, G11)
+    std::vector<std::uint64_t> percep_dummies_;              // the dummies as the pilots' ground objects (B6)
+    std::map<std::string, std::uint64_t> percep_movers_;     // the roads' movers as ground objects, by mover id (B6)
 
     // ---- The TZM's runs to the regiment's technical battery (roadmap 17.4; campaign/stocks.hpp): the battery commander's
     // order on the net, its chief's run on the session's roads, his report back, and what the commander reckons and

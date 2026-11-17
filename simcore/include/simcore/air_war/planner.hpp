@@ -185,7 +185,7 @@ inline bool CanDeliver(const WeaponDef& w, Delivery d, const AircraftType& a, Pr
     if (w.guidance == "tv" && (night || weather == Weather::Poor)) return false;
     if (w.guidance == "ir" && weather == Weather::Poor) return false;
     if (w.guidance == "wire" && night && !a.night) return false;
-    const bool visual = d == Delivery::PopUp || d == Delivery::Dive || d == Delivery::HoverFire;
+    const bool visual = d == Delivery::PopUp || d == Delivery::Dive || d == Delivery::HoverFire || d == Delivery::Strafe || d == Delivery::GentleDive;
     if (visual && !w.Guided() && weather == Weather::Poor) return false;
     if (d == Delivery::Level && weather == Weather::Poor && !a.all_weather) return false;
     return true;
@@ -204,7 +204,7 @@ inline double DeliveryCep(const WeaponDef& w, Delivery d, const AircraftType& a,
         cep = tune.Get("delivery.cep_wire_m");
     } else {
         cep = tune.Get(std::string("delivery.cep_") + DeliveryName(d) + "_m") * (1.4 - 0.8 * Clamp01(a.computing));
-        const bool visual = d == Delivery::PopUp || d == Delivery::Dive || d == Delivery::HoverFire;
+        const bool visual = d == Delivery::PopUp || d == Delivery::Dive || d == Delivery::HoverFire || d == Delivery::Strafe || d == Delivery::GentleDive;
         if (visual && part == DayPart::Night && !a.night) cep *= tune.Get("delivery.night_visual_factor");
         if (weather == Weather::Poor) cep *= tune.Get("delivery.poor_weather_factor");
     }
@@ -1197,6 +1197,13 @@ private:
                     attack.push_back({target - dir * room(tune.Get("delivery.dive_roll_in_m")), agl, 0.0, "roll_in"});
                     tg.agl_m = std::min(agl, tune.Get("delivery.dive_release_m"));
                     break;
+                case Delivery::GentleDive: {  // roadmap B6: a shallow climb to a low apex and a 10-25 deg dive (mt_1970_bukhantsev)
+                    const double pull = room(tune.Get("delivery.gentle_dive_pull_m"));
+                    attack.push_back({target - dir * pull + side * 800.0, agl, 0.0, "pull_up"});
+                    attack.push_back({target - dir * (0.5 * (pull + rs)) + side * 400.0, tune.Get("delivery.gentle_dive_apex_m"), 0.0, "apex"});
+                    tg.agl_m = tune.Get("delivery.gentle_dive_release_m");
+                    break;
+                }
                 default: break;
             }
         } else if (delivery == Delivery::HoverFire) {

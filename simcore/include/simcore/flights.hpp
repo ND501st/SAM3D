@@ -117,7 +117,7 @@ struct FlightOrder {
 // his route (Rejoin), or out of the session at the point (Home: turning away with his weapons gone; a leader's flight
 // goes home behind him). End::Point ends it where the point is passed as a waypoint is (AircraftDemand::capture).
 struct PilotOverride {
-    enum class Kind { Break, Dive, Jink, TurnAway };
+    enum class Kind { Break, Dive, Jink, TurnAway, Attack };  // Attack: a pass at a ground target (air_war/attack_pass.hpp, B6)
     enum class End { Time, Point };  // at until_s; or at the point (until_s the latest)
     enum class After { Rejoin, Home };
     Kind kind = Kind::Break;
@@ -139,6 +139,7 @@ inline const char* ToString(PilotOverride::Kind k) {
         case PilotOverride::Kind::Dive: return "dive";
         case PilotOverride::Kind::Jink: return "jink";
         case PilotOverride::Kind::TurnAway: return "turn away";
+        case PilotOverride::Kind::Attack: return "attack pass";
     }
     return "?";
 }
@@ -414,6 +415,11 @@ public:
     bool Overriding(int target) const {
         const FlightSlot* s = SlotOf(target);
         return s != nullptr && s->overriding;
+    }
+    // The manoeuvre he is flying (null: none).
+    const PilotOverride* OverrideOf(int target) const {
+        const FlightSlot* s = SlotOf(target);
+        return s != nullptr && s->overriding ? &s->ov : nullptr;
     }
     void SetHears(int target, bool hears) {
         const std::pair<int, int> fs = Where(target);

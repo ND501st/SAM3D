@@ -8,7 +8,7 @@
 // and outcomes the original saw.
 //
 //   {"save_version": 2, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
-//    "seed": 7, "route_mode": 1, "c2_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//    "seed": 7, "route_mode": 1, "c2_mode": 1, "opportunity_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
 //
 // Version 2 (roadmap B2 and B5) adds the routes' mode the campaign was planned with (route.mode: 1 the route planner), its
 // command in the air's (c2.mode: 1 the posts and the packages flown in time), the raids a session took ("take", the
@@ -160,6 +160,29 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Push(reports, x);
     }
     Put(v, "reports", reports);
+    if (!o.opportunities.empty()) {
+        json::Value opp = Arr();
+        for (const PackageOutcome::OpportunityRecord& r : o.opportunities) {
+            json::Value x = Obj();
+            Put(x, "flight", Num(r.flight));
+            Put(x, "t_h", Num(r.t_h));
+            Put(x, "believed", Str(r.believed));
+            Put(x, "east_m", Num(r.east_m));
+            Put(x, "north_m", Num(r.north_m));
+            Put(x, "act", Str(r.act));
+            Put(x, "stopped", Str(r.stopped));
+            Put(x, "why", Str(r.why));
+            Put(x, "reported_in_flight", Bool(r.reported_in_flight));
+            Put(x, "passes", Num(r.passes));
+            Put(x, "claimed", Num(r.claimed));
+            Put(x, "object", Str(r.object));
+            Put(x, "truth", Str(r.truth));
+            Put(x, "kills", Num(r.kills));
+            Put(x, "misidentified", Bool(r.misidentified));
+            Push(opp, x);
+        }
+        Put(v, "opportunities", opp);
+    }
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
     Put(v, "reported", Bool(o.reported));
@@ -342,6 +365,27 @@ public:
                 o.reports.push_back(rr);
             }
         }
+        if (const json::Value* os = v.Find("opportunities")) {
+            for (const json::Value& x : os->items) {
+                PackageOutcome::OpportunityRecord r;
+                r.flight = Int(x, "flight", -1);
+                r.t_h = Number(x, "t_h");
+                r.believed = String(x, "believed");
+                r.east_m = Number(x, "east_m");
+                r.north_m = Number(x, "north_m");
+                r.act = String(x, "act");
+                r.stopped = String(x, "stopped");
+                r.why = String(x, "why");
+                r.reported_in_flight = Boolean(x, "reported_in_flight");
+                r.passes = Int(x, "passes");
+                r.claimed = Int(x, "claimed");
+                r.object = String(x, "object");
+                r.truth = String(x, "truth");
+                r.kills = Int(x, "kills");
+                r.misidentified = Boolean(x, "misidentified");
+                o.opportunities.push_back(r);
+            }
+        }
         o.truth_applied = Boolean(v, "truth_applied");
         o.played = Boolean(v, "played", true);
         o.reported = Boolean(v, "reported");
@@ -369,6 +413,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "seed", Num(static_cast<double>(c.Seed())));
     Put(root, "route_mode", Num(c.Data().tuning.Get("route.mode")));
     Put(root, "c2_mode", Num(c.Data().tuning.Get("c2.mode")));
+    Put(root, "opportunity_mode", Num(c.Data().tuning.Get("opportunity.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -450,6 +495,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double route_mode = version == 1 ? 0.0 : r.Number(root, "route_mode", 1.0);
     // And its command in the air (roadmap B5): a version 1 save, packages resolved whole at their first hour, no posts.
     const double c2_mode = version == 1 ? 0.0 : r.Number(root, "c2_mode", 1.0);
+    // And its targets of opportunity (roadmap B6): a save made before them has no key, and replays without them.
+    const double opportunity_mode = r.Number(root, "opportunity_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -511,6 +558,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     if (!LoadAirWarData(data_dir, theatre, faction, data, error)) return false;
     data.tuning.values["route.mode"] = route_mode;
     data.tuning.values["c2.mode"] = c2_mode;
+    data.tuning.values["opportunity.mode"] = opportunity_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

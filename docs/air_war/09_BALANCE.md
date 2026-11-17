@@ -787,7 +787,9 @@ B8 (`docs/air_battle/07_AIR_TO_AIR.md` §8) replaced the resolver's flat fighter
 our fighters from the same model. The 1985 data list of B7 changed the Pact's MiG-23 regiments (20 MLs and 10 MLDs, not
 30 MLDs), the neutral's escorts (the Saab 105; the Draken only from 1988) and the A-50, which no longer cuts our fighter
 threat in 1985. `air_war_balance` gained an "Air battle" line: fights a campaign, the enemy's aircraft our fighters shot
-down, ours lost. Against §14's runs (the same code without B8; district 20 seeds, nation 10, 7 days; base → B8):
+down, ours lost. Against §14's runs (the same code without B8; district 20 seeds, nation 10, 7 days; base → B8). B8 was
+run on track-b before B6 (targets of opportunity) was merged into it; B6 finds columns so rarely at the abstract level
+(the neutral alone, a few a campaign) that these rows should hold after the merge; they were not rerun on it:
 
 | District | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | Air battle: fights, theirs down, ours lost |
 |---|---|---|---|---|---|---|---|

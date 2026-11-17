@@ -26,7 +26,8 @@ M64 = (1 << 64) - 1
 STREAMS = {"detection": 1, "range_noise": 2, "azimuth_noise": 3, "elevation_noise": 4, "esm_bearing": 5,
            "esm_frequency": 6, "esm_pri": 7, "esm_pulse_width": 8, "comms_delivery": 9, "iff": 10,
            "false_alarm": 11, "tdoa_noise": 12, "doctrine": 13, "arm_seeker": 14, "air_combat": 15, "air_radio": 16,
-           "sight": 17, "sight_error": 18, "ground_acquire": 19, "reaction": 20}
+           "sight": 17, "sight_error": 18, "ground_acquire": 19, "reaction": 20,
+           "opportunity": 21}
 
 
 def mix64(x: int) -> int:

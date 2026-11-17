@@ -28,6 +28,13 @@ def test_reaction_stream_matches_cpp():
     assert em.uniform01(em.draw_hash(42, 20, 7, 3, 1)) == pytest.approx(0.08319907501352408, abs=1e-15)  # C++
 
 
+def test_opportunity_stream_matches_cpp():
+    # Roadmap B6: a flight leader's chain on a target of opportunity draws on stream 21 (simcore em::Stream::Opportunity,
+    # tests/test_opportunity.cpp checks the same number).
+    assert em.STREAMS["opportunity"] == 21
+    assert em.uniform01(em.draw_hash(42, 21, 7, 3, 1)) == pytest.approx(0.7313714574912689, abs=1e-15)  # C++
+
+
 def test_free_space_and_knife_edge():
     assert em.free_space_loss_db(10000.0, 1e9) == pytest.approx(112.45, abs=0.01)
     assert em.knife_edge_loss_db(0.0) == pytest.approx(6.03, abs=0.01)

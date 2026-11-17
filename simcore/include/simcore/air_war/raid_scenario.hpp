@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "simcore/air_war/campaign.hpp"
+#include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/flights.hpp"
 #include "simcore/geo.hpp"
@@ -281,6 +282,13 @@ struct RaidManifest {
     double airmanship = 0.5;   // PackageAirmanship
     bool night = false;
     bool poor_weather = false;
+    // Targets of opportunity (roadmap B6, opportunity.hpp): the package's mission, how far the battery stands past the
+    // faction's front (where its own troops are not), whether its free hunt is open there now (c2.free_hunt, by the
+    // campaign's phase), and each flight's leader as its chain reads him (an older save's manifest: none, no chain).
+    MissionKind mission = MissionKind::Strike;
+    double depth_km = 0.0;
+    bool free_hunt = false;
+    std::vector<OppLeader> leaders;  // per flight
 };
 
 struct RaidScenario {
@@ -929,6 +937,24 @@ public:
         m.airmanship = PackageAirmanship(p, c.Staff());
         m.night = p.part == DayPart::Night;
         m.poor_weather = c.WeatherNow() == Weather::Poor;
+        m.mission = p.kind;
+        if (const FrontDef* front = th.FrontFor(f.front)) m.depth_km = DistanceToLine(front->line, bst.pos) / 1000.0;
+        m.free_hunt = c.C2().FreeHunt(bst.pos, c.Phase());
+        for (const Flight& fl : p.flights) {
+            OppLeader ld;
+            ld.skill = m.airmanship;
+            const int oi = fl.officer >= 0 ? fl.officer : (p.leader >= 0 ? p.leader : p.planner);
+            if (oi >= 0 && static_cast<std::size_t>(oi) < c.Staff().officers.size()) {
+                const Officer& o = c.Staff().officers[static_cast<std::size_t>(oi)];
+                ld.traits = o.def.traits;
+                ld.press_on = o.HasQuirk("press_on");
+                ld.by_the_book = o.HasQuirk("by_the_book");
+                ld.loss_shy = o.HasQuirk("loss_shy");
+                ld.chases_kills = o.HasQuirk("chases_kills");
+                ld.stress = o.stress;
+            }
+            m.leaders.push_back(ld);
+        }
         if (!fallback.items.empty()) Put(c2, "fallback_order", fallback);
         if (!sources.items.empty()) Put(c2, "sources", sources);
         if (!radars.items.empty()) {
@@ -1200,7 +1226,8 @@ public:
             Put(root, "environment", env);
         }
         json::Value end = Obj();
-        Put(end, "time_limit_s", Num(std::round(m.end_s)));
+        // Rounded up: a session that stopped before the raid's end would leave it unfinished (MissionBridge::Over).
+        Put(end, "time_limit_s", Num(std::ceil(m.end_s)));
         Put(end, "when_targets_gone", Bool(true));
         Put(root, "end", end);
         out.json_text = Dump(root);

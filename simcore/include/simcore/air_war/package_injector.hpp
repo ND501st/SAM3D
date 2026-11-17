@@ -326,6 +326,15 @@ private:
                 }
             }
         }
+        // What its flights found on the ground and reported in flight (roadmap B6, opportunity_session.hpp; said on their
+        // nets there already): to the posts, as the launches.
+        for (const OpportunityRun::Report& rp : l.bridge->TakeOpportunityReports()) {
+            Played& pl = played_[l.played];
+            Vec3 at = MoveFrame(session, theatre, rp.where);
+            at.z = 0.0;
+            c_->NoteReport(pl.package_id, rp.flight, rp.what, at, rp.sigma_m, HourOf(rp.t_s), MoveFrame(session, theatre, rp.from));
+            ++pl.reports;
+        }
     }
 
     // Who may order the session's enemy flights: their own command, and the campaign's posts by the faction's table, a

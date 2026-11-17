@@ -33,6 +33,10 @@
 // release and impact, a cruise missile's warhead, its ARMs' launch and burst, the neighbours' missiles and gun passes.
 // The feed changes nothing; where to draw a miss is drawn from a generator of its own, never the bridge's; with the
 // runner's feed switched off (ScenarioRunner::SetFxOn) it pushes and draws nothing.
+//   * targets of opportunity (roadmap B6, opportunity_session.hpp): its flights' leaders run their chains on what their
+//     pilots see, report and fly passes; a fixed-wing aircraft's planned gun or rocket attack is flown as passes too, in
+//     place of the release at a waypoint. What a pass that opened fire did is decided here, on what is really near its
+//     aim (PassFired), by keyed draws of their own (the bridge's draws fall as without them).
 #pragma once
 
 #include <algorithm>
@@ -44,6 +48,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/air_war/opportunity_session.hpp"
 #include "simcore/air_war/raid_scenario.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
@@ -65,7 +70,11 @@ public:
         neighbours_.assign(m_.neighbours.size(), NeighbourState{});
         for (std::size_t j = 0; j < m_.neighbours.size(); ++j) neighbours_[j].missiles = m_.neighbours[j].missiles;
         kill_by_.assign(m_.aircraft.size(), std::string());
+        opp_.Init(m_, d, seed);
+        opp_seed_ = static_cast<std::uint64_t>(seed) * 0xC2B2AE3D27D4EB4Full + 0xB6F1ull;
     }
+    MissionBridge(const MissionBridge&) = delete;  // its opportunity run holds its manifest
+    MissionBridge& operator=(const MissionBridge&) = delete;
 
     // Call after every runner.Step().
     void Step(ScenarioRunner& r) {
@@ -125,9 +134,16 @@ public:
                 Log(r, a.target_id, "strikes its target");
                 continue;
             }
+            // A fixed-wing aircraft's planned gun or rocket attack: flown as passes from run_in_m out (roadmap B6); its
+            // first burst or salvo is its release (PassFired).
+            const bool flown = opp_.PlannedPass(i);
+            if (flown && a.has_release && !s.released && !a.missile && !r.StoresJettisoned(a.target_id) && !opp_.PlannedBegun(i) &&
+                Dist2d(pos, a.aim_enu) < tune.Get("opportunity.run_in_m")) {
+                opp_.BeginPlanned(r, i, a.aim_enu);
+            }
             // Weapons at the release point.
             // (A load thrown off under fire is gone: nothing left to release, roadmap B4.)
-            if (a.has_release && !s.released && !a.missile && !r.StoresJettisoned(a.target_id) && Releases(r, a, s, pos)) {
+            if (!flown && a.has_release && !s.released && !a.missile && !r.StoresJettisoned(a.target_id) && Releases(r, a, s, pos)) {
                 s.released = true;
                 r.NoteReleased(a.target_id);
                 if (a.role == FlightRole::Recce) {
@@ -171,6 +187,16 @@ public:
                     ++arms_fired_;
                     Log(r, a.target_id, "fires an anti-radiation missile at the radar (" + std::to_string(static_cast<int>(range / 1000.0 + 0.5)) + " km)");
                 }
+            }
+        }
+        // Targets of opportunity and the passes flown (roadmap B6).
+        if (opp_.On()) {
+            std::vector<bool> released(state_.size(), false);
+            for (std::size_t i = 0; i < state_.size(); ++i) released[i] = state_[i].released;
+            opp_.SetReleased(released);
+            for (const OpportunityRun::Fire& f : opp_.Step(r)) {
+                PassFired(r, f);
+                if (unit_destroyed_) return;
             }
         }
         Neighbours(r);
@@ -248,6 +274,10 @@ public:
         if (!unit_destroyed_) LandDue(r, r.Time());
     }
     double EmittedSeconds() const { return emitted_s_; }
+    // Targets of opportunity (roadmap B6): the flights' in-flight reports not yet taken (the injector sends them to the
+    // posts), and what the leaders did so far.
+    std::vector<OpportunityRun::Report> TakeOpportunityReports() { return opp_.TakeReports(); }
+    const OpportunityRun& Opportunities() const { return opp_; }
     int ArmsFired() const { return arms_fired_ + em_arms_fired_; }
 
     // The munitions library (data/scenery/munitions.json; null: none) a gun neighbour's rounds in its GunPass are counted
@@ -426,6 +456,7 @@ public:
             if (emitted > 0.0) o.AddEmission(id, emitted);
             if (spent > 0) o.missiles_by.push_back({id, spent});
         }
+        OpportunityRecords(o);
         o.notes = notes_;
         return o;
     }
@@ -537,6 +568,9 @@ private:
     std::vector<NeighbourState> neighbours_;
     std::vector<std::string> kill_by_;  // per aircraft: the neighbour that shot it down
     const scenery::MunitionLibrary* munitions_ = nullptr;
+    OpportunityRun opp_;          // targets of opportunity and the passes flown (roadmap B6)
+    std::uint64_t opp_seed_ = 0;  // the passes' effect draws (keyed: em::Stream::Opportunity)
+    int pass_fires_ = 0;
 
     // When an aircraft releases its load (docs/air_war/05_EXECUTION.md "release"). Rockets, missiles, guns, a weapon not
     // known and a recce's camera: within `scenario.release_capture_m` of its release point. A load that falls goes where
@@ -899,6 +933,167 @@ private:
         if (!hit) Log(r, a.target_id, "bombs fall on empty ground", at_t);
         return burnt;
     }
+
+    // ---- Passes (roadmap B6). A pass that opened fire: on his run the pilot lines up on what is really there within
+    // opportunity.find_m of where he believed it (the nearest of our vehicle, the battery's vehicles, a dummy, an object,
+    // a mover on the roads); nothing there, it hits nothing. One keyed draw against the weapon's per_pass for its class
+    // (attack_pass.hpp GunPassEffect: moving, under fire, by eye at night). Its first planned pass is its load's release.
+    void PassFired(ScenarioRunner& r, const OpportunityRun::Fire& f) {
+        const TuningTable& tune = d_->tuning;
+        const RaidAircraft& a = m_.aircraft[f.aircraft];
+        AircraftState& s = state_[f.aircraft];
+        if (f.first_planned && !s.released) {
+            s.released = true;
+            r.NoteReleased(a.target_id);
+        }
+        if (f.contact < 0) delivered_ = true;
+        const int n = ++pass_fires_;
+        // What is really near the aim.
+        std::string what;
+        int kind = -1;  // 0 our vehicle, 1 a battery vehicle, 2 a dummy, 3 an object, 4 a mover
+        TargetClass cls = TargetClass::Light;
+        bool moving = false;
+        double best = tune.Get("opportunity.find_m");
+        const auto consider = [&](const Vec3& at, const std::string& id, int k, TargetClass c, bool mv) {
+            const double dist = Dist2d(at, f.aim);
+            if (dist >= best) return;
+            best = dist;
+            what = id;
+            kind = k;
+            cls = c;
+            moving = mv;
+        };
+        consider(m_.own_enu, m_.own_object, 0, TargetClass::Light, false);
+        for (const auto& v : m_.battery) consider(v.second, v.first, 1, TargetClass::Light, false);
+        for (const auto& dm : m_.dummies) consider(dm.second, dm.first, 2, TargetClass::Light, false);
+        for (const auto& ob : m_.objects) {
+            const TheatreObject* def = d_->theatre.Find(ob.first);
+            consider(ob.second, ob.first, 3, def != nullptr && def->hardness > 0.6 ? TargetClass::Hard : TargetClass::Light, false);
+        }
+        if (const nav::SessionNav* nav = r.Nav()) {
+            for (const nav::Mover& mv : nav->GetMovers().All()) {
+                if (mv.state == nav::MoverState::Waiting || mv.state == nav::MoverState::Arrived || mv.state == nav::MoverState::BrokenDown ||
+                    mv.route.path.empty())
+                    continue;
+                const MapPoint p = nav::PointAlong(mv.route, mv.arc_m);
+                consider(Vec3{p.east_m, p.north_m, 0.0}, "mover:" + mv.id, 4, TargetClass::Soft, mv.state == nav::MoverState::Moving);
+            }
+        }
+        const AircraftType* type = d_->faction.Aircraft(a.aircraft);
+        const bool night_eye = m_.night && (type == nullptr || !type->night);
+        const PassEffect eff = GunPassEffect(f.pass, cls, moving, f.under_fire, night_eye, tune);
+        const double u = OppDraw(opp_seed_, f.aircraft, static_cast<std::uint64_t>(n), 40, 0);
+        const bool hit = kind >= 0 && u < eff.kill;
+        const bool burnt = hit && OppDraw(opp_seed_, f.aircraft, static_cast<std::uint64_t>(n), 41, 0) < eff.catastrophic;
+        const std::string how = IsRocketPass(f) ? "rocket pass" : "gun run";
+        int kills = 0;
+        if (kind < 0) {
+            Log(r, a.target_id, how + ": nothing there");
+        } else if (!hit) {
+            Log(r, a.target_id, how + ": misses " + (kind == 0 ? std::string("our vehicle") : what));
+        } else {
+            kills = 1;
+            hit_something_ = true;
+            switch (kind) {
+                case 0:
+                    unit_destroyed_ = true;
+                    AddDamage(m_.own_object, 0.25);
+                    Log(r, a.target_id, how + ": our vehicle is hit and out of action");
+                    break;
+                case 1:
+                    AddDamage(m_.own_object, what == "PU-12" ? 0.15 : 0.2);
+                    Log(r, a.target_id, how + ": vehicle " + what + " of the battery is hit");
+                    break;
+                case 2:
+                    if (std::find(decoys_hit_.begin(), decoys_hit_.end(), what) == decoys_hit_.end()) {
+                        decoys_hit_.push_back(what);
+                        destroyed_.push_back(what);
+                    }
+                    Log(r, a.target_id, how + ": a dummy position is wrecked");
+                    break;
+                case 3: {
+                    const TheatreObject* def = d_->theatre.Find(what);
+                    AddDamage(what, 0.3 * a.strike_power * (1.0 - 0.7 * (def != nullptr ? def->hardness : 0.5)));
+                    Log(r, a.target_id, how + ": " + (def != nullptr ? def->name : what) + " hit");
+                    break;
+                }
+                default:
+                    r.StrikeMover(what.substr(6), a.target_id);
+                    Log(r, a.target_id, how + ": " + what.substr(6) + " put out of action on the road");
+                    break;
+            }
+        }
+        opp_.NoteResult(f, kills, what);
+        FxPass(r, a, f, burnt || (hit && kind != 2));
+    }
+    // Rockets (a salvo of a few) or a gun (a burst of many rounds).
+    static bool IsRocketPass(const OpportunityRun::Fire& f) { return f.pass.rounds <= 20 && f.weapon != "door_guns"; }
+
+    // The outcome's opportunity records, with the theatre object each report or claim is taken to be about (the nearest of
+    // our vehicle, a dummy or an object within kClaimMatchM of where he believed it: the enemy cannot tell a dummy from a
+    // battery), and a note of each act for the journal.
+    static constexpr double kClaimMatchM = 1500.0;  // sam3d
+    void OpportunityRecords(PackageOutcome& o) {
+        for (PackageOutcome::OpportunityRecord rec : opp_.Records()) {
+            const Vec3 at{rec.east_m, rec.north_m, 0.0};
+            double best = kClaimMatchM;
+            const auto consider = [&](const Vec3& p, const std::string& id) {
+                const double dist = Dist2d(p, at);
+                if (dist < best) {
+                    best = dist;
+                    rec.object = id;
+                }
+            };
+            if (rec.believed == "battery" || rec.believed == "vehicles") {
+                consider(m_.own_enu, m_.own_object);
+                for (const auto& dm : m_.dummies) consider(dm.second, dm.first);
+            }
+            for (const auto& ob : m_.objects) consider(ob.second, ob.first);
+            const std::string callsign = rec.flight >= 0 && static_cast<std::size_t>(rec.flight) < m_.flight_ids.size() &&
+                                                 !m_.flight_ids[static_cast<std::size_t>(rec.flight)].empty()
+                                             ? m_.flight_ids[static_cast<std::size_t>(rec.flight)]
+                                             : std::string("a flight");
+            if (rec.passes > 0) {
+                notes_.push_back(callsign + " attacked a " + rec.believed + " it found (" + std::to_string(rec.passes) + " pass" +
+                                 (rec.passes > 1 ? "es" : "") + "), claims " + std::to_string(rec.claimed));
+            } else if (rec.act == "report") {
+                notes_.push_back(callsign + " reported a " + rec.believed + (rec.reported_in_flight ? " in flight" : " at the debrief"));
+            }
+            o.opportunities.push_back(rec);
+        }
+    }
+
+    // A pass in the feed: its burst or salvo leaving the aircraft, and landing at the aim.
+    void FxPass(ScenarioRunner& r, const RaidAircraft& a, const OpportunityRun::Fire& f, bool burnt) {
+        if (!r.FxOn()) return;
+        const Vec3 pos = r.TargetPosition(a.target_id);
+        const Vec3 vel = r.TargetVelocity(a.target_id);
+        const bool rockets = IsRocketPass(f);
+        const double arrive = r.Time() + (f.aim - pos).Length() / (rockets ? kFxRocketMps : kFxRoundMps);
+        fx::Event e = FxEvent(fx::EventKind::WeaponRelease, r.Time());
+        e.position = pos;
+        e.velocity = vel;
+        e.aim = f.aim;
+        e.end_t_s = arrive;
+        e.source = a.target_id;
+        e.world_id = r.TargetWorldId(a.target_id);
+        e.number = f.pass.rounds;
+        e.weapon = f.weapon;
+        e.delivery = rockets ? "gentle_dive" : "strafe";
+        r.Fx().Push(e);
+        fx::Event i = FxEvent(fx::EventKind::WeaponImpact, arrive);
+        i.position = i.aim = f.aim;
+        i.source = a.target_id;
+        i.world_id = e.world_id;
+        i.number = f.pass.rounds;
+        i.weapon = f.weapon;
+        i.delivery = e.delivery;
+        i.end = fx::BurstEnd::Ground;
+        i.fire = burnt;
+        r.Fx().Push(i);
+    }
+    static constexpr double kFxRoundMps = 1000.0;   // sam3d: a cannon round's mean speed to the aim
+    static constexpr double kFxRocketMps = 600.0;   // sam3d: a rocket's
 
     // ---- The presentation feed (fx/events.hpp): pushed into the runner's feed, never read back. Draws from fx_rng_.
     static constexpr unsigned kFxSeed = 0xB41D6Eu;     // sam3d: the presentation generator's seed, after the bridge's
