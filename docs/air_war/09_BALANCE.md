@@ -870,3 +870,70 @@ one built at `-j 2`, so their wall times (the district 5m03 → 5m12, `crew_bala
 16m → 53m, `ground_check` 4m → 5m) measure the load, not B8; the base's nation run stopped before NATO's campaigns, so
 its 10m49 against 19m39 is not a comparison either. `em_bench` 11.4 s → 10.9 s. The live fight is not in any raid yet
 (B10); in `test_air_fight` a two-aircraft session of 155 s steps it at the runner's 10 Hz with no measurable cost.
+
+## 16. Faction profiles: NATO low until the defences break, interdiction from day 1 (track B, B11, 18 November 2026)
+
+B11 (`docs/air_battle/10_FACTIONS.md` §12) moved each faction's hot-phase values into a sourced `hot_phase` block. The
+abstract resolver does not read it, so on its own it changes no number. Two data choices that were not 1985 practice
+were changed with it (`10_FACTIONS.md` §9):
+
+- **§9.1.**
+  - NATO's strike, close support and armed reconnaissance templates have `medium_below_iads` 0.45. The planner offers them medium altitude only once the believed working defences are below the rollback's line.
+  - `medium_altitude_man` is rare in a superior force (1.3 → 0.1).
+  - Halloran is a `low_level_purist`.
+- **§9.2.** NATO's first phase is "counter-air and suppression, with interdiction from the first day":
+
+| Mission | dead | hunter | deception | recce | strike | bda | cas | missile | armed_recce |
+|---|---|---|---|---|---|---|---|---|---|
+| Before | 0.25 | 0.15 | 0.10 | 0.15 | 0.22 | 0.05 | 0.05 | 0.06 | 0.03 |
+| B11 | 0.22 | 0.12 | 0.08 | 0.11 | 0.25 | 0.03 | 0.08 | 0.05 | 0.06 |
+
+**The base** was the B12 build (track-b at 65b3dbd) on a copy of the data as it was. The rows below compare it with B11
+(base → B11), on the district over 20 seeds and the nation over 10, 7 days each.
+
+**What stayed byte for byte:**
+- the rebels', the neutral's and the Pact's tables, on both theatres;
+- `air_war_bench data 400`;
+- `crew_balance data 10`;
+- `helper_coverage` (its page as committed);
+- `ground_check data 3600` (0 of 15 scenarios with anything off the ground; only the wall times moved).
+
+The `hot_phase.mode` switch, the hot quirks' own stream and the per-mode tier weights are what keep the other factions
+still.
+
+| NATO | Packages | Sorties a week | Lost | Loss % | D1 SEAD share | D1 loss % | Defences working D3, D7 | Battery raids | Battery wrecked |
+|---|---|---|---|---|---|---|---|---|---|
+| District, careless | 95.2 → 99.8 | 537 → 547 | 8.8 → 8.2 | 1.6% → 1.5% | 39% → 35% | 2.5% → 2.5% | 32%, 64% → 44%, 53% | 5.2 → 6.0 | 90% → 95% |
+| District, careful | 93.8 → 101.2 | 522 → 549 | 9.3 → 8.4 | 1.8% → 1.5% | 39% → 35% | 2.5% → 2.5% | 47%, 63% → 48%, 68% | 7.8 → 7.0 | 0% → 15% |
+| Nation, careless | 126.7 → 131.2 | 737 → 765 | 17.1 → 16.3 | 2.3% → 2.1% | 42% → 46% | 3.0% → 2.5% | 74%, 70% → 79%, 80% | 8.6 → 8.3 | 50% → 10% |
+| Nation, careful | 126.4 → 131.3 | 732 → 747 | 16.2 → 16.0 | 2.2% → 2.1% | 42% → 46% | 3.0% → 2.5% | 77%, 75% → 80%, 75% | 8.7 → 9.0 | 0% → 0% |
+
+**What moved, and why:**
+
+- **More packages, more interdiction.**
+  - Strike, close support and armed reconnaissance share the first phase from day 1. The mix shows it: armed reconnaissance rises from 5-6% to 9% of packages on the district, strike from 24-25% to 27-28% on the nation.
+  - Packages rise by 3.5-8% and sorties by 2-5%: interdiction pairs and fours are smaller than the SEAD packages they replace.
+  - Armed reconnaissance searches rise from 4.8-6.2 to 6.9-9.5 a campaign, and columns found from 25-40% to 30-51%.
+  - On the nation, the line-hours cut in the week rise from 112-123 to 113-132. §9.2 asked for that.
+- **The rollback ends later on the district.** Fewer SEAD packages a day leave more of the defences standing: the careless battery's district has 44% working on day 3 against 32%. The phase means show the rollback ending later (day 4 1.6 → 1.4, day 6 1.9 → 1.7). It still ends and resumes: in `test_air_war.cpp`'s ten NATO campaigns of twelve days, it ended 13 times and resumed 9. On the nation it held all week before and still does (§8.4).
+- **Day 1's SEAD share stays the highest of the week**, on both theatres (§9.2's test).
+  - On the district it falls from 39% to 35%, as the shares say.
+  - On the nation it rises from 42% to 46%. A strike that must fly low under standing defences takes more suppression with it (each template's `sead_per_threat` against the threats on a low route).
+- **Losses did not rise.**
+  - §9.1 expected low strikes into the target guns to cost more, and they hardly did: 1.5% against 1.6-1.8% on the district, 2.1% against 2.2-2.3% on the nation, within what a few aircraft are worth across the seeds.
+  - The weaponeer answered the low level as `09_BALANCE.md` §9 would predict, with fewer dives (14.8-15.0 → 7.8-10.1 flights a campaign) and more pop-ups, lofts and stand-off shots (popup 10.8-12.6 → 15.9-18.4, loft 10.1-11.0 → 11.8-12.7, standoff 17.9-20.2 → 21.4-21.6).
+  - NATO keeps the lowest loss rate of the four on both theatres. On the district the Pact loses 1.8-2.1%, the rebels 2.7% and the neutral 3.1-3.8%; on the nation the Pact loses 3.7-4.1%.
+  - Losses still fall as the rollback bites (§2's shape).
+  - NATO's day 1 on the district (2.5%) was above the Pact's careless day 1 (2.3%) before B11 as well, and B11 does not change it. `delivery_risk` was left alone.
+- **The battery.**
+  - On the district the careful battery is now wrecked in 3 runs of 20, where it was wrecked in none. The interdiction and armed reconnaissance flights from day 1 find it on the roads and in the open more often.
+  - On the nation the careless battery is wrecked in 1 run of 10, where it was wrecked in 5. More of NATO's day goes to bridges, junctions and columns, away from the battery.
+  - Battery raids move within the noise (5.2-8.7 → 6.0-9.0).
+- **The fighters** fight a little less on the nation (8.6-8.7 → 7.9-8.0 a campaign), and the tankers refuel more (10-15 → 28-35 aircraft a campaign): deep low-level interdiction needs fuel.
+
+**No rebalance is needed.** NATO keeps the lowest loss rate, the rollback ends and resumes, day 1 keeps its SEAD
+peak, and week 1 cuts more lines.
+
+**Cost.** The planner's gate is one comparison per template and the officers' hot quirks a few draws at
+appointment. `HotPhase` is pure and is read once per aircraft when a raid is handed to a session. Nothing runs per step.
+The wall times are not comparable: the base set ran while this worktree compiled, B11's while the tests ran.

@@ -193,15 +193,22 @@ SC_TEST("mission bridge: a kill by the battery's launchers is the package's loss
     SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", d, &e));
     airwar::AirCampaign c;
     SC_EXPECT(c.Init(d, 1));
+    // The first raid with a crewed aircraft in it (a decoy drone shot down is no loss: B11's day-1 shares may send the
+    // drones first).
     airwar::RaidScenario rs;
-    while (c.Now() < 6.0 * 24.0 && !rs.ok) {
+    std::string first;
+    while (c.Now() < 6.0 * 24.0 && first.empty()) {
         if (!c.Advance(6.0 * 24.0)) break;
         rs = airwar::RaidScenarioBuilder().Build(c, *c.PlayerMission());
-        if (!rs.ok) c.SkipPlayerMission();
+        if (rs.ok) {
+            for (const airwar::RaidAircraft& a : rs.manifest.aircraft) {
+                if (!a.drone && first.empty()) first = a.target_id;
+            }
+        }
+        if (first.empty()) c.SkipPlayerMission();
     }
-    SC_EXPECT(rs.ok && !rs.manifest.aircraft.empty());
-    if (!rs.ok || rs.manifest.aircraft.empty()) return;
-    const std::string first = rs.manifest.aircraft.front().target_id;
+    SC_EXPECT(rs.ok && !first.empty());
+    if (!rs.ok || first.empty()) return;
     const auto lost = [&](bool take_back) {
         ScenarioDef def;
         ConsoleData console;

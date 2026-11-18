@@ -724,6 +724,23 @@ public:
                     const bool strike = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
                     if (strike && !fl.weapon.empty()) Put(rx, "stores", Str(fl.weapon));
                     if (!briefed_zones.items.empty()) Put(rx, "zones", briefed_zones);
+                    // His officer's shifts of the faction's press-on and jettison readiness, read once at the hand-over
+                    // (roadmap B11, hot_phase.hpp): the one flying in it, or his squadron's leader at half weight.
+                    const Officer* lead_o = nullptr;
+                    bool flies = true;
+                    if (fl.officer >= 0 && static_cast<std::size_t>(fl.officer) < c.Staff().officers.size()) {
+                        lead_o = &c.Staff().officers[static_cast<std::size_t>(fl.officer)];
+                    } else {
+                        const int sl = c.Staff().LeaderOf(fl.squadron);
+                        if (sl >= 0) lead_o = &c.Staff().officers[static_cast<std::size_t>(sl)];
+                        flies = false;
+                    }
+                    if (f.hot.present && lead_o != nullptr) {
+                        const double po = std::round(HotOfficerShift(f, HotParam::PressOn, fl.role, lead_o, flies) * 1000.0) / 1000.0;
+                        const double jt = std::round(HotOfficerShift(f, HotParam::Jettison, fl.role, lead_o, flies) * 1000.0) / 1000.0;
+                        if (po != 0.0) Put(rx, "press_on_shift", Num(po));
+                        if (jt != 0.0) Put(rx, "jettison_shift", Num(jt));
+                    }
                     Put(t, "reactions", rx);
                 } else if (!a->drone && !a->missile) {
                     json::Value e = Obj();

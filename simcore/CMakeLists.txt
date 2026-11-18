@@ -103,6 +103,7 @@ add_executable(simcore_tests
   tests/test_packages_live.cpp
   tests/test_c2.cpp
   tests/test_opportunity.cpp
+  tests/test_hot_phase.cpp
   tests/test_routes.cpp
   tests/test_flights.cpp
   tests/test_levels.cpp

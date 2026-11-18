@@ -82,6 +82,12 @@ struct PlanContext {
     }
 };
 
+// Whether a template's medium profile is offered now (10_FACTIONS.md §9.1): with no line, always; with one, only once the
+// believed working air defences are below it (hot_phase.mode 1; a save made before roadmap B11 has no gate).
+inline bool MediumOffered(const PackageTemplate& t, double believed_iads, int hot_mode) {
+    return hot_mode < 1 || t.medium_below_iads < 0.0 || believed_iads < t.medium_below_iads;
+}
+
 inline double ProfileHeight(const AircraftType& a, Profile p) {
     switch (p) {
         case Profile::Low: return a.low_agl_m;
@@ -329,7 +335,7 @@ public:
         const double doctrine_weight = Clamp01(0.4 + 0.5 * ct.rigidity + 0.3 * cdr->Quirk("doctrine_weight"));
         std::string bent;
         for (int k = 0; k < kMissionKinds; ++k) {
-            double s = phase.apportion[k];
+            double s = phase.Apportion(HotMode())[k];
             const MissionKind mk = static_cast<MissionKind>(k);
             if (!f.doctrine.packages[k].allowed || (mk == MissionKind::Missile && MissileType() == nullptr)) {
                 share[k] = 0.0;
@@ -489,6 +495,9 @@ private:
     std::map<std::string, std::vector<double>> gate_book_;
 
     int Mode() const { return static_cast<int>(Tune().Get("route.mode")); }
+    // roadmap B11 (10_FACTIONS.md §9): 1 the phases' new shares and medium altitude gated by the believed defences; 0 a
+    // save made before it.
+    int HotMode() const { return static_cast<int>(Tune().Get("hot_phase.mode")); }
     const RouteGround& Ground() {
         if (c_->ground != nullptr) return *c_->ground;
         if (!own_ground_) {
@@ -1580,9 +1589,14 @@ private:
             Profile top_prof = Profile::Low;
             DayPart top_part = DayPart::Day;
             double top_size = 1.0, top_u = -1e300;
+            // Medium altitude only once the defences are broken (10_FACTIONS.md §9.1: NATO's strike, close support and armed
+            // reconnaissance fly low while the believed working defences are at or above the template's line). A political
+            // order to fly high stands above it.
+            const bool medium_shut = c_->politics->min_profile < 1 && !MediumOffered(t, c_->intel->BelievedIadsShare(), HotMode());
             for (std::size_t ei = 0; ei < front_->entries.size(); ++ei) {
                 for (Profile prof : t.profiles) {
                     if (c_->politics->min_profile >= 1 && prof == Profile::Low) continue;
+                    if (medium_shut && prof == Profile::Medium) continue;
                     for (DayPart part : t.day_parts) {
                         // The strike group's size: with a cost for every sortie, the planner sizes it to the target (a pair
                         // for a radar, a massed blow for an airfield; docs/air_war/13_PACKAGES.md).

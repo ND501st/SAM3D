@@ -10,8 +10,10 @@
 // his own side's intelligence learns.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <utility>
@@ -229,6 +231,15 @@ private:
     }
 
     static double Draw(Rng& rng, double mean, double sd) { return Clamp01(rng.Normal(mean, sd)); }
+    // FNV-1a of a word: the hot habits' stream key (portable, unlike std::hash).
+    static std::uint64_t HotKey(const std::string& s) {
+        std::uint64_t h = 1469598103934665603ull;
+        for (const char c : s) {
+            h ^= static_cast<unsigned char>(c);
+            h *= 1099511628211ull;
+        }
+        return h ^ 0x407ull;
+    }
 
     OfficerDef Generate(StaffRole role, const std::string& squadron, const AirWarData& data, Rng& rng,
                         const Officer* predecessor) const {
@@ -280,23 +291,41 @@ private:
         od.skills.airmanship = Draw(rng, sm.airmanship, ss);
         od.skills.leadership = Draw(rng, sm.leadership, ss);
         od.skills.politics = Draw(rng, sm.politics, ss);
-        // Quirks, weighted by tier, allowed for the role, no repeats.
+        // Quirks, weighted by tier, allowed for the role, no repeats. The hot phase's own habits (hot_draw) are not in this
+        // draw: they come after, each from a stream keyed on him, at the chance it would have had in it (roadmap B11).
+        const int hot_mode = static_cast<int>(data.tuning.Get("hot_phase.mode"));
         const int n = pool.quirks_min + rng.Index(pool.quirks_max - pool.quirks_min + 1);
         std::vector<double> w;
+        double all = 0.0;
         for (const QuirkDef& q : data.quirks) {
-            double x = q.tier_weight[static_cast<int>(f.tier)];
+            double x = q.TierWeight(f.tier, hot_mode);
             if (!q.roles.empty()) {
                 bool ok = false;
                 for (StaffRole r : q.roles) ok = ok || r == role;
                 if (!ok) x = 0.0;
             }
-            w.push_back(x);
+            all += std::max(0.0, x);
+            w.push_back(q.hot_draw ? 0.0 : x);
         }
         for (int k = 0; k < n; ++k) {
             const int qi = rng.Weighted(w);
             if (qi < 0 || w[static_cast<std::size_t>(qi)] <= 0.0) break;
             od.quirks.push_back(data.quirks[static_cast<std::size_t>(qi)].id);
             w[static_cast<std::size_t>(qi)] = 0.0;
+        }
+        if (hot_mode >= 1 && all > 0.0) {
+            Rng hot = rng.Fork(HotKey(od.id));
+            for (const QuirkDef& q : data.quirks) {
+                if (!q.hot_draw) continue;
+                double x = q.TierWeight(f.tier, hot_mode);
+                if (!q.roles.empty()) {
+                    bool ok = false;
+                    for (StaffRole r : q.roles) ok = ok || r == role;
+                    if (!ok) x = 0.0;
+                }
+                const double chance = std::min(1.0, static_cast<double>(n) * std::max(0.0, x) / all);
+                if (hot.Uniform() < chance) od.quirks.push_back(q.id);
+            }
         }
         od.flies = role == StaffRole::SquadronLeader;
         for (const std::string& q : od.quirks) {

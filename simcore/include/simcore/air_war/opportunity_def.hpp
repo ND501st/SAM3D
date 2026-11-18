@@ -21,8 +21,8 @@ namespace airwar {
 // defaults below (report what is seen, attack nothing unbriefed).
 struct OpportunityRulesDef {
     bool present = false;
-    // Its base tendency to act on a target of opportunity rather than report it (10_FACTIONS.md §7.2's
-    // hot_phase.opportunity; it lives here until roadmap B11 moves the hot phase's values into one block).
+    // Its base tendency to act on a target of opportunity rather than report it: the faction's hot_phase.opportunity
+    // (10_FACTIONS.md §7.2), written here by the faction's loader (roadmap B11 moved it out of this block).
     double tendency = 0.2;
     bool report_in_flight = true;             // its crews report what they see at once by radio; else after landing
     bool fired_on_may_attack = false;         // a flight fired on may hit back at that gun or site, and nothing else
@@ -153,8 +153,7 @@ inline bool LoadOpportunityRules(const json::Value& b, OpportunityRulesDef& out,
         std::string* to;
         std::vector<std::string> allowed;
     };
-    const Num nums[] = {{"tendency", &out.tendency, 0.0, 1.0},
-                        {"own_troops_keepout_m", &out.own_troops_keepout_m, 0.0, 10000.0},
+    const Num nums[] = {{"own_troops_keepout_m", &out.own_troops_keepout_m, 0.0, 10000.0},
                         {"road_corridor_m", &out.road_corridor_m, 0.0, 10000.0},
                         {"village_keepout_m", &out.village_keepout_m, 0.0, 10000.0},
                         {"reattack", &out.reattack, 0.0, 1.0},

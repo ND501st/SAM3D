@@ -9,7 +9,7 @@ value where they do not.
 `docs/air_battle/04_REACTIONS.md`): the skill tiers (delay, no reaction, dispense misuse), the values (stress, the
 manoeuvres, chaff and flares, going round, the flight's decision), the receivers' names by threat class, our fighters by
 model, and one profile per faction (its rows: manoeuvre, countermeasure, and the flight's jettison, press-on and abort
-shares). Each value cites its source or says it is a game value or an estimate. A target names its profile in
+shares; the flight's officer moves these by his shifts of the faction's `hot_phase`, B11). Each value cites its source or says it is a game value or an estimate. A target names its profile in
 `"reactions"`.
 
 One file per system with the game-balance numbers used by `simcore/engagement.hpp`: when zone lamps light, how close
@@ -103,7 +103,10 @@ first hour without posts, as before B5, kept so an old save replays), the campai
 jammed hop's retry, the depth of BAI, how far an officer's traits bend a post's decision, the pools' commit risk, the
 posts' cover of a low flight, the spread of a FAC's and a pilot's report, the reach of hunters and diverts, our
 listeners' chance, a second report's wait, the corps' refusal and a FAC's requests per hour; the posts, authority, hop
-times and alert shares themselves are each faction's `"c2"` block in `data/air_war/`, with sources.
+times are each faction's `"c2"` block in `data/air_war/` and the alert pools its `"hot_phase"` block, with sources.
+The `"hot_phase"` group (track B, B11, `simcore/air_war/hot_phase.hpp`): its switch (`mode`: 0 keeps NATO's old
+first-phase shares, the old weight of `medium_altitude_man`, no medium-altitude gate and no hot-phase quirks, so a save
+made before B11 replays).
 The `"opportunity"` group (track B, B6, `simcore/air_war/opportunity.hpp`, `docs/air_battle/06_OPPORTUNITY.md`): targets
 of opportunity, its switch (`mode`: 0 as before B6, kept so an old save replays), the leader's tick, identification
 time and misidentification, the room a pass needs, the slot's slack, the gun's burst under fire, re-attacks, the bounds

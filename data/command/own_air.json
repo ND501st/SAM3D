@@ -14,6 +14,23 @@
     "source": "fm_100_2_1_1984 p. 12-7 (Pact readiness 1 / 2 / 3 to take-off: 3-5 min, 15 min, 1-2 h, as NATO saw it; the chart is for fighter-bombers and is used by analogy); the hours held are its own figures, state 3's a game value",
     "confidence": "low"
   },
+  "hot_phase": {
+    "source": "docs/air_battle/10_FACTIONS.md sections 6 and 7 (our fighters follow Pact practice: brought in by the GCI, the pilot's own initiative from contact)",
+    "confidence": "estimate",
+    "notes": "The same block as each enemy faction's (roadmap B11, simcore/air_war/hot_phase.hpp). No alert pools: the readiness above. No authority: our fighters' tasks are the GCI's (own_flights.hpp).",
+    "initiative": {"value": 0.25, "range": [0.1, 0.4], "source": "pennington_1985 (the pilot's own initiative begins at contact); fm_100_2_1_1984 ch. 12; SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "the flight leader's, at contact"},
+    "plan_adherence": {"value": 0.9, "range": [0.75, 1.0], "source": "fm_100_2_1_1984 ch. 12; cia_1987_iraq_af (the rigid end); SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "to the controller"},
+    "press_on": {"value": 0.6, "by_role": {"cap": 0.4, "escort": 0.4, "sweep": 0.4}, "when_control_lost": true, "range": [0.4, 0.7], "source": "lambeth_1984; checo_1969_tactics; SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "0.4 without GCI"},
+    "jettison_readiness": {"value": 0.5, "range": [0.3, 0.7], "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (checo_1969_tactics); SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side): tanks before combat)", "confidence": "estimate", "notes": "tanks dropped before combat"},
+    "radio_discipline": {"value": 0.7, "range": [0.4, 0.85], "source": "fm_100_2_1_1984 p. 12-7; airwar_ru (the Lazur command link on the MiG-23ML); SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "low", "notes": "GCI by voice or by the Lazur link"},
+    "emission_discipline": {"value": 0.6, "range": [0.4, 0.8], "source": "pennington_1985 (radars off until close for surprise); SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate"},
+    "air_combat_skill": {"value": 0.45, "range": [0.3, 0.6], "source": "SAM3D estimate between the Pact's and its clients' (lambeth_1984, cia_1987_iraq_af); the same as data/air_war/air_combat.json's doctrine 'ours' (tests/test_hot_phase.cpp)", "confidence": "estimate"},
+    "opportunity": {"value": 0.2, "range": [0.1, 0.35], "source": "mt_turchin_coop (our own SAMs the worst problem: a fighter keeps to his zone); fm_100_2_1_1984 p. 12-6; SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "independent search only"},
+    "turn_back": {"value": 0.2, "by_role": {"cap": 0.6, "escort": 0.6, "sweep": 0.6}, "when_control_lost": true, "range": [0.1, 0.6], "source": "lambeth_1984 (Skinner; Syria 1982: confused pilots headed straight back); SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "0.6 once GCI is lost"},
+    "husbanding": {"value": 0.0, "range": [0.0, 0.1], "source": "game value (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate"},
+    "reaction_delay_s": {"value": [2, 5], "improvised_extra_s": 0, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (trained 2-5 s under the GCI's warning)", "confidence": "estimate", "notes": "4-10 s with the nets jammed (10_FACTIONS.md section 7.2) is not modelled yet: the jamming state does not reach the flight (roadmap B11 Left)"},
+    "on_control_lost": {"green": "abort", "skilled": "pairs", "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985; the same as data/air_war/air_combat.json's doctrine 'ours' (tests/test_hot_phase.cpp)", "confidence": "estimate"}
+  },
 
   "duty": {
     "day_pairs_r1": 1,

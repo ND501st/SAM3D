@@ -104,7 +104,7 @@
   "fighter_models": ["mig21", "mig21mf", "mig21bis", "mig23ml"],
   "profiles": {
     "nato": {
-      "skill": 0.7, "initiative": 0.7, "calls": true, "package_net": true,
+      "skill": 0.7, "calls": true, "package_net": true,
       "source": "docs/air_battle/04_REACTIONS.md sections 6.1, 8, 9, 11 (factions_cases.md section 1)", "confidence": "estimate",
       "rows": [
         { "threat": "sam_low", "manoeuvre": "break_late", "countermeasure": "chaff", "jettison": 0.4, "press_on": 0.6, "abort": 0.1,
@@ -129,7 +129,7 @@
       "fallback": { "manoeuvre": "break", "jettison": 0.2, "press_on": 0.6, "abort": 0.1, "source": "game value", "confidence": "estimate" }
     },
     "warsaw_pact": {
-      "skill": 0.6, "initiative": 0.25, "calls": true, "package_net": false, "programme": true,
+      "skill": 0.6, "calls": true, "package_net": false, "programme": true,
       "source": "docs/air_battle/04_REACTIONS.md sections 6.2, 9, 11 (sve_prm; fm_100_2_1_1984 ch. 12)", "confidence": "estimate",
       "rows": [
         { "threat": "sam_low", "manoeuvre": "programme", "jettison": 0.2, "press_on": 0.7, "abort": 0.1,
@@ -152,7 +152,7 @@
       "fallback": { "manoeuvre": "break", "jettison": 0.1, "press_on": 0.8, "abort": 0.05, "source": "game value", "confidence": "estimate" }
     },
     "neutral": {
-      "skill": 0.55, "initiative": 0.6, "calls": true, "package_net": false,
+      "skill": 0.55, "calls": true, "package_net": false,
       "source": "docs/air_battle/04_REACTIONS.md sections 6.1, 8, 9, 11 (Argentina 1982 as analogue: twz_2025_argentine_chaff, usn_falklands_1983, fundacion_malvinas_24may)", "confidence": "estimate",
       "rows": [
         { "threat": "sam_low", "manoeuvre": "jink", "countermeasure": "chaff", "jettison": 0.3, "press_on": 0.55, "abort": 0.15,
@@ -175,7 +175,7 @@
       "fallback": { "manoeuvre": "jink", "jettison": 0.2, "press_on": 0.5, "abort": 0.2, "source": "game value", "confidence": "estimate" }
     },
     "rebels": {
-      "skill": 0.25, "initiative": 0.8, "calls": false, "package_net": false,
+      "skill": 0.25, "calls": false, "package_net": false,
       "source": "docs/air_battle/04_REACTIONS.md sections 6.1, 9, 11 (eyes only; few radios)", "confidence": "estimate",
       "rows": [
         { "threat": "sam_low", "manoeuvre": "dive", "jettison": 0.5, "press_on": 0.5, "abort": 0.4,
@@ -191,7 +191,7 @@
       "fallback": { "manoeuvre": "dive", "jettison": 0.3, "press_on": 0.5, "abort": 0.4, "source": "game value", "confidence": "estimate" }
     },
     "our_side": {
-      "skill": 0.55, "initiative": 0.4, "calls": true, "package_net": false,
+      "skill": 0.55, "calls": true, "package_net": false,
       "source": "docs/air_battle/04_REACTIONS.md section 11 (checo_1969_tactics p. 39; nwc_83_027): our fighters' reactions are the air battle's (B8); this profile holds the place", "confidence": "estimate",
       "rows": [],
       "fallback": { "manoeuvre": "break", "jettison": 0.0, "press_on": 0.6, "abort": 0.3, "source": "estimate: the Syrian failure under jamming, 30% home (nwc_83_027)", "confidence": "estimate" }

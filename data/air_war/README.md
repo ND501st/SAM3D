@@ -13,13 +13,13 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 | `faction_neutral.json` | Near peer: the Noric Republic's small air force |
 | `faction_warsaw_pact.json` | Peer: the Warsaw Pact's air forces of the front |
 | `faction_nato.json` | Superior: a composite allied tactical air force |
-| `traits.json` | The eight traits and the 33 quirks with their named effects, signatures and our analysts' phrases (`chatterbox` and `silent_runner` move a unit's radio discipline, B9) |
+| `traits.json` | The eight traits and the 35 quirks with their named effects, signatures and our analysts' phrases (`chatterbox` and `silent_runner` move a unit's radio discipline, B9; `opportunist` and `controller_bound` move a flight in the air, B11, drawn after the others from a stream keyed on the officer: `hot_draw`). A quirk's `tier_weight_mode0` is the weight an old save keeps (`medium_altitude_man`, rare in a superior force since B11) |
 | `air_combat.json` | **The air battle's air-to-air data** (track B, B7; `docs/air_battle/07_AIR_TO_AIR.md`): `aams` (18 missiles by guidance class with `in_service_year` and `allies_year`, ranges, limits, reliability, design kill chance, lethal radius, and `game_values` naming what is not sourced), `guns`, `fits` (what each type carries by year, `loads_by_year`; ours, the Pact's, NATO's, the neutral's and the rebels'), `doctrine` (rules of engagement, commit, formation, shot order and the strikers' answer per faction and ours; since B8 also `skill`, `on_control_lost` for green and skilled pilots, `commit_odds` and `fighter_plan`: the shares of close escort, sweep and CAP and the sweep's lead), `calibration` (the chain's numbers, the 1967 engagement mix and the period's rates they are held to), `fight` (B8's game values for the live fight, `air_war/air_fight_session.hpp`, and the abstract one, `air_war/air_fight.hpp`: think and scan rates, the eye's identification range, GCI vectors and their loss, joker and bingo, and the A0 chances of finding, meeting and surprise) and `ours` (our fighter regiments' types and counts from the order of battle, which the abstract fight draws our group from; a loss to them is written with the regiment's id). The `unarmed` fit names the support, jamming, reconnaissance and light types that carry nothing. Loaded by `air_war/air_combat_data.hpp` into `AirWarData::air_combat`; the shot is `air_war/air_combat.hpp`. Nothing later than the war's year is offered (`AirCombatDef::LoadOutFor`) |
 | `sensors.json` | The airborne sensors by type and year (`03_PERCEPTION.md` section 4): fighter radars (each naming its EM `RadarDef` in `data/em/fighter_radars_1985.json`, with the published ranges), infrared search sets, optical aids, warning receivers by type, flares and command links; `slots` are sensors the research has no year for, out of every war until a source fills them. `AirWarData::sensors` |
 | `countermeasures.json` | **Chaff, flares and drop tanks by type and year** (track B, B4; `docs/air_battle/04_REACTIONS.md` section 7): each fit names the aircraft's model id, the kind (`chaff`, `flares`, `drop_tanks`), the count and the year it entered service; `automatic` marks a dispenser started by the warning receiver, not used in the 1985 war. The latest fit not after the war's year counts (`ReactionTable::LoadoutOf`). The ALE-40 and ASO-2V loads are placeholders until a source gives them |
 | `weapons.json` | The weapons (facts from `wiki_weapons`; footprint and effect by target class are calibrated game values) and every object kind as a target: its class and aim points (`docs/air_war/10_WEAPONS.md`) |
 
-Each faction file also has a `"radio"` block (track B, B9; `docs/air_battle/09_COMMS_AND_INTERCEPT.md` section 3.1): the EM library ids of its aircraft and controllers' sets, the band of its nets, `language`, `callsign_rotation_h` (0: never), the staff's `opsec` 0..1, `have_quick_share` and `secure_voice_share` (0 until a USAFE fielding date is found), `gci_channels_per_post`, and `discipline`, the share of a strike flight's routine calls kept off the air. Its `source` and `confidence` are required. The call lengths and the rest are the `"radio"` group of `data/gameplay/air_war.json`.
+Each faction file also has a `"radio"` block (track B, B9; `docs/air_battle/09_COMMS_AND_INTERCEPT.md` section 3.1): the EM library ids of its aircraft and controllers' sets, the band of its nets, `language`, `callsign_rotation_h` (0: never), the staff's `opsec` 0..1, `have_quick_share` and `secure_voice_share` (0 until a USAFE fielding date is found), and `gci_channels_per_post`. The share of a strike flight's routine calls kept off the air is `hot_phase.radio_discipline` (below). Its `source` and `confidence` are required. The call lengths and the rest are the `"radio"` group of `data/gameplay/air_war.json`.
 
 Each faction file also has a `"c2"` block (track B, B5; `docs/air_battle/05_C2_AND_RETASKING.md` section 4.9, loaded
 into `FactionDef::c2` by `c2_def.hpp`): `posts` (id, `kind` of `tasking`, `support_centre`, `radar_control`,
@@ -28,16 +28,29 @@ into `FactionDef::c2` by `c2_def.hpp`): `posts` (id, `kind` of `tasking`, `suppo
 `sight_km`, `from_year` for a post not yet there in the war's year: NATO's E-3A 1982, the Pact's A-50 1989), `authority`
 (which post may `designate`, `warn`, `divert_airborne`, `scramble`, `approve`, `redirect_before_ip`, `divert_recovery` or `recall`,
 for which `missions`, `where` and with what `needs` or `chance`), `timing` (each hop's relay, decide and encode bands in
-seconds), `alert` (the alert pools' shares of the planner's on-call sorties, take-off times, shifts, an airborne pool, a
-`phase_scale`), `report_missions`, `hunter_leave` (`any`, `free_hunt_zone` with `free_hunt`, or `none`),
+seconds), `report_missions`, `hunter_leave` (`any`, `free_hunt_zone`, whose phase and depth are `hot_phase.authority`'s, or `none`),
 `silence_consent_s`, `max_report_age_h`, `nomination_h` and the Pact's `debrief_s`. The rebels have no posts. The game
 values are the `"c2"` group of `data/gameplay/air_war.json`; its `mode` 0 sets every faction's block aside (the
 campaign as before B5, for an old save's replay). Its officers come from the pool's ranks `cp_controller`,
 `gci_controller` and `fac`.
 
+Each faction file also has a `"hot_phase"` block (track B, B11; `docs/air_battle/10_FACTIONS.md` sections 7 and 12, loaded
+into `FactionDef::hot` by `hot_phase_def.hpp`, read through `hot_phase.hpp`): how its flights choose in the air. Eleven
+keys, each `{"value", "range", "source", "confidence"}` with `by_role` and `when_control_lost` where they differ:
+`initiative`, `plan_adherence`, `press_on`, `jettison_readiness`, `radio_discipline`, `emission_discipline`,
+`air_combat_skill` (must equal `air_combat.json`'s doctrine `skill`), `opportunity`, `turn_back`, `husbanding`, and
+`reaction_delay_s` (`[min, max]` with `improvised_extra_s`). Then `alert` (the alert pools: shares of the planner's
+on-call sorties, take-off times, shifts, an airborne pool, a `phase_scale`), `retask_air` (`delay_s`, `never`),
+`authority` (`beyond_task`, `free_hunt_from_phase` and `free_hunt_depth_km`, `retask_by` and `retask_kinds`, which must
+agree with the `"c2"` block's authority table, `recall_only`, `leader_may`) and `on_control_lost` (must equal the
+doctrine's). The loader refuses an unknown key, a missing source and a value outside its range. A package template's
+`medium_below_iads` (NATO's strike, close support and armed reconnaissance: 0.45) offers medium altitude only once the
+believed working defences are below it, and a phase's `apportion_mode0` is the shares an old save keeps (NATO's first
+phase, B11). The switch is the `"hot_phase"` group of `data/gameplay/air_war.json`.
+
 Each faction file also has an `"opportunity_rules"` block (track B, B6; `docs/air_battle/06_OPPORTUNITY.md`, loaded into
 `FactionDef::opportunity` by `opportunity_def.hpp`): what its flights may do with what they find. Each rule is
-`{"value", "source", "confidence"}`: `tendency` (how readily a flight on another task acts, before the type's ease),
+`{"value", "source", "confidence"}` (how readily a flight on another task acts is `hot_phase.opportunity`):
 `report_in_flight` (at once by radio, or at the debrief), `fired_on_may_attack` (the protective reaction: that site
 only), `night_hunt_clearance` (`ground_post`: a helicopter's night hunt waits for it), `own_troops_keepout_m`,
 `road_corridor_m` and `village_keepout_m` (0: off), `reattack`, `armed_recce` (`attack`, `free_hunt_zone` or

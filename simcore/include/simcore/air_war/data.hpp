@@ -20,6 +20,7 @@
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/c2_def.hpp"
+#include "simcore/air_war/hot_phase_def.hpp"
 #include "simcore/air_war/opportunity_def.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/console_data.hpp"
@@ -456,6 +457,10 @@ struct PackageTemplate {
     std::vector<Profile> profiles;
     std::vector<DayPart> day_parts;
     std::vector<std::string> aircraft;  // preferred types for the main flights (the doctrine's choice), in order
+    // >= 0: the medium profile is offered only once the believed working air defences are below this share (NATO's
+    // strike, close support and armed reconnaissance: low level until the defences are broken, 10_FACTIONS.md §9.1;
+    // hot_phase.mode 1). < 0: no gate.
+    double medium_below_iads = -1.0;
     std::string notes;
 };
 
@@ -466,7 +471,11 @@ struct PhaseDef {
     int until_day = 0;                     // > 0: the phase ends after this campaign day
     double until_iads = -1.0;              // >= 0: ends when the believed working air defences fall below this share
     double tempo = 1.0;                    // the sortie rate in this phase, times the doctrine's (> 1: a surge)
+    // The shares a campaign saved before roadmap B11 was planned with (hot_phase.mode 0; 10_FACTIONS.md §9.2), normalised.
+    bool has_apportion_mode0 = false;
+    double apportion_mode0[kMissionKinds] = {};
     std::string notes;
+    const double* Apportion(int hot_mode) const { return hot_mode < 1 && has_apportion_mode0 ? apportion_mode0 : apportion; }
 };
 
 // A faction's rules for its routes (docs/air_battle/01_ROUTES.md §6.7, §9; the doctrine's "routing"). Without a block:
@@ -769,6 +778,10 @@ struct FactionDef {
     FactionRadio radio;  // its air radio and discipline (the "radio" block, roadmap B9)
     FactionC2 c2;        // its command posts in the air, their authority, timings and alert pools (the "c2" block, roadmap B5)
     OpportunityRulesDef opportunity;  // what its flights may do with what they find (the "opportunity_rules" block, roadmap B6)
+    // How its flights choose in the air, its gates and latencies (the "hot_phase" block, roadmap B11, 10_FACTIONS.md §7).
+    // The loader also writes from it what the earlier blocks read: opportunity.tendency, c2.free_hunt, c2.alert,
+    // radio.discipline and radio.discipline_gci_fighters.
+    HotPhaseDef hot;
 
     // A class's formations by phase, as a flight carries them (flights.hpp FlightState::formations); empty: none given.
     std::map<std::string, std::vector<Vec3>> FormationsFor(const std::string& cls) const {
@@ -804,7 +817,17 @@ struct QuirkDef {
     bool weakness = false;
     std::map<std::string, double> effects;
     double tier_weight[4] = {1.0, 1.0, 1.0, 1.0};
+    // The weights a campaign saved before roadmap B11 drew with (hot_phase.mode 0; 10_FACTIONS.md §9.1), where they differ.
+    double tier_weight_mode0[4] = {-1.0, -1.0, -1.0, -1.0};
+    // A habit of the hot phase only (10_FACTIONS.md §8.5): drawn apart from the officer's other quirks, from a stream keyed
+    // on him (officers.hpp), so adding one moves no other draw.
+    bool hot_draw = false;
     std::vector<StaffRole> roles;  // who can have it (empty: anyone)
+
+    double TierWeight(Tier t, int hot_mode) const {
+        const int i = static_cast<int>(t);
+        return hot_mode < 1 && tier_weight_mode0[i] >= 0.0 ? tier_weight_mode0[i] : tier_weight[i];
+    }
 
     double Effect(const std::string& key) const {
         const auto it = effects.find(key);
@@ -842,6 +865,8 @@ inline const std::vector<std::string>& KnownQuirkEffects() {
         "recce_first",      // recce before strikes
         "risk",             // accepts higher expected losses
         "radio_chatter",    // + talks more on the air (a chatterbox), - keeps radio discipline (a silent runner) (roadmap B9)
+        "opportunity",      // + his flights act on targets of opportunity more (the opportunist; hot_phase.hpp, roadmap B11)
+        "control_bound",    // + his fighters wait for their controller and turn for home without him (roadmap B11)
     };
     return k;
 }
@@ -1034,6 +1059,9 @@ struct TuningTable {
             {"own_intel.leak_warning_s", 900.0},
             // routes as flown (route_planner.hpp, docs/air_battle/01_ROUTES.md): game values
             {"route.mode", 1.0},                    // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner
+            // the hot phase (hot_phase.hpp, docs/air_battle/10_FACTIONS.md): 1 roadmap B11's planning (NATO's medium altitude
+            // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11)
+            {"hot_phase.mode", 1.0},
             {"route.start_before_gate_m", 80000.0}, // the route starts this far behind its gate (at most at the bases)
             {"route.bend_deg", 30.0},               // a river vertex turning more is a bend, a turn point
             {"route.fallback_grid_m", 15000.0},     // the lattice of a theatre without a map
@@ -1479,7 +1507,7 @@ public:
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
                              "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2",
-                             "opportunity_rules"}) ||
+                             "opportunity_rules", "hot_phase"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1499,6 +1527,64 @@ public:
             std::string why;
             if (!LoadOpportunityRules(*op, out.opportunity, &why)) return Fail("opportunity_rules", why);
         }
+        return LoadHotPhaseBlock(root, out);
+    }
+
+    // The "hot_phase" block (roadmap B11, 10_FACTIONS.md §7.5): required. It holds the values the earlier blocks parked
+    // (the opportunity tendency, the free hunt, the alert pools, the radio discipline), written back where their readers
+    // look; and its gates summarise the c2 block's authority table, so the two must agree (§7.3).
+    bool LoadHotPhaseBlock(const json::Value& root, FactionDef& out) {
+        const json::Value* h = root.Find("hot_phase");
+        if (h == nullptr) return Fail("hot_phase", "required (10_FACTIONS.md section 7.5)");
+        std::string why;
+        if (!LoadHotPhase(*h, "hot_phase", out.hot, &why)) {
+            const std::size_t colon = why.find(": ");
+            return colon == std::string::npos ? Fail("hot_phase", why) : Fail(why.substr(0, colon), why.substr(colon + 2));
+        }
+        const HotPhaseDef& hp = out.hot;
+        out.opportunity.tendency = hp.Value(HotParam::Opportunity).value;
+        out.radio.discipline = hp.Value(HotParam::RadioDiscipline).value;
+        out.radio.discipline_gci_fighters = hp.Value(HotParam::RadioDiscipline).For(FlightRole::Escort, true);
+        out.c2.alert = hp.alert;
+        out.c2.free_hunt = C2FreeHuntDef();
+        if (hp.authority.set && hp.authority.free_hunt_from_phase >= 0) {
+            out.c2.free_hunt.from_phase = hp.authority.free_hunt_from_phase;
+            out.c2.free_hunt.depth_km = hp.authority.free_hunt_depth_km;
+            out.c2.free_hunt.source = hp.authority.source;
+            out.c2.free_hunt.confidence = hp.authority.confidence;
+        }
+        return HotPhaseAgrees(out);
+    }
+    // §7.3: the gates and the c2 block's authority table say the same. The posts that may retask an airborne flight
+    // (divert it or designate its target) are hot_phase.authority.retask_by, the missions they may do it to its
+    // retask_kinds; a faction whose posts may only recall is recall_only; a hunter's leave in the free hunt's zone, or an
+    // armed reconnaissance's, needs a free hunt, and the doctrine has the phase it opens in.
+    bool HotPhaseAgrees(const FactionDef& f) {
+        const HotAuthorityDef& a = f.hot.authority;
+        const std::string p = "hot_phase.authority";
+        std::vector<std::string> by, kinds;
+        bool recall = false;
+        for (const C2AuthorityDef& l : f.c2.authority) {
+            if (l.act == "recall") recall = true;
+            if (l.act != "divert_airborne" && l.act != "designate") continue;
+            if (std::find(by.begin(), by.end(), l.post) == by.end()) by.push_back(l.post);
+            for (const std::string& m : l.missions) {
+                if (std::find(kinds.begin(), kinds.end(), m) == kinds.end()) kinds.push_back(m);
+            }
+        }
+        auto same = [](std::vector<std::string> x, std::vector<std::string> y) {
+            std::sort(x.begin(), x.end());
+            std::sort(y.begin(), y.end());
+            return x == y;
+        };
+        if (!same(by, a.retask_by)) return Fail(Join(p, "retask_by"), "must name the post kinds the c2 block lets divert or designate");
+        if (!same(kinds, a.retask_kinds)) return Fail(Join(p, "retask_kinds"), "must name the missions the c2 block's diverts and designations cover");
+        if (a.recall_only != (recall && by.empty())) return Fail(Join(p, "recall_only"), "true exactly when the c2 block's posts may recall and nothing more");
+        const bool needs_hunt = f.c2.hunter_leave == "free_hunt_zone" || f.opportunity.armed_recce == "free_hunt_zone";
+        if (needs_hunt && a.free_hunt_from_phase < 0) return Fail(Join(p, "free_hunt_from_phase"), "the c2 block or the opportunity rules use a free hunt zone");
+        if (a.free_hunt_from_phase >= static_cast<int>(f.doctrine.phases.size())) return Fail(Join(p, "free_hunt_from_phase"), "past the doctrine's last phase");
+        if (!by.empty() && !f.hot.retask_air.delay_s.Set()) return Fail("hot_phase.retask_air", "the c2 block retasks in the air: give its delay_s");
+        if (!f.hot.alert.empty() && !f.c2.present) return Fail("hot_phase.alert", "alert pools need the c2 block's posts");
         return true;
     }
 
@@ -1510,14 +1596,13 @@ public:
         if (!r->Is(json::Type::Object)) return Fail(p, "expected an object");
         FactionRadio& b = out.radio;
         if (!Keys(*r, p, {"air_radio", "ground_radio", "band_mhz", "modulation", "language", "callsign_rotation_h", "opsec", "have_quick_share",
-                          "secure_voice_share", "gci_channels_per_post", "discipline", "discipline_gci_fighters", "source", "confidence", "notes"}) ||
+                          "secure_voice_share", "gci_channels_per_post", "source", "confidence", "notes"}) ||
             !Provenance(*r, p) || !RequireString(*r, p, "source", b.source) || !RequireString(*r, p, "confidence", b.confidence) ||
             !RequireString(*r, p, "air_radio", b.air_radio) || !OptionalString(*r, p, "ground_radio", b.ground_radio) ||
             !OptionalString(*r, p, "modulation", b.modulation) || !RequireString(*r, p, "language", b.language) ||
             !Num(*r, p, "band_mhz", b.band_mhz, 3.0, 1000.0) || !Num(*r, p, "callsign_rotation_h", b.callsign_rotation_h, 0.0, 720.0) ||
             !Num(*r, p, "opsec", b.opsec, 0.0, 1.0) || !Num(*r, p, "have_quick_share", b.have_quick_share, 0.0, 1.0) ||
-            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0) ||
-            !Num(*r, p, "discipline", b.discipline, 0.0, 1.0) || !Num(*r, p, "discipline_gci_fighters", b.discipline_gci_fighters, 0.0, 1.0)) {
+            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0)) {
             return false;
         }
         b.present = true;
@@ -1549,7 +1634,7 @@ public:
         const std::string p = "c2";
         if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
         FactionC2& b = out.c2;
-        if (!Keys(*c, p, {"posts", "authority", "timing", "alert", "report_missions", "hunter_leave", "free_hunt", "silence_consent_s",
+        if (!Keys(*c, p, {"posts", "authority", "timing", "report_missions", "hunter_leave", "silence_consent_s",
                           "max_report_age_h", "nomination_h", "debrief_s", "source", "confidence", "notes"}) ||
             !Provenance(*c, p) || !RequireString(*c, p, "source", b.source) || !RequireString(*c, p, "confidence", b.confidence) ||
             !OptionalString(*c, p, "notes", b.notes) || !StringList(*c, p, "report_missions", b.report_missions) ||
@@ -1561,14 +1646,6 @@ public:
         if (!OneOf(b.hunter_leave, {"any", "free_hunt_zone", "none"})) return Fail(Join(p, "hunter_leave"), "any, free_hunt_zone or none");
         for (std::size_t i = 0; i < b.report_missions.size(); ++i) {
             if (!C2Mission(b.report_missions[i])) return Fail(Index(Join(p, "report_missions"), i), "not a mission");
-        }
-        if (const json::Value* fh = c->Find("free_hunt")) {
-            const std::string fp = Join(p, "free_hunt");
-            if (!Keys(*fh, fp, {"from_phase", "depth_km", "source", "confidence", "notes"}) || !Provenance(*fh, fp) ||
-                !RequireString(*fh, fp, "source", b.free_hunt.source) || !RequireString(*fh, fp, "confidence", b.free_hunt.confidence) ||
-                !Int(*fh, fp, "from_phase", b.free_hunt.from_phase, -1, 20) || !Num(*fh, fp, "depth_km", b.free_hunt.depth_km, 0.0, 1000.0)) {
-                return false;
-            }
         }
         if (const json::Value* posts = OptionalArray(*c, p, "posts")) {
             for (std::size_t i = 0; i < posts->items.size(); ++i) {
@@ -1628,30 +1705,6 @@ public:
                     return false;
                 }
                 b.timing[t->keys[k]] = h;
-            }
-        }
-        if (const json::Value* al = OptionalArray(*c, p, "alert")) {
-            for (std::size_t i = 0; i < al->items.size(); ++i) {
-                const json::Value& v = al->items[i];
-                const std::string lp = Index(Join(p, "alert"), i);
-                C2AlertDef a;
-                if (!Keys(v, lp, {"id", "share", "takeoff_s", "hold_h", "airborne", "phase_scale", "source", "confidence", "notes"}) ||
-                    !Provenance(v, lp) || !RequireString(v, lp, "source", a.source) || !RequireString(v, lp, "confidence", a.confidence) ||
-                    !RequireString(v, lp, "id", a.id) || !Num(v, lp, "share", a.share, 0.0, 1.0) ||
-                    !Band(v, lp, "takeoff_s", a.takeoff_s, 0.0, 86400.0) || !Band(v, lp, "hold_h", a.hold_h, 0.0, 240.0) ||
-                    !OptionalBool(v, lp, "airborne", a.airborne) || !OptionalString(v, lp, "notes", a.notes)) {
-                    return false;
-                }
-                if (const json::Value* ps = OptionalArray(v, lp, "phase_scale")) {
-                    for (std::size_t k = 0; k < ps->items.size(); ++k) {
-                        if (!ps->items[k].Is(json::Type::Number) || ps->items[k].number < 0.0 || ps->items[k].number > 1.0) {
-                            return Fail(Index(Join(lp, "phase_scale"), k), "a number 0 .. 1");
-                        }
-                        a.phase_scale.push_back(ps->items[k].number);
-                    }
-                }
-                if (!a.hold_h.Set()) return Fail(Join(lp, "hold_h"), "required, [lo, hi] hours");
-                b.alert.push_back(a);
             }
         }
         if (!message_.empty()) return false;  // a list that is not a list
@@ -2058,7 +2111,7 @@ public:
             const json::Value& ph = phases->items[i];
             const std::string pp = Index(Join(p, "phases"), i);
             PhaseDef phase;
-            if (!Keys(ph, pp, {"id", "name", "apportion", "until_day", "until_iads", "tempo", "notes"}) ||
+            if (!Keys(ph, pp, {"id", "name", "apportion", "apportion_mode0", "until_day", "until_iads", "tempo", "notes"}) ||
                 !RequireString(ph, pp, "id", phase.id) || !RequireString(ph, pp, "name", phase.name) ||
                 !Int(ph, pp, "until_day", phase.until_day, 0, 1000) || !Num(ph, pp, "until_iads", phase.until_iads, -1.0, 1.0) ||
                 !Num(ph, pp, "tempo", phase.tempo, 0.1, 3.0) || !OptionalString(ph, pp, "notes", phase.notes)) {
@@ -2078,6 +2131,21 @@ public:
             }
             if (total <= 0.0) return Fail(Join(pp, "apportion"), "the shares add up to nothing");
             for (double& x : phase.apportion) x /= total;
+            if (const json::Value* a0 = ph.Find("apportion_mode0")) {
+                const std::string ap0 = Join(pp, "apportion_mode0");
+                if (!a0->Is(json::Type::Object)) return Fail(ap0, "{mission kind: share}");
+                double t0 = 0.0;
+                for (std::size_t k = 0; k < a0->keys.size() && k < a0->items.size(); ++k) {
+                    MissionKind mk;
+                    if (!ParseMissionKind(a0->keys[k], mk)) return Fail(Join(ap0, a0->keys[k]), "unknown mission kind");
+                    if (!a0->items[k].Is(json::Type::Number) || a0->items[k].number < 0.0) return Fail(Join(ap0, a0->keys[k]), "a share >= 0");
+                    phase.apportion_mode0[static_cast<int>(mk)] = a0->items[k].number;
+                    t0 += a0->items[k].number;
+                }
+                if (t0 <= 0.0) return Fail(ap0, "the shares add up to nothing");
+                for (double& x : phase.apportion_mode0) x /= t0;
+                phase.has_apportion_mode0 = true;
+            }
             doc.phases.push_back(std::move(phase));
         }
         const json::Value* pk = d->Find("packages");
@@ -2089,13 +2157,14 @@ public:
             PackageTemplate& t = doc.packages[static_cast<int>(mk)];
             const json::Value& v = pk->items[k];
             if (!Keys(v, tp, {"main_flights", "flight_size", "sead_per_threat", "sead_max", "escort_ratio", "jammers",
-                              "escort_jamming", "decoys", "chaff", "recce_lead", "profiles", "day_parts", "aircraft", "notes"}) ||
+                              "escort_jamming", "decoys", "chaff", "recce_lead", "profiles", "day_parts", "aircraft", "medium_below_iads", "notes"}) ||
                 !Int(v, tp, "main_flights", t.main_flights, 1, 12) || !Int(v, tp, "flight_size", t.flight_size, 1, 8) ||
                 !Num(v, tp, "sead_per_threat", t.sead_per_threat, 0.0, 8.0) || !Int(v, tp, "sead_max", t.sead_max, 0, 16) ||
                 !Num(v, tp, "escort_ratio", t.escort_ratio, 0.0, 4.0) || !Int(v, tp, "jammers", t.jammers, 0, 8) ||
                 !OptionalBool(v, tp, "escort_jamming", t.escort_jamming) || !Int(v, tp, "decoys", t.decoys, 0, 16) ||
                 !OptionalBool(v, tp, "chaff", t.chaff) || !Int(v, tp, "recce_lead", t.recce_lead, 0, 4) ||
                 !LoadProfiles(v, tp, t.profiles) || !LoadDayParts(v, tp, t.day_parts) || !StringList(v, tp, "aircraft", t.aircraft) ||
+                !Num(v, tp, "medium_below_iads", t.medium_below_iads, -1.0, 1.0) ||
                 !OptionalString(v, tp, "notes", t.notes)) {
                 return false;
             }
@@ -2108,7 +2177,7 @@ public:
         }
         for (const PhaseDef& ph : doc.phases) {
             for (int k = 0; k < kMissionKinds; ++k) {
-                if (ph.apportion[k] > 0.0 && !doc.packages[k].allowed) {
+                if ((ph.apportion[k] > 0.0 || ph.apportion_mode0[k] > 0.0) && !doc.packages[k].allowed) {
                     return Fail(Join(p, "phases"), "phase '" + ph.id + "' apportions " +
                                                        MissionKindName(static_cast<MissionKind>(k)) + " but has no package for it");
                 }
@@ -2348,10 +2417,11 @@ public:
             QuirkDef qd;
             std::vector<std::string> roles;
             if (!Keys(q, p, {"id", "name", "description", "signature", "intel_hint", "weakness", "effects", "tier_weight",
-                             "roles", "source", "notes"}) ||
+                             "tier_weight_mode0", "hot_draw", "roles", "source", "notes"}) ||
                 !RequireString(q, p, "id", qd.id) || !RequireString(q, p, "name", qd.name) ||
                 !RequireString(q, p, "description", qd.description) || !RequireString(q, p, "signature", qd.signature) ||
                 !RequireString(q, p, "intel_hint", qd.intel_hint) || !OptionalBool(q, p, "weakness", qd.weakness) ||
+                !OptionalBool(q, p, "hot_draw", qd.hot_draw) ||
                 !StringList(q, p, "roles", roles)) {
                 return false;
             }
@@ -2378,6 +2448,17 @@ public:
                         return Fail(Join(Join(p, "tier_weight"), tw->keys[k]), "a weight >= 0");
                     }
                     qd.tier_weight[static_cast<int>(t)] = tw->items[k].number;
+                }
+            }
+            if (const json::Value* tw = q.Find("tier_weight_mode0")) {
+                if (!tw->Is(json::Type::Object)) return Fail(Join(p, "tier_weight_mode0"), "expected {tier: weight}");
+                for (std::size_t k = 0; k < tw->keys.size(); ++k) {
+                    Tier t;
+                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, "tier_weight_mode0"), tw->keys[k]), "unknown tier");
+                    if (!tw->items[k].Is(json::Type::Number) || tw->items[k].number < 0.0) {
+                        return Fail(Join(Join(p, "tier_weight_mode0"), tw->keys[k]), "a weight >= 0");
+                    }
+                    qd.tier_weight_mode0[static_cast<int>(t)] = tw->items[k].number;
                 }
             }
             for (const QuirkDef& other : out) {
@@ -2670,6 +2751,20 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
         d.country = LoadCountryMap(data_dir, d.theatre.country_map, error);
         if (d.country == nullptr) {
             if (error != nullptr) *error = theatre_file + ": country_map: " + *error;
+            return false;
+        }
+    }
+    // The faction's hot phase and the air battle's doctrine name the same skill and the same answer to a lost controller
+    // (roadmap B11): air_combat.json is read by sessions without the faction files, so both keep them, and they must agree.
+    if (const AirDoctrineDef* doc = d.air_combat.Doctrine(d.faction.id)) {
+        const HotPhaseDef& h = d.faction.hot;
+        const HotValue& sk = h.Value(HotParam::AirCombat);
+        if (std::fabs(sk.value - doc->skill) > 1e-9) {
+            if (error != nullptr) *error = faction_file + ": hot_phase.air_combat_skill differs from air_war/air_combat.json's doctrine skill";
+            return false;
+        }
+        if (h.on_control_lost.set && (h.on_control_lost.green != doc->control_lost_green || h.on_control_lost.skilled != doc->control_lost_skilled)) {
+            if (error != nullptr) *error = faction_file + ": hot_phase.on_control_lost differs from air_war/air_combat.json's doctrine";
             return false;
         }
     }

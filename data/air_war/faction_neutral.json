@@ -21,8 +21,6 @@
     "have_quick_share": 0.0,
     "secure_voice_share": 0.0,
     "gci_channels_per_post": 2,
-    "discipline": 0.6,
-    "discipline_gci_fighters": 0.2,
     "source": "estimate (nothing was found on a small neutral air arm's radio procedure or listening, comms-24; the Austrian analogue austrian_af_wiki for scale only; German is an inference)",
     "confidence": "estimate",
     "notes": "Weekly call signs, medium opsec: game values."
@@ -45,7 +43,6 @@
     }
   },
   "opportunity_rules": {
-    "tendency": {"value": 0.4, "source": "SAM3D estimate bounded by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "low"},
     "report_in_flight": {"value": false, "source": "SAM3D assumption (docs/research/air_battle_2026-11/c2_retasking.md c2-40)", "confidence": "low", "notes": "centralised: the rest reported after landing"},
     "fired_on_may_attack": {"value": false, "source": "SAM3D assumption", "confidence": "low"},
     "own_troops_keepout_m": {"value": 500, "source": "SAM3D estimate", "confidence": "low"},
@@ -80,13 +77,32 @@
       "scramble": { "relay_s": [60, 180], "decide_s": [300, 600],
         "source": "SAM3D estimate (docs/air_battle/05_C2_AND_RETASKING.md §3)", "confidence": "low" }
     },
+    "report_missions": ["any"],
+    "hunter_leave": "none",
+    "max_report_age_h": 6
+  },
+  "hot_phase": {
+    "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
+    "confidence": "estimate",
+    "notes": "How its flights choose in the air (roadmap B11, simcore/air_war/hot_phase.hpp): each value the faction's, moved by the flight's officer (at most 0.2) and pilot (at most 0.15). Played flights (A2, A1) read it; the abstract resolver does not.",
+    "initiative": {"value": 0.6, "range": [0.4, 0.75], "source": "ellitoral_crippa (the lone pilot sent to count ships and allowed to attack chose his target); usn_falklands_1983; SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "plan_adherence": {"value": 0.6, "range": [0.4, 0.75], "source": "swe_stril_c2 (a neutral could control its fighters closely); goldhaube_refs; SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "press_on": {"value": 0.4, "range": [0.25, 0.55], "source": "usn_falklands_1983 (pressed on at extreme range, could not afford to manoeuvre over the target); SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "jettison_readiness": {"value": 0.6, "range": [0.4, 0.8], "source": "fundacion_malvinas_24may (A-4s jettisoned tanks and climbed away from Sea Harriers); docs/research/air_battle_2026-11/reactions.md section 2.6", "confidence": "estimate", "notes": "tanks first: the reactions table's tanks_only shares (data/gameplay/reactions.json)"},
+    "radio_discipline": {"value": 0.6, "by_role": {"escort": 0.2, "sweep": 0.2, "cap": 0.2}, "range": [0.2, 0.8], "source": "estimate (nothing was found on a small neutral air arm's radio procedure or listening, comms-24; the Austrian analogue austrian_af_wiki for scale only)", "confidence": "low", "notes": "by_role: its fighters under ground control talk to it (the radio block's discipline_gci_fighters before roadmap B11)"},
+    "emission_discipline": {"value": 0.5, "range": [0.3, 0.7], "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.2)", "confidence": "estimate"},
+    "air_combat_skill": {"value": 0.5, "range": [0.3, 0.6], "source": "austrian_af_wiki (interceptors with guns only); docs/research/air_battle_2026-11/air_combat.md neu-01; the same as data/air_war/air_combat.json's doctrine skill (checked on load)", "confidence": "estimate"},
+    "opportunity": {"value": 0.4, "range": [0.2, 0.6], "source": "SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "low", "notes": "moved from opportunity_rules.tendency (roadmap B11)"},
+    "turn_back": {"value": 0.5, "range": [0.3, 0.7], "source": "angola_saaf_1987 (pattern: a small force without replacements husbands its aircraft); SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "husbanding": {"value": 0.3, "range": [0.1, 0.5], "source": "game value on angola_saaf_1987 (the pattern) and the faction's loss_tolerance_per_day (every aircraft irreplaceable)", "confidence": "estimate"},
+    "reaction_delay_s": {"value": [2, 5], "improvised_extra_s": 0, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (trained 2-5 s, from a sighting: no warning receivers, twz_2025_argentine_chaff)", "confidence": "estimate"},
     "alert": [
       { "id": "ground", "share": 1.0, "takeoff_s": [900, 900], "hold_h": [4, 8],
         "source": "SAM3D assumption: assumed to follow NATO's 15 min ground alert (hoak_1987_retasking); hold a game value", "confidence": "low" }
     ],
-    "report_missions": ["any"],
-    "hunter_leave": "none",
-    "max_report_age_h": 6
+    "retask_air": {"delay_s": [300, 900], "never": 1.0, "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.4: recall only)", "confidence": "estimate", "notes": "its national control centre may recall a flight and nothing more"},
+    "authority": {"beyond_task": ["armed_recce"], "retask_by": [], "retask_kinds": [], "recall_only": true, "leader_may": ["attack", "break_off"], "source": "SAM3D assumption (c2-40: centralised, ground-controlled, no retasking in the air beyond a recall; docs/research/air_battle_2026-11/c2_retasking.md); goldhaube_refs; swe_stril_c2", "confidence": "estimate", "notes": "its armed reconnaissance pairs attack near the line (opportunity_rules.armed_recce near_line)"},
+    "on_control_lost": {"green": "abort", "skilled": "abort", "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"}
   },
   "doctrine": {
     "routing": { "crossing": "entry", "letdown_m": 20000, "max_turn_points": 2, "variants": ["covered", "direct"], "w_exp": 6, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0, "return": "same_entry", "deviation": "eye", "deviation_lateral_m": 3000, "source": "game values: design inference, no period source on the neutral's routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },

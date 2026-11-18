@@ -8,13 +8,15 @@
 // and outcomes the original saw.
 //
 //   {"save_version": 2, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
-//    "seed": 7, "route_mode": 1, "c2_mode": 1, "opportunity_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//    "seed": 7, "route_mode": 1, "c2_mode": 1, "opportunity_mode": 1, "hot_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
 //
 // Version 2 (roadmap B2 and B5) adds the routes' mode the campaign was planned with (route.mode: 1 the route planner), its
 // command in the air's (c2.mode: 1 the posts and the packages flown in time), the raids a session took ("take", the
 // campaign going on while they flew) and their pilots' reports to the posts ("report"), and a "complete" naming its
 // package; a version 1 save was planned with the old shapes, its packages resolved whole at their first hour with no
-// posts, and replays with route.mode 0 and c2.mode 0, to the bit.
+// posts, and replays with route.mode 0 and c2.mode 0, to the bit. A save without "hot_mode" was made before roadmap B11
+// (10_FACTIONS.md §9: NATO's medium altitude gated by the defences, the rollback's new shares, the quirk weights) and
+// replays with hot_phase.mode 0, as it was played.
 #pragma once
 
 #include <cmath>
@@ -414,6 +416,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "route_mode", Num(c.Data().tuning.Get("route.mode")));
     Put(root, "c2_mode", Num(c.Data().tuning.Get("c2.mode")));
     Put(root, "opportunity_mode", Num(c.Data().tuning.Get("opportunity.mode")));
+    Put(root, "hot_mode", Num(c.Data().tuning.Get("hot_phase.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -497,6 +500,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double c2_mode = version == 1 ? 0.0 : r.Number(root, "c2_mode", 1.0);
     // And its targets of opportunity (roadmap B6): a save made before them has no key, and replays without them.
     const double opportunity_mode = r.Number(root, "opportunity_mode", 0.0);
+    // And its hot phase's planning (roadmap B11): a save made before it has no key, and replays as it was played.
+    const double hot_mode = r.Number(root, "hot_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -559,6 +564,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["route.mode"] = route_mode;
     data.tuning.values["c2.mode"] = c2_mode;
     data.tuning.values["opportunity.mode"] = opportunity_mode;
+    data.tuning.values["hot_phase.mode"] = hot_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;
