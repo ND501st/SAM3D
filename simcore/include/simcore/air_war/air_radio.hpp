@@ -85,7 +85,7 @@ inline std::string GridOf(const Vec3& p) {
     int de = 0, dn = 0;
     axis(p.x, le, de);
     axis(p.y, ln, dn);
-    char buf[16];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%c%c %02d%02d", le, ln, de, dn);
     return buf;
 }
@@ -114,7 +114,7 @@ inline std::string ClockOf(double s) {
     double d = std::fmod(s, 86400.0);
     if (d < 0.0) d += 86400.0;
     const int m = static_cast<int>(d / 60.0);
-    char buf[32];  // room for any int in each field (GCC's -Wformat-truncation)
+    char buf[64];  // room for any int in each field (GCC's -Wformat-truncation)
     std::snprintf(buf, sizeof(buf), "%02d%02d", m / 60, m % 60);
     return buf;
 }
@@ -209,7 +209,7 @@ inline std::string CallsignAt(const std::string& base, double hour, double rotat
     if (epoch == 0) return base;
     const em::Random rng(seed ^ 0xCA11517Bull);
     const int n = 10 + static_cast<int>(rng.Uniform(em::Stream::AirRadio, std::hash<std::string>()(base), static_cast<std::uint64_t>(epoch)) * 89.0);
-    char buf[16];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), " %d", n);
     return base + buf;
 }

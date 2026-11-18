@@ -637,7 +637,7 @@ inline std::string ClockWords(double clock_h) {
     double d = std::fmod(clock_h, 24.0);
     if (d < 0.0) d += 24.0;
     int m = static_cast<int>(std::lround(d * 60.0)) % (24 * 60);
-    char buf[8];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%02d%02d", m / 60, m % 60);
     return buf;
 }
