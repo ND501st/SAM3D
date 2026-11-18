@@ -505,7 +505,7 @@ keeps:
 
 **Left:**
 - Most values are data that played flights do not read yet. Played flights now read the officer's press-on and jettison shifts, the opportunity, the radio discipline, the alert pools and the free hunt. They do not yet read `initiative`, `plan_adherence`, `emission_discipline`, `turn_back` (with its control-lost role values), `husbanding`, `reaction_delay_s` or `leader_may`. Wiring each one needs the behaviour it governs to exist in the session first: the leader's re-route (B2/B4), timing at gates (B2), our controller lost in a played raid (B8/B10), the stepped resolver (§9.3).
-- `retask_air` and the latencies are functions with no caller yet: B5's divert still uses `c2.timing`. The Pact's report and order hops compose to 160-490 s, faster than `retask_air`'s 600-1800 s. B14 should settle it. The loader does not check the composition.
+- ~~`retask_air` with no caller~~ **Settled by B14 (18 Nov 2026):** under `balance.mode` 1 B5's divert waits for `RetaskAirS`, so an airborne Pact flight has its new task 10-30 min after the decision, not in the order's 160-490 s of hops (`c2.hpp`, `docs/air_war/09_BALANCE.md` §17.3 item 3). `AlertTakeoffS` and `RecallS` are read by the bench only. The loader does not check the composition.
 - The pilot's shift needs pilots with sorties, currency and nerve. The session's nerve is passed; the sorties and currency are B12's.
 - Our side's 4-10 s reaction delay when jammed is not modelled. The jammed state does not reach a flight.
 - NATO's `redirect_before_ip` line (c2, 10%) is not counted as a retask: `RetaskAirS` says interdiction is never retasked.

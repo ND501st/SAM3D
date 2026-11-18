@@ -407,6 +407,9 @@ private:
             Event(AirEvent::Kind::Loss, t_h, static_cast<std::size_t>(l.flight), l.by, lr.where, fl.count - fl.lost);
         }
         for (const std::string& by : res.ours_lost) out.our_fighters_lost.push_back(by);
+        out.fight_attacked_flights += res.attacked;
+        out.fight_jettison_drawn += res.jettison_drawn;
+        out.fight_aborted += static_cast<int>(res.aborted.size());
         for (const int fi : res.aborted) {
             run.fight_home[static_cast<std::size_t>(fi)] = true;
             out.aborted_flights.push_back(fi);

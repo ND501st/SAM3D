@@ -24,3 +24,4 @@
 #include "simcore/air_war/package_control.hpp"
 #include "simcore/air_war/package_injector.hpp"
 #include "simcore/air_war/save.hpp"
+#include "simcore/air_war/balance_bands.hpp"

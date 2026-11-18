@@ -298,6 +298,7 @@ private:
             {"a0_meet_cap", &f.a0_meet_cap, 1.0, 0.0, 1.0},
             {"a0_meet_close", &f.a0_meet_close, 1.0, 0.0, 1.0},
             {"a0_awacs_meet", &f.a0_awacs_meet, 1.0, 0.0, 5.0},
+            {"a0_awacs_meet_mode0", &f.a0_awacs_meet_mode0, 1.0, 0.0, 5.0},
             {"a0_surprise_gci", &f.a0_surprise_gci, 1.0, 0.0, 1.0},
             {"a0_surprise_jammed", &f.a0_surprise_jammed, 1.0, 0.0, 1.0},
             {"a0_seen_awacs", &f.a0_seen_awacs, 1.0, 0.0, 1.0},

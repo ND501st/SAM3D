@@ -214,6 +214,53 @@ SC_TEST("air fight B8: the night, the weather and the low profile hide a package
     SC_EXPECT_NEAR(fight.FindChance(p, day), 0.5 * 0.85, 1e-9);
 }
 
+SC_TEST("air fight B14: attacked strike flights answer as the F-105s did; an E-3A's warning swings the exchange") {
+    // The balance pass's bands (data/air_war/balance_bands.json, red_baron_vol2, aces_1976, checo_1978_linebacker); the
+    // bench (air_war_bench) checks them over more fights.
+    AirWarData d = LoadWar("nato");
+    BalanceBands bands;
+    std::string e;
+    SC_EXPECT(LoadBalanceBands(kData + "/air_war/balance_bands.json", bands, &e));
+    const BalanceBand* jett = bands.Find("air_war_bench", "f105_jettison");
+    const BalanceBand* ab = bands.Find("air_war_bench", "f105_abort");
+    const BalanceBand* swing = bands.Find("air_war_bench", "exchange_swing");
+    SC_EXPECT(jett != nullptr && ab != nullptr && swing != nullptr);
+    if (jett == nullptr || ab == nullptr || swing == nullptr) return;
+    Package p;
+    p.flights = {MakeFlight(FlightRole::Strike, "f4e", 4, Profile::Medium), MakeFlight(FlightRole::Strike, "f4e", 4, Profile::Medium)};
+    const auto answers = [&](const AirWarData& data, int& attacked, int& jettison, int& aborted) {
+        const AbstractAirFight fight(data);
+        attacked = jettison = aborted = 0;
+        for (std::uint64_t k = 1; k <= 3000; ++k) {
+            const AbstractFightResult r = fight.Resolve(p, {4, 4}, Day(1.0), k * 7919u);
+            attacked += r.attacked;
+            jettison += r.jettison_drawn;
+            aborted += static_cast<int>(r.aborted.size());
+        }
+    };
+    int a1 = 0, j1 = 0, b1 = 0;
+    answers(d, a1, j1, b1);
+    d.tuning.values["balance.mode"] = 0.0;
+    int a0 = 0, j0 = 0, b0 = 0;
+    answers(d, a0, j0, b0);
+    d.tuning.values["balance.mode"] = 1.0;
+    std::printf("    %d flights attacked: %.0f%% jettisoned, %.0f%% turned home (before B14 %.0f%%)\n", a1, 100.0 * j1 / std::max(1, a1),
+                100.0 * b1 / std::max(1, a1), 100.0 * b0 / std::max(1, a0));
+    SC_EXPECT(a1 > 300 && a0 == a1 && j0 == j1);  // the abort's draw is one either way: nothing else moves
+    SC_EXPECT(j1 >= jett->lo * a1 && j1 <= jett->hi * a1);
+    SC_EXPECT(b1 >= ab->lo * a1 && b1 <= ab->hi * a1);
+    SC_EXPECT(b0 > b1);  // the old reading turned NATO home 36 % of the time
+    // An F-4E strike with an F-4E escort against our MiG-21s, without and with an E-3A: ours lost for each of theirs.
+    Package v;
+    v.flights = {MakeFlight(FlightRole::Strike, "f4e", 4, Profile::Medium), MakeFlight(FlightRole::Escort, "f4e", 4, Profile::Medium)};
+    const Tally bare = Many(d, v, Day(1.0), 4000);
+    const Tally warned = Many(d, v, Day(1.0, 1.0), 4000);
+    const double rb = static_cast<double>(bare.ours_lost) / std::max(1, bare.strikers_lost + bare.cover_lost);
+    const double rw = static_cast<double>(warned.ours_lost) / std::max(1, warned.strikers_lost + warned.cover_lost);
+    std::printf("    exchange (ours lost for each of theirs): no warning %.2f, under an E-3A %.2f\n", rb, rw);
+    SC_EXPECT(rw >= swing->lo * rb);
+}
+
 SC_TEST("air fight B8: the resolver fights once a package; its losses to fighters name the regiment, ours lost are counted") {
     AirWarData d = LoadWar("warsaw_pact");
     AirCampaign base;

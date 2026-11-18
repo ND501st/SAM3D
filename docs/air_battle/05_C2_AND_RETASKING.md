@@ -488,6 +488,11 @@ Kept out of the 1985 war's data, available to a later war only through `from_yea
 
 ## 9. As built (B5, 17 November 2026, branch `tb-b5`)
 
+**B14 (18 November 2026):** a divert now waits for the faction's retask delay (`RetaskAirS`, `10_FACTIONS.md` §7.4)
+under `balance.mode` 1: the order is sent at once, and the flight has its new task no earlier than the decision plus
+the delay (`C2Message::not_before_h`). `C2Stats` keeps each divert's and each on-call package's latency from the
+sighting. An old save keeps the composed hops. See `docs/air_war/09_BALANCE.md` §17.
+
 **Files.** `simcore/air_war/c2_def.hpp` (the faction's `"c2"` block: posts, authority, timing, alert, the act and kind
 lists, `C2TuningDefaults`), `c2.hpp` (`C2Authority`, `AirC2`: the posts, messages, pools and decisions),
 `package_control.hpp` (`PackageControl`: the session's flights asking the authority table), `Flights::SetAuthority` and

@@ -61,14 +61,15 @@ struct Bench {
     std::vector<IntelReport> intel;
     std::vector<std::string> journal;
 
-    explicit Bench(AirWarData data) : d(std::move(data)) {
+    // `root`: the posts' keyed draws (a test that needs many different decisions takes a different root for each case).
+    explicit Bench(AirWarData data, std::uint64_t root = 11) : d(std::move(data)) {
         AirCampaign c;
         SC_EXPECT(c.Init(d, 1));
         truth = c.Truth();
         Rng r(5);
         staff.Build(d, r, 0.0);
         Rng pr(9);
-        c2.Init(d, staff, pr, Rng(11), 0.0);
+        c2.Init(d, staff, pr, Rng(root), 0.0);
     }
     C2Context Ctx() {
         C2Context cx;
@@ -547,6 +548,71 @@ SC_TEST("c2 (B5): NATO's CAS divert waits for the corps or its silence; a BAI di
     SC_EXPECT(b.c2.Stats().warnings == 1 && b.c2.Stats().diverts == 0);
     std::vector<RetaskRecord> hunts = b.c2.TakeRetasks(b.packages[0].id);
     SC_EXPECT(hunts.size() == 1 && hunts[0].kind == "hunt" && hunts[0].by == "leader");
+}
+
+SC_TEST("c2 (B14): a Pact armed reconnaissance diverted in the air has its new task 10-30 min after the decision, not in the order's hops") {
+    // Centralised control makes a change to an airborne flight slow (10_FACTIONS.md section 2): the faction's retask delay
+    // (hot_phase.retask_air, 600-1800 s, mt_1962_kontsevoy and factions_cases) floors the order's hops (B5's c2.timing,
+    // 60-210 s for an order); before B14 (balance.mode 0) the hops alone. Diverts are occasional (chance 0.2), so cases
+    // (each with its own root for the posts' draws) are taken until a few are found.
+    AirWarData d = LoadWar("warsaw_pact");
+    std::string strike_type;
+    for (const AircraftType& a : d.faction.aircraft) {
+        if (strike_type.empty() && a.Has(FlightRole::Strike) && !a.missile && !a.drone && !a.helicopter) strike_type = a.id;
+    }
+    const C2Band& band = d.faction.hot.retask_air.delay_s;
+    SC_EXPECT(band.Set() && band.lo >= 600.0 - 1e-9 && band.hi <= 1800.0 + 1e-9);
+    int found = 0;
+    for (int attempt = 0; attempt < 60 && found < 4; ++attempt) {
+        double delay_min[2] = {-1.0, -1.0};
+        for (int mode = 0; mode < 2; ++mode) {
+            d.tuning.values["balance.mode"] = mode;
+            Bench b(d, 1000u + static_cast<std::uint64_t>(attempt));
+            const C2PostState* sq = nullptr;
+            int seen = 0;
+            for (const C2PostState& s : b.c2.Posts()) {
+                if (s.kind == "squadron" && seen++ == attempt % 3) sq = &s;
+            }
+            if (sq == nullptr) {
+                for (const C2PostState& s : b.c2.Posts()) {
+                    if (s.kind == "squadron" && sq == nullptr) sq = &s;
+                }
+            }
+            SC_EXPECT(sq != nullptr);
+            if (sq == nullptr) return;
+            const Vec3 place = sq->at + Vec3{10000.0, 0.0, 0.0};
+            Airborne a;
+            b.packages.reserve(4);
+            Fly(b, a, MissionKind::ArmedRecce, FlightRole::Strike, strike_type, sq->at, sq->at + Vec3{60000.0, 0.0, 0.0}, 0);
+            a.p.id += attempt * 10;
+            b.packages.push_back(a.p);
+            C2Context cx = b.Ctx();
+            cx.airborne.push_back({0, &a.run});
+            Package& flying = b.packages[0];
+            SC_EXPECT(C2MissionOf(flying, d) == "armed_recce");
+            b.c2.Report(flying, 0, "column", "", ObjectKind::Column, true, place, 700.0, 0.5, place, Profile::High, 0.5, cx);
+            for (double t = 0.5; t < 1.4; t += 1.0 / 120.0) b.c2.StepTo(t, cx);
+            const C2Message* divert = nullptr;
+            const C2Message* report = nullptr;
+            for (const C2Message& m : b.c2.Log()) {
+                if (m.kind == airwar::C2Kind::Divert) divert = &m;
+                if (m.kind == airwar::C2Kind::InFlightReport) report = &m;
+            }
+            if (divert == nullptr || report == nullptr) continue;
+            SC_EXPECT(std::fabs(divert->sent_h - report->arrive_h) < 1e-9);  // decided on the report's arrival
+            delay_min[mode] = (divert->arrive_h - divert->sent_h) * 60.0;
+            if (b.c2.Stats().diverts == 1) SC_EXPECT(!b.c2.Stats().divert_min.empty());
+        }
+        // The decision's own draws are the same in both modes; B14 adds only the retask's, whose "never" can stop a divert.
+        SC_EXPECT(delay_min[1] < 0.0 || delay_min[0] >= 0.0);
+        if (delay_min[0] < 0.0 || delay_min[1] < 0.0) continue;
+        ++found;
+        std::printf("    divert: the order's hops %.1f min (before B14), the flight has it %.1f min after the decision\n", delay_min[0], delay_min[1]);
+        SC_EXPECT(delay_min[0] < 6.0);
+        SC_EXPECT(delay_min[1] >= band.lo * (1.0 - kHotOfficerBound) / 60.0 - 1e-6);
+        SC_EXPECT(delay_min[1] <= band.hi * (1.0 + kHotOfficerBound) / 60.0 + 1e-6);
+    }
+    SC_EXPECT(found >= 1);
 }
 
 SC_TEST("c2 (B5): a package elsewhere flies and resolves while a raid taken by a session is in it; the clock goes on") {

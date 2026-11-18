@@ -215,6 +215,7 @@ struct FightParams {
     double a0_meet_cap = 0.4;
     double a0_meet_close = 0.5;
     double a0_awacs_meet = 1.5;
+    double a0_awacs_meet_mode0 = 1.5;  // the factor before roadmap B14 (balance.mode 0: a save made before it)
     double a0_surprise_gci = 0.6;
     double a0_surprise_jammed = 0.2;
     double a0_seen_awacs = 0.9;

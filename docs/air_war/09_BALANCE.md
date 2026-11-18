@@ -937,3 +937,205 @@ peak, and week 1 cuts more lines.
 **Cost.** The planner's gate is one comparison per template and the officers' hot quirks a few draws at
 appointment. `HotPhase` is pure and is read once per aircraft when a raid is handed to a session. Nothing runs per step.
 The wall times are not comparable: the base set ran while this worktree compiled, B11's while the tests ran.
+
+## 17. The balance pass: the hot phase against history (track B, B14, 18 November 2026)
+
+B14 (`docs/air_battle/11_IMPLEMENTATION_PLAN.md`) turns the track's measures into bands. Each band is a range in
+`data/air_war/balance_bands.json` with its anchor: a registered source, or "game value" with the reason. The two
+benches read the bands and fail when a measure falls outside one: they print PASS or FAIL on each row, and exit with 2
+when anything is out of band (`simcore/air_war/balance_bands.hpp`).
+
+- `air_war_bench` ends with a new block, "The hot phase against history": the strikers' answers to our fighters, the
+  1967 missiles, the exchanges, the latencies and friendly fire.
+- `air_war_balance` prints three new lines for each faction and posture: the losses by what shot them down (beside
+  what the planners expected), the strike flights our fighters reached and how they answered, and the latencies from
+  a pilot's sighting to an on-call package over the place and to a diverted flight's new task. It ends with a band
+  table for the theatre, the faction and the posture.
+
+Fast checks went into the tests: `test_air_fight.cpp` (the strikers' answers and the warning's swing over 3000 and
+4000 abstract fights), `test_c2.cpp` (a Pact divert's new task 10-30 min after the decision) and `test_hot_phase.cpp`
+(the bands load with their sources; `RetaskAirS` stays in its band; the save's `balance_mode`).
+
+### 17.1 The bands against history (`air_war_bench data 400`)
+
+| Measure | The model | Band | Anchor |
+|---|---|---|---|
+| Strike flights attacked by our fighters (abstract fight): jettisoned | 49.3% | 40-65% | `red_baron_vol2` (16 of 37 F-105 flights, 1966), `aces_1976` (107 of 192, 55.7%) |
+| the same: pressed on with their stores | 41.1% | 18-55% | `red_baron_vol2` (12 of 37) |
+| the same: turned for home | 19.0% (36% before B14) | 10-42% | `red_baron_vol2` (9 of 37) |
+| The same in a session (`reactions.hpp`, NATO's row for a fighter seen): jettisoned, pressed on, turned home | 55.9%, 34.4%, 22.3% | the same bands | the same |
+| AIM-7E: hits a launch, out of parameters | 11.0%, 35.3% | 9.6-12.6%, 31-39% | `checo_1967_a2a` p. 44 (11.1%, 35%) |
+| AIM-9B: hits a launch, out of parameters | 18.8%, 26.0% | 17.1-20.1%, 22-30% | `checo_1967_a2a` p. 44 (18.6%, 26%) |
+| Exchange, ours lost for each of theirs: an F-4E strike and escort, no warning | 0.91 | 0.7-3.0 | `mcallister_1985` (2.25:1 in 1965-68, 1:1 in 1968) |
+| the same under an E-3A (Teaball's warning) | 2.36 (1.60 before B14) | 2.0-8.0 | `checo_1978_linebacker` (3.8:1 in August-October 1972) |
+| the warning's swing (times) | 2.60 (1.76) | 1.5-10 | `checo_1978_linebacker` (0.47:1 in May 1972 to 3.8:1) |
+| an F-16A strike with an F-15C sweep, an EF-111A and an E-3A (the Bekaa) | 3.73 (2.92) | 3-1000 | `lambeth_1984` (about 85 to none); the floor a game value |
+| the Pact's MiG-23ML sweep | 1.10 | 0.5-4.0 | game value (`07_AIR_TO_AIR.md`) |
+| Latency: the Pact's airborne flight retasked | 20.0 min | 10-30 min | `mt_1962_kontsevoy`, `fm_100_2_1_1984` p. 12-7, SAM3D estimate |
+| NATO's close support retasked in the air | 6.5 min | 3-10 min | SAM3D estimate (`10_FACTIONS.md` §7.4) |
+| the Pact's readiness 1 to wheels up | 4.0 min | 3-5 min | `fm_100_2_1_1984` p. 12-7 |
+| Friendly fire in an exercise, ours among those fired on: notices only (the 1960s) | 22.5% | 12-30% | `mt_turchin_coop` pp. 11-12 (up to 25%) |
+| the same with notices and the day's codes (1985) | 0.4% | 0-6% | game value (`08_OUR_FIGHTERS.md` §8) |
+
+How the rows are measured:
+
+- **The strikers' answers.** Two flights of four F-4Es on a medium strike meet our pair of MiG-21s by day, 8000 times.
+  "Pressed on" is a flight that neither jettisoned nor turned home. The F-105 records count flights attacked by MiGs,
+  not flights that only saw them, so the bench counts only the flights our fighters actually attacked. The session's
+  row draws NATO's reaction row for a fighter seen by eye (`DecideFlight`), with the flight's nerve between 0.3 and 0.7.
+- **The exchanges** are the abstract fight's own (two passes, the warning, the escort's screen), at 2000 fights a case,
+  counted as the US counted them: our losses for each of theirs. The bands are wide because the analogue is flown with
+  1985's missiles (AIM-7F, AIM-9L), which hit far more often than 1968's.
+- **The latencies** are the means of `RetaskAirS` and `AlertTakeoffS` over a grid of draws and officers. The order's
+  own hops (report, decision, order) are printed beside them for reference: 2.2 min for the Pact and 2.8 for NATO.
+- **Friendly fire** is a small Monte Carlo of an exercise: 400 tracks, 35% of them ours, each notice sent 15-75 min
+  before the crossing (game values). A notice reaches the battery by `RunNotice` (the chain from the fighter
+  regiment's duty officer to the regiment's post, about 43 min), and the crew judges each track by `JudgeTrack`:
+  in the 1960s by the notice alone, in 1985 by the notice and the day's codes (`IffSystem::Kremniy`).
+
+### 17.2 The bands of the campaign (`air_war_balance`)
+
+| Band | District | Nation | Anchor |
+|---|---|---|---|
+| Aircraft lost a sortie: the rebels | 0-6% | 0-20% | §2; the nation's band argued below (item 1) |
+| the neutral | 0-8% | 0-8% | §2, §5, §8 |
+| the Pact | 1-4% | 1.5-4.5% | §5, §8, §14 |
+| NATO | 0.5-3% | 1-3.5% | §2, §5 (the lowest rate of the four), §8 |
+| Runs with the battery wrecked: careless (Pact, NATO) | 50-100% | - | §5 (the lesson the campaign teaches) |
+| careful | 0-40% | 0-40% | §5 |
+| The air battle, theirs lost for each of ours: the Pact | 0.8-2.5 | 0.8-2.5 | game value (`07_AIR_TO_AIR.md`, §15) |
+| NATO | 0.25-1.2 | 0.25-1.2 | game value; `checo_1978_linebacker`, `lambeth_1984`: the bench's cases turned round, from the Bekaa (1/3.7) to 1968 unwarned (1/0.9) |
+| On call, the sighting to over the place: the Pact | 15-45 min | 15-45 min | `mt_1962_kontsevoy` (20-30 min, 17-28 in the exercise), widened |
+| NATO | 15-60 min | 15-60 min | `luke_2002_cas` (40-50 min in Korea, the goal 15-20) |
+| A divert, the sighting to the new task: the Pact | 10-40 min | 10-40 min | SAM3D estimate (`10_FACTIONS.md` §7.4, plus the report's way) |
+
+A band is checked only where the measure is worth reading: the exchange with at least 10 aircraft down, the on-call
+latency with at least 5 packages and the divert with at least 3 diverts.
+
+### 17.3 The items B14 settled
+
+1. **The rebels' losses on the nation (14-17% a sortie; B2's Left).** The losses come from B2's route planner, not from
+   a fault: with `route.mode` 0 they are 4.1-5.7%. They run at 2.0-2.4 aircraft a week. Most are single low
+   reconnaissance aircraft by day over our troops (the motor rifle division's artillery, group south, the tank
+   regiment's area). They are shot down by the Osa batteries guarding those troops (battery 21, battery 24 and the
+   regiment's others) and by the S-125 at Paksany. The rebels' intelligence has no ELINT and a weak analyst, so it
+   never places the mobile batteries. Their planner prices those flights at 0.4 losses a week; they lose 1.1-1.5.
+   Reconnaissance makes up 52-55% of their packages, against an apportionment of 15%, because their other missions
+   find few targets they can reach. Few sorties and two losses a week give a high share. That is a fair picture of a
+   rebel air arm flying blind into a division's air defence, so the band on the nation is 0-20%, a game value. The
+   district keeps 0-6%. **Left:** the rebels' intelligence never places the mobile batteries, and the planner does not
+   learn a threat from losses it cannot explain.
+2. **NATO's day 1 against the Pact's, and `delivery_risk`.** NATO's day 1 costs 2.6-2.7% a sortie against the Pact's
+   2.3-2.7%, inside the noise of about ±0.45 points over 20 seeds. Its losses that day go to our fighters (0.7 aircraft
+   a campaign), the SAMs (0.5) and the player's battery (0.3); the target's guns take only 0.1. `delivery_risk` (the
+   price of a low delivery into the target's guns) cannot move what it does not cause: at 0.8 day 1 cost 2.3-2.5%, no
+   different. It stays at 0.4.
+3. **The retask latency: B5's hops against B11's `retask_air`.** B5's divert composed the report's and the order's
+   hops (160-490 s for the Pact), well under the doctrine's 10-30 min for an airborne flight. Under `balance.mode` 1 a
+   divert now waits for `RetaskAirS` (the faction, the mission, the officer, from a stream keyed on the message id,
+   not a new keyed stream): the order is sent at once but the flight has its new task no earlier than the decision
+   plus the retask delay (`C2Message::not_before_h`). The test in `test_c2.cpp` diverts a Pact armed reconnaissance
+   flight onto a reported column: under 6 min in mode 0, inside the band in mode 1. In the campaigns no divert happened
+   at all (the Pact's only divertable line is armed reconnaissance within its own area at a 0.2 chance, and NATO had no
+   in-flight report to divert on), so the campaign rows of `divert_min` stay unread. **Left:** diverts are too rare
+   in the campaign to measure there.
+4. **B4's two outcome-changing savings (B12's Left).** Declined. They are the defensive perception rate capped at the
+   threat rate (about 7 s in the testbed's hour) and the warning receivers' period at 0.4 s instead of 0.2 s (about
+   25 s). Both act inside the play circle, where the player watches, and change what a pilot knows and when. B12's
+   levels of detail already carry the cost outside it. Both stay as data (`perception.json`'s `defensive` rate, the
+   EM library's ESM period) should a later pass need them.
+5. **B6's order of attacks on unbriefed targets.** The data keep the design's order for each encounter
+   (`hot_phase.opportunity`: rebels 0.7, NATO 0.5, the neutral 0.4, the Pact 0.2). The counts a campaign come out
+   NATO, the Pact, the neutral, the rebels, because of exposure: the rebels fly few gun or rocket aircraft near our
+   lines. That is right for 1985, and nothing changed.
+6. **B11's careful battery wrecked in 3 runs of 20 against NATO.** Now 2 of 20 against NATO and 3 of 20 against the
+   Pact, inside the careful band of 0-40%. (The first pass in §5 gave 15-40% for a careful battery; 0-40% keeps a
+   battery that never meets its raid as a pass.)
+7. **B8's exchange ratios in a band.** In the campaigns the Pact's sit at 1.42-1.88 of theirs for each of ours and
+   NATO's at 0.32-0.68 (the band's floor moved, 17.5). The bench's Teaball case was out of band: the E-3A's warning lifted the exchange only
+   from 0.91 to 1.60 against the record's 0.47:1 to 3.8:1. Two changes under `balance.mode`, both in
+   `air_war/air_fight.hpp`:
+   - A package under an E-3A is no longer surprised when the controller sees our fighters coming
+     (`a0_seen_awacs`): Teaball's whole point was the warning.
+   - The E-3A's controller brings the package's fighters to the fight more often: `a0_awacs_meet` 1.5 → 2.0
+     (`a0_awacs_meet_mode0` keeps 1.5 for old saves).
+   The warned case is now 2.36 and the swing 2.60. The Bekaa case rose from 2.92 to 3.73. Its floor was lowered from
+   6 to 3, a game value: the abstract fight's two passes against our pilots of 1985 carry neither the destruction of
+   the Syrians' ground control with their SAMs nor the Syrians' training, so the band asks only that a sweep, a jammer
+   and an E-3A do better than the warned 1972 package's floor.
+8. **The F-105 and CHECO rows** are in the bench (17.1). One more change: the abstract fight's strikers answered by
+   reading `strikers_abort` as a share of the strikers that did not press on, which turned NATO home 36% of the time
+   against the record's 24%. Under `balance.mode` 1 the abort is drawn at its own rate (19%).
+
+### 17.4 What changed, under `balance.mode`
+
+All four changes are behind `tuning["balance.mode"]` (1 in `data/gameplay/air_war.json`'s `balance` group). A save written before B14 has no `balance_mode` and
+loads with 0, the old behaviour: B5's composed divert, the old abort reading, no surprise denied, `a0_awacs_meet` 1.5.
+
+| Change | Where | Effect |
+|---|---|---|
+| A divert waits for the retask delay | `air_war/c2.hpp` (`Divert`, `Send`) | an airborne Pact flight has its new task 10-30 min after the decision, not 3-8 |
+| The strikers' abort at its own rate | `air_war/air_fight.hpp` | NATO's attacked flights turn home 19% of the time, not 36% |
+| No surprise under an E-3A that sees our fighters | `air_war/air_fight.hpp` | the warned exchange 1.6 → 2.4 |
+| `a0_awacs_meet` 1.5 → 2.0 | `data/air_war/air_combat.json` | the same; the Bekaa case 2.9 → 3.7 |
+
+For the counters only (not saved): `PackageOutcome` counts the flights our fighters attacked, the jettisons and the
+aborts; `C2Stats` keeps each divert's and each on-call package's latency; `AirCampaign::ObserveOutcomes` lets a bench
+see each package's outcome as it is applied.
+
+### 17.5 Balance before and after
+
+The base is track-b at ef9952b on a copy of the data as it was; the after is this branch. District 20 seeds, nation
+10, 7 days each (base → after).
+
+| District | Loss % | Battery wrecked | Exchange, theirs for ours | On call (min) |
+|---|---|---|---|---|
+| Rebels, careless | 2.7% → 2.7% | 0% → 0% | - | - |
+| Rebels, careful | 2.7% → 2.7% | 0% → 0% | - | - |
+| Neutral, careless | 3.1% → 3.1% | 0% → 0% | - | - |
+| Neutral, careful | 3.8% → 3.8% | 0% → 0% | - | - |
+| Warsaw Pact, careless | 1.8% → 1.8% | 70% → 75% | 1.40 → 1.42 | 23.8 |
+| Warsaw Pact, careful | 2.1% → 2.0% | 15% → 15% | 1.60 → 1.73 | 23.8 |
+| NATO, careless | 1.5% → 1.6% | 95% → 90% | 0.80 → 0.68 | 23.1 |
+| NATO, careful | 1.5% → 1.5% | 15% → 10% | 0.80 → 0.56 | 22.8 |
+
+| Nation | Loss % | Battery wrecked | Exchange, theirs for ours | On call (min) |
+|---|---|---|---|---|
+| Rebels, careless | 16.9% → 16.9% | 0% → 0% | - | - |
+| Rebels, careful | 13.9% → 13.9% | 0% → 0% | - | - |
+| Neutral, careless | 4.8% → 4.8% | 0% → 0% | - | - |
+| Neutral, careful | 6.4% → 6.4% | 0% → 0% | - | - |
+| Warsaw Pact, careless | 4.1% → 4.1% | 60% → 60% | 1.40 → 1.51 | 27.8 |
+| Warsaw Pact, careful | 3.7% → 3.6% | 10% → 10% | 1.93 → 1.88 | 29.7 |
+| NATO, careless | 2.1% → 1.9% | 10% → 10% | 0.49 → 0.42 | 20.6 |
+| NATO, careful | 2.1% → 2.2% | 0% → 10% | 0.57 → 0.32 | 20.3 |
+
+What moved:
+
+- **The rebels and the neutral did not move** on either theatre: they fly few fights under an E-3A and few diverts,
+  and the same seeds give the same campaigns.
+- **NATO's exchange fell**, on the district from 0.8 to 0.56-0.68 of theirs for each of ours and on the nation from
+  0.49-0.57 to 0.32-0.42: with no surprise under the E-3A and its fighters brought to the fight more often, NATO's
+  escorts and sweeps win more of the fights. This is the swing of 1972 the bench asks for. The nation's careful run
+  (2.3 of theirs down for 7.2 of ours) fell below the first band's floor of 0.4, which was set before the bench's
+  cases existed. The band now runs from the Bekaa case turned round (1/3.7, about 0.27) to the unwarned 1968 package
+  (1/0.9), floor 0.25: NATO's campaign mixes sweeps under an E-3A with strikes that fly without one, so it should
+  fall between the two.
+- **The Pact's exchange rose a little** (1.40-1.60 → 1.42-1.73): its strikers turn home less often under the new
+  abort reading and stay in the fight to be shot at.
+- **Losses a sortie and the battery's fate** moved inside the noise of a few aircraft and one or two runs of 20.
+- **The latencies** sit in their bands: an on-call package is over the place 23-24 min after the pilot's sighting
+  for both alliances.
+
+`crew_balance data 10`, `helper_coverage` (its page as committed), `ground_check data 3600` (0 of 15 scenarios with
+anything off the ground), `em_bench data 500 60 24` and `air_battle_bench` give the same outcomes as the base; only the
+wall times moved (the base set ran beside a build). The old rows of `air_war_bench data 400` are unchanged.
+
+**Cost.** One more comparison and at most one draw per attacked flight, per fight under an E-3A and per divert.
+Nothing runs per step.
+
+**Left:**
+- The rebels' intelligence placing mobile batteries, and the planner learning from losses it cannot explain (item 1).
+- Diverts too rare in the campaigns to read their latency there (item 3); the `divert_min` band waits for them.
+- The exchange bands are wide: the abstract fight is calibrated to 1967-72 rates and flown with 1985 missiles.
+- B13 (Unreal) is the owner's; the hot phase's look will need its own pass once it is drawn.
