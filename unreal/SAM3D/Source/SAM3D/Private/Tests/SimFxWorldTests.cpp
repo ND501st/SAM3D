@@ -104,6 +104,22 @@ bool FSimFxWorldMunitionMeshesTest::RunTest(const FString& Parameters)
 		TestNotNull(FString::Printf(TEXT("the basic model %s is a munition"), ModelId), Spec);
 		TestNotNull(FString::Printf(TEXT("%s has its mesh"), ModelId), FSimMunitionModels::Mesh(ModelId));
 	}
+	// The air battle's (roadmap B13): every air-to-air missile of data/air_war/air_combat.json and the drop tank a fighter
+	// throws off, with their meshes; its fighters' guns known (no mesh).
+	for (const TCHAR* Id : {TEXT("k13"), TEXT("r13m"), TEXT("r60"), TEXT("r60m"), TEXT("r23r"), TEXT("r23t"), TEXT("r24r"), TEXT("r24t"),
+			 TEXT("r73"), TEXT("r27r"), TEXT("r27t"), TEXT("aim9b"), TEXT("aim7e"), TEXT("aim9j"), TEXT("aim9l"), TEXT("aim9m"),
+			 TEXT("aim7f"), TEXT("aim7m"), TEXT("drop_tank")})
+	{
+		const simcore::scenery::MunitionSpec* Spec = FSimMunitionModels::Resolve(Id);
+		TestNotNull(FString::Printf(TEXT("the air battle's %s is a munition"), Id), Spec);
+		TestNotNull(FString::Printf(TEXT("%s has its mesh"), Id), FSimMunitionModels::Mesh(Id));
+	}
+	for (const TCHAR* Id : {TEXT("gsh23l"), TEXT("m61a1"), TEXT("aden30"), TEXT("mg127"), TEXT("gsh6_30"), TEXT("gsh6_23"),
+			 TEXT("gsh30_2"), TEXT("nr30"), TEXT("bk27"), TEXT("gau8_air")})
+	{
+		const simcore::scenery::MunitionSpec* Spec = FSimMunitionModels::Resolve(Id);
+		TestTrue(FString::Printf(TEXT("the fighters' gun %s is known"), Id), Spec != nullptr && Spec->kind == "gun");
+	}
 	TestNull(TEXT("an unknown id has no mesh"), FSimMunitionModels::Mesh(TEXT("no_such_munition")));
 	return true;
 }
