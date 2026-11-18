@@ -279,7 +279,7 @@ public:
         run.ext = c.rng;
         if (by_flight) {
             for (std::size_t i = 0; i < run.order.size(); ++i) run.order[i] = i;
-            std::sort(run.order.begin(), run.order.end(), [&](std::size_t a, std::size_t b) {
+            std::stable_sort(run.order.begin(), run.order.end(), [&](std::size_t a, std::size_t b) {
                 return TargetTime(p.flights[a]) < TargetTime(p.flights[b]);
             });
             c_ = &c;

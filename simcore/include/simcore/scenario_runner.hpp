@@ -10716,7 +10716,7 @@ private:
                     known.push_back(k);
                 }
             }
-            std::sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
+            std::stable_sort(known.begin(), known.end(), [](const KnownTarget& a, const KnownTarget& b) { return a.range_m < b.range_m; });
             // With the battery commander in a real post, what he gave this vehicle comes first: the latest designation
             // to it of a target still in the picture (the post reads out only this vehicle's on its net).
             if (LinkedToPost()) {

@@ -126,7 +126,7 @@ public:
             }
         }
         pending.swap(later);
-        std::sort(arrived.begin(), arrived.end(),
+        std::stable_sort(arrived.begin(), arrived.end(),
                   [](const IntelReport& a, const IntelReport& b) { return a.arrive_h < b.arrive_h; });
         delivering_h_ = now_h;
         for (const IntelReport& r : arrived) Merge(r, analyst_skill);

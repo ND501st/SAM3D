@@ -684,7 +684,7 @@ private:
             }
             return console_.procedures.size();
         };
-        std::sort(procs.begin(), procs.end(), [&](const std::string& a, const std::string& b) { return index_of(a) < index_of(b); });
+        std::stable_sort(procs.begin(), procs.end(), [&](const std::string& a, const std::string& b) { return index_of(a) < index_of(b); });
         for (std::size_t pass = 0; pass < procs.size(); ++pass) {
             bool swapped = false;
             for (std::size_t i = 0; i + 1 < procs.size(); ++i) {

@@ -371,7 +371,7 @@ private:
             for (std::size_t i = 0; i < def_.containers.size(); ++i) {
                 if (!loaded_[i] && def_.containers[i].channel == side) pack.push_back(i);
             }
-            std::sort(pack.begin(), pack.end(), [&](std::size_t a, std::size_t b) { return def_.containers[a].order < def_.containers[b].order; });
+            std::stable_sort(pack.begin(), pack.end(), [&](std::size_t a, std::size_t b) { return def_.containers[a].order < def_.containers[b].order; });
             const int places = reload_stock_ < 0 ? traverse : std::min(traverse, reload_stock_);
             for (std::size_t k = 0; k < pack.size() && static_cast<int>(k) < places; ++k) {
                 loaded_[pack[k]] = true;

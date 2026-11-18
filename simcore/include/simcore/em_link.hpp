@@ -598,7 +598,7 @@ public:
         // is the same echo on the scope, one blip, not a new contact. Not beside chaff: those echoes he sees apart.
         out.erase(std::remove_if(out.begin(), out.end(), [&](const Contact& c) { return c.ghost && DuplicateOf(c, claimed); }),
                   out.end());
-        std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
+        std::stable_sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
     }
 
