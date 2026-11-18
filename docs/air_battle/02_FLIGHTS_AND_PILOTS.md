@@ -547,9 +547,8 @@ runner and `MirrorTargets` (scenario_runner.hpp:10893) copies positions to the p
 
 ### 5.4 As built (B12, 18 Nov 2026)
 
-**Shipped off.** The levels are built, tested and measured, but `data/gameplay/air_levels.json` ships with `mode` 0, every
-aircraft at A2 as before B12, for the reason under "What the levels change" below; `mode` 1 turns them on. The savings
-that change nothing (below) are always on.
+**On.** `data/gameplay/air_levels.json` ships with `mode` 1 since B12's second pass (below); `mode` 0 puts every
+aircraft at A2, as before B12. The savings that change nothing (below) are always on.
 
 **The levels.** `simcore/air_levels.hpp` holds them and `data/gameplay/air_levels.json` their values (game values but
 the Osa's 45 km search radar range, `voenizdat_osa_1991`). The runner looks at each flight when it comes into the sky and
@@ -566,32 +565,61 @@ a lock or launch on his receiver from the last 60 s: what the pilots know, never
 is at A2 at once; beyond 1.2 times the near range for 30 s, it goes down to A1; a flight that comes into the sky far
 away starts at A1. Our own flights are always at A2.
 
-**A1 as built.** The leader flies and thinks exactly as at A2 (the flight model, his height layer, his perception, his
-receiver, his reactions, the radio). Each wingman who keeps his slot (`FlightSlot::keeping`) is not flown by the world
-(`Aircraft::placed`): after the world's step he is set on his station from the leader (`Flights::StationOf` and the
-formation's slot), with the leader's velocity, attitude, airspeed and throttle; at the leader's height over the ground
-when his pilot holds one, else at the leader's altitude plus the slot's, never under his floor. His place on the plan is
-the leader's (`Flights::AfterMove`). His height layer does not run, his receiver is switched off
-(`EmSensorLink::SetRwrOn`; its contacts age) and his eyes are shut (no perception ticks; his picture is kept as it was).
-A wingman who is not keeping his slot (lost from sight, detached, in the attack, breaking) is flown in full. Back at A2
-his receiver is switched on and his eyes open (`PerceptionHub::Wake`: his next tick is now, and what happened while they
-were shut is not for him to see). His stores, fuel, damage, stress, orders and route are never touched, so they are as
-they were. His jammer, if he carries one, radiates from where he is placed, as at A2.
+**A1 as built.** Every aircraft of a flight at A1 is flown, looks and thinks as at A2: the flight model, the height
+layer, perception at its own rates, reactions, the radio. The one thing A1 changes is the wingmen's warning receivers.
+Each wingman who keeps his slot (`FlightSlot::keeping`, alive and in the sky) has his own receiver switched off
+(`EmSensorLink::SetRwrOn`; switched off it holds nothing, so back on it starts from what it hears) and hears on his
+leader's: the searches and the missiles' guidance the leader's receiver hears go into his picture, marked `borrowed`
+(`RwrHeard::borrowed`, `Sighting::borrowed`, keyed apart from his own receiver's contacts). A lock is not lent: a
+tracking radar holding the leader is not holding him. A missile's guidance heard on the leader's receiver is also his
+warning (`CueFromWarnings`). The leader's receiver must be the same type as the wingman's, and on; if the leader is
+dead or gone, or a wingman leaves his slot (lost from sight, detached, in the attack, breaking), the wingman's own
+receiver is on at once. When the flight comes back to A2 (or the wingman stops being lent), his own receiver comes on
+and for 1 s he still hears the leader's searches and guidance while his own takes hold (a contact counts as heard for
+1 s); his own locks and launches count from the first moment. A sighting that moves between the leader's receiver and
+his own (the same kind of emitter on the same bearing, within three bearing errors or 10 degrees) keeps its place in
+his picture (`PerceptionHub`'s `Adopt`): it is not news, so it raises no stress and cues no reaction a second time.
+
+**The cause of the first pass's divergence.** The first pass (B12, branch `tb-b12`) also stopped flying the wingmen at
+A1 and shut their eyes. Traced step by step against the levels off (`air_battle_bench --trace`), its first difference
+in the testbed's hour came from two things at the hand-over back to A2. A placed wingman was up to 191 m from where he
+would have flown (4 m at the hand-over, gone by 415 s), and waking his eyes set his next perception tick to the moment of
+the hand-over (`PerceptionHub::Wake`). The second moved every keyed draw of his perception afterwards, since the draws
+are keyed on the tick's index: the first wingman to part (62320-2) saw a missile's trail at 536.95 s on a different tick,
+with his receiver's display and picture otherwise the same, and the hour went its own way from there. Nothing in B3's
+or B4's streams shifted (both are keyed hashes, not sequential streams); the state they were keyed on did. The second
+pass flies the wingmen and keeps their eyes open, so their ticks and draws are the ones they would have had at A2.
+
+**What the levels change.** Near our units nothing is coarse: every flight there is at A2, flown and looking as
+with the levels off. A flight that was far comes back with every aircraft in the place it would have had, its stores, fuel,
+damage, orders and route untouched, and with the pictures it would have built, but for one thing: a wingman heard on
+his leader's receiver, 1-2 km away, which hears an emitter at slightly different moments than his own would have (the
+ground masks the two differently, and each sits at its own margin of sensitivity). In the testbed's hour, seed 12, two
+wingmen of Viper19, at A1, would have heard an SA-8's search on their own receivers at 170.3 s and 173.7 s, before
+their leader's receiver heard it, and a third heard it on the leader's at 175.95 s, when his own would not yet have. A
+search paint adds 0.05 to a pilot's stress, and that moves the delay of his next reaction by a few hundredths of a
+second. From such a difference the hour goes its own way, as it does from any small change. So the debriefs are often
+not identical, and the test is whether the levels move the outcomes the way a new seed does or push them one way. The
+testbed's hour over 24 seeds, with the levels off and on (`air_battle_bench data --compare 3600 --seeds N --first K`):
+
+| The testbed's hour, 24 seeds | Levels off, mean (spread) | Levels on, mean (spread) | On less off, mean (its standard error) |
+|---|---|---|---|
+| Our launches | 6.00 (3.01) | 5.71 (2.73) | -0.29 (0.49) |
+| The neighbours' launches | 206.5 (16.7) | 206.5 (18.8) | 0.0 (2.3) |
+| Aircraft down | 38.0 (6.0) | 38.1 (6.3) | +0.08 (1.09) |
+
+Seven seeds of the 24 give identical debriefs; in the others the first different line is between line 426 and line
+41,199. No outcome moves one way: each mean difference is well inside its standard error, and the spreads are alike.
+Seed by seed the runs with the levels off and on stay closer than two different seeds do (the spread of the paired
+difference is 0.5 to 0.6 of what two independent seeds give), but one hour can differ a lot (seed 12: our launches 14
+against 6; seed 13: 6 against 11). That is the kind of change a new seed makes, so the levels are on.
+`helper_coverage` (the testbed's rows, 900 s, included) and `crew_balance data 10` are identical with the levels on
+and off, line for line, and `ground_check data 3600` lists nothing with them on. The sessions in `test_levels.cpp`
+whose flights go far and come back near give the same places at every step, the same launches and the same debrief
+but for a wingman's warning-receiver line, which may come at another moment (see Tests).
 
 **A0** is not built here: the time-stepped resolver is B5's (`05_C2_AND_RETASKING.md` §4.6), and making the resolver
 place packages each step changes every campaign's outcome; it stays with B5.
-
-**What the levels change.** Inside the play circle nothing: a session whose flights stay near is the same with the
-levels on and off, debrief and launches (`test_levels.cpp`). But a flight that comes in from A1 is handed back to A2
-with its wingmen where they were placed rather than where they would have flown, and without the receiver history and
-picture they would have built while far (the leader keeps his). In the testbed's hour (`air_battle_bench --compare`)
-the first difference is at 540 s: a wingman of a flight that came into the sky far away at 294 s, was at A1 until 350 s
-and came near, breaks away from a threat he would otherwise have met differently; from there the hour plays out
-differently (our launches 6 against 4, the neighbours' 214 against 213, two runs with the levels off are identical). That
-is an outcome at the battery moved by the levels, so they ship off. What would let them on: a hand-over that rebuilds
-the wingman's receiver display and picture from the leader's (they flew together and heard the same radars), or keeping
-the receivers on at A1 (which gives up most of the saving, below), and a balance pass over the testbed and the missions
-with the levels on.
 
 **Savings that change nothing.** The step was made cheaper where the result is exact. The engagement model's geometry
 tested the line of sight (ground samples every 100 m) and the clouds for every aircraft at every step; they are now
@@ -603,31 +631,34 @@ keeps each edge's heading and its statistics with the edge, so a search no longe
 cached leg at every relaxation.
 
 **What it costs.** Timings are wall time on one core of a machine shared with other builds, so means move by a fifth
-from run to run; before and after were run alternately.
+from run to run; the first pass and the second were run alternately, back to back.
 
-| Measure | Before (b-b8) | B12, levels off (as shipped) | B12, levels on |
-|---|---|---|---|
-| The testbed's hour (`ground_check data 3600`, the testbed alone), wall, two rounds | 129 s, 103 s | 87 s, 82 s | 65 s, 62 s |
-| The testbed's hour, mean step (`air_battle_bench --testbed 3600`) | | 1.77 ms (air battle 0.55) | 1.56 ms (air battle 0.49), 1 % of aircraft-steps at A1 |
-| `em_bench data 500 60 24`, a tick | 21.0 ms | 21.0 to 21.8 ms, the same checksum | |
-
-`air_battle_bench`: 25 flights of four of the testbed's waves' types (placeholders) entered at once into the testbed
-(its battery, its neighbours and their radars, no waves of its own), measured for 120 s after 45 s, aimed at the
-battery (near) or at a point 220 km away (far):
+`air_battle_bench data`: 25 flights of four of the testbed's waves' types (placeholders) entered at once into the
+testbed (its battery, its neighbours and their radars, no waves of its own), measured for 120 s after 45 s, aimed at the
+battery (near) or at a point 220 km away (far). Two rounds each, ms a step:
 
 | Case | Aircraft | At A1 | Step (mean) | Step (worst) | Air battle | Pilots' height | Perception | Engagement and EM | of it receivers |
 |---|---|---|---|---|---|---|---|---|---|
-| near, A2 | 105 | 0 % | 3.92 ms | 17.2 ms | 0.69 ms | 0.33 ms | 0.24 ms | 2.95 ms | 2.07 ms |
-| far, A2 | 105 | 0 % | 2.26 ms | 11.9 ms | 0.54 ms | 0.32 ms | 0.10 ms | 1.46 ms | 1.30 ms |
-| far, A1 | 105 | 53 % | 1.32 ms | 7.9 ms | 0.39 ms | 0.23 ms | 0.08 ms | 0.68 ms | 0.53 ms |
+| near, A2 | 104 | 0 % | 3.72-3.73 | 16.7-16.8 | 0.72 | 0.33 | 0.27 | 2.71-2.72 | 1.77 |
+| far, A2 | 104 | 0 % | 2.24-2.29 | 12.9-13.0 | 0.53-0.54 | 0.30-0.31 | 0.10 | 1.45-1.49 | 1.29-1.33 |
+| far, A1, first pass (wingmen placed) | 104 | 53 % | 1.33 | 8.6-10.4 | 0.39 | 0.22 | 0.09 | 0.69 | 0.53 |
+| far, A1, second pass (as built) | 104 | 53 % | 1.47-1.53 | 9.1-9.7 | 0.52-0.54 | 0.29-0.30 | 0.10 | 0.69-0.72 | 0.54-0.57 |
+
+The second pass keeps most of the saving: far away, 2.3 ms a step at A2 and 1.5 ms at A1, against the first pass's
+1.3 ms. What it gives up is the wingmen's flight model, height layer and perception at A1, about 0.15 ms with 100 aircraft.
+In the testbed's hour (`air_battle_bench data --testbed 3600`) the flights are near nearly all the time (0 to 1 % of the
+aircraft-steps at A1), so the levels change little there: a mean step of 1.89-1.93 ms with them off and 1.90-1.92 ms
+on, two rounds of each pass (the first pass's runs with them on, at 1.71-1.74 ms, played a different hour).
 
 The air battle's own parts (the levels, the flights and the flight model, the pilots' height layer, the radio,
-perception, reactions, the air fight) are 0.54 to 0.69 ms with 100 aircraft at A2, a little over the budget of 0.5 ms; the
-pilots' height layer (the terrain look-ahead) is half of it, and A1 takes it to 0.39 ms. The levels themselves cost
-0.005 to 0.010 ms. What dominates the step is the EM layer's warning receivers: every aircraft's receiver hears every
-radar every 0.2 s, each a path profile over the ground. At A1 a wingman's receiver is off, which takes them from 1.3 ms
-to 0.53 ms. Near the battery, where everything is A2 whatever the levels, the step is the receivers' and the engagement
-model's, and that is B4's ESM period below.
+perception, reactions, the air fight) are 0.52 to 0.72 ms with 100 aircraft, the same at A1 as at A2 now that every
+aircraft flies and looks, a little over the budget of 0.5 ms; the pilots' height layer (the terrain look-ahead) is half
+of them. The levels themselves cost 0.004 to 0.009 ms. What dominates the step is the EM layer's warning
+receivers: every aircraft's receiver hears every radar every 0.2 s, each a path profile over the ground, and at A1
+three of each four are off. Near the battery, where everything is A2 whatever the levels, the step is the receivers'
+and the engagement model's, and that is B4's ESM period below. The pilots' height layer at a lower rate was not taken:
+an exact skip needs a ceiling on the ground ahead, and the map's analytic ground beyond its lattices has none, so any
+lower rate changes where the pilots fly inside the play circle.
 
 **B4's savings that change outcomes** (`04_REACTIONS.md` §15: the defensive perception rate capped at the threat rate,
 about 7 s in the testbed's hour; the ESM period at 0.4 s instead of 0.2 s, about 25 s) are not taken: both act inside the
@@ -642,32 +673,45 @@ moves: 3,936 of 71,528 plans repeat one). The edge memo cuts the searches by abo
 line; building the edges is left as it is. A coarser lattice on a theatre with no map would cut the rest but changes the
 routes, so it stays on 01's Left list.
 
-**Through the other tasks.** B3's perception: the leader's eyes and receiver run at A1, a wingman's are shut and woken
-(`PerceptionHub::Wake`). B6's ground opportunities are found by the leader, and the near range covers our ground objects
-a pilot may find (40 km, the ground law's cull), so a flight that could find a mover or a dummy is at A2. B9's radio runs
-for every member at A1 as at A2 (the calls are made and heard), and an order heard that takes a wingman off his slot has
-him flown in full from that step, since only a wingman keeping his slot is placed. B8's live air fight counts as engaged,
-so it is always at A2: there is no "A1 far fight", and `air_combat_bench` is not written (B8's fights are measured as
+**Through the other tasks.** B3's perception runs for every pilot at every level; at A1 a wingman's receiver sightings
+come from his leader's receiver, marked borrowed, and `Adopt` keeps a sighting in place when it moves between the two.
+B4's reactions are keyed on the pilot and his count of cues (`ReactionU`), so they shift only if what he heard shifts.
+B6's ground opportunities are found as at A2, and the near range covers our ground objects a pilot may find (40 km, the
+ground law's cull). B9's radio runs for every member at A1 as at A2. B8's live air fight counts as engaged, so it is
+always at A2: there is no "A1 far fight", and `air_combat_bench` is not written (B8's fights are measured as
 `air_battle_bench`'s "air fight" part). A0 is B5's.
 
 **Tests** (`tests/test_levels.cpp`): the stagger fires at the same simulation times at 0.05 s and 0.1 s and spreads the
 flights; the hysteresis (up at once, down past 1.2 times after 30 s, a route along the edge never changes level, a flight
-first seen far starts at A1, mode 0 keeps everything at A2); the data loads (mode 0 as shipped), and a data folder
-without the file keeps the levels off (old saves and old data folders load as before); a flight out to 160 km and back
-goes A2, A1, A2 once each, its wingmen placed exactly on their stations and on the leader's waypoint, their receivers off
-and pictures kept, the leader's receiver on, and back at A2 they fly their slots within 300 m (with the practice drone in
-the sky, the Osa's launch at it is heard on the leader's receiver 124 km away, and the flight is at A2 for a minute: what
-a pilot knows brings him to A2 however far); three flights near the battery give the same debrief and launches with the
-levels on and off; a session with the levels on run twice gives the same debrief; 100 aircraft far away at A1 make a
-quarter of the perception ticks of A2.
+first seen far starts at A1, mode 0 keeps everything at A2); the data loads, and a data folder without the file keeps
+the levels off (old saves and old data folders load as before); a flight out to 160 km and back, the levels off and on
+side by side: it goes to A1 and back, its wingmen's receivers are off at A1 while the leader's is on, the Osa's search
+heard on the leader's receiver reaches the wingmen's pictures as borrowed, none is borrowed 2 s after the return, every
+aircraft is in the same place at every step and the debrief is the same; four cases of flights that go far and come
+back near the battery (routes north and south, east of the unit by -30 to 20 km, four seeds), each compared with the
+levels off when a flight went to A1, came back within 55 km and its wingmen heard on the leader's receiver: the same
+places at every step, the same launches, and the same debrief within the stated tolerance (the warning receivers' lines
+the same by who and what; only a wingman's may come at another moment; every other line identical). Three of the four
+are identical; in the fourth, while his flight was far south of the unit, a wingman's own receiver would have heard an
+SA-8's track 8 s before his leader's did, and with the levels on he hears it 14 s later, once the leader's lock has
+brought the flight back to A2. Three flights near the battery give
+the same debrief and launches with the levels on and off; a session with the levels on run twice gives the same
+debrief; 100 aircraft far away at A1 have 25 receivers on against 100 at A2 and the same perception ticks.
 
-**The balance (base b-b8 against B12, the levels on for the runs marked so).** `crew_balance data 10`, `air_war_balance data 20 7`, `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` and `air_war_bench data 400` are identical to the base, line for line (the air war's runs play no session with far flights; the route planner's memo changes no route). `em_bench data 500 60 24` gives the same checksum at the same cost (it drives the EM world directly). `ground_check data 3600` lists nothing, 0 of 15, with the levels off and on. `helper_coverage` is identical with the levels off; with them on only the testbed's rows move (its hour plays differently, as above). `python -m pytest prototype tools -q`: 186 passed, the one failure `test_voice_lines` as before; `check_citations`: 0 problems.
+**The balance (the first pass, levels off, against the second, levels on).** `crew_balance data 10`,
+`air_war_balance data 20 7`, `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` and `air_war_bench data
+400` are identical, line for line (the air war's runs play no session with far flights). `em_bench data 500 60 24`
+gives the same checksum (it drives the EM world directly). `ground_check data 3600` lists nothing, 0 of 15, with the
+levels off and on. `helper_coverage` is identical with the levels off and on, the testbed's rows included, and the same
+as the first pass's with them off. With the levels off the second pass's `ground_check`, `helper_coverage` and
+`crew_balance` are the first pass's, line for line. `python -m pytest prototype tools -q`: 186 passed, the one failure
+`test_voice_lines` as before; `check_citations`: 0 problems.
 
-**Shortcuts.** A placed wingman perceives nothing, so nothing he would have seen raises his stress while placed. A
-wingman whose pilot holds a height over the ground is placed at the leader's height over the ground, read at his own
-place, not flown to it. The stagger key is a hash of the flight's id, not a serial given at `EnterTarget`: the same on
-every machine, but it changes if a flight is renamed. The post's radar does not make a flight near by default
-(`post_radar_m` 0): the PU-12M's P-19 reaches 160 km and would keep a whole battery mission at A2; set it to count it.
+**Shortcuts.** A wingman at A1 hears what his leader's receiver hears, not what his own would have: an emitter at the
+edge of hearing is heard earlier or later, and a lock on him that is not on his leader is missed until the flight comes
+back to A2. The stagger key is a hash of the flight's id, not a serial given at `EnterTarget`: the same on every machine,
+but it changes if a flight is renamed. The post's radar does not make a flight near by default (`post_radar_m` 0): the
+PU-12M's P-19 reaches 160 km and would keep a whole battery mission at A2; set it to count it.
 
 ## Done when
 
@@ -706,5 +750,5 @@ every machine, but it changes if a flight is renamed. The post's radar does not 
 - Two-seat crew coordination beyond DeHart's remark; how fatigue and stress curves should be shaped (game values).
 - The A0 resolver made time-stepped (`05_C2_AND_RETASKING.md` §4.6, with `01_ROUTES.md`'s routes): its cost on the
   nation's theatre is not yet measured.
-- The levels on (B12, §5.4): a hand-over from A1 that rebuilds a placed wingman's receiver display and picture,
-  then a balance pass over the testbed and the missions with `air_levels.json` `mode` 1.
+- B12's A1 (§5.4): a wingman hears on his leader's receiver, so an emitter at the edge of hearing comes to him a
+  little earlier or later, and a lock on him alone is missed until his flight is back at A2.

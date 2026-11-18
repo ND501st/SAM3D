@@ -775,14 +775,19 @@ public:
         rwr_of_[target_id] = rwrs_.size();
         rwrs_.push_back({target_id, esm_id, 0, true});
     }
-    // A target's warning receiver switched off and on (roadmap B12: a wingman placed on his slot at A1 listens with his
-    // leader's; air_levels.hpp). Off, it hears nothing and says nothing; its contacts age. Its own keyed draws are its
-    // own (em::DrawHash), so the others' receivers hear the same either way.
+    // A target's warning receiver switched off and on (roadmap B12: a wingman at A1 keeping his slot hears on his
+    // leader's; air_levels.hpp). Off, it hears nothing, says nothing and holds nothing: back on, it starts from what it
+    // hears. Its own keyed draws are its own (em::DrawHash), so the others' receivers hear the same either way.
     void SetRwrOn(const std::string& target_id, bool on) {
         Rwr* r = RwrOf(target_id);
         if (r == nullptr || r->on == on) return;
         r->on = on;
-        if (r->esm != 0) SetEsmOn(r->esm, on);
+        if (r->esm == 0) return;
+        SetEsmOn(r->esm, on);
+        if (em::EsmState* es = world_.Scene().FindEsm(r->esm); es != nullptr && !on) {
+            es->contacts.clear();
+            es->intercepts.clear();
+        }
     }
     bool RwrOn(const std::string& target_id) const {
         const Rwr* r = RwrOf(target_id);

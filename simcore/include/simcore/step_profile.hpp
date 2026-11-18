@@ -12,7 +12,7 @@ namespace simcore {
 struct StepProfile {
     enum Part : int {
         Levels,      // the flights' levels of detail (air_levels.hpp)
-        Flights,     // the command layer's steering and its after-move, the A1 wingmen placed
+        Flights,     // the command layer's steering and its after-move, the A1 wingmen's receivers lent
         World,       // the flight model and the missiles (World::Step)
         Pilots,      // the pilots' height layers, the ground floor, the gone and the lost
         Radio,       // the enemy's calls and our intercept (air_war/air_radio.hpp)
