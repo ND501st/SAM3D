@@ -540,7 +540,8 @@ the visible events the runner records, the neighbours' and the PU-12M's radars r
 | the instructor's `EvadeNow` | kept |
 
 **Differences from the design.**
-- No A1 or A0 level: every aircraft in the session runs the full tick (B12).
+- No A1 or A0 level: every aircraft in the session runs the full tick (B12). B12 built A1 (a placed wingman's eyes shut
+  and woken, `PerceptionHub::Wake`) but ships it off (`02_FLIGHTS_AND_PILOTS.md` §5.4); A0 is B5's.
 - Only our own launches count toward the report that goes up; the neighbours' and the testbed's launches make signs and trails
   the pilots see, and cue them, but are not counted in `PackageOutcome`.
 - A sighting reaches no wingman: the picture is per pilot (B9 carries it by voice, B4 reacts to it).

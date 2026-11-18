@@ -840,7 +840,15 @@ private:
     mutable const std::vector<RouteThreat>* threats_ = nullptr;
     mutable LegCache* cache_ = nullptr;
     mutable std::vector<Node> nodes_;
-    mutable std::vector<std::vector<int>> adj_;
+    // An edge of the graph: the node it goes to, its heading (as TurnDeg reads it) and, once looked up, its leg's facts in
+    // the cycle's cache (roadmap B12: the three searches of a plan share their edges; a reference into an unordered_map
+    // stays valid as it grows).
+    struct Edge {
+        int to = 0;
+        double heading_rad = 0.0;
+        const LegStats* stats = nullptr;
+    };
+    mutable std::vector<std::vector<Edge>> adj_;
     mutable std::vector<bool> avoid_;
     mutable double agl_ = 60.0, transit_agl_ = 4000.0, in_mps_ = 220.0, attack_mps_ = 250.0, cruise_mps_ = 220.0, home_mps_ = 220.0, w_exp_ = 1.0;
     mutable std::uint64_t prof_key_ = 0, threat_hash_ = 0;
@@ -853,7 +861,7 @@ private:
         nodes_.resize(mark);
         avoid_.resize(mark);
         adj_.resize(mark);
-        for (auto& a : adj_) a.erase(std::remove_if(a.begin(), a.end(), [&](int j) { return j >= static_cast<int>(mark); }), a.end());
+        for (auto& a : adj_) a.erase(std::remove_if(a.begin(), a.end(), [&](const Edge& e) { return e.to >= static_cast<int>(mark); }), a.end());
     }
 
     static Vec3 Rotate(const Vec3& v, double ang) {  // counter-clockwise (to the left) by ang
@@ -866,7 +874,9 @@ private:
         return xs.empty() ? m : m * (1.0 / static_cast<double>(xs.size()));
     }
     static double TurnDeg(const Vec3& a, const Vec3& b, const Vec3& c) {
-        const double h1 = std::atan2(b.x - a.x, b.y - a.y), h2 = std::atan2(c.x - b.x, c.y - b.y);
+        return TurnDegOf(std::atan2(b.x - a.x, b.y - a.y), std::atan2(c.x - b.x, c.y - b.y));
+    }
+    static double TurnDegOf(double h1, double h2) {
         double d = std::fabs(h2 - h1);
         if (d > 3.141592653589793) d = 6.283185307179586 - d;
         return RadToDeg(d);
@@ -910,11 +920,13 @@ private:
         } else {
             std::sort(c.begin(), c.end());
         }
+        const auto to = [](int j) { return [j](const Edge& x) { return x.to == j; }; };
         for (const auto& e : c) {
             auto& a = adj_[static_cast<std::size_t>(i)];
             auto& b = adj_[static_cast<std::size_t>(e.second)];
-            if (std::find(a.begin(), a.end(), e.second) == a.end()) a.push_back(e.second);
-            if (std::find(b.begin(), b.end(), i) == b.end()) b.push_back(i);
+            const Vec3& pj = nodes_[static_cast<std::size_t>(e.second)].pos;
+            if (std::find_if(a.begin(), a.end(), to(e.second)) == a.end()) a.push_back({e.second, std::atan2(pj.x - pi.x, pj.y - pi.y), nullptr});
+            if (std::find_if(b.begin(), b.end(), to(i)) == b.end()) b.push_back({i, std::atan2(pi.x - pj.x, pi.y - pj.y), nullptr});
         }
     }
 
@@ -942,6 +954,10 @@ private:
         return last_stats_;
     }
     mutable LegStats last_stats_;
+    // Whether Stats keeps this leg's facts in the cycle's cache (else in last_stats_, good until the next call).
+    bool StatsCached(int ia, int ib) const {
+        return cache_ != nullptr && nodes_[static_cast<std::size_t>(ia)].feature >= 0 && nodes_[static_cast<std::size_t>(ib)].feature >= 0;
+    }
     LegStats Compute(const Vec3& a, const Vec3& b, double agl_a, double agl_b, const Vec3* skip_ring_of) const {
         LegStats s;
         s.len_m = Dist2d(a, b);
@@ -1035,7 +1051,9 @@ private:
             const bool is_goal = std::find(goals.begin(), goals.end(), static_cast<int>(u)) != goals.end();
             if (is_goal && static_cast<int>(u) != start) continue;  // a route ends at its goal
             const Vec3 from = prev[u] >= 0 ? nodes_[static_cast<std::size_t>(prev[u])].pos : nodes_[u].pos - in_dir * 1000.0;
-            for (int v : adj_[u]) {
+            const double h_in = std::atan2(nodes_[u].pos.x - from.x, nodes_[u].pos.y - from.y);  // TurnDeg's first heading
+            for (Edge& e : adj_[u]) {
+                const int v = e.to;
                 const std::size_t vv = static_cast<std::size_t>(v);
                 if (done[vv]) continue;
                 const bool v_goal = std::find(goals.begin(), goals.end(), v) != goals.end();
@@ -1043,11 +1061,16 @@ private:
                 if (!v_goal && nodes_[vv].feature < 0) continue;
                 // A feature flown over straight on is a check on the way, not a turn point: only real turns count
                 // against the faction's turn points (the legs' limits keep the graph's own hops short).
-                const double turn = TurnDeg(from, nodes_[u].pos, nodes_[vv].pos);
+                const double turn = TurnDegOf(h_in, e.heading_rad);
                 if (turn > max_turn) continue;
                 const int hv = hops[u] + (static_cast<int>(u) != start && turn > straight ? 1 : 0);
                 if (hv > rules_.max_turn_points) continue;
-                const LegStats& s = Stats(static_cast<int>(u), v);
+                const LegStats* sp = e.stats;
+                if (sp == nullptr) {
+                    sp = &Stats(static_cast<int>(u), v);
+                    if (StatsCached(static_cast<int>(u), v)) e.stats = sp;  // a reference into the cycle's cache, not the scratch
+                }
+                const LegStats& s = *sp;
                 double c = cost[u] + Cost(s, nodes_[u].pos, nodes_[vv].pos, mps, goal);
                 if (vv < avoid_.size() && avoid_[vv]) c += penalty;
                 if (c < cost[vv] - 1e-9) {

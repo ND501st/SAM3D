@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -394,9 +395,13 @@ public:
             p.position = position;
             p.velocity = velocity;
             pid = world_.AddPlatform(p);
+            platform_of_[id] = pid;
             targets_.emplace_back(id, pid);
-            for (auto& r : rwrs_) {
-                if (r.target == id && r.esm == 0 && !r.esm_def.empty()) r.esm = world_.AddEsm(pid, r.esm_def);
+            if (Rwr* r = RwrOf(id)) {
+                if (r->esm == 0 && !r->esm_def.empty()) {
+                    r->esm = world_.AddEsm(pid, r->esm_def);
+                    if (!r->on) SetEsmOn(r->esm, false);
+                }
             }
         }
         em::Platform* p = world_.Scene().FindPlatform(pid);
@@ -763,13 +768,27 @@ public:
     // ---- A target's radar warning receiver: a library ESM receiver (kind rwr) on the target's platform, made when the
     // target first appears. Its contacts, named through its threat library, tell the pilot what illuminates him.
     void SetTargetRwr(const std::string& target_id, const std::string& esm_id) {
-        for (auto& r : rwrs_) {
-            if (r.target == target_id) {
-                r.esm_def = esm_id;
-                return;
-            }
+        if (Rwr* r = RwrOf(target_id)) {
+            r->esm_def = esm_id;
+            return;
         }
-        rwrs_.push_back({target_id, esm_id, 0});
+        rwr_of_[target_id] = rwrs_.size();
+        rwrs_.push_back({target_id, esm_id, 0, true});
+    }
+    // A target's warning receiver switched off and on (roadmap B12: a wingman placed on his slot at A1 listens with his
+    // leader's; air_levels.hpp). Off, it hears nothing and says nothing; its contacts age. Its own keyed draws are its
+    // own (em::DrawHash), so the others' receivers hear the same either way.
+    void SetRwrOn(const std::string& target_id, bool on) {
+        Rwr* r = RwrOf(target_id);
+        if (r == nullptr || r->on == on) return;
+        r->on = on;
+        if (r->esm != 0) SetEsmOn(r->esm, on);
+    }
+    bool RwrOn(const std::string& target_id) const {
+        const Rwr* r = RwrOf(target_id);
+        if (r == nullptr || r->esm == 0) return false;
+        const em::EsmState* es = world_.Scene().FindEsm(r->esm);
+        return es != nullptr && es->on;
     }
     struct RwrWarning {
         bool lock = false;    // a hostile tracking radar holds him (steady illumination from an emitter named "track")
@@ -780,8 +799,9 @@ public:
     // What the target's RWR says now (heard within the last second). No RWR: nothing.
     RwrWarning WarningOf(const std::string& target_id) const {
         RwrWarning w;
-        for (const auto& r : rwrs_) {
-            if (r.target != target_id || r.esm == 0) continue;
+        for (const Rwr* rp = RwrOf(target_id); rp != nullptr; rp = nullptr) {
+            const Rwr& r = *rp;
+            if (r.esm == 0) continue;
             const em::EsmState* es = world_.Scene().FindEsm(r.esm);
             if (es == nullptr || !es->on) continue;
             for (const em::EsmContact& c : es->contacts) {
@@ -798,10 +818,8 @@ public:
         return w;
     }
     bool HasRwr(const std::string& target_id) const {
-        for (const auto& r : rwrs_) {
-            if (r.target == target_id && !r.esm_def.empty()) return true;
-        }
-        return false;
+        const Rwr* r = RwrOf(target_id);
+        return r != nullptr && !r->esm_def.empty();
     }
     // A pilot's own chaff (roadmap B4, reaction_chain.hpp): a cloud where the target is now, drifting on the wind. False
     // if the target is not in the EM world.
@@ -828,8 +846,9 @@ public:
     };
     std::vector<RwrContactView> RwrPictureOf(const std::string& target_id) const {
         std::vector<RwrContactView> out;
-        for (const auto& r : rwrs_) {
-            if (r.target != target_id || r.esm == 0) continue;
+        for (const Rwr* rp = RwrOf(target_id); rp != nullptr; rp = nullptr) {
+            const Rwr& r = *rp;
+            if (r.esm == 0) continue;
             const em::EsmState* es = world_.Scene().FindEsm(r.esm);
             if (es == nullptr || !es->on) continue;
             for (const em::EsmContact& c : es->contacts) {
@@ -926,8 +945,9 @@ public:
     bool RwrRadarInBand(const std::string& target_id, double freq_min_hz, double freq_max_hz, double aim_bearing_rad, double bearing_tol_rad,
                         RwrSignal& out) const {
         double best = -1e300;
-        for (const auto& r : rwrs_) {
-            if (r.target != target_id || r.esm == 0) continue;
+        for (const Rwr* rp = RwrOf(target_id); rp != nullptr; rp = nullptr) {
+            const Rwr& r = *rp;
+            if (r.esm == 0) continue;
             const em::EsmState* es = world_.Scene().FindEsm(r.esm);
             if (es == nullptr || !es->on) continue;
             for (const em::EsmContact& c : es->contacts) {
@@ -1179,9 +1199,8 @@ private:
     }
 
     int PlatformOf(const std::string& id) const {
-        for (const auto& t : targets_)
-            if (t.first == id) return t.second;
-        return 0;
+        const auto it = platform_of_.find(id);
+        return it == platform_of_.end() ? 0 : it->second;
     }
     std::string CarrierOf(int arm_id) const {
         for (const auto& c : arm_carriers_)
@@ -1343,8 +1362,22 @@ private:
         std::string target;
         std::string esm_def;
         int esm;
+        bool on;  // the receiver switched on (SetRwrOn)
     };
     std::vector<Rwr> rwrs_;
+    std::unordered_map<std::string, std::size_t> rwr_of_;   // a target's receiver (index into rwrs_)
+    std::unordered_map<std::string, int> platform_of_;      // a target's EM platform (targets_ as a map)
+    Rwr* RwrOf(const std::string& target_id) {
+        const auto it = rwr_of_.find(target_id);
+        return it == rwr_of_.end() ? nullptr : &rwrs_[it->second];
+    }
+    const Rwr* RwrOf(const std::string& target_id) const {
+        const auto it = rwr_of_.find(target_id);
+        return it == rwr_of_.end() ? nullptr : &rwrs_[it->second];
+    }
+    void SetEsmOn(int esm_id, bool on) {
+        if (em::EsmState* es = world_.Scene().FindEsm(esm_id)) es->on = on;
+    }
     struct Site {
         std::string key;
         int platform = 0;

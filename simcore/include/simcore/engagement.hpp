@@ -1175,8 +1175,30 @@ private:
         Vec3 velocity;
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
-        bool los = false;
-        double cloud_transmission = 1.0;  // the light the cloud lets through between the unit and the target (weather.hpp)
+        // The line of sight and the cloud between the unit and the target, worked out when first asked this step from
+        // where both were at Measure (roadmap B12: a far aircraft's profile is thousands of ground samples, and most
+        // steps nobody asks). The same answer as working them out at Measure.
+        bool Los() const {
+            if (los_state < 0) {
+                los_state = terrain != nullptr && HasLineOfSight(*terrain, from, from_alt_m, pos, alt_m, 100.0) ? 1 : 0;
+            }
+            return los_state == 1;
+        }
+        double CloudTransmission() const {
+            if (cloud_state < 0.0) {
+                cloud_state = weather != nullptr && weather->HasClouds() ? weather->CloudTransmission(from, from_unit_alt_m, pos, alt_m) : 1.0;
+            }
+            return cloud_state;
+        }
+        const Terrain* terrain = nullptr;
+        const Weather* weather = nullptr;
+        Vec3 from;                   // the unit, at Measure
+        double from_alt_m = 0.0;     // its search antenna's altitude
+        double from_unit_alt_m = 0.0;
+        Vec3 pos;                    // the target, at Measure
+        double alt_m = 0.0;
+        mutable int los_state = 0;   // -1 not yet worked out, 0 no, 1 yes
+        mutable double cloud_state = 1.0;  // < 0 not yet worked out
         std::vector<std::array<double, 3>> history;  // (time, az, el) of the last few seconds, for a lagging operator
         Vec3 prev_velocity;
         Vec3 prev_los_dir;
@@ -1271,8 +1293,15 @@ private:
             g.az_deg = Wrap180(g.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
-            g.los = HasLineOfSight(terrain, unit_, antenna_alt, a->position, alt, 100.0);
-            g.cloud_transmission = world.GetWeather().HasClouds() ? world.GetWeather().CloudTransmission(unit_, unit_alt, a->position, alt) : 1.0;
+            g.terrain = &terrain;
+            g.weather = &world.GetWeather();
+            g.from = unit_;
+            g.from_alt_m = antenna_alt;
+            g.from_unit_alt_m = unit_alt;
+            g.pos = a->position;
+            g.alt_m = alt;
+            g.los_state = -1;
+            g.cloud_state = -1.0;
             const Vec3 dir = los.Normalized();
             g.rel = los;
             g.velocity = a->velocity;
@@ -1529,7 +1558,7 @@ private:
         }
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.los || g.range_m < window.first || g.range_m > window.second) continue;
+            if (!g.alive || g.range_m < window.first || g.range_m > window.second || !g.Los()) continue;
             if (mti ? g.range_m > d.mti_max_range_m : g.agl_m < tuning_.clutter_altitude_m) continue;
             picture_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             if (seen_by_search_.insert(kv.first).second) {
@@ -1768,7 +1797,7 @@ private:
         const double wheel_az = console.panel.GetValue(d.az_wheel);
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.los || g.range_m > d.max_range_m) continue;
+            if (!g.alive || g.range_m > d.max_range_m || !g.Los()) continue;
             const bool in_beam =
                 std::fabs(WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= tuning_.az_tolerance_deg;
             if (in_beam || (kv.first == tracked_ && method_ == TrackMethod::Radar)) {
@@ -1787,7 +1816,7 @@ private:
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
             return nullptr;
         }
-        if (!g.los) return "no line of sight";
+        if (!g.Los()) return "no line of sight";
         if (g.angular_rate_deg_s > tuning_.max_angular_rate_deg_s) return "target crossing too fast";
         if (method == TrackMethod::Radar) {
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
@@ -1810,7 +1839,7 @@ private:
                                      ? optical_.contrast_threshold
                                      : em::AnchorThreshold(optical_.inherent_contrast, tuning_.tv_max_range_m, em::kReferenceVisibilityM);
         const double fov_h = DegToRad(TvFieldOfViewDeg(console) * console.track.fov_height_ratio);
-        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los, g.cloud_transmission);
+        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.Los(), g.CloudTransmission());
     }
 
     // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by
@@ -1946,7 +1975,7 @@ private:
         const double wheel_el = console.panel.GetValue(d.el_wheel);
         double error_deg = 0.0;
         if (problem == nullptr) {
-            if (!g.los) {
+            if (!g.Los()) {
                 tv_masked_s_ += dt;
                 if (tv_masked_s_ > tuning_.tv_memory_s) {
                     problem = "masked: the memory ran out";
@@ -1974,11 +2003,11 @@ private:
             tv_masked_s_ = 0.0;
             return false;
         }
-        if (g.los && crew.advise) {  // where the target is now, for a player's wheels (the helper)
+        if (g.Los() && crew.advise) {  // where the target is now, for a player's wheels (the helper)
             if (d.lock_control.empty() || console.panel.Get(d.lock_control) >= 1) Want(d.az_wheel, WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg));
             Want(d.el_wheel, g.el_deg);
         }
-        if (g.los) {
+        if (g.Los()) {
             // The NPC seats follow the target as it was a moment ago (each seat's own lag), with their own aim error.
             double az = g.az_deg, el = g.el_deg;
             const double az_t = time_ - (crew.az_lag_s >= 0.0 ? crew.az_lag_s : tuning_.tv_npc_delay_s);
@@ -2366,8 +2395,7 @@ private:
         const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.friendly || g.iff_code != iff_code_ || !g.los || g.range_m > d.iff_max_range_m) continue;
-
+            if (!g.alive || !g.friendly || g.iff_code != iff_code_ || g.range_m > d.iff_max_range_m || !g.Los()) continue;
             if (gated) {
                 bool on_scope = false;
                 for (const Contact& c : picture_) on_scope = on_scope || c.target_id == kv.first;
@@ -2497,7 +2525,7 @@ private:
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             for (const auto& kv : geo_) {
                 const Geometry& tg = kv.second;
-                if (!tg.alive || !tg.los || tg.range_m > d.max_range_m) continue;
+                if (!tg.alive || tg.range_m > d.max_range_m || !tg.Los()) continue;
                 const bool aimed = std::fabs(WheelAzimuth(tg.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= 5.0;
                 if ((aimed || kv.first == tracked_) && tg.agl_m < tuning_.track_min_altitude_m) low = true;
             }
@@ -2621,7 +2649,7 @@ private:
         tv_range_estimate_m_ = 0.0;
         if (method_ != TrackMethod::Tv || tuning_.tv_span_m.empty()) return;
         const auto g = geo_.find(tracked_);
-        if (g == geo_.end() || !g->second.alive || !g->second.los || g->second.range_m <= 1.0) return;
+        if (g == geo_.end() || !g->second.alive || g->second.range_m <= 1.0 || !g->second.Los()) return;
         const double span = SpanOf(tracked_);
         if (span <= 0.0) return;
         tv_span_mils_ = (span / g->second.range_m) * (6000.0 / (2.0 * 3.14159265358979323846));

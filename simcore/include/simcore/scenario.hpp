@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_levels.hpp"
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_data.hpp"
 #include "simcore/air_war/air_fight_def.hpp"
@@ -427,6 +428,7 @@ struct ScenarioDef {
     int year = 1985;           // the "date"'s year (the default's)
     LightValues light_values;  // data/gameplay/light.json
     airwar::PerceptionData perception;  // data/gameplay/perception.json and the receivers' displays (roadmap B3)
+    AirLevelValues air_levels;          // data/gameplay/air_levels.json: the flights' levels of detail (roadmap B12)
     // The reactions under fire (roadmap B4): data/gameplay/reactions.json and data/air_war/countermeasures.json, loaded
     // whenever they are in the data folder (a package entering the session may bring pilots who react).
     ReactionTable reactions;
@@ -2695,6 +2697,8 @@ private:
             return Fail("", error);  // there but wrong; a data folder without it keeps the code's thresholds
         }
         if (!airwar::LoadPerceptionData(data_dir, out.perception, &error)) return Fail("", error);
+        // The flights' levels of detail (roadmap B12): a data folder without the file keeps every aircraft at A2.
+        if (!LoadAirLevelValues(data_dir, "gameplay/air_levels.json", out.air_levels, &error)) return Fail("", error);
         const json::Value* env = root.Find("environment");
         const json::Value* bat = root.Find("battery");
         const bool daylight_given = env != nullptr && env->Find("daylight") != nullptr;

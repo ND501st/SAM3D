@@ -64,6 +64,8 @@ python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
 ./simcore/build/air_war_balance --theatre theatre_pannonia_nation.json data 10 7   # the same on the whole nation (N4); the demo takes --theatre too
 ./simcore/build/air_war_bench data 400            # weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9)
+./simcore/build/air_battle_bench data [--testbed 600]  # 100 aircraft near at A2, far at A2 and A1: ms a step by part (docs/air_battle/02 section 5.4)
+./simcore/build/air_battle_bench data --compare 600    # the testbed with the levels off, off again and on: where the outcomes part
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson

@@ -81,6 +81,7 @@ struct Aircraft {
     bool attitude_set = false;    // the heading and path angle were taken from its velocity on its first step
     // Its height is set by a pilot after each step (TargetPilot, target_behaviour.hpp): the step flies the horizontal.
     bool height_held = false;
+    bool placed = false;          // set on its slot by the runner this step, not flown (a wingman at A1, roadmap B12)
     AircraftDemand demand;  // the command layer's (flights.hpp); inactive: its waypoints
 };
 
