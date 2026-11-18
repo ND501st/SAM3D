@@ -547,7 +547,6 @@ private:
     double last_t_ = 0.0;
     double emitted_s_ = 0.0;
     double last_radiating_t_ = -1e9;
-    int launches_seen_ = 0;
     bool launch_seen_ = false;
     std::vector<PackageOutcome::LaunchSighting> sightings_;
     std::size_t sightings_taken_ = 0;

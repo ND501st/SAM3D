@@ -8,8 +8,11 @@ import json
 import os
 import sys
 
-import numpy as np
 import pytest
+
+# The art tools need numpy and Pillow; CI's prototype job installs neither (and checks out without LFS art).
+np = pytest.importorskip('numpy')
+pytest.importorskip('PIL')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fx_sounds as S  # noqa: E402

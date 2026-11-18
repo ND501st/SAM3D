@@ -667,7 +667,6 @@ private:
     double next_s_ = 0.0;
     int waves_ = 0;
     int flight_no_ = 10;
-    int released_ = 0;
     int drops_ = 0;
     std::vector<std::pair<std::size_t, std::size_t>> deck_;  // (faction, aircraft type) still to come round
     std::vector<std::size_t> fdeck_;

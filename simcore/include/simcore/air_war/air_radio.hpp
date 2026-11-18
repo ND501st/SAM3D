@@ -114,7 +114,7 @@ inline std::string ClockOf(double s) {
     double d = std::fmod(s, 86400.0);
     if (d < 0.0) d += 86400.0;
     const int m = static_cast<int>(d / 60.0);
-    char buf[8];
+    char buf[32];  // room for any int in each field (GCC's -Wformat-truncation)
     std::snprintf(buf, sizeof(buf), "%02d%02d", m / 60, m % 60);
     return buf;
 }

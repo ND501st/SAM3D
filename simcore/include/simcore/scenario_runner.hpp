@@ -9688,7 +9688,7 @@ private:
     void SlipDesignation(char (&az)[16], char (&r)[16], KnownTarget& k) {
         const std::string right = std::string(az) + ", " + r;
         std::string digits = std::string(az, 2) + std::string(az + 3, 2) + r;
-        const unsigned pick = relay_rng_();
+        const unsigned pick = static_cast<unsigned>(relay_rng_());
         const std::size_t at = pick % digits.size();
         digits[at] = static_cast<char>('0' + (digits[at] - '0' + 1 + static_cast<int>((pick / 7u) % 9u)) % 10);
         const int mils = std::atoi(digits.substr(0, 4).c_str()) % 6000;

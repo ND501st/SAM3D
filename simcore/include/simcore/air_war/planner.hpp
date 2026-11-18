@@ -896,9 +896,9 @@ private:
                 if (!main_pr.ok) return false;
                 // The same way as the covered route is no other option; a flank far dearer is not offered.
                 const auto flown = [](const PlannedRoute& pr) {
-                    std::vector<std::string> f;
-                    for (const RoutePoint& rp : pr.points) f.push_back(rp.feature);
-                    return f;
+                    std::vector<std::string> features;
+                    for (const RoutePoint& rp : pr.points) features.push_back(rp.feature);
+                    return features;
                 };
                 if (flown(main_pr) == flown(v0) && main_pr.exit == v0.exit) return false;
                 if (o.variant == 1 && main_pr.cost > Tune().Get("route.prune_ratio") * std::max(1.0, v0.cost)) return false;
