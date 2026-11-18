@@ -56,7 +56,17 @@ public:
         double t_s = 0.0;
     };
 
+    // A controller's mark (roadmap S2): the FAC's designate, heard by the flight's leader on the air.
+    struct Designation {
+        std::size_t flight = 0;
+        Vec3 where;           // session ENU, on the ground
+        double radius_m = 0.0;
+        std::string by;
+        double t_s = 0.0;
+    };
+
     void Init(const RaidManifest& m, const AirWarData& d, unsigned seed) {
+        designations_.clear();
         m_ = &m;
         d_ = &d;
         seed_ = static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 0xB6ull;
@@ -96,6 +106,18 @@ public:
     }
 
     bool On() const { return on_; }
+    // A contact of `flight`'s within `radius_m` of `where` is designated for its chain (opportunity.hpp MayAttack: "designated
+    // by the controller").
+    void Designate(std::size_t flight, const Vec3& where, double radius_m, const std::string& by, double t_s) {
+        designations_.push_back({flight, where, radius_m, by, t_s});
+    }
+    bool Designated(std::size_t flight, const Vec3& at) const {
+        for (const Designation& d : designations_) {
+            if (d.flight == flight && Dist2d(d.where, at) <= d.radius_m) return true;
+        }
+        return false;
+    }
+    const std::vector<Designation>& Designations() const { return designations_; }
     // A fixed-wing aircraft whose planned load is a gun or rockets: its attack is flown as passes.
     bool PlannedPass(std::size_t i) const { return on_ && i < ac_.size() && ac_[i].planned_pass; }
     bool PlannedBegun(std::size_t i) const { return i < ac_.size() && ac_[i].planned_begun; }
@@ -318,6 +340,7 @@ private:
         s.range_m = Dist2d(lpos, c.pos);
         s.moving = c.moving;
         s.fired_on = c.fired_on;
+        s.designated = Designated(fi, c.pos);
         s.depth_km = m.depth_km;
         s.free_hunt_zone = m.free_hunt;
         s.night = m.night;
@@ -593,6 +616,7 @@ private:
     std::vector<std::size_t> planned_fired_;
     int planned_claims_ = 0;
     int passes_ = 0;
+    std::vector<Designation> designations_;
 };
 
 }  // namespace airwar

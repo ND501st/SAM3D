@@ -238,6 +238,32 @@ inline bool RedirectFlight(Package& p, PackageRun& run, std::size_t fi, const Ve
     return true;
 }
 
+// A flight recalled (roadmap S2): from where it is now straight back to the end of its route, its load kept (aborted: it
+// releases nothing). False if it is done or has released already.
+inline bool RecallFlight(Package& p, PackageRun& run, std::size_t fi, double now_h, double speed_mps) {
+    if (fi >= p.flights.size() || fi >= run.next_leg.size() || run.FlightDone(p, fi) || speed_mps <= 0.0) return false;
+    Flight& fl = p.flights[fi];
+    if (fl.released || fl.aborted) return false;
+    const std::size_t si = run.next_leg[fi];
+    const RoutePoint& r0 = fl.route[si];
+    if (now_h < r0.t_h) now_h = r0.t_h;
+    RoutePoint here;
+    here.pos = PackageRun::PlaceOf(fl, now_h);
+    here.pos.z = r0.pos.z;
+    here.agl_m = r0.agl_m;
+    here.t_h = now_h;
+    here.tag = "recall";
+    RoutePoint home = fl.route.back();
+    home.t_h = now_h + Dist2d(here.pos, home.pos) / speed_mps / 3600.0;
+    std::vector<RoutePoint> route(fl.route.begin(), fl.route.begin() + static_cast<std::ptrdiff_t>(si + 1));
+    route.push_back(here);
+    route.push_back(home);
+    fl.route = route;
+    fl.release_index = -1;
+    fl.aborted = true;
+    return true;
+}
+
 class Resolver {
 public:
     // The whole package at once, drawing from `c.rng` (the bench's and the tests' way; the campaign steps it in time).

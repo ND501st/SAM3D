@@ -20,6 +20,7 @@
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/c2_def.hpp"
+#include "simcore/air_war/counter_c2.hpp"
 #include "simcore/air_war/hot_phase_def.hpp"
 #include "simcore/air_war/opportunity_def.hpp"
 #include "simcore/air_war/types.hpp"
@@ -1639,7 +1640,7 @@ public:
         if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
         FactionC2& b = out.c2;
         if (!Keys(*c, p, {"posts", "authority", "timing", "report_missions", "hunter_leave", "silence_consent_s",
-                          "max_report_age_h", "nomination_h", "debrief_s", "source", "confidence", "notes"}) ||
+                          "max_report_age_h", "nomination_h", "debrief_s", "post_loss", "clearance", "source", "confidence", "notes"}) ||
             !Provenance(*c, p) || !RequireString(*c, p, "source", b.source) || !RequireString(*c, p, "confidence", b.confidence) ||
             !OptionalString(*c, p, "notes", b.notes) || !StringList(*c, p, "report_missions", b.report_missions) ||
             !OptionalString(*c, p, "hunter_leave", b.hunter_leave) || !Num(*c, p, "silence_consent_s", b.silence_consent_s, 0.0, 3600.0) ||
@@ -1710,6 +1711,45 @@ public:
                 }
                 b.timing[t->keys[k]] = h;
             }
+        }
+        if (const json::Value* pl = c->Find("post_loss")) {  // a post destroyed (roadmap S2)
+            const std::string lp = Join(p, "post_loss");
+            C2PostLossDef& l = b.post_loss;
+            if (!Keys(*pl, lp, {"takeover", "takeover_s", "reconstitute_h", "source", "confidence", "notes"}) || !Provenance(*pl, lp) ||
+                !RequireString(*pl, lp, "source", l.source) || !RequireString(*pl, lp, "confidence", l.confidence) ||
+                !OptionalString(*pl, lp, "takeover", l.takeover) || !Band(*pl, lp, "takeover_s", l.takeover_s, 0.0, 86400.0) ||
+                !OptionalString(*pl, lp, "notes", l.notes)) {
+                return false;
+            }
+            if (!OneOf(l.takeover, {"alternate", "none"})) return Fail(Join(lp, "takeover"), "alternate or none");
+            if (const json::Value* rh = pl->Find("reconstitute_h")) {
+                const std::string rp = Join(lp, "reconstitute_h");
+                if (!rh->Is(json::Type::Object)) return Fail(rp, "expected an object of post kinds");
+                for (std::size_t k = 0; k < rh->keys.size() && k < rh->items.size(); ++k) {
+                    if (!OneOf(rh->keys[k], C2PostKinds())) return Fail(Join(rp, rh->keys[k]), "not a post kind");
+                    C2Band band;
+                    if (!Band(*rh, rp, rh->keys[k].c_str(), band, 0.0, 2000.0)) return false;
+                    l.reconstitute_h[rh->keys[k]] = band;
+                }
+            }
+            l.set = true;
+        }
+        if (const json::Value* cl = c->Find("clearance")) {  // a strike's clearance on a jammed net (roadmap S2)
+            const std::string cp = Join(p, "clearance");
+            C2ClearanceDef& k = b.clearance;
+            if (!Keys(*cl, cp, {"missions", "on_jammed", "hold_s", "source", "confidence", "notes"}) || !Provenance(*cl, cp) ||
+                !RequireString(*cl, cp, "source", k.source) || !RequireString(*cl, cp, "confidence", k.confidence) ||
+                !StringList(*cl, cp, "missions", k.missions) || !OptionalString(*cl, cp, "on_jammed", k.on_jammed) ||
+                !Band(*cl, cp, "hold_s", k.hold_s, 0.0, 7200.0) || !OptionalString(*cl, cp, "notes", k.notes)) {
+                return false;
+            }
+            if (!OneOf(k.on_jammed, {"attack", "abort", "hold_then_abort"})) return Fail(Join(cp, "on_jammed"), "attack, abort or hold_then_abort");
+            if (k.missions.empty()) return Fail(Join(cp, "missions"), "required, a list of missions");
+            for (std::size_t m = 0; m < k.missions.size(); ++m) {
+                if (!C2Mission(k.missions[m])) return Fail(Index(Join(cp, "missions"), m), "not a mission");
+            }
+            if (k.on_jammed == "hold_then_abort" && !k.hold_s.Set()) return Fail(Join(cp, "hold_s"), "required for hold_then_abort");
+            k.set = true;
         }
         if (!message_.empty()) return false;  // a list that is not a list
         b.present = true;
@@ -2721,6 +2761,7 @@ struct AirWarData {
     WeaponsDef weapons;  // empty: every type strikes by its strike_power (the model before the weapons)
     AirCombatDef air_combat;  // the air-to-air missiles, guns and fits, the chain's numbers (data/air_war/air_combat.json, track B7)
     SensorsDef sensors;       // the airborne sensors by type and year (data/air_war/sensors.json)
+    CounterC2Def counter_c2;  // our side against the enemy's command in the air (data/command/counter_c2.json, roadmap S2)
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
 
     const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
@@ -2751,6 +2792,7 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadWeaponsFile(data_dir + "/air_war/weapons.json", d.weapons, error)) return false;
     if (!LoadAirCombatFile(data_dir + "/air_war/air_combat.json", d.air_combat, error)) return false;
     if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;
+    if (!LoadCounterC2File(data_dir + "/command/counter_c2.json", d.counter_c2, error)) return false;
     if (!d.theatre.country_map.empty()) {
         d.country = LoadCountryMap(data_dir, d.theatre.country_map, error);
         if (d.country == nullptr) {

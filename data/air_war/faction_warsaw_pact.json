@@ -110,7 +110,21 @@
     "report_missions": ["any"],
     "hunter_leave": "free_hunt_zone",
     "max_report_age_h": 6,
-    "debrief_s": [300, 600]
+    "debrief_s": [300, 600],
+    "post_loss": {
+      "takeover": "none",
+      "reconstitute_h": {"tasking": [12, 24], "support_centre": [6, 12], "radar_control": [6, 12], "fac": [2, 6]},
+      "source": "fm_100_2_1_1984 p. 12-4 (aircraft follow their original plan unless ground control changes it: nobody takes a lost post's traffic, the flights fly the plan); the reconstitution times SAM3D estimates",
+      "confidence": "low",
+      "notes": "Roadmap S2: messages to a destroyed post are lost; it works again after its kind's reconstitution, with a stand-in at its desk."
+    },
+    "clearance": {
+      "missions": ["cas", "helo_raid"],
+      "on_jammed": "attack",
+      "source": "fm_100_2_1_1984 p. 12-4 (the original plan flown unless changed by ground control): a flight that does not hear its aviation guide attacks as briefed",
+      "confidence": "low",
+      "notes": "Roadmap S2."
+    }
   },
   "hot_phase": {
     "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",

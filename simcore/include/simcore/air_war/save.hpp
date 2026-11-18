@@ -420,6 +420,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "opportunity_mode", Num(c.Data().tuning.Get("opportunity.mode")));
     Put(root, "hot_mode", Num(c.Data().tuning.Get("hot_phase.mode")));
     Put(root, "balance_mode", Num(c.Data().tuning.Get("balance.mode")));
+    Put(root, "c2_live_mode", Num(c.Data().tuning.Get("c2.live_mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -474,6 +475,11 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "sigma_m", Num(a.sigma_m));
                 Put(x, "observed_h", Num(a.observed_h));
                 break;
+            case CampaignAction::Kind::PostAttack:
+                Put(x, "kind", Str("post_attack"));
+                Put(x, "post", Str(a.what));
+                Put(x, "by", Str(a.by));
+                break;
         }
         Put(x, "posture", save_detail::PostureJson(a.posture));
         Push(actions, x);
@@ -507,6 +513,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double hot_mode = r.Number(root, "hot_mode", 0.0);
     // And the balance pass's changes (roadmap B14): a save made before them has no key, and replays as it was played.
     const double balance_mode = r.Number(root, "balance_mode", 0.0);
+    // And the command live in the session (roadmap S2): a save made before it has no key, and replays as it was played.
+    const double c2_live_mode = r.Number(root, "c2_live_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -543,6 +551,10 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
             } else if (kind == "take") {
                 a.kind = CampaignAction::Kind::Take;
                 a.package_id = r.Int(x, "package_id", -1);
+            } else if (kind == "post_attack") {
+                a.kind = CampaignAction::Kind::PostAttack;
+                a.what = r.String(x, "post");
+                a.by = r.String(x, "by");
             } else if (kind == "report") {
                 a.kind = CampaignAction::Kind::Report;
                 a.package_id = r.Int(x, "package_id", -1);
@@ -571,6 +583,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["opportunity.mode"] = opportunity_mode;
     data.tuning.values["hot_phase.mode"] = hot_mode;
     data.tuning.values["balance.mode"] = balance_mode;
+    data.tuning.values["c2.live_mode"] = c2_live_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

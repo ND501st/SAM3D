@@ -90,6 +90,10 @@ struct RunStats {
     double c2_reports = 0.0, c2_out_of_cover = 0.0, c2_diverts = 0.0, c2_warnings = 0.0, c2_scrambles = 0.0, c2_on_call = 0.0;
     double c2_on_call_sorties = 0.0, c2_pool_aircraft = 0.0, c2_pools = 0.0, c2_stood_down = 0.0, c2_heard = 0.0, c2_refusals = 0.0;
     double c2_briefs = 0.0, c2_requests = 0.0, c2_to_intel = 0.0, c2_on_call_sorties_d1 = 0.0, c2_sorties_d1 = 0.0;
+    // The command live (roadmap S2): recalls, posts struck and set up again, traffic to an alternate or lost with its post,
+    // hops our jamming took, close support held and sent home for want of its FAC's clearance.
+    double c2_recalls = 0.0, c2_posts_struck = 0.0, c2_posts_back = 0.0, c2_to_alternate = 0.0, c2_lost_with_post = 0.0;
+    double c2_jammed_by_us = 0.0, c2_holds = 0.0, c2_clearance_aborts = 0.0;
     // The air battle (roadmap B8, air_fight.hpp): fights, the enemy's aircraft our fighters shot down, ours lost.
     double air_fights = 0.0, air_enemy_lost = 0.0, air_ours_lost = 0.0;
     // The latencies (roadmap B14): minutes from a pilot's sighting to an on-call package over the place, and to a diverted
@@ -315,6 +319,14 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         acc.c2_briefs += cs.briefs;
         acc.c2_requests += cs.requests;
         acc.c2_to_intel += cs.to_intel;
+        acc.c2_recalls += cs.recalls;
+        acc.c2_posts_struck += cs.posts_struck;
+        acc.c2_posts_back += cs.posts_back;
+        acc.c2_to_alternate += cs.to_alternate;
+        acc.c2_lost_with_post += cs.lost_with_post;
+        acc.c2_jammed_by_us += cs.jammed_by_us;
+        acc.c2_holds += cs.clearance_holds;
+        acc.c2_clearance_aborts += cs.clearance_aborts;
         for (double m : cs.on_call_min) acc.on_call_min += m;
         acc.on_call_n += static_cast<double>(cs.on_call_min.size());
         for (double m : cs.divert_min) acc.divert_min += m;
@@ -410,6 +422,9 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
                     r.c2_to_intel / n, r.c2_briefs / n, r.c2_heard / n, r.c2_pools / n, r.c2_pool_aircraft / n, r.c2_stood_down / n, r.c2_on_call / n,
                     r.c2_on_call_sorties / n, sorties > 0.0 ? 100.0 * r.c2_on_call_sorties / sorties : 0.0,
                     d1 > 0.0 ? 100.0 * r.c2_on_call_sorties_d1 / d1 : 0.0);
+        std::printf("Command live (S2): %.1f recalls, %.1f hops jammed by us, %.1f posts struck by our fires (%.1f set up again), %.1f messages to an alternate, %.1f lost with their post, %.1f close support briefs held, %.1f sent home a campaign.\n",
+                    r.c2_recalls / n, r.c2_jammed_by_us / n, r.c2_posts_struck / n, r.c2_posts_back / n, r.c2_to_alternate / n, r.c2_lost_with_post / n,
+                    r.c2_holds / n, r.c2_clearance_aborts / n);
     }
     // The bands (roadmap B14): each measure this theatre, faction and posture has one for.
     {
