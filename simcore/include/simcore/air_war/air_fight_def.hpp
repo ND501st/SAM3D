@@ -34,6 +34,9 @@ struct AirFightFighterDef {
     std::string regiment;    // ours: the regiment a kill is written to
     std::string controller;  // the controller's id, or none
     double skill = -1.0;     // < 0: the doctrine's
+    // Ours with a base (S1, a pair the duty scrambled): sent home, he flies to it, not away from the fight and on.
+    bool has_home = false;
+    Vec3 home;               // ENU (the scenario's)
 };
 
 struct AirFightControllerDef {

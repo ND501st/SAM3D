@@ -52,6 +52,9 @@ struct ResolveContext {
     // draws (0: none, as before B6) and its phase (the Pact's free hunt).
     std::uint64_t opportunity_seed = 0;
     int phase = 0;
+    // Our fighters' corridors as they are (S1, docs/air_battle/08_OUR_FIGHTERS.md section 9; theatre ENU, hours of the day):
+    // a package timed into one its staff believes in meets defences near it holding fire for ours at its hours.
+    std::vector<command::OwnAirZone> own_corridors;
 };
 
 // The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
@@ -141,6 +144,7 @@ struct AirEvent {
 // A package in the air (roadmap B5, A0): walked leg by leg in the order of time, so it has a place at every hour and its
 // posts can act while it flies. Resolver::Begin sets it up, Resolver::StepTo walks every leg that ends by then.
 struct PackageRun {
+    std::vector<char> belt_done;  // per flight: its damaged aircraft have met their own belt (S1)
     PackageOutcome out;
     Rng rng{1};
     Rng* ext = nullptr;  // draw from this stream instead (Resolver::Resolve: the caller's)
@@ -392,7 +396,51 @@ private:
 
     // The flight is done with its route (shot down, turned back, home): reconnaissance without a release point
     // photographs what was along it.
+    // A defence near our fighters' corridor, at its hours, holds fire for ours (S1, mt_1973_nvn pp. 13-14): the share it keeps.
+    double OwnCorridorHold(const Package& p, const Vec3& at, double when_h) const {
+        const AirWarData& d = *c_->data;
+        if (!d.has_own_air || d.tuning.Get("own_air.mode") < 1.0) return 1.0;
+        double hod = std::fmod(d.theatre.start_hour + when_h, 24.0);
+        if (hod < 0.0) hod += 24.0;
+        for (const command::OwnAirZone& z : c_->own_corridors) {
+            if (z.id != p.own_corridor || hod < z.from_h || hod > z.to_h || z.DistanceM(at) > d.own_air.learning.near_m) continue;
+            return 1.0 - d.own_air.learning.hold_fire;
+        }
+        return 1.0;
+    }
+    // Its damaged aircraft come home over its own ground air defence (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): off
+    // the minimum risk route and with Mode 4 failed, each by a chance, and then its own belt may shoot one down; written in
+    // its records as lost to its own fire. Draws from a fork of the package's stream keyed on kOwnAirKey + 0x900 (none taken).
+    void OwnBelt(Package& p, std::size_t fi) {
+        const AirWarData& d = *c_->data;
+        const OwnAdDef& a = d.faction.own_ad;
+        if (!a.present || d.tuning.Get("own_air.mode") < 1.0 || fi >= p.flights.size()) return;
+        PackageRun& run = *run_;
+        if (run.belt_done.size() < p.flights.size()) run.belt_done.resize(p.flights.size(), 0);
+        if (run.belt_done[fi] != 0) return;
+        run.belt_done[fi] = 1;
+        Flight& fl = p.flights[fi];
+        const int damaged = std::min(fl.damaged, fl.count - fl.lost);
+        if (damaged <= 0 || fl.route.empty() || fl.role == FlightRole::Missile) return;
+        Rng belt = R().Fork(command::kOwnAirKey + 0x900ull + (static_cast<std::uint64_t>(p.id) << 8) + static_cast<std::uint64_t>(fi));
+        for (int k = 0; k < damaged; ++k) {
+            const bool off = belt.Chance(a.off_mrr_damaged);
+            const bool mode4 = belt.Chance(a.mode4_failed_damaged);
+            if (!(off && mode4) || !belt.Chance(a.belt_kill)) continue;
+            LossRecord lr;
+            lr.flight = static_cast<int>(fi);
+            lr.by = a.belt;
+            lr.where = fl.route.back().pos;
+            lr.own_fire = true;
+            run.out.losses.push_back(lr);
+            ++fl.lost;
+            Event(AirEvent::Kind::Loss, fl.route.back().t_h, fi, a.belt, lr.where, fl.count - fl.lost);
+            run.out.notes.push_back(fl.callsign + ": a damaged aircraft lost to its own " + a.belt + " coming home off its minimum risk route, Mode 4 failed");
+        }
+    }
+
     void Finish(Package& p, std::size_t fi) {
+        OwnBelt(p, fi);
         Flight& fl = p.flights[fi];
         run_->next_leg[fi] = fl.route.empty() ? 0 : fl.route.size() - 1;
         const AircraftType* a = c_->data->faction.Aircraft(fl.aircraft);
@@ -557,6 +605,7 @@ private:
                 double supp = radar && !emcon ? std::max(run.supp_base, run.suppressed[oj]) : 0.0;
                 if (radar && !emcon && run.routed) supp = std::max(supp, run.corridor_supp[oj]);
                 if (st.function < 1.0) env *= st.function;
+                if (!p.own_corridor.empty() && p.own_corridor_found) env *= OwnCorridorHold(p, st.pos, when_h);
                 const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
                                                 def.defence.low_cover, def.defence.medium_cover, radar, supp,
                                                 run.jam && radar ? tune.Get("attrition.jamming") : 0.0, env,

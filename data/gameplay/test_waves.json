@@ -46,7 +46,7 @@
   ],
   "friendly_callsigns": ["Sokol", "Berkut", "Strizh", "Kobra", "Grom"],
   "friendly": [
-    { "id": "mig21", "name": "MiG-21", "model": "mig21", "class": "fighter", "roles": ["cap", "intercept"], "speed_mps": 240, "alt_m": 5000, "rcs_m2": 3, "count": [2, 4] },
+    { "id": "mig21", "name": "MiG-21", "model": "mig21", "fit": "mig21bis", "class": "fighter", "roles": ["cap", "intercept"], "speed_mps": 240, "alt_m": 5000, "rcs_m2": 3, "count": [2, 4] },
     { "id": "mig23ml", "name": "MiG-23ML", "model": "mig23ml", "class": "fighter", "roles": ["cap", "intercept"], "speed_mps": 260, "alt_m": 6000, "rcs_m2": 5, "count": [2, 4] },
     { "id": "su22m3", "name": "Su-22M3", "model": "su22m3", "class": "fighter", "roles": ["ground_attack"], "speed_mps": 240, "alt_m": 100, "rcs_m2": 6, "count": [2, 4] },
     { "id": "l39", "name": "L-39 Albatros", "model": "l39", "class": "fighter", "roles": ["trainer", "ground_attack"], "speed_mps": 170, "alt_m": 1500, "rcs_m2": 2, "count": [1, 2] },

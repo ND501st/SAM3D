@@ -773,6 +773,7 @@ struct EngagementTarget {
     bool evade_on_launch = false;
     double evade_turn_rate_rad_s = 0.0;
     bool friendly = false;  // replies to IFF interrogation
+    bool transponder = false;  // an enemy with our IFF system that answers on its code (S1: the Pact's allies on Kremniy)
     int iff_code = 0;       // the code its transponder is set to now (roadmap B10; replies only to the same; -1 off)
     double size_m = 4.5;    // critical dimension for the TV sight (em/optical.hpp; a fighter's side, estimate)
 
@@ -1165,6 +1166,7 @@ private:
         double agl_m = 0.0;
         double true_az_deg = 0.0;  // from north; az_deg is in the crew's frame
         bool friendly = false;
+        bool transponder = false;
         int iff_code = 0;
         double size_m = 4.5;  // critical dimension for the TV
 
@@ -1280,6 +1282,7 @@ private:
             g.target_class = tg.target_class;
             g.span_m = tg.span_m;
             g.friendly = tg.friendly;
+            g.transponder = tg.transponder;
             g.iff_code = tg.iff_code;
             g.size_m = tg.size_m;
 
@@ -1359,7 +1362,7 @@ private:
         for (const EngagementTarget& tg : targets) {
             if (tg.world_id < 0) continue;
             const Aircraft* a = world.FindAircraft(tg.world_id);
-            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly, tg.iff_code);
+            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly, tg.iff_code, tg.transponder);
 
         }
         const SearchSensorDef& s = console.search;
@@ -2395,7 +2398,7 @@ private:
         const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.friendly || g.iff_code != iff_code_ || g.range_m > d.iff_max_range_m || !g.Los()) continue;
+            if (!g.alive || !(g.friendly || g.transponder) || g.iff_code != iff_code_ || g.range_m > d.iff_max_range_m || !g.Los()) continue;
             if (gated) {
                 bool on_scope = false;
                 for (const Contact& c : picture_) on_scope = on_scope || c.target_id == kv.first;

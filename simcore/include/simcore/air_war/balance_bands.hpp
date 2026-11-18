@@ -20,7 +20,7 @@ namespace airwar {
 
 struct BalanceBand {
     std::string id;        // the measure
-    std::string tool;      // "air_war_bench" or "air_war_balance"
+    std::string tool;      // "air_war_bench", "air_war_balance" or "own_air_balance" (S1)
     std::string theatre;   // air_war_balance: the theatre file ("" any)
     std::string faction;   // air_war_balance: the faction id ("" any)
     std::string posture;   // air_war_balance: "careless", "careful" or "" (both)

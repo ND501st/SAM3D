@@ -230,6 +230,9 @@ simcore_configure_target(air_war_balance)
 
 add_executable(air_war_bench examples/air_war_bench.cpp)
 simcore_configure_target(air_war_bench)
+# Our fighters and our own fire: the exercise sweep against the 25% anchor (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md).
+add_executable(own_air_balance examples/own_air_balance.cpp)
+simcore_configure_target(own_air_balance)
 # What the air battle costs a step, and what the levels of detail save (roadmap B12, docs/air_battle/02 5.4).
 add_executable(air_battle_bench examples/air_battle_bench.cpp)
 simcore_configure_target(air_battle_bench)

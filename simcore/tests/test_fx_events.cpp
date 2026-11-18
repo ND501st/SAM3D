@@ -474,6 +474,7 @@ SC_TEST("fx: a raid's loads are released where their throw puts them on the aim 
     AirWarData d;
     std::string e;
     SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", d, &e));
+    d.tuning.values["own_air.mode"] = 0.0;  // the bombs' flight alone: no pair of ours in the raid to make them jettison (S1)
     AirCampaign c;
     SC_EXPECT(c.Init(d, 3u));
     // A strike on the P-40 post 24 km north of the battery, out of its reach: two F-16s bombing level from 4.5 km and two

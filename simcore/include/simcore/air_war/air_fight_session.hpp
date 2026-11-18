@@ -191,6 +191,16 @@ public:
         const Fighter* f = Find(target);
         return f != nullptr ? f->why_home : std::string();
     }
+    // Sent home by his command (S1: our fighters' pursuit limit past the front line, mt_turchin_coop p. 9): he turns for home at
+    // his next think. False if no such fighter, or he is already going home.
+    bool Recall(const std::string& target, const std::string& why) {
+        for (Fighter& f : fighters_) {
+            if (f.def->target != target || f.gone || f.mode == Mode::Home) continue;
+            f.recall = why;
+            return true;
+        }
+        return false;
+    }
     // Is this target one of our fighters, and its regiment.
     bool IsOurs(const std::string& target) const {
         const Fighter* f = Find(target);
@@ -240,6 +250,7 @@ private:
         bool steering = false;
         bool gone = false;
         std::string why_home;
+        std::string recall;       // sent home by his command (S1)
         std::uint64_t shots = 0;
         double start_s = -1.0;    // first in the air in this battle
     };
@@ -436,6 +447,7 @@ private:
     void Think(Fighter& f, const Aircraft& me, double t, const AirFightWorld& w) {
         const FightParams& fp = def_->combat.fight;
         if (f.mode == Mode::Home) return;
+        if (!f.recall.empty()) return GoHome(f, me, t, w, f.recall);
         Sense(f, me, t, w);
         f.contacts.erase(std::remove_if(f.contacts.begin(), f.contacts.end(), [&](const Contact& c) { return t - c.t_s > fp.contact_hold_s; }),
                          f.contacts.end());
@@ -628,15 +640,17 @@ private:
         for (const Contact& c : f.contacts) {
             if (c.hostile) away = me.position - c.believed;
         }
+        if (f.def->has_home) away = f.def->home - me.position;  // S1: ours with a base fly to it
         away.z = 0.0;
         if (away.Length() < 1.0) away = Vec3{0.0, 1.0, 0.0};
         PilotOverride ov;
         ov.kind = PilotOverride::Kind::TurnAway;
         ov.end = PilotOverride::End::Point;
         ov.after = PilotOverride::After::Home;
-        ov.point = me.position + away * (30000.0 / away.Length());
+        ov.point = f.def->has_home ? Vec3{f.def->home.x, f.def->home.y, me.position.z} : me.position + away * (30000.0 / away.Length());
         ov.turn_rate_rad_s = me.max_turn_rate_rad_s;
-        ov.until_s = t + 600.0;
+        const double speed = std::max(50.0, me.velocity.Length());
+        ov.until_s = t + std::max(600.0, 1.5 * away.Length() / speed);
         w.steer(f.target, ov);
     }
 
