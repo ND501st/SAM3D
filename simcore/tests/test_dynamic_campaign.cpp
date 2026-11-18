@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/air_war/air_combat.hpp"
 #include "simcore/air_war/test_waves.hpp"
 #include "simcore/ground_check.hpp"
 #include "simcore/scenario.hpp"
@@ -109,6 +110,53 @@ SC_TEST("dynamic campaign: the waves bring every adversary's aircraft type round
     SC_EXPECT(waves.EnemyTypesFlown().size() == types);
     SC_EXPECT(waves.FriendlyTypesFlown().size() == def->friendly.size());
     SC_EXPECT(friends > 0 && friends < aircraft && weapons > 0);
+}
+
+SC_TEST("dynamic campaign S1: the waves' flights are live in the air fight; ours fly on the day's codes, our fighters with a fit") {
+    const std::shared_ptr<const WavesDef> def = LoadWaves();
+    AirCombatDef ac;
+    std::string e;
+    SC_EXPECT(LoadAirCombatFile(kData + "/air_war/air_combat.json", ac, &e));
+    FlatTerrain ground(100.0);
+    const LocalFrame frame(GeoPoint::FromDegrees(47.42, 20.18, 100.0));
+    WaveScene scene;
+    scene.frame = &frame;
+    scene.terrain = &ground;
+    scene.defences = {Vec3{1000.0, 500.0, 0.0}};
+    int ours_fighting = 0, enemy_fighting = 0, escorts = 0;
+    for (unsigned seed = 1; seed <= 4; ++seed) {
+        TestWaves waves(def, seed);
+        double t = def->first_wave_s;
+        for (int i = 0; i < 25; ++i) {
+            const Wave w = waves.Next(t, scene);
+            std::map<std::string, const ScenarioTarget*> by_id;
+            for (const ScenarioTarget& a : w.aircraft) by_id[a.id] = &a;
+            std::set<std::string> in_fight;
+            for (const WaveFighter& f : w.fight) {
+                const auto it = by_id.find(f.target);
+                SC_EXPECT(it != by_id.end() && in_fight.insert(f.target).second);
+                if (it == by_id.end()) continue;
+                const ScenarioTarget& a = *it->second;
+                SC_EXPECT(!a.weapon && !a.decoy);           // no missile, drone decoy or salvo fights
+                SC_EXPECT(a.friendly == (f.faction == "ours"));
+                if (a.friendly) {
+                    ++ours_fighting;
+                    SC_EXPECT(f.role == "cap" || f.role == "intercept");
+                    SC_EXPECT(ac.Fit(f.type) != nullptr);   // our fighters are armed (test_waves.json's "fit")
+                } else {
+                    ++enemy_fighting;
+                    escorts += f.role == "escort" ? 1 : 0;
+                    SC_EXPECT(f.role == "escort" || f.role == "strike");
+                }
+            }
+            for (const ScenarioTarget& a : w.aircraft) {
+                if (a.friendly) SC_EXPECT(a.iff_table);    // our pilots on the day's table, as the own_air codes have them
+            }
+            t = waves.NextWaveS();
+        }
+    }
+    std::printf("    in the fight: %d of ours, %d of the enemy's (%d escorts)\n", ours_fighting, enemy_fighting, escorts);
+    SC_EXPECT(ours_fighting > 0 && enemy_fighting > 0);
 }
 
 SC_TEST("dynamic campaign: a strike aircraft at its release range lets its load go, timed to land on its aim") {
@@ -289,6 +337,10 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
         enemy_seen = enemy_seen || (!t.friendly && !t.weapon);
     }
     SC_EXPECT(friend_seen && enemy_seen);
+    // S1: the waves' flights joined the air fight under our GCI (the scenario's "air_fight" and "own_air").
+    const AirFightSession* af = r.AirFight();
+    SC_EXPECT(af != nullptr && af->FighterCount() > 0);
+    if (af != nullptr) std::printf("    the air fight: %zu fighters, %zu kills, %d vectors sent\n", af->FighterCount(), af->Kills().size(), af->VectorsSent());
     const std::string d = r.Debrief();
     SC_EXPECT(d.find("wave 1") != std::string::npos && d.find("impact") != std::string::npos && d.find("destroyed by") != std::string::npos);
 }

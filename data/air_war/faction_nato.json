@@ -121,6 +121,14 @@
     "max_report_age_h": 6,
     "nomination_h": 48
   },
+  "own_ad": {
+    "off_mrr_damaged": 0.3,
+    "mode4_failed_damaged": 0.2,
+    "belt_kill": 0.3,
+    "belt": "Hawk and Nike belt",
+    "source": "fm44_1_2_1984 p. 9-1 (weapons free: fire at anything not positively friendly) and fm_100_42_1976 ch. 4 (returning aircraft on minimum risk routes at set times, Mode 4 by code book), as docs/air_battle/08_OUR_FIGHTERS.md section 10 reads them; cbo_1986_amraam ch. 2 n. 5 (Mark XII's operational problems); no fratricide rate was found: the three chances, a damaged aircraft off its route, its Mode 4 failed and the belt's kill of one with both, are game values",
+    "confidence": "estimate"
+  },
   "hot_phase": {
     "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
     "confidence": "estimate",

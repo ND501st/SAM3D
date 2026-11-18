@@ -128,7 +128,37 @@ struct PlannedStep {
     double end_s = 0.0;
 };
 
+// The battery commander's working map (voenizdat_osa_1991 pp. 240-245: the map's contents; S1, docs/air_battle/08_OUR_FIGHTERS.md
+// section 5): the positions, the covered object and, from the task's plan of cooperation, our fighters' corridors and duty
+// zones with their heights and hours, each with how near it passes the main position.
+struct MapMark {
+    std::string kind;   // "main", "reserve", "dummy", "tzm", "covered", "corridor", "duty_zone", "sam_zone"
+    std::string id;
+    std::vector<Vec3> path;  // one point for a place
+    double half_width_m = 0.0;
+    double floor_m = 0.0;
+    double ceiling_m = 0.0;
+    double from_h = -1e18;   // local clock hours (a zone's; none for a place)
+    double to_h = 1e18;
+    double from_main_m = 0.0;  // a zone's nearest edge from the main position (0: over it)
+};
+struct WorkingMap {
+    std::vector<MapMark> marks;
+    const MapMark* Find(const std::string& kind, const std::string& id) const {
+        for (const MapMark& m : marks) {
+            if (m.kind == kind && m.id == id) return &m;
+        }
+        return nullptr;
+    }
+    int Count(const std::string& kind) const {
+        int n = 0;
+        for (const MapMark& m : marks) n += m.kind == kind ? 1 : 0;
+        return n;
+    }
+};
+
 struct BatteryPlan {
+    WorkingMap map;
     bool planned = false;
     std::string why;  // not planned: why
     std::vector<PlannedStep> steps;
@@ -183,6 +213,34 @@ inline BatteryPlan PlanBatteryTask(const BatteryTask& task, const PlanSequence& 
             return plan;
         }
         points.push_back(p);
+    }
+    // The working map: the places, then our aviation's zones from the task's plan of cooperation.
+    const auto place = [&](const std::string& kind, const std::string& id) {
+        Vec3 p;
+        if (id.empty() || !in.where(id, p)) return;
+        MapMark m;
+        m.kind = kind;
+        m.id = id;
+        m.path = {p};
+        plan.map.marks.push_back(m);
+    };
+    place("main", task.main);
+    for (const std::string& r : task.reserve) place("reserve", r);
+    for (const std::string& d : task.dummies) place("dummy", d);
+    place("tzm", task.tzm_place);
+    place("covered", task.covered);
+    for (const command::OwnAirZone& z : task.own_air.zones) {
+        MapMark m;
+        m.kind = z.kind;
+        m.id = z.id;
+        m.path = z.path;
+        m.half_width_m = z.half_width_m;
+        m.floor_m = z.floor_m;
+        m.ceiling_m = z.ceiling_m;
+        m.from_h = z.from_h;
+        m.to_h = z.to_h;
+        m.from_main_m = std::max(0.0, z.DistanceM(main_at) - z.half_width_m);
+        plan.map.marks.push_back(m);
     }
 
     // The sequence, its steps worked toward their short times by one proportion to leave the march and the occupation
@@ -265,6 +323,27 @@ inline BatteryPlan PlanBatteryTask(const BatteryTask& task, const PlanSequence& 
     return plan;
 }
 
+// Our aviation's zones on the working map as words: each with its heights, hours and how near the main position it passes.
+inline std::string WorkingMapZones(const WorkingMap& map) {
+    std::string s;
+    for (const MapMark& m : map.marks) {
+        if (m.kind != "corridor" && m.kind != "duty_zone" && m.kind != "sam_zone") continue;
+        char buf[200];
+        std::snprintf(buf, sizeof(buf), "%s%s %s at %.0f-%.0f m", s.empty() ? "" : "; ",
+                      m.kind == "corridor" ? "our fighters' corridor" : m.kind == "duty_zone" ? "our fighters' duty zone" : "the SAM zone", m.id.c_str(),
+                      m.floor_m, m.ceiling_m);
+        s += buf;
+        if (m.from_h > -1e17 && m.to_h < 1e17) s += ", " + command::ClockWords(m.from_h) + "-" + command::ClockWords(m.to_h);
+        if (m.from_main_m <= 0.0) {
+            s += ", over the main position";
+        } else {
+            std::snprintf(buf, sizeof(buf), ", %.1f km from the main position", m.from_main_m / 1000.0);
+            s += buf;
+        }
+    }
+    return s;
+}
+
 // The plan as the battery commander's timeline (the ideal one the helper and the debrief go by).
 // `name`: a place's name by its id (none: the id).
 inline std::string PlanText(const BatteryPlan& p, const std::function<std::string(double)>& clock,
@@ -285,6 +364,8 @@ inline std::string PlanText(const BatteryPlan& p, const std::function<std::strin
         std::snprintf(late, sizeof(late), ": %.0f min late", p.late_s / 60.0);
         s += late;
     }
+    const std::string zones = WorkingMapZones(p.map);
+    if (!zones.empty()) s += "\nOn the working map: " + zones;
     return s;
 }
 

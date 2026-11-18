@@ -380,8 +380,9 @@ public:
 
     // A target as it is now. Added on first sight; once not alive it stops echoing.
     // `iff_code`: the code its transponder is set to now (roadmap B10; 0 the default the interrogator asks on).
+    // `transponder`: an enemy with our IFF system that answers on its code (S1: the false friend); its side stays the enemy's.
     void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly,
-                    int iff_code = 0) {
+                    int iff_code = 0, bool transponder = false) {
 
         int pid = PlatformOf(id);
         if (pid == 0) {
@@ -391,7 +392,7 @@ public:
             p.side = friendly ? em::Side::Red : em::Side::Blue;
             p.kind = em::PlatformKind::FixedWing;
             p.rcs = em::RcsModel{rcs_m2, rcs_m2, rcs_m2};  // one number in the scenario file: the same from every aspect
-            p.iff_reply = friendly;
+            p.iff_reply = friendly || transponder;
             p.position = position;
             p.velocity = velocity;
             pid = world_.AddPlatform(p);

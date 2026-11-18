@@ -18,7 +18,9 @@
 // (10_FACTIONS.md §9: NATO's medium altitude gated by the defences, the rollback's new shares, the quirk weights) and
 // replays with hot_phase.mode 0, as it was played. A save without "balance_mode" was made before roadmap B14 (an airborne
 // flight's divert at the faction's retask delay, the strikers' abort and the E-3A's warning in an air fight;
-// 09_BALANCE.md section 17) and replays with balance.mode 0.
+// 09_BALANCE.md section 17) and replays with balance.mode 0. A save without "own_air_mode" was made before roadmap S1 (our pairs
+// in the played raids, the enemy's learning and use of our corridors, its own belt on its damaged aircraft) and replays with
+// own_air.mode 0.
 #pragma once
 
 #include <cmath>
@@ -87,6 +89,7 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Put(x, "officer", Bool(l.officer));
         Put(x, "captured", Bool(l.captured));
         Put(x, "fighter", Bool(l.fighter));
+        if (l.own_fire) Put(x, "own_fire", Bool(true));
         Push(losses, x);
     }
     Put(v, "losses", losses);
@@ -294,6 +297,7 @@ public:
                 l.officer = Boolean(x, "officer");
                 l.captured = Boolean(x, "captured");
                 l.fighter = Boolean(x, "fighter");
+                l.own_fire = Boolean(x, "own_fire");
                 o.losses.push_back(l);
             }
         }
@@ -420,6 +424,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "opportunity_mode", Num(c.Data().tuning.Get("opportunity.mode")));
     Put(root, "hot_mode", Num(c.Data().tuning.Get("hot_phase.mode")));
     Put(root, "balance_mode", Num(c.Data().tuning.Get("balance.mode")));
+    Put(root, "own_air_mode", Num(c.Data().tuning.Get("own_air.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -507,6 +512,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double hot_mode = r.Number(root, "hot_mode", 0.0);
     // And the balance pass's changes (roadmap B14): a save made before them has no key, and replays as it was played.
     const double balance_mode = r.Number(root, "balance_mode", 0.0);
+    // And our fighters (roadmap S1): a save made before them has no key, and replays as it was played.
+    const double own_air_mode = r.Number(root, "own_air_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -571,6 +578,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["opportunity.mode"] = opportunity_mode;
     data.tuning.values["hot_phase.mode"] = hot_mode;
     data.tuning.values["balance.mode"] = balance_mode;
+    data.tuning.values["own_air.mode"] = own_air_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

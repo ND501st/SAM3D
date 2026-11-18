@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/command/own_air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/json.hpp"
@@ -109,6 +110,9 @@ struct BatteryTask {
     std::vector<std::string> coordination;
     std::vector<std::string> reports;
     std::vector<std::string> support;
+    // The plan of cooperation with our fighters (S1, docs/air_battle/08_OUR_FIGHTERS.md section 5): by zones or one zone, the
+    // corridors and duty zones with their heights and hours (ENU of the task's map), the signals and the codes' issue.
+    command::CooperationPlan own_air;
 
     // The main attack direction from the covered object (the first attack line's middle); false if the order gives none.
     bool MainAttackDeg(double& out) const {
@@ -140,7 +144,7 @@ public:
         if (!Keys(root, "", {"task_id", "kind", "given_by", "unit", "covered", "task", "short_ru", "area_ru", "reasons", "situation", "habits",
                              "area", "sectors", "readiness", "readiness_text", "emission", "on_turns", "off_turns", "reconnoitre",
                              "roving", "axis_deg", "width_m", "ready_in_s", "lasts_s", "coordination", "reports", "support",
-                             "source", "confidence", "notes"}) ||
+                             "own_air", "source", "confidence", "notes"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -177,6 +181,10 @@ public:
             return false;
         }
         if (t.reasons.empty()) return Fail("reasons", "required: the order says why");
+        if (const json::Value* oa = root.Find("own_air")) {
+            std::string e;
+            if (!command::LoadCooperationPlan(*oa, "own_air", t.own_air, &e)) return Fail("own_air", e);
+        }
         if (!LoadArea(root, t) || !LoadSituation(root, t) || !LoadSectors(root, t)) return false;
         if (t.kind != TaskKind::CoverMarch && t.main.empty()) return Fail("area.main", "required: where the battery goes");
         if ((t.kind == TaskKind::CoverObject || t.kind == TaskKind::CoverRebuild || t.kind == TaskKind::CoverCrossing ||
@@ -321,7 +329,9 @@ inline std::string TaskDocument(const BatteryTask& t, double given_s, const std:
     s += ".";
     s += "\n6. Time: ready by " + clock(given_s + t.ready_in_s) + "; " +
          (t.lasts_s < 0.0 ? std::string("until relieved") : "until " + clock(given_s + t.lasts_s)) + ".";
-    if (!t.coordination.empty()) s += "\n7. Coordination: " + detail::JoinWords(t.coordination, "; ") + ".";
+    std::vector<std::string> coordination = t.coordination;
+    if (t.own_air.present) coordination.push_back(t.own_air.Words());
+    if (!coordination.empty()) s += "\n7. Coordination: " + detail::JoinWords(coordination, "; ") + ".";
     if (!t.reports.empty()) s += "\n8. Reports: " + detail::JoinWords(t.reports, "; ") + ".";
     if (!t.support.empty()) s += "\n9. Support: " + detail::JoinWords(t.support, "; ") + ".";
     return s;

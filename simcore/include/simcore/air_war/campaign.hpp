@@ -121,6 +121,8 @@ public:
         seed_ = seed;
         actions_.clear();
         rng_ = Rng(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 1234567u);
+        corridor_intel_.Init(data_.own_air.learning, static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 0xB10ull);
+        corridor_days_fed_ = 0;
         now_h_ = 0.0;
         const FrontDef* front = data_.theatre.FrontFor(data_.faction.front);
         if (front == nullptr) {
@@ -684,6 +686,8 @@ private:
     PoliticsState politics_;
     AirStaff staff_;
     IntelPicture intel_;
+    command::EnemyCorridorIntel corridor_intel_;  // what its COMINT heard of our fighters' corridors (roadmap S1)
+    int corridor_days_fed_ = 0;
     std::vector<Package> packages_;
     std::vector<JournalEntry> journal_;
     std::vector<Weather> weather_;
@@ -752,6 +756,7 @@ private:
         rc.ground = RouteGroundPtr();
         rc.opportunity_seed = static_cast<std::uint64_t>(seed_) * 0x9E3779B97F4A7C15ull + 0xB6A0ull;  // roadmap B6's keyed draws
         rc.phase = phase_;
+        rc.own_corridors = OwnCorridors();
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -973,6 +978,7 @@ private:
                     (by_iads ? "the air defences are believed broken" : "the plan's day has come") + ").",
                 false);
         }
+        FeedCorridors();
         PlanContext pc;
         pc.data = &data_;
         pc.staff = &staff_;
@@ -1010,6 +1016,7 @@ private:
         std::vector<Package> plan = planner.Plan(pc);
         int planned = 0;
         for (Package& p : plan) {
+            ExploitCorridor(p);
             planned += p.Aircraft();
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
@@ -1018,6 +1025,110 @@ private:
         c2_.Bind(data_, staff_);
         const double begin = now_h_ + data_.faction.doctrine.lead_time_h;
         c2_.BuildPools(squadrons_, held, planned, begin, begin + data_.faction.doctrine.planning_cycle_h, phase_);
+    }
+
+    // ------------------------------------------------------------------ our fighters' corridors (roadmap S1)
+
+    bool OwnAirOn() const { return data_.has_own_air && data_.tuning.Get("own_air.mode") >= 1.0; }
+public:
+    // Our fighters' corridors as they are (docs/air_battle/08_OUR_FIGHTERS.md section 9): one from each of our airfields to the
+    // nearest point of the front, at the task file's heights (2,000-6,000 m) and by day from 06:00 for hours_per_day, theatre
+    // ENU and hours of the day. None without our aviation's rules or before S1.
+    std::vector<command::OwnAirZone> OwnCorridors() const {
+        std::vector<command::OwnAirZone> out;
+        const FrontDef* front = data_.theatre.FrontFor(data_.faction.front);
+        if (!OwnAirOn() || front == nullptr || front->line.empty()) return out;
+        for (std::size_t i = 0; i < data_.theatre.objects.size(); ++i) {
+            const TheatreObject& o = data_.theatre.objects[i];
+            if (o.kind != ObjectKind::Airfield) continue;
+            command::OwnAirZone z;
+            z.id = "corridor " + o.id;
+            const Vec3 a = truth_.size() > i ? truth_[i].pos : o.pos;
+            Vec3 best = front->line.front();
+            for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {
+                const Vec3 p0 = front->line[k], p1 = front->line[k + 1];
+                const Vec3 d = p1 - p0;
+                const double l2 = d.x * d.x + d.y * d.y;
+                double u = l2 > 1e-9 ? ((a.x - p0.x) * d.x + (a.y - p0.y) * d.y) / l2 : 0.0;
+                u = std::max(0.0, std::min(1.0, u));
+                const Vec3 q = p0 + d * u;
+                if (Dist2d(q, a) < Dist2d(best, a)) best = q;
+            }
+            if (front->line.size() == 1) best = front->line.front();
+            z.path = {Vec3{a.x, a.y, 0.0}, Vec3{best.x, best.y, 0.0}};
+            z.half_width_m = data_.own_air.notice.corridor_half_width_m;
+            z.floor_m = 2000.0;
+            z.ceiling_m = 6000.0;
+            z.from_h = 6.0;
+            z.to_h = 6.0 + data_.own_air.learning.hours_per_day;
+            out.push_back(z);
+        }
+        return out;
+    }
+    // What the enemy has heard of them.
+    const command::EnemyCorridorIntel& CorridorIntel() const { return corridor_intel_; }
+
+private:
+    // Each day gone by, each corridor from a working airfield used once (by day): the enemy's COMINT on our GCI's and the
+    // notices' traffic may hear it (EnemyCorridorIntel's keyed draws, kOwnAirKey + 0x500).
+    void FeedCorridors() {
+        if (!OwnAirOn()) return;
+        const int day = static_cast<int>(std::floor(now_h_ / 24.0));
+        const std::vector<command::OwnAirZone> zs = OwnCorridors();
+        for (; corridor_days_fed_ < day; ++corridor_days_fed_) {
+            for (const command::OwnAirZone& z : zs) {
+                const int i = data_.theatre.IndexOf(z.id.substr(9));
+                if (i < 0 || truth_[static_cast<std::size_t>(i)].function <= 0.05) continue;
+                const double h = corridor_days_fed_ * 24.0 + z.from_h - data_.theatre.start_hour;
+                if (corridor_intel_.Use(z, h)) {
+                    Log("intel", "COMINT", "our fighters' traffic in " + z.id + " heard (" + std::to_string(corridor_days_fed_ + 1) + ". day)", false);
+                }
+            }
+        }
+    }
+    // A creative planner with a fresh belief of our corridor near the package's target times it into the corridor's hours,
+    // when that is at most shift_h later (mt_umnov_1968 pp. 10-11, the Syrian landing case; Mitronin's warning, mitronin_1976
+    // p. 7). Whether the belief found the real corridor decides whether our defences then hold fire (resolve.hpp).
+    void ExploitCorridor(Package& p) {
+        if (!OwnAirOn() || p.planner < 0 || static_cast<std::size_t>(p.planner) >= staff_.officers.size()) return;
+        const command::EnemyLearningDef& L = data_.own_air.learning;
+        const double creativity = staff_.officers[static_cast<std::size_t>(p.planner)].def.traits.creativity;
+        if (!corridor_intel_.Exploits(creativity, now_h_)) return;
+        const command::BelievedCorridor* use = nullptr;
+        std::vector<command::BelievedCorridor> believed = corridor_intel_.Believed(now_h_);
+        command::OwnAirZone bz;
+        for (const command::BelievedCorridor& b : believed) {
+            command::OwnAirZone z;
+            z.path = b.path;
+            if (z.DistanceM(p.target_pos) > 2.0 * L.near_m + L.margin_m) continue;
+            use = &b;
+            bz = z;
+            break;
+        }
+        if (use == nullptr) return;
+        double hod = std::fmod(data_.theatre.start_hour + p.tot_h, 24.0);
+        if (hod < 0.0) hod += 24.0;
+        double delta = 0.0;
+        if (hod < use->from_h || hod > use->to_h) {
+            double ahead = use->from_h + 0.25 - hod;
+            if (ahead < 0.0) ahead += 24.0;
+            if (ahead > L.shift_h) return;
+            delta = ahead;
+        }
+        p.tot_h += delta;
+        if (p.gate_h >= 0.0) p.gate_h += delta;
+        for (Flight& fl : p.flights) {
+            for (RoutePoint& r : fl.route) r.t_h += delta;
+        }
+        p.own_corridor = use->id;
+        for (const command::OwnAirZone& z : OwnCorridors()) {
+            if (z.id != use->id || use->path.empty()) continue;
+            p.own_corridor_found = z.DistanceM(use->path.front()) <= z.half_width_m + L.margin_m;
+        }
+        const std::string why = "timed into our fighters' " + use->id + " (believed, heard " + std::to_string(use->heard) + " times): their defences hold fire then" +
+                                (delta > 0.0 ? ", " + std::to_string(static_cast<int>(std::lround(delta * 60.0))) + " min later than planned" : std::string());
+        p.rationale.push_back(why);
+        Log("decision", staff_.officers[static_cast<std::size_t>(p.planner)].Title(), p.name + ": " + why, false);
     }
 
     // Does the raid come through the player's battery's sector (or at it)?
