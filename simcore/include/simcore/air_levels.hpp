@@ -4,15 +4,18 @@
 // A2, full: every aircraft flown by R3's model with its own pilot, perception, receiver and reactions. A flight is at A2
 // near any of our units (within the reach of our radars or eyes, plus a margin) or engaged (a missile of ours at it, a
 // launch, a burst or a lock in its pilots' pictures within the last minute, a pilot manoeuvring or in an attack pass).
-// A1, coarse: the leader flown by R3's model and thinking at his own rates; the wingmen placed on their slots from the
-// leader each step, their receivers off and their eyes shut (the leader looks for the flight). Their emitters radiate as
-// at A2 (what the enemy emits is what our ESM hears). A0, abstract: the campaign's time-stepped resolver
-// (air_war/resolve.hpp), outside the session.
+// A1, coarse: every aircraft flown by R3's model and looking as at A2, but each wingman keeping his slot hears on his
+// leader's receiver, his own switched off (the receivers, each hearing every radar every ESM period over the ground, are
+// most of what the air battle costs). He hears his leader's searches, never a lock or a launch on his leader, and back at
+// A2 his own receiver's contacts take the place of the same emitters in his picture, so the hand-over is no news to
+// him. Their emitters radiate as at A2 (what the enemy emits is what our ESM hears). A0, abstract: the campaign's
+// time-stepped resolver (air_war/resolve.hpp), outside the session.
 //
 // Whole flights change level together. Up to A2 at once; down to A1 only past `down_factor` times the near range and after
 // `down_dwell_s` there, so a route that runs along the edge does not flicker. Levels follow simulation facts, never the
 // camera, so a headless run, the game and a server agree. Everything a flight is (route place, order, stores, fuel,
-// damage, the pilots' stress and pictures) stays where it is through a change: the level only says who is stepped how.
+// damage, the pilots' stress and pictures) stays where it is through a change: the level only says whose receiver a
+// wingman hears on.
 //
 // The stagger (§5.2): a task at rate f runs in the step that takes the clock past a tick of floor(t f + phase), the phase
 // from a fixed serial's hash, so it runs at the same simulation times whatever the step (0.05 s in the game, 0.1 s headless).

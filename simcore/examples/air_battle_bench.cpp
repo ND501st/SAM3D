@@ -14,9 +14,13 @@
 // and on (mode 1), the mean and worst step and the parts, and whether the outcome is the same.
 //
 // Part 3 (--compare seconds, alone): the testbed with the levels off, off again and on; the first line where the
-// debriefs part, and each flight's changes of level with the levels on.
+// debriefs part, and each flight's changes of level with the levels on. With --seeds N [--first K]: N seeds from K (1 if
+// not given; each its own waves), off and on, the outcomes side by side.
 //
-// Usage: air_battle_bench [data_dir] [--seconds S] [--aircraft N] [--testbed [S]] [--compare S]
+// Part 4 (--trace seconds [--who id], alone): the testbed off and on stepped side by side; for every aircraft, the first
+// moment its place, its receiver's display, its picture or its stress parts between the two.
+//
+// Usage: air_battle_bench [data_dir] [--seconds S] [--aircraft N] [--testbed [S]] [--compare S [--seeds N [--first K]]] [--trace S [--who id] [--seeds 1 --first K]]
 // Generic placeholder numbers in the testbed's data; timings are wall time on one core and move with the machine's load.
 #include <algorithm>
 #include <chrono>
@@ -24,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -45,6 +50,7 @@ struct Result {
     int changes = 0;
     std::string debrief;      // the testbed's outcome: its debrief, our launches and the neighbours'
     int launches = 0, defence_launches = 0;
+    int downed = 0;           // aircraft destroyed (by us, a neighbour, anything) or flown into the ground
     std::vector<std::string> level_log;  // each flight's changes of level, with the time
     bool ok = false;
 };
@@ -128,12 +134,13 @@ Result RunWaves(const std::string& data_dir, int n, double seconds, bool far, in
     return res;
 }
 
-Result RunTestbed(const std::string& data_dir, double seconds, int mode) {
+Result RunTestbed(const std::string& data_dir, double seconds, int mode, int seed = -1) {
     Result res;
     ScenarioDef def;
     ConsoleData console;
     if (!LoadTestbed(data_dir, def, console)) return res;
     if (mode >= 0) def.air_levels.mode = mode;
+    if (seed >= 0) def.seed = static_cast<unsigned>(seed);
     ScenarioRunner r(std::move(def), std::move(console));
     r.SetProfile(true);
     double alive = 0.0, a1 = 0.0;
@@ -162,6 +169,10 @@ Result RunTestbed(const std::string& data_dir, double seconds, int mode) {
     res.debrief = r.Debrief();
     res.launches = r.Launches();
     res.defence_launches = r.DefenceLaunches();
+    for (const DebriefEntry& e : r.Log().Entries()) {
+        if (e.kind != DebriefEntry::Kind::Scenario) continue;
+        if (e.detail == "destroyed" || e.detail.compare(0, 13, "destroyed by ") == 0 || e.detail == "flew into the ground") ++res.downed;
+    }
     res.ok = true;
     return res;
 }
@@ -225,6 +236,124 @@ int FirstDiff(const std::string& x, const std::string& y, std::string& lx, std::
     return -1;
 }
 
+// Part 4 (--trace seconds): the testbed with the levels off and on stepped side by side; for every aircraft, the first
+// moment its place, its receiver's display, its picture or its stress parts between the two, and whether it was then a
+// wingman at A1 (hearing on his leader's receiver) in the run with the levels on. The first lines say where a difference
+// starts and how it spreads.
+std::string g_who;  // --who: an aircraft whose distance between the two runs is printed every 5 s
+
+struct TraceMark {
+    double t = -1.0;
+    std::string what;
+    bool at_a1 = false;  // a wingman at A1 then
+};
+
+std::string PictureKey(const std::vector<airwar::Sighting>& p) {
+    std::string k;
+    char b[160];
+    for (const airwar::Sighting& s : p) {
+        std::snprintf(b, sizeof(b), "%d/%d/%d/%llx/%.2f/%d/%s;", static_cast<int>(s.kind), static_cast<int>(s.by), static_cast<int>(s.rwr),
+                      static_cast<unsigned long long>(s.debug_truth_key), s.time_s, s.seen_count, s.what.c_str());
+        k += b;
+    }
+    return k;
+}
+
+std::string RwrKey(ScenarioRunner& r, const std::string& id) {
+    std::string k;
+    if (r.Em() == nullptr) return k;
+    char b[96];
+    for (const EmSensorLink::RwrContactView& c : r.Em()->RwrPictureOf(id)) {
+        std::snprintf(b, sizeof(b), "%llx/%d/%.4f;", static_cast<unsigned long long>(c.key), c.state, c.bearing_rad);
+        k += b;
+    }
+    return k;
+}
+
+int Trace(const std::string& data_dir, double seconds, int mode_on, int seed) {
+    ScenarioDef d0, d1;
+    ConsoleData c0, c1;
+    if (!LoadTestbed(data_dir, d0, c0) || !LoadTestbed(data_dir, d1, c1)) return 1;
+    d0.air_levels.mode = 0;
+    d1.air_levels.mode = mode_on;
+    if (seed >= 0) d0.seed = d1.seed = static_cast<unsigned>(seed);
+    ScenarioRunner r0(std::move(d0), std::move(c0));
+    ScenarioRunner r1(std::move(d1), std::move(c1));
+    std::map<std::string, TraceMark> pos, rwr, pic, stress;
+    std::map<std::string, std::string> rwr_on_a1;  // a wingman's receiver display as he was woken
+    std::vector<std::pair<double, std::string>> log;
+    std::vector<AirLevel> was;
+    while (r0.Time() < seconds && !r0.Finished() && !r1.Finished()) {
+        r0.Step(0.05);
+        r1.Step(0.05);
+        const std::vector<ScenarioTarget>& ts = r0.Def().targets;
+        const std::size_t n = std::min(ts.size(), r1.Def().targets.size());
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::string& id = ts[i].id;
+            if (r1.Def().targets[i].id != id) {
+                log.push_back({r0.Time(), "target list parts at " + id});
+                break;
+            }
+            const Aircraft* a0 = r0.TargetAircraft(id);
+            const Aircraft* a1 = r1.TargetAircraft(id);
+            if (a0 == nullptr || a1 == nullptr) continue;
+            const bool at_a1 = r1.TargetLevel(id) == AirLevel::A1;
+            char b[200];
+            const double dp = (a0->position - a1->position).Length();
+            if (pos[id].t < 0.0 && (dp > 0.01 || a0->alive != a1->alive)) {
+                std::snprintf(b, sizeof(b), "%.1f m apart", dp);
+                pos[id] = {r0.Time(), b, at_a1};
+            }
+            if (rwr[id].t < 0.0 && !at_a1) {
+                const std::string x = RwrKey(r0, id), y = RwrKey(r1, id);
+                if (x != y) rwr[id] = {r0.Time(), "off " + x.substr(0, 90) + " | on " + y.substr(0, 90), at_a1};
+            }
+            if (pic[id].t < 0.0 && !at_a1) {
+                const std::string x = PictureKey(r0.PilotPicture(id)), y = PictureKey(r1.PilotPicture(id));
+                if (x != y) {
+                    std::snprintf(b, sizeof(b), "(%.1f m apart) ", dp);
+                    pic[id] = {r0.Time(), b + std::string("off ") + x.substr(0, 110) + " | on " + y.substr(0, 110), at_a1};
+                }
+            }
+            if (id == g_who && std::fmod(r0.Time() + 1e-6, 5.0) < 0.05) {
+                std::snprintf(b, sizeof(b), "%s: %.1f m apart, speeds %.1f %.1f, picture %zu %zu%s", id.c_str(), dp, a0->speed_mps, a1->speed_mps,
+                              r0.PilotPicture(id).size(), r1.PilotPicture(id).size(), at_a1 ? " (at A1)" : "");
+                log.push_back({r0.Time(), b});
+            }
+            const double s0 = r0.Reactions().Stress(static_cast<int>(i), r0.Time()), s1 = r1.Reactions().Stress(static_cast<int>(i), r1.Time());
+            if (stress[id].t < 0.0 && std::fabs(s0 - s1) > 1e-9) {
+                std::snprintf(b, sizeof(b), "%.3f against %.3f", s0, s1);
+                stress[id] = {r0.Time(), b + std::string("; pictures off ") + PictureKey(r0.PilotPicture(id)).substr(0, 300) + " | on " +
+                                             PictureKey(r1.PilotPicture(id)).substr(0, 300),
+                              at_a1};
+            }
+        }
+        const std::vector<FlightState>& fs = r1.AllFlights().All();
+        was.resize(fs.size(), AirLevel::A2);
+        for (std::size_t k = 0; k < fs.size(); ++k) {
+            const AirLevel l = r1.FlightLevel(fs[k].id);
+            if (l == was[k]) continue;
+            log.push_back({r1.Time(), "flight " + fs[k].id + " to " + AirLevelName(l)});
+            was[k] = l;
+        }
+    }
+    for (const auto& m : {std::make_pair("place", &pos), std::make_pair("receiver", &rwr), std::make_pair("picture", &pic),
+                          std::make_pair("stress", &stress)}) {
+        for (const auto& kv : *m.second) {
+            if (kv.second.t < 0.0) continue;
+            log.push_back({kv.second.t, std::string(m.first) + " " + kv.first + (kv.second.at_a1 ? " (at A1) " : " ") + kv.second.what});
+        }
+    }
+    std::stable_sort(log.begin(), log.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+    for (const auto& l : log) std::printf("%8.2f  %s\n", l.first, l.second.c_str());
+    std::string x, y;
+    const int dl = FirstDiff(r0.Debrief(), r1.Debrief(), x, y);
+    std::printf("debriefs: %s\n", dl < 0 ? "identical" : "differ");
+    if (dl >= 0) std::printf("  line %d:\n    %s\n    %s\n", dl, x.c_str(), y.c_str());
+    std::printf("launches %d and %d, the neighbours' %d and %d\n", r0.Launches(), r1.Launches(), r0.DefenceLaunches(), r1.DefenceLaunches());
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -234,6 +363,9 @@ int main(int argc, char** argv) {
     bool testbed = false;
     double testbed_s = 600.0;
     double compare_s = 0.0;
+    double trace_s = 0.0;
+    int seeds = 0;
+    int first_seed = 1;
     int pos = 0;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
@@ -245,9 +377,36 @@ int main(int argc, char** argv) {
             if (i + 1 < argc && argv[i + 1][0] != '-') testbed_s = std::atof(argv[++i]);
         } else if (std::strcmp(argv[i], "--compare") == 0 && i + 1 < argc) {
             compare_s = std::atof(argv[++i]);
+        } else if (std::strcmp(argv[i], "--seeds") == 0 && i + 1 < argc) {
+            seeds = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--first") == 0 && i + 1 < argc) {
+            first_seed = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--trace") == 0 && i + 1 < argc) {
+            trace_s = std::atof(argv[++i]);
+        } else if (std::strcmp(argv[i], "--who") == 0 && i + 1 < argc) {
+            g_who = argv[++i];
         } else if (pos++ == 0) {
             data_dir = argv[i];
         }
+    }
+    if (trace_s > 0.0) return Trace(data_dir, trace_s, 1, seeds > 0 ? first_seed : -1);
+    if (compare_s > 0.0 && seeds > 0) {
+        // Part 3b: the testbed over several seeds (each its own waves), the levels off and on: the outcomes side by side,
+        // to set any difference the levels make beside what a seed changes.
+        std::printf("| Seed | Launches off | on | Neighbours' off | on | Aircraft down off | on | Level changes | Debrief |\n|---|---|---|---|---|---|---|---|---|\n");
+        int same = 0;
+        for (int sd = first_seed; sd < first_seed + seeds; ++sd) {
+            const Result a = RunTestbed(data_dir, compare_s, 0, sd);
+            const Result c = RunTestbed(data_dir, compare_s, 1, sd);
+            std::string x, y;
+            const int at = FirstDiff(a.debrief, c.debrief, x, y);
+            if (at < 0) ++same;
+            std::printf("| %d | %d | %d | %d | %d | %d | %d | %d | %s |\n", sd, a.launches, c.launches, a.defence_launches, c.defence_launches, a.downed,
+                        c.downed, c.changes, at < 0 ? "identical" : ("parts at line " + std::to_string(at)).c_str());
+            std::fflush(stdout);
+        }
+        std::printf("\n%d of %d seeds identical\n", same, seeds);
+        return 0;
     }
     if (compare_s > 0.0) {
         // Part 3: the testbed's outcome with the levels off, off again and on: where the debriefs part.

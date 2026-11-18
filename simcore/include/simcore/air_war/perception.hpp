@@ -378,6 +378,7 @@ struct Sighting {
     bool recognised = false;
     std::string seen_by;            // the aircraft
     std::uint64_t debug_truth_key = 0;  // the object's key: the hub's merge key, overlays and tests only; no decision reads it
+    bool borrowed = false;          // a receiver's contact heard on his leader's receiver (a wingman at A1, roadmap B12)
 };
 
 // A thing the simulation made that can be seen: recorded by the runner beside the place that makes it.
@@ -438,6 +439,11 @@ struct RwrHeard {
     double bearing_rad = 0.0;      // true azimuth, measured
     double sigma_rad = 0.0;
     double power_dbw = -300.0;
+    // Heard on his leader's receiver, not his own (a wingman at A1 keeping his slot, roadmap B12): a search or a missile's
+    // guidance the flight hears together, never a lock (a lock is a radar's beam held on one aircraft). `key` is then the
+    // leader's receiver's contact; his own receiver's contact of the same emitter takes its place in his picture when his
+    // receiver is back on, and the other way about (Adopt).
+    bool borrowed = false;
 };
 
 struct ObserverIn {
@@ -564,18 +570,6 @@ public:
             o.last_event_check_s = now_s;  // what ended before he was there is not for him to see
         }
         return now_s + 1e-9 >= o.next_tick_s;
-    }
-
-    // An observer whose eyes were shut opens them (a wingman placed on his slot at A1 and back at A2, roadmap B12,
-    // air_levels.hpp): his next tick is now, looking as for one transit period, and what happened while they were shut
-    // is not for him to see. His picture is kept as it was, ageing.
-    void Wake(std::uint64_t observer_key, double now_s) {
-        const auto it = obs_.find(observer_key);
-        if (it == obs_.end() || !it->second.started) return;
-        Obs& o = it->second;
-        o.last_tick_s = now_s - 1.0 / d_.rate.transit_hz;
-        o.next_tick_s = now_s;
-        o.last_event_check_s = now_s;
     }
 
     // One perception tick for one observer: looks at what is in view and updates his picture. `fresh` receives what is new
@@ -735,6 +729,7 @@ private:
 
     static constexpr std::uint64_t kEventBit = 1ull << 62;
     static constexpr std::uint64_t kGroundBit = 1ull << 61;
+    static constexpr std::uint64_t kBorrowedBit = 1ull << 60;  // a contact of his leader's receiver (Adopt)
 
     PerceptionData d_;
     std::uint64_t seed_;
@@ -1145,6 +1140,28 @@ private:
     }
 
     // ---- the warning receiver
+    // A receiver's contact `key` heard for the first time, on his own receiver or (`borrowed`) on his leader's: if his
+    // picture holds the same emitter as heard on the other (its name or class, its bearing within the display's error),
+    // that sighting becomes this contact's. A wingman whose receiver is switched off at A1, or back on at A2, so goes on
+    // holding what he held, and the change is no news to him (roadmap B12).
+    static void Adopt(Obs& o, std::uint64_t key, bool borrowed, const std::string& what, double bearing_rad, double sigma_rad) {
+        Sighting* best = nullptr;
+        double best_d = std::max(3.0 * sigma_rad, 10.0 * kPi / 180.0);
+        for (Sighting& e : o.picture) {
+            if (e.by != SightBy::Rwr) continue;
+            if (e.debug_truth_key == key) return;
+            if (e.borrowed == borrowed || e.what != what) continue;
+            const double d = std::fabs(detail::WrapPi(e.bearing_rad - bearing_rad));
+            if (d <= best_d) {
+                best_d = d;
+                best = &e;
+            }
+        }
+        if (best == nullptr) return;
+        best->debug_truth_key = key;
+        best->borrowed = borrowed;
+    }
+
     void IngestRwr(Obs& o, const View& v, const std::vector<RwrHeard>& heard, std::vector<Sighting>* fresh) {
         const RwrSetDisplay* set = v.ob->rwr_set;
         if (set == nullptr) return;
@@ -1192,8 +1209,12 @@ private:
                      : st == RwrState::Lock                 ? "lock"
                                                             : "search";
             s.confidence = d_.confidence.seen;
-            (void)sigma;
-            const std::uint64_t key = h->key;
+            // A contact heard on his leader's receiver is the leader's receiver's contact; when he changes from his own
+            // receiver to his leader's or back, the contact takes the place of the same emitter's in his picture (Adopt).
+            const std::uint64_t key = h->borrowed ? (kBorrowedBit | h->key) : h->key;
+            s.debug_truth_key = key;
+            s.borrowed = h->borrowed;
+            Adopt(o, key, h->borrowed, s.what, s.bearing_rad, sigma);
             // A contact that has grown more serious is new news.
             bool escalated = false;
             for (const Sighting& e : o.picture) {
