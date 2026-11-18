@@ -83,7 +83,6 @@ public:
         for (const Aircraft& a : aircraft_) start_positions_.push_back(a.position);
 
         for (Aircraft& a : aircraft_) {
-            if (a.placed) continue;  // the runner sets it on its slot after the step (a wingman at A1, roadmap B12)
             if (weather_ == nullptr || !a.alive) {
                 StepAircraft(a, dt);
                 continue;

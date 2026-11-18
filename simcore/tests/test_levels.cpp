@@ -1,9 +1,11 @@
 // Roadmap B12: the levels of detail of a session's aircraft (simcore/air_levels.hpp; the runner's A1;
 // docs/air_battle/02_FLIGHTS_AND_PILOTS.md §5). Every number here is a generic placeholder, not data of a real aircraft.
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -82,7 +84,7 @@ std::string Session(int flights, const std::vector<double>& route_km, double end
     return s;
 }
 
-std::unique_ptr<ScenarioRunner> Runner(const std::string& text, int mode) {
+std::unique_ptr<ScenarioRunner> Runner(const std::string& text, int mode, int seed = -1) {
     ScenarioDef def;
     ConsoleData console;
     std::string error;
@@ -91,7 +93,129 @@ std::unique_ptr<ScenarioRunner> Runner(const std::string& text, int mode) {
         return nullptr;
     }
     def.air_levels.mode = mode;
+    if (seed >= 0) def.seed = static_cast<unsigned>(seed);
     return std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
+}
+
+// Does a pilot's picture hold a receiver's contact heard on his leader's receiver, seen since `since_s`?
+bool HoldsBorrowed(const ScenarioRunner& r, const std::string& id, double since_s) {
+    for (const airwar::Sighting& sg : r.PilotPicture(id)) {
+        if (sg.borrowed && sg.time_s >= since_s) return true;
+    }
+    return false;
+}
+
+// A debrief split in two: its warning receivers' lines (who and what, without the time, sorted) and every other line.
+// The tolerance of a hand-over from A1: a wingman whose own receiver is off at A1 may hear a lock or a missile's guidance
+// at another moment than his own receiver would have (his leader's, 1-2 km away, heard it, or did not yet); everything
+// else, places, launches and every other line, is the same.
+struct DebriefParts {
+    std::vector<std::string> warnings;
+    std::string rest;
+};
+DebriefParts SplitWarnings(const std::string& debrief) {
+    DebriefParts p;
+    std::istringstream in(debrief);
+    std::string l;
+    while (std::getline(in, l)) {
+        const std::size_t w = l.find("warning receiver: ");
+        const std::size_t s = l.find(" s ");
+        if (w == std::string::npos || s == std::string::npos) {
+            p.rest += l + "\n";
+            continue;
+        }
+        p.warnings.push_back(l.substr(s + 3));
+    }
+    std::sort(p.warnings.begin(), p.warnings.end());
+    return p;
+}
+// Lines of the warning receivers that differ in time between two debriefs are a wingman's (not slot 1's: "_1 ").
+bool WarningsMovedOnlyForWingmen(const std::string& a, const std::string& b) {
+    std::vector<std::string> x, y;
+    {
+        std::istringstream in(a);
+        std::string l;
+        while (std::getline(in, l))
+            if (l.find("warning receiver: ") != std::string::npos) x.push_back(l);
+    }
+    {
+        std::istringstream in(b);
+        std::string l;
+        while (std::getline(in, l))
+            if (l.find("warning receiver: ") != std::string::npos) y.push_back(l);
+    }
+    std::sort(x.begin(), x.end());
+    std::sort(y.begin(), y.end());
+    std::vector<std::string> d;
+    std::set_symmetric_difference(x.begin(), x.end(), y.begin(), y.end(), std::back_inserter(d));
+    for (const std::string& l : d) {
+        const std::size_t w = l.find("  warning receiver: ");
+        if (w == std::string::npos || w < 2 || l.compare(w - 2, 2, "_1") == 0) return false;
+    }
+    return true;
+}
+
+// The levels off and on side by side, `flights` flights of four: what the run with the levels on did at A1 and at the
+// hand-over, and where the two runs parted.
+struct SideBySide {
+    bool ok = false;
+    bool went_a1 = false, came_back = false;  // a flight at A1, then back at A2 and within 55 km of the unit
+    int lent_steps = 0;                       // wingman-steps hearing on the leader's receiver
+    bool borrowed = false;                    // a wingman's picture held a search heard on his leader's receiver
+    bool own_off = true, lead_on = true;      // at A1 the wingmen's receivers off, the leaders' on
+    bool borrowed_after = false;              // back at A2 (after the warm-up), a contact still heard on the leader's
+    double worst_m = 0.0;                     // the farthest any aircraft was from itself in the other run
+    double first_apart_s = -1.0;              // when the two first differed by more than a millimetre
+    std::string debrief_off, debrief_on;
+    int launches_off = 0, launches_on = 0;
+};
+
+SideBySide RunSideBySide(const std::string& text, int flights, double end_s, int seed = -1) {
+    SideBySide out;
+    auto off = Runner(text, 0, seed);
+    auto on = Runner(text, 1, seed);
+    if (!off || !on) return out;
+    std::vector<AirLevel> last(static_cast<std::size_t>(flights), AirLevel::A2);
+    std::vector<double> back_at(static_cast<std::size_t>(flights), -1.0);
+    while (!off->Finished() && !on->Finished() && off->Time() < end_s) {
+        off->Step(0.05);
+        on->Step(0.05);
+        for (int f = 0; f < flights; ++f) {
+            const std::size_t fk = static_cast<std::size_t>(f);
+            const std::string fid = "f" + std::to_string(f + 1);
+            const AirLevel l = on->FlightLevel(fid);
+            if (l == AirLevel::A1) out.went_a1 = true;
+            if (l == AirLevel::A2 && last[fk] == AirLevel::A1) back_at[fk] = on->Time();
+            last[fk] = l;
+            for (int k = 1; k <= 4; ++k) {
+                const std::string id = fid + "_" + std::to_string(k);
+                const Aircraft* a_on = on->TargetAircraft(id);
+                const Aircraft* a_off = off->TargetAircraft(id);
+                if (a_on == nullptr || a_off == nullptr) continue;
+                const double d = (a_on->position - a_off->position).Length();
+                out.worst_m = std::max(out.worst_m, d);
+                if (d > 1e-3 && out.first_apart_s < 0.0) out.first_apart_s = on->Time();
+                if (k == 1) {
+                    out.lead_on = out.lead_on && (l != AirLevel::A1 || on->Em()->RwrOn(id));
+                    if (back_at[fk] > 0.0 && std::hypot(a_on->position.x, a_on->position.y) < 55000.0) out.came_back = true;
+                    continue;
+                }
+                if (on->TargetLevel(id) == AirLevel::A1) {
+                    ++out.lent_steps;
+                    out.own_off = out.own_off && !on->Em()->RwrOn(id);
+                    out.borrowed = out.borrowed || HoldsBorrowed(*on, id, on->Time() - 0.5);
+                } else if (back_at[fk] > 0.0 && on->Time() > back_at[fk] + 2.0) {
+                    out.borrowed_after = out.borrowed_after || HoldsBorrowed(*on, id, on->Time() - 0.5);
+                }
+            }
+        }
+    }
+    out.debrief_off = off->Debrief();
+    out.debrief_on = on->Debrief();
+    out.launches_off = off->Launches();
+    out.launches_on = on->Launches();
+    out.ok = true;
+    return out;
 }
 
 }  // namespace
@@ -168,95 +292,72 @@ SC_TEST("levels B12: the data's values load, and a data folder without them keep
     std::string e;
     SC_EXPECT(LoadAirLevelValues(kData, "gameplay/air_levels.json", v, &e));
     if (!e.empty()) std::printf("    %s\n", e.c_str());
-    // Shipped off (mode 0) until a balance decision (02 section 5.4); every other value is read.
-    SC_EXPECT(v.mode == 0 && v.radar_m > 10000.0 && v.down_factor >= 1.0 && v.down_dwell_s > 0.0);
+    // Shipped on (mode 1) since the second pass (02 section 5.4); every other value is read.
+    SC_EXPECT(v.mode == 1 && v.radar_m > 10000.0 && v.down_factor >= 1.0 && v.down_dwell_s > 0.0);
     AirLevelValues none;
     SC_EXPECT(LoadAirLevelValues(kData, "gameplay/no_such_file.json", none, &e) && none.mode == 0);
 }
 
-SC_TEST("levels B12: a flight out and back keeps its route place, slots, receivers and pictures across A2 to A1 to A2") {
+SC_TEST("levels B12: a flight out and back flies as with the levels off; at A1 its wingmen hear on the leader's receiver") {
     // North from 30 km to 160 km and back to 20 km, 40 km east: out of the near range (45 + 10 km) and back in. The
-    // practice drone comes after the end: with it, the Osa's launch at it is heard on the flight's receivers 124 km away,
-    // and a launch on a receiver is a pilot's reason to be at A2 however far (A2 for a minute, then A1 again: four changes).
-    // The output below says why each change was made.
-    auto r = Runner(ReplaceOnce(Session(1, {30.0, 160.0, 20.0}, 1500.0, true, 40000.0), "\"appear_at_s\": 200", "\"appear_at_s\": 5000"), 1);
-    SC_EXPECT(r != nullptr);
-    if (!r) return;
-    bool was_a1 = false, back_a2 = false;
-    std::size_t pic_at_a1[5] = {};
-    bool shut[5] = {};
-    bool pic_kept = true, rwr_off = true, lead_rwr = true, slot_kept = true, place_kept = true;
-    int placed_steps = 0;
-    double worst_station_m = 0.0;
-    AirLevel last = AirLevel::A2;
-    double worst_placed_m = 0.0;
-    // His station by the flight's own rule (the formation's slot for the flight's phase, off the leader's track).
-    auto station_of = [&](int k) {
-        const FlightState* f = r->AllFlights().Find("f1");
-        const FlightSlot* me = nullptr;
-        for (std::size_t n = 0; f != nullptr && n < f->slots.size(); ++n) {
-            if (f->slots[n].number == k) me = &f->slots[n];
-        }
-        const Aircraft* L = r->GetWorld().FindAircraft(r->TargetWorldId("f1_1"));
-        if (f == nullptr || me == nullptr || L == nullptr) return Vec3{1e9, 1e9, 0.0};
-        return Flights::StationOf(*L, Flights::SlotOffset(*f, *me));
+    // practice drone comes after the end. With the levels on and off side by side: every aircraft in the same place at
+    // every step, the wingmen's receivers off at A1 and the searches heard on the leader's, none of them heard on the
+    // leader's once back at A2, and the same debrief.
+    const std::string text = ReplaceOnce(Session(1, {30.0, 160.0, 20.0}, 1500.0, true, 40000.0), "\"appear_at_s\": 200", "\"appear_at_s\": 5000");
+    const SideBySide s = RunSideBySide(text, 1, 1300.0);
+    SC_EXPECT(s.ok);
+    std::printf("    A1 %d, back near %d, wingman-steps lent %d, borrowed %d, own receivers off %d, the leader's on %d, borrowed after %d; "
+                "worst apart %.4f m (first at %.1f s)\n",
+                s.went_a1, s.came_back, s.lent_steps, s.borrowed, s.own_off, s.lead_on, s.borrowed_after, s.worst_m, s.first_apart_s);
+    SC_EXPECT(s.went_a1 && s.came_back);
+    SC_EXPECT(s.lent_steps > 1000);
+    SC_EXPECT(s.borrowed);  // the Osa's search radar is heard on the leader's receiver over 100 km away
+    SC_EXPECT(s.own_off && s.lead_on && !s.borrowed_after);
+    SC_EXPECT(s.worst_m < 1e-6);  // flown, not placed: the same place at every step
+    SC_EXPECT(s.debrief_off == s.debrief_on);
+    SC_EXPECT(s.launches_off == s.launches_on);
+}
+
+SC_TEST("levels B12: flights that go far and come back to the battery play as with the levels off (cases by property)") {
+    // Routes out of the near range and back over the unit, at several distances east and seeds. Every case in which a
+    // flight went to A1, came back within 55 km of the unit and its wingmen heard searches on the leader's receiver is
+    // compared with the levels off: every aircraft in the same place at every step, the same launches, and the same
+    // debrief within the tolerance of SplitWarnings (a wingman's warning-receiver line may move in time, not appear or go).
+    struct Case {
+        std::vector<double> route_km;
+        double east_m;
+        int seed;
     };
-    while (!r->Finished() && r->Time() < 1300.0) {
-        r->Step(0.05);
-        const AirLevel l = r->FlightLevel("f1");
-        if (l != last) {
-            // Why it changed: what the members hold (a manoeuvre, a recent launch, trail, burst or lock in a picture).
-            std::string why;
-            const FlightState* f = r->AllFlights().Find("f1");
-            for (std::size_t n = 0; f != nullptr && n < f->slots.size(); ++n) {
-                if (f->slots[n].overriding) why += " slot" + std::to_string(n) + ":override";
-            }
-            for (int k = 1; k <= 4; ++k) {
-                for (const airwar::Sighting& sg : r->PilotPicture("f1_" + std::to_string(k))) {
-                    if (sg.time_s < r->Time() - 60.0 || sg.kind == airwar::SightKind::Aircraft) continue;
-                    why += " f1_" + std::to_string(k) + ":" + sg.what;
-                }
-            }
-            std::printf("    t %.0f s, the leader %.0f km north: %s to %s;%s\n", r->Time(), r->TargetPosition("f1_1").y / 1000.0,
-                        AirLevelName(last), AirLevelName(l), why.c_str());
-            last = l;
+    const Case cases[] = {{{30.0, 160.0, -20.0}, 20000.0, 1}, {{25.0, 140.0, 0.0}, 0.0, 2}, {{40.0, 180.0, 10.0}, -30000.0, 3}, {{-30.0, -150.0, 5.0}, 10000.0, 4}};
+    int compared = 0, same = 0;
+    for (const Case& c : cases) {
+        const SideBySide s = RunSideBySide(Session(2, c.route_km, 1500.0, true, c.east_m), 2, 1400.0, c.seed);
+        SC_EXPECT(s.ok);
+        const bool qualifies = s.went_a1 && s.came_back && s.borrowed;
+        const bool identical = s.debrief_off == s.debrief_on && s.launches_off == s.launches_on;
+        std::printf("    case %.0f km east, seed %d: A1 %d, back %d, borrowed %d; worst apart %.4f m; launches %d and %d; debrief %s\n", c.east_m / 1000.0,
+                    c.seed, s.went_a1, s.came_back, s.borrowed, s.worst_m, s.launches_off, s.launches_on, identical ? "the same" : "differs");
+        if (!identical) {
+            // Where the two parted, for the record.
+            std::istringstream x(s.debrief_off), y(s.debrief_on);
+            std::string lx, ly;
+            int line = 0;
+            while (std::getline(x, lx) && std::getline(y, ly) && lx == ly) ++line;
+            std::printf("      line %d:\n        %s\n        %s\n", line, lx.c_str(), ly.c_str());
         }
-        if (l == AirLevel::A1) was_a1 = true;
-        else if (was_a1) back_a2 = true;
-        lead_rwr = lead_rwr && (l != AirLevel::A1 || r->Em()->RwrOn("f1_1"));
-        for (int k = 2; k <= 4; ++k) {
-            const std::string id = "f1_" + std::to_string(k);
-            if (r->TargetLevel(id) == AirLevel::A1) {
-                ++placed_steps;
-                if (!shut[k]) pic_at_a1[k] = r->PilotPicture(id).size();
-                shut[k] = true;
-                pic_kept = pic_kept && r->PilotPicture(id).size() == pic_at_a1[k];  // his eyes shut, his picture as it was
-                rwr_off = rwr_off && !r->Em()->RwrOn(id);
-                // Placed on his station, on the leader's place on the plan.
-                const Vec3 W = r->TargetPosition(id), S = station_of(k);
-                worst_placed_m = std::max(worst_placed_m, std::hypot(S.x - W.x, S.y - W.y));
-                slot_kept = slot_kept && std::hypot(S.x - W.x, S.y - W.y) < 1.0;
-                place_kept = place_kept && r->TargetNextWaypoint(id) == r->TargetNextWaypoint("f1_1");
-            } else {
-                shut[k] = false;
-                if (back_a2 && k == 2 && r->TargetPosition("f1_1").y < 40000.0) {
-                    // Back at A2 he flies his slot himself: within a few hundred metres of it while the flight flies straight.
-                    const Vec3 W = r->TargetPosition(id), S = station_of(k);
-                    worst_station_m = std::max(worst_station_m, std::hypot(S.x - W.x, S.y - W.y));
-                }
-            }
-        }
+        if (!qualifies) continue;
+        ++compared;
+        if (identical) ++same;
+        SC_EXPECT(s.own_off && s.lead_on && !s.borrowed_after);
+        SC_EXPECT(s.worst_m < 1e-6);
+        SC_EXPECT(s.launches_off == s.launches_on);
+        const DebriefParts a = SplitWarnings(s.debrief_off), b = SplitWarnings(s.debrief_on);
+        SC_EXPECT(a.rest == b.rest);
+        SC_EXPECT(a.warnings == b.warnings);
+        SC_EXPECT(WarningsMovedOnlyForWingmen(s.debrief_off, s.debrief_on));
     }
-    std::printf("    level changes %d, wingman-steps placed %d; kept: picture %d, receivers off %d, the leader's on %d, slot %d, "
-                "route place %d; worst off station placed %.2f m, back at A2 %.0f m\n",
-                r->LevelChanges(), placed_steps, pic_kept, rwr_off, lead_rwr, slot_kept, place_kept, worst_placed_m, worst_station_m);
-    SC_EXPECT(was_a1 && back_a2);
-    SC_EXPECT(placed_steps > 1000);
-    SC_EXPECT(pic_kept && rwr_off && lead_rwr && slot_kept && place_kept);
-    SC_EXPECT(worst_station_m < 300.0);
-    SC_EXPECT(r->Em()->RwrOn("f1_2"));  // his receiver back on at A2
-    // Down once, up once: no flicker at the edges.
-    SC_EXPECT(r->LevelChanges() == 2);
+    std::printf("    %d of %d cases identical, the rest within the tolerance\n", same, compared);
+    SC_EXPECT(compared >= 3);
 }
 
 SC_TEST("levels B12: near the battery the levels change nothing: the debrief is the same with the levels on and off") {
@@ -285,26 +386,33 @@ SC_TEST("levels B12: a session with the levels on, run twice with one seed, writ
     SC_EXPECT(a->Debrief() == b->Debrief());
 }
 
-SC_TEST("levels B12: 100 aircraft far away at A1 do a fraction of the work at A2 (counts), and the levels cost little (time, loose)") {
-    // 25 flights of four, 90 to 200 km north: far from the unit throughout.
+SC_TEST("levels B12: 100 aircraft far away at A1 hear on a quarter of the receivers, and the levels cost little (time, loose)") {
+    // 25 flights of four, 90 to 200 km north: far from the unit throughout. Every aircraft flies and looks at both levels;
+    // at A1 three of each four receivers are off (the wingmen hear on the leader's), so the EM world runs a quarter of them.
     const std::string text = Session(25, {90.0, 200.0, 90.0}, 400.0);
+    int on[2] = {0, 0};
     std::uint64_t ticks[2] = {0, 0};
     StepProfile prof[2];
     for (int mode = 0; mode < 2; ++mode) {
         auto r = Runner(text, mode);
-        SC_EXPECT(r != nullptr);
-        if (!r) return;
+        SC_EXPECT(r != nullptr && r->Em() != nullptr);
+        if (!r || r->Em() == nullptr) return;
         while (r->Time() < 60.0) r->Step(0.05);
         r->SetProfile(true);
         const std::uint64_t t0 = r->PerceptionTicks();
         while (r->Time() < 180.0) r->Step(0.05);
         ticks[mode] = r->PerceptionTicks() - t0;
         prof[mode] = r->Profile();
+        for (int f = 1; f <= 25; ++f)
+            for (int k = 1; k <= 4; ++k)
+                if (r->Em()->RwrOn("f" + std::to_string(f) + "_" + std::to_string(k))) ++on[mode];
         if (mode == 1) SC_EXPECT(r->FlightLevel("f1") == AirLevel::A1 && r->FlightLevel("f25") == AirLevel::A1);
     }
-    std::printf("    perception ticks in 120 s: %llu at A2, %llu at A1; step %.3f ms and %.3f ms mean, the levels %.4f ms\n",
-                static_cast<unsigned long long>(ticks[0]), static_cast<unsigned long long>(ticks[1]), prof[0].MeanStepMs(), prof[1].MeanStepMs(),
-                prof[1].MeanMs(StepProfile::Levels));
-    SC_EXPECT(ticks[1] * 3 < ticks[0]);  // the leaders alone look: a quarter, at their own rates
+    std::printf("    receivers on: %d at A2, %d at A1; perception ticks in 120 s %llu and %llu; step %.3f ms and %.3f ms mean, the levels %.4f ms\n",
+                on[0], on[1], static_cast<unsigned long long>(ticks[0]), static_cast<unsigned long long>(ticks[1]), prof[0].MeanStepMs(),
+                prof[1].MeanStepMs(), prof[1].MeanMs(StepProfile::Levels));
+    SC_EXPECT(on[0] == 100);
+    SC_EXPECT(on[1] == 25);               // the leaders' receivers alone
+    SC_EXPECT(ticks[1] == ticks[0]);      // every pilot looks at A1 as at A2
     SC_EXPECT(prof[1].MeanMs(StepProfile::Levels) < 0.5);  // ten times what it takes on a quiet machine: a loose guard
 }

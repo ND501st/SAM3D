@@ -66,6 +66,8 @@ python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign
 ./simcore/build/air_war_bench data 400            # weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9)
 ./simcore/build/air_battle_bench data [--testbed 600]  # 100 aircraft near at A2, far at A2 and A1: ms a step by part (docs/air_battle/02 section 5.4)
 ./simcore/build/air_battle_bench data --compare 600    # the testbed with the levels off, off again and on: where the outcomes part
+./simcore/build/air_battle_bench data --compare 3600 --seeds 3 --first 1   # the testbed's hour over seeds, levels off and on side by side
+./simcore/build/air_battle_bench data --trace 900 [--who id]   # the testbed off and on in lockstep: where each aircraft's place, receiver, picture or stress first part
 ./simcore/build/em_bench data 500 60 24           # EM scaling benchmark (aircraft, SAM radars, ESM sites)
 
 # Play the game (docs/PLAYING.md): the missions menu, or straight into the first lesson or a seat's lesson

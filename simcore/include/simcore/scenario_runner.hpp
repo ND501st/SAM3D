@@ -369,7 +369,9 @@ public:
     }
     int LevelChanges() const { return level_changes_; }
     const AirLevels& Levels() const { return levels_; }
-    // The aircraft in the sky now, and how many of them are wingmen at A1 (placed, eyes shut).
+    // A target's aircraft in the world (null before it appeared): for tests and the cost bench's trace.
+    const Aircraft* TargetAircraft(const std::string& id) const { return AircraftOf(id); }
+    // The aircraft in the sky now, and how many of them are wingmen at A1 (hearing on their leader's receiver).
     void LevelCounts(int& alive, int& a1) const {
         alive = a1 = 0;
         for (std::size_t i : live_) {
@@ -2132,13 +2134,13 @@ private:
         UpdateLevels(air);  // roadmap B12: each flight's level of detail
         clock_.Lap(StepProfile::Levels);
         flights_->Steer(time_, air);
-        PlaceLevels(air);  // the wingmen of flights at A1 that keep their slots: placed on them after the world's step
+        LendReceivers(air);  // the wingmen of flights at A1 that keep their slots: their leader's receiver for theirs
         clock_.Lap(StepProfile::Flights);
         for (std::size_t i = 0; i < targets_.size(); ++i) {
             TargetState& s = targets_[i];
             if (!s.spawned || s.gone) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
-            if (a != nullptr && !a->placed) s.pilot.BeforeStep(*a);
+            if (a != nullptr) s.pilot.BeforeStep(*a);
         }
         clock_.Lap(StepProfile::Pilots);
         world_.Step(dt);
@@ -2148,17 +2150,6 @@ private:
             if (!s.spawned) continue;
             Aircraft* a = world_.FindAircraft(s.world_id);
             if (a == nullptr) continue;
-            if (a->placed) {
-                // A wingman at A1 (roadmap B12): set on his slot from his leader, as the leader flies; no pilot's work.
-                if (!s.gone && a->alive) {
-                    PlaceOnSlot(i, *a, air);
-                    bool ended = false;
-                    const std::string ev = flights_->AfterMove(static_cast<int>(i), *a, time_, air, ended);
-                    if (!ev.empty()) Event(def_.targets[i].id, ev);
-                }
-                a->placed = false;
-                continue;
-            }
             if (s.gone) {
                 // Past its last waypoint and flying on until it is taken out of the world (a wave's long gone): no more
                 // pilot's work, but still held over the ground (roadmap R5).
@@ -2242,11 +2233,15 @@ private:
     // ---- The levels of detail (roadmap B12, air_levels.hpp, docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.4). Each flight
     // is looked at when it comes into the sky and then once a second, at a moment of its own (staggered by its id, the
     // same at any step): near one of our units, or engaged, it is at A2; far, after the hysteresis, at A1. Our own flights
-    // are always at A2. At A1 the leader flies and thinks as at A2; each wingman keeping his slot is set on it from the
-    // leader after the world's step (PlaceOnSlot), his receiver off and his eyes shut, and opens them on coming back to
-    // A2. Nothing a pilot decides reads the levels: what reaches them (a lock, a launch, a burst) is in a picture.
+    // are always at A2. At A1 every aircraft flies and looks as at A2; each wingman keeping his slot hears the searches on
+    // his leader's receiver instead of his own (LendReceivers), which is switched off: the receivers are most of what the
+    // air battle costs. Nothing a pilot decides reads the levels: what reaches them (a lock, a launch, a burst) is in a
+    // picture.
     std::vector<NearPoint> near_points_;
     double levels_last_s_ = -1.0;
+    std::vector<double> rwr_lent_until_;  // each target's: until when he still hears on his leader's receiver, back at A2
+    // game value: an own receiver back on hears each radar every ESM period (0.2 s); after a second it holds them
+    static constexpr double kRwrWarmS = 1.0;
 
     void UpdateLevels(const Flights::Lookup& air) {
         live_.clear();
@@ -2360,19 +2355,30 @@ private:
         }
         return false;
     }
-    // After the command layer steered: which aircraft the world leaves for the runner to place this step.
-    void PlaceLevels(const Flights::Lookup& air) {
+    // After the command layer steered: which wingmen hear on their leader's receiver this step. A wingman of a flight at
+    // A1 who keeps his slot, whose leader carries the same receiver and has it on, is at A1 himself: his own receiver is
+    // switched off and his perception hears the leader's searches and missiles' guidance (UpdatePerception). Every other
+    // aircraft is at A2. The
+    // leader's slot is looked at first, so a new leader (the old one lost) has his own receiver on before he lends it.
+    void LendReceivers(const Flights::Lookup& air) {
         if (!levels_.On()) return;
+        if (rwr_lent_until_.size() < target_level_.size()) rwr_lent_until_.resize(target_level_.size(), -1.0);
         for (std::size_t k = 0; k < flights_->Size(); ++k) {
             const FlightState& f = flights_->All()[k];
             const bool a1 = levels_.LevelOf(static_cast<int>(k)) == AirLevel::A1;
+            const FlightSlot* ls = f.Leader();
+            const bool lead_ok = ls != nullptr && ls->target >= 0 && static_cast<std::size_t>(ls->target) < target_level_.size();
+            if (lead_ok) SetTargetLevel(static_cast<std::size_t>(ls->target), AirLevel::A2);
             for (std::size_t n = 0; n < f.slots.size(); ++n) {
                 const FlightSlot& sl = f.slots[n];
-                if (sl.target < 0 || static_cast<std::size_t>(sl.target) >= target_level_.size()) continue;
-                const bool placed = a1 && sl.keeping && static_cast<int>(n) != f.leader_slot && sl.alive && !sl.gone;
-                Aircraft* a = air(sl.target);
-                if (a != nullptr) a->placed = placed;
-                SetTargetLevel(static_cast<std::size_t>(sl.target), placed ? AirLevel::A1 : AirLevel::A2);
+                if (sl.target < 0 || static_cast<std::size_t>(sl.target) >= target_level_.size() || static_cast<int>(n) == f.leader_slot) continue;
+                const std::size_t i = static_cast<std::size_t>(sl.target);
+                bool lent = a1 && lead_ok && sl.keeping && sl.alive && !sl.gone && air(sl.target) != nullptr;
+                if (lent && !def_.targets[i].rwr.empty()) {
+                    const ScenarioTarget& lt = def_.targets[static_cast<std::size_t>(ls->target)];
+                    lent = lt.rwr == def_.targets[i].rwr && em_link_ && em_link_->RwrOn(lt.id);
+                }
+                SetTargetLevel(i, lent ? AirLevel::A1 : AirLevel::A2);
             }
         }
     }
@@ -2381,38 +2387,20 @@ private:
         target_level_[i] = l;
         const ScenarioTarget& t = def_.targets[i];
         if (em_link_ && !t.rwr.empty()) em_link_->SetRwrOn(t.id, l == AirLevel::A2);
-        if (l == AirLevel::A2 && percep_) percep_->hub.Wake(airwar::ObjectKeyOf(t.id), time_);
+        // Back at A2 his own receiver needs a few of its looks to hold what it hears: until then he hears the leader's.
+        if (l == AirLevel::A2 && i < rwr_lent_until_.size()) rwr_lent_until_[i] = time_ + kRwrWarmS;
     }
-    // A wingman at A1 on his slot: the leader's place, track and attitude, the slot's offset; at the leader's height over
-    // the ground when his pilot holds one (terrain following), else at the leader's altitude; never under his floor.
-    void PlaceOnSlot(std::size_t i, Aircraft& a, const Flights::Lookup& air) {
+    // The leader whose receiver a wingman hears on now (null: his own): at A1, and for kRwrWarmS after it.
+    const ScenarioTarget* LenderOf(std::size_t i) const {
+        if (!levels_.On() || i >= target_level_.size() || !em_link_) return nullptr;
+        if (target_level_[i] != AirLevel::A1 && !(i < rwr_lent_until_.size() && time_ < rwr_lent_until_[i])) return nullptr;
         const int fi = flights_->FlightOf(static_cast<int>(i));
-        const FlightSlot* me = flights_->SlotOf(static_cast<int>(i));
-        if (fi < 0 || me == nullptr) return;
-        const FlightState& f = flights_->All()[static_cast<std::size_t>(fi)];
-        const FlightSlot* ls = f.Leader();
-        const Aircraft* L = ls != nullptr ? air(ls->target) : nullptr;
-        if (L == nullptr) return;
-        const Vec3 off = Flights::SlotOffset(f, *me);
-        Vec3 S = Flights::StationOf(*L, off);
-        const LocalFrame& fr = world_.Frame();
-        const Terrain& ground = world_.GetTerrain();
-        const double here_m = ground.HeightAt(S.x, S.y);
-        const double l_alt = fr.AltitudeOf(L->position);
-        double alt = l_alt + off.z;
-        if (targets_[i].pilot.ControlsHeight()) alt = here_m + (l_alt - ground.HeightAt(L->position.x, L->position.y)) + off.z;
-        alt = std::max(alt, here_m + a.bottom_m + 1.0);
-        S.z += alt - fr.AltitudeOf(S);
-        a.position = S;
-        a.velocity = L->velocity;
-        a.heading_rad = L->heading_rad;
-        a.pitch_rad = L->pitch_rad;
-        a.bank_rad = L->bank_rad;
-        a.path_angle_rad = L->path_angle_rad;
-        a.load_g = L->load_g;
-        a.airspeed_mps = L->airspeed_mps;
-        a.throttle = L->throttle;
-        a.attitude_set = L->attitude_set;
+        if (fi < 0) return nullptr;
+        const FlightSlot* ls = flights_->All()[static_cast<std::size_t>(fi)].Leader();
+        if (ls == nullptr || ls->target < 0 || static_cast<std::size_t>(ls->target) == i || !ls->alive || ls->gone) return nullptr;
+        const ScenarioTarget& lt = def_.targets[static_cast<std::size_t>(ls->target)];
+        if (lt.rwr != def_.targets[i].rwr || !em_link_->RwrOn(lt.id)) return nullptr;
+        return &lt;
     }
 
     // The aircraft of a target in the sky now, for the command layer (flights.hpp).
@@ -2615,7 +2603,7 @@ private:
     std::unique_ptr<airwar::AirRadio> air_radio_;  // the enemy's calls on the air (air_war/air_radio.hpp, roadmap B9)
     StepClock clock_;                       // where a step goes, when asked (step_profile.hpp, roadmap B12)
     AirLevels levels_;                      // each flight's level of detail (air_levels.hpp, roadmap B12)
-    std::vector<AirLevel> target_level_;    // each target's: A1 for a wingman placed on his slot, else A2
+    std::vector<AirLevel> target_level_;    // each target's: A1 for a wingman hearing on his leader's receiver, else A2
     int level_changes_ = 0;
     std::vector<std::size_t> live_;         // the targets in the sky this step (indices into def_.targets)
     std::set<std::string> packages_added_;
@@ -3326,7 +3314,14 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             const ScenarioTarget& t = def_.targets[i];
             if (t.rwr.empty() || !targets_[i].spawned || targets_[i].gone) continue;
-            const EmSensorLink::RwrWarning w = em_link_->WarningOf(t.id);
+            EmSensorLink::RwrWarning w = em_link_->WarningOf(t.id);
+            if (const ScenarioTarget* lender = LenderOf(i)) {  // a wingman at A1 hears a missile's guidance on his leader's
+                const EmSensorLink::RwrWarning lw = em_link_->WarningOf(lender->id);
+                if (lw.launch && !w.launch) {
+                    w.launch = true;
+                    w.launch_by = lw.launch_by;
+                }
+            }
             if (w.lock && (rwr_warned_[i] & 1) == 0) {
                 rwr_warned_[i] |= 1;
                 Event(t.id, "warning receiver: locked by " + w.lock_by);
@@ -3495,7 +3490,6 @@ private:
         for (std::size_t i = 0; i < def_.targets.size(); ++i) {
             const ScenarioTarget& t = def_.targets[i];
             if (!targets_[i].spawned || targets_[i].gone || t.weapon) continue;
-            if (i < target_level_.size() && target_level_[i] == AirLevel::A1) continue;  // a wingman placed at A1: eyes shut (B12)
             const Aircraft* a = world_.FindAircraft(targets_[i].world_id);
             if (a == nullptr || !a->alive) continue;
             if (pf.hub.Due(airwar::ObjectKeyOf(t.id), time_)) due.push_back(i);
@@ -3534,7 +3528,11 @@ private:
                 ob.rwr_set = def_.perception.RwrSet(t.rwr);
                 if (ob.rwr_set == nullptr) ob.rwr_set = &default_rwr_set_;  // a receiver with no display of its own in the data
                 if (em_link_) {
-                    for (const EmSensorLink::RwrContactView& c : em_link_->RwrPictureOf(t.id)) {
+                    // A wingman at A1 (roadmap B12) hears the searches and the missiles' guidance on his leader's receiver,
+                    // his own being off; back at A2 he does so a moment longer while his own takes hold, and hears a lock on
+                    // him on his own.
+                    const ScenarioTarget* lender = LenderOf(i);
+                    const auto hear = [&heard](const EmSensorLink::RwrContactView& c, bool borrowed) {
                         airwar::RwrHeard h;
                         h.key = c.key;
                         h.state = c.state == 2 ? airwar::RwrState::Launch : (c.state == 1 ? airwar::RwrState::Lock : airwar::RwrState::Search);
@@ -3543,7 +3541,16 @@ private:
                         h.bearing_rad = c.bearing_rad;
                         h.sigma_rad = c.sigma_rad;
                         h.power_dbw = c.power_dbw;
+                        h.borrowed = borrowed;
                         heard.push_back(h);
+                    };
+                    for (const EmSensorLink::RwrContactView& c : em_link_->RwrPictureOf(t.id)) {
+                        if (lender == nullptr || c.state != 0) hear(c, false);
+                    }
+                    if (lender != nullptr) {
+                        for (const EmSensorLink::RwrContactView& c : em_link_->RwrPictureOf(lender->id)) {
+                            if (c.state != 1) hear(c, true);  // a lock is held on his leader, not on him
+                        }
                     }
                 }
             }
