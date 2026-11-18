@@ -56,7 +56,8 @@ enum class FactKind {
     Press,
     Rumour,
     Mail,
-    Intercept  // what our radio intercept posts heard of the enemy's air radio and read (roadmap B9, command/intercept.hpp)
+    Intercept,    // what our radio intercept posts heard of the enemy's air radio and read (roadmap B9, command/intercept.hpp)
+    OwnAirNotice  // a notice of our own flights, coded by the talk table at each hop (roadmap B10, command/own_air.hpp)
 };
 
 inline const char* FactKindName(FactKind k) {
@@ -76,6 +77,7 @@ inline const char* FactKindName(FactKind k) {
         case FactKind::Rumour: return "rumour";
         case FactKind::Mail: return "mail";
         case FactKind::Intercept: return "intercept";
+        case FactKind::OwnAirNotice: return "own_air_notice";
     }
     return "?";
 }
@@ -97,6 +99,8 @@ struct Fact {
     double expires_h = 1e18;             // nobody passes it on after this
     bool held = false;                   // the origin passes it on only to whom and how he tells it (the player's own
                                          // report or order: roadmap P2)
+    double hop_work_s = 0.0;             // work at each hop before it goes on: a coded notice's encoding and decoding by
+                                         // the talk table (roadmap B10, own_air.json "notice"; 0 for everything else)
 
     const std::string& Told() const { return summary.empty() ? text : summary; }
 };
@@ -1425,7 +1429,7 @@ private:
         const Fact& f = facts_[static_cast<std::size_t>(fi)];
         const Position& pa = data_.positions[static_cast<std::size_t>(a)];
         const Position& pb = data_.positions[static_cast<std::size_t>(b)];
-        const double t0 = t + RelayDelayH(a, f.precedence);
+        const double t0 = t + RelayDelayH(a, f.precedence) + f.hop_work_s / 3600.0;
         if (t0 > f.expires_h) return;
         const int la = PlaceOf(a, t0), lb = PlaceOf(b, t0);
         const Vec3 xa = PlacePos(la, t0), xb = PlacePos(lb, t0);

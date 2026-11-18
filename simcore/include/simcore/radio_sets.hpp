@@ -266,6 +266,7 @@ struct RegimentMessage {
     std::string road_crossing;  // the crossing on the session's roads ("" none)
     bool road_down = false;
     std::string road_entry;     // the entry's id (the bridge's damage it stands for)
+    int own_air_notice = 0;     // a notice of our aircraft (roadmap B10): its number among the session's, from 1 (0 none)
 };
 
 struct RadioPlan {

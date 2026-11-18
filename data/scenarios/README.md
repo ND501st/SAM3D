@@ -127,6 +127,21 @@ go out on that post's net and may be jammed or lost (B9), else they are heard at
 fire by what they know (their pilots' picture, their radar, the controller's word); kills come back through the
 runner's `DestroyTarget`, ours with the regiment's id.
 
+**Our aviation (track B, B10; `simcore/command/own_air.hpp`, `own_flights.hpp`, `docs/air_battle/08_OUR_FIGHTERS.md`).**
+An optional `"own_air"` gives the session our side's air: `{ "data": "command/own_air.json", "codes":
+"command/iff_codes.json", "war": true, "fixed_code", "battery_table_s", "battery_last_code", "post_table_s",
+"post_last_code", "chain": "command/chain_pannonia.json", "origin": "fighter_rgt_duty", "notice_post": "rgt_cp_duty",
+"plan": { "method", "split_height_m", "zones", ... }, "notices": [ { "flight", "type", "count", "route_m": [[e, n], ...],
+"half_width_m", "floor_m", "ceiling_m", "cross_from_s", "cross_to_s", "back_s", "sent_s", "lost", "aircraft" } ],
+"regiments": [ { "id", "base", "base_east_m", "base_north_m", "type", "name", "skill", "function", "area_east_m",
+"area_north_m", "area_radius_m", "gci" } ], "gci": { "east_m", "north_m", "mast_m" }, "raid_warning_s" }`. The day's
+codes come from the table (or `fixed_code`); a holder whose table never came (`*_table_s` < 0) keeps its last code. A
+target of ours may have `"iff_code"` (fixed; -1 its transponder off) or `"iff_table": true` (its pilot sets the table's
+code, and may miss a change). Each notice goes down the chain from `origin` to `notice_post` with each post's work, then
+on the regiment's net into the post's journal (or, without a post, as the battery commander's line); the crew keeps what
+it read from the words. Regiments need an `"air_fight"` with our controller `gci` (its fighters may then be empty): the
+duty scrambles pairs on our GCI's picture, guided on that picture.
+
 **The Osa and the PU-12M in one battery (a battery link, `simcore/battery_link.hpp`, docs/PU12_DEVELOPMENT.md P8).** A
 link file names two scenarios that share a battery and a sky, `{ "link_id", "name", "description", "osa", "post",
 "callsign", "source", "confidence", "notes" }`:

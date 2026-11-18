@@ -1,0 +1,27 @@
+{
+  "iff_id": "kremniy_2m_pannonia",
+  "status": "B10, 18 November 2026. Our side's identification codes in 1985: Kremniy-2M's plug-in code filters, the schedule they are changed on and the paper that carries it (simcore/command/own_air.hpp IffSchedule, docs/air_battle/08_OUR_FIGHTERS.md sections 2.7 and 6).",
+  "source": "soviet_iff (Kremniy-2 and -2M: band III at 668 MHz, 12 plug-in code filters, 1-8 for peace and 9-12 kept for war, filter 4 for alignment, changed on a secret pre-arranged schedule every one to six hours, a distress reply by answering twice, unencrypted)",
+  "confidence": "low",
+  "notes": "soviet_iff is tier 4 and the only source read for the filters and the change period; the day's schedule is drawn from the campaign's stream within these bounds (a filter never follows itself). Parol, Soviet service from 1977 (dewiki_p15, a pointer only), is not ours in 1985: a small Pact nation flies Kremniy-2M.",
+
+  "system": "kremniy_2m",
+  "filters": 12,
+  "peace": [1, 8],
+  "war": [9, 12],
+  "alignment": 4,
+  "period_h": {
+    "min": 1.0,
+    "max": 6.0,
+    "source": "soviet_iff ('every one to six hours')",
+    "confidence": "low"
+  },
+  "document": {
+    "means": ["in_person", "messenger", "despatch_rider", "courier"],
+    "issued_by": "rgt_signals_chief",
+    "issued_h": 18.0,
+    "for_next_day": true,
+    "source": "game value: the regiment's signals chief issues the next day's schedule as a paper carried by a means that takes documents (docs/air_battle/08_OUR_FIGHTERS.md section 6; pvo_bu_x_1984 art. 17 has the commander check the timely change of identification codes); the hour of issue is a game value",
+    "confidence": "estimate"
+  }
+}

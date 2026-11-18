@@ -94,6 +94,7 @@ inline std::string PaperTitle(FactKind k) {
         case FactKind::Press: return "Newspaper";
         case FactKind::Mail: return "Letter";
         case FactKind::Intercept: return "Intercept report";
+        case FactKind::OwnAirNotice: return "Notice of our aircraft";
         case FactKind::War: return "Announcement";
         case FactKind::AirWarning: return "Air-raid warning";
         case FactKind::Rumour: return "Note";

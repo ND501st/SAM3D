@@ -123,6 +123,7 @@ add_executable(simcore_tests
   tests/test_weapons.cpp
   tests/test_air_combat.cpp
   tests/test_air_fight.cpp
+  tests/test_own_air.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp
   tests/test_world_map.cpp

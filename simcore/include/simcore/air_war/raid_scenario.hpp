@@ -212,7 +212,12 @@ struct ScenarioFormat {
     bool reactions = true;
     // R1's damage states for every aircraft in it (data/gameplay/damage.json, roadmap B4); off: a hit destroys.
     bool damage_states = true;
+    // Our fighters (roadmap B10, command/own_air.hpp): the theatre's airfields as our fighter regiments' bases, their duty
+    // scrambling pairs on our GCI's picture as the raid comes in, the day's identification codes and the notices of the
+    // pairs down the chain. Off (the default): no fighters of ours in a played raid, as before B10.
+    bool our_fighters = false;
 };
+
 
 // One scenario target, and the flight and aircraft it is.
 struct RaidAircraft {
@@ -1123,7 +1128,66 @@ public:
         }
         const double first_s = std::max(0.0, (first_h - m.start_h) * 3600.0);
         double warn_after_s = std::max(0.0, first_s - warn_s);
+        // Our fighters (B10): each of the theatre's airfields still working is a fighter regiment's base (the type of the
+        // 1985 regiments, MiG-21MF), its function the share it launches; one GCI at the battery's sector command post's
+        // radar, 40 km behind the battery from the raid (a game value, docs/air_battle/08 section 4).
+        json::Value own_air_regs = Arr();
+        if (fmt.our_fighters) {
+            for (std::size_t oi = 0; oi < th.objects.size(); ++oi) {
+                const TheatreObject& ob = th.objects[oi];
+                const ObjectState& os = c.Truth()[oi];
+                if (ob.kind != ObjectKind::Airfield || os.function <= 0.05) continue;
+                const Vec3 b = to_scen(os.pos);
+                json::Value r = Obj();
+                Put(r, "id", Str(ob.id));
+                Put(r, "base", Str(ob.id));
+                Put(r, "base_east_m", Num(std::round(b.x)));
+                Put(r, "base_north_m", Num(std::round(b.y)));
+                Put(r, "type", Str("mig21mf"));
+                Put(r, "name", Str("MiG-21"));
+                Put(r, "function", Num(std::round(os.function * 100.0) / 100.0));
+                Put(r, "area_east_m", Num(0.0));
+                Put(r, "area_north_m", Num(0.0));
+                Put(r, "gci", Str("our_gci"));
+                Push(own_air_regs, r);
+            }
+        }
+        if (!own_air_regs.items.empty()) {
+            Vec3 from{0.0, -1.0, 0.0};
+            const json::Value* tl = targets.items.empty() ? nullptr : targets.items.front().Find("start");
+            if (tl != nullptr && tl->Find("east_m") != nullptr && tl->Find("north_m") != nullptr) {
+                const Vec3 s{tl->Find("east_m")->number, tl->Find("north_m")->number, 0.0};
+                if (s.Length() > 1.0) from = s * (1.0 / s.Length());
+            }
+            const Vec3 gci = from * -40000.0;
+            json::Value af = Obj();
+            json::Value ctl = Obj();
+            Put(ctl, "id", Str("our_gci"));
+            Put(ctl, "side", Str("ours"));
+            Put(ctl, "kind", Str("radar_control"));
+            Put(ctl, "east_m", Num(std::round(gci.x)));
+            Put(ctl, "north_m", Num(std::round(gci.y)));
+            Put(ctl, "range_m", Num(220000.0));
+            json::Value ctls = Arr();
+            Push(ctls, ctl);
+            Put(af, "controllers", ctls);
+            Put(af, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md section 4 (our GCI; a game value for its place)"));
+            Put(af, "confidence", Str("low"));
+            Put(root, "air_fight", af);
+            json::Value oa = Obj();
+            Put(oa, "war", Bool(true));
+            Put(oa, "regiments", own_air_regs);
+            json::Value g = Obj();
+            Put(g, "east_m", Num(std::round(gci.x)));
+            Put(g, "north_m", Num(std::round(gci.y)));
+            Put(oa, "gci", g);
+            Put(oa, "raid_warning_s", Num(std::round(warn_after_s)));
+            Put(oa, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md (roadmap B10)"));
+            Put(oa, "confidence", Str("low"));
+            Put(root, "own_air", oa);
+        }
         std::vector<DeliveryDef> messages;
+
         if (fmt.deliveries != nullptr) {
             // From the pipeline: played as a message when it comes inside the raid; known from the start when it came
             // before; no warning at all when it never reached the vehicle.

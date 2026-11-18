@@ -773,7 +773,9 @@ struct EngagementTarget {
     bool evade_on_launch = false;
     double evade_turn_rate_rad_s = 0.0;
     bool friendly = false;  // replies to IFF interrogation
+    int iff_code = 0;       // the code its transponder is set to now (roadmap B10; replies only to the same; -1 off)
     double size_m = 4.5;    // critical dimension for the TV sight (em/optical.hpp; a fighter's side, estimate)
+
     double span_m = 0.0;    // its span as the TV sight sees it (0: the tuning's for its class)
 };
 
@@ -1020,6 +1022,11 @@ public:
     void SetUnitPosition(const Vec3& unit_position) { unit_ = unit_position; }
     // The hull's true heading, degrees clockwise from north (driven by the player or the scenario).
     void SetUnitHeading(double heading_deg) { unit_heading_deg_ = heading_deg; }
+    // The code the interrogator asks on: the one the crew set from the code table that reached it (roadmap B10). A
+    // transponder on another code does not reply.
+    void SetIffCode(int code) { iff_code_ = code; }
+    int IffCode() const { return iff_code_; }
+
     // The light and the air for the TV sight (scenario "environment"; em/optical.hpp).
     void SetOpticalConditions(const em::OpticalConditions& c) { optics_ = c; }
     const em::OpticalConditions& OpticalConditions() const { return optics_; }
@@ -1158,7 +1165,9 @@ private:
         double agl_m = 0.0;
         double true_az_deg = 0.0;  // from north; az_deg is in the crew's frame
         bool friendly = false;
+        int iff_code = 0;
         double size_m = 4.5;  // critical dimension for the TV
+
         double closing_mps = 0.0;
         double speed_mps = 0.0;
         double parameter_m = 0.0;  // crossing parameter: distance from the unit to the target's course, over the ground
@@ -1249,7 +1258,9 @@ private:
             g.target_class = tg.target_class;
             g.span_m = tg.span_m;
             g.friendly = tg.friendly;
+            g.iff_code = tg.iff_code;
             g.size_m = tg.size_m;
+
             const Aircraft* a = tg.world_id >= 0 ? world.FindAircraft(tg.world_id) : nullptr;
             g.alive = a != nullptr && a->alive;
             if (!g.alive) continue;
@@ -1319,7 +1330,8 @@ private:
         for (const EngagementTarget& tg : targets) {
             if (tg.world_id < 0) continue;
             const Aircraft* a = world.FindAircraft(tg.world_id);
-            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly);
+            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly, tg.iff_code);
+
         }
         const SearchSensorDef& s = console.search;
         const Equipment& eq = console.equipment;
@@ -2314,7 +2326,11 @@ private:
         }
         const bool active = ready && t < iff_until_s_ + 1e-9;
         if (!d.iff_interrogating_input.empty()) console.equipment.SetInput(d.iff_interrogating_input, active);
-        if (em_ != nullptr) em_->SetInterrogating(active);
+        if (em_ != nullptr) {
+            em_->SetInterrogating(active);
+            em_->SetInterrogatorCode(iff_code_);
+        }
+
         // The contacts on the scope within the interrogator's range while it asks; those that never answered are reported
         // when it stops ("Ответа нет!": not identified as friends).
         if (active) {
@@ -2350,7 +2366,8 @@ private:
         const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.friendly || !g.los || g.range_m > d.iff_max_range_m) continue;
+            if (!g.alive || !g.friendly || g.iff_code != iff_code_ || !g.los || g.range_m > d.iff_max_range_m) continue;
+
             if (gated) {
                 bool on_scope = false;
                 for (const Contact& c : picture_) on_scope = on_scope || c.target_id == kv.first;
@@ -2522,6 +2539,8 @@ private:
     std::vector<Contact> iff_replies_;
     double iff_until_s_ = -1.0;
     bool iff_control_ = false;
+    int iff_code_ = 0;
+
     double unit_heading_deg_ = 0.0;
     em::OpticalSensorDef optical_;    // the TV sight as a camera (em/optical.hpp)
     em::OpticalConditions optics_;    // the light and the air (scenario "environment")

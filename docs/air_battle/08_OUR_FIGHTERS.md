@@ -504,6 +504,107 @@ link to the battery beyond the PU-12's own.
   flights saves and replays exactly.
 - No Parol, no launch block and no data link to the battery appear for our side in the war of 1985.
 
+## As built (B10, 18 Nov 2026, branch `tb-b10`)
+
+A first form of sections 3-9: the codes, the notices, the crews' rule, the duty and its pairs, the trace and the enemy's
+learning are in simcore and tested; the crew's lines, the task file's block, the report and the campaign are not (the
+**Left** list below).
+
+**Code and data.**
+
+- `data/command/iff_codes.json`: the Kremniy-2M's 12 filters, 1-8 in peace and 9-12 in war, changed every 1-6 h
+  (`soviet_iff`); the day's table a paper issued the evening before (a game value).
+- `data/command/own_air.json`: the readiness states (`fm_100_2_1_1984`), the duty's rule table (game values), the
+  airborne-alert zones and the pursuit limit (`mt_turchin_coop`), the GCI (3 channels; 10 s automated, 3-6 min manual;
+  1.5 km error; 220 km reach), the notice (half a minute's coding per hop, priority precedence, a 5 km corridor), the
+  pilot's missed change (3 %), the cooperation defaults (`mitronin_1976`) and the enemy's learning. Every value carries
+  its source or is marked a game value.
+- `simcore/command/own_air.hpp`: the loaders; `IffSchedule` (a day's changes, keyed), `IffHolding` (a holder keeps the
+  code it had until the day's table reaches it), `PilotFilterAt` (a pilot who misses a change stays on the old code),
+  `IffAnswers`; `OwnAirZone`, `CooperationPlan` (by zones or one zone by height, the 3,000 m floor over a unit unable to
+  fire, `Words()` for the order's coordination line) and its loader; `OwnFlightNotice`, `NoticeWords` (talk-table group
+  402 with the notice's number, the route as the PVO grid's small squares, heights, crossing hours, return, amendment,
+  planned or actual) and `ReadNotice` (the same read back from what was written); `JudgeTrack`, the crews' rule (a
+  reply on a notified route is a friend, a reply off every notice a violator, silence inside a notified corridor at its
+  heights and hours held, above the split height in one zone held, the rest free; with no notice and no plan a reply is
+  a friend, as before); `TraceFriendlyFire`; `FighterRegimentDef`, `Scramble` and `FighterDuty` (pairs at readiness 1
+  and 2 by day and night, scaled by the base's function; more on a raid warning; a pair per group on the picture coming
+  at a regiment's area while the GCI has a channel free; take-off by the readiness state's times, later from a struck
+  base); `EnemyCorridorIntel`.
+- `simcore/command/own_flights.hpp`: `OwnGciPicture` (our GCI's radar on its horizon, each track with its error and its
+  reply on the regiment's code, read as old as the sector passes it), `PlanPair` and `NoticeOf` (a scrambled pair as two
+  session aircraft and its actual notice), `RunNotice` (a notice down the chain by `InfoNet`, post by post with each
+  hop's coding work), `OwnAirScenarioDef`.
+- `command/info_net.hpp`: `FactKind::OwnAirNotice` and `Fact::hop_work_s`; `scenes.hpp` and `player_inputs.hpp` know the
+  kind.
+- `em/model.hpp`, `em/radar_system.hpp`, `em_link.hpp`: a transponder's `iff_code` and the interrogator's; a reply needs
+  both the same (`SetInterrogatorCode`, `SyncTarget(..., iff_code)`). Both default to 0, so nothing changes without
+  `"own_air"`.
+- `engagement.hpp`: `EngagementTarget::iff_code`, `SetIffCode`; the gameplay IFF and the EM one reply only on the code.
+- `air_war/air_fight_session.hpp`: `AirFightWorld::tracks` (an "ours" controller vectors on our picture's hostile
+  tracks, not the truth, when the runner gives it), `AddFighter` (a pair joins the running fight), a fighter thinks
+  only once airborne. `air_war/air_radio.hpp`, `air_radio_def.hpp`: our side's set (`our_radio`, `our_freq_mhz`) and
+  `"our_gci"` posts, so our vectors can go out as transmissions; our calls are not logged by our own intercept.
+- `scenario.hpp`: a scenario's `"own_air"` block (`data/scenarios/README.md`), a target's `"iff_code"` (-1: its
+  transponder off) and `"iff_table"`; an `"air_fight"` may have no fighters when our GCI is there for `"own_air"`.
+- `scenario_runner.hpp`: our pilots' codes each step; the Osa's interrogator on the battery's holding, the PU-12M's on
+  the post's, the regiment's picture and the other batteries on the day's table; the board's type and the transponder,
+  the battery fire model's and the testbed's neighbours' `friendly` by `RegimentHoldsFire` (a reply on their code, or a
+  notice the regiment's post has, or the plan), never by the target's truth; each notice down the chain (`RunNotice`),
+  then on the regiment's R-111 into the post's journal or, without a post, as the battery commander's line (a lone
+  vehicle's commander told in person); the crew keeps the notice it read from the words (`CrewNotices`); the NPC
+  commander holds fire on a track his crew's notices and plan hold and does not pick it, through his existing orders
+  (`hold_fire`, `order_drop_target`); the duty scrambles pairs on `OwnGciPicture`, each pair entering by `AddTargets`
+  and `AirFightSession::AddFighter` with its actual notice sent down the chain; a launch at one of ours writes
+  `TraceFriendlyFire`'s finding to the log (`FriendlyFire`).
+- `air_war/raid_scenario.hpp`: `ScenarioFormat::our_fighters` (off by default) writes `"own_air"` with the theatre's
+  working airfields as our regiments, our GCI 40 km behind the battery from the raid, and the raid warning.
+- `light.hpp` now includes `crew_data.hpp` for `detail::ReadTextFile` (an include-order fault the new headers exposed).
+
+**Random draws.** No new stream. All on `Stream::AirCombat` with keys from `kOwnAirKey` (0xB10A0000): +0x100 the day's
+schedule, +0x200 a pilot's missed change, +0x300 a scramble's take-off, +0x401-0x403 the GCI picture's age and error,
++0x500-0x501 the enemy's hearing and placing of a corridor. None meets B8's keys. `prototype/` has no IFF reply model,
+so nothing is mirrored.
+
+**Numbers.** The notice's way on `chain_pannonia.json`: the fighter regiment's duty officer to the sector's CP about
+14.5 min, the sector to the division's AD CP about 14 min, the division to the regiment's CP about 14.5 min; with the
+regiment's half minute on its net, division to battery about 15 min, the top of `mitronin_1976`'s 10-15 min (the chain's
+own relay, a field telephone's 10-min connection off 'Vozdukh' precedence, is most of it). A readiness-1 pair was
+airborne 247-282 s after the order (3 seeds) in the session test. Pilots miss about 3 % of changes. The enemy, hearing a quarter
+of the uses and reading the talk table in 15 % more, learns a corridor used 40 times in every seed, placed about 8.5 km
+off.
+
+**Tests** (`tests/test_own_air.cpp`, 8 cases; one in `test_em_link.cpp`): the codes' schedule and holdings over 20 seeds;
+the notice's words read back (40 notices) and the crews' rule case by case; the notice's way down the chain and its
+timing; in a session, the Osa asking on the crew's code (a pilot on another code is not answered and is fired on, the
+trace naming the code; on the same code never); a notice that reached the crew holding fire on a silent one of ours in
+the corridor while the hostile outside it is engaged, and a lost notice letting the launch happen, traced as no notice
+and the transponder off; the duty scrambling a readiness-1 pair, vectored on the picture, on the table's code, its
+notice traced; the enemy's learning; and a count test that the board, the post's interrogator and the battery fire
+model read no `t.friendly`.
+
+**Left:**
+
+- The crew's own lines (own aircraft told, fire prohibited on a track, code changed, one of ours near the target,
+  violator reported) and their `"menu"` places: the NPC commander uses the existing `hold_fire` and
+  `order_drop_target`, and the code change is an event with no seat's act; no cabin control sets the Kremniy's code, so a
+  player's seat gets it changed for him.
+- The task file's `"own_air"` block, the battery commander's plan and working map with the corridors, the report's and
+  the regiment's check against the notices (`campaign/report.hpp`), and the 3,000 m floor from the regiment's record of
+  a battery on the march.
+- The raid builder writes no enemy `"air_fight"` fighters with our pairs (our pairs fight only the escorts a scenario
+  gives), and `ScenarioFormat::our_fighters` is off in the campaign; the testbed's friendly flights stay scripted (they
+  answer on code 0).
+- Our GCI's vectors on `our_radio` need an `"air_radio"` block with `our_radio` set; the raid builder does not set it,
+  so our vectors are heard at once as in B8. Flights beyond the channels search on their own only as B8's lost control.
+- The fighter regiment's loss report down the chain, our fighters' claims through the pipeline, and the regiment's
+  word to the battery after a friendly-fire launch.
+- `EnemyCorridorIntel` is not fed by the air war's intercept nor read by its planner; no save mode is needed until it
+  is.
+- Airborne alert zones, the pursuit limit and recall rules are in the data and not yet flown; the allied false friend
+  (a Pact enemy on our filters) and NATO's own belt are not built.
+- `own_air_balance` is not written.
+
 ## Left open
 
 - **Corridor widths and heights, and the notice lead time** the regulations required: not found (look in the НПП of the

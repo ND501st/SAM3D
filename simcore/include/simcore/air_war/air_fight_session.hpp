@@ -21,11 +21,17 @@
 //    draw is keyed (em::DrawHash on Stream::AirCombat with this session's keys, 0xF1600000 and up for shooters).
 //
 // Kills go to the runner's destroy (the regiment's id for ours); claims are what the shooter believed.
+//
+// B10 (docs/air_battle/08_OUR_FIGHTERS.md section 4): our controllers vector on our own picture when the runner gives one
+// (AirFightWorld::tracks: our GCI's tracks, late and with their errors, identified by its interrogator), never on the truth;
+// a fighter is added while the session runs (AddFighter: a pair scrambled by the duty's rule table), and his time in the
+// fight and without a vector counts from when he first flies in it.
 #pragma once
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <string>
 #include <vector>
@@ -38,6 +44,15 @@
 
 namespace simcore {
 namespace airwar {
+
+// A track on a controller's picture (our GCI's: command/own_flights.hpp): where his board has it, and whether it is hostile
+// there (no friend's reply, not one of his own). `truth` is for the act only.
+struct AirTrack {
+    int truth = -1;
+    Vec3 pos;
+    Vec3 vel;
+    bool hostile = true;
+};
 
 // What the session reads and does in its runner (ScenarioRunner fills it; a test can fill it by hand).
 struct AirFightWorld {
@@ -52,6 +67,9 @@ struct AirFightWorld {
     // A controller's vector on its post's net: the call's number (< 0: not sent); and when the fighter hears it (< 0: never).
     std::function<int(const std::string& post, int fighter_target, const std::string& words, double t)> say;
     std::function<double(int call, int fighter_target, double t)> heard;
+    // Our controllers' picture (B10): a controller of side "ours" with one vectors on it; without one, on the truth in his
+    // range (B8's behaviour, for the enemy's E-3A and a range day's GCI).
+    std::function<std::vector<AirTrack>(const std::string& controller, double t)> tracks;
 };
 
 class AirFightSession {
@@ -96,43 +114,46 @@ public:
         def_ = &def;
         seed_ = seed;
         fighters_.clear();
+        added_.clear();
         for (const AirFightFighterDef& fd : def.fighters) {
-            Fighter f;
-            f.def = &fd;
-            f.target = -1;
+            int target = -1;
             for (std::size_t i = 0; i < ids.size(); ++i) {
-                if (ids[i] == fd.target) f.target = static_cast<int>(i);
+                if (ids[i] == fd.target) target = static_cast<int>(i);
             }
-            f.doc = def.combat.Doctrine(fd.faction);
-            if (f.target < 0 || f.doc == nullptr) {
-                if (error != nullptr) *error = "air_fight: fighter '" + fd.target + "': " + (f.target < 0 ? "no such target" : "no doctrine for " + fd.faction);
-                return false;
-            }
-            f.ours = fd.faction == "ours";
-            f.skill = fd.skill >= 0.0 ? fd.skill : f.doc->skill;
-            const LoadOut lo = def.combat.LoadOutFor(fd.type, def.year, f.ours);
-            f.aams = lo.aams;
-            f.gun = lo.gun;
-            f.gun_s = lo.gun != nullptr ? lo.gun->firing_s : 0.0;
-            const std::vector<const SensorDef*> radars = def.sensors.Of(fd.type, SensorKind::Radar, def.year, f.ours);
-            f.radar = radars.empty() ? nullptr : radars.front();
-            f.striker = fd.role == "strike";
-            f.key = 0xF1600000ull + static_cast<std::uint64_t>(fighters_.size());
-            fighters_.push_back(f);
+            if (!Make(fd, target, error)) return false;
         }
         return true;
     }
+    // A fighter joins the running battle (B10: a pair scrambled by the duty's rule table): `target` is its index among the
+    // scenario's targets. False, with why, before Init, without a doctrine for its faction or with no such target.
+    bool AddFighter(const AirFightFighterDef& fd, int target, std::string* error = nullptr) {
+        if (def_ == nullptr) {
+            if (error != nullptr) *error = "air_fight: not started";
+            return false;
+        }
+        added_.push_back(fd);
+        if (!Make(added_.back(), target, error)) {
+            added_.pop_back();
+            return false;
+        }
+        return true;
+    }
+    std::size_t FighterCount() const { return fighters_.size(); }
 
     void Step(double t, const AirFightWorld& w) {
         if (def_ == nullptr) return;
         const FightParams& fp = def_->combat.fight;
         if (start_s_ < 0.0) start_s_ = t;
+        for (Fighter& f : fighters_) {  // his time in the fight counts from when he is first in the air in it
+            if (f.start_s >= 0.0 || f.gone) continue;
+            if (w.air && w.air(f.target) != nullptr) f.start_s = t;
+        }
         Controllers(t, w);
         Deliver(t);
         Missiles(t, w);
         for (std::size_t i = 0; i < fighters_.size(); ++i) {
             Fighter& f = fighters_[i];
-            if (f.gone || t < f.next_think_s) continue;
+            if (f.gone || f.start_s < 0.0 || t < f.next_think_s) continue;
             f.next_think_s = t + fp.think_s;
             const Aircraft* me = w.air ? w.air(f.target) : nullptr;
             if (me == nullptr) {
@@ -212,6 +233,7 @@ private:
         bool gone = false;
         std::string why_home;
         std::uint64_t shots = 0;
+        double start_s = -1.0;    // first in the air in this battle
     };
     struct Missile {
         std::size_t shooter = 0;
@@ -233,6 +255,29 @@ private:
         int truth = -1;
         bool done = false;
     };
+
+    bool Make(const AirFightFighterDef& fd, int target, std::string* error) {
+        Fighter f;
+        f.def = &fd;
+        f.target = target;
+        f.doc = def_->combat.Doctrine(fd.faction);
+        if (f.target < 0 || f.doc == nullptr) {
+            if (error != nullptr) *error = "air_fight: fighter '" + fd.target + "': " + (f.target < 0 ? "no such target" : "no doctrine for " + fd.faction);
+            return false;
+        }
+        f.ours = fd.faction == "ours";
+        f.skill = fd.skill >= 0.0 ? fd.skill : f.doc->skill;
+        const LoadOut lo = def_->combat.LoadOutFor(fd.type, def_->year, f.ours);
+        f.aams = lo.aams;
+        f.gun = lo.gun;
+        f.gun_s = lo.gun != nullptr ? lo.gun->firing_s : 0.0;
+        const std::vector<const SensorDef*> radars = def_->sensors.Of(fd.type, SensorKind::Radar, def_->year, f.ours);
+        f.radar = radars.empty() ? nullptr : radars.front();
+        f.striker = fd.role == "strike";
+        f.key = 0xF1600000ull + static_cast<std::uint64_t>(fighters_.size());
+        fighters_.push_back(f);
+        return true;
+    }
 
     const Fighter* Find(const std::string& target) const {
         for (const Fighter& f : fighters_) {
@@ -270,9 +315,13 @@ private:
         const FightParams& fp = def_->combat.fight;
         for (std::size_t ci = 0; ci < def_->controllers.size(); ++ci) {
             const AirFightControllerDef& c = def_->controllers[ci];
+            // Ours vector on our picture (B10); the others on what is in their range.
+            const bool on_picture = c.side == "ours" && static_cast<bool>(w.tracks);
+            std::vector<AirTrack> picture;
+            bool asked = false;
             for (std::size_t i = 0; i < fighters_.size(); ++i) {
                 Fighter& f = fighters_[i];
-                if (f.gone || f.mode == Mode::Home || f.def->controller != c.id || f.striker) continue;
+                if (f.gone || f.start_s < 0.0 || f.mode == Mode::Home || f.def->controller != c.id || f.striker) continue;
                 if (t < f.next_vector_due) continue;
                 f.next_vector_due = t + fp.gci_vector_s;
                 const Aircraft* me = w.air ? w.air(f.target) : nullptr;
@@ -281,21 +330,41 @@ private:
                 int best = -1;
                 double best_d = 1e18;
                 Vec3 at, vel;
-                for (const Fighter& o : fighters_) {
-                    if (o.gone || o.ours == f.ours) continue;
-                    const Aircraft* a = w.air(o.target);
-                    if (a == nullptr || (a->position - c.pos).Length() > c.range_m) continue;
-                    const double d = (a->position - me->position).Length();
-                    if (d < best_d) {
-                        best_d = d;
-                        best = o.target;
-                        at = a->position;
-                        vel = a->velocity;
+                if (on_picture) {
+                    if (!asked) {
+                        picture = w.tracks(c.id, t);
+                        asked = true;
+                    }
+                    for (const AirTrack& k : picture) {
+                        if (!k.hostile || (k.pos - c.pos).Length() > c.range_m) continue;
+                        const Fighter* kf = FighterAt(k.truth);
+                        if (kf != nullptr && kf->ours == f.ours) continue;  // his own, by his plot of them
+                        const double d = (k.pos - me->position).Length();
+                        if (d < best_d) {
+                            best_d = d;
+                            best = k.truth;
+                            at = k.pos;
+                            vel = k.vel;
+                        }
+                    }
+                } else {
+                    for (const Fighter& o : fighters_) {
+                        if (o.gone || o.ours == f.ours) continue;
+                        const Aircraft* a = w.air(o.target);
+                        if (a == nullptr || (a->position - c.pos).Length() > c.range_m) continue;
+                        const double d = (a->position - me->position).Length();
+                        if (d < best_d) {
+                            best_d = d;
+                            best = o.target;
+                            at = a->position;
+                            vel = a->velocity;
+                        }
                     }
                 }
                 if (best < 0) continue;
                 const std::uint64_t n = ++vector_count_;
-                const Vec3 err{fp.gci_error_m * N(0xF16C0000ull + ci, n, 1), fp.gci_error_m * N(0xF16C0000ull + ci, n, 2), 0.0};
+                const double err_m = on_picture ? 0.0 : fp.gci_error_m;  // the picture carries its own errors
+                const Vec3 err{err_m * N(0xF16C0000ull + ci, n, 1), err_m * N(0xF16C0000ull + ci, n, 2), 0.0};
                 Vector v;
                 v.fighter = i;
                 v.point = at + err;
@@ -367,7 +436,7 @@ private:
         const AirFightControllerDef* ctl = def_->Controller(f.def->controller);
         const bool bound = ctl != nullptr && !f.striker && (f.doc->ControllerBound() || f.doc->roe == "controller");
         if (bound && !f.control_lost && !f.free) {
-            const double since = f.last_vector_s >= 0.0 ? t - f.last_vector_s : t - start_s_;
+            const double since = f.last_vector_s >= 0.0 ? t - f.last_vector_s : t - f.start_s;
             if (since > fp.control_lost_s) {
                 f.control_lost = true;
                 const std::string& what = f.doc->OnControlLost(f.skill);
@@ -380,7 +449,7 @@ private:
             }
         }
         // Joker, bingo, Winchester.
-        const double in_fight = t - start_s_;
+        const double in_fight = t - f.start_s;
         if (!f.striker) {
             if (in_fight >= fp.bingo_s) return GoHome(f, me, t, w, "bingo");
             if (!Armed(f)) return GoHome(f, me, t, w, "winchester");
@@ -706,6 +775,7 @@ private:
     std::uint64_t seed_ = 0;
     double start_s_ = -1.0;
     std::vector<Fighter> fighters_;
+    std::deque<AirFightFighterDef> added_;  // fighters added while it runs (their defs stay put)
     std::vector<Missile> missiles_;
     std::vector<Vector> vectors_;
     std::vector<Kill> kills_;

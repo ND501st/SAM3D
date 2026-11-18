@@ -408,7 +408,8 @@ inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const 
         if (lr.detected) {
             RadarPlot pl = lr.plot;
             // IFF: the interrogator shares the antenna; a working transponder of our side replies.
-            if (d.has_iff && r.iff_interrogating && t.iff_reply && t.side == p.side)
+            if (d.has_iff && r.iff_interrogating && t.iff_reply && t.side == p.side && t.iff_code == r.iff_code)
+
                 pl.iff_reply = s.rng.Uniform01Of(Stream::Iff, LookKey(r.id, t.id, e.revolutions)) < d.iff_reply_probability;
             r.last_plots.push_back(pl);
         }
