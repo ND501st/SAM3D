@@ -106,6 +106,13 @@ void ASimScenarioDirector::BeginPlay()
 		ScenarioFile = CommandLineScenario;
 		CabinFile.Reset();
 	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("-SimAirShots="), CommandLineScenario) && !CommandLineScenario.IsEmpty())
+	{
+		// The air battle's photographer (roadmap B13): its own air battle when no scenario is named.
+		ScenarioFile = TEXT("scenarios/air_battle_shots.json");
+		CabinFile.Reset();
+		UE_LOG(LogSAM3D, Log, TEXT("The air battle's photographer: %s"), *ScenarioFile);
+	}
 	else if (FParse::Value(FCommandLine::Get(), TEXT("-SimFxShots="), CommandLineScenario) ||
 		FParse::Value(FCommandLine::Get(), TEXT("-SimFxShotsNight="), CommandLineScenario))
 	{
