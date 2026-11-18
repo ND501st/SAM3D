@@ -347,7 +347,8 @@ by ±0.15 (`factions_cases.md` §1).
 - `doctrine` is a list with one entry per faction (`nato`, `warsaw_pact`, `neutral`, `rebels`, `ours`); `strikers_answer` is
   `{jettison, press_on, abort}`.
 - Each missile and gun names its game values in `game_values` (keys of the entry that are SAM3D's, not the source's); the loader
-  refuses a name that is not a key. The `munition` key is empty until B13 gives the air-to-air shapes in `munitions.json`.
+  refuses a name that is not a key. The `munition` key names the missile's shape in `data/scenery/munitions.json` (B13, 19 Nov
+  2026: all 18, each with its dimensions, fins, colours and motor from `parsch_dusrm`, `airwar_ru` and `mis`).
 - `loads_by_year` is a list of eras, `{"from": year, "aams": [[id, count], ...], "gun": id}`: the latest era at or before the
   war's year is the fit, each missile checked against the year for the shooter's side (`AirCombatDef::LoadOutFor(type, year,
   allied)`; `allied` is true for the Pact's allies and our side). `aliases` let the order of battle's `mig21` find
@@ -666,4 +667,5 @@ a session our MiG-21 under GCI closes on an enemy jet and fires, and the scenari
   pursuit and the abstract one by range bands.
 - The strikers' chaff and flares and the escort's station on its strikers (B1's formation layer) in the fight.
 - `air_combat_bench` (§5.10) against Vietnam, Linebacker, the Bekaa, the Falklands and ACEVAL; the A1 far fight.
-- AAM shapes and their smoke in Unreal (B13); claims into the enemy's records and ours through the pipeline.
+- Claims into the enemy's records and ours through the pipeline. (AAM shapes, their smoke and the fight drawn in Unreal: B13,
+  done 19 Nov 2026, `11_IMPLEMENTATION_PLAN.md`.)

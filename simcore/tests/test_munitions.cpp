@@ -149,6 +149,31 @@ SC_TEST("munitions: the file loads and every weapon, system, model and alias res
     for (const char* id : {"3m9m3", "v601", "v750", "v755", "9m37m", "9m31m", "9m32m", "9m36", "9m39", "kh22m", "bgm109c", "agm86c"}) {
         SC_EXPECT(lib.Find(id) != nullptr);
     }
+    // The air battle's (roadmap B13): every air-to-air missile of air_combat.json by its munition, a missile with a shape
+    // and a motor; every fighter's gun a gun; the drop tank a fighter throws off a shape with no motor and no charge.
+    json::Value combat;
+    SC_EXPECT(json::Parse(ReadText(kData + "/air_war/air_combat.json"), combat));
+    const json::Value* aams = combat.Find("aams");
+    const json::Value* guns = combat.Find("guns");
+    SC_EXPECT(aams != nullptr && aams->items.size() >= 18 && guns != nullptr && guns->items.size() >= 10);
+    if (aams != nullptr) {
+        for (const json::Value& a : aams->items) {
+            const json::Value* mun = a.Find("munition");
+            const MunitionSpec* m = mun != nullptr ? lib.Resolve(mun->string) : nullptr;
+            if (m == nullptr) std::printf("    no munition for the AAM %s\n", mun != nullptr ? mun->string.c_str() : "(none)");
+            SC_EXPECT(m != nullptr && m->kind == "missile" && m->HasMesh() && m->has_motor && m->charge_kg > 0.0);
+        }
+    }
+    if (guns != nullptr) {
+        for (const json::Value& g : guns->items) {
+            const json::Value* id = g.Find("id");
+            const MunitionSpec* m = id != nullptr ? lib.Resolve(id->string) : nullptr;
+            if (m == nullptr) std::printf("    no munition for the gun %s\n", id != nullptr ? id->string.c_str() : "(none)");
+            SC_EXPECT(m != nullptr && m->kind == "gun");
+        }
+    }
+    const MunitionSpec* tank = lib.Resolve("drop_tank");
+    SC_EXPECT(tank != nullptr && tank->kind == "tank" && tank->HasMesh() && !tank->has_motor && tank->charge_kg == 0.0);
     SC_EXPECT(lib.Resolve("no_such_thing") == nullptr);
     SC_EXPECT(lib.Find("osa") == nullptr);  // a system's id is not a munition's
 }
