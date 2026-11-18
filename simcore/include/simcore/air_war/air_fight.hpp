@@ -66,6 +66,8 @@ struct AbstractFightResult {
     std::vector<std::string> ours_lost;  // one per our fighter: its regiment
     std::vector<int> jettisoned;         // strike flights that threw their stores off
     std::vector<int> aborted;            // strike flights that turned for home
+    int attacked = 0;                    // strike flights shot at or that saw the attack (each drew its answer)
+    int jettison_drawn = 0;              // of them, those that drew a jettison, aborted or not (the balance tool's count)
     std::vector<std::string> notes;
 };
 
@@ -97,7 +99,8 @@ public:
     // The chance a fighter element of this role meets our group before the strikers.
     double MeetChance(FlightRole r, const AbstractFightSetup& s) const {
         double m = r == FlightRole::Sweep ? f_->a0_meet_sweep : r == FlightRole::Cap ? f_->a0_meet_cap : r == FlightRole::Escort ? f_->a0_meet_close : 0.0;
-        m *= 1.0 + (f_->a0_awacs_meet - 1.0) * s.awacs;
+        const double meet = d_->tuning.Get("balance.mode") >= 1.0 ? f_->a0_awacs_meet : f_->a0_awacs_meet_mode0;
+        m *= 1.0 + (meet - 1.0) * s.awacs;
         return std::clamp(m, 0.0, 1.0);
     }
     // The chance no fighter of the package meets our group.
@@ -167,8 +170,12 @@ public:
             out.notes.push_back("our fighters lost their controller and went home");
             return out;
         }
-        const bool surprise = r.Chance(jammed ? f_->a0_surprise_jammed : f_->a0_surprise_gci);
+        bool surprise = r.Chance(jammed ? f_->a0_surprise_jammed : f_->a0_surprise_gci);
         const double seen = s.awacs > 0.0 ? f_->a0_seen_eye + (f_->a0_seen_awacs - f_->a0_seen_eye) * s.awacs : f_->a0_seen_eye;
+        // An E-3A that controls the package's fighters sees our GCI's pass coming and warns them: the surprise is gone as
+        // often as its warning is heard (balance.mode 1, roadmap B14; Teaball's warning turned 0.47:1 in May 1972 into
+        // 3.8:1 by October, checo_1978_linebacker). Before B14 our first pass from the rear came as often under an E-3A.
+        if (surprise && s.awacs > 0.0 && d_->tuning.Get("balance.mode") >= 1.0 && r.Chance(s.awacs * f_->a0_seen_awacs)) surprise = false;
         const bool ours_cleared = ours_->roe == "cleared_bvr" || (ours_->roe == "controller" && !jammed);
         std::uint64_t shooter_key = 0;
         // Their fighters: a sweep first, then a CAP, then the close escort.
@@ -250,9 +257,16 @@ public:
                     left += x.alive ? 1 : 0;
                 }
                 if (!attacked || left == 0) continue;
+                ++out.attacked;
                 const bool jett = r.Chance(theirs_->strikers_jettison);
+                out.jettison_drawn += jett ? 1 : 0;
+                // The doctrine's abort is a share of the attacked flights (04_REACTIONS.md section 8, as the session's
+                // DecideFlight reads it); the rest press on or go round, which in an abstract fight is to go on. Before
+                // B14 (balance.mode 0) it was the abort's share of abort and press on alone, which turned NATO home 36%
+                // of the time against the F-105s' 3 of 16 (red_baron_vol2).
                 const double ab = theirs_->strikers_abort + theirs_->strikers_press_on;
-                const bool abort = ab > 0.0 && r.Chance(theirs_->strikers_abort / ab);
+                const bool abort = d_->tuning.Get("balance.mode") >= 1.0 ? r.Chance(theirs_->strikers_abort)
+                                                                          : ab > 0.0 && r.Chance(theirs_->strikers_abort / ab);
                 if (abort) {
                     out.aborted.push_back(static_cast<int>(fi));
                 } else if (jett) {

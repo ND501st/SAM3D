@@ -479,3 +479,57 @@ SC_TEST("hot phase (B11): a save keeps its hot mode; one made before B11 loads w
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     SC_EXPECT_NEAR(old.Data().tuning.Get("hot_phase.mode"), 0.0, 1e-12);
 }
+
+SC_TEST("balance (B14): a save keeps its balance mode; one made before B14 loads with mode 0") {
+    const AirWarData d = LoadHot("nato");
+    SC_EXPECT_NEAR(d.tuning.Get("balance.mode"), 1.0, 1e-12);
+    AirCampaign c;
+    c.Init(d, 9u);
+    if (c.Advance(12.0)) c.SkipPlayerMission();
+    std::string text = SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_nato.json");
+    std::string e;
+    AirCampaign now;
+    SC_EXPECT(LoadCampaignJson(text, kData, now, &e));
+    SC_EXPECT_NEAR(now.Data().tuning.Get("balance.mode"), 1.0, 1e-12);
+    SC_EXPECT(now.Journal().size() == c.Journal().size());
+    const std::size_t at = text.find("\"balance_mode\"");
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const std::size_t end = text.find_first_of(",}", at);
+    if (text[end] == ',') {
+        text.erase(at, end - at + 1);
+    } else {
+        const std::size_t comma = text.rfind(',', at);
+        text.erase(comma, end - comma);
+    }
+    AirCampaign old;
+    SC_EXPECT(LoadCampaignJson(text, kData, old, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT_NEAR(old.Data().tuning.Get("balance.mode"), 0.0, 1e-12);
+}
+
+SC_TEST("balance (B14): the bands load, each with its source; the bench's measures and the campaign's are all there") {
+    BalanceBands b;
+    std::string e;
+    SC_EXPECT(LoadBalanceBands(kData + "/air_war/balance_bands.json", b, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    for (const char* id : {"f105_jettison", "f105_press_on", "f105_abort", "checo_aim7_hit", "checo_aim7_out", "checo_aim9_hit", "checo_aim9_out",
+                           "exchange_no_warning", "exchange_warning", "exchange_swing", "exchange_bekaa", "retask_pact_air_min", "retask_nato_air_min",
+                           "alert_pact_r1_min", "friendly_fire_1960s", "friendly_fire_1985"}) {
+        SC_EXPECT(b.Find("air_war_bench", id) != nullptr);
+    }
+    for (const char* f : {"rebels", "neutral", "warsaw_pact", "nato"}) {
+        for (const char* t : {"theatre_pannonia.json", "theatre_pannonia_nation.json"}) SC_EXPECT(b.Find("air_war_balance", "loss_share", t, f, "careful") != nullptr);
+    }
+    SC_EXPECT(b.Find("air_war_balance", "battery_wrecked", "theatre_pannonia.json", "nato", "careful") != nullptr);
+    SC_EXPECT(b.Find("air_war_balance", "battery_wrecked", "theatre_pannonia.json", "nato", "careful")->hi <= 0.4 + 1e-12);
+    // The retask delays the data give agree with the doctrine's bands (hot_phase.hpp; c2.hpp floors a divert by them).
+    const AirWarData pact = LoadHot("warsaw_pact");
+    const BalanceBand* rp = b.Find("air_war_bench", "retask_pact_air_min");
+    SC_EXPECT(rp != nullptr);
+    if (rp == nullptr) return;
+    for (double u = 0.0; u <= 1.0; u += 0.25) {
+        const double s = RetaskAirS(pact.faction, "armed_recce", 0.99, u);
+        SC_EXPECT(s >= rp->lo * 60.0 - 1e-9 && s <= rp->hi * 60.0 + 1e-9);
+    }
+}

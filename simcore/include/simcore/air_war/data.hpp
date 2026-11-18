@@ -1062,6 +1062,10 @@ struct TuningTable {
             // the hot phase (hot_phase.hpp, docs/air_battle/10_FACTIONS.md): 1 roadmap B11's planning (NATO's medium altitude
             // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11)
             {"hot_phase.mode", 1.0},
+            // the balance pass (roadmap B14, docs/air_war/09_BALANCE.md section 17): 1 its changes (an airborne flight's
+            // divert waits for the faction's retask delay, the strikers' abort a share of the attacked flights, no surprise
+            // under an E-3A that sees our fighters, its factor a0_awacs_meet), 0 before it (a save made before B14)
+            {"balance.mode", 1.0},
             {"route.start_before_gate_m", 80000.0}, // the route starts this far behind its gate (at most at the bases)
             {"route.bend_deg", 30.0},               // a river vertex turning more is a bend, a turn point
             {"route.fallback_grid_m", 15000.0},     // the lattice of a theatre without a map

@@ -32,6 +32,7 @@
 
 #include "simcore/air_war/c2_def.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/officers.hpp"
 #include "simcore/air_war/resolve.hpp"
@@ -152,6 +153,9 @@ struct C2Message {
     Vec3 where;
     double sigma_m = 0.0;
     double observed_h = 0.0;
+    // A divert of an airborne flight (balance.mode 1, roadmap B14): the flight has its new task no sooner than this, the
+    // decision plus its faction's retask delay (hot_phase.hpp RetaskAirS); < 0 no floor.
+    double not_before_h = -1.0;
     std::string mission;    // the mission concerned (the authority's name)
     int post = -1;          // the post that handles it on arrival
     int tries = 1;
@@ -218,6 +222,10 @@ struct C2Stats {
     int stale = 0;             // too old to strike
     int briefs = 0;            // FAC briefs that aimed close support
     int fac_sightings = 0;
+    // The latencies (roadmap B14, for the balance tool): each divert's minutes from the pilot's sighting to the flight
+    // having the new task, each on-call package's from the sighting to its time over the place.
+    std::vector<double> divert_min;
+    std::vector<double> on_call_min;
 };
 
 // What the campaign gives the posts each step.
@@ -777,6 +785,7 @@ private:
             m.tries = tries;
         }
         m.arrive_h = now_h + s / 3600.0;
+        if (m.kind == C2Kind::Divert && m.not_before_h > m.arrive_h) m.arrive_h = m.not_before_h;
         if (!call.empty() && !m.lost) {
             const Vec3 at = from_at != nullptr ? *from_at : (sender >= 0 ? posts_[static_cast<std::size_t>(sender)].at : m.where);
             if (Dist2d(at, c.battery) <= tune.Get("c2.intercept_reach_m")) {
@@ -888,6 +897,7 @@ private:
             rr.t_s = now * 3600.0;
             retasks_[m.package_id].push_back(rr);
             ++stats_.diverts;
+            stats_.divert_min.push_back((now - m.observed_h) * 60.0);
             return;
         }
         if (m.kind == C2Kind::Warning) {  // a hunter told: the leader's own leave takes him there
@@ -1018,7 +1028,19 @@ private:
                 chance *= 1.0 - 2.0 * d_->tuning.Get("c2.trait_bound") * std::max(0.0, o->def.traits.rigidity - 0.5);
             }
             if (!r.Chance(chance)) continue;
+            // An airborne flight changes its task no sooner than its faction's retask delay after the decision (10_FACTIONS.md
+            // section 7.4; the Pact's 10-30 min, ground control alone: mt_1962_kontsevoy, factions_cases), or never; its own
+            // keyed draws, so the rest of the decision's are as before. Before B14 (balance.mode 0) only the order's hops.
+            double not_before_h = -1.0;
+            if (d_->tuning.Get("balance.mode") >= 1.0) {
+                Rng rd = Draw(0x5E7A0000ull + static_cast<std::uint64_t>(m.id), 4);
+                const double u_never = rd.Uniform();
+                const double s = RetaskAirS(d_->faction, mission, u_never, rd.Uniform(), Duty(by));
+                if (s < 0.0) continue;
+                not_before_h = now + s / 3600.0;
+            }
             C2Message d = m;
+            d.not_before_h = not_before_h;
             d.package_id = p.id;
             d.flight = k.second.second;
             d.post = by;
@@ -1186,6 +1208,7 @@ private:
         pool->flown += pk.Aircraft();
         ++stats_.on_call_packages;
         stats_.on_call_sorties += pk.Aircraft();
+        stats_.on_call_min.push_back((pk.tot_h - m.observed_h) * 60.0);
         if (c.log) {
             c.log("decision", m.from,
                   "Scrambled " + std::to_string(pk.Aircraft()) + " from the " + pool->kind + " alert (" + pool->squadron + ") as '" + pk.name + "' on " +

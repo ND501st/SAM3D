@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
@@ -538,6 +539,10 @@ public:
         for (const SquadronState& s : squadrons_) n += s.lost;
         return n;
     }
+    // An observer of each package's outcome as it is applied (the balance tool's tallies, roadmap B14): it reads, it
+    // changes nothing, and it is not saved.
+    using OutcomeObserver = std::function<void(const Package&, const PackageOutcome&)>;
+    void ObserveOutcomes(OutcomeObserver f) { observer_ = std::move(f); }
 
     // Our side has seen the enemy send decoys (or knows its planner likes them): the battery is warned.
     bool DecoysExpected() const {
@@ -698,6 +703,7 @@ private:
     unsigned seed_ = 1;
     std::vector<CampaignAction> actions_;
     bool traffic_fed_ = false;
+    OutcomeObserver observer_;
     std::set<std::string> noted_;
     std::vector<Transmission> on_air_;  // noted, not yet heard
     int comint_heard_ = 0;
@@ -1206,6 +1212,7 @@ private:
 
     // `observe`: our side's record of the raid (once per raid: not again for the rest of a played one).
     void ApplyOutcome(Package& p, const PackageOutcome& o, bool observe = true) {
+        if (observer_) observer_(p, o);
         const FactionDef& f = data_.faction;
         const TuningTable& tune = data_.tuning;
         p.resolved = true;

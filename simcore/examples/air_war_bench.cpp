@@ -24,17 +24,26 @@
 //      undefended tanks (Array 20, 19 September 1979: 8 put out of action, 3 of them burnt), and the same on a column on
 //      the move whose guns fire back.
 // The figures are what the model makes of the analogue, not a claim it reproduces the battle: the settings are stated
-// with each line. Exits non-zero if the data fail to load.
+// with each line. Then the hot phase (roadmap B14, docs/air_war/09_BALANCE.md section 17), each measure against its band
+// in data/air_war/balance_bands.json: the strikers' answers to our fighters against the F-105s' records, the 1967
+// missiles' hits and shots out of parameters against CHECO, exchange ratios against Vietnam's swing and the Bekaa,
+// the retask latencies against doctrine, friendly fire against the Soviet exercises' 25 %. Exits 1 if the data fail to
+// load, 2 if a measure is out of its band.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/command/data.hpp"
+#include "simcore/command/own_air.hpp"
+#include "simcore/command/own_flights.hpp"
+#include "simcore/reactions.hpp"
 
 using namespace simcore;
 using namespace simcore::airwar;
@@ -188,6 +197,248 @@ bool Load(Bench& b, const std::string& data_dir, const char* faction) {
 }
 
 double Within(double r, double cep) { return 1.0 - std::pow(0.5, (r / cep) * (r / cep)); }
+
+// ------------------------------------------------------------------------------------------------ the hot phase (B14)
+
+// The abstract fight over many seeds (air_fight.hpp): the strikers' answers, the losses each side.
+struct FightTally {
+    int fights = 0, attacked = 0, jettison = 0, aborted = 0, theirs_lost = 0, ours_lost = 0;
+};
+FightTally Fights(const AirWarData& d, const Package& p, double awacs, int runs, std::uint64_t key) {
+    const AbstractAirFight fight(d);
+    AbstractFightSetup s;
+    s.friendly_fighters = 1.0;
+    s.awacs = awacs;
+    FightTally t;
+    std::vector<int> alive;
+    for (const Flight& f : p.flights) alive.push_back(f.count);
+    for (int k = 1; k <= runs; ++k) {
+        const AbstractFightResult r = fight.Resolve(p, alive, s, key + static_cast<std::uint64_t>(k) * 7919u);
+        if (!r.found) continue;
+        ++t.fights;
+        t.attacked += r.attacked;
+        t.jettison += r.jettison_drawn;
+        t.aborted += static_cast<int>(r.aborted.size());
+        t.theirs_lost += static_cast<int>(r.enemy_lost.size());
+        t.ours_lost += static_cast<int>(r.ours_lost.size());
+    }
+    return t;
+}
+
+Flight FightFlight(FlightRole role, const char* type, int n, Profile prof) {
+    Flight f;
+    f.callsign = std::string(FlightRoleName(role)) + " " + type;
+    f.role = role;
+    f.aircraft = type;
+    f.count = n;
+    f.profile = prof;
+    return f;
+}
+
+// The hot phase against history, each measure against its band in data/air_war/balance_bands.json; returns the number
+// out of band.
+int HotPhase(const std::string& data_dir, int runs, const Bench& nato, const Bench& pact) {
+    BalanceBands bands;
+    std::string e;
+    if (!LoadBalanceBands(data_dir + "/air_war/balance_bands.json", bands, &e)) {
+        std::fprintf(stderr, "%s\n", e.c_str());
+        return 1;
+    }
+    const auto band = [&bands](const char* id) { return bands.Find("air_war_bench", id); };
+    int fails = 0;
+    const int n_fights = std::max(2000, runs * 20);
+    std::printf("\n# The hot phase against history (roadmap B14; %d abstract fights each)\n\n", n_fights);
+    std::printf("| Measure | The model | Band | Anchor | |\n|---|---|---|---|---|\n");
+
+    // 1. Strikers attacked by fighters: two flights of four F-4Es, no escort, no warning (the F-105s of 1966), against our
+    // MiG-21s under GCI; and the same answer in a session (reactions.hpp DecideFlight: NATO's row for a fighter seen,
+    // the stress a fighter's attack raises, the leaders' nerve spread about their faction's).
+    {
+        Package p;
+        p.flights = {FightFlight(FlightRole::Strike, "f4e", 4, Profile::Medium), FightFlight(FlightRole::Strike, "f4e", 4, Profile::Medium)};
+        const FightTally t = Fights(nato.d, p, 0.0, n_fights, 0xB14F105ull);
+        const double a = std::max(1, t.attacked);
+        const double jett = t.jettison / a, ab = t.aborted / a;
+        // Pressed on with its stores: neither jettisoned nor turned home (the two draws are independent).
+        const double press_share = (1.0 - jett) * (1.0 - ab);
+        std::printf("| *Strike flights attacked by our fighters (abstract fight, %d flights)* | | | | |\n", t.attacked);
+        fails += BandRow(band("f105_jettison"), "jettisoned (any stores)", jett, 100.0, "%") ? 0 : 1;
+        fails += BandRow(band("f105_press_on"), "pressed on with their stores", press_share, 100.0, "%") ? 0 : 1;
+        fails += BandRow(band("f105_abort"), "turned for home", ab, 100.0, "%") ? 0 : 1;
+        ReactionTable rt;
+        if (!LoadReactionTable(data_dir, rt, &e)) {
+            std::fprintf(stderr, "%s\n", e.c_str());
+            return fails + 1;
+        }
+        const ReactionProfile* prof = rt.Profile("nato");
+        if (prof != nullptr) {
+            const ReactionRow& row = ChooseRow(*prof, CueSource::Eye, ThreatClass::Fighter);
+            const double stress = StressAdd(0.0, rt.stress_fighter);
+            Rng r(0xB14DEC1ull);
+            int sj = 0, sp = 0, sa = 0;
+            const int n = 20000;
+            for (int k = 0; k < n; ++k) {
+                const double nerve = r.Uniform(0.3, 0.7);
+                const double uj = r.Uniform(), ut = r.Uniform(), uc = r.Uniform();
+                const FlightDecision d = DecideFlight(rt, row, stress, nerve, uj, ut, uc);
+                sj += d.jettison ? 1 : 0;
+                sa += d.choice == FlightChoice::Abort ? 1 : 0;
+                sp += d.choice != FlightChoice::Abort && !d.jettison ? 1 : 0;
+            }
+            std::printf("| *The same in a session (reactions.hpp, NATO's row for a fighter seen, %d draws)* | | | | |\n", n);
+            fails += BandRow(band("f105_jettison"), "jettisoned (any stores)", static_cast<double>(sj) / n, 100.0, "%") ? 0 : 1;
+            fails += BandRow(band("f105_press_on"), "pressed on with their stores", static_cast<double>(sp) / n, 100.0, "%") ? 0 : 1;
+            fails += BandRow(band("f105_abort"), "turned for home", static_cast<double>(sa) / n, 100.0, "%") ? 0 : 1;
+        }
+    }
+
+    // 2. The missiles of 1967 (CHECO): the reference mix's pilots (the calibration's skill and stress) firing AIM-7Es and
+    // AIM-9Bs (air_combat.hpp SimulateLaunches), hits and shots out of parameters per launch.
+    {
+        const AirCombatDef& ac = nato.d.air_combat;
+        Pilot of67;
+        of67.skill = ac.calibration.mix.skill;
+        of67.stress = ac.calibration.mix.stress;
+        const AamDef* aim7 = ac.Aam("aim7e");
+        const AamDef* aim9 = ac.Aam("aim9b");
+        if (aim7 != nullptr && aim9 != nullptr) {
+            const int n = std::max(20000, runs * 50);
+            const LaunchStats s7 = SimulateLaunches(*aim7, ac.calibration, of67, n, 0xB14C7ull);
+            const LaunchStats s9 = SimulateLaunches(*aim9, ac.calibration, of67, n, 0xB14C9ull);
+            std::printf("| *The 1967 crews' launches (air_combat.hpp, %d each)* | | | | |\n", n);
+            fails += BandRow(band("checo_aim7_hit"), "AIM-7E hits a launch", s7.HitRate(), 100.0, "%") ? 0 : 1;
+            fails += BandRow(band("checo_aim7_out"), "AIM-7E out of parameters", s7.OutOfEnvelopeShare(), 100.0, "%") ? 0 : 1;
+            fails += BandRow(band("checo_aim9_hit"), "AIM-9B hits a launch", s9.HitRate(), 100.0, "%") ? 0 : 1;
+            fails += BandRow(band("checo_aim9_out"), "AIM-9B out of parameters", s9.OutOfEnvelopeShare(), 100.0, "%") ? 0 : 1;
+        }
+    }
+
+    // 3. Exchange ratios, the US view (our fighters lost for each of theirs): analogues flown with 1985 types, since the
+    // fits begin in 1974. Vietnam 1968: F-4E strikers with an F-4E escort against our MiG-21s under GCI, no warning;
+    // Linebacker's swing in 1972 came with Teaball's warning: the same under an E-3A; the Bekaa: F-16A strikers, an F-15C
+    // sweep, an EF-111A jamming our GCI, under an E-3A.
+    {
+        Package viet;
+        viet.flights = {FightFlight(FlightRole::Strike, "f4e", 4, Profile::Medium), FightFlight(FlightRole::Escort, "f4e", 4, Profile::Medium)};
+        Package bekaa;
+        bekaa.flights = {FightFlight(FlightRole::Strike, "f16a", 4, Profile::Medium), FightFlight(FlightRole::Sweep, "f15c", 4, Profile::Medium),
+                         FightFlight(FlightRole::Jammer, "ef111a", 1, Profile::Medium)};
+        const FightTally a = Fights(nato.d, viet, 0.0, n_fights, 0xB14E01ull);
+        const FightTally b = Fights(nato.d, viet, 1.0, n_fights, 0xB14E02ull);
+        const FightTally c = Fights(nato.d, bekaa, 1.0, n_fights, 0xB14E03ull);
+        const auto ratio = [](const FightTally& t) { return static_cast<double>(t.ours_lost) / std::max(1, t.theirs_lost); };
+        std::printf("| *Exchanges, ours lost for each of theirs (fights: %d, %d, %d)* | | | | |\n", a.fights, b.fights, c.fights);
+        fails += BandRow(band("exchange_no_warning"), "strike and escort, no warning (1968)", ratio(a)) ? 0 : 1;
+        fails += BandRow(band("exchange_warning"), "the same under an E-3A (1972, Teaball)", ratio(b)) ? 0 : 1;
+        fails += BandRow(band("exchange_swing"), "the warning's swing (times)", ratio(b) / std::max(1e-9, ratio(a))) ? 0 : 1;
+        fails += BandRow(band("exchange_bekaa"), "sweep, jammer and E-3A (the Bekaa)", ratio(c)) ? 0 : 1;
+        // The Pact's MiG-23MLs sweeping for its Su-24s (B8's own check, here for the record).
+        Package wp;
+        wp.flights = {FightFlight(FlightRole::Strike, "su24", 4, Profile::Medium), FightFlight(FlightRole::Sweep, "mig23ml_wp", 4, Profile::Medium)};
+        const FightTally w = Fights(pact.d, wp, 0.0, n_fights, 0xB14E04ull);
+        fails += BandRow(band("exchange_pact_sweep"), "the Pact's MiG-23ML sweep", ratio(w)) ? 0 : 1;
+    }
+
+    // 4. Retask latencies against doctrine (hot_phase.hpp): an airborne flight retasked (the Pact's armed reconnaissance,
+    // NATO's close support) and a new tasking from readiness 1, over the delays' draws with the faction's mean officer;
+    // beside them B5's order hops (c2.timing), which since B14 the retask delay floors (c2.hpp Divert).
+    {
+        const auto mean_s = [](const std::function<double(double)>& f) {
+            double s = 0.0;
+            int n = 0;
+            for (int k = 0; k < 200; ++k) {
+                const double v = f((k + 0.5) / 200.0);
+                if (v < 0.0) continue;
+                s += v;
+                ++n;
+            }
+            return n > 0 ? s / n : -1.0;
+        };
+        const double pact_air = mean_s([&](double u) { return RetaskAirS(pact.d.faction, "armed_recce", 0.99, u); });
+        const double nato_air = mean_s([&](double u) { return RetaskAirS(nato.d.faction, "cas", 0.99, u); });
+        const double pact_r1 = mean_s([&](double u) { return AlertTakeoffS(pact.d.faction, "readiness_1", u); });
+        const auto hop = [](const FactionC2& c2, const char* name) {
+            const C2HopDef* h = c2.Hop(name);
+            return h == nullptr ? 0.0 : 0.5 * (h->relay_s.lo + h->relay_s.hi + h->decide_s.lo + h->decide_s.hi + h->encode_s.lo + h->encode_s.hi);
+        };
+        std::printf("| *Latencies (minutes; the order's hops alone: Pact %.1f, NATO %.1f)* | | | | |\n", hop(pact.d.faction.c2, "order") / 60.0,
+                    hop(nato.d.faction.c2, "order") / 60.0);
+        fails += BandRow(band("retask_pact_air_min"), "the Pact: an airborne flight retasked", pact_air / 60.0) ? 0 : 1;
+        fails += BandRow(band("retask_nato_air_min"), "NATO: close support retasked in the air", nato_air / 60.0) ? 0 : 1;
+        fails += BandRow(band("alert_pact_r1_min"), "the Pact: readiness 1 to wheels up", pact_r1 / 60.0) ? 0 : 1;
+    }
+
+    // 5. Friendly fire in an exercise (command/own_air.hpp, own_flights.hpp): tracks cross a battery's zone, a share of
+    // them ours; each of ours is notified down the chain from its regiment (RunNotice, the notice's real hops) some minutes
+    // before it crosses, and the crew judges it by its rule (JudgeTrack). 1960s settings: notices only, no interrogator;
+    // 1985: the day's codes too (the table's schedule, the pilots' missed changes). The share of ours among the tracks fired on.
+    {
+        command::ChainData chain;
+        command::OwnAirDef rules;
+        command::IffCodesDef codes;
+        if (!command::LoadChainData(data_dir, "command/chain_pannonia.json", chain, &e) ||
+            !command::LoadOwnAirFile(data_dir + "/command/own_air.json", rules, &e) || !command::LoadIffCodesFile(data_dir + "/command/iff_codes.json", codes, &e)) {
+            std::fprintf(stderr, "%s\n", e.c_str());
+            return fails + 1;
+        }
+        const LocalFrame frame(GeoPoint::FromDegrees(46.9, 19.7, 110.0));
+        // Game values (no period figure): ours among the tracks crossing a battery's zone in an exercise, and how long
+        // before it crosses a notice leaves the fighter regiment (08_OUR_FIGHTERS.md "Left open": the lead time).
+        const double own_share = 0.35;
+        const double lead_lo_min = 15.0, lead_hi_min = 75.0;
+        const int n = std::max(200, runs);
+        int fired_own[2] = {0, 0}, fired_hostile = 0;
+        Rng r(0xB14FF0ull);
+        for (int k = 0; k < n; ++k) {
+            const bool own = r.Chance(own_share);
+            const double lead_h = r.Uniform(lead_lo_min, lead_hi_min) / 60.0;
+            if (!own) {
+                ++fired_hostile;
+                continue;
+            }
+            command::OwnFlightNotice nt;
+            nt.number = 400 + k;
+            nt.flight = "Sokol " + std::to_string(k + 1);
+            nt.route = {Vec3{-25000.0, -20000.0, 0.0}, Vec3{0.0, 30000.0, 0.0}};
+            nt.floor_m = 2000.0;
+            nt.ceiling_m = 6000.0;
+            const double sent_h = 10.25;
+            const double cross_h = sent_h + lead_h;
+            nt.cross_from_h = cross_h - 0.1;
+            nt.cross_to_h = cross_h + 0.2;
+            const command::NoticeTrace tr = command::RunNotice(chain, nt, command::NoticeWords(nt, frame), "fighter_rgt_duty", "rgt_cp_duty", sent_h - 10.0,
+                                                               rules.notice, static_cast<unsigned>(k + 1), 10.0);
+            const bool reached = !tr.hops.empty() && tr.hops.back().post == "rgt_cp_duty" &&
+                                 10.0 + tr.hops.back().h + rules.notice.liaison_s / 3600.0 <= cross_h;
+            const command::IffSchedule sched = command::IffSchedule::Days(codes, true, 0, 0, static_cast<std::uint64_t>(k + 1));
+            const double clock_h = cross_h;
+            command::TrackSeen ts;
+            ts.pos = Vec3{-12500.0, 5000.0, 0.0};
+            ts.alt_m = 4000.0;
+            ts.clock_h = clock_h;
+            std::vector<command::OwnFlightNotice> known;
+            if (reached) known.push_back(nt);
+            const command::CooperationPlan told;
+            for (int era = 0; era < 2; ++era) {
+                ts.replied = false;
+                if (era == 1) {
+                    const int bf = sched.FilterAt(clock_h);
+                    const int pf = command::PilotFilterAt(sched, clock_h, rules.iff_change.pilot_miss, static_cast<std::uint64_t>(k + 1), 1);
+                    ts.replied = command::IffAnswers(command::IffSystem::Kremniy, pf, command::IffSystem::Kremniy, bf);
+                }
+                const command::OwnAirCall call = command::JudgeTrack(ts, known, told, rules.notice.corridor_half_width_m, rules.notice.slack_s / 3600.0);
+                if (call == command::OwnAirCall::Free) ++fired_own[era];
+            }
+        }
+        std::printf("| *Friendly fire in an exercise (%d tracks, %.0f%% ours, notices %.0f-%.0f min ahead)* | | | | |\n", n, 100.0 * own_share, lead_lo_min,
+                    lead_hi_min);
+        const auto share = [&](int own) { return static_cast<double>(own) / std::max(1, own + fired_hostile); };
+        fails += BandRow(band("friendly_fire_1960s"), "ours among those fired on: notices only", share(fired_own[0]), 100.0, "%") ? 0 : 1;
+        fails += BandRow(band("friendly_fire_1985"), "ours among those fired on: notices and codes", share(fired_own[1]), 100.0, "%") ? 0 : 1;
+    }
+    std::printf("\n%d measure(s) out of band.\n", fails);
+    return fails;
+}
 
 }  // namespace
 
@@ -419,5 +670,6 @@ int main(int argc, char** argv) {
         }
         Why();
     }
-    return 0;
+    // The hot phase against history (roadmap B14): exits 2 when a measure is out of its band.
+    return HotPhase(data_dir, runs, nato, pact) > 0 ? 2 : 0;
 }

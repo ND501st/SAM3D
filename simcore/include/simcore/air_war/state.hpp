@@ -212,6 +212,11 @@ struct PackageOutcome {
     // regiment's id), and the fights it had with them.
     std::vector<std::string> our_fighters_lost;
     int air_fights = 0;
+    // The strikers' answer in those fights (bookkeeping for the balance tool, roadmap B14; not saved): strike flights our
+    // fighters reached, of them those that drew a jettison (whether they then aborted or not) and those that turned home.
+    int fight_attacked_flights = 0;
+    int fight_jettison_drawn = 0;
+    int fight_aborted = 0;
     bool aborted = false;
     bool delivered = false;
     double collateral = 0.0;
