@@ -230,7 +230,9 @@ SC_TEST("crew talk: silent against the ARM, the commander orders nothing that ra
     for (const SpokenCallout& s : log) {
         if (s.start_s < off->start_s || s.start_s > off->start_s + 60.0) continue;
         if (s.id == "order_emcon_off") ++offs;
-        SC_EXPECT(s.id != "order_jammer" && s.id != "order_take_target" && s.id != "order_prepare");
+        const bool radiates = s.id == "order_jammer" || s.id == "order_take_target" || s.id == "order_prepare";
+        if (radiates) std::printf("    %s at %.1f s (radiation off at %.1f s)\n", s.id.c_str(), s.start_s, off->start_s);
+        SC_EXPECT(!radiates);
         if (s.id == "order_drop_target") std::printf("    radiation off at %.1f s, the target let go at %.1f s\n", off->start_s, s.start_s);
     }
     std::printf("    «Излучение выключить!» %d time(s) in the minute after the first\n", offs);
@@ -278,7 +280,10 @@ SC_TEST("crew talk: stress graded from what each man heard; it fades; a war star
     }
     std::printf("    ARM sign heard at %.0f s; the commander's stress peaked at %.2f, %.2f five minutes on\n", launch_heard, peak, after);
     SC_EXPECT(launch_heard > 0.0);
-    SC_EXPECT(peak >= 0.9 - 1e-9);
+    // Near the top: 0.8 from the sign alone, 1.0 when a missile also bursts close to this vehicle. Since roadmap B3 the
+    // battery's other launcher (22, 400 m off) radiates while it engages the raid, so the ARMs burst at it (121 m and 303 m
+    // from it in this scenario), not at this vehicle. Stable at 0.80 run alone or in the suite; the baseline's 1.00 had one emitter.
+    SC_EXPECT(peak >= 0.8 - 1e-9);
     if (after >= 0.0) SC_EXPECT(after < 0.5);
 }
 
@@ -312,7 +317,7 @@ SC_TEST("crew talk: the radial menu holds every line a seat can say, at most 8 s
             // What the commander says on the air himself, as ScenarioRunner::PlayerRadioReports offers it.
             std::vector<std::string> radio;
             if (seat.station == o.crew.commander) {
-                for (const char* id : {"report_ready", "readback", "report_arm_attack"}) {
+                for (const char* id : {"report_ready", "readback", "report_arm_attack", "request_tzm", "request_fuel"}) {
                     const CalloutDef* c = o.crew.FindCallout(id);
                     if (c != nullptr && c->from == seat.station) radio.push_back(id);
                 }

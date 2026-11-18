@@ -394,13 +394,23 @@ SC_TEST("threats 9.3: terrain following holds its height over a ridge, climbing 
     a.waypoints = {{0.0, 16000.0, 60.0}};
     a.velocity = {0.0, 200.0, 0.0};
     double t = 0.0, min_clear = 1e9, max_agl_flat = 0.0, agl_at_crest = 0.0;
-    Fly(pilot, a, ridge, frame, t, 75.0, [&](const std::string&) {
+    double last_z = a.position.z, max_climb = 0.0;
+    int pulled_up = 0;
+    Fly(pilot, a, ridge, frame, t, 75.0, [&](const std::string& ev) {
+        // The climb in a step is the pilot's alone (BeforeStep levels the world's move): never over his limit, and the
+        // ground floor (roadmap R5) adds nothing to it nor reports a pull-up for a pilot holding his own height.
+        max_climb = std::max(max_climb, (a.position.z - last_z) / 0.1);
+        last_z = a.position.z;
+        if (ev == "pulled up over the ground") ++pulled_up;
         const double agl = Agl(a, ridge, frame);
         min_clear = std::min(min_clear, agl);
         if (a.position.y < 4000.0) max_agl_flat = std::max(max_agl_flat, agl);
         if (std::fabs(a.position.y - 8000.0) < 100.0) agl_at_crest = agl;
     });
-    std::printf("    lowest %.0f m above the ground; at the crest %.0f m; on the flat up to %.0f m\n", min_clear, agl_at_crest, max_agl_flat);
+    std::printf("    lowest %.0f m above the ground; at the crest %.0f m; on the flat up to %.0f m; climb up to %.1f m/s\n", min_clear,
+                agl_at_crest, max_agl_flat, max_climb);
+    SC_EXPECT(max_climb <= b.max_climb_mps + 1e-6);
+    SC_EXPECT(pulled_up == 0);
     SC_EXPECT(min_clear > 30.0);           // never close to flying into the ridge
     SC_EXPECT(agl_at_crest > 40.0);        // over the top at about its height
     SC_EXPECT(max_agl_flat < 75.0);        // and low on the flat
@@ -535,23 +545,41 @@ SC_TEST("threats 9.3: behind a ridge the hiding helicopter is masked; popping up
     SC_EXPECT(seen_up);
 }
 
-SC_TEST("threats 9.3: warned by the radar lock, a target breaks and dives; a TV track gives it no warning") {
-    const std::string dive = R"(, "evade": { "on": "lock", "kind": "dive", "dive_agl_m": 40, "turn_rate_deg_s": 10 })";
-    const Run r = Play(Engage(Target(24000, 1000, dive), kAcquireAndFire), 450.0);
+SC_TEST("threats 9.3 (B3): a pilot with no warning receiver does not feel the lock; he turns when, and if, he sees the missile") {
+    // Roadmap B3, the truth cues gone: our radar's lock is felt only through a receiver of his own (the EM scenarios'
+    // tests, em guidance), and a launch only if his eyes find it (its dust and flash, its smoke trail).
+    const std::string lock = R"(, "evade": { "on": "lock", "kind": "dive", "dive_agl_m": 40, "turn_rate_deg_s": 10 })";
+    const Run r = Play(Engage(Target(24000, 1000, lock), kAcquireAndFire), 450.0);
     SC_EXPECT(Has(r, "radar track"));
-    SC_EXPECT(Has(r, "breaks onto a beam heading and dives for the ground"));
-    // Tracked by the TV alone it never hears a thing.
-    const Run tv = Play(Engage(Target(12000, 800, dive), kEmconTv));
-    SC_EXPECT(Has(tv, "TV track"));
-    SC_EXPECT(tv.debrief.find("dives for the ground") == std::string::npos);
+    SC_EXPECT(r.debrief.find("dives for the ground") == std::string::npos);  // no receiver: the lock is not felt
+    // He sees the missile's trail some of the time: it climbs toward him, and he is looking about, not at it.
+    const std::string launch = R"(, "evade": { "on": "launch", "kind": "dive", "dive_agl_m": 40, "turn_rate_deg_s": 10 })";
+    int dived = 0, runs = 0;
+    for (unsigned seed = 1; seed <= 8; ++seed) {
+        const Run l = Play(Engage(Target(24000, 1000, launch), kAcquireAndFire, seed), 450.0);
+        ++runs;
+        if (l.debrief.find("breaks onto a beam heading and dives for the ground") != std::string::npos) {
+            ++dived;
+            // Roadmap B1, on purpose: the dive is the pilot's override for evade_s (20 s), then he is back on his route.
+            SC_EXPECT(l.debrief.find("back on its route") != std::string::npos || l.summary.hits >= 1);
+        }
+    }
+    std::printf("    the pilot saw the launch and dived in %d of %d runs\n", dived, runs);
+    SC_EXPECT(dived >= 4 && dived < runs);  // most, but not every one (seed 1 never sees it), and none by the truth
 }
 
 SC_TEST("threats 9.3: a jinking target turns hard both ways, which costs hit chance, then resumes its route") {
-    const std::string jink = R"(, "evade": { "on": "launch", "kind": "jink", "turn_rate_deg_s": 15, "jink_period_s": 3, "evade_s": 15 })";
-    const Run r = Play(Engage(Target(24000, 1000, jink), kAcquireAndFire));
+    // The pilot is told to manoeuvre by the trainer's order (instructor.hpp: his tool, not the pilot's knowledge): since
+    // roadmap B3 a pilot with no receiver turns on a launch only when he sees it.
+    const std::string jink = R"(, "evade": { "on": "lock", "kind": "jink", "turn_rate_deg_s": 15, "jink_period_s": 3, "evade_s": 120 })";
+    const char* order = R"(,
+        { "id": "warn", "when": { "target": "t1", "target_within_m": 16000 }, "do": [ { "instructor": "evade", "target": "t1" } ] })";
+    const Run r = Play(Engage(Target(24000, 1000, jink), std::string(kAcquireAndFire) + order));
     SC_EXPECT(Has(r, "jinks (hard turns left and right)"));
     SC_EXPECT(r.summary.launches >= 1);
     SC_EXPECT(Has(r, "manoeuvre 0.40 (15 deg/s)"));
+    // Roadmap B1: the jink is the pilot's override, ended after evade_s with his route again (unless hit first).
+    SC_EXPECT(Has(r, "back on its route") || r.summary.hits >= 1);
 }
 
 SC_TEST("threats 9.3: the loader checks behaviour, evade and waypoint heights with paths") {

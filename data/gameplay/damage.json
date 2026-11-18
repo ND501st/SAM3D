@@ -1,0 +1,43 @@
+{
+  "damage_id": "damage",
+  "status": "first pass (roadmap R1, docs/DAMAGE.md)",
+  "notes": "What a burst or a hit does to an aircraft (simcore/damage.hpp): none, light (largely unaffected), moderate (smoke, jettison, abort), heavy (smoke, fire, a crash 10 s to 5 min later) or destroyed. A burst's fragments strike it Poisson(N A / (4 pi d^2) exp(-d / R)) times; a contact round strikes it once. Each strike is critical, serious or light; three lights make a moderate, two moderates make heavy (the project owner's rule, 2 Nov 2026). Calibrated in docs/DAMAGE.md against docs/research/AAA_DAMAGE_2026-11.md.",
+  "source": "game values (sam3d), set against docs/research/AAA_DAMAGE_2026-11.md where it gives a figure; the adding-up and the crash window are the project owner's rule of 2 Nov 2026",
+  "confidence": "estimate",
+  "values": {
+    "fragments_per_kg": { "value": 70, "source": "estimate: lethal fragments per kg of casing, set so a 130 mm shell bursting 15 m off strikes a fighter about ten times (docs/DAMAGE.md)", "confidence": "estimate" },
+    "fragment_reach_m": { "value": 26, "source": "estimate: the fragments' reach per cube root of the charge's kg (40 m for the KS-30's 3.5 kg), so bursts 30-50 m off mostly do nothing (the project owner, 2 Nov 2026)", "confidence": "estimate" },
+    "fragment_critical": { "value": 0.03, "source": "game value: a fragment's strike on an engine, fuel, the controls or the crew", "confidence": "estimate" },
+    "fragment_serious": { "value": 0.08, "source": "game value: a strike that leaves the aircraft moderately damaged", "confidence": "estimate" },
+    "blast_destroy_m": { "value": 2.0, "source": "estimate: the blast destroys outright inside 2 m per cube root of the charge's kg (3 m for 3.5 kg)", "confidence": "estimate" },
+    "blast_heavy_m": { "value": 3.5, "source": "estimate: heavily damaged inside 3.5 m per cube root of the charge's kg", "confidence": "estimate" },
+    "area_per_size2": { "value": 0.2, "source": "estimate: a fighter of 10 m presents about 20 m2 to a burst (a convex body's mean projection is a quarter of its surface)", "confidence": "estimate" },
+    "lights_per_moderate": { "value": 3, "source": "game value: the project owner's rule (docs/DEVELOPMENT_ROADMAP.md track R, 2 Nov 2026): three light damage instances make moderate", "confidence": "high" },
+    "moderates_per_heavy": { "value": 2, "source": "game value: the project owner's rule (docs/DEVELOPMENT_ROADMAP.md track R, 2 Nov 2026): two moderate damage instances make heavy", "confidence": "high" },
+    "critical_destroys": { "value": 0.4, "source": "game value: a critical strike that destroys the aircraft outright, else heavily damaged", "confidence": "estimate" },
+    "heavy_crash": { "value": 0.85, "source": "game value: a heavily damaged aircraft that does not get home", "confidence": "estimate" },
+    "crash_min_s": { "value": 10, "source": "game value: the project owner's rule (docs/DEVELOPMENT_ROADMAP.md track R, 2 Nov 2026): 10 s to 5 min before it crashes", "confidence": "high" },
+    "crash_max_s": { "value": 300, "source": "game value: the project owner's rule (docs/DEVELOPMENT_ROADMAP.md track R, 2 Nov 2026); affdl_tr_77_115 has 32-50% of fatal gun hits down inside about 40 s, the rest up to 6 min and more", "confidence": "high" },
+    "heavy_fire": { "value": 0.45, "source": "affdl_tr_77_115: fire or explosion in 44.2% of the F-105's losses to ground fire", "confidence": "medium" },
+    "heavy_jettison": { "value": 0.8, "source": "estimate: a damaged aircraft jettisons its stores 80% of the time (docs/research/AAA_DAMAGE_2026-11.md section 7, anchored on checo_1969_tactics)", "confidence": "estimate" },
+    "moderate_smoke": { "value": 0.3, "source": "estimate: moderate damage trails smoke about 30% of the time (docs/research/AAA_DAMAGE_2026-11.md section 7)", "confidence": "estimate" },
+    "moderate_jettison": { "value": 0.8, "source": "estimate: a damaged aircraft jettisons its stores 80% of the time (docs/research/AAA_DAMAGE_2026-11.md section 7, anchored on checo_1969_tactics)", "confidence": "estimate" },
+    "moderate_abort": { "value": 0.6, "source": "game value", "confidence": "estimate" },
+    "missile_heavy_share": { "value": 0.25, "source": "game value: a missile's kill that leaves the aircraft flying for a while before it falls", "confidence": "estimate" },
+    "missile_near_burst": { "value": 0.5, "source": "game value: a missile that missed bursting near enough to strike", "confidence": "estimate" },
+    "missile_near_min_m": { "value": 15, "source": "game value", "confidence": "estimate" },
+    "missile_near_max_m": { "value": 60, "source": "game value", "confidence": "estimate" },
+    "missile_fragments_per_kg": { "value": 50, "source": "estimate: a fragmentation warhead's lethal fragments per kg of its charge", "confidence": "estimate" }
+  },
+  "round_hits": [
+    { "calibre_mm": { "value": 23, "source": "derived: data/scenery/munitions.json shell_23_zsu234", "confidence": "high" },
+      "critical": { "value": 0.25, "source": "estimate: one 23 mm hit destroys 0.10 and heavily damages 0.15 (docs/research/AAA_DAMAGE_2026-11.md section 7, calibrated on affdl_tr_77_115 and werrell_2005)", "confidence": "estimate" },
+      "serious": { "value": 0.25, "source": "estimate: moderate 0.25 (docs/research/AAA_DAMAGE_2026-11.md section 7)", "confidence": "estimate" } },
+    { "calibre_mm": { "value": 37, "source": "derived: data/scenery/munitions.json shell_37_aaa", "confidence": "high" },
+      "critical": { "value": 0.4, "source": "estimate: one 37 mm hit destroys 0.20 and heavily damages 0.20 (docs/research/AAA_DAMAGE_2026-11.md section 7)", "confidence": "estimate" },
+      "serious": { "value": 0.25, "source": "estimate: moderate 0.25 (docs/research/AAA_DAMAGE_2026-11.md section 7)", "confidence": "estimate" } },
+    { "calibre_mm": { "value": 57, "source": "derived: data/scenery/munitions.json shell_57_s60", "confidence": "high" },
+      "critical": { "value": 0.55, "source": "estimate: one 57 mm hit destroys 0.30 and heavily damages 0.25 (docs/research/AAA_DAMAGE_2026-11.md section 7)", "confidence": "estimate" },
+      "serious": { "value": 0.25, "source": "estimate: moderate 0.25 (docs/research/AAA_DAMAGE_2026-11.md section 7)", "confidence": "estimate" } }
+  ]
+}

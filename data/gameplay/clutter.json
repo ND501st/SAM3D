@@ -1,0 +1,12 @@
+{
+  "clutter_id": "clutter",
+  "status": "first pass (roadmap R6 and E9, docs/EM_ARCHITECTURE.md section 27)",
+  "notes": "Representative clutter heights for the far ground's towns the map does not lay out (simcore/terrain_map.hpp MapData::ObstacleHeight, read by LoadMap): a line of sight or a radio path over such a town carries this height on the ground, as ITU-R P.1812 adds its representative clutter heights to the path profile. A town's middle (within dense_share of its radius) is dense urban, the rest suburban; a village is suburban throughout. Where the map lays a town out (the map proper's and the detail areas' towns) its buildings are the obstacles instead.",
+  "source": "itu_r_p1812 (its table of default representative clutter heights); the share of the radius is a game value",
+  "confidence": "medium",
+  "values": {
+    "dense_urban_m": { "value": 20, "source": "itu_r_p1812: dense urban, 20 m", "confidence": "medium" },
+    "suburban_m": { "value": 10, "source": "itu_r_p1812: suburban, 10 m", "confidence": "medium" },
+    "dense_share": { "value": 0.45, "source": "game value: the same share of the radius as the map's towns lay blocks of flats in (terrain_map.hpp LaySettlement, a city)", "confidence": "estimate" }
+  }
+}

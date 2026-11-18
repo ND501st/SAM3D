@@ -4,9 +4,10 @@
   "name": "Angola, the north-south road: dug in, a night raid and a Puma in the canyon",
   "description": "An Osa-AK vehicle guarding the north-south road in southern Angola in the 1980s (roadmap 10.2): it stands in its 2 m-deep emplacement under nets. At night the TV sees nothing, so everything is fought by the radars. A pair of Buccaneers comes in low and pulls up to toss its bombs; later an Impala follows. Meanwhile a Puma helicopter flies west along a canyon north of the position, below its walls and out of the radar's sight, and climbs out of it over the hills to cross the road. The NPC commander runs the crew; take any seat, or his.",
   "source": "sam3d", "confidence": "estimate",
-  "notes": "The setting follows the Angola memoir of A. P. Pavlov in korovin_tiv_2010 (docs/research/OSA_RESEARCH_2026-10.md section 9): an Osa-AK unit on the border and the north-south road, the vehicles in 2 m-deep emplacements under nets, SAAF Impala, Mirage and Buccaneer bombing at night, and the unit's claim of a Puma flying low in a canyon out of the radar's view. Everything else is SAM3D's: the place (a point on the road, PLACEHOLDER), the canyon (two straight ridges), the aircraft's routes, heights, speeds and echoes, and the Puma's climb out of the canyon (the memoir doesn't say how it was seen).",
+  "notes": "The setting follows the Angola memoir of A. P. Pavlov in korovin_tiv_2010 (docs/research/OSA_RESEARCH_2026-10.md section 9): an Osa-AK unit on the border and the north-south road, the vehicles in 2 m-deep emplacements under nets, SAAF Impala, Mirage and Buccaneer bombing at night, and the unit's claim of a Puma flying low in a canyon out of the radar's view. Everything else is SAM3D's: the place (a point on the road, PLACEHOLDER), the canyon (two straight ridges), the aircraft's routes, heights, speeds and echoes, and the Puma's climb out of the canyon (the memoir doesn't say how it was seen). The date and the hour are SAM3D's game values too (the memoir gives neither): a night in the dry season, 23:00 by Angola's UTC+1, the sun far below the horizon (roadmap R7); the missions menu holds this mission's time.",
   "seed": 85,
   "origin": { "lat_deg": -16.0, "lon_deg": 14.8, "alt_m": 1100 },
+  "date": "1985-10-15", "utc_offset_h": 1, "clock_start": "23:00",
   "terrain": {
     "type": "flat", "height_m": 1100,
     "ridges": [

@@ -128,7 +128,10 @@ Every producer asks the router who hears it, so nothing reaches anyone without a
 * **Jamming** (the scenario's `jamming` list: nets or a band, from-to, noise or spot, weak or strong, a spot jammer's time
   to find the new frequency): strong jamming loses every message at a receiver; weak loses each with a chance
   (`data/gameplay/comms.json`), and commands are said twice. A listener recognises it after his skill's perception time and
-  says «Помехи на …»; it is logged and reported.
+  says «Помехи на …»; it is logged and reported. A jamming listed for a net with a band reaches only the net's
+  frequencies inside the band. In a mission with an air war, each package entering the session brings its faction's
+  voice jammers onto the battery net, as strong or weak as FM 34-40-7's ratio at the worst receiver makes them, from the
+  package's take-off to its last aircraft out (`air_war/comms_jamming.hpp`, roadmap 16.2).
 * **The spare-frequency drill**: the main station orders «Переходите на запасную частоту» (circular, said twice); the
   members read back, turn their sets to the spare, and wait for its call. A member who missed the order calls the main
   station after 1-2 min, tries both frequencies after 5 min, and reports loss of communication after 10 min
@@ -153,7 +156,9 @@ Every producer asks the router who hears it, so nothing reaches anyone without a
 The RTK-1 takes five lines (`rtk1.line1..5`: down / up). The scenario's `lines` say which are laid and to whom (a launcher's
 TA-57, the coupled radar, the regiment's post); laying four 500 m lines adds 7 min to the deployment (`ru_pu12_text`: 25 min
 against 18). A call rings the far end (the RTK-1's acoustic signal and the line's lamp; a TA-57's bell). It is answered by
-raising the lever (RTK-1) or taking the handset (`ta57.handset`, the Osa's at a halt). A line carries voice with no
+raising the lever (RTK-1) or taking the handset (`ta57.handset`, the Osa's at a halt). A line the scenario gives as not laid
+is laid by the crew on «Линии проложить!», a man paying the P-274M out to its far end, and works only once laid
+(`docs/crew/13_OUT_OF_THE_VEHICLE.md` section 4.1). A line carries voice with no
 emission and no jamming: the commander may designate or check by line, as a veteran describes the night checks
 (`airbase_ek32_2012`).
 

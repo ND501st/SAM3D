@@ -52,13 +52,28 @@ A target past a wheel's stop (beyond the range wheel's 28 km) is advised only as
 The helper's ghost hand shows switches only, never a wheel.
 
 At the **PU-12M** the battery commander's fire distribution runs for a player in his seat too: each target it would give
-a launcher is a designate duty. The plotter owes every report he has heard and not written; the radio operator owes the
+a launcher is a designate duty (not a mark where a launcher he heard said «цели не наблюдаю», until a fresher one comes, nor one a launcher has read back). The plotter owes every report he has heard and not written; the radio operator owes the
 air reports he heard and hasn't read out, a retune when his net is ordered to its other frequency, and the jamming he
-recognised.
+recognised. With the regiment's task (roadmap 14.3, 30 Oct 2026) the battery commander owes its preliminary order and
+its oral combat order when his plan has them (the crew menu's Battery orders: `order_battery_preliminary`,
+`order_battery_combat_order`), then the march it starts and the «К бою!» at its end; at a new position the R-111 back
+on the regiment's net (the antenna to the mast, «Р-111 на частоту полка, настроить!») before «к бою готова» goes up.
+A raid announced and nothing new on his board for 4 min (the post out of the air-picture net's reach, jammed), he owes
+«Батарее — поиск целей самостоятельно, в своих секторах!» (`order_battery_search_own`, roadmap 21.5): each launcher
+that hears it searches its sector with its own radar and engages what it finds there, or with its sector empty what
+comes at it from another side; a fresh mark on the board and he owes «Батарее — работать по целеуказанию!»
+(`order_battery_by_designation`).
 
 A report the player then makes from the crew menu says what the NPC would have said, and tells the crew what his would
 have: the duty carries the words and the knowledge (the target, its IFF answer), so the commander learns the target is
 interrogated from the player's «Ответа нет!» as from his NPC's.
+
+A line the commander says **on the air** (a read-back, «к бою готов», a result, the ARM attack, asking for the TZM or
+the fuel truck) goes out only with his chest switch at ПРД (7.8). The helper shows the chest switch first
+(`ScenarioRunner::ChestToTalk`), then the words; once they are out and nothing more is owed on the air, the switch back to
+ПРМ (`PlayerChestDuty`): held, the set stays on the air and he hears nothing on the net (30 Oct 2026). The ARM
+attack's report comes due when his NPC would say it, three seconds after the sign, so «Излучение выключить!» to the crew
+comes first.
 
 ## 3. In the game
 
@@ -116,15 +131,14 @@ interrogated from the player's «Ответа нет!» as from his NPC's.
 
 From the first coverage map (`generated/helper_coverage.md`):
 
-- **The TV camera in К бою, in command.** The NPC commander switches the deputy's TV camera on (РАБ.РЕЖ., `tov.power`)
-  with an order of its own for that one switch; no order of the crew data starts it (it is in the TV-watch, low-target
-  and EMCON drills, each a different order). So a player in command, with or without the helper, never gets the vehicle
-  "ready" by the crew data's definition, though the engagement goes on by radar. Needs a sourced order or a decision
-  that the deputy switches the TV on in his part of К бою (data, the project owner's call); the coverage map lists it.
-  The same holds for the PU-12M radio operator's R-111 power mode (МОЩНОСТЬ 1 %), which the NPC commander orders as a
-  single switch.
+- **The TV camera in К бою**: done 30 Oct 2026. The deputy switches the TV camera on (РАБ.РЕЖ.) as his first drill
+  of К бою (`tv_camera_on`, voenizdat_osa_1991 p247: in the drill К бою the TV is switched on), before the orientation,
+  so a player in command gets the vehicle ready; a player's К бою at a halt already oriented skips the orientation and
+  the compass work, as the NPC's does. This was the project owner's call to make; it rests on p247 and is one line of
+  the crew data to take back. Still open: the PU-12M radio operator's R-111 power mode (МОЩНОСТЬ 1 %), which the NPC
+  commander orders as a single switch.
 - **Acts with no move in a player's menu yet**: the Osa commander turning his set to the battery net's other frequency
-  (`HearBatteryNetOrder`, `UpdateOsaNet`), asking for the fuel truck and the transport-loader, passing the PU-12's
+  (`HearBatteryNetOrder`, `UpdateOsaNet`), passing the PU-12's
   designations to the crew, his reports on the battery net (hit, miss), and the battery's short halt on the march when
   the battery drives the vehicle (`osa_mission_march` in command: no halt, so no engagement). The NPC does them; a player
   can't, so the helper doesn't ask. They are among the `NpcAt` uses the tripwire test counts.
@@ -136,5 +150,7 @@ From the first coverage map (`generated/helper_coverage.md`):
   EMCON engagement (`osa_emcon_tv`), a capture a minute later against decoys, fewer kills at night in Angola. These are
   timing and target-choice leads (the duties are there; the follower turns the wheels onto the mark the NPC's aim gives,
   and where that mark moves between echoes a capture can come later), for the next pass with `--trace`.
+  In command under the limited regime (`air_war_nato_strike`), the commander's ВЫСОКОЕ on and off come as orders a
+  reaction time apart, so the bursts run longer than the regime's and the ARM comes sooner than against the NPC crew.
 - **Multiplayer**: the duties are worked out where the scenario runs (the server); a client mirrors the console but not
   the duties, so a client's helper is quiet.

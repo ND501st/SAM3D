@@ -80,6 +80,15 @@ struct OrientationDef {
     double survey_s = 0.0;
     double survey_sigma_deg = 0.0;
     std::string qc_known_input;
+    // Or the compass work as his drill (the Osa's measure_qc): its first step sets the instrument up (`survey_control`
+    // at `survey_up_position`, taken from that step), the reading is taken once `survey_subsystem` is ready, and
+    // `survey_break_procedure` stows it (to `survey_stowed_position`) when he breaks off. With it, `survey_s` is not used.
+    std::string survey_procedure;
+    std::string survey_subsystem;
+    std::string survey_break_procedure;
+    std::string survey_control;
+    int survey_up_position = 1;
+    int survey_stowed_position = 0;
     // Set while the gyro holds a heading that was set from the crew chief's Qc at this halt (cleared when the gyro
     // stops or the vehicle moves off).
     std::string oriented_input;
@@ -311,10 +320,12 @@ struct LauncherDef {
     double min_interval_s = 0.0;    // between two launches
     std::string hold_input;         // set while the next launch must wait (too soon, or no missile on a free channel)
     // Reloading from the transport-loader vehicle (TZM; roadmap 7.3): while `reload_input` is set and the vehicle is
-    // stopped (`stopped_input`), the crane puts one missile into an empty container every `reload_s_per_missile`.
+    // stopped (`stopped_input`), the crane's traverse lifts up to `reload_traverse` missiles into the empty containers of
+    // one launcher side (a channel) at a time, each lift taking `reload_s_per_missile` for every place on the traverse.
     std::string reload_input;
     std::string stopped_input;
     double reload_s_per_missile = 0.0;
+    int reload_traverse = 1;
     bool has_letter = false;
     LauncherLetterDef letter;
     bool has_emergency = false;
@@ -1380,14 +1391,15 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
         if (!Keys(*l, lp, {"containers", "channels", "channel_control", "channel_positions", "attention_input",
                            "jam_control", "pair_preparation", "capture_s", "medium_s", "narrow_s", "fuse_range_m",
                            "nominal_flight_s", "min_interval_s", "hold_input", "reload_input", "stopped_input",
-                           "reload_s_per_missile", "letter", "emergency", "range_sweep", "prep_hold", "source", "confidence", "notes"}) ||
+                           "reload_s_per_missile", "reload_traverse", "letter", "emergency", "range_sweep", "prep_hold", "source",
+                           "confidence", "notes"}) ||
             !Provenance(*l, lp) ||
             !RefControl(*l, lp, "channel_control", out.panel, ControlKind::Discrete, true, d.channel_control) ||
             !RefControl(*l, lp, "jam_control", out.panel, ControlKind::Discrete, false, d.jam_control) ||
             !RefInput(*l, lp, "attention_input", eq, d.attention_input) ||
             !RefInput(*l, lp, "hold_input", eq, d.hold_input) || !RefInput(*l, lp, "reload_input", eq, d.reload_input) ||
             !RefInput(*l, lp, "stopped_input", eq, d.stopped_input) ||
-            !OptionalNumber(*l, lp, "reload_s_per_missile", d.reload_s_per_missile) ||
+            !OptionalNumber(*l, lp, "reload_s_per_missile", d.reload_s_per_missile) || !OptionalInt(*l, lp, "reload_traverse", d.reload_traverse) ||
             !RefSubsystem(*l, lp, "pair_preparation", eq, true, d.pair_preparation)) {
             return false;
         }
@@ -1401,6 +1413,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (*t.second < 0.0) return Fail(Join(lp, t.first), "must be >= 0");
         }
         if (d.reload_s_per_missile < 0.0) return Fail(Join(lp, "reload_s_per_missile"), "must be >= 0");
+        if (d.reload_traverse < 1) return Fail(Join(lp, "reload_traverse"), "must be >= 1");
         if (d.reload_s_per_missile > 0.0 && (d.reload_input.empty() || d.stopped_input.empty())) {
             return Fail(Join(lp, "reload_s_per_missile"), "needs reload_input and stopped_input");
         }
@@ -1764,7 +1777,7 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             if (!LoadElevationSearch(*es, Join(tp, "elevation_search"), panel, eq, track)) return false;
         }
         if (const json::Value* o = s->Find("orientation")) {
-            if (!LoadOrientation(*o, "sensors.orientation", panel, eq, out.orientation)) return false;
+            if (!LoadOrientation(*o, "sensors.orientation", panel, eq, out.procedures, out.orientation)) return false;
             out.has_orientation = true;
         }
         out.has_sensors = true;
@@ -1772,11 +1785,12 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
     }
 
     bool LoadOrientation(const json::Value& o, const std::string& op, const ControlPanel& panel, const Equipment& eq,
-                         OrientationDef& def) {
+                         const std::vector<Procedure>& procedures, OrientationDef& def) {
         if (!Keys(o, op, {"gyro", "setter", "mode_control", "set_position", "relay_control", "relay_position",
                           "sync_button", "slew_rate_deg_s", "sync_rate_deg_s", "synced_input", "latitude_control",
                           "earth_rate_deg_h", "own_drift_deg_h", "survey_s", "survey_sigma_deg", "qc_known_input",
-                          "oriented_input", "source", "confidence", "notes"}) ||
+                          "oriented_input", "survey_procedure", "survey_subsystem", "survey_break_procedure", "source",
+                          "confidence", "notes"}) ||
             !Provenance(o, op) || !RefSubsystem(o, op, "gyro", eq, true, def.gyro) ||
             !RefControl(o, op, "setter", panel, ControlKind::Continuous, true, def.setter) ||
             !RefControl(o, op, "mode_control", panel, ControlKind::Discrete, true, def.mode_control) ||
@@ -1793,8 +1807,32 @@ protected:  // the helpers are shared with the scenario loader (scenario.hpp)
             !OptionalNumber(o, op, "survey_s", def.survey_s) ||
             !OptionalNumber(o, op, "survey_sigma_deg", def.survey_sigma_deg) ||
             !RefInput(o, op, "qc_known_input", eq, def.qc_known_input) ||
-            !RefInput(o, op, "oriented_input", eq, def.oriented_input)) {
+            !RefInput(o, op, "oriented_input", eq, def.oriented_input) ||
+            !OptionalString(o, op, "survey_procedure", def.survey_procedure) ||
+            !RefSubsystem(o, op, "survey_subsystem", eq, false, def.survey_subsystem) ||
+            !OptionalString(o, op, "survey_break_procedure", def.survey_break_procedure)) {
             return false;
+        }
+        if (!def.survey_procedure.empty()) {
+            const auto find = [&procedures](const std::string& id) -> const Procedure* {
+                for (const Procedure& p : procedures) {
+                    if (p.id == id) return &p;
+                }
+                return nullptr;
+            };
+            const Procedure* survey = find(def.survey_procedure);
+            if (survey == nullptr) return Fail(Join(op, "survey_procedure"), "unknown procedure '" + def.survey_procedure + "'");
+            def.survey_control = survey->steps.front().control_id;
+            def.survey_up_position = survey->steps.front().value;
+            if (def.survey_subsystem.empty() || def.survey_break_procedure.empty()) {
+                return Fail(op, "survey_procedure needs survey_subsystem and survey_break_procedure");
+            }
+            const Procedure* stow = find(def.survey_break_procedure);
+            if (stow == nullptr || stow->steps.size() != 1 || stow->steps.front().control_id != def.survey_control ||
+                stow->steps.front().value == def.survey_up_position) {
+                return Fail(Join(op, "survey_break_procedure"), "must be a procedure of one step that stows " + def.survey_control);
+            }
+            def.survey_stowed_position = stow->steps.front().value;
         }
         if (def.earth_rate_deg_h < 0.0 || def.own_drift_deg_h < 0.0 || def.survey_s < 0.0 || def.survey_sigma_deg < 0.0) {
             return Fail(op, "earth_rate_deg_h, own_drift_deg_h, survey_s and survey_sigma_deg must be >= 0");

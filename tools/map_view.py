@@ -9,6 +9,8 @@ docs/COUNTRY_MAP.md), with the theatre's objects and the enemy's fronts over it.
     python tools/map_view.py out/kesmark_range_map.json --png      # a picture instead (needs Pillow)
     ./simcore/build/country_dump data maps/pannonia.json out/pannonia_map.json
     python tools/map_view.py out/pannonia_map.json --png           # the country, with the nation's theatre over it
+    ./simcore/build/nav_check data 200 --json out/routes.json
+    python tools/map_view.py out/pannonia_map.json --routes out/routes.json   # battery 21's routes over the country
 """
 import argparse
 import html
@@ -173,7 +175,24 @@ def load_theatre(path, depth=0):
     return merged
 
 
-def country_shapes(dump, theatre=None):
+ROUTE_COLOURS = {"road": "#c01818", "off_road": "#c07018", "swim": "#1860c0"}
+
+
+def route_shapes(routes):
+    """nav_check --json's routes (km) as lines: each stretch in its kind's colour, off the road dashed; the far end named."""
+    shapes = []
+    for r in routes.get("routes", []):
+        pts = r["points_km"]
+        kinds = r.get("stretches", [])
+        for i in range(len(pts) - 1):
+            k = kinds[i] if i < len(kinds) else "road"
+            shapes.append(("line", [pts[i], pts[i + 1]], ROUTE_COLOURS.get(k, "#c01818"), 2.5, k != "road"))
+        end = pts[-1]
+        shapes.append(("text", end[0], end[1] + 2, "%s %d min" % (r["to"], round(r["time_s"] / 60)), 9))
+    return shapes
+
+
+def country_shapes(dump, theatre=None, routes=None):
     """The country as drawing primitives in km: (kind, ...) tuples that svg and png both render."""
     shapes = []
     g = dump["ground"]
@@ -247,6 +266,8 @@ def country_shapes(dump, theatre=None):
                 shapes.append(("text", en["east_km"], en["north_km"] + 3, en["id"], 10))
             shapes.append(("dot", f["bases"]["east_km"], f["bases"]["north_km"], 2.4, colour))
             shapes.append(("text", f["bases"]["east_km"], f["bases"]["north_km"] + 4, f["faction"] + " bases", 10))
+    if routes:
+        shapes.extend(route_shapes(routes))
     return shapes
 
 
@@ -260,14 +281,14 @@ def country_bounds(dump, theatre=None):
     return w, s, e, n
 
 
-def country_svg(dump, theatre=None, size_px=1600):
+def country_svg(dump, theatre=None, size_px=1600, routes=None):
     w, s, e, n = country_bounds(dump, theatre)
     scale = size_px / max(e - w, n - s)
     X = lambda x: (x - w) * scale
     Y = lambda y: (n - y) * scale
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size_px} {size_px}" width="{size_px}" height="{size_px}">',
            f'<rect width="{size_px}" height="{size_px}" fill="#cfcfc8"/>']
-    for sh in country_shapes(dump, theatre):
+    for sh in country_shapes(dump, theatre, routes):
         if sh[0] == "rect":
             _, x0, y0, x1, y1, fill = sh
             out.append(f'<rect x="{X(x0):.1f}" y="{Y(y1):.1f}" width="{(x1 - x0) * scale + 0.6:.1f}" height="{(y1 - y0) * scale + 0.6:.1f}" fill="{fill}"/>')
@@ -290,7 +311,7 @@ def country_svg(dump, theatre=None, size_px=1600):
     return "\n".join(out)
 
 
-def country_png(dump, path, theatre=None, size_px=2400):
+def country_png(dump, path, theatre=None, size_px=2400, routes=None):
     from PIL import Image, ImageDraw
     w, s, e, n = country_bounds(dump, theatre)
     scale = size_px / max(e - w, n - s)
@@ -298,7 +319,7 @@ def country_png(dump, path, theatre=None, size_px=2400):
     Y = lambda y: (n - y) * scale
     img = Image.new("RGB", (size_px, size_px), (207, 207, 200))
     d = ImageDraw.Draw(img, "RGBA")
-    for sh in country_shapes(dump, theatre):
+    for sh in country_shapes(dump, theatre, routes):
         if sh[0] == "rect":
             _, x0, y0, x1, y1, fill = sh
             d.rectangle([X(x0), Y(y1), X(x1) + 1, Y(y0) + 1], fill=fill)
@@ -325,6 +346,7 @@ def main(argv=None):
     ap.add_argument("--png", action="store_true", help="write a PNG instead of an HTML page (needs Pillow)")
     ap.add_argument("--theatre", default=str(ROOT / "data" / "air_war" / "theatre_pannonia_nation.json"),
                     help="the country: the theatre whose objects and fronts to draw over it ('' none)")
+    ap.add_argument("--routes", default=None, help="the country: nav_check --json's routes to draw over it (roadmap G1.6)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     dump = json.loads(Path(a.dump).read_text(encoding="utf-8"))
@@ -332,11 +354,12 @@ def main(argv=None):
     out.parent.mkdir(parents=True, exist_ok=True)
     if dump.get("kind") == "country":
         theatre = load_theatre(a.theatre) if a.theatre and Path(a.theatre).exists() else None
+        routes = json.loads(Path(a.routes).read_text(encoding="utf-8")) if a.routes else None
         if a.png:
-            country_png(dump, out, theatre)
+            country_png(dump, out, theatre, routes=routes)
         else:
             out.write_text(f'<!doctype html><meta charset="utf-8"><title>{html.escape(dump["name"])}</title>'
-                           f'<body style="margin:0;background:#ddd">{country_svg(dump, theatre)}</body>', encoding="utf-8")
+                           f'<body style="margin:0;background:#ddd">{country_svg(dump, theatre, routes=routes)}</body>', encoding="utf-8")
         print(f"wrote {out}")
         return 0
     if a.png:

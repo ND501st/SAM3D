@@ -41,6 +41,47 @@ is +X east, +Y south at its origin), and the director puts the georeference orig
 `LocalFrame` converts geodetic ↔ ENU exactly (via ECEF). Far from the origin, ENU `z` differs from altitude by
 about d²/2R (≈ 785 m at 100 km), so use `LocalFrame::AltitudeOf` whenever altitude matters.
 
+### One ground, one vertical (roadmap R5)
+
+* **One ground.** On a map's level the sim samples exactly the triangles Unreal draws. Each map has drawn levels
+  (`MapData::DrawnLevels`): the core at 50 m, the far ground at 500 m, the country's 1 km lattice and the land beyond
+  at 4 km. Each cell is two triangles split along its (c+1, r)-(c, r+1) diagonal (`MapGrid::SampleTri`).
+  `MapData::GroundHeight` samples the finest level that covers the point (`LevelAt`). A cell is left undrawn
+  (`DrawsCell`) only when it lies wholly inside a finer level. `country_map.hpp` samples its own grid the same way.
+  A map's detail areas (roadmap R6, `terrain.detail`) are levels too, ahead of the map proper: their edges on the
+  coarse level's nodes, their ground that level's triangles at a finer spacing plus faded micro relief
+  (`docs/TEST_RANGE.md`, "Detail areas").
+* **What stands on the ground blocks sight** (E9 in R6): `Terrain::ObstacleHeightAt` (the map's woods and buildings)
+  is on every line of sight's and radio path's profile beyond 60 m from either end, and low pilots hold their height
+  over it (`docs/EM_ARCHITECTURE.md` §27).
+* **One vertical: the frame's z.** A ground point keeps its east and north and finds its z where `AltitudeOf` gives
+  the ground's height (`GroundPointInFrame`, `MapFrameLink::GroundPoint`, `ScenarioRunner::GroundEnu`). The drawn
+  vertices are those points through `EnuToUnreal`. `DrawnGroundAgrees` and the automation test
+  `SAM3D.Map.GroundAgrees` check the two.
+* **Ground items carry their ground point.** The view stream's battery rows and works carry it
+  (`ViewVehicle::ground`, `ViewWork::ground`), because their `position` is where the antennas are.
+* **Held over the ground in simcore, never pushed up in Unreal.**
+  * `TargetPilot::GroundFloor` keeps an aircraft's belly (`Aircraft::bottom_m`) a metre over the ground 3 s ahead.
+    A pilot who holds his own height (terrain following, a pop-up, a dive) already climbs for the ground ahead within
+    his limit, so for him the floor is only a limit: no second climb in the same step, no "pulled up" event.
+  * A weapon ends where its line crosses the ground, or on its aim when it flies low.
+  * An aircraft that still ends up under the ground is counted (`ScenarioRunner::TerrainStrikes`) and goes down.
+  * Unreal only stops the 0.15 s it draws ahead between steps at the ground (`FSimEntityState::GroundClearSeconds`).
+* **Unreal reads the drawn ground with no trace.** `USimWorldSubsystem::GroundAt` gives the map actor's drawn ground
+  from the map's own link. Only a level without a map actor (Cesium) traces, and that trace is ground-only (see the
+  known limitations).
+* **The checks.**
+  * `simcore/ground_check.hpp`, run by `ground_check` and the dynamic campaign test, lists aircraft, weapons,
+    missiles, visitors and movers under the ground. It cannot judge what is put on the ground by `GroundEnu` or
+    `GroundAt` (the battery's rows, the works, the neighbours, the scenery, the own vehicle): those are on the sim's
+    ground by construction, and only the game's check can find them off the drawn mesh.
+  * `NoGroundDrawnTwice`: no drawn cell of a coarse level shares area with a finer level. The country's lattice is
+    grown to the next node of the 4 km land beyond so their edges meet.
+  * In the game, `sam3d.ground.check` and `-SimGroundCheck=<s>` (`tools/ue_ground_check.py`) judge every shown entity
+    actor against the ground tiles' meshes as built (`ASimMapActor::DrawnGroundAt`, not `GroundAt`, which placed
+    them). `SAM3D.Map.GroundAgrees` builds the map actor for the testbed's frame and checks its meshes against the
+    sim's ground on every level.
+
 ## Time
 
 `USimWorldSubsystem` accumulates frame time and calls `World::Step(0.01)` in a loop (fixed 100 Hz, capped per frame).
@@ -167,11 +208,21 @@ Deterministic for a seed. `examples/air_war_demo.cpp` runs it end to end.
 
 Generic simcore models (used by the demo, not by the Osa's outcomes):
 
-- Aircraft: constant airspeed, turn-rate limited, and they fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
-- Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's obstacle grid (woods, buildings) is not yet used by line of sight (E9).
+- Aircraft (`aircraft.hpp`, roadmap R3): an aircraft given its type's limits (the air war's types) is a point mass flown by bank-to-turn, within its g limit and roll rate, its speed traded in climbs and lost in turns harder than its sustained one; a helicopter leans its nose down to fly forward and has no energy model yet. One without them (the hand-made scenarios) flies the old way, constant airspeed and turn-rate limited, with a bank shown for the drawing only. Both fly straight lines in ENU, so they drift in true altitude over long distances. With a scenario's "weather" they drift with the wind and crab to hold their track (`weather.hpp`); missiles ignore the wind.
+- Cloud blocks only the TV sight (and its EM-layer optical sensor is not yet told: `em/optical.hpp` is, through the engagement model). The map's woods and buildings block line of sight and radio paths as clutter heights (E9 in R6, `docs/EM_ARCHITECTURE.md` section 27), sampled from 50 m and 25 m grids; the country's own ground (`CountryGround`) has none.
 - Demo missile (`missile.hpp`): PN only, perfect target knowledge, no autopilot lag or noise, constant Cd,
   deterministic kill radius. The scenario path doesn't fly a missile; the engagement model resolves launches.
 - Radar physics: single-look SNR threshold, no clutter or multipath.
+- The ground (roadmap R5) on a Cesium level is in an interim state. With no map actor there are two grounds: Cesium's
+  tiles and the scenario's own terrain.
+  - Unreal puts ground items on the first static surface of a ground-only trace (WorldStatic objects; entity actors,
+    pawns and actors tagged `SimNotGround` are ignored) from 3 km over to 3 km under (`USimWorldSubsystem::GroundAt`).
+  - Aircraft are held over the sim's terrain, not over the tiles.
+  - One ground there waits on R6's map. Without a map actor, `ground_check` and `SAM3D.Map.GroundAgrees` say nothing
+    about the tiles.
+  - On a map's level the obstacle heights (woods, buildings) are bilinear and not part of the drawn ground; low
+    pilots hold their height over the ground plus the obstacles (R6), the ground floor (R5) over the bare ground.
+    The drawn trees (R6's dressing) never stand above the obstacle heights; the buildings' meshes fill their boxes.
 - ISA atmosphere treats geopotential altitude as geometric (< 0.5 % error below 32 km).
 
 Osa model gaps found by the October 2026 research review (`docs/research/OSA_RESEARCH_2026-10.md`), scheduled as
@@ -207,7 +258,9 @@ roadmap phase 6:
   the range goes back to the hand. Not modelled: the SOC's СА against non-synchronous pulses (no such interference
   in the EM layer), the anti-radiation missile threat. (6.7, 9.1, 9.4)
 - Targets: terrain following, low strike runs, pop-up helicopters and evasion on launch or lock are scenario behaviours
-  (9.3); the aircraft is still a constant-speed, turn-rate-limited point (no energy, no g limit).
+  (9.3); a target given its type's limits flies by bank-to-turn with an energy model (R3), one without them is still a
+  constant-speed, turn-rate-limited point. The terrain-following height is still set after the step, not flown as a
+  path angle; a damaged aircraft keeps its g and acceleration.
 - Power: GTA, take-off generator and an external supply; a prepared position's grid, cut and diesel set are a scenario
   block (7.6), and so are emplacements, nets and dummy positions (drawn in Unreal: `ASimPositionWork`). The tank's level
   shows on the driver's fuel gauge (7.4); the drive's own consumption is not modelled. No smoke generators.

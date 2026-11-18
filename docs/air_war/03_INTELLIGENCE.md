@@ -20,7 +20,7 @@ The planner reads only this. Truth enters through reports.
 | Satellite | each pass (local hours), not in poor weather, half the chance under cloud | fixed objects, mobile ones by `satellite_detect` (halved under nets) | 150 m | `satellite_latency_h` |
 | Air reconnaissance | survivors of recce flights | objects within `intel.recce_corridor_m` of the route, by the aircraft's recce quality (less under nets, in poor weather) | 300 m | `recce_latency_h` |
 | ELINT | whatever radiates within `elint_reach_km` of the line: routine emission each hour and every second of a raid | the emitter | `elint_best_m + elint_k_m / sqrt(seconds)` | `elint_delay_h` |
-| Radio intercept | the battery's voice traffic by its radio discipline | the battery | `comint_sigma_m` | `comint_delay_h` |
+| Radio intercept | the battery's voice traffic: the calls its people made on the radio, from our side's information pipeline (`docs/command/06_INTEGRATION.md` §1, `intel.comint_per_call` each); without the pipeline, its posture's radio discipline | the battery | `comint_sigma_m` | `comint_delay_h` |
 | Agents | `humint_per_day`, mostly what is near the front | a random object within reach; `humint_false` of them ghosts | `humint_sigma_m` | `humint_delay_h` |
 | Pilots' reports | after every package | the target's state as claimed; dummies destroyed as SAM sites; radars that went silent under ARM attack as destroyed | | `pirep_delay_h` |
 | Launch sightings | survivors near a defence that fired | where it is, and the losses credited to it | 700 m | `pirep_delay_h` |

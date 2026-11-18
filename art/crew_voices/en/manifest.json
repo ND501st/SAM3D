@@ -186,6 +186,36 @@
    "word_error": 0.0,
    "phonemes": "ˈeɪ.ˈɛs.pˈiː.dˈiː. ˈɔn!"
   },
+  "battery_commander/order_battery_by_designation": {
+   "seat": "battery_commander",
+   "id": "order_battery_by_designation",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: back on the post's designations!",
+   "spoken": "The battery: back on the post's designations!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: back on the post's designations!",
+    "engine_text": "The battery: back on the post's designations!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: bˈæk ɔnðə pˈoʊsts dˌɛzɪɡnˈeɪʃənz!",
+   "duration_s": 2.46,
+   "speech_s": 2.16,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -1.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "the battery back on the post's designations.",
+   "word_error": 0.0
+  },
   "battery_commander/order_battery_duty": {
    "seat": "battery_commander",
    "id": "order_battery_duty",
@@ -328,6 +358,176 @@
    "peak_db": -1.2,
    "flags": [],
    "transcript": "The battery, no radiation.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_halt": {
+   "seat": "battery_commander",
+   "id": "order_battery_halt",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: halt!",
+   "spoken": "The battery: halt!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: halt!",
+    "engine_text": "The battery: halt!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: hˈɔlt!",
+   "duration_s": 1.13,
+   "speech_s": 1.01,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "The battery halt.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_k_boyu": {
+   "seat": "battery_commander",
+   "id": "order_battery_k_boyu",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: action stations!",
+   "spoken": "The battery: action stations!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: action stations!",
+    "engine_text": "The battery: action stations!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: ˈækʃən stˈeɪʃənz!",
+   "duration_s": 1.79,
+   "speech_s": 1.6,
+   "slot_s": 1.8,
+   "rms_db": -18.5,
+   "peak_db": -2.2,
+   "flags": [],
+   "transcript": "the battery action stations.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_march": {
+   "seat": "battery_commander",
+   "id": "order_battery_march",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: prepare to march!",
+   "spoken": "The battery: prepare to march!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: prepare to march!",
+    "engine_text": "The battery: prepare to march!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: pɹɪpˈɛɹ tə mˈɑːɹtʃ!",
+   "duration_s": 1.56,
+   "speech_s": 1.39,
+   "slot_s": 1.8,
+   "rms_db": -18.5,
+   "peak_db": -2.5,
+   "flags": [
+    "words"
+   ],
+   "transcript": "The battery prepared a march.",
+   "word_error": 0.4
+  },
+  "battery_commander/order_battery_relocate": {
+   "seat": "battery_commander",
+   "id": "order_battery_relocate",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: change position!",
+   "spoken": "The battery: change position!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: change position!",
+    "engine_text": "The battery: change position!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: tʃˈeɪndʒ pəzˈɪʃən!",
+   "duration_s": 1.58,
+   "speech_s": 1.43,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -1.8,
+   "flags": [],
+   "transcript": "The battery change position.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_resume": {
+   "seat": "battery_commander",
+   "id": "order_battery_resume",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: move on!",
+   "spoken": "The battery: move on!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: move on!",
+    "engine_text": "The battery: move on!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: mˈuːv ˈɔn!",
+   "duration_s": 1.26,
+   "speech_s": 1.17,
+   "slot_s": 1.45,
+   "rms_db": -18.3,
+   "peak_db": -1.8,
+   "flags": [],
+   "transcript": "The battery move on.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_search_own": {
+   "seat": "battery_commander",
+   "id": "order_battery_search_own",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The battery: search on your own, each in its sector!",
+   "spoken": "The battery: search on your own, each in its sector!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The battery: search on your own, each in its sector!",
+    "engine_text": "The battery: search on your own, each in its sector!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə bˈæɾɚɹi: sˈɜːtʃ ˌɔn jʊɹ ˈoʊn, ˈiːtʃ ɪn ɪts sˈɛktɚ!",
+   "duration_s": 2.56,
+   "speech_s": 2.21,
+   "slot_s": 3.2,
+   "rms_db": -18.6,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "The battery, search on your own each in its sector.",
    "word_error": 0.0
   },
   "battery_commander/order_battery_simplex": {
@@ -559,6 +759,34 @@
    "transcript": "The battery nets set back to the working frequency.",
    "word_error": 0.0,
    "phonemes": "ðə bˈæɾɚɹi nˈɛts sˈɛt bˈæk tə ðə wˈɜːkɪŋ fɹˈiːkwənsi!"
+  },
+  "battery_commander/order_lay_lines": {
+   "seat": "battery_commander",
+   "id": "order_lay_lines",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Lay the lines!",
+   "spoken": "Lay the lines!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Lay the lines!",
+    "engine_text": "Lay the lines!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "lˈeɪ ðə lˈaɪnz!",
+   "duration_s": 0.97,
+   "speech_s": 0.89,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -1.3,
+   "flags": [],
+   "transcript": "Lay the lines.",
+   "word_error": 0.0
   },
   "battery_commander/order_mast": {
    "seat": "battery_commander",

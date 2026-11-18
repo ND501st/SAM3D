@@ -46,6 +46,9 @@ foreach ($f in 'rebels', 'neutral', 'warsaw_pact', 'nato') {
 # The weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9): the table to out/.
 & "$bin/air_war_bench" data 100 2>&1 | Out-File -Encoding utf8 out/air_war_bench.md
 if ($LASTEXITCODE -ne 0) { throw 'air_war_bench failed' }
+# Roadmap R5, nothing under the map: the testbed's hour and every map mission's ten minutes (docs/TEST_RANGE.md).
+& "$bin/ground_check" data 3600 2>&1 | Out-File -Encoding utf8 out/ground_check.txt
+if ($LASTEXITCODE -ne 0) { throw 'ground_check listed something off the ground: out/ground_check.txt' }
 $ErrorActionPreference = 'Stop'
 
 Write-Host '==> prototype and tools: pytest' -ForegroundColor Cyan

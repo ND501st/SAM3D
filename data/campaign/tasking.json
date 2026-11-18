@@ -1,0 +1,32 @@
+{
+  "tasking_id": "rgt15_tasking_first_form",
+  "status": "first form (roadmap 14.2, docs/campaign/03_THE_BATTERY_MISSION.md section 1)",
+  "notes": "The 15th SAM Regiment's tasking of a battery (simcore/campaign/regiment.hpp): each rule a trigger the regiment can know, the task, and the reason the order gives. Routine rules are read at the evening briefing, urgent ones at once. The regiment knows the enemy's picture of the battery only from our intelligence's estimate in the campaign's journal.",
+  "source": "voenizdat_osa_1991 pp. 232-239 (a battery changes position only on the regiment commander's order; reserve positions within 2 km); docs/campaign/03_THE_BATTERY_MISSION.md section 1 (the rule table)",
+  "confidence": "medium",
+  "briefing_hour": 19,
+  "rules": [
+    {
+      "id": "cover_priority_object",
+      "when": "no_task",
+      "task": "task_file",
+      "task_file": "campaign/tasks/bty21_cover_bridges.json",
+      "urgent": false,
+      "reason": "The bridges are first on the division's priority list and have no low cover.",
+      "source": "docs/campaign/03_THE_BATTERY_MISSION.md section 1 (an object on the priority list without low cover: cover it); docs/command/05_PLACES.md section 3 (routine tasks at the 19:00 briefing); sam3d estimate (the object: the campaign's)",
+      "confidence": "estimate",
+      "notes": "First form: one object for battery 21. The division's priority list and the regiment's other batteries come with 13.8 and the five batteries."
+    },
+    {
+      "id": "relocate_when_known",
+      "when": "enemy_knows_battery",
+      "task": "relocate",
+      "urgent": true,
+      "ready_in_s": 3600,
+      "reason": "Our intelligence estimates the enemy has found your position.",
+      "source": "voenizdat_osa_1991 pp. 232-239 (the change of position by the regiment's order, to a reserve position prepared within 2 km); docs/campaign/03_THE_BATTERY_MISSION.md section 1 (the trigger and the reason); sam3d estimate (ready_in_s: the commander's short sequence, about 12 min; the march under 2 km with the vehicles out of their emplacements and the column closed up, about 20 min; the post's 18 min occupation, data/campaign/battery_plan.json; with a margin)",
+      "confidence": "estimate",
+      "notes": "Each estimate moves the battery once, and only an estimate made after the battery reached the position it holds; the old main position becomes a reserve."
+    }
+  ]
+}

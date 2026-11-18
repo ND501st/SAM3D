@@ -21,7 +21,7 @@
 namespace
 {
 TAutoConsoleVariable<int32> CVarSimViews(TEXT("sam3d.Views"), 2,
-	TEXT("The camera views allowed (F1-F11): 2 every view, 1 our own side (the cabin, our vehicles, our missiles, the map), ")
+	TEXT("The camera views allowed (F1-F12): 2 every view, 1 our own side (the cabin, our vehicles, our missiles, the map), ")
 	TEXT("0 the cabin and our own vehicle only."),
 	ECVF_Default);
 
@@ -62,6 +62,7 @@ FString USimViewComponent::KeyOf(ESimView InView)
 	case ESimView::Air: return TEXT("F8");
 	case ESimView::Map: return TEXT("F10");
 	case ESimView::Free: return TEXT("F11");
+	case ESimView::Asset: return TEXT("F12");
 	}
 	return FString();
 }
@@ -80,6 +81,7 @@ FString USimViewComponent::NameOf(ESimView InView)
 	case ESimView::Air: return TEXT("Aircraft");
 	case ESimView::Map: return TEXT("Map");
 	case ESimView::Free: return TEXT("Free camera");
+	case ESimView::Asset: return TEXT("Every asset");
 	}
 	return FString();
 }
@@ -125,22 +127,46 @@ bool USimViewComponent::StateOf(const FSubject& S, FSubjectState& Out) const
 		Out.Name = V->IsCommandPost() ? TEXT("your PU-12M") : TEXT("your Osa");
 		Out.bAlive = true;
 		Out.SizeM = 9.0;
+		Out.bSideKnown = true;
+		Out.bFriendly = true;
 		return true;
 	}
 	const USimWorldSubsystem* W = Sim();
+	if (S.PlaceIndex != INDEX_NONE)
+	{
+		const TArray<FSimViewPlace> Places = W != nullptr ? W->GetViewPlaces() : TArray<FSimViewPlace>();
+		if (!Places.IsValidIndex(S.PlaceIndex))
+		{
+			return false;
+		}
+		const FSimViewPlace& P = Places[S.PlaceIndex];
+		Out.Location = P.Location;
+		Out.Velocity = FVector::ZeroVector;
+		Out.Rotation = FRotator::ZeroRotator;
+		Out.Name = P.Name;
+		Out.bAlive = true;
+		Out.SizeM = P.SizeM;
+		Out.bSideKnown = true;
+		Out.bFriendly = P.bFriendly;
+		return true;
+	}
 	FSimEntityState E;
 	if (W == nullptr || !W->GetEntityState(S.EntityId, E))
 	{
 		return false;
 	}
-	Out.Location = E.Location;
+	// Where its actor draws it: carried on to the render time between sim steps (else a missile followed at 700 m/s
+	// would jump 35 m a step against the drawn one).
+	Out.Location = W->GetRenderLocation(E);
 	Out.Velocity = E.Velocity;
 	Out.Rotation = E.Rotation;
 	Out.Name = E.Name;
 	Out.bAlive = E.bAlive;
 	// The basic models are built to their real size (docs/scenery/): stand off by roughly that.
 	const FString Model = E.Model.ToLower();
-	Out.SizeM = E.bIsMissile ? 3.0 : E.bIsGround ? 9.0 : (Model.Contains(TEXT("drone")) || Model.Contains(TEXT("bqm"))) ? 5.0 : 16.0;
+	Out.SizeM = E.bIsMissile || E.bIsWeapon ? 3.0 : E.bIsGround ? 9.0 : (Model.Contains(TEXT("drone")) || Model.Contains(TEXT("bqm"))) ? 5.0 : 16.0;
+	Out.bSideKnown = true;
+	Out.bFriendly = E.bFriendly;
 	return true;
 }
 
@@ -153,7 +179,7 @@ TArray<USimViewComponent::FSubject> USimViewComponent::CandidatesFor(ESimView In
 	{
 		return Out;
 	}
-	if (InView == ESimView::Ground)
+	if (InView == ESimView::Ground || InView == ESimView::Asset)
 	{
 		Out.Add(FSubject());  // our own first
 	}
@@ -171,14 +197,26 @@ TArray<USimViewComponent::FSubject> USimViewComponent::CandidatesFor(ESimView In
 		{
 			continue;
 		}
-		const bool bAir = !E.bIsGround && !E.bIsMissile;
-		const bool bWant = (InView == ESimView::Ground && E.bIsGround) || (InView == ESimView::Weapon && E.bIsMissile) ||
-						   ((InView == ESimView::Air || InView == ESimView::NearestAir) && bAir);
+		const bool bAir = !E.bIsGround && !E.bIsMissile && !E.bIsWeapon;
+		const bool bWant = InView == ESimView::Asset || (InView == ESimView::Ground && E.bIsGround) ||
+						   (InView == ESimView::Weapon && E.bIsMissile) || ((InView == ESimView::Air || InView == ESimView::NearestAir) && bAir);
 		if (bWant)
 		{
 			FSubject S;
 			S.bOwn = false;
 			S.EntityId = E.Id;
+			Out.Add(S);
+		}
+	}
+	if (InView == ESimView::Asset)
+	{
+		// Then what stands: the air defence sites and radars round us, the map's objects.
+		const int32 Places = W->GetViewPlaces().Num();
+		for (int32 I = 0; I < Places; ++I)
+		{
+			FSubject S;
+			S.bOwn = false;
+			S.PlaceIndex = I;
 			Out.Add(S);
 		}
 	}
@@ -202,7 +240,7 @@ void USimViewComponent::SetView(ESimView NewView)
 bool USimViewComponent::SetViewByKey(const FString& Key)
 {
 	for (ESimView V : {ESimView::Cabin, ESimView::Vehicle, ESimView::FlyBy, ESimView::Chase, ESimView::NearestAir, ESimView::Weapon,
-			 ESimView::Ground, ESimView::Air, ESimView::Map, ESimView::Free})
+			 ESimView::Ground, ESimView::Air, ESimView::Map, ESimView::Free, ESimView::Asset})
 	{
 		if (KeyOf(V) == Key)
 		{
@@ -213,7 +251,7 @@ bool USimViewComponent::SetViewByKey(const FString& Key)
 	return false;
 }
 
-void USimViewComponent::Press(ESimView InView)
+void USimViewComponent::Press(ESimView InView, bool bBack)
 {
 	ASimOsaVehicle* V = Vehicle();
 	if (V == nullptr)
@@ -244,7 +282,8 @@ void USimViewComponent::Press(ESimView InView)
 		return;
 	}
 	// The views that look for something of their own kind: none, and the view stays as it was.
-	if (InView == ESimView::NearestAir || InView == ESimView::Weapon || InView == ESimView::Ground || InView == ESimView::Air)
+	if (InView == ESimView::NearestAir || InView == ESimView::Weapon || InView == ESimView::Ground || InView == ESimView::Air ||
+		InView == ESimView::Asset)
 	{
 		const TArray<FSubject> List = CandidatesFor(InView);
 		if (List.Num() == 0)
@@ -254,8 +293,11 @@ void USimViewComponent::Press(ESimView InView)
 			return;
 		}
 		const int32 At = bRepeat ? List.IndexOfByKey(Subject) : INDEX_NONE;
-		// First press: the nearest (F5), the newest missile (F6), the first of the list; again: the next.
-		const int32 Pick = At != INDEX_NONE ? (At + 1) % List.Num() : (InView == ESimView::Weapon ? List.Num() - 1 : 0);
+		// First press: the nearest (F5), the newest missile (F6), the first of the list; again: the next (Shift: the one before).
+		const int32 Step = bBack ? List.Num() - 1 : 1;
+		const int32 Pick = At != INDEX_NONE ? (At + Step) % List.Num() : (InView == ESimView::Weapon ? List.Num() - 1 : 0);
+		AssetCount = List.Num();
+		AssetIndex = Pick;
 		Subject = List[Pick];
 		if (!bRepeat)
 		{
@@ -360,12 +402,13 @@ void USimViewComponent::UpdateViews(APlayerController* Pc, float DeltaSeconds)
 		ESimView Mode;
 	} Keys[] = {{EKeys::F1, ESimView::Cabin}, {EKeys::F2, ESimView::Vehicle}, {EKeys::F3, ESimView::FlyBy}, {EKeys::F4, ESimView::Chase},
 		{EKeys::F5, ESimView::NearestAir}, {EKeys::F6, ESimView::Weapon}, {EKeys::F7, ESimView::Ground}, {EKeys::F8, ESimView::Air},
-		{EKeys::F10, ESimView::Map}, {EKeys::F11, ESimView::Free}};
+		{EKeys::F10, ESimView::Map}, {EKeys::F11, ESimView::Free}, {EKeys::F12, ESimView::Asset}};
+	const bool bShift = Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift);
 	for (const auto& K : Keys)
 	{
 		if (Pc->WasInputKeyJustPressed(K.Key))
 		{
-			Press(K.Mode);
+			Press(K.Mode, bShift);
 		}
 	}
 	ClearDebugKeyBindings(Pc);
@@ -642,6 +685,7 @@ void USimViewComponent::PlaceCamera(APlayerController* Pc, float DeltaSeconds)
 	case ESimView::Vehicle:
 	case ESimView::Ground:
 	case ESimView::Air:
+	case ESimView::Asset:
 	{
 		if (bLook)
 		{
@@ -744,6 +788,12 @@ FString USimViewComponent::GetViewLabel() const
 	if (View == ESimView::Map)
 	{
 		return FString::Printf(TEXT("%s  Map, above %s"), *KeyOf(View), *Name);
+	}
+	if (View == ESimView::Asset)
+	{
+		const TCHAR* Side = !S.bSideKnown ? TEXT("") : S.bFriendly ? TEXT("ours: ") : TEXT("enemy: ");
+		return FString::Printf(TEXT("%s  %s (%d of %d, Shift+F12 back)  %s%s"), *KeyOf(View), *NameOf(View), AssetIndex + 1, AssetCount,
+			Side, *Name);
 	}
 	return FString::Printf(TEXT("%s  %s: %s"), *KeyOf(View), *NameOf(View), *Name);
 }

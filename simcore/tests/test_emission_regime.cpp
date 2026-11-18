@@ -58,6 +58,12 @@ const SpokenCallout* FirstSaid(const ScenarioRunner& r, const std::string& id, c
     }
     return nullptr;
 }
+// Said by any seat but the commander from `from_s` on: the radar seats' answers to the bursts.
+int CrewSaidSince(const ScenarioRunner& r, const std::string& id, double from_s) {
+    int n = 0;
+    for (const SpokenCallout& c : r.Callouts()->Log()) n += c.id == id && c.from != "commander" && c.start_s >= from_s ? 1 : 0;
+    return n;
+}
 int TimesSaid(const ScenarioRunner& r, const std::string& id) {
     int n = 0;
     for (const SpokenCallout& c : r.Callouts()->Log()) n += c.id == id ? 1 : 0;
@@ -197,6 +203,9 @@ SC_TEST("emission: the combat order's regime is told to the crew before the rada
     const double duty = DutyCycle(*r, 120.0, 380.0);
     std::printf("    the search transmitter on %.0f%% of the time at the halt\n", 100.0 * duty);
     SC_EXPECT(duty > 0.25 && duty < 0.6);
+    // The bursts are a standing order: no seat answers each one ("Есть!", "Готово!" every few seconds without end).
+    std::printf("    from 120 s: %d done, %d ack from the crew\n", CrewSaidSince(*r, "done", 120.0), CrewSaidSince(*r, "ack", 120.0));
+    SC_EXPECT(CrewSaidSince(*r, "done", 120.0) <= 2 && CrewSaidSince(*r, "ack", 120.0) <= 2);
     SC_EXPECT(r->GetEmissionRecord().regimes_told == 1 && r->GetEmissionRecord().bursts_s > 200.0);
     // A hostile after a quiet spell: the radar seats are reminded.
     while (!r->Finished() && r->Time() < 470.0) r->Step(0.1);
@@ -212,6 +221,8 @@ SC_TEST("emission: a limited regime is the commander's bursts, said once, kept a
     std::printf("    limited: the search transmitter on %.0f%% of the time at the halt\n", 100.0 * duty);
     SC_EXPECT(FirstSaid(*r, "order_emission_regime", "commander") != nullptr);
     SC_EXPECT(duty > 0.1 && duty < 0.45);  // 2 turns in 8
+    std::printf("    from 120 s: %d done, %d ack from the crew\n", CrewSaidSince(*r, "done", 120.0), CrewSaidSince(*r, "ack", 120.0));
+    SC_EXPECT(CrewSaidSince(*r, "done", 120.0) <= 2 && CrewSaidSince(*r, "ack", 120.0) <= 2);
 }
 
 SC_TEST("emission: a player commander's crew keeps the old regime until he tells them; the helper shows it") {
@@ -413,7 +424,7 @@ SC_TEST("emission: a player commander hears the ARM's sign: the silence and the 
     if (!r) return;
     r->TakeSeat("commander", "Player");
     r->SetHelper(true);
-    HelpFollower f("commander");  // he does what the helper shows; the radio report he makes by hand below
+    HelpFollower f("commander");  // he does what the helper shows: the silence, then the report on his chest switch
     while (!r->Finished() && r->Time() < 900.0 && !HasDuty(*r, "commander", "report_arm_attack")) {
         r->Step(0.1);
         f.Update(*r);
@@ -421,22 +432,26 @@ SC_TEST("emission: a player commander hears the ARM's sign: the silence and the 
     std::printf("    the report owed at %.0f s\n", r->Time());
     SC_EXPECT(HasDuty(*r, "commander", "report_arm_attack"));
     const double heard = r->Time();
-    while (!r->Finished() && r->Time() < heard + 15.0) {
-        r->Step(0.1);
-        f.Update(*r);
-    }
-    bool silenced = false;  // «Излучение выключить!», shown to him by the shadow commander and given
-    for (const ScenarioRunner::GivenOrder& o : r->OrdersGiven()) silenced = silenced || (o.order == "order_emcon_off" && o.time_s >= heard - 1.0);
+    // «Излучение выключить!», shown to him by the shadow commander and given before the report is due, as his NPC would.
+    bool silenced = false;
+    for (const ScenarioRunner::GivenOrder& o : r->OrdersGiven()) silenced = silenced || (o.order == "order_emcon_off" && o.time_s >= heard - 5.0);
     SC_EXPECT(silenced);
     SC_EXPECT(r->CommanderRegime().kind == EmissionKind::Free);  // the battery commander hasn't heard of it yet
     const std::vector<std::string> radio = r->PlayerRadioReports("commander");  // in his crew menu
     SC_EXPECT(std::find(radio.begin(), radio.end(), "report_arm_attack") != radio.end());
     SC_EXPECT(r->ReportWords("commander", "report_arm_attack").first.find("…") == std::string::npos);
-    r->SeatSet("commander", "radio.chest", 1);  // held at ПРД to talk
-    SC_EXPECT(r->PlayerSay("commander", "report_arm_attack"));
-    if (!r->LastRefusal().empty()) std::printf("    %s\n", r->LastRefusal().c_str());
+    while (!r->Finished() && r->Time() < heard + 15.0) {
+        r->Step(0.1);
+        f.Update(*r);
+    }
+    // He keyed the chest switch, said it, and let the switch back to receive.
     SC_EXPECT(!HasDuty(*r, "commander", "report_arm_attack"));
-    while (!r->Finished() && r->Time() < heard + 15.0 + r->Def().emission.arm_on_report_s + 3.0) r->Step(0.1);
+    SC_EXPECT(Has(r->Debrief(), "21: пуск ПРР"));
+    SC_EXPECT(r->Console().panel.Get("radio.chest") == 0);
+    while (!r->Finished() && r->Time() < heard + 15.0 + r->Def().emission.arm_on_report_s + 3.0) {
+        r->Step(0.1);
+        f.Update(*r);
+    }
     SC_EXPECT(Has(r->Debrief(), "a launcher reported an ARM attack"));
     SC_EXPECT(r->CommanderRegime().kind == EmissionKind::Arm || r->CommanderRegime().kind == EmissionKind::Silent);
 }

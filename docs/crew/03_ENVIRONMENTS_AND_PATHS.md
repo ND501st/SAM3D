@@ -130,7 +130,7 @@ chart); detection to launch 26–40 s (`nvo_2015`, `korovin_tiv_2010`).
 | Deputy | Reports the launcher empty (lamps) | `launcher_empty` ("Ракет нет") |
 | Commander | Calls the TZM on the battery net (`reload`); orders the vehicle de-energised for reloading (`mon_2112_80`) | `order_reload`, `request_tzm` |
 | Driver | Reports fuel at half (ePap); calls the fuel truck through the commander | `fuel_half` |
-| TZM crew | Drive alongside, load from stock (`battery.hpp`, `launcher.hpp`: one missile a minute) | `tzm_alongside`, `reload_done` |
+| TZM crew | Drive alongside, load from stock (`battery.hpp`, `launcher.hpp`: a side's three containers per three-minute lift of the crane) | `tzm_alongside`, `reload_done` |
 
 ## 3. Outcomes catalogue
 

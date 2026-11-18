@@ -1,0 +1,18 @@
+{
+  "air_levels_id": "air_levels",
+  "status": "Second pass (roadmap B12, 18 November 2026: the wingmen flown, their receivers lent): the levels of detail of a session's aircraft (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 5.4).",
+  "notes": "Read by simcore/air_levels.hpp. A flight is at A2 (every aircraft flown and thinking in full) within the reach of one of our units (a launcher's radar, our fighters' radar, plus the margin) or engaged (a missile of ours at it, a launch, a burst or a lock in a pilot's picture within engaged_s, a pilot manoeuvring or in his attack); else at A1: every aircraft flown and thinking in full, but each wingman keeping his slot hears on his leader's warning receiver (its searches and a missile's guidance), his own switched off. Without this file, or with mode 0, every aircraft is at A2, as before B12; mode 1 (as shipped) the levels. The PU-12M's radar is not counted by default (post_radar_m 0): it gives the board plots, which the levels do not change, and counting its 160 km would put nearly every aircraft of a battery mission at A2; set it to the P-19's instrumented range (160000, ru_wiki_p19) to count it as the design first said.",
+  "source": "game values (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 5.1); the Osa's search radar range from voenizdat_osa_1991",
+  "confidence": "estimate",
+  "values": {
+    "mode": { "value": 1, "source": "game value: 0 every aircraft at A2 (as before B12), 1 the levels. On since B12's second pass: every aircraft flown and looking at A1, only the wingmen's receivers lent; the testbed's hour over 24 seeds gives the same outcomes on average with the levels off and on (our launches 6.00 and 5.71, aircraft down 38.0 and 38.1), and helper_coverage and crew_balance are identical (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.4)", "confidence": "estimate" },
+    "radar_m": { "value": 45000, "source": "voenizdat_osa_1991 p24-25 (the search radar's instrumented range, 45 km): the reach round the session's own vehicle, the battery's launchers and the neighbours", "confidence": "high" },
+    "post_radar_m": { "value": 0, "source": "game value: the PU-12M's radar not counted (see notes); 160000 would count the P-19's instrumented range (ru_wiki_p19)", "confidence": "estimate" },
+    "fighter_radar_m": { "value": 30000, "source": "game value: the reach round each of our fighters in the session (a period interceptor's radar against a fighter, to be read from data/em/fighter_radars_1985.json when our fighters fly by it, B10)", "confidence": "estimate" },
+    "ground_m": { "value": 40000, "source": "game value: the reach round our ground objects a pilot may find (the session's movers on the roads, the dummies), the pilots' search for a ground object's cull (data/gameplay/perception.json ground max_range_m): near them every pilot of a flight looks, so B6's opportunities are found as before", "confidence": "estimate" },
+    "margin_m": { "value": 10000, "source": "game value: added to every reach (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.1)", "confidence": "estimate" },
+    "down_factor": { "value": 1.2, "source": "game value: down to A1 only beyond 1.2 times the near range (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.1, as the movers' margin)", "confidence": "estimate" },
+    "down_dwell_s": { "value": 30, "source": "game value: and only after 30 s there (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.1)", "confidence": "estimate" },
+    "engaged_s": { "value": 60, "source": "game value: a launch, a burst or a lock seen in the last minute keeps a flight at A2 (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 5.1)", "confidence": "estimate" }
+  }
+}

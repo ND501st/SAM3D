@@ -445,8 +445,9 @@ SC_TEST("crew body: in the PU-12M, a crewman reaching for any control keeps his 
         if (!plan.seated) ++stood;
     }
     // the DTP and the mast's winch, crouching under the roof; the R-111's antenna distributor, on the SAU block under
-    // the bench's back behind the battery commander; and the plotter's headset socket on top of PVS-1
-    SC_EXPECT(stood == 4);
+    // the bench's back behind the battery commander; the plotter's headset socket on top of PVS-1; and his line's reel
+    // latch by the S-23 behind the driver (he gets up to take the reel out)
+    SC_EXPECT(stood == 5);
 }
 
 namespace {

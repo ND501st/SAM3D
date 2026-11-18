@@ -749,7 +749,8 @@ bool Has(const std::vector<std::string>& v, const std::string& id) {
 
 SC_TEST("regiment: the radar library loads with every value cited; bad files are refused") {
     const RegimentRadarLibrary lib = RegimentLibrary();
-    SC_EXPECT(lib.types.size() == 2 && lib.Find("p19") != nullptr && lib.Find("p40") != nullptr);
+    SC_EXPECT(lib.types.size() == 4 && lib.Find("p19") != nullptr && lib.Find("p40") != nullptr && lib.Find("p15") != nullptr &&
+              lib.Find("p18") != nullptr);
     SC_EXPECT_NEAR(lib.Find("p19")->max_range_m, 250000.0, 1e-9);
     SC_EXPECT(lib.Find("p19")->antenna_height_m > 0.0 && lib.Find("p19")->antenna_height_m < 30.0);
     RegimentRadarLibrary out;

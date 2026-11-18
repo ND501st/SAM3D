@@ -10,7 +10,74 @@
   "notes": "The Rava Liberation Front is fictional. The Croatian air arm of 1991 only gives the shape (later than our period). Every aircraft number is a PLACEHOLDER.",
   "em_libraries": [],
   "callsigns": [ "Sokol", "Orao", "Vila", "Jastreb", "Kobac", "Lastavica" ],
+  "radio": {
+    "air_radio": "rebel_air_vhf_am",
+    "ground_radio": "air_ground_uhf_am",
+    "band_mhz": 125.0,
+    "modulation": "AM",
+    "language": "pannonian",
+    "callsign_rotation_h": 0.0,
+    "opsec": 0.15,
+    "have_quick_share": 0.0,
+    "secure_voice_share": 0.0,
+    "gci_channels_per_post": 1,
+    "source": "nsa_purple_dragon_1993 p. 68 (a guerrilla army's intercept service lives on plain voice); estimate (their few aircraft talk in our language on civil or captured sets)",
+    "confidence": "estimate",
+    "notes": "Call signs never change (a game value, rotation 0 = never); low opsec."
+  },
+  "flights": {
+    "source": "sam3d estimate: a single aircraft or a loose pair, low, at night (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3, a design inference from biafra_minicoin and katanga_fouga)",
+    "confidence": "estimate",
+    "notes": "Places in number order, the leader's [0, 0, 0] first: No. 2 his wingman, No. 3 the element lead, No. 4 his wingman; a place past the list repeats it further back. Each place is [right_m, back_m, up_m] of the leader. A phase not given flies the transit's. 1985 formations only: no welded wing (anderegg_2001 p. 20 puts Fluid Four before 1975).",
+    "fighter": {
+      "transit": { "slots": [ [0, 0, 0], [1500, 1000, 0] ],
+        "source": "sam3d estimate: a loose pair (biafra_minicoin, katanga_fouga)", "confidence": "estimate" }
+    },
+    "strike": {
+      "transit": { "slots": [ [0, 0, 0], [1500, 1000, 0] ],
+        "source": "sam3d estimate: a loose pair (biafra_minicoin, katanga_fouga)", "confidence": "estimate" }
+    },
+    "helicopter": {
+      "transit": { "slots": [ [0, 0, 0], [500, 800, 0] ],
+        "source": "sam3d estimate: a loose pair", "confidence": "estimate" }
+    }
+  },
+  "opportunity_rules": {
+    "report_in_flight": {"value": false, "source": "SAM3D assumption (no net)", "confidence": "low"},
+    "fired_on_may_attack": {"value": true, "source": "SAM3D assumption: the pilot is his own authority", "confidence": "low"},
+    "own_troops_keepout_m": {"value": 300, "source": "SAM3D estimate", "confidence": "low"},
+    "reattack": {"value": 0.3, "source": "garrison_biafra", "confidence": "low", "notes": "shoot-ups cost two MFI-9s; rarely more than a pass (estimate)"},
+    "armed_recce": {"value": "attack", "source": "SAM3D assumption", "confidence": "low"},
+    "strike_on_task": {"value": "attack", "source": "garrison_biafra", "confidence": "low", "notes": "attack if able"},
+    "cas": {"value": "attack", "source": "SAM3D assumption", "confidence": "low"}
+  },
+  "c2": {
+    "source": "SAM3D assumption: no posts; each sortie flies its own plan and the leader is his own retasker (docs/air_battle/05_C2_AND_RETASKING.md §2.4)",
+    "confidence": "low",
+    "notes": "No warning system beyond their eyes and agents; what the pilots saw goes in at the debrief.",
+    "report_missions": [],
+    "hunter_leave": "none"
+  },
+  "hot_phase": {
+    "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
+    "confidence": "estimate",
+    "notes": "How its flights choose in the air (roadmap B11, simcore/air_war/hot_phase.hpp): each value the faction's, moved by the flight's officer (at most 0.2) and pilot (at most 0.15). Played flights (A2, A1) read it; the abstract resolver does not.",
+    "initiative": {"value": 0.8, "range": [0.6, 0.95], "source": "biafra_minicoin; garrison_biafra; katanga_fouga; SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate", "notes": "no net, no plan beyond take-off: the leader decides everything"},
+    "plan_adherence": {"value": 0.3, "range": [0.1, 0.5], "source": "biafra_minicoin (planned on known targets, one run, then whatever comes); SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "press_on": {"value": 0.6, "range": [0.3, 0.9], "source": "garrison_biafra (two aircraft lost in shoot-ups); katanga_fouga; SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate", "notes": "a wide spread: the range"},
+    "jettison_readiness": {"value": 0.5, "range": [0.3, 0.7], "source": "game value (docs/air_battle/10_FACTIONS.md section 7.2: no source for the rebels)", "confidence": "estimate"},
+    "radio_discipline": {"value": 0.3, "range": [0.1, 0.5], "source": "nsa_purple_dragon_1993 p. 68 (a guerrilla army's intercept service lives on plain voice); estimate (their few aircraft talk in our language on civil or captured sets, comms-25)", "confidence": "low"},
+    "emission_discipline": {"value": 0.2, "range": [0.0, 0.4], "source": "SAM3D estimate (few emitters: docs/air_battle/10_FACTIONS.md section 7.2)", "confidence": "estimate"},
+    "air_combat_skill": {"value": 0.2, "range": [0.1, 0.3], "source": "docs/research/air_battle_2026-11/air_combat.md reb-01 (no fighters: hide low, run or land); the same as data/air_war/air_combat.json's doctrine skill (checked on load)", "confidence": "estimate"},
+    "opportunity": {"value": 0.7, "range": [0.5, 0.9], "source": "garrison_biafra", "confidence": "low", "notes": "'the adrenaline game of shooting rockets': one veteran's account; the value an estimate (moved from opportunity_rules.tendency, roadmap B11)"},
+    "turn_back": {"value": 0.4, "range": [0.2, 0.6], "source": "SAM3D estimate (docs/air_battle/04_REACTIONS.md section 8: turn away and dive)", "confidence": "estimate"},
+    "husbanding": {"value": 0.15, "range": [0.0, 0.3], "source": "game value on angola_saaf_1987 (the pattern: a small force cuts its sorties as the threat rises) and the faction's loss_tolerance_per_day", "confidence": "estimate"},
+    "reaction_delay_s": {"value": [4, 10], "improvised_extra_s": 0, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (green pilots 4-10 s)", "confidence": "estimate"},
+    "authority": {"beyond_task": ["strike", "harassment", "helo_raid", "recce", "armed_recce", "cas"], "retask_by": [], "retask_kinds": [], "recall_only": false, "leader_may": ["everything"], "source": "SAM3D assumption (c2-41: no net, no retasking; docs/research/air_battle_2026-11/c2_retasking.md): anything that looks military", "confidence": "estimate"},
+    "on_control_lost": {"green": "continue", "skilled": "continue", "source": "docs/research/air_battle_2026-11/air_combat.md reb-01 (no controller to lose); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"}
+  },
   "doctrine": {
+    "routing": { "crossing": "none", "letdown_m": 10000, "max_turn_points": 4, "variants": ["covered"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0.5, "return": "same_entry", "deviation": "any", "source": "game values: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate", "notes": "At night, low, by roads, rivers and villages; clear of known guns; home the way they came." },
     "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
     "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3, "delivery_risk": 0.8, "min_effect": 0.005, "min_value": -0.5,
     "source": "game values: ad hoc planning by a few pilots, night harassment (croatia_1991_migflug: bombs on positions around a besieged town)",
@@ -61,21 +128,30 @@
   "aircraft": [
     { "id": "an2_bomber", "name": "An-2 crop sprayer with home-made bombs", "roles": [ "strike" ], "class": "default", "rcs_m2": 4, "cruise_mps": 50, "attack_mps": 45,
       "low_agl_m": 80, "medium_alt_m": 1500, "max_turn_deg_s": 6, "night": true, "strike_power": 0.15, "evasion": 0.1,
-      "loads": [["improvised", 4]], "computing": 0.05, "radius_km": 300,
+      "flight": { "max_load_g": 3.5, "sustained_turn_deg_s": 5, "roll_rate_deg_s": 30, "max_mps": 72, "accel_mps2": 0.8, "climb_mps": 4, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
+      "loads": [["improvised", 4]], "computing": 0.05, "opportunity": {"ease": 0.5, "bingo_share": 0.25, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "slow, low, improvised bombs (estimate)"},
+      "radius_km": 300,
       "source": "croatia_1991_migflug (An-2 crop dusters dropping makeshift bombs); numbers placeholders", "confidence": "low",
       "notes": "Night here means willing to fly by moonlight, not equipped for it: accuracy suffers." },
     { "id": "utva75", "name": "Light aircraft with rockets (UTVA 75 class)", "roles": [ "strike", "recce" ], "class": "default", "rcs_m2": 2, "cruise_mps": 55, "attack_mps": 55,
       "low_agl_m": 60, "medium_alt_m": 1500, "max_turn_deg_s": 8, "strike_power": 0.08, "recce_quality": 0.3, "evasion": 0.15,
-      "loads": [["s5", 2], ["improvised", 2]], "computing": 0.1, "radius_km": 300,
+      "flight": { "max_load_g": 4.4, "sustained_turn_deg_s": 6, "roll_rate_deg_s": 60, "max_mps": 65, "accel_mps2": 1, "climb_mps": 5, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
+      "loads": [["s5", 2], ["improvised", 2]], "computing": 0.1, "opportunity": {"ease": 0.6, "bingo_share": 0.25, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "a light aircraft, the pilot his own authority (garrison_biafra, by analogy)"},
+      "radius_km": 300,
       "source": "croatia_1991_migflug (UTVA and other civil aircraft); numbers placeholders", "confidence": "low" },
     { "id": "mi8_doorgun", "name": "Mi-8 with door guns and rocket pods", "roles": [ "helicopter", "recce" ], "class": "helicopter", "helicopter": true,
       "rcs_m2": 10, "cruise_mps": 55, "attack_mps": 55, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 8, "strike_power": 0.2,
+      "flight": { "max_load_g": 1.8, "sustained_turn_deg_s": 8, "roll_rate_deg_s": 30, "max_mps": 70, "climb_mps": 8, "source": "game values (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2): a helicopter's bank limit, roll rate and climb", "confidence": "estimate" },
       "recce_quality": 0.25, "evasion": 0.2,
-      "loads": [["s5", 4], ["door_guns", 1]], "computing": 0.1, "radius_km": 200,
+      "loads": [["s5", 4], ["door_guns", 1]], "computing": 0.1, "opportunity": {"ease": 0.55, "bingo_share": 0.25, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "door guns and rockets, the crew its own authority (estimate)"},
+      "radius_km": 200,
       "source": "placeholder: a transport helicopter the faction captured, armed for the game; no value is the real aircraft's", "confidence": "estimate" },
     { "id": "galeb", "name": "Defected light jet (G-2 Galeb class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 180, "attack_mps": 200,
       "low_agl_m": 80, "medium_alt_m": 3000, "max_turn_deg_s": 9, "strike_power": 0.25, "recce_quality": 0.4, "evasion": 0.35,
-      "loads": [["fab250", 2], ["s5", 2]], "computing": 0.3, "radius_km": 300,
+      "low_level": { "agl_m": 80, "mps": 180, "source": "game value: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
+      "flight": { "max_load_g": 6, "sustained_turn_deg_s": 6, "roll_rate_deg_s": 120, "max_mps": 225, "accel_mps2": 2.5, "climb_mps": 30, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
+      "loads": [["fab250", 2], ["s5", 2]], "computing": 0.3, "opportunity": {"ease": 0.55, "bingo_share": 0.3, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "a light jet, the pilot his own authority (garrison_biafra, by analogy)"},
+      "radius_km": 300,
       "source": "placeholder: a period light jet named for flavour; no value is the real aircraft's", "confidence": "estimate" }
   ],
   "squadrons": [

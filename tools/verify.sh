@@ -28,6 +28,8 @@ for f in rebels neutral warsaw_pact nato; do
 done
 # The weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9): the table to out/.
 ./simcore/build/air_war_bench data 100 > out/air_war_bench.md
+# Roadmap R5, nothing under the map: the testbed's hour and every map mission's ten minutes (docs/TEST_RANGE.md).
+./simcore/build/ground_check data 3600 > out/ground_check.txt || { echo "ground_check listed something off the ground: out/ground_check.txt"; exit 1; }
 
 echo "==> prototype and tools: pytest"
 PY=python3

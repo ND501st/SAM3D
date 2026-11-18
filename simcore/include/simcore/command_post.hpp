@@ -511,19 +511,27 @@ public:
         frame_ = frame;
         has_frame_ = true;
     }
-    // The targets the regiment's radars cover (all of them without radars).
-    static std::vector<BoardContact> RegimentSees(const PostRegiment& r, const std::vector<BoardContact>& truth) {
+    // The targets the regiment's radars on the air at `t` cover (all of them without radars; none with every one of them
+    // off the air).
+    static std::vector<BoardContact> RegimentSees(const PostRegiment& r, const std::vector<BoardContact>& truth, double t = -1e18) {
         if (r.radars.empty()) return truth;
         std::vector<BoardContact> out;
         for (const BoardContact& c : truth) {
             for (const RegimentRadar& radar : r.radars) {
-                if (Covers(radar, c)) {
+                if (!RadarDownAt(radar, t) && Covers(radar, c)) {
                     out.push_back(c);
                     break;
                 }
             }
         }
         return out;
+    }
+    // A radar off the air at `t` (its outages: struck, wrecked).
+    static bool RadarDownAt(const RegimentRadar& radar, double t) {
+        for (const C2Outage& o : radar.outages) {
+            if (t >= o.from_s && t < o.to_s) return true;
+        }
+        return false;
     }
     static bool Covers(const RegimentRadar& radar, const BoardContact& c) {
         const double range = (Vec3{c.position.x, c.position.y, 0.0} - Vec3{radar.position.x, radar.position.y, 0.0}).Length();
@@ -692,6 +700,22 @@ public:
         out.number = number;
         if (number != said.number) out.contact.target_id = "journal:" + std::to_string(number);
         return true;
+    }
+    // A place on the board in the words of the post's reports: its square of the PVO grid, or its azimuth and range from
+    // the reporting radar (the after-action report's places for a target only on the board, campaign/report.hpp).
+    std::string PlaceWords(const Vec3& p) const {
+        char text[64];
+        const int levels = static_cast<int>(def_.air_net_grid_levels);
+        if (levels > 0 && has_frame_) {
+            const GeoPoint g = frame_.EnuToGeodetic(p);
+            return "square " + pvo_grid::Encode(RadToDeg(g.lat_rad), RadToDeg(g.lon_rad), levels);
+        }
+        const Vec3 src = has_air_source_ ? air_source_ : position_;
+        const Vec3 rel = p - src;
+        double az_deg = RadToDeg(std::atan2(rel.x, rel.y));
+        if (az_deg < 0.0) az_deg += 360.0;
+        std::snprintf(text, sizeof(text), "azimuth %03.0f, %.0f km", std::fmod(std::round(az_deg), 360.0), rel.HorizontalLength() / 1000.0);
+        return text;
     }
     // A report found again in the radiotelephonist's journal (radio_journal.hpp): it waits for the plotter's hand once
     // more, as if heard now, and leaves the held list (`said_number`: the number it was heard under, if written otherwise).

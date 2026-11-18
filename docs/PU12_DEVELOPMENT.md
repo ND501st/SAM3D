@@ -216,7 +216,14 @@ driver-electrician; `ru_pu12_text`). The four-man lists are the numbers without 
     number, azimuth and range from the launcher (flak11). He reads the number off the board and the place off the
     IT-45, its latest fix led along its speed vector to when the launcher hears it.
   - The launcher's crew takes the target nearest the point it was told within 6 km (sam3d): with the post's navigation
-    error it can take another target, or report «цели не наблюдаю».
+    error it can take another target, or report «цели не наблюдаю». Heard at the post (31 Oct 2026), that answer marks
+    his picture there as lagging: he gives that mark, or any within 6 km of where it stood or where it was looked for, to
+    nobody again until a fresher mark comes (the regiment's air picture arrives in squares and late; before, he repeated
+    the same stale square every few seconds).
+  - A launcher that read a mark back has it, whichever aircraft it found there: it reports by the number it was given
+    (captured, launch, result), and the commander gives that number to no second launcher while its last word on it is
+    under a minute old and it has reported on nothing else. A kill reported by number is the board's mark of that number
+    to him, not the aircraft the launcher really hit (the record's error carries; `ReportedTarget`).
   - The NPC battery commander gives each hostile on the board to the nearest free launcher (its sector first), never a
     friend; a player in his seat does it himself (`DesignateBatteryTarget`).
   - The launchers report on the battery net (к бою готов with their missiles, launch, result, out of missiles, reloaded);

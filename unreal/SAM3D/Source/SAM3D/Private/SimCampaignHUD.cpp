@@ -45,6 +45,13 @@ namespace
 		return FString(UTF8_TO_TCHAR(S.c_str()));
 	}
 
+	// "2 h 05 min": a march's time on the roads (G9.5).
+	FString MarchText(double Hours)
+	{
+		const int32 Minutes = FMath::RoundToInt(static_cast<float>(Hours * 60.0));
+		return FString::Printf(TEXT("%d h %02d min"), Minutes / 60, Minutes % 60);
+	}
+
 	// The country the campaign is fought over (data/maps/pannonia.json, simcore/country_map.hpp), the map's ground: built
 	// once and kept. Its frame is the theatre's (the same origin; docs/COUNTRY_MAP.md).
 	const simcore::CountryMap* CampaignCountry()
@@ -148,7 +155,12 @@ void ASimCampaignHUD::ChangePosture(int32 Row, int32 Step)
 	{
 		case 0: P.Emission = FMath::Clamp(P.Emission + F, 0.0f, 1.0f); break;
 		case 1: P.EmconDiscipline = FMath::Clamp(P.EmconDiscipline + F, 0.0f, 1.0f); break;
-		case 2: P.RadioDiscipline = FMath::Clamp(P.RadioDiscipline + F, 0.0f, 1.0f); break;
+		case 2:  // what was said on the air, when the pipeline tells the campaign (roadmap P3); else the old guess
+			if (!C->GetCampaign()->TrafficFromPipeline())
+			{
+				P.RadioDiscipline = FMath::Clamp(P.RadioDiscipline + F, 0.0f, 1.0f);
+			}
+			break;
 		case 3: P.bDummyTraffic = !P.bDummyTraffic; break;
 		case 4: P.bDecoyEmitters = !P.bDecoyEmitters; break;
 		case 5: P.bNets = !P.bNets; break;
@@ -157,6 +169,164 @@ void ASimCampaignHUD::ChangePosture(int32 Row, int32 Step)
 		default: break;
 	}
 	C->SetPosture(P);
+}
+
+namespace
+{
+	int32 WrapIndex(int32 I, int32 N)
+	{
+		return N > 0 ? ((I % N) + N) % N : 0;
+	}
+}
+
+void ASimCampaignHUD::OpenTell(int32 Fact)
+{
+	TellFact = Fact;
+	TellBy = 0;
+}
+
+void ASimCampaignHUD::Tell()
+{
+	USimAirCampaignSubsystem* C = Campaign();
+	const simcore::command::InfoNet* Net = C != nullptr ? C->GetInfoNet() : nullptr;
+	if (Net == nullptr || TellFact < 0)
+	{
+		return;
+	}
+	const std::vector<int> To = Net->Contacts(Net->Player());
+	if (To.empty())
+	{
+		return;
+	}
+	const int Who = To[static_cast<std::size_t>(WrapIndex(TellTo, static_cast<int32>(To.size())))];
+	const std::vector<simcore::command::TellOption> By = Net->TellOptions(Net->Player(), Who, TellFact, Net->Now());
+	if (By.empty())
+	{
+		return;
+	}
+	const simcore::command::TellOption& O = By[static_cast<std::size_t>(WrapIndex(TellBy, static_cast<int32>(By.size())))];
+	FString Why;
+	const FString Name = CampaignToF(Net->Data().positions[static_cast<std::size_t>(Who)].Label());
+	if (C->TellFact(TellFact, Who, CampaignToF(O.mean), Why))
+	{
+		Message = FString::Printf(TEXT("You told %s: %s."), *Name, *CampaignToF(O.name));
+	}
+	else
+	{
+		Message = FString::Printf(TEXT("You can't tell %s that way: %s."), *Name, *Why);
+	}
+}
+
+void ASimCampaignHUD::OrderPosture()
+{
+	USimAirCampaignSubsystem* C = Campaign();
+	const simcore::command::InfoNet* Net = C != nullptr ? C->GetInfoNet() : nullptr;
+	if (C == nullptr || Net == nullptr || Net->Player() < 0)
+	{
+		return;
+	}
+	const FSimBatteryPosture P = C->GetPosture();
+	auto Pct = [](float V) { return FString::Printf(TEXT("%.0f%%"), V * 100.0f); };
+	const FString Text = FString::Printf(
+		TEXT("Battery order: the radars radiate %s of each hour between fights; emission discipline %s; keep off the air but for "
+			 "what must be said; dummy traffic %s; decoy emitters %s; camouflage nets %s; %s; %s."),
+		*Pct(P.Emission), *Pct(P.EmconDiscipline), P.bDummyTraffic ? TEXT("on") : TEXT("off"),
+		P.bDecoyEmitters ? TEXT("on") : TEXT("off"), P.bNets ? TEXT("up") : TEXT("down"),
+		P.bFightSilent ? TEXT("fight silent, by the TV on the PU-12's designations") : TEXT("fight with the radars"),
+		P.RelocateEveryH > 0.0f ? *FString::Printf(TEXT("move every %.0f hours"), P.RelocateEveryH) : TEXT("move only when ordered"));
+	const FString Summary = FString::Printf(TEXT("New battery orders: radiate %s, %s."), *Pct(P.Emission), P.bFightSilent ? TEXT("fight silent") : TEXT("fight with the radars"));
+	const int32 Fact = C->GiveOrder(Text, Summary);
+	if (Fact < 0)
+	{
+		return;
+	}
+	OpenTell(Fact);
+	// To the first of the people under you.
+	const std::vector<int> To = Net->Contacts(Net->Player());
+	const std::string Me = Net->Data().positions[static_cast<std::size_t>(Net->Player())].id;
+	for (int32 I = 0; I < static_cast<int32>(To.size()); ++I)
+	{
+		if (Net->Data().positions[static_cast<std::size_t>(To[static_cast<std::size_t>(I)])].superior == Me)
+		{
+			TellTo = I;
+			break;
+		}
+	}
+	Message = TEXT("Your order is written. Tell the vehicle commanders, each in turn.");
+}
+
+float ASimCampaignHUD::DrawTell(float X, float Y, float W)
+{
+	USimAirCampaignSubsystem* C = Campaign();
+	const simcore::command::InfoNet* Net = C != nullptr ? C->GetInfoNet() : nullptr;
+	if (Net == nullptr || C->GetCampaign() == nullptr || TellFact < 0 || static_cast<std::size_t>(TellFact) >= Net->Facts().size())
+	{
+		TellFact = -1;
+		return Y;
+	}
+	UFont* Small = GEngine->GetSmallFont();
+	UFont* Medium = GEngine->GetMediumFont();
+	const double Start = C->GetCampaign()->Data().theatre.start_hour;
+	const simcore::command::Fact& F = Net->Facts()[static_cast<std::size_t>(TellFact)];
+	const float Top = Y;
+	DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.1f), X - 6.0f, Y - 4.0f, W + 12.0f, 150.0f);
+	Y = DrawWrapped(TEXT("Tell: ") + CampaignToF(F.Told()), X, Y, W, Small, CPaper) + 6.0f;
+	const std::vector<int> To = Net->Contacts(Net->Player());
+	if (To.empty())
+	{
+		DrawWrapped(TEXT("You have nobody to tell. (Esc)"), X, Y, W, Small, CDim);
+		return Top + 154.0f;
+	}
+	TellTo = WrapIndex(TellTo, static_cast<int32>(To.size()));
+	const int Who = To[static_cast<std::size_t>(TellTo)];
+	auto Arrows = [&](float Ay, const TCHAR* Id)
+	{
+		DrawText(TEXT("<"), CAmber, X, Ay - 3.0f, Medium);
+		DrawText(TEXT(">"), CAmber, X + W - 14.0f, Ay - 3.0f, Medium);
+		PendingClicks.Add({FBox2D(FVector2D(X - 4.0f, Ay - 4.0f), FVector2D(X + 18.0f, Ay + 18.0f)), FString::Printf(TEXT("%s:-1"), Id)});
+		PendingClicks.Add({FBox2D(FVector2D(X + W - 18.0f, Ay - 4.0f), FVector2D(X + W + 4.0f, Ay + 18.0f)), FString::Printf(TEXT("%s:1"), Id)});
+	};
+	// Whom; and if you have told him already, when and how (your own memory of it).
+	FString Whom = TEXT("To: ") + CampaignToF(Net->Data().positions[static_cast<std::size_t>(Who)].Label());
+	for (const simcore::command::Telling& T : Net->Tellings())
+	{
+		if (T.fact == TellFact && T.to == Who)
+		{
+			Whom += FString::Printf(TEXT("  (you told him %s)"), *CampaignToF(simcore::command::FormatClock(T.h, Start)));
+		}
+	}
+	Arrows(Y, TEXT("tellto"));
+	DrawText(Whom, CPaper, X + 24.0f, Y, Small);
+	Y += 24.0f;
+	// By what, when he has it, and what it costs.
+	const std::vector<simcore::command::TellOption> By = Net->TellOptions(Net->Player(), Who, TellFact, Net->Now());
+	if (!By.empty())
+	{
+		TellBy = WrapIndex(TellBy, static_cast<int32>(By.size()));
+		const simcore::command::TellOption& O = By[static_cast<std::size_t>(TellBy)];
+		FString Cost;
+		if (O.arrive_h >= 0.0)
+		{
+			Cost = FString::Printf(TEXT("he has it at %s (in %.0f min)"), *CampaignToF(simcore::command::FormatClock(O.arrive_h, Start)),
+				(O.arrive_h - Net->Now()) * 60.0);
+			Cost += O.paper ? TEXT(", the paper with it") : TEXT("");
+			Cost += O.intercept >= 1.0 ? TEXT("; the enemy's intercept service hears every word")
+				: O.intercept > 0.0 ? *FString::Printf(TEXT("; the enemy may listen (%.0f%%)"), O.intercept * 100.0) : TEXT("");
+			Cost += O.road ? TEXT("; on the road, he may not get through") : TEXT("");
+		}
+		else
+		{
+			Cost = TEXT("no: ") + CampaignToF(O.why_not);
+		}
+		Arrows(Y, TEXT("tellby"));
+		Y = DrawWrapped(FString::Printf(TEXT("By: %s: %s"), *CampaignToF(O.name), *Cost), X + 24.0f, Y, W - 48.0f, Small,
+			O.arrive_h >= 0.0 ? CPaper : CDim) + 8.0f;
+	}
+	Button(TEXT("Tell him (Enter)"), X, Y, 170.0f, 26.0f, true);
+	PendingClicks.Add({FBox2D(FVector2D(X, Y), FVector2D(X + 170.0f, Y + 26.0f)), TEXT("tell!")});
+	Button(TEXT("Close (Esc)"), X + 180.0f, Y, 130.0f, 26.0f, false);
+	PendingClicks.Add({FBox2D(FVector2D(X + 180.0f, Y), FVector2D(X + 310.0f, Y + 26.0f)), TEXT("tellx")});
+	return FMath::Max(Y + 34.0f, Top + 154.0f);
 }
 
 void ASimCampaignHUD::HandleInput()
@@ -168,7 +338,24 @@ void ASimCampaignHUD::HandleInput()
 		return;
 	}
 	auto Pressed = [&](const FKey& K) { return Pc->WasInputKeyJustPressed(K); };
-	if (Pressed(EKeys::Q) || Pressed(EKeys::Escape))
+	// The tell box has the arrows, Enter and Esc while it is open.
+	const bool bTelling = TellFact >= 0 && C != nullptr && C->HasCampaign();
+	if (bTelling)
+	{
+		if (Pressed(EKeys::Escape))
+		{
+			TellFact = -1;
+			return;
+		}
+		TellTo += (Pressed(EKeys::Right) ? 1 : 0) - (Pressed(EKeys::Left) ? 1 : 0);
+		TellBy += (Pressed(EKeys::Down) ? 1 : 0) - (Pressed(EKeys::Up) ? 1 : 0);
+		if (Pressed(EKeys::Enter))
+		{
+			Tell();
+			return;
+		}
+	}
+	if (Pressed(EKeys::Q) || (!bTelling && Pressed(EKeys::Escape)))
 	{
 		UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, TEXT("SimMenu"));
 		return;
@@ -191,8 +378,12 @@ void ASimCampaignHUD::HandleInput()
 			Scroll = 0;
 		}
 	}
-	if (Panel == EPanel::Posture)
+	if (!bTelling && Panel == EPanel::Posture)
 	{
+		if (Pressed(EKeys::O))
+		{
+			OrderPosture();
+		}
 		if (Pressed(EKeys::Down))
 		{
 			PostureRow = (PostureRow + 1) % NumPostureRows;
@@ -210,7 +401,7 @@ void ASimCampaignHUD::HandleInput()
 			ChangePosture(PostureRow, -1);
 		}
 	}
-	else
+	else if (!bTelling)
 	{
 		if (Pressed(EKeys::Down) || Pressed(EKeys::PageDown) || Pressed(EKeys::MouseScrollDown))
 		{
@@ -233,7 +424,7 @@ void ASimCampaignHUD::HandleInput()
 	{
 		Advance();
 	}
-	if (Pressed(EKeys::Enter))
+	if (!bTelling && Pressed(EKeys::Enter))
 	{
 		Fight();
 		return;
@@ -253,7 +444,7 @@ void ASimCampaignHUD::HandleInput()
 		FString Why;
 		if (C->RelocateBattery(MarkKm, Why))
 		{
-			Message = TEXT("The battery has moved to the marked position.");
+			Message = MarkMarchH > 0.0 ? TEXT("The battery is on the march to the marked position.") : TEXT("The battery has moved to the marked position.");
 			bHasMark = false;
 		}
 		else
@@ -319,6 +510,30 @@ void ASimCampaignHUD::HandleInput()
 			{
 				UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, TEXT("SimMenu"));
 			}
+			else if (Id.StartsWith(TEXT("tell:")))
+			{
+				OpenTell(FCString::Atoi(*Id.Mid(5)));
+			}
+			else if (Id.StartsWith(TEXT("tellto:")))
+			{
+				TellTo += FCString::Atoi(*Id.Mid(7));
+			}
+			else if (Id.StartsWith(TEXT("tellby:")))
+			{
+				TellBy += FCString::Atoi(*Id.Mid(7));
+			}
+			else if (Id == TEXT("tell!"))
+			{
+				Tell();
+			}
+			else if (Id == TEXT("tellx"))
+			{
+				TellFact = -1;
+			}
+			else if (Id == TEXT("order"))
+			{
+				OrderPosture();
+			}
 			else if (Id.StartsWith(TEXT("posture:")))
 			{
 				TArray<FString> Parts;
@@ -335,7 +550,11 @@ void ASimCampaignHUD::HandleInput()
 		{
 			MarkKm = ToTheatre(At) / 1000.0;
 			bHasMark = true;
-			Message = FString::Printf(TEXT("Marked %.0f km east, %.0f km north: M moves the battery there."), MarkKm.X, MarkKm.Y);
+			MarkMarchH = C->MarchHoursTo(MarkKm);
+			Message = MarkMarchH >= 0.0
+				? FString::Printf(TEXT("Marked %.0f km east, %.0f km north: M marches the battery there (%s by the roads)."), MarkKm.X,
+					  MarkKm.Y, *MarchText(MarkMarchH))
+				: FString::Printf(TEXT("Marked %.0f km east, %.0f km north: M moves the battery there."), MarkKm.X, MarkKm.Y);
 		}
 	}
 }
@@ -688,6 +907,14 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 	Circle(Bp, static_cast<float>(10000.0 * MapScale), FLinearColor(1.0f, 0.78f, 0.35f, 0.5f), 1.0f);
 	Diamond(Bp, 8.0f, B.function > 0.3 ? CAmber : CRed, true);
 	Label(TEXT("Battery 21"), CAmber, Bp.X - 24.0f, Bp.Y - 24.0f);
+	if (C->Marching())
+	{
+		// On the march (G9.5): where to, and when it arrives.
+		const FVector2D To = ToScreen(C->MarchTo().x, C->MarchTo().y);
+		MapLine(Bp, To, CAmber, 1.0f);
+		Diamond(To, 6.0f, CAmber, false);
+		Label(TEXT("on the march, there at ") + CampaignToF(FormatHour(C->MarchArriveH(), C->Data().theatre.start_hour)), CAmber, To.X + 9.0f, To.Y + 4.0f);
+	}
 	if (bHasMark)
 	{
 		const FVector2D M = ToScreen(MarkKm.X * 1000.0, MarkKm.Y * 1000.0);
@@ -697,7 +924,10 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		MapLine(Bp, M, Col, 1.0f);
 		DrawLine(M.X - 7.0f, M.Y, M.X + 7.0f, M.Y, Col, 2.0f);
 		DrawLine(M.X, M.Y - 7.0f, M.X, M.Y + 7.0f, Col, 2.0f);
-		Label(bOk ? FString(TEXT("M: move here")) : CampaignToF(Why), Col, M.X + 9.0f, M.Y + 4.0f);
+		const FString MoveHere = MarkMarchH >= 0.0
+			? TEXT("M: march here, ") + MarchText(MarkMarchH)
+			: FString(TEXT("M: move here"));
+		Label(bOk ? MoveHere : CampaignToF(Why), Col, M.X + 9.0f, M.Y + 4.0f);
 	}
 }
 
@@ -792,6 +1022,10 @@ float ASimCampaignHUD::DrawPanel(float X, float Y, float W, float H)
 		Tx += Tw + 22.0f;
 	}
 	Y += 34.0f;
+	if (TellFact >= 0)
+	{
+		Y = DrawTell(X, Y, W);
+	}
 
 	switch (Panel)
 	{
@@ -804,10 +1038,41 @@ float ASimCampaignHUD::DrawPanel(float X, float Y, float W, float H)
 				DrawWrapped(TEXT("No word reaches you: the chain of command's data did not load."), X, Y, W, Small, CDim);
 				break;
 			}
-			const std::vector<simcore::command::Delivery> Known = Net->KnownBy(Net->Player());
+			const std::vector<simcore::command::Delivery> Known = Net->KnownByPlayer();
 			if (Known.empty())
 			{
 				DrawWrapped(TEXT("Nothing has reached you yet."), X, Y, W, Small, CDim);
+			}
+			// The last briefing you sat in, as the one scene it was (roadmap P1): who held it, where, and what was told.
+			const std::vector<simcore::command::BriefingScene> Held = simcore::command::Briefings(*Net, Net->Player());
+			if (!Held.empty() && Scroll == 0)
+			{
+				const simcore::command::BriefingScene& B = Held.back();
+				const simcore::command::Place* At = Net->Data().FindPlace(B.place);
+				const FString Leader = B.leader >= 0 ? CampaignToF(Net->Data().positions[static_cast<std::size_t>(B.leader)].Label()) : FString();
+				Y = DrawWrapped(FString::Printf(TEXT("%s, %s, %s to %s%s"), *CampaignToF(B.name), At != nullptr ? *CampaignToF(At->name) : *CampaignToF(B.place),
+					*CampaignToF(simcore::airwar::FormatHour(B.start_h, Start)), *CampaignToF(simcore::airwar::FormatHour(B.end_h, Start)),
+					Leader.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(", held by %s"), *Leader)), X, Y, W, Small, CAmber, 2.0f, Bottom);
+				for (const simcore::command::Scene& S : B.items)
+				{
+					Y = DrawWrapped(FString::Printf(TEXT("%s: %s"), *CampaignToF(S.teller_label), *CampaignToF(S.words)), X + 16.0f, Y, W - 16.0f,
+						Small, CPaper, 2.0f, Bottom);
+				}
+				Y += 8.0f;
+			}
+			// The papers in your map case: what you can read again.
+			const std::vector<simcore::command::Paper> Case = simcore::command::MapCase(*Net, Net->Player());
+			if (!Case.empty() && Scroll == 0)
+			{
+				FString Titles;
+				for (int32 I = static_cast<int32>(Case.size()) - 1; I >= 0 && I >= static_cast<int32>(Case.size()) - 4; --I)
+				{
+					const simcore::command::Paper& P = Case[static_cast<std::size_t>(I)];
+					Titles += FString::Printf(TEXT("%s%s (%s)"), Titles.IsEmpty() ? TEXT("") : TEXT("; "), *CampaignToF(P.title),
+						*CampaignToF(simcore::airwar::FormatHour(P.received_h, Start)));
+				}
+				Y = DrawWrapped(FString::Printf(TEXT("In your map case, %d paper%s: %s"), static_cast<int32>(Case.size()), Case.size() == 1 ? TEXT("") : TEXT("s"),
+					*Titles), X, Y, W, Small, CDim, 2.0f, Bottom) + 8.0f;
 			}
 			int32 Skip = Scroll;
 			for (int32 I = static_cast<int32>(Known.size()) - 1; I >= 0 && Y < Bottom; --I)
@@ -818,7 +1083,10 @@ float ASimCampaignHUD::DrawPanel(float X, float Y, float W, float H)
 				}
 				const simcore::command::Delivery& D = Known[static_cast<std::size_t>(I)];
 				const simcore::command::Fact& F = Net->Facts()[static_cast<std::size_t>(D.fact)];
-				Y = DrawWrapped(CampaignToF(Net->Describe(D)), X, Y, W, Small, CDim, 2.0f, Bottom);
+				// "tell": pass it on (roadmap P2).
+				DrawText(TEXT("tell"), CAmber, X + W - 30.0f, Y, Small);
+				PendingClicks.Add({FBox2D(FVector2D(X + W - 36.0f, Y - 2.0f), FVector2D(X + W + 4.0f, Y + 16.0f)), FString::Printf(TEXT("tell:%d"), D.fact)});
+				Y = DrawWrapped(CampaignToF(Net->Describe(D)), X, Y, W - 44.0f, Small, CDim, 2.0f, Bottom);
 				FString Body = CampaignToF(D.full ? F.text : F.Told());
 				if (F.document && !D.full)
 				{
@@ -900,7 +1168,7 @@ float ASimCampaignHUD::DrawPanel(float X, float Y, float W, float H)
 			const FString Rows[NumPostureRows][2] = {
 				{TEXT("Radars radiate (share of each hour, between fights)"), Pct(P.Emission)},
 				{TEXT("EMCON discipline (off when ARMs come, short bursts)"), Pct(P.EmconDiscipline)},
-				{TEXT("Radio discipline (little voice traffic)"), Pct(P.RadioDiscipline)},
+				{TEXT("Radio traffic: what you and the crews said on the air (calls)"), C->TrafficFromPipeline() ? FString::Printf(TEXT("%d"), C->CallsOnAir()) : Pct(P.RadioDiscipline)},
 				{TEXT("Dummy radio traffic"), P.bDummyTraffic ? TEXT("on") : TEXT("off")},
 				{TEXT("Decoy emitters at the dummies"), P.bDecoyEmitters ? TEXT("on") : TEXT("off")},
 				{TEXT("Camouflage nets"), P.bNets ? TEXT("on") : TEXT("off")},
@@ -926,8 +1194,12 @@ float ASimCampaignHUD::DrawPanel(float X, float Y, float W, float H)
 			Y += 8.0f;
 			Y = DrawWrapped(TEXT("Every second the radars radiate is a fix for the enemy's ELINT; every word on the net, a bearing for its "
 								 "intercept service. Moving makes its picture stale; dummies and decoy emitters give it something else to "
-								 "strike. Up/Down a row, Left/Right change it."),
-				X, Y, W, Small, CDim, 2.0f, Bottom);
+								 "strike. Up/Down a row, Left/Right change it. The vehicles go by what they have been told: give it as an "
+								 "order (O) and tell their commanders."),
+				X, Y, W, Small, CDim, 2.0f, Bottom) + 6.0f;
+			Button(TEXT("Give it as an order (O)"), X, Y, 230.0f, 26.0f, false);
+			PendingClicks.Add({FBox2D(FVector2D(X, Y), FVector2D(X + 230.0f, Y + 26.0f)), TEXT("order")});
+			Y += 32.0f;
 			break;
 		}
 		case EPanel::Raids:
@@ -998,7 +1270,7 @@ void ASimCampaignHUD::DrawHUD()
 	FLinearColor EstColour = CDim;
 	if (const simcore::command::InfoNet* Net = Sub->GetInfoNet())
 	{
-		const std::vector<simcore::command::Delivery> Known = Net->KnownBy(Net->Player());
+		const std::vector<simcore::command::Delivery> Known = Net->KnownByPlayer();
 		for (auto It = Known.rbegin(); It != Known.rend(); ++It)
 		{
 			const simcore::command::Fact& F = Net->Facts()[static_cast<std::size_t>(It->fact)];

@@ -79,3 +79,12 @@ def test_main_writes_a_page_and_a_picture(tmp_path):
         return
     assert map_view.main([str(dump), "--png", "--far", "--out", str(pic)]) == 0
     assert pic.stat().st_size > 1000
+
+
+def test_routes_are_drawn_over_the_country_each_stretch_in_its_kind():
+    routes = {"routes": [{"to": "rgt_cp", "time_s": 1740, "length_m": 21000,
+                          "points_km": [[0, 0], [5, 0], [5, 5], [6, 6]], "stretches": ["road", "swim", "off_road"]}]}
+    svg = map_view.country_svg(COUNTRY, None, routes=routes)
+    for k in ("road", "swim", "off_road"):
+        assert map_view.ROUTE_COLOURS[k] in svg
+    assert "rgt_cp 29 min" in svg and 'stroke-dasharray' in svg

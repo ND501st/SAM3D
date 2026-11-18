@@ -41,6 +41,44 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
 | building, church, tower, tent | walls and a 45-degree pitched roof (or flat), a tower and spire; cylinders for chimneys, cooling towers and tanks |
 | tree, mast, crates, bridge | trunk and crown; pole and crossbar; stacked boxes; a deck on piers |
 
+A search radar's antenna turns: a model's `antenna_rpm` (turns a minute) turns the part its archetype marks as the
+antenna (`Part::turns`: the dish, the array, the radar post's antenna) round the vertical through its centre. In Unreal
+it is a rotating movement on that part (`FSimBasicModels::Build`). The P-15 and P-19 turn in 6 s (`rusarmy_p15_p19`,
+`ru_wiki_p19`), the P-18 in 10 s (`ru_wiki_p18`); the P-14's 4 and the P-40's 6 turns a minute are estimates. The
+PRV-11 height finder and the fire-control radars do not turn.
+
+## Munitions
+
+Written 31 October 2026 (docs/fx/README.md section 3.2). `data/scenery/munitions.json` (62 munitions), loaded by
+`simcore/scenery/munitions.hpp` (`simcore::scenery::MunitionLibrary`), gives every munition a shape finer than the basic
+models' missile archetype, and the numbers the effects read: every weapon of `data/air_war/weapons.json` (bombs, cluster
+dispensers, the Snakeye, the Durandal and the FAB-500ShN on their retarders, guided and glide bombs, rockets, ATGMs,
+air-to-ground missiles; the aircraft's guns as rounds with no model), our 9M33M2 and 9M33M3 (the M2's wings fold in
+pairs; the tail's tracers for the TV sight), the neighbours' SAMs and MANPADS, the anti-radiation missiles and the
+cruise missiles, and the guns' rounds (23, 37, 57 and 130 mm).
+
+- **Shape**: a body of revolution (nose ogive, conical, hemisphere, blunt or flat; a cylinder whose diameter may step for
+  a booster; a boattail, cone or flat tail), fin sets as thin plates (count, span, chords, the root's leading edge,
+  sweep, roll), ring tails, paint bands, a retarder (blades, ballute, chute) and a dispenser's opening. Positions along
+  the body are fractions of its length. Colours: US bombs olive drab with a yellow band, US missiles white with yellow
+  and brown bands (MIL-STD-709C); the Soviet colours are estimates. Only one source gave fin chords (the V-600P's
+  wing): the rest are estimates, to be traced from photos.
+- **Effects**: the motor (boost and sustain seconds, its smoke dense to none, the sustainer's when it differs, the plume's
+  colour, a tracer for an optical sight), how long the trail lingers (`smoke_s`, a game value), the charge as a TNT
+  equivalent (on one basis for every bomb: a source's TNT equivalent, else the fill times its explosive's factor, see the
+  file's notes), and a round's calibre, muzzle velocity, rate, barrels, tracer burn and colour, self-destruct window and fuze.
+- **Names**: `MunitionLibrary::Resolve` takes a munition's id, a weapons.json id, an air defence system's id
+  (`osa` → 9M33M2, `zu23` → its 23 mm round), a basic model's id (`missile_9m33`, `missile_arm`, `kh22m`, `tlam_c`,
+  `agm86c`) or an alias (`9m33`, the EM library's ARMs).
+- **Meshes**: `BuildMesh(spec, lod)` gives positions, normals, linear colours and indices in the munition's frame (x
+  forward, y right, z up, metres, the origin at its middle): 24 sides at level 0, 12, 6, and at level 3 a box with no
+  fins. `BuildPart` gives the Snakeye's blades open and the 9M33M2's (or the Kh-22's ventral fin's) wings folded, both in
+  place of the mesh, and a ballute or chute behind the tail to draw with it.
+- **Checks**: `simcore/tests/test_munitions.cpp` resolves every weapon, system, model and ARM; builds every shape at
+  every level and checks it against its length, diameter and span; checks a cylinder, an ogive, a boattail and a booster
+  by hand, every round's ballistics, the parts, and that the loader refuses unknown keys, kinds, colours and fins inside
+  the body or past the tail.
+
 ## How the game uses them
 
 - **Aircraft**: a scenario target names its model (`"model": "su24"`; the air war's raids write each aircraft's type),
@@ -93,6 +131,57 @@ the ground under the middle, an aircraft's at the middle of its fuselage):
   **Found and fixed 23 October 2026:** the vehicle's view component (`USimViewComponent`) took the view back every frame,
   so since it came in these photographs (and the map's, `-SimMapShots`) showed its orbit view of the vehicle, not the
   photographer's camera; with a photographer on the command line it now leaves the camera alone.
+
+## The map's meshes (R6)
+
+`simcore/scenery/map_meshes.hpp` builds the map's dressing as triangle meshes (`TriMesh`, `scenery/trimesh.hpp`, shared
+with the munitions): a tree of each kind (`TreeMesh`: oak, poplar, pine, black locust; four LODs down to the crown
+alone), the mass of a wood seen from afar (`CanopyMassMesh`, four variants), a house (`HouseMesh`: walls 0.68 of its
+height under a gable or hipped roof, its ridge at the box's top, four variants of walls, roof and ridge), a barn, a
+block of flats with a band of windows a floor, an industrial hall under a sawtooth roof, and a bridge from a crossing's
+plain numbers (its two ends, the bed and the width: deck, parapets, piers at most 28 m apart). Buildings and masses are
+on the unit cube the map's boxes are drawn with today, so the same transform places either; a tree is one unit tall
+with a crown one unit across. Each is a set of closed convex solids, flat-shaded, deterministic (clients rebuild them).
+Colours are game values, placeholders until real assets.
+
+In Unreal, `FSimRuntimeMesh::Build` turns any `TriMesh` LOD list into a static mesh (the munitions' builder, moved);
+`FSimMapAssets::MeshFor(part, variant)` gives the register's real asset where one is on this machine, else the
+procedural mesh. The register of third-party art and its licence rules: [ASSETS.md](ASSETS.md).
+
+### The map's dressing (R6)
+
+`simcore/scenery/map_dressing.hpp`, with its rules in `data/scenery/map_dressing.json` (every value a game value with
+its confidence), says where the meshes go. Presentation only: nothing in the simulation reads it.
+
+* `BakeCover`: the land cover of the map proper and each detail area as 25 m cells: farmland in parcels (250-700 m
+  along the furrows, 80-250 m across, the furrows turning from one 3 km square to the next) each with its crop by
+  share, then the levelled sites (military ground), woods, marsh, buildings with a 15 m garden, military works, roads
+  and railways (at least a cell wide) and water. `CoverRaster::ColourAt` gives the ground's colour.
+* `PlaceTrees`: a wood's block inside a detail area planted whole (a tree every 7 m each way, jittered), elsewhere in
+  the map proper two rows along each side open to the fields (8 m apart) and a mass inside; the far ground's woods
+  masses only. Kinds by share (oak, pine, black locust, poplar; poplars within 60 m of a river). Each tree's base is
+  0.3 m into the ground; its top is the wood's top less up to 15 % of its height, and never above the ground plus
+  `MapData::ObstacleHeight` there, so no drawn tree stands above what blocks the sim's sight lines. None within 4 m
+  of a road's, railway's or river's edge, none in the water, none outside the map proper and the detail areas.
+  Kesmark: about 159 000 trees, 20 000 masses, built in about 0.4 s (`map_dump` prints the counts).
+* `BuildingVariant`, `FlatsFloors`, `BuildingPart`: a house's variant by a hash of its place, a block's storeys by its
+  height, the part key a box is drawn by (`house`, `flats`, `barn`, `industrial`).
+* Deterministic: a function of the map and the rules alone, in the layout's order, so every client builds the same.
+
+In Unreal `ASimMapActor` draws them: the ground's vertices in the map proper and the detail areas coloured from the
+cover; the trees one instanced component per kind (`bDrawTrees`, culled at `TreeCullDistanceM`, 8 km), the masses
+one per variant, neither with collision; houses, barns, flats and halls through `FSimMapAssets::MeshFor` on the
+boxes' own transforms; each crossing's `BridgeMesh` over its deck box, kept unseen and QueryOnly for the traces;
+roads with 1.5 m shoulders and rivers with 6 m banks; everything on the sim's ground points
+(`MapFrameLink::GroundPoint`). `-SimMapShots` adds a tree close up, a Kesmark street, a bridge's pier and the
+capital from 150 m. The ground tiles are R5's, unchanged, so `SAM3D.Map.GroundAgrees` and `DrawnGroundAt` still
+judge what is drawn.
+
+The haze near the ground is drawn as an exponential height fog on `ASimSkyWeatherActor`: of Koschmieder's extinction
+for the day's visibility (the atmosphere's aerosol, R7's sky), `HeightFogShare` (0.3, a game value) is the fog's and
+the rest stays the atmosphere's, so together they keep the day's visibility; its density thins upward over
+`HeightFogScaleHeightKm` (1.2 km, as the aerosol). The engine's density units are taken as remembered from its source
+(per 1000 cm) and are to be confirmed with `-SimMapShots`.
 
 ## On the map
 

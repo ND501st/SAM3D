@@ -1,0 +1,476 @@
+{
+ "library_id": "air_radios_1985",
+ "display_name": "The air battle's radio sets and our intercept receivers, 1985",
+ "status": "B9, 17 November 2026. The radios the flights, controllers and request nets talk on, and the receivers of our intercept posts (docs/air_battle/09_COMMS_AND_INTERCEPT.md section 2.1 and 4.2). Bands are sourced; powers and sensitivities of the class are labelled estimates (no tier 1-4 source read gives an air set's power for NATO or a 1985 Pact intercept receiver).",
+ "provenance": "per_value",
+ "notes": "Used by a scenario's \"air_radio\" block (simcore/air_radio_def.hpp). No HAVE QUICK II and no Compass Call in the 1985 theatre (docs/air_battle/09 section 1.3).",
+ "sources": [],
+ "radios": [
+  {
+   "id": "nato_air_uhf_am",
+   "name": "NATO aircraft UHF AM voice set (225-400 MHz)",
+   "freq_min_hz": {
+    "value": 225000000.0,
+    "source": "fh_radios (NATO air voice was AM in 225-400 MHz)",
+    "confidence": "medium"
+   },
+   "freq_max_hz": {
+    "value": 400000000.0,
+    "source": "fh_radios (NATO air voice was AM in 225-400 MHz)",
+    "confidence": "medium"
+   },
+   "power_w": {
+    "value": 10.0,
+    "source": "estimate (docs/air_battle/09 section 2.1: no tier 1-4 source read gives this)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 0.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "antenna_height_m": {
+    "value": 1.0,
+    "source": "game value: its platform's height above the ground (an aircraft's is its altitude, set by the platform)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -125.0,
+    "source": "estimate (textbook VHF/UHF AM receiver class, 10 dB SNR in 25 kHz)",
+    "confidence": "estimate"
+   },
+   "required_snr_db": {
+    "value": 10.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bandwidth_hz": {
+    "value": 25000.0,
+    "source": "fh_radios (25 kHz channel spacing of the air bands)",
+    "confidence": "medium"
+   },
+   "voice": true,
+   "message_s": {
+    "value": 8.0,
+    "source": "game value: the call's own length is set by its kind (air_war.json radio.call_*_s)",
+    "confidence": "estimate"
+   },
+   "operator_delay_s": {
+    "value": 0.5,
+    "source": "game value: a pilot keys at once",
+    "confidence": "estimate"
+   },
+   "tracks_per_message": {
+    "value": 1,
+    "source": "game value",
+    "confidence": "estimate"
+   },
+   "source": "fh_radios (band); power and sensitivity are estimates of the class",
+   "confidence": "medium",
+   "notes": "The band is documented; the 10 W is the figure of a set that is tier 5 only, recorded and not cited (docs/air_battle/09 section 2.1). HAVE QUICK and secure voice are per-unit flags, both 0 until a USAFE fielding date is found."
+  },
+  {
+   "id": "pact_air_r832m",
+   "name": "Warsaw Pact aircraft radio, R-832M class (100-150 and 220-400 MHz)",
+   "freq_min_hz": {
+    "value": 100000000.0,
+    "source": "valka_r832m (100-150 and 220-400 MHz)",
+    "confidence": "low"
+   },
+   "freq_max_hz": {
+    "value": 400000000.0,
+    "source": "valka_r832m (100-150 and 220-400 MHz)",
+    "confidence": "low"
+   },
+   "power_w": {
+    "value": 15.0,
+    "source": "estimate (docs/air_battle/09 section 2.1: no tier 1-4 source read gives this)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 0.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "antenna_height_m": {
+    "value": 1.0,
+    "source": "game value: its platform's height above the ground (an aircraft's is its altitude, set by the platform)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -125.0,
+    "source": "estimate (textbook VHF/UHF AM receiver class, 10 dB SNR in 25 kHz)",
+    "confidence": "estimate"
+   },
+   "required_snr_db": {
+    "value": 10.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bandwidth_hz": {
+    "value": 25000.0,
+    "source": "fh_radios (25 kHz channel spacing of the air bands)",
+    "confidence": "medium"
+   },
+   "voice": true,
+   "message_s": {
+    "value": 8.0,
+    "source": "game value: the call's own length is set by its kind (air_war.json radio.call_*_s)",
+    "confidence": "estimate"
+   },
+   "operator_delay_s": {
+    "value": 0.5,
+    "source": "game value: a pilot keys at once",
+    "confidence": "estimate"
+   },
+   "tracks_per_message": {
+    "value": 1,
+    "source": "game value",
+    "confidence": "estimate"
+   },
+   "source": "valka_r832m (band and 15 W)",
+   "confidence": "low",
+   "notes": "One definition spans both its bands; the nets are in the upper one."
+  },
+  {
+   "id": "neutral_air_vhf_am",
+   "name": "Neutral air arm's VHF AM set",
+   "freq_min_hz": {
+    "value": 118000000.0,
+    "source": "estimate (inference from the Austrian analogue, austrian_af_wiki; docs/air_battle/09 section 1.5)",
+    "confidence": "estimate"
+   },
+   "freq_max_hz": {
+    "value": 150000000.0,
+    "source": "estimate (inference from the Austrian analogue, austrian_af_wiki; docs/air_battle/09 section 1.5)",
+    "confidence": "estimate"
+   },
+   "power_w": {
+    "value": 10.0,
+    "source": "estimate (docs/air_battle/09 section 2.1: no tier 1-4 source read gives this)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 0.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "antenna_height_m": {
+    "value": 1.0,
+    "source": "game value: its platform's height above the ground (an aircraft's is its altitude, set by the platform)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -125.0,
+    "source": "estimate (textbook VHF/UHF AM receiver class, 10 dB SNR in 25 kHz)",
+    "confidence": "estimate"
+   },
+   "required_snr_db": {
+    "value": 10.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bandwidth_hz": {
+    "value": 25000.0,
+    "source": "fh_radios (25 kHz channel spacing of the air bands)",
+    "confidence": "medium"
+   },
+   "voice": true,
+   "message_s": {
+    "value": 8.0,
+    "source": "game value: the call's own length is set by its kind (air_war.json radio.call_*_s)",
+    "confidence": "estimate"
+   },
+   "operator_delay_s": {
+    "value": 0.5,
+    "source": "game value: a pilot keys at once",
+    "confidence": "estimate"
+   },
+   "tracks_per_message": {
+    "value": 1,
+    "source": "game value",
+    "confidence": "estimate"
+   },
+   "source": "estimate (nothing found on a small neutral's radio procedure, comms-24)",
+   "confidence": "estimate",
+   "notes": "Placeholder numbers."
+  },
+  {
+   "id": "rebel_air_vhf_am",
+   "name": "Rebels' civil or captured VHF AM set",
+   "freq_min_hz": {
+    "value": 118000000.0,
+    "source": "estimate (civil air band)",
+    "confidence": "estimate"
+   },
+   "freq_max_hz": {
+    "value": 137000000.0,
+    "source": "estimate (civil air band)",
+    "confidence": "estimate"
+   },
+   "power_w": {
+    "value": 5.0,
+    "source": "estimate (docs/air_battle/09 section 2.1: no tier 1-4 source read gives this)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 0.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "antenna_height_m": {
+    "value": 1.0,
+    "source": "game value: its platform's height above the ground (an aircraft's is its altitude, set by the platform)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -120.0,
+    "source": "estimate (textbook VHF/UHF AM receiver class, 10 dB SNR in 25 kHz)",
+    "confidence": "estimate"
+   },
+   "required_snr_db": {
+    "value": 10.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bandwidth_hz": {
+    "value": 25000.0,
+    "source": "fh_radios (25 kHz channel spacing of the air bands)",
+    "confidence": "medium"
+   },
+   "voice": true,
+   "message_s": {
+    "value": 8.0,
+    "source": "game value: the call's own length is set by its kind (air_war.json radio.call_*_s)",
+    "confidence": "estimate"
+   },
+   "operator_delay_s": {
+    "value": 0.5,
+    "source": "game value: a pilot keys at once",
+    "confidence": "estimate"
+   },
+   "tracks_per_message": {
+    "value": 1,
+    "source": "game value",
+    "confidence": "estimate"
+   },
+   "source": "estimate (a guerrilla army's few aircraft on civil or captured sets, inference)",
+   "confidence": "estimate",
+   "notes": "Placeholder numbers."
+  },
+  {
+   "id": "air_ground_uhf_am",
+   "name": "Ground controller's UHF AM set (GCI, CRC, FAC)",
+   "freq_min_hz": {
+    "value": 225000000.0,
+    "source": "fh_radios; fm_100_2_1_1984 p. 15-3 (UHF for strike control)",
+    "confidence": "medium"
+   },
+   "freq_max_hz": {
+    "value": 400000000.0,
+    "source": "fh_radios; fm_100_2_1_1984 p. 15-3 (UHF for strike control)",
+    "confidence": "medium"
+   },
+   "power_w": {
+    "value": 50.0,
+    "source": "estimate (docs/air_battle/09 section 2.1: no tier 1-4 source read gives this)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 2.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "antenna_height_m": {
+    "value": 15.0,
+    "source": "game value: its platform's height above the ground (an aircraft's is its altitude, set by the platform)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -125.0,
+    "source": "estimate (textbook VHF/UHF AM receiver class, 10 dB SNR in 25 kHz)",
+    "confidence": "estimate"
+   },
+   "required_snr_db": {
+    "value": 10.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bandwidth_hz": {
+    "value": 25000.0,
+    "source": "fh_radios (25 kHz channel spacing of the air bands)",
+    "confidence": "medium"
+   },
+   "voice": true,
+   "message_s": {
+    "value": 8.0,
+    "source": "game value: the call's own length is set by its kind (air_war.json radio.call_*_s)",
+    "confidence": "estimate"
+   },
+   "operator_delay_s": {
+    "value": 0.5,
+    "source": "game value: a pilot keys at once",
+    "confidence": "estimate"
+   },
+   "tracks_per_message": {
+    "value": 1,
+    "source": "game value",
+    "confidence": "estimate"
+   },
+   "source": "fh_radios (band); power and the 15 m mast are estimates",
+   "confidence": "low",
+   "notes": "A mast of 15 m gives a horizon of about 39 km (docs/air_battle/09 section 4.2)."
+  },
+  {
+   "id": "air_hf_request",
+   "name": "HF request net (TACP to ASOC)",
+   "freq_min_hz": {
+    "value": 2000000.0,
+    "source": "fm_100_2_1_1984 p. 15-3 (HF for immediate air requests)",
+    "confidence": "medium"
+   },
+   "freq_max_hz": {
+    "value": 30000000.0,
+    "source": "fm_100_2_1_1984 p. 15-3 (HF for immediate air requests)",
+    "confidence": "medium"
+   },
+   "power_w": {
+    "value": 100.0,
+    "source": "estimate (docs/air_battle/09 section 2.1: no tier 1-4 source read gives this)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 0.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "antenna_height_m": {
+    "value": 10.0,
+    "source": "game value: its platform's height above the ground (an aircraft's is its altitude, set by the platform)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -125.0,
+    "source": "estimate (textbook VHF/UHF AM receiver class, 10 dB SNR in 25 kHz)",
+    "confidence": "estimate"
+   },
+   "required_snr_db": {
+    "value": 10.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bandwidth_hz": {
+    "value": 3000.0,
+    "source": "fh_radios (25 kHz channel spacing of the air bands)",
+    "confidence": "medium"
+   },
+   "voice": true,
+   "message_s": {
+    "value": 8.0,
+    "source": "game value: the call's own length is set by its kind (air_war.json radio.call_*_s)",
+    "confidence": "estimate"
+   },
+   "operator_delay_s": {
+    "value": 1.0,
+    "source": "game value: a pilot keys at once",
+    "confidence": "estimate"
+   },
+   "tracks_per_message": {
+    "value": 1,
+    "source": "game value",
+    "confidence": "estimate"
+   },
+   "source": "fm_100_2_1_1984 p. 15-3 (band); power an estimate",
+   "confidence": "low",
+   "notes": "Sky wave: heard by the HF intercept far past any horizon (em/comms_intercept.hpp)."
+  }
+ ],
+ "esm": [
+  {
+   "id": "air_intercept_vhf_uhf",
+   "name": "Intercept and DF receiver, VHF and UHF air bands (100-400 MHz)",
+   "kind": "comms_intercept",
+   "freq_min_hz": {
+    "value": 100000000.0,
+    "source": "estimate (covers the air bands of fh_radios and valka_r832m)",
+    "confidence": "estimate"
+   },
+   "freq_max_hz": {
+    "value": 400000000.0,
+    "source": "estimate (covers the air bands of fh_radios and valka_r832m)",
+    "confidence": "estimate"
+   },
+   "sensitivity_dbw": {
+    "value": -140.0,
+    "source": "estimate (thermal noise in 25 kHz about -160 dBW; a 10 dB noise figure and 10 dB of SNR for a readable call)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 6.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bearing_sigma_deg": {
+    "value": 3.5,
+    "source": "fm_100_2_1_1984 p. 15-2 (VHF DF usually within 3.5 degrees); lawrence_1982",
+    "confidence": "medium"
+   },
+   "line_interval_s": {
+    "value": 2.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "contact_timeout_s": {
+    "value": 30.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "source": "fm_100_2_1_1984 p. 15-2 (bearing accuracy); sensitivity an estimate",
+   "confidence": "low",
+   "notes": "The East German regiment's roughly 600 receivers over 14 kHz-40 GHz (bischoff_fufutakl) are an upper bound of 1989-90, not a 1985 value."
+  },
+  {
+   "id": "air_intercept_hf",
+   "name": "Intercept and DF receiver, HF (2-30 MHz)",
+   "kind": "comms_intercept",
+   "freq_min_hz": {
+    "value": 2000000.0,
+    "source": "fm_100_2_1_1984 p. 15-3 (HF request nets)",
+    "confidence": "medium"
+   },
+   "freq_max_hz": {
+    "value": 30000000.0,
+    "source": "fm_100_2_1_1984 p. 15-3 (HF request nets)",
+    "confidence": "medium"
+   },
+   "sensitivity_dbw": {
+    "value": -135.0,
+    "source": "estimate (thermal noise in 25 kHz about -160 dBW; a 10 dB noise figure and 10 dB of SNR for a readable call)",
+    "confidence": "estimate"
+   },
+   "antenna_gain_db": {
+    "value": 0.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "bearing_sigma_deg": {
+    "value": 5.0,
+    "source": "fm_100_2_1_1984 p. 15-2 (VHF DF usually within 3.5 degrees); lawrence_1982",
+    "confidence": "medium"
+   },
+   "line_interval_s": {
+    "value": 2.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "contact_timeout_s": {
+    "value": 30.0,
+    "source": "estimate",
+    "confidence": "estimate"
+   },
+   "source": "estimate",
+   "confidence": "low",
+   "notes": "HF bearings are coarser (game value)."
+  }
+ ]
+}

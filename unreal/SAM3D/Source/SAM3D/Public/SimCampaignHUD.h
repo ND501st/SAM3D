@@ -16,9 +16,11 @@ class USimAirCampaignSubsystem;
  * When the campaign ends, the enemy's whole staff is revealed (AirCampaign::EnemyMind).
  *
  * Keys: Space advance to the next raid; Enter fight the waiting raid; L let it pass; [ ] the seat; Tab or 1-4 the panels;
- * on the Posture panel Up/Down a row, Left/Right change it; a click on the map marks a new position, M moves the battery
- * there; E ends the campaign; Q or Esc back to the missions menu. Mouse: the panels' tabs, the buttons, the posture's
- * arrows, the wheel scrolls the summary.
+ * on the Posture panel Up/Down a row, Left/Right change it, O gives it as an order; a click on the map marks a new
+ * position, M moves the battery there; E ends the campaign; Q or Esc back to the missions menu. Mouse: the panels' tabs,
+ * the buttons, the posture's arrows, the wheel scrolls the summary, "tell" beside a piece of news opens the tell box.
+ * The tell box (roadmap P2): Left/Right whom, Up/Down by what means (when he has it, what it costs), Enter tell him, Esc
+ * close it.
  *
  * Scripted check: -SimCampaignTest=<folder> photographs the screen (campaign.png), advances to a raid and photographs it
  * (campaign_raid.png), then quits.
@@ -49,6 +51,12 @@ private:
 	void Advance();
 	void Fight();
 	void ChangePosture(int32 Row, int32 Step);
+	/** The tell box (roadmap P2): what you know, passed to someone by a means you choose. */
+	void OpenTell(int32 Fact);
+	void Tell();
+	float DrawTell(float X, float Y, float W);
+	/** The posture as the battery commander's order, opened in the tell box. */
+	void OrderPosture();
 	void RunScriptedCheck(float DeltaSeconds);
 
 	float DrawWrapped(const FString& Text, float X, float Y, float Width, UFont* Font, const FLinearColor& Colour, float LineGap = 2.0f,
@@ -68,8 +76,14 @@ private:
 	int32 PostureRow = 0;
 	int32 SeatIndex = 0;
 	int32 Scroll = 0;
+	/** The tell box: the fact (-1 closed), whom (in the player's contacts) and by what (in the means). */
+	int32 TellFact = -1;
+	int32 TellTo = 0;
+	int32 TellBy = 0;
 	bool bHasMark = false;
 	FVector2D MarkKm = FVector2D::ZeroVector;
+	/** The battery's march there on the roads, in hours (< 0: none found): G9.5. */
+	double MarkMarchH = -1.0;
 	FString Message;
 
 	/** This frame's clickable areas (filled while drawing, read by the next input). */

@@ -1,0 +1,212 @@
+{
+  "sounds_id": "sam3d_fx_sounds",
+  "status": "first pass",
+  "source": "sam3d game values; levels are estimates (docs/fx/README.md section 4.2), each named below",
+  "notes": "How the weapons and the aircraft sound (USimFxAudioSubsystem, unreal/SAM3D/Source/SAM3D/Private/SimFxAudio.cpp). Every sample is an asset /Game/SAM3D/FX/Sounds/<sample>.<sample>, made by tools/ue_make_fx_assets.py from art/fx/sounds/<sample>.wav (tools/fx_sounds.py, its SOUNDS). A level is the sound pressure level 1 m from the source (dB re 20 uPa) before spreading, the air's absorption and the ground; an explosion's comes from simcore's fx::PeakSplDb by its charge instead. The game hears each source where it was when the sound now arriving left it (simcore/fx/acoustics.hpp) and plays the loudest through a loudness window.",
+
+  "mix": {
+    "floor_db": 105, "depth_db": 60, "slope": 0.7, "attack_db_per_s": 400, "release_db_per_s": 12,
+    "hysteresis_db": 3, "loop_fade_s": 0.075, "one_shot_fade_s": 0.05,
+    "one_shot_hold_s": 0.25, "one_shot_decay_db_per_s": 20,
+    "peak_to_level_db": -10,
+    "source": "sam3d game value: the loudness window as in Frostbite's HDR audio; peak_to_level_db sets a blast's peak level against an engine's running level (an estimate)"
+  },
+
+  "propagation": {
+    "near_m": 600, "far_m": 2500,
+    "max_range_m": 40000, "one_shot_range_m": 60000,
+    "absorption_budget_db": 6,
+    "voice_distance_m": 500,
+    "listener_max_mps": 400, "listener_jump_m": 2000, "listener_smooth_s": 0.25,
+    "track_sample_s": 0.1,
+    "ground_listener_agl_m": 100,
+    "source": "sam3d game value: the near and far samples crossfade between near_m and far_m (as Arma 3's distance sets); a voice is placed voice_distance_m along the line to where the sound left (the engine only pans it)"
+  },
+
+  "enclosure": {
+    "cutoff_hz": 700, "loss_db": 14, "near_m": 30, "near_loss_db": 6,
+    "source": "estimate (sam3d): the Osa's closed cabin muffles what is outside to a dull thud; what stands beside the vehicle comes through the hull less muffled"
+  },
+
+  "profiles": {
+    "turbojet_fighter": {
+      "layers": [
+        { "sample": "S_FX_Jet_Roar_Turbojet", "level_db_1m": 162, "directivity": "roar", "pitch": 1.0, "band": "near" },
+        { "sample": "S_FX_Rec_Jet_Far", "level_db_1m": 160.8, "directivity": "roar", "pitch": 1.0, "band": "far" },
+        { "sample": "S_FX_Jet_Whine_Turbojet", "level_db_1m": 146, "directivity": "whine", "pitch": 1.0 },
+        { "sample": "S_FX_Afterburner", "level_db_1m": 166, "directivity": "roar", "pitch": 1.0, "when": "supersonic" }
+      ],
+      "source": "estimate: an F-35 at 305 m at military power 115 dB is about 165 dB at 1 m aft, an F-16 about 160 dB (FX research C6); a turbojet taken 2 dB louder, its whine 16 dB under the roar (sam3d game value). Far off (propagation near_m to far_m) the recorded military jet (NPS) takes over the synthesised roar at the roar's 162 dB plus its match (recordings), so the crossfade holds the loudness"
+    },
+    "turbofan_fighter": {
+      "layers": [
+        { "sample": "S_FX_Jet_Roar_Turbofan", "level_db_1m": 160, "directivity": "roar", "pitch": 1.0, "band": "near" },
+        { "sample": "S_FX_Rec_Jet_Far", "level_db_1m": 160.6, "directivity": "roar", "pitch": 1.0, "band": "far" },
+        { "sample": "S_FX_Jet_Whine_Turbofan", "level_db_1m": 148, "directivity": "whine", "pitch": 1.0 },
+        { "sample": "S_FX_Afterburner", "level_db_1m": 165, "directivity": "roar", "pitch": 1.0, "when": "supersonic" }
+      ],
+      "source": "estimate: an F-16-class fighter about 160 dB at 1 m aft (FX research C6); the fan's whine louder than a turbojet's (sam3d game value). Far off the recorded military jet (NPS) at the roar's 160 dB plus its match (recordings)"
+    },
+    "heavy_jet": {
+      "layers": [
+        { "sample": "S_FX_Rec_Jet_Heavy", "level_db_1m": 156.2, "directivity": "roar", "pitch": 1.0 },
+        { "sample": "S_FX_Jet_Whine_Turbofan", "level_db_1m": 150, "directivity": "whine", "pitch": 0.8, "band": "near" }
+      ],
+      "source": "estimate (sam3d): four large engines, a slower and lower roar than a fighter's at about its level (158 dB): the recorded 747SP (NASA SOFIA) at 158 dB plus its match (recordings); the synthesised fan whine near only (the recording has its own)"
+    },
+    "turboprop": {
+      "layers": [
+        { "sample": "S_FX_Rec_Prop_Turboprop", "level_db_1m": 148.3, "directivity": "omni", "pitch": 1.0 },
+        { "sample": "S_FX_Jet_Whine_Turbofan", "level_db_1m": 134, "directivity": "whine", "pitch": 1.35 }
+      ],
+      "source": "estimate (sam3d): the propellers' blade-pass drone (148 dB) and the turbines' whine; the drone is the recorded An-24 (its AI-24s are the An-26's family) at 148 dB plus its match (recordings)"
+    },
+    "helicopter": {
+      "layers": [
+        { "sample": "S_FX_Rec_Rotor_Near", "level_db_1m": 145.5, "directivity": "omni", "pitch": 1.4, "band": "near" },
+        { "sample": "S_FX_Rec_Rotor_Far", "level_db_1m": 140.9, "directivity": "omni", "pitch": 1.0, "band": "far" },
+        { "sample": "S_FX_Jet_Whine_Turbojet", "level_db_1m": 130, "directivity": "omni", "pitch": 1.25 }
+      ],
+      "source": "estimate (sam3d): the main rotor's slap (146 dB) and the turboshafts' whine. The slap is the recorded Chinook played 1.4 times faster (its 10.4 blade slaps a second to 14.6: an AH-1's are 10.8, a Mi-8's 16, a Mi-24's 20), far off the recorded helicopter over a lake; each at 146 dB plus its match (recordings)"
+    },
+    "piston": {
+      "layers": [
+        { "sample": "S_FX_Prop_Turboprop", "level_db_1m": 136, "directivity": "omni", "pitch": 0.62 }
+      ],
+      "source": "estimate (sam3d): one radial engine and its propeller (An-2, a light trainer)"
+    },
+    "cruise_turbojet": {
+      "layers": [
+        { "sample": "S_FX_Jet_Roar_Turbojet", "level_db_1m": 142, "directivity": "roar", "pitch": 1.6 },
+        { "sample": "S_FX_Jet_Whine_Turbojet", "level_db_1m": 136, "directivity": "whine", "pitch": 1.5 }
+      ],
+      "source": "estimate (sam3d): a small turbojet or turbofan (a drone, a Tomahawk's F107) far quieter than a fighter's and higher"
+    },
+    "rocket_small": {
+      "layers": [
+        { "sample": "S_FX_Rocket_Motor_Small", "level_db_1m": 159, "directivity": "roar", "pitch": 1.0, "band": "near" },
+        { "sample": "S_FX_Rec_Rocket_Motor_Far", "level_db_1m": 157.5, "directivity": "roar", "pitch": 1.8, "band": "far" }
+      ],
+      "sustain_offset_db": -6,
+      "source": "estimate: a 20 kN motor with a 2200 m/s exhaust, Lp about 159 dB at 1 m by Eldred's rule (FX research C6); the sustainer's lower thrust 6 dB down (sam3d game value). Far off the recorded Atlas V heard from afar (NASA) played 1.8 times faster (a small motor's roar peaks higher), at 159 dB plus its match (recordings)"
+    },
+    "rocket_large": {
+      "layers": [
+        { "sample": "S_FX_Rec_Rocket_Motor_Large", "level_db_1m": 169, "directivity": "roar", "pitch": 1.3, "band": "near" },
+        { "sample": "S_FX_Rec_Rocket_Motor_Far_Large", "level_db_1m": 162.8, "directivity": "roar", "pitch": 1.2, "band": "far" }
+      ],
+      "sustain_offset_db": -4,
+      "source": "estimate (sam3d): a large liquid or solid motor (the Kh-22's) by Eldred's rule scaled up from the 20 kN case (168 dB). The recorded SLS test fire (NASA) near and the Shuttle's launch heard from afar (NASA) far, played a little faster (smaller motors than those), each at 168 dB plus its match (recordings)"
+    },
+    "fire": {
+      "layers": [
+        { "sample": "S_FX_Fire_Loop", "level_db_1m": 118, "directivity": "omni", "pitch": 1.0 }
+      ],
+      "source": "estimate (sam3d): a burning wreck's roar and crackle"
+    }
+  },
+
+  "models": {
+    "mig21": "turbojet_fighter", "mig21mf": "turbojet_fighter", "mig21bis": "turbojet_fighter", "mig23ml": "turbojet_fighter", "mig23ml_wp": "turbojet_fighter", "mig23mld": "turbojet_fighter", "mig25rb": "turbojet_fighter",
+    "mig25bm": "turbojet_fighter", "mig27": "turbojet_fighter", "su17m3": "turbojet_fighter", "su22m3": "turbojet_fighter",
+    "su24": "turbojet_fighter", "su25": "turbojet_fighter", "yak28pp": "turbojet_fighter", "f4e": "turbojet_fighter",
+    "f4g": "turbojet_fighter", "rf4c": "turbojet_fighter", "draken_gun": "turbojet_fighter", "galeb": "turbojet_fighter",
+    "generic_fighter": "turbojet_fighter", "generic_bomber": "turbojet_fighter",
+    "f15c": "turbofan_fighter", "f16a": "turbofan_fighter", "f111f": "turbofan_fighter", "ef111a": "turbofan_fighter",
+    "tornado_ids": "turbofan_fighter", "a10a": "turbofan_fighter", "l39": "turbofan_fighter", "saab105": "turbofan_fighter",
+    "e3a": "heavy_jet", "kc135": "heavy_jet", "rc135": "heavy_jet", "a50": "heavy_jet",
+    "il20": "turboprop", "an26": "turboprop",
+    "ah1s": "helicopter", "mi24": "helicopter", "mi24d": "helicopter", "mi8": "helicopter", "mi8_doorgun": "helicopter",
+    "mi2": "helicopter", "ab212": "helicopter", "alouette3": "helicopter", "generic_helicopter": "helicopter",
+    "an2": "piston", "an2_bomber": "piston", "utva75": "piston", "generic_light": "piston",
+    "bqm74": "cruise_turbojet", "generic_drone": "cruise_turbojet", "tlam_c": "cruise_turbojet", "agm86c": "cruise_turbojet",
+    "kh22m": "rocket_large",
+    "missile_9m33": "rocket_small", "missile_arm": "rocket_small",
+    "source": "sam3d game value: each basic model's engines (data/scenery/basic_models.json): MiG-21/23/25/27, Su-17/22/24/25 and F-4 turbojets; F-15, F-16, F-111, Tornado and A-10 turbofans; the Kh-22 a liquid rocket"
+  },
+
+  "archetypes": {
+    "jet": "turbojet_fighter", "prop": "piston", "helicopter": "helicopter", "drone": "cruise_turbojet", "missile": "rocket_small",
+    "heavy_jet_length_m": 35, "heavy_profile": "heavy_jet",
+    "source": "sam3d game value: a model with no entry of its own sounds as its archetype; a jet longer than heavy_jet_length_m as a heavy jet"
+  },
+
+  "missiles": {
+    "profile": "rocket_small", "boost_s": 3.0, "sustain_s": 12.0,
+    "large_profile": "rocket_large", "large_from_length_m": 7.0, "flyer_mps": 600,
+    "source": "sam3d game value: a missile whose munition has no motor data burns this long; a site's missile (no entity) longer than large_from_length_m (the S-75's, the S-200's) sounds as a large rocket; one with no flight time given flies at flyer_mps to its aim"
+  },
+
+  "events": {
+    "launch": { "sample": "S_FX_Missile_Launch", "level_db_1m": 156, "pitch": 1.0 },
+    "arm_launch": { "sample": "S_FX_Missile_Launch", "level_db_1m": 150, "pitch": 1.1 },
+    "rocket_launch": { "sample": "S_FX_Missile_Launch", "level_db_1m": 146, "pitch": 1.45 },
+    "bomb_rush": { "sample": "S_FX_Bomb_Rush", "level_db_1m": 132, "pitch": 1.0 },
+    "debris": { "sample": "S_FX_Debris_Rain", "level_db_1m": 122, "pitch": 1.0 },
+    "cluster": { "sample": "S_FX_Cluster_Ripple", "level_db_1m": 172, "pitch": 1.0 },
+    "crack": { "sample": "S_FX_Bullet_Crack", "level_db_1m": 150, "pitch": 1.0 },
+    "fireball": { "sample": "S_FX_Fireball_Roar", "level_db_1m": 150, "pitch": 1.0 },
+    "rush_lead_s": 2.0, "rush_range_m": 1000, "debris_range_m": 600,
+    "stick_spread_m": 15,
+    "kill_blast_kg": 40, "warhead_default_kg": 15, "sam_default_kg": 30, "arm_default_kg": 25, "cruise_default_kg": 450,
+    "charge_share_of_mass": 0.42, "gun_impact_kg": 0.05, "gun_impact_bursts": 6,
+    "air_burst_agl_m": 10, "crack_range_m": 40, "wreck_ground_fire_s": 60,
+    "sd_pops_per_burst": 3, "flak_default_kg": 0.2,
+    "source": "estimate (sam3d): launch levels by Eldred's rule as the motors (FX research C6) with the igniter's crack; a GP bomb's fill about 42 % of its mass (Mk 82: 89 kg of 227 kg, FX research C6); an aircraft's fuel fireball (the picture's, LOOK 6) a combustion roar, not a jet's: 150 dB at 1 m, under a fighter's roar and far under the blast before it; the rest game values. The rockets' and bombs' ripples (their intervals and how many) and the guns' bursts are the picture's, data/fx/effects.json's bombs and guns; a flak shell's charge and a gun's rate and muzzle speed the munition's (data/scenery/munitions.json), flak_default_kg when it has none"
+  },
+
+  "blasts": [
+    { "max_kg": 3, "near": "S_FX_Explosion_Ground_Small_Near", "far": "S_FX_Explosion_Small_Far", "air_near": "S_FX_Explosion_Small_Near", "air_far": "S_FX_Explosion_Small_Far", "ref_kg": 2 },
+    { "max_kg": 50, "near": "S_FX_Explosion_Ground_Small_Near", "far": "S_FX_Explosion_Small_Far", "air_near": "S_FX_Explosion_Small_Near", "air_far": "S_FX_Explosion_Small_Far", "ref_kg": 15,
+      "tail": "S_FX_Rec_Blast_Tail", "tail_delay_s": 0.8, "tail_db": -12 },
+    { "max_kg": 250, "near": "S_FX_Explosion_Medium_Near", "far": "S_FX_Explosion_Medium_Far", "air_near": "S_FX_Explosion_Medium_Near", "air_far": "S_FX_Explosion_Medium_Far", "ref_kg": 120,
+      "tail": "S_FX_Rec_Blast_Tail", "tail_delay_s": 1.0, "tail_db": -9 },
+    { "max_kg": 1000000, "near": "S_FX_Explosion_Large_Near", "far": "S_FX_Explosion_Large_Far", "air_near": "S_FX_Explosion_Large_Near", "air_far": "S_FX_Explosion_Large_Far", "ref_kg": 430,
+      "tail": "S_FX_Rec_Blast_Tail", "tail_delay_s": 1.2, "tail_db": -6 }
+  ],
+  "blast_pitch_exponent": 0.1,
+  "blast_source": "sam3d game value: the charge classes of tools/fx_sounds.py's explosions; within a class a bigger charge plays lower, (ref_kg / charge)^blast_pitch_exponent. Far off (the far half of the crossfade) a blast of 3 kg or more rolls on under the recorded NPS thunder's roll (tail, from tail_delay_s, tail_db under the blast): set so that 1-3 s in the roll sits 6-10 dB under the synthesised far blast and carries on after it has died (its RMS in 1 s windows against S_FX_Explosion_*_Far's, measured with tools/fx_sounds.py's read_wav)",
+
+  "recordings": {
+    "S_FX_Rec_Jet_Far": { "file": "S_FXR_Jet_Military_Far_NPS_Loop", "recorded_at_m": 2000,
+      "matches": [
+        { "profile": "turbojet_fighter", "stands_for": "S_FX_Jet_Roar_Turbojet", "stands_for_level_db_1m": 162, "at_m": 1550, "match_db": -1.2 },
+        { "profile": "turbofan_fighter", "stands_for": "S_FX_Jet_Roar_Turbofan", "stands_for_level_db_1m": 160, "at_m": 1550, "match_db": 0.6 }
+      ] },
+    "S_FX_Rec_Jet_Heavy": { "file": "S_FXR_Jet_Heavy_SOFIA_Takeoff_Loop", "recorded_at_m": 300,
+      "matches": [ { "profile": "heavy_jet", "stands_for": "S_FX_Jet_Roar_Turbofan", "stands_for_pitch": 0.72, "stands_for_level_db_1m": 158, "at_m": 3000, "match_db": -1.8 } ] },
+    "S_FX_Rec_Prop_Turboprop": { "file": "S_FXR_Prop_Turboprop_An24_Loop", "recorded_at_m": 300,
+      "matches": [ { "profile": "turboprop", "stands_for": "S_FX_Prop_Turboprop", "stands_for_level_db_1m": 148, "at_m": 1000, "match_db": 0.3 } ] },
+    "S_FX_Rec_Rotor_Near": { "file": "S_FXR_Rotor_Chinook_Loop", "recorded_at_m": 400,
+      "matches": [ { "profile": "helicopter", "stands_for": "S_FX_Rotor_Helicopter", "stands_for_level_db_1m": 146, "at_m": 600, "match_db": -0.5 } ] },
+    "S_FX_Rec_Rotor_Far": { "file": "S_FXR_Rotor_Heli_Far_Lake_Loop", "recorded_at_m": 1000,
+      "matches": [ { "profile": "helicopter", "stands_for": "S_FX_Rotor_Helicopter", "stands_for_level_db_1m": 146, "at_m": 1550, "match_db": -5.1 } ] },
+    "S_FX_Rec_Rocket_Motor_Far": { "file": "S_FXR_Rocket_AtlasV_Far_SDO_Loop", "recorded_at_m": 5000,
+      "matches": [ { "profile": "rocket_small", "stands_for": "S_FX_Rocket_Motor_Small", "stands_for_level_db_1m": 159, "at_m": 1550, "match_db": -1.5 } ] },
+    "S_FX_Rec_Rocket_Motor_Large": { "file": "S_FXR_Rocket_StaticFire_SLS_Loop", "recorded_at_m": 1000,
+      "matches": [ { "profile": "rocket_large", "stands_for": "S_FX_Rocket_Motor_Large", "stands_for_level_db_1m": 168, "at_m": 600, "match_db": 1.0 } ] },
+    "S_FX_Rec_Rocket_Motor_Far_Large": { "file": "S_FXR_Rocket_Shuttle_Far_STS131_Loop", "recorded_at_m": 5600,
+      "matches": [ { "profile": "rocket_large", "stands_for": "S_FX_Rocket_Motor_Large", "stands_for_level_db_1m": 168, "at_m": 1550, "match_db": -5.2 } ] },
+    "S_FX_Rec_Blast_Tail": { "file": "S_FXR_Thunder_Roll_NPS", "recorded_at_m": 3000 },
+    "source": "art/fx/recorded/PROVENANCE.md 2 (NASA, NPS: public domain; Wikimedia Commons: public domain or CC0), made into the bank by tools/fx_sounds.py. recorded_at_m: how far off each was made, an estimate (sam3d) from the source's description and its spectrum (what the air had already taken off it): the game dulls it only by the rest of the way (NASA's press sites are 5-6 km from the pads; the NPS jet 'far off' has nothing left above 1 kHz; the SLS test, SOFIA, the An-24 and the Chinook keep their highs, so were near). match_db: the recording's level against the synthesised sound it stands for, both heard as the game plays them at at_m (pitch, the air's low-pass there less the recording's own distance), so the recording's layer is stands_for_level_db_1m + match_db and the crossfade holds the sourced level; tools/fx_sounds.py --check recomputes each and fails past 1 dB"
+  },
+
+  "guns": {
+    "zsu234": { "loop": "S_FX_Gun_23mm_Quad", "tail": "S_FX_Gun_Burst_Tail", "level_db_1m": 158, "rate_hz": 58, "muzzle_mps": 970 },
+    "zu23": { "loop": "S_FX_Gun_23mm_Twin", "tail": "S_FX_Gun_Burst_Tail", "level_db_1m": 154, "rate_hz": 30, "muzzle_mps": 970 },
+    "aaa": { "loop": "S_FX_Gun_23mm_Twin", "tail": "S_FX_Gun_Burst_Tail", "level_db_1m": 154, "rate_hz": 30, "muzzle_mps": 970 },
+    "s60": { "single": "S_FX_Gun_57mm_Single", "level_db_1m": 168, "rate_hz": 2.0, "muzzle_mps": 1000 },
+    "ks30": { "single": "S_FX_Gun_57mm_Single", "level_db_1m": 176, "pitch": 0.6, "rate_hz": 0.5, "muzzle_mps": 900 },
+    "gau8": { "loop": "S_FX_Gun_30mm_Gatling", "level_db_1m": 160, "rate_hz": 65 },
+    "gsh30": { "loop": "S_FX_Gun_30mm_Gatling", "level_db_1m": 158, "rate_hz": 65 },
+    "door_guns": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 140, "pitch": 1.6, "rate_hz": 30 },
+    "default": { "loop": "S_FX_Gun_20mm_Gatling", "level_db_1m": 156, "rate_hz": 100 },
+    "source": "estimate (sam3d): no muzzle-blast data for 23 mm or larger was found (FX research C6); rates from the guns' cyclic rates (FX research G: 23 mm 850-1000 rounds a minute a barrel, S-60 70 practical, M61 6000, GAU-8 3900); muzzle speeds FX research G. A munition's own rate and muzzle speed (data/scenery/munitions.json) win where it has them; a pass fires in the picture's bursts (effects.json guns: SimFxLogic::GunBursts on the event's seq); an aircraft's gun for as long as the picture's gun run (its rounds at the rate, 0.5-4 s)"
+  },
+
+  "booms": {
+    "short": "S_FX_Sonic_Boom_Short", "long": "S_FX_Sonic_Boom_Long", "long_from_length_m": 30,
+    "shape_factor": 0.1, "default_length_m": 15, "level_offset_db": 0,
+    "source": "sam3d game value: Carlson's shape factor 0.1 for a fighter at cruise weight (simcore/fx/acoustics.hpp, NASA TP-1122 as there); a fighter's or a missile's boom short, a big aircraft's long"
+  }
+}

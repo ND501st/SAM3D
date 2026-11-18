@@ -156,6 +156,12 @@ private:
 	 *  that has found none is put as far from the scenario's ground as the others were. */
 	void GroundNeighbourSites(bool bFirstMinuteOver);
 	void ShowStatus(const USimWorldSubsystem* Sim) const;
+	/** A level without the sky actor (OsaPractice): its own atmosphere sun turned by the scenario's sun once a second when
+	 *  it is Movable (roadmap R7); never a second sun spawned. A fixed sun is logged and left. */
+	void FindLevelSun();
+	void UpdateLevelSun();
+	TWeakObjectPtr<class UDirectionalLightComponent> LevelSun;
+	float NextLevelSunAt = 0.0f;
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<ASimEntityActor>> SpawnedActors;

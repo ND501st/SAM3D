@@ -801,6 +801,31 @@ SC_TEST("em link: IFF replies come from the friendly transponder's track, only w
     SC_EXPECT(seen_h > 20 && iff_h == 0);
 }
 
+SC_TEST("em link B10: a transponder replies only when the interrogator asks on its code") {
+    for (int asked : {9, 10}) {
+        Bench b;
+        SC_EXPECT(b.ok);
+        b.link->SetSearch(true, false);
+        b.link->SetInterrogating(true);
+        b.link->SetInterrogatorCode(asked);
+        double north = 28000.0;
+        int iff = 0, seen = 0;
+        for (int i = 0; i < 400; ++i) {
+            north -= 0.5;
+            b.link->SyncTarget("f", true, Vec3{0.0, north, 3000.0 - north * north / (2.0 * wgs84::kMeanRadius)}, Vec3{0.0, -5.0, 0.0}, 50.0, true, 9);
+            b.link->Advance(0.1);
+            for (const EmSensorLink::Contact& c : b.link->SearchPicture()) {
+                if (c.target_id != "f") continue;
+                ++seen;
+                iff += c.iff ? 1 : 0;
+            }
+        }
+        SC_EXPECT(seen > 20);
+        if (asked == 9) SC_EXPECT(iff > seen / 2);
+        else SC_EXPECT(iff == 0);
+    }
+}
+
 SC_TEST("em link: the Osa's decoys copy its search radar and blink with it (own_unit.em.decoys)") {
     EmLinkDef def;
     SC_EXPECT(LoadEmLinkDef(kData, "em/osa_ak.json", "osa_ak_soc", "osa_ak_ssc", def));

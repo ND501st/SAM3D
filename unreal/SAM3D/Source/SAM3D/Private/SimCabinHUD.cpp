@@ -27,6 +27,11 @@ void ASimCabinHUD::DrawHUD()
 	{
 		OwnerPc = nullptr;
 	}
+	// O: the map case, the papers the chain of command handed in.
+	if (OwnerPc != nullptr && Vehicle != nullptr && !Vehicle->IsMissionMenuOpen() && OwnerPc->WasInputKeyJustPressed(EKeys::O))
+	{
+		bShowMapCase = !bShowMapCase;
+	}
 	// G: every key; N: the guide's next step.
 	if (OwnerPc != nullptr && Vehicle != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::G))
 	{
@@ -66,6 +71,10 @@ void ASimCabinHUD::DrawHUD()
 		{
 			DrawBoard(Sim, SmallFont, Vehicle != nullptr ? Vehicle->GetStationId() : FString());
 		}
+		if (Vehicle != nullptr && Sim->IsScenarioRunning())
+		{
+			DrawMapCase(Sim, SmallFont, Vehicle->GetStationId());
+		}
 	}
 	if (Vehicle != nullptr && Sim != nullptr && Canvas != nullptr && Sim->IsScenarioRunning())
 	{
@@ -98,7 +107,7 @@ void ASimCabinHUD::DrawHUD()
 	if (Vehicle != nullptr && !Vehicle->IsInCabin() && Canvas != nullptr && Sim != nullptr && Sim->IsScenarioRunning())
 	{
 		const bool bFree = Vehicle->GetViews() != nullptr && Vehicle->GetViews()->IsFreeCamera();
-		DrawText(FString::Printf(TEXT("%s   F1 the cabin   F2-F11 views   right mouse turns, wheel zooms   Ctrl+Z time   G keys   Esc menu%s"),
+		DrawText(FString::Printf(TEXT("%s   F1 the cabin   F2-F12 views   right mouse turns, wheel zooms   Ctrl+Z time   G keys   Esc menu%s"),
 					 bFree ? TEXT("W A S D Q E fly") : TEXT("W A S D drive"), *SwitchHint),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 20.0f, Canvas->ClipY - 40.0f, GEngine != nullptr ? GEngine->GetMediumFont() : nullptr);
 	}
@@ -656,9 +665,11 @@ void ASimCabinHUD::DrawGuide(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehi
 	// The status line: what happens next, always.
 	FString Status;
 	FLinearColor StatusColor = Amber;
-	// A control or the crew menu needs the lesson's seat (driving or a view doesn't).
-	const bool bAwayFromSeat = bAction && !Step.Seat.IsEmpty() && (!Step.Control.IsEmpty() || !Step.Order.IsEmpty()) &&
-		(!Vehicle->IsInCabin() || Vehicle->GetStationId() != Step.Seat);
+	// A control or the crew menu needs the lesson's seat (driving or a view doesn't); a job done outside is worked at its
+	// place instead, and simcore says where his body must go first (Away: out to it, or back in for a control inside).
+	const bool bOutsideJob = !Step.Place.IsEmpty();
+	const bool bAwayFromSeat = bAction && !bOutsideJob && Step.Away.IsEmpty() && !Step.Seat.IsEmpty() &&
+		(!Step.Control.IsEmpty() || !Step.Order.IsEmpty()) && (!Vehicle->IsInCabin() || Vehicle->GetStationId() != Step.Seat);
 	switch (Step.Phase)
 	{
 	case ESimTutorialPhase::Read:
@@ -686,6 +697,27 @@ void ASimCabinHUD::DrawGuide(USimWorldSubsystem* Sim, const ASimOsaVehicle* Vehi
 	{
 		Status = TEXT("Back to your seat first: L takes you there and looks at it (or F1 / Tab)");
 		StatusColor = Red;
+	}
+	if (bAction && !Step.Away.IsEmpty())
+	{
+		if (Vehicle->IsLed())
+		{
+			Status = bOutsideJob ? FString::Printf(TEXT("On your way out to %s"), *Step.PlaceLabel) : FString(TEXT("On your way back in"));
+		}
+		else if (!bOutsideJob)
+		{
+			Status = TEXT("Back in first: F by a wheel climbs up, F at your hatch climbs in, X sits you down");
+			StatusColor = Red;
+		}
+		else if (Vehicle->IsOutside())
+		{
+			Status = FString::Printf(TEXT("To %s: W A S D, or L leads you there"), *Step.PlaceLabel);
+		}
+		else
+		{
+			Status = FString::Printf(TEXT("Your move: the click takes you out to %s"), *Step.PlaceLabel);
+			StatusColor = Green;
+		}
 	}
 	if (Step.bInstructor && !Step.bReview)
 	{
@@ -769,6 +801,7 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("F5    the nearest aircraft from your vehicle; again: the next"), TEXT("F6    your missile in flight; again: the next"),
 				TEXT("F7    the battery's vehicles; again: the next"), TEXT("F8    the aircraft; again: the next"),
 				TEXT("F10   the map from above (wheel: height, right drag: pan)"), TEXT("F11   free camera (W A S D Q E, Shift faster)"),
+				TEXT("F12   every asset, ours and the enemy's (again: next, Shift: back)"),
 				TEXT("Right mouse + drag   turn the camera"), TEXT("Wheel   closer / further, the lens on F5")}},
 		{TEXT("Time"), {TEXT("Ctrl+Z   faster (x2 .. x32)"), TEXT("Alt+Z    slower"), TEXT("Shift+Z  normal time")}},
 		{TEXT("The game"), {TEXT("Esc   pause: resume, restart, the missions, quit; the debrief"), TEXT("G     this card"),
@@ -791,7 +824,8 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("Caps Lock held   flick to a sector, on to a line, let go; Tab (commander) seat first"),
 				TEXT("U / I / P   «Есть!» / «Выполнено!» / «Повторите!»"),
 				TEXT("H   the helper: off, hints, on, watch the crewman"), TEXT("1-9   quick crew drills (outside the crew menu)"),
-				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)")}},
+				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)"),
+				TEXT("O   your map case: the papers handed in to you")}},
 		{TEXT("Headset and radios"),
 			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
 				TEXT("Y   answer a ringing line or telephone (again: put it down)")}},
@@ -1329,6 +1363,73 @@ void ASimCabinHUD::DrawRadio(USimWorldSubsystem* Sim, UFont* Font, float Bottom,
 		}
 		DrawText(L.Text, L.Ink, L.bRadio ? 30.0f : 20.0f, Y, Font);
 		Y += 16.0f;
+	}
+}
+
+void ASimCabinHUD::DrawMapCase(USimWorldSubsystem* Sim, UFont* Font, const FString& Station)
+{
+	const TArray<FSimPaper> Papers = Sim->GetMapCase(Station);
+	if (!bShowMapCase)
+	{
+		if (Papers.Num() > PapersRead)
+		{
+			const FString Note = TEXT("A paper has been handed in: your map case (O)");
+			float W = 0.0f;
+			float H = 0.0f;
+			GetTextSize(Note, W, H, Font);
+			DrawBacking(Canvas->ClipX * 0.5f - W * 0.5f, 64.0f, W, H);
+			DrawText(Note, FLinearColor(1.0f, 0.85f, 0.5f), Canvas->ClipX * 0.5f - W * 0.5f, 64.0f, Font);
+		}
+		return;
+	}
+	PapersRead = Papers.Num();
+	// A sheet of paper held up, dark ink: the newest on top.
+	const float X = 60.0f;
+	const float Y = 80.0f;
+	const float W = FMath::Min(600.0f, Canvas->ClipX - 2.0f * X);
+	const FLinearColor Ink(0.12f, 0.11f, 0.1f);
+	const FLinearColor Faint(0.35f, 0.32f, 0.28f);
+	TArray<TPair<FString, FLinearColor>> Lines;
+	if (Papers.Num() == 0)
+	{
+		Lines.Add({TEXT("The map case: nothing has been handed in."), Ink});
+	}
+	else
+	{
+		const FSimPaper& P = Papers.Last();
+		Lines.Add({P.Title, Ink});
+		Lines.Add({FString::Printf(TEXT("from %s, handed in at %d:%02d"), *P.From, static_cast<int32>(P.TimeSeconds) / 60,
+					   static_cast<int32>(P.TimeSeconds) % 60), Faint});
+		Lines.Add({FString(), Ink});
+		TArray<FString> Paragraphs;
+		P.Text.ParseIntoArray(Paragraphs, TEXT("\n"), false);
+		for (const FString& Para : Paragraphs)
+		{
+			for (const FString& L : Wrap(Para, W - 24.0f, Font))
+			{
+				Lines.Add({L, Ink});
+			}
+		}
+		if (Papers.Num() > 1)
+		{
+			Lines.Add({FString(), Ink});
+			Lines.Add({TEXT("Also in the case:"), Faint});
+			for (int32 I = Papers.Num() - 2; I >= 0 && I >= Papers.Num() - 6; --I)
+			{
+				Lines.Add({FString::Printf(TEXT("  %s (%d:%02d)"), *Papers[I].Title, static_cast<int32>(Papers[I].TimeSeconds) / 60,
+							   static_cast<int32>(Papers[I].TimeSeconds) % 60), Faint});
+			}
+		}
+	}
+	Lines.Add({FString(), Ink});
+	Lines.Add({TEXT("O: close the map case"), Faint});
+	const float LineH = 17.0f;
+	DrawRect(FLinearColor(0.86f, 0.83f, 0.74f, 0.96f), X, Y, W, 20.0f + LineH * Lines.Num());
+	float Ly = Y + 10.0f;
+	for (const TPair<FString, FLinearColor>& L : Lines)
+	{
+		DrawText(L.Key, L.Value, X + 12.0f, Ly, Font);
+		Ly += LineH;
 	}
 }
 

@@ -14,6 +14,7 @@
 #include "ProceduralMeshComponent.h"
 #include "GlobalRenderResources.h"
 #include "SimCabinComponent.h"
+#include "SimFxSubsystem.h"
 #include "SimOsaVehicle.h"
 #include "simcore/readouts.hpp"
 #include "SimWorldSubsystem.h"
@@ -1928,6 +1929,11 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	const FVector To = Sim->ToUnreal(Unit + Dir * 1000.0);
 	Capture->SetWorldLocationAndRotation(From, (To - From).Rotation());
 	Capture->FOVAngle = static_cast<float>(FMath::Max(0.1, simcore::TvFieldOfViewDeg(Console)));
+	// The weapons effects must look right through the sight too (their detail follows the larger of the two views).
+	if (USimFxSubsystem* Fx = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimFxSubsystem>() : nullptr)
+	{
+		Fx->SetAuxView(TEXT("tv"), From, (To - From).Rotation(), Capture->FOVAngle, Target != nullptr ? static_cast<float>(Target->SizeX) : 512.0f, IsSeen());
+	}
 	// Each picture renders the scene a second time: only while someone in the cabin can see the monitor, at a TV's
 	// rate rather than the game's.
 	if (IsSeen() && RedrawSecondsLeft <= 0.0f)

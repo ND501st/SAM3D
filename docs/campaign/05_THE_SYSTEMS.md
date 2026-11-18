@@ -57,6 +57,16 @@ gets a test (`CLAUDE.md`).
 `campaign/regiment.hpp`, data `data/campaign/tasking.json` (the rules of `03` §1) and the division's priorities per
 campaign (`data/campaign/<faction>.json`).
 
+**Built, first form (30 Oct 2026).** Two rules, each with its reason and source: `no_task` (routine, at the 19:00
+briefing) gives a task file, battery 21's cover of the Kesmark bridges; `enemy_knows_battery` (urgent) gives a
+relocation made from the task held (`RelocateTask`: the first reserve position becomes the main one, the old main
+one a reserve, the cover, sectors and regime as they were, ready in 60 min). The regiment's picture
+(`PictureFromJournal`) is our intelligence's latest daily estimate in the campaign's journal; an estimate made
+before the battery reached the position it holds is about the old one, and each estimate moves it once.
+`MissionSession` decides every minute and gives the task on the regiment's net into the running session
+(`ScenarioRunner::GiveTask`); the battery commander plans it from where he stands, and the campaign's battery
+follows each task's arrival. Not yet: the officers, the other triggers, the five batteries, the division's list.
+
 - **Inputs**, all from what the regiment can know: the division's priority list; the regiment's picture (§11); its
   estimate of what the enemy knows of each battery (built: the daily estimate); each battery's last report
   (readiness, missiles, fuel, damage); the campaign's front data (where the covered troops are and go).
@@ -94,6 +104,12 @@ It travels as a document fact through the pipeline (P1/P2), with a voice summary
 planner turns it into `BatteryOrder`s (`battery.hpp`): `March`, `CombatFormation`, `Ambush` (`roving`), `RiverCrossing`,
 `Relocate`, `Emcon`, `Reload`, `Refuel`.
 
+**Built, first form (30 Oct 2026).** `simcore/campaign/battery_task.hpp` loads a task from `data/campaign/tasks/` with
+every part above (the regime as readiness and an emission regime, the time as `ready_in_s` and `lasts_s`, the TZM's
+place under `area`; `cover_rebuild` as a kind), refuses one without its reasons, and writes its paper (the order's nine
+parts) and its radio summary. A scenario's `"task"` has the regiment give it on its net (`BatteryOrderNet`, G10.7), or in
+person. Not yet: it travels as a delivery of the pipeline only on the regiment's net, not down the chain's posts.
+
 ## 5. The battery commander's planner
 
 `campaign/battery_plan.hpp`: the sequence of `03` §3 as a timed plan, like the drill master's for a vehicle.
@@ -105,6 +121,16 @@ planner turns it into `BatteryOrder`s (`battery.hpp`): `March`, `CombatFormation
 - **Outputs**: the battery's orders with their times; the oral combat order as callouts to the vehicle commanders on
   the battery net or in person (`voice_comms.hpp`); the working map's marks (each with its source and time); an ideal
   timeline that the helper shows a player battery commander, and that the debrief compares against.
+
+**Built, first form (30 Oct 2026).** `simcore/campaign/battery_plan.hpp` with `data/campaign/battery_plan.json`: the
+sequence's steps with a full and a short time each (the times are estimates; the book gives none), worked in full when
+there is time and shortened in one proportion when there is not, reconnaissance only for a position new to the battery,
+support alongside the march; the march planned on the roads to the task's main position (`PlanToPlace`), 18 min to
+occupy it (the post's deployment, `ru_pu12_text`), and the formation the task's kind asks for. The preliminary order and
+the oral combat order are callouts on the battery net (read back, nobody moves on them); the combat order then sets the
+regime and each launcher's sector and starts the march. A player battery commander owes them when they fall due (the
+helper's duties). Not yet: positions chosen on the ground by sight along the attack directions (the task's are taken as
+given), the working map's marks, the ideal timeline against the drill master.
 
 ## 6. The continuous mission
 
@@ -130,6 +156,16 @@ task arrives as an order into the running session.
   district generated the same way (`terrain_map.hpp`, deterministic for its seed), so the battery marches, crosses and
   moves on real ground wherever it fights.
 
+**Built, first form (30 Oct 2026)**: `simcore/campaign/mission_session.hpp`. A battery mission (a scenario with the
+regiment's `"task"`) plays in one runner with an enemy's campaign beside it: the scenario's `clock_start` on the war's
+day is the campaign's hour at the session's start, the campaign is run to there first (its packages before then
+resolved without the player), and from then on the packages it gives the battery come in live (§7). The campaign's
+battery stands where the session's launchers do from the war's first hour, so the enemy's intelligence looks at the
+battery the session plays; it moves to the main position once the session's battery has arrived, so until then the
+enemy aims where it stood. `mission_demo --war <faction> [seed [day]]` plays it headless. Left: the
+`MissionScenarioBuilder` (the session made from the task and the battery's state, not a written scenario), the next
+task arriving in the running session, `BatteryState` carried out (15.1), and the other batteries at L1.
+
 ## 7. Packages entering a running mission
 
 - **The runner gains** `AddTargets` (a package's aircraft with their behaviour, EM gear, ARMs and decoy flags, at a
@@ -143,6 +179,18 @@ task arrives as an order into the running session.
 - **The warning** comes as today: the air-raid warning's trigger before the first aircraft, `own_intel.warning_s`
   ahead (15 min for a planner with loose lips), delivered through the warning net and the pipeline.
 
+**Built, first form (30 Oct 2026)**: `simcore/air_war/package_injector.hpp`. The raid builder is not split: the
+injector loads the scenario it writes and moves its aircraft into the running session (the frame through the geodetic,
+the clock by the package's entry), so they keep everything a played raid's have. The runner takes them with
+`AddTargets` (all or none), the package's EM library and jammers with `AddEmGear` (the unit's EM world and the post
+radar's; without an EM layer the aircraft come as plain targets), and its warning with `AddTriggers` (only the air
+threat and C2 sources: a raid's console orders were written for another crew). The manifest moves with them, so a
+`MissionBridge` per package reads the session; `MissionBridge::Over` says when its last aircraft, bomb and missile are
+done. `LivePackages` runs the campaign in step with the session: advanced to its clock every 30 s, each package it
+hands the battery injected on its own time, its outcome handed back with `CompletePlayerMission`. Left: one package at
+a time (the campaign keeps one pending, so one due meanwhile waits), the campaign's battery where the session has it
+(15.1), a package's pipeline messages and fighting neighbours, and the battery mission itself as the session (15.2).
+
 ## 8. Time and the director
 
 - **Compression**: duty passes fast. The director wakes the player at full speed on: an order or a delivery, a warning,
@@ -152,6 +200,10 @@ task arrives as an order into the running session.
 - **Long quiet stretches**: when nothing is within reach and nothing is due, the session steps coarsely with the EM
   layer idle until the next wake event's lead time. Fuel still burns, gyros still drift, the warning net still listens.
   This is the session's own fast path, measured in 15.4.
+- **Built first, the measure (15.4, 31 Oct 2026)**: `campaign/director.hpp` watches the player's seat and wakes it only
+  on what has reached it (first person): a word heard there on a net, a line or the intercom that is not a crew callout,
+  a target new in the seat's picture, a new mark on the post's board. It measures the quiet stretches between; the
+  compression and the coarse step wait with the battery's day (G7, on hold).
 - **What the player lives**: every package that comes to the battery's area is lived at the battery. The director
   never skips one and never changes its odds. Between missions it chooses which steps of the next mission's life
   (`03` §5) are lived and which are summarised. The march may be lived; the TZM's run is summarised unless something
@@ -164,7 +216,7 @@ task arrives as an order into the running session.
 | Strikes, DEAD, hunters, decoys, SEAD, escorts | In the raid scenario; ARMs as EM missiles (A11) | Injected live (§7) |
 | Stand-off and self-protection jamming, chaff | In the raid scenario (`own_unit.em.jammers`) | Injected live |
 | **Reconnaissance** | Abstract: photographs what lies along its route | In the scenario, a reconnaissance aircraft photographs what it overflies within its quality's reach (nets halve it). The photographs reach the enemy's picture only if it gets home: shooting it down denies them |
-| **Voice jamming** | A hand-written scenario only (`osa_vhf_jamming_em.json`) | A comms jammer kind in the faction data where 16.0's research supports it; the package's jammer jams the nets in its band (`radio_nets.hpp`); the nets' drills answer |
+| **Voice jamming** | A hand-written scenario only (`osa_vhf_jamming_em.json`) | A comms jammer kind in the faction data where 16.0's research supports it; the package's jammer jams the nets in its band (`radio_nets.hpp`); the nets' drills answer. **First form built (16.2, 31 Oct 2026)**: `air_war/comms_jamming.hpp`, the faction's `comms_jamming` (ground and helicopter jammers behind its front, by FM 34-40-7's J/S rule) put on the battery net by each package entering the session |
 | ELINT and COMINT | The seconds radiated, from the raid; the posture's radio discipline | The session's real emissions every minute, and its real radio calls (P3) |
 | Satellites | Abstract passes in the campaign | Unchanged; their pass times as a known hazard is a design option with no source yet (`04` §5) |
 
@@ -173,14 +225,21 @@ task arrives as an order into the running session.
 - **Neighbours' fire**: an injected aircraft crossing a neighbour's ring (the ZU-23 at the bridges, battery 22, the
   Strela platoons, the S-125) takes that defence's kill chance, as the abstract resolution's `PassKillChance` gives it.
   It is logged as theirs, and heard on the net or seen. A neighbour at full detail is a later choice (`battery_fire.hpp`
-  already fights the battery's own other launchers).
+  already fights the battery's own other launchers). **Heard on the net, built 31 Oct 2026**: the regiment tells the
+  battery each neighbour's kill on its command net by the board's number, and the post wipes the mark on hearing it.
 - **Our fighters**: friendly aircraft in the battery's sky by the task's coordination (the corridor and its times),
   written as targets that answer IFF. The fighter regiment's notices reach the battery through the pipeline (its duty
   officer is already a post), and friendly fire follows from stale codes or a notice that never arrived.
 - **The warning net and the regiment's radars**: as the raid builder sets them today (outages for wrecked radars,
-  the PU-12M blind when none stands), carried through the session.
+  the PU-12M blind when none stands), carried through the session. **First form built (17.3, 31 Oct 2026)**: the
+  `MissionSession` joins the theatre's radars of the regiment to the PU-12M's feed and puts each, with the vehicle's
+  warning sources at theatre objects, off the air while the war has it struck and back once repaired; the regiment
+  tells the battery on its command net.
 - **Supply**: the TZM and the ATZ draw from the technical battery's and the depots' stocks and drive the real roads and
-  bridges. A wrecked bridge lengthens the run (§2).
+  bridges. A wrecked bridge lengthens the run (§2). **First form built for the TZM (17.4, 31 Oct 2026)**: the battery
+  commander sends it on the battery net by his reckoning of its load, its chief plans on the bridges the commander was
+  told of and finds the others when he comes to them; the war's damage to the road bridges is the session roads' truth,
+  and the regiment tells the battery of it on its net.
 
 ## 11. The after-action loop
 
@@ -188,7 +247,9 @@ The record principle (`docs/command/01_PRINCIPLES.md` 9) carried into the campai
 
 1. **The report** (`campaign/report.hpp`, the pipeline's P9): compiled from the battery's records, the radiotelephonist's
    journal, the board's marks and the commander's log. Raids are given with their times, routes by grid square, and
-   sizes as written. Claims, missiles spent, damage. A raid nobody wrote down is not in it.
+   sizes as written. Claims, missiles spent, damage. A raid nobody wrote down is not in it. **First form built (P9,
+   29 Oct 2026)** for a session at the PU-12M, with the regiment's check of the records against the radar company's log,
+   the crew's mark for them and a trust per unit (`ReportTrust`); damage and the day's report are left.
 2. **Up the chain** by the means the post has (P2): the combat report at priority, the day's report routine.
 3. **The regiment's picture** (`campaign/regiment_picture.hpp`): the analysts' patterns (the air war's `RaidPatterns`,
    fed from the reports instead of the truth), the enemy's estimated aims and phase (`02` §4), and a trust per unit,
@@ -197,7 +258,9 @@ The record principle (`docs/command/01_PRINCIPLES.md` 9) carried into the campai
 4. **The next order** comes from that picture (§3). A battery whose radiotelephonist lost half the raid sends its
    regiment's ambush to a corridor the enemy never flew.
 5. **Our side's journal lines** in the air war (`[ours]`) come from the reports, not the truth, as
-   `docs/air_war/README.md` already notes.
+   `docs/air_war/README.md` already notes. **First form built (18.1, 18.5, 31 Oct 2026)** for a package played in the
+   session: the post's report from its records since the package came in goes back with the package's outcome, and our
+   side's lines on it (the battery's, the warning net's) and our record of the raid count what the battery reported.
 
 ## 12. The debrief
 
@@ -237,6 +300,17 @@ enemy's.
   damaged. Per day it records whether the battery held the enemy's suppression phase open (the believed share of
   working air defences with and without it). The difference comes from planning each package again without the
   battery's entry, which costs little next to a scenario.
+
+**Built, first form (31 Oct 2026).** `simcore/campaign/outcomes.hpp`, kept by the `MissionSession` and printed after
+its debrief (`MissionSession::Debrief`, `mission_demo --war`). Assets kept: the theatre object at the task's covered
+place (the anchor's `theatre_object`), the hours covered from the battery's «к бою готова» up and those hours weighted
+by its working share, the played packages' hits on it, and the flights against it with their release point in the
+session that released nothing, shot down first or broken away. Freedom of action denied: each package back from the
+session, with what it brought (suppression, jammers, decoys, escorts, cruise missiles), the ARMs it fired, its aircraft
+and missiles downed by the battery and by our others, its release flights and the enemy's own reasons from its plan;
+and the enemy's phase checked at the start and at the debrief (`IntelPicture::BelievedIadsShare` with and without the
+battery's entry, against the phase's `until_iads`). Not yet: the package planned again without the battery's entry,
+the rebuilds, troops and columns covered, the consequences that did not follow.
 
 During the campaign our side sees only what its reports show: SEAD in the raids, raids that turned back, the heights
 they came at. The regiment's picture can infer part of the ledger from those (§11). The whole ledger is shown at the

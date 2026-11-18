@@ -198,11 +198,12 @@ SC_TEST("air war: each adversary flies its own kind of war") {
     // NATO: most DEAD packages carry SEAD (one against a radar with no SAM known on its way goes without), and so does a
     // strike whose route meets a radar threat it knows of (one on a depot behind the lines, or loosing stand-off weapons
     // short of the target's own SAM, goes without); packages carry jamming; power plants and towns are off limits at the
-    // start. Judged over four campaigns.
+    // start. Judged over sixteen campaigns: a strike that meets a known radar is rare (some 3 in 100 strikes over 24
+    // seeds), so four campaigns could hold none.
     {
         const AirWarData nato = Load("nato");
         std::vector<Package> ps;
-        for (unsigned seed = 1; seed <= 4; ++seed) {
+        for (unsigned seed = 1; seed <= 16; ++seed) {
             const std::vector<Package> one = PlanDays(nato, seed, 2.0);
             ps.insert(ps.end(), one.begin(), one.end());
         }
@@ -679,6 +680,67 @@ SC_TEST("air war: a raid through the battery's sector becomes a scenario the loa
     SC_EXPECT(played >= 1);
 }
 
+namespace {
+// The pipeline as the raid builder sees it, with one warning said on the battery net half a minute in.
+struct OneWarning : DeliverySource {
+    std::vector<DeliveryDef> Between(int package, double, double) const override {
+        DeliveryDef w;
+        w.id = "warn_" + std::to_string(package);
+        w.after_s = 30.0;
+        w.to = "commander";
+        w.means = DeliveryMeans::Radio;
+        w.net = "battery net";
+        w.from = "Captain Novak";
+        w.words = "Air raid warning";
+        w.air_warning = true;
+        return {w};
+    }
+    double AirWarnedAt(int, double) const override { return -1e18; }
+};
+}  // namespace
+
+SC_TEST("air war: the pipeline's warning in a raid gives the raid's bearing, which the crew's picture takes (P4)") {
+    const AirWarData d = Load("nato");
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 1));
+    const OneWarning source;
+    ScenarioFormat fmt;
+    fmt.deliveries = &source;
+    int checked = 0;
+    while (c.Now() < 6.0 * 24.0 && checked < 1) {
+        if (!c.Advance(6.0 * 24.0)) continue;
+        RaidScenarioBuilder builder;
+        const RaidScenario rs = builder.Build(c, *c.PlayerMission(), fmt);
+        if (!rs.ok) {
+            c.SkipPlayerMission();
+            continue;
+        }
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        SC_EXPECT(LoadScenario(rs.json_text, kData, def, console, &e));
+        SC_EXPECT(def.deliveries.size() == 1 && !def.targets.empty());
+        if (def.deliveries.size() != 1 || def.targets.empty()) break;
+        const DeliveryDef& w = def.deliveries[0];
+        // The way the raid's first aircraft comes from, as seen from the battery.
+        const Vec3 from = def.targets[0].start - def.unit_position;
+        double expect = RadToDeg(std::atan2(from.x, from.y));
+        if (expect < 0.0) expect += 360.0;
+        double diff = std::fabs(w.azimuth_deg - expect);
+        diff = std::min(diff, 360.0 - diff);
+        std::printf("    warning gives %.0f deg, the first aircraft comes from %.0f deg\n", w.azimuth_deg, expect);
+        SC_EXPECT(w.air_warning && w.has_azimuth && diff < 15.0);
+        const std::string told = "warning:" + w.id;
+        ScenarioRunner runner(std::move(def), std::move(console));
+        while (runner.Time() < 31.0) runner.Step(0.1);
+        const CrewPicture* pic = runner.PictureOf("commander");
+        const KnownTarget* k = pic != nullptr ? pic->Find(told) : nullptr;
+        SC_EXPECT(k != nullptr && k->has_azimuth && !k->has_range);
+        ++checked;
+    }
+    SC_EXPECT(checked == 1);
+}
+
 SC_TEST("air war: SEAD aircraft with a warning receiver carry EM anti-radiation missiles, which the bridge reads back (A11)") {
     for (const char* adversary : {"nato", "warsaw_pact"}) {
         const AirWarData d = Load(adversary);
@@ -897,6 +959,12 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
                 o.decoys_hit.push_back(d.theatre.objects[static_cast<std::size_t>(c.Dummies().front())].id);
                 o.emissions.push_back({l.by, 123.456789});
                 o.released_flights.push_back(0);
+                RetaskRecord rt;  // roadmap B1: a diversion by a ground post, with who ordered it
+                rt.flight = 0;
+                rt.kind = "divert";
+                rt.by = "atoc_test";
+                rt.t_s = 61.25;
+                o.retasks.push_back(rt);
                 c.CompletePlayerMission(o, c.Now() + 0.123456789);
                 ++played;
             } else {
@@ -922,6 +990,12 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
     for (std::size_t i = 0; same && i < c.Journal().size(); ++i) same = loaded.Journal()[i].text == c.Journal()[i].text;
     SC_EXPECT(same);
     SC_EXPECT(loaded.Packages().size() == c.Packages().size() && loaded.AircraftLost() == c.AircraftLost());
+    int retasks = 0, retasks_loaded = 0;
+    for (const auto& a : c.Actions()) retasks += static_cast<int>(a.outcome.retasks.size());
+    for (const auto& a : loaded.Actions()) {
+        for (const RetaskRecord& rt : a.outcome.retasks) retasks_loaded += rt.by == "atoc_test" && rt.kind == "divert" && rt.t_s == 61.25 ? 1 : 0;
+    }
+    SC_EXPECT(retasks == played && retasks_loaded == played);
     const Vec3 a = loaded.Truth()[static_cast<std::size_t>(loaded.PlayerIndex())].pos;
     const Vec3 b = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos;
     SC_EXPECT_NEAR(Dist2d(a, b), 0.0, 0.0);
@@ -1301,4 +1375,58 @@ SC_TEST("air war: a cruise missile salvo through the battery's sector is a scena
     SC_EXPECT(o.losses.empty());                                         // missiles are never a crew lost
     SC_EXPECT(struck + static_cast<int>(o.missiles_downed.size()) == 4);  // each struck or was shot down
     SC_EXPECT(struck == 0 || o.delivered);
+}
+
+SC_TEST("air war (18.1): our side's journal says of a played raid what the battery reported from its records, not what happened") {
+    const AirWarData d = Load("warsaw_pact");
+    AirCampaign c;
+    SC_EXPECT(c.Init(d, 21));
+    bool pending = false;
+    for (int k = 0; k < 96 && !pending; ++k) pending = c.Advance(c.Now() + 1.0);
+    SC_EXPECT(pending);
+    if (!pending) return;
+    const Package& p = *c.PlayerMission();
+    int flight = -1;
+    for (std::size_t i = 0; i < p.flights.size() && flight < 0; ++i) {
+        const AircraftType* a = d.faction.Aircraft(p.flights[i].aircraft);
+        if (a != nullptr && !a->drone) flight = static_cast<int>(i);
+    }
+    SC_EXPECT(flight >= 0);
+    const bool missiles = p.Missiles() > 0;
+    // The truth: two of its aircraft down to the battery. The records: one kill reported (the other never logged).
+    PackageOutcome o;
+    o.package_id = p.id;
+    o.played = true;
+    for (int k = 0; k < 2; ++k) {
+        LossRecord l;
+        l.flight = flight;
+        l.by = d.theatre.objects[static_cast<std::size_t>(c.PlayerIndex())].id;
+        o.losses.push_back(l);
+    }
+    o.reported = true;
+    o.reported_destroyed = 1;
+    o.reported_missiles = 3;
+    o.reported_targets = 4;
+    const std::size_t from = c.Journal().size();
+    c.CompletePlayerMission(o, c.Now() + 0.25);
+    bool reported = false, warned = false, enemy_knows = false;
+    for (std::size_t i = from; i < c.Journal().size(); ++i) {
+        const JournalEntry& j = c.Journal()[i];
+        if (j.visible) std::printf("    our side: %s\n", j.text.c_str());
+        reported = reported || (j.visible && j.kind == "player_mission" &&
+                                j.text.find("the battery reports 1 destroyed of 4 targets plotted in its sector, 3 missiles fired.") != std::string::npos);
+        warned = warned || (j.visible && j.who == "warning net" && j.text.find(", 1 shot down") != std::string::npos);
+        enemy_knows = enemy_knows || (!j.visible && j.kind == "result" && j.text.find("lost 2 of") != std::string::npos);
+    }
+    SC_EXPECT(reported);
+    SC_EXPECT(warned);
+    SC_EXPECT(missiles || enemy_knows);  // the enemy counts its own losses as they were
+    // The report is part of the saved action: the loaded campaign's journal is the same.
+    const std::string text = SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json");
+    AirCampaign loaded;
+    std::string e;
+    SC_EXPECT(LoadCampaignJson(text, kData, loaded, &e));
+    bool same = loaded.Journal().size() == c.Journal().size();
+    for (std::size_t i = 0; same && i < c.Journal().size(); ++i) same = loaded.Journal()[i].text == c.Journal()[i].text;
+    SC_EXPECT(same);
 }

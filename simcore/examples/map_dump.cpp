@@ -10,6 +10,7 @@
 #include <fstream>
 #include <string>
 
+#include "simcore/scenery/map_dressing.hpp"
 #include "simcore/terrain_map.hpp"
 
 using namespace simcore;
@@ -29,6 +30,22 @@ int main(int argc, char** argv) {
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::fprintf(stderr, "%s built in %.0f ms: %zu boxes, %zu strips, %zu crossings\n", map->Def().map_id.c_str(), ms,
                  map->Layout().boxes.size(), map->Layout().strips.size(), map->Layout().crossings.size());
+    {
+        // The map's dressing (roadmap R6, scenery/map_dressing.hpp): its trees, wood masses and land cover, and their time.
+        const auto t1 = std::chrono::steady_clock::now();
+        scenery::DressingRules rules;
+        std::string rules_error;
+        if (!scenery::LoadDressingRules(std::string(argv[1]) + "/scenery/map_dressing.json", rules, &rules_error)) {
+            std::fprintf(stderr, "%s (the defaults instead)\n", rules_error.c_str());
+        }
+        const scenery::MapDressing dressing = scenery::PlaceTrees(*map, rules);
+        const scenery::CoverRaster cover = scenery::BakeCover(*map, rules);
+        std::size_t cells = 0;
+        for (const scenery::CoverGrid& g : cover.grids) cells += g.cover.size();
+        const double dress_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
+        std::fprintf(stderr, "dressing in %.0f ms: %zu trees, %zu wood masses, %zu land cover cells\n", dress_ms, dressing.trees.size(),
+                     dressing.masses.size(), cells);
+    }
     if (std::strcmp(argv[3], "--height") == 0) {
         for (int i = 4; i + 1 < argc; i += 2) {
             const double e = std::atof(argv[i]) * 1000.0, n = std::atof(argv[i + 1]) * 1000.0;

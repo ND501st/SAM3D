@@ -567,3 +567,575 @@ battery's sector more often when it radiates (4-7 a week for the neutral).
 - The direct-hit tail of unguided bombs (gross errors) if a target's survival turns on single hits.
 - Exercise records as a second check (`docs/research/AIR_WAR_MISSIONS_2026-10.md` §7).
 - Our side's reports of the supply war through the chain of command, and the regiment's answer to cut lines (13.x).
+
+## 11. The weapons' effects branch: before and after (1 November 2026)
+
+The branch that gives the fight its effects (`docs/fx/`) changed the mission bridge's timing: a release where the
+aircraft's own path takes it to the release point (a pop-up only in its dive after the apex), each load falling for its
+own time and landing then, and a package handed back to the campaign only once its last load has landed
+(`LivePackages`). `air_war_balance data 20 7` was built and run from HEAD before the branch and from the branch.
+
+| Adversary, battery (tuned theatre) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 21.9 = 21.9 | 2.3 % = 2.3 % | 100 %, 100 % | 2.9 = 2.9 |
+| Rebels, careful | 18.8 = 18.8 | 2.1 % = 2.1 % | 100 %, 100 % | 1.0 = 1.0 |
+| Neutral, careless | 35.1 = 35.1 | 4.4 % = 4.4 % | 100 %, 100 % | 7.7 = 7.7 |
+| Neutral, careful | 25.2 = 25.2 | 5.2 % = 5.2 % | 100 %, 100 % | 2.9 = 2.9 |
+| Warsaw Pact, careless | 560.1 = 560.1 | 1.1 % = 1.1 % | 26 %, 78 % | 6.8 = 6.8 |
+| Warsaw Pact, careful | 560.6 = 560.6 | 1.3 % = 1.3 % | 39 %, 80 % | 9.3 = 9.3 |
+| NATO, careless | 515.9 = 515.9 | 0.9 % = 0.9 % | 40 %, 69 % | 5.2 = 5.2 |
+| NATO, careful | 496.2 = 496.2 | 0.7 % = 0.7 % | 56 %, 64 % | 8.1 = 8.1 |
+
+The two outputs are the same byte for byte, and the same as §10: the balance tool resolves the battery's raids by the
+abstract model (`SkipPlayerMission`), so the bridge, where everything the branch changed lives, never runs in it.
+
+The raids played through the bridge were read with `air_war_demo <faction> <seed> data <out> 7`, seeds 1-3 for each
+adversary, before and after (summed over the three seeds):
+
+| Adversary | Raids played | Aircraft | Our launches | Shot down (by neighbours) | Radars on, s | ARMs | Our vehicle hit | Enemy aircraft lost |
+|---|---|---|---|---|---|---|---|---|
+| Rebels | 3 = 3 | 5 = 5 | 10 = 10 | 2 (0) = 2 (0) | 5647 = 5647 | 0 = 0 | 0 = 0 | 3 = 3 |
+| Neutral | 8 = 8 | 33 = 33 | 2 = 2 | 0 (0) = 0 (0) | 3753 = 3753 | 0 = 0 | 0 = 0 | 1 = 1 |
+| Warsaw Pact | 33 = 33 | 105 = 105 | 0 = 0 | 1 (1) = 1 (1) | 7997 = 7997 | 84 = 84 | 6 = 6 | 0 = 0 |
+| NATO | 21 = 21 | 165 = 165 | 0 = 0 | 3 (13) = 3 (13) | 11754 = 11754 | 42 = 42 | 2 = 2 | 0 = 0 |
+
+The enemy's knowledge of the battery at the end and the journal's length are the same too. What differs is only the
+order of the aircraft's releases and hits inside a package's line in the journal (a load now lands at its own time, so
+two aircraft's hits can swap places; in one neutral campaign the same number of hits is credited to different aircraft).
+
+**No rebalance is needed.** The caveat: the balance tool does not play raids through the bridge, so its tables cannot
+show the bridge's effect; the demo's three seeds are the check of it, and a larger played sample is left for a person's
+campaign playthrough. Known gaps the branch leaves in the bridge's deliveries (`docs/fx/README.md` §7): the toss lets
+go about 1.8 km early (its aim a third farther than its throw, the planner's data unchanged), and the pop-up's
+terrain-following climb tops out near its release point (about 1140 m) instead of the planner's apex.
+
+## 12. The nation's theatre by the sun (2 November 2026)
+
+Roadmap R7 gave every session one sun (`docs/LIGHT.md`), and the air war uses it only once a theatre has a `"date"`
+(`DayPartBySun`, `DayPartHourBySun`, §5 there). `theatre_pannonia_nation.json` now has one: 15 October 1985, UTC+1. At
+its origin (46.9 N 19.7 E) the parts of the day become the sun's, and the planner aims each at its sun's middle:
+
+| Part | The buckets (undated, still the tuned theatre's) | By the sun on 15 October | The planner's aim |
+|---|---|---|---|
+| Dawn | 04:00-07:00 | 05:29-06:41 (the sun from 6 degrees down to 6 up) | 05:30 → sunrise, 06:04 |
+| Day | 07:00-18:00 | 06:41-16:13 | 12:00 → noon, 11:27 |
+| Dusk | 18:00-21:00 | 16:13-17:25 | 19:30 → sunset, 16:50 |
+| Night | 21:00-04:00 | 17:25-05:29 | 01:00 → midnight, 23:27 |
+
+`air_war_balance data 20 7` (the tuned theatre, undated) is byte for byte the same totals as §11: R7 changes nothing
+there. Nor in the raids it plays as sessions (`air_war_demo`, `test_packages_live.cpp`): a raid from an undated
+theatre carries no clock and keeps the legacy light keys from the planner's part (`docs/LIGHT.md` §5), so it is lit as it
+was planned and as before R7. `--theatre theatre_pannonia_nation.json data 10 7` was run undated (identical to §10's nation table) and dated:
+
+| Adversary, battery (the nation) | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 17.9 → 16.1 | 7.3 % → 6.2 % | 100 %, 100 % | 1.4 → 1.5 |
+| Rebels, careful | 18.6 → 15.7 | 4.3 % → 8.3 % | 100 %, 100 % | 0.6 → 0.5 |
+| Neutral, careless | 30.9 → 28.4 | 3.6 % → 4.9 % | 100 %, 100 % | 7.3 → 6.0 |
+| Neutral, careful | 25.6 → 31.6 | 4.3 % → 4.4 % | 100 %, 100 % | 4.3 → 3.6 |
+| Warsaw Pact, careless | 1044.3 → 1035.5 | 2.0 % → 2.0 % | 38 %, 72 % → 35 %, 72 % | 7.8 → 9.8 |
+| Warsaw Pact, careful | 1009.4 → 1059.2 | 2.1 % → 1.7 % | 42 %, 72 % → 36 %, 72 % | 7.0 → 8.6 |
+| NATO, careless | 736.8 → 747.7 | 1.5 % → 1.8 % | 71 %, 69 % → 69 %, 67 % | 5.9 → 6.3 |
+| NATO, careful | 732.3 → 740.5 | 1.7 % → 1.6 % | 66 %, 66 % → 70 %, 65 % | 6.8 → 6.5 |
+
+The shapes hold and most of the shift is within ten seeds' noise: the light air arms lose one aircraft a week or so,
+so a loss rate moving between 4 and 8 % is a fraction of an aircraft. What moved with the sun: the rebels' strikes
+fell from 17 % to 6 % of their packages when careless (their dusk is an hour and a quarter now, not three, and their
+night twelve hours, not seven), the Pact offers the battery one or two raids a week more, its opening blows leave 35-36 % of the radar SAM sites working
+on day 3 against 38-42 %, and the bridges are cut a little less (Pact 93 and 71 line-hours a week against 102 and 75;
+NATO 114 and 111 against 113 and 127). `air_war_bench data 400` builds its benches on the tuned theatre's values, undated, and runs as before.
+
+**No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11
+were read on its buckets).
+
+
+## 13. Command in the air and the time-stepped resolver (track B, B5, 17 November 2026)
+
+B5 (`docs/air_battle/05_C2_AND_RETASKING.md` §9) changed two things the balance tool sees. First the resolver became
+time-stepped (A0): a package takes off at its first aircraft's hour and flies leg by leg beside the campaign's clock in
+steps of `c2.step_h` (5 min), its draws from a fork keyed by its id, and its outcome is applied when it lands; before,
+each package was resolved whole at its first hour from the campaign's own stream. Second, the enemy's posts: reports in
+flight, the FACs' sightings, diverts, hunters warned and the alert pools flying the planner's held-back on-call
+sorties. `air_war_balance data 20 7` was run from HEAD before B5, from B5 with every faction's `"c2"` block removed (the
+A0 step alone), and from B5:
+
+| Adversary, battery (tuned theatre) | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids a week | On-call sorties (share) |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 13.7 → 13.6 → 13.6 | 21.9 → 21.6 → 21.6 | 0.5 → 0.5 → 0.5 | 2.3% → 2.3% → 2.3% | 100%, 100% throughout | 2.9 → 2.5 → 2.5 | none (no posts) |
+| Rebels, careful | 11.9 → 13.0 → 13.0 | 18.8 → 20.6 → 20.6 | 0.4 → 0.7 → 0.7 | 2.1% → 3.2% → 3.2% | 100%, 100% throughout | 1.0 → 1.1 → 1.1 | none (no posts) |
+| Neutral, careless | 16.6 → 13.5 → 13.5 | 35.1 → 29.2 → 29.2 | 1.6 → 1.9 → 1.9 | 4.4% → 6.3% → 6.3% | 100%, 100% throughout | 7.7 → 6.0 → 6.0 | 0 (pools stood down) |
+| Neutral, careful | 11.0 → 13.7 → 13.7 | 25.2 → 30.9 → 30.9 | 1.3 → 1.1 → 1.1 | 5.2% → 3.7% → 3.7% | 100%, 100% throughout | 2.9 → 3.7 → 3.7 | 0 (pools stood down) |
+| Warsaw Pact, careless | 94.7 → 94.2 → 97.5 | 560.1 → 556.4 → 563.1 | 6.3 → 8.6 → 8.7 | 1.1% → 1.5% → 1.5% | 26%, 78% → 28%, 79% → 27%, 81% | 6.8 → 6.4 → 6.5 | 17.2 (3.1%) |
+| Warsaw Pact, careful | 95.0 → 93.2 → 98.5 | 560.6 → 552.5 → 571.5 | 7.0 → 8.4 → 9.8 | 1.3% → 1.5% → 1.7% | 39%, 80% → 41%, 76% → 39%, 79% | 9.3 → 9.5 → 8.4 | 20.2 (3.5%) |
+| NATO, careless | 91.5 → 91.5 → 94.2 | 516.1 → 515.5 → 530.5 | 4.8 → 5.2 → 5.2 | 0.9% → 1.0% → 1.0% | 40%, 69% → 50%, 61% → 49%, 60% | 5.2 → 4.8 → 4.8 | 13.8 (2.6%) |
+| NATO, careful | 89.6 → 90.5 → 93.5 | 496.1 → 501.0 → 513.3 | 3.6 → 5.1 → 4.9 | 0.7% → 1.0% → 1.0% | 56%, 65% → 56%, 64% → 55%, 66% | 8.2 → 7.2 → 7.4 | 12.8 (2.5%) |
+
+The tool's new line, "Command in the air", a campaign (20 seeds, careless then careful):
+
+| Adversary | In-flight reports (out of cover) | Requests | Scrambles (refused) | FAC briefs | Diverts, hunters warned | Our listeners heard | Pools (aircraft), stood down unused | On-call packages |
+|---|---|---|---|---|---|---|---|---|
+| Neutral | 6.7 (0.0), 3.8 (0.1) | 0 | 0 | 0 | 0, 0 | 1.1, 0.6 calls | 0.6-0.8 (1.2-1.6), all | 0 |
+| Warsaw Pact | 10.4 (34.6), 11.2 (37.9) | 15.2, 15.6 | 5.2 (0.9), 6.0 (1.0) | 4.9, 5.7 | 0, 0 | 0.5 calls | 18.3-18.5 (73-74), 11 | 4.3, 5.0 |
+| NATO | 0.0 (0.5), 0.0 (0.3) | 9.1, 8.3 | 5.0 (1.6), 5.0 (1.8) | 4.1, 4.0 | 0, 0 | 0 | 12.9-13.2 (52-53), 7 | 3.5, 3.2 |
+
+**What moved, and why.**
+
+- **The A0 step alone (the first arrow).** Nothing in the model of a leg changed (`test_c2`: the stepped resolver gives
+  the atomic one's outcome with the same stream). Two things did: the legs of a package's flights are walked in the
+  order of time (before, each flight was walked whole, decoys and SEAD first), and a package's draws now come from its
+  own fork, not the campaign's stream, so from the first package on every campaign takes a different but equally
+  likely course. For the light air arms, who lose about one aircraft a week, that is a reshuffle within the seeds'
+  noise: run over 60 seeds instead of 20, the rebels give 19.3 → 19.3 and 19.1 → 19.8 sorties, 2.9 % → 2.1 % and
+  1.7 % → 2.1 % loss, and the neutral 29.1 → 25.7 and 23.4 → 24.9 sorties, 4.8 % → 5.9 % and 3.7 % → 3.9 % loss (the
+  20-seed rows above swing as much between the base's own 20 and 60 seeds: the neutral careless 35.1 against 29.1).
+- **The Pact's and NATO's loss rate up by 0.2-0.4 points with A0.** A cycle's packages are in the air together now.
+  Before, a package resolved at its first hour wrecked and suppressed radars at once, so a package taking off minutes
+  later met defences already cut by one still on its way in. Now a package's damage counts when it lands, so packages
+  flying together meet the defences as they stand: the Pact loses 8.4-8.6 aircraft a week against 6.3-7.0, NATO
+  5.1-5.2 against 3.6-4.8. NATO's careless opening blow cuts less by D3 (50 % working against 40 %), and its campaign
+  ends lower by D7 (61 % against 69 %); the careful rows and the Pact's hardly move, so this is read as the same
+  reshuffle within the seeds' noise.
+- **The posts (the second arrow).** The rebels have no posts and the neutral's reports go to intelligence (its
+  authority has no divert, and its one ground pool, 15 % of its few sorties, finds nothing it may scramble for), so their
+  rows do not move. The Pact and NATO fly 2.5-3.5 % of their sorties from the alert pools (`on_call_fraction` 0.2 and
+  0.1 of the capacity is held back; most pools stand down unused, 11 of 18 and 7 of 13 a week), so packages rise by 3
+  and sorties by 7-19 a week; the Pact's on-call packages go to reported launches and columns and lose about one
+  aircraft more a week when the battery is careful (9.8 against 8.4). NATO reports in flight only from CAS and BAI
+  (its `report_missions`), which rarely see a launch in the abstract campaign, so its scrambles come from the FACs'
+  requests (4 a week) through the ASOC; the Pact's 10-11 reports a week reach a post, 35-38 are out of every post's
+  cover and wait for the debrief. No flight was diverted and no hunter warned in these campaigns: a divert needs an
+  armed reconnaissance flight within 40 km at the Pact's 20 % chance or a NATO CAS or BAI flight near a report, and the
+  hunters' leave needs a report inside a Weasel's package or the Pact's free-hunt zone; both are exercised by
+  `test_c2`, and they will matter more once B6 gives the flights targets of opportunity to report.
+- **The battery's raids** move within the seeds' noise (the Pact careful 9.3 → 8.4, NATO careful 8.2 → 7.4).
+
+The shapes of §2 hold: the opening blows, the attrition well under the period's 2 % a sortie for the Pact and NATO, the
+light air arms still light. **No rebalance is needed.**
+
+**Cost.** The A0 step's sub-steps run only while a package is in the air or a message is on its way. `air_war_balance data 20 7`, the base and B5 back to back, twice, on a quiet machine: 46.1 s and 46.6 s for the base, 46.0 s and 46.9 s for B5, the same within a percent (the quarter allowed is not touched). `air_war_bench data 400` (4.2 and 4.5 s against 5.5 and 4.2 s, back to
+back) resolves its benches with `Resolver::Resolve`, now `Begin` + `StepTo` to the end, so only the leg order moved its
+rows, and only those where a flight's suppression or losses count for another flying at the same time: JP233 Tornados
+against F-16s at medium altitude 6.2 against 0.4 losses a 100 sorties (14.6 times) → 5.4 against 0.9 (5.7 times;
+Desert Storm's about 4 times), the runways cut 54 % → 53 %, ARMs for each radar destroyed 3.6 against 11.7 → 3.7
+against 12.3, the F-4Es popping up behind the Kub belt 25.0 → 25.3, and the Bekaa package destroying the battery in
+66 % → 64 % of runs with 4.5 → 5.1 lost a 100 sorties (the F-4Gs' shots now reach the Kub only as early as they are
+flown, not before every other flight's legs). Every other row is the same. `crew_balance data 10`, `helper_coverage` (the same 19 gaps, its page byte for byte), `ground_check data 3600` and `em_bench` give the base's results; only their wall times differ, with the load.
+
+## 14. B2 and B5 together (track B, 18 November 2026)
+
+B2 (routes as flown) and B5 were built side by side and merged on `tb-b5`: the stepped resolver keeps B2's one
+engagement a pass, its ground-masked chord, its fighters on the IP's leg and its corridor suppression, and on-call
+packages are planned on routes (`docs/air_battle/05_C2_AND_RETASKING.md`, "With B2's routes"). Three faults were found
+by the runs and fixed in the merge: a flight under flak reported "a launch seen", so the Pact's posts scrambled DEAD
+at the guns (the nation's rule that guns are never hunted, §8; a gun's fire is no longer reported); B2's route planner
+read the egress point's node after its side's search had removed it (`RealTurn`, a wrong home turn when the first side
+won); and the loader's columns were made at their depot through a pointer the next column's `push_back` could move
+(`MakeColumns`, from N7), which crashed `air_war_balance` on the nation when the Pact's campaigns had run before NATO's.
+Against B2's own runs (district 20 seeds, nation 10, 7 days; B2 → B2 and B5):
+
+| District | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | On-call sorties (share) |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 13.3 → 13.1 | 21.0 → 20.6 | 0.3 → 0.2 | 1.7% → 1.2% | 100%, 100% | 1.7 → 1.6 | none (no posts) |
+| Rebels, careful | 14.3 → 13.9 | 23.1 → 22.2 | 0.3 → 0.5 | 1.5% → 2.3% | 100%, 100% | 1.1 → 0.8 | none (no posts) |
+| Neutral, careless | 20.9 → 19.5 | 48.2 → 45.9 | 1.1 → 1.6 | 2.4% → 3.4% | 100%, 100% | 10.2 → 8.9 | 0 (pools stood down) |
+| Neutral, careful | 16.1 → 17.1 | 32.8 → 38.1 | 1.4 → 0.8 | 4.4% → 2.0% | 100%, 100% | 5.6 → 5.0 | 0 (pools stood down) |
+| Warsaw Pact, careless | 94.5 → 97.8 | 552.1 → 568.5 | 6.5 → 9.3 | 1.2% → 1.6% | 30%, 78% → 31%, 80% | 7.5 → 7.2 | 13.8 (2.4%) |
+| Warsaw Pact, careful | 93.5 → 99.2 | 555.2 → 578.3 | 7.8 → 7.8 | 1.4% → 1.4% | 38%, 79% → 44%, 78% | 8.4 → 8.2 | 18.8 (3.3%) |
+| NATO, careless | 93.8 → 94.7 | 518.5 → 528.0 | 4.8 → 5.2 | 0.9% → 1.0% | 34%, 61% → 39%, 54% | 5.8 → 5.4 | 10.2 (1.9%) |
+| NATO, careful | 92.9 → 95.2 | 498.6 → 533.7 | 5.2 → 4.7 | 1.0% → 0.9% | 39%, 71% → 49%, 62% | 7.7 → 6.9 | 17.0 (3.2%) |
+
+| Nation | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | On-call sorties (share) |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 9.4 → 10.1 | 13.4 → 14.9 | 1.9 → 1.6 | 14.2% → 10.7% | 100%, 100% | 5.7 → 7.3 | none (no posts) |
+| Rebels, careful | 8.5 → 10.2 | 12.2 → 15.3 | 2.4 → 2.1 | 19.7% → 13.7% | 100%, 100% | 2.5 → 2.6 | none (no posts) |
+| Neutral, careless | 16.0 → 16.7 | 26.9 → 28.2 | 0.8 → 0.9 | 3.0% → 3.2% | 100%, 100% | 7.0 → 8.5 | 0 (no pools) |
+| Neutral, careful | 12.7 → 14.0 | 20.5 → 23.7 | 1.3 → 0.8 | 6.3% → 3.4% | 100%, 100% | 5.3 → 4.0 | 0 (no pools) |
+| Warsaw Pact, careless | 182.6 → 183.2 | 992.3 → 989.9 | 28.3 → 30.1 | 2.9% → 3.0% | 36%, 72% → 37%, 66% | 9.3 → 8.4 | 41.2 (4.2%) |
+| Warsaw Pact, careful | 173.8 → 189.1 | 947.8 → 1016.7 | 27.7 → 28.2 | 2.9% → 2.8% | 41%, 69% → 41%, 69% | 9.1 → 8.9 | 35.6 (3.5%) |
+| NATO, careless | 129.2 → 129.7 | 722.0 → 725.9 | 11.9 → 15.0 | 1.6% → 2.1% | 73%, 71% → 73%, 74% | 8.6 → 7.6 | 17.6 (2.4%) |
+| NATO, careful | 131.1 → 128.7 | 724.4 → 721.3 | 13.1 → 14.5 | 1.8% → 2.0% | 76%, 75% → 76%, 78% | 8.4 → 8.0 | 18.0 (2.5%) |
+
+**What B5 moves on top of B2.** The same three things as on the base (§13), and nothing new from the meeting of the two:
+
+- **The posts and the alert pools.** The Pact and NATO fly 2-4 % of their sorties on call from the pools, on the
+  district as on the base (2.4-3.3 % against 2.5-3.5 %). On the nation the Pact's posts hear more: 146-154 in-flight
+  reports a campaign, three quarters of them out of every post's cover and kept for the debrief, 34-37 scrambles of
+  which 24-28 refused as too dangerous for the alert, and 9-10 on-call packages; NATO's come from the FACs' requests
+  (15 a campaign, 11 scrambles, 4-5 packages). The rebels have no posts and the neutral's pools find nothing they may
+  scramble for, so their rows move only within the noise.
+- **Packages flying together.** A package's damage now counts when it lands, so packages in the air at the same time
+  meet the defences as they stand. On the nation NATO loses 1.4-3.1 aircraft a week more (2.0-2.1 % against 1.6-1.8 %),
+  and the Pact careless 1.8 more; the Pact careful and the district's rows hardly move. All stay inside the period's
+  2 % a sortie or close to it, as on the base.
+- **A reshuffle of the seeds.** Every package draws from its own fork, so every campaign takes another, equally likely
+  course. The light air arms' rows (a loss or two a week, a dozen packages) swing by what one aircraft is worth: the
+  rebels on the nation 1.6-2.1 lost against 1.9-2.4, the neutral careful 0.8 against 1.3 in both theatres; §13 showed
+  how much such rows swing between 20 and 60 seeds of the same code.
+
+B2's own shapes hold: one engagement a pass, low flights masked by the ground, the Pact's checkpoint and
+counter-SAM programme, NATO's gates and corridors. **No rebalance is needed.** `air_war_bench data 400` moves the same
+rows as B5 did on the base and by the same amounts (JP233 Tornados against medium-altitude F-16s 5.5 against 1.8 → 2.0
+losses a 100 sorties, the runways cut 51 % → 52 %, ARMs for each radar destroyed 3.6 → 3.8 against 11.8 → 12.8, the Bekaa
+package destroying the battery in 62 % → 65 % of runs with 7.6 → 6.3 lost a 100 sorties); every other row is B2's.
+Wall times on a machine with another build running: the district 295 s (B2's own run took 2090 s under a heavier
+load), the nation 1103 s with the test suite running beside it (B2: 1457 s), the bench 0.21 s (0.19 s).
+
+## 15. The air battle (track B, B8, 18 November 2026)
+
+B8 (`docs/air_battle/07_AIR_TO_AIR.md` §8) replaced the resolver's flat fighter roll with the abstract air battle
+(`air_war/air_fight.hpp`). The planner now sends sweep and CAP flights by each doctrine's plan and expects its losses to
+our fighters from the same model. The 1985 data list of B7 changed the Pact's MiG-23 regiments (20 MLs and 10 MLDs, not
+30 MLDs), the neutral's escorts (the Saab 105; the Draken only from 1988) and the A-50, which no longer cuts our fighter
+threat in 1985. `air_war_balance` gained an "Air battle" line: fights a campaign, the enemy's aircraft our fighters shot
+down, ours lost. Against §14's runs (the same code without B8; district 20 seeds, nation 10, 7 days; base → B8). B8 was
+run on track-b before B6 (targets of opportunity) was merged into it; B6 finds columns so rarely at the abstract level
+(the neutral alone, a few a campaign) that these rows should hold after the merge; they were not rerun on it:
+
+| District | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | Air battle: fights, theirs down, ours lost |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 13.1 → 12.8 | 20.6 → 20.2 | 0.2 → 0.5 | 1.2% → 2.2% | 100%, 100% → 100%, 100% | 1.6 → 1.6 | 0.1, 0.1, 0.0 |
+| Rebels, careful | 13.9 → 13.7 | 22.2 → 21.8 | 0.5 → 0.7 | 2.3% → 3.2% | 100%, 100% → 100%, 100% | 0.8 → 0.8 | 0.2, 0.2, 0.0 |
+| Neutral, careless | 19.5 → 17.6 | 45.9 → 40.0 | 1.6 → 1.1 | 3.4% → 2.9% | 100%, 100% → 100%, 100% | 8.9 → 8.3 | 0.5, 0.2, 0.1 |
+| Neutral, careful | 17.1 → 15.4 | 38.1 → 34.4 | 0.8 → 1.2 | 2.0% → 3.6% | 100%, 100% → 100%, 100% | 5.0 → 3.4 | 0.5, 0.5, 0.1 |
+| Warsaw Pact, careless | 97.8 → 96.4 | 568.5 → 563.0 | 9.3 → 10.4 | 1.6% → 1.9% | 31%, 80% → 37%, 73% | 7.2 → 7.5 | 6.5, 3.8, 3.1 |
+| Warsaw Pact, careful | 99.2 → 94.4 | 578.3 → 567.1 | 7.8 → 11.5 | 1.4% → 2.0% | 44%, 78% → 43%, 81% | 8.2 → 8.8 | 6.1, 4.3, 2.5 |
+| NATO, careless | 94.7 → 94.8 | 528.0 → 533.7 | 5.2 → 8.4 | 1.0% → 1.6% | 39%, 54% → 35%, 60% | 5.4 → 5.2 | 5.8, 4.1, 4.8 |
+| NATO, careful | 95.2 → 94.5 | 533.7 → 524.0 | 4.7 → 8.2 | 0.9% → 1.6% | 49%, 62% → 47%, 67% | 6.9 → 7.2 | 5.5, 4.0, 4.3 |
+
+| Nation | Packages | Sorties a week | Lost | Loss % | Defences working D3, D7 | Battery raids | Air battle: fights, theirs down, ours lost |
+|---|---|---|---|---|---|---|---|
+| Rebels, careless | 10.1 → 10.6 | 14.9 → 15.8 | 1.6 → 1.7 | 10.7% → 10.8% | 100%, 100% → 100%, 100% | 7.3 → 7.6 | 0.2, 0.1, 0.0 |
+| Rebels, careful | 10.2 → 10.2 | 15.3 → 15.2 | 2.1 → 2.1 | 13.7% → 13.8% | 100%, 100% → 100%, 100% | 2.6 → 2.5 | 0, 0, 0 |
+| Neutral, careless | 16.7 → 15.6 | 28.2 → 25.5 | 0.9 → 0.8 | 3.2% → 3.1% | 100%, 100% → 100%, 100% | 8.5 → 7.3 | 0.4, 0.1, 0.0 |
+| Neutral, careful | 14.0 → 12.7 | 23.7 → 21.4 | 0.8 → 1.0 | 3.4% → 4.7% | 100%, 100% → 100%, 100% | 4.0 → 3.6 | 0.5, 0.4, 0.0 |
+| Warsaw Pact, careless | 183.2 → 171.3 | 989.9 → 996.7 | 30.1 → 35.8 | 3.0% → 3.6% | 37%, 66% → 44%, 71% | 8.4 → 10.8 | 11.6, 8.0, 5.1 |
+| Warsaw Pact, careful | 189.1 → 164.6 | 1016.7 → 971.8 | 28.2 → 36.6 | 2.8% → 3.8% | 41%, 69% → 45%, 70% | 8.9 → 10.8 | 12.8, 10.4, 5.7 |
+
+The base run of the nation stopped after the Pact's campaigns (the `MakeColumns` fault §14 fixed was still in the base
+binary), so NATO's nation rows are compared with §14's own: careless 129.7 → 124.9 packages, 725.9 → 726.8 sorties,
+15.0 → 18.5 lost (2.1 % → 2.5 %), 9.6 fights, 5.9 down, 9.0 of ours lost; careful 128.7 → 128.3, 721.3 → 739.3,
+14.5 → 17.3 lost (2.0 % → 2.3 %), 7.4 fights, 5.2 down, 6.2 of ours lost.
+
+**What moved, and why.**
+
+- **Our fighters kill more, and lose aircraft.** The flat roll killed a strike aircraft at its fighter leg with a chance
+  of the front's threat (0.15-0.4) × 0.03, a third of that with an escort, half at night: about one or two aircraft a
+  week for the Pact and NATO on the district. The air battle shoots down 3.8-4.3 a week of the Pact's and 4.0-4.1 of
+  NATO's on the district, 8-10 and 5-6 a campaign on the nation; it costs us 2.5-3.1 and 4.3-4.8 on the district, 5-6
+  and 6-9 on the nation. So the Pact and NATO lose 1-4 more aircraft a week, and their loss rates rise by 0.3-0.8 points
+  (the Pact 1.4-1.6 % → 1.9-2.0 % on the district, 2.8-3.0 % → 3.6-3.8 % on the nation; NATO 0.9-1.0 % → 1.6 %, and
+  2.0-2.1 % → 2.3-2.5 % on the nation). The district's rates stay at the period's 2 % a sortie or under it; the nation's
+  were above it before (§8) and stay the highest.
+- **The exchange.** Against the Pact our fighters come out ahead, 1.2-1.8 of theirs for one of ours: most of the
+  Pact's losses are strikers our pairs reach, while its MiG-23MLs beat our MiG-21MFs one against one (2.8:1 in
+  `test_air_fight`) and its clearing group and close escort meet us first 60 % and 50 % of the time. Against NATO we lose more than
+  we kill, 0.7-0.9 of theirs for one of ours: NATO sends sweeps and CAPs, not close escort, its E-3A controls them and
+  warns its strikers (the meet chance ×1.5, the strikers warned 90 % of the time against 20 % by eye), and its F-15
+  sweep shoots our MiG-21s down at 4.8:1 alone. That is the period's order: Linebacker's 2:1 for the USAF against
+  MiG-21s with Teaball's warning, ACEVAL near parity without it, the Bekaa far beyond with an E-2C and the Syrian GCI
+  jammed; ours, a Pact-style air force of MiG-21s with a third of its regiments' MiG-23MLs, against NATO's F-15s and
+  E-3A, should lose the fighter-on-fighter fight and make the strikers pay.
+- **The Pact plans for our fighters.** With the A-50 out of 1985 its planner no longer halves our fighter threat
+  (`support.awacs_fighter_cut`), so it escorts more and gathers its strikers into bigger groups: on the nation 6.5-6.6 →
+  7.0-7.1 attackers a package, 30-32 % → 36-37 % of eight or more, and 171-165 packages a campaign against 183-189 with
+  the same sorties (990-1017 → 972-997). DEAD falls from 27-29 % of the mix to 25 %, helicopter raids rise from 10-12 %
+  to 15-16 %. On the district the Pact's packages move 97.8-99.2 → 94.4-96.4.
+- **The neutral flies less.** Its Draken is out of service in 1985, so it fields fewer jets: 45.9-38.1 → 40.0-34.4
+  sorties a week on the district, 28.2-23.7 → 25.5-21.4 on the nation; its losses move by what one aircraft is worth
+  (0.8-1.6 → 1.1-1.2).
+- **The rebels** have no fighters to send and almost nothing changes. A fight now and then (0.1-0.2 a week) is a light
+  aircraft our pair catches; their loss rate moves 1.2-2.3 % → 2.2-3.2 % on the district, within what one aircraft is
+  worth in a dozen packages (§13).
+- **A reshuffle.** The flat roll drew from the package's stream for every strike aircraft even at no threat; the air
+  battle forks its own stream, so every package after the first fight takes another, equally likely course. The battery
+  raids (7.2-8.2 → 7.5-8.8 for the Pact on the district, 8.4-8.9 → 10.8 on the nation) and the defences working move
+  within the seeds' noise.
+
+`air_war_bench data 400` has no fighters in its cases; only the reshuffle moves it, on the rows that §13 and §14 named:
+JP233 Tornados against medium-altitude F-16s 5.5 against 2.0 → 6.2 against 1.9 losses a 100 sorties, the runways cut
+52 % → 54 %, ARMs for each radar destroyed 3.8 → 3.5 against 12.8 → 12.6, the Thanh Hoa analogue's span down in 29 % →
+28 % of campaigns, the F-4Es popping up behind the Kub belt 25.8 → 25.2, the Bekaa package destroying the battery in
+65 % → 62 % with 6.3 → 6.5 lost a 100 sorties. `crew_balance data 10`, `helper_coverage` (its page byte for byte),
+`ground_check data 3600` and `em_bench` give the base's results.
+
+**No rebalance is needed.** The shapes of §2 hold, the district stays within the period's 2 % a sortie, and the
+fighters' share of the enemy's losses (a third to a half on the district) is new and wanted: our fighters now count.
+
+**Cost.** The abstract fight runs once a package and only where our fighters find it: a few dozen keyed
+draws and chain products, nothing per step. `air_war_balance data 5 7`, the base on its own data and B8 back to back on a
+quiet machine, twice: 76.9 s and 70.7 s for the base, 78.0 s and 70.7 s for B8, the same within the noise.
+`crew_balance data 3` back to back: 20.2 s and 20.1 s (the runner's `UpdateAirFight` returns at once in a scenario
+without `"air_fight"`). The full runs above were made while another worktree compiled with thirteen compilers and this
+one built at `-j 2`, so their wall times (the district 5m03 → 5m12, `crew_balance` 1m15 → 8m48, `helper_coverage`
+16m → 53m, `ground_check` 4m → 5m) measure the load, not B8; the base's nation run stopped before NATO's campaigns, so
+its 10m49 against 19m39 is not a comparison either. `em_bench` 11.4 s → 10.9 s. The live fight is not in any raid yet
+(B10); in `test_air_fight` a two-aircraft session of 155 s steps it at the runner's 10 Hz with no measurable cost.
+
+## 16. Faction profiles: NATO low until the defences break, interdiction from day 1 (track B, B11, 18 November 2026)
+
+B11 (`docs/air_battle/10_FACTIONS.md` §12) moved each faction's hot-phase values into a sourced `hot_phase` block. The
+abstract resolver does not read it, so on its own it changes no number. Two data choices that were not 1985 practice
+were changed with it (`10_FACTIONS.md` §9):
+
+- **§9.1.**
+  - NATO's strike, close support and armed reconnaissance templates have `medium_below_iads` 0.45. The planner offers them medium altitude only once the believed working defences are below the rollback's line.
+  - `medium_altitude_man` is rare in a superior force (1.3 → 0.1).
+  - Halloran is a `low_level_purist`.
+- **§9.2.** NATO's first phase is "counter-air and suppression, with interdiction from the first day":
+
+| Mission | dead | hunter | deception | recce | strike | bda | cas | missile | armed_recce |
+|---|---|---|---|---|---|---|---|---|---|
+| Before | 0.25 | 0.15 | 0.10 | 0.15 | 0.22 | 0.05 | 0.05 | 0.06 | 0.03 |
+| B11 | 0.22 | 0.12 | 0.08 | 0.11 | 0.25 | 0.03 | 0.08 | 0.05 | 0.06 |
+
+**The base** was the B12 build (track-b at 65b3dbd) on a copy of the data as it was. The rows below compare it with B11
+(base → B11), on the district over 20 seeds and the nation over 10, 7 days each.
+
+**What stayed byte for byte:**
+- the rebels', the neutral's and the Pact's tables, on both theatres;
+- `air_war_bench data 400`;
+- `crew_balance data 10`;
+- `helper_coverage` (its page as committed);
+- `ground_check data 3600` (0 of 15 scenarios with anything off the ground; only the wall times moved).
+
+The `hot_phase.mode` switch, the hot quirks' own stream and the per-mode tier weights are what keep the other factions
+still.
+
+| NATO | Packages | Sorties a week | Lost | Loss % | D1 SEAD share | D1 loss % | Defences working D3, D7 | Battery raids | Battery wrecked |
+|---|---|---|---|---|---|---|---|---|---|
+| District, careless | 95.2 → 99.8 | 537 → 547 | 8.8 → 8.2 | 1.6% → 1.5% | 39% → 35% | 2.5% → 2.5% | 32%, 64% → 44%, 53% | 5.2 → 6.0 | 90% → 95% |
+| District, careful | 93.8 → 101.2 | 522 → 549 | 9.3 → 8.4 | 1.8% → 1.5% | 39% → 35% | 2.5% → 2.5% | 47%, 63% → 48%, 68% | 7.8 → 7.0 | 0% → 15% |
+| Nation, careless | 126.7 → 131.2 | 737 → 765 | 17.1 → 16.3 | 2.3% → 2.1% | 42% → 46% | 3.0% → 2.5% | 74%, 70% → 79%, 80% | 8.6 → 8.3 | 50% → 10% |
+| Nation, careful | 126.4 → 131.3 | 732 → 747 | 16.2 → 16.0 | 2.2% → 2.1% | 42% → 46% | 3.0% → 2.5% | 77%, 75% → 80%, 75% | 8.7 → 9.0 | 0% → 0% |
+
+**What moved, and why:**
+
+- **More packages, more interdiction.**
+  - Strike, close support and armed reconnaissance share the first phase from day 1. The mix shows it: armed reconnaissance rises from 5-6% to 9% of packages on the district, strike from 24-25% to 27-28% on the nation.
+  - Packages rise by 3.5-8% and sorties by 2-5%: interdiction pairs and fours are smaller than the SEAD packages they replace.
+  - Armed reconnaissance searches rise from 4.8-6.2 to 6.9-9.5 a campaign, and columns found from 25-40% to 30-51%.
+  - On the nation, the line-hours cut in the week rise from 112-123 to 113-132. §9.2 asked for that.
+- **The rollback ends later on the district.** Fewer SEAD packages a day leave more of the defences standing: the careless battery's district has 44% working on day 3 against 32%. The phase means show the rollback ending later (day 4 1.6 → 1.4, day 6 1.9 → 1.7). It still ends and resumes: in `test_air_war.cpp`'s ten NATO campaigns of twelve days, it ended 13 times and resumed 9. On the nation it held all week before and still does (§8.4).
+- **Day 1's SEAD share stays the highest of the week**, on both theatres (§9.2's test).
+  - On the district it falls from 39% to 35%, as the shares say.
+  - On the nation it rises from 42% to 46%. A strike that must fly low under standing defences takes more suppression with it (each template's `sead_per_threat` against the threats on a low route).
+- **Losses did not rise.**
+  - §9.1 expected low strikes into the target guns to cost more, and they hardly did: 1.5% against 1.6-1.8% on the district, 2.1% against 2.2-2.3% on the nation, within what a few aircraft are worth across the seeds.
+  - The weaponeer answered the low level as `09_BALANCE.md` §9 would predict, with fewer dives (14.8-15.0 → 7.8-10.1 flights a campaign) and more pop-ups, lofts and stand-off shots (popup 10.8-12.6 → 15.9-18.4, loft 10.1-11.0 → 11.8-12.7, standoff 17.9-20.2 → 21.4-21.6).
+  - NATO keeps the lowest loss rate of the four on both theatres. On the district the Pact loses 1.8-2.1%, the rebels 2.7% and the neutral 3.1-3.8%; on the nation the Pact loses 3.7-4.1%.
+  - Losses still fall as the rollback bites (§2's shape).
+  - NATO's day 1 on the district (2.5%) was above the Pact's careless day 1 (2.3%) before B11 as well, and B11 does not change it. `delivery_risk` was left alone.
+- **The battery.**
+  - On the district the careful battery is now wrecked in 3 runs of 20, where it was wrecked in none. The interdiction and armed reconnaissance flights from day 1 find it on the roads and in the open more often.
+  - On the nation the careless battery is wrecked in 1 run of 10, where it was wrecked in 5. More of NATO's day goes to bridges, junctions and columns, away from the battery.
+  - Battery raids move within the noise (5.2-8.7 → 6.0-9.0).
+- **The fighters** fight a little less on the nation (8.6-8.7 → 7.9-8.0 a campaign), and the tankers refuel more (10-15 → 28-35 aircraft a campaign): deep low-level interdiction needs fuel.
+
+**No rebalance is needed.** NATO keeps the lowest loss rate, the rollback ends and resumes, day 1 keeps its SEAD
+peak, and week 1 cuts more lines.
+
+**Cost.** The planner's gate is one comparison per template and the officers' hot quirks a few draws at
+appointment. `HotPhase` is pure and is read once per aircraft when a raid is handed to a session. Nothing runs per step.
+The wall times are not comparable: the base set ran while this worktree compiled, B11's while the tests ran.
+
+## 17. The balance pass: the hot phase against history (track B, B14, 18 November 2026)
+
+B14 (`docs/air_battle/11_IMPLEMENTATION_PLAN.md`) turns the track's measures into bands. Each band is a range in
+`data/air_war/balance_bands.json` with its anchor: a registered source, or "game value" with the reason. The two
+benches read the bands and fail when a measure falls outside one: they print PASS or FAIL on each row, and exit with 2
+when anything is out of band (`simcore/air_war/balance_bands.hpp`).
+
+- `air_war_bench` ends with a new block, "The hot phase against history": the strikers' answers to our fighters, the
+  1967 missiles, the exchanges, the latencies and friendly fire.
+- `air_war_balance` prints three new lines for each faction and posture: the losses by what shot them down (beside
+  what the planners expected), the strike flights our fighters reached and how they answered, and the latencies from
+  a pilot's sighting to an on-call package over the place and to a diverted flight's new task. It ends with a band
+  table for the theatre, the faction and the posture.
+
+Fast checks went into the tests: `test_air_fight.cpp` (the strikers' answers and the warning's swing over 3000 and
+4000 abstract fights), `test_c2.cpp` (a Pact divert's new task 10-30 min after the decision) and `test_hot_phase.cpp`
+(the bands load with their sources; `RetaskAirS` stays in its band; the save's `balance_mode`).
+
+### 17.1 The bands against history (`air_war_bench data 400`)
+
+| Measure | The model | Band | Anchor |
+|---|---|---|---|
+| Strike flights attacked by our fighters (abstract fight): jettisoned | 49.3% | 40-65% | `red_baron_vol2` (16 of 37 F-105 flights, 1966), `aces_1976` (107 of 192, 55.7%) |
+| the same: pressed on with their stores | 41.1% | 18-55% | `red_baron_vol2` (12 of 37) |
+| the same: turned for home | 19.0% (36% before B14) | 10-42% | `red_baron_vol2` (9 of 37) |
+| The same in a session (`reactions.hpp`, NATO's row for a fighter seen): jettisoned, pressed on, turned home | 55.9%, 34.4%, 22.3% | the same bands | the same |
+| AIM-7E: hits a launch, out of parameters | 11.0%, 35.3% | 9.6-12.6%, 31-39% | `checo_1967_a2a` p. 44 (11.1%, 35%) |
+| AIM-9B: hits a launch, out of parameters | 18.8%, 26.0% | 17.1-20.1%, 22-30% | `checo_1967_a2a` p. 44 (18.6%, 26%) |
+| Exchange, ours lost for each of theirs: an F-4E strike and escort, no warning | 0.91 | 0.7-3.0 | `mcallister_1985` (2.25:1 in 1965-68, 1:1 in 1968) |
+| the same under an E-3A (Teaball's warning) | 2.36 (1.60 before B14) | 2.0-8.0 | `checo_1978_linebacker` (3.8:1 in August-October 1972) |
+| the warning's swing (times) | 2.60 (1.76) | 1.5-10 | `checo_1978_linebacker` (0.47:1 in May 1972 to 3.8:1) |
+| an F-16A strike with an F-15C sweep, an EF-111A and an E-3A (the Bekaa) | 3.73 (2.92) | 3-1000 | `lambeth_1984` (about 85 to none); the floor a game value |
+| the Pact's MiG-23ML sweep | 1.10 | 0.5-4.0 | game value (`07_AIR_TO_AIR.md`) |
+| Latency: the Pact's airborne flight retasked | 20.0 min | 10-30 min | `mt_1962_kontsevoy`, `fm_100_2_1_1984` p. 12-7, SAM3D estimate |
+| NATO's close support retasked in the air | 6.5 min | 3-10 min | SAM3D estimate (`10_FACTIONS.md` §7.4) |
+| the Pact's readiness 1 to wheels up | 4.0 min | 3-5 min | `fm_100_2_1_1984` p. 12-7 |
+| Friendly fire in an exercise, ours among those fired on: notices only (the 1960s) | 22.5% | 12-30% | `mt_turchin_coop` pp. 11-12 (up to 25%) |
+| the same with notices and the day's codes (1985) | 0.4% | 0-6% | game value (`08_OUR_FIGHTERS.md` §8) |
+
+How the rows are measured:
+
+- **The strikers' answers.** Two flights of four F-4Es on a medium strike meet our pair of MiG-21s by day, 8000 times.
+  "Pressed on" is a flight that neither jettisoned nor turned home. The F-105 records count flights attacked by MiGs,
+  not flights that only saw them, so the bench counts only the flights our fighters actually attacked. The session's
+  row draws NATO's reaction row for a fighter seen by eye (`DecideFlight`), with the flight's nerve between 0.3 and 0.7.
+- **The exchanges** are the abstract fight's own (two passes, the warning, the escort's screen), at 2000 fights a case,
+  counted as the US counted them: our losses for each of theirs. The bands are wide because the analogue is flown with
+  1985's missiles (AIM-7F, AIM-9L), which hit far more often than 1968's.
+- **The latencies** are the means of `RetaskAirS` and `AlertTakeoffS` over a grid of draws and officers. The order's
+  own hops (report, decision, order) are printed beside them for reference: 2.2 min for the Pact and 2.8 for NATO.
+- **Friendly fire** is a small Monte Carlo of an exercise: 400 tracks, 35% of them ours, each notice sent 15-75 min
+  before the crossing (game values). A notice reaches the battery by `RunNotice` (the chain from the fighter
+  regiment's duty officer to the regiment's post, about 43 min), and the crew judges each track by `JudgeTrack`:
+  in the 1960s by the notice alone, in 1985 by the notice and the day's codes (`IffSystem::Kremniy`).
+
+### 17.2 The bands of the campaign (`air_war_balance`)
+
+| Band | District | Nation | Anchor |
+|---|---|---|---|
+| Aircraft lost a sortie: the rebels | 0-6% | 0-20% | §2; the nation's band argued below (item 1) |
+| the neutral | 0-8% | 0-8% | §2, §5, §8 |
+| the Pact | 1-4% | 1.5-4.5% | §5, §8, §14 |
+| NATO | 0.5-3% | 1-3.5% | §2, §5 (the lowest rate of the four), §8 |
+| Runs with the battery wrecked: careless (Pact, NATO) | 50-100% | - | §5 (the lesson the campaign teaches) |
+| careful | 0-40% | 0-40% | §5 |
+| The air battle, theirs lost for each of ours: the Pact | 0.8-2.5 | 0.8-2.5 | game value (`07_AIR_TO_AIR.md`, §15) |
+| NATO | 0.25-1.2 | 0.25-1.2 | game value; `checo_1978_linebacker`, `lambeth_1984`: the bench's cases turned round, from the Bekaa (1/3.7) to 1968 unwarned (1/0.9) |
+| On call, the sighting to over the place: the Pact | 15-45 min | 15-45 min | `mt_1962_kontsevoy` (20-30 min, 17-28 in the exercise), widened |
+| NATO | 15-60 min | 15-60 min | `luke_2002_cas` (40-50 min in Korea, the goal 15-20) |
+| A divert, the sighting to the new task: the Pact | 10-40 min | 10-40 min | SAM3D estimate (`10_FACTIONS.md` §7.4, plus the report's way) |
+
+A band is checked only where the measure is worth reading: the exchange with at least 10 aircraft down, the on-call
+latency with at least 5 packages and the divert with at least 3 diverts.
+
+### 17.3 The items B14 settled
+
+1. **The rebels' losses on the nation (14-17% a sortie; B2's Left).** The losses come from B2's route planner, not from
+   a fault: with `route.mode` 0 they are 4.1-5.7%. They run at 2.0-2.4 aircraft a week. Most are single low
+   reconnaissance aircraft by day over our troops (the motor rifle division's artillery, group south, the tank
+   regiment's area). They are shot down by the Osa batteries guarding those troops (battery 21, battery 24 and the
+   regiment's others) and by the S-125 at Paksany. The rebels' intelligence has no ELINT and a weak analyst, so it
+   never places the mobile batteries. Their planner prices those flights at 0.4 losses a week; they lose 1.1-1.5.
+   Reconnaissance makes up 52-55% of their packages, against an apportionment of 15%, because their other missions
+   find few targets they can reach. Few sorties and two losses a week give a high share. That is a fair picture of a
+   rebel air arm flying blind into a division's air defence, so the band on the nation is 0-20%, a game value. The
+   district keeps 0-6%. **Left:** the rebels' intelligence never places the mobile batteries, and the planner does not
+   learn a threat from losses it cannot explain.
+2. **NATO's day 1 against the Pact's, and `delivery_risk`.** NATO's day 1 costs 2.6-2.7% a sortie against the Pact's
+   2.3-2.7%, inside the noise of about ±0.45 points over 20 seeds. Its losses that day go to our fighters (0.7 aircraft
+   a campaign), the SAMs (0.5) and the player's battery (0.3); the target's guns take only 0.1. `delivery_risk` (the
+   price of a low delivery into the target's guns) cannot move what it does not cause: at 0.8 day 1 cost 2.3-2.5%, no
+   different. It stays at 0.4.
+3. **The retask latency: B5's hops against B11's `retask_air`.** B5's divert composed the report's and the order's
+   hops (160-490 s for the Pact), well under the doctrine's 10-30 min for an airborne flight. Under `balance.mode` 1 a
+   divert now waits for `RetaskAirS` (the faction, the mission, the officer, from a stream keyed on the message id,
+   not a new keyed stream): the order is sent at once but the flight has its new task no earlier than the decision
+   plus the retask delay (`C2Message::not_before_h`). The test in `test_c2.cpp` diverts a Pact armed reconnaissance
+   flight onto a reported column: under 6 min in mode 0, inside the band in mode 1. In the campaigns no divert happened
+   at all (the Pact's only divertable line is armed reconnaissance within its own area at a 0.2 chance, and NATO had no
+   in-flight report to divert on), so the campaign rows of `divert_min` stay unread. **Left:** diverts are too rare
+   in the campaign to measure there.
+4. **B4's two outcome-changing savings (B12's Left).** Declined. They are the defensive perception rate capped at the
+   threat rate (about 7 s in the testbed's hour) and the warning receivers' period at 0.4 s instead of 0.2 s (about
+   25 s). Both act inside the play circle, where the player watches, and change what a pilot knows and when. B12's
+   levels of detail already carry the cost outside it. Both stay as data (`perception.json`'s `defensive` rate, the
+   EM library's ESM period) should a later pass need them.
+5. **B6's order of attacks on unbriefed targets.** The data keep the design's order for each encounter
+   (`hot_phase.opportunity`: rebels 0.7, NATO 0.5, the neutral 0.4, the Pact 0.2). The counts a campaign come out
+   NATO, the Pact, the neutral, the rebels, because of exposure: the rebels fly few gun or rocket aircraft near our
+   lines. That is right for 1985, and nothing changed.
+6. **B11's careful battery wrecked in 3 runs of 20 against NATO.** Now 2 of 20 against NATO and 3 of 20 against the
+   Pact, inside the careful band of 0-40%. (The first pass in §5 gave 15-40% for a careful battery; 0-40% keeps a
+   battery that never meets its raid as a pass.)
+7. **B8's exchange ratios in a band.** In the campaigns the Pact's sit at 1.42-1.88 of theirs for each of ours and
+   NATO's at 0.32-0.68 (the band's floor moved, 17.5). The bench's Teaball case was out of band: the E-3A's warning lifted the exchange only
+   from 0.91 to 1.60 against the record's 0.47:1 to 3.8:1. Two changes under `balance.mode`, both in
+   `air_war/air_fight.hpp`:
+   - A package under an E-3A is no longer surprised when the controller sees our fighters coming
+     (`a0_seen_awacs`): Teaball's whole point was the warning.
+   - The E-3A's controller brings the package's fighters to the fight more often: `a0_awacs_meet` 1.5 → 2.0
+     (`a0_awacs_meet_mode0` keeps 1.5 for old saves).
+   The warned case is now 2.36 and the swing 2.60. The Bekaa case rose from 2.92 to 3.73. Its floor was lowered from
+   6 to 3, a game value: the abstract fight's two passes against our pilots of 1985 carry neither the destruction of
+   the Syrians' ground control with their SAMs nor the Syrians' training, so the band asks only that a sweep, a jammer
+   and an E-3A do better than the warned 1972 package's floor.
+8. **The F-105 and CHECO rows** are in the bench (17.1). One more change: the abstract fight's strikers answered by
+   reading `strikers_abort` as a share of the strikers that did not press on, which turned NATO home 36% of the time
+   against the record's 24%. Under `balance.mode` 1 the abort is drawn at its own rate (19%).
+
+### 17.4 What changed, under `balance.mode`
+
+All four changes are behind `tuning["balance.mode"]` (1 in `data/gameplay/air_war.json`'s `balance` group). A save written before B14 has no `balance_mode` and
+loads with 0, the old behaviour: B5's composed divert, the old abort reading, no surprise denied, `a0_awacs_meet` 1.5.
+
+| Change | Where | Effect |
+|---|---|---|
+| A divert waits for the retask delay | `air_war/c2.hpp` (`Divert`, `Send`) | an airborne Pact flight has its new task 10-30 min after the decision, not 3-8 |
+| The strikers' abort at its own rate | `air_war/air_fight.hpp` | NATO's attacked flights turn home 19% of the time, not 36% |
+| No surprise under an E-3A that sees our fighters | `air_war/air_fight.hpp` | the warned exchange 1.6 → 2.4 |
+| `a0_awacs_meet` 1.5 → 2.0 | `data/air_war/air_combat.json` | the same; the Bekaa case 2.9 → 3.7 |
+
+For the counters only (not saved): `PackageOutcome` counts the flights our fighters attacked, the jettisons and the
+aborts; `C2Stats` keeps each divert's and each on-call package's latency; `AirCampaign::ObserveOutcomes` lets a bench
+see each package's outcome as it is applied.
+
+### 17.5 Balance before and after
+
+The base is track-b at ef9952b on a copy of the data as it was; the after is this branch. District 20 seeds, nation
+10, 7 days each (base → after).
+
+| District | Loss % | Battery wrecked | Exchange, theirs for ours | On call (min) |
+|---|---|---|---|---|
+| Rebels, careless | 2.7% → 2.7% | 0% → 0% | - | - |
+| Rebels, careful | 2.7% → 2.7% | 0% → 0% | - | - |
+| Neutral, careless | 3.1% → 3.1% | 0% → 0% | - | - |
+| Neutral, careful | 3.8% → 3.8% | 0% → 0% | - | - |
+| Warsaw Pact, careless | 1.8% → 1.8% | 70% → 75% | 1.40 → 1.42 | 23.8 |
+| Warsaw Pact, careful | 2.1% → 2.0% | 15% → 15% | 1.60 → 1.73 | 23.8 |
+| NATO, careless | 1.5% → 1.6% | 95% → 90% | 0.80 → 0.68 | 23.1 |
+| NATO, careful | 1.5% → 1.5% | 15% → 10% | 0.80 → 0.56 | 22.8 |
+
+| Nation | Loss % | Battery wrecked | Exchange, theirs for ours | On call (min) |
+|---|---|---|---|---|
+| Rebels, careless | 16.9% → 16.9% | 0% → 0% | - | - |
+| Rebels, careful | 13.9% → 13.9% | 0% → 0% | - | - |
+| Neutral, careless | 4.8% → 4.8% | 0% → 0% | - | - |
+| Neutral, careful | 6.4% → 6.4% | 0% → 0% | - | - |
+| Warsaw Pact, careless | 4.1% → 4.1% | 60% → 60% | 1.40 → 1.51 | 27.8 |
+| Warsaw Pact, careful | 3.7% → 3.6% | 10% → 10% | 1.93 → 1.88 | 29.7 |
+| NATO, careless | 2.1% → 1.9% | 10% → 10% | 0.49 → 0.42 | 20.6 |
+| NATO, careful | 2.1% → 2.2% | 0% → 10% | 0.57 → 0.32 | 20.3 |
+
+What moved:
+
+- **The rebels and the neutral did not move** on either theatre: they fly few fights under an E-3A and few diverts,
+  and the same seeds give the same campaigns.
+- **NATO's exchange fell**, on the district from 0.8 to 0.56-0.68 of theirs for each of ours and on the nation from
+  0.49-0.57 to 0.32-0.42: with no surprise under the E-3A and its fighters brought to the fight more often, NATO's
+  escorts and sweeps win more of the fights. This is the swing of 1972 the bench asks for. The nation's careful run
+  (2.3 of theirs down for 7.2 of ours) fell below the first band's floor of 0.4, which was set before the bench's
+  cases existed. The band now runs from the Bekaa case turned round (1/3.7, about 0.27) to the unwarned 1968 package
+  (1/0.9), floor 0.25: NATO's campaign mixes sweeps under an E-3A with strikes that fly without one, so it should
+  fall between the two.
+- **The Pact's exchange rose a little** (1.40-1.60 → 1.42-1.73): its strikers turn home less often under the new
+  abort reading and stay in the fight to be shot at.
+- **Losses a sortie and the battery's fate** moved inside the noise of a few aircraft and one or two runs of 20.
+- **The latencies** sit in their bands: an on-call package is over the place 23-24 min after the pilot's sighting
+  for both alliances.
+
+`crew_balance data 10`, `helper_coverage` (its page as committed), `ground_check data 3600` (0 of 15 scenarios with
+anything off the ground), `em_bench data 500 60 24` and `air_battle_bench` give the same outcomes as the base; only the
+wall times moved (the base set ran beside a build). The old rows of `air_war_bench data 400` are unchanged.
+
+**Cost.** One more comparison and at most one draw per attacked flight, per fight under an E-3A and per divert.
+Nothing runs per step.
+
+**Left:**
+- The rebels' intelligence placing mobile batteries, and the planner learning from losses it cannot explain (item 1).
+- Diverts too rare in the campaigns to read their latency there (item 3); the `divert_min` band waits for them.
+- The exchange bands are wide: the abstract fight is calibrated to 1967-72 rates and flown with 1985 missiles.
+- B13 (Unreal) is the owner's; the hot phase's look will need its own pass once it is drawn.

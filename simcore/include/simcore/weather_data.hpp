@@ -50,10 +50,15 @@ private:
     }
 
     bool LoadPreset(const json::Value& e, const std::string& p, WeatherPreset& out) {
-        if (!Keys(e, p, {"id", "name", "air_war", "source", "confidence", "notes", "surface", "boundary_layer", "winds_aloft", "layers"}) ||
+        if (!Keys(e, p, {"id", "name", "air_war", "source", "confidence", "notes", "surface", "boundary_layer", "winds_aloft", "layers",
+                         "upper_rh_pct"}) ||
             !RequireString(e, p, "id", out.id) || !RequireString(e, p, "name", out.name) ||
-            !OptionalString(e, p, "air_war", out.air_war) || !Provenance(e, p)) {
+            !OptionalString(e, p, "air_war", out.air_war) || !Provenance(e, p) ||
+            !OptionalNumber(e, p, "upper_rh_pct", out.upper_rh_pct)) {
             return false;
+        }
+        if (e.Find("upper_rh_pct") != nullptr && (out.upper_rh_pct < 0.0 || out.upper_rh_pct > 100.0)) {
+            return Fail(Join(p, "upper_rh_pct"), "must be 0 to 100");
         }
         const json::Value* s = e.Find("surface");
         if (s == nullptr) return Fail(Join(p, "surface"), "required");

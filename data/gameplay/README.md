@@ -1,5 +1,17 @@
 # Gameplay tuning
 
+`perception.json` (track B, B3) is not a system's tuning: it is the pilot's eye, the ground law, the launch's signs and the
+memory of a picture (`simcore/air_war/perception.hpp`, `docs/air_battle/03_PERCEPTION.md`). Each value has its source: the two US
+Navy models (`nwc_tp5709_1974` for aircraft, `nwc_tp6005_1978` for ground targets) where they give a number, a labelled game
+value where they do not.
+
+`reactions.json` (track B, B4) is the pilots' reactions under fire (`simcore/reactions.hpp`, `simcore/reaction_chain.hpp`,
+`docs/air_battle/04_REACTIONS.md`): the skill tiers (delay, no reaction, dispense misuse), the values (stress, the
+manoeuvres, chaff and flares, going round, the flight's decision), the receivers' names by threat class, our fighters by
+model, and one profile per faction (its rows: manoeuvre, countermeasure, and the flight's jettison, press-on and abort
+shares; the flight's officer moves these by his shifts of the faction's `hot_phase`, B11). Each value cites its source or says it is a game value or an estimate. A target names its profile in
+`"reactions"`.
+
 One file per system with the game-balance numbers used by `simcore/engagement.hpp`: when zone lamps light, how close
 an operator must aim for the tracking radar to capture, how fast NPC crew turn the wheels, how long a missile takes
 to arrive, and the chance of a hit.
@@ -85,6 +97,35 @@ Game-balance numbers of the enemy air command (`simcore/air_war/`, `docs/air_war
 abstract attrition and strike model (with the guns around targets), the intelligence's ageing and deception, adaptation,
 politics, the repair of what is wrecked, the day's weather, the pacing of the player's missions, the raid scenarios and
 the mission bridge's weapon effects, and what our side learns. Tuned against the period's shapes in the balance pass
-(`docs/air_war/09_BALANCE.md`, `simcore/examples/air_war_balance.cpp`).
+(`docs/air_war/09_BALANCE.md`, `simcore/examples/air_war_balance.cpp`). The `"c2"` group (track B, B5,
+`simcore/air_war/c2.hpp`): the command in the air's game values, its switch (`mode`: 0 resolves each package whole at its
+first hour without posts, as before B5, kept so an old save replays), the campaign's step while a package is airborne, a
+jammed hop's retry, the depth of BAI, how far an officer's traits bend a post's decision, the pools' commit risk, the
+posts' cover of a low flight, the spread of a FAC's and a pilot's report, the reach of hunters and diverts, our
+listeners' chance, a second report's wait, the corps' refusal and a FAC's requests per hour; the posts, authority, hop
+times are each faction's `"c2"` block in `data/air_war/` and the alert pools its `"hot_phase"` block, with sources.
+The `"hot_phase"` group (track B, B11, `simcore/air_war/hot_phase.hpp`): its switch (`mode`: 0 keeps NATO's old
+first-phase shares, the old weight of `medium_altitude_man`, no medium-altitude gate and no hot-phase quirks, so a save
+made before B11 replays).
+The `"opportunity"` group (track B, B6, `simcore/air_war/opportunity.hpp`, `docs/air_battle/06_OPPORTUNITY.md`): targets
+of opportunity, its switch (`mode`: 0 as before B6, kept so an old save replays), the leader's tick, identification
+time and misidentification, the room a pass needs, the slot's slack, the gun's burst under fire, re-attacks, the bounds
+of the traits' and pilots' moves, the threat's radius and age, the claims by day and night, a report's spread, the
+pass's run-in, find, recovery and trail distances, and the abstract level's find scale and a column's hit and guns.
+The `"delivery"` group gains `strafe` and `gentle_dive` (their CEP, exposure, release, and the gentle dive's pull-up,
+apex and release heights).
 Every key is listed with its default in `TuningTable::Defaults` (`simcore/air_war/data.hpp`); an unknown key fails the
 load and `test_air_war` checks the file names them all.
+
+The `"route"` group is the route planner's (track B, B2; `simcore/air_war/route_planner.hpp`,
+`docs/air_battle/01_ROUTES.md` sections 6 and 10). `mode` 0 flies the old four shapes; a save made before B2 replays
+with it. `mode` 1 plans routes over the believed threats and the ground. The rest shape the graph of map features, the
+leg cost, the variants, the corridor suppression and the helicopters' holding areas and battle positions. All are game
+values except `continuous_s` (`crawford_1977_rand`) and `egress_clear_s` (`fm_100_2_1_1984`).
+
+## after_action.json (the combat report from the records)
+
+The battery's combat report compiled from the PU-12M's records and the regiment's check of them
+(`simcore/campaign/report.hpp`, roadmap P9, `docs/command/01_PRINCIPLES.md` 9): how far apart in time two raids are,
+how a journal line or a board mark is matched to the report the radar company said, the agreement each mark of the
+crew's records needs (5 to 3; below it 2), and the regiment's belief in a unit before its first check.

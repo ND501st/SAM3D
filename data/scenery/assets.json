@@ -1,0 +1,15 @@
+{
+  "notes": "The register of third-party art the map may draw in place of its procedural meshes (simcore/scenery/asset_register.hpp, docs/scenery/ASSETS.md). It starts empty: every part is procedural (simcore/scenery/map_meshes.hpp). An asset is added only with the project owner's say-so, file by file; one that may not be redistributed lives under /Game/ThirdParty/ (unreal/SAM3D/Content/ThirdParty/, ignored by git) and is fetched on each machine. tools/check_assets.py checks that none is committed.",
+  "assets": [],
+  "parts": {
+    "tree_oak": {"asset": null},
+    "tree_poplar": {"asset": null},
+    "tree_pine": {"asset": null},
+    "tree_acacia": {"asset": null},
+    "canopy_mass": {"asset": null},
+    "house": {"asset": null},
+    "barn": {"asset": null},
+    "flats": {"asset": null},
+    "industrial": {"asset": null}
+  }
+}

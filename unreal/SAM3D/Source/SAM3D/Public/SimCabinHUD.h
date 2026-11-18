@@ -25,6 +25,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Board")
 	bool bShowBoard = false;
 
+	/** The seat's map case open (toggled with O): the papers the chain of command has handed in (roadmap P1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Command")
+	bool bShowMapCase = false;
+
 	/** The lesson card's lower edge this frame (0: no card); the crew menu opens below it. */
 	float GuideBottom = 0.0f;
 
@@ -59,6 +63,11 @@ private:
 	/** The PU-12 board (B); in a launcher the designations heard, and beside them what the seat's crewman knows of the air
 	 *  (his own picture: what I've heard). */
 	void DrawBoard(class USimWorldSubsystem* Sim, class UFont* Font, const FString& Station);
+	/** The seat's map case (O): the newest paper on top, read in full; the others' titles under it. Closed, a line when a
+	 *  paper has come in since it was last opened. */
+	void DrawMapCase(class USimWorldSubsystem* Sim, class UFont* Font, const FString& Station);
+	/** Papers in the map case when it was last open (a new one is pointed out). */
+	int32 PapersRead = 0;
 	void DrawPost(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle, class UFont* Font);
 	/** The camera view's name, the view's last note and the time compression, at the top. */
 	void DrawView(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);

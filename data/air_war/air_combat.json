@@ -1,0 +1,1839 @@
+{
+  "air_combat_id": "air_combat",
+  "status": "B7 data set (15 November 2026): the air-to-air weapons, fits, doctrine and the chain's numbers for the 1985 air battle (docs/air_battle/07_AIR_TO_AIR.md 5.1). Draft: the values the sources give are cited; everything else is a game value, named in each entry's game_values.",
+  "source": "docs/research/air_battle_2026-11/aam_weapons.md and air_combat.md (the cited values and source ids); checo_1967_a2a; airwar_ru; mis; parsch_dusrm",
+  "confidence": "medium",
+  "notes": "Every missile, gun and fit carries the year it entered service, gated by TheatreDef::year. Soviet equipment has a second year, allies_year, for the Pact's allies and our side. The 1991 AMRAAM, the AIM-9X and ASRAAM have no guidance class here and are absent; the R-27 and the R-73 are present with their real years (the R-73 for allies from 1988) and carried by no 1985 fit. AIM-9P, Sky Flash, Magic 1 and Super 530F have no usable date or envelope and are absent: their slots wait for a source (docs/air_battle/07_AIR_TO_AIR.md 7).",
+  "aams": [
+    {
+      "id": "k13",
+      "name": "K-13 (R-3S, AA-2 Atoll)",
+      "guidance": "ir_rear",
+      "in_service_year": 1960,
+      "max_rear_m": 6000,
+      "low_factor": 0.5,
+      "min_m": 1000,
+      "launch_g": 2.0,
+      "seeker_cone_deg": 10,
+      "target_g": 10,
+      "sun_exclusion_deg": 30,
+      "clutter_below": 0.4,
+      "flare_rejection": 0.0,
+      "reliability": 0.7,
+      "design_pk": 0.4,
+      "lethal_m": 6,
+      "mean_mps": 600,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "seeker_cone_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "checo_1967_a2a pp. 19-20 (the US intelligence view of the K-13 in 1967: minimum 1,000 m, launch under 2 g, 10 g at sea level, no guidance within 30 deg of the sun); ru_wiki_aam (series production 1960); the other values are game values",
+      "confidence": "medium",
+      "notes": "The 1967 view is the adversary's. The seeker's degradation 30-50 deg from the sun and the ground clutter (clutter_below) follow the same page; their numbers are game values. The maximum range is not in the sources read."
+    },
+    {
+      "id": "r13m",
+      "name": "R-13M (K-13M, AA-2-2 Atoll)",
+      "guidance": "ir_rear",
+      "in_service_year": 1974,
+      "max_rear_m": 7500,
+      "low_factor": 0.5,
+      "min_m": 800,
+      "launch_g": 4.0,
+      "seeker_cone_deg": 12,
+      "target_g": 8,
+      "sun_exclusion_deg": 25,
+      "clutter_below": 0.6,
+      "flare_rejection": 0.1,
+      "reliability": 0.75,
+      "design_pk": 0.5,
+      "lethal_m": 7,
+      "mean_mps": 600,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "ru_wiki_aam (freon-cooled Inei-70 seeker and a new proximity fuze, adopted 3 January 1974: unverified, Wikipedia only, no footnote); the values are game values",
+      "confidence": "low",
+      "notes": "Adoption date unverified (aam_weapons.md aam-wp-01): the year 1974 is used because the research says the round existed by 1985. Ranges and limits are SAM3D's estimates on the K-13's."
+    },
+    {
+      "id": "r60",
+      "name": "R-60 (AA-8 Aphid)",
+      "guidance": "ir_rear",
+      "in_service_year": 1973,
+      "max_rear_m": 7200,
+      "low_factor": 0.333,
+      "min_m": 250,
+      "launch_g": 7.0,
+      "seeker_cone_deg": 12,
+      "target_g": 8,
+      "sun_exclusion_deg": 25,
+      "clutter_below": 0.9,
+      "flare_rejection": 0.1,
+      "reliability": 0.8,
+      "design_pk": 0.5,
+      "lethal_m": 2.5,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "mean_mps"
+      ],
+      "source": "airwar_ru (R-60: adopted 18 December 1973; 7.2 km at about 12 km, about a third near the ground; minimum 250 m; launch at up to 7 g; target 8 g; 3 kg rod warhead, damage radius 2.5 m; calculated kill chance 0.5 for one missile); ru_wiki_aam (seeker designation 12 deg, rear hemisphere only); the other values are game values",
+      "confidence": "medium",
+      "notes": "The target load is 8 g in the text and 12 g in the table: 8 used (aam_weapons.md section 4). The design figure is a design figure, not a combat rate: it is the ceiling of the last link only."
+    },
+    {
+      "id": "r60m",
+      "name": "R-60M (AA-8 Aphid)",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1980,
+      "allies_year": 1984,
+      "max_head_m": 3000,
+      "max_rear_m": 7200,
+      "low_factor": 0.333,
+      "min_m": 250,
+      "launch_g": 7.0,
+      "seeker_cone_deg": 17,
+      "target_g": 8,
+      "sun_exclusion_deg": 20,
+      "clutter_below": 0.9,
+      "flare_rejection": 0.4,
+      "reliability": 0.85,
+      "design_pk": 0.9,
+      "lethal_m": 2.5,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "max_head_m",
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "mean_mps"
+      ],
+      "source": "ru_wiki_aam (cooled Komar-M seeker, designation +-17 deg, usable head-on in close combat, calculated kill chance 0.9 after Markovsky and Perov 2005, not read); airwar_ru (R-60, for the shared round); the other values are game values",
+      "confidence": "low",
+      "notes": "Adoption 1977 or the early 1980s (unverified; aam_weapons.md aam-wp-02): 1980 is a SAM3D estimate, before 1985 either way. allies_year 1984 is a SAM3D estimate for the Pact allies and our side, low confidence. The head-on range is a game value for close combat."
+    },
+    {
+      "id": "r23r",
+      "name": "R-23R (AA-7 Apex, semi-active)",
+      "guidance": "sarh",
+      "in_service_year": 1973,
+      "max_head_m": 25000,
+      "max_rear_m": 15000,
+      "low_factor": 0.6,
+      "min_m": 500,
+      "launch_g": 4.0,
+      "seeker_cone_deg": 60,
+      "target_g": 6,
+      "clutter_below": 0.7,
+      "flare_rejection": 0.2,
+      "reliability": 0.75,
+      "design_pk": 0.6,
+      "lethal_m": 8,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "ru_wiki_aam (serial production 1973; the first Soviet missile able to engage against the ground; rod warhead 23 kg); mis (R-24: the R-24R raised the R-23's 25 km head-on and 15 km rear to 32 and 20 km: implied); the other values are game values",
+      "confidence": "low",
+      "notes": "A Soviet comparison rates it above the AIM-7B and R.530 and a little below the AIM-7F (airwar_ru, MiG-23M)."
+    },
+    {
+      "id": "r23t",
+      "name": "R-23T (AA-7 Apex, infrared)",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1973,
+      "max_head_m": 15000,
+      "max_rear_m": 15000,
+      "low_factor": 0.6,
+      "min_m": 500,
+      "launch_g": 4.0,
+      "seeker_cone_deg": 20,
+      "target_g": 6,
+      "sun_exclusion_deg": 15,
+      "clutter_below": 0.95,
+      "flare_rejection": 0.3,
+      "reliability": 0.75,
+      "design_pk": 0.6,
+      "lethal_m": 8,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "max_head_m",
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "ru_wiki_aam (serial production 1973; the seeker locks head-on on the kinetic heating of the leading edges); the values are game values",
+      "confidence": "low",
+      "notes": "Ranges: the R-23's 25 km head-on and 15 km rear are for the radar round; the infrared round's are SAM3D estimates."
+    },
+    {
+      "id": "r24r",
+      "name": "R-24R (AA-7 Apex, semi-active)",
+      "guidance": "sarh_inertial",
+      "in_service_year": 1981,
+      "allies_year": 1981,
+      "max_head_m": 32000,
+      "max_rear_m": 20000,
+      "low_factor": 0.4,
+      "min_m": 500,
+      "launch_g": 4.0,
+      "seeker_cone_deg": 60,
+      "target_g": 8,
+      "clutter_below": 0.8,
+      "autonomous_s": 10,
+      "flare_rejection": 0.25,
+      "reliability": 0.82,
+      "design_pk": 0.7,
+      "lethal_m": 10,
+      "mean_mps": 900,
+      "munition": "",
+      "game_values": [
+        "low_factor",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "mean_mps"
+      ],
+      "source": "mis (R-24: adopted for the MiG-23ML and MiG-23P by a decree of 6 April 1981; 32 km head-on and 20 km rear in the text; minimum 0.5 km; 10 s of autonomous flight, fired about 30 per cent beyond the seeker's lock range; 35 kg rod warhead, lethal radius 10 m; Mach 3.5); the other values are game values",
+      "confidence": "medium",
+      "notes": "The table in the source gives 50 km; the US view in 1982 was 10 to 14 nm (npic_1982_apex): 32 km used as the kinematic maximum head-on at height (aam_weapons.md section 4). allies_year 1981 is a SAM3D estimate, low confidence: the export dates are not given (unverified)."
+    },
+    {
+      "id": "r24t",
+      "name": "R-24T (AA-7 Apex, infrared)",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1981,
+      "allies_year": 1981,
+      "max_head_m": 20000,
+      "max_rear_m": 35000,
+      "low_factor": 0.4,
+      "min_m": 500,
+      "launch_g": 4.0,
+      "seeker_cone_deg": 25,
+      "target_g": 8,
+      "sun_exclusion_deg": 15,
+      "clutter_below": 0.95,
+      "flare_rejection": 0.35,
+      "reliability": 0.82,
+      "design_pk": 0.7,
+      "lethal_m": 10,
+      "mean_mps": 900,
+      "munition": "",
+      "game_values": [
+        "max_head_m",
+        "max_rear_m",
+        "low_factor",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "mean_mps"
+      ],
+      "source": "mis (R-24: adopted by the decree of 6 April 1981; the all-aspect nitrogen-cooled seeker; 35 km in the table; minimum 0.5 km; lethal radius 10 m); the other values are game values",
+      "confidence": "low",
+      "notes": "The rear range is the table's 35 km (low confidence); the head-on range is a game value. allies_year 1981 as the R-24R's."
+    },
+    {
+      "id": "r73",
+      "name": "R-73 (AA-11 Archer)",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1984,
+      "allies_year": 1988,
+      "max_head_m": 30000,
+      "max_rear_m": 30000,
+      "low_factor": 0.5,
+      "min_m": 300,
+      "launch_g": 5.0,
+      "seeker_cone_deg": 45,
+      "target_g": 12,
+      "sun_exclusion_deg": 15,
+      "clutter_below": 1.0,
+      "flare_rejection": 0.8,
+      "reliability": 0.9,
+      "design_pk": 0.8,
+      "lethal_m": 8,
+      "mean_mps": 800,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "launch_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "airwar_ru (R-73: adopted 22 June 1984; 30 km head-on; minimum 0.3 km from the rear; targets to 12 g; designation 45 deg in the table, 60 deg in the text; first exports in 1988); the other values are game values",
+      "confidence": "medium",
+      "notes": "In Soviet units only in 1985 (with the MiG-29, whose entry into frontal units is not established); no aircraft of the Pact faction in a 1985 war carries it. 45 deg is the missile cued by the aircraft's sights; 60 deg needs a helmet sight, post-period. The rear maximum is a game value."
+    },
+    {
+      "id": "r27r",
+      "name": "R-27R (AA-10 Alamo, semi-active): a later war's",
+      "guidance": "sarh_inertial",
+      "in_service_year": 1987,
+      "allies_year": 1990,
+      "max_head_m": 80000,
+      "max_rear_m": 40000,
+      "low_factor": 0.4,
+      "min_m": 500,
+      "launch_g": 5.0,
+      "seeker_cone_deg": 50,
+      "target_g": 8,
+      "clutter_below": 0.9,
+      "autonomous_s": 10,
+      "flare_rejection": 0.4,
+      "reliability": 0.88,
+      "design_pk": 0.8,
+      "lethal_m": 12,
+      "mean_mps": 1000,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "target_g",
+        "clutter_below",
+        "autonomous_s",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "airwar_ru (R-27: the family formally adopted in 1987-1990; the R-27R 80 km, launch at up to 5 g, designation 50 deg for the radar round); the other values are game values",
+      "confidence": "low",
+      "notes": "After 1985: kept out of the 1985 war by its year (docs/air_battle/07_AIR_TO_AIR.md 2.6). The allied year is a SAM3D estimate."
+    },
+    {
+      "id": "r27t",
+      "name": "R-27T (AA-10 Alamo, infrared): a later war's",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1987,
+      "allies_year": 1990,
+      "max_head_m": 70000,
+      "max_rear_m": 50000,
+      "low_factor": 0.4,
+      "min_m": 500,
+      "launch_g": 5.0,
+      "seeker_cone_deg": 55,
+      "target_g": 8,
+      "sun_exclusion_deg": 15,
+      "clutter_below": 1.0,
+      "flare_rejection": 0.8,
+      "reliability": 0.9,
+      "design_pk": 0.8,
+      "lethal_m": 12,
+      "mean_mps": 1000,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "airwar_ru (R-27: the family formally adopted in 1987-1990; the R-27T 70 km, launch at up to 5 g, designation 55 deg for the infrared round); the other values are game values",
+      "confidence": "low",
+      "notes": "After 1985: kept out of the 1985 war by its year."
+    },
+    {
+      "id": "aim9b",
+      "name": "AIM-9B Sidewinder",
+      "guidance": "ir_rear",
+      "in_service_year": 1956,
+      "max_rear_m": 4800,
+      "low_factor": 0.6,
+      "min_m": 900,
+      "launch_g": 3.0,
+      "seeker_cone_deg": 20,
+      "target_g": 3,
+      "sun_exclusion_deg": 20,
+      "clutter_below": 0.7,
+      "flare_rejection": 0.0,
+      "reliability": 0.725,
+      "design_pk": 0.8,
+      "lethal_m": 6,
+      "mean_mps": 600,
+      "munition": "",
+      "game_values": [
+        "low_factor",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-9B: non-manoeuvring targets only, 900 m to 4.8 km); navy_factfiles (in operational use 1956); checo_1967_a2a (1967 reference round); the other values are game values",
+      "confidence": "medium",
+      "notes": "The 1967 reference round of the calibration (the USAF's AIM-9B/E in 1967). reliability 0.725 is the middle of the 1972 figure for AIM-9E rounds after captive carriage (25-30 per cent guidance failures: checo_1978_linebacker p. 30) applied to 1967 rounds: a SAM3D assumption (docs/air_battle/07_AIR_TO_AIR.md 3.1)."
+    },
+    {
+      "id": "aim7e",
+      "name": "AIM-7E Sparrow",
+      "guidance": "sarh",
+      "in_service_year": 1963,
+      "max_head_m": 35000,
+      "max_rear_m": 5500,
+      "low_factor": 0.5,
+      "min_m": 1500,
+      "launch_g": 1.9,
+      "seeker_cone_deg": 60,
+      "target_g": 4,
+      "clutter_below": 0.6,
+      "flare_rejection": 0.1,
+      "reliability": 0.725,
+      "design_pk": 0.6,
+      "lethal_m": 8,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "low_factor",
+        "launch_g",
+        "target_g",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-7E from 1963: head-on up to 35 km in ideal conditions, about 5.5 km from the stern; the 1,500 m minimum is Parsch's figure for the Vietnam-era AIM-7); checo_1969_a2a (the F-4's radar arc 60 deg either side of the nose); the other values are game values",
+      "confidence": "medium",
+      "notes": "The 1967 reference round of the calibration. The AIM-7E-2 'dogfight' Sparrow of 1969 could be launched from about 610 m (checo_1969_a2a); not a separate entry. reliability as the AIM-9B's. The beam against the ground (AFIT 1982, afit_1982_vid) is the chain's beam_notch."
+    },
+    {
+      "id": "aim9j",
+      "name": "AIM-9J Sidewinder",
+      "guidance": "ir_rear",
+      "in_service_year": 1972,
+      "max_rear_m": 6000,
+      "low_factor": 0.6,
+      "min_m": 900,
+      "launch_g": 4.0,
+      "seeker_cone_deg": 20,
+      "target_g": 6,
+      "sun_exclusion_deg": 20,
+      "clutter_below": 0.8,
+      "flare_rejection": 0.1,
+      "reliability": 0.75,
+      "design_pk": 0.6,
+      "lethal_m": 6,
+      "mean_mps": 600,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-9J: about 10,000 built from 1972, mostly rebuilt B/E, actuators that doubled the single-plane g capability); the other values are game values",
+      "confidence": "medium",
+      "notes": "Rear aspect only. Ranges and limits are SAM3D estimates: no launch zone for the J was found (aam_weapons.md aam-nato-02)."
+    },
+    {
+      "id": "aim9l",
+      "name": "AIM-9L Sidewinder",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1978,
+      "max_head_m": 8000,
+      "max_rear_m": 18000,
+      "low_factor": 0.4,
+      "min_m": 600,
+      "launch_g": 7.0,
+      "seeker_cone_deg": 25,
+      "target_g": 10,
+      "sun_exclusion_deg": 15,
+      "clutter_below": 0.9,
+      "flare_rejection": 0.5,
+      "reliability": 0.85,
+      "design_pk": 0.7,
+      "lethal_m": 8,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "max_head_m",
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-9L: production 1978; all-aspect, argon-cooled indium antimonide seeker, laser proximity fuze, 9.4 kg warhead; a table gives 18 km for later rounds, the column alignment ambiguous); the other values are game values",
+      "confidence": "medium",
+      "notes": "All-aspect. The rear maximum is Parsch's ambiguous 18 km (low confidence); the head-on range and the limits are game values."
+    },
+    {
+      "id": "aim9m",
+      "name": "AIM-9M Sidewinder",
+      "guidance": "ir_all_aspect",
+      "in_service_year": 1983,
+      "max_head_m": 8000,
+      "max_rear_m": 18000,
+      "low_factor": 0.4,
+      "min_m": 600,
+      "launch_g": 7.0,
+      "seeker_cone_deg": 25,
+      "target_g": 10,
+      "sun_exclusion_deg": 15,
+      "clutter_below": 0.95,
+      "flare_rejection": 0.8,
+      "reliability": 0.88,
+      "design_pk": 0.75,
+      "lethal_m": 8,
+      "mean_mps": 700,
+      "munition": "",
+      "game_values": [
+        "max_head_m",
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "sun_exclusion_deg",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-9M: production 1982); navy_factfiles (deliveries from 1983; better flare rejection, background discrimination and a reduced-smoke motor); the other values are game values",
+      "confidence": "medium",
+      "notes": "The year is the deliveries' (1983); production began in 1982."
+    },
+    {
+      "id": "aim7f",
+      "name": "AIM-7F Sparrow",
+      "guidance": "sarh",
+      "in_service_year": 1975,
+      "max_head_m": 50000,
+      "max_rear_m": 10000,
+      "low_factor": 0.5,
+      "min_m": 1500,
+      "launch_g": 2.5,
+      "seeker_cone_deg": 60,
+      "target_g": 5,
+      "clutter_below": 0.7,
+      "flare_rejection": 0.2,
+      "reliability": 0.8,
+      "design_pk": 0.7,
+      "lethal_m": 9,
+      "mean_mps": 750,
+      "munition": "",
+      "game_values": [
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-7F: production 1975-81, dual-thrust motor, 39 kg warhead); dubrov_1983 (envelope 5-50 km in the Soviet reading); the other values are game values",
+      "confidence": "medium",
+      "notes": "The Soviet reading's 5 km lower figure is not used as the minimum range. Semi-active: the launcher illuminates to impact (cbo_1986_amraam)."
+    },
+    {
+      "id": "aim7m",
+      "name": "AIM-7M Sparrow",
+      "guidance": "sarh",
+      "in_service_year": 1982,
+      "max_head_m": 50000,
+      "max_rear_m": 10000,
+      "low_factor": 0.5,
+      "min_m": 1500,
+      "launch_g": 2.5,
+      "seeker_cone_deg": 60,
+      "target_g": 5,
+      "clutter_below": 0.9,
+      "flare_rejection": 0.5,
+      "reliability": 0.85,
+      "design_pk": 0.7,
+      "lethal_m": 9,
+      "mean_mps": 750,
+      "munition": "",
+      "game_values": [
+        "max_head_m",
+        "max_rear_m",
+        "low_factor",
+        "min_m",
+        "launch_g",
+        "seeker_cone_deg",
+        "target_g",
+        "clutter_below",
+        "flare_rejection",
+        "reliability",
+        "design_pk",
+        "lethal_m",
+        "mean_mps"
+      ],
+      "source": "parsch_dusrm (AIM-7M: first firing of a YAIM-7M in 1980, production 1982, inverse monopulse seeker for low altitude and jamming); the other values are game values",
+      "confidence": "medium",
+      "notes": "The monopulse seeker is the higher clutter_below and flare_rejection (here: chaff and jamming), game values."
+    }
+  ],
+  "guns": [
+    {
+      "id": "gsh23l",
+      "name": "GSh-23L 23 mm twin-barrel gun",
+      "firing_s": 4.0,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1965,
+      "game_values": [
+        "kill_per_s"
+      ],
+      "source": "ru_wiki_aam (adopted 1965, after development from 1959: Wikipedia only, unverified); airwar_ru (200 rounds on the MiG-23MLD; about 4 s of firing on the MiG-23M); checo_1967_a2a p. 18 (the US view of the older NR-23 of the same calibre: effective range 3,500 ft, 1,067 m)",
+      "confidence": "low",
+      "notes": "Effective range: the NR-23's, rounded to 1,000 m. kill_per_s is a game value calibrated with the pass's chance (docs/air_battle/07_AIR_TO_AIR.md 3.3)."
+    },
+    {
+      "id": "m61a1",
+      "name": "M61A1 Vulcan 20 mm gun",
+      "firing_s": 6.5,
+      "effective_m": 900,
+      "kill_per_s": 0.2,
+      "in_service_year": 1960,
+      "game_values": [
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (MiG-23M: a Soviet comparison gives the F-4E's gun 6-7 s of firing); aces_1976 (the F-105's M61 in 1965-73)",
+      "confidence": "low",
+      "notes": "Loads and rates of the M61 in 1985 aircraft were not found in a usable source (aam_weapons.md aam-nato-08): the 6.5 s of the F-4E is used for every M61 fit. The effective range is a game value; the year is the gun's service before the Vietnam war (aces_1976 records F-105 gun kills from 1965)."
+    },
+    {
+      "id": "aden30",
+      "name": "Aden 30 mm gun",
+      "firing_s": 5.0,
+      "effective_m": 800,
+      "kill_per_s": 0.2,
+      "in_service_year": 1960,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "usn_falklands_1983 (the Sea Harrier carried two Aden 30 mm guns in 1982); the figures are game values: no rate or load found",
+      "confidence": "low",
+      "notes": "Carried by the neutral's gun-armed jets (austrian_af_wiki: guns only; the calibre is a SAM3D assumption, unverified)."
+    },
+    {
+      "id": "mg127",
+      "name": "12.7 mm machine guns",
+      "firing_s": 10.0,
+      "effective_m": 500,
+      "kill_per_s": 0.05,
+      "in_service_year": 1950,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "game value: the rebels' defected light jet carries guns (the theatre's data, docs/air_battle/07_AIR_TO_AIR.md 2.5); no calibre or load found",
+      "confidence": "estimate",
+      "notes": "A placeholder gun for the rebels' Galeb class."
+    },
+    {
+      "id": "gsh6_30",
+      "name": "GSh-6-30 30 mm six-barrel gun (MiG-27)",
+      "firing_s": 3.0,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1975,
+      "game_values": [
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "hushkit_2020_mig27 (an Indian Air Force MiG-27 pilot: 260 rounds, 'just over 3 seconds to expend' at 5000 rounds a minute)",
+      "confidence": "medium",
+      "notes": "The firing window is the pilot's 3 s. The effective range and the kill rate are game values; the year is the MiG-27's, a SAM3D estimate."
+    },
+    {
+      "id": "gsh6_23",
+      "name": "GSh-6-23 23 mm six-barrel gun (Su-24)",
+      "firing_s": 3.3,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1975,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (Su-24 and Su-24M: a GSh-6-23 with 500 rounds, read 18 Nov 2026, the page's text partly garbled)",
+      "confidence": "low",
+      "notes": "firing_s is derived from the 500 rounds at a rate of about 9000 a minute, a SAM3D assumption (the rate was not read)."
+    },
+    {
+      "id": "gsh30_2",
+      "name": "GSh-30-2 30 mm twin-barrel gun (Su-25)",
+      "firing_s": 5.0,
+      "effective_m": 1000,
+      "kill_per_s": 0.2,
+      "in_service_year": 1981,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (Su-25: a GSh-30-2 with 250 rounds, read 18 Nov 2026)",
+      "confidence": "medium",
+      "notes": "firing_s is derived from the 250 rounds at about 3000 a minute, a SAM3D assumption (the rate was not read)."
+    },
+    {
+      "id": "nr30",
+      "name": "Two NR-30 30 mm guns (Su-17M3)",
+      "firing_s": 5.6,
+      "effective_m": 1000,
+      "kill_per_s": 0.15,
+      "in_service_year": 1976,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "airwar_ru (Su-17M3: two 30 mm guns, 80 rounds a barrel; read 18 Nov 2026, the designation garbled in the page's text)",
+      "confidence": "low",
+      "notes": "firing_s is derived from 80 rounds a barrel at about 850 a minute, a SAM3D assumption."
+    },
+    {
+      "id": "bk27",
+      "name": "Two Mauser BK-27 27 mm guns (Tornado IDS)",
+      "firing_s": 4.0,
+      "effective_m": 900,
+      "kill_per_s": 0.2,
+      "in_service_year": 1980,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "sam3d assumption: the Tornado IDS's two 27 mm Mauser guns are public reference knowledge not read from a registered source (unverified)",
+      "confidence": "estimate",
+      "notes": "Every number a game value."
+    },
+    {
+      "id": "gau8_air",
+      "name": "GAU-8/A 30 mm gun used against aircraft (A-10A)",
+      "firing_s": 10.0,
+      "effective_m": 1200,
+      "kill_per_s": 0.1,
+      "in_service_year": 1977,
+      "game_values": [
+        "firing_s",
+        "effective_m",
+        "kill_per_s",
+        "in_service_year"
+      ],
+      "source": "wiki_guns (GAU-8 Avenger, a pointer: the A-10's gun); its use against aircraft is a SAM3D assumption (unverified)",
+      "confidence": "estimate",
+      "notes": "A ground-attack gun: offered only against helicopters and slow aircraft (fight.slow_target_mps). Game values."
+    }
+  ],
+  "fits": [
+    {
+      "id": "mig21mf",
+      "aliases": [
+        "mig21"
+      ],
+      "iff": "kremniy2m",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1974,
+          "aams": [
+            [
+              "r13m",
+              2
+            ],
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "gsh23l"
+        },
+        {
+          "from": 1984,
+          "aams": [
+            [
+              "r13m",
+              2
+            ],
+            [
+              "r60m",
+              2
+            ]
+          ],
+          "gun": "gsh23l"
+        }
+      ],
+      "source": "airwar_ru (MiG-21MF: up to four K-13M, K-13, R-60 or R-60M; GSh-23L); docs/research/air_battle_2026-11/aam_weapons.md aam-our-01",
+      "confidence": "low",
+      "notes": "Our fighter regiments' MiG-21 (the order of battle's 'mig21'). Two of each at a time is a SAM3D load. The R-60M from 1984 follows its estimated allies_year. RP-21 and RP-22 are placeholders in sensors.json."
+    },
+    {
+      "id": "mig21bis",
+      "iff": "kremniy2m",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1974,
+          "aams": [
+            [
+              "r13m",
+              2
+            ],
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "gsh23l"
+        },
+        {
+          "from": 1984,
+          "aams": [
+            [
+              "r13m",
+              2
+            ],
+            [
+              "r60m",
+              2
+            ]
+          ],
+          "gun": "gsh23l"
+        }
+      ],
+      "source": "airwar_ru (R-60: the MiG-21MF and MiG-21bis among its carriers); docs/research/air_battle_2026-11/aam_weapons.md aam-our-01",
+      "confidence": "low",
+      "notes": "As the MF."
+    },
+    {
+      "id": "mig23ml",
+      "iff": "sro2m",
+      "command_link": true,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1981,
+          "aams": [
+            [
+              "r24r",
+              2
+            ],
+            [
+              "r60",
+              4
+            ]
+          ],
+          "gun": "gsh23l"
+        },
+        {
+          "from": 1984,
+          "aams": [
+            [
+              "r24r",
+              2
+            ],
+            [
+              "r60m",
+              4
+            ]
+          ],
+          "gun": "gsh23l"
+        }
+      ],
+      "export_fit": "mig23ml_export",
+      "source": "mis (R-24: adopted for the MiG-23ML by the decree of 6 April 1981); airwar_ru (MiG-23ML; the MiG-23MLD's typical load of two R-24 and four R-60, taken for the ML)",
+      "confidence": "low",
+      "notes": "The Soviet frontal aviation's MiG-23ML of the Pact's 1985 war and our 3rd Fighter Regiment's twelve. The R-24T or R-23 are alternatives, not modelled. SRO-2M IFF, Lazur-SML link. export_fit is the stripped client variant (Bekaa's lower bound). The Pact's own MiG-23ML (type mig23ml_wp, B8) takes this fit: Soviet frontal aviation, the R-24 from 1981.",
+      "aliases": [
+        "mig23ml_wp"
+      ]
+    },
+    {
+      "id": "mig23ml_export",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1976,
+          "aams": [
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "gsh23l"
+        }
+      ],
+      "source": "lambeth_1984 (the Syrian export MiG-23s and MiG-21s: no R-23 or High Lark radar, at best the R-60: the lower bound); cordesman_1982",
+      "confidence": "low",
+      "notes": "A stripped client variant, the fit a client's MiG-23 carries when export_fit is used. Not an aircraft type."
+    },
+    {
+      "id": "mig23mld",
+      "iff": "parol",
+      "command_link": true,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1984,
+          "aams": [
+            [
+              "r24r",
+              2
+            ],
+            [
+              "r60",
+              4
+            ]
+          ],
+          "gun": "gsh23l"
+        }
+      ],
+      "source": "airwar_ru (MiG-23MLD: 66 built new in 1984-85; typical load two R-24R or R-24T and four R-60; 200 rounds; 60 x 50 mm LO-43 flares; Parol IFF and the Lazur link, the IFF unverified for the MLD)",
+      "confidence": "medium",
+      "notes": "The 'or two R-73' of the page belongs to later variants and is not offered (docs/air_battle/07_AIR_TO_AIR.md 2.6)."
+    },
+    {
+      "id": "mig27",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1973,
+          "aams": [
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "gsh6_30"
+        }
+      ],
+      "source": "airwar_ru (R-60: carried by the MiG-27); hushkit_2020_mig27 (the gun)",
+      "confidence": "medium",
+      "notes": "Self-defence: two R-60 and the six-barrel gun (B8 gave the strike types their guns)."
+    },
+    {
+      "id": "su24",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1973,
+          "aams": [
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "gsh6_23"
+        }
+      ],
+      "source": "airwar_ru (R-60: carried by the Su-24 for self-defence); airwar_ru (Su-24M: up to two R-60 or R-60M; the GSh-6-23)",
+      "confidence": "medium",
+      "notes": "Self-defence: two R-60 and the six-barrel gun."
+    },
+    {
+      "id": "su25",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1973,
+          "aams": [
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "gsh30_2"
+        }
+      ],
+      "source": "airwar_ru (R-60: carried by the Su-25 for self-defence); airwar_ru (Su-25: the GSh-30-2, an R-3 or R-60 class missile)",
+      "confidence": "medium",
+      "notes": "Self-defence: two R-60 and the twin-barrel gun."
+    },
+    {
+      "id": "su17m3",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1973,
+          "aams": [
+            [
+              "r60",
+              2
+            ]
+          ],
+          "gun": "nr30"
+        }
+      ],
+      "source": "airwar_ru (R-60: carried by the Su-17); airwar_ru (Su-17M3: two 30 mm guns, an R-60)",
+      "confidence": "medium",
+      "notes": "Self-defence: two R-60 and two guns."
+    },
+    {
+      "id": "f15c",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 8000,
+      "loads_by_year": [
+        {
+          "from": 1979,
+          "aams": [
+            [
+              "aim7f",
+              4
+            ],
+            [
+              "aim9l",
+              4
+            ]
+          ],
+          "gun": "m61a1"
+        },
+        {
+          "from": 1983,
+          "aams": [
+            [
+              "aim7m",
+              4
+            ],
+            [
+              "aim9l",
+              4
+            ]
+          ],
+          "gun": "m61a1"
+        },
+        {
+          "from": 1984,
+          "aams": [
+            [
+              "aim7m",
+              4
+            ],
+            [
+              "aim9m",
+              4
+            ]
+          ],
+          "gun": "m61a1"
+        }
+      ],
+      "source": "parsch_dusrm (AIM-7F, AIM-7M, AIM-9L, AIM-9M dates); anderegg_2001 pp. 33, 161 (rifle scopes, 'Eagle Eye'); lambeth_1984",
+      "confidence": "low",
+      "notes": "Four of each is a SAM3D load. No AMRAAM: it is a later war's weapon (cbo_1986_amraam: 1989 planned, 1991 in service) and has no guidance class in the data. Mark XII IFF, subject to spoofing (cbo_1986_amraam); visual identification is the rule (doctrine)."
+    },
+    {
+      "id": "f16a",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1979,
+          "aams": [
+            [
+              "aim9l",
+              2
+            ]
+          ],
+          "gun": "m61a1"
+        },
+        {
+          "from": 1984,
+          "aams": [
+            [
+              "aim9m",
+              2
+            ]
+          ],
+          "gun": "m61a1"
+        }
+      ],
+      "source": "cbo_1986_amraam ('F-16s cannot carry Sparrows'); parsch_dusrm (AIM-9L, AIM-9M)",
+      "confidence": "medium",
+      "notes": "The F-16A carries no radar missile in 1985: it fights with the AIM-9 and its gun. Two rounds is a SAM3D load."
+    },
+    {
+      "id": "f4e",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 8000,
+      "loads_by_year": [
+        {
+          "from": 1975,
+          "aams": [
+            [
+              "aim7f",
+              4
+            ],
+            [
+              "aim9j",
+              4
+            ]
+          ],
+          "gun": "m61a1"
+        }
+      ],
+      "source": "parsch_dusrm (AIM-7F, AIM-9J); checo_1978_linebacker p. 31 (the standard 1972 load: two or four AIM-7E-2 and four AIM-9E/J); airwar_ru (MiG-23M: the F-4E's gun 6-7 s)",
+      "confidence": "low",
+      "notes": "TISEO adds identification range (vid_aid_m; anderegg_2001). Whether USAFE's F-4Es had the AIM-9L by 1985 was not found."
+    },
+    {
+      "id": "f4g",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1978,
+          "aams": [
+            [
+              "aim9j",
+              2
+            ]
+          ],
+          "gun": ""
+        }
+      ],
+      "source": "parsch_dusrm (AIM-9J); the gun's absence and the load are SAM3D estimates, unverified",
+      "confidence": "estimate",
+      "notes": "A Wild Weasel: an AIM-9 for its own defence, no gun (unverified)."
+    },
+    {
+      "id": "saab105",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1970,
+          "aams": [],
+          "gun": "aden30"
+        }
+      ],
+      "source": "austrian_af_wiki (a combat jet of the neutral's 1985 air force: guns only, tier problem); the gun is a SAM3D assumption",
+      "confidence": "low",
+      "notes": "Guns only: the neutral has no guided air-to-air missile in 1985."
+    },
+    {
+      "id": "draken_gun",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1988,
+          "aams": [],
+          "gun": "aden30"
+        }
+      ],
+      "source": "austrian_af_wiki (the neutral's Drakens came in 1988, guns only)",
+      "confidence": "low",
+      "notes": "A 1988 aircraft: no 1985 war offers it a load (B11 gives the type its year)."
+    },
+    {
+      "id": "galeb",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1960,
+          "aams": [],
+          "gun": "mg127"
+        }
+      ],
+      "source": "game value: the rebels' defected light jet's guns",
+      "confidence": "estimate",
+      "notes": "No guided air-to-air weapon."
+    },
+    {
+      "id": "tornado_ids",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1980,
+          "aams": [
+            [
+              "aim9l",
+              2
+            ]
+          ],
+          "gun": "bk27"
+        }
+      ],
+      "source": "sam3d assumption: two AIM-9L for self-defence and the two guns (parsch_dusrm for the AIM-9L's year; the Tornado's carriage not read in a registered source, unverified)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: self-defence only; it never escorts."
+    },
+    {
+      "id": "f111f",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no air-to-air fit (no source read gives the F-111F an AIM-9 or a gun in 1985)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: it carries nothing for air combat; its defence is speed and low level."
+    },
+    {
+      "id": "a10a",
+      "iff": "mk12",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [
+        {
+          "from": 1977,
+          "aams": [],
+          "gun": "gau8_air"
+        }
+      ],
+      "source": "sam3d assumption: the AIM-9 on the A-10 is not dated in a source read (unverified), so only its gun",
+      "confidence": "estimate",
+      "notes": "Decided in B8: the gun against helicopters and slow aircraft only."
+    },
+    {
+      "id": "ah1s",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no air-to-air missile on the AH-1S in 1985 (none in a source read)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: nothing."
+    },
+    {
+      "id": "mig25bm",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no source read gives the suppression variant an air-to-air missile (mig25bm_refs names only the Kh-58)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: nothing; speed and height are its defence."
+    },
+    {
+      "id": "mi24",
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "docs/air_battle/07_AIR_TO_AIR.md 2.5 (whether a Mi-24 could carry the R-60 is unverified)",
+      "confidence": "estimate",
+      "notes": "Decided in B8: nothing until a source dates the R-60 on it."
+    },
+    {
+      "id": "helicopters",
+      "aliases": [
+        "mi8_doorgun",
+        "ab212",
+        "alouette3"
+      ],
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: no armed helicopter of the four factions carries an air-to-air weapon in 1985",
+      "confidence": "estimate",
+      "notes": "Decided in B8: every other helicopter (Mi-8, AB 212, Alouette III) carries nothing for air combat."
+    },
+    {
+      "id": "unarmed",
+      "aliases": [
+        "ef111a",
+        "rf4c",
+        "e3a",
+        "kc135",
+        "rc135",
+        "mig25rb",
+        "yak28pp",
+        "a50",
+        "il20",
+        "an2_bomber",
+        "utva75"
+      ],
+      "iff": "none",
+      "command_link": false,
+      "vid_aid_m": 0,
+      "loads_by_year": [],
+      "source": "sam3d assumption: the support, jamming and reconnaissance types and the rebels' light aircraft carry no air-to-air weapon in 1985",
+      "confidence": "estimate",
+      "notes": "Decided in B8 so every type has a fit: the EF-111A, RF-4C, E-3A, KC-135, RC-135, MiG-25RB, Yak-28PP, A-50, Il-20, the rebels' An-2 and UTVA 75 carry nothing for air combat. Their defence is distance, height, speed or their escorts. The IFF is left 'none' here: these are never shooters, and our side's identification of them goes by the faction's own IFF rules in perception."
+    }
+  ],
+  "doctrine": [
+    {
+      "faction": "nato",
+      "roe": "vid",
+      "commit_by": "leader",
+      "initiative_at_contact": "flight_leader",
+      "formation": "line_abreast_pair",
+      "sort": "left_low_lead",
+      "shot_order": [
+        "sarh",
+        "ir",
+        "gun"
+      ],
+      "tactic": "beam",
+      "cooperative_id": false,
+      "strikers_answer": {
+        "jettison": 0.5,
+        "press_on": 0.35,
+        "abort": 0.2,
+        "source": "docs/air_battle/04_REACTIONS.md section 8 (NATO trained crews); design estimates",
+        "confidence": "estimate"
+      },
+      "skill": 0.8,
+      "on_control_lost": {
+        "green": "continue",
+        "skilled": "continue",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 0.5,
+      "fighter_plan": {
+        "close": 0.0,
+        "sweep": 0.5,
+        "cap": 0.5,
+        "sweep_lead_s": 300,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
+      "source": "afit_1982_vid (visual identification before a radar missile in central Europe); anderegg_2001 pp. 59, 82-84, 160 (pairs line abreast about a mile apart; 'left, low, lead'); checo_1969_a2a (the shot order of F-4E units: Sparrow, Sidewinder, gun); lambeth_1984 (the Bekaa's beam attacks)",
+      "confidence": "medium",
+      "notes": "Commit by the flight leader, or the E-3A or CRC vectoring defence fighters. The cooperative identification of the enemy's IFF (Combat Tree in 1972) is off: its 1985 status in Europe is not known (air_combat.md nato-06, unverified). B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
+    },
+    {
+      "faction": "warsaw_pact",
+      "roe": "controller",
+      "commit_by": "controller",
+      "initiative_at_contact": "by_skill",
+      "formation": "sword_shield",
+      "sort": "controller",
+      "shot_order": [
+        "sarh",
+        "ir",
+        "gun"
+      ],
+      "tactic": "slash",
+      "cooperative_id": false,
+      "strikers_answer": {
+        "jettison": 0.4,
+        "press_on": 0.5,
+        "abort": 0.15,
+        "source": "game value: Pact attackers keep to the plan (docs/air_battle/07_AIR_TO_AIR.md 4.6)",
+        "confidence": "estimate"
+      },
+      "skill": 0.5,
+      "on_control_lost": {
+        "green": "abort",
+        "skilled": "pairs",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 0.0,
+      "fighter_plan": {
+        "close": 0.5,
+        "sweep": 0.5,
+        "cap": 0.0,
+        "sweep_lead_s": 180,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
+      "source": "lambeth_1984 (Skinner 1983: the mission is aborted if contact is lost); pennington_1985; johnson_1986 (initiative to the flight leaders only at contact); checo_1969_a2a (the MiG-21's hit-and-run under GCI); mt_turchin_coop (the rear-hemisphere attack)",
+      "confidence": "medium",
+      "notes": "The average Pact unit of 1985 is GCI-bound, aborting or falling back to rote pairs when control is lost; the best units pass initiative to the flight leader at contact (a skill rule, air_combat.md section 4.3). The controller's word is the identification rule: SAM3D's assumption. B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
+    },
+    {
+      "faction": "neutral",
+      "roe": "vid",
+      "commit_by": "controller",
+      "initiative_at_contact": "controller",
+      "formation": "pair",
+      "sort": "nearest",
+      "shot_order": [
+        "gun"
+      ],
+      "tactic": "turn",
+      "cooperative_id": false,
+      "strikers_answer": {
+        "jettison": 0.6,
+        "press_on": 0.25,
+        "abort": 0.3,
+        "source": "docs/air_battle/04_REACTIONS.md section 8 (the neutral); design estimates",
+        "confidence": "estimate"
+      },
+      "skill": 0.5,
+      "on_control_lost": {
+        "green": "abort",
+        "skilled": "abort",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 1.0,
+      "fighter_plan": {
+        "close": 1.0,
+        "sweep": 0.0,
+        "cap": 0.0,
+        "sweep_lead_s": 0,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
+      "source": "docs/research/air_battle_2026-11/air_combat.md neu-01 (visual identification always, by day, guns, breaks off on any threat; no period source on its tactics)",
+      "confidence": "low",
+      "notes": "Low confidence: no period source on its tactics. B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
+    },
+    {
+      "faction": "rebels",
+      "roe": "vid",
+      "commit_by": "leader",
+      "initiative_at_contact": "flight_leader",
+      "formation": "single",
+      "sort": "nearest",
+      "shot_order": [
+        "gun"
+      ],
+      "tactic": "turn",
+      "cooperative_id": false,
+      "strikers_answer": {
+        "jettison": 0.7,
+        "press_on": 0.1,
+        "abort": 0.5,
+        "source": "game value: a rebel aircraft hides low, runs or lands (docs/air_battle/07_AIR_TO_AIR.md 4.4)",
+        "confidence": "estimate"
+      },
+      "skill": 0.2,
+      "on_control_lost": {
+        "green": "continue",
+        "skilled": "continue",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 1.0,
+      "fighter_plan": {
+        "close": 1.0,
+        "sweep": 0.0,
+        "cap": 0.0,
+        "sweep_lead_s": 0,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
+      "source": "docs/research/air_battle_2026-11/air_combat.md reb-01 (the rebels have no fighters: a rebel aircraft hides low, runs or lands)",
+      "confidence": "low",
+      "notes": "Game values. B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
+    },
+    {
+      "faction": "ours",
+      "roe": "controller",
+      "commit_by": "controller",
+      "initiative_at_contact": "flight_leader",
+      "formation": "pair",
+      "sort": "controller",
+      "shot_order": [
+        "sarh",
+        "ir",
+        "gun"
+      ],
+      "tactic": "slash",
+      "cooperative_id": false,
+      "strikers_answer": {
+        "jettison": 0.0,
+        "press_on": 0.0,
+        "abort": 0.0,
+        "source": "game value: ours are interceptors, not strikers",
+        "confidence": "estimate"
+      },
+      "skill": 0.45,
+      "on_control_lost": {
+        "green": "abort",
+        "skilled": "pairs",
+        "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); docs/air_battle/10_FACTIONS.md 7.5 (on_control_lost by skill)",
+        "confidence": "estimate"
+      },
+      "commit_odds": 0.0,
+      "fighter_plan": {
+        "close": 1.0,
+        "sweep": 0.0,
+        "cap": 0.0,
+        "sweep_lead_s": 0,
+        "source": "dubrov_1983 (the detached CAP and escort); lambeth_1984 (the Bekaa's CAPs away from the strike groups); docs/air_battle/07_AIR_TO_AIR.md 5.5 (NATO's CAP and sweep, the Pact's clearing group and close escort, the neutral's few escorts); the shares and the lead are game values",
+        "confidence": "estimate"
+      },
+      "source": "docs/research/air_battle_2026-11/air_combat.md our-01 (Soviet control practice: the national air defence's GCI brings them in; their own initiative begins at contact); reactions.md section 2.6 (30 per cent of green crews go home under jamming: a design estimate)",
+      "confidence": "low",
+      "notes": "Fall back to independent search in pairs, or go home, when the command post is lost or the nets jammed (08_OUR_FIGHTERS.md). B8: skill is the faction's air_combat_skill (factions_cases section 1 (air_combat_skill: SAM3D estimates ordered by lambeth_1984, vangilder_1979, cia_1987_iraq_af; docs/air_battle/10_FACTIONS.md 7.2)); commit_odds the believed own-to-enemy ratio a leader who commits himself needs (0: the controller commits; ACEVAL's numbers, lambeth_1985), a game value."
+    }
+  ],
+  "calibration": {
+    "source": "checo_1967_a2a; checo_1978_linebacker; aces_1976; cbo_1986_amraam; mcallister_1985; usn_falklands_1983; lambeth_1984",
+    "confidence": "medium",
+    "notes": "The targets are the period's rates; the chain and the mix are game values calibrated to them. The bench (air_combat_bench, B14) reads the same targets.",
+    "chain": {
+      "source": "game value: the numbers of the chain of chances, calibrated until the 1967 rates come out (docs/air_battle/07_AIR_TO_AIR.md 3.1, aam_weapons.md section 8)",
+      "confidence": "estimate",
+      "notes": "Game values held to the targets by test_air_combat.cpp (SimulateLaunches over the mix).",
+      "alt_ref_m": 12000,
+      "rear_aspect_limit_deg": 90,
+      "judge_range_sigma": 0.35,
+      "judge_aspect_sigma_deg": 25,
+      "judge_cone_sigma_deg": 11,
+      "judge_g_sigma": 0.35,
+      "judge_skill_gain": 0.8,
+      "judge_stress_gain": 0.5,
+      "judge_sarh_scale": 2.0,
+      "switch_error_base": 0.12,
+      "switch_idle_share": 0.2,
+      "switch_skill_gain": 0.7,
+      "switch_stress_gain": 1.0,
+      "guides_ir_rear": 0.85,
+      "guides_ir_all_aspect": 0.8,
+      "guides_sarh": 0.6,
+      "guides_sarh_inertial": 0.5,
+      "aspect_ir_rear_edge": 0.5,
+      "aspect_ir_all_head": 0.85,
+      "sun_soft_factor": 1.667,
+      "sun_soft_floor": 0.3,
+      "beam_notch": 0.5,
+      "beam_notch_half_deg": 20,
+      "break_max": 0.6,
+      "break_miss_m": 6,
+      "nominal_miss_m": 1.5,
+      "gun_skill_floor": 0.4,
+      "gun_range_edge": 0.5,
+      "gun_g_loss": 0.4,
+      "gun_g_full": 8
+    },
+    "mix": {
+      "source": "game value: the engagement mix of the 1967 reference (a SAM3D estimate: where shots were taken from and what the target did)",
+      "confidence": "estimate",
+      "notes": "The USAF's crews over North Vietnam in 1967, held to checo_1967_a2a p. 44.",
+      "skill": 0.3,
+      "stress": 0.4,
+      "mode_change_share": 0.5,
+      "range_median_m": 2300,
+      "range_sigma_ln": 0.75,
+      "aspect_rear_share": 0.7,
+      "off_boresight_sigma_deg": 11,
+      "altitude_m": 5000,
+      "launch_g_mean": 2.0,
+      "break_share": 0.5,
+      "break_g": 6,
+      "look_down_share": 0.3,
+      "sun_share": 0.05,
+      "countermeasure_share": 0.0
+    },
+    "targets": {
+      "aim7_hit_per_launch": {
+        "value": 0.111,
+        "tolerance": 0.015,
+        "source": "checo_1967_a2a p. 44 (23 April-8 July 1967: 11.1 per cent hits per AIM-7 fired, probables included)",
+        "confidence": "high"
+      },
+      "aim9_hit_per_launch": {
+        "value": 0.186,
+        "tolerance": 0.015,
+        "source": "checo_1967_a2a p. 44 (18.6 per cent hits per AIM-9 fired, probables included)",
+        "confidence": "high"
+      },
+      "aim7_out_of_params": {
+        "value": 0.35,
+        "tolerance": 0.04,
+        "source": "checo_1967_a2a p. 44 (35 per cent of AIM-7s launched outside the permissible parameters)",
+        "confidence": "high"
+      },
+      "aim9_out_of_params": {
+        "value": 0.26,
+        "tolerance": 0.04,
+        "source": "checo_1967_a2a p. 44 (26 per cent of AIM-9s launched outside the permissible parameters)",
+        "confidence": "high"
+      },
+      "reliability_1972": {
+        "value": 0.725,
+        "tolerance": 0.025,
+        "source": "checo_1978_linebacker p. 30 (25 to 30 per cent guidance failure indications after 10 to 15 captive flights: the middle of 0.70-0.75)",
+        "confidence": "high"
+      },
+      "ir_kill_share_1973": {
+        "value": 0.966,
+        "tolerance": 0.03,
+        "source": "cbo_1986_amraam n. 4 (about 200 Arab aircraft to infrared missiles, about 7 to Sparrow)",
+        "confidence": "medium",
+        "notes": "For the bench (B8/B14), not the chain alone."
+      },
+      "ir_kill_share_1982": {
+        "value": 0.962,
+        "tolerance": 0.03,
+        "source": "cbo_1986_amraam n. 4 (about 50 Syrian aircraft to infrared missiles, 2 to Sparrow)",
+        "confidence": "medium",
+        "notes": "For the bench."
+      },
+      "gun_share_vietnam": {
+        "value": 0.292,
+        "tolerance": 0.04,
+        "source": "aces_1976 Table 4 (40 of the USAF's 137 MiG kills by gun)",
+        "confidence": "high",
+        "notes": "The upper end of the gun share the bench must show."
+      },
+      "gun_share_bekaa": {
+        "value": 0.07,
+        "tolerance": 0.03,
+        "source": "lambeth_1984 (7 per cent of the Israeli kills in 1982 by gun)",
+        "confidence": "medium",
+        "notes": "The lower end."
+      },
+      "exchange_1965_68": {
+        "value": 2.25,
+        "tolerance": 0.3,
+        "source": "mcallister_1985 p. 17 (81:36)",
+        "confidence": "medium",
+        "notes": "For the bench."
+      },
+      "exchange_1968": {
+        "value": 1.0,
+        "tolerance": 0.3,
+        "source": "mcallister_1985 p. 17 (about 1:1 in 1968)",
+        "confidence": "medium",
+        "notes": "For the bench."
+      },
+      "exchange_linebacker_may_1972": {
+        "value": 0.47,
+        "tolerance": 0.15,
+        "source": "checo_1978_linebacker pp. 52-53 (1:0.47 in May 1972: 0.47 MiGs per US loss)",
+        "confidence": "high",
+        "notes": "For the bench."
+      },
+      "exchange_linebacker_aug_oct_1972": {
+        "value": 3.8,
+        "tolerance": 0.5,
+        "source": "checo_1978_linebacker pp. 52-53 (19 MiGs for 5 losses from August to mid-October 1972)",
+        "confidence": "high",
+        "notes": "For the bench."
+      },
+      "falklands_aim9l_kills": {
+        "value": 16,
+        "tolerance": 3,
+        "source": "usn_falklands_1983 (at least 20 Argentine aircraft down, 16 by AIM-9L, none of the Sea Harriers)",
+        "confidence": "high",
+        "notes": "The number fired is not established."
+      },
+      "strikers_jettison_1966": {
+        "value": 0.557,
+        "tolerance": 0.05,
+        "source": "aces_1976 p. 10 (107 of 192 strike aircraft engaged by MiGs jettisoned, September-December 1966)",
+        "confidence": "high",
+        "notes": "For the bench."
+      }
+    }
+  },
+  "fight": {
+    "source": "game values for the live and the abstract fight (docs/air_battle/07_AIR_TO_AIR.md 5.3, 5.6); the period anchors each names in its notes",
+    "confidence": "estimate",
+    "notes": "Live: think_s the mode and shot check (2 Hz, staggered by a fixed key); radar_scan_s a radar's look; radar_az_deg its scan either side of the nose; contact_hold_s how long a contact is kept unseen; vid_m the eye's identification of a fighter (aam_weapons.md section 8: about 5-6 km by day); friendly_clear_m no friendly aircraft this near a contact for a BVR shot on the E-3A's word; gci_vector_s a controller's vector; gci_update_s and gci_error_m his radar picture; control_lost_s without a vector this long a flight has lost its controller; joker_s and bingo_s seconds of fight after the commit (no period number: air_combat.md nato-16); break_g a defender's break; gun_cone_deg and gun_aspect_deg the gun's angle off and the target's aspect a gun pass needs; extend_s an extension; claim_on_miss the share of misses claimed as kills (lambeth_1985: two shots called for every one observed at TOPGUN in 1980); slow_target_mps a target slow enough for a ground-attack gun. Abstract (A0): a0_intercept the share of our fighter threat that reaches a package; a0_detect_* our ground control finding it by day, by night, in poor weather and when the package is low; a0_rounds the passes fought; a0_meet_* the chance one escort flight of that kind engages our pair first, a0_awacs_meet its factor under the E-3A (2.0 from roadmap B14: the warned package's exchange against Teaball's 3.8:1 of August-October 1972, checo_1978_linebacker, in air_war_bench; a0_awacs_meet_mode0 the 1.5 before it, for a save made before B14); a0_surprise_* our first pass from the rear under GCI and with GCI jammed; a0_seen_* the enemy sees the attack in time (the E-3A's warning; the eye alone: red_baron_vol2, 13 of 16 MiG attacks on F-105 flights first seen with no warning); a0_gci_jammed our GCI's nets jammed when the package brings a jammer; a0_green_home green crews going home under jamming (reactions.md section 2.6: 30 per cent); a0_sarh_bvr_m, a0_sarh_vid_m, a0_ir_m and a0_gun_m the median ranges each weapon is fired from, with a0_range_sigma their lognormal spread.",
+    "think_s": 0.5,
+    "radar_scan_s": 2.0,
+    "radar_az_deg": 60,
+    "contact_hold_s": 10,
+    "vid_m": 5500,
+    "friendly_clear_m": 20000,
+    "gci_vector_s": 20,
+    "gci_update_s": 10,
+    "gci_error_m": 1000,
+    "control_lost_s": 60,
+    "joker_s": 600,
+    "bingo_s": 900,
+    "break_g": 6,
+    "gun_cone_deg": 10,
+    "gun_aspect_deg": 60,
+    "extend_s": 20,
+    "claim_on_miss": 0.3,
+    "slow_target_mps": 120,
+    "a0_intercept": 0.5,
+    "a0_detect_day": 0.85,
+    "a0_detect_night": 0.45,
+    "a0_detect_poor": 0.6,
+    "a0_detect_low": 0.6,
+    "a0_rounds": 2,
+    "a0_meet_sweep": 0.6,
+    "a0_meet_cap": 0.4,
+    "a0_meet_close": 0.5,
+    "a0_awacs_meet": 2.0,
+    "a0_awacs_meet_mode0": 1.5,
+    "a0_surprise_gci": 0.6,
+    "a0_surprise_jammed": 0.2,
+    "a0_seen_awacs": 0.9,
+    "a0_seen_eye": 0.2,
+    "a0_gci_jammed": 0.5,
+    "a0_green_home": 0.3,
+    "a0_sarh_bvr_m": 15000,
+    "a0_sarh_vid_m": 5000,
+    "a0_ir_m": 3000,
+    "a0_gun_m": 600,
+    "a0_range_sigma": 0.4
+  },
+  "ours": {
+    "source": "derived from data/command/oob_pannonia.json (the fighter division's three regiments, briefing decision 2) and docs/air_battle/08_OUR_FIGHTERS.md",
+    "confidence": "estimate",
+    "notes": "Our fighter regiments as the abstract fight sees them until B10 makes them actors: each regiment's types and counts. A loss to our fighters is written with the regiment's id (LossRecord::by), so the debrief counts it apart.",
+    "regiments": [
+      {
+        "id": "fighter_rgt_1",
+        "types": [
+          [
+            "mig21mf",
+            36
+          ]
+        ]
+      },
+      {
+        "id": "fighter_rgt_2",
+        "types": [
+          [
+            "mig21mf",
+            36
+          ]
+        ]
+      },
+      {
+        "id": "fighter_rgt_3",
+        "types": [
+          [
+            "mig21bis",
+            24
+          ],
+          [
+            "mig23ml",
+            12
+          ]
+        ]
+      }
+    ]
+  }
+}

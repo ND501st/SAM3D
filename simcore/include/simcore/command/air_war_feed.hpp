@@ -20,9 +20,19 @@
 
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/command/info_net.hpp"
+#include "simcore/command/intercept.hpp"
 
 namespace simcore {
 namespace command {
+
+// The campaign's sky on its information net (roadmap R7, docs/LIGHT.md): on a dated theatre the couriers' night is the
+// sun's at the theatre's origin, as the air war's parts of the day are (airwar::TheatrePartAt); an undated theatre keeps
+// the net's fixed 20:00-06:00. Call after InfoNet::Init with the theatre's start_hour. True when a sky was given.
+inline bool GiveTheatreSky(InfoNet& net, const airwar::TheatreDef& t, const LightValues& values = LightValues()) {
+    if (t.day_of_year <= 0) return false;
+    net.SetSky(airwar::TheatreSky(t), values);
+    return true;
+}
 
 // Who first knows each kind of news, and the air war's effects on the pipeline (game values, docs/command/06).
 struct FeedRoles {
@@ -31,6 +41,7 @@ struct FeedRoles {
     std::string army_intel = "army_intel";            // intercepts, the analysts
     std::string div_intel = "div_intel";              // prisoners' interrogations
     std::string police = "kesmark_police";            // airmen picked up in the district
+    std::string intercept = "intercept_centre";       // the hours warning from the enemy's administrative traffic (roadmap B9)
     std::string staff = "rgt_chief_of_staff";         // the regiment's estimate of what the enemy knows of the battery
     std::string battery = "bty21_commander";          // the battery's own news and fights
     std::string announcer = "army_ad_chief";          // the war itself
@@ -52,6 +63,20 @@ public:
         battery_people_.clear();
         battery_places_.clear();
         if (net_ != nullptr) regiment_ = net_->Data().unit_regiment;
+    }
+
+    // The staff's operational security shows (or not) in its administrative traffic hours before a raid (roadmap B9,
+    // docs/air_battle/09 section 5.3): a draw keyed on the package, so a loaded campaign replays it. Our centre has it as a fact.
+    void AddOpsecAlert(const airwar::AirCampaign& c, const airwar::Package& p, int target_index) {
+        const airwar::FactionRadio& fr = c.Data().faction.radio;
+        if (!fr.present || net_->Data().PositionIndex(roles_.intercept) < 0) return;
+        AirRadioDef td;
+        for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = c.Data().tuning.Get(kv.first);
+        double leak = 0.0;
+        if (p.planner >= 0 && static_cast<std::size_t>(p.planner) < c.Staff().officers.size()) leak = c.Staff().officers[static_cast<std::size_t>(p.planner)].Quirk("comsec_leak");
+        const airwar::OpsecAlert alert = airwar::DrawOpsecAlert(airwar::StaffOpsec(fr.opsec, leak, td), c.Seed(), static_cast<std::uint64_t>(p.id), td);
+        const std::string where = target_index >= 0 ? c.Data().theatre.objects[static_cast<std::size_t>(target_index)].name : std::string("the district");
+        for (const Fact& f : OpsecAlertFacts(alert, p.id, p.tot_h, where, roles_.intercept)) net_->AddFact(f);
     }
 
     // Read what the campaign added since the last call, then bring the net up to the campaign's hour.
@@ -91,6 +116,7 @@ public:
             dz.chance = roles_.danger_chance;
             dz.known_h = std::min(p.FirstH(), p.tot_h);
             net_->AddDanger(dz);
+            AddOpsecAlert(c, p, ti);
             bool released = false;
             for (const airwar::Flight& fl : p.flights) released = released || fl.released;
             if (!released) continue;
@@ -168,6 +194,25 @@ public:
             net_->AddFact(f);
         }
         net_->AdvanceTo(c.Now());
+    }
+
+    // The calls the battery's people have made on the radio by now (the player's own among them), for the enemy's
+    // radio intercept (roadmap P3: AirCampaign::NoteTransmissions; it hears each once). After Pump.
+    std::vector<airwar::Transmission> BatteryCalls() const {
+        std::vector<airwar::Transmission> out;
+        if (net_ == nullptr) return out;
+        const ChainData& d = net_->Data();
+        const SignalMean* radio = d.FindMean("radio_voice");
+        for (const RadioCall& call : net_->RadioCalls()) {
+            const std::string& who = d.positions[static_cast<std::size_t>(call.position)].id;
+            if (std::find(battery_people_.begin(), battery_people_.end(), who) == battery_people_.end()) continue;
+            airwar::Transmission t;
+            t.h = call.h;
+            t.intercept = (radio != nullptr ? radio->intercept : 1.0) * call.heard;  // the EM layer's listeners, when on (P5)
+            t.key = net_->Facts()[static_cast<std::size_t>(call.fact)].key + "@" + who + "@" + std::to_string(call.h);
+            out.push_back(t);
+        }
+        return out;
     }
 
 private:

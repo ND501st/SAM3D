@@ -21,9 +21,30 @@ missions don't load: ... unknown key". The lessons play on the Kesmark test rang
 internet. Playing from the editor (Play) works too, but there the editor keeps a few F keys of its own (F8 ejects from
 the vehicle, F11 the immersive view): use the standalone game for the full set of views.
 
+**Playing while the code is being worked on.** `play.ps1` plays the checkout it is in, so while its code is being edited
+(by Claude or another session) it may not build, or it waits on someone else's build or stops at an open editor's Live
+Coding. `play_latest.ps1` plays a copy of its own instead: a second checkout beside this one, `C:\dev\SAM3D-play` (a git
+worktree), brought up to the newest commit of the branch this checkout is on and built there. Work not yet committed
+never reaches it; when the newest commit doesn't build, the copy goes back to the last one that did.
+
+```
+.\tools\play_latest.ps1 -Tutorial           # the newest commit; the same options as play.ps1
+.\tools\play_latest.ps1 -NoUpdate           # the copy as it is, at once
+.\tools\play_latest.ps1 -UpdateOnly         # bring it up to date and build it, without playing
+.\tools\play_latest.ps1 -Ref main           # another branch or commit
+```
+
+The first run makes the copy and builds it from nothing (about 12 minutes and 3 GB); later runs build only what
+changed. Close the copy's game before updating it. The copy keeps its own `Saved` folder (settings, logs, campaign
+saves), and isn't for editing: an update overwrites it. `play.ps1 -NoBuild` plays this checkout's build as it is.
+
 ## The missions menu
 
-Up/Down a mission, H the helper (Off, Hints, On: below), Enter (or Start) to choose who to play, Q to quit. Choosing
+Up/Down a mission, H the helper (Off, Hints, On: below), T the time of day (Shift+T back), Enter (or Start) to choose
+who to play, Q to quit. The time of day is the mission's own, dawn, day, dusk, night or an hour (`,` and `.` move it by
+half an hour), each by the sun at the mission's place and date: the TV sees only by day and in twilight, the battery
+signals by lamps and marches by night in the dark, and the sky follows the same sun (docs/LIGHT.md). The lessons, the
+battles on their dates and the air war's raids hold their own time. Choosing
 shows the mission's crew: every crewman of its vehicles, in command or in the crew, with his duties under the one chosen,
 and outside with no seat. Up/Down or 1-9 a crewman, Enter, Play or a second click on him to play, Esc or Back to the
 missions. (Left/Right on the mission's page still pick where to start.) The groups:
@@ -35,7 +56,7 @@ missions. (Left/Right on the mission's page still pick where to start.) The grou
 | Drills | Scripted shoots: the scenario gives the orders. Watch, or take a seat and keep up. |
 | Ranges and history | Range days and the Osa's battles. |
 | Air war | Raids planned by the enemy air command (and the campaign screen). |
-| Test range | The Kesmark map with a raid at the bridges. |
+| Test range | The Kesmark map with a raid at the bridges; the dynamic campaign test, the capital's air defences under endless waves of every aircraft (docs/DYNAMIC_CAMPAIGN_TEST.md). |
 
 ## The helper
 
@@ -143,8 +164,9 @@ As in DCS: each F key is a kind of view, and pressing it again moves to the next
 | F8 | Aircraft | the next |
 | F10 | The map, from above | back to the middle, the first height |
 | F11 | Free camera: W A S D, Q down, E up, Shift faster, wheel the speed | |
+| F12 | Every asset in turn, ours and the enemy's: your vehicle, the aircraft, their bombs and missiles, our missiles, the battery's vehicles, then the air defence sites, radars and the map's objects; the label says whose | the next (Shift+F12: the one before) |
 
-Right mouse + drag turns the camera (F2, F7, F8; looks in F11; pans in F10). The wheel brings it closer or further,
+Right mouse + drag turns the camera (F2, F7, F8, F12; looks in F11; pans in F10). The wheel brings it closer or further,
 closes F5's lens, sets F10's height. F3, F4 and F10 follow whatever the last view followed: F8 then F4 chases the
 drone. F5 looks through the air as it is: a drone 50 km out is lost in the haze, and comes out of it as it closes.
 
@@ -162,7 +184,7 @@ is not 1. The simulation keeps its fixed step; only how many steps a frame runs 
 
 | Keys | What |
 |---|---|
-| F1-F8, F10, F11 | Camera views (above) |
+| F1-F8, F10-F12 | Camera views (above) |
 | F9 | The trainer's instructor panel (roadmap 10.3; where the simulation runs: single player or the server) |
 | Right mouse, wheel | Turn the camera, closer / further |
 | Ctrl+Z, Alt+Z, Shift+Z | Time faster, slower, normal |

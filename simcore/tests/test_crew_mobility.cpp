@@ -3,6 +3,7 @@
 // sending a crewman out for a job done outside, keeping the hatches shut in combat work and the voices in earshot.
 #include <cmath>
 #include <string>
+#include <vector>
 
 #include "simcore/cabin.hpp"
 #include "simcore/console_data.hpp"
@@ -238,6 +239,18 @@ SC_TEST("crew mobility: the Osa's hatches stay shut in combat work; the opening 
         bool window = false;
         for (const MoveLeg& leg : held.Legs()) window = window || leg.exit == "windscreen";
         SC_EXPECT(window);
+        // A man already outside still comes in to his post by his hatch, and it is shut after him.
+        CrewMover back(&l.vehicle, "commander");
+        back.Hold(BodyPlace::Ground, Vec3{0.0, 20.0, 0.0}, 0.0);
+        MoveGoal seat = MoveGoal::Seat();
+        seat.shut_after = true;
+        SC_EXPECT(back.GoTo(seat, &l.console, pose, &why));
+        bool by_hatch = false, shut = false;
+        for (const MoveLeg& leg : back.Legs()) {
+            by_hatch = by_hatch || (leg.kind == LegKind::ClimbIn && leg.exit != "windscreen");
+            shut = shut || leg.kind == LegKind::ShutHatch;
+        }
+        SC_EXPECT(by_hatch && shut);
     } else {
         std::printf("    (the equipment didn't power up headless: the БР check is left to the runner test)\n");
     }
@@ -313,8 +326,11 @@ SC_TEST("crew mobility: К машинам lines the crew up beside the vehicle, 
     SC_EXPECT(r->InEarshot("commander", "driver"));
     SC_EXPECT(r->OrderMount());
     for (int i = 0; i < 1500; ++i) r->Step(0.1);
-    for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
-    for (const auto& h : r->Hatches()) SC_EXPECT(!h.second);
+    // In their seats, but for the crew chief gone out with the aiming circle (a halt without Qc), his hatch left open.
+    for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated || (v.station == "commander" && r->SurveyUnderWay()));
+    if (!r->SurveyUnderWay()) {
+        for (const auto& h : r->Hatches()) SC_EXPECT(!h.second);
+    }
 }
 
 SC_TEST("crew mobility: К машине and По местам are orders of the menu, greyed while they hold, each said once") {
@@ -337,8 +353,9 @@ SC_TEST("crew mobility: К машине and По местам are orders of the 
         SC_EXPECT(r->CheckOrder("order_mount").can);
         SC_EXPECT(r->GiveCrewOrder("order_mount"));
         for (int i = 0; i < 1500; ++i) r->Step(0.1);
-        for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
-        SC_EXPECT(!r->CheckOrder("order_mount").can);
+        // The Osa's crew chief may be out with the aiming circle (a halt without Qc): По местам can then be given again.
+        for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated || (v.station == "commander" && r->SurveyUnderWay()));
+        SC_EXPECT(!r->CheckOrder("order_mount").can || r->SurveyUnderWay());
         int said_dismount = 0, said_mount = 0;
         if (r->Callouts() != nullptr) {
             for (const SpokenCallout& c : r->Callouts()->Log()) {
@@ -371,6 +388,43 @@ SC_TEST("crew mobility: the Osa's crew chief carries the aiming circle out ahead
     std::printf("    out %.0f s, set up %.0f s, Qc %.0f s, back %.0f s, %.1f m ahead at the farthest\n", out_s, set_s, ready_s, back_s, farthest);
     SC_EXPECT(out_s > 0.0 && set_s > out_s && ready_s > set_s && back_s > ready_s);
     SC_EXPECT(farthest > 30.0 && farthest < 40.0);
+}
+
+SC_TEST("crew mobility: the drill master walks the crew chief out to the aiming circle: its ideal Qc counts the way (8.14)") {
+    auto r = RunnerFor("school_deputy_commander.json");
+    SC_EXPECT(r != nullptr && r->Drill() != nullptr);
+    if (!r || r->Drill() == nullptr) return;
+    r->Console().equipment.SetInput("vehicle_stopped", true);
+    const DrillGoal goal(std::vector<Condition>{Condition::Ready("qc_measured")});
+    const auto set_at = [](const IdealTimeline& tl) {
+        for (const DrillAction& a : tl.actions) {
+            if (a.control == "nav.aiming_circle" && a.position == 1) return a.time_s;
+        }
+        return -1.0;
+    };
+    const IdealTimeline walked = r->Drill()->Ideal(goal, r->Console());
+    // The same planner without the ways works the aiming circle from his seat.
+    DrillMaster seated(r->Console(), &r->Def().crew_data, r->Drill()->ReactionS());
+    const IdealTimeline in_place = seated.Ideal(goal, r->Console());
+    const double way_s = r->Drill()->WalkFor("nav.aiming_circle");
+    std::printf("    the ideal: set up at %.1f s (in place %.1f s), Qc at %.1f s (in place %.1f s); the way out and back %.1f s\n", set_at(walked),
+                set_at(in_place), walked.time_s, in_place.time_s, way_s);
+    SC_EXPECT(walked.reached && in_place.reached);
+    SC_EXPECT(way_s > 30.0 && seated.WalkFor("nav.aiming_circle") == 0.0);
+    SC_EXPECT(set_at(walked) > set_at(in_place) + 0.3 * way_s);
+    SC_EXPECT(walked.time_s > in_place.time_s + 0.3 * way_s);
+    // The NPC crew chief, a trained man, sets it up about when the ideal does.
+    SC_EXPECT(r->GiveDrill("commander", "measure_qc"));
+    double set_s = -1.0;
+    while (r->Time() < 300.0 && set_s < 0.0) {
+        r->Step(0.1);
+        if (r->Console().panel.Get("nav.aiming_circle") == 1) set_s = r->Time();
+    }
+    std::printf("    the NPC crew chief sets it up at %.1f s\n", set_s);
+    SC_EXPECT(set_s > 0.0 && std::fabs(set_s - set_at(walked)) < 0.35 * set_s);
+    // Out there, the ideal's next is the measurement, with no way to walk.
+    const IdealTimeline there = r->Drill()->Ideal(goal, r->Console());
+    SC_EXPECT(there.reached && there.time_s < walked.time_s);
 }
 
 SC_TEST("crew mobility: once the engine reports the player's body, a job outside needs him out there") {
@@ -437,4 +491,215 @@ SC_TEST("crew mobility: a player inside can't set out the AB-1 from his seat; ou
     SC_EXPECT(r->Console().panel.Get("pwr.ab1_set") == 1);
     // And from out there his own console inside is out of reach.
     SC_EXPECT(r->SeatSet("driver", "pwr.input", 1, &why) == StepResult::Blocked);
+}
+
+SC_TEST("crew mobility (G2.4): a long walk across the map goes by the foot way's points; a short one, or one with no way given, straight") {
+    const Loaded l = LoadVehicleOf("pu12m");
+    VehiclePose pose;
+    pose.origin = Vec3{0.0, 0.0, 110.0};
+    FlatTerrain ground(110.0);
+    std::map<std::string, bool> hatches;
+    const Vec3 far_point{0.0, 600.0, 110.0};
+    // The foot way (nav::SessionNav::FootWay in a session): round a pond between the vehicle and the goal, by a point 300 m east.
+    int asked = 0;
+    auto way = [&asked](const Vec3& a, const Vec3& b) {
+        ++asked;
+        return std::vector<Vec3>{a, Vec3{300.0, 300.0, 0.0}, b};
+    };
+    CrewMover straight(&l.vehicle, "driver");
+    CrewMover round_pond(&l.vehicle, "driver");
+    round_pond.SetFootRoute(way);
+    std::string why;
+    SC_EXPECT(straight.GoTo(MoveGoal::OnGround(far_point), &l.console, pose, &why));
+    SC_EXPECT(round_pond.GoTo(MoveGoal::OnGround(far_point), &l.console, pose, &why));
+    SC_EXPECT(asked == 1);
+    bool via = false;
+    for (const MoveLeg& leg : round_pond.Legs()) via = via || (leg.kind == LegKind::GroundWalk && leg.to_map && std::fabs(leg.to.x - 300.0) < 1e-9);
+    SC_EXPECT(via);
+    const double t_straight = WalkUntilArrived(straight, l.vehicle, l.walking.gait, pose, &ground, hatches, 1800.0);
+    hatches.clear();
+    const double t_round = WalkUntilArrived(round_pond, l.vehicle, l.walking.gait, pose, &ground, hatches, 1800.0);
+    std::printf("    600 m across the map: straight %.0f s, round the pond %.0f s\n", t_straight, t_round);
+    SC_EXPECT(t_round > t_straight + 100.0);  // two legs of 424 m against 600 m at a walk
+    const MoverView v = round_pond.View(pose);
+    SC_EXPECT(!round_pond.Moving() && v.place == BodyPlace::Ground);
+    SC_EXPECT_NEAR(v.feet_enu.x, far_point.x, 0.01);
+    SC_EXPECT_NEAR(v.feet_enu.y, far_point.y, 0.01);
+    // A walk to a point beside the vehicle does not ask for the way.
+    CrewMover beside(&l.vehicle, "driver");
+    beside.SetFootRoute(way);
+    SC_EXPECT(beside.GoTo(MoveGoal::OnGround(Vec3{8.0, 20.0, 110.0}), &l.console, pose, &why));
+    SC_EXPECT(asked == 1);
+}
+
+SC_TEST("crew mobility: in the PU-12M's deployment with wire, four men each pay a P-274M out to a line's far end; a line works only once laid (8.14)") {
+    auto r = RunnerFor("pu12m_deploy_wire.json");
+    SC_EXPECT(r != nullptr);
+    if (!r) return;
+    const RadioDataDef& rd = r->Def().radio_data;
+    const VehicleWire& wire = r->Vehicle()->wire;
+    SC_EXPECT(wire.present && std::fabs(wire.lay_mps - 1.2) < 1e-9);
+    // At the start no line of the crew's is laid and each can be; the regiment's is laid from the regiment.
+    for (int n = 1; n <= 4; ++n) SC_EXPECT(rd.Line(n) != nullptr && !r->LineLaid(*rd.Line(n)) && r->LineCantBeLaid(n).empty());
+    SC_EXPECT(rd.Line(5) != nullptr && r->LineLaid(*rd.Line(5)) && !r->LineCantBeLaid(5).empty());
+    SC_EXPECT(r->CheckOrder("order_lay_lines").can);
+    const char* layer[5] = {"", "driver", "squad_leader", "radio_operator", "operator"};
+    double out_s[5] = {-1, -1, -1, -1, -1}, laid_s[5] = {-1, -1, -1, -1, -1}, back_s[5] = {-1, -1, -1, -1, -1};
+    double fastest[5] = {0, 0, 0, 0, 0};
+    double deployed_s = -1.0;
+    Vec3 was[5];
+    const CrewTask* ready = r->Def().crew_data.FindTask("ready_halted");
+    SC_EXPECT(ready != nullptr);
+    while (!r->Finished() && r->Time() < 1800.0) {
+        r->Step(0.1);
+        if (deployed_s < 0.0 && ready != nullptr && r->Console().equipment.AllHold(ready->conditions, r->Console().panel)) deployed_s = r->Time();
+        for (int n = 1; n <= 4; ++n) {
+            const CrewMover* m = r->Mover(layer[n]);
+            const MoverView v = m->View(r->Pose());
+            // Out on the ground towards the far end he goes no faster than the cable is paid out.
+            if (m->At() == "line:" + std::to_string(n) && v.place == BodyPlace::Ground && m->Moving() && laid_s[n] < 0.0 && was[n].x != 0.0) {
+                fastest[n] = std::max(fastest[n], std::hypot(v.feet_enu.x - was[n].x, v.feet_enu.y - was[n].y) / 0.1);
+            }
+            was[n] = v.place == BodyPlace::Ground ? v.feet_enu : Vec3();
+            if (deployed_s > 0.0 && out_s[n] < 0.0 && r->Outside(layer[n])) out_s[n] = r->Time();
+            if (laid_s[n] < 0.0 && r->LineLaid(*rd.Line(n))) {
+                laid_s[n] = r->Time();
+                Vec3 end_at;
+                SC_EXPECT(r->LineFarEnd(n, end_at));
+                SC_EXPECT(std::hypot(v.feet_enu.x - end_at.x, v.feet_enu.y - end_at.y) < 3.0);  // he connected it at the far end
+            }
+            if (laid_s[n] > 0.0 && back_s[n] < 0.0 && m->Place() == BodyPlace::Seated) back_s[n] = r->Time();
+        }
+    }
+    std::printf("    deployed %.0f s\n", deployed_s);
+    SC_EXPECT(deployed_s > 0.0);
+    for (int n = 1; n <= 4; ++n) {
+        Vec3 end_at;
+        SC_EXPECT(r->LineFarEnd(n, end_at));
+        const Vec3 post = r->Pose().origin;
+        const double dist = std::hypot(end_at.x - post.x, end_at.y - post.y);
+        const auto w = r->Wires().find(n);
+        SC_EXPECT(w != r->Wires().end() && w->second.reached && w->second.station == layer[n]);
+        const double cable = w != r->Wires().end() ? w->second.length_m : 0.0;
+        std::printf("    line %d (%s, %.0f m off): out %.0f s, laid %.0f s, back in his seat %.0f s; %.0f m of cable, %zu points, at most %.2f m/s\n", n,
+                    layer[n], dist, out_s[n], laid_s[n], back_s[n], cable, w != r->Wires().end() ? w->second.points.size() : std::size_t(0), fastest[n]);
+        // Laid after the post was deployed, by its man, out at the laying pace: the cable about the way he walked.
+        SC_EXPECT(out_s[n] >= deployed_s && laid_s[n] > out_s[n] && back_s[n] > laid_s[n]);
+        SC_EXPECT(laid_s[n] - out_s[n] >= (dist - 10.0) / wire.lay_mps);
+        SC_EXPECT(cable > dist - 10.0 && cable < 1.1 * dist && cable <= wire.cable_m);
+        SC_EXPECT(fastest[n] <= wire.lay_mps + 0.01 && fastest[n] > 0.5 * wire.lay_mps);
+        // He rang the post on it, and the post answered.
+        bool rang = false;
+        for (const ScenarioRunner::RadioMessage& msg : r->RadioLog()) {
+            rang = rang || (msg.net == "line " + std::to_string(n) && msg.text.find("Проверка связи") != std::string::npos);
+        }
+        SC_EXPECT(rang);
+        // ru_pu12_text: deployed with four lines laid to 500 m within 25 min by day.
+        SC_EXPECT(laid_s[n] <= 1500.0);
+    }
+    SC_EXPECT(!r->CheckOrder("order_lay_lines").can);  // nothing left to lay
+    for (const MoverView& v : r->CrewBodies()) SC_EXPECT(v.place == BodyPlace::Seated);
+}
+
+SC_TEST("crew mobility: a line's far end beside a launcher, short of it on the post's side; one beyond the cable can't be laid") {
+    std::string t;
+    SC_EXPECT(detail::ReadTextFile(kData + "/scenarios/school_pu12m_battery_commander.json", t));
+    const std::string from = "\"line\": 1, \"to\": \"21\",";
+    const std::size_t at = t.find(from);
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    t.replace(at, from.size(), from + " \"laid\": false,");
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(t, kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.Step(0.1);
+    Vec3 end_at;
+    SC_EXPECT(r.LineFarEnd(1, end_at));
+    const Vec3 post = r.Pose().origin;
+    const Vec3 launcher{-2500.0, 1500.0, 0.0};
+    SC_EXPECT(std::fabs(std::hypot(end_at.x - launcher.x, end_at.y - launcher.y) - r.Vehicle()->wire.far_set_m) < 0.01);
+    SC_EXPECT(std::hypot(end_at.x - post.x, end_at.y - post.y) < std::hypot(launcher.x - post.x, launcher.y - post.y));
+    // 3.5 km off: no line of 500 m reaches it, and a line laid in the scenario stays laid.
+    SC_EXPECT(r.LineCantBeLaid(1) == "its far end is beyond the cable");
+    SC_EXPECT(!r.LineLaid(*r.Def().radio_data.Line(1)));
+    SC_EXPECT(r.LineLaid(*r.Def().radio_data.Line(2)) && r.LineCantBeLaid(2) == "laid");
+    SC_EXPECT(r.LaidLineTo("21") == nullptr && r.LaidLineTo("22") != nullptr);
+    SC_EXPECT(!r.CheckOrder("order_lay_lines").can);
+}
+
+SC_TEST("crew mobility: at a road's edge the crew gets down and up on the side away from the traffic (art. 147, 154)") {
+    // The PU-12M school's post on the Kesmark range, set down beside the middle of a road's longest straight: on its right
+    // shoulder (the road on the post's left), on its left shoulder, and away from any road. The driver, whose hatch is on
+    // the left, goes out to the AB-1 set behind the post.
+    std::unique_ptr<ScenarioRunner> probe = RunnerFor("school_pu12m_driver.json");
+    SC_EXPECT(probe != nullptr && probe->MapGround() != nullptr);
+    if (!probe || probe->MapGround() == nullptr) return;
+    const MapTerrain& map = *probe->MapGround();
+    const MapLineDef* road = nullptr;
+    std::size_t seg = 0;
+    double longest = 0.0;
+    for (const MapLineDef& line : map.Map().Def().roads) {
+        for (std::size_t i = 1; i < line.points.size(); ++i) {
+            const double len = std::hypot(line.points[i].east_m - line.points[i - 1].east_m, line.points[i].north_m - line.points[i - 1].north_m);
+            if (len > longest) {
+                longest = len;
+                road = &line;
+                seg = i;
+            }
+        }
+    }
+    SC_EXPECT(road != nullptr && longest > 50.0);
+    if (road == nullptr) return;
+    const Vec3 a = map.Link().MapToFrame(road->points[seg - 1].east_m, road->points[seg - 1].north_m, 0.0);
+    const Vec3 b = map.Link().MapToFrame(road->points[seg].east_m, road->points[seg].north_m, 0.0);
+    const double len = std::hypot(b.x - a.x, b.y - a.y);
+    const Vec3 along{(b.x - a.x) / len, (b.y - a.y) / len, 0.0};
+    const Vec3 right{along.y, -along.x, 0.0};  // facing along it, the right hand
+    const Vec3 mid{0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.0};
+    const double heading_deg = RadToDeg(std::atan2(along.x, along.y));
+    // The post standing `off` m to the right of the road's centre line, facing along it: the side it keeps off, and the
+    // way the driver takes down on his way out to the set.
+    struct Out {
+        int side = 9;
+        double way_x = 0.0;
+        std::string way;
+    };
+    auto out_from = [&](double off) {
+        Out o;
+        std::unique_ptr<ScenarioRunner> r = RunnerFor("school_pu12m_driver.json");
+        if (!r) return o;
+        r->SetUnitPosition(Vec3{mid.x + off * right.x, mid.y + off * right.y, 0.0});
+        r->SetUnitHeading(heading_deg);
+        r->TakeSeat("driver", "Player");
+        r->SetPlayerBody("driver", BodyPlace::Seated, Vec3{}, 0.0);
+        r->Step(0.1);
+        o.side = r->TrafficSide();
+        if (!r->PlayerGoTo("driver", r->PlaceGoal("ab1"))) return o;
+        for (const MoveLeg& l : r->Mover("driver")->Legs()) {
+            if (l.kind != LegKind::ClimbDown) continue;
+            o.way = l.way;
+            if (const VehicleWayDown* w = r->Vehicle()->Way(l.way)) o.way_x = w->bottom_m.x;
+        }
+        return o;
+    };
+    const double shoulder = 0.5 * road->width_m + 2.0;
+    const Out on_right = out_from(shoulder), on_left = out_from(-shoulder);
+    std::printf("    a %.0f m road: on its right shoulder the traffic on the post's %s, the driver down by %s; on its left shoulder, on its %s, down by %s\n",
+                road->width_m, on_right.side < 0 ? "left" : "right", on_right.way.c_str(), on_left.side < 0 ? "left" : "right", on_left.way.c_str());
+    SC_EXPECT(on_right.side == -1 && on_right.way_x > 0.0);  // round to the right side, away from the road
+    SC_EXPECT(on_left.side == 1 && on_left.way_x < 0.0);
+    // Away from any road: no side kept off.
+    double away_m = 0.0;
+    for (double d = 120.0; d < 3000.0 && away_m == 0.0; d += 40.0) {
+        Vec3 c;
+        double w = 0.0;
+        if (!map.NearestRoad(mid.x + d * right.x, mid.y + d * right.y, 100.0, c, w)) away_m = d;
+    }
+    SC_EXPECT(away_m > 0.0);
+    const Out off_road = out_from(away_m);
+    std::printf("    %.0f m off the road: down by %s\n", away_m, off_road.way.c_str());
+    SC_EXPECT(off_road.side == 0 && !off_road.way.empty());
 }
