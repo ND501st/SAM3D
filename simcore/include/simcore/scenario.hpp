@@ -1262,20 +1262,23 @@ private:
 
     // A target's "arms" (ArmCarrierDef): its warning receiver tells it what to fire at, so it needs one.
     // A target's "reactions" (roadmap B4, reactions.hpp): {"profile", "aircraft", "chaff", "flares", "tanks", "stores",
-    // "nerve", "zones": [{"east_m", "north_m", "radius_m"}]}. Not with "evade" or "evade_on_launch".
+    // "nerve", "press_on_shift", "jettison_shift", "zones": [{"east_m", "north_m", "radius_m"}]}. Not with "evade" or
+    // "evade_on_launch". The shifts: his officer's (roadmap B11, air_war/hot_phase.hpp), at most 0.2 either way.
     bool LoadReactionPilot(const json::Value& t, const std::string& tp, ScenarioTarget& tg) {
         const json::Value* r = t.Find("reactions");
         if (r == nullptr) return true;
         const std::string p = Join(tp, "reactions");
         if (t.Find("evade") != nullptr || t.Find("evade_on_launch") != nullptr) return Fail(p, "a target has \"reactions\" or \"evade\", not both");
         ReactionPilotDef& d = tg.reactions;
-        if (!Keys(*r, p, {"profile", "aircraft", "chaff", "flares", "tanks", "stores", "nerve", "zones", "notes"}) ||
+        if (!Keys(*r, p, {"profile", "aircraft", "chaff", "flares", "tanks", "stores", "nerve", "press_on_shift", "jettison_shift", "zones", "notes"}) ||
             !RequireString(*r, p, "profile", d.profile) || !OptionalString(*r, p, "aircraft", d.aircraft) ||
             !OptionalInt(*r, p, "chaff", d.chaff) || !OptionalInt(*r, p, "flares", d.flares) || !OptionalInt(*r, p, "tanks", d.tanks) ||
-            !OptionalString(*r, p, "stores", d.stores) || !OptionalNumber(*r, p, "nerve", d.nerve)) {
+            !OptionalString(*r, p, "stores", d.stores) || !OptionalNumber(*r, p, "nerve", d.nerve) ||
+            !OptionalNumber(*r, p, "press_on_shift", d.press_on_shift) || !OptionalNumber(*r, p, "jettison_shift", d.jettison_shift)) {
             return false;
         }
         if (d.nerve < 0.0 || d.nerve > 1.0) return Fail(Join(p, "nerve"), "0 to 1");
+        if (std::fabs(d.press_on_shift) > 0.2 || std::fabs(d.jettison_shift) > 0.2) return Fail(p, "an officer's shift is at most 0.2 either way");
         if (const json::Value* zs = OptionalArray(*r, p, "zones")) {
             for (std::size_t i = 0; i < zs->items.size(); ++i) {
                 const std::string zp = Index(Join(p, "zones"), i);

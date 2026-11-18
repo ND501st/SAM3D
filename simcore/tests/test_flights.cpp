@@ -355,9 +355,10 @@ SC_TEST("flights B1: a planner's raid flies as flights in formation, in one pack
     c.Posture().emission = 0.1;
     c.Posture().relocate_every_h = 20.0;
     // A flight of two or more that keeps its slots: its wingmen on their stations once in the air a while, outside the
-    // attack (where each flies his own run). The first raid that has one in the air out of its attack (the campaign's
-    // course decides which raids come: roadmap B5's packages fly in time; a raid clipped near the battery may begin in
-    // its attack).
+    // attack and its defence (where each flies his own run or break) and while the wingman is not on a manoeuvre of his
+    // own (B4: he reacts to what he sees before his leader does). The first raid that has one in the air so (the
+    // campaign's course decides which raids come: roadmap B5's packages fly in time; a raid clipped near the battery may
+    // begin in its attack; B11's day-1 shares change which come first).
     int raids = 0, kept = 0, looked = 0;
     std::string pair_id;
     std::map<std::string, int> phases;
@@ -391,7 +392,7 @@ SC_TEST("flights B1: a planner's raid flies as flights in formation, in one pack
             const FlightState* f = r.Flight(pair_id);
             if (f == nullptr) continue;
             ++phases[f->phase];
-            if (f->phase == "attack") continue;
+            if (f->phase == "attack" || f->phase == "defensive" || f->slots[1].overriding) continue;
             ++looked;
             kept += f->slots[1].keeping ? 1 : 0;
         }

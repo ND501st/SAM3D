@@ -133,6 +133,8 @@ public:
         s.skill = skill >= 0.0 ? std::clamp(skill, 0.0, 1.0) : p->skill;
         s.two_seat = two_seat;
         s.nerve = std::clamp(d.nerve, 0.0, 1.0);
+        s.press_on_shift = d.press_on_shift;
+        s.jettison_shift = d.jettison_shift;
         const Loadout l = table_->LoadoutOf(d.aircraft, year_);
         s.chaff = d.chaff >= 0 ? d.chaff : l.chaff;
         s.flares = d.flares >= 0 ? d.flares : l.flares;
@@ -272,6 +274,8 @@ private:
         double skill = 0.6;
         bool two_seat = false;
         double nerve = 0.5;
+        double press_on_shift = 0.0;  // his officer's (roadmap B11)
+        double jettison_shift = 0.0;
         double stress = 0.0;
         double stress_t = 0.0;
         int chaff = 0, flares = 0, tanks = 0;
@@ -704,7 +708,8 @@ private:
         if (fi >= 0 && fl.All()[static_cast<std::size_t>(fi)].weapons) return;
         const int key = fi >= 0 ? fi : -1 - target;  // a lone aircraft decides for himself
         if (decided_.count({key, sit}) != 0) return;
-        const FlightDecision d = DecideFlight(*table_, row, Stress(target, now), s.nerve, ReactionU(seed_, s.key, c.serial, ReactionDraw::Jettison),
+        const FlightDecision d = DecideFlight(*table_, ShiftedRow(row, s.press_on_shift, s.jettison_shift), Stress(target, now), s.nerve,
+                                              ReactionU(seed_, s.key, c.serial, ReactionDraw::Jettison),
                                               ReactionU(seed_, s.key, c.serial, ReactionDraw::TanksOnly),
                                               ReactionU(seed_, s.key, c.serial, ReactionDraw::Choice));
         Decided rec;
@@ -814,7 +819,8 @@ private:
         ++counts_.self_decided;
         const ReactionRow& row = ChooseRow(*s.profile, it.cue.source, it.cue.threat);
         const std::uint64_t k = it.cue.serial + 7919u;
-        const FlightDecision d = DecideFlight(*table_, row, Stress(it.target, now), s.nerve, ReactionU(seed_, s.key, k, ReactionDraw::Jettison),
+        const FlightDecision d = DecideFlight(*table_, ShiftedRow(row, s.press_on_shift, s.jettison_shift), Stress(it.target, now), s.nerve,
+                                              ReactionU(seed_, s.key, k, ReactionDraw::Jettison),
                                               ReactionU(seed_, s.key, k, ReactionDraw::TanksOnly), ReactionU(seed_, s.key, k, ReactionDraw::Choice));
         if (d.jettison) Jettison(it.target, s, d.tanks_only, now, "his own decision, nothing heard from the lead", acts);
         if (d.choice == FlightChoice::Abort) Abort(it.target, now, acts, "nothing heard from the lead: turns for home alone");

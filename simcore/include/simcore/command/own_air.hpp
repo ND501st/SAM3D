@@ -36,6 +36,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/hot_phase_def.hpp"
 #include "simcore/em/random.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
@@ -127,6 +128,9 @@ struct OwnAirDef {
     IffChangeDef iff_change;
     CooperationDefaults coop;
     EnemyLearningDef learning;
+    // How our fighters choose in the air (roadmap B11, docs/air_battle/10_FACTIONS.md section 7.2, "Our side"): the same block
+    // as each enemy faction's, read by the same functions (air_war/hot_phase.hpp). No alert pools (the readiness above).
+    airwar::HotPhaseDef hot;
 
     const ReadinessDef* Readiness(int state) const {
         for (const ReadinessDef& r : readiness) {
@@ -228,10 +232,17 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
     if (!ReadFile(path, root, error)) return false;
     std::string e;
     if (Unknown(root, "", {"own_air_id", "status", "source", "confidence", "notes", "readiness", "readiness_source", "duty", "airborne_alert",
-                           "pursuit_limit_km", "gci", "notice", "iff_change", "cooperation", "enemy_learning"}, &e)) {
+                           "pursuit_limit_km", "gci", "notice", "iff_change", "cooperation", "enemy_learning", "hot_phase"}, &e)) {
         return fail(e);
     }
     out = OwnAirDef();
+    {
+        const json::Value* hp = root.Find("hot_phase");
+        if (hp == nullptr) return fail("hot_phase: required (roadmap B11)");
+        std::string he;
+        if (!airwar::LoadHotPhase(*hp, "hot_phase", out.hot, &he)) return fail(he);
+        if (!out.hot.alert.empty()) return fail("hot_phase.alert: our fighters' readiness is the readiness block's");
+    }
     const json::Value* rs = root.Find("readiness");
     if (rs == nullptr || !rs->Is(json::Type::Array) || rs->items.empty()) return fail("readiness: expected the states");
     for (const json::Value& r : rs->items) {

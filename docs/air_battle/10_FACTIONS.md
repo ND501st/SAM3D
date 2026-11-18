@@ -331,7 +331,7 @@ or intercept can see; each reaches the player only as our analysts' phrase.
 
 ## 9. Two current data choices that are not 1985 practice
 
-These are proposals; this doc does not edit the data.
+These were proposals; both were taken in B11 (§12, `docs/air_war/09_BALANCE.md` §16).
 
 ### 9.1 `medium_altitude_man` for NATO
 
@@ -430,6 +430,86 @@ In the air war's test area (`simcore/tests/test_hot_phase.cpp`, new):
 - 9.2: the rollback's apportionment sums to 1 and gives armed reconnaissance on day 1.
 
 `air_war_balance` and `air_war_bench` are unchanged byte for byte by phase one.
+
+## 12. As built (B11, 18 November 2026, branch `tb-b11`)
+
+**The data.** Each of the four faction files and our side's `data/command/own_air.json` has a `hot_phase` block with
+all eleven keys of §7.1. Each key has a value, a `range`, a source and a confidence, plus `by_role` and
+`when_control_lost` where §7.2 gives them. The values are §7.2's. The loader (`air_war/hot_phase_def.hpp`
+`LoadHotPhase`) is strict:
+- an unknown key fails the load;
+- so does a missing source or confidence;
+- so does a value or role value outside its range;
+- so does a range outside 0..1.
+
+The block is required. The enemy's blocks also carry `alert`, `retask_air`, `authority` and `on_control_lost`. Our side
+has no alert pools, because its readiness block covers that, and no authority, because its fighters' tasks come from the
+GCI.
+
+**What moved into it**, and what reads it now:
+
+| Was | Now | Read by |
+|---|---|---|
+| `opportunity_rules.tendency` (B6) | `hot_phase.opportunity` | the loader writes it back to `opportunity.tendency`; B6's `ActShare` is unchanged |
+| `radio.discipline`, `radio.discipline_gci_fighters` (B9) | `hot_phase.radio_discipline`, with `by_role` 0.2 or 0.3 for escort, sweep and CAP | written back; B9's radio is unchanged |
+| `c2.alert` (B5) | `hot_phase.alert` | written back to `c2.alert` |
+| `c2.free_hunt` (B5, the Pact) | `hot_phase.authority.free_hunt_from_phase`, `free_hunt_depth_km` | written back to `c2.free_hunt` |
+| `reactions.json` profiles' `initiative` (B4, read by nothing) | `hot_phase.initiative` | `HotPhase()` |
+
+The old keys are refused in their old places, so a value cannot live in two files.
+
+**What stayed where it was**, and why:
+- **B4's reaction rows and B8's `strikers_answer`.** These are the shares per situation, which §7.1 keeps in `04_REACTIONS.md`'s table.
+- **B8's doctrine `skill` and `on_control_lost` in `air_combat.json`.** A session reads `air_combat.json` without the faction files (`scenario.hpp`). The hot phase repeats these values, and `LoadAirWarData` refuses a faction whose values differ. The test checks our side's.
+- **B5's `c2.timing`.** It is per hop; `retask_air` is the whole delay of §7.4, so it is new.
+- **B5's `c2.authority` table.** The gates in `hot_phase.authority` must agree with it on load:
+  - `retask_by` must equal the posts holding `divert_airborne` or `designate`;
+  - `retask_kinds` must equal their missions;
+  - `recall_only` must hold exactly when the posts may recall and do nothing else;
+  - a free hunt zone used by `hunter_leave` or the opportunity rules needs `free_hunt_from_phase`.
+
+  Moving the table itself would have been a large rewrite of `c2.hpp` with no gain.
+- **B9's quirks `chatterbox` and `silent_runner`.** They keep their `radio_chatter` key and B9's tier weights. §8.5's new `radio_discipline` key and weights would have moved every faction's generated officers.
+
+**The code.**
+- `simcore/air_war/hot_phase_def.hpp`: the data.
+- `simcore/air_war/hot_phase.hpp`:
+  - `HotPhase(faction, param, role, pool, who)` returns the faction's value, plus the officer's shift (§8.2's weights and §8.4-8.5's quirks, at most ±0.2, half weight when he does not fly), plus the pilot's shift (experience, currency, nerve, at most ±0.15).
+  - `ReactionDelayS`.
+  - `RetaskAirS`, `RecallS` and `AlertTakeoffS` (§7.4).
+  - `BeyondTaskOffered` and `FreeHuntOffered` (§7.3). These take no officer, so no officer can open a gate.
+  - `HotShiftsLine`, which `AirCampaign::EnemyMind` shows beside each flying officer's traits (§10).
+
+  All of these are pure functions. The callers draw from their own keyed streams; no stream was added.
+- When a raid is handed to a played session (`raid_scenario.hpp`), each aircraft's `"reactions"` carries its officer's `press_on_shift` and `jettison_shift`. If that officer does not fly, it is his squadron leader's shift at half weight. `reaction_chain.hpp` moves the row by them (`reactions.hpp` `ShiftedRow`).
+- The abstract resolver reads none of it (§7.5, phase one).
+
+**The quirks.** Two are new, `opportunist` and `controller_bound`, with the effect keys `opportunity` and
+`control_bound`. They are drawn after the other quirks, each from a stream keyed on the officer (`hot_draw`), with the
+chance the main draw would have given them. So an older campaign's officers keep every quirk they had.
+
+**§9.1 and §9.2** were taken as written (results in `docs/air_war/09_BALANCE.md` §16):
+- `medium_altitude_man`'s superior weight is 0.1.
+- Halloran is a `low_level_purist`.
+- NATO's strike, close support and armed reconnaissance templates have `medium_below_iads` 0.45. The planner offers them medium altitude only once the believed working defences are below it, unless a political order to fly high stands.
+- NATO's first phase is "counter-air and suppression, with interdiction from the first day", with the shares in §9.2's table.
+
+**Old saves.** A save carries `hot_mode`, and one without it loads with mode 0 (the tuning `hot_phase.mode`). Mode 0
+keeps:
+- the old shares (the phase's `apportion_mode0`);
+- the old weight (the quirk's `tier_weight_mode0`);
+- no medium gate;
+- no hot quirks.
+
+**Tests.** `tests/test_hot_phase.cpp` covers each item of §11.
+
+**Left:**
+- Most values are data that played flights do not read yet. Played flights now read the officer's press-on and jettison shifts, the opportunity, the radio discipline, the alert pools and the free hunt. They do not yet read `initiative`, `plan_adherence`, `emission_discipline`, `turn_back` (with its control-lost role values), `husbanding`, `reaction_delay_s` or `leader_may`. Wiring each one needs the behaviour it governs to exist in the session first: the leader's re-route (B2/B4), timing at gates (B2), our controller lost in a played raid (B8/B10), the stepped resolver (§9.3).
+- `retask_air` and the latencies are functions with no caller yet: B5's divert still uses `c2.timing`. The Pact's report and order hops compose to 160-490 s, faster than `retask_air`'s 600-1800 s. B14 should settle it. The loader does not check the composition.
+- The pilot's shift needs pilots with sorties, currency and nerve. The session's nerve is passed; the sorties and currency are B12's.
+- Our side's 4-10 s reaction delay when jammed is not modelled. The jammed state does not reach a flight.
+- NATO's `redirect_before_ip` line (c2, 10%) is not counted as a retask: `RetaskAirS` says interdiction is never retasked.
+- §8.5's tier weights for `chatterbox` and `silent_runner` were not applied (see above).
 
 ## Done when
 

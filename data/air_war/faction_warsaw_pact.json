@@ -27,11 +27,9 @@
     "have_quick_share": 0.0,
     "secure_voice_share": 0.0,
     "gci_channels_per_post": 3,
-    "discipline": 0.8,
-    "discipline_gci_fighters": 0.2,
     "source": "mt_1964_air_army p. 6 (complete radio silence on the move); fm_100_2_1_1984 p. 12-8 (radio reduced to a minimum or prohibited on the attack); mt_1962_front_aviation (30-40 groups for twelve command posts: about three per post); valka_r832m; lawrence_1982 (planning on landlines and couriers)",
     "confidence": "low",
-    "notes": "discipline: strike groups keep radio silence on the way in and the attack; fighters talk to GCI (discipline_gci_fighters). Call signs change per planning cycle (a game value, 12 h). Staff opsec high: planning on landlines and couriers."
+    "notes": "The radio discipline is the hot phase's (hot_phase.radio_discipline, roadmap B11): strike groups keep radio silence on the way in and the attack; fighters talk to GCI. Call signs change per planning cycle (a game value, 12 h). Staff opsec high: planning on landlines and couriers."
   },
   "flights": {
     "source": "johnson_1986, pennington_1985, fm_100_2_1_1984, mai_tactics_vvs, airwar_mi24_markovsky (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3); spacings no source gives are game values",
@@ -57,7 +55,6 @@
     }
   },
   "opportunity_rules": {
-    "tendency": {"value": 0.2, "source": "SAM3D estimate bounded by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "low"},
     "report_in_flight": {"value": true, "source": "fm_100_2_1_1984 p. 12-6", "confidence": "medium", "notes": "crews on any mission report observed enemy activity at once"},
     "fired_on_may_attack": {"value": false, "source": "fm_100_2_1_1984 p. 12-4", "confidence": "low", "notes": "a planned strike follows its plan unless ground control changes it"},
     "night_hunt_clearance": {"value": "ground_post", "source": "rgs_afghan_2002 pp. 219-220", "confidence": "low", "notes": "dated before 1986 by assumption"},
@@ -110,6 +107,26 @@
       "scramble": { "relay_s": [10, 30],
         "source": "SAM3D estimate: a command signal to crews in the cockpit (fm_100_2_1_1984 p. 12-7)", "confidence": "low" }
     },
+    "report_missions": ["any"],
+    "hunter_leave": "free_hunt_zone",
+    "max_report_age_h": 6,
+    "debrief_s": [300, 600]
+  },
+  "hot_phase": {
+    "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
+    "confidence": "estimate",
+    "notes": "How its flights choose in the air (roadmap B11, simcore/air_war/hot_phase.hpp): each value the faction's, moved by the flight's officer (at most 0.2) and pilot (at most 0.15). Played flights (A2, A1) read it; the abstract resolver does not.",
+    "initiative": {"value": 0.25, "range": [0.1, 0.4], "source": "fm_100_2_1_1984 ch. 12 (pp. 12-3, 12-4); johnson_1986 (unverified); lambeth_1984; pennington_1985 (the flight leader at contact)", "confidence": "estimate"},
+    "plan_adherence": {"value": 0.9, "range": [0.75, 1.0], "source": "fm_100_2_1_1984 pp. 12-3, 12-4 (the flight plan and the route fixed before launch); johnson_1986 (unverified: 'fettered initiative'); cia_1987_iraq_af (the rigid end, a client)", "confidence": "estimate"},
+    "press_on": {"value": 0.6, "by_role": {"escort": 0.4}, "when_control_lost": true, "range": [0.4, 0.7], "source": "lambeth_1984; checo_1969_tactics; usn_falklands_1983", "confidence": "estimate", "notes": "an escort without its GCI: 0.4"},
+    "jettison_readiness": {"value": 0.2, "range": [0.1, 0.35], "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (red_baron_vol2, checo_1969_tactics); the preset programme keeps the load (sve_prm)", "confidence": "estimate"},
+    "radio_discipline": {"value": 0.8, "by_role": {"escort": 0.2, "sweep": 0.2, "cap": 0.2}, "range": [0.2, 0.95], "source": "mt_1964_air_army p. 6 (complete radio silence on the move); fm_100_2_1_1984 p. 12-8 (radio reduced to a minimum or prohibited on the attack); wseg_116_1967 (unverified) for the failure", "confidence": "medium", "notes": "strike groups keep silence on the way in and the attack; by_role: its fighters talk to GCI (the radio block's discipline_gci_fighters before roadmap B11)"},
+    "emission_discipline": {"value": 0.6, "range": [0.4, 0.8], "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.2)", "confidence": "estimate"},
+    "air_combat_skill": {"value": 0.5, "range": [0.3, 0.6], "source": "lambeth_1984; cia_1987_iraq_af (clients 0.3); the same as data/air_war/air_combat.json's doctrine skill (checked on load)", "confidence": "estimate"},
+    "opportunity": {"value": 0.2, "range": [0.1, 0.35], "source": "fm_100_2_1_1984 p. 12-6 (report rather than attack: a SAM3D inference); markovsky_afghan_sky (an order of 1981 forbade attacks on unidentified targets); SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "low", "notes": "moved from opportunity_rules.tendency (roadmap B11)"},
+    "turn_back": {"value": 0.2, "by_role": {"escort": 0.6}, "when_control_lost": true, "range": [0.1, 0.6], "source": "lambeth_1984 (Skinner); fm_100_2_1_1984 p. 12-4", "confidence": "estimate", "notes": "an escort whose controller is jammed or lost: 0.6"},
+    "husbanding": {"value": 0.0, "range": [0.0, 0.1], "source": "game value (docs/air_battle/10_FACTIONS.md section 7.2: a large force with replacements)", "confidence": "estimate"},
+    "reaction_delay_s": {"value": [2, 5], "improvised_extra_s": 2, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6; sve_prm (the preset counter-SAM programme)", "confidence": "estimate", "notes": "an improvised manoeuvre (not the programme) 2 s slower"},
     "alert": [
       { "id": "readiness_1", "share": 0.4, "takeoff_s": [180, 300], "hold_h": [1, 2], "phase_scale": [0.25, 1.0],
         "source": "fm_100_2_1_1984 p. 12-7; small in the opening air operation (dia_1977_fa_support), the scale a game value; share a game value", "confidence": "medium" },
@@ -118,12 +135,9 @@
       { "id": "readiness_3", "share": 0.2, "takeoff_s": [3600, 7200], "hold_h": [48, 96], "phase_scale": [0.25, 1.0],
         "source": "fm_100_2_1_1984 p. 12-7; phase scale and share game values", "confidence": "medium" }
     ],
-    "report_missions": ["any"],
-    "hunter_leave": "free_hunt_zone",
-    "free_hunt": { "from_phase": 1, "depth_km": 30,
-      "source": "fm_100_2_1_1984 p. 12-6 (free hunting waits for air superiority); the depth a game value", "confidence": "low" },
-    "max_report_age_h": 6,
-    "debrief_s": [300, 600]
+    "retask_air": {"delay_s": [600, 1800], "never": 0.5, "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.4): only through ground control (fm_100_2_1_1984 pp. 12-4, 12-5)", "confidence": "estimate", "notes": "a planned strike never in half the cases; armed reconnaissance and close support through the control post and the FAC"},
+    "authority": {"beyond_task": ["armed_recce", "hunter"], "free_hunt_from_phase": 1, "free_hunt_depth_km": 30, "retask_by": ["fac", "tasking", "squadron"], "retask_kinds": ["cas", "helo_raid", "armed_recce"], "recall_only": false, "leader_may": ["targets_in_flight", "programme"], "source": "fm_100_2_1_1984 pp. 12-4 to 12-6 (ground control, the FAC at the checkpoint; free hunting waits for air superiority); sve_prm; the free hunt's depth a game value; the phase after the air operation a SAM3D reading (c2-30, docs/research/air_battle_2026-11/c2_retasking.md)", "confidence": "low", "notes": "the free hunt moved here from c2.free_hunt (roadmap B11); the c2 block's authority table and these gates must agree (checked on load)"},
+    "on_control_lost": {"green": "abort", "skilled": "pairs", "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985 (initiative to the flight leader at contact); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"}
   },
   "doctrine": {
     "routing": { "crossing": "checkpoint_gate", "gate_window_s": 120, "gate_separation_s": 120, "letdown_m": 40000, "max_turn_points": 6, "variants": ["covered", "other_flank", "direct"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0, "return": "planned_departure", "blast_lead_s": 90, "blast_exposure_s": 20, "zone_escapes": true, "helo_umbrella": true, "deviation": "ground_control", "source": "fm_100_2_1_1984 pp. 12-3, 12-4, 12-5, 12-8 (approach corridors, a checkpoint behind the lines, the plan held unless ground control changes it, helicopters under the umbrella, 50-100 m); hines_1981 (approach and departure routes in the plan; a group 1-2 min ahead to blast a corridor); sve_prm (the counter-SAM programme); mt_1984_babich (low exposure, not clean avoidance); the numbers game values", "confidence": "medium", "notes": "docs/air_battle/01_ROUTES.md sections 1.3-1.6, 3, 6.7, 9. All of it NATO's or open-press view of the Soviet side." },

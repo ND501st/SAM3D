@@ -34,6 +34,7 @@
 
 #include "simcore/air_war/c2.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/officers.hpp"
@@ -613,6 +614,11 @@ public:
             s << "  " << StaffRoleName(o.def.role) << (o.def.squadron.empty() ? "" : " " + o.def.squadron) << ": " << o.Title()
               << (o.active ? "" : " [" + o.fate + "]") << " - " << DescribeTraits(o.def.traits) << ". Quirks:";
             for (const QuirkDef& q : o.quirks) s << " " << q.name << (q.weakness ? " (weakness)" : "") << ";";
+            // How he moves his flights in the air (10_FACTIONS.md §10): only for those who lead flights.
+            if (o.def.role == StaffRole::SquadronLeader || o.def.flies) {
+                const std::string hot = HotShiftsLine(data_.faction, o);
+                if (!hot.empty()) s << " In the air: " << hot << ";";
+            }
             s << " stress " << static_cast<int>(o.stress * 100) << "%, reputation " << static_cast<int>(o.reputation * 100) << "%";
             if (!o.grudges.empty()) {
                 s << ", grudges:";

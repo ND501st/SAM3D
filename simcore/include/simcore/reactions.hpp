@@ -177,7 +177,7 @@ struct ReactionProfile {
     bool calls = true;         // its pilots call threats on the flight's net (the rebels have few radios)
     bool package_net = false;  // a call is heard by the package's other flights (one strike frequency)
     double skill = 0.6;        // its pilots' skill when the target names none (0 green .. 1 veteran)
-    double initiative = 0.5;   // the leader's freedom to decide in the air (a wingman who heard nothing decides alone above it)
+    // (The leader's initiative is the faction's hot_phase.initiative since roadmap B11: data/air_war/faction_*.json.)
     std::vector<ReactionRow> rows;
     ReactionRow fallback;
 };
@@ -348,6 +348,10 @@ struct ReactionPilotDef {
     int chaff = -1, flares = -1, tanks = -1;  // what it carries (< 0: by its type and the year)
     std::string stores;               // the load it carries, as jettisoned ("" none: an unarmed type)
     double nerve = 0.5;               // the pilot's nerve, 0..1 (0.5 his faction's own)
+    // His officer's shifts of the faction's press-on and jettison readiness (roadmap B11, air_war/hot_phase.hpp
+    // HotOfficerShift), handed over with the flight: they move the row's shares by the same amount (10_FACTIONS.md §7.1).
+    double press_on_shift = 0.0;
+    double jettison_shift = 0.0;
     std::vector<ProgrammeZone> zones;  // the Pact's programme: the zones briefed
 };
 
@@ -451,6 +455,17 @@ struct FlightDecision {
     bool tanks_only = false;
     FlightChoice choice = FlightChoice::PressOn;
 };
+// A row moved by the flight's officer (10_FACTIONS.md §7.1: the officer's shift of press_on and jettison_readiness moves the
+// situation's shares by the same amount; what he takes from abort goes to press on).
+inline ReactionRow ShiftedRow(const ReactionRow& r, double press_on_shift, double jettison_shift) {
+    ReactionRow out = r;
+    if (press_on_shift == 0.0 && jettison_shift == 0.0) return out;
+    out.press_on = std::clamp(r.press_on + press_on_shift, 0.0, 1.0);
+    out.abort = std::clamp(r.abort - press_on_shift, 0.0, 1.0);
+    out.jettison = std::clamp(r.jettison + jettison_shift, 0.0, 1.0);
+    return out;
+}
+
 inline FlightDecision DecideFlight(const ReactionTable& t, const ReactionRow& r, double stress, double nerve, double u_jettison,
                                    double u_tanks, double u_choice) {
     FlightDecision d;
@@ -713,13 +728,12 @@ private:
     }
 
     bool LoadProfile(const json::Value& v, const std::string& p, ReactionProfile& pr) {
-        if (!Keys(v, p, {"programme", "calls", "package_net", "skill", "initiative", "rows", "fallback", "source", "confidence", "notes"}) ||
+        if (!Keys(v, p, {"programme", "calls", "package_net", "skill", "rows", "fallback", "source", "confidence", "notes"}) ||
             !Provenance(v, p) || !OptionalBool(v, p, "programme", pr.programme) || !OptionalBool(v, p, "calls", pr.calls) ||
-            !OptionalBool(v, p, "package_net", pr.package_net) || !OptionalNumber(v, p, "skill", pr.skill) ||
-            !OptionalNumber(v, p, "initiative", pr.initiative)) {
+            !OptionalBool(v, p, "package_net", pr.package_net) || !OptionalNumber(v, p, "skill", pr.skill)) {
             return false;
         }
-        if (pr.skill < 0.0 || pr.skill > 1.0 || pr.initiative < 0.0 || pr.initiative > 1.0) return Fail(p, "skill and initiative 0 to 1");
+        if (pr.skill < 0.0 || pr.skill > 1.0) return Fail(p, "skill 0 to 1");
         const json::Value* rows = OptionalArray(v, p, "rows");
         if (rows == nullptr) return Message().empty() ? Fail(Join(p, "rows"), "required") : false;
         for (std::size_t i = 0; i < rows->items.size(); ++i) {
