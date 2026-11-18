@@ -262,7 +262,7 @@ marshes (`docs/COUNTRY_MAP.md`).
 The battery's war (project owner, 22 Oct 2026; roadmap phases 13-21, `docs/campaign/`): after the nation on the map,
 M2, a person's campaign playthrough and the pipeline's P1-P3, the systems the Osa and PU-12M crews, vehicles and battery fit into. **One enemy at a
 time**, its doctrine and officers as built (`docs/air_war/`); the strategy layer stays thin (object roles, not an
-economy; the front as data; the regiment's tasking a rule table). Every objective has a traceable why: the enemy's war
+economy; the regiment's tasking a rule table; the front moved by its units since track F). Every objective has a traceable why: the enemy's war
 aims, its officers' target picking and its raids; our objects' roles, the regiment's order and the battery's task. A
 battery mission starts with the regiment's combat order and runs as one continuous session to the report from the
 records, with the enemy's packages entering it live. The battery's people have needs (sleep, food, morale) that change
@@ -303,5 +303,12 @@ nothing) with the AAA's accuracy falling with range, both in simcore and drawn f
 the map; aircraft flown with bank, pitch and roll; a more realistic map (free Fab, Epic and online assets as
 placeholders, each with its licence recorded); the time of day in the missions menu; pilots who break, dive and jettison
 on a warning, a sighted launch or flak, or damage. Damage seen by our crews goes into the records as they saw it.
+
+**Track F, the fronts** (project owner, 19 Nov 2026; `docs/DEVELOPMENT_ROADMAP.md` track F, `docs/fronts/`): the map is the
+only source of truth for where things are (every placed object takes its place from the country map by id); the enemy's air
+front starts at the border and moves forward in a sector it judges low risk and high reward (degraded air defence, our
+mobile ground assets destroyed), low-level attack and helicopters first; the ground war's units make the front, attacking
+or withdrawing (as a unit or dispersed) by their officers' logic, and the ground situation sets our national air defence's
+sector priorities. The player learns the front only through reports.
 
 Early-warning sources: the PU-12 is the main source but the crew can switch to others (`simcore/c2_sources.hpp`, `data/command/c2_sources.json`; roadmap 7.8, E4).
