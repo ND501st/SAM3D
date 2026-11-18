@@ -230,7 +230,7 @@ inline std::vector<BriefingScene> Briefings(const InfoNet& net, int position) {
             if (!b.items.empty()) out.push_back(b);
         }
     }
-    std::sort(out.begin(), out.end(), [](const BriefingScene& a, const BriefingScene& b) { return a.start_h < b.start_h; });
+    std::stable_sort(out.begin(), out.end(), [](const BriefingScene& a, const BriefingScene& b) { return a.start_h < b.start_h; });
     return out;
 }
 
