@@ -503,7 +503,7 @@ inline std::string FormatHour(double campaign_h, double start_hour) {
     if (h < 0.0) h += 24.0;
     const int hh = static_cast<int>(std::floor(h));
     const int mm = static_cast<int>(std::floor((h - hh) * 60.0 + 1e-6));
-    char buf[32];
+    char buf[96];
     std::snprintf(buf, sizeof(buf), "D%d %02d:%02d", day, hh, mm);
     return buf;
 }

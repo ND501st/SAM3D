@@ -4806,7 +4806,7 @@ private:
     // "1:05:30" for a session second.
     static std::string SessionClock(double s) {
         const long long t = std::llround(std::max(0.0, s));
-        char buf[24];
+        char buf[96];
         std::snprintf(buf, sizeof(buf), "%lld:%02lld:%02lld", t / 3600, (t / 60) % 60, t % 60);
         return buf;
     }
@@ -5274,7 +5274,7 @@ private:
     std::string DayClock(double s) const {
         if (def_.clock_start_s < 0.0) return SessionClock(s);
         const long long m = (std::llround(def_.clock_start_s + std::max(0.0, s)) / 60) % (24 * 60);
-        char buf[16];
+        char buf[64];
         std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
         return buf;
     }
@@ -7123,7 +7123,7 @@ private:
         }
     }
     std::map<std::string, std::string> PlotFields(const BoardMark& m) const {
-        char n[8];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", m.number);
         const Vec3 d = m.position - post_->Position();
         double az = RadToDeg(std::atan2(d.x, d.y));
@@ -7265,7 +7265,7 @@ private:
         // A target's number is read back when it is first given; the post's updates of it need none (sam3d: a raid of
         // sixteen updated every few seconds read back every time kept the commander on the air).
         if (!read_back_.insert(e.number).second) return;
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", e.number);
         callouts_->Say(time_, "readback", Cmdr(), {{"number", n}, {"callsign", OwnCallsign()}, {"post", "10"}}, SpeakDelayS(Cmdr()));
         if (LinkedToPost()) own_readbacks_.push_back(e.number);
@@ -7316,7 +7316,7 @@ private:
         if (callout_id == "readback") {
             f["post"] = "10";
             if (!designations_heard_.empty()) {
-                char n[16];
+                char n[64];
                 std::snprintf(n, sizeof(n), "%04d", designations_heard_.back().number);
                 f["number"] = n;
             }
@@ -7662,7 +7662,7 @@ public:
     // The post hears a launcher's read-back (a linked Osa's) if its box is on the battery net and the net carries it.
     void HearReadback(const std::string& callsign, int number) {
         const bool heard = NetHears() && (!nets_ || nets_->GetsThrough("battery", time_));
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", number);
         if (heard) {
             ++readbacks_heard_;
@@ -7776,7 +7776,7 @@ public:
     // Is it this command: its group, or its two digits?
     static bool RegimentCommandIs(const RegimentCommand& c, const std::string& what) {
         if (!c.group.empty()) return c.group == what;
-        char code[8];
+        char code[64];
         std::snprintf(code, sizeof(code), "%02d", c.code);
         return what == code || what == std::to_string(c.code);
     }
@@ -9220,7 +9220,7 @@ private:
             // The target's number from its designation, as his words would have it (SpeakOrder).
             for (const C2Network::Event& e : designations_heard_) {
                 if (!shadow_target_.empty() && e.subject == shadow_target_ && e.number > 0) {
-                    char n[16];
+                    char n[64];
                     std::snprintf(n, sizeof(n), "%04d", e.number);
                     d.fields["number"] = n;
                 }
@@ -9930,7 +9930,7 @@ private:
             if (assigned_target_.empty() || e.subject == assigned_target_) number = e.number;
         }
         if (number > 0) {
-            char n[16];
+            char n[64];
             std::snprintf(n, sizeof(n), "%04d", number);
             fields["number"] = n;
         }
@@ -12935,7 +12935,7 @@ private:
         // The post hears a launcher on its net through any jamming, while the launchers can transmit (not Д. ПРИЁМ).
         const bool hears = NetHears() && (!post_ || !nets_ || ((nets_->GetsThrough("battery", time_)) && (LaunchersCanTransmit() ||
                                                                                                        r.kind == BatteryFire::Event::Kind::Assigned)));
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", r.number);
         const std::string number = r.number > 0 ? std::string(n) : r.target;
         switch (r.kind) {
@@ -13030,7 +13030,7 @@ private:
             OnAir(1.0);  // a player's words go out as he speaks them; the data reaches the post
             return;
         }
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", r.number);
         const std::string number = r.number > 0 ? std::string(n) : target;
         if (kind == BatteryFire::Event::Kind::Ready) {
@@ -13391,7 +13391,7 @@ private:
             if (best->id != d.mark.target_id && !d.group) Event(d.callsign, "takes " + best->id + ", not the designated " + d.mark.target_id);
             battery_fire_->Assign(d.callsign, best->id, d.mark.number, time_);
             // Its read-back (rrs_1986): heard at the post if the launcher can transmit and the post hears the net.
-            char rn[16];
+            char rn[64];
             std::snprintf(rn, sizeof(rn), "%04d", d.mark.number);
             if (d.by_line) {
                 Radio("line " + std::to_string(LineToLauncher(d.callsign)->line), d.callsign,
@@ -13462,7 +13462,7 @@ public:
             }
         }
         if (!battery_fire_->Assign(callsign, target, number, time_)) return false;
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", number);
         if (callouts_) callouts_->Say(time_, "order_assign", "battery", {{"callsign", callsign}, {"number", number > 0 ? std::string(n) : target}});
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", callsign, "target " + target});
@@ -13549,7 +13549,7 @@ public:
         f.marked_arrival_s = marked_arrival_s_;
         const int target = KeypadTarget();
         if (target >= 0) {
-            char n[8];
+            char n[64];
             std::snprintf(n, sizeof(n), "%02d", target % 100);
             f.keypad = n;
         }
@@ -13647,7 +13647,7 @@ private:
     void CorrectKillReport(const std::string& target) {
         std::map<std::string, std::string> f = RadioFields();
         const int number = BoardNumberOf(target);
-        char n[16];
+        char n[64];
         std::snprintf(n, sizeof(n), "%04d", number);
         f["number"] = number > 0 ? std::string(n) : target;
         SeatDuty d = SeatDuty::Report(Cmdr(), "report_not_destroyed", "a target reported destroyed flies on: take the report back on the battery net", f);
@@ -13754,7 +13754,7 @@ private:
                     std::map<std::string, std::string> f = RadioFields();
                     f["number"] = j.target;
                     for (const C2Network::Event& d : designations_heard_) {
-                        char n[16];
+                        char n[64];
                         std::snprintf(n, sizeof(n), "%04d", d.number);
                         if (d.subject == j.target && d.number > 0) f["number"] = n;
                     }

@@ -326,7 +326,7 @@ inline CombatReport CompileReport(const std::string& unit, double from_s, double
 }
 
 inline std::string BoardNumber(int number) {
-    char n[16];
+    char n[64];
     std::snprintf(n, sizeof(n), "%04d", number);
     return n;
 }
