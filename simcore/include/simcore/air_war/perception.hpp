@@ -566,6 +566,18 @@ public:
         return now_s + 1e-9 >= o.next_tick_s;
     }
 
+    // An observer whose eyes were shut opens them (a wingman placed on his slot at A1 and back at A2, roadmap B12,
+    // air_levels.hpp): his next tick is now, looking as for one transit period, and what happened while they were shut
+    // is not for him to see. His picture is kept as it was, ageing.
+    void Wake(std::uint64_t observer_key, double now_s) {
+        const auto it = obs_.find(observer_key);
+        if (it == obs_.end() || !it->second.started) return;
+        Obs& o = it->second;
+        o.last_tick_s = now_s - 1.0 / d_.rate.transit_hz;
+        o.next_tick_s = now_s;
+        o.last_event_check_s = now_s;
+    }
+
     // One perception tick for one observer: looks at what is in view and updates his picture. `fresh` receives what is new
     // or has grown more serious (a receiver's search become a lock) in this tick.
     void Tick(const ObserverIn& ob, const EnvIn& env, double now_s, const std::vector<AirObject>& air,

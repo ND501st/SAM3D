@@ -4,6 +4,7 @@
 // entity state back for rendering. Nothing in here knows about rendering.
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -82,6 +83,7 @@ public:
         for (const Aircraft& a : aircraft_) start_positions_.push_back(a.position);
 
         for (Aircraft& a : aircraft_) {
+            if (a.placed) continue;  // the runner sets it on its slot after the step (a wingman at A1, roadmap B12)
             if (weather_ == nullptr || !a.alive) {
                 StepAircraft(a, dt);
                 continue;
@@ -144,9 +146,11 @@ public:
 private:
     static constexpr std::size_t kNotFound = static_cast<std::size_t>(-1);
 
+    // The list is in id order (ids are given increasing, AddAircraft appends and RemoveAircraft keeps the order): a
+    // binary search (roadmap B12: hundreds of lookups a step).
     std::size_t IndexOfAircraft(int id) const {
-        for (std::size_t i = 0; i < aircraft_.size(); ++i) if (aircraft_[i].id == id) return i;
-        return kNotFound;
+        const auto it = std::lower_bound(aircraft_.begin(), aircraft_.end(), id, [](const Aircraft& a, int v) { return a.id < v; });
+        return it != aircraft_.end() && it->id == id ? static_cast<std::size_t>(it - aircraft_.begin()) : kNotFound;
     }
 
     void RecordOutcome(const Missile& m, std::size_t target_index, double t) {
