@@ -392,6 +392,28 @@ proposed (`docs/air_battle/README.md`).
 - a save that replays to the bit;
 - the testbed within its budget.
 
+### Finishing tracks B and R (priority, 19 Nov 2026)
+
+The project owner, 19 Nov 2026: B13, R3 and B4, and the rest of tracks B and R, come first and are finished before
+track F. The tasks below gather every "Left:" of B1-B14 and R0-R7 that a later task did not already take. Each task
+gets its own branch and is merged once reviewed.
+
+| Task | What it finishes |
+|---|---|
+| U1 | **Unreal built.** The code of R3 (roll), B4 (chaff, flares, stores), R5, R6 and the rest of track B is compiled. The game's own scripted runs check it: `-SimGroundCheck`, `-SimMapShots` and the crew smoke test |
+| U2 (B13) | **The air battle drawn.** Formations, jettisoned tanks and stores, attack passes, flares and chaff, missile trails, air-to-air missiles (shapes in `munitions.json`), air combat and our fighters, all from simcore's state. The enemy's calls are heard only on an intercept post's set |
+| S1 | **Our fighters in full** (B10's Left). <br>• **The crew:** the crew's lines and menu places, and the IFF code control in the cabin. <br>• **The battery's papers:** our corridors in the task file and on the working map; the report checked against the notices. <br>• **In the war:** our pairs in the campaign's raids with enemy fighters beside them; the testbed's friendly flights as live actors; our GCI on `our_radio`. <br>• **Through the pipeline:** losses and claims. <br>• **The enemy:** its corridor learning fed by its intercept and read by its planner. <br>• **Not yet modelled:** airborne alert, the pursuit limit, the allied false friend and NATO's own belt. <br>• **Balance:** `own_air_balance` |
+| S2 | **Command live in the session** (B5, B6). <br>• **Orders and packages:** the posts' orders reach a session's flights, on-call packages are injected live, and posts can be attacked and destroyed. <br>• **Planning:** `nomination_h` gates the planner. <br>• **Jamming:** our jamming of the enemy's nets in the campaign; a jammed net stops a strike. <br>• **FAC:** the FAC's `designate` in the opportunity chain |
+| S3 | **Air combat in detail** (B7, B8). <br>• **Radars:** fighter radars as EM emitters, with `look_down_db`. <br>• **Control:** authority lines for vectors. <br>• **Tactics:** beam, slash, turn and drag told apart. <br>• **In the fight:** the strikers' chaff and flares and the escort's station. <br>• **Measures:** `air_combat_bench` and the A1 far fight |
+| S4 | **Attack passes and reactions** (B4, B6, R1, R3). <br>• **Attack passes:** the dive flown in the pass; bombs on targets of opportunity in a session; the testbed's releases through `AttackPass`. <br>• **Reactions:** hand-written `"evade"` as a scripted profile; the late-window manoeuvre factor re-tuned. <br>• **Damage:** damage lowering the g limit and acceleration; escorts and fuel for a damaged aircraft. <br>• **Flight model:** top speed and thrust by altitude; helicopters' energy; the terrain-following climb as a path angle. <br>• **Records:** our crews' records of a jettison or chaff, and the journal's "hit"; the Osa's own hits and the air war's repair. <br>• **Odds and ends:** the bridge mission's guns without `flak_offset_m`; the checks B6 left |
+| S5 | **The faction values read** (B11). `initiative`, `plan_adherence`, `emission_discipline`, `turn_back`, `husbanding`, `reaction_delay_s` and `leader_may` read by the behaviours they govern. §8.5's weights for `chatterbox` and `silent_runner`. §9.3's second phase. Our side's jammed delay. The pilot's sorties and currency |
+| S6 | **Radio and intercept** (B9). The abstract level's calls. The intercept facts rebuilt on a load. The enemy's listeners on the campaign screen. Teaball's relay. Deception with dummy traffic. A no-HUD canary test |
+| S7 | **Routes, perception, cost and learning** (B2, B3, B12, B14). <br>• **Routes:** a fallback at a gate with no feature; the believed fighter picture in a leg's cost; navigation error; the testbed's waves on planned routes; routes as flown fed back; tests of the umbrella and `axis_vary`. <br>• **Perception:** the rear blind arc; TISEO and pods; the weather by month. <br>• **Cost:** the height layer gated at a lower rate; the receivers' cost near the battery; the A1 wingman's lock; B2's lattice without a map; a fixed stagger serial. <br>• **Learning:** the rebels finding the mobile batteries, and the planner learning from losses it cannot explain |
+| S8 | **Light and the sample raids** (R3, R7). The tuned theatre dated. The seven sample raids regenerated with their types' limits and clocks. Twilight as a gradient for the TV, and the moon. The start hour replicated to clients. The air war reading `light.json` |
+| S9 | **The map's leftovers** (R6). <br>• **Materials:** a textured ground and ribbon material. <br>• **Heights:** the P.1812 heights checked against the text. <br>• **Sites:** the Rava-bank positions as sites. <br>• **Drawing:** no ribbon drawn twice; roads at least a 25 m cell. <br>• **Obstacles:** obstacles on the country's own ground; a clutter class per cell; obstacle profiles cached. <br>• **Assets:** the owner's placeholder models registered once their origin and licence are known |
+
+**Order:** U1 first, then U2. S1-S9 run beside them, two or three at a time, and never touch the same files at once.
+
 ## The battery's war: phases 13-21 (planned 22 Oct 2026)
 
 The project owner, 22 Oct 2026: our side and one enemy at a time fight over the fictional nation, the enemy grinding it
