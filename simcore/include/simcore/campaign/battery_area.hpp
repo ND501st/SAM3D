@@ -196,7 +196,7 @@ inline BatteryArea LayOutBatteryArea(const std::string& id, const MapPoint& cent
         const AreaRule* rule;
     };
     auto place = [&](const std::string& pid, const std::string& kind, const std::string& mobility, const MapPoint& ideal,
-                     std::vector<Bound> bounds, double clear, double reach_m = 800.0) -> bool {
+                     const std::vector<Bound>& bounds, double clear, double reach_m = 800.0) -> bool {
         auto fits = [&](const MapPoint& p) {
             if (!detail::OpenAt(ground, p, clear)) return false;
             for (const Bound& b : bounds) {
@@ -236,14 +236,26 @@ inline BatteryArea LayOutBatteryArea(const std::string& id, const MapPoint& cent
     const double sep = r.pair_separation_m.value, in = r.pair_internal_m.value;
     const MapPoint pair_a = at(centre, 0.0, -0.5 * sep), pair_b = at(centre, 0.0, 0.5 * sep);
     const double clear = r.clear_m.value;
-    bool ok = place("launcher_1", "launcher", "osa_9a33", at(pair_a, 0.0, -0.5 * in), {}, clear) &&
-              place("launcher_2", "launcher", "osa_9a33", at(pair_a, 0.0, 0.5 * in), {{"launcher_1", &r.pair_internal_m}}, clear) &&
-              place("launcher_3", "launcher", "osa_9a33", at(pair_b, 0.0, -0.5 * in), {{"launcher_2", &r.pair_separation_m}}, clear) &&
-              place("launcher_4", "launcher", "osa_9a33", at(pair_b, 0.0, 0.5 * in), {{"launcher_3", &r.pair_internal_m}}, clear) &&
-              place("tzm_a", "tzm", "tzm_9t217", at(pair_a, -r.tzm_from_pair_m.value, 0.0),
-                    {{"launcher_1", &r.tzm_from_pair_m}, {"launcher_2", &r.tzm_from_pair_m}}, 0.0) &&
-              place("tzm_b", "tzm", "tzm_9t217", at(pair_b, -r.tzm_from_pair_m.value, 0.0),
-                    {{"launcher_3", &r.tzm_from_pair_m}, {"launcher_4", &r.tzm_from_pair_m}}, 0.0);
+    // Named lists, not braced ones at each call: GCC 13 takes those temporaries for dangling pointers
+    // (-Wdangling-pointer), as console_data.hpp found for -Wdangling-reference.
+    auto bound = [](const char* other, const AreaRule* rule) {
+        Bound b;
+        b.other = other;
+        b.rule = rule;
+        return b;
+    };
+    const std::vector<Bound> none;
+    const std::vector<Bound> to_l1{bound("launcher_1", &r.pair_internal_m)};
+    const std::vector<Bound> to_l2{bound("launcher_2", &r.pair_separation_m)};
+    const std::vector<Bound> to_l3{bound("launcher_3", &r.pair_internal_m)};
+    const std::vector<Bound> tzm_a{bound("launcher_1", &r.tzm_from_pair_m), bound("launcher_2", &r.tzm_from_pair_m)};
+    const std::vector<Bound> tzm_b{bound("launcher_3", &r.tzm_from_pair_m), bound("launcher_4", &r.tzm_from_pair_m)};
+    bool ok = place("launcher_1", "launcher", "osa_9a33", at(pair_a, 0.0, -0.5 * in), none, clear) &&
+              place("launcher_2", "launcher", "osa_9a33", at(pair_a, 0.0, 0.5 * in), to_l1, clear) &&
+              place("launcher_3", "launcher", "osa_9a33", at(pair_b, 0.0, -0.5 * in), to_l2, clear) &&
+              place("launcher_4", "launcher", "osa_9a33", at(pair_b, 0.0, 0.5 * in), to_l3, clear) &&
+              place("tzm_a", "tzm", "tzm_9t217", at(pair_a, -r.tzm_from_pair_m.value, 0.0), tzm_a, 0.0) &&
+              place("tzm_b", "tzm", "tzm_9t217", at(pair_b, -r.tzm_from_pair_m.value, 0.0), tzm_b, 0.0);
     if (ok) {
         // The post behind the pairs, at its distance from the area's centre (anywhere its rule allows: the search reaches
         // as far as the rule's span).
@@ -252,19 +264,24 @@ inline BatteryArea LayOutBatteryArea(const std::string& id, const MapPoint& cent
         c.id = "centre";
         c.at = centre;
         a.places.push_back(c);
-        ok = place("command_post", "command_post", "pu12m", at(centre, -cp.value, 0.0), {{"centre", &cp}}, 0.0);
+        const std::vector<Bound> to_centre{bound("centre", &cp)};
+        ok = place("command_post", "command_post", "pu12m", at(centre, -cp.value, 0.0), to_centre, 0.0);
         a.places.erase(std::remove_if(a.places.begin(), a.places.end(), [](const AreaPlace& p) { return p.id == "centre"; }), a.places.end());
     }
     if (ok) {
         const AreaPlace cp = *a.Place("command_post");
-        ok = place("aiming_circle_post", "aiming_circle", "", at(cp.at, r.aiming_circle_post_m.value, 0.0), {{"command_post", &r.aiming_circle_post_m}}, 0.0);
+        const std::vector<Bound> to_post{bound("command_post", &r.aiming_circle_post_m)};
+        ok = place("aiming_circle_post", "aiming_circle", "", at(cp.at, r.aiming_circle_post_m.value, 0.0), to_post, 0.0);
         for (int k = 1; ok && k <= 4; ++k) {
             const std::string l = "launcher_" + std::to_string(k);
+            const std::vector<Bound> to_launcher{bound(l.c_str(), &r.aiming_circle_launcher_m)};
             ok = place("aiming_circle_" + std::to_string(k), "aiming_circle", "", at(a.Place(l)->at, r.aiming_circle_launcher_m.value, 0.0),
-                       {{l, &r.aiming_circle_launcher_m}}, 0.0);
+                       to_launcher, 0.0);
         }
-        ok = ok && place("maintenance", "maintenance", "truck", at(cp.at, -r.maintenance_behind_m.value, 0.0), {{"command_post", &r.maintenance_behind_m}}, 0.0);
-        ok = ok && place("camp", "camp", "truck", at(cp.at, -r.camp_behind_m.value, 0.25 * r.camp_behind_m.value), {{"command_post", &r.camp_behind_m}}, 0.0);
+        const std::vector<Bound> maint{bound("command_post", &r.maintenance_behind_m)};
+        const std::vector<Bound> camp{bound("command_post", &r.camp_behind_m)};
+        ok = ok && place("maintenance", "maintenance", "truck", at(cp.at, -r.maintenance_behind_m.value, 0.0), maint, 0.0);
+        ok = ok && place("camp", "camp", "truck", at(cp.at, -r.camp_behind_m.value, 0.25 * r.camp_behind_m.value), camp, 0.0);
     }
     if (ok) {
         // The reserve position: off to a flank and back, within its distance of the centre.
@@ -273,7 +290,8 @@ inline BatteryArea LayOutBatteryArea(const std::string& id, const MapPoint& cent
         c.id = "centre";
         c.at = centre;
         a.places.push_back(c);
-        ok = place("reserve", "reserve", "osa_9a33", at(centre, -0.6 * d, 0.8 * d), {{"centre", &r.reserve_within_m}}, clear);
+        const std::vector<Bound> reserve{bound("centre", &r.reserve_within_m)};
+        ok = place("reserve", "reserve", "osa_9a33", at(centre, -0.6 * d, 0.8 * d), reserve, clear);
         a.places.erase(std::remove_if(a.places.begin(), a.places.end(), [](const AreaPlace& p) { return p.id == "centre"; }), a.places.end());
     }
     if (ok) {
