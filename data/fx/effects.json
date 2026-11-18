@@ -299,6 +299,15 @@
       "barrel_spacing_m": "sam3d game value: the mount's barrels about 0.5 m apart, a flash at each (LOOK.md 14)"
     }
   },
+  "air_battle": {
+    "source": "sam3d game value (roadmap B13: the air battle drawn): sizes, times, counts and colours by eye; no source read for a flare's burn or a chaff cloud's bloom",
+    "chaff_puffs_per_cartridge": 2, "chaff_puffs_max": 24, "chaff_bloom_m": 25, "chaff_bloom_s": 1.5, "chaff_s": 12,
+    "chaff_spread_m": 30, "chaff_drag_per_s": 3, "chaff_opacity": 0.35, "chaff_colour": [0.62, 0.63, 0.66], "chaff_glints": 12,
+    "flare_burn_s": 4.5, "flare_eject_mps": 30, "flare_drag_per_s": 0.6, "flare_size_m": 2.5, "flare_brightness": 200,
+    "flare_colour": [1.0, 0.86, 0.62], "flare_lumens": 30000000, "flare_salvo_s": 0.25, "flares_max": 12,
+    "flare_smoke_width_m": 1.2, "flare_smoke_s": 25, "flare_smoke_point_m": 8, "flare_smoke_colour": [0.80, 0.80, 0.78],
+    "tumble_deg_per_s": 120, "aam_fly_on_s": 4, "aam_turn_per_s": 2.5, "air_gun_dispersion_mrad": 6
+  },
   "wreck": {
     "source": "sam3d game value",
     "smoke_width_m": 10,

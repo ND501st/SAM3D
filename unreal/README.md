@@ -69,6 +69,26 @@ The materials, textures and sounds under `/Game/SAM3D/FX` are made by `tools/ue_
 add `-SimFxShotsNight` for night and `-SimFxShotsOnly=a+b` for some subjects) sets up standard shots, writes them, logs each subject's effects and sound
 cost (mean and peak ms, the most sprites, ribbons and lights) and quits; automation tests `SAM3D.Fx.*` run headless.
 
+The air battle (roadmap B13) is drawn from the same feed and the entities: our fighters with our models (a scenario's
+`"air_fight"` fighter with no model of its own is drawn as its type when it is the enemy's), every member of a flight
+banked by simcore's bank, a flare salvo as bright points falling and burning out with their smoke, a chaff salvo as a
+pale cloud blooming behind the aircraft and drifting on the wind, jettisoned stores and drop tanks tumbling down inert
+(`FSimMunitionModels`), air-to-air missiles shaped from `munitions.json` with the missiles' smoke and motor, chasing their
+target until their end (a hit bursts on it; a miss flies on and destroys itself), a fighter's gun burst as tracers from
+its nose; heard as flare pops, the missile's launch and motor, its burst and the gun's loop (`USimFxAudioSubsystem`). The
+enemy's calls are never played: they reach the player only through our intercept post's report on the battery net
+(`command/intercept.hpp`). The tuning is `data/fx/effects.json`'s `air_battle`; the tests `SAM3D.Fx.AirBattle` and
+`SAM3D.Fx.World.MunitionMeshes`. Photographs: `-SimAirShots=<folder>` plays `scenarios/air_battle_shots.json` (or the
+`-SimScenario` given) and, only watching, photographs close to the aircraft the first banked aircraft, flight in
+formation, fighter of ours, flare salvo, chaff salvo, jettison, air-to-air launch and end, and air gun burst
+(`shot_air_<what>_<delay>s.png`, the log naming each aircraft's model, side and bank), then quits, logging the subjects it never saw; `-SimAirShotsMaxS=<s>`
+(default 900) bounds the scenario's time. The default scenario gives no flares (a neighbour's IR SAM fires only in a
+session with `"waves"`) and no gun burst (its fight ends on missiles): give `-SimScenario=` a waves scenario for them. From PowerShell:
+
+```powershell
+& "D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject" -game -RenderOffscreen -ResX=1280 -ResY=720 -SimAirShots=C:/dev/SAM3D/out/air_shots -log
+```
+
 ## First level: Osa practice scenario on Cesium terrain
 
 The level is in the repository (`Content/Maps/OsaPractice`, stored with Git LFS: run `git lfs install` once per

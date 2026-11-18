@@ -5,6 +5,7 @@
 // test checks the ordering and a wide band, not one engagement's numbers.
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -19,6 +20,7 @@
 #include "simcore/air_war/air_fight_session.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
+#include "simcore/scenery/munitions.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -402,6 +404,15 @@ struct Duel {
     double first_shot_m = -1.0;
     double recognised_at_m = -1.0;
     bool shot_before_vid = false;
+    // The presentation hooks (roadmap B13), when `fx`: each launch, end and burst as the fight told them.
+    bool fx = false;
+    struct FxShot {
+        int shooter = -1, target = -1, shot = 0;
+        std::string weapon;
+        double t = 0.0, until = 0.0;
+        bool kill = false, gone = false;
+    };
+    std::vector<FxShot> launches, ends, bursts;
 
     explicit Duel(bool e3a, std::uint64_t seed = 11) {
         w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});         // 0: the F-15
@@ -439,9 +450,19 @@ struct Duel {
                 if (sg.recognised && recognised_at_m < 0.0) recognised_at_m = range;
                 w.pictures[0].push_back(sg);
             }
-            const std::size_t before = s.Shots().size();
-            s.Step(t, w.World());
-            (void)before;
+            AirFightWorld aw = w.World();
+            if (fx) {
+                aw.fx_launch = [this](int shooter, int target, const AamDef& aam, int shot, double at, double arrive_s) {
+                    launches.push_back({shooter, target, shot, aam.munition, at, arrive_s, false, false});
+                };
+                aw.fx_end = [this](int shooter, int target, const AamDef& aam, int shot, double at, bool kill, bool gone_before) {
+                    ends.push_back({shooter, target, shot, aam.munition, at, at, kill, gone_before});
+                };
+                aw.fx_gun = [this](int shooter, int target, const AirGunDef& gun, double at, double burst_s, bool kill) {
+                    bursts.push_back({shooter, target, 0, gun.id, at, at + burst_s, kill, false});
+                };
+            }
+            s.Step(t, aw);
             for (const std::string& ev : w.events) {
                 if (first_shot_m < 0.0 && ev.rfind("eagle: fires", 0) == 0) {
                     first_shot_m = range;
@@ -564,6 +585,43 @@ SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an 
     for (const AirFightSession::Kill& k : af->Kills()) {
         if (k.shooter == "red11") SC_EXPECT(k.by == "fighter_rgt_1" && !r.TargetAlive(k.target));
     }
+    // The shots in the presentation feed (roadmap B13): each launch from the shooter's place toward its target, with a shape
+    // the munitions library draws; each end matched to its launch, a hit where the target is and before its wreck.
+    {
+        std::vector<fx::Event> launches, ends, bursts;
+        std::vector<fx::Event> downs;
+        std::size_t early = 0;
+        for (const fx::Event& ev : r.Fx().Since(0)) {
+            if (ev.kind == fx::EventKind::AamLaunch) launches.push_back(ev);
+            if (ev.kind == fx::EventKind::AamEnd) ends.push_back(ev);
+            if (ev.kind == fx::EventKind::AamEnd && ev.end == fx::BurstEnd::Early) ++early;
+            if (ev.kind == fx::EventKind::AirGunBurst) bursts.push_back(ev);
+            if (ev.kind == fx::EventKind::AircraftDown) downs.push_back(ev);
+        }
+        std::printf("    feed: %zu launches, %zu ends, %zu bursts\n", launches.size(), ends.size(), bursts.size());
+        SC_EXPECT(static_cast<int>(launches.size() + bursts.size()) >= af->ShotsBy("red11"));
+        SC_EXPECT(ends.size() - early + bursts.size() == af->Shots().size());
+        scenery::MunitionLibrary lib;
+        SC_EXPECT(lib.Load(kData + "/scenery/munitions.json"));
+        for (const fx::Event& l : launches) {
+            const scenery::MunitionSpec* m = lib.Resolve(l.weapon);
+            SC_EXPECT(m != nullptr && m->kind == "missile" && m->HasMesh() && m->has_motor);
+            SC_EXPECT(!l.source.empty() && !l.target.empty() && l.world_id >= 0 && l.target_world_id >= 0 && l.world_id != l.target_world_id);
+            SC_EXPECT(l.end_t_s > l.t_s && (l.aim - l.position).Length() > 100.0);
+        }
+        for (const fx::Event& en : ends) {
+            int matched = 0;
+            for (const fx::Event& l : launches) matched += l.source == en.source && l.number == en.number && l.seq < en.seq ? 1 : 0;
+            SC_EXPECT(matched == 1);
+            if (en.end == fx::BurstEnd::Hit) {
+                SC_EXPECT(en.position.Length() > 0.0 && (en.aim - en.position).Length() < 1e-9);
+                bool wreck_after = false;  // the burst before the wreck it makes
+                for (const fx::Event& d : downs) wreck_after = wreck_after || (d.world_id == en.target_world_id && d.seq > en.seq);
+                SC_EXPECT(wreck_after);
+            }
+        }
+        for (const fx::Event& gb : bursts) SC_EXPECT(lib.Resolve(gb.weapon) != nullptr && lib.Resolve(gb.weapon)->kind == "gun" && gb.end_t_s > gb.t_s);
+    }
     // The loader refuses a fighter with no target, an unknown doctrine and a controller that is not there.
     const auto refuse = [&](const std::string& from, const std::string& to, const std::string& expect) {
         std::string t2 = text;
@@ -580,4 +638,96 @@ SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an 
     SC_EXPECT(refuse(R"("target": "t1")", R"("target": "nobody")", "no target"));
     SC_EXPECT(refuse(R"("faction": "warsaw_pact")", R"("faction": "martians")", "no doctrine"));
     SC_EXPECT(refuse(R"("controller": "gci")", R"("controller": "elsewhere")", "no controller"));
+}
+
+SC_TEST("air fight B13: the presentation hooks are told every launch, end and burst, and change nothing in the fight") {
+    for (const bool e3a : {false, true}) {
+        Duel plain(e3a, 7), shown(e3a, 7);
+        shown.fx = true;
+        plain.Run(240.0);
+        shown.Run(240.0);
+        // The same fight with the hooks as without.
+        SC_EXPECT(plain.s.Shots().size() == shown.s.Shots().size() && plain.s.Kills().size() == shown.s.Kills().size());
+        for (std::size_t i = 0; i < std::min(plain.s.Shots().size(), shown.s.Shots().size()); ++i) {
+            SC_EXPECT(plain.s.Shots()[i].weapon == shown.s.Shots()[i].weapon && plain.s.Shots()[i].kill == shown.s.Shots()[i].kill &&
+                      plain.s.Shots()[i].t_s == shown.s.Shots()[i].t_s);
+        }
+        // Every resolved shot is a missile's end or a gun's burst, in the same order and with the same outcome.
+        std::size_t missiles = 0, guns = 0;
+        std::vector<Duel::FxShot> resolved;  // the ends of missiles that met their target (a gone target's are not shots)
+        for (const Duel::FxShot& en : shown.ends) {
+            if (!en.gone) resolved.push_back(en);
+        }
+        for (const AirFightSession::ShotRecord& r : shown.s.Shots()) {
+            const bool gun = shown.def.combat.Gun(r.weapon) != nullptr;
+            if (gun) {
+                SC_EXPECT(guns < shown.bursts.size() && shown.bursts[guns].kill == r.kill && shown.bursts[guns].t == r.t_s &&
+                          shown.bursts[guns].until > r.t_s);
+                ++guns;
+            } else {
+                SC_EXPECT(missiles < resolved.size() && resolved[missiles].kill == r.kill && resolved[missiles].t == r.t_s);
+                ++missiles;
+            }
+        }
+        SC_EXPECT(guns == shown.bursts.size());
+        // Each end follows its launch (the same shooter and shot), whose time it was told then; every launch names its shape.
+        for (const Duel::FxShot& en : shown.ends) {
+            bool found = false;
+            for (const Duel::FxShot& l : shown.launches) {
+                if (l.shooter == en.shooter && l.shot == en.shot && l.target == en.target) {
+                    found = true;
+                    SC_EXPECT(l.t < en.t && en.t >= l.until - 1e-9 && en.t - l.until < 0.26);  // resolved on the first step past its arrival
+                }
+            }
+            SC_EXPECT(found);
+        }
+        for (const Duel::FxShot& l : shown.launches) SC_EXPECT(!l.weapon.empty());
+        std::printf("    %s: %zu launches, %zu ends, %zu bursts\n", e3a ? "under an E-3A" : "alone", shown.launches.size(), shown.ends.size(),
+                    shown.bursts.size());
+        SC_EXPECT(!shown.launches.empty() && shown.ends.size() <= shown.launches.size());
+        SC_EXPECT(missiles + guns == shown.s.Shots().size());
+    }
+}
+
+SC_TEST("air fight B13: the air battle shot check's scenario does in the first minutes what -SimAirShots photographs") {
+    // scenarios/air_battle_shots.json (unreal/README.md, -SimAirShots): our pair and an F-15C fire missiles, the F-4Es
+    // under the Osa's fire turn, dispense chaff and jettison, our fighters in the air: each at least once in the first
+    // seven minutes. Flares (an IR SAM's launch seen: a neighbour fires only in a session with waves) and guns (a fight
+    // closed to gun range) are photographed when they come and logged as not seen when they do not.
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const bool ok = LoadScenario(ReadFile(kData + "/scenarios/air_battle_shots.json"), kData, def, console, &e);
+    if (!ok) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(ok && def.air_fight.present);
+    if (!ok) return;
+    ScenarioRunner r(std::move(def), std::move(console));
+    double banked_s = -1.0;
+    bool ours_up = false;
+    std::map<std::string, int> n;
+    std::map<std::string, double> first;
+    std::uint64_t cursor = 0;
+    while (r.Time() < 420.0 && !r.Finished()) {
+        r.Step(0.1);
+        for (const Aircraft& a : r.GetWorld().AircraftList()) {
+            if (!a.alive) continue;
+            if (banked_s < 0.0 && std::fabs(a.bank_rad) >= DegToRad(30.0)) banked_s = r.Time();
+        }
+        ours_up = ours_up || r.TargetAlive("red11");
+        for (const fx::Event& ev : r.Fx().Since(cursor)) {
+            std::string k = fx::ToString(ev.kind);
+            if (ev.kind == fx::EventKind::WeaponRelease) k = ev.delivery == "jettison" ? "jettison" : "release";
+            if (ev.kind == fx::EventKind::AamEnd && ev.end == fx::BurstEnd::Early) k = "aam_end_early";
+            if (n[k]++ == 0) first[k] = ev.t_s;
+        }
+        cursor = r.Fx().Last();
+    }
+    std::printf("    %.0f s (%s); banked at %.0f s;", r.Time(), r.Finished() ? r.EndReason().c_str() : "running", banked_s);
+    for (const auto& kv : n) std::printf(" %s %d (%.0f s)", kv.first.c_str(), kv.second, first[kv.first]);
+    std::printf("\n");
+    SC_EXPECT(ours_up && banked_s >= 0.0);
+    for (const char* k : {"chaff_drop", "jettison", "aam_launch", "aam_end"}) {
+        if (n[k] == 0) std::printf("    none: %s\n", k);
+        SC_EXPECT(n[k] > 0);
+    }
 }

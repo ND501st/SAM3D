@@ -145,6 +145,9 @@
     "debris": { "sample": "S_FX_Debris_Rain", "level_db_1m": 122, "pitch": 1.0 },
     "cluster": { "sample": "S_FX_Cluster_Ripple", "level_db_1m": 172, "pitch": 1.0 },
     "crack": { "sample": "S_FX_Bullet_Crack", "level_db_1m": 150, "pitch": 1.0 },
+    "flare_pop": { "sample": "S_FX_Flare_Pop", "level_db_1m": 132, "pitch": 1.0 },
+    "aam_launch": { "sample": "S_FX_Missile_Launch", "level_db_1m": 148, "pitch": 1.25 },
+    "flare_pops_max": 6,
     "fireball": { "sample": "S_FX_Fireball_Roar", "level_db_1m": 150, "pitch": 1.0 },
     "rush_lead_s": 2.0, "rush_range_m": 1000, "debris_range_m": 600,
     "stick_spread_m": 15,
@@ -152,7 +155,7 @@
     "charge_share_of_mass": 0.42, "gun_impact_kg": 0.05, "gun_impact_bursts": 6,
     "air_burst_agl_m": 10, "crack_range_m": 40, "wreck_ground_fire_s": 60,
     "sd_pops_per_burst": 3, "flak_default_kg": 0.2,
-    "source": "estimate (sam3d): launch levels by Eldred's rule as the motors (FX research C6) with the igniter's crack; a GP bomb's fill about 42 % of its mass (Mk 82: 89 kg of 227 kg, FX research C6); an aircraft's fuel fireball (the picture's, LOOK 6) a combustion roar, not a jet's: 150 dB at 1 m, under a fighter's roar and far under the blast before it; the rest game values. The rockets' and bombs' ripples (their intervals and how many) and the guns' bursts are the picture's, data/fx/effects.json's bombs and guns; a flak shell's charge and a gun's rate and muzzle speed the munition's (data/scenery/munitions.json), flak_default_kg when it has none"
+    "source": "estimate (sam3d): launch levels by Eldred's rule as the motors (FX research C6) with the igniter's crack; a GP bomb's fill about 42 % of its mass (Mk 82: 89 kg of 227 kg, FX research C6); an aircraft's fuel fireball (the picture's, LOOK 6) a combustion roar, not a jet's: 150 dB at 1 m, under a fighter's roar and far under the blast before it; the rest game values. A flare's pop (S_FX_Flare_Pop, tools/fx_sounds.py) and an air-to-air missile off its rail (the launch sample pitched up, a smaller motor than a SAM's) are game values by ear (roadmap B13), a salvo heard as at most flare_pops_max pops. The rockets' and bombs' ripples (their intervals and how many) and the guns' bursts are the picture's, data/fx/effects.json's bombs and guns; a flak shell's charge and a gun's rate and muzzle speed the munition's (data/scenery/munitions.json), flak_default_kg when it has none"
   },
 
   "blasts": [
@@ -200,8 +203,18 @@
     "gau8": { "loop": "S_FX_Gun_30mm_Gatling", "level_db_1m": 160, "rate_hz": 65 },
     "gsh30": { "loop": "S_FX_Gun_30mm_Gatling", "level_db_1m": 158, "rate_hz": 65 },
     "door_guns": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 140, "pitch": 1.6, "rate_hz": 30 },
+    "m61a1": { "loop": "S_FX_Gun_20mm_Gatling", "level_db_1m": 156, "rate_hz": 100 },
+    "gsh23l": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 154, "pitch": 1.2, "rate_hz": 57 },
+    "gsh6_23": { "loop": "S_FX_Gun_20mm_Gatling", "level_db_1m": 156, "pitch": 0.9, "rate_hz": 150 },
+    "gsh6_30": { "loop": "S_FX_Gun_30mm_Gatling", "level_db_1m": 158, "rate_hz": 65 },
+    "gau8_air": { "loop": "S_FX_Gun_30mm_Gatling", "level_db_1m": 160, "rate_hz": 65 },
+    "gsh30_2": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 158, "pitch": 0.8, "rate_hz": 50 },
+    "aden30": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 156, "pitch": 0.85, "rate_hz": 21 },
+    "bk27": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 156, "pitch": 0.9, "rate_hz": 28 },
+    "nr30": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 156, "pitch": 0.8, "rate_hz": 15 },
+    "mg127": { "loop": "S_FX_Gun_23mm_Twin", "level_db_1m": 146, "pitch": 1.5, "rate_hz": 20 },
     "default": { "loop": "S_FX_Gun_20mm_Gatling", "level_db_1m": 156, "rate_hz": 100 },
-    "source": "estimate (sam3d): no muzzle-blast data for 23 mm or larger was found (FX research C6); rates from the guns' cyclic rates (FX research G: 23 mm 850-1000 rounds a minute a barrel, S-60 70 practical, M61 6000, GAU-8 3900); muzzle speeds FX research G. A munition's own rate and muzzle speed (data/scenery/munitions.json) win where it has them; a pass fires in the picture's bursts (effects.json guns: SimFxLogic::GunBursts on the event's seq); an aircraft's gun for as long as the picture's gun run (its rounds at the rate, 0.5-4 s)"
+    "source": "estimate (sam3d): no muzzle-blast data for 23 mm or larger was found (FX research C6); rates from the guns' cyclic rates (FX research G: 23 mm 850-1000 rounds a minute a barrel, S-60 70 practical, M61 6000, GAU-8 3900); muzzle speeds FX research G. A munition's own rate and muzzle speed (data/scenery/munitions.json) win where it has them; a pass fires in the picture's bursts (effects.json guns: SimFxLogic::GunBursts on the event's seq); the fighters' guns in the air battle (roadmap B13: m61a1 to mg127, air_combat.json's ids) by their cyclic rates (M61 6000, GSh-23L 3400, GSh-6-23 9000, GSh-30-2 3000, ADEN 1300, BK 27 1700, NR-30 900, 12.7 mm 1200 rounds a minute, operator-country reference pages; levels by ear) for the burst's seconds; an aircraft's gun for as long as the picture's gun run (its rounds at the rate, 0.5-4 s)"
   },
 
   "booms": {

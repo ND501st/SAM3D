@@ -23,7 +23,7 @@
       "design_pk": 0.4,
       "lethal_m": 6,
       "mean_mps": 600,
-      "munition": "",
+      "munition": "k13",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -57,7 +57,7 @@
       "design_pk": 0.5,
       "lethal_m": 7,
       "mean_mps": 600,
-      "munition": "",
+      "munition": "r13m",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -95,7 +95,7 @@
       "design_pk": 0.5,
       "lethal_m": 2.5,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "r60",
       "game_values": [
         "sun_exclusion_deg",
         "clutter_below",
@@ -127,7 +127,7 @@
       "design_pk": 0.9,
       "lethal_m": 2.5,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "r60m",
       "game_values": [
         "max_head_m",
         "max_rear_m",
@@ -163,7 +163,7 @@
       "design_pk": 0.6,
       "lethal_m": 8,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "r23r",
       "game_values": [
         "low_factor",
         "min_m",
@@ -200,7 +200,7 @@
       "design_pk": 0.6,
       "lethal_m": 8,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "r23t",
       "game_values": [
         "max_head_m",
         "max_rear_m",
@@ -241,7 +241,7 @@
       "design_pk": 0.7,
       "lethal_m": 10,
       "mean_mps": 900,
-      "munition": "",
+      "munition": "r24r",
       "game_values": [
         "low_factor",
         "launch_g",
@@ -277,7 +277,7 @@
       "design_pk": 0.7,
       "lethal_m": 10,
       "mean_mps": 900,
-      "munition": "",
+      "munition": "r24t",
       "game_values": [
         "max_head_m",
         "max_rear_m",
@@ -316,7 +316,7 @@
       "design_pk": 0.8,
       "lethal_m": 8,
       "mean_mps": 800,
-      "munition": "",
+      "munition": "r73",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -353,7 +353,7 @@
       "design_pk": 0.8,
       "lethal_m": 12,
       "mean_mps": 1000,
-      "munition": "",
+      "munition": "r27r",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -391,7 +391,7 @@
       "design_pk": 0.8,
       "lethal_m": 12,
       "mean_mps": 1000,
-      "munition": "",
+      "munition": "r27t",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -427,7 +427,7 @@
       "design_pk": 0.8,
       "lethal_m": 6,
       "mean_mps": 600,
-      "munition": "",
+      "munition": "aim9b",
       "game_values": [
         "low_factor",
         "launch_g",
@@ -463,7 +463,7 @@
       "design_pk": 0.6,
       "lethal_m": 8,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "aim7e",
       "game_values": [
         "low_factor",
         "launch_g",
@@ -497,7 +497,7 @@
       "design_pk": 0.6,
       "lethal_m": 6,
       "mean_mps": 600,
-      "munition": "",
+      "munition": "aim9j",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -536,7 +536,7 @@
       "design_pk": 0.7,
       "lethal_m": 8,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "aim9l",
       "game_values": [
         "max_head_m",
         "max_rear_m",
@@ -576,7 +576,7 @@
       "design_pk": 0.75,
       "lethal_m": 8,
       "mean_mps": 700,
-      "munition": "",
+      "munition": "aim9m",
       "game_values": [
         "max_head_m",
         "max_rear_m",
@@ -615,7 +615,7 @@
       "design_pk": 0.7,
       "lethal_m": 9,
       "mean_mps": 750,
-      "munition": "",
+      "munition": "aim7f",
       "game_values": [
         "max_rear_m",
         "low_factor",
@@ -652,7 +652,7 @@
       "design_pk": 0.7,
       "lethal_m": 9,
       "mean_mps": 750,
-      "munition": "",
+      "munition": "aim7m",
       "game_values": [
         "max_head_m",
         "max_rear_m",
