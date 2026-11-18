@@ -19,6 +19,7 @@
 #include "simcore/air_war/air_fight_session.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
+#include "simcore/scenery/munitions.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -402,6 +403,15 @@ struct Duel {
     double first_shot_m = -1.0;
     double recognised_at_m = -1.0;
     bool shot_before_vid = false;
+    // The presentation hooks (roadmap B13), when `fx`: each launch, end and burst as the fight told them.
+    bool fx = false;
+    struct FxShot {
+        int shooter = -1, target = -1, shot = 0;
+        std::string weapon;
+        double t = 0.0, until = 0.0;
+        bool kill = false, gone = false;
+    };
+    std::vector<FxShot> launches, ends, bursts;
 
     explicit Duel(bool e3a, std::uint64_t seed = 11) {
         w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});         // 0: the F-15
@@ -439,9 +449,19 @@ struct Duel {
                 if (sg.recognised && recognised_at_m < 0.0) recognised_at_m = range;
                 w.pictures[0].push_back(sg);
             }
-            const std::size_t before = s.Shots().size();
-            s.Step(t, w.World());
-            (void)before;
+            AirFightWorld aw = w.World();
+            if (fx) {
+                aw.fx_launch = [this](int shooter, int target, const AamDef& aam, int shot, double at, double arrive_s) {
+                    launches.push_back({shooter, target, shot, aam.munition, at, arrive_s, false, false});
+                };
+                aw.fx_end = [this](int shooter, int target, const AamDef& aam, int shot, double at, bool kill, bool gone_before) {
+                    ends.push_back({shooter, target, shot, aam.munition, at, at, kill, gone_before});
+                };
+                aw.fx_gun = [this](int shooter, int target, const AirGunDef& gun, double at, double burst_s, bool kill) {
+                    bursts.push_back({shooter, target, 0, gun.id, at, at + burst_s, kill, false});
+                };
+            }
+            s.Step(t, aw);
             for (const std::string& ev : w.events) {
                 if (first_shot_m < 0.0 && ev.rfind("eagle: fires", 0) == 0) {
                     first_shot_m = range;
@@ -563,6 +583,43 @@ SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an 
     SC_EXPECT(af->VectorsHeard() > 0 && af->ShotsBy("red11") > 0);
     for (const AirFightSession::Kill& k : af->Kills()) {
         if (k.shooter == "red11") SC_EXPECT(k.by == "fighter_rgt_1" && !r.TargetAlive(k.target));
+    }
+    // The shots in the presentation feed (roadmap B13): each launch from the shooter's place toward its target, with a shape
+    // the munitions library draws; each end matched to its launch, a hit where the target is and before its wreck.
+    {
+        std::vector<fx::Event> launches, ends, bursts;
+        std::vector<fx::Event> downs;
+        std::size_t early = 0;
+        for (const fx::Event& ev : r.Fx().Since(0)) {
+            if (ev.kind == fx::EventKind::AamLaunch) launches.push_back(ev);
+            if (ev.kind == fx::EventKind::AamEnd) ends.push_back(ev);
+            if (ev.kind == fx::EventKind::AamEnd && ev.end == fx::BurstEnd::Early) ++early;
+            if (ev.kind == fx::EventKind::AirGunBurst) bursts.push_back(ev);
+            if (ev.kind == fx::EventKind::AircraftDown) downs.push_back(ev);
+        }
+        std::printf("    feed: %zu launches, %zu ends, %zu bursts\n", launches.size(), ends.size(), bursts.size());
+        SC_EXPECT(static_cast<int>(launches.size() + bursts.size()) >= af->ShotsBy("red11"));
+        SC_EXPECT(ends.size() - early + bursts.size() == af->Shots().size());
+        scenery::MunitionLibrary lib;
+        SC_EXPECT(lib.Load(kData + "/scenery/munitions.json"));
+        for (const fx::Event& l : launches) {
+            const scenery::MunitionSpec* m = lib.Resolve(l.weapon);
+            SC_EXPECT(m != nullptr && m->kind == "missile" && m->HasMesh() && m->has_motor);
+            SC_EXPECT(!l.source.empty() && !l.target.empty() && l.world_id >= 0 && l.target_world_id >= 0 && l.world_id != l.target_world_id);
+            SC_EXPECT(l.end_t_s > l.t_s && (l.aim - l.position).Length() > 100.0);
+        }
+        for (const fx::Event& en : ends) {
+            int matched = 0;
+            for (const fx::Event& l : launches) matched += l.source == en.source && l.number == en.number && l.seq < en.seq ? 1 : 0;
+            SC_EXPECT(matched == 1);
+            if (en.end == fx::BurstEnd::Hit) {
+                SC_EXPECT(en.position.Length() > 0.0 && (en.aim - en.position).Length() < 1e-9);
+                bool wreck_after = false;  // the burst before the wreck it makes
+                for (const fx::Event& d : downs) wreck_after = wreck_after || (d.world_id == en.target_world_id && d.seq > en.seq);
+                SC_EXPECT(wreck_after);
+            }
+        }
+        for (const fx::Event& gb : bursts) SC_EXPECT(lib.Resolve(gb.weapon) != nullptr && lib.Resolve(gb.weapon)->kind == "gun" && gb.end_t_s > gb.t_s);
     }
     // The loader refuses a fighter with no target, an unknown doctrine and a controller that is not there.
     const auto refuse = [&](const std::string& from, const std::string& to, const std::string& expect) {

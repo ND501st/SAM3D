@@ -42,6 +42,19 @@
 //                  line at end_t_s - t_s); world_id/target: the aircraft; source: the site; weapon: its system id.
 //   AircraftDamaged world_id/target: the aircraft; position, velocity: its; number: its damage level now (2 moderate,
 //                  3 heavy: simcore::DamageLevel); fire: it burns; falls: it trails smoke; source: who did it.
+//   ChaffDrop, FlareDrop  position = aim, velocity: the aircraft's; world_id, source: it; number: cartridges or flares.
+//                  A jettison (B4) is a WeaponRelease with delivery "jettison": `weapon` the store ("drop_tank" for the
+//                  tanks), `number` how many, end_t_s and aim its fall onto the ground below; it lands inert.
+//   AamLaunch      an air-to-air missile fired (roadmap B8, air_war/air_fight_session.hpp): position, velocity: the
+//                  shooter's; aim: the target where it was; end_t_s: when the fight resolves it (its range over the
+//                  missile's mean speed); world_id, source: the shooter; target_world_id, target: the target; weapon: its
+//                  munitions.json shape (air_combat.json's `munition`, else the missile's id); number: the shooter's shot.
+//   AamEnd         that shot resolved, matched by source, number: end Hit (aim = position: the target now, where it
+//                  bursts), Wide (missed: it passes the target at `position` and flies on to destroy itself), or Early
+//                  (its target was gone before it arrived: no position; the picture ends it where it is drawn).
+//   AirGunBurst    a fighter's burst at an aircraft: t_s..end_t_s the burst; position, velocity: the shooter's; aim: the
+//                  target where it was; world_id, source: the shooter; target_world_id, target; weapon: the gun's
+//                  air_combat.json id; end Hit (it brought the target down) or Wide; number: 0 (the gun's rate draws).
 // `weapon` is a munitions.json id, a data/air_war/weapons.json id, or an air defence system id (air_war/data.hpp
 // AirDefenceSystems: "osa", "zsu234", ...): the munitions library resolves any of them.
 #pragma once
@@ -75,6 +88,9 @@ enum class EventKind {
     AircraftDamaged, // an aircraft damaged and flying on: smoke, fire
     ChaffDrop,       // a pilot's chaff salvo (roadmap B4): at the aircraft, `number` cartridges
     FlareDrop,       // a pilot's flares (roadmap B4): at the aircraft, `number` of them
+    AamLaunch,       // an air-to-air missile fired (roadmap B8): shooter, target, its shape, its flight time
+    AamEnd,          // that missile's end: on the target, a miss flying on, or its target gone
+    AirGunBurst,     // a fighter's gun burst at an aircraft (roadmap B8)
 };
 
 inline const char* ToString(EventKind k) {
@@ -94,6 +110,9 @@ inline const char* ToString(EventKind k) {
         case EventKind::AircraftDamaged: return "aircraft_damaged";
         case EventKind::ChaffDrop: return "chaff_drop";
         case EventKind::FlareDrop: return "flare_drop";
+        case EventKind::AamLaunch: return "aam_launch";
+        case EventKind::AamEnd: return "aam_end";
+        case EventKind::AirGunBurst: return "air_gun_burst";
     }
     return "?";
 }
@@ -141,7 +160,9 @@ struct Event {
     std::string source;         // who: the target id of an aircraft, a neighbour id, "own" for our launcher
     std::string target;         // at whom/what: a target id
     int world_id = -1;          // the aircraft's World id (= Unreal entity id) for AircraftDown, WeaponRelease, GunPass,
-                                // SamLaunch, SamEnd (the target), WeaponImpact, ArmLaunch, CruiseImpact (the aircraft)
+                                // SamLaunch, SamEnd (the target), WeaponImpact, ArmLaunch, CruiseImpact (the aircraft);
+                                // the shooter for AamLaunch, AamEnd, AirGunBurst
+    int target_world_id = -1;   // AamLaunch, AamEnd, AirGunBurst: the target's World id (-1: none)
     int number = 0;             // our missile's number (MissileLaunch/End; 1000 + n thrown off), a site's launch, or the
                                 // count (bombs, rounds)
     std::string weapon;         // munitions.json id (weapons.json id, "9m33", a system's missile, "zu23" for guns)

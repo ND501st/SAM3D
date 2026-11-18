@@ -4094,7 +4094,59 @@ private:
                 return out;
             };
         }
+        if (fx_on_) {  // the shots in the presentation feed (roadmap B13): pushed, never read back
+            w.fx_launch = [this](int shooter, int target, const airwar::AamDef& aam, int shot, double t, double arrive_s) {
+                FxAirShot(fx::EventKind::AamLaunch, shooter, target, aam.munition.empty() ? aam.id : aam.munition, shot, t, arrive_s, false, false);
+            };
+            w.fx_end = [this](int shooter, int target, const airwar::AamDef& aam, int shot, double t, bool kill, bool gone) {
+                FxAirShot(fx::EventKind::AamEnd, shooter, target, aam.munition.empty() ? aam.id : aam.munition, shot, t, t, kill, gone);
+            };
+            w.fx_gun = [this](int shooter, int target, const airwar::AirGunDef& gun, double t, double burst_s, bool kill) {
+                FxAirShot(fx::EventKind::AirGunBurst, shooter, target, gun.id, 0, t, t + burst_s, kill, false);
+            };
+        }
         air_fight_->Step(time_, w);
+    }
+
+    // An air-to-air shot in the feed (fx/events.hpp: AamLaunch, AamEnd, AirGunBurst), from the session's aircraft as they
+    // are now. `gone`: the target left the session before the missile arrived (an Early end with no position).
+    void FxAirShot(fx::EventKind kind, int shooter, int target, const std::string& weapon, int number, double t, double end_t,
+                   bool kill, bool gone) {
+        const auto aircraft_of = [this](int ti) -> const Aircraft* {
+            if (ti < 0 || static_cast<std::size_t>(ti) >= targets_.size()) return nullptr;
+            const TargetState& ts = targets_[static_cast<std::size_t>(ti)];
+            return ts.spawned ? world_.FindAircraft(ts.world_id) : nullptr;
+        };
+        const Aircraft* from = aircraft_of(shooter);
+        const Aircraft* at = aircraft_of(target);
+        fx::Event e;
+        e.kind = kind;
+        e.t_s = t;
+        e.end_t_s = end_t;
+        e.weapon = weapon;
+        e.number = number;
+        if (shooter >= 0 && static_cast<std::size_t>(shooter) < def_.targets.size()) {
+            e.source = def_.targets[static_cast<std::size_t>(shooter)].id;
+            e.world_id = targets_[static_cast<std::size_t>(shooter)].world_id;
+        }
+        if (target >= 0 && static_cast<std::size_t>(target) < def_.targets.size()) {
+            e.target = def_.targets[static_cast<std::size_t>(target)].id;
+            e.target_world_id = targets_[static_cast<std::size_t>(target)].world_id;
+        }
+        if (kind == fx::EventKind::AamEnd) {
+            e.end = gone || at == nullptr ? fx::BurstEnd::Early : kill ? fx::BurstEnd::Hit : fx::BurstEnd::Wide;
+            if (e.end != fx::BurstEnd::Early) {
+                e.position = e.aim = at->position;
+                e.velocity = at->velocity;
+            }
+        } else {
+            if (from == nullptr) return;  // nothing to draw it leaving
+            e.position = from->position;
+            e.velocity = from->velocity;
+            if (at != nullptr) e.aim = at->position;
+            e.end = kill ? fx::BurstEnd::Hit : fx::BurstEnd::Wide;
+        }
+        fx_.Push(e);
     }
 
 

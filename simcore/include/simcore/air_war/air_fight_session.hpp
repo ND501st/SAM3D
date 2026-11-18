@@ -70,6 +70,14 @@ struct AirFightWorld {
     // Our controllers' picture (B10): a controller of side "ours" with one vectors on it; without one, on the truth in his
     // range (B8's behaviour, for the enemy's E-3A and a range day's GCI).
     std::function<std::vector<AirTrack>(const std::string& controller, double t)> tracks;
+    // The presentation feed (fx/events.hpp, roadmap B13; may be empty): told each shot as the fight decides it. Nothing in
+    // the fight reads what they do, and they draw nothing from its generators.
+    //   fx_launch  a missile leaves the shooter: its def, the shooter's shot number, its resolution time;
+    //   fx_end     that shot resolved (`kill`), or its target gone before it arrived (`gone`);
+    //   fx_gun     a gun burst of `burst_s` from t, and whether it brought the target down.
+    std::function<void(int shooter, int target, const AamDef& aam, int shot, double t, double arrive_s)> fx_launch;
+    std::function<void(int shooter, int target, const AamDef& aam, int shot, double t, bool kill, bool gone)> fx_end;
+    std::function<void(int shooter, int target, const AirGunDef& gun, double t, double burst_s, bool kill)> fx_gun;
 };
 
 class AirFightSession {
@@ -667,6 +675,7 @@ private:
                 gp.window_s = burst;
                 gp.target_g = std::max(1.0, tg->load_g);
                 const GunResult gr = ResolveGunPass(*f.gun, ch, gp, pl, seed_, f.key, ++f.shots);
+                if (w.fx_gun) w.fx_gun(f.target, c.truth, *f.gun, t, burst, gr.kill);
                 Record(f, c.truth, f.gun->id, t, gr.kill, gr.reason, c.what, w);
                 if (gr.kill) Down(f, c.truth, f.gun->id, t, w);
                 return;
@@ -692,6 +701,7 @@ private:
                 ms.shot = shot;
                 ms.believed = c.what;
                 missiles_.push_back(ms);
+                if (w.fx_launch) w.fx_launch(f.target, c.truth, *m.first, static_cast<int>(shot), t, ms.arrive_s);
                 f.next_shot_s = t + 4.0;
                 if (w.event) w.event(f.def->target, "fires " + m.first->name + " at " + c.what + " " + std::to_string(static_cast<int>(g.range_m)) + " m");
                 return;
@@ -713,7 +723,10 @@ private:
             if (t < m.arrive_s) continue;
             m.done = true;
             const Aircraft* tg = w.air(m.target);
-            if (tg == nullptr) continue;  // gone already
+            if (tg == nullptr) {  // gone already
+                if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, false, true);
+                continue;
+            }
             ShotConditions k;
             // His break, if he knew of the shot: a lock or a launch on his receiver, or the trail or the shooter seen since.
             bool knew = false;
@@ -736,6 +749,7 @@ private:
             }
             if (m.lock_lost_s >= 0.0) k.lock_lost_before_impact_s = std::max(0.0, m.arrive_s - m.lock_lost_s);
             const ShotResult r = ResolveShot(*m.aam, def_->combat.calibration.chain, m.geo, k, Pilot{f.skill, 0.4, false}, seed_, f.key, m.shot);
+            if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, r.kill, false);
             Record(f, m.target, m.aam->id, t, r.kill, r.reason, m.believed, w);
             if (r.kill) Down(f, m.target, m.aam->id, t, w);
         }
