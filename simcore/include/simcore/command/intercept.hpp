@@ -234,7 +234,7 @@ struct Logged {
 };
 
 inline std::string BearingText(double deg) {
-    char buf[16];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%03d", static_cast<int>(std::lround(deg)) % 360);
     return buf;
 }

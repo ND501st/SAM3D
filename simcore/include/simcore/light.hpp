@@ -174,7 +174,7 @@ inline double PresetHour(const SkyClock& c, TimePreset p) {
 inline std::string FormatLocalHour(double h) {
     long long m = std::llround(h * 60.0) % (24 * 60);
     if (m < 0) m += 24 * 60;
-    char buf[16];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
     return buf;
 }

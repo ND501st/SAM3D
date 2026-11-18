@@ -211,7 +211,7 @@ inline std::string FormatClock(double h, double start_hour) {
         mm -= 60;
         hh += 1;
     }
-    char buf[32];
+    char buf[96];
     std::snprintf(buf, sizeof(buf), "D%d %02d:%02d", day, hh % 24, mm);
     return buf;
 }

@@ -94,7 +94,7 @@ inline void Escape(std::ostringstream& s, const std::string& t) {
             case '\r': s << "\\r"; break;
             default:
                 if (static_cast<unsigned char>(c) < 0x20) {
-                    char b[8];
+                    char b[64];
                     std::snprintf(b, sizeof(b), "\\u%04x", static_cast<unsigned>(static_cast<unsigned char>(c)));
                     s << b;
                 } else {
@@ -859,7 +859,7 @@ public:
             Put(root, "clock_start", Str(FormatLocalHour(std::floor(local * 60.0) / 60.0)));
             int month = 1, day = 1;
             if (DateOfDay(th.year, TheatreSky(th).DayOfYearAt(m.start_h * 3600.0), month, day)) {
-                char date[16];
+                char date[96];
                 std::snprintf(date, sizeof(date), "%04d-%02d-%02d", th.year, month, day);
                 Put(root, "date", Str(date));
             }
