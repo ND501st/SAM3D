@@ -443,7 +443,7 @@ are written only when present.
 
 **Shortcuts.** Passes are flown level at the pilot's held height: the dive is only in the open-fire range and the
 effect. Opportunistic attacks use guns and rockets only, never bombs, in a session. Fuel is estimated from the time
-flown. No FAC designation reaches the session's chain yet. The tendency stays in `opportunity_rules` until B11's
+flown. The FAC's designation reaches the session's chain since S2. The tendency stays in `opportunity_rules` until B11's
 `hot_phase`. The claim has day and night factors, no `claim_factor` per class. The test waves gate on the open-fire
 range but fly no passes. A contact's chain draws are fixed per contact.
 
@@ -460,8 +460,18 @@ rebels attack least, for want of aircraft with guns or rockets near our lines, n
 strike with SEAD past a known radar was judged over four seeds; such strikes are 3 in 100, and the finds moved seeds 1-4
 to none, so it is now judged over sixteen.
 
-**Left:** the FAC's `designate` into the session chain (B5's left item); a jammed net stopping a strike;
-`TestWaves::Releases` through `AttackPass`; bombs dropped on targets of opportunity in a session; the dive flown
+**S2 (19 November 2026, branch `tbr-s2`; `05_C2_AND_RETASKING.md` §9).** The FAC's `designate` reaches the session's
+chain: when a close support flight (or the Pact's helicopter raid) of a raid in the session comes within
+`c2.fac_contact_m` (25 km) of the FAC who last saw its target, the FAC calls the mark on his net (`LivePackages`,
+`AirRadio::SayFrom`). If the flight's leader hears it, `OpportunityRun::Designate` marks the place for that flight, its
+radius three times the sighting's sigma and at least 500 m, and a contact the leader sees there has `designated` set:
+NATO's close support, which otherwise strikes only what the controller designates, may attack it. A jammed net stops a
+strike: unheard (our jammer on the FAC's net, out of range, the FAC's post out), the faction's `clearance` rule decides;
+NATO's close support holds (`Hold` by its leader, `hold_s` 5-15 min) and asks again, then goes home with its load; the
+Pact's attacks on its plan. The abstract campaign does the same at the brief (`AirC2::Brief`). `Played` counts the
+marks, the unheard marks, the holds and the aborts. Off with `c2.live_mode` 0.
+
+**Left:** `TestWaves::Releases` through `AttackPass`; bombs dropped on targets of opportunity in a session; the dive flown
 in the pass; A1 (the coarse flown level); a check that a silent battery is found less often than one on the march;
 the 24 h `mission_demo` counts per faction (§ Done when 3) as a test; `AimOnCall` (already legacy only).
 

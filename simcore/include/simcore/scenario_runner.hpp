@@ -2528,7 +2528,9 @@ public:
         return true;
     }
     // A new route for a flight from where it is (a Divert on its legs), toward `aim`, its new release point.
-    bool RerouteFlight(const std::string& flight, std::vector<RouteLeg> legs, const Vec3& aim, const std::string& by, std::string* why = nullptr) {
+    // `by_radio`: a post's order said on its net, taken only if the flight's leader hears it (roadmap S2).
+    bool RerouteFlight(const std::string& flight, std::vector<RouteLeg> legs, const Vec3& aim, const std::string& by, std::string* why = nullptr,
+                       bool by_radio = false) {
         if (legs.empty()) {
             if (why != nullptr) *why = "a new route needs one leg at least";
             return false;
@@ -2539,6 +2541,7 @@ public:
         o.has_aim = true;
         o.aim = aim;
         o.by = by;
+        o.by_radio = by_radio;
         return OrderFlight(flight, std::move(o), why);
     }
     const FlightState* Flight(const std::string& id) const { return flights_->Find(id); }

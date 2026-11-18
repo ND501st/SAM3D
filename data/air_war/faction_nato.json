@@ -119,7 +119,23 @@
     "hunter_leave": "any",
     "silence_consent_s": 300,
     "max_report_age_h": 6,
-    "nomination_h": 48
+    "nomination_h": 48,
+    "post_loss": {
+      "takeover": "alternate",
+      "takeover_s": [600, 1800],
+      "reconstitute_h": {"tasking": [12, 24], "support_centre": [6, 12], "radar_control": [12, 24], "fac": [2, 6]},
+      "source": "smart_1985_tacs (a FACP took 12 h to mobilise and a TSQ-91 CRC up to 24 h to set up: the radar control's and the tasking centre's times); the alternate's takeover, the support centre's and the FAC's times SAM3D estimates",
+      "confidence": "low",
+      "notes": "Roadmap S2 (docs/air_battle/05_C2_AND_RETASKING.md section 9): a destroyed post's traffic goes to the nearest live post of its kind after takeover_s; it works again after its kind's reconstitution, with a stand-in at its desk."
+    },
+    "clearance": {
+      "missions": ["cas"],
+      "on_jammed": "hold_then_abort",
+      "hold_s": [300, 900],
+      "source": "tradoc_jaat_1983 (close air support attacks on the controller's clearance and mark); the hold before going home a SAM3D estimate",
+      "confidence": "low",
+      "notes": "Roadmap S2: a close support flight whose FAC's clearance does not reach it (the net jammed, the FAC gone) holds at its contact point asking again, then goes home with its load."
+    }
   },
   "hot_phase": {
     "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",

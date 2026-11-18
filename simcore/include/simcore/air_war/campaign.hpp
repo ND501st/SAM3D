@@ -83,7 +83,9 @@ struct Transmission {
 struct CampaignAction {
     // Take: a session took the raid waiting (the campaign goes on while it is flown there); Report: a played package's
     // pilot's report that reached the enemy's posts while the session ran (roadmap B5 §4.7).
-    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report };
+    // PostAttack: an enemy air control post struck from outside the campaign's own processes (a session's strike, a call
+    // for fire: roadmap S2), `what` the post's id, `by` who struck it.
+    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report, PostAttack };
     Kind kind = Kind::Advance;
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
@@ -98,6 +100,7 @@ struct CampaignAction {
     Vec3 from;               // Report: where he was
     double sigma_m = 0.0;    // Report
     double observed_h = 0.0; // Report: when he saw it (the place is `to`)
+    std::string by;          // PostAttack
 };
 
 // The evidence our analysts gather from the raids they see.
@@ -177,6 +180,7 @@ public:
         // from forks of a root fixed here, never from the campaign's stream.
         airborne_.clear();
         live_.clear();
+        on_call_.clear();
         last_fac_hour_ = -1000000;
         c2_root_ = Rng(static_cast<std::uint64_t>(seed) * 0xD6E8FEB86659FD93ull + 0xB5B5B5ull);
         Rng post_rng = rng_.Fork(23);
@@ -280,6 +284,19 @@ public:
         a.from = from;
         ApplyReport(a);
     }
+
+    // An enemy air control post struck from outside the campaign's own processes (a session's strike on it, a call for
+    // fire: roadmap S2): out now, back after its kind's reconstitution. Recorded. False: no such post, or out already.
+    bool StrikePost(const std::string& post_id, const std::string& by) {
+        CampaignAction& a = Record(CampaignAction::Kind::PostAttack);
+        a.what = post_id;
+        a.by = by;
+        C2Context cx = C2Ctx();
+        return c2_.StrikePost(post_id, now_h_, by, cx);
+    }
+    // The posts' orders for the flights of packages a session is flying (roadmap S2), decided since the last call. Not
+    // recorded: the campaign decides them again on a replay, and the session's flights' records keep what they did.
+    std::vector<C2SessionOrder> TakeSessionOrders() { return c2_.TakeSessionOrders(); }
 
     // The enemy's command in the air (roadmap B5): its posts, pools, messages and what they did.
     const AirC2& C2() const {
@@ -438,6 +455,7 @@ public:
                 case CampaignAction::Kind::Report:
                     NoteReport(a.package_id, a.flight, a.what, a.to, a.sigma_m, a.observed_h, a.from);
                     break;
+                case CampaignAction::Kind::PostAttack: StrikePost(a.what, a.by); break;
                 case CampaignAction::Kind::Complete:
                     if (a.package_id >= 0) {
                         if (!LiveMission(a.package_id)) {
@@ -716,6 +734,7 @@ private:
     };
     std::vector<Airborne> airborne_;
     std::map<int, double> live_;
+    std::set<int> on_call_;  // packages the posts launched from their alert pools (roadmap B5)
     mutable AirC2 c2_;
     Rng c2_root_{1};
     int last_fac_hour_ = -1000000;
@@ -836,6 +855,7 @@ private:
                 last_fac_hour_ = hour;
                 C2Context cx = C2Ctx();
                 c2_.Hourly(t0, cx);
+                c2_.OurFires(t0, cx);  // our fires on the posts our listeners fixed (roadmap S2)
             }
             // The packages: each takes off at its first aircraft's hour and flies in time; while any is in the air (or about to
             // be) or a message is on its way, the step is cut to c2.step_h (roadmap B5's A0).
@@ -849,7 +869,7 @@ private:
                         Package& p = packages_[i];
                         if (p.resolved || p.played || Flying(static_cast<int>(i))) continue;
                         if (p.FirstH() >= ts) continue;
-                        if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
+                        if (player_candidates_.count(static_cast<int>(i)) > 0 && (Pacing() || OnCallLive(p))) {
                             pending_ = static_cast<int>(i);
                             player_candidates_.erase(static_cast<int>(i));
                             ++player_missions_today_;
@@ -889,6 +909,12 @@ private:
             MoveBattery(march_to_);
         }
         return false;
+    }
+
+    // An on-call package the posts launched while a session is flying a raid: it enters that session too, whatever the
+    // pacing (roadmap S2, c2.live_mode 1).
+    bool OnCallLive(const Package& p) const {
+        return !live_.empty() && on_call_.count(p.id) > 0 && data_.tuning.Get("c2.live_mode") >= 1.0;
     }
 
     bool Pacing() const {
@@ -1113,6 +1139,7 @@ private:
         C2Context cx = C2Ctx();
         for (Airborne& a : airborne_) c2_.OnEvents(packages_[static_cast<std::size_t>(a.package)], a.run, ts, cx);
         c2_.StepTo(ts, cx);
+        c2_.Recalls(ts, cx);  // a package whose target is believed destroyed since it took off (roadmap S2)
         for (std::size_t k = 0; k < airborne_.size();) {
             Package& p = packages_[static_cast<std::size_t>(airborne_[k].package)];
             if (!airborne_[k].run.Done(p)) {
@@ -1170,6 +1197,11 @@ private:
         c.staff = &staff_;
         c.packages = &packages_;
         for (Airborne& a : airborne_) c.airborne.push_back({a.package, &a.run});
+        for (const auto& lv : live_) {  // the raids a session flies: the posts know their plan (roadmap S2)
+            for (std::size_t i = 0; i < packages_.size(); ++i) {
+                if (packages_[i].id == lv.first) c.live.push_back(static_cast<int>(i));
+            }
+        }
         c.phase = phase_;
         c.battery = truth_[static_cast<std::size_t>(player_)].pos;
         c.on_call = [this](MissionKind mk, const IntelEntry& e, const AlertPool& pool, double takeoff_h, Package& out) {
@@ -1200,6 +1232,7 @@ private:
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
             if (TouchesPlayer(p)) player_candidates_.insert(idx);
+            on_call_.insert(p.id);
         };
         c.intel = [this](const IntelReport& r) { intel_.Queue(r); };
         c.believed = [this](const std::string& key) -> const IntelEntry* { return key.empty() ? nullptr : intel_.Find(key); };

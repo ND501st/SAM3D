@@ -88,6 +88,38 @@ struct C2FreeHuntDef {
     std::string confidence;
 };
 
+// What losing a post does (roadmap S2, 05 §9): who takes its traffic and when, and how long the post takes to be set up
+// again. "alternate": the nearest live post of the same kind takes its messages after a takeover; "none": messages to it
+// are lost, and the flights fly the plan (the Pact's: fm_100_2_1_1984 p. 12-4).
+struct C2PostLossDef {
+    bool set = false;
+    std::string takeover = "none";               // "alternate" or "none"
+    C2Band takeover_s;                           // the alternate's time to take the traffic over
+    std::map<std::string, C2Band> reconstitute_h;  // post kind -> hours until it works again (unlisted: not in this war)
+    std::string source;
+    std::string confidence;
+    std::string notes;
+};
+
+// A strike that needs a controller's clearance or mark (roadmap S2, 05 §9): its missions, and what a flight does when the
+// clearance does not reach it (the net jammed or its post gone): "attack" on its plan, "abort", or "hold_then_abort"
+// (it holds for hold_s, asking again, then goes home).
+struct C2ClearanceDef {
+    bool set = false;
+    std::vector<std::string> missions;
+    std::string on_jammed = "attack";
+    C2Band hold_s;
+    std::string source;
+    std::string confidence;
+    std::string notes;
+    bool Covers(const std::string& mission) const {
+        for (const std::string& m : missions) {
+            if (m == mission || m == "any") return true;
+        }
+        return false;
+    }
+};
+
 struct FactionC2 {
     bool present = false;
     std::vector<C2PostDef> posts;
@@ -101,6 +133,8 @@ struct FactionC2 {
     double max_report_age_h = 6.0;             // a mobile target reported longer ago is not struck without a fresh report
     double nomination_h = 0.0;                 // a nomination into the tasking cycle is flown no sooner
     C2Band debrief_s;                          // the report after landing (unset: the faction's pirep_delay_h)
+    C2PostLossDef post_loss;                   // a post destroyed (roadmap S2)
+    C2ClearanceDef clearance;                  // a strike's clearance on a jammed net (roadmap S2)
     std::string source;
     std::string confidence;
     std::string notes;
@@ -156,6 +190,17 @@ inline std::vector<std::pair<std::string, double>> C2TuningDefaults() {
         {"c2.second_report_m", 3000.0},     // and how near it must be
         {"c2.army_refusal", 0.1},           // the corps refuses a CAS divert
         {"c2.fac_request_per_h", 0.1},      // a FAC with our troops in sight asks for immediate support on them, per hour
+        // Roadmap S2, the command live in the session: 1 the posts' orders into a session's flights, recalls, posts struck
+        // by our fires, the nomination cycle, our jamming of the enemy's nets and the strike's clearance; 0 before it (a
+        // save without the key).
+        {"c2.live_mode", 1.0},
+        {"c2.recall_live", 0.3},            // a package is recalled when its target, claimed destroyed since it took off, is believed this alive
+        {"c2.jam_strong_share", 0.9},       // the share of a hop's tries our jamming takes at a strong J/S (FM capture)
+        {"c2.jam_weak_share", 0.35},        // ... and at a weak one (words lost)
+        {"c2.post_fix_calls", 3.0},         // calls of a post our listeners must have heard before our fires can be laid on it
+        {"c2.post_strike_per_h", 0.04},     // our fires' chance per hour on a located post marked for destruction
+        {"c2.post_footprint_m", 600.0},     // a fix this near the post puts the fires on it
+        {"c2.fac_contact_m", 25000.0},      // a close support flight in a session asks its FAC for the mark this near him
     };
 }
 

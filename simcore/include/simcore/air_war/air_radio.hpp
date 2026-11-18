@@ -465,6 +465,47 @@ public:
         return Transmit(sp, e != nullptr ? *e : dummy, t);
     }
 
+    // ---- the campaign's posts in a session (roadmap S2)
+
+    // A post of the enemy's command the session did not have (the campaign's posts, when a raid enters a battery's
+    // session): it speaks from then on. False, with why, if the library lacks its set; true and nothing done if it is here.
+    bool AddSpeakerPost(const AirRadioPostDef& p, std::string* error = nullptr) {
+        if (!On()) return false;
+        if (FindPost(p.id) != nullptr) return true;
+        return AddPost(p, error);
+    }
+    bool HasPost(const std::string& id) const { return FindPost(id) != nullptr; }
+    // The frequency of a post's net (0: no such speaking post).
+    double PostFreqHz(const std::string& id) const {
+        const Post* p = FindPost(id);
+        if (p == nullptr || !On()) return 0.0;
+        const em::NetState* n = world_->Scene().FindNet(p->net);
+        return n != nullptr ? n->freq_hz : 0.0;
+    }
+    // One of our spot jammers on a post's net (our side's jamming of the enemy's command, data/command/counter_c2.json):
+    // `jammer` from the library, standing at `at` (session ENU) on a mast, tuned to the post's net and turned toward the
+    // post. Every call on that net is judged against it by the link budget (em::EvaluateLink's J/N). The jammer's id, or 0.
+    int JamPostNet(const std::string& post_id, const std::string& jammer, const Vec3& at, double mast_m = 10.0) {
+        if (!On()) return 0;
+        const Post* p = FindPost(post_id);
+        if (p == nullptr || p->node == 0) return 0;
+        em::EmScene& s = world_->Scene();
+        const em::NetState* net = s.FindNet(p->net);
+        if (net == nullptr || s.lib.Jammer(jammer) < 0) return 0;
+        const int platform = world_->AddGroundPlatform("our jammer on " + post_id, em::Side::Blue, at.x, at.y, mast_m);
+        const int id = world_->AddJammer(platform, jammer, true);
+        for (const em::JammerState& j : s.jammers) {
+            if (j.id != id) continue;
+            if (em::EmitterState* e = s.FindEmitter(j.emitter_id)) {
+                e->freq_hz = net->freq_hz;
+                e->radiating = true;
+                const em::Platform* pp = s.FindPlatform(p->platform);
+                if (pp != nullptr) e->pointing_az_rad = em::AzimuthFromTo(Vec3{at.x, at.y, 0.0}, Vec3{pp->position.x, pp->position.y, 0.0});
+            }
+        }
+        return id;
+    }
+
     // ---- what the world holds
 
     const std::vector<Call>& Calls() const { return log_; }

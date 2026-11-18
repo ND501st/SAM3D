@@ -278,6 +278,10 @@ public:
     // posts), and what the leaders did so far.
     std::vector<OpportunityRun::Report> TakeOpportunityReports() { return opp_.TakeReports(); }
     const OpportunityRun& Opportunities() const { return opp_; }
+    // A controller's mark for one of its flights, heard on the air (roadmap S2, OpportunityRun::Designate).
+    void Designate(std::size_t flight, const Vec3& where, double radius_m, const std::string& by, double t_s) {
+        opp_.Designate(flight, where, radius_m, by, t_s);
+    }
     int ArmsFired() const { return arms_fired_ + em_arms_fired_; }
 
     // The munitions library (data/scenery/munitions.json; null: none) a gun neighbour's rounds in its GunPass are counted
@@ -286,8 +290,9 @@ public:
 
     // A new route for one of the package's flights (ScenarioRunner::RerouteFlight, roadmap B1), its weapons now for
     // `aim`: its aircraft release there, and the neighbours' passes they are in are decided again on their new track.
+    // `by_radio`: a post's order said on its net (roadmap S2); false, and nothing changed, if the leader did not hear it.
     bool Reroute(ScenarioRunner& r, const std::string& flight, std::vector<RouteLeg> legs, const Vec3& aim, const std::string& by,
-                 std::string* why = nullptr) {
+                 std::string* why = nullptr, bool by_radio = false) {
         int fi = -1;
         for (std::size_t k = 0; k < m_.flight_ids.size(); ++k) {
             if (m_.flight_ids[k] == flight) fi = static_cast<int>(k);
@@ -296,7 +301,13 @@ public:
             if (why != nullptr) *why = "no flight '" + flight + "' in package " + std::to_string(m_.package_id);
             return false;
         }
-        if (!r.RerouteFlight(flight, std::move(legs), aim, by, why)) return false;
+        if (!r.RerouteFlight(flight, std::move(legs), aim, by, why, by_radio)) return false;
+        if (const FlightState* fs = r.Flight(flight)) {
+            if (!fs->orders.empty() && !fs->orders.back().heard) {
+                if (why != nullptr) *why = "the leader did not hear the call";
+                return false;
+            }
+        }
         for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
             RaidAircraft& a = m_.aircraft[i];
             if (a.flight != fi) continue;
@@ -398,7 +409,7 @@ public:
             const FlightState* fs = fid.empty() ? nullptr : r.Flight(fid);
             if (fs != nullptr) {
                 for (const OrderRecord& rec : fs->orders) {
-                    if (rec.by == "leader" || rec.by == "package" || rec.by == "pilot") continue;
+                    if (rec.by == "leader" || rec.by == "package" || rec.by == "pilot" || !rec.heard) continue;
                     RetaskRecord rt;
                     rt.flight = static_cast<int>(fi);
                     rt.kind = OrderKindId(rec.kind);
@@ -414,7 +425,7 @@ public:
                 if (fs != nullptr) {
                     std::vector<int> member_home;
                     for (const OrderRecord& rec : fs->orders) {
-                        if (rec.kind != OrderKind::ReturnHome) continue;
+                        if (rec.kind != OrderKind::ReturnHome || !rec.heard) continue;
                         if (rec.target < 0) home = true;
                         else member_home.push_back(rec.target);
                     }

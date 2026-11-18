@@ -385,6 +385,59 @@
    "notes": "Sky wave: heard by the HF intercept far past any horizon (em/comms_intercept.hpp)."
   }
  ],
+ "jammers": [
+  {
+   "id": "our_air_net_jammer",
+   "name": "Our R-834-class spot jammer of an enemy air-ground voice net (roadmap S2)",
+   "technique": "spot",
+   "emitter": {
+    "freq_hz": {
+     "value": 300000000.0,
+     "source": "game value: set on the jammed post's net when it is put on (AirRadio::JamPostNet)",
+     "confidence": "estimate"
+    },
+    "bandwidth_hz": {
+     "value": 25000.0,
+     "source": "estimate: one channel of the air bands, as the sets here (fh_radios: 25 kHz spacing)",
+     "confidence": "low"
+    },
+    "peak_power_w": {
+     "value": 1000.0,
+     "source": "estimate, as data/command/counter_c2.json's air_net_jammer (no source read gives the R-834's power)",
+     "confidence": "estimate"
+    },
+    "tx_loss_db": {
+     "value": 2.0,
+     "source": "estimate",
+     "confidence": "estimate"
+    },
+    "antenna": {
+     "gain_db": {
+      "value": 6.0,
+      "source": "estimate: a log-periodic array toward the enemy's side",
+      "confidence": "estimate"
+     },
+     "beamwidth_az_deg": {
+      "value": 60.0,
+      "source": "estimate",
+      "confidence": "estimate"
+     },
+     "beamwidth_el_deg": {
+      "value": 60.0,
+      "source": "estimate",
+      "confidence": "estimate"
+     },
+     "sidelobe_db": {
+      "value": -12.0,
+      "source": "estimate",
+      "confidence": "estimate"
+     }
+    }
+   },
+   "source": "fm_100_2_1_1984 pp. 15-2 to 15-3 (the R-834 named among the jammers of the air-ground nets); its figures estimates as marked",
+   "confidence": "low"
+  }
+ ],
  "esm": [
   {
    "id": "air_intercept_vhf_uhf",
