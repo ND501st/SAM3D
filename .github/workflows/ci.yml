@@ -19,7 +19,11 @@ jobs:
       - name: Configure
         run: cmake -S simcore -B simcore/build -DCMAKE_BUILD_TYPE=Release
       - name: Build
-        run: cmake --build simcore/build --config Release
+        if: runner.os == 'Windows'
+        run: cmake --build simcore/build --config Release --parallel 4
+      - name: Build (keep going, so one run lists every error)
+        if: runner.os != 'Windows'
+        run: cmake --build simcore/build --config Release --parallel 3 -- -k
       - name: Test
         run: ctest --test-dir simcore/build -C Release --output-on-failure
 
