@@ -71,7 +71,8 @@ struct LessonRun {
 
 // The student: does what the step asks, a move every so often like a person (a click about once a second, the wheels at
 // a hand's speed), and nothing else. Front-end conditions (views, the cabin, the keys) he satisfies as asked; he drives
-// when a step wants the vehicle moved, and stops when it wants it halted.
+// when a step wants the vehicle moved, and stops when it wants it halted. His body is reported as the game does: a
+// control worked outside he walks out to (the click in the cabin takes him), and he goes back in for one inside.
 LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
     LessonRun run;
     TutorialDef def;
@@ -98,6 +99,7 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
         ui.in_cabin = true;
         ui.seat = def.seat;
         ui.holding = def.seat;
+        r->SetPlayerBody(def.seat, BodyPlace::Seated, Vec3{}, 0.0);
     }
     // The PU-12M's lessons: a half-second step (the post's deployment takes some 17 minutes, nothing in it is fast).
     const double dt = r->Console().system_id == "pu12m" ? 0.5 : 0.1;
@@ -177,6 +179,15 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                         driving = false;
                         r->Console().equipment.SetInput("vehicle_stopped", true);
                     }
+                    // The radiotelephonist: the page before his eyes, the report taken down as he heard it.
+                    if (c.arg == "journal_written_by_hand" && r->Time() >= next_move_s && r->JournalBegin(def.seat)) {
+                        const JournalDraft d = *r->Journal().Draft();
+                        for (const std::string& group : d.said) {
+                            for (char digit : group) r->JournalType(def.seat, digit);
+                        }
+                        r->JournalFinish(def.seat, false);
+                        next_move_s = r->Time() + 1.0;
+                    }
                     break;
                 default:
                     break;
@@ -203,6 +214,12 @@ LessonRun PlayLesson(const std::string& file, double limit_s = 3000.0) {
                 next_move_s = r->Time() + 1.0;
                 break;
             case TutorialStatus::Phase::Act:
+                if (!st.away.empty()) {  // not where it is worked: he goes there first, and works it once there
+                    const CrewMover* m = r->Mover(def.seat);
+                    if (m == nullptr || !m->Moving()) r->PlayerGoTo(def.seat, st.place.empty() ? MoveGoal::Seat() : r->PlaceGoal(st.place));
+                    next_move_s = r->Time() + 1.0;
+                    break;
+                }
                 if (!st.control.empty()) {
                     if (!g.Refusal(*r, st.control, ui).empty()) ++run.refusals;
                     const ControlDef* d = r->Console().panel.Find(st.control);
@@ -613,6 +630,7 @@ SC_TEST("tutorial: a student who only presses skip is taken through every lesson
             SC_EXPECT(r->TakeSeat(def.seat, "Player"));
             ui.in_cabin = true;
             ui.seat = ui.holding = def.seat;
+            r->SetPlayerBody(def.seat, BodyPlace::Seated, Vec3{}, 0.0);  // the instructor leads him to a job outside
         }
         double next_skip_s = 1.0;
         std::size_t skipped_at = 1000;
@@ -632,6 +650,57 @@ SC_TEST("tutorial: a student who only presses skip is taken through every lesson
         SC_EXPECT(g.AtEnd());
         // (Skipped, the watching steps pass at once: the lesson can end before the crew has fired.)
     }
+}
+
+SC_TEST("tutorial: a step worked outside sends the learner out to its place and back in; the instructor leads him, nobody is carried") {
+    // The PU-12M driver's lesson: the AB-1 set out and started on the ground behind the post, then the supply switch inside.
+    TutorialDef def;
+    std::string e;
+    SC_EXPECT(LoadTutorialFile(kData, "tutorials/school_pu12m_driver.json", def, &e));
+    std::unique_ptr<ScenarioRunner> r = Load(def.scenario);
+    SC_EXPECT(r != nullptr && r->HasVehicle());
+    if (!r) return;
+    TutorialGuide g(def);
+    SC_EXPECT(g.Bind(*r, &e));
+    TutorialUi ui;
+    SC_EXPECT(r->TakeSeat("driver", "Player"));
+    ui.in_cabin = true;
+    ui.seat = ui.holding = "driver";
+    auto run = [&](auto done, double limit_s) {
+        for (double t = 0.0; t < limit_s && !done(); t += 0.5) {
+            r->Step(0.5);
+            g.Update(*r, ui);
+        }
+        return done();
+    };
+    while (g.Current() != nullptr && g.Current()->id != "ab1_set") g.Pass(*r, ui);  // the reading, and the order given
+    SC_EXPECT(run([&] { return g.Status(*r, ui).phase == TutorialStatus::Phase::Act; }, 120.0));
+    TutorialStatus st = g.Status(*r, ui);
+    SC_EXPECT(st.place == "ab1" && !st.place_label.empty() && st.away.empty());  // headless, no body reported: no walk
+    r->SetPlayerBody("driver", BodyPlace::Seated, Vec3{}, 0.0);
+    st = g.Status(*r, ui);
+    SC_EXPECT(st.away == "out to " + st.place_label);
+    SC_EXPECT(r->SeatSet("driver", "pwr.ab1_set", 1) == StepResult::Blocked);  // not from his seat
+    // Out (the click in the cabin takes him): through his hatch, down, round to the set.
+    const double out_s = r->Time();
+    SC_EXPECT(r->PlayerGoTo("driver", r->PlaceGoal(st.place)));
+    SC_EXPECT(run([&] { return !r->Mover("driver")->Moving(); }, 300.0));
+    std::printf("    out to the set in %.1f s\n", r->Time() - out_s);
+    SC_EXPECT(g.Status(*r, ui).away.empty() && r->Time() - out_s >= 10.0);
+    SC_EXPECT(r->SeatSet("driver", "pwr.ab1_set", 1) != StepResult::Blocked);  // there: it moves (the headset passed over, it is out of order)
+    SC_EXPECT(run([&] { return g.Current()->id == "ab1_start" && g.Status(*r, ui).phase == TutorialStatus::Phase::Act; }, 600.0));
+    SC_EXPECT(g.Status(*r, ui).away.empty());  // started at the same place
+    SC_EXPECT(r->SeatSet("driver", "pwr.ab1_start", 1) != StepResult::Blocked);
+    SC_EXPECT(run([&] { return g.Current()->id == "input" && g.Status(*r, ui).phase == TutorialStatus::Phase::Act; }, 600.0));
+    st = g.Status(*r, ui);
+    SC_EXPECT(st.place.empty() && st.away == "back inside the vehicle");
+    // Skipped: the instructor leads him back in by the vehicle's ways and works the switch once he is inside.
+    const double in_s = r->Time();
+    g.Skip(*r, ui);
+    SC_EXPECT(r->Mover("driver")->Moving());
+    SC_EXPECT(run([&] { return g.Current()->id != "input"; }, 300.0));
+    std::printf("    led back in, the switch worked, in %.1f s\n", r->Time() - in_s);
+    SC_EXPECT(r->Time() - in_s >= 10.0 && r->Mover("driver")->Inside() && r->Console().panel.Get("pwr.input") == 1);
 }
 
 SC_TEST("tutorial: a held target appears only when released") {

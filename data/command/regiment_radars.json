@@ -1,7 +1,7 @@
 {
   "library_id": "regiment_radars",
   "display_name": "Radars of the regiment's control battery that feed the PU-12M",
-  "status": "Library of radar TYPES (simcore/c2_sources.hpp, roadmap 7.1). A scenario's \"c2.regiment\" block places instances of them; the PU-12M's board then only holds the targets some radar of the list covers. Every number cited; both radars' heights are estimates.",
+  "status": "Library of radar TYPES (simcore/c2_sources.hpp, roadmap 7.1). A scenario's \"c2.regiment\" block places instances of them; the PU-12M's board then only holds the targets some radar of the list covers. Every number cited; the radars' heights are estimates.",
   "notes": "Coverage is the simplest honest model: a target is seen when it is within the radar's range and above its radar horizon, 4.12 (sqrt(antenna height) + sqrt(target height)) km. No clutter, terrain or blind cone; that is the EM layer's job.",
   "radars": [
     {
@@ -10,7 +10,8 @@
       "notes": "The control battery's radar in the Soviet regiment (korovin_tiv_2010) and two of the NVA regiment's (flak11).",
       "max_range_m": { "value": 250000, "source": "fm100_2_3 p. 5-138 (Flat Face, UHF, 250 km: the US Army's view in 1991); nato_radar_refs (P-19 instrumented range 260 km)", "confidence": "low" },
       "antenna_height_m": { "value": 8, "source": "estimate (a truck- or trailer-mounted UHF early-warning antenna stands a few metres up)", "confidence": "estimate" },
-      "switch_position": { "value": 3, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its third position 1RL13 / 1RL134); the P-19 is the 1RL134 (p19_to: РЛС П-19)", "confidence": "medium" }
+      "switch_position": { "value": 3, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its third position 1RL13 / 1RL134); the P-19 is the 1RL134 (p19_to: РЛС П-19)", "confidence": "medium" },
+      "iff_interrogator": { "value": 1, "source": "p19_to (4.3.3: the ground interrogator 1L23-6 for Kremniy-2, Kremniy-2M and Parol-4, its replies on the indicators; 4.3.1: identification marks among the signals to the ASPD)", "confidence": "high" }
     },
     {
       "id": "p40",
@@ -18,7 +19,23 @@
       "notes": "In the NVA regiment's headquarters battery (flak11).",
       "max_range_m": { "value": 150000, "source": "fm100_2_3 p. 5-138 (Long Track, over 150 km: a lower bound)", "confidence": "low" },
       "antenna_height_m": { "value": 10, "source": "estimate (a tracked-vehicle mast antenna)", "confidence": "estimate" },
-      "switch_position": { "value": 2, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its second position 1RL111 / 1RL128); the P-40 is the 1RL128 (sam3d: its index)", "confidence": "low" }
+      "switch_position": { "value": 2, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its second position 1RL111 / 1RL128); the P-40 is the 1RL128 (sam3d: its index)", "confidence": "low" },
+      "iff_interrogator": { "value": 1, "source": "estimate (a 1980s Soviet surveillance radar worked with a ground interrogator, as the P-19 with the 1L23-6, p19_to; the P-40's own is not found)", "confidence": "estimate" }
+    },
+    {
+      "id": "p15",
+      "display_name": "P-15 (Flat Face A) low-level radar",
+      "notes": "The P-19's forerunner, a UHF radar for low fliers on a truck; in the dynamic campaign testbed on the capital's eastern heights.",
+      "max_range_m": { "value": 160000, "source": "rusarmy_p15_p19 (the P-15's instrumented range 10-160 km, its coverage to 6000 m)", "confidence": "medium" },
+      "antenna_height_m": { "value": 6, "source": "estimate (a truck-mounted UHF antenna, lower than the P-19's mast)", "confidence": "estimate" },
+      "switch_position": { "value": 3, "source": "rwd_mb3 (pu12e: the PU-12M's primary source switch, its third position 1RL13 / 1RL134); the P-15 is the 1RL13 (sam3d: its index)", "confidence": "low" }
+    },
+    {
+      "id": "p18",
+      "display_name": "P-18 (Spoon Rest D) early-warning radar",
+      "notes": "A VHF early-warning radar on two trucks; in the dynamic campaign testbed in the capital's northern allotments.",
+      "max_range_m": { "value": 180000, "source": "ru_wiki_p18 (180 km against a fighter at 10,000 m, 60 km at 500 m: after «Оружие России»)", "confidence": "medium" },
+      "antenna_height_m": { "value": 6, "source": "estimate (the Yagi array on its mast above the antenna truck)", "confidence": "estimate" }
     }
   ]
 }

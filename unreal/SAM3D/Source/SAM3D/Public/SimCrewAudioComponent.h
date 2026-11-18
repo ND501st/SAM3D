@@ -10,8 +10,9 @@ class UAudioComponent;
 class USoundWaveProcedural;
 
 /**
- * The commander's headset between the words (roadmap 7.7): the R-123M his A-1 is on hisses, the noise suppressor shuts
- * the hiss off, a carrier on the net quietens it, and ТОН. ВЫЗОВ sounds its call tone (simcore::HeadsetSoundNow),
+ * The player's headset between the words (roadmap 7.7), while his box is on a set (the commander's A-1 on Р-123, A-2 or
+ * the driver's ПВ on the radio): the R-123M hisses, the noise suppressor shuts the hiss off, a carrier on the net
+ * quietens it, and ТОН. ВЫЗОВ sounds its call tone (simcore::HeadsetSoundNow),
  * synthesised here (band-limited noise, a 1 kHz tone). The words themselves are USimCrewVoiceComponent's (roadmap 8.10).
  * Console: sam3d.Audio (0 off).
  */

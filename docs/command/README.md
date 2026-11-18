@@ -32,3 +32,8 @@ In the game: start a campaign from the missions menu; the campaign screen's firs
 what has reached the player's character, each line saying who told them, how and when) and the second **Your chain**
 (the player's post, superior, contacts, the people below and the coming briefings, visits and courier runs). These panels
 are the interim view; the aim is to present each delivery in the world (`06_INTEGRATION.md` §6).
+
+**The battery's war** (`docs/campaign/`, roadmap phases 13-21) uses this pipeline both ways: the regiment's combat order
+reaches the battery commander as a document by the means available (P1, P2: `docs/campaign/03_THE_BATTERY_MISSION.md`
+§2), and the battery's report, compiled from its records (P9), goes up to the regiment's picture, which gives the next
+order (`docs/campaign/05_THE_SYSTEMS.md` §11).

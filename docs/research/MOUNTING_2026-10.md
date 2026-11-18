@@ -110,7 +110,8 @@ inside the shut vehicle.
 ## 7. For later tasks (not built)
 
 - **Laying wire**: the RTK-1's five lines (`simcore/radio_nets.hpp` LineDef), the P-274 field cable to the launchers and
-  the regiment, the norm of 25-30 min with four lines at 500 m (`ru_pu12_text`).
+  the regiment, the norm of 25-30 min with four lines at 500 m (`ru_pu12_text`). Built 30 Oct 2026
+  (`docs/crew/13_OUT_OF_THE_VEHICLE.md` section 4.1).
 - **Mechanical work, the AB-1's servicing, the dugouts and small command posts, rest**: places round the vehicle with a
   job each (`data/vehicles/<system>.json` "places" and "jobs").
 - The march signals by flags and lamps (`voenizdat_osa_1991` pp. 232-239) need a man in a hatch or on the ground with

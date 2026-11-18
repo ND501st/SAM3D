@@ -444,9 +444,10 @@ SC_TEST("crew body: in the PU-12M, a crewman reaching for any control keeps his 
         SC_EXPECT(off < 0.03);
         if (!plan.seated) ++stood;
     }
-    // the DTP and the mast's winch, crouching under the roof; and the R-111's antenna distributor, on the SAU block under
-    // the bench's back behind the battery commander
-    SC_EXPECT(stood == 3);
+    // the DTP and the mast's winch, crouching under the roof; the R-111's antenna distributor, on the SAU block under
+    // the bench's back behind the battery commander; the plotter's headset socket on top of PVS-1; and his line's reel
+    // latch by the S-23 behind the driver (he gets up to take the reel out)
+    SC_EXPECT(stood == 5);
 }
 
 namespace {

@@ -59,6 +59,33 @@ A post's superior is never at a lower level (the loader checks it), and the chai
 
 - The other four batteries of the regiment, and vehicles 21-2..21-4's crews (their commanders are there).
 - The motorised rifle regiment a battery covers in the field (the Kesmark bridges are an object, not a unit).
-- Replacing a post's holder when they fall (the air war does it for the enemy's staff: `docs/air_war/02_AIR_STAFF.md` §4).
-- The player's career moving them between posts (`docs/crew/08_TRAINING_AND_ASSISTANCE.md`), and the alternate command
-  post under a deputy when the KP is lost (`utin_2018` §1).
+- What makes a post change hands: the air war's strikes and the battery's fights do not yet kill or wound our people
+  (the pipeline takes the change when something gives it, below).
+
+Planned in the battery's war: the regiment's other batteries (`docs/campaign/`, 17.5); holders who fall from the war's
+own events, improvisation and reconstitution (`docs/campaign/08_COMMAND_DOCTRINE_AND_REACH.md` §3, roadmap phase 21).
+
+## 4. Posts change hands (built, roadmap P8, 29 Oct 2026)
+
+A post may name its **deputy** (`"deputy"`: the regiment's and the division's chiefs of staff, the battery
+commander's vehicle 21-2's commander, a vehicle commander his crew's deputy) and its **alternate place** (`"alternate_place"`:
+the battery commander works from vehicle 21-2's position when the PU-12M is lost; `utin_2018` §1 for the alternate
+command post, the choice of vehicle SAM3D's own). In the pipeline (`InfoNet`, `simcore/command/info_net.hpp`) a
+**post change** is a time-stamped input like a telling (`ChangeHands`): from its hour the post is held by someone else
+(a replacement, a promotion), by nobody (a casualty) or works from another place (`ToAlternate`).
+
+- **A vacant post's deputy acts for it**: what would have reached the post reaches him, by the post's own links (the
+  regiment's duty officer warns vehicle 21-2's commander in the battery commander's place), and he passes it to the
+  post's people as well as his own. A message on its way when the man falls reaches the deputy when it would have
+  reached him. Down the deputies, if the deputy has fallen too (`ActingFor`).
+- **A replacement has only the papers**: what was said to the man before him went with him; what was written is on the
+  desk (`KnownBy` keeps a post's deliveries since its holder took it, and its papers).
+- **The player's career** (`PlayerTo`): from an hour his character holds another post and is its holder; the post he
+  left is vacant (its deputy acts) until a change fills it. What he knew goes with him (`KnownByPlayer`, what the
+  campaign screen shows), and he can tell it from his new post; what was said to his predecessor is not his.
+- **The alternate command post**: a post that moved works from its new place, and the routines held at its old place
+  (the evening orders, the regiment commander's visit) follow it there.
+
+Post changes and the career are saved with the player's inputs (`player_inputs.hpp`). Left: what gives a change (the
+war's own casualties, the regiment's replacements and the player's promotions: the battery's war, phase 21), and the
+deputy improvising when the chain above him is cut too (`docs/campaign/08_*` §3).

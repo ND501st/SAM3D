@@ -124,6 +124,7 @@ public:
     // The commander's chest switch is at ПРД (a player holds it there to talk; an NPC keys it as he speaks).
     bool ChestKeyed(const ConsoleData& console) const { return !def_.chest.empty() && console.panel.Get(def_.chest) == 1; }
     bool HasChest() const { return !def_.chest.empty(); }
+    const std::string& ChestControl() const { return def_.chest; }
     // The set whose ТОН. ВЫЗОВ is pressed this step (-1: none).
     int TonePressed(const ConsoleData& console) const {
         for (std::size_t i = 0; i < def_.radios.size(); ++i) {

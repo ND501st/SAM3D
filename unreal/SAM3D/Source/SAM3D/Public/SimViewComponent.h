@@ -33,7 +33,10 @@ enum class ESimView : uint8
 	/** F10: the map, from above (wheel: height, right drag: pan). */
 	Map,
 	/** F11: a free camera (W A S D Q E, right mouse looks, Shift faster). */
-	Free
+	Free,
+	/** F12: every asset in turn, ours and the enemy's: the aircraft, their weapons, the missiles, the vehicles, the air
+	 *  defence sites and radars, the map's objects (again: the next; Shift+F12: the one before). */
+	Asset
 };
 
 /** The camera the external views look through (ASimOsaVehicle's cabin camera is F1's). */
@@ -53,7 +56,7 @@ private:
 };
 
 /**
- * The player's camera views (F1-F11, docs/PLAYING.md) and the time compression keys (Ctrl+Z faster, Alt+Z slower, Shift+Z
+ * The player's camera views (F1-F12, docs/PLAYING.md) and the time compression keys (Ctrl+Z faster, Alt+Z slower, Shift+Z
  * normal). Lives on the player's ASimOsaVehicle, which calls UpdateViews each frame.
  *
  * Views are presentation only: they move a camera, never tell the crew anything (the first-person rule, docs/command/).
@@ -78,14 +81,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Views")
 	void SetView(ESimView NewView);
 
-	/** The view on that F key ("F1".."F11"), as if pressed (again: the next of its kind). False for a key with no view. */
+	/** The view on that F key ("F1".."F12"), as if pressed (again: the next of its kind). False for a key with no view. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Views")
 	bool SetViewByKey(const FString& Key);
 
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Views")
 	ESimView GetView() const { return View; }
 
-	/** "F1" .. "F11". */
+	/** "F1" .. "F12". */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Views")
 	FString GetViewKey() const { return KeyOf(View); }
 
@@ -113,12 +116,16 @@ public:
 	double FreeSpeedMps = 60.0;
 
 private:
-	/** What a view follows: our own vehicle, or a sim entity. */
+	/** What a view follows: our own vehicle, a sim entity, or a place that stands (USimWorldSubsystem::GetViewPlaces). */
 	struct FSubject
 	{
 		bool bOwn = true;
 		int32 EntityId = INDEX_NONE;
-		bool operator==(const FSubject& O) const { return bOwn == O.bOwn && (bOwn || EntityId == O.EntityId); }
+		int32 PlaceIndex = INDEX_NONE;
+		bool operator==(const FSubject& O) const
+		{
+			return bOwn == O.bOwn && (bOwn || (EntityId == O.EntityId && PlaceIndex == O.PlaceIndex));
+		}
 	};
 	struct FSubjectState
 	{
@@ -129,6 +136,9 @@ private:
 		bool bAlive = false;
 		/** Roughly how big it is (m), for how far the camera stands off. */
 		double SizeM = 10.0;
+		/** Ours or the enemy's, where that is known (F12's label). */
+		bool bSideKnown = false;
+		bool bFriendly = false;
 	};
 
 	ASimOsaVehicle* Vehicle() const;
@@ -137,8 +147,8 @@ private:
 	/** The subjects a view cycles through, in order (the nearest first for F5). */
 	TArray<FSubject> CandidatesFor(ESimView InView) const;
 	bool IsAllowed(ESimView InView) const;
-	/** A view key pressed: switch to the view, or on to the next of its kind if already in it. */
-	void Press(ESimView InView);
+	/** A view key pressed: switch to the view, or on to the next of its kind if already in it (`bBack`: the one before). */
+	void Press(ESimView InView, bool bBack = false);
 	void Note(const FString& Text);
 	void EnsureCamera();
 	void PlaceCamera(APlayerController* Pc, float DeltaSeconds);
@@ -172,6 +182,9 @@ private:
 	double PadlockFill = 1.0;
 	double MapHeightM = 1500.0;
 	FVector MapPan = FVector::ZeroVector;
+	/** F12's place in its list when last pressed, and the list's length then (its label). */
+	int32 AssetIndex = 0;
+	int32 AssetCount = 0;
 	FVector FreeLocation = FVector::ZeroVector;
 	FRotator FreeRotation = FRotator::ZeroRotator;
 	bool bFreePlaced = false;

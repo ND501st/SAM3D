@@ -498,7 +498,71 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
 
 * **Deygout diffraction.** `AnalysePath` keeps, besides the main edge, the worst crest on each side of it measured against the line to the main edge's top (`sub_v_geometry_a/b`); `DiffractionLossDb` sums J(v) over the three. A sub-edge must be a crest of its own, with a 20 m valley between it and the main edge, so the flat top of one wide ridge stays one edge. Sub-edges are only looked for when the main edge blocks the ray. Two 300 m ridges on a 20 km path: 21 dB at 50 MHz for one, 38 dB for two.
 * **Rain.** `Environment::rain_rate_mmh` (scenario `own_unit.em.rain_mmh`) adds ITU-R P.838-3 specific attenuation (k R^alpha, horizontal polarisation, 1-40 GHz table; f^2 below 1 GHz) times the P.530 distance factor to a path's atmospheric loss, for radars and radios. Radar and radio calibration always uses the dry environment (`EmWorld::Dry`), so rain lowers ranges instead of being fitted away. 10 GHz, 50 mm/h: 1.66 dB/km; over 30 km 17.7 dB.
-* Left: forest and urban obstacle heights (needs a land-cover layer), sea areas and ducting.
+* **Woods and buildings (roadmap R6, 2 November 2026).** `Terrain::ObstacleHeightAt` (0 on a bare terrain) gives how
+  high woods and buildings stand over the ground. `HasLineOfSight` (radar.hpp: the radars' detection, the gameplay
+  engagement's line of sight) and `AnalysePath` (the EM layer's `PathCache`, the PU-12M's radios over the country) add it
+  to the profile as ITU-R P.1812 adds its representative clutter heights (`itu_r_p1812`), so a wood or a town between a
+  radar and a low target blocks it, and over a wood's edge it is a diffraction edge like a ridge's (its height above
+  the ray in J(v)). The prototype mirrors both (`has_line_of_sight`, `analyse_path`, `obstacle=`).
+  * **The search antenna** (R6's review): the gameplay engagement's line of sight starts 5 m over the ground under the
+    vehicle (`data/gameplay/osa_ak.json` `search.antenna_height_m`, as `data/em/osa_ak.json` gives the SOC's, an
+    estimate; `engagement.hpp` `SearchAntennaAltitude`), not at the scenario's point for the vehicle; the battery's
+    other launchers and the regiment's other batteries in the battery fire model (`battery_fire.hpp`) see by the same
+    rule (`SearchAntennaSees`): a target behind the ground, a wood or a building is neither taken, captured nor fired at.
+  * **The 60 m skip** (terrain.hpp `kObstacleSkipM`, a game value): within 60 m of either end the obstacles are left
+    out, so a radar at a wood's edge, in a clearing or in a street, or a target over a wood, is not hidden by the cell
+    it stands in or flies over.
+  * **On the map** (`MapData::ObstacleHeight` and `ObstacleTop`, `simcore/terrain_map.hpp`): the tallest box whose
+    footprint holds the point (the turned rectangle, or a round part's circle), its top over the ground there: a
+    building masks exactly where it stands, no wider (R6's review, 3 November 2026). The footprints are indexed by cell
+    (50 m on the map proper, 25 m in the detail areas, 50 m cells by hash beyond them), and every one in 500 m blocks that
+    keep only the tallest top and the narrowest side. Thin or porous parts (masts, chimneys, towers, launchers, tents)
+    and flat ones (marsh, pads, runways) are left out: a 0.6 m mast hides nothing. Everything the map lays out counts
+    the same way, beyond the map proper too (the forests' 100 m blocks running out past it, the far ground's woods, the
+    towns laid beyond it such as Novo Varosd); where no box stands in the far ground's towns the map does not lay out, a
+    representative clutter height (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban
+    10 m beyond; villages suburban), so what the game draws there blocks sight too. The obstacle grids
+    (`ObstacleGrid`, `DetailObstacleGrids`) remain as a picture: each node holds what stands over it.
+  * **Footprints between the samples** (`terrain.hpp` `ObstaclesAlong`; `Terrain::ObstacleSpacingM`, `ObstacleTopAt`,
+    `ObstacleTopBoundM`). A path sampled every 50-100 m would step over a 7 m house, so where the terrain has footprints
+    each stretch between two samples is bounded first (the blocks', then for a short stretch the cells' tallest top) and,
+    only where the ray runs lower than that bound, every footprint the stretch crosses is found exactly
+    (`Terrain::ObstacleChords`, `MapData::ObstacleChords`: the stretch walks every cell it passes through, a corner
+    clipped too, and each footprint's cut is the segment's own entry and exit, a turned rectangle's slabs or a circle's
+    roots), and the ray is looked at at each cut's ends and middle (over a flat roof it is lowest at an end): a ray
+    cutting a corner 0.1 m deep is blocked (R6's second review: at the narrowest side's spacing a quarter of the corner
+    cuts on the Kesmark map had been stepped over). A terrain that does not know its cuts is looked at at the
+    narrowest side among the footprints there (no finer than 4 m). `HasLineOfSight` is blocked by the first
+    footprint over the ray; `AnalysePath` adds each stretch's highest footprint over the ray to its profile where one
+    comes within 10 m of the ray (`kFootprintNearRayM`), so it is a diffraction edge where it stands. A terrain
+    without footprints (a bare one, a test's function of east and north) keeps the samples alone.
+    `test_map_obstacles.cpp`: a 12 m-wide, 20 m-tall box blocks a ray 0.5 m inside its end and not 0.5 m outside, 0.5 m
+    under its roof and not 0.5 m over it, at 50, 100 and 400 m sampling; cut 0.1 m into its corner it blocks, 0.1 m clear
+    of it it does not; a house on the map proper and one in the capital likewise; every fifth building and wood block on
+    the Kesmark map (8086) blocks a ray cutting its corner 0.3 m deep 2 m under its roof.
+  * **A site's open ground** (`air_war/raid_scenario.hpp` `OpenGroundShift`): a raid's positions are moved off any
+    footprint within 20 m of a spot, found whole (`MapData::ObstacleHeightWithin`), not at nine points round it,
+    between which a house could stand.
+  * **Low pilots climb over the canopy.** `TargetPilot::HoldHeight` holds the wanted height over the ground plus the
+    obstacles, here and ahead (the footprints between its 100 m look-ahead points too, where one may top what he holds
+    over already); a terrain-following helicopter over a forest flies its height over the treetops. The
+    ground floor (R5) is still over the bare ground.
+  * The country's own ground (`command/em_radio.hpp`'s `CountryGround`) carries no obstacles yet.
+  * **What is drawn is what blocks sight.** The game draws the woods as trees and masses from the same boxes
+    (`scenery/map_dressing.hpp` `PlaceTrees`), each tree's top clamped to the ground plus `ObstacleHeight` where it
+    stands: nothing drawn stands above the profile the sight lines use. The other way round, a ray is blocked only
+    over a box's footprint, so it is never blocked outside the drawn wood's blocks.
+  * Balance against r-track (the merged R5 and R7, before obstacles): see `docs/DEVELOPMENT_ROADMAP.md` track R, R6.
+  * **The cost.** A sample looks the obstacle up only where the ray runs within the tallest thing on the map
+    (`Terrain::ObstacleTallestM`: a box's top over the ground under it, 5 m to spare; `AnalysePath` within 100 m more,
+    `kObstacleFarBelowRayM`, where an edge could still diffract down to 30 MHz), and a stretch between samples only
+    where the ray runs under the blocks' bound (`ObstacleTopCeilingM` first: the tallest top anywhere). The dynamic
+    campaign test's hour in `ground_check data 3600`: 64.1 s of wall time with the exact cuts (69.4 s at the
+    narrowest side's spacing, 88.6 s before the footprints), against r-track's 48.4 s, run in turn on one machine: a
+    third slower than before the obstacles; Kesmark's raid 0.5 s against 0.4 s. If it tells in the game's fixed step:
+    obstacle profiles cached per path.
+* Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
+  (fields, orchards) in place of the towns' two heights.
 
 ## 28. Scale (E8, started 16 October 2026)
 
@@ -546,7 +610,13 @@ follows a noise jammer in angle when the jamming drowns its echo (`RunTrackRadar
   (`AngleSigmaRad`, as for a strobe), drawn on the keyed random streams. There is no range: the gate stays at the
   range it had, or at the designation's range (the crew's range wheel), so the radar takes the echo again by itself
   when it burns through (about 2.6 km for a 5 m2 target against the placeholder `generic_selfscreen_noise_ku`).
-* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam.
+* It leaves the state when the echo is back in the gate (the ordinary lock) or the jamming has left the beam. In the
+  engagement layer (`EngagementModel::TrackJammer`) the jamming leaving the beam is not at once a lost track: the
+  tracking radar carries on at the strobe's last smoothed angles and rates for the memory time (`tv.memory_s`, ePap's
+  memory mode) while the range operator turns the gate onto the echo, now on his range indicator
+  (`RangeGateOntoEcho`); with the echo in the gate it locks (the burn-through path). A strobe that flickers below the
+  threshold for a moment is carried the same way. Lost only when the memory runs out first (the target beyond the
+  radar's reach, or out of the beam).
 * `EmSensorLink::JamTracked` gives the engagement layer the target that direction lines up with (by angle only, the
   referee-side association of §23) and the measured angles, with `no_range` set. `RadarState::on_jam`, `jam_az_rad`,
   `jam_el_rad`, `jam_jn_db`, `jam_range_m` hold the state; `ClearLock` resets it.
@@ -616,8 +686,9 @@ the missile (the Osa's missile is command-guided), sidelobe blanking or frequenc
 * **A stand-off jammer escort** is a target carrying a scripted jammer on a racetrack beyond the missiles' reach
   (`osa_soj_strike.json`): its strobe lies across the search scope and the strikers show late; one striker's
   self-protection pod is fought on its angle by method Н (9.1).
-* **Emission discipline** (`doctrine.search_bursts` {on_s, off_s}): while no hostile is within the tracking radar's
-  reach, the commander keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
+* **Emission discipline** (the limited regime, `docs/crew/16_EMISSION.md`; the older `doctrine.search_bursts` {on_s,
+  off_s}): once the commander has told his crew the regime, while no hostile is within the tracking radar's
+  reach, he keeps the search transmitter in bursts (the situational drills `hv_off`, `hv_on`: ВЫСОКОЕ only,
   the antenna turning); it stays on once one is near. Drills marked `situational` are never pulled into a plan by the
   drill master.
 * Anti-radiation missiles and the drill against them: §35.
@@ -651,8 +722,10 @@ search radar holds it as a small, fast mark; on the scope a mark faster than 450
 confirmed, without the four updates other ghost marks wait for (`EmSensorLink::FastClosing`).
 
 The classes: `agm45_class_shrike` (2-10 GHz broad head, no memory, 600 m/s, 40 km), `agm88a_class_harm` (2-20 GHz,
-tuned within 10 %, memory, 700 m/s, 25 km at low level), `kh58_class` (an H-band head, no memory assumed, 900 m/s,
-60 km). Every value is cited or marked an estimate in the file.
+tuned within 10 %, memory, 700 m/s, 25 km at low level), `agm78b_class_standard_arm` (the AGM-78B: a gimballed
+broadband head taken as 2-18 GHz, tuned within 15 %, a simple memory, 650 m/s, 90 km from altitude, a 97 kg warhead;
+the F-4G's ARM in a war before the HARM reached the USAF in 1987), `kh58_class` (an H-band head, no memory assumed,
+900 m/s, 60 km). Every value is cited or marked an estimate in the file.
 
 **Carriers (`ScenarioTarget::arms`, `ScenarioRunner::UpdateArms`).** A target with a warning receiver fires when it hears
 a radar in its weapon's band on the bearing of where its briefing has the radar (within about 20 deg), one its library
@@ -665,23 +738,31 @@ pp262-264).**
 
 * *The signs, seen by the senior operator on his scope* (the marks' motion over their last looks, never the truth): a
   smaller mark separating and coming at the vehicle much faster than any aircraft at zero parameter ("Пуск ПРР!
-  Азимут ..."); and, warned of ARMs (`doctrine.arm_threat`), a target that came at the battery at zero parameter turning
+  Азимут ..."); and, warned of ARMs (told the arm regime), a target that came at the battery at zero parameter turning
   away out at stand-off range. A mark lost between bursts and a new one where it was heading are one blip to him.
   A "basic" tier (recruit, class3) doesn't know the signs; the others may miss one (`miss_chance`, more under stress).
-  Not built: the tracking radar's indicators (the tracked pulse briefly growing, a smaller one separating) and the
-  launch seen on the TV.
+* *The signs on the tracking radar's indicators and on the TV* (`WatchTrackSigns`, 21 Oct 2026): while the tracking
+  radar radiates on a target, an ARM's own echo in its beam (the EM layer's look at the missile, `ArmEchoVisible`) more
+  than a pulse ahead of the target's (100 m: 1.5 lengths of the 0.45 us pulse) and within the indicator's sweep about
+  it (3 km), closing faster than any aircraft, is the operator's sign at his range indicator («От цели отделился импульс, идёт на нас — пуск ПРР!»,
+  `arm_launch_track`); with the TV on, a missile leaving the tracked target (within 1.5 km of it) inside the TV's field
+  while the TV sees the target is the deputy commander's («По ТОВ: пуск ПРР с цели!», `arm_launch_tv`). The commander
+  acts on either as on the scope's sign. The same tiers know them and may miss them. The distances are estimates. The
+  radar's own look decides: a HARM-class missile (0.08 m2, an estimate) shows on the indicators only when fired from
+  about 8 km or nearer, for the few tenths of a second before its loft takes it out of the 1 deg beam; from 12 km its
+  echo is 8 dB, below detection (`test_arm_drill.cpp`).
 * *The commander, on hearing a sign*: the missile in the air is guided to its burst, then every transmitter off at
   once (`order_drop_target`, `order_emcon_off`, `order_ssc_off`; a capture under way is stopped) for `arm_silence_s`
   (60 s, an estimate), held so until it is over; radiation then comes back through the EMCON path. He reports the
   attack up the battery net ("21: пуск ПРР, азимут ..."). Having seen the sign himself the senior operator gives no more
   bursts.
-* *The least emission under the threat* (`doctrine.arm_threat`): the senior operator keeps the search transmitter's high
-  voltage on for 2 turns after every `arm_search_off_turns` (3; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
+* *The least emission under the threat* (the regime `arm`, once his commander has told him: `docs/crew/16_EMISSION.md`;
+  the older `doctrine.arm_threat`): the senior operator keeps the search transmitter's high
+  voltage on for 2 turns after every 3 (the regime's `off_turns`; the textbook's 3-4), with ЛУЧ АВТ. I–II so that each
   two-turn burst lights both low beams (under АВТ. I–III the low beam is dark in every third burst), and off while the
   tracking radar holds a target alone (5 s); the commander has the tracking transmitter put on a target only from Table
   7.3's far-edge range for its speed as the scope shows it (24 km over 300 m/s, 20 km under) and off after the burst.
-  Not built: the TV for tracking under the threat (the angles on the TV without НЛЦ, range by short bursts of the
-  tracking radar, p264).
+  Not built: the TV for tracking under the threat («использования ТОВ для сопровождения цели», p262).
 * *Relocation* (`doctrine.relocate_after_arm`): a position is changed only on the regiment commander's order (p238)
   and the battery commander's map carries the ARM launch lines (p244), so the attack is reported up and the regiment's
   standing order moves the battery when the fight is over: the crew stows (`order_march`), the battery moves to the

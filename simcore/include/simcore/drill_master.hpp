@@ -12,6 +12,9 @@
 //      to get the ideal timeline: every seat's actions with their times, and when the goal is reached;
 //   4. from that, gives each seat's best next move now (what, why, when) and the cost of any move (how much later the
 //      goal comes after it).
+// A control worked outside the vehicle is a job at a place (data/vehicles/<system>.json, crew_mobility.hpp): given the
+// jobs and the way's times (SetOutside), the ideal run walks the man out to it and back as the crew's own do, so its
+// times and the cost of a job count the walk (roadmap 8.14, docs/crew/13_OUT_OF_THE_VEHICLE.md).
 // It is deterministic and explainable: the same state gives the same answer, and every answer is a chain of
 // conditions in the data. It plans from the console and the crew data, never from the truth of the world: a world
 // fact it can't make true (a target captured, a target in the zone) is reported as what the run waits for.
@@ -19,6 +22,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -100,6 +104,27 @@ public:
 
     double ReactionS() const { return reaction_s_; }
 
+    // The ways out (8.14): each seat's jobs outside, the seconds a seat's man takes from one place to another ("" his
+    // seat) at a reference pace, and where each man is now with the seconds until he gets there ("" and 0: seated).
+    using WalkTime = std::function<double(const std::string& station, const std::string& from, const std::string& to)>;
+    using WhereNow = std::function<std::pair<std::string, double>(const std::string& station)>;
+    void SetOutside(std::map<std::string, std::vector<OutsideJob>> jobs, WalkTime walk, WhereNow where = nullptr) {
+        jobs_ = std::move(jobs);
+        walk_ = std::move(walk);
+        where_ = std::move(where);
+    }
+    // The seconds of the way out to the place a control is worked at and back (0 at the seat, or without the ways).
+    double WalkFor(const std::string& control) const {
+        if (!walk_) return 0.0;
+        const std::string station = Station(control);
+        const auto it = jobs_.find(station);
+        if (it == jobs_.end()) return 0.0;
+        for (const OutsideJob& j : it->second) {
+            if (j.control == control) return walk_(station, std::string(), j.place) + walk_(station, j.place, std::string());
+        }
+        return 0.0;
+    }
+
     // A task as the drill master aims at it: its conditions, its preferred ways, and the drills of the crew data's
     // orders that ask for it (К бою's drills for "ready, halted"), which win over other drills that would also do.
     DrillGoal GoalFor(const CrewTask& task) const {
@@ -175,15 +200,32 @@ public:
             std::string station;
             std::size_t last_index = 0;
             std::string last_proc;
+            std::string at;         // where his body is ("" his seat)
+            std::string going;      // where he is walking to
+            double walk_left_s = 0.0;
+            bool walking = false;
         };
         std::vector<Hand> hands;
         std::vector<std::pair<std::string, double>> world_due;  // inputs set by a seat's action, and when
         for (const DrillPlan::Seat& s : plan.seats) {
-            hands.push_back({CrewMember("ghost " + s.station, s.station, reaction_s_), s.station, 0, std::string()});
+            hands.push_back({CrewMember("ghost " + s.station, s.station, reaction_s_), s.station, 0, std::string(), std::string(), std::string(), 0.0, false});
             CrewMember& m = hands.back().member;
             if (crew_ != nullptr) {  // the perfect crewman still gets up for a control out of seated reach
                 const CrewSeatDef* seat = crew_->FindSeat(s.station);
                 if (seat != nullptr && !seat->stand_for.empty()) m.SetStanding(seat->stand_for, crew_->stand_s, crew_->sit_s);
+            }
+            if (walk_) {  // his jobs outside, and where he is now (8.14)
+                const auto jobs = jobs_.find(s.station);
+                if (jobs != jobs_.end()) m.SetOutsideJobs(jobs->second);
+                if (where_) {
+                    const std::pair<std::string, double> now_at = where_(s.station);
+                    Hand& h = hands.back();
+                    h.going = now_at.first;
+                    h.walk_left_s = now_at.second;
+                    h.walking = now_at.second > 0.0;
+                    h.at = h.walking ? std::string() : now_at.first;
+                    m.SetWhere(h.walking ? h.going : h.at, h.walking);
+                }
             }
             std::vector<Procedure> later;
             for (std::size_t i = 0; i < s.loose.size(); ++i) {  // loose actions with nothing to wait for come first
@@ -228,6 +270,21 @@ public:
             }
             ghost.panel.ReleaseMomentaries();
             for (Hand& h : hands) {
+                if (walk_) {  // his body on its way: out to a job, back to his seat (the crew's own ways, their times)
+                    if (h.walking) {
+                        h.walk_left_s -= dt;
+                        if (h.walk_left_s <= 1e-9) {
+                            h.walking = false;
+                            h.at = h.going;
+                        }
+                    } else if (h.member.WantedPlace() != h.at) {
+                        h.going = h.member.WantedPlace();
+                        h.walk_left_s = walk_(h.station, h.at, h.going);
+                        h.walking = h.walk_left_s > 0.0;
+                        if (!h.walking) h.at = h.going;
+                    }
+                    h.member.SetWhere(h.walking ? h.going : h.at, h.walking);
+                }
                 const std::string proc_before = h.member.IsBusy() ? h.member.Tracker().GetProcedure().id : std::string();
                 const std::size_t index_before = h.member.IsBusy() ? h.member.Tracker().NextIndex() : 0;
                 const Procedure* p_before = h.member.IsBusy() ? &h.member.Tracker().GetProcedure() : nullptr;
@@ -387,7 +444,7 @@ private:
         if (!seen.insert(k).second) return 0.0;
         switch (c.kind) {
             case Condition::Kind::ControlEquals:
-            case Condition::Kind::ControlAtLeast: return reaction_s_;
+            case Condition::Kind::ControlAtLeast: return reaction_s_ + WalkFor(c.id);  // a job outside: the way there and back
             case Condition::Kind::InputIs: {
                 const CrewFact* f = crew_ != nullptr ? crew_->FindFact(c.id) : nullptr;
                 if (f == nullptr) return 1e6;
@@ -627,7 +684,7 @@ private:
             }
             return console_.procedures.size();
         };
-        std::sort(procs.begin(), procs.end(), [&](const std::string& a, const std::string& b) { return index_of(a) < index_of(b); });
+        std::stable_sort(procs.begin(), procs.end(), [&](const std::string& a, const std::string& b) { return index_of(a) < index_of(b); });
         for (std::size_t pass = 0; pass < procs.size(); ++pass) {
             bool swapped = false;
             for (std::size_t i = 0; i + 1 < procs.size(); ++i) {
@@ -700,6 +757,9 @@ private:
     }
 
     const ConsoleData& console_;
+    std::map<std::string, std::vector<OutsideJob>> jobs_;
+    WalkTime walk_;
+    WhereNow where_;
     const CrewData* crew_;
     double reaction_s_;
 };

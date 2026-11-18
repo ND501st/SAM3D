@@ -66,16 +66,21 @@ add_executable(simcore_tests
   tests/test_crew_seats.cpp
   tests/test_scope_feed.cpp
   tests/test_battery.cpp
+  tests/test_battery_life.cpp
+  tests/test_battery_mission.cpp
+  tests/test_after_action.cpp
   tests/test_comms.cpp
   tests/test_voice_comms.cpp
   tests/test_fuel.cpp
   tests/test_orientation.cpp
   tests/test_radio_setup.cpp
   tests/test_threats.cpp
+  tests/test_flight.cpp
   tests/test_crew.cpp
   tests/test_crew_body.cpp
   tests/test_crew_mobility.cpp
   tests/test_crew_voice.cpp
+  tests/test_crew_talk.cpp
   tests/test_crew_training.cpp
   tests/test_crew_systems.cpp
   tests/test_pu12m_console.cpp
@@ -91,12 +96,51 @@ add_executable(simcore_tests
   tests/test_em_threats.cpp
   tests/test_em_arm.cpp
   tests/test_arm_drill.cpp
+  tests/test_emission_regime.cpp
   tests/test_ranges_history.cpp
   tests/test_instructor.cpp
   tests/test_air_war.cpp
+  tests/test_packages_live.cpp
+  tests/test_c2.cpp
+  tests/test_opportunity.cpp
+  tests/test_hot_phase.cpp
+  tests/test_routes.cpp
+  tests/test_flights.cpp
+  tests/test_levels.cpp
+  tests/test_air_radio.cpp
+  tests/test_perception.cpp
+  tests/test_perception_em.cpp
+  tests/test_reactions.cpp
+  tests/test_dynamic_campaign.cpp
+  tests/test_ground.cpp
+  tests/test_map_obstacles.cpp
+  tests/test_damage.cpp
+  tests/test_mission_session.cpp
+  tests/test_outcomes.cpp
+  tests/test_comms_jamming.cpp
+  tests/test_director.cpp
+  tests/test_regiment.cpp
+  tests/test_picture_lost.cpp
+  tests/test_logistics.cpp
+  tests/test_weapons.cpp
+  tests/test_air_combat.cpp
+  tests/test_air_fight.cpp
+  tests/test_own_air.cpp
   tests/test_command.cpp
   tests/test_scenery.cpp
-  tests/test_world_map.cpp)
+  tests/test_world_map.cpp
+  tests/test_light.cpp
+  tests/test_country_map.cpp
+  tests/test_nav.cpp
+  tests/test_fx_acoustics.cpp
+  tests/test_fx_bridge.cpp
+  tests/test_fx_contrails.cpp
+  tests/test_fx_events.cpp
+  tests/test_fx_explosions.cpp
+  tests/test_fx_trajectories.cpp
+  tests/test_munitions.cpp
+  tests/test_map_meshes.cpp
+  tests/test_map_dressing.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
@@ -123,6 +167,21 @@ simcore_configure_target(battery_link_demo)
 add_test(NAME battery_link_demo
          COMMAND battery_link_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/battery_link_practice.json"
                  "${CMAKE_CURRENT_SOURCE_DIR}/../data" battery_link.acmi)
+
+# A battery mission headless (roadmap 14): the regiment's task to «к бою готова» by its ready-by.
+add_executable(mission_demo examples/mission_demo.cpp)
+simcore_configure_target(mission_demo)
+add_test(NAME mission_demo
+         COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data")
+# The same with the Pact's air war on its clock (roadmap 15.2, 15.3): its package comes in live on the march.
+add_test(NAME mission_demo_war
+         COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" --war warsaw_pact 1 1)
+# The task held through the whole day (15.2): the dusk and dawn packages, the regiment's tasking on its estimate.
+add_test(NAME mission_demo_day
+         COMMAND mission_demo "${CMAKE_CURRENT_SOURCE_DIR}/../data/scenarios/pu12m_mission_cover.json"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/../data" --war warsaw_pact 1 1 --hours 24)
 
 add_executable(scenario_demo examples/scenario_demo.cpp)
 simcore_configure_target(scenario_demo)
@@ -168,9 +227,46 @@ simcore_configure_target(em_bench)
 add_executable(air_war_balance examples/air_war_balance.cpp)
 simcore_configure_target(air_war_balance)
 
+add_executable(air_war_bench examples/air_war_bench.cpp)
+simcore_configure_target(air_war_bench)
+# What the air battle costs a step, and what the levels of detail save (roadmap B12, docs/air_battle/02 5.4).
+add_executable(air_battle_bench examples/air_battle_bench.cpp)
+simcore_configure_target(air_battle_bench)
+# What the pilots' perception costs per step (roadmap B3, docs/air_battle/03_PERCEPTION.md 5.7).
+add_executable(perception_bench examples/perception_bench.cpp)
+simcore_configure_target(perception_bench)
+add_executable(aaa_bench examples/aaa_bench.cpp)
+simcore_configure_target(aaa_bench)
+
 # The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
-# as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact.
+# as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact,
+# and of NATO on the whole nation's theatre with its raids on the Kesmark map's ground (the nation on the map, N6).
 add_executable(air_war_demo examples/air_war_demo.cpp)
 simcore_configure_target(air_war_demo)
 add_test(NAME air_war_demo
          COMMAND air_war_demo warsaw_pact 2 "${CMAKE_CURRENT_SOURCE_DIR}/../data" "${CMAKE_CURRENT_BINARY_DIR}/air_war" 1)
+add_test(NAME air_war_demo_nation
+         COMMAND air_war_demo --theatre theatre_pannonia_nation.json nato 2 "${CMAKE_CURRENT_SOURCE_DIR}/../data"
+                 "${CMAKE_CURRENT_BINARY_DIR}/air_war_nation" 1 maps/kesmark_range.json)
+
+# The generated maps: a district's layout (data/maps/kesmark_range.json, docs/TEST_RANGE.md) and the whole country's
+# (data/maps/pannonia.json, docs/COUNTRY_MAP.md), as JSON for tools/map_view.py; the country's also as routes over its
+# roads, railways and pipelines with bridges cut.
+add_executable(map_dump examples/map_dump.cpp)
+simcore_configure_target(map_dump)
+add_executable(country_dump examples/country_dump.cpp)
+simcore_configure_target(country_dump)
+add_test(NAME country_dump_route
+         COMMAND country_dump "${CMAKE_CURRENT_SOURCE_DIR}/../data" maps/pannonia.json --route road 9 -1 68 12 b_ralje@rava)
+
+# The route service against the map's data (roadmap G1.6): the anchors off the road net or cut off from it, listed; the
+# graph's build and a sample of routes timed.
+add_executable(nav_check examples/nav_check.cpp)
+simcore_configure_target(nav_check)
+add_test(NAME nav_check COMMAND nav_check "${CMAKE_CURRENT_SOURCE_DIR}/../data" 200)
+
+# Roadmap R5, nothing under the map: the testbed's hour and every map mission's ten minutes, everything judged against
+# the ground once a second (simcore/ground_check.hpp). The test plays the Kesmark range's test scenario two minutes.
+add_executable(ground_check examples/ground_check.cpp)
+simcore_configure_target(ground_check)
+add_test(NAME ground_check COMMAND ground_check "${CMAKE_CURRENT_SOURCE_DIR}/../data" 120 scenarios/kesmark_range_test.json)

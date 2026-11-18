@@ -94,7 +94,7 @@ Each faction has a hand-written staff with a background and a line of biography 
 | Rava Front | Ivo Kranjc, ex-airline captain, flies the night raids, keeps a list | Tomislav Babic, aero-club instructor, loose lips | Mirko Juric (informers) |
 | Noric Republic | Brigadier Leopold Hainisch, cautious, loss-shy | Oberst Ernst Pichler, ex-display leader, dawn and low | Rudolf Moser (border service), Walter Steiner (helicopters, leads in person) |
 | Warsaw Pact | Gen-Maj Viktor Sorokin, massed blows, by the book | Col Arkady Belyaev, dawn, the same corridor, to the minute | Voronin (ELINT believer), Akhmetov (MiG-25BMs, ARM hoarder), Kuznetsov (political, paper tiger), Tarasenko (Su-24, night), Gribov (MiG-23, grudges) |
-| NATO | Maj Gen Thomas Halloran, suppression first, above the flak | Oberst Dieter Kessler, feints, never the same way twice, decoys | Pryce (photographs, sceptic), Duquesne (SEAD, ARM hoarder), Becker (Weasels, press-on, grudges), Ferraro (Tornados, dawn, low) |
+| NATO | Maj Gen Thomas Halloran, suppression first, low level | Oberst Dieter Kessler, feints, never the same way twice, decoys | Pryce (photographs, sceptic), Duquesne (SEAD, ARM hoarder), Becker (Weasels, press-on, grudges), Ferraro (Tornados, dawn, low) |
 
 ## 6. How the player perceives them
 

@@ -65,6 +65,8 @@ struct WeatherPreset {
     double veer_deg = 25.0;           // how far the wind turns (clockwise) from the surface to the top of the boundary layer
     std::vector<WindDef> winds_aloft; // ascending by altitude
     std::vector<CloudLayerDef> layers;
+    double upper_rh_pct = -1.0;       // optional: relative humidity over water above the boundary layer, between the
+                                      // clouds (fx/air.hpp, for contrails); < 0: not given (fx/air.hpp's 40 %)
 };
 
 // Kunkel (1984): the extinction coefficient of a water cloud of liquid water content `lwc_g_m3`, per km.
@@ -121,6 +123,9 @@ public:
     const CloudLayerDef& LayerDef(std::size_t i) const { return layers_[i].def; }
     double LayerCover(std::size_t i) const { return layers_[i].cover; }
     double TemperatureOffsetK() const { return temperature_offset_k_; }
+    double GroundM() const { return ground_m_; }
+    // The preset's humidity above the boundary layer (%, over water), or < 0 when it gives none.
+    double UpperRhPct() const { return preset_.upper_rh_pct; }
 
     // Where the clouds have drifted to: the field moves with the wind at each layer's height.
     void SetTime(double t_s) { time_s_ = t_s; }
@@ -369,7 +374,7 @@ private:
         return d;
     }
 
-    WeatherPreset preset_{"standard", "Standard atmosphere, calm", "", 15.0, 5.0, 1013.25, 40.0, 0.0, {}, 100.0, 1000.0, 25.0, {}, {}};
+    WeatherPreset preset_{"standard", "Standard atmosphere, calm", "", 15.0, 5.0, 1013.25, 40.0, 0.0, {}, 100.0, 1000.0, 25.0, {}, {}, -1.0};
     double ground_m_ = 0.0;
     double temperature_offset_k_ = 0.0;
     double roughness_m_ = 0.1;

@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <map>
 #include <random>
@@ -74,6 +75,21 @@
 namespace simcore {
 
 // Game-balance numbers. Every field is loaded from data/gameplay/<system>.json.
+// Where a vehicle's search antenna stands (above sea level): `antenna_height_m` over the ground under the vehicle at
+// `position` (ENU; its east and north), the same rule for the player's vehicle (EngagementModel::Measure) and the
+// battery's other launchers (battery_fire.hpp); with no height (0), the vehicle's own point.
+inline double SearchAntennaAltitude(const Terrain& terrain, const LocalFrame& frame, const Vec3& position, double antenna_height_m) {
+    return antenna_height_m > 0.0 ? terrain.HeightAt(position.x, position.y) + antenna_height_m : frame.AltitudeOf(position);
+}
+
+// Whether a search antenna there sees `target` over the ground, the woods and the buildings (radar.hpp HasLineOfSight,
+// sampled every 100 m, the footprints between the samples at their own spacing).
+inline bool SearchAntennaSees(const Terrain& terrain, const LocalFrame& frame, const Vec3& position, double antenna_height_m,
+                              const Vec3& target) {
+    return HasLineOfSight(terrain, position, SearchAntennaAltitude(terrain, frame, position, antenna_height_m), target,
+                          frame.AltitudeOf(target), 100.0);
+}
+
 struct EngagementTuning {
     std::string system_id;
     // Firing zone, for the ЦЕЛЬ В ЗОНЕ / ВНИМАНИЕ lamps and the outcome's zone factor.
@@ -137,6 +153,9 @@ struct EngagementTuning {
     double tv_size_min_mils = 0.0;
     // Search radar.
     double clutter_altitude_m = 0.0;
+    // Its antenna's height over the ground under the vehicle, for the line of sight (search.antenna_height_m, as
+    // data/em/<system>.json gives the radar's). 0: from the vehicle's own point (a tuning built by hand).
+    double search_antenna_height_m = 0.0;
     // Tracking.
     double az_tolerance_deg = 0.0;
     double range_gate_m = 0.0;
@@ -176,6 +195,10 @@ struct EngagementTuning {
     std::map<std::string, double> method_factor;
     // A missile launched with no range known and ПОМЕХА off: the fuse is armed by range, and there is none (1 = no effect).
     double no_range_fuse_factor = 1.0;
+    // The manoeuvre counts over the last manoeuvre_window_s before the missile's arrival only (roadmap B4,
+    // docs/air_battle/04_REACTIONS.md 6.3: a pull in the last seconds gains most, a break flown at launch little).
+    // 0: over the whole flight (as before).
+    double manoeuvre_window_s = 0.0;
     // Chance of a hit against a low target, as a factor on the class's chance: points (height AGL m, factor), ascending.
     // By class; "default" is used for a class without its own.
     std::map<std::string, std::vector<std::pair<double, double>>> low_altitude;
@@ -431,10 +454,12 @@ public:
             }
             t.has_arm_table = true;
         }
-        if (!Group(root, "search", {"clutter_altitude_m"}, g) ||
-            !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0)) {
+        if (!Group(root, "search", {"clutter_altitude_m", "antenna_height_m"}, g) ||
+            !Num(*g, "search", "clutter_altitude_m", t.clutter_altitude_m, 0.0) ||
+            !OptionalNumber(*g, "search", "antenna_height_m", t.search_antenna_height_m)) {
             return false;
         }
+        if (t.search_antenna_height_m < 0.0) return Fail("search.antenna_height_m", "must be >= 0");
         if (!Group(root, "track",
                    {"az_tolerance_deg", "range_gate_m", "lock_time_s", "min_altitude_m", "clutter_altitude_m",
                     "tv_max_range_m", "max_angular_rate_deg_s", "em_capture_looks", "em_capture_hits"},
@@ -479,7 +504,8 @@ public:
         }
         if (!Group(root, "outcome",
                    {"hit_chance", "low_altitude", "tv_factor", "outside_zone_factor", "manoeuvre_penalty_per_deg_s",
-                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor"},
+                    "manoeuvre_factor_min", "deviation_penalty", "deviation_factor_min", "method_factor", "no_range_fuse_factor",
+                    "manoeuvre_window_s"},
                    g) ||
             !Factor(*g, "tv_factor", t.tv_factor) || !Factor(*g, "outside_zone_factor", t.outside_zone_factor) ||
             !Num(*g, "outcome", "manoeuvre_penalty_per_deg_s", t.manoeuvre_penalty_per_deg_s, 0.0) ||
@@ -515,6 +541,7 @@ public:
             }
         }
         if (g->Find("no_range_fuse_factor") != nullptr && !Factor(*g, "no_range_fuse_factor", t.no_range_fuse_factor)) return false;
+        if (g->Find("manoeuvre_window_s") != nullptr && !Num(*g, "outcome", "manoeuvre_window_s", t.manoeuvre_window_s, 0.0)) return false;
         if (!LoadLowAltitude(*g, t)) return false;
         if (root.Find("kill_assessment") != nullptr && !LoadKillAssessment(root, t.kill)) return false;
         if (root.Find("group") != nullptr && !LoadGroup(root, t.group)) return false;
@@ -746,7 +773,9 @@ struct EngagementTarget {
     bool evade_on_launch = false;
     double evade_turn_rate_rad_s = 0.0;
     bool friendly = false;  // replies to IFF interrogation
+    int iff_code = 0;       // the code its transponder is set to now (roadmap B10; replies only to the same; -1 off)
     double size_m = 4.5;    // critical dimension for the TV sight (em/optical.hpp; a fighter's side, estimate)
+
     double span_m = 0.0;    // its span as the TV sight sees it (0: the tuning's for its class)
 };
 
@@ -929,24 +958,33 @@ public:
     }
 
     // Missiles in flight for display: an illustrative straight path from the launch point to the target,
-    // advanced by the fraction of the flight time elapsed. Not a flight path.
+    // advanced by the fraction of the flight time elapsed. Not a flight path. `launch_t_s` and `flight_time_s` (the
+    // time it was given to the meeting) let the game phase the motor (fx/trajectories.hpp).
     struct MissileView {
         int number = 0;
         Vec3 position;
         Vec3 velocity;
+        double launch_t_s = 0.0;
+        double flight_time_s = 0.0;
     };
 
     std::vector<MissileView> MissilesInFlight(double t, World& world, const std::vector<EngagementTarget>& targets) const {
         std::vector<MissileView> out;
         for (const Shot& s : shots_) {
             if (s.done) continue;
-            const Aircraft* a = TargetAircraft(world, targets, s.target_id);
-            if (a == nullptr) continue;
-            const double f = Clamp((t - s.launch_t) / s.flight_time_s, 0.0, 1.0);
-            const Vec3 path = a->position - s.launch_pos;
-            out.push_back({s.number, s.launch_pos + path * f, path / s.flight_time_s});
+            MissileView v;
+            if (ViewOf(s, t, world, targets, v)) out.push_back(v);
         }
         return out;
+    }
+
+    // One shot's display state at `t` on the same illustrative line, finished or not (its end, for the presentation
+    // feed: fx/events.hpp). False for an unknown number or a shot with no target.
+    bool ShotView(int number, double t, World& world, const std::vector<EngagementTarget>& targets, MissileView& out) const {
+        for (const Shot& s : shots_) {
+            if (s.number == number) return ViewOf(s, t, world, targets, out);
+        }
+        return false;
     }
 
     // Tacview: an illustrative missile path (straight line from the unit to the target), not a flight path.
@@ -984,6 +1022,11 @@ public:
     void SetUnitPosition(const Vec3& unit_position) { unit_ = unit_position; }
     // The hull's true heading, degrees clockwise from north (driven by the player or the scenario).
     void SetUnitHeading(double heading_deg) { unit_heading_deg_ = heading_deg; }
+    // The code the interrogator asks on: the one the crew set from the code table that reached it (roadmap B10). A
+    // transponder on another code does not reply.
+    void SetIffCode(int code) { iff_code_ = code; }
+    int IffCode() const { return iff_code_; }
+
     // The light and the air for the TV sight (scenario "environment"; em/optical.hpp).
     void SetOpticalConditions(const em::OpticalConditions& c) { optics_ = c; }
     const em::OpticalConditions& OpticalConditions() const { return optics_; }
@@ -1012,6 +1055,12 @@ public:
         qc_commanded_deg_ = Wrap360(qc_deg);
     }
     void ClearCommandedQc() { qc_known_ = false; }
+    // A target's pilot dispensed chaff at `t_s` (roadmap B4, without the EM layer): a missile reaching it within
+    // `window_s` after has its chance times `factor`.
+    void NoteChaff(const std::string& target_id, double t_s, double factor, double window_s) { chaff_[target_id] = ChaffNote{t_s, factor, window_s}; }
+    // Damage states (roadmap R1, B4): asked at each hit whether it leaves the aircraft flying on, heavily damaged (the
+    // runner draws it); unset, every hit destroys.
+    void SetHitSurvives(std::function<bool(const std::string&, int)> f) { hit_survives_ = std::move(f); }
     bool QcKnown() const { return qc_known_; }
     double CommandedQcDeg() const { return qc_commanded_deg_; }
     // The site's latitude (degrees, north positive), for the gyro's drift, and the gyro's own drift (deg/h, signed).
@@ -1116,7 +1165,9 @@ private:
         double agl_m = 0.0;
         double true_az_deg = 0.0;  // from north; az_deg is in the crew's frame
         bool friendly = false;
+        int iff_code = 0;
         double size_m = 4.5;  // critical dimension for the TV
+
         double closing_mps = 0.0;
         double speed_mps = 0.0;
         double parameter_m = 0.0;  // crossing parameter: distance from the unit to the target's course, over the ground
@@ -1124,8 +1175,30 @@ private:
         Vec3 velocity;
         double angular_rate_deg_s = 0.0;
         double turn_rate_deg_s = 0.0;
-        bool los = false;
-        double cloud_transmission = 1.0;  // the light the cloud lets through between the unit and the target (weather.hpp)
+        // The line of sight and the cloud between the unit and the target, worked out when first asked this step from
+        // where both were at Measure (roadmap B12: a far aircraft's profile is thousands of ground samples, and most
+        // steps nobody asks). The same answer as working them out at Measure.
+        bool Los() const {
+            if (los_state < 0) {
+                los_state = terrain != nullptr && HasLineOfSight(*terrain, from, from_alt_m, pos, alt_m, 100.0) ? 1 : 0;
+            }
+            return los_state == 1;
+        }
+        double CloudTransmission() const {
+            if (cloud_state < 0.0) {
+                cloud_state = weather != nullptr && weather->HasClouds() ? weather->CloudTransmission(from, from_unit_alt_m, pos, alt_m) : 1.0;
+            }
+            return cloud_state;
+        }
+        const Terrain* terrain = nullptr;
+        const Weather* weather = nullptr;
+        Vec3 from;                   // the unit, at Measure
+        double from_alt_m = 0.0;     // its search antenna's altitude
+        double from_unit_alt_m = 0.0;
+        Vec3 pos;                    // the target, at Measure
+        double alt_m = 0.0;
+        mutable int los_state = 0;   // -1 not yet worked out, 0 no, 1 yes
+        mutable double cloud_state = 1.0;  // < 0 not yet worked out
         std::vector<std::array<double, 3>> history;  // (time, az, el) of the last few seconds, for a lagging operator
         Vec3 prev_velocity;
         Vec3 prev_los_dir;
@@ -1182,16 +1255,34 @@ private:
         return nullptr;
     }
 
+    // A shot's place on its illustrative line at `t` (MissilesInFlight, ShotView).
+    static bool ViewOf(const Shot& s, double t, World& world, const std::vector<EngagementTarget>& targets, MissileView& out) {
+        if (s.flight_time_s <= 0.0) return false;
+        const Aircraft* a = TargetAircraft(world, targets, s.target_id);
+        if (a == nullptr) return false;
+        const double f = Clamp((t - s.launch_t) / s.flight_time_s, 0.0, 1.0);
+        const Vec3 path = a->position - s.launch_pos;
+        out.number = s.number;
+        out.position = s.launch_pos + path * f;
+        out.velocity = path / s.flight_time_s;
+        out.launch_t_s = s.launch_t;
+        out.flight_time_s = s.flight_time_s;
+        return true;
+    }
+
     void Measure(double dt, World& world, const std::vector<EngagementTarget>& targets) {
         const LocalFrame& frame = world.Frame();
         const Terrain& terrain = world.GetTerrain();
         const double unit_alt = frame.AltitudeOf(unit_);
+        const double antenna_alt = SearchAntennaAltitude(terrain, frame, unit_, tuning_.search_antenna_height_m);
         for (const EngagementTarget& tg : targets) {
             Geometry& g = geo_[tg.id];
             g.target_class = tg.target_class;
             g.span_m = tg.span_m;
             g.friendly = tg.friendly;
+            g.iff_code = tg.iff_code;
             g.size_m = tg.size_m;
+
             const Aircraft* a = tg.world_id >= 0 ? world.FindAircraft(tg.world_id) : nullptr;
             g.alive = a != nullptr && a->alive;
             if (!g.alive) continue;
@@ -1202,8 +1293,15 @@ private:
             g.az_deg = Wrap180(g.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
             g.el_deg = RadToDeg(ElevationOf(los));
             g.agl_m = alt - terrain.HeightAt(a->position.x, a->position.y);
-            g.los = HasLineOfSight(terrain, unit_, unit_alt, a->position, alt, 100.0);
-            g.cloud_transmission = world.GetWeather().HasClouds() ? world.GetWeather().CloudTransmission(unit_, unit_alt, a->position, alt) : 1.0;
+            g.terrain = &terrain;
+            g.weather = &world.GetWeather();
+            g.from = unit_;
+            g.from_alt_m = antenna_alt;
+            g.from_unit_alt_m = unit_alt;
+            g.pos = a->position;
+            g.alt_m = alt;
+            g.los_state = -1;
+            g.cloud_state = -1.0;
             const Vec3 dir = los.Normalized();
             g.rel = los;
             g.velocity = a->velocity;
@@ -1261,7 +1359,8 @@ private:
         for (const EngagementTarget& tg : targets) {
             if (tg.world_id < 0) continue;
             const Aircraft* a = world.FindAircraft(tg.world_id);
-            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly);
+            if (a != nullptr) em_->SyncTarget(tg.id, a->alive, a->position, a->velocity, a->rcs_m2, tg.friendly, tg.iff_code);
+
         }
         const SearchSensorDef& s = console.search;
         const Equipment& eq = console.equipment;
@@ -1343,7 +1442,8 @@ private:
                                    MeetingOf(console, s.target_id, g)});
                 continue;
             }
-            if (g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
+            const bool in_window = tuning_.manoeuvre_window_s <= 0.0 || t + 1e-9 >= s.launch_t + s.flight_time_s - tuning_.manoeuvre_window_s;
+            if (in_window && g.turn_rate_deg_s > s.max_turn_deg_s) s.max_turn_deg_s = g.turn_rate_deg_s;
             if (t + 1e-9 < s.launch_t + s.flight_time_s) continue;
             if (s.out_of_reach) {
                 Finish(s, false);
@@ -1371,7 +1471,11 @@ private:
             const double guidance = tuning_.MethodFactor(EngagementTuning::ToString(s.guidance));
             const bool unfused = !s.range_known && s.guidance != EngagementTuning::GuidanceMethod::Jammer;
             const double fuse = unfused ? tuning_.no_range_fuse_factor : 1.0;
-            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse;
+            // Chaff the target dispensed in the window before the missile's arrival (roadmap B4; without the EM layer).
+            double chaff = 1.0;
+            const auto ch = chaff_.find(s.target_id);
+            if (ch != chaff_.end() && ch->second.t_s <= t + 1e-9 && t - ch->second.t_s <= ch->second.window_s) chaff = ch->second.factor;
+            const double p = base * method * zone * manoeuvre * crew * altitude * aim * guidance * fuse * chaff;
             char aim_text[160] = "";  // only a TV shot is aimed by hand
             if (s.method == TrackMethod::Tv && tuning_.has_tv_manual) {
                 std::snprintf(aim_text, sizeof(aim_text), " x TV aim %.2f (%.2f deg off the crosshair)", aim, aim_error_deg);
@@ -1384,19 +1488,29 @@ private:
                 const std::size_t n = std::strlen(aim_text);
                 std::snprintf(aim_text + n, sizeof(aim_text) - n, " x fuse %.2f (no range, ПОМЕХА off)", fuse);
             }
+            if (chaff != 1.0) {
+                const std::size_t n = std::strlen(aim_text);
+                std::snprintf(aim_text + n, sizeof(aim_text) - n, " x chaff %.2f", chaff);
+            }
             const double draw = Uniform01(rng);
             const bool hit = draw < p;
+            // With damage states (roadmap R1, B4) a hit may leave it heavily damaged and flying on (the runner's draw).
+            const bool survives = hit && hit_survives_ && hit_survives_(s.target_id, s.number);
             char detail[480];
             std::snprintf(detail, sizeof(detail),
                           "%s: chance %.2f = %s %.2f x %s track %.2f x zone %.2f x manoeuvre %.2f (%.0f deg/s) x "
                           "crew %.2f (%d mistakes) x height %.2f (%.0f m up)%s; draw %.2f",
                           hit ? "HIT" : "MISS", p, g.target_class.c_str(), base, ToString(s.method), method, zone,
                           manoeuvre, s.max_turn_deg_s, crew, mistakes, altitude, g.agl_m, aim_text, draw);
+            if (survives) {
+                const std::size_t n = std::strlen(detail);
+                std::snprintf(detail + n, sizeof(detail) - n, "; heavily damaged, it flies on");
+            }
             log.Record({t, hit ? DebriefEntry::Kind::Hit : DebriefEntry::Kind::Miss, who, s.target_id, detail});
             Finish(s, hit);
             events_.push_back({hit ? EngagementEvent::Kind::Hit : EngagementEvent::Kind::Miss, t, s.target_id, g.az_deg, g.range_m, s.method,
                                std::string(), s.number, MeetingOf(console, s.target_id, g)});
-            if (hit) {
+            if (hit && !survives) {
                 Aircraft* a = TargetAircraft(world, targets, s.target_id);
                 if (a != nullptr) a->alive = false;
             }
@@ -1444,7 +1558,7 @@ private:
         }
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.los || g.range_m < window.first || g.range_m > window.second) continue;
+            if (!g.alive || g.range_m < window.first || g.range_m > window.second || !g.Los()) continue;
             if (mti ? g.range_m > d.mti_max_range_m : g.agl_m < tuning_.clutter_altitude_m) continue;
             picture_.push_back({kv.first, g.range_m, g.az_deg, g.el_deg});
             if (seen_by_search_.insert(kv.first).second) {
@@ -1638,6 +1752,25 @@ public:
         value = it->second.value;
         return true;
     }
+    // Whether the equipment turns this hand wheel itself now, and why (nullptr: a hand turns it): the tracking servo on a
+    // radar lock (the angles, and the range while the radar has it), the elevation search scanning the antenna while
+    // nothing is tracked, ПОЛУАВТОМАТ's range. A hand on it changes nothing then; the helper offers no such wheel.
+    const char* WheelDrivenBy(const ConsoleData& console, const std::string& wheel) const {
+        const TrackSensorDef& d = console.track;
+        const bool angle = wheel == d.az_wheel || wheel == d.el_wheel;
+        if ((method_ == TrackMethod::Radar || method_ == TrackMethod::RadarOnJam) && !tracked_.empty()) {
+            if (angle) return "the tracking radar holds the target: its servo turns the antenna";
+            if (wheel == d.range_wheel && method_ == TrackMethod::Radar && RangeKnown(console)) return "the tracking radar holds the target's range";
+        }
+        if (method_ == TrackMethod::Tv && wheel == d.range_wheel && RangeFrom(console) == RangeSource::RangeOnly) {
+            return "ПОЛУАВТОМАТ follows the target's range";
+        }
+        if (method_ == TrackMethod::None && wheel == d.el_wheel && el_beam_ >= 0 && !d.el_search_mode.empty() &&
+            console.equipment.IsReady(d.el_search_mode)) {
+            return "the elevation search scans the antenna up and down";
+        }
+        return nullptr;
+    }
 
 private:
 
@@ -1664,7 +1797,7 @@ private:
         const double wheel_az = console.panel.GetValue(d.az_wheel);
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.los || g.range_m > d.max_range_m) continue;
+            if (!g.alive || g.range_m > d.max_range_m || !g.Los()) continue;
             const bool in_beam =
                 std::fabs(WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= tuning_.az_tolerance_deg;
             if (in_beam || (kv.first == tracked_ && method_ == TrackMethod::Radar)) {
@@ -1683,7 +1816,7 @@ private:
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
             return nullptr;
         }
-        if (!g.los) return "no line of sight";
+        if (!g.Los()) return "no line of sight";
         if (g.angular_rate_deg_s > tuning_.max_angular_rate_deg_s) return "target crossing too fast";
         if (method == TrackMethod::Radar) {
             if (!eq.IsReady(d.transmitter)) return "transmitter off";
@@ -1706,7 +1839,7 @@ private:
                                      ? optical_.contrast_threshold
                                      : em::AnchorThreshold(optical_.inherent_contrast, tuning_.tv_max_range_m, em::kReferenceVisibilityM);
         const double fov_h = DegToRad(TvFieldOfViewDeg(console) * console.track.fov_height_ratio);
-        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.los, g.cloud_transmission);
+        return em::Look(optical_, threshold, optics_, g.range_m, g.size_m, fov_h, g.Los(), g.CloudTransmission());
     }
 
     // Where the system's range comes from now: the tracking radar's lock, its range-only mode (ПОЛУАВТОМАТ, angles by
@@ -1808,6 +1941,18 @@ private:
         console.panel.SetValue(d.range_wheel, Toward(wheel_r, want, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
     }
 
+    // The jamming gone from the beam, the echo shows on the tracking radar's range indicator: the range operator turns
+    // the gate onto it (an NPC by his skill; a player's wheel stays where he puts it, the helper shows where).
+    void RangeGateOntoEcho(double dt, ConsoleData& console, const AimCrew& crew, double echo_m) {
+        const TrackSensorDef& d = console.track;
+        if (!crew.range) {
+            if (crew.advise) Want(d.range_wheel, echo_m);
+            return;
+        }
+        const double wheel_r = console.panel.GetValue(d.range_wheel);
+        console.panel.SetValue(d.range_wheel, Toward(wheel_r, echo_m, tuning_.aim_range_rate_mps * crew.range_rate_factor * dt));
+    }
+
     // Manual TV tracking: the target has to stay in the lens field around where the wheels point. An NPC in a wheel's seat
     // follows the target a little behind it and no faster than the wheel turns; a wheel in the player's hands stays
     // where the player puts it. A target masked by terrain is carried on at the last rates until the memory runs out.
@@ -1830,7 +1975,7 @@ private:
         const double wheel_el = console.panel.GetValue(d.el_wheel);
         double error_deg = 0.0;
         if (problem == nullptr) {
-            if (!g.los) {
+            if (!g.Los()) {
                 tv_masked_s_ += dt;
                 if (tv_masked_s_ > tuning_.tv_memory_s) {
                     problem = "masked: the memory ran out";
@@ -1858,11 +2003,11 @@ private:
             tv_masked_s_ = 0.0;
             return false;
         }
-        if (g.los && crew.advise) {  // where the target is now, for a player's wheels (the helper)
+        if (g.Los() && crew.advise) {  // where the target is now, for a player's wheels (the helper)
             if (d.lock_control.empty() || console.panel.Get(d.lock_control) >= 1) Want(d.az_wheel, WheelAzimuth(g.az_deg, wheel_az, d.az_limit_deg));
             Want(d.el_wheel, g.el_deg);
         }
-        if (g.los) {
+        if (g.Los()) {
             // The NPC seats follow the target as it was a moment ago (each seat's own lag), with their own aim error.
             double az = g.az_deg, el = g.el_deg;
             const double az_t = time_ - (crew.az_lag_s >= 0.0 ? crew.az_lag_s : tuning_.tv_npc_delay_s);
@@ -1910,8 +2055,10 @@ private:
     }
 
     // The tracking radar follows a jammer in angle (no range). The servo turns the wheels to the measured angles; the
-    // range gate stays on the range wheel, so the radar takes the echo again by itself if it burns through. Returns
-    // false (and logs why) when there is nothing left to follow.
+    // range gate stays on the range wheel, so the radar takes the echo again by itself if it burns through. When the
+    // noise stops, the radar carries on at the last angular rates (the memory mode, the TV's memory time: ePap) while the
+    // range operator brings the gate onto the echo, now on his range indicator; with the echo in the gate the radar locks
+    // (the burn-through below). Returns false (and logs why) when there is nothing left to follow.
     bool TrackJammer(double t, double dt, ConsoleData& console, SessionLog& log, const AimCrew& crew) {
         const TrackSensorDef& d = console.track;
         const Geometry& g = geo_.at(tracked_);
@@ -1924,9 +2071,38 @@ private:
             std::snprintf(detail, sizeof(detail), "burn-through: the echo is back in the gate at %.1f km, radar range again", est.range_m / 1000.0);
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, detail});
             events_.push_back({EngagementEvent::Kind::BurnThrough, t, tracked_, 0.0, est.range_m, TrackMethod::Radar, std::string()});
+            jam_quiet_ = false;
             return true;
         }
-        if (problem == nullptr && !(em_->JamTracked(&id, &est) && id == tracked_)) problem = "the jamming stopped: nothing to follow in angle";
+        const bool jammed = em_->JamTracked(&id, &est) && id == tracked_;
+        if (problem == nullptr && !jammed && jam_angles_for_ == tracked_) {
+            // The strobe gone (the noise stopped, or flickers below the strobe threshold): the memory, said once a target.
+            if (!jam_quiet_) {
+                jam_quiet_ = true;
+                jam_quiet_s_ = t;
+                if (jam_quiet_said_for_ != tracked_) {
+                    jam_quiet_said_for_ = tracked_;
+                    log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_,
+                                "the jamming stopped: memory on the last angles, the range gate onto the echo"});
+                }
+            }
+            if (t - jam_quiet_s_ > tuning_.tv_memory_s + 1e-9) {
+                problem = "the jamming stopped: the memory ran out before the gate took the echo";
+            } else {
+                const double held_s = t - jam_meas_s_;
+                const double true_az = Wrap180(jam_az_deg_ + jam_rate_az_deg_s_ * held_s);
+                const double el = jam_el_deg_ + jam_rate_el_deg_s_ * held_s;
+                const double az_deg = Wrap180(true_az - unit_heading_deg_ + gyro_heading_deg_);
+                console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
+                console.panel.SetValue(d.el_wheel, el);
+                RangeGateOntoEcho(dt, console, crew, g.range_m);
+                em_->Designate(true_az, el, console.panel.GetValue(d.range_wheel));
+                antenna_el_deg_ = swept_low_deg_ = swept_high_deg_ = el;
+                return true;
+            }
+        } else if (problem == nullptr && !jammed) {
+            problem = "the jamming stopped: nothing to follow in angle";
+        }
         if (problem != nullptr) {
             log.Record({t, DebriefEntry::Kind::Scenario, "SSC", tracked_, std::string("track lost: ") + problem});
             events_.push_back({EngagementEvent::Kind::TrackLost, t, tracked_, 0.0, 0.0, method_, problem});
@@ -1935,6 +2111,26 @@ private:
             tracked_.clear();
             return false;
         }
+        // What the memory would carry on with: the strobe's angles, smoothed (they are as noisy as the jamming makes
+        // them), and their slow rates.
+        if (jam_angles_for_ != tracked_) {
+            jam_angles_for_ = tracked_;
+            jam_rate_az_deg_s_ = jam_rate_el_deg_s_ = 0.0;
+            jam_az_deg_ = est.true_az_deg;
+            jam_el_deg_ = est.el_deg;
+        } else if (t - jam_meas_s_ > 0.0) {
+            const double since = t - jam_meas_s_;
+            const double held_az = Wrap180(jam_az_deg_ + jam_rate_az_deg_s_ * since);
+            const double held_el = jam_el_deg_ + jam_rate_el_deg_s_ * since;
+            const double k_angle = 0.2, k_rate = 0.05;
+            const double az_err = Wrap180(est.true_az_deg - held_az), el_err = est.el_deg - held_el;
+            jam_az_deg_ = Wrap180(held_az + k_angle * az_err);
+            jam_el_deg_ = held_el + k_angle * el_err;
+            jam_rate_az_deg_s_ += k_rate * az_err / since;
+            jam_rate_el_deg_s_ += k_rate * el_err / since;
+        }
+        jam_quiet_ = false;
+        jam_meas_s_ = t;
         const double az_deg = Wrap180(est.true_az_deg - unit_heading_deg_ + gyro_heading_deg_);
         console.panel.SetValue(d.az_wheel, WheelAzimuth(az_deg, console.panel.GetValue(d.az_wheel), d.az_limit_deg));
         console.panel.SetValue(d.el_wheel, est.el_deg);
@@ -2159,7 +2355,11 @@ private:
         }
         const bool active = ready && t < iff_until_s_ + 1e-9;
         if (!d.iff_interrogating_input.empty()) console.equipment.SetInput(d.iff_interrogating_input, active);
-        if (em_ != nullptr) em_->SetInterrogating(active);
+        if (em_ != nullptr) {
+            em_->SetInterrogating(active);
+            em_->SetInterrogatorCode(iff_code_);
+        }
+
         // The contacts on the scope within the interrogator's range while it asks; those that never answered are reported
         // when it stops ("Ответа нет!": not identified as friends).
         if (active) {
@@ -2195,7 +2395,7 @@ private:
         const bool gated = !d.iff_gate_control.empty() && console.panel.Get(d.iff_gate_control) == 1;
         for (const auto& kv : geo_) {
             const Geometry& g = kv.second;
-            if (!g.alive || !g.friendly || !g.los || g.range_m > d.iff_max_range_m) continue;
+            if (!g.alive || !g.friendly || g.iff_code != iff_code_ || g.range_m > d.iff_max_range_m || !g.Los()) continue;
             if (gated) {
                 bool on_scope = false;
                 for (const Contact& c : picture_) on_scope = on_scope || c.target_id == kv.first;
@@ -2325,7 +2525,7 @@ private:
             const double wheel_az = console.panel.GetValue(d.az_wheel);
             for (const auto& kv : geo_) {
                 const Geometry& tg = kv.second;
-                if (!tg.alive || !tg.los || tg.range_m > d.max_range_m) continue;
+                if (!tg.alive || tg.range_m > d.max_range_m || !tg.Los()) continue;
                 const bool aimed = std::fabs(WheelAzimuth(tg.az_deg, wheel_az, d.az_limit_deg) - wheel_az) <= 5.0;
                 if ((aimed || kv.first == tracked_) && tg.agl_m < tuning_.track_min_altitude_m) low = true;
             }
@@ -2367,6 +2567,8 @@ private:
     std::vector<Contact> iff_replies_;
     double iff_until_s_ = -1.0;
     bool iff_control_ = false;
+    int iff_code_ = 0;
+
     double unit_heading_deg_ = 0.0;
     em::OpticalSensorDef optical_;    // the TV sight as a camera (em/optical.hpp)
     em::OpticalConditions optics_;    // the light and the air (scenario "environment")
@@ -2395,9 +2597,26 @@ private:
     double tv_masked_s_ = 0.0;
     double tv_rate_az_deg_s_ = 0.0;
     double tv_rate_el_deg_s_ = 0.0;
+    // The jammer track's memory: the strobe's last angles (true azimuth), when measured, their rates; when the strobe went.
+    std::string jam_angles_for_;
+    std::string jam_quiet_said_for_;
+    bool jam_quiet_ = false;
+    double jam_quiet_s_ = 0.0;
+    double jam_meas_s_ = 0.0;
+    double jam_az_deg_ = 0.0;
+    double jam_el_deg_ = 0.0;
+    double jam_rate_az_deg_s_ = 0.0;
+    double jam_rate_el_deg_s_ = 0.0;
     double beam_turn_ = 0.0;
     std::size_t beam_step_ = 0;
     std::vector<Shot> shots_;
+    struct ChaffNote {
+        double t_s = 0.0;
+        double factor = 1.0;
+        double window_s = 0.0;
+    };
+    std::map<std::string, ChaffNote> chaff_;
+    std::function<bool(const std::string&, int)> hit_survives_;
     int hits_ = 0;
     int misses_ = 0;
     bool range_known_now_ = false;  // the system has a range for the tracked target (set each step)
@@ -2430,7 +2649,7 @@ private:
         tv_range_estimate_m_ = 0.0;
         if (method_ != TrackMethod::Tv || tuning_.tv_span_m.empty()) return;
         const auto g = geo_.find(tracked_);
-        if (g == geo_.end() || !g->second.alive || !g->second.los || g->second.range_m <= 1.0) return;
+        if (g == geo_.end() || !g->second.alive || g->second.range_m <= 1.0 || !g->second.Los()) return;
         const double span = SpanOf(tracked_);
         if (span <= 0.0) return;
         tv_span_mils_ = (span / g->second.range_m) * (6000.0 / (2.0 * 3.14159265358979323846));

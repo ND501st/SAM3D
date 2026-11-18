@@ -1,0 +1,18 @@
+{
+  "logistics_id": "osa_battery_1985",
+  "status": "first pass (roadmap G5, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md section 5.6)",
+  "notes": "The battery's missiles from the rear to the launchers (simcore/campaign/stocks.hpp): the regiment's technical battery at the Horka siding tests what the trains bring and loads the TZMs; the TZMs load the launchers; the battery commander keeps a ledger from what was reported and logged, and asks for missiles by it.",
+  "source": "voenizdat_osa_1991 pp. 188-189; sam3d estimates and game values where a value says so",
+  "confidence": "medium",
+  "values": {
+    "launcher_missiles": { "value": 6, "source": "voenizdat_osa_1991 p188 (the 9A33BM3 carries six missiles in two containers of three)", "confidence": "high" },
+    "tzm_missiles": { "value": 12, "source": "voenizdat_osa_1991 p188 (the 9T217BM2 carries up to 12 missiles, six a side), as data/command/battery_tactics.json's tzm_capacity", "confidence": "high" },
+    "reload_launcher_s": { "value": 390, "source": "voenizdat_osa_1991 p188 (a TZM loads a launcher in 5-8 min): the middle", "confidence": "high" },
+    "tests_per_h": { "value": 6.5, "source": "voenizdat_osa_1991 pp. 188-189 (the technical battery's 9V242-1 test station checks 6-7 missiles an hour)", "confidence": "high" },
+    "load_tzm_s_per_missile": { "value": 150, "source": "sam3d estimate (G0: a TZM loaded at the technical battery by its crane, 12 missiles in half an hour)", "confidence": "estimate" },
+    "request_when_short": { "value": 6, "source": "game value: the NPC battery commander asks for missiles once his ledger says the battery is short of its full load by a launcher's load or more", "confidence": "estimate" },
+    "request_answer_s": { "value": 1800, "source": "sam3d estimate: the regiment's deputy for armament answers a request with a run's time", "confidence": "estimate" },
+    "train_kmh": { "value": 40, "source": "sam3d estimate: a military train's average on the country's lines, stops included", "confidence": "estimate" },
+    "train_missiles": { "value": 48, "source": "game value: what one train brings the technical battery", "confidence": "estimate" }
+  }
+}

@@ -1,5 +1,6 @@
 {
   "scenario_id": "osa_arm_drill_shrike",
+  "setting": "war",
   "name": "Shrike drill: a SEAD pair with Shrike-class missiles, which a radar beats by going silent",
   "description": "The HARM drill's raid with the older missile: two defence-suppression aircraft each with one Shrike-class anti-radiation missile (no memory: when the radar it homes on goes silent it loses lock and falls ballistic), then two strike aircraft. The crew is warned of ARMs and fights with the least emission; the senior operator watches for the signs of a launch and the commander has every transmitter off once the missile in the air has burst. Going silent beats a Shrike even late; against a HARM it has to be early.",
   "source": "sam3d", "confidence": "estimate",

@@ -17,7 +17,7 @@
   "own_unit": {
     "console": "procedures/osa_ak.json",
     "tuning": "gameplay/osa_ak.json",
-    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc" },
+    "em": { "library": "em/osa_ak.json", "search_radar": "osa_ak_soc", "track_radar": "osa_ak_ssc", "extra_libraries": [ "em/nato_1985.json" ] },
     "position": { "east_m": 0, "north_m": 0, "up_m": 3 },
     "heading_deg": 0,
     "inputs": { "vehicle_stopped": true }
@@ -31,7 +31,7 @@
   ],
   "targets": [
     {
-      "id": "t1", "name": "Strike aircraft, low run (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "id": "t1", "name": "Strike aircraft, low run (placeholder)", "type": "Air+FixedWing", "class": "fighter", "rwr": "nato_alr46_class_rwr",
       "start": { "east_m": -4000, "north_m": 40000, "up_m": 80 },
       "waypoints": [
         { "east_m": -3000, "north_m": 14000, "agl_m": 60 },

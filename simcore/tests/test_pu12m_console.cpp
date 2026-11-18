@@ -143,7 +143,9 @@ SC_TEST("pu12m data: on the move the mast, the generator set and the aiming circ
     SC_EXPECT(!Faulted(c));
 }
 
-SC_TEST("pu12m data: the telecode picture needs the R-407 warm, the ASPD-U working, the parallax set and the regiment sending") {
+// Whether the telecode arrives (the R-407 warm and on the channel, or a telecode line on ПРОВОД) is the runner's
+// (test_command_post.cpp: "the telecode comes by wire"); here the input stands for it.
+SC_TEST("pu12m data: the telecode picture needs the ASPD-U working, the parallax set and the telecode arriving") {
     ConsoleData c;
     SC_EXPECT(LoadConsoleFile(Pu12mPath(), c));
     Crew crew(c);
@@ -155,13 +157,21 @@ SC_TEST("pu12m data: the telecode picture needs the R-407 warm, the ASPD-U worki
     c.equipment.SetInput("regiment_telecode", true);
     crew.Tick();
     SC_EXPECT(c.equipment.IsReady("telecode_reception"));
-    c.panel.Set("radio.fug5.power", 0);  // the R-407 off: the picture goes
+    c.panel.Set("dtp.parallax", 0);  // the parallax not set: the receiver cannot place the targets
     crew.Tick();
     SC_EXPECT(!c.equipment.IsReady("telecode_reception"));
-    // A radar coupled by cable gives the primary picture without any radio.
-    c.equipment.SetInput("radar_coupled", true);
+    c.equipment.SetInput("regiment_telecode", false);  // nothing arriving
+    c.panel.Set("dtp.parallax", 1);
     crew.Tick();
-    SC_EXPECT(c.equipment.IsReady("primary_picture"));
+    SC_EXPECT(!c.equipment.IsReady("telecode_reception"));
+    // A radar coupled by cable gives the primary picture without any radio, once its cable is laid (90 s).
+    c.equipment.SetInput("radar_coupled", true);
+    c.equipment.SetInput("radar_here", true);
+    crew.Tick();
+    SC_EXPECT(!c.equipment.IsReady("primary_picture"));
+    c.panel.Set("cable.radar", 1);
+    for (int i = 0; i < 950; ++i) crew.Tick();
+    SC_EXPECT(c.equipment.IsReady("radar_cable_laid") && c.equipment.IsReady("primary_picture"));
 }
 
 SC_TEST("pu12m data: the readiness states warm what they list; stowing brings the set and the mast back") {
@@ -173,6 +183,7 @@ SC_TEST("pu12m data: the readiness states warm what they list; stowing brings th
         if (st == nullptr) continue;
         for (const auto& kv : st->controls) c.panel.Set(kv.first, kv.second);
         for (const auto& kv : st->inputs) c.equipment.SetInput(kv.first, kv.second);
+        c.equipment.SetInput("radar_here", true);  // a position with a radar to cable to (the deployed state lays the cable)
         c.equipment.Update(0.0, c.panel);
         bool all = true;
         for (const std::string& id : st->ready) {

@@ -214,6 +214,18 @@ public:
         if (!has_order_) StartNext();
     }
 
+    // Is this procedure his order now, or queued after it?
+    bool Holds(const std::string& procedure_id) const {
+        if (has_order_ && tracker_.GetProcedure().id == procedure_id) return true;
+        for (const Procedure& p : queue_) {
+            if (p.id == procedure_id) return true;
+        }
+        return false;
+    }
+
+    // Taken back by the one who gave it (the crew chief breaking his own work off): stopped, with no report of an abort.
+    void Withdraw() { Stop(); }
+
     // Stop the current order and forget the queue.
     void CancelOrder() {
         if (has_order_) Report(CrewReport::Kind::Aborted, "cancelled");
@@ -230,9 +242,18 @@ public:
     }
     bool HasSkill() const { return has_skill_; }
     const CrewSkill& Skill() const { return skill_; }
-    // Under stress (night, jamming, under fire, a target in the zone with no track) delays and chances grow.
-    void SetStressed(bool stressed) { stressed_ = stressed; }
+    // Under stress (night, jamming, under fire, a target in the zone with no track) delays and chances grow: by the tier's
+    // stress factor at full stress (level 1), in proportion below it (docs/crew/15_TALK.md section 4). Stressed() from
+    // half on.
+    void SetStressed(bool stressed) { SetStressLevel(stressed ? 1.0 : 0.0); }
+    void SetStressLevel(double level) {
+        stress_level_ = level < 0.0 ? 0.0 : (level > 1.0 ? 1.0 : level);
+        stressed_ = stress_level_ >= 0.5;
+    }
     bool Stressed() const { return stressed_; }
+    double StressLevel() const { return stress_level_; }
+    // What stress multiplies his delays and chances by now: 1 calm, the tier's stress factor at full stress.
+    double StressMultiplier() const { return 1.0 + (skill_.stress_factor - 1.0) * stress_level_; }
     // Slips and omissions so far (the debrief and the tests).
     int Slips() const { return slips_; }
     int Omissions() const { return omissions_; }
@@ -322,7 +343,10 @@ public:
         time_s_ += dt;
         tracker_.Update(dt);
         if (!has_order_) {
-            want_ = stay_;
+            // A job's work still under way holds him at its place though his drill is over (the far set being
+            // connected), unless he has been told to be elsewhere (К машинам).
+            const bool held = stay_.empty() && !hold_at_.empty() && at_ == hold_at_ && !moving_ && WorkUnderWay(equipment);
+            want_ = held ? hold_at_ : stay_;
             idle_s_ += dt;
             if (standing_ && idle_s_ > 1.0) {  // nothing more to do up there: back to his seat
                 standing_ = false;
@@ -380,8 +404,11 @@ public:
         const std::string control_id = step->control_id;
         const StepResult r = tracker_.Attempt(panel, control_id, step->value, equipment);
         hold_.clear();  // a job's work holds him at its place until it is done
+        hold_at_.clear();
         for (const OutsideJob& j : jobs_) {
-            if (j.control == control_id) hold_ = j.stay_until;
+            if (j.control != control_id) continue;
+            hold_ = j.stay_until;
+            hold_at_ = j.place;
         }
         last_control_ = control_id;
         last_time_s_ = time_s_;
@@ -442,7 +469,7 @@ private:
     // How long the step takes this crew member (reaction and jitter, a forgotten step's patience, stress), and
     // whether he slips (does the next step first). A slip is only possible between two steps that wait for nothing.
     void DrawStep() {
-        const double stress = stressed_ ? skill_.stress_factor : 1.0;
+        const double stress = StressMultiplier();
         double d = skill_.reaction_s + (2.0 * Uniform() - 1.0) * skill_.jitter_s;
         d = (d > 0.05 ? d : 0.05) * stress;
         for (const std::string& c : skill_.decision_controls) {
@@ -522,6 +549,7 @@ private:
     CrewSkill skill_;
     std::mt19937 rng_;
     bool stressed_ = false;
+    double stress_level_ = 0.0;
     std::size_t drawn_for_step_ = static_cast<std::size_t>(-1);
     unsigned serial_ = 0;        // procedures started (a new one's first step is a new step even at the same index)
     unsigned drawn_serial_ = 0;
@@ -530,6 +558,15 @@ private:
     std::vector<std::string> stand_for_;
     std::vector<OutsideJob> jobs_;
     std::vector<Condition> hold_;
+    std::string hold_at_;  // the job's place hold_ keeps him at
+    // A subsystem the job waits for is coming up (not off: a job packed up waits for nothing).
+    bool WorkUnderWay(const Equipment* equipment) const {
+        if (equipment == nullptr) return false;
+        for (const Condition& c : hold_) {
+            if (c.kind == Condition::Kind::SubsystemIs && c.state == SubsystemState::Ready && equipment->State(c.id) == SubsystemState::Starting) return true;
+        }
+        return false;
+    }
     std::string at_;
     bool moving_ = false;
     std::string stay_;

@@ -4,7 +4,10 @@
 
 #include "Cesium3DTileset.h"
 #include "CesiumGeoreference.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Engine/DirectionalLight.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/DefaultPawn.h"
 #include "GameFramework/PlayerController.h"
@@ -15,11 +18,13 @@
 #include "Misc/Paths.h"
 #include "Engine/GameInstance.h"
 #include "SimAirCampaignSubsystem.h"
+#include "SimBasicModels.h"
 #include "SimCampaignHUD.h"
 #include "SimEntityActor.h"
 #include "SimMissionMenuHUD.h"
 #include "SimModelGallery.h"
 #include "SimOsaVehicle.h"
+#include "SimSkyWeatherActor.h"
 #include "UnrealClient.h"
 
 ASimScenarioDirector::ASimScenarioDirector()
@@ -101,6 +106,15 @@ void ASimScenarioDirector::BeginPlay()
 		ScenarioFile = CommandLineScenario;
 		CabinFile.Reset();
 	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("-SimFxShots="), CommandLineScenario) ||
+		FParse::Value(FCommandLine::Get(), TEXT("-SimFxShotsNight="), CommandLineScenario))
+	{
+		// The effects' photographer (docs/fx/README.md 4.1) shoots in a running scenario: the first practice when none
+		// is named (it brings its own aircraft where the scenario has none to shoot).
+		ScenarioFile = TEXT("scenarios/osa_practice.json");
+		CabinFile.Reset();
+		UE_LOG(LogSAM3D, Log, TEXT("The effects' photographer: %s"), *ScenarioFile);
+	}
 	else if (ShouldShowMissionMenu())
 	{
 		ShowMissionMenu();
@@ -176,6 +190,7 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 		}
 		return;
 	}
+	FindLevelSun();
 	const FString Cabin = CabinFile.IsEmpty() ? Sim->GetDefaultCabinFile() : (CabinFile == TEXT("none") ? FString() : CabinFile);
 	if (!Cabin.IsEmpty() && !Sim->LoadCabin(Cabin, Error) && GEngine != nullptr)
 	{
@@ -269,6 +284,58 @@ void ASimScenarioDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void ASimScenarioDirector::FindLevelSun()
+{
+	LevelSun.Reset();
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return;
+	}
+	if (TActorIterator<ASimSkyWeatherActor>(World))
+	{
+		return;  // the sky actor turns its own sun by the scenario's clock
+	}
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		UDirectionalLightComponent* Light = It->GetComponent();
+		if (Light == nullptr || !Light->IsUsedAsAtmosphereSunLight())
+		{
+			continue;
+		}
+		if (Light->GetMobility() != EComponentMobility::Movable)
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Sky: the level's sun %s is not Movable: the scenario's time of day changes the simulation's light but not this level's picture (make it Movable to follow the sun)"),
+				*It->GetName());
+			return;
+		}
+		LevelSun = Light;
+		NextLevelSunAt = 0.0f;
+		UE_LOG(LogSAM3D, Log, TEXT("Sky: the level's sun %s follows the scenario's sun"), *It->GetName());
+		UpdateLevelSun();
+		return;
+	}
+}
+
+void ASimScenarioDirector::UpdateLevelSun()
+{
+	UDirectionalLightComponent* Light = LevelSun.Get();
+	const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	double ElevationDeg = 0.0;
+	double AzimuthDeg = 0.0;
+	bool bDaylight = true;
+	float NightShare = 0.0f;
+	if (Light == nullptr || Sim == nullptr || !Sim->GetSunNow(ElevationDeg, AzimuthDeg, bDaylight, NightShare))
+	{
+		return;
+	}
+	// The direction to the sun in Unreal (X north, Y east, Z up); the light shines the other way (as ASimSkyWeatherActor).
+	const double El = FMath::DegreesToRadians(ElevationDeg);
+	const double Az = FMath::DegreesToRadians(AzimuthDeg);
+	const FVector ToSun(FMath::Cos(El) * FMath::Cos(Az), FMath::Cos(El) * FMath::Sin(Az), FMath::Sin(El));
+	Light->SetWorldRotation((-ToSun).Rotation());
+}
+
 void ASimScenarioDirector::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -278,6 +345,11 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	if (LevelSun.IsValid() && TimeSinceBeginPlay >= NextLevelSunAt)
+	{
+		NextLevelSunAt = TimeSinceBeginPlay + 1.0f;
+		UpdateLevelSun();
+	}
 	if (!bTerrainRequested && TerrainTileset != nullptr && Sim->IsScenarioRunning() &&
 		TimeSinceBeginPlay >= TerrainSampleDelaySeconds)
 	{
@@ -285,6 +357,15 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 	}
 	SpawnMissingEntityActors();
 	UpdatePositionWorks();
+	if (!bNeighboursSpawned && Sim->IsScenarioRunning())
+	{
+		SpawnNeighbourSites(Sim);
+	}
+	else if (bNeighboursSpawned && TimeSinceBeginPlay >= NextNeighbourGroundAt)
+	{
+		NextNeighbourGroundAt = TimeSinceBeginPlay + 1.0f;
+		GroundNeighbourSites(TimeSinceBeginPlay - NeighboursSpawnedAt >= 60.0f);
+	}
 	ShowStatus(Sim);
 	if (!MenuTestFolder.IsEmpty())
 	{
@@ -332,7 +413,7 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 		return;
 	}
 
-	for (const FSimEntityState& State : Sim->GetEntityStates())
+	for (const FSimEntityState& State : Sim->GetEntityStatesCached())  // the frame's one snapshot, not a copy
 	{
 		if (!State.bAlive || SpawnedActors.Contains(State.Id))
 		{
@@ -370,7 +451,10 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 			}
 			else if (!State.bIsGround && Actor->GetClass() == ASimEntityActor::StaticClass() && Actor->UseBasicModel(State.Model))
 			{
-				Actor->SetActorScale3D(FVector(1.0));  // aircraft and missiles at their real size (docs/scenery/)
+				// Aircraft at their real size (docs/scenery/), and missiles too: ours, the ARMs and the cruise missiles wear
+				// their munition's mesh (FSimMunitionModels, docs/fx/README.md 4.3). MissileScale is only for the cone that
+				// stands in for a missile without a model.
+				Actor->SetActorScale3D(FVector(1.0));
 			}
 			UE_LOG(LogSAM3D, Log, TEXT("Entity %d '%s' drawn as %s"), State.Id, *State.Name,
 				Actor->GetBasicModel().IsEmpty() ? TEXT("a placeholder") : *Actor->GetBasicModel());
@@ -379,6 +463,175 @@ void ASimScenarioDirector::SpawnMissingEntityActors()
 #endif
 			SpawnedActors.Add(State.Id, Actor);
 		}
+	}
+}
+
+void ASimScenarioDirector::SpawnNeighbourSites(USimWorldSubsystem* Sim)
+{
+	const simcore::ScenarioRunner* Runner = Sim->GetScenarioRunner();
+	const simcore::scenery::ModelLibrary* Lib = FSimBasicModels::Library();
+	UWorld* MyWorld = GetWorld();
+	if (Runner == nullptr || Lib == nullptr || MyWorld == nullptr)
+	{
+		return;
+	}
+	bNeighboursSpawned = true;
+	NeighboursSpawnedAt = TimeSinceBeginPlay;
+	int32 Vehicles = 0;
+	TArray<FSimViewPlace> Places;  // each site, and each scenery model, for the views (F12)
+	// One model standing on the ground at (east, north) of the scenario, facing a true heading: kept with the sites, so
+	// it is put on the level's ground as they are.
+	auto Stand = [&](const std::string& Model, double East, double North, double HeadingDeg)
+	{
+		const simcore::Vec3 Enu = Runner->GroundEnu(East, North);
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* Site = MyWorld->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
+		if (Site == nullptr)
+		{
+			return FVector::ZeroVector;
+		}
+		USceneComponent* Root = NewObject<USceneComponent>(Site, TEXT("Root"));
+		Site->SetRootComponent(Root);
+		Root->RegisterComponent();
+		Site->Tags.Add(USimWorldSubsystem::GroundTag);  // a site is set on the ground, never the ground (roadmap R5)
+		const FVector At = Sim->ToUnreal(Enu);  // through the level's georeference where it has one (Cesium's X is east)
+		Site->SetActorLocationAndRotation(At, FRotator(0.0, Sim->HeadingToYawDeg(At, HeadingDeg), 0.0));
+		FSimBasicModels::Build(UTF8_TO_TCHAR(Model.c_str()), Root);
+		NeighbourSites.Add(Site);
+		NeighbourSiteAt.Add(At);
+		// On a map's level its drawn ground at once (one ground, roadmap R5: the sim's GroundEnu is on it already).
+		FVector Ground;
+		const bool bOnMap = Sim->GetGroundMap() != nullptr && Sim->GroundAt(At, Ground, nullptr, Site);
+		if (bOnMap)
+		{
+			Site->SetActorLocation(Ground);
+		}
+		NeighbourSiteGrounded.Add(bOnMap);
+		++Vehicles;
+		return At;
+	};
+	const std::vector<std::pair<std::string, simcore::Vec3>> Fighting = Runner->NeighbourLaunchers();
+	for (const simcore::ScenarioNeighbour& Nb : Runner->Neighbours())
+	{
+		// An Osa battery that fights stands where its launchers fire from (the battery's combat formation); the others
+		// as their system's site.
+		std::vector<std::pair<std::string, simcore::Vec3>> Layout;
+		if (Runner->NeighbourFights(Nb.id))
+		{
+			for (const std::pair<std::string, simcore::Vec3>& L : Fighting)
+			{
+				if (L.first == Nb.id)
+				{
+					Layout.push_back({"osa_9a33", simcore::Vec3{L.second.x - Nb.position.x, L.second.y - Nb.position.y, 0.0}});
+				}
+			}
+		}
+		else
+		{
+			Layout = Lib->SiteLayout(Nb.system);
+		}
+		for (const std::pair<std::string, simcore::Vec3>& V : Layout)
+		{
+			// Each vehicle faces out from the site's centre (an S-75's launchers round its radar).
+			const double HeadingDeg = V.second.HorizontalLength() > 1.0 ? FMath::RadiansToDegrees(FMath::Atan2(V.second.x, V.second.y)) : 0.0;
+			Stand(V.first, Nb.position.x + V.second.x, Nb.position.y + V.second.y, HeadingDeg);
+		}
+		FSimViewPlace Place;
+		Place.Name = UTF8_TO_TCHAR(Nb.name.c_str());
+		Place.Location = Sim->ToUnreal(Runner->GroundEnu(Nb.position.x, Nb.position.y));
+		Place.SizeM = Runner->NeighbourFights(Nb.id) ? 600.0 : 40.0;
+		Places.Add(Place);
+	}
+	// The scenario's scenery: radars and whatever else stands there (the dynamic campaign testbed's).
+	for (const simcore::ScenarioScenery& Sc : Runner->Scenery())
+	{
+		FSimViewPlace Place;
+		Place.Name = UTF8_TO_TCHAR(Sc.name.c_str());
+		Place.Location = Stand(Sc.model, Sc.position.x, Sc.position.y, Sc.heading_deg);
+		Place.bFriendly = Sc.friendly;
+		Place.SizeM = 15.0;
+		Places.Add(Place);
+	}
+	Sim->SetViewPlaces(TEXT("Scenario"), MoveTemp(Places));
+	if (!Runner->Neighbours().empty() || !Runner->Scenery().empty())
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Neighbours: %d air defences and %d scenery models near the scenario, %d vehicles drawn"),
+			static_cast<int32>(Runner->Neighbours().size()), static_cast<int32>(Runner->Scenery().size()), Vehicles);
+	}
+}
+
+void ASimScenarioDirector::GroundNeighbourSites(bool bFirstMinuteOver)
+{
+	UWorld* MyWorld = GetWorld();
+	if (MyWorld == nullptr)
+	{
+		return;
+	}
+	int32 Grounded = 0;
+	for (int32 i = 0; i < NeighbourSites.Num(); ++i)
+	{
+		AActor* Site = NeighbourSites[i];
+		if (Site == nullptr || NeighbourSiteGrounded[i])
+		{
+			Grounded += Site != nullptr ? 1 : 0;
+			continue;
+		}
+		// The level's ground (USimWorldSubsystem::GroundAt: a map's drawn ground, else a ground-only trace 3 km either way).
+		// A trace straight down a Cesium tile's seam can slip through, so a metre to each side too.
+		const USimWorldSubsystem* Sim = MyWorld->GetSubsystem<USimWorldSubsystem>();
+		const FVector At = NeighbourSiteAt[i];
+		for (const FVector& Side : {FVector::ZeroVector, FVector(100.0, 0.0, 0.0), FVector(-100.0, 0.0, 0.0), FVector(0.0, 100.0, 0.0), FVector(0.0, -100.0, 0.0)})
+		{
+			FVector Ground;
+			if (Sim != nullptr && Sim->GroundAt(At + Side, Ground, nullptr, Site))
+			{
+				Site->SetActorLocation(FVector(At.X, At.Y, Ground.Z));
+				NeighbourSiteGrounded[i] = true;
+				++Grounded;
+				break;
+			}
+		}
+	}
+	if (Grounded == NeighbourSites.Num())
+	{
+		NextNeighbourGroundAt = TNumericLimits<float>::Max();  // all down (or none): no more traces
+		if (Grounded > 0)
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Neighbours: all %d vehicles on the level's ground"), Grounded);
+		}
+		return;
+	}
+	if (bFirstMinuteOver && !bNeighbourFallbackPlaced)
+	{
+		// The far ones' tiles may never load with collision: put each as far under or over the scenario's ground as the
+		// nearest one that found the level's (the globe's curve and the datum differ with the place), and keep trying.
+		bNeighbourFallbackPlaced = true;
+		for (int32 i = 0; i < NeighbourSites.Num(); ++i)
+		{
+			if (NeighbourSites[i] == nullptr || NeighbourSiteGrounded[i])
+			{
+				continue;
+			}
+			double BestD = TNumericLimits<double>::Max();
+			double Offset = 0.0;
+			for (int32 j = 0; j < NeighbourSites.Num(); ++j)
+			{
+				const double D = FVector::DistSquared2D(NeighbourSiteAt[i], NeighbourSiteAt[j]);
+				if (NeighbourSites[j] != nullptr && NeighbourSiteGrounded[j] && D < BestD)
+				{
+					BestD = D;
+					Offset = NeighbourSites[j]->GetActorLocation().Z - NeighbourSiteAt[j].Z;
+				}
+			}
+			NeighbourSites[i]->SetActorLocation(NeighbourSiteAt[i] + FVector(0.0, 0.0, Offset));
+		}
+		UE_LOG(LogSAM3D, Log, TEXT("Neighbours: %d of %d vehicles on the level's ground, the rest by their nearest"),
+			Grounded, NeighbourSites.Num());
+	}
+	if (bFirstMinuteOver)
+	{
+		NextNeighbourGroundAt += 4.0f;  // every 5 s after the first minute
 	}
 }
 

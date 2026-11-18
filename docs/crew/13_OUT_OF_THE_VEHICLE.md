@@ -73,7 +73,17 @@ trained man's 1 s (0.7-1.8). He is "inside" (on the intercom, at his instruments
 
 **Exits by the drill.** A crewman leaves by his seat's exit (`stations`). If every exit he may use is shut by the drill
 (the Osa in БР with the equipment on), he can't go out, and the runner logs why (p. 207) and tries again every 2 s. The
-emergency exits (the Osa's opening windscreen) are used only for an emergency goal.
+rule is against leaving: a man already outside comes in to his post by his hatch, and it is shut after him (SAM3D's
+reading of p. 207, so the crew chief called back by a target reaches his seat). The emergency exits (the Osa's opening
+windscreen) are used only for an emergency goal.
+
+**Not on the traffic side** (`stroevoy_ustav_1993` art. 147, 154: at a road's right edge nobody gets on or off over the
+left side). Where the vehicle stands at a road of the scenario's map (within half the road's width and 5 m of its centre
+line, SAM3D's estimate for its shoulder and verge: `MapTerrain::NearestRoad`), the side facing the carriageway is the
+traffic side (`ScenarioRunner::TrafficSide`; on the centre line, its left). Every mover keeps off it
+(`CrewMover::SetKeepOffSide`): his way down and up is by a wheel on the other side, round the roof if his hatch is on the
+road's side, and the traffic side's ways only if the vehicle had no other. The player climbing by a wheel on that side
+is told to take the other (Unreal). Away from roads no side is kept off.
 
 ### 2.3 Jobs outside: a step needs him where it is done
 
@@ -95,7 +105,23 @@ The first jobs:
 | Osa | commander (crew chief) | `nav.aiming_circle`: `measure_qc` (situational) | 35 m ahead (p. 250) |
 
 The switches stay where they were in the cabins (the cases): for the player they are where the job is started from
-(§3). The deputy's `orient_vehicle` still takes the crew chief's Qc as given.
+(§3).
+
+**The crew chief's compass survey is his walk** (roadmap 6.5, `orientation.hpp`; built 30 Oct 2026). The Osa's
+orientation data names the drill that is the survey (`survey_procedure`: `measure_qc`), the measurement it waits for
+(`survey_subsystem`: `qc_measured`) and a drill that stows the instrument when he breaks off (`survey_break_procedure`:
+`break_off_qc`). An NPC crew chief takes it at a halt once his own seat has nothing in hand (his orders and his set
+first, `NpcSurvey` after his think), not while the crew is lined up and not while he can't get out (БР). He walks out
+by his hatch and a wheel to the aiming circle 35 m ahead, sets it up, and the survey runs from that moment to the
+console's reading (`qc_measured`, 150 s): its Qc, with the survey's error, is then his. He stows it and walks back, and
+tells the deputy the Qc (`qc_report`) once the deputy can hear him (`InEarshot`: inside, or near enough outside), so the
+deputy's `orient_vehicle` waits for him: about 3.6 minutes from the halt to the deputy hearing it, against 3 minutes in
+place before. Stowed before the reading, or left by an NPC called away (К машинам), it gives nothing; moving off spoils
+it. Out there he hears neither the intercom nor the reports, and no shout carries to him over the turbine: the first
+NPC inside who knows of a target signals him back by flag or lamp (pp. 232-239 for the signals; who and when: SAM3D;
+the signaller is not drawn at his hatch), and he stows the aiming circle and comes back to his post; the crew fights in
+the gyro's frame as it is. A player crew chief is handed no drill: after К бою the helper has him out to set the aiming
+circle up and, once read, stow it (`SeatDuty::Control`).
 
 ### 2.4 The voice outside
 
@@ -113,6 +139,11 @@ an order to a man out of earshot waits until he can hear it.
 ahead of the vehicle, the commander on the right); `OrderMount` ("По местам!") brings them back to their seats, the last
 man in shutting his hatch. The line-up hears the commander standing with it; an order from inside the shut vehicle does
 not reach it.
+
+Both are orders of the crew data (`order_dismount`, `order_mount` in `data/crew/osa_ak_crew.json` and `pu12m_crew.json`,
+actions `dismount` and `mount`), so the order menu offers them: said once on the intercom, then the same work
+(`LineUpCrew`, `MountCrew`). The menu greys К машине on a vehicle without a line-up or while the crew is lined up or on
+its way there, and По местам while every NPC is in his seat ("уже выполнено").
 
 ## 3. The player (Unreal)
 
@@ -142,11 +173,50 @@ as a subsystem's `start_time_s`, and the drill's procedure). The later tasks fit
 
 | Task | Place(s) | Job | Needs |
 |---|---|---|---|
-| Laying a field telephone line (P-274) to a launcher or the regiment (`ru_pu12_text`: four lines at 500 m in 25-30 min) | a reel's walk from the vehicle to the far end: a moving place along a line | `line<n>.laid` on the RTK-1's lines (`radio_nets.hpp` LineDef, today taken as laid) | a place that moves with the man (the reel unrolling), the line's length as distance walked |
+| Laying a field telephone line (P-274) to a launcher or the regiment (`ru_pu12_text`: four lines at 500 m in 25-30 min) | a reel's walk from the vehicle to the far end: a moving place along a line | `line<n>.laid` on the RTK-1's lines (`radio_nets.hpp` LineDef, today taken as laid) | **built (30 Oct 2026), section 4.1** |
 | Servicing the AB-1, changing a wheel, the engine | the set, a wheel, the engine deck | maintenance switches | the fault model's repairs |
 | A dugout, a small command post, camouflage | a spot near the vehicle | a dig job with hours of time | shifts of men; tools |
 | Rest, meals, guard | the vehicle's side, a tent | the battery's routine (halts every 3-4 h, `voenizdat_osa_1991` p. 236) | the time of day |
 | Signals on the march by flags and lamps (pp. 232-239) | the commander in his hatch | a signal control | the hatch as a place to stand |
+
+### 4.1 Wire: the PU-12M's lines (built 30 Oct 2026)
+
+The first new task outside. A line of the scenario's `radio_data.lines` with `"laid": false` is laid by the crew:
+
+* **The far end** is a place that is not the vehicle's: the job's place `line:<n>` (`data/vehicles/pu12m.json`) is line n's
+  far set, the scenario's `far_end`, else beside the battery's vehicle of that call sign or the cabled radar, `far_set_m`
+  (8 m, estimate) short of it on the post's side (`ScenarioRunner::LineFarEnd`). The regiment's line has none: it is laid
+  from the regiment.
+* **The order**: «Линии проложить!» (`order_lay_lines`, the menu's "Battery net and lines"). Its drills are `lay_line1..4`,
+  one man to a line (the driver, the squad leader, the radiotelephonist, the plotter: SAM3D's choice, since the norm's seven
+  minutes for four lines of 500 m allow one line a man at the laying pace); only the lines the crew can lay now are given
+  (`ProcedureWanted`): not one laid, one with no far end of ours or one beyond the cable (the run a tenth over the straight
+  line, at most `cable_m`, 500 m). The NPC commander gives it once the post is deployed (`ready_halted`).
+* **The walk**: he goes out to `line:<n>` as to any job, and on the ground no faster than the cable is paid out (the
+  `wire.lay_mps`, 1.2 m/s, `ru_pu12_text`; `MoveGoal::max_mps`). The cable follows him: a point every 5 m, its length the way
+  he walked (`ScenarioRunner::Wires`). At the far end the run is out (the input `line<n>_run`); he connects the far set
+  (`wire.line<n>` worked there), stays while it is connected (`line<n>_laid`, 20 s, estimate), rings the post on it
+  («Линия проложена. Проверка связи.», answered at the RTK-1) and walks back at his own pace.
+* **The line** is laid while `line<n>_laid` is ready (`ScenarioRunner::LineLaid`): only then do its calls ring, a
+  designation go by it and the radar's crew ring on it. A scenario's laid lines start so (`StartLines`).
+* **The player** at a layer's seat clicks the line's switch in the cabin and is walked out along it at the laying pace;
+  arrived, the switch is worked there. Walking to the far end by himself lays no cable, and the job refuses him.
+
+In `pu12m_deploy_wire.json` (four lines to far sets 446 m out, `test_crew_mobility.cpp`) the post is deployed at 1060 s;
+the four men are out by 1069 s, each pays out 443-445 m of cable (89-90 points) at no more than 1.20 m/s, the lines are
+laid at 1464-1468 s (about 400 s from the order), the check calls ring and are answered, and the men are back in their
+seats by 1796 s, inside the norm's 25 minutes (1500 s) from the halt.
+
+A job now holds its man at its place after his drill's last step while the work he started there is under way (a
+`stay_until` subsystem starting, `CrewMember::WorkUnderWay`): a one-step drill (the line's connection, the radar cable at
+its drum) no longer lets him walk off before it is done.
+
+Left: winding the lines back in when the post leaves (the cable stays on the ground); Unreal drawing the cable on the ground
+(`Wires()` has its points); a line cut by fire or vehicles and its repair; the free men sent before the post is deployed.
+
+**Planned** (the battery's war, `docs/campaign/07_BETWEEN_FIGHTS.md`, roadmap phase 20): the battery's activities between
+fights (maintenance, rest, meals, digging, wire, guard, briefings) run as jobs at places in this form, and the time to
+readiness is computed from where every person is and the legs to their seat.
 
 ## 5. Status and what is next
 
@@ -156,5 +226,9 @@ as a subsystem's `start_time_s`, and the drill's procedure). The later tasks fit
 | `simcore/crew_mobility.hpp`: the data, the pace, the voice, the mover; `CrewMember` jobs; the runner's movers, earshot, К машинам / По местам | done, `simcore/tests/test_crew_mobility.cpp` |
 | The vehicles' files (Osa, PU-12M) and the first jobs | done (times estimated) |
 | Unreal: the player through the hatch, on the hull, down, over the ground, back; NPCs drawn walking; the job switches walk him out | done, to be tested in the game |
-| The drill master and the lessons knowing the walk's time; the order menu's К машинам / По местам; the dismount on the safe side of a road | next |
-| Wire laying as the first new outside task | next |
+| The order menu's К машине / По местам | done |
+| The drill master knowing the walk: its ideal run walks a man out to a job and back, a job's cost counts the way (`DrillMaster::SetOutside`, the runner's `WaySeconds`) | done 29 Oct 2026, `test_crew_mobility.cpp` |
+| The lessons knowing the walk: a step worked outside says where the learner must go (out to the job's place, back in for a control inside), the card shows it, L leads him to a job's place, and the instructor (N) leads him there before working it (`TutorialStatus::away`, `TutorialGuide::Lead`; `docs/TUTORIALS.md`) | done 30 Oct 2026, `test_tutorial.cpp` |
+| The dismount on the safe side of a road: at a road of the map the crew gets down and up away from the traffic (section 2.2) | done 30 Oct 2026, `test_crew_mobility.cpp` |
+| Wire laying as the first new outside task: the PU-12M's lines paid out to their far ends (section 4.1) | done 30 Oct 2026, `test_crew_mobility.cpp`, `pu12m_deploy_wire.json` |
+| The crew chief's compass survey as his walk out to the aiming circle and back, the Qc told once he is heard; a man outside comes in through a hatch combat work keeps shut (sections 2.2, 2.3) | done 30 Oct 2026, `test_orientation.cpp`, `test_crew_mobility.cpp` |

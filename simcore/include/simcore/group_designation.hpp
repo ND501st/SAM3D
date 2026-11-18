@@ -92,7 +92,7 @@ inline std::vector<GroupEcho> RuleOrder(std::vector<GroupEcho> group, double sam
     }
     const double middle = RadToDeg(std::atan2(sx, sy));
     auto rel = [&](const GroupEcho& e) { return group_detail::Wrap180(e.azimuth_deg - middle); };
-    std::sort(group.begin(), group.end(), [&](const GroupEcho& a, const GroupEcho& b) { return rel(a) < rel(b); });
+    std::stable_sort(group.begin(), group.end(), [&](const GroupEcho& a, const GroupEcho& b) { return rel(a) < rel(b); });
     // Echoes on one azimuth (each within the beam of the one before) count by range.
     for (std::size_t i = 0; i < group.size();) {
         std::size_t j = i + 1;

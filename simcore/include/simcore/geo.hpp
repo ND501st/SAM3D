@@ -100,4 +100,15 @@ private:
     Vec3 east_, north_, up_;
 };
 
+// The point of a frame at (east, north) whose altitude is `alt_m`: x and y stay exactly (east, north), z is solved
+// (roadmap R5: one vertical, the frame's z, for the ground the sim samples and the ground the game draws). A first
+// guess from the sphere, then Newton steps on the altitude (its slope in z is the cosine of the tilt between the frame's
+// up and the local up: 0.99994 at 70 km, so a few steps leave micrometres).
+inline Vec3 GroundPointInFrame(const LocalFrame& frame, double east_m, double north_m, double alt_m) {
+    Vec3 p{east_m, north_m,
+           alt_m - frame.Origin().alt_m - (east_m * east_m + north_m * north_m) / (2.0 * wgs84::kMeanRadius)};
+    for (int i = 0; i < 3; ++i) p.z += alt_m - frame.AltitudeOf(p);
+    return p;
+}
+
 }  // namespace simcore

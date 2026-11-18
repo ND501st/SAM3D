@@ -1,9 +1,11 @@
 // air_war_demo: the enemy air command's war, end to end (docs/air_war/).
 //
-// Usage: air_war_demo [faction] [days] [data_dir] [out_dir] [seed] [map]
-//   faction: rebels, neutral, warsaw_pact or nato (default nato); days (default 3); data_dir (default data);
-//   out_dir (default out/air_war); seed (default 1); map: the raids on a map's ground (e.g. maps/kesmark_range.json),
-//   the battery and its dummies set down on open ground near where the campaign has them (default: flat ground).
+// Usage: air_war_demo [--theatre file] [faction] [days] [data_dir] [out_dir] [seed] [map]
+//   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json; theatre_pannonia_nation.json is the
+//   whole nation); faction: rebels, neutral, warsaw_pact or nato (default nato); days (default 3); data_dir (default
+//   data); out_dir (default out/air_war); seed (default 1); map: the raids on a map's ground (e.g.
+//   maps/kesmark_range.json), the battery and its dummies set down on open ground near where the campaign has them
+//   (default: flat ground).
 //
 // Runs the campaign hour by hour. The enemy's staff plans its air tasking orders; raids are flown abstractly, except
 // those through the player's battery's sector, which become scenarios (raid_scenario.hpp) loaded by the same loader
@@ -18,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "simcore/air_war.hpp"
 #include "simcore/scenario.hpp"
@@ -44,16 +47,26 @@ std::string Escape(const std::string& s) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    const std::string faction = argc > 1 ? argv[1] : "nato";
-    const double days = argc > 2 ? std::atof(argv[2]) : 3.0;
-    const std::string data_dir = argc > 3 ? argv[3] : "data";
-    const std::string out_dir = argc > 4 ? argv[4] : "out/air_war";
-    const unsigned seed = argc > 5 ? static_cast<unsigned>(std::atoi(argv[5])) : 1u;
-    const std::string map_file = argc > 6 ? argv[6] : "";
+    std::string theatre = "theatre_pannonia.json";
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--theatre" && i + 1 < argc) {
+            theatre = argv[++i];
+        } else {
+            args.push_back(a);
+        }
+    }
+    const std::string faction = args.size() > 0 ? args[0] : "nato";
+    const double days = args.size() > 1 ? std::atof(args[1].c_str()) : 3.0;
+    const std::string data_dir = args.size() > 2 ? args[2] : "data";
+    const std::string out_dir = args.size() > 3 ? args[3] : "out/air_war";
+    const unsigned seed = args.size() > 4 ? static_cast<unsigned>(std::atoi(args[4].c_str())) : 1u;
+    const std::string map_file = args.size() > 5 ? args[5] : "";
 
     AirWarData data;
     std::string error;
-    if (!LoadAirWarData(data_dir, "air_war/theatre_pannonia.json", "air_war/faction_" + faction + ".json", data, &error)) {
+    if (!LoadAirWarData(data_dir, "air_war/" + theatre, "air_war/faction_" + faction + ".json", data, &error)) {
         std::fprintf(stderr, "%s\n", error.c_str());
         return 1;
     }
@@ -120,10 +133,12 @@ int main(int argc, char** argv) {
             if (!hit && (e.kind != DebriefEntry::Kind::Scenario || e.detail.compare(0, 9, "destroyed") != 0)) continue;
             for (const RaidAircraft& a : rs.manifest.aircraft) drones += a.drone && a.target_id == e.what ? 1 : 0;
         }
-        std::printf("  >> %s (%s '%s' on %s): %d aircraft, %d launches, %d shot down and %d decoys, radars on %.0f s, %d ARMs%s\n",
+        std::printf("  >> %s (%s '%s' on %s): %d aircraft, %d launches, %d shot down (%d by the %d neighbours in reach) and %d decoys, "
+                    "radars on %.0f s, %d ARMs%s\n",
                     rs.manifest.scenario_id.c_str(), MissionKindName(p->kind), p->name.c_str(), p->target_label.c_str(),
-                    static_cast<int>(rs.manifest.aircraft.size()), runner.Launches(), outcome.Lost(), drones, bridge.EmittedSeconds(),
-                    bridge.ArmsFired(), bridge.UnitDestroyed() ? ", OUR VEHICLE HIT" : "");
+                    static_cast<int>(rs.manifest.aircraft.size()), runner.Launches(), outcome.Lost(), bridge.NeighbourKills(),
+                    static_cast<int>(rs.manifest.neighbours.size()), drones, bridge.EmittedSeconds(), bridge.ArmsFired(),
+                    bridge.UnitDestroyed() ? ", OUR VEHICLE HIT" : "");
         campaign.CompletePlayerMission(outcome, rs.manifest.start_h + runner.Time() / 3600.0);
         ++played;
     }
@@ -150,5 +165,39 @@ int main(int argc, char** argv) {
     }
     js << "  ],\n  \"enemy_mind\": \"" << Escape(campaign.EnemyMind()) << "\",\n  \"intsum\": \"" << Escape(campaign.Intsum(24.0)) << "\"\n}\n";
     std::printf("Wrote %s\n", jpath.c_str());
+
+    // Each package's main route in the form tools/map_view.py --routes draws (km on the country's map): to the gate
+    // dashed, in to the release solid, home in blue (roadmap B2, docs/air_battle/01_ROUTES.md).
+    const std::string rpath = out_dir + "/air_war_" + faction + "_routes.json";
+    std::ofstream rs(rpath, std::ios::binary);
+    rs << "{\n  \"routes\": [\n";
+    bool first = true;
+    for (const Package& p : campaign.Packages()) {
+        const Flight* main = nullptr;
+        for (const Flight& fl : p.flights) {
+            if (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter || fl.role == FlightRole::Hunter) {
+                main = &fl;
+                break;
+            }
+        }
+        if (main == nullptr || main->route.size() < 2) continue;
+        const int gate = RouteIndexOf(main->route, "gate");
+        const int release = RouteIndexOf(main->route, "target");
+        rs << (first ? "" : ",\n") << "    {\"to\": \"" << Escape(p.name + " " + p.corridor) << "\", \"time_s\": "
+           << (main->route.back().t_h - main->route.front().t_h) * 3600.0 << ", \"points_km\": [";
+        for (std::size_t i = 0; i < main->route.size(); ++i) {
+            rs << (i == 0 ? "" : ", ") << "[" << main->route[i].pos.x / 1000.0 << ", " << main->route[i].pos.y / 1000.0 << "]";
+        }
+        rs << "], \"stretches\": [";
+        for (std::size_t i = 0; i + 1 < main->route.size(); ++i) {
+            const int k = static_cast<int>(i);
+            const char* kind = (gate >= 0 && k < gate) ? "off_road" : ((release >= 0 && k >= release) ? "swim" : "road");
+            rs << (i == 0 ? "" : ", ") << "\"" << kind << "\"";
+        }
+        rs << "]}";
+        first = false;
+    }
+    rs << "\n  ]\n}\n";
+    std::printf("Wrote %s\n", rpath.c_str());
     return failed == 0 ? 0 : 1;
 }

@@ -8,7 +8,11 @@
 //     with the message's own timing and over the Osa's link to the post; none while the post's battery net is off the air;
 //   - the Osa's commander's reports (к бою готов, пуск, цель поражена, ракет нет) go onto the post's IT boards, and the
 //     post's other launchers' reports are heard in the Osa;
-//   - the Osa's place in the post's fire distribution: its missiles and the target its crew is on.
+//   - the Osa's place in the post's fire distribution: its missiles and the target its crew is on;
+//   - the battery commander's emission regime, said on the battery net, to the Osa's commander (if his set hears the
+//     net), and the Osa's report of an ARM attack to the battery commander (docs/crew/16_EMISSION.md);
+//   - for the game's eyes only (the presentation feed, fx/events.hpp): the missiles of the battery's other launchers,
+//     which fire in the post's runner, shown in the Osa's feed, the one the game reads.
 //
 // The file (data/scenarios/<link>.json):
 //   { "link_id", "name", "description", "osa": "scenarios/<the Osa's>.json", "post": "scenarios/<the post's>.json",
@@ -18,12 +22,17 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/fx/events.hpp"
 #include "simcore/json.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
@@ -68,6 +77,7 @@ public:
         if (Finished()) return;
         osa_->Step(dt);
         post_->Step(dt);
+        osa_->HearPostRadarOf(*post_);  // the post's radar is an emitter the aircraft's receivers can hear (roadmap B3)
         Sync();
     }
     bool RunToEnd(double dt, double max_s = 1e9) {
@@ -86,8 +96,11 @@ private:
         }
         osa_->SetPostNetUp(post_->PostBatteryNetUp());
         for (int to : post_->TakeBatteryNetOrders()) osa_->HearBatteryNetOrder(to);  // the spare frequency (or back)
+        for (const EmissionRegime& r : post_->TakeBatteryEmissionOrders()) osa_->HearBatteryEmissionOrder(r);  // the emission regime
+        for (const std::string& az : osa_->TakeArmAttackReports()) post_->HearArmAttackReport(callsign_, az);  // an ARM attack
         for (int number : osa_->TakeReadbacks()) post_->HearReadback(callsign_, number);
         for (const ScenarioRunner::LinkReport& r : osa_->TakeOwnReports()) post_->HearBatteryReport(r);
+        ShowPostMissiles();  // before the reports: the burst comes before the wreck
         for (const ScenarioRunner::LinkReport& r : post_->TakeNetReports()) {
             if (r.kind == BatteryFire::Event::Kind::Hit) osa_->DestroyTarget(r.target, r.callsign);
             osa_->HearBatteryReport(r);
@@ -101,11 +114,30 @@ private:
         post_->SetExternalLauncherState(callsign_, l != nullptr ? l->LoadedCount() : -1, target, osa_->Tracking());
     }
 
+    // The presentation feed (fx/events.hpp): the game draws and hears the Osa's runner's feed whichever vehicle the
+    // player is in, but the battery's other launchers fire in the post's runner. Their missiles (SamLaunch, SamEnd) go
+    // into the Osa's feed as well, with the Osa's World id of their target; the wreck of what they hit comes with the
+    // kill (DestroyTarget). A neighbour that fights in the Osa's own runner shows there already.
+    void ShowPostMissiles() {
+        const std::vector<fx::Event> seen = post_->Fx().Since(post_fx_seen_);
+        post_fx_seen_ = post_->Fx().Last();
+        if (!osa_->FxOn()) return;
+        for (const fx::Event& e : seen) {
+            if (e.kind != fx::EventKind::SamLaunch && e.kind != fx::EventKind::SamEnd) continue;
+            const std::size_t slash = e.source.find('/');  // a neighbour's launcher: "<neighbour>/<n>"
+            if (slash != std::string::npos && osa_->NeighbourFights(e.source.substr(0, slash))) continue;
+            fx::Event c = e;
+            c.world_id = osa_->TargetWorldId(e.target);
+            osa_->Fx().Push(c);
+        }
+    }
+
     std::string callsign_;
     std::unique_ptr<ScenarioRunner> osa_;
     std::unique_ptr<ScenarioRunner> post_;
     std::string pending_target_;
     double pending_until_s_ = -1.0;
+    std::uint64_t post_fx_seen_ = 0;  // the post's feed read so far
 };
 
 namespace detail {
@@ -127,8 +159,11 @@ public:
 }  // namespace detail
 
 // Load a link and both its scenarios. Null with `error` set when a file is missing or the two don't fit together.
+// `adjust` is applied to each half once loaded, before the checks (roadmap R7: the menu's time of day, ApplyTimeChoice),
+// so the two halves still have to agree after it.
 inline std::unique_ptr<BatteryLink> LoadBatteryLinkFile(const std::string& path, const std::string& data_dir,
-                                                        std::string* error = nullptr, BatteryLinkDef* def_out = nullptr) {
+                                                        std::string* error = nullptr, BatteryLinkDef* def_out = nullptr,
+                                                        const std::function<void(ScenarioDef&)>& adjust = {}) {
     auto fail = [&](const std::string& why) -> std::unique_ptr<BatteryLink> {
         if (error != nullptr) *error = path + ": " + why;
         return nullptr;
@@ -146,6 +181,10 @@ inline std::unique_ptr<BatteryLink> LoadBatteryLinkFile(const std::string& path,
     std::string e;
     if (!LoadScenarioFile(data_dir + "/" + def.osa_file, data_dir, osa, osa_console, &e)) return fail("osa: " + e);
     if (!LoadScenarioFile(data_dir + "/" + def.post_file, data_dir, post, post_console, &e)) return fail("post: " + e);
+    if (adjust) {
+        adjust(osa);
+        adjust(post);
+    }
     if (osa.battery_commander != "post") return fail("osa: its battery_commander must be \"post\"");
     if (!osa.has_battery || osa.tuning_file.empty()) return fail("osa: needs a battery and the engagement model");
     if (!post.has_post || !post.has_battery) return fail("post: its own unit must be the command post, with a battery");
@@ -161,6 +200,10 @@ inline std::unique_ptr<BatteryLink> LoadBatteryLinkFile(const std::string& path,
     if (std::fabs(osa.origin.lat_rad - post.origin.lat_rad) > 1e-12 || std::fabs(osa.origin.lon_rad - post.origin.lon_rad) > 1e-12 ||
         std::fabs(osa.origin.alt_m - post.origin.alt_m) > 1e-6) {
         return fail("the two scenarios need the same origin");
+    }
+    if (osa.clock.day_of_year != post.clock.day_of_year || std::fabs(osa.clock.utc_offset_h - post.clock.utc_offset_h) > 1e-6 ||
+        std::fabs(osa.clock.start_local_h - post.clock.start_local_h) > 1e-6) {
+        return fail("the two scenarios need the same clock (date, utc_offset_h and the hour of second 0)");
     }
     if (def_out != nullptr) *def_out = def;
     return std::make_unique<BatteryLink>(std::move(osa), std::move(osa_console), std::move(post), std::move(post_console), def.callsign);

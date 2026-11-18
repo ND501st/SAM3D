@@ -10,8 +10,10 @@
 // his own side's intelligence learns.
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <utility>
@@ -35,6 +37,12 @@ struct TacticMemory {
 inline std::string TacticKey(const std::string& entry, Profile p, DayPart d, MissionKind k) {
     return entry + "|" + ProfileName(p) + "|" + DayPartName(d) + "|" + MissionKindName(k);
 }
+// The route planner's (docs/air_battle/01_ROUTES.md §7.3): the way in by its corridor (the gate and the feature of
+// greatest lateral offset) and the way home. A key of the old form read from memory is an unknown corridor.
+inline std::string TacticKey(const std::string& gate, const std::string& corridor, const std::string& exit, Profile p, DayPart d,
+                             MissionKind k) {
+    return gate + "|" + corridor + "|" + exit + "|" + ProfileName(p) + "|" + DayPartName(d) + "|" + MissionKindName(k);
+}
 
 struct Officer {
     OfficerDef def;
@@ -51,6 +59,7 @@ struct Officer {
     std::map<std::string, double> grudges;      // what he believes shot his men down (intel entry key) -> weight
     std::map<std::string, TacticMemory> tactics;
     std::string last_entry;       // the entry point of his last package
+    std::string last_corridor;    // and its corridor (route.mode 1, route_planner.hpp)
     double lesson_sead = 0.0;     // more SEAD per threat, learnt from losses to radar defences
     int packages_planned = 0;
     int aircraft_lost = 0;        // under his plans (planner) or his command (leader)
@@ -153,6 +162,22 @@ public:
         }
     }
 
+    // The duty officers of the command posts in the air (roadmap B5, c2.hpp): not one of the staff's single posts.
+    static bool IsPostRole(StaffRole r) { return r == StaffRole::CpController || r == StaffRole::GciController || r == StaffRole::Fac; }
+
+    // A command post's duty officer (roadmap B5): generated from the pool with his role's rank and trait means, after the
+    // staff (so the staff's own draws are not moved), kept apart from the single posts' holders (a faction has many posts
+    // of a kind). `post` is the post's id (his def.squadron). Returns his index.
+    int AppointPost(StaffRole role, const std::string& post, const AirWarData& data, Rng& rng, double now_h) {
+        OfficerDef od = Generate(role, post, data, rng, nullptr);
+        od.flies = false;
+        Officer o = Make(od, data);
+        o.appointed_h = now_h;
+        o.Note(now_h, data.theatre.start_hour, "on duty at " + post);
+        officers.push_back(std::move(o));
+        return static_cast<int>(officers.size()) - 1;
+    }
+
     // Put a new officer in a post (generated from the faction's pool). Returns his index.
     int Appoint(StaffRole role, const std::string& squadron, const AirWarData& data, Rng& rng, double now_h,
                 const std::string& why, const Officer* predecessor = nullptr) {
@@ -206,6 +231,15 @@ private:
     }
 
     static double Draw(Rng& rng, double mean, double sd) { return Clamp01(rng.Normal(mean, sd)); }
+    // FNV-1a of a word: the hot habits' stream key (portable, unlike std::hash).
+    static std::uint64_t HotKey(const std::string& s) {
+        std::uint64_t h = 1469598103934665603ull;
+        for (const char c : s) {
+            h ^= static_cast<unsigned char>(c);
+            h *= 1099511628211ull;
+        }
+        return h ^ 0x407ull;
+    }
 
     OfficerDef Generate(StaffRole role, const std::string& squadron, const AirWarData& data, Rng& rng,
                         const Officer* predecessor) const {
@@ -257,23 +291,41 @@ private:
         od.skills.airmanship = Draw(rng, sm.airmanship, ss);
         od.skills.leadership = Draw(rng, sm.leadership, ss);
         od.skills.politics = Draw(rng, sm.politics, ss);
-        // Quirks, weighted by tier, allowed for the role, no repeats.
+        // Quirks, weighted by tier, allowed for the role, no repeats. The hot phase's own habits (hot_draw) are not in this
+        // draw: they come after, each from a stream keyed on him, at the chance it would have had in it (roadmap B11).
+        const int hot_mode = static_cast<int>(data.tuning.Get("hot_phase.mode"));
         const int n = pool.quirks_min + rng.Index(pool.quirks_max - pool.quirks_min + 1);
         std::vector<double> w;
+        double all = 0.0;
         for (const QuirkDef& q : data.quirks) {
-            double x = q.tier_weight[static_cast<int>(f.tier)];
+            double x = q.TierWeight(f.tier, hot_mode);
             if (!q.roles.empty()) {
                 bool ok = false;
                 for (StaffRole r : q.roles) ok = ok || r == role;
                 if (!ok) x = 0.0;
             }
-            w.push_back(x);
+            all += std::max(0.0, x);
+            w.push_back(q.hot_draw ? 0.0 : x);
         }
         for (int k = 0; k < n; ++k) {
             const int qi = rng.Weighted(w);
             if (qi < 0 || w[static_cast<std::size_t>(qi)] <= 0.0) break;
             od.quirks.push_back(data.quirks[static_cast<std::size_t>(qi)].id);
             w[static_cast<std::size_t>(qi)] = 0.0;
+        }
+        if (hot_mode >= 1 && all > 0.0) {
+            Rng hot = rng.Fork(HotKey(od.id));
+            for (const QuirkDef& q : data.quirks) {
+                if (!q.hot_draw) continue;
+                double x = q.TierWeight(f.tier, hot_mode);
+                if (!q.roles.empty()) {
+                    bool ok = false;
+                    for (StaffRole r : q.roles) ok = ok || r == role;
+                    if (!ok) x = 0.0;
+                }
+                const double chance = std::min(1.0, static_cast<double>(n) * std::max(0.0, x) / all);
+                if (hot.Uniform() < chance) od.quirks.push_back(q.id);
+            }
         }
         od.flies = role == StaffRole::SquadronLeader;
         for (const std::string& q : od.quirks) {

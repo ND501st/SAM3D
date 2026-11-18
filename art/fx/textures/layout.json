@@ -1,0 +1,80 @@
+{
+  "T_FX_SmokeAtlas": {
+    "cols": 4,
+    "rows": 4,
+    "width": 1024,
+    "height": 1024
+  },
+  "T_FX_Fireball": {
+    "cols": 8,
+    "rows": 8,
+    "width": 1024,
+    "height": 1024
+  },
+  "T_FX_HeatRamp": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 4
+  },
+  "T_FX_Glow": {
+    "cols": 1,
+    "rows": 1,
+    "width": 128,
+    "height": 128
+  },
+  "T_FX_Flash": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 256
+  },
+  "T_FX_Streak": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 32
+  },
+  "T_FX_Spark": {
+    "cols": 1,
+    "rows": 1,
+    "width": 64,
+    "height": 64
+  },
+  "T_FX_Ring": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 256
+  },
+  "T_FX_Contrail": {
+    "cols": 1,
+    "rows": 1,
+    "width": 512,
+    "height": 128
+  },
+  "T_FX_Plume": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 64
+  },
+  "T_FX_Afterburner": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 64
+  },
+  "T_FX_Scorch": {
+    "cols": 1,
+    "rows": 1,
+    "width": 256,
+    "height": 256
+  },
+  "T_FX_DebrisAtlas": {
+    "cols": 4,
+    "rows": 4,
+    "width": 256,
+    "height": 256
+  }
+}

@@ -2,6 +2,7 @@
 // combat formation in pairs, scheduled halts, and the scenario hooks (orders, triggers, shared pictures).
 #include <cmath>
 #include <cstdio>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -454,6 +455,61 @@ SC_TEST("battery drills: the TZM drives up when the launcher is empty, reloads s
               d.find("reload done") != std::string::npos && d.find("to refuel 21") != std::string::npos);
 }
 
+SC_TEST("battery drills (G9): in the commander's seat the TZM is the player's to ask for on the net; it comes once asked") {
+    const std::string text = R"({
+      "scenario_id": "svc_player", "name": "Service", "source": "sam3d", "confidence": "estimate", "seed": 2,
+      "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 }, "terrain": { "type": "flat", "height_m": 110 },
+      "battery": { "own": { "id": "21", "callsign": "21" },
+        "vehicles": [ { "id": "TZM", "kind": "reload", "position": { "east_m": 300, "north_m": -400, "up_m": 3 } } ] },
+      "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json", "readiness": "deployed",
+                    "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "inputs": { "vehicle_stopped": true } },
+      "crew": [ { "name": "Commander", "role": "commander" } ], "crew_commander": "npc",
+      "targets": [], "triggers": [], "end": { "time_limit_s": 1500, "when_targets_gone": false } })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &error));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.GetLauncher() != nullptr && r.GetBattery() != nullptr && r.GetBattery()->Find("TZM") != nullptr);
+    if (r.GetLauncher() == nullptr || r.GetBattery() == nullptr || r.GetBattery()->Find("TZM") == nullptr) return;
+    r.TakeSeat("commander", "Player");
+    r.SetHelper(true);
+    auto owes = [&](SeatDuty::Kind kind, const std::string& id) {
+        for (const SeatDuty& d : r.OwedDuties("commander")) {
+            if (d.kind == kind && d.id == id) return true;
+        }
+        return false;
+    };
+    const std::vector<std::string> menu = r.PlayerRadioReports("commander");
+    SC_EXPECT(std::find(menu.begin(), menu.end(), "request_tzm") != menu.end());
+    // Missiles on the launcher: nothing to ask for.
+    r.Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(!r.PlayerSay("commander", "request_tzm") && r.LastRefusal() == "the launcher still has missiles");
+    r.Console().panel.Set("radio.chest", 0);
+    for (const char* c : {"1-I", "2-I", "3-I", "1-II", "2-II", "3-II"}) r.GetLauncher()->Unload(c);
+    for (int i = 0; i < 20 * 120; ++i) r.Step(0.05);
+    // Two minutes empty and not asked: the TZM stays where it is, and the request is his to make, on the air.
+    SC_EXPECT(r.GetBattery()->Find("TZM")->serving.empty() && r.GetLauncher()->LoadedCount() == 0);
+    SC_EXPECT(owes(SeatDuty::Kind::Report, "request_tzm"));
+    SC_EXPECT(r.ChestToTalk("commander", "request_tzm") == "radio.chest");  // the helper shows the chest switch first
+    SC_EXPECT(!r.PlayerSay("commander", "request_tzm"));
+    r.Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(r.ChestToTalk("commander", "request_tzm").empty());
+    SC_EXPECT(r.PlayerSay("commander", "request_tzm"));
+    r.Step(0.05);
+    SC_EXPECT(!owes(SeatDuty::Kind::Report, "request_tzm"));
+    // His words out, the chest switch back to receive (held, the set stays on the air).
+    for (int i = 0; i < 20 * 10; ++i) r.Step(0.05);
+    SC_EXPECT(owes(SeatDuty::Kind::Control, "radio.chest"));
+    r.Console().panel.Set("radio.chest", 0);
+    r.Step(0.05);
+    SC_EXPECT(!owes(SeatDuty::Kind::Control, "radio.chest"));
+    for (int i = 0; i < 20 * 900; ++i) r.Step(0.05);
+    std::printf("    loaded %d after the request\n", r.GetLauncher()->LoadedCount());
+    SC_EXPECT(r.GetLauncher()->LoadedCount() == 6);
+    SC_EXPECT(r.Debrief().find("to reload 21") != std::string::npos);
+}
+
 SC_TEST("battery fire: in free fire each launcher takes the targets in its sector of fire, not just the nearest") {
     std::vector<BatteryVehicleDef> v;
     auto add = [&v](const char* id, double from, double to) {
@@ -510,6 +566,67 @@ SC_TEST("battery fire: in free fire each launcher takes the targets in its secto
     SC_EXPECT(fire.SetSector("22", 0.0, 0.0));
     SC_EXPECT(BatteryFire::InSector(fire.Shooters()[0], Vec3{-100.0, -100.0, 0.0}));
     SC_EXPECT(!fire.SetSector("99", 0.0, 90.0));
+}
+
+SC_TEST("battery fire: on its own, with its sector empty, a launcher takes one coming at it from any side, not one going away or above its ceiling") {
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    BatteryVehicleDef l22;
+    l22.id = l22.callsign = "22";
+    l22.kind = BatteryVehicleKind::Launcher;
+    l22.has_sector = true;
+    l22.sector_from_deg = 0.0;  // north-east
+    l22.sector_to_deg = 90.0;
+    Battery b(Tactics(), {own, l22});
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    BatteryFire fire(t, 20000.0);
+    fire.Sync(b);
+    fire.SetOnOwn("22", true);
+    auto target = [](const char* id, const Vec3& at, const Vec3& v, double agl) {
+        BatteryFireTarget tg;
+        tg.id = id;
+        tg.position = at;
+        tg.velocity = v;
+        tg.agl_m = agl;
+        return tg;
+    };
+    // South-west, out of its sector: one flying away, one above the zone's ceiling coming at it, one low coming at it.
+    const BatteryFireTarget away = target("away", Vec3{-4000.0, -4000.0, 300.0}, Vec3{-200.0, -200.0, 0.0}, 300.0);
+    const BatteryFireTarget high = target("high", Vec3{-6000.0, -6000.0, 5100.0}, Vec3{200.0, 200.0, 0.0}, 5100.0);
+    const BatteryFireTarget low = target("low", Vec3{-9000.0, -9000.0, 300.0}, Vec3{200.0, 200.0, 0.0}, 300.0);
+    std::mt19937 rng(3);
+    fire.Step(0.0, {away, high}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire.Find("22")->target.empty());
+    fire.Step(0.1, {away, high, low}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire.Find("22")->target == "low");
+    // One in its sector comes first, even farther off.
+    BatteryFire fire2(t, 20000.0);
+    fire2.Sync(b);
+    fire2.SetOnOwn("22", true);
+    const BatteryFireTarget ne = target("ne", Vec3{12000.0, 12000.0, 300.0}, Vec3{-200.0, -200.0, 0.0}, 300.0);
+    fire2.Step(0.0, {low, ne}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire2.Find("22")->target == "ne");
+    // Captured, then past it and out of its zones going away: let go for the next one.
+    BatteryFire fire3(t, 20000.0);
+    fire3.Sync(b);
+    fire3.SetOnOwn("22", true);
+    BatteryFireTarget pass = target("pass", Vec3{-3000.0, -3000.0, 300.0}, Vec3{200.0, 200.0, 0.0}, 300.0);
+    fire3.Step(0.0, {pass}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire3.Find("22")->target == "pass");
+    fire3.Step(20.0, {pass}, rng, &b, [](const std::string&) {});  // captured (the chart's 16.5 s)
+    SC_EXPECT(fire3.Find("22")->phase == BatteryFire::Phase::Tracking);
+    pass.position = Vec3{9000.0, 9000.0, 300.0};  // past it, beyond the zone's far edge, going away
+    fire3.Step(21.0, {pass}, rng, &b, [](const std::string&) {});
+    SC_EXPECT(fire3.Find("22")->target.empty() && fire3.Find("22")->phase == BatteryFire::Phase::Idle);
 }
 
 #include "simcore/board_reading.hpp"
@@ -582,4 +699,615 @@ SC_TEST("battery readiness: the commander reads the board; a fast track 150 km o
     std::printf("    warned of the 300 m/s track at %.0f s, of the 100 m/s one at %.0f s\n", fast, slow);
     SC_EXPECT(fast > 0.0 && fast < 200.0);
     SC_EXPECT(slow > 900.0);
+}
+
+#include <fstream>
+#include <sstream>
+
+namespace {
+
+// The practice scenario (one drone from the north past the battery) with our neighbours added before its targets.
+std::string PracticeWithNeighbours(const std::string& neighbours) {
+    std::ifstream f(kData + "/scenarios/osa_practice.json", std::ios::binary);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string text = ss.str();
+    const std::size_t at = text.find("\"targets\"");
+    if (at != std::string::npos) text.insert(at, "\"neighbours\": [" + neighbours + "],\n  ");
+    return text;
+}
+
+}  // namespace
+
+SC_TEST("neighbours: the regiment's other Osa battery fights in the battery fire model; its kills, missiles and radar time are its own") {
+    // Battery 23 30 km north on the drone's way in: its launchers take it on their own, long before it reaches us.
+    const std::string osa23 = R"({ "id": "osa_23", "name": "Osa battery 23", "system": "osa",
+        "position": { "east_m": 2000, "north_m": 30000, "up_m": 0 }, "radius_km": 10, "fights": true, "launchers": 3 })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(PracticeWithNeighbours(osa23), kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    SC_EXPECT(def.neighbours.size() == 1 && def.neighbours[0].fights && def.neighbours[0].launchers == 3);
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.NeighbourFights("osa_23"));
+    // Its working launchers in the combat formation: pairs 3 km apart, 200 m within.
+    const std::vector<std::pair<std::string, Vec3>> places = r.NeighbourLaunchers();
+    SC_EXPECT(places.size() == 3);
+    if (places.size() == 3) {
+        SC_EXPECT_NEAR((places[1].second - places[0].second).HorizontalLength(), 200.0, 1.0);
+        SC_EXPECT_NEAR((places[2].second - places[0].second).x, 3000.0, 1.0);
+    }
+    for (int i = 0; i < 20 * 700 && !r.Finished(); ++i) r.Step(0.05);
+    const int launches = r.NeighbourLaunches("osa_23");
+    const bool killed = r.NeighbourKills().count("t1") != 0;
+    bool logged = false;
+    for (const DebriefEntry& e : r.Log().Entries()) logged = logged || (e.what == "t1" && e.detail == "destroyed by Osa battery 23");
+    std::printf("    battery 23: %d missiles, the drone %s, %.0f launcher-seconds on it\n", launches, killed ? "shot down" : "flew on",
+                r.NeighbourRadarSeconds("osa_23"));
+    SC_EXPECT(launches >= 1 && launches <= 18);
+    SC_EXPECT(r.NeighbourRadarSeconds("osa_23") > 0.0);
+    SC_EXPECT(killed == logged);
+    SC_EXPECT(killed || launches == 18);
+    if (killed) SC_EXPECT(r.NeighbourKills().at("t1") == "osa_23");
+}
+
+SC_TEST("neighbours: only an Osa battery fights; the others are drawn and plotted, their fire the mission bridge's") {
+    const std::string s125 = R"({ "id": "kecel_s125", "name": "S-125 at Kecel", "system": "s125m1",
+        "position": { "east_m": 2000, "north_m": 30000, "up_m": 0 }, "radius_km": 22 })";
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenario(PracticeWithNeighbours(s125), kData, def, console, &error));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(!r.NeighbourFights("kecel_s125") && r.NeighbourLaunchers().empty());
+    for (int i = 0; i < 20 * 400; ++i) r.Step(0.05);
+    SC_EXPECT(r.NeighbourLaunches("kecel_s125") == 0 && r.NeighbourKills().empty());
+    // A mistake is refused with its path.
+    const std::string fights = R"({ "id": "x", "name": "x", "system": "s125m1", "position": { "east_m": 0, "north_m": 0, "up_m": 0 },
+        "radius_km": 22, "fights": true })";
+    ScenarioDef d2;
+    ConsoleData c2;
+    error.clear();
+    SC_EXPECT(!LoadScenario(PracticeWithNeighbours(fights), kData, d2, c2, &error));
+    SC_EXPECT(error.find("neighbours[0].fights") != std::string::npos);
+    const std::string launchers = R"({ "id": "x", "name": "x", "system": "osa", "position": { "east_m": 0, "north_m": 0, "up_m": 0 },
+        "radius_km": 10, "fights": true, "launchers": 5 })";
+    ScenarioDef d3;
+    ConsoleData c3;
+    error.clear();
+    SC_EXPECT(!LoadScenario(PracticeWithNeighbours(launchers), kData, d3, c3, &error));
+    SC_EXPECT(error.find("neighbours[0].launchers") != std::string::npos);
+}
+
+// The leg of an order to one post.
+static const command::OrderLeg* LegOf(const command::BatteryOrderRecord& o, const std::string& post) {
+    for (const command::OrderLeg& l : o.to) {
+        if (l.post == post) return &l;
+    }
+    return nullptr;
+}
+
+// The battery net's lines as the radio log has them: who said «я X: <words>» (the vehicle commanders' and ours).
+static void NetLines(const ScenarioRunner& r, const std::string& words, std::set<std::string>& out) {
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+        if (m.net != "battery net") continue;
+        const std::size_t at = m.text.find(": " + words);
+        const std::size_t me = m.text.find("я ");
+        if (at != std::string::npos && me != std::string::npos && me < at) out.insert(m.text.substr(me + 3, at - me - 3));
+    }
+}
+
+SC_TEST("battery orders by a means (G10.5): «К маршу!» on the battery net; 23, its set off, by the telephone; 24 by a runner; nobody moves before he hears") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    // The battery commander rides in the PU-12; every other vehicle has a commander, battery 21's from the chain, ours
+    // (driven by the battery) the crew's own, seat by seat.
+    SC_EXPECT(def.battery_by_means && def.battery_giver == "PU-12" && def.battery_crews.size() == 6);
+    const command::OrderVehicle* c23 = nullptr;
+    const command::OrderVehicle* c21 = nullptr;
+    for (const command::OrderVehicle& c : def.battery_crews) {
+        if (c.vehicle == "23") c23 = &c;
+        if (c.vehicle == "21") c21 = &c;
+    }
+    SC_EXPECT(c23 != nullptr && c23->commander == "Radek Cerny" && !c23->set_on && c23->line && !c23->seats);
+    SC_EXPECT(c21 != nullptr && c21->seats && c21->post == "veh21_1_commander");
+    Vec3 start21, start23, start24;
+    for (const BatteryVehicleDef& v : def.battery_vehicles) {
+        if (v.id == "21") start21 = v.start;
+        if (v.id == "23") start23 = v.start;
+        if (v.id == "24") start24 = v.start;
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    bool early21 = false, early23 = false, early24 = false, caught24 = false;
+    std::set<std::string> said, read_back, again;  // on the battery net: «к маршу готов», «к маршу, понял», «X, я 10: К маршу!»
+    while (!r.Finished() && r.Time() < 2400.0) {
+        r.Step(0.05);
+        const Battery* b = r.GetBattery();
+        const bool any = !net->Book().Orders().empty();
+        auto moved = [&](const std::string& id, const Vec3& from) {
+            const Battery::Vehicle* v = b->Find(id);
+            return v != nullptr && std::hypot(v->position.x - from.x, v->position.y - from.y) > 1e-6;
+        };
+        if (!(any && net->Heard(0, "21")) && moved("21", start21)) early21 = true;
+        if (!(any && net->Heard(0, "23")) && moved("23", start23)) early23 = true;
+        if (!(any && net->Heard(0, "24")) && moved("24", start24)) early24 = true;
+        caught24 = caught24 || b->Catching("24");
+        NetLines(r, "к маршу готов", said);
+        NetLines(r, "к маршу, понял", read_back);
+        for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) {
+            if (m.net == "battery net" && m.text.find(", я 10: К маршу!") != std::string::npos) again.insert(m.text.substr(0, m.text.find(',')));
+        }
+    }
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    const command::OrderBook& book = net->Book();
+    SC_EXPECT(book.Orders().size() == 1);
+    if (book.Orders().size() != 1) return;
+    const command::BatteryOrderRecord& o = book.Orders()[0];
+    SC_EXPECT(o.kind == "march" && o.mean == "radio_voice" && o.words == "К маршу!" && o.giver == "bty21_commander");
+    SC_EXPECT_NEAR(o.given_h * 3600.0, 0.0, 0.1);  // on the first step, the crew still stowed
+    const double wait_s = net->Def().chase.wait_s;
+    for (const command::OrderLeg& l : o.to) {
+        const double heard_s = l.At(command::OrderStep::Heard) * 3600.0;
+        if (l.post == "veh21_3_commander") {
+            // Twice more on the net, then the telephone: the line is laid.
+            SC_EXPECT(l.sent.size() == 4 && l.sent[3].second == "field_telephone" && l.mean == "field_telephone");
+            SC_EXPECT_NEAR(heard_s, 3.0 * wait_s + net->Def().ring_s + net->Def().say_s, 1.0);
+            // He repeats it back on the same call, before the chase's runner is due.
+            SC_EXPECT(l.At(command::OrderStep::RepeatedBack) * 3600.0 - heard_s < net->Def().ring_s);
+        } else if (l.post == "veh21_4_commander") {
+            // No wire: the runner, after the net's two repeats.
+            SC_EXPECT(l.sent.size() == 4 && l.sent[3].second == "messenger" && l.mean == "messenger");
+            SC_EXPECT(heard_s > 3.0 * wait_s + net->Def().runner_handling_s);
+            // His set, switched on when the runner came, carries the report once it can transmit.
+            SC_EXPECT(l.At(command::OrderStep::Reported) * 3600.0 >= heard_s + net->Def().set_warm_s + net->Def().set_tx_s);
+        } else {
+            SC_EXPECT(l.mean == "radio_voice" && l.sent.size() == 1);
+            SC_EXPECT_NEAR(heard_s, net->Def().say_s, 0.1);
+        }
+        SC_EXPECT(l.Has(command::OrderStep::RepeatedBack) && l.Has(command::OrderStep::Reported));
+    }
+    // Nobody left before his commander heard; 24, gone after the column, caught it up.
+    SC_EXPECT(!early21 && !early23 && !early24 && caught24);
+    // On the battery net: the order said again to 23 and 24 by call sign; each read-back that went by radio (23's went
+    // down its telephone line, 24's on the net once its set could transmit); «к маршу готов» from every vehicle but 23.
+    SC_EXPECT(again.count("23") == 1 && again.count("24") == 1 && again.count("22") == 0);
+    for (const char* v : {"21", "22", "24", "TZM", "ATZ"}) SC_EXPECT(read_back.count(v) == 1 && said.count(v) == 1);
+    SC_EXPECT(read_back.count("23") == 0 && said.count("23") == 0);
+}
+
+SC_TEST("battery orders by a means (G10.5): our crew, ready at the position, hears «К маршу!», stows and only then moves off") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    SC_EXPECT(!def.battery_orders.empty());
+    if (def.battery_orders.empty()) return;
+    def.battery_orders[0].at_s = 60.0;  // the crew has the vehicle ready by then
+    Vec3 start;
+    for (const BatteryVehicleDef& v : def.battery_vehicles) {
+        if (v.id == "21") start = v.start;
+    }
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    double moved_s = -1.0, stow_ordered_s = -1.0;
+    while (!r.Finished() && r.Time() < 900.0) {
+        r.Step(0.05);
+        const Battery::Vehicle* own = r.GetBattery()->Find("21");
+        if (moved_s < 0.0 && own != nullptr && std::hypot(own->position.x - start.x, own->position.y - start.y) > 1e-6) moved_s = r.Time();
+        for (const ScenarioRunner::GivenOrder& g : r.OrdersGiven()) {
+            if (g.order == "order_march" && stow_ordered_s < 0.0) stow_ordered_s = g.time_s;
+        }
+    }
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(!net->Book().Orders().empty());
+    if (net->Book().Orders().empty()) return;
+    const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_1_commander");
+    SC_EXPECT(l != nullptr);
+    if (l == nullptr) return;
+    const double heard_s = l->At(command::OrderStep::Heard) * 3600.0;
+    const double done_s = l->At(command::OrderStep::Done) * 3600.0;
+    std::printf("    heard %.1f s, «К маршу!» to the crew %.1f s, stowed %.1f s, moved %.1f s\n", heard_s, stow_ordered_s, done_s, moved_s);
+    // He heard it on the net, ordered the crew to stow, and the vehicle went only once it was stowed: no fault.
+    SC_EXPECT_NEAR(heard_s, 60.0 + net->Def().say_s, 0.2);
+    SC_EXPECT(stow_ordered_s >= heard_s - 0.01 && done_s > stow_ordered_s && moved_s >= done_s - 0.1);  // times through hours: 0.01 s
+    SC_EXPECT(l->Has(command::OrderStep::RepeatedBack) && l->Has(command::OrderStep::Reported));
+    SC_EXPECT(r.Log().Summary().equipment_faults == 0);
+}
+
+SC_TEST("battery orders by a means (G10.5): in the commander's seat the read-back and «к маршу готов» are the player's, on his chest switch") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.TakeSeat("commander", "Player");
+    r.SetHelper(true);
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    auto owes = [&](const std::string& id) {
+        for (const SeatDuty& d : r.OwedDuties("commander")) {
+            if (d.kind == SeatDuty::Kind::Report && d.id == id) return true;
+        }
+        return false;
+    };
+    while (r.Time() < 10.0) r.Step(0.05);
+    // He heard it: his read-back is owed, and the vehicle (stowed) is already on its way; nothing is reported for him.
+    SC_EXPECT(net->Heard(0, "21") && !net->RepeatedBack(0, "21") && owes("order_readback"));
+    SC_EXPECT(!r.PlayerSay("commander", "report_ready_to_march"));
+    // Not with the chest switch at receive; with it at ПРД, on the air.
+    SC_EXPECT(!r.PlayerSay("commander", "order_readback"));
+    r.Console().panel.Set("radio.chest", 1);
+    SC_EXPECT(r.PlayerSay("commander", "order_readback"));
+    r.Step(0.05);
+    SC_EXPECT(net->RepeatedBack(0, "21") && !owes("order_readback"));
+    SC_EXPECT(owes("report_ready_to_march"));
+    SC_EXPECT(r.PlayerSay("commander", "report_ready_to_march"));
+    r.Step(0.05);
+    SC_EXPECT(net->Reported(0, "21") && !owes("report_ready_to_march"));
+    // His were the only lines: the battery commander never had to say it to 21 again.
+    const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_1_commander");
+    SC_EXPECT(l != nullptr && l->sent.size() == 1);
+}
+
+SC_TEST("battery orders (G10.6): a vehicle broken down on the march says it cannot, and every reply is written in the journal") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    ScenarioTrigger tr;
+    tr.id = "22 breaks down";
+    tr.after_s = 400.0;
+    TriggerAction a;
+    a.kind = TriggerAction::Kind::Breakdown;
+    a.vehicle = "22";
+    a.reason = "the transmission";
+    tr.actions.push_back(a);
+    def.triggers.push_back(tr);
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr && r.GetBatteryJournal() != nullptr);
+    if (net == nullptr || r.GetBatteryJournal() == nullptr) return;
+    Vec3 at_breakdown;
+    while (!r.Finished() && r.Time() < 900.0) {
+        r.Step(0.05);
+        if (std::fabs(r.Time() - 400.05) < 0.03) at_breakdown = r.GetBattery()->Find("22")->position;
+    }
+    const Battery::Vehicle* v22 = r.GetBattery()->Find("22");
+    SC_EXPECT(v22 != nullptr && v22->broken);
+    if (v22 == nullptr) return;
+    // It stays where it broke down; its commander said so on the net (out of the column, radio is his), and the giver's
+    // picture has it.
+    SC_EXPECT(std::hypot(v22->position.x - at_breakdown.x, v22->position.y - at_breakdown.y) < 1.0);
+    const command::OrderLeg* l = LegOf(net->Book().Orders()[0], "veh21_2_commander");
+    SC_EXPECT(l != nullptr && l->cannot == "the transmission" && l->cannot_h * 3600.0 > 400.0);
+    const command::BatteryOrderNet::Word* w = net->LastFrom("22");
+    SC_EXPECT(w != nullptr && w->what == "cannot");
+    // Every reply that reached the battery commander is on his radiotelephonist's page, and its order's leg logged.
+    bool cannot_written = false;
+    for (const RadioJournalEntry& e : r.GetBatteryJournal()->Written()) {
+        if (e.from == "22" && e.said.find("не могу") != std::string::npos) cannot_written = true;
+    }
+    SC_EXPECT(cannot_written);
+    int logged = 0, reported = 0;
+    for (const command::OrderLeg& leg : net->Book().Orders()[0].to) {
+        reported += leg.Has(command::OrderStep::Reported) ? 1 : 0;
+        if (!leg.Has(command::OrderStep::Logged)) continue;
+        ++logged;
+        SC_EXPECT(leg.At(command::OrderStep::Logged) >= leg.At(command::OrderStep::Reported));
+    }
+    std::printf("    %d reported, %d logged; the journal has %d lines\n", reported, logged, static_cast<int>(r.GetBatteryJournal()->Written().size()));
+    SC_EXPECT(reported >= 4 && logged == reported);
+    SC_EXPECT(r.Debrief().find("Battery orders (the order book") != std::string::npos);
+}
+
+SC_TEST("battery orders (G10.6): at the end of the route «К бою!» goes down the column by flags and each vehicle reports «к бою готов»") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    SC_EXPECT(!def.battery_orders.empty() && def.battery_orders[0].route.size() == 2);
+    if (def.battery_orders.empty() || def.battery_orders[0].route.size() != 2) return;
+    def.battery_orders[0].route[1].y = 3000.0;  // a short march: 3 km, every set on (the whole column)
+    for (command::OrderVehicle& c : def.battery_crews) c.set_on = true;
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    while (!r.Finished() && r.Time() < 2400.0 && net->Book().Orders().size() < 2) r.Step(0.05);
+    SC_EXPECT(net->Book().Orders().size() == 2);
+    if (net->Book().Orders().size() < 2) return;
+    const command::BatteryOrderRecord& battle = net->Book().Orders()[1];
+    SC_EXPECT(battle.kind == "combat_formation" && battle.mean == "flags");
+    while (!r.Finished() && r.Time() < 2400.0) r.Step(0.05);
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    // Every vehicle read it and deployed; the launchers' «к бою готов» and the others' came back.
+    int done = 0;
+    for (const command::OrderLeg& leg : net->Book().Orders()[1].to) {
+        SC_EXPECT(leg.Has(command::OrderStep::Heard));
+        done += leg.Has(command::OrderStep::Reported) ? 1 : 0;
+    }
+    SC_EXPECT(done == static_cast<int>(net->Book().Orders()[1].to.size()));
+    for (const Battery::Vehicle& v : r.GetBattery()->Vehicles()) {
+        if (v.def.id != "PU-12") SC_EXPECT(v.deployed);
+    }
+}
+
+SC_TEST("battery orders (G10.7): the regiment's order of the emission regime reaches the battery commander, then the battery on the order net") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_battery_orders.json", kData, def, console));
+    ScenarioDef::EmissionOrderDef eo;
+    eo.at_s = 120.0;
+    eo.regime = def.emission.Make(EmissionKind::Limited, "regiment");
+    def.emission_orders.push_back(eo);
+    for (command::OrderVehicle& c : def.battery_crews) c.set_on = true;  // the whole battery on the net
+    const double relay_s = def.emission.relay_s;
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    const command::BatteryOrderNet* rgt = r.GetRegimentOrders();
+    SC_EXPECT(net != nullptr && rgt != nullptr);
+    if (net == nullptr || rgt == nullptr) return;
+    while (!r.Finished() && r.Time() < 400.0) r.Step(0.05);
+    for (const std::string& line : rgt->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    // The regiment's book: said to the battery commander, read back, passed on and reported done.
+    SC_EXPECT(rgt->Book().Orders().size() == 1);
+    if (rgt->Book().Orders().size() != 1) return;
+    const command::OrderLeg& bc = rgt->Book().Orders()[0].to.front();
+    SC_EXPECT(bc.Has(command::OrderStep::Heard) && bc.Has(command::OrderStep::RepeatedBack) && bc.Has(command::OrderStep::Done) &&
+              bc.Has(command::OrderStep::Reported));
+    // The battery's book: the regime given after he had it and passed it on, to every vehicle, each reading it back.
+    int regime = -1;
+    for (std::size_t i = 0; i < net->Book().Orders().size(); ++i) {
+        if (net->Book().Orders()[i].kind == "emission") regime = static_cast<int>(i);
+    }
+    SC_EXPECT(regime >= 0);
+    if (regime < 0) return;
+    const command::BatteryOrderRecord& o = net->Book().Orders()[static_cast<std::size_t>(regime)];
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(o.given_h * 3600.0 >= bc.At(command::OrderStep::CarryingOut) * 3600.0 + relay_s - 0.1);
+    for (const command::OrderLeg& leg : o.to) SC_EXPECT(leg.Has(command::OrderStep::Heard) && leg.Has(command::OrderStep::RepeatedBack));
+    // Our commander has it once he heard it on the net, and read it back like the others.
+    SC_EXPECT(r.CommanderRegime().kind == EmissionKind::Limited && r.CommanderRegime().from == "regiment");
+    SC_EXPECT(net->RepeatedBack(regime, "21"));
+}
+
+SC_TEST("battery orders (G10.8): from the PU-12M the battery commander gives the planned march when it is due; the replies are in the post's journal") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string error;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/pu12m_battery_orders.json", kData, def, console, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    ScenarioRunner r(std::move(def), std::move(console));
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr && r.GetBattery() != nullptr && r.GetBattery()->Own() != nullptr);
+    if (net == nullptr || r.GetBattery() == nullptr || r.GetBattery()->Own() == nullptr) return;
+    const Vec3 post_at = r.GetBattery()->Own()->position;
+    double post_moved_s = -1.0;
+    while (!r.Finished() && r.Time() < 2400.0) {
+        r.Step(0.05);
+        const Vec3 p = r.GetBattery()->Own()->position;
+        if (post_moved_s < 0.0 && std::hypot(p.x - post_at.x, p.y - post_at.y) > 1.0) post_moved_s = r.Time();
+    }
+    for (const std::string& line : net->Debrief(0.0)) std::printf("    %s\n", line.c_str());
+    SC_EXPECT(net->Book().Orders().size() >= 1);
+    if (net->Book().Orders().empty()) return;
+    // The NPC battery commander gave the planned march when it was due, on the battery net; nobody moved before hearing.
+    const command::BatteryOrderRecord& march = net->Book().Orders()[0];
+    SC_EXPECT(march.kind == "march" && march.mean == "radio_voice");
+    SC_EXPECT_NEAR(march.given_h * 3600.0, 60.0, 1.5);
+    bool given = false;
+    for (const ScenarioRunner::GivenOrder& g : r.OrdersGiven()) given = given || g.order == "order_battery_march";
+    SC_EXPECT(given);
+    // The post itself moved only once stowed (after the order), and the replies are on its radiotelephonist's page.
+    std::printf("    the post moved off at %.0f s\n", post_moved_s);
+    SC_EXPECT(post_moved_s > 60.0);
+    // The column waited for its commander's post, and at the route's end he gave «К бою!» from it.
+    SC_EXPECT(net->Book().Orders().size() >= 2 && net->Book().Orders().back().kind == "combat_formation");
+    SC_EXPECT(net->Book().Orders().back().given_h * 3600.0 > post_moved_s);
+    int logged = 0;
+    for (const command::OrderLeg& leg : march.to) {
+        SC_EXPECT(leg.Has(command::OrderStep::RepeatedBack));
+        logged += leg.Has(command::OrderStep::Logged) ? 1 : 0;
+    }
+    SC_EXPECT(logged >= 1);
+    SC_EXPECT(r.GetBatteryJournal() == &r.Journal());
+}
+
+SC_TEST("battery orders (G10.8): in the battery commander's seat the march is the player's to give, from the menu's Battery orders") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/pu12m_battery_orders.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    r.TakeSeat("battery_commander", "Player");
+    r.SetHelper(true);
+    const command::BatteryOrderNet* net = r.GetBatteryOrders();
+    SC_EXPECT(net != nullptr);
+    if (net == nullptr) return;
+    auto owes = [&](const std::string& id) {
+        for (const SeatDuty& d : r.OwedDuties("battery_commander")) {
+            if (d.kind == SeatDuty::Kind::Order && d.id == id) return true;
+        }
+        return false;
+    };
+    while (r.Time() < 30.0) r.Step(0.05);
+    SC_EXPECT(!owes("order_battery_march") && net->Book().Orders().empty());
+    // «К бою!» is not in the combat order yet; a halt he may give at any time.
+    ScenarioRunner::OrderCheck why;
+    SC_EXPECT(!r.TryCrewOrder("order_battery_k_boyu", &why));
+    while (r.Time() < 65.0) r.Step(0.05);
+    // Due at 60 s: owed (the helper shows it), and nobody gives it for him.
+    SC_EXPECT(owes("order_battery_march") && net->Book().Orders().empty());
+    SC_EXPECT(r.TryCrewOrder("order_battery_march", &why));
+    r.Step(0.05);
+    SC_EXPECT(net->Book().Orders().size() == 1 && net->Book().Orders()[0].kind == "march");
+    SC_EXPECT(!owes("order_battery_march"));
+}
+
+SC_TEST("battery fire: a launcher reports by the number it was given, whatever aircraft it found there; on its own, by the target's") {
+    std::vector<BatteryVehicleDef> v;
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    v.push_back(own);
+    BatteryVehicleDef l;
+    l.id = l.callsign = "22";
+    l.kind = BatteryVehicleKind::Launcher;
+    l.start = Vec3{0.0, 0.0, 0.0};
+    v.push_back(l);
+    Battery b(Tactics(), v);
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    // The aircraft where it was told to look is the board's 6205; it was given the board's 6202 (a stale mark of
+    // another aircraft, the post's picture late).
+    BatteryFireTarget a;
+    a.id = "a";
+    a.number = 6205;
+    a.position = Vec3{6000.0, 6000.0, 1000.0};
+    a.velocity = Vec3{-100.0, -100.0, 0.0};
+    a.agl_m = 1000.0;
+    a.alive = true;
+    const auto reported = [&](bool on_own) {
+        BatteryFire fire(t, 20000.0);
+        fire.SetAutonomous(on_own);
+        fire.Sync(b);
+        if (!on_own) fire.Assign("22", "a", 6202, 0.0);
+        std::mt19937 rng(3);
+        std::vector<BatteryFire::Event> out;
+        for (double s = 0.0; s < 45.0; s += 0.5) {
+            fire.Step(s, {a}, rng, &b, [](const std::string&) {});
+            for (const BatteryFire::Event& e : fire.TakeEvents()) {
+                if (e.callsign == "22" && e.kind != BatteryFire::Event::Kind::Empty && e.kind != BatteryFire::Event::Kind::Ready) out.push_back(e);
+            }
+        }
+        return out;
+    };
+    const std::vector<BatteryFire::Event> given = reported(false);
+    bool captured = false, launched = false;
+    for (const BatteryFire::Event& e : given) {
+        SC_EXPECT(e.target == "a" && e.number == 6202);
+        captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
+        launched = launched || e.kind == BatteryFire::Event::Kind::Launch;
+    }
+    SC_EXPECT(captured && launched);
+    const std::vector<BatteryFire::Event> own_search = reported(true);
+    SC_EXPECT(!own_search.empty());
+    for (const BatteryFire::Event& e : own_search) SC_EXPECT(e.number == 6205);
+}
+
+// Roadmap R6's review: the battery's other launchers (and the regiment's other batteries in the battery fire model) see
+// over the ground, the woods and the buildings as the player's Osa does (engagement.hpp SearchAntennaSees: the search
+// antenna 5 m over the ground), not through them. Placeholder ground and numbers.
+SC_TEST("battery fire: a launcher behind a ridge neither takes nor captures a target it cannot see; over open ground it does") {
+    BatteryVehicleDef own;
+    own.id = own.callsign = "21";
+    own.own = true;
+    BatteryVehicleDef l22;
+    l22.id = l22.callsign = "22";
+    l22.kind = BatteryVehicleKind::Launcher;
+    Battery b(Tactics(), {own, l22});
+    b.SetInEmplacement(0.0);
+    EngagementTuning t;
+    t.zone_min_range_m = 1500.0;
+    t.zone_max_range_m = 12000.0;
+    t.zone_min_alt_m = 10.0;
+    t.zone_max_alt_m = 5000.0;
+    t.missile_average_speed_mps = 500.0;
+    t.missile_max_flight_time_s = 30.0;
+    t.hit_chance["default"] = 0.6;
+    t.search_antenna_height_m = 5.0;
+    const LocalFrame frame(GeoPoint::FromDegrees(47.0, 20.0, 0.0));
+    // A 60 m ridge running east-west 3 km north of the launcher (the grid 30 x 30 km round it), and the same ground flat.
+    std::vector<double> heights(61 * 61, 0.0);
+    for (int col = 0; col < 61; ++col) heights[static_cast<std::size_t>(36 * 61 + col)] = 60.0;
+    const GridTerrain ridge(-15000.0, -15000.0, 500.0, 61, 61, heights);
+    const FlatTerrain flat(0.0);
+    // A target 9 km north, 100 m up, coming south: under the ridge's shadow from the launcher (the ray 3 km out is 35 m up).
+    BatteryFireTarget tg;
+    tg.id = "low";
+    tg.position = GroundPointInFrame(frame, 0.0, 9000.0, 100.0);
+    tg.velocity = Vec3{0.0, -1.0, 0.0};  // slow: it stays put over the test's minute
+    tg.agl_m = 100.0;
+    for (const Terrain* ground : {static_cast<const Terrain*>(&ridge), static_cast<const Terrain*>(&flat)}) {
+        BatteryFire fire(t, 20000.0);
+        fire.SetGround(ground, &frame);
+        fire.SetAutonomous(true);
+        fire.Sync(b);
+        std::mt19937 rng(5);
+        bool captured = false;
+        std::string took;
+        for (double s = 0.0; s < 60.0; s += 0.5) {
+            fire.Step(s, {tg}, rng, &b, [](const std::string&) {});
+            took = took.empty() ? fire.Shooters().front().target : took;
+            for (const BatteryFire::Event& e : fire.TakeEvents()) captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
+        }
+        if (ground == &ridge) {
+            SC_EXPECT(took.empty() && !captured);
+        } else {
+            SC_EXPECT(took == "low" && captured);
+        }
+    }
+    // Given a target by the commander behind the ridge, it searches (Acquiring) and never captures it.
+    BatteryFire fire(t, 20000.0);
+    fire.SetGround(&ridge, &frame);
+    fire.Sync(b);
+    SC_EXPECT(fire.Assign("22", "low", 1, 0.0));
+    std::mt19937 rng(5);
+    bool captured = false;
+    for (double s = 0.0; s < 60.0; s += 0.5) {
+        fire.Step(s, {tg}, rng, &b, [](const std::string&) {});
+        for (const BatteryFire::Event& e : fire.TakeEvents()) captured = captured || e.kind == BatteryFire::Event::Kind::Captured;
+    }
+    SC_EXPECT(!captured && fire.Shooters().front().phase == BatteryFire::Phase::Acquiring);
+
+    // R6's review: a missile in flight needs the track, as the player's does. Launched on a target 2 km north (short of
+    // the ridge, in sight), which then drops behind the ridge (9 km north): the missile is lost within a second, never a
+    // hit, and the launcher looks for the target again.
+    BatteryFire flying(t, 20000.0);
+    flying.SetGround(&ridge, &frame);
+    flying.Sync(b);
+    SC_EXPECT(flying.Assign("22", "low", 1, 0.0));
+    BatteryFireTarget near_tg = tg;
+    near_tg.position = GroundPointInFrame(frame, 0.0, 2000.0, 100.0);
+    std::mt19937 rng2(5);
+    double launched_s = -1.0, lost_s = -1.0;
+    bool hit_any = false;
+    for (double s = 0.0; s < 120.0; s += 0.5) {
+        flying.Step(s, {launched_s < 0.0 ? near_tg : tg}, rng2, &b, [](const std::string&) {});
+        for (const BatteryFire::Event& e : flying.TakeEvents()) {
+            if (e.kind == BatteryFire::Event::Kind::Launch && launched_s < 0.0) launched_s = s;
+            if (e.kind == BatteryFire::Event::Kind::Miss && lost_s < 0.0) lost_s = s;
+            hit_any = hit_any || e.kind == BatteryFire::Event::Kind::Hit;
+        }
+        if (lost_s >= 0.0) break;
+    }
+    SC_EXPECT(launched_s >= 0.0 && lost_s >= launched_s && lost_s <= launched_s + 1.0 && !hit_any);
+    SC_EXPECT(flying.Shooters().front().phase == BatteryFire::Phase::Acquiring);
+    // In sight all the way, the same launch is resolved at its meeting time (a hit or a miss by the chance, not lost).
+    BatteryFire seen_fire(t, 20000.0);
+    seen_fire.SetGround(&ridge, &frame);
+    seen_fire.Sync(b);
+    SC_EXPECT(seen_fire.Assign("22", "low", 1, 0.0));
+    std::mt19937 rng3(5);
+    double launch3 = -1.0, result3 = -1.0;
+    for (double s = 0.0; s < 120.0 && result3 < 0.0; s += 0.5) {
+        seen_fire.Step(s, {near_tg}, rng3, &b, [](const std::string&) {});
+        for (const BatteryFire::Event& e : seen_fire.TakeEvents()) {
+            if (e.kind == BatteryFire::Event::Kind::Launch && launch3 < 0.0) launch3 = s;
+            if ((e.kind == BatteryFire::Event::Kind::Hit || e.kind == BatteryFire::Event::Kind::Miss) && result3 < 0.0) result3 = s;
+        }
+    }
+    SC_EXPECT(launch3 >= 0.0 && result3 >= launch3 + 3.5);  // 2 km at 500 m/s: about 4 s
 }

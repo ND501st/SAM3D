@@ -19,8 +19,15 @@ class USimWorldSubsystem;
  * squelch's tail. The radio log's own lines (the command net's designations, the air-picture net's reports, the battery's
  * traffic) are read out the same way, in an English voice.
  *
- * The simulation keeps its own timing (the bus's speaking time); a voice plays alongside it. Under time compression
+ * The simulation keeps its own timing (the bus's speaking time); a speech engine's voice plays alongside it. A recorded
+ * line takes its recording's time: the component gives the scenario runner the lengths of the recordings its language
+ * plays (simcore RecordedLineLengths), so the next line on the channel doesn't cut one off. Under time compression
  * (above 1.5x) the crew is not voiced. Console: sam3d.Voice 0/1, sam3d.VoiceLanguage auto|ru|en, sam3d.VoiceVolume.
+ *
+ * How a line sounds (docs/crew/15_TALK.md sections 4 and 7): a crewman's stress, graded from what he has heard, raises
+ * his voice's pitch, rate and loudness in proportion; the intercom is heard through the R-124's laryngophone headsets
+ * (a throat microphone: muffled, its highs gone); a word said aloud in the cabin comes from the speaker's head; and while
+ * an urgent line plays, the less urgent channels are ducked under it.
  *
  * A lesson's instructor (data/tutorials/, docs/TUTORIALS.md) reads each new step's title, and an action step's first line,
  * in an English voice, outside the intercom's band and whatever the crew's voices are doing (sam3d.InstructorVoice 0/1).
@@ -49,14 +56,23 @@ private:
 		FString Channel;
 		simcore::VoiceSettings Settings;
 		double SpokenAt = 0.0;  // sim time the bus started it
+		int32 Priority = 1;     // the bus's priority (0 urgent): ducks the less urgent channels
+		FString From;           // the speaker's station: a word said aloud in the cabin comes from his head
 	};
 
 	void ChooseLanguage(const simcore::VoiceData& Voices);
+	/** art/crew_voices/<language>: the recorded lines this language plays. */
+	FString RecordingsRoot(const USimWorldSubsystem& Sim) const;
+	/** The recordings' lengths to the scenario runner's bus, once per runner and language. */
+	void GiveRecordedLengths(USimWorldSubsystem& Sim);
 	/** The lesson's new step, aloud (once the speech engine has its voices). */
 	void SpeakInstructor(USimWorldSubsystem& Sim, FSimSpeech& Speech);
 	bool PlayRecorded(const simcore::SpokenCallout& Line, const simcore::VoiceSettings& Settings, const FString& Channel);
-	void Play(TArray<int16>&& Pcm, int32 SampleRate, const FString& Channel, const simcore::VoiceSettings& Settings);
+	void Play(TArray<int16>&& Pcm, int32 SampleRate, const FString& Channel, const simcore::VoiceSettings& Settings, int32 Priority = 1,
+		const FString& From = FString());
 	UAudioComponent* ChannelComponent(const FString& Channel);
+	/** The less urgent channels ducked under the most urgent one playing (every frame). */
+	void Duck();
 	/** The radio log's lines that are not callouts (designations, air-picture reports, the battery's traffic), aloud. */
 	void VoiceRadioLog(USimWorldSubsystem& Sim, const simcore::ScenarioRunner& Runner, const simcore::VoiceData& Voices, FSimSpeech& Speech);
 
@@ -64,6 +80,10 @@ private:
 	TMap<FString, TObjectPtr<UAudioComponent>> Channels;
 
 	TMap<int32, FPendingLine> Pending;
+	/** Each channel's line now: its priority, and its volume before ducking. */
+	TMap<FString, int32> ChannelPriority;
+	TMap<FString, float> ChannelVolume;
+	TSet<FString> Ducked;
 	const simcore::ScenarioRunner* LastRunner = nullptr;
 	size_t LastSeq = 0;
 	int32 NextRequest = 1;

@@ -14,6 +14,7 @@
 #include "ProceduralMeshComponent.h"
 #include "GlobalRenderResources.h"
 #include "SimCabinComponent.h"
+#include "SimFxSubsystem.h"
 #include "SimOsaVehicle.h"
 #include "simcore/readouts.hpp"
 #include "SimWorldSubsystem.h"
@@ -664,7 +665,18 @@ bool USimCabinDisplayComponent::ContentKey(const simcore::CabinDisplay& Display,
 	case simcore::CabinDisplayKind::ElevationScope:
 		return !bOn;
 	case simcore::CabinDisplayKind::Document:
-		return true;  // the paper doesn't change
+		// A paper doesn't change, but the radiotelephonist's journal fills as he writes.
+		if (Display.document == "radio_journal")
+		{
+			if (const USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
+			{
+				for (const FString& L : Sim->GetDocumentLines(TEXT("radio_journal")))
+				{
+					Key = HashCombine(Key, GetTypeHash(L));
+				}
+			}
+		}
+		return true;
 	default:
 		return false;
 	}
@@ -1344,8 +1356,10 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			}
 		}
 
-		// A cabled radar's picture (any primary track): the receiver's noise speckled over the tube where the sweep has
-		// been, and each target's echo under its symbol. The speckle stays where it was painted until the sweep comes round.
+		// A cabled radar's picture (its echo video, flak11 PU12-0's figure; p19_to 4.3.1): the receiver's noise speckled over
+		// the tube where the sweep has been, and every echo the radar sees, taken off or not (the raw marks); an echo whose
+		// interrogation got a reply carries the reply's short dash just beyond it. The speckle stays where it was painted
+		// until the sweep comes round.
 		bool bPrimary = false;
 		for (const simcore::CommandPost::ScopeMark& M : Post.scope)
 		{
@@ -1373,7 +1387,7 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 			}
 			for (const simcore::CommandPost::ScopeMark& M : Post.scope)
 			{
-				if (!M.primary)
+				if (!M.raw)
 				{
 					continue;
 				}
@@ -1386,6 +1400,31 @@ void USimCabinDisplayComponent::DrawAspdScope(UCanvas* Canvas, const FVector2D& 
 					const double Aa = Az + I * 0.006;
 					Disc(Canvas, Polar(C, Aa, Rr), 0.007 * S, OnFace(Afterglow(B) * (0.6f - 0.1f * FMath::Abs(I))));
 				}
+				if (M.friendly)
+				{
+					// the IFF reply: a short radial dash just beyond the echo (its position is SAM3D's)
+					Line(Canvas, Polar(C, Az, Rr + 0.018 * S), Polar(C, Az, Rr + 0.034 * S), 2.0f, OnFace(Afterglow(B) * 0.55f));
+				}
+			}
+		}
+
+		// The cabled radar's jamming strobes (p19_to: its device finds an active jammer's azimuth; post_feed.hpp): a grainy
+		// spoke along each jammer's azimuth across the whole tube, as bright as the jamming is strong, painted by the sweep
+		// and fading in the afterglow like the echoes. Drawn from the centre: the radar is at most 300 m from the post.
+		for (const simcore::em::ViewStrobe& St : Post.strobes)
+		{
+			const double Az = FMath::DegreesToRadians(St.azimuth_deg);
+			const float Strength = FMath::Clamp(0.3f + static_cast<float>(St.jn_db - 6.0) / 24.0f, 0.3f, 1.0f) * static_cast<float>(BrightAt(Az));
+			if (Strength < 0.03f)
+			{
+				continue;
+			}
+			Glow(Canvas, C, Polar(C, Az, R), 2.5f, OnFace(Afterglow(0.9) * Strength));
+			FRandomStream Grain(static_cast<int32>(St.azimuth_deg * 100.0) + AspdTurns * 7919);
+			for (int32 I = 0; I < 40; ++I)
+			{
+				const FVector2D P = Polar(C, Az + Grain.FRandRange(-0.02, 0.02), R * Grain.FRand());
+				Polygon(Canvas, P, 1.3, 4, OnFace(Afterglow(Grain.FRandRange(0.4f, 1.0f)) * Strength));
 			}
 		}
 
@@ -1644,6 +1683,27 @@ void USimCabinDisplayComponent::DrawPlotBoard(UCanvas* Canvas, const FVector2D& 
 	Text(Canvas, TEXT("С"), C + FVector2D(-4.0, -R - 0.025 * Size.Y), EtchText, 0.8f, false);  // север
 	Disc(Canvas, C, 0.008 * Size.X, Etch * 1.5f);  // the post
 
+	// Our neighbours, from the regiment's order (voenizdat_osa_1991 pp. 232-245: the neighbours and their tasks), in
+	// blue pencil: each one's place, its reach and our name for it.
+	for (const simcore::PostFeed::Neighbour& Nb : Post.neighbours)
+	{
+		const simcore::Vec3 Rel = Nb.position - Post.position;
+		const FVector2D P = ToScreen(Rel.x, Rel.y);
+		if (!Inside(P))
+		{
+			continue;
+		}
+		const double K = 0.006 * Size.X;
+		Line(Canvas, P - FVector2D(K, K), P + FVector2D(K, -K), 1.8f, Blue * 0.8f);
+		Line(Canvas, P + FVector2D(K, -K), P + FVector2D(K, K), 1.8f, Blue * 0.8f);
+		Line(Canvas, P + FVector2D(K, K), P - FVector2D(K, -K), 1.8f, Blue * 0.8f);
+		Line(Canvas, P - FVector2D(K, -K), P - FVector2D(K, K), 1.8f, Blue * 0.8f);
+		Circle(Canvas, P, Nb.radius_m / RadiusM * R, Blue * 0.45f, 1.2f);
+		const simcore::airwar::AirDefenceSystem* System = simcore::airwar::FindAirDefenceSystem(Nb.system);
+		const FString Name = System != nullptr ? FString(UTF8_TO_TCHAR(System->own)) : FString(UTF8_TO_TCHAR(Nb.system.c_str()));
+		Text(Canvas, Name, P + FVector2D(K + 2.0, -K - 2.0), Blue * 0.8f, 0.6f, false);
+	}
+
 	// The grease pencil: each target's crosses of the last minutes joined into its track, its number, height over code.
 	for (const simcore::em::ViewBoardMark& Latest : simcore::LatestMarks(Post))
 	{
@@ -1869,6 +1929,11 @@ void USimCabinDisplayComponent::UpdateTv(const USimWorldSubsystem* Sim, simcore:
 	const FVector To = Sim->ToUnreal(Unit + Dir * 1000.0);
 	Capture->SetWorldLocationAndRotation(From, (To - From).Rotation());
 	Capture->FOVAngle = static_cast<float>(FMath::Max(0.1, simcore::TvFieldOfViewDeg(Console)));
+	// The weapons effects must look right through the sight too (their detail follows the larger of the two views).
+	if (USimFxSubsystem* Fx = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimFxSubsystem>() : nullptr)
+	{
+		Fx->SetAuxView(TEXT("tv"), From, (To - From).Rotation(), Capture->FOVAngle, Target != nullptr ? static_cast<float>(Target->SizeX) : 512.0f, IsSeen());
+	}
 	// Each picture renders the scene a second time: only while someone in the cabin can see the monitor, at a TV's
 	// rate rather than the game's.
 	if (IsSeen() && RedrawSecondsLeft <= 0.0f)

@@ -11,10 +11,12 @@
 # PU-12M (-SimVehicle=post) as the battery commander, tries the mast's winch (refused: the radio operator's) and
 # gives the board's first target to launcher 21 (the Osa); client 2 joins in the Osa as the driver and starts the gas
 # turbine (the Osa's console). Each one's console and knowledge come from its own vehicle.
+# -Time dusk (or dawn, day, night, mission) plays at that time of day (roadmap R7): -SimTime goes to the server and both
+# clients alike, since each machine loads the scenario from its own command line (docs/MULTIPLAYER.md).
 # Build the editor target first, with the editor closed.
 #   With the EM practice scenario on the map, -TimeScale 8 -ClientSeconds 60 lets the drone reach the radar (about 300 s
 #   of sim time), so the clients' scopes show echoes from the knowledge stream.
-param([string]$Engine = 'D:\UE_5.8', [int]$TimeScale = 1, [int]$ClientSeconds = 35, [switch]$Pu12m, [switch]$Link)
+param([string]$Engine = 'D:\UE_5.8', [int]$TimeScale = 1, [int]$ClientSeconds = 35, [switch]$Pu12m, [switch]$Link, [string]$Time = '')
 $ErrorActionPreference = 'Continue'
 $exe = Join-Path $Engine 'Engine\Binaries\Win64\UnrealEditor.exe'
 $proj = (Resolve-Path (Join-Path $PSScriptRoot '..\unreal\SAM3D\SAM3D.uproject')).Path
@@ -25,6 +27,7 @@ Remove-Item "$out\*.log" -ErrorAction SilentlyContinue
 $scenario = @()
 if ($Pu12m) { $scenario = @('-SimScenario=scenarios/pu12m_battery.json') }
 if ($Link) { $scenario = @('-SimScenario=scenarios/battery_link_practice.json') }
+if ($Time -ne '') { $scenario += @("-SimTime=$Time") }
 $server = Start-Process -FilePath $exe -PassThru -ArgumentList (@($proj, '/Game/Maps/OsaPractice?game=/Script/SAM3D.SimCrewGameMode?listen', '-server', '-nullrhi', '-nosound', '-unattended', '-log', "-ABSLOG=$out\server.log", "-SimCrewSmoke=$($ClientSeconds + 40)", "-ini:Engine:[ConsoleVariables]:sam3d.TimeScale=$TimeScale") + $scenario)
 Start-Sleep -Seconds 25
 $common = @($proj, '127.0.0.1', '-game', '-nullrhi', '-nosound', '-unattended', '-log', "-SimCrewSmoke=$ClientSeconds") + $scenario

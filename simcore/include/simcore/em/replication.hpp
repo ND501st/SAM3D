@@ -131,9 +131,10 @@ struct ViewRadio {
 struct ViewVehicle {
     std::string id;
     std::string kind;  // launcher, reload, command_post, maintenance, dummy
-    Vec3 position;
+    Vec3 position;     // the data's point (its antenna's, for the EM layer and the nets)
     double heading_deg = 0.0;
     bool deployed = false;
+    Vec3 ground;       // the ground under it, where its hull stands (ScenarioRunner::GroundEnu: roadmap R5)
 };
 
 // A prepared position's works at one vehicle's place (roadmap 7.6): the emplacement dug there (it stays when the vehicle
@@ -143,6 +144,7 @@ struct ViewWork {
     double heading_deg = 0.0;
     bool emplacement = false;
     bool nets = false;
+    Vec3 ground;  // the ground under it (ScenarioRunner::GroundEnu: roadmap R5)
 };
 
 // The command post's own instruments (post_feed.hpp): an IT-45 track (fractions of the scale) and a launcher on the IT
@@ -159,6 +161,7 @@ struct ViewPostTrack {
     bool primary = false;  // from a radar cabled to the post: its echo paints under the symbol
     bool designated = false;  // the regiment's designation to the battery
     bool imitated = false;    // the ФР block's imitated echo
+    bool raw = false;         // an echo with no symbol (the cabled radar's video, taken off or not)
 };
 
 struct ViewLauncher {
@@ -179,6 +182,7 @@ struct ViewExtras {
     double post_scale_m = 0.0;
     Vec3 post_position;
     std::vector<ViewPostTrack> post_scope;
+    std::vector<ViewStrobe> post_strobes;  // the radar cabled to the post: its jamming strobes
     std::vector<ViewLauncher> launchers;
     // the commander's marker and keypad (post_feed.hpp)
     double post_marker_x = 0.0;
@@ -365,6 +369,7 @@ constexpr double kPosStep = 1.0;     // m
 constexpr double kVelStep = 0.01;    // m/s
 constexpr double kAngStep = 1e-5;    // rad
 constexpr double kSigmaStep = 1.0;   // m
+constexpr double kGroundStep = 0.01; // m: a point on the ground the game stands a model on
 
 inline void Put(Writer& w, const ViewTrack& t) {
     w.I32(t.id);
@@ -548,12 +553,14 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.V3(v.position, kPosStep);
         w.Q(v.heading_deg, kDegStep);
         w.U8(v.deployed ? 1 : 0);
+        w.V3(v.ground, kGroundStep);
     }
     w.U32(static_cast<std::uint32_t>(x.works.size()));
     for (const ViewWork& k : x.works) {
         w.V3(k.position, kPosStep);
         w.Q(k.heading_deg, kDegStep);
         w.U8((k.emplacement ? 1u : 0u) | (k.nets ? 2u : 0u));
+        w.V3(k.ground, kGroundStep);
     }
     w.U8(x.post ? 1 : 0);
     if (!x.post) return w.bytes;
@@ -568,7 +575,12 @@ inline std::vector<std::uint8_t> ExtrasBytes(const ViewExtras& x) {
         w.Q(t.vy, kFracStep);
         w.U8(static_cast<std::uint8_t>(t.zone));
         w.U8(static_cast<std::uint8_t>((t.friendly ? 1 : 0) | (t.group ? 2 : 0) | (t.primary ? 4 : 0) | (t.designated ? 8 : 0) |
-                                       (t.imitated ? 16 : 0)));
+                                       (t.imitated ? 16 : 0) | (t.raw ? 32 : 0)));
+    }
+    w.U32(static_cast<std::uint32_t>(x.post_strobes.size()));
+    for (const ViewStrobe& st : x.post_strobes) {
+        w.Q(st.azimuth_deg, kDegStep);
+        w.Q(st.jn_db, kDbStep);
     }
     w.U32(static_cast<std::uint32_t>(x.launchers.size()));
     for (const ViewLauncher& l : x.launchers) {
@@ -630,6 +642,7 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         v.position = r.V3(kPosStep);
         v.heading_deg = r.Q(kDegStep);
         v.deployed = r.U8() != 0;
+        v.ground = r.V3(kGroundStep);
         x.battery.push_back(v);
     }
     n = r.U32();
@@ -641,6 +654,7 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         const std::uint32_t f = r.U8();
         k.emplacement = (f & 1u) != 0;
         k.nets = (f & 2u) != 0;
+        k.ground = r.V3(kGroundStep);
         x.works.push_back(k);
     }
     x.post = r.U8() != 0;
@@ -663,7 +677,16 @@ inline bool GetExtras(Reader& r, ViewExtras& x) {
         t.primary = (flags & 4u) != 0;
         t.designated = (flags & 8u) != 0;
         t.imitated = (flags & 16u) != 0;
+        t.raw = (flags & 32u) != 0;
         x.post_scope.push_back(t);
+    }
+    n = r.U32();
+    if (!r.ok || n > 1000u) return false;
+    for (std::uint32_t i = 0; i < n && r.ok; ++i) {
+        ViewStrobe st;
+        st.azimuth_deg = r.Q(kDegStep);
+        st.jn_db = r.Q(kDbStep);
+        x.post_strobes.push_back(st);
     }
     n = r.U32();
     if (!r.ok || n > 100000u) return false;

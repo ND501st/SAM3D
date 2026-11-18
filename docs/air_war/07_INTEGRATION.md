@@ -12,7 +12,7 @@ no longer stowing between raids, came from issues the raids exposed).
 | Target behaviour (`target_behaviour.hpp`, roadmap 9.3) | terrain following, pop-up, evasion on lock or launch | low raids with waypoint heights, helicopter hides, how each type evades |
 | Engagement model (`engagement.hpp`, `data/gameplay/osa_ak.json`) | hit chances by class (`fighter`, `bomber`, `helicopter`, `drone`, `default`), HIT records | each aircraft type's class, RCS, speed, height and turn rate |
 | EM layer (`em_link.hpp`, `data/em/`) | the Osa's radars and their emission; jammers (`nato_alq99_band8`, `generic_soj_barrage_c`, `generic_selfscreen_noise_ku`), RWRs (`nato_alr46_class_rwr`, `generic_rwr`), decoy emitters, rain | the faction's EM libraries; jammers on their aircraft; RWRs; rain in poor weather; ELINT exposure (seconds radiated) back to the campaign |
-| Threats (roadmap 9.1, 9.2, E5, E6) | method Н against jammers, the TV check against decoys, search bursts; anti-radiation missiles as EM missiles (`em/arm.hpp`, the library's `agm45_class_shrike`, `agm88a_class_harm`, `kh58_class` in `em/nato_1985.json`) and the crew's ARM drill | decoy drones marked `decoy`; the crew's `doctrine` from our side's intelligence and the battery's posture; the SEAD and hunter aircraft's `"arms"` (their type's `arm_em`, aimed at where the enemy believes the battery is) |
+| Threats (roadmap 9.1, 9.2, E5, E6) | method Н against jammers, the TV check against decoys, search bursts; anti-radiation missiles as EM missiles (`em/arm.hpp`, the library's `agm45_class_shrike`, `agm78b_class_standard_arm`, `agm88a_class_harm`, `kh58_class` in `em/nato_1985.json`) and the crew's ARM drill | decoy drones marked `decoy`; the crew's `doctrine` from our side's intelligence and the battery's posture; the SEAD and hunter aircraft's `"arms"` (their type's `arm_em` or, by the war's year, `arm_em_by_year`, aimed at where the enemy believes the battery is) |
 | Crew (`crew_data.hpp`, `docs/crew/`) | NPC vehicle commander and crew, skill tiers, callouts | the crew tier from the campaign's progression (pillar 5); missions with no scripted orders: the NPCs fight by doctrine |
 | Battery (`battery.hpp`, `battery_fire.hpp`) | the battery's other launchers fighting, air-threat alert, emcon order, TZM | the vehicles the battery still has, its layout, night |
 | Prepared positions (`position_prep.hpp`, roadmap 7.6) | emplacement, nets, dummies with decoy emitters | where the dummies stand, their decoy mode |
@@ -29,6 +29,20 @@ no longer stowing between raids, came from issues the raids exposed).
 `ScenarioFormat` (raid_scenario.hpp) switches the keys added on the EM branch (`environment`, target `rwr`, target
 `decoy`, `doctrine`) on or off, for a build whose loader lacks them. All are on by default. `model` writes each
 aircraft's basic model (`docs/scenery/`), `weather` the day's weather.
+
+## Into a running session (roadmap 15.3)
+
+A raid need not be a scenario of its own. `package_injector.hpp` loads the scenario the builder writes and brings its
+aircraft into a session already running (the battery's mission, `docs/campaign/05_THE_SYSTEMS.md` §6-7), moved into
+the session's frame through the geodetic and onto its clock. For it the runner gained its first calls made for the air
+war: `AddTargets`, `AddEmGear` (the package's EM library entries and jammers, `em::EmWorld::MergeLibrary`) and
+`AddTriggers` (the air-raid warning, a C2 source put out), with `TargetAppeared`; the bridge gained `Over`. The
+manifest moves with the aircraft and the battery stands where the session has it, so the bridge per package reads the
+session as it reads a raid's own scenario. `LivePackages` advances the campaign with the session's clock and hands it
+each package the campaign gives the battery, one at a time, and the outcome back with `CompletePlayerMission`;
+`campaign/mission_session.hpp` puts it beside a battery mission on the mission's clock (roadmap 15.2). The bridge counts
+the battery's launchers' kills (the battery fire model's "destroys", unless a launcher takes the kill back), which it
+missed before 30 October 2026: a played raid's losses to the battery's other launchers never reached the campaign.
 
 ## On the map
 

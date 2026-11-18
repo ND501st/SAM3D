@@ -1,0 +1,118 @@
+{
+ "save_version": 1,
+ "theatre_file": "air_war/theatre_pannonia.json",
+ "faction_file": "air_war/faction_warsaw_pact.json",
+ "seed": 21,
+ "clock": "D4 04:00",
+ "actions": [
+  {
+   "kind": "advance",
+   "until_h": 72,
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  },
+  {
+   "kind": "skip",
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  },
+  {
+   "kind": "advance",
+   "until_h": 72,
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  },
+  {
+   "kind": "skip",
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  },
+  {
+   "kind": "advance",
+   "until_h": 72,
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  },
+  {
+   "kind": "skip",
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  },
+  {
+   "kind": "advance",
+   "until_h": 72,
+   "posture": {
+    "emission": 0.29999999999999999,
+    "emcon_discipline": 0.5,
+    "radio_discipline": 0.5,
+    "dummy_traffic": false,
+    "dummies": 2,
+    "decoy_mode": "when_radar_off",
+    "nets": true,
+    "emplacement": true,
+    "relocate_every_h": 0,
+    "fight_silent": false
+   }
+  }
+ ]
+}

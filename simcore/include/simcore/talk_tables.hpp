@@ -23,7 +23,8 @@ struct TalkEntry {
     std::string code;     // "143"
     std::string ru, en;   // what it means
     std::string effect;   // "readiness", "fire_ban", "fire_free", "cease_fire", "silence_on", "silence_off",
-                          // "spare_frequency", "report_readiness", "air_warning", "all_clear", or "" (said only)
+                          // "spare_frequency", "report_readiness", "air_warning", "all_clear", "emission_free",
+                          // "emission_limited", "emission_arm", "emission_silent" (emission_regime.hpp), or "" (said only)
     int aspd = -1;        // the ASPD-U's two-digit command of the same meaning (-1: none)
     std::string visual;   // a signal table's sign seen instead of heard ("зелёная ракета"), "" if none
 };

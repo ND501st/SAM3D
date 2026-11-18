@@ -294,7 +294,7 @@ inline void RunEsmSite(const EmScene& s, EsmState& esm, double dt, EsmWork& work
                 if (SameEmitter(sa, sb, ftol, ptol) && std::fabs(WrapPi(a.bearing_rad - b.bearing_rad)) < gate) {
                     std::vector<BearingLine> lines = a.lines;
                     lines.insert(lines.end(), b.lines.begin(), b.lines.end());
-                    std::sort(lines.begin(), lines.end(),
+                    std::stable_sort(lines.begin(), lines.end(),
                               [](const BearingLine& x, const BearingLine& y) { return x.time_s < y.time_s; });
                     if (lines.size() > 40) lines.erase(lines.begin(), lines.end() - 40);
                     a.lines = lines;

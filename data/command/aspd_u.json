@@ -36,8 +36,13 @@
     "air_net_az_step_deg": { "value": 1, "source": "bguir_tsp (the azimuth-range report: azimuth in degrees)", "confidence": "medium",
       "notes": "SAM3D reads the reports in the azimuth-range form. The PVO grid's coded squares are the other form (pvo_bu_x_1984; rwd_mb3 pu12e: the board's tracks in the designation grid's squares about the radar)." },
     "air_net_range_step_m": { "value": 1000, "source": "bguir_tsp (the azimuth-range report: range in kilometres)", "confidence": "medium" },
+    "journal_write_s": { "value": 5, "source": "estimate (one message written into the radiotelephonist's journal: the time, the net, a report's six groups of digits; pvo_bu_x_1984 art. 24, rrs_1986 art. 154: under load the numbers and times only)", "confidence": "estimate",
+      "notes": "Shorter than one air report's reading (air_net_report_s), so a practised radiotelephonist keeps up with the net." },
+    "journal_remember_s": { "value": 30, "source": "estimate (how long a message heard stays in the radiotelephonist's head before it is lost unwritten)", "confidence": "estimate" },
     "regiment_net_range_m": { "value": 30000, "source": "flak11 (PU12-1: FuG-3, the R-111, 25-30 km, the regiment's command net)", "confidence": "medium",
       "notes": "The regiment's voice commands reach the post within this range of the regiment's post (the R-111's)." },
+    "radar_cable_m": { "value": 300, "source": "flak11 (PU12-0: the PU-12M up to 300 m from the radar; the 1984 handbook's ASPD figure draws the radar 300 m off by cable)", "confidence": "high",
+      "notes": "A scenario's cabled radar (post.radar) must stand within this of the post; the cable is laid at deployment (data/procedures/pu12m.json, cable.radar)." },
     "air_net_grid_levels": { "value": 2, "source": "bguir_tsp (the place in the PVO grid most often to the seventh digit, the small square; less often the eighth, the additional square); rwd_mb3 (pu12e: the board's tracks plotted in the designation squares); pvo_bu_x_1984 (art. 30: positions passed by the grid's coded squares)", "confidence": "medium",
       "notes": "The reports give the target's square (simcore/pvo_grid.hpp: big square 1 degree by 1 degree 30', its medium and small ninths) and the plotter marks its centre: a small square is about 12 by 11 km here, so a mark from the net can be some 7 km off. The tube's marks are finer. 0 would read azimuth and range instead (the steps above)." }
   }
