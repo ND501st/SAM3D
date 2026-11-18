@@ -1,0 +1,99 @@
+{
+  "own_air_id": "pannonia_own_air_1985",
+  "status": "B10, 18 November 2026. Our fighters as the battery meets them: the fighter regiments' duty by a rule table, our ground control, the sky shared with the SAM troops, the notices of our flights and the change of the identification codes (simcore/command/own_air.hpp, own_flights.hpp; docs/air_battle/08_OUR_FIGHTERS.md).",
+  "source": "mitronin_1976 pp. 4-11 (the two ways of sharing the sky, corridors, the 3,000 m floor over units that cannot fire, the 10-15 min run of a notice by code table); mt_turchin_coop pp. 6-13 (airborne alert heights and zones, the pursuit limit, 600 m); fm_100_2_1_1984 p. 12-7 (readiness); vizh_tikshaev_pvo (an automated sector passes a track in about 10 s); mt_1973_nvn p. 14 (3-6 min off a manual board)",
+  "confidence": "low",
+  "notes": "Game values are marked so in each block's source. Corridor widths and heights and the lead time of a notice were not found (docs/air_battle/08 Left open); the task file names its own corridors.",
+
+  "readiness": [
+    { "state": 1, "takeoff_s": [180, 300], "held_h": [1, 2] },
+    { "state": 2, "takeoff_s": [900, 900], "held_h": [2, 4] },
+    { "state": 3, "takeoff_s": [3600, 7200], "held_h": [8, 24] }
+  ],
+  "readiness_source": {
+    "source": "fm_100_2_1_1984 p. 12-7 (Pact readiness 1 / 2 / 3 to take-off: 3-5 min, 15 min, 1-2 h, as NATO saw it; the chart is for fighter-bombers and is used by analogy); the hours held are its own figures, state 3's a game value",
+    "confidence": "low"
+  },
+
+  "duty": {
+    "day_pairs_r1": 1,
+    "day_pairs_r2": 2,
+    "night_pairs_r1": 1,
+    "night_pairs_r2": 1,
+    "warning_extra_r1": 1,
+    "pairs_per_group": 1,
+    "group_m": 10000,
+    "scramble_reach_m": 90000,
+    "night_from_h": 20.0,
+    "night_to_h": 6.0,
+    "source": "game values (docs/air_battle/08_OUR_FIGHTERS.md section 3: so many pairs at readiness 1 and 2 per regiment by day and night, more to readiness 1 on a raid warning, a pair for each enemy group, Turchin's groups of 4-8 as the enemy's unit, mt_turchin_coop p. 7)",
+    "confidence": "estimate"
+  },
+
+  "airborne_alert": {
+    "low_m": [1500, 2000],
+    "high_m": [10000, 12000],
+    "centre_inside_km": [50, 60],
+    "source": "mt_turchin_coop pp. 6-7 (fighters on airborne alert at 1,500-2,000 m against low targets and 10-12 km against high ones, the zones' centre 50-60 km inside our territory)",
+    "confidence": "medium"
+  },
+
+  "pursuit_limit_km": {
+    "value": [25, 30],
+    "source": "mt_turchin_coop p. 9 (fighters in independent search break off 25-30 km beyond the front line)",
+    "confidence": "medium"
+  },
+
+  "gci": {
+    "channels": 3,
+    "automated": true,
+    "age_auto_s": 10,
+    "age_manual_s": [180, 360],
+    "update_s": 10,
+    "error_m": 1500,
+    "radar_range_m": 220000,
+    "mast_m": 25,
+    "source": "vizh_tikshaev_pvo (automation cut the passing of a track to about 10 s); mt_1973_nvn p. 14 (fighters controlled off plotting boards, 3-6 min late); mt_rozhdestvenskiy_depth pp. 8-10 (the national air defence's control 'stable and automated', so automated by default); the channels after mt_1962_front_aviation's principle (a GCI guides only so many groups), their number, the error, the radar's reach and mast are game values",
+    "confidence": "low"
+  },
+
+  "notice": {
+    "hop_work_s": 30,
+    "precedence": 1,
+    "liaison_at_regiment": false,
+    "liaison_s": 30,
+    "corridor_half_width_m": 5000,
+    "slack_s": 300,
+    "source": "mitronin_1976 p. 11 (our aircraft's actions told by the division's air defence chief to the guns by code table in 10-15 min; an air force liaison officer at the regiment proposed for busy axes); mt_franchuk_front p. 6 (the notice's fields); hop_work_s, the time a hop spends coding and decoding the notice by the talk table, is a game value: with the chain's own relay at priority (signal_means.json: 3 min to pass it on, a field telephone's 10-min connection off 'Vozdukh' precedence, a minute's handling) and the regiment's half minute to say it on its net, the division-to-battery run comes to about 15 min, the top of mitronin_1976's 10-15 min (test_own_air.cpp); the liaison's half minute, the corridor's half width and the time slack are game values",
+    "confidence": "low"
+  },
+
+  "iff_change": {
+    "job_s": 40,
+    "pilot_miss": 0.03,
+    "handover_s": 600,
+    "source": "game values (docs/air_battle/08_OUR_FIGHTERS.md section 6: the senior operator fits the new filter, a job of a few tens of seconds; the AK's real act is not known; a pilot who misses a change answers on the old filter, no period failure rate found; the paper's handing over)",
+    "confidence": "estimate"
+  },
+
+  "cooperation": {
+    "method": "by_zones",
+    "floor_unable_m": 3000,
+    "floor_margin_m": 1000,
+    "split_height_m": 5000,
+    "near_target_m": 600,
+    "source": "mitronin_1976 pp. 6-9 (by zones against the first massed strike; the fighters' floor of unrestricted use over units that cannot fire drops to 3,000 m); mt_turchin_coop p. 11 (600 m, a requirement never fielded, as SAM3D's 'one of ours close to the target'); the margin above the regiment's highest kill limit and the default split height of one zone are game values",
+    "confidence": "low"
+  },
+
+  "enemy_learning": {
+    "heard_per_use": 0.25,
+    "break_talk_table": 0.15,
+    "learn_after": 3,
+    "sigma_m": 8000,
+    "use_creativity": 0.55,
+    "use_age_h": 72,
+    "source": "game values (docs/air_battle/08_OUR_FIGHTERS.md section 9: the enemy's COMINT hears our GCI and notices, talk-table groups broken by a chance, a belief of a corridor after it is heard so often; mitronin_1976 p. 7 warns the enemy may find and use corridors; that a 1985 enemy planned on them is not documented, so its use is gated by the planner's creativity and the belief's age)",
+    "confidence": "estimate"
+  }
+}

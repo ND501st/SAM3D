@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "simcore/console_data.hpp"
+#include "simcore/crew_data.hpp"  // detail::ReadTextFile
 #include "simcore/json.hpp"
 #include "simcore/solar.hpp"
 

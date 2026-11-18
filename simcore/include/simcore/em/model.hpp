@@ -76,7 +76,9 @@ struct Platform {
     Vec3 velocity;
     RcsModel rcs;
     bool alive = true;
-    bool iff_reply = false;  // answers its own side's interrogations (codes and modes not modelled yet)
+    bool iff_reply = false;  // answers its own side's interrogations
+    int iff_code = 0;        // its transponder's code (Kremniy-2M's filter, roadmap B10; 0 the default both ends share)
+
     // Derived each tick by the scene:
     double altitude_m = 0.0;    // above the ellipsoid
     double height_agl_m = 0.0;  // above the terrain under it
@@ -323,6 +325,8 @@ struct RadarState {
     int emitter_id = 0;
     bool on = false;
     bool iff_interrogating = true;
+    int iff_code = 0;  // the code its interrogator asks on: a transponder replies only on the same (roadmap B10)
+
     MtiMode mti = MtiMode::Off;
     std::vector<int> beam_program;  // indices into the emitter's beams, one per revolution
     std::size_t program_pos = 0;

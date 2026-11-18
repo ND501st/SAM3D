@@ -20,7 +20,7 @@ namespace command {
 inline bool ParseFactKind(const std::string& s, FactKind& out) {
     for (FactKind k : {FactKind::War, FactKind::AirWarning, FactKind::Order, FactKind::Intsum, FactKind::RaidSeen, FactKind::RaidResult,
                        FactKind::OwnDamage, FactKind::Prisoner, FactKind::EnemyOfficer, FactKind::EnemyKnowsBattery, FactKind::BatteryNews,
-                       FactKind::Press, FactKind::Rumour, FactKind::Mail, FactKind::Intercept}) {
+                       FactKind::Press, FactKind::Rumour, FactKind::Mail, FactKind::Intercept, FactKind::OwnAirNotice}) {
         if (s == FactKindName(k)) {
             out = k;
             return true;

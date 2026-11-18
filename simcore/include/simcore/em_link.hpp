@@ -378,7 +378,10 @@ public:
     }
 
     // A target as it is now. Added on first sight; once not alive it stops echoing.
-    void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly) {
+    // `iff_code`: the code its transponder is set to now (roadmap B10; 0 the default the interrogator asks on).
+    void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly,
+                    int iff_code = 0) {
+
         int pid = PlatformOf(id);
         if (pid == 0) {
             if (!alive) return;
@@ -403,8 +406,10 @@ public:
             world_.DestroyPlatform(pid);
             return;
         }
+        p->iff_code = iff_code;
         world_.SetPlatformState(pid, position, velocity);
     }
+
 
     // The console's state: is each radar radiating (and, for the search radar, is its MTI selected).
     void SetSearch(bool radiating, bool mti) {
@@ -440,6 +445,11 @@ public:
     void SetInterrogating(bool on) {
         if (em::RadarState* r = Radar(search_)) r->iff_interrogating = on;
     }
+    // The code the interrogator asks on: the one the crew set from the code table that reached it (roadmap B10).
+    void SetInterrogatorCode(int code) {
+        if (em::RadarState* r = Radar(search_)) r->iff_code = code;
+    }
+
 
     // The tracking radar: radiating; its СДЦ (staggered repetition periods: a repeater that walks the gate in becomes
     // non-synchronous) and its pull-off circuit (УВ. ПОМЕХА: the video after the tracked echo is blanked, so a repeater

@@ -37,7 +37,8 @@ struct FlightRadioInfo {
 struct AirRadioPostDef {
     std::string id;
     std::string name;
-    std::string kind = "intercept";  // "intercept" (ours, listening), "gci", "crc", "fac", "awacs" (the enemy's, speaking)
+    std::string kind = "intercept";  // "intercept" (ours, listening), "gci", "crc", "fac", "awacs" (the enemy's, speaking),
+                                     // "our_gci" (ours, speaking to our flights on our_radio: roadmap B10)
     Vec3 at;                         // east, north; z unused (the antenna's height is mast_m above the ground)
     double mast_m = 30.0;            // antenna height above the ground (an airborne post: its orbit height)
     std::string esm;                 // intercept: the receiver's id in the library
@@ -90,6 +91,8 @@ struct AirRadioDef {
     std::string library_file;        // the EM library of the sets and receivers ("em/air_radios_1985.json")
     std::string air_radio;           // the aircraft's set (library id)
     std::string ground_radio;        // controllers' set
+    std::string our_radio;           // our side's air set (roadmap B10): our GCI's posts ("our_gci") and our flights speak on it
+    double our_freq_hz = 124e6;      // our flights' first net (the R-832M's VHF band, valka_r832m: low confidence)
     double freq_hz = 300e6;          // the first flight net; each flight's is a channel above it
     double channel_hz = 25e3;
     std::string language = "en";     // what its calls are in: "en", "ru", "de", "pannonian" (ours)

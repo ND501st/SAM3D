@@ -33,6 +33,8 @@
 #include "simcore/campaign/report.hpp"
 #include "simcore/campaign/stocks.hpp"
 #include "simcore/command/battery_orders.hpp"
+#include "simcore/command/own_flights.hpp"
+
 #include "simcore/command_post.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
@@ -110,6 +112,10 @@ struct ScenarioTarget {
     bool evade_on_launch = false;          // breaks away onto a beam heading when a missile is launched at it
     double evade_turn_rate_rad_s = DegToRad(12.0);
     bool friendly = false;                 // "iff": "friend": replies to IFF interrogation
+    int iff_code = 0;                      // "iff_code": its transponder's code, fixed (0 the default every interrogator asks
+                                           // on; -1 off: ours, but it gives no reply) (roadmap B10)
+    bool iff_table = false;                // "iff_table": our pilot sets his code by the day's table ("own_air"), and may miss a change
+
     int board_type = -1;                   // its type on the PU-12 board (0-9; -1: 1 if a friend, else 9, no IFF)
     int formation = 1;                     // aircraft in its formation, as the board notes it
     double span_m = 0.0;                   // its span as the TV sight sees it (0: the gameplay tuning's for its class)
@@ -341,6 +347,8 @@ struct ScenarioDef {
     std::vector<ScenarioPackage> packages;  // "packages": the flights' packages
     AirRadioDef air_radio;                  // "air_radio": the enemy's flights' calls as transmissions, our intercept posts (B9)
     airwar::AirFightDef air_fight;          // "air_fight": the air battle's fighters and controllers (B8, air_fight_session.hpp)
+    command::OwnAirScenarioDef own_air;     // "own_air": our aviation's codes, notices, plan of cooperation and duty (B10)
+
     std::vector<ScenarioNeighbour> neighbours;
     std::vector<ScenarioScenery> scenery;
     // "waves": "gameplay/test_waves.json": random waves of every adversary's and our own aircraft for as long as the
@@ -487,7 +495,8 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight"})) {
+                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air"})) {
+
             return false;
         }
         if (!RequireString(root, "", "scenario_id", out.id) || !RequireString(root, "", "name", out.name) ||
@@ -540,7 +549,8 @@ public:
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
         if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out) || !LoadAirRadio(root, data_dir, out)) return false;
-        if (!LoadAirFight(root, data_dir, out)) return false;
+        if (!LoadAirFight(root, data_dir, out) || !LoadOwnAir(root, data_dir, out)) return false;
+
         if (!LoadScenery(root, out) || !LoadWaves(root, data_dir, out)) return false;
         if (!LoadTriggers(root, out, console)) return false;
         if (!LoadDeliveries(root, out, console)) return false;
@@ -1463,10 +1473,12 @@ private:
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
         AirRadioDef& a = out.air_radio;
         std::string library;
-        double freq_mhz = a.freq_hz / 1e6, channel_khz = a.channel_hz / 1e3;
+        double freq_mhz = a.freq_hz / 1e6, channel_khz = a.channel_hz / 1e3, our_mhz = a.our_freq_hz / 1e6;
         if (!Keys(*v, p, {"faction", "library", "radio", "ground_radio", "freq_mhz", "channel_khz", "language", "discipline", "callsign_rotation_h",
-                          "have_quick_share", "secure_voice_share", "opsec", "tune", "posts", "source", "confidence", "notes"}) ||
+                          "have_quick_share", "secure_voice_share", "opsec", "tune", "posts", "our_radio", "our_freq_mhz", "source", "confidence",
+                          "notes"}) ||
             !OptionalString(*v, p, "faction", a.faction) || !RequireString(*v, p, "library", library) || !RequireString(*v, p, "radio", a.air_radio) ||
+            !OptionalString(*v, p, "our_radio", a.our_radio) || !OptionalNumber(*v, p, "our_freq_mhz", our_mhz) ||
             !OptionalString(*v, p, "ground_radio", a.ground_radio) || !OptionalNumber(*v, p, "freq_mhz", freq_mhz) ||
             !OptionalNumber(*v, p, "channel_khz", channel_khz) || !OptionalString(*v, p, "language", a.language) ||
             !OptionalNumber(*v, p, "discipline", a.discipline) || !OptionalNumber(*v, p, "callsign_rotation_h", a.callsign_rotation_h) ||
@@ -1476,6 +1488,7 @@ private:
         }
         a.freq_hz = freq_mhz * 1e6;
         a.channel_hz = channel_khz * 1e3;
+        a.our_freq_hz = our_mhz * 1e6;
         if (a.discipline < 0.0 || a.discipline > 1.0 || a.opsec < 0.0 || a.opsec > 1.0) return Fail(p, "discipline and opsec are between 0 and 1");
         if (const json::Value* t = v->Find("tune")) {
             const std::string tp = Join(p, "tune");
@@ -1500,9 +1513,10 @@ private:
                     !OptionalInt(pv, pp, "channels", d.channels) || !OptionalString(pv, pp, "chain_post", d.chain_post)) {
                     return false;
                 }
-                if (d.kind != "intercept" && d.kind != "gci" && d.kind != "crc" && d.kind != "fac" && d.kind != "awacs") {
-                    return Fail(Join(pp, "kind"), "intercept, gci, crc, fac or awacs");
+                if (d.kind != "intercept" && d.kind != "gci" && d.kind != "crc" && d.kind != "fac" && d.kind != "awacs" && d.kind != "our_gci") {
+                    return Fail(Join(pp, "kind"), "intercept, gci, crc, fac, awacs or our_gci");
                 }
+                if (d.kind == "our_gci" && d.radio.empty() && a.our_radio.empty()) return Fail(pp, "our GCI speaks on our_radio: give it");
                 if (d.kind == "intercept" && d.esm.empty()) return Fail(pp, "an intercept post needs its receiver (the esm key)");
                 d.at = Vec3{e, n, 0.0};
                 d.freq_hz = freq * 1e6;
@@ -1556,7 +1570,16 @@ private:
             }
         }
         const json::Value* arr = OptionalArray(*v, p, "fighters");
-        if (arr == nullptr || arr->items.empty()) return Fail(Join(p, "fighters"), "required: the targets that fight");
+        bool our_gci = false;  // our GCI with our regiments' pairs to come (B10: scrambled by "own_air")
+        for (const airwar::AirFightControllerDef& c : a.controllers) our_gci = our_gci || c.side == "ours";
+        if ((arr == nullptr || arr->items.empty()) && !(our_gci && root.Find("own_air") != nullptr)) {
+            return Fail(Join(p, "fighters"), "required: the targets that fight (or our GCI with \"own_air\"'s regiments)");
+        }
+        if (arr == nullptr) {
+            a.present = true;
+            return true;
+        }
+
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
             const json::Value& fv = arr->items[i];
             const std::string fp = Index(Join(p, "fighters"), i);
@@ -1581,7 +1604,126 @@ private:
         a.present = true;
         return true;
     }
+    // "own_air" (roadmap B10): our aviation's side of the session. The codes and rules files, the day's codes and when
+    // the table reached the battery and the post, the plan of cooperation, the notices our fighter regiment sends, its
+    // regiments and the GCI's radar. Positions in the scenario's east and north metres; times in session seconds.
+    bool LoadOwnAir(const json::Value& root, const std::string& data_dir, ScenarioDef& out) {
+        const json::Value* v = root.Find("own_air");
+        if (v == nullptr) return true;
+        const std::string p = "own_air";
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        command::OwnAirScenarioDef& o = out.own_air;
+        if (!Keys(*v, p, {"data", "codes", "war", "day", "fixed_code", "battery_table_s", "battery_last_code", "post_table_s", "post_last_code",
+                          "chain", "origin", "notice_post", "plan", "notices", "regiments", "gci", "raid_warning_s", "source", "confidence", "notes"}) ||
+            !OptionalString(*v, p, "data", o.data_file) || !OptionalString(*v, p, "codes", o.codes_file) || !OptionalBool(*v, p, "war", o.war) ||
+            !OptionalInt(*v, p, "day", o.day) || !OptionalInt(*v, p, "fixed_code", o.fixed_code) ||
+            !OptionalNumber(*v, p, "battery_table_s", o.battery_table_s) || !OptionalInt(*v, p, "battery_last_code", o.battery_last_code) ||
+            !OptionalNumber(*v, p, "post_table_s", o.post_table_s) || !OptionalInt(*v, p, "post_last_code", o.post_last_code) ||
+            !OptionalString(*v, p, "chain", o.chain_file) || !OptionalString(*v, p, "origin", o.origin) ||
+            !OptionalString(*v, p, "notice_post", o.notice_post) || !OptionalNumber(*v, p, "raid_warning_s", o.raid_warning_s) ||
+            !Provenance(*v, p)) {
+            return false;
+        }
+        std::string e;
+        if (!command::LoadOwnAirFile(data_dir + "/" + o.data_file, o.def, &e)) return Fail(Join(p, "data"), e);
+        if (!command::LoadIffCodesFile(data_dir + "/" + o.codes_file, o.codes, &e)) return Fail(Join(p, "codes"), e);
+        if (o.fixed_code < 0 || o.fixed_code > o.codes.filters) return Fail(Join(p, "fixed_code"), "0 (the day's table) or a code 1-" + std::to_string(o.codes.filters));
+        if (!o.chain_file.empty()) {
+            if (!command::LoadChainData(data_dir, o.chain_file, o.chain, &e)) return Fail(Join(p, "chain"), e);
+            if (o.chain.PositionIndex(o.origin) < 0) return Fail(Join(p, "origin"), "no position '" + o.origin + "' in the chain");
+            if (o.chain.PositionIndex(o.notice_post) < 0) return Fail(Join(p, "notice_post"), "no position '" + o.notice_post + "' in the chain");
+            o.has_chain = true;
+        }
+        if (const json::Value* pl = v->Find("plan")) {
+            if (!command::LoadCooperationPlan(*pl, Join(p, "plan"), o.plan, &e)) return Fail(Join(p, "plan"), e);
+        }
+        const double clock0_h = out.clock_start_s >= 0.0 ? out.clock_start_s / 3600.0 : 0.0;
+        const auto read_path = [&](const json::Value& n, const std::string& np, std::vector<Vec3>& path) {
+            const json::Value* r = n.Find("route_m");
+            if (r == nullptr || !r->Is(json::Type::Array) || r->items.empty()) return Fail(Join(np, "route_m"), "a list of [east_m, north_m]");
+            for (std::size_t j = 0; j < r->items.size(); ++j) {
+                const json::Value& q = r->items[j];
+                if (!q.Is(json::Type::Array) || q.items.size() != 2 || !q.items[0].Is(json::Type::Number) || !q.items[1].Is(json::Type::Number)) {
+                    return Fail(Index(Join(np, "route_m"), j), "expected [east_m, north_m]");
+                }
+                path.push_back(Vec3{q.items[0].number, q.items[1].number, 0.0});
+            }
+            return true;
+        };
+        if (const json::Value* arr = OptionalArray(*v, p, "notices")) {
+            for (std::size_t i = 0; i < arr->items.size(); ++i) {
+                const json::Value& n = arr->items[i];
+                const std::string np = Index(Join(p, "notices"), i);
+                command::OwnAirScenarioNotice sn;
+                command::OwnFlightNotice& f = sn.notice;
+                double from_s = 0.0, to_s = 0.0, back_s = -1.0;
+                f.number = static_cast<int>(i) + 1;
+                if (!Keys(n, np, {"number", "amendment", "actual", "flight", "type", "count", "route_m", "half_width_m", "floor_m", "ceiling_m",
+                                  "cross_from_s", "cross_to_s", "back_s", "sent_s", "lost", "aircraft", "notes"}) ||
+                    !OptionalInt(n, np, "number", f.number) || !OptionalInt(n, np, "amendment", f.amendment) || !OptionalBool(n, np, "actual", f.actual) ||
+                    !RequireString(n, np, "flight", f.flight) || !OptionalString(n, np, "type", f.type) || !OptionalInt(n, np, "count", f.count) ||
+                    !OptionalNumber(n, np, "half_width_m", f.half_width_m) || !RequireNumber(n, np, "floor_m", f.floor_m) ||
+                    !RequireNumber(n, np, "ceiling_m", f.ceiling_m) || !RequireNumber(n, np, "cross_from_s", from_s) ||
+                    !RequireNumber(n, np, "cross_to_s", to_s) || !OptionalNumber(n, np, "back_s", back_s) || !OptionalNumber(n, np, "sent_s", sn.sent_s) ||
+                    !OptionalBool(n, np, "lost", sn.lost) || !read_path(n, np, f.route)) {
+                    return false;
+                }
+                if (f.ceiling_m <= f.floor_m) return Fail(Join(np, "ceiling_m"), "must be above floor_m");
+                if (to_s < from_s) return Fail(Join(np, "cross_to_s"), "must be after cross_from_s");
+                f.cross_from_h = clock0_h + from_s / 3600.0;
+                f.cross_to_h = clock0_h + to_s / 3600.0;
+                f.back_h = back_s >= 0.0 ? clock0_h + back_s / 3600.0 : -1.0;
+                if (const json::Value* ac = OptionalArray(n, np, "aircraft")) {
+                    for (std::size_t k = 0; k < ac->items.size(); ++k) {
+                        if (!ac->items[k].Is(json::Type::String)) return Fail(Index(Join(np, "aircraft"), k), "a target's id");
+                        bool known = false;
+                        for (const ScenarioTarget& t : out.targets) known = known || t.id == ac->items[k].string;
+                        if (!known) return Fail(Index(Join(np, "aircraft"), k), "no target '" + ac->items[k].string + "'");
+                        sn.aircraft.push_back(ac->items[k].string);
+                    }
+                }
+                o.notices.push_back(std::move(sn));
+            }
+        }
+        if (const json::Value* arr = OptionalArray(*v, p, "regiments")) {
+            for (std::size_t i = 0; i < arr->items.size(); ++i) {
+                const json::Value& r = arr->items[i];
+                const std::string rp = Index(Join(p, "regiments"), i);
+                command::FighterRegimentDef d;
+                double be = 0.0, bn = 0.0, ae = 0.0, an = 0.0;
+                if (!Keys(r, rp, {"id", "base", "base_east_m", "base_north_m", "type", "name", "skill", "aircraft", "function", "area_east_m",
+                                  "area_north_m", "area_radius_m", "gci", "notes"}) ||
+                    !RequireString(r, rp, "id", d.id) || !OptionalString(r, rp, "base", d.base) || !RequireNumber(r, rp, "base_east_m", be) ||
+                    !RequireNumber(r, rp, "base_north_m", bn) || !OptionalString(r, rp, "type", d.type) || !OptionalString(r, rp, "name", d.name) ||
+                    !OptionalNumber(r, rp, "skill", d.skill) || !OptionalInt(r, rp, "aircraft", d.aircraft) || !OptionalNumber(r, rp, "function", d.function) ||
+                    !RequireNumber(r, rp, "area_east_m", ae) || !RequireNumber(r, rp, "area_north_m", an) ||
+                    !OptionalNumber(r, rp, "area_radius_m", d.area_radius_m) || !RequireString(r, rp, "gci", d.gci)) {
+                    return false;
+                }
+                if (!out.air_fight.present || out.air_fight.Controller(d.gci) == nullptr || out.air_fight.Controller(d.gci)->side != "ours") {
+                    return Fail(Join(rp, "gci"), "one of our controllers in \"air_fight\"");
+                }
+                if (out.air_fight.combat.Fit(d.type) == nullptr) return Fail(Join(rp, "type"), "no fit for '" + d.type + "' in the air fight's combat data");
+                d.base_pos = Vec3{be, bn, 0.0};
+                d.area_centre = Vec3{ae, an, 0.0};
+                o.regiments.push_back(std::move(d));
+            }
+        }
+        if (const json::Value* g = v->Find("gci")) {
+            double ge = 0.0, gn = 0.0;
+            if (!Keys(*g, Join(p, "gci"), {"east_m", "north_m", "mast_m", "notes"}) || !RequireNumber(*g, Join(p, "gci"), "east_m", ge) ||
+                !RequireNumber(*g, Join(p, "gci"), "north_m", gn) || !OptionalNumber(*g, Join(p, "gci"), "mast_m", o.gci_mast_m)) {
+                return false;
+            }
+            o.gci_radar = Vec3{ge, gn, 0.0};
+        } else if (!o.regiments.empty()) {
+            return Fail(Join(p, "gci"), "required with regiments: our GCI's radar");
+        }
+        o.present = true;
+        return true;
+    }
     // A formation's slots: [[right_m, back_m, up_m], ...], the leader's place first.
+
     bool LoadSlots(const json::Value& v, const std::string& p, std::vector<Vec3>& out) {
         if (!v.Is(json::Type::Array) || v.items.empty()) return Fail(p, "a list of [right_m, back_m, up_m], the leader's first");
         for (std::size_t j = 0; j < v.items.size(); ++j) {
@@ -1683,7 +1825,8 @@ private:
                              "rcs_m2", "appear_at_s", "evade_on_launch", "evade_turn_rate_deg_s", "iff", "board_type",
                              "formation", "behaviour", "evade", "size_m", "rwr", "decoy", "model", "on_cue", "arms", "span_m", "weapon",
                              "bottom_m", "max_load_g", "sustained_turn_deg_s", "roll_rate_deg_s", "max_mps", "accel_mps2",
-                             "climb_mps", "flight", "slot", "legs", "seats", "pilot_skill", "reactions", "notes"})) {
+                             "climb_mps", "flight", "slot", "legs", "seats", "pilot_skill", "reactions", "iff_code", "iff_table", "notes"})) {
+
                 return false;
             }
             ScenarioTarget tg;
@@ -1696,9 +1839,13 @@ private:
             }
             if (evade_deg_s <= 0.0) return Fail(Join(p, "evade_turn_rate_deg_s"), "must be > 0");
             if (!OptionalInt(t, p, "board_type", tg.board_type) || !OptionalInt(t, p, "formation", tg.formation) ||
-                !OptionalNumber(t, p, "span_m", tg.span_m)) {
+                !OptionalNumber(t, p, "span_m", tg.span_m) || !OptionalInt(t, p, "iff_code", tg.iff_code) ||
+                !OptionalBool(t, p, "iff_table", tg.iff_table)) {
                 return false;
             }
+            if (tg.iff_code < -1) return Fail(Join(p, "iff_code"), "-1 (off), 0 (the default) or a code 1-12");
+            if ((tg.iff_code != 0 || tg.iff_table) && !tg.friendly) return Fail(Join(p, "iff_code"), "only for one of ours (\"iff\": \"friend\")");
+
             if (tg.span_m < 0.0) return Fail(Join(p, "span_m"), "must be >= 0");
             if (t.Find("board_type") != nullptr && (tg.board_type < 0 || tg.board_type > 9)) {
                 return Fail(Join(p, "board_type"), "a digit 0-9 (0 jamming, 1 friend, 2 training target, 8 enemy, 9 no IFF...)");

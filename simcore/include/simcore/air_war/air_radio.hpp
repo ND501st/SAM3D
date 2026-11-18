@@ -143,6 +143,7 @@ struct Call {
     bool secure = false;
     bool dropped = false;     // never said: the net was too busy for too long
     bool by_signal = false;   // not said on the air
+    bool ours = false;        // our side's call (our GCI's vector, our pilots: roadmap B10): our posts do not log it
     std::string truth;        // what really happened (debrief only)
 };
 
@@ -232,6 +233,7 @@ public:
         const em::EmLibrary& lib = world_->Scene().lib;
         if (def_.air_radio.empty() || lib.Radio(def_.air_radio) < 0) return fail("air_radio: no radio '" + def_.air_radio + "' in the library");
         if (!def_.ground_radio.empty() && lib.Radio(def_.ground_radio) < 0) return fail("air_radio: no radio '" + def_.ground_radio + "' in the library");
+        if (!def_.our_radio.empty() && lib.Radio(def_.our_radio) < 0) return fail("air_radio: no radio '" + def_.our_radio + "' in the library");
         // The calls are the only thing this world does: no sweeps, no links on the clock, no ageing.
         em::EmRates& r = world_->Rates();
         r.esm_period_s = r.knowledge_period_s = r.link_period_s = r.age_period_s = 1e9;
@@ -248,9 +250,16 @@ public:
     // ---- the flights (called as each is registered in the session)
 
     // A flight's net and nodes, one per aircraft; `starts` are where its aircraft begin (the leader's first).
+    // Our flights (roadmap B10) have a net too when the scenario gives our side's set (`our_radio`): our GCI's vectors reach
+    // them by the same link budget, and can be lost the same way.
     void AddFlight(int fi, const FlightState& f, const FlightRadioInfo& info, const std::vector<Vec3>& starts) {
-        if (!On() || f.weapons || f.side != "enemy") return;
+        if (!On() || f.weapons) return;
+        const bool ours = f.side == "ours";
+        if (!ours && f.side != "enemy") return;
+        if (ours && def_.our_radio.empty()) return;
+        const em::Side side = ours ? em::Side::Blue : em::Side::Red;
         FlightEntry e;
+        e.ours = ours;
         e.fi = fi;
         e.id = f.id;
         e.callsign = f.callsign.empty() ? f.id : f.callsign;
@@ -268,16 +277,16 @@ public:
             m.number = f.slots[k].number;
             em::Platform p;
             p.name = f.id + " " + std::to_string(f.slots[k].number);
-            p.side = em::Side::Red;
+            p.side = side;
             p.kind = em::PlatformKind::FixedWing;
             p.position = k < starts.size() ? starts[k] : (starts.empty() ? Vec3() : starts.front());
             m.platform = world_->AddPlatform(p);
-            m.node = world_->AddNode(p.name, m.platform, em::Side::Red);
+            m.node = world_->AddNode(p.name, m.platform, side);
             nodes.push_back(m.node);
             e.members.push_back(m);
         }
-        const double freq = def_.freq_hz + def_.channel_hz * static_cast<double>(index % 200);
-        e.net = world_->AddNet("flight " + f.id, def_.air_radio, freq, nodes);
+        const double freq = (ours ? def_.our_freq_hz : def_.freq_hz) + def_.channel_hz * static_cast<double>(index % 200);
+        e.net = world_->AddNet("flight " + f.id, ours ? def_.our_radio : def_.air_radio, freq, nodes);
         e.unit_key = std::hash<std::string>()(e.unit);
         entries_.push_back(std::move(e));
     }
@@ -398,6 +407,7 @@ public:
         bool has_when = false;
         double when_s = 0.0;
         double stress = 0.0;
+        bool ours = false;
         std::string truth;
     };
     // A flight's leader (or the aircraft numbered `number`) speaks on his flight's net. Returns the call's number, or one of
@@ -450,6 +460,7 @@ public:
         sp.speaker = post->def.id;
         sp.has_where = has_where;
         sp.where = where;
+        sp.ours = post->def.kind == "our_gci";
         FlightEntry dummy;
         return Transmit(sp, e != nullptr ? *e : dummy, t);
     }
@@ -532,6 +543,7 @@ private:
         bool checked_in = false;
         bool codeword_said = false;
         bool attacked = false;
+        bool ours = false;
     };
     struct Post {
         AirRadioPostDef def;
@@ -547,7 +559,8 @@ private:
         Post po;
         po.def = p;
         const bool listens = p.kind == "intercept";
-        const em::Side side = listens ? em::Side::Blue : em::Side::Red;
+        const bool ours = p.kind == "our_gci";  // our GCI post speaking to our flights (roadmap B10)
+        const em::Side side = listens || ours ? em::Side::Blue : em::Side::Red;
         po.platform = world_->AddGroundPlatform(p.name.empty() ? p.id : p.name, side, p.at.x, p.at.y, p.mast_m);
         if (listens) {
             po.esm = world_->AddEsm(po.platform, p.esm);
@@ -557,12 +570,12 @@ private:
             }
         } else {
             po.node = world_->AddNode(p.name.empty() ? p.id : p.name, po.platform, side);
-            const std::string radio = p.radio.empty() ? def_.ground_radio : p.radio;
+            const std::string radio = p.radio.empty() ? (ours ? def_.our_radio : def_.ground_radio) : p.radio;
             if (radio.empty() || s.lib.Radio(radio) < 0) {
                 if (error != nullptr) *error = "air_radio post " + p.id + ": no radio '" + radio + "' in the library";
                 return false;
             }
-            po.net = world_->AddNet("post " + p.id, radio, p.freq_hz > 0.0 ? p.freq_hz : def_.freq_hz, {po.node});
+            po.net = world_->AddNet("post " + p.id, radio, p.freq_hz > 0.0 ? p.freq_hz : (ours ? def_.our_freq_hz : def_.freq_hz), {po.node});
         }
         posts_.push_back(std::move(po));
         return true;
@@ -659,7 +672,8 @@ private:
         c.flight = sp.flight;
         c.unit = e.unit.empty() ? sp.speaker : e.unit;
         c.callsign = CallsignFor(e.callsign.empty() ? sp.speaker : e.callsign, t);
-        c.language = def_.language;
+        c.ours = sp.ours || e.ours;
+        c.language = c.ours ? std::string("pannonian") : def_.language;
         c.words = sp.words;
         if (sp.has_when && c.words.find(" time ") == std::string::npos) c.words += ", time " + ClockOf(clock_start_s_ + sp.when_s);
         if (!e.callsign.empty() && c.callsign != e.callsign) {  // the rotation changed the sign: say it as in force
@@ -737,6 +751,7 @@ private:
 
     void Collect(const em::CommsHeard& h) {
         if (h.payload < 0 || static_cast<std::size_t>(h.payload) >= log_.size()) return;
+        if (log_[static_cast<std::size_t>(h.payload)].ours) return;  // our own GCI and pilots: not the intercept's business
         for (const Post& p : posts_) {
             if (p.esm != h.esm) continue;
             Heard r;
