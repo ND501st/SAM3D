@@ -446,6 +446,11 @@ struct SensorDef {
     // An infrared search set or an optical aid.
     double rear_m = 0.0;                // from the rear against a clear sky (an F-4 from the rear for the TP-23)
     double vid_m = 0.0;                 // recognition range it gives beyond the eye's
+    // An optical aid in the perception (roadmap S7): where it points (its half-field about the nose), the range a ground
+    // target is recognised through it, and whether it sees by night (imaging infrared).
+    double field_deg = 0.0;
+    double ground_recognise_m = 0.0;
+    bool night = false;
     std::string source;
     std::string confidence;
     std::string notes;

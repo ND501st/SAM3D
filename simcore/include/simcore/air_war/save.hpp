@@ -28,6 +28,11 @@
 // light.json: docs/LIGHT.md) and replays with light.mode 0, its theatre as it was then dated.
 // A save without "air_fight_mode" was made before roadmap S3 (the abstract air fight's attacks told apart, the drag, the
 // strikers' flares and chaff) and replays with air_fight.mode 0.
+// A save whose "route_mode" is 1 was planned before roadmap S7 (a gate with no feature, our believed air bases in a
+// leg's cost, the coarser lattice without a map, a played raid's navigation error, the routes as flown back) and
+// replays with route.mode 1. A save without "learning_mode" was made before S7 (losses nobody saw explained, the
+// sympathisers' word of our mobile batteries) and replays with learning.mode 0; one without "weather_mode" (S7, the
+// weather by month) with weather.mode 0.
 #pragma once
 
 #include <cmath>
@@ -134,6 +139,18 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "notes", Strings(o.notes));
     Put(v, "released_flights", Ints(o.released_flights));
     Put(v, "aborted_flights", Ints(o.aborted_flights));
+    if (!o.flown.empty()) {  // roadmap S7: an outcome without them reads as before
+        json::Value flown = Arr();
+        for (const PackageOutcome::FlownRecord& f : o.flown) {
+            json::Value x = Obj();
+            Put(x, "flight", Num(f.flight));
+            Put(x, "east_m", Num(f.at.x));
+            Put(x, "north_m", Num(f.at.y));
+            Put(x, "t_h", Num(f.t_h));
+            Push(flown, x);
+        }
+        Put(v, "flown", flown);
+    }
     Put(v, "jettisoned_flights", Ints(o.jettisoned_flights));
     Put(v, "tanks_dropped", Num(o.tanks_dropped));
     Put(v, "stores_dropped", Num(o.stores_dropped));
@@ -348,6 +365,15 @@ public:
         o.notes = Strings(v, "notes");
         o.released_flights = Ints(v, "released_flights");
         o.aborted_flights = Ints(v, "aborted_flights");
+        if (const json::Value* fs = v.Find("flown")) {
+            for (const json::Value& x : fs->items) {
+                PackageOutcome::FlownRecord f;
+                f.flight = Int(x, "flight", -1);
+                f.at = Vec3{Number(x, "east_m"), Number(x, "north_m"), 0.0};
+                f.t_h = Number(x, "t_h");
+                o.flown.push_back(f);
+            }
+        }
         o.jettisoned_flights = Ints(v, "jettisoned_flights");
         o.tanks_dropped = Int(v, "tanks_dropped");
         o.stores_dropped = Int(v, "stores_dropped");
@@ -454,6 +480,8 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "damage_mode", Num(c.Data().tuning.Get("damage.mode")));
     Put(root, "light_mode", Num(c.Data().tuning.Get("light.mode")));
     Put(root, "air_fight_mode", Num(c.Data().tuning.Get("air_fight.mode")));
+    Put(root, "learning_mode", Num(c.Data().tuning.Get("learning.mode")));
+    Put(root, "weather_mode", Num(c.Data().tuning.Get("weather.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -556,6 +584,9 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double light_mode = r.Number(root, "light_mode", 0.0);
     // And the abstract air fight in detail (roadmap S3): a save made before it has no key, and replays as it was played.
     const double air_fight_mode = r.Number(root, "air_fight_mode", 0.0);
+    // And the planner's learning and the weather by month (roadmap S7): a save made before them has no keys.
+    const double learning_mode = r.Number(root, "learning_mode", 0.0);
+    const double weather_mode = r.Number(root, "weather_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -630,6 +661,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["light.mode"] = light_mode;
     ApplyLightMode(data);
     data.tuning.values["air_fight.mode"] = air_fight_mode;
+    data.tuning.values["learning.mode"] = learning_mode;
+    data.tuning.values["weather.mode"] = weather_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

@@ -633,6 +633,30 @@ and off, line for line, and `ground_check data 3600` lists nothing with them on.
 whose flights go far and come back near give the same places at every step, the same launches and the same debrief
 but for a wingman's warning-receiver line, which may come at another moment (see Tests).
 
+**Mode 2 (roadmap S7, 20 Nov 2026, branch `tbr-s7`).** `air_levels.json` ships with `mode` 2: the levels as above and
+four more of B12's leftovers. Mode 1 is B12's levels unchanged, and B12's tests run with it.
+
+- *The height layer at a lower rate.* A wingman of a flight at A1 who follows the ground scans it ahead only every
+  `a1_height_scan_s` (0.5 s; `TargetPilot::SetHeightScanEvery`): the scan reaches over his look-ahead and that half
+  second, and its highest point holds until the next. He never holds lower than a scan at every step would have him
+  (a test over a ridge); he may hold a little higher. A flight at A2 and every leader scan at every step.
+- *The receivers' cost near the battery.* `receiver_bound` 1 sets the EM world's `esm_sidelobe_bound`: before a
+  receiver walks the path from a beam (the terrain profile and the two rays), the beam as it points now over the best
+  ground there is (the two rays in phase, F at most 2, -6.02 dB on free space) is compared with the receiver's
+  sensitivity, and a beam that cannot reach it is skipped. It is a bound, so what a receiver hears does not change, but
+  the paths not walked are not refreshed in the path cache, so a later walk may use a profile cached at another moment:
+  not bit-exact (a test: within two steps in 400 for every jet).
+- *The A1 wingman's lock.* A radar locked on a wingman whose flight is at A1 (the engagement's track, a battery or
+  neighbour launcher's target, an EM track radar's target: `ScenarioRunner::LockedOn`) gives him back his own
+  receiver at once, so the lock is heard on his own set; B12 left it missed until the flight came back to A2.
+- *A fixed stagger serial.* A flight's moment in the second is `StaggerDueEven` by a serial given in the order the
+  flights first flew (the golden ratio's sequence), so no two of ten flights fall in one 0.05 s step; by the hash of the
+  id two could. The serial is the session's, not saved.
+
+The out-and-back session of `test_levels.cpp` at mode 2 flies every aircraft where it flew with the levels off, to a
+micrometre, with the same launches and debrief (but a wingman's warning-receiver line); the testbed's numbers are in
+`docs/air_war/09_BALANCE.md` section 22.
+
 **A0** is not built here: the time-stepped resolver is B5's (`05_C2_AND_RETASKING.md` §4.6), and making the resolver
 place packages each step changes every campaign's outcome; it stays with B5.
 
@@ -766,4 +790,5 @@ PU-12M's P-19 reaches 160 km and would keep a whole battery mission at A2; set i
 - The A0 resolver made time-stepped (`05_C2_AND_RETASKING.md` §4.6, with `01_ROUTES.md`'s routes): its cost on the
   nation's theatre is not yet measured.
 - B12's A1 (§5.4): a wingman hears on his leader's receiver, so an emitter at the edge of hearing comes to him a
-  little earlier or later, and a lock on him alone is missed until his flight is back at A2.
+  little earlier or later (a lock on him alone gives him his own receiver back since S7's mode 2). The receivers'
+  bound is not bit-exact through the path cache.

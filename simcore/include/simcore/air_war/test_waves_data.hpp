@@ -81,6 +81,11 @@ struct WavesDef {
     double jammer_orbit_m = 45000.0;
     double support_orbit_m = 105000.0;
     double city_radius_m = 6000.0;
+    // Low strikes routed round our defences' rings on the way to their IP (roadmap S7, "routes"): the ring of the
+    // scenario's own unit and the battery's vehicles (a neighbour has its own reach) and the margin kept outside a ring.
+    // 0: straight legs, as before.
+    double route_own_ring_m = 0.0;
+    double route_margin_m = 0.0;
 
     const DefenceDef* Defence(const std::string& system) const {
         const auto it = defences.find(system);
@@ -187,7 +192,10 @@ private:
         double emin = out.entry_min_m / 1000.0, emax = out.entry_max_m / 1000.0;
         double hmin = out.helicopter_min_m / 1000.0, hmax = out.helicopter_max_m / 1000.0;
         double jam = out.jammer_orbit_m / 1000.0, sup = out.support_orbit_m / 1000.0, city = out.city_radius_m / 1000.0;
-        if (!Keys(*g, "geometry", {"entry_km", "helicopter_km", "jammer_orbit_km", "support_orbit_km", "city_radius_km", "notes"}) ||
+        double own_ring = out.route_own_ring_m / 1000.0, margin = out.route_margin_m / 1000.0;
+        if (!Keys(*g, "geometry", {"entry_km", "helicopter_km", "jammer_orbit_km", "support_orbit_km", "city_radius_km", "route_own_ring_km",
+                                   "route_margin_km", "notes"}) ||
+            !OptionalNumber(*g, "geometry", "route_own_ring_km", own_ring) || !OptionalNumber(*g, "geometry", "route_margin_km", margin) ||
             !Range(*g, "geometry", "entry_km", emin, emax) || !Range(*g, "geometry", "helicopter_km", hmin, hmax) ||
             !OptionalNumber(*g, "geometry", "jammer_orbit_km", jam) || !OptionalNumber(*g, "geometry", "support_orbit_km", sup) ||
             !OptionalNumber(*g, "geometry", "city_radius_km", city)) {
@@ -201,6 +209,8 @@ private:
         out.jammer_orbit_m = jam * 1000.0;
         out.support_orbit_m = sup * 1000.0;
         out.city_radius_m = city * 1000.0;
+        out.route_own_ring_m = own_ring * 1000.0;
+        out.route_margin_m = margin * 1000.0;
         return true;
     }
 

@@ -469,7 +469,8 @@ private:
     bool Sensor(const json::Value& v, const std::string& p, SensorDef& s) {
         std::string kind;
         if (!Keys(v, p, {"id", "name", "kind", "carriers", "in_service_year", "allies_year", "placeholder", "radar_def", "library", "rcs_m2",
-                         "by_hand_m", "cued_m", "lock_m", "design_m", "clutter_m", "rear_m", "vid_m", "source", "confidence", "notes"}) ||
+                         "by_hand_m", "cued_m", "lock_m", "design_m", "clutter_m", "rear_m", "vid_m", "field_deg", "ground_recognise_m", "night", "source",
+                         "confidence", "notes"}) ||
             !RequireString(v, p, "id", s.id) || !RequireString(v, p, "name", s.name) || !RequireString(v, p, "kind", kind) ||
             !StringList(v, p, "carriers", s.carriers) || !Int(v, p, "in_service_year", s.in_service_year, 1900, 2050) ||
             !Int(v, p, "allies_year", s.allies_year, 0, 2050) || !OptionalBool(v, p, "placeholder", s.placeholder) ||
@@ -477,7 +478,9 @@ private:
             !Num(v, p, "rcs_m2", s.rcs_m2, 0.0, 1000.0) || !Num(v, p, "by_hand_m", s.by_hand_m, 0.0, 500000.0) ||
             !Num(v, p, "cued_m", s.cued_m, 0.0, 500000.0) || !Num(v, p, "lock_m", s.lock_m, 0.0, 500000.0) ||
             !Num(v, p, "design_m", s.design_m, 0.0, 500000.0) || !Num(v, p, "clutter_m", s.clutter_m, 0.0, 500000.0) ||
-            !Num(v, p, "rear_m", s.rear_m, 0.0, 500000.0) || !Num(v, p, "vid_m", s.vid_m, 0.0, 50000.0) || !Provenance(v, p) ||
+            !Num(v, p, "rear_m", s.rear_m, 0.0, 500000.0) || !Num(v, p, "vid_m", s.vid_m, 0.0, 50000.0) ||
+            !Num(v, p, "field_deg", s.field_deg, 0.0, 180.0) || !Num(v, p, "ground_recognise_m", s.ground_recognise_m, 0.0, 50000.0) ||
+            !OptionalBool(v, p, "night", s.night) || !Provenance(v, p) ||
             !OptionalString(v, p, "source", s.source) || !OptionalString(v, p, "confidence", s.confidence) ||
             !OptionalString(v, p, "notes", s.notes)) {
             return false;

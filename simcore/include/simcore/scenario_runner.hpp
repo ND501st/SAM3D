@@ -206,6 +206,7 @@ public:
             em_link_ = std::make_unique<EmSensorLink>(def_.origin, &world_.GetTerrain(), def_.seed, def_.em, def_.unit_position);
             if (em_link_->Ok()) {
                 engagement_.SetEmLink(em_link_.get());
+                if (levels_.On() && levels_.Values().mode >= 2 && levels_.Values().receiver_bound > 0.0) em_link_->SetEsmSidelobeBound(true);  // S7
                 for (const ScenarioTarget& t : def_.targets) {
                     if (!t.rwr.empty()) em_link_->SetTargetRwr(t.id, t.rwr);  // made with the target's platform
                 }
@@ -2190,6 +2191,10 @@ private:
                     if (ended) s.pilot.OverrideEnded();
                     if (!ev.empty()) Event(def_.targets[i].id, ev);
                 }
+                // A wingman at A1 scans the ground ahead at a lower rate (roadmap S7, levels mode 2).
+                s.pilot.SetHeightScanEvery(levels_.On() && levels_.Values().mode >= 2 && i < target_level_.size() && target_level_[i] == AirLevel::A1
+                                               ? levels_.Values().a1_height_scan_s
+                                               : 0.0);
                 const std::string what = s.pilot.AfterStep(*a, world_.GetTerrain(), world_.Frame(), dt, time_);
                 if (!what.empty()) Event(def_.targets[i].id, what);
             }
@@ -2288,7 +2293,10 @@ private:
             const int fi = static_cast<int>(k);
             const AirLevels::Entry* e = levels_.EntryOf(fi);
             const bool first = e == nullptr || !e->seen;
-            if (!first && (prev < 0.0 || !StaggerDue(airwar::ObjectKeyOf(f.id), 1.0, prev, time_))) continue;
+            // Its stagger (roadmap S7, mode 2: by the serial fixed when it first flew; before, by its id's hash).
+            const bool due = v.mode >= 2 ? (e != nullptr && StaggerDueEven(e->serial, 1.0, prev, time_))
+                                         : StaggerDue(airwar::ObjectKeyOf(f.id), 1.0, prev, time_);
+            if (!first && (prev < 0.0 || !due)) continue;
             double ratio = 1e9;
             bool any = false;
             for (const FlightSlot& sl : f.slots) {
@@ -2391,6 +2399,7 @@ private:
     // leader's slot is looked at first, so a new leader (the old one lost) has his own receiver on before he lends it.
     void LendReceivers(const Flights::Lookup& air) {
         if (!levels_.On()) return;
+        const bool v_s7 = levels_.Values().mode >= 2;
         if (rwr_lent_until_.size() < target_level_.size()) rwr_lent_until_.resize(target_level_.size(), -1.0);
         for (std::size_t k = 0; k < flights_->Size(); ++k) {
             const FlightState& f = flights_->All()[k];
@@ -2403,6 +2412,8 @@ private:
                 if (sl.target < 0 || static_cast<std::size_t>(sl.target) >= target_level_.size() || static_cast<int>(n) == f.leader_slot) continue;
                 const std::size_t i = static_cast<std::size_t>(sl.target);
                 bool lent = a1 && lead_ok && sl.keeping && sl.alive && !sl.gone && air(sl.target) != nullptr;
+                // A radar locked on him alone (roadmap S7, levels mode 2): his own receiver, so he hears the lock.
+                if (lent && v_s7 && LockedOn(i)) lent = false;
                 if (lent && !def_.targets[i].rwr.empty()) {
                     const ScenarioTarget& lt = def_.targets[static_cast<std::size_t>(ls->target)];
                     lent = lt.rwr == def_.targets[i].rwr && em_link_ && em_link_->RwrOn(lt.id);
@@ -2410,6 +2421,23 @@ private:
                 SetTargetLevel(i, lent ? AirLevel::A1 : AirLevel::A2);
             }
         }
+    }
+    // A radar holds this aircraft now: the engagement's track, a battery's or a neighbour's shot at it, or a tracking
+    // emitter of the EM layer pointed at it (roadmap S7: the A1 wingman's lock).
+    bool LockedOn(std::size_t i) const {
+        if (i >= def_.targets.size()) return false;
+        const std::string& id = def_.targets[i].id;
+        if (engagement_on_ && engagement_.TrackedTarget() == id) return true;
+        for (const NeighbourShot& ns : nb_shots_) {
+            if (ns.target == i) return true;
+        }
+        for (const BatteryFire* bf : {battery_fire_.get(), neighbour_fire_.get()}) {
+            if (bf == nullptr) continue;
+            for (const BatteryFire::Shooter& sh : bf->Shooters()) {
+                if (sh.target == id) return true;
+            }
+        }
+        return em_link_ && em_link_->TrackedBy(id);
     }
     void SetTargetLevel(std::size_t i, AirLevel l) {
         if (target_level_[i] == l) return;
@@ -3353,10 +3381,18 @@ private:
         scene.frame = &world_.Frame();
         scene.terrain = &world_.GetTerrain();
         scene.centre = def_.unit_position;
+        const double own_ring = def_.waves->route_own_ring_m;  // roadmap S7: the low strikes' routes round the rings
         scene.defences.push_back(def_.unit_position);
-        for (const ScenarioNeighbour& nb : def_.neighbours) scene.defences.push_back(nb.position);
+        scene.rings_m.push_back(own_ring);
+        for (const ScenarioNeighbour& nb : def_.neighbours) {
+            scene.defences.push_back(nb.position);
+            scene.rings_m.push_back(nb.radius_m);
+        }
         if (battery_) {
-            for (const Battery::Vehicle& v : battery_->Vehicles()) scene.defences.push_back(v.position);
+            for (const Battery::Vehicle& v : battery_->Vehicles()) {
+                scene.defences.push_back(v.position);
+                scene.rings_m.push_back(own_ring);
+            }
         }
         for (const ScenarioScenery& s : def_.scenery) scene.objects.push_back(s.position);
         scene.em = em_link_ ? &em_link_->World().Scene().lib : nullptr;
@@ -3651,6 +3687,22 @@ private:
             ob.alt_m = world_.Frame().AltitudeOf(a->position);
             ob.agl_m = ob.alt_m - world_.GetTerrain().HeightAt(a->position.x, a->position.y);
             ob.two_seat = t.seats > 1;
+            {  // his type's blind cone (roadmap S7), by the model it is drawn with (the air war's aircraft id)
+                const auto bt = def_.perception.lookout.rear_half_deg_by_type.find(t.model);
+                if (bt != def_.perception.lookout.rear_half_deg_by_type.end()) ob.rear_half_deg = bt->second;
+            }
+            // His optical aids in the scenario's year (roadmap S7): TISEO, Pave Spike, Pave Tack.
+            for (const airwar::PerceptionData::OpticalAid* aid : def_.perception.AidsOf(t.model, def_.year)) {
+                if (aid->vid_m > ob.aid_vid_m) {
+                    ob.aid_vid_m = aid->vid_m;
+                    ob.aid_air_deg = aid->field_deg;
+                }
+                if (aid->ground_m > ob.aid_ground_m) {
+                    ob.aid_ground_m = aid->ground_m;
+                    ob.aid_ground_deg = aid->field_deg;
+                    ob.aid_night = aid->night;
+                }
+            }
             ob.skill = t.pilot_skill;
             ob.stress = reactions_.Stress(static_cast<int>(i), time_);
             ob.defensive = targets_[i].pilot.Evading();

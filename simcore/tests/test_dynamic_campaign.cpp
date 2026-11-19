@@ -480,3 +480,38 @@ SC_TEST("dynamic campaign: nothing is under the ground, and no aircraft flies in
     SC_EXPECT(listed == 0u);
     SC_EXPECT(r.TerrainStrikes() == 0);
 }
+
+SC_TEST("dynamic campaign (S7): a low strike's way to its IP goes round our rings and their margin; a ring round its ends is flown through") {
+    // Placeholder rings: two 10 km rings across the way from (0, -60 km) to (0, 0), a third round the IP.
+    const std::vector<Vec3> centres = {{2000.0, -40000.0, 0.0}, {-3000.0, -20000.0, 0.0}, {0.0, 1000.0, 0.0}};
+    const std::vector<double> rings = {10000.0, 10000.0, 10000.0};
+    const double margin = 3000.0;
+    const Vec3 a{0.0, -60000.0, 0.0}, b{0.0, 0.0, 0.0};
+    const std::vector<Vec3> turns = TestWaves::AroundRings(a, b, centres, rings, margin);
+    std::vector<Vec3> way = {a};
+    for (const Vec3& p : turns) way.push_back(p);
+    way.push_back(b);
+    // The least distance of the way's legs from each of the first two rings' centres, sampled every 100 m.
+    double least[2] = {1e18, 1e18};
+    for (std::size_t i = 0; i + 1 < way.size(); ++i) {
+        const Vec3 d = way[i + 1] - way[i];
+        const int n = 1 + static_cast<int>(std::hypot(d.x, d.y) / 100.0);
+        for (int k = 0; k <= n; ++k) {
+            const Vec3 p = way[i] + d * (static_cast<double>(k) / n);
+            for (int c = 0; c < 2; ++c) least[c] = std::min(least[c], std::hypot(p.x - centres[static_cast<std::size_t>(c)].x, p.y - centres[static_cast<std::size_t>(c)].y));
+        }
+    }
+    std::printf("    %zu turn points; the way's least distance from the two rings' centres %.1f and %.1f km\n", turns.size(), least[0] / 1000.0,
+                least[1] / 1000.0);
+    SC_EXPECT(!turns.empty() && turns.size() <= 3);
+    SC_EXPECT(least[0] >= rings[0] && least[1] >= rings[1]);  // outside each ring (the margin is the planner's own slack)
+    // The same every time (no draws), and nothing to go round with no rings.
+    const std::vector<Vec3> again = TestWaves::AroundRings(a, b, centres, rings, margin);
+    SC_EXPECT(again.size() == turns.size());
+    for (std::size_t i = 0; i < again.size() && i < turns.size(); ++i) SC_EXPECT((again[i] - turns[i]).Length() < 1e-9);
+    SC_EXPECT(TestWaves::AroundRings(a, b, {}, {}, margin).empty());
+    SC_EXPECT(TestWaves::AroundRings(a, b, {centres[2]}, {rings[2]}, margin).empty());  // the IP's own ring
+    // The data's rings and margin load.
+    const std::shared_ptr<const WavesDef> w = LoadWaves();
+    SC_EXPECT(w != nullptr && w->route_own_ring_m > 0.0 && w->route_margin_m > 0.0);
+}

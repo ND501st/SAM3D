@@ -529,7 +529,13 @@ private:
         const std::string k = a.id + "|" + std::to_string(static_cast<int>(prof));
         const auto it = route_threats_.find(k);
         if (it != route_threats_.end()) return it->second;
-        return route_threats_[k] = BelievedRouteThreats(c_->intel->Threats(), a, prof, GroundC().HasGround(), Tune());
+        std::vector<RouteThreat> t = BelievedRouteThreats(c_->intel->Threats(), a, prof, GroundC().HasGround(), Tune());
+        if (Mode() >= 2 && front_ != nullptr) {
+            // Our fighters as it believes them (roadmap S7): a cost on the legs near our believed air bases.
+            std::vector<RouteThreat> f = BelievedFighterThreats(c_->intel->entries, front_->friendly_fighters, a, prof, Tune());
+            t.insert(t.end(), f.begin(), f.end());
+        }
+        return route_threats_[k] = std::move(t);
     }
     // One flight's route by the route planner (cached by the request for this cycle).
     PlannedRoute RouteFor(const AircraftType& a, Profile prof, DayPart part, const EntryPoint& gate, const std::vector<const EntryPoint*>& exits,
@@ -1330,7 +1336,7 @@ private:
         const RouteThreat* best = nullptr;
         double best_w = 0.0;
         for (const RouteThreat& th : threats) {
-            if (th.weight <= 0.0 || Dist2d(th.pos, target) < th.ring_m) continue;
+            if (th.weight <= 0.0 || th.fighter || Dist2d(th.pos, target) < th.ring_m) continue;  // the group ahead suppresses sites
             const double w = th.weight * RouteChord(r, th.pos, th.ring_m);
             if (w > best_w + 1e-9) {
                 best_w = w;

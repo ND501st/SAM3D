@@ -467,8 +467,9 @@ SC_TEST("air combat gate: a 1985 war offers no weapon, gun or sensor from a late
     SC_EXPECT(s.Of("mig23mld", SensorKind::Countermeasure, 1985, false).size() == 1 && s.Of("mig23ml", SensorKind::Countermeasure, 1985, false).empty());
     SC_EXPECT(s.Of("mig23ml", SensorKind::Radar, 1985, true).size() == 1 && s.Of("mig23ml", SensorKind::Irst, 1985, true).size() == 1);
     for (const SensorDef& x : s.sensors) SC_EXPECT(x.InService(1985, true) && x.InService(1985, false));  // nothing in the data is later than the war
-    // The unsourced are slots, in no war.
-    SC_EXPECT(s.Find("spo15l") == nullptr && s.Find("pave_tack") == nullptr);
+    // The unsourced are slots, in no war; Pave Tack entered with its dates (roadmap S7), the F-111F's from 1982.
+    SC_EXPECT(s.Find("spo15l") == nullptr && s.Find("pave_penny") == nullptr);
+    SC_EXPECT(s.Find("pave_tack") != nullptr && s.Find("pave_tack")->in_service_year == 1982);
 }
 
 // ------------------------------------------------------------------------------------------------ the chain

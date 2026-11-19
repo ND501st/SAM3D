@@ -126,6 +126,8 @@ struct LookoutData {
     double low_level_agl_m = 300.0;
     double check_six_share = 0.1;
     double rear_half_deg = 25.0;  // blind: the cone about the tail of a single seat
+    // Each type's own cone (roadmap S7, "blind_by_type": its canopy), by the aircraft's id; a type not listed has rear_half_deg.
+    std::map<std::string, double> rear_half_deg_by_type;
 };
 
 struct GroundData {
@@ -243,6 +245,18 @@ struct PerceptionData {
     RateData rate;
     ConfidenceData confidence;
     std::vector<RwrSetDisplay> rwr_sets;
+    // The crews' optical aids (roadmap S7, data/air_war/sensors.json's "optical_aid" sensors with a year): a telescope that
+    // recognises an aircraft further out (TISEO), a pod that recognises a ground target further out (Pave Spike, Pave Tack).
+    struct OpticalAid {
+        std::string id;
+        std::vector<std::string> carriers;
+        int year = 0;
+        double vid_m = 0.0;
+        double ground_m = 0.0;
+        double field_deg = 0.0;
+        bool night = false;
+    };
+    std::vector<OpticalAid> aids;
 
     PerceptionData() {
         classes["osa_battery_silent"] = {Pattern::Small, GroundContrast::Low, 60.0};
@@ -250,6 +264,17 @@ struct PerceptionData {
         classes["column_moving"] = {Pattern::Large, GroundContrast::Medium, 300.0};
         classes["vehicles_parked"] = {Pattern::Small, GroundContrast::Low, 40.0};
         classes["bridge_or_works"] = {Pattern::Large, GroundContrast::High, 500.0};
+    }
+    // The aids a type carries in a year (roadmap S7), in the data's order.
+    std::vector<const OpticalAid*> AidsOf(const std::string& type, int year) const {
+        std::vector<const OpticalAid*> out;
+        for (const OpticalAid& a : aids) {
+            if (a.year > year) continue;
+            for (const std::string& c : a.carriers) {
+                if (c == type) out.push_back(&a);
+            }
+        }
+        return out;
     }
     const RwrSetDisplay* RwrSet(const std::string& em_esm) const {
         for (const RwrSetDisplay& s : rwr_sets) {
@@ -455,6 +480,14 @@ struct ObserverIn {
     double alt_m = 0.0;
     double agl_m = 1000.0;
     bool two_seat = false;
+    double rear_half_deg = -1.0;   // the blind cone about his tail (a single seat); < 0: the data's default
+    // His optical aids (roadmap S7, PerceptionData::AidsOf): an aircraft he already sees within aid_air_deg of the nose is
+    // recognised out to aid_vid_m; a ground target within aid_ground_deg out to aid_ground_m, by night only with aid_night.
+    double aid_vid_m = 0.0;
+    double aid_air_deg = 0.0;
+    double aid_ground_m = 0.0;
+    double aid_ground_deg = 0.0;
+    bool aid_night = false;
     double skill = -1.0;           // < 0: the data's default
     double stress = 0.0;
     bool defensive = false;
@@ -781,7 +814,14 @@ private:
     bool Blind(const View& v, const Vec3& dir) const {
         if (v.ob->two_seat) return false;
         const double c = Dot(dir.Normalized(), v.heading);
-        return c < -std::cos(d_.lookout.rear_half_deg * kPi / 180.0);
+        const double half = v.ob->rear_half_deg >= 0.0 ? v.ob->rear_half_deg : d_.lookout.rear_half_deg;
+        return c < -std::cos(half * kPi / 180.0);
+    }
+
+    // Within an aid's half-field about the nose (roadmap S7)?
+    static bool InAidField(const View& v, const Vec3& dir, double half_deg) {
+        if (half_deg <= 0.0) return false;
+        return Dot(dir.Normalized(), v.heading) >= std::cos(half_deg * kPi / 180.0);
     }
 
     double SunFactor(const View& v, const Vec3& dir) const {
@@ -911,8 +951,9 @@ private:
         s.range_sigma_m = d_.errors.range_sigma_frac * range_m;
         s.range_est_m = std::max(50.0, range_m + nr * s.range_sigma_m);
         s.believed_enu = v.ob->pos + DirectionFromAzEl(s.bearing_rad, s.elevation_rad) * s.range_est_m;
-        s.recognised = kind == SightKind::Aircraft && range_m <= RecognitionRangeM(d_.eye, a.size_m) &&
-                       margin >= 1.0;
+        s.recognised = kind == SightKind::Aircraft && margin >= 1.0 &&
+                       (range_m <= RecognitionRangeM(d_.eye, a.size_m) ||
+                        (range_m <= v.ob->aid_vid_m && InAidField(v, dir, v.ob->aid_air_deg)));
         s.what = kind == SightKind::Contrail ? "contrail" : (s.recognised && !a.type.empty() ? a.type : (a.weapon ? "missile" : "aircraft"));
         s.confidence = s.recognised ? d_.confidence.recognised : d_.confidence.seen;
         bool is_new = false;
@@ -1130,7 +1171,8 @@ private:
         s.range_sigma_m = r_sigma;
         s.range_est_m = std::max(50.0, range_m + nr * r_sigma);
         s.believed_enu = v.ob->pos + DirectionFromAzEl(s.bearing_rad, s.elevation_rad) * s.range_est_m;
-        s.recognised = range_m <= d_.ground.recognise_good_m;
+        s.recognised = range_m <= d_.ground.recognise_good_m ||
+                       (range_m <= v.ob->aid_ground_m && (!v.night || v.ob->aid_night) && InAidField(v, d / std::max(range_m, 1.0), v.ob->aid_ground_deg));
         s.confidence = s.recognised ? d_.confidence.recognised : d_.confidence.seen;
         s.origin_enu = s.believed_enu;
         s.has_origin = true;
@@ -1319,7 +1361,7 @@ namespace detail {
 class PerceptionLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, PerceptionData& out) {
-        if (!Keys(root, "", {"perception_id", "status", "notes", "source", "confidence", "eye", "lookout", "blind", "ground", "classes", "trail",
+        if (!Keys(root, "", {"perception_id", "status", "notes", "source", "confidence", "eye", "lookout", "blind", "blind_by_type", "ground", "classes", "trail",
                              "launch", "burst", "tracer", "fire", "errors", "memory", "hz", "confidence_levels"})) {
             return false;
         }
@@ -1350,6 +1392,18 @@ public:
             return false;
         }
         if (!Group(root, "blind", {{"rear_half_deg", &l.rear_half_deg}})) return false;
+        // Each type's cone (roadmap S7): {"<aircraft id>": {"value": deg, "source", "confidence"}}.
+        if (const json::Value* bt = root.Find("blind_by_type")) {
+            if (!bt->Is(json::Type::Object)) return Fail("blind_by_type", "an object");
+            for (std::size_t k = 0; k < bt->keys.size(); ++k) {
+                const json::Value& x = bt->items[k];
+                const json::Value* val = x.Find("value");
+                if (!x.Is(json::Type::Object) || val == nullptr || !val->Is(json::Type::Number) || val->number < 0.0 || val->number > 90.0) {
+                    return Fail("blind_by_type." + bt->keys[k], "{\"value\": 0 .. 90 degrees, \"source\", \"confidence\"}");
+                }
+                l.rear_half_deg_by_type[bt->keys[k]] = val->number;
+            }
+        }
         GroundData& g = out.ground;
         if (!Group(root, "ground",
                    {{"pmax_small_low", &g.pmax[0][0]}, {"pmax_small_medium", &g.pmax[0][1]}, {"pmax_small_high", &g.pmax[0][2]},
@@ -1541,6 +1595,30 @@ inline bool LoadPerceptionData(const std::string& data_dir, PerceptionData& out,
         if (!loader.LoadRwrSets(root, d)) {
             if (error != nullptr) *error = "perception rwr_sets: " + loader.Message();
             return false;
+        }
+        // The optical aids (roadmap S7): sensors.json's "optical_aid" sensors with a year (the air combat loader checks them).
+        if (const json::Value* arr = root.Find("sensors")) {
+            for (const json::Value& x : arr->items) {
+                const json::Value* kind = x.Find("kind");
+                if (kind == nullptr || !kind->Is(json::Type::String) || kind->string != "optical_aid") continue;
+                PerceptionData::OpticalAid a;
+                const auto num = [&x](const char* k) {
+                    const json::Value* n = x.Find(k);
+                    return n != nullptr && n->Is(json::Type::Number) ? n->number : 0.0;
+                };
+                if (const json::Value* id = x.Find("id")) a.id = id->Is(json::Type::String) ? id->string : std::string();
+                if (const json::Value* cs = x.Find("carriers")) {
+                    for (const json::Value& c : cs->items) {
+                        if (c.Is(json::Type::String)) a.carriers.push_back(c.string);
+                    }
+                }
+                a.year = static_cast<int>(num("in_service_year"));
+                a.vid_m = num("vid_m");
+                a.ground_m = num("ground_recognise_m");
+                a.field_deg = num("field_deg");
+                if (const json::Value* n = x.Find("night")) a.night = n->Is(json::Type::Bool) && n->boolean;
+                if (a.year > 0) d.aids.push_back(a);
+            }
         }
     }
     out = std::move(d);

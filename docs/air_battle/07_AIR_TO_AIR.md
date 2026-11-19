@@ -751,6 +751,13 @@ on his leader's picture: no look of his own, his leader's mode, and his shots ju
 never changes while a missile of his or at him is in the air. It is the fight's own notion, not B12's levels, so B12's
 level equality stays as it was.
 
+**The A1 wingman's lock (roadmap S7, 20 November 2026, branch `tbr-s7`).** Under B12's levels a wingman of a flight at
+A1 hears on his leader's receiver, and a lock is not lent, so before S7 one of our fighters locking a far wingman alone
+went unheard until the flight came back to A2. With `air_levels.json`'s mode 2 a radar whose track is on him (one of
+our fighters' radars as an EM emitter, a SAM's track radar, the engagement's or a launcher's target:
+`ScenarioRunner::LockedOn`) gives him back his own receiver at once, so he hears the lock and reacts as at A2
+(`docs/air_battle/02_FLIGHTS_AND_PILOTS.md` 5.4).
+
 **A0.** With `air_fight.mode` 1: a beam attacker's shots come from the target's beam (±30°); a slash by the side that
 fired first is one pass, after which only `a0_slash_return` (0.4) of it comes back for another round (fights between
 fighters only: strikers cannot chase); a turning doctrine on either side keeps a fight between fighters

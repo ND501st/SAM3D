@@ -202,6 +202,10 @@ struct EsmWork {
     std::uint64_t culled = 0, evaluations = 0, intercepts = 0;
 };
 
+// The most the ground can add to a one-way path over free space: two rays in phase, F = 2 at most (LinkLossCore,
+// TwoRayFactor with rho and the gain ratio at most 1; the plane-earth factor and every loss are never a gain).
+constexpr double kBestGroundGainDb = -6.0206;
+
 inline void RunEsmSite(const EmScene& s, EsmState& esm, double dt, EsmWork& work) {
     {
         esm.intercepts.clear();
@@ -226,6 +230,12 @@ inline void RunEsmSite(const EmScene& s, EsmState& esm, double dt, EsmWork& work
             const IlluminationGeometry ill = Illumination(s, e, *tx, *rx, dt);
             const double eirp =
                 e.def.peak_power_w * DbToLinear(AntennaGainDb(ill.antenna, ill.off_az_rad, ill.off_el_rad) - e.def.tx_loss_db);
+            // The beam as it points now, over the best ground there is (the two rays in phase, F <= 2: -6.02 dB, LinkLossCore):
+            // below the sensitivity, the path is not walked (roadmap S7).
+            if (s.esm_sidelobe_bound && OneWayReceivedPowerW(eirp, def.antenna_gain_db, f, range, kBestGroundGainDb) < sens_w) {
+                ++work.culled;
+                continue;
+            }
             const LinkLossResult loss = LinkLossCached(s, esm.paths, *tx, *rx, f);
             const double pr = OneWayReceivedPowerW(eirp, def.antenna_gain_db, f, range, loss.TotalOneWayDb());
             if (pr < sens_w) continue;

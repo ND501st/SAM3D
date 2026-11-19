@@ -78,7 +78,7 @@
     "pilots": {"hours_per_year": 60, "start_sorties": 0, "source": "game value (docs/air_battle/10_FACTIONS.md section 8.3: the rebels start green, flying little)", "confidence": "estimate"}
   },
   "doctrine": {
-    "routing": { "crossing": "none", "letdown_m": 10000, "max_turn_points": 4, "variants": ["covered"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0.5, "return": "same_entry", "deviation": "any", "source": "game values: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate", "notes": "At night, low, by roads, rivers and villages; clear of known guns; home the way they came." },
+    "routing": { "crossing": "none", "letdown_m": 10000, "max_turn_points": 4, "variants": ["covered"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0.5, "return": "same_entry", "deviation": "any", "navigation": { "drift_share": 0.03, "source": "game value (estimate: compass, clock and map at night, low, between fixes; no period figure found, docs/air_battle/01_ROUTES.md As built S7)", "confidence": "estimate" }, "source": "game values: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate", "notes": "At night, low, by roads, rivers and villages; clear of known guns; home the way they came." },
     "planning_cycle_h": 24, "lead_time_h": 6, "on_call_fraction": 0.0, "centralisation": 0.2, "simultaneous_bias": 0.3,
     "sortie_rate_per_day": 1.5, "serviceability": 0.6, "max_packages_per_cycle": 3, "delivery_risk": 0.8, "min_effect": 0.005, "min_value": -0.5,
     "source": "game values: ad hoc planning by a few pilots, night harassment (croatia_1991_migflug: bombs on positions around a besieged town)",
@@ -99,9 +99,9 @@
     "satellite": false, "recce_latency_h": 2,
     "elint": false,
     "comint": true, "comint_sigma_m": 5000, "comint_delay_h": 3,
-    "humint_per_day": 4, "humint_delay_h": 6, "humint_sigma_m": 2000, "humint_false": 0.25, "humint_reach_km": 1000,
+    "humint_per_day": 4, "humint_delay_h": 6, "humint_sigma_m": 2000, "humint_false": 0.25, "humint_reach_km": 1000, "humint_air_defence_per_day": 2,
     "prior_mobile_sigma_m": 6000, "bda_overclaim": 1.0, "pirep_delay_h": 2, "analyst_skill": 0.25,
-    "source": "game values: sympathisers everywhere (the reach), listening on captured radios, no imagery but a pilot's eyes",
+    "source": "game values: sympathisers everywhere (the reach), listening on captured radios, no imagery but a pilot's eyes; humint_air_defence_per_day the sympathisers' word of our mobile air defence (roadmap S7, docs/air_war/09_BALANCE.md section 22)",
     "confidence": "estimate"
   },
   "logistics": {
