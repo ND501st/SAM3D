@@ -115,6 +115,7 @@ public:
             const Vec3 pos = r.TargetPosition(a.target_id);
             s.prev_pos = s.seen ? s.last_pos : pos;
             s.last_pos = pos;
+            s.last_t = t;
             s.seen = true;
             // A cruise missile at its target: its warhead goes off where it arrives, and it is gone.
             // (Within the release capture: the runner retires a target at its last waypoint before it is quite there.)
@@ -411,6 +412,13 @@ public:
             l.by = kill_by_[i].empty() ? m_.own_object : kill_by_[i];
             l.fighter = by_fighter[i];
             l.where = state_[i].last_pos;
+            // In the theatre's frame for the campaign (roadmap S7, learning.mode 1: the staff's suspicion where it was lost;
+            // before, the scenario's frame was passed on as it was).
+            if (d_->tuning.Get("learning.mode") >= 1.0) {
+                const LocalFrame scen(m_.origin), theatre(d_->theatre.origin);
+                l.where = theatre.GeodeticToEnu(scen.EnuToGeodetic(Vec3{l.where.x, l.where.y, 0.0}));
+                l.where.z = 0.0;
+            }
             l.officer = a.officer;
             l.captured = rng_.Chance(0.5);
             o.losses.push_back(l);
@@ -449,6 +457,26 @@ public:
                     home = home || all;
                 }
                 if (home) o.aborted_flights.push_back(static_cast<int>(fi));
+            }
+        }
+        // Where each flight was last seen in the session (roadmap S7, route.mode 2): the rest of the raid flies on from there.
+        if (d_->tuning.Get("route.mode") >= 2.0) {
+            const LocalFrame scen(m_.origin), theatre(d_->theatre.origin);
+            for (std::size_t fi = 0; fi < nf; ++fi) {
+                int best = -1;
+                for (std::size_t i = 0; i < m_.aircraft.size(); ++i) {
+                    const RaidAircraft& a = m_.aircraft[i];
+                    if (a.flight != static_cast<int>(fi) || down[i] || !state_[i].seen || a.missile || a.drone) continue;
+                    if (best < 0 || state_[i].last_t > state_[static_cast<std::size_t>(best)].last_t) best = static_cast<int>(i);
+                }
+                if (best < 0) continue;
+                const AircraftState& s = state_[static_cast<std::size_t>(best)];
+                PackageOutcome::FlownRecord f;
+                f.flight = static_cast<int>(fi);
+                f.at = theatre.GeodeticToEnu(scen.EnuToGeodetic(Vec3{s.last_pos.x, s.last_pos.y, 0.0}));
+                f.at.z = 0.0;
+                f.t_h = m_.start_h + s.last_t / 3600.0;
+                o.flown.push_back(f);
             }
         }
         Jettisoned(r, flight_released, o);
@@ -520,6 +548,7 @@ private:
         double last_arm_t = -1e9;
         Vec3 last_pos;
         Vec3 prev_pos;  // where it was the step before
+        double last_t = -1.0;  // the session's time it was last where last_pos says
         bool impacted = false;  // a cruise missile that struck (gone by its own warhead, not shot down)
         double release_d = 1e18;  // its distance to its release point over the ground the step before
         double release_fit = std::numeric_limits<double>::quiet_NaN();  // ln(aim ahead / throw) the step before (Releases)

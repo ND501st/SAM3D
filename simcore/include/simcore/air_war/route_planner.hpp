@@ -96,6 +96,69 @@ inline int RouteIndexOf(const std::vector<RoutePoint>& r, const char* tag) {
     return -1;
 }
 
+// A flight's navigation error between its fixes (roadmap S7, route.mode 2): each point's offset from where it was planned,
+// in the theatre frame. A fix is a point on a map feature the crew sees (or the route's first point, the IP and the
+// target, which it finds by eye): there the error is gone. Between fixes the flight drifts along one direction, drawn
+// from `key` and the fix's count (no campaign or session stream), by `share` of the distance flown since the fix, never
+// more than `cap_m`. Every aircraft of the flight flies the same error.
+inline std::vector<Vec3> NavigationDrift(const std::vector<RoutePoint>& r, double share, double cap_m, std::uint64_t key) {
+    std::vector<Vec3> off(r.size());
+    if (share <= 0.0 || cap_m <= 0.0) return off;
+    double since_m = 0.0;
+    std::uint64_t fixes = 0;
+    double dir = 0.0;
+    for (std::size_t i = 0; i < r.size(); ++i) {
+        const bool fix = i == 0 || !r[i].feature.empty() || r[i].tag == "ip" || r[i].tag == "target";
+        if (fix) {
+            since_m = 0.0;
+            Rng g(key * 0x9E3779B97F4A7C15ull + (++fixes) * 0xC2B2AE3D27D4EB4Full);
+            dir = 6.283185307179586 * g.Uniform();
+            continue;
+        }
+        since_m += Dist2d(r[i - 1].pos, r[i].pos);
+        const double d = std::min(share * since_m, cap_m);
+        off[i] = Vec3{d * std::sin(dir), d * std::cos(dir), 0.0};
+    }
+    return off;
+}
+
+// The route as flown back from a session (roadmap S7, route.mode 2): the flight was last seen at `at` (the theatre's
+// frame) at `t_h`. That place goes into its route after the points it had passed by then (tag "flown"), and the points
+// after it move in time by when it can reach the next of them at the leg's planned speed. Every index into the route
+// after the new point moves on by one. False: nothing to change (no route, or the session ended after its last point).
+inline bool FlownInto(Flight& fl, const Vec3& at, double t_h) {
+    std::vector<RoutePoint>& r = fl.route;
+    if (r.size() < 2) return false;
+    std::size_t j = 0;
+    while (j < r.size() && r[j].t_h <= t_h) ++j;
+    if (j == 0 || j >= r.size()) return false;
+    const RoutePoint& a = r[j - 1];
+    const RoutePoint& b = r[j];
+    const double planned_s = (b.t_h - a.t_h) * 3600.0;
+    const double v = a.leg_mps > 0.0 ? a.leg_mps : (planned_s > 1.0 ? Dist2d(a.pos, b.pos) / planned_s : 200.0);
+    const double next_h = t_h + Dist2d(at, b.pos) / std::max(1.0, v) / 3600.0;
+    const double shift_h = next_h - b.t_h;
+    RoutePoint f;
+    f.pos = Vec3{at.x, at.y, 0.0};
+    f.t_h = t_h;
+    f.agl_m = a.agl_m;
+    f.leg_mps = a.leg_mps;
+    f.tag = "flown";
+    for (std::size_t k = j; k < r.size(); ++k) r[k].t_h += shift_h;
+    r.insert(r.begin() + static_cast<std::ptrdiff_t>(j), f);
+    const int ji = static_cast<int>(j);
+    const auto moved = [ji](int& i) {
+        if (i >= ji) ++i;
+    };
+    moved(fl.release_index);
+    for (ZoneEscape& z : fl.escapes) {
+        moved(z.first);
+        moved(z.last);
+        moved(z.rejoin);
+    }
+    return true;
+}
+
 inline double RouteLength(const std::vector<RoutePoint>& r) {
     double s = 0.0;
     for (std::size_t i = 0; i + 1 < r.size(); ++i) s += Dist2d(r[i].pos, r[i + 1].pos);
@@ -437,7 +500,8 @@ private:
         for (const FrontDef& f : d.theatre.fronts) {
             for (const EntryPoint& e : f.entries) grow(e.pos);
         }
-        const double g = tune.Get("route.fallback_grid_m");
+        // Roadmap S7 (route.mode 2): a coarser lattice, so a search on a theatre without a map costs less.
+        const double g = tune.Get("route.mode") >= 2.0 ? tune.Get("route.fallback_grid2_m") : tune.Get("route.fallback_grid_m");
         if (g <= 0.0 || x1 < x0) return;
         for (int j = static_cast<int>(std::floor(y0 / g)); j <= static_cast<int>(std::ceil(y1 / g)); ++j) {
             for (int i = static_cast<int>(std::floor(x0 / g)); i <= static_cast<int>(std::ceil(x1 / g)); ++i) {
@@ -480,6 +544,10 @@ struct RouteThreat {
     double ring_m = 0.0;
     double weight = 0.0;
     bool masked = false;  // seen only where the ground lets it see (a Low flight on a map with ground)
+    // Our fighters as the enemy believes them (roadmap S7, route.mode 2): a ring about a believed air base our
+    // interceptors reach from. It costs a leg like a site's ring, but it is no zone: no escape, no believed SAM exposure,
+    // no battle position's hiding.
+    bool fighter = false;
 };
 
 struct RouteRequest {
@@ -554,7 +622,7 @@ class RoutePlanner {
 public:
     RoutePlanner(const RouteGround& ground, const TuningTable& tune, const RouteRules& rules)
         : g_(ground), tune_(tune), rules_(rules), final_cone_m_(tune.Get("route.final_cone_m")),
-          continuous_s_(tune.Get("route.continuous_s")) {}
+          continuous_s_(tune.Get("route.continuous_s")), mode_(tune.Get("route.mode")) {}
 
     // Plans one route (a pure function of its inputs; `cache` holds leg facts for this cycle's `threats` only).
     PlannedRoute Plan(const RouteRequest& rq, const std::vector<RouteThreat>& threats, LegCache* cache = nullptr) const {
@@ -595,7 +663,9 @@ public:
 
         // The run-in: IP candidates round the target, each on a feature where one is near (else the computed point).
         const double ipd = std::min(rq.ip_dist_m, 0.6 * std::max(1.0, Dist2d(gate, rq.target)));
-        const int headings = std::max(1, static_cast<int>(tune_.Get("route.run_in_headings")));
+        // Roadmap S7 (route.mode 2): fewer headings on a theatre without a map (its lattice is cost, not features).
+        const int headings =
+            std::max(1, static_cast<int>(tune_.Get(mode_ >= 2.0 && !g_.HasGround() ? "route.run_in_headings_nomap" : "route.run_in_headings")));
         std::vector<int> ip_nodes;
         for (int h = 0; h < headings; ++h) {
             const double ang = 6.283185307179586 * h / headings;
@@ -617,6 +687,12 @@ public:
         }
         avoid_.resize(nodes_.size(), false);
         BuildEdges();
+        // A gate with no feature within a leg of it (roadmap S7, route.mode 2): its first leg runs to the nearest features
+        // however far, as a crew flies a heading from the gate to its first fix. Before S7 such a route was not planned.
+        if (mode_ >= 2.0) {
+            LinkFar(gate_node);
+            for (int x : exit_nodes) LinkFar(x);
+        }
 
         // Ingress: from the gate, the way the flight came (the bearing from its bases).
         Vec3 u_in = gate - rq.bases;
@@ -791,7 +867,7 @@ public:
     static std::vector<ZoneEscape> Escapes(const std::vector<RoutePoint>& r, const std::vector<RouteThreat>& threats) {
         std::vector<ZoneEscape> out;
         for (const RouteThreat& th : threats) {
-            if (th.weight <= 0.0) continue;  // a zone that cannot reach the flight's height needs no escape
+            if (th.weight <= 0.0 || th.fighter) continue;  // a zone that cannot reach the flight's height needs no escape
             int first = -1, last = -1;
             for (std::size_t i = 0; i + 1 <= r.size(); ++i) {
                 const bool in = i + 1 < r.size() && ChordInCircle2d(r[i].pos, r[i + 1].pos, th.pos, th.ring_m) > 0.0;
@@ -837,6 +913,7 @@ private:
     const RouteRules& rules_;
     const double final_cone_m_;
     const double continuous_s_;
+    const double mode_;  // route.mode
     mutable const std::vector<RouteThreat>* threats_ = nullptr;
     mutable LegCache* cache_ = nullptr;
     mutable std::vector<Node> nodes_;
@@ -930,6 +1007,27 @@ private:
         }
     }
 
+    // A node with no edge joined to its route.neighbours nearest features at least the least leg away, however far
+    // (roadmap S7: the gate's fallback). In order of distance, then index.
+    void LinkFar(int i) const {
+        if (i < 0 || static_cast<std::size_t>(i) >= adj_.size() || !adj_[static_cast<std::size_t>(i)].empty()) return;
+        const Vec3 pi = nodes_[static_cast<std::size_t>(i)].pos;
+        std::vector<std::pair<double, int>> c;
+        for (std::size_t j = 0; j < nodes_.size(); ++j) {
+            if (static_cast<int>(j) == i || nodes_[j].feature < 0) continue;
+            const double d = Dist2d(nodes_[j].pos, pi);
+            if (d < edge_lo_m_) continue;
+            c.push_back({d, static_cast<int>(j)});
+        }
+        std::sort(c.begin(), c.end());
+        if (c.size() > static_cast<std::size_t>(edge_k_)) c.resize(static_cast<std::size_t>(edge_k_));
+        for (const auto& e : c) {
+            const Vec3& pj = nodes_[static_cast<std::size_t>(e.second)].pos;
+            adj_[static_cast<std::size_t>(i)].push_back({e.second, std::atan2(pj.x - pi.x, pj.y - pi.y), nullptr});
+            adj_[static_cast<std::size_t>(e.second)].push_back({i, std::atan2(pi.x - pj.x, pi.y - pj.y), nullptr});
+        }
+    }
+
     // The leg's facts for this cycle's threats at this height (cached between features).
     // The leg's stats: a reference into the cache, or to the last computed (valid until the next call).
     const LegStats& Stats(int ia, int ib) const {
@@ -968,7 +1066,7 @@ private:
             const double seen = g_.Seen(th.key, th.pos, th.ring_m, a, b, agl_a, agl_b, th.masked, &longest);
             if (seen <= 0.0) continue;
             s.seen_w_m += th.weight * seen;
-            s.runs.push_back({th.weight, longest});
+            if (!th.fighter) s.runs.push_back({th.weight, longest});  // a fighter ring is no site's continuous sight (S7)
         }
         if (g_.HasGround() && rules_.w_low > 0.0) {
             const int n = std::max(1, static_cast<int>(std::ceil(s.len_m / 2000.0)));
@@ -1011,7 +1109,7 @@ private:
     bool HiddenFromAll(const Vec3& p) const {
         const double hover = tune_.Get("route.helo_hide_agl_m");
         for (const RouteThreat& th : *threats_) {
-            if (th.weight <= 0.0 || Dist2d(p, th.pos) >= th.ring_m) continue;
+            if (th.weight <= 0.0 || th.fighter || Dist2d(p, th.pos) >= th.ring_m) continue;
             if (!th.masked || !g_.HasGround()) return false;
             if (hover >= g_.View(th.key, th.pos, th.ring_m).NeedAt(p)) return false;
         }
@@ -1170,7 +1268,7 @@ private:
         const int gate = RouteIndexOf(r, "gate");
         double exposure = 0.0, longest = 0.0;
         for (const RouteThreat& th : *threats_) {
-            if (th.weight <= 0.0) continue;
+            if (th.weight <= 0.0 || th.fighter) continue;  // the believed SAM and gun exposure only
             const bool own = Dist2d(rq.target, th.pos) < th.ring_m;
             double run_s = 0.0;
             for (std::size_t i = 0; i + 1 < r.size(); ++i) {
@@ -1224,6 +1322,34 @@ inline std::vector<RouteThreat> BelievedRouteThreats(const std::vector<const Int
         r.ring_m = ring;
         r.weight = th->threat_lethality * th->Live() * spread * alt;
         r.masked = ground && p == Profile::Low;
+        out.push_back(r);
+    }
+    std::stable_sort(out.begin(), out.end(), [](const RouteThreat& x, const RouteThreat& y) { return x.key < y.key; });
+    return out;
+}
+
+// Our fighters as the enemy believes them (roadmap S7, route.mode 2; 01_ROUTES.md "As built (S7)"): each air base of
+// ours it believes there and working is a ring of route.fighter_reach_m (with half its position's sigma) our interceptors
+// reach from under ground control, weighed by the front's fighter threat (friendly_fighters), route.fighter_weight and its
+// belief in the base; for a Low flight or a helicopter by route.fighter_low_share (the period's radars saw little below
+// them: 07_AIR_TO_AIR.md 5.2). Never masked (a fighter is not a site). Keys "fighter:<entry>", in key order.
+inline std::vector<RouteThreat> BelievedFighterThreats(const std::vector<IntelEntry>& entries, double friendly_fighters, const AircraftType& a,
+                                                       Profile prof, const TuningTable& tune) {
+    std::vector<RouteThreat> out;
+    const double reach = tune.Get("route.fighter_reach_m");
+    const double w0 = tune.Get("route.fighter_weight") * friendly_fighters;
+    if (reach <= 0.0 || w0 <= 0.0) return out;
+    const bool low = a.helicopter || prof == Profile::Low;
+    for (const IntelEntry& e : entries) {
+        if (e.kind != ObjectKind::Airfield || e.ghost) continue;
+        const double live = e.Live();
+        if (live < 0.15) continue;
+        RouteThreat r;
+        r.key = "fighter:" + e.key;
+        r.pos = e.pos;
+        r.ring_m = reach + 0.5 * e.sigma_m;
+        r.weight = w0 * live * (low ? tune.Get("route.fighter_low_share") : 1.0);
+        r.fighter = true;
         out.push_back(r);
     }
     std::stable_sort(out.begin(), out.end(), [](const RouteThreat& x, const RouteThreat& y) { return x.key < y.key; });

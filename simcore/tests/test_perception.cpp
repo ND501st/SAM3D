@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war/perception.hpp"
@@ -605,4 +606,134 @@ SC_TEST("perception: the data file loads, every group is read, and it agrees wit
     airwar::detail::PerceptionLoader loader;
     PerceptionData t;
     SC_EXPECT(!loader.Load(root, t));
+}
+
+// ---------------------------------------------------------------------------------------------- roadmap S7
+
+SC_TEST("perception (S7): a single seat's blind cone is its type's: 30 degrees off the tail is seen by one and not another") {
+    World w;
+    const PerceptionData d;
+    const Vec3 from_tail = Vec3{std::sin(DegToRad(150.0)), std::cos(DegToRad(150.0)), 0.0} * 2000.0 + Vec3{0.0, 0.0, 1000.0};
+    AirObject a;
+    a.id = "bandit";
+    a.key = ObjectKeyOf(a.id);
+    a.side = 1;
+    a.pos = from_tail;
+    a.vel = Vec3{200.0, 0.0, 0.0};
+    a.alt_m = 1000.0;
+    bool seen[2] = {false, false};
+    for (int k = 0; k < 2; ++k) {
+        PerceptionHub hub(d, 5);
+        ObserverIn ob = Observer("me", Vec3{0.0, 0.0, 1000.0}, Vec3{0.0, 200.0, 0.0});
+        ob.rear_half_deg = k == 0 ? -1.0 : 40.0;  // the data's 25 degrees; a type that sees nothing within 40 of its tail
+        hub.AddCue(ob.key, DegToRad(150.0), 1e9);  // told where to look: only the cone hides it
+        Hold(hub, ob, w.env, 0.0, 60.0, {a});
+        seen[k] = Holds(hub, ob, SightKind::Aircraft, 60.0);
+    }
+    std::printf("    30 degrees off the tail: %s with a 25 degree cone, %s with a 40 degree cone\n", seen[0] ? "seen" : "unseen", seen[1] ? "seen" : "unseen");
+    SC_EXPECT(seen[0] && !seen[1]);
+}
+
+SC_TEST("perception (S7): TISEO recognises a fighter ahead beyond the eye's reach; off the nose it does not") {
+    World w;
+    w.env.visibility_m = 40000.0;
+    PerceptionData d;
+    // A placeholder eye that recognises at half the range it would (twice the lines): the case of a fighter seen beyond the
+    // eye's recognition, which the data's eye (recognised at 5.5 km, seen from the side to about 5 km) rarely makes.
+    d.eye.recognise_lines *= 2.0;
+    const double rec = RecognitionRangeM(d.eye, 4.5);
+    const double beam = EyeRangeM(d.eye, EyeFactor(d.eye, true, d.eye.default_skill), d.eye.aircraft_contrast_pct,
+                                  d.eye.area_beam_per_size2 * 4.5 * 4.5, w.env.visibility_m, 1.0, true);
+    const double at = std::min(rec + 0.5 * (std::min(beam, 8000.0) - rec), 7900.0);
+    std::printf("    recognised by eye to %.1f km, seen from the side to %.1f km; the fighter at %.1f km\n", rec / 1000.0, beam / 1000.0, at / 1000.0);
+    SC_EXPECT(beam > rec + 300.0);
+    if (beam <= rec + 300.0) return;
+    const auto run = [&](double aid_m, double bearing_deg) {
+        PerceptionHub hub(d, 9);
+        ObserverIn ob = Observer("me", Vec3{0.0, 0.0, 3000.0}, Vec3{0.0, 200.0, 0.0});
+        ob.aid_vid_m = aid_m;
+        ob.aid_air_deg = 5.0;
+        hub.AddCue(ob.key, DegToRad(bearing_deg), 1e9);  // TISEO is pointed at an aircraft the crew is told of
+        AirObject a;
+        a.id = "bandit";
+        a.key = ObjectKeyOf(a.id);
+        a.side = 1;
+        a.pos = Vec3{std::sin(DegToRad(bearing_deg)), std::cos(DegToRad(bearing_deg)), 0.0} * at + Vec3{0.0, 0.0, 3000.0};
+        a.vel = Vec3{200.0, 0.0, 0.0};
+        a.alt_m = 3000.0;
+        a.type = "Fighter";
+        Hold(hub, ob, w.env, 0.0, 90.0, {a});
+        int seen = 0, recognised = 0;
+        for (const Sighting& s : hub.Picture(ob.key)) {
+            if (s.kind != SightKind::Aircraft) continue;
+            ++seen;
+            recognised += s.recognised ? 1 : 0;
+        }
+        return std::make_pair(seen, recognised);
+    };
+    const auto eye = run(0.0, 0.0), tiseo = run(8000.0, 0.0), aside = run(8000.0, 30.0);
+    std::printf("    seen and recognised: eye %d/%d, TISEO ahead %d/%d, TISEO 30 degrees off %d/%d\n", eye.first, eye.second, tiseo.first,
+                tiseo.second, aside.first, aside.second);
+    SC_EXPECT(eye.first > 0 && eye.second == 0);
+    SC_EXPECT(tiseo.first > 0 && tiseo.second > 0);
+    SC_EXPECT(aside.second == 0);
+}
+
+SC_TEST("perception (S7): the optical aids and the blind cones load: TISEO and Pave Spike on the F-4E, Pave Tack from 1982") {
+    PerceptionData d;
+    std::string error;
+    SC_EXPECT(LoadPerceptionData(kData, d, &error));
+    if (!error.empty()) std::printf("    %s\n", error.c_str());
+    const std::vector<const PerceptionData::OpticalAid*> f4 = d.AidsOf("f4e", 1985);
+    bool tiseo = false, spike = false;
+    for (const PerceptionData::OpticalAid* a : f4) {
+        tiseo = tiseo || (a->id == "tiseo" && a->vid_m > 5000.0 && a->field_deg > 0.0);
+        spike = spike || (a->id == "pave_spike" && a->ground_m > 0.0 && !a->night);
+    }
+    SC_EXPECT(tiseo && spike);
+    SC_EXPECT(d.AidsOf("f111f", 1981).empty());
+    const std::vector<const PerceptionData::OpticalAid*> tack = d.AidsOf("f111f", 1985);
+    SC_EXPECT(tack.size() == 1 && tack[0]->night);
+    SC_EXPECT(d.AidsOf("f4e", 1978).size() == 1);  // Pave Spike only, before TISEO
+    const auto& bt = d.lookout.rear_half_deg_by_type;
+    SC_EXPECT(bt.count("mig23mld") == 1 && bt.count("f16a") == 1);
+    if (bt.count("mig23mld") == 1 && bt.count("f16a") == 1) SC_EXPECT(bt.at("mig23mld") > bt.at("f16a"));
+}
+
+SC_TEST("perception (S7): a targeting pod recognises a column ahead beyond the eye's 3 km; by night it finds nothing to recognise") {
+    // Runs in at 600 m over a column on the march: the range at which the crew first knows what it is, by eye, with a day pod and by
+    // night with a day pod and a night pod (the pods' numbers here are placeholders, not Pave Spike's or Pave Tack's).
+    const auto run = [](double pod_m, bool pod_night, bool night) {
+        World w;
+        if (night) w.Night();
+        int recognised_far = 0, found = 0;
+        for (std::uint64_t seed = 1; seed <= 40; ++seed) {
+            PerceptionHub hub(PerceptionData(), seed);
+            hub.AddGround("column_moving", Vec3{0.0, 0.0, 0.0}, "column");
+            ObserverIn ob = Observer("a", Vec3{0.0, -15000.0, 600.0}, Vec3{0.0, 230.0, 0.0});
+            ob.aid_ground_m = pod_m;
+            ob.aid_ground_deg = 30.0;
+            ob.aid_night = pod_night;
+            bool seen = false;
+            for (double t = 0.0; t < 15000.0 / 230.0 && !seen; t += 0.25) {
+                ob.pos = Vec3{0.0, -15000.0 + 230.0 * t, 600.0};
+                if (hub.Due(ob.key, t)) hub.Tick(ob, w.env, t, {}, {}, nullptr);
+                for (const Sighting& s : hub.Picture(ob.key)) {
+                    if (s.kind != SightKind::GroundObject) continue;
+                    seen = true;
+                    ++found;
+                    if (s.recognised && -ob.pos.y > 3000.0) ++recognised_far;
+                }
+            }
+        }
+        return std::make_pair(found, recognised_far);
+    };
+    const auto eye = run(0.0, false, false), day_pod = run(8000.0, false, false), day_pod_night = run(8000.0, false, true),
+               night_pod = run(8000.0, true, true);
+    std::printf("    found and recognised beyond 3 km, of 40 runs: eye %d/%d, day pod %d/%d; by night a day pod %d/%d, a night pod %d/%d\n",
+                eye.first, eye.second, day_pod.first, day_pod.second, day_pod_night.first, day_pod_night.second, night_pod.first,
+                night_pod.second);
+    SC_EXPECT(eye.second == 0);
+    SC_EXPECT(day_pod.second > 0);
+    SC_EXPECT(day_pod_night.second == 0);
 }

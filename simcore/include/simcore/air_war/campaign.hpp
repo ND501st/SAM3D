@@ -190,9 +190,18 @@ public:
         weather_.clear();
         const double clear = data_.tuning.Get("weather.clear_share");
         const double poor = data_.tuning.Get("weather.poor_share");
+        // By month (roadmap S7, weather.mode 1, a dated theatre): the same draw a day, the shares the month's.
+        const bool by_month = data_.tuning.Get("weather.mode") >= 1.0 && data_.theatre.day_of_year > 0;
+        const double poor_part = (1.0 - clear) > 0.0 ? poor / (1.0 - clear) : 0.0;
         for (int day = 0; day < 120; ++day) {
             const double u = rng_.Uniform();
-            weather_.push_back(u < clear ? Weather::Clear : (u < 1.0 - poor ? Weather::Cloudy : Weather::Poor));
+            double c = clear, p = poor;
+            if (by_month) {
+                const double not_clear = NotClearShare((data_.theatre.day_of_year - 1 + day) % 365 + 1);
+                c = 1.0 - not_clear;
+                p = poor_part * not_clear;
+            }
+            weather_.push_back(u < c ? Weather::Clear : (u < 1.0 - p ? Weather::Cloudy : Weather::Poor));
         }
         PriorIntel();
         day_ = 1;
@@ -340,6 +349,12 @@ private:
                                                 " shot down in the battery's sector.", true);
         }
         ApplyOutcome(p, outcome);
+        // The routes as flown (roadmap S7, route.mode 2): each flight that left the session goes on from where it was.
+        if (data_.tuning.Get("route.mode") >= 2.0) {
+            for (const PackageOutcome::FlownRecord& f : outcome.flown) {
+                if (f.flight >= 0 && f.flight < static_cast<int>(p.flights.size())) FlownInto(p.flights[static_cast<std::size_t>(f.flight)], f.at, f.t_h);
+            }
+        }
         // The rest of the raid, without the player's battery: every part of every route but what the scenario flew
         // (inside its circle while it ran, where the other defences took their chances: mission_bridge.hpp).
         ResolveContext rc = Context();
@@ -433,6 +448,8 @@ public:
     int CallsOnAir() const { return static_cast<int>(noted_.size()); }
     // Radio intercept reports about the battery the enemy has had (the dummy traffic's ghosts not counted).
     int ComintHeard() const { return comint_heard_; }
+    // The sympathisers' reports of our mobile air defence (roadmap S7), for the balance tool and the tests.
+    int SympathiserReports() const { return sympathiser_reports_; }
 
     // The player's actions so far, in order (save.hpp), and the seed the campaign started from.
     const std::vector<CampaignAction>& Actions() const { return actions_; }
@@ -729,6 +746,7 @@ private:
     std::set<std::string> noted_;
     std::vector<Transmission> on_air_;  // noted, not yet heard
     int comint_heard_ = 0;
+    int sympathiser_reports_ = 0;
     // In the air (roadmap B5): the packages flying now, each walked in time; the raids a session took (package id ->
     // the hour it took them); the command posts; the root every in-the-air and C2 draw is forked from.
     struct Airborne {
@@ -1619,6 +1637,34 @@ private:
             r.label = "unidentified air defence";
             intel_.Queue(r);
         }
+        // Losses nobody can explain (roadmap S7, learning.mode 1): the defence fired but nobody came home to say so, or
+        // nobody knows who shot. The staff suspects an air defence where the flight was last heard of: a ghost report
+        // about the place, never about the true killer, its error drawn from a fork keyed by the package and the loss.
+        if (tune.Get("learning.mode") >= 1.0) {
+            for (std::size_t li = 0; li < o.losses.size(); ++li) {
+                const LossRecord& l = o.losses[li];
+                if (l.fighter || l.own_fire) continue;  // our fighters or its own guns: not a defence of ours on the ground
+                const bool unseen = l.by.empty() || (fired.count(l.by) > 0 && survivors <= 0);
+                if (!unseen) continue;
+                Rng g = rng_.Fork(0x5E7A1EA2000ull + static_cast<std::uint64_t>(p.id) * 64ull + li);
+                const double sigma = tune.Get("learning.unexplained_sigma_m");
+                IntelReport r;
+                r.arrive_h = pirep_h;
+                r.observed_h = t;
+                r.source = IntelSource::PilotReport;
+                r.ghost = true;
+                r.kind = ObjectKind::SamSite;
+                r.pos = l.where + Vec3{g.Normal(0.0, sigma), g.Normal(0.0, sigma), 0.0};
+                r.sigma_m = sigma;
+                r.exists = tune.Get("learning.unexplained_exists");
+                r.losses = 1.0;
+                r.threat_radius_m = tune.Get("learning.unexplained_radius_m");
+                r.threat_lethality = tune.Get("learning.unexplained_lethality");
+                r.label = "suspected air defence (a loss nobody saw)";
+                r.note = "inferred from a flight lost without a report";
+                intel_.Queue(r);
+            }
+        }
         // What radiated while the raid was up: ELINT fixes.
         if (in.elint) {
             for (const auto& em : o.emissions) Elint(em.first, em.second, t);
@@ -1807,6 +1853,48 @@ private:
                     r.label = Label(i) + " (agent)";
                 }
                 intel_.Queue(r);
+            }
+        }
+        // Sympathisers who watch our troops (roadmap S7, learning.mode 1): word of our mobile air defence, more often where
+        // it stands by a town than out in the country, less under its nets. Every draw from a fork keyed by the hour.
+        if (in.humint_air_defence_per_day > 0.0 && tune.Get("learning.mode") >= 1.0) {
+            Rng g = rng_.Fork(0x5E7A1EA3000ull + static_cast<std::uint64_t>(std::max(0.0, std::floor(t0 * 60.0 + 1e-6))));
+            if (g.Chance(std::min(1.0, in.humint_air_defence_per_day * dt / 24.0))) {
+                std::vector<int> pool;
+                std::vector<double> weights;
+                for (std::size_t i = 0; i < data_.theatre.objects.size(); ++i) {
+                    const TheatreObject& o = data_.theatre.objects[i];
+                    const bool player = static_cast<int>(i) == player_;
+                    if (o.kind != ObjectKind::SamSite || o.decoy || (!o.mobile && !player) || truth_[i].function <= 0.05) continue;
+                    if (DistanceToFront(truth_[i].pos) > in.humint_reach_m) continue;
+                    bool town = false;
+                    for (std::size_t k = 0; k < data_.theatre.objects.size(); ++k) {
+                        if (data_.theatre.objects[k].kind == ObjectKind::City && Dist2d(truth_[k].pos, truth_[i].pos) <= tune.Get("learning.watch_m")) town = true;
+                    }
+                    double wt = town ? 1.0 : tune.Get("learning.countryside_share");
+                    if (player && posture_.nets) wt *= 0.5;
+                    pool.push_back(static_cast<int>(i));
+                    weights.push_back(wt);
+                }
+                double wmax = 0.0;
+                for (double wt : weights) wmax = std::max(wmax, wt);
+                if (!pool.empty() && wmax > 0.0) {
+                    const std::size_t k = static_cast<std::size_t>(g.Weighted(weights));
+                    const int i = pool[k];
+                    if (g.Chance(weights[k] / wmax)) {
+                        IntelReport r = ReportAbout(i, IntelSource::Humint, t0, t0 + in.humint_delay_h, in.humint_sigma_m);
+                        r.exists = 0.6;
+                        r.note = "sympathisers saw it";
+                        if (g.Chance(in.humint_false)) {
+                            r.object_id.clear();
+                            r.ghost = true;
+                            r.pos += Vec3{g.Normal(0.0, 8000.0), g.Normal(0.0, 8000.0), 0.0};
+                            r.label = Label(i) + " (sympathisers)";
+                        }
+                        intel_.Queue(r);
+                        ++sympathiser_reports_;
+                    }
+                }
             }
         }
         // Radars that radiate in their routine (the player's battery by its posture).

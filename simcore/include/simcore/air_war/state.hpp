@@ -234,6 +234,14 @@ struct PackageOutcome {
     bool delivered = false;
     double collateral = 0.0;
     std::vector<std::string> notes;
+    // Each flight that left a played session, where it was last seen (the theatre's frame) and when (roadmap S7: the
+    // rest of the raid flies on from there under route.mode 2; empty before, and the rest flew the plan).
+    struct FlownRecord {
+        int flight = -1;
+        Vec3 at;
+        double t_h = 0.0;
+    };
+    std::vector<FlownRecord> flown;
     std::vector<int> released_flights;  // flights that released their weapons (a played mission)
     std::vector<int> aborted_flights;   // flights that broke away before their release point (a played mission)
     // Under fire (roadmap B4, reaction_chain.hpp): flights that threw their stores off before their release point, and

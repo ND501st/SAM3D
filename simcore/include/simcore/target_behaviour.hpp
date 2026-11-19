@@ -103,6 +103,9 @@ public:
     bool InPass() const { return pass_; }
     // A weapon flies into the ground on purpose: no ground floor (GroundFloor) for it.
     void SetWeapon(bool weapon) { weapon_ = weapon; }
+    // The look-ahead over the ground scanned only every `s` seconds (roadmap S7: a wingman at A1, air_levels.hpp), over the
+    // look-ahead and the time to the next scan, the highest held between; 0: every step.
+    void SetHeightScanEvery(double s) { scan_every_s_ = s; }
     bool Evading() const { return evading_; }
     // The height above the ground it holds from now on (the instructor's order: a terrain-following pilot).
     void SetAgl(double agl_m) {
@@ -353,8 +356,13 @@ private:
         const double here = terrain.HeightAt(a.position.x, a.position.y);
         double ground = here + terrain.ObstacleHeightAt(a.position.x, a.position.y);
         const double vh = std::hypot(a.velocity.x, a.velocity.y);
-        if (vh > 1.0 && b_.lookahead_s > 0.0) {
-            const double reach = vh * b_.lookahead_s;
+        // At a lower rate (roadmap S7): the last scan's highest point holds until the next scan is due; it covered this far.
+        const bool held = scan_every_s_ > 0.0 && scan_age_s_ + dt < scan_every_s_ && scan_ground_ > -1e17;
+        if (held) {
+            scan_age_s_ += dt;
+            ground = std::max(ground, scan_ground_);
+        } else if (vh > 1.0 && b_.lookahead_s > 0.0) {
+            const double reach = vh * (b_.lookahead_s + std::max(0.0, scan_every_s_));
             const int samples = 2 + static_cast<int>(reach / 100.0);
             for (int i = 1; i <= samples; ++i) {
                 const double f = reach * i / samples / vh;
@@ -372,6 +380,8 @@ private:
                                    return true;
                                });
             }
+            scan_ground_ = ground;
+            scan_age_s_ = 0.0;
         }
         const double alt = frame.AltitudeOf(a.position);
         const double want = ground + WantedAglM(a);
@@ -421,6 +431,9 @@ private:
     double pass_dive_rad_ = 0.0;
     double pass_open_fire_m_ = 0.0;
     bool weapon_ = false;     // a weapon's "pilot": no ground floor
+    double scan_every_s_ = 0.0;   // the look-ahead's scan at a lower rate (SetHeightScanEvery); 0: every step
+    double scan_age_s_ = 0.0;     // since the last scan
+    double scan_ground_ = -1e18;  // its highest point (-1e18: none yet)
     bool pulled_up_ = false;  // under the ground floor last step
 };
 

@@ -767,6 +767,10 @@ struct EmScene {
     long long tick = 0;
     EmLibrary lib;
 
+    // A receiver skips the path to an emitter whose beam as it points now cannot reach it even over the best ground
+    // (roadmap S7: the receivers' cost near the battery; the intercepts are the same, the path cache's refreshes not).
+    bool esm_sidelobe_bound = false;
+
     std::vector<Platform> platforms;
     std::vector<EmitterState> emitters;
     std::vector<RadarState> radars;

@@ -516,6 +516,9 @@ struct RouteRules {
     std::string deviation = "leader";   // who may leave the route (§9): leader, ground_control, eye, any
     double deviation_lateral_m = 0.0;
     double deviation_tot_slip_s = 0.0;
+    // Navigation error (roadmap S7, route.mode 2): between fixes a crew drifts this share of the distance flown since its
+    // last (an INS's or a Doppler's drift, dead reckoning's); a turn point or IP on a feature is a fix.
+    double nav_drift_share = 0.0;
     std::string source;
     std::string confidence;
     std::string notes;
@@ -563,6 +566,7 @@ struct IntelDef {
     double humint_sigma_m = 4000.0;
     double humint_false = 0.2;                 // share of agents' reports that are wrong or planted
     double humint_reach_m = 60000.0;           // how far behind the line the agents see (rebels: everywhere)
+    double humint_air_defence_per_day = 0.0;   // sympathisers' word of our mobile air defence a day (roadmap S7, learning.mode 1)
     double prior_mobile_sigma_m = 8000.0;      // pre-war knowledge of mobile units
     double bda_overclaim = 0.5;                // mean inflation of pilots' claims
     double pirep_delay_h = 1.0;
@@ -1043,6 +1047,16 @@ struct TuningTable {
             {"intel.launch_sighting_m", 20000.0},
             {"intel.recce_corridor_m", 12000.0},
             {"intel.suspect_after_loss", 0.5},
+            // learning (roadmap S7, docs/air_war/09_BALANCE.md section 22): 1 the losses nobody saw explained as a suspected
+            // defence where the flight was last heard of, and the sympathisers' reports of our mobile air defence; 0 before
+            // it (a save made before S7)
+            {"learning.mode", 1.0},
+            {"learning.unexplained_sigma_m", 8000.0},   // a lost flight's last known place: where it last reported
+            {"learning.unexplained_exists", 0.4},       // how much a loss nobody saw makes the staff believe a defence is there
+            {"learning.unexplained_radius_m", 10000.0}, // the believed reach of a defence nobody saw (a short-range SAM's)
+            {"learning.unexplained_lethality", 0.15},
+            {"learning.watch_m", 15000.0},              // sympathisers see what stands this near a town or village
+            {"learning.countryside_share", 0.3},        // and out in the country, this share as often
             {"repair.restored_function", 0.5},
             {"attrition.target_guns_troops", 0.04},
             {"attrition.target_guns_site", 0.015},
@@ -1065,6 +1079,9 @@ struct TuningTable {
             // weather (a day's weather, drawn at the start)
             {"weather.clear_share", 0.5},
             {"weather.poor_share", 0.15},
+            // roadmap S7 (03_PERCEPTION.md 2.7): 1 the clear share by the month of a dated theatre (crawford_1977_rand: not
+            // clear about 85 % of winter days, 50 % of summer's); 0 the same shares every month (a save made before S7)
+            {"weather.mode", 1.0},
             // pacing (which raids the player plays)
             {"pacing.min_gap_h", 3.0},
             {"pacing.max_per_day", 3.0},
@@ -1088,7 +1105,16 @@ struct TuningTable {
             {"own_intel.warning_s", 300.0},
             {"own_intel.leak_warning_s", 900.0},
             // routes as flown (route_planner.hpp, docs/air_battle/01_ROUTES.md): game values
-            {"route.mode", 1.0},                    // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner
+            // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner, 2 roadmap S7's (the gate's fallback,
+            // the believed fighters in a leg's cost, the coarser lattice without a map, navigation error in a played raid,
+            // the routes as flown back from a session)
+            {"route.mode", 2.0},
+            {"route.fallback_grid2_m", 25000.0},    // the lattice of a theatre without a map (route.mode 2)
+            {"route.run_in_headings_nomap", 4.0},   // run-in headings there (route.mode 2)
+            {"route.fighter_reach_m", 40000.0},     // our interceptors' believed reach about a believed air base
+            {"route.fighter_weight", 0.15},         // a second in it, as a share of a believed lethal second in a site's sight
+            {"route.fighter_low_share", 0.3},       // for a low flight or a helicopter (the period's radars looked down poorly)
+            {"route.nav_fix_m", 3000.0},            // a crew sees its fix within this and turns over it: the error's cap
             // the hot phase (hot_phase.hpp, docs/air_battle/10_FACTIONS.md): 1 roadmap B11's planning (NATO's medium altitude
             // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11)
             {"hot_phase.mode", 1.0},
@@ -2020,7 +2046,7 @@ public:
         if (!Keys(*v, rp, {"crossing", "cas_free", "gate_window_s", "gate_separation_s", "letdown_m", "max_turn_points", "variants",
                            "w_exp", "w_cont", "w_low", "lines_bonus", "return", "blast_lead_s", "blast_exposure_s", "zone_escapes",
                            "helo_umbrella", "corridor_suppression", "deviation", "deviation_lateral_m", "deviation_tot_slip_s",
-                           "source", "confidence", "notes"}) ||
+                           "navigation", "source", "confidence", "notes"}) ||
             !Provenance(*v, rp) || !RequireString(*v, rp, "crossing", r.crossing) || !OptionalBool(*v, rp, "cas_free", r.cas_free) ||
             !Num(*v, rp, "gate_window_s", r.gate_window_s, 0.0, 3600.0) || !Num(*v, rp, "gate_separation_s", r.gate_separation_s, 0.0, 3600.0) ||
             !Num(*v, rp, "letdown_m", r.letdown_m, 0.0, 300000.0) || !Int(*v, rp, "max_turn_points", r.max_turn_points, 0, 12) ||
@@ -2035,6 +2061,15 @@ public:
             !OptionalString(*v, rp, "source", r.source) || !OptionalString(*v, rp, "confidence", r.confidence) ||
             !OptionalString(*v, rp, "notes", r.notes)) {
             return false;
+        }
+        // "navigation" (roadmap S7): the drift between fixes as a share of the distance flown since the last.
+        if (const json::Value* nv = v->Find("navigation")) {
+            const std::string np = Join(rp, "navigation");
+            if (!nv->Is(json::Type::Object)) return Fail(np, "an object");
+            if (!Keys(*nv, np, {"drift_share", "source", "confidence", "notes"}) || !Provenance(*nv, np) ||
+                !Num(*nv, np, "drift_share", r.nav_drift_share, 0.0, 0.2)) {
+                return false;
+            }
         }
         if (r.crossing != "gate" && r.crossing != "checkpoint_gate" && r.crossing != "entry" && r.crossing != "none") {
             return Fail(Join(rp, "crossing"), "gate, checkpoint_gate, entry or none");
@@ -2301,7 +2336,7 @@ public:
         if (!Keys(*d, p, {"satellite", "satellite_pass_hours", "satellite_latency_h", "satellite_detect", "recce_latency_h",
                           "elint", "elint_reach_km", "elint_delay_h", "elint_best_m", "elint_k_m", "comint",
                           "comint_sigma_m", "comint_delay_h", "humint_per_day", "humint_delay_h", "humint_sigma_m",
-                          "humint_false", "humint_reach_km", "prior_mobile_sigma_m", "bda_overclaim", "pirep_delay_h",
+                          "humint_false", "humint_reach_km", "humint_air_defence_per_day", "prior_mobile_sigma_m", "bda_overclaim", "pirep_delay_h",
                           "analyst_skill", "source", "confidence", "notes"}) ||
             !Provenance(*d, p) || !OptionalBool(*d, p, "satellite", in.satellite) ||
             !Num(*d, p, "satellite_latency_h", in.satellite_latency_h, 0.0, 200.0) ||
@@ -2318,6 +2353,7 @@ public:
             !Num(*d, p, "humint_sigma_m", in.humint_sigma_m, 10.0, 100000.0) ||
             !Num(*d, p, "humint_false", in.humint_false, 0.0, 1.0) ||
             !Num(*d, p, "humint_reach_km", humint_reach_km, 0.0, 1000.0) ||
+            !Num(*d, p, "humint_air_defence_per_day", in.humint_air_defence_per_day, 0.0, 50.0) ||
             !Num(*d, p, "prior_mobile_sigma_m", in.prior_mobile_sigma_m, 10.0, 100000.0) ||
             !Num(*d, p, "bda_overclaim", in.bda_overclaim, 0.0, 5.0) || !Num(*d, p, "pirep_delay_h", in.pirep_delay_h, 0.0, 48.0) ||
             !Num(*d, p, "analyst_skill", in.analyst_skill, 0.0, 1.0)) {

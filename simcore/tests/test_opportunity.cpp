@@ -592,7 +592,7 @@ SC_TEST("opportunity (A0): with no finds a campaign runs as before B6; with them
         // A find is rare (a column on the road under a flight's route): the seeds are tried until one campaign has one,
         // so the property is tested, not one seed's course (B8's air battle changes every campaign's course).
         int found = 0;
-        for (unsigned seed = 7u; seed < 12u && total + found == 0; ++seed) {
+        for (unsigned seed = 7u; seed < 22u && total + found == 0; ++seed) {
             const AirCampaign on = RunDays(LoadOpp(f), seed, 5.0);
             for (const JournalEntry& j : on.Journal()) {
                 std::size_t pos = 0;

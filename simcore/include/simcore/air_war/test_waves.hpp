@@ -53,6 +53,7 @@ struct WaveScene {
     const Terrain* terrain = nullptr;
     Vec3 centre;                    // the defended city's middle (ENU, the ground's height or near it)
     std::vector<Vec3> defences;     // our air defences and the battery's vehicles: DEAD and SEAD aim here
+    std::vector<double> rings_m;    // each defence's reach for the low strikes' routes (roadmap S7; missing or 0: none)
     std::vector<Vec3> objects;      // anything else worth a bomb (the scenery, points of the city)
     const em::EmLibrary* em = nullptr;  // the session's EM library (null: no warning receivers, ARMs or jammers)
 };
@@ -323,6 +324,53 @@ private:
     }
 
     static Vec3 Toward(double bearing_rad) { return Vec3{std::sin(bearing_rad), std::cos(bearing_rad), 0.0}; }
+
+public:
+    // The turn points of a low leg from `a` to `b` round the rings it crosses (roadmap S7): the ring it cuts deepest is
+    // passed outside its reach and the margin, at the place nearest the straight line, and each half is looked at again
+    // (twice at most). A ring round `a` or `b` itself is flown through (the target's own guard). No draws.
+    static std::vector<Vec3> AroundRings(const Vec3& a, const Vec3& b, const std::vector<Vec3>& centres, const std::vector<double>& rings_m,
+                                         double margin_m, int depth = 2) {
+        std::vector<Vec3> out;
+        const Vec3 ab{b.x - a.x, b.y - a.y, 0.0};
+        const double len2 = ab.x * ab.x + ab.y * ab.y;
+        if (depth <= 0 || len2 < 1.0) return out;
+        int worst = -1;
+        double worst_cut = 0.0;
+        Vec3 worst_near;
+        for (std::size_t k = 0; k < centres.size() && k < rings_m.size(); ++k) {
+            const double r = rings_m[k] + margin_m;
+            if (rings_m[k] <= 0.0) continue;
+            const Vec3& c = centres[k];
+            if (std::hypot(a.x - c.x, a.y - c.y) < r || std::hypot(b.x - c.x, b.y - c.y) < r) continue;
+            const double u = std::max(0.0, std::min(1.0, ((c.x - a.x) * ab.x + (c.y - a.y) * ab.y) / len2));
+            const Vec3 near{a.x + ab.x * u, a.y + ab.y * u, 0.0};
+            const double cut = r - std::hypot(near.x - c.x, near.y - c.y);
+            if (cut > worst_cut) {
+                worst_cut = cut;
+                worst = static_cast<int>(k);
+                worst_near = near;
+            }
+        }
+        if (worst < 0) return out;
+        const Vec3& c = centres[static_cast<std::size_t>(worst)];
+        const double r = rings_m[static_cast<std::size_t>(worst)] + margin_m;
+        Vec3 out_dir{worst_near.x - c.x, worst_near.y - c.y, 0.0};
+        double n = std::hypot(out_dir.x, out_dir.y);
+        if (n < 1.0) {  // straight through the middle: the left of the way
+            out_dir = Vec3{-ab.y, ab.x, 0.0};
+            n = std::hypot(out_dir.x, out_dir.y);
+        }
+        // Far enough out that both halves clear the ring (a chord touching it at its middle stands r / cos of half
+        // the angle it turns through; 1.2 r is enough for the turns of a few tens of degrees a ring of 10-20 km takes).
+        const Vec3 p{c.x + out_dir.x / n * r * 1.2, c.y + out_dir.y / n * r * 1.2, 0.0};
+        for (const Vec3& q : AroundRings(a, p, centres, rings_m, margin_m, depth - 1)) out.push_back(q);
+        out.push_back(p);
+        for (const Vec3& q : AroundRings(p, b, centres, rings_m, margin_m, depth - 1)) out.push_back(q);
+        return out;
+    }
+
+private:
     static double BearingOf(const Vec3& d) { return std::atan2(d.x, d.y); }
 
     // A point `up_m` above the ground at (east, north) (straight up the frame's z, as the runner's GroundEnu: roadmap R5).
@@ -521,7 +569,15 @@ private:
                     const double in = BearingOf(entry - aim) + DegToRad(Uniform(-40.0, 40.0));
                     const Vec3 ip = aim + Toward(in) * 14000.0;
                     const Vec3 past = aim + (aim - ip).Normalized() * 5000.0;
-                    legs = {{entry, h}, {ip, h}, {aim, h}, {past, h}, {home, h}};
+                    legs = {{entry, h}};
+                    // Low, round our rings to the IP (roadmap S7, the geometry's route_margin_km; none: straight).
+                    if (low && !a.helicopter && def_->route_margin_m > 0.0) {
+                        for (const Vec3& p : AroundRings(entry, ip, s.defences, s.rings_m, def_->route_margin_m)) legs.push_back({p, h});
+                    }
+                    legs.push_back({ip, h});
+                    legs.push_back({aim, h});
+                    legs.push_back({past, h});
+                    legs.push_back({home, h});
                     t.speed_mps = a.attack_mps;
                     release_aim_m = 1.0;
                     break;

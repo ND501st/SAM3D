@@ -790,6 +790,17 @@ public:
             es->intercepts.clear();
         }
     }
+    // The receivers' bound on a beam that cannot reach them (roadmap S7, em/esm_system.hpp RunEsmSite).
+    void SetEsmSidelobeBound(bool on) { world_.Scene().esm_sidelobe_bound = on; }
+    // A tracking emitter in the air holds this target (roadmap S7: a wingman at A1 locked up alone is lent no receiver).
+    bool TrackedBy(const std::string& target_id) const {
+        const auto it = platform_of_.find(target_id);
+        if (it == platform_of_.end() || it->second == 0) return false;
+        for (const em::EmitterState& e : world_.Scene().emitters) {
+            if (e.InAir() && e.track_target_platform == it->second) return true;
+        }
+        return false;
+    }
     bool RwrOn(const std::string& target_id) const {
         const Rwr* r = RwrOf(target_id);
         if (r == nullptr || r->esm == 0) return false;
