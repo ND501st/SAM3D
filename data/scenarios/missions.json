@@ -100,7 +100,8 @@
       "missions": [
         { "file": "scenarios/kesmark_range_test.json", "title": "Kesmark range: raid at the bridges, broken cloud", "level": "/Game/Maps/KesmarkRange" },
         { "file": "scenarios/dynamic_campaign_test.json", "title": "Dynamic campaign test: the capital's air defences under endless waves (F12 visits every asset)", "level": "/Game/Maps/KesmarkRange" },
-        { "file": "scenarios/air_battle_shots.json", "title": "Air battle check: F-4Es under the Osa's fire, an F-15C met by our MiG-21s (what -SimAirShots photographs)" }
+        { "file": "scenarios/air_battle_shots.json", "title": "Air battle check: F-4Es under the Osa's fire, an F-15C met by our MiG-21s (what -SimAirShots photographs)" },
+        { "file": "scenarios/air_battle_flares.json", "title": "Air battle check: NATO flights low over a Strela-2 team, their flares (-SimAirShots' second scenario)" }
       ]
     }
   ]

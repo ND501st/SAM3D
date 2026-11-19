@@ -63,7 +63,7 @@ world fact for the debrief, never a crewman's knowledge.
 | The AAA's fire control (`aaa.hpp` `DrawPassErrors`: optical sights blind) | `dark` |
 | The dynamic campaign's waves (`air_war/test_waves.hpp` `WavePassKillChance`) | `dark`: a defence without radar takes `attrition.night`, as the abstract raids do (`mission_bridge.hpp`) |
 | The couriers' night speed (`command/info_net.hpp`) | `dark` once given a sky (`InfoNet::SetSky`; the campaign's net gets its dated theatre's through `command::GiveTheatreSky`); without one the old 20:00-06:00 |
-| Unreal's sky (`ASimSkyWeatherActor`, or the level's own Movable sun) | the sun's elevation and azimuth |
+| Unreal's sky (`ASimSkyWeatherActor`, or the level's own atmosphere sun: OsaPractice's CesiumSunSky, made Movable and set to the project's 10 lux by `ASimScenarioDirector::FindLevelSun`) | the sun's elevation and azimuth |
 | Unreal's fx (`SimFxLogic::NightShare`) | `simcore::NightShare` of the sun's elevation |
 
 ## 4. The menu's time of day
@@ -104,7 +104,6 @@ light it was planned in, as before R7, and the bridge's night attrition (`missio
 - Twilight as a gradient for the TV (the contrast threshold by `night_share`), and a moon.
 - Multiplayer: the chosen hour is not replicated; each machine applies its own `-SimTime` (docs/MULTIPLAYER.md), and a
   client's sky stands at the start hour.
-- OsaPractice's sun is the level's: it follows the scenario only if it is Movable (not checked without the editor).
 - The air war reads the code's light defaults, not `light.json`.
 - The air war's seven sample raids (`data/scenarios/air_war_*.json`, from the undated theatre) have estimated clocks:
   the sun's rising or setting at each origin on 15 October less half the time limit, so each dawn or dusk raid plays in

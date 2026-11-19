@@ -3514,23 +3514,31 @@ void FSimFxWorld::ChaffDrop(const simcore::fx::Event& E)
 		P.SpreadCmps = 30.0f;
 		Spawn(P);
 	}
-	// The foil catching the sun: brief glints inside the cloud (none at night).
+	// The foil catching the sun: brief twinkles through the cloud over most of its life (none at night). A waiting particle
+	// does not move, so each starts where the cloud has drifted to by its turn: the puffs' velocity eased toward the wind at
+	// their drag, x(t) = wind t + (v0 - wind) (1 - e^-kt) / k.
 	if (Sun.bNight)
 	{
 		return;
 	}
-	for (int32 K = 0; K < T.ChaffGlints; ++K)
+	const FVector V0 = VelU * 0.25;
+	const double DragK = FMath::Max(T.ChaffDragPerS, 0.01);
+	for (int32 I = 0; I < T.ChaffGlints; ++I)
 	{
+		const double Delay = RandRange(0.0, 0.7 * T.ChaffS);
+		const double Ease = FMath::Exp(-DragK * Delay);
+		const FVector Drift = Wind * Delay + (V0 - Wind) * ((1.0 - Ease) / DragK);
+		const double Grown = FMath::Clamp(Delay / FMath::Max(T.ChaffBloomS, 0.1), 0.2, 1.0);
 		FSimFxParticle G;
 		G.Layer = ESimFxLayer::Glow;
-		G.Pos = At + Back * (100.0 * T.ChaffSpreadM * Rand01()) + RandUnit() * (100.0 * 0.4 * T.ChaffBloomM);
-		G.Vel = VelU * 0.25;
+		G.Pos = At + Drift + Back * (100.0 * T.ChaffSpreadM * Rand01()) + RandUnit() * (100.0 * 0.5 * T.ChaffBloomM * Grown);
+		G.Vel = Wind + (V0 - Wind) * Ease;
 		G.Wind = Wind;
 		G.Drag = static_cast<float>(T.ChaffDragPerS);
-		G.Age = -static_cast<float>(RandRange(0.0, 2.0));
-		G.Life = static_cast<float>(RandRange(0.3, 1.0));
-		G.Size0 = G.Size1 = 40.0f;
-		G.Tint = FLinearColor::White * Brightness(6.0);
+		G.Age = -static_cast<float>(Delay);
+		G.Life = static_cast<float>(RandRange(0.15, 0.5));
+		G.Size0 = G.Size1 = 25.0f;
+		G.Tint = FLinearColor::White * Brightness(T.ChaffGlintBrightness);
 		G.FadeFrom = 0.3f;
 		G.MinPx = 1.0f;
 		Spawn(G);

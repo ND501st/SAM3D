@@ -78,12 +78,15 @@ target until their end (a hit bursts on it; a miss flies on and destroys itself)
 its nose; heard as flare pops, the missile's launch and motor, its burst and the gun's loop (`USimFxAudioSubsystem`). The
 enemy's calls are never played: they reach the player only through our intercept post's report on the battery net
 (`command/intercept.hpp`). The tuning is `data/fx/effects.json`'s `air_battle`; the tests `SAM3D.Fx.AirBattle` and
-`SAM3D.Fx.World.MunitionMeshes`. Photographs: `-SimAirShots=<folder>` plays `scenarios/air_battle_shots.json` (or the
-`-SimScenario` given) and, only watching, photographs close to the aircraft the first banked aircraft, flight in
-formation, fighter of ours, flare salvo, chaff salvo, jettison, air-to-air launch and end, and air gun burst
-(`shot_air_<what>_<delay>s.png`, the log naming each aircraft's model, side and bank), then quits, logging the subjects it never saw; `-SimAirShotsMaxS=<s>`
-(default 900) bounds the scenario's time. The default scenario gives no flares (a neighbour's IR SAM fires only in a
-session with `"waves"`) and no gun burst (its fight ends on missiles): give `-SimScenario=` a waves scenario for them. From PowerShell:
+`SAM3D.Fx.World.MunitionMeshes`. Photographs: `-SimAirShots=<folder>`, only watching, photographs close to the aircraft
+the first banked aircraft, flight in formation (over the hindmost member's shoulder, the others beyond it), fighter of
+ours, our own 9M33 in flight, flare salvo, chaff salvo, jettison, air-to-air launch and end, and air gun burst
+(`shot_air_<what>_<delay>s.png`, the log naming each aircraft's model, side and bank). With no `-SimScenario` it plays
+two scenarios in one run: `scenarios/air_battle_shots.json` for all but the flares, then `scenarios/air_battle_flares.json`
+(NATO's waves low over a Strela-2 team, whose launch the pilots answer with flares; no IR SAM fires in the first). Each
+plays until its subjects are taken, it ends, or `-SimAirShotsMaxS=<s>` (default 900) of it have passed; then the check
+quits, logging the subjects it never saw (gun bursts come only when a fight closes to gun range). A `-SimScenario=` given
+is played alone for every subject. From PowerShell:
 
 ```powershell
 & "D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\dev\SAM3D\unreal\SAM3D\SAM3D.uproject" -game -RenderOffscreen -ResX=1280 -ResY=720 -SimAirShots=C:/dev/SAM3D/out/air_shots -log
