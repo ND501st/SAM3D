@@ -645,8 +645,8 @@ night twelve hours, not seven), the Pact offers the battery one or two raids a w
 on day 3 against 38-42 %, and the bridges are cut a little less (Pact 93 and 71 line-hours a week against 102 and 75;
 NATO 114 and 111 against 113 and 127). `air_war_bench data 400` builds its benches on the tuned theatre's values, undated, and runs as before.
 
-**No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11
-were read on its buckets).
+**No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11 were read on
+its buckets) until S8 (§18).
 
 
 ## 13. Command in the air and the time-stepped resolver (track B, B5, 17 November 2026)
@@ -1139,3 +1139,34 @@ Nothing runs per step.
 - Diverts too rare in the campaigns to read their latency there (item 3); the `divert_min` band waits for them.
 - The exchange bands are wide: the abstract fight is calibrated to 1967-72 rates and flown with 1985 missiles.
 - B13 (Unreal) is the owner's; the hot phase's look will need its own pass once it is drawn.
+
+## 18. The tuned theatre by the sun (roadmap S8, 19 November 2026)
+
+S8 gave `theatre_pannonia.json`, the theatre the tests and §3-§11 were tuned on, the war's date: 15 October 1985, UTC+1,
+the same parts of the day as the nation's (§12's table). Its date is read only under the air war's save mode
+`light.mode` 1 (`data/gameplay/air_war.json`, `docs/LIGHT.md` §5); under mode 0 the theatre is undated and its parts
+of the day are the buckets, as before. A campaign saved before S8 carries no `"light_mode"` and replays with mode 0,
+so `test_routes.cpp`'s fingerprint (journal 107, FNV 1375944258174313379, 41 packages) holds. Under mode 1 every
+theatre's light thresholds are `light.json`'s rather than the code's own; the values are equal today.
+
+`air_war_balance --set light.mode=0 data 20 7` against `air_war_balance data 20 7` (mode 1, the default):
+
+| Adversary, battery | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 20.6 → 20.2 | 2.7% → 1.7% | 100%, 100% | 1.6 → 1.6 |
+| Rebels, careful | 22.0 → 21.3 | 2.7% → 2.3% | 100%, 100% | 0.8 → 0.9 |
+| Neutral, careless | 39.8 → 41.2 | 3.1% → 2.8% | 100%, 100% | 8.8 → 8.2 |
+| Neutral, careful | 35.9 → 38.0 | 3.8% → 2.2% | 100%, 100% | 3.8 → 3.6 |
+| Warsaw Pact, careless | 567.6 → 558.2 | 1.9% → 2.0% | 35%, 75% → 29%, 78% | 8.2 → 7.2 |
+| Warsaw Pact, careful | 562.0 → 558.0 | 2.0% → 1.8% | 42%, 83% → 41%, 82% | 9.0 → 9.8 |
+| NATO, careless | 537.0 → 537.0 | 1.7% → 1.3% | 43%, 56% → 40%, 55% | 5.8 → 6.5 |
+| NATO, careful | 536.4 → 535.9 | 1.5% → 1.3% | 44%, 60% → 48%, 60% | 7.7 → 8.1 |
+
+Every band row passes under both modes. The shapes hold, and the shifts are of the size §12 found on the nation:
+within twenty seeds' noise for the light air arms (a few tenths of an aircraft a week), a few points of the defences
+on day 3 for the two large air forces, and a raid a week more or less at the battery. The losses fall a little almost
+everywhere: the dusk and night by the sun begin some three hours earlier than the buckets' (16:13 and 17:25 against
+18:00 and 21:00); the likely reason is that more of the raids planned for the dark now fly in it, not measured.
+
+**No rebalance is needed.** The seven sample raids of the missions menu were regenerated from the dated theatre
+(`docs/LIGHT.md` §5; the command in each file's notes).
