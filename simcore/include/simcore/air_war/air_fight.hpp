@@ -186,6 +186,13 @@ public:
         // often as its warning is heard (balance.mode 1, roadmap B14; Teaball's warning turned 0.47:1 in May 1972 into
         // 3.8:1 by October, checo_1978_linebacker). Before B14 our first pass from the rear came as often under an E-3A.
         if (surprise && s.awacs > 0.0 && d_->tuning.Get("balance.mode") >= 1.0 && r.Chance(s.awacs * f_->a0_seen_awacs)) surprise = false;
+        // Teaball's relay (roadmap S6, docs/air_battle/09 section 6): where the faction has one, its listeners overhear our
+        // GCI's vectors and warn the package about a minute later, unless the relay fails; the surprise is gone. Off in the
+        // data (no Teaball-type service in Europe by 1985 was found); its own draw, so the fight's stream is unchanged.
+        if (surprise && !jammed && TeaballWarns(seed)) {
+            surprise = false;
+            out.notes.push_back("the package was warned of our fighters by its listeners' relay");
+        }
         const bool ours_cleared = ours_->roe == "cleared_bvr" || (ours_->roe == "controller" && !jammed);
         std::uint64_t shooter_key = 0;
         // Their fighters: a sweep first, then a CAP, then the close escort.
@@ -327,6 +334,15 @@ public:
     // Roadmap S3's fight (tuning air_fight.mode 1).
     bool S3() const { return d_->tuning.Get("air_fight.mode") >= 1.0; }
     static bool IsFighterCover(FlightRole r) { return r == FlightRole::Escort || r == FlightRole::Sweep || r == FlightRole::Cap; }
+
+    // Whether the faction's Teaball-type relay warns a package of our fighters (radio.mode 1 and the faction's relay on):
+    // keyed on the fight's seed, its own stream.
+    bool TeaballWarns(std::uint64_t seed) const {
+        const FactionRadio::Teaball& tb = d_->faction.radio.teaball;
+        if (!tb.on || d_->tuning.Get("radio.mode") < 1.0) return false;
+        Rng tr(seed ^ 0x7EAB0A1100000001ull);
+        return tr.Chance(1.0 - tb.fail);
+    }
 
 private:
     struct Fighter {

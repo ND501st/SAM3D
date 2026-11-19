@@ -1129,6 +1129,32 @@ private:
                     Log("intel", "COMINT", "our fighters' traffic in " + z.id + " heard (" + std::to_string(corridor_days_fed_ + 1) + ". day)", false);
                 }
             }
+            FeedDummyCorridors(zs);
+        }
+    }
+    // Our dummy traffic (roadmap S6, docs/air_battle/09 section 8; radio.mode 1): each day radio.our_dummy_corridors false
+    // corridors, a working airfield's real one turned radio.our_dummy_turn_deg about the airfield (the side alternating by
+    // day), are talked on by our GCI and notices at the real one's hours, so the enemy's COMINT can learn a corridor where
+    // our fighters never fly (vr_1985_plss: dummy transmitters and imitated traffic; nazarenko_1984: radio disinformation and
+    // imitation). A raid timed into one gets no held fire. The enemy's journal names it as it heard it.
+    void FeedDummyCorridors(const std::vector<command::OwnAirZone>& zs) {
+        if (data_.tuning.Get("radio.mode") < 1.0 || zs.empty()) return;
+        const int n = static_cast<int>(std::floor(data_.tuning.Get("radio.our_dummy_corridors") + 1e-9));
+        const double turn = data_.tuning.Get("radio.our_dummy_turn_deg") * 3.14159265358979323846 / 180.0;
+        for (int k = 0; k < n; ++k) {
+            const command::OwnAirZone& real = zs[static_cast<std::size_t>(corridor_days_fed_ + k) % zs.size()];
+            const int i = data_.theatre.IndexOf(real.id.substr(9));
+            if (i < 0 || truth_[static_cast<std::size_t>(i)].function <= 0.05 || real.path.size() < 2) continue;
+            const double a = ((corridor_days_fed_ + k) % 2 == 0 ? 1.0 : -1.0) * turn;
+            const Vec3 o = real.path.front(), e = real.path.back();
+            const double dx = e.x - o.x, dy = e.y - o.y;
+            command::OwnAirZone z = real;
+            z.id = real.id + " B";  // as the enemy would label a second corridor from the same field
+            z.path = {o, Vec3{o.x + dx * std::cos(a) + dy * std::sin(a), o.y - dx * std::sin(a) + dy * std::cos(a), 0.0}};
+            const double h = corridor_days_fed_ * 24.0 + z.from_h - data_.theatre.start_hour;
+            if (corridor_intel_.Use(z, h)) {
+                Log("intel", "COMINT", "our fighters' traffic in " + z.id + " heard (" + std::to_string(corridor_days_fed_ + 1) + ". day)", false);
+            }
         }
     }
     // A creative planner with a fresh belief of our corridor near the package's target times it into the corridor's hours,

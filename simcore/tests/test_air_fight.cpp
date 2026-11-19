@@ -1342,3 +1342,102 @@ SC_TEST("air fight S3: the scenario's air_fight takes its mode and the far fight
     SC_EXPECT(!LoadScenario(bad, kData, d2, console, &e));
     SC_EXPECT(e.find("mode") != std::string::npos);
 }
+
+SC_TEST("air fight S6 (A0): Teaball's relay takes the surprise from our fighters' pass where the faction has one; off in the data, and not at radio.mode 0") {
+    AirWarData d = LoadWar("nato");
+    SC_EXPECT(!d.faction.radio.teaball.on);  // no Teaball-type service in Europe by 1985 was found: the owner's choice
+    Package p;
+    p.flights = {MakeFlight(FlightRole::Strike, "f4e", 4, Profile::Medium)};
+    const auto warned = [&](const AirWarData& data) {
+        const AbstractAirFight fight(data);
+        int n = 0;
+        for (std::uint64_t k = 1; k <= 1500; ++k) {
+            const AbstractFightResult r = fight.Resolve(p, {4}, Day(1.0), k * 7919u);
+            for (const std::string& note : r.notes) n += note.find("listeners' relay") != std::string::npos ? 1 : 0;
+        }
+        return n;
+    };
+    const int off = warned(d);
+    d.faction.radio.teaball.on = true;
+    const int on = warned(d);
+    d.faction.radio.teaball.fail = 1.0;
+    const int failing = warned(d);
+    d.faction.radio.teaball.fail = 0.15;
+    d.tuning.values["radio.mode"] = 0.0;
+    const int before = warned(d);
+    std::printf("    warned of our pass by the relay: off %d, on %d, always failing %d, before S6 %d (of 1500 fights)\n", off, on, failing, before);
+    SC_EXPECT(off == 0 && on > 0 && failing == 0 && before == 0);
+}
+
+SC_TEST("air fight S6 live: Teaball's relay overhears our GCI's vectors within the horizon and warns its fighters a minute later; beyond it, nothing") {
+    for (const double relay_east : {-150000.0, -600000.0}) {
+        AirFightDef def = Def();
+        HandWorld w;
+        w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});          // 0: the F-15
+        w.Add(Vec3{0.0, 120000.0, 5000.0}, Vec3{0.0, -230.0, 0.0});    // 1: our MiG
+        def.fighters.push_back(Fighter("eagle", "f15c", "nato", "sweep", "e3a"));
+        def.fighters.push_back(Fighter("red", "mig21mf", "ours", "intercept", "gci"));
+        AirFightControllerDef e3a;
+        e3a.id = "e3a";
+        e3a.side = "enemy";
+        e3a.kind = "airborne_warning";
+        e3a.pos = Vec3{relay_east, 0.0, 9000.0};
+        e3a.range_m = 1000000.0;
+        def.controllers.push_back(e3a);
+        AirFightControllerDef gci;
+        gci.id = "gci";
+        gci.side = "ours";
+        gci.kind = "radar_control";
+        gci.pos = Vec3{0.0, 160000.0, 0.0};
+        gci.range_m = 300000.0;
+        def.controllers.push_back(gci);
+        def.teaball.relay = "e3a";
+        def.teaball.fail = 0.0;  // the outage's draw is the abstract test's; here every overheard vector is passed on
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"eagle", "red"}, 5, &e));
+        double first_warning = -1.0, first_vector = -1.0;
+        for (double t = 0.25; t <= 150.0; t += 0.25) {
+            w.Move(0.25);
+            s.Step(t, w.World());
+            for (const std::string& ev : w.events) {
+                if (first_vector < 0.0 && ev.rfind("gci: ", 0) == 0) first_vector = t;
+                if (first_warning < 0.0 && ev.find("(relayed)") != std::string::npos) first_warning = t;
+            }
+            w.events.clear();
+            if (w.gone[0] || w.gone[1]) break;
+        }
+        std::printf("    relay %.0f km off: our vectors %d, overheard %d, warnings %d (first vector %.0f s, first warning %.0f s)\n", -relay_east / 1000.0,
+                    s.VectorsSent(), s.TeaballOverheard(), s.TeaballWarnings(), first_vector, first_warning);
+        SC_EXPECT(s.VectorsSent() > 0);
+        if (relay_east > -200000.0) {
+            SC_EXPECT(s.TeaballOverheard() > 0 && s.TeaballWarnings() > 0);
+            SC_EXPECT(first_warning >= first_vector + def.teaball.delay_s - 1e-6);
+        } else {
+            SC_EXPECT(s.TeaballOverheard() == 0 && s.TeaballWarnings() == 0);
+        }
+    }
+}
+
+SC_TEST("air fight S6: the scenario's air_fight takes Teaball's relay, an enemy controller; a bad one is refused") {
+    const std::string base = ReadFile(kData + "/scenarios/air_battle_shots.json");
+    const auto with = [&](const std::string& relay) {
+        std::string text = base;
+        const std::size_t at = text.find("\"air_fight\"");
+        const std::size_t ctl = text.find("\"controllers\"", at);
+        const std::size_t open = text.find('[', ctl);
+        text.insert(open + 1, " { \"id\": \"e3a\", \"side\": \"enemy\", \"kind\": \"airborne_warning\", \"east_m\": -150000, \"north_m\": 0, \"alt_m\": 9000 },");
+        const std::size_t brace = text.find('{', at);
+        text.insert(brace + 1, " \"teaball\": { \"relay\": \"" + relay + "\", \"delay_s\": 45, \"fail\": 0.1, \"source\": \"test\", \"confidence\": \"estimate\" },");
+        return text;
+    };
+    ScenarioDef d;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(with("e3a"), kData, d, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(d.air_fight.teaball.relay == "e3a" && d.air_fight.teaball.delay_s == 45.0 && d.air_fight.teaball.fail == 0.1);
+    ScenarioDef d2;
+    SC_EXPECT(!LoadScenario(with("gci"), kData, d2, console, &e));  // our own GCI cannot be the enemy's relay
+    SC_EXPECT(e.find("relay") != std::string::npos);
+}

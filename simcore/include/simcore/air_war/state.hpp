@@ -182,6 +182,14 @@ struct HeardRecord {
     std::string text;        // what the post wrote
     bool understood = false;
     std::string fact;        // the key of the fact made of it in our side's pipeline ("" none)
+    // Roadmap S6: what the campaign's pipeline needs to make the same facts on a load (command/air_war_feed.hpp). A save
+    // made before S6 has none of them: the hour is then the package's time over target.
+    std::string chain_post;  // the post in data/command/intercept.json it is ("" : `post`)
+    double h = -1.0;         // the campaign hour it was heard (< 0: not known)
+    double written_h = -1.0; // the campaign hour the form was done (< 0: when heard)
+    double bearing_deg = 0.0;
+    int precedence = 1;
+    bool names_battery = false;  // the written square is the battery's
 };
 
 struct PackageOutcome {
