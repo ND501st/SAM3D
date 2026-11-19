@@ -4556,6 +4556,41 @@ private:
                 return out;
             };
         }
+        if (def_.air_fight.mode >= 1) {  // roadmap S3
+            if (em_link_ && em_link_->Ok()) {
+                if (!air_fight_radars_merged_) {
+                    air_fight_radars_merged_ = true;
+                    std::string e;
+                    if (!em_link_->MergeLibrary(def_.air_fight.radar_library, &e)) Event("air fight", "the fighters' radars: " + e);
+                }
+                w.radar = [this](int t, const std::string& radar_def, int state, int locked) {
+                    const std::string lid = locked >= 0 && static_cast<std::size_t>(locked) < def_.targets.size() ? def_.targets[static_cast<std::size_t>(locked)].id
+                                                                                                                 : std::string();
+                    em_link_->SetFighterRadar(def_.targets[static_cast<std::size_t>(t)].id, radar_def, state, lid);
+                };
+            }
+            if (reactions_.Configured()) {
+                w.dispense = [this](int t, bool infrared, double at) {
+                    if (!reactions_.On(t)) return false;
+                    std::vector<ReactionAct> acts;
+                    const bool did = reactions_.AnswerAam(t, infrared, at, acts);
+                    for (const ReactionAct& act : acts) ApplyReaction(act);
+                    return did;
+                };
+                w.countermeasure = [this](int t, bool infrared, double at) {
+                    if (!reactions_.On(t)) return 0.0;
+                    if (infrared) return reactions_.FlaresOut(t, at) ? def_.reactions.flare_decoy : 0.0;
+                    return reactions_.ChaffOut(t, at) ? 1.0 - def_.reactions.chaff_factor : 0.0;
+                };
+            }
+            w.leader = [this](int t) {
+                const int fi = flights_->FlightOf(t);
+                if (fi < 0) return -1;
+                const FlightSlot* l = flights_->All()[static_cast<std::size_t>(fi)].Leader();
+                return l != nullptr ? l->target : -1;
+            };
+            w.far_from_ours = [this](int t) { return FarFromOurGround(t); };
+        }
         if (fx_on_) {  // the shots in the presentation feed (roadmap B13): pushed, never read back
             w.fx_launch = [this](int shooter, int target, const airwar::AamDef& aam, int shot, double t, double arrive_s) {
                 FxAirShot(fx::EventKind::AamLaunch, shooter, target, aam.munition.empty() ? aam.id : aam.munition, shot, t, arrive_s, false, false);
@@ -4568,7 +4603,29 @@ private:
             };
         }
         air_fight_->Step(time_, w);
+        if (em_link_ && def_.air_fight.mode >= 1) em_link_->PointFighterRadars();
     }
+    bool air_fight_radars_merged_ = false;
+    // The far fight (roadmap S3, A1 of 07 section 5.6): a fighter beyond every reach of our ground units (the near points
+    // without our fighters', so two fighter groups far from the battery fight at A1 even beside each other).
+    bool FarFromOurGround(int t) {
+        const Aircraft* a = t >= 0 && static_cast<std::size_t>(t) < targets_.size() && targets_[static_cast<std::size_t>(t)].spawned
+                                ? world_.FindAircraft(targets_[static_cast<std::size_t>(t)].world_id)
+                                : nullptr;
+        if (a == nullptr) return false;
+        if (far_points_s_ != time_) {
+            far_points_s_ = time_;
+            AirLevelValues v = levels_.Values();
+            v.fighter_radar_m = 0.0;
+            std::vector<NearPoint> keep = std::move(near_points_);
+            NearPoints(v);
+            far_points_ = std::move(near_points_);
+            near_points_ = std::move(keep);
+        }
+        return NearRatio(a->position, far_points_, levels_.Values().margin_m) > 1.0;
+    }
+    std::vector<NearPoint> far_points_;
+    double far_points_s_ = -1.0;
 
     // An air-to-air shot in the feed (fx/events.hpp: AamLaunch, AamEnd, AirGunBurst), from the session's aircraft as they
     // are now. `gone`: the target left the session before the missile arrived (an Early end with no position).

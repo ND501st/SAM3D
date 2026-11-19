@@ -31,6 +31,7 @@
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/light.hpp"
+#include "simcore/reactions.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -1125,6 +1126,9 @@ struct TuningTable {
             // A damaged aircraft back in service (roadmap S4, campaign.hpp): 1 by its level; 0 as before S4.
             {"damage.mode", 0.0},
             {"damage.heavy_share", 0.3},
+            // the air fight in detail (roadmap S3, air_fight.hpp): 1 the doctrines' attacks told apart, the drag and the
+            // strikers' flares and chaff in the abstract fight; 0 before it (a save made before S3)
+            {"air_fight.mode", 0.0},
             {"damage.heavy_repair_factor", 3.0},
         };
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
@@ -1665,7 +1669,8 @@ public:
     }
     static bool C2Mission(const std::string& m) {
         MissionKind k;
-        return m == "any" || m == "bai" || m == "fighters" || ParseMissionKind(m, k);
+        // "fighters", or (a vector line, roadmap S3) a fighter's role in the air fight.
+        return m == "any" || m == "bai" || m == "fighters" || m == "escort" || m == "sweep" || m == "cap" || m == "intercept" || ParseMissionKind(m, k);
     }
     bool LoadC2Block(const json::Value& root, FactionDef& out) {
         const json::Value* c = root.Find("c2");
@@ -2795,6 +2800,7 @@ struct AirWarData {
     WeaponsDef weapons;  // empty: every type strikes by its strike_power (the model before the weapons)
     AirCombatDef air_combat;  // the air-to-air missiles, guns and fits, the chain's numbers (data/air_war/air_combat.json, track B7)
     SensorsDef sensors;       // the airborne sensors by type and year (data/air_war/sensors.json)
+    ReactionTable reactions;  // the pilots' reactions and the countermeasure fits (S3: the strikers' flares and chaff at A0; empty: none)
     CounterC2Def counter_c2;  // our side against the enemy's command in the air (data/command/counter_c2.json, roadmap S2)
     AaaTable aaa;             // how the guns fire by range (data/gameplay/aaa.json): a played raid's guns shown (roadmap S4)
     command::OwnAirDef own_air;  // our fighters' rules (data/command/own_air.json, roadmap S1; absent: none of it)
@@ -2829,6 +2835,9 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadWeaponsFile(data_dir + "/air_war/weapons.json", d.weapons, error)) return false;
     if (!LoadAirCombatFile(data_dir + "/air_war/air_combat.json", d.air_combat, error)) return false;
     if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;
+    if (!FillLookDown(d.sensors, data_dir, error)) return false;
+    // The strikers' flares and chaff in the abstract fight (roadmap S3): the reaction table, where the data has it.
+    if (std::ifstream(data_dir + "/gameplay/reactions.json").good() && !LoadReactionTable(data_dir, d.reactions, error)) return false;
     if (!LoadCounterC2File(data_dir + "/command/counter_c2.json", d.counter_c2, error)) return false;
     if (!LoadAaaFile(data_dir, "gameplay/aaa.json", d.aaa, error)) return false;
     {

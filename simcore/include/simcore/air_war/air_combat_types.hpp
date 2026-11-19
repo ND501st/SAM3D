@@ -204,6 +204,25 @@ struct FightParams {
     double extend_s = 20.0;
     double claim_on_miss = 0.3;
     double slow_target_mps = 120.0;
+    // Roadmap S3 (the fight in detail; AirFightDef::mode 1).
+    double look_down_clutter_db = 48.0;  // the main lobe's clutter against a target below over the ground, before rejection
+    double beam_offset_m = 8000.0;       // a beam attack steers for a point this far abeam the target's track ...
+    double beam_turn_in_m = 15000.0;     // ... and turns in once this close or on the target's beam
+    double slash_offset_m = 3000.0;      // a slashing attack steers for a point this far behind the target ...
+    double slash_turn_in_m = 6000.0;     // ... and turns in once this close or in its rear hemisphere
+    double pass_m = 1500.0;              // a slashing pass ends (he extends) this close with no shot left to take
+    double drag_s = 15.0;                // a warned fighter turns tail and runs this long
+    double drag_warning_s = 3.0;         // a lock or a launch on his receiver this recent warns him
+    double missile_ref_target_mps = 250.0;  // the target the missiles' rear ranges are for: the flight time it gives is the budget
+    double a1_think_s = 1.0;             // the far fight (A1): each fighter thinks at this period, a wingman on his leader's
+    double escort_back_m = 2000.0;       // an escort's station on its strikers' leader: behind,
+    double escort_side_m = 2000.0;       //   abeam,
+    double escort_up_m = 600.0;          //   above
+    double escort_tether_m = 15000.0;    // an escort engages only a hostile this near its strikers (unless released)
+    // Abstract (A0), S3.
+    double a0_slash_return = 0.4;        // the share of a slashed group's return fire that reaches a slasher extending away
+    double a0_turn_rounds = 1.0;         // more rounds in a turning fight
+    double a0_drag = 0.6;                // a warned fighter drags a radar shot beyond sight (times his skill and 0.5)
     // Abstract (A0).
     double a0_intercept = 0.5;
     double a0_detect_day = 0.85;
@@ -423,6 +442,7 @@ struct SensorDef {
     double lock_m = 0.0;                // lock head-on
     double design_m = 0.0;              // on paper
     double clutter_m = 0.0;             // looking down against the ground
+    double look_down_db = -1.0;         // its EM RadarDef's look_down_db (roadmap S3; < 0: not read, FillLookDown)
     // An infrared search set or an optical aid.
     double rear_m = 0.0;                // from the rear against a clear sky (an F-4 from the rear for the TP-23)
     double vid_m = 0.0;                 // recognition range it gives beyond the eye's
@@ -472,6 +492,7 @@ struct SensorsDef {
 // Declared here, defined in air_combat_data.hpp (which data.hpp includes last), so AirWarData can load them.
 inline bool LoadAirCombatFile(const std::string& path, AirCombatDef& out, std::string* error = nullptr);
 inline bool LoadSensorsFile(const std::string& path, SensorsDef& out, std::string* error = nullptr);
+inline bool FillLookDown(SensorsDef& s, const std::string& data_dir, std::string* error = nullptr);
 
 }  // namespace airwar
 }  // namespace simcore

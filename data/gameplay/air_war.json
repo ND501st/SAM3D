@@ -143,6 +143,11 @@
     "source": "game values (roadmap S4), the heavy share after data/gameplay/damage.json (a missile's kill heavy 25%, the guns' heavy hits); the repair after affdl_tr_77_115's kill severities and the faction's damaged_return_h",
     "notes": "A damaged aircraft back in service (air_war/campaign.hpp): mode 1 by its level, a heavily damaged one heavy_repair_factor times its faction's damaged_return_h, a moderately damaged one damaged_return_h; a played session's damaged aircraft that got away on their own flights with their levels (mission_bridge.hpp), the abstract resolver's drawn heavy at heavy_share by a keyed draw; 0 as before S4 (every one damaged_return_h on a flight drawn; a save without the key replays with it)."
   },
+  "air_fight": {
+    "mode": 1,
+    "source": "game value: the switch of roadmap S3 (docs/air_battle/07_AIR_TO_AIR.md section 9, docs/air_war/09_BALANCE.md section 19)",
+    "notes": "The abstract air fight in detail (air_war/air_fight.hpp). mode 1: a beam attack's shots from the target's beam, a slash by the side that fired first one pass after which only air_combat.json's a0_slash_return come back, a turning doctrine's fight a0_turn_rounds longer, a fighter dragging a radar round from beyond sight at a0_drag of his skill, strikers that saw the shot answering with flares or chaff if their type carries them in the war's year. 0 before it (a save without the key replays with it). The played session's fight has its own switch, the scenario's air_fight.mode."
+  },
   "balance": {
     "mode": 1,
     "source": "game value: the switch of roadmap B14 (docs/air_war/09_BALANCE.md section 17)",

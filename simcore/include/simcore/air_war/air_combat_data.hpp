@@ -6,8 +6,13 @@
 // load. data.hpp includes this file last, so AirWarData can hold both.
 #pragma once
 
+#include <map>
+#include <string>
+#include <utility>
+
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/em/data.hpp"
 
 namespace simcore {
 namespace airwar {
@@ -288,6 +293,23 @@ private:
             {"extend_s", &f.extend_s, 1.0, 1.0, 300.0},
             {"claim_on_miss", &f.claim_on_miss, 1.0, 0.0, 1.0},
             {"slow_target_mps", &f.slow_target_mps, 1.0, 0.0, 400.0},
+            {"look_down_clutter_db", &f.look_down_clutter_db, 1.0, 0.0, 100.0},
+            {"beam_offset_m", &f.beam_offset_m, 1.0, 0.0, 50000.0},
+            {"beam_turn_in_m", &f.beam_turn_in_m, 1.0, 100.0, 100000.0},
+            {"slash_offset_m", &f.slash_offset_m, 1.0, 0.0, 50000.0},
+            {"slash_turn_in_m", &f.slash_turn_in_m, 1.0, 100.0, 100000.0},
+            {"pass_m", &f.pass_m, 1.0, 50.0, 20000.0},
+            {"drag_s", &f.drag_s, 1.0, 1.0, 300.0},
+            {"drag_warning_s", &f.drag_warning_s, 1.0, 0.1, 60.0},
+            {"missile_ref_target_mps", &f.missile_ref_target_mps, 1.0, 0.0, 600.0},
+            {"a1_think_s", &f.a1_think_s, 1.0, 0.05, 10.0},
+            {"escort_back_m", &f.escort_back_m, 1.0, 0.0, 20000.0},
+            {"escort_side_m", &f.escort_side_m, 1.0, 0.0, 20000.0},
+            {"escort_up_m", &f.escort_up_m, 1.0, -5000.0, 5000.0},
+            {"escort_tether_m", &f.escort_tether_m, 1.0, 1000.0, 200000.0},
+            {"a0_slash_return", &f.a0_slash_return, 1.0, 0.0, 1.0},
+            {"a0_turn_rounds", &f.a0_turn_rounds, 1.0, 0.0, 4.0},
+            {"a0_drag", &f.a0_drag, 1.0, 0.0, 1.0},
             {"a0_intercept", &f.a0_intercept, 1.0, 0.0, 1.0},
             {"a0_detect_day", &f.a0_detect_day, 1.0, 0.0, 1.0},
             {"a0_detect_night", &f.a0_detect_night, 1.0, 0.0, 1.0},
@@ -507,6 +529,29 @@ inline bool LoadAirCombatFile(const std::string& path, AirCombatDef& out, std::s
 
 inline bool LoadSensorsFile(const std::string& path, SensorsDef& out, std::string* error) {
     return detail::LoadCombatFile(path, out, error, [](detail::AirCombatLoader& l, const json::Value& r, SensorsDef& o) { return l.LoadSensors(r, o); });
+}
+
+// Each radar's look-down rejection from its EM RadarDef (roadmap S3): the library each entry names, read once, relative to
+// `data_dir`. A radar whose library or entry is missing keeps -1 (the fight then uses B8's rule). False, with why, only if a
+// named library does not load.
+inline bool FillLookDown(SensorsDef& s, const std::string& data_dir, std::string* error) {
+    std::map<std::string, em::EmLibrary> libs;
+    for (SensorDef& d : s.sensors) {
+        if (d.kind != SensorKind::Radar || d.radar_def.empty() || d.library.empty()) continue;
+        auto it = libs.find(d.library);
+        if (it == libs.end()) {
+            em::EmLibrary lib;
+            const em::EmLoadResult r = em::LoadEmLibraryFile(data_dir + "/" + d.library, lib);
+            if (!r.ok) {
+                if (error != nullptr) *error = d.library + ": " + r.error;
+                return false;
+            }
+            it = libs.emplace(d.library, std::move(lib)).first;
+        }
+        const int idx = it->second.Radar(d.radar_def);
+        if (idx >= 0) d.look_down_db = it->second.radars[static_cast<std::size_t>(idx)].look_down_db;
+    }
+    return true;
 }
 
 // Text loaders (tests).

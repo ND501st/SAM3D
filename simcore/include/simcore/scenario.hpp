@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -1543,14 +1544,26 @@ private:
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
         airwar::AirFightDef& a = out.air_fight;
         std::string combat = "air_war/air_combat.json", sensors = "air_war/sensors.json";
-        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "source", "confidence", "notes"}) ||
+        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "mode", "far_fight", "source", "confidence", "notes"}) ||
             !OptionalInt(*v, p, "year", a.year) || !OptionalString(*v, p, "combat", combat) || !OptionalString(*v, p, "sensors", sensors) ||
-            !Provenance(*v, p)) {
+            !OptionalInt(*v, p, "mode", a.mode) || !OptionalInt(*v, p, "far_fight", a.far_fight) || !Provenance(*v, p)) {
             return false;
         }
+        if (a.mode < 0 || a.mode > 1) return Fail(Join(p, "mode"), "0 (B8's fight) or 1 (roadmap S3's)");
+        if (a.far_fight < -1 || a.far_fight > 1) return Fail(Join(p, "far_fight"), "-1 (with the mode), 0 or 1");
         std::string e;
         if (!airwar::LoadAirCombatFile(data_dir + "/" + combat, a.combat, &e)) return Fail(Join(p, "combat"), e);
         if (!airwar::LoadSensorsFile(data_dir + "/" + sensors, a.sensors, &e)) return Fail(Join(p, "sensors"), e);
+        if (!airwar::FillLookDown(a.sensors, data_dir, &e)) return Fail(Join(p, "sensors"), e);
+        {  // the radars as emitters (S3): every library a sensor names, once
+            std::vector<std::string> libs;
+            for (const airwar::SensorDef& sd : a.sensors.sensors) {
+                if (sd.library.empty() || std::find(libs.begin(), libs.end(), sd.library) != libs.end()) continue;
+                libs.push_back(sd.library);
+                const em::EmLoadResult lr = em::LoadEmLibraryFile(data_dir + "/" + sd.library, a.radar_library);
+                if (!lr.ok) return Fail(Join(p, "sensors"), sd.library + ": " + lr.error);
+            }
+        }
         if (const json::Value* arr = OptionalArray(*v, p, "controllers")) {
             for (std::size_t i = 0; i < arr->items.size(); ++i) {
                 const json::Value& cv = arr->items[i];
@@ -1589,11 +1602,17 @@ private:
             const json::Value& fv = arr->items[i];
             const std::string fp = Index(Join(p, "fighters"), i);
             airwar::AirFightFighterDef f;
-            if (!Keys(fv, fp, {"target", "type", "faction", "role", "regiment", "controller", "skill", "notes"}) || !RequireString(fv, fp, "target", f.target) ||
-                !RequireString(fv, fp, "type", f.type) || !RequireString(fv, fp, "faction", f.faction) || !OptionalString(fv, fp, "role", f.role) ||
-                !OptionalString(fv, fp, "regiment", f.regiment) || !OptionalString(fv, fp, "controller", f.controller) ||
-                !OptionalNumber(fv, fp, "skill", f.skill)) {
+            if (!Keys(fv, fp, {"target", "type", "faction", "role", "regiment", "controller", "skill", "escorts", "notes"}) ||
+                !RequireString(fv, fp, "target", f.target) || !RequireString(fv, fp, "type", f.type) || !RequireString(fv, fp, "faction", f.faction) ||
+                !OptionalString(fv, fp, "role", f.role) || !OptionalString(fv, fp, "regiment", f.regiment) ||
+                !OptionalString(fv, fp, "controller", f.controller) || !OptionalNumber(fv, fp, "skill", f.skill) ||
+                !OptionalString(fv, fp, "escorts", f.escorts)) {
                 return false;
+            }
+            if (!f.escorts.empty()) {
+                bool named = false;
+                for (const ScenarioTarget& t : out.targets) named = named || t.id == f.escorts;
+                if (!named) return Fail(Join(fp, "escorts"), "no target '" + f.escorts + "'");
             }
             bool known = false;
             for (const ScenarioTarget& t : out.targets) known = known || t.id == f.target;
@@ -1603,6 +1622,15 @@ private:
             if (!f.controller.empty() && a.Controller(f.controller) == nullptr) return Fail(Join(fp, "controller"), "no controller '" + f.controller + "'");
             if (f.role != "escort" && f.role != "sweep" && f.role != "cap" && f.role != "intercept" && f.role != "strike") {
                 return Fail(Join(fp, "role"), "escort, sweep, cap, intercept or strike");
+            }
+            // Its faction's vector lines (roadmap S3), once: who may vector which of its fighters.
+            if (f.faction != "ours" && a.vector_lines.find(f.faction) == a.vector_lines.end()) {
+                std::vector<airwar::C2AuthorityDef>& lines = a.vector_lines[f.faction];
+                std::ifstream in(data_dir + "/air_war/faction_" + f.faction + ".json", std::ios::binary);
+                if (in) {
+                    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                    if (!airwar::VectorLinesFromJson(text, lines)) return Fail(Join(fp, "faction"), "air_war/faction_" + f.faction + ".json does not parse");
+                }
             }
             a.fighters.push_back(std::move(f));
         }

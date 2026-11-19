@@ -44,7 +44,8 @@
       "speed_mps": 210, "appear_at_s": 200,
       "reactions": { "profile": "nato", "aircraft": "f4e", "stores": "mk82" } }
   ],
-  "air_fight": { "year": 1985, "source": "sam3d", "confidence": "estimate", "notes": "the check's fight: our pair under our GCI against the sweep",
+  "air_fight": { "year": 1985, "source": "sam3d", "confidence": "estimate", "notes": "the check's fight: our pair under our GCI against the sweep; B8's fight (mode 0), the sequence -SimAirShots photographs: with S3's our pair slashes, survives and drives the F-4Es off before the Osa's chaff",
+    "mode": 0,
     "fighters": [ { "target": "red11", "type": "mig21mf", "faction": "ours", "role": "intercept", "regiment": "fighter_rgt_1", "controller": "gci" },
                   { "target": "red12", "type": "mig21mf", "faction": "ours", "role": "intercept", "regiment": "fighter_rgt_1", "controller": "gci" },
                   { "target": "e1", "type": "f15c", "faction": "nato", "role": "sweep" },

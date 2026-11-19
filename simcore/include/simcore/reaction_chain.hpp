@@ -215,6 +215,19 @@ public:
         const Pilot* s = P(target);
         return s != nullptr && s->chaff_s <= t && t - s->chaff_s <= table_->chaff_window_s;
     }
+    // Roadmap S3: an air-to-air missile he knows of, in the air fight (air_war/air_fight_session.hpp): flares at an infrared
+    // round, chaff at a radar one, by his profile's habit against the like SAM on his warning receiver (the same dispenser
+    // and the same drill: an IR SAM, a low radar SAM) and from what he still carries. True if he dispensed.
+    bool AnswerAam(int target, bool infrared, double now, std::vector<ReactionAct>& acts) {
+        Pilot* s = P(target);
+        if (s == nullptr || s->profile == nullptr) return false;
+        const ThreatClass like = infrared ? ThreatClass::SamIr : ThreatClass::SamLow;
+        const Countermeasure cm = CmFor(ChooseRow(*s->profile, CueSource::Rwr, like).cm, like);
+        if (cm == Countermeasure::None) return false;
+        const int chaff = s->chaff, flares = s->flares;
+        DispenseNow(target, *s, cm, now, acts);
+        return s->chaff != chaff || s->flares != flares;
+    }
     // A keyed draw: did the flares decoy IR shot `shot` at it?
     bool FlareDecoys(int target, std::uint64_t shot) const {
         const Pilot* s = P(target);

@@ -23,6 +23,8 @@
 // own_air.mode 0.
 // A save without "damage_mode" was made before roadmap S4 (a damaged aircraft repaired by its level, a played
 // session's damaged aircraft on their own flights) and replays with damage.mode 0.
+// A save without "air_fight_mode" was made before roadmap S3 (the abstract air fight's attacks told apart, the drag, the
+// strikers' flares and chaff) and replays with air_fight.mode 0.
 #pragma once
 
 #include <cmath>
@@ -447,6 +449,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "c2_live_mode", Num(c.Data().tuning.Get("c2.live_mode")));
     Put(root, "own_air_mode", Num(c.Data().tuning.Get("own_air.mode")));
     Put(root, "damage_mode", Num(c.Data().tuning.Get("damage.mode")));
+    Put(root, "air_fight_mode", Num(c.Data().tuning.Get("air_fight.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -545,6 +548,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double own_air_mode = r.Number(root, "own_air_mode", 0.0);
     // And the damaged aircraft repaired by their level (roadmap S4): a save made before it has no key, and replays as it was.
     const double damage_mode = r.Number(root, "damage_mode", 0.0);
+    // And the abstract air fight in detail (roadmap S3): a save made before it has no key, and replays as it was played.
+    const double air_fight_mode = r.Number(root, "air_fight_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -616,6 +621,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["c2.live_mode"] = c2_live_mode;
     data.tuning.values["own_air.mode"] = own_air_mode;
     data.tuning.values["damage.mode"] = damage_mode;
+    data.tuning.values["air_fight.mode"] = air_fight_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

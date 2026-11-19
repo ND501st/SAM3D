@@ -112,6 +112,7 @@ Package OneFlight(const AirWarData& d, MissionKind kind) {
 }  // namespace
 
 SC_TEST("c2 (B5): the 1985 table: no NATO divert of a deep strike, the E-3A only warns, the neutral warns, scrambles fighters and recalls, the rebels nothing") {
+    // (Roadmap S3: a controller vectoring fighters in the air fight is its own act, `vector`, read only by the fight.)
     for (const char* f : {"nato", "warsaw_pact", "neutral", "rebels"}) {
         const AirWarData d = LoadWar(f);
         SC_EXPECT(d.faction.c2.present);
@@ -121,9 +122,10 @@ SC_TEST("c2 (B5): the 1985 table: no NATO divert of a deep strike, the E-3A only
             SC_EXPECT(!Has(allowed, k + " divert_airborne strike") || std::string(f) == "warsaw_pact");
         }
         for (const std::string& a : allowed) {
-            if (a.rfind("airborne_warning ", 0) == 0) SC_EXPECT(a.find(" warn ") != std::string::npos || a == "airborne_warning scramble fighters");
+            if (a.rfind("airborne_warning ", 0) == 0) SC_EXPECT(a.find(" warn ") != std::string::npos || a == "airborne_warning scramble fighters" || a == "airborne_warning vector fighters");
             if (std::string(f) == "neutral") {
-                SC_EXPECT(a.find(" warn ") != std::string::npos || a.find(" recall ") != std::string::npos || a.find(" scramble fighters") != std::string::npos);
+                SC_EXPECT(a.find(" warn ") != std::string::npos || a.find(" recall ") != std::string::npos || a.find(" scramble fighters") != std::string::npos ||
+                          a.find(" vector fighters") != std::string::npos);
             }
         }
         if (std::string(f) == "rebels") SC_EXPECT(allowed.empty() && d.faction.c2.posts.empty());
