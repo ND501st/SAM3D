@@ -1587,7 +1587,7 @@ private:
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
         airwar::AirFightDef& a = out.air_fight;
         std::string combat = "air_war/air_combat.json", sensors = "air_war/sensors.json";
-        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "mode", "far_fight", "hot_mode", "source", "confidence", "notes"}) ||
+        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "mode", "far_fight", "hot_mode", "teaball", "source", "confidence", "notes"}) ||
             !OptionalInt(*v, p, "year", a.year) || !OptionalString(*v, p, "combat", combat) || !OptionalString(*v, p, "sensors", sensors) ||
             !OptionalInt(*v, p, "mode", a.mode) || !OptionalInt(*v, p, "far_fight", a.far_fight) ||
             !OptionalInt(*v, p, "hot_mode", a.hot_mode) || !Provenance(*v, p)) {
@@ -1630,6 +1630,19 @@ private:
                 c.pos = Vec3{east, north, alt};
                 a.controllers.push_back(std::move(c));
             }
+        }
+        if (const json::Value* tb = v->Find("teaball")) {  // roadmap S6: the enemy's relay of our GCI's vectors
+            const std::string tp = Join(p, "teaball");
+            airwar::AirFightDef::Teaball& t = a.teaball;
+            if (!tb->Is(json::Type::Object) || !Keys(*tb, tp, {"relay", "delay_s", "fail", "error_m", "our_mast_m", "source", "confidence", "notes"}) ||
+                !RequireString(*tb, tp, "relay", t.relay) || !OptionalNumber(*tb, tp, "delay_s", t.delay_s) || !OptionalNumber(*tb, tp, "fail", t.fail) ||
+                !OptionalNumber(*tb, tp, "error_m", t.error_m) || !OptionalNumber(*tb, tp, "our_mast_m", t.our_mast_m)) {
+                return tb->Is(json::Type::Object) ? false : Fail(tp, "expected an object");
+            }
+            const airwar::AirFightControllerDef* rc = a.Controller(t.relay);
+            if (rc == nullptr || rc->side != "enemy") return Fail(Join(tp, "relay"), "no enemy controller '" + t.relay + "'");
+            if (t.fail < 0.0 || t.fail > 1.0) return Fail(Join(tp, "fail"), "a chance 0 to 1");
+            if (t.delay_s < 0.0 || t.error_m < 0.0 || t.our_mast_m < 0.0) return Fail(tp, "delay_s, error_m and our_mast_m are not negative");
         }
         const json::Value* arr = OptionalArray(*v, p, "fighters");
         bool our_gci = false;  // our GCI with our regiments' pairs to come (B10: scrambled by "own_air")

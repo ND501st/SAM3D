@@ -28,6 +28,8 @@
 // light.json: docs/LIGHT.md) and replays with light.mode 0, its theatre as it was then dated.
 // A save without "air_fight_mode" was made before roadmap S3 (the abstract air fight's attacks told apart, the drag, the
 // strikers' flares and chaff) and replays with air_fight.mode 0.
+// A save without "radio_mode" was made before roadmap S6 (the abstract packages' calls heard by our posts, the intercept
+// facts rebuilt on a load, our dummy traffic on our fighters' nets, the Teaball relay) and replays with radio.mode 0.
 #pragma once
 
 #include <cmath>
@@ -156,6 +158,15 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Put(x, "text", Str(h.text));
         Put(x, "understood", Bool(h.understood));
         Put(x, "fact", Str(h.fact));
+        // Roadmap S6: what the campaign's pipeline rebuilds the facts from on a load.
+        if (!h.chain_post.empty()) Put(x, "chain_post", Str(h.chain_post));
+        if (h.h >= 0.0) {
+            Put(x, "h", Num(h.h));
+            Put(x, "written_h", Num(h.written_h));
+            Put(x, "bearing_deg", Num(h.bearing_deg));
+            Put(x, "precedence", Num(h.precedence));
+            Put(x, "names_battery", Bool(h.names_battery));
+        }
         Push(heard, x);
     }
     Put(v, "heard", heard);
@@ -370,6 +381,12 @@ public:
                 h.text = String(x, "text");
                 h.understood = Boolean(x, "understood");
                 h.fact = String(x, "fact");
+                h.chain_post = String(x, "chain_post");
+                h.h = Number(x, "h", -1.0);
+                h.written_h = Number(x, "written_h", -1.0);
+                h.bearing_deg = Number(x, "bearing_deg", 0.0);
+                h.precedence = Int(x, "precedence", 1);
+                h.names_battery = Boolean(x, "names_battery", false);
                 o.heard.push_back(h);
             }
         }
@@ -453,6 +470,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "own_air_mode", Num(c.Data().tuning.Get("own_air.mode")));
     Put(root, "damage_mode", Num(c.Data().tuning.Get("damage.mode")));
     Put(root, "light_mode", Num(c.Data().tuning.Get("light.mode")));
+    Put(root, "radio_mode", Num(c.Data().tuning.Get("radio.mode")));
     Put(root, "air_fight_mode", Num(c.Data().tuning.Get("air_fight.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
@@ -556,6 +574,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double light_mode = r.Number(root, "light_mode", 0.0);
     // And the abstract air fight in detail (roadmap S3): a save made before it has no key, and replays as it was played.
     const double air_fight_mode = r.Number(root, "air_fight_mode", 0.0);
+    // And the radio and intercept of roadmap S6: a save made before it has no key, and replays as it was played.
+    const double radio_mode = r.Number(root, "radio_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -630,6 +650,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["light.mode"] = light_mode;
     ApplyLightMode(data);
     data.tuning.values["air_fight.mode"] = air_fight_mode;
+    data.tuning.values["radio.mode"] = radio_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

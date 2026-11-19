@@ -31,7 +31,12 @@
     "have_quick_share": 0.0,
     "secure_voice_share": 0.0,
     "gci_channels_per_post": 3,
-    "source": "fh_radios (AM in 225-400 MHz); nsa_purple_dragon_1993 pp. 68-69 and nalty_1977 (code words and call signs changed daily); rafhs_j20_1999 (Red Flag packages with no radio calls required); lawrence_1982; afmag_1983_usafe (the ATO went between ATOCs by data)",
+    "demonstration": 0.5,
+    "teaball": { "on": false, "delay_s": 60.0, "fail": 0.15, "error_m": 3000.0,
+                 "source": "boyne_2008_teaball (Teaball, 1972: intercepts of MiG pilots and their controllers relayed by a KC-135A, Luzon, to the F-4 patrols as heading, speed and vector, with unexpected outages); checo_1978_linebacker p. 52 (a plot once a minute, 19 MiGs for 5 losses)",
+                 "confidence": "low",
+                 "notes": "Off: a Teaball-type warning service for NATO's aircrews in Europe by 1985 was not found (docs/research/air_battle_2026-11/comms_emcon.md comms-06, section 7); turning it on is the owner's design choice. delay_s the plot's minute; fail and error_m game values." },
+    "source": "fh_radios (AM in 225-400 MHz); nsa_purple_dragon_1993 pp. 68-69 and nalty_1977 (code words and call signs changed daily); rafhs_j20_1999 (Red Flag packages with no radio calls required); lawrence_1982; afmag_1983_usafe (the ATO went between ATOCs by data); nazarenko_1984 (demonstration: in the Vintex-75 exercise NATO's feint landing used its air and artillery radio nets above all, as the Pact read it)",
     "confidence": "low",
     "notes": "The radio discipline (the share of routine calls a strike flight keeps off the air, 0.8 for NATO's comm-out packages, factions_cases section 1) is the hot phase's since roadmap B11 (hot_phase.radio_discipline); the other values are SAM3D estimates ordered by the sources: opsec medium-high. HAVE QUICK I reached the F-15, F-16, A-10, F-111 and F-4 in Europe at a date not found, and whether KY-58 secure voice was in fighters by 1985 is not found: both shares stay 0."
   },

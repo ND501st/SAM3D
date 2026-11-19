@@ -568,3 +568,99 @@ tasking reads on its estimates, so the battery's posture shifts a little in the 
   entry, the delivery's paper and `MissionSession::Desk()` for the debrief.
 - **The word of 1985.** The words are generic plain language with call signs and clock codes; the TRADOC glossary's words are not used
   (the words a flight says are its kind's), and none of section 1's open items has moved.
+
+## As built (S6, 20 November 2026, branch `tbr-s6`)
+
+Roadmap S6 closes most of B9's Left under a new save mode, `radio.mode` (the save's `"radio_mode"`; a save without it was
+made before S6 and replays at 0, so the replay fingerprint of `test_routes.cpp` is unchanged). Every new draw is keyed on the
+seed, the package and the call with stable string hashes (`AbstractKeyOf`), on salts of its own: no existing stream draws
+more in an old mode.
+
+**The abstract level's calls (A0, section 2.4).** `air_war/abstract_radio.hpp`. When the campaign resolves a package no session
+flies, `AbstractPackageCalls` gives its flights their calls at their route's points by the session's rules: the entry's
+"airborne", the gate's check-in, a strike's "IP inbound, target <square>" (by signal for a comm-out flight), a threat call at the
+target when the flight lost or had damaged aircraft, the codeword or "off target" after the attack, "RTB" at the exit, "aborting"
+at the gate for an aborted flight, nothing after the target from a flight all lost; at most `radio.abstract_calls` a flight. A
+comm-out strike says nothing routine before its attack, and past it a strike keeps routine calls off the air with its
+discipline's chance (section 3.2's rule, with the officer's chatter and loose lips). The messages of the enemy's command about
+the package (`c2.hpp`'s log, `C2CallKind`) are calls too (`AbstractC2Call`): said by the post at its place (an E-3A at
+`radio.awacs_height_m`, a ground post at `radio.abstract_mast_m`) or by a flight where its route had it; requests and their
+answers on the HF request net. `HearAbstract` is section 4.2's horizon in closed form: a VHF or UHF call within the 4/3-earth
+horizon between the speaker's antenna and our 30 m mast (`RadioHorizonM`, `vr_1989_tr1`'s 4.12 sqrt(H)) and never beyond
+`radio.abstract_range_m`; an HF call within `radio.abstract_hf_range_m` by the post's HF set only; with chance
+`radio.abstract_hear`; the bearing with the VHF DF's error, `radio.df_sigma_deg` 3.5 degrees (`fm_100_2_1_1984` p. 15-2).
+
+**Into the pipeline.** `CampaignFeed::UseIntercept` (command/air_war_feed.hpp) puts the posts of `data/command/intercept.json` at
+their chain places in the theatre frame (a VHF/UHF and an HF receiver each, as in a session) and runs an `InterceptDesk` for the
+campaign: the same write-up (linguists, slips, continuity, codeword habits; the new `WriteUpCall`) and the air section's day
+summary at `daily_summary_hour`, a `FactKind::Intsum` document from `army_intel` for the regiment (key
+`intercept_intsum_campaign:<n>`), now with the squares the read calls named. The abstract calls take only this slow road (section
+2.4), never the fast one. The forms are written in order of time up to a watermark (the campaign's hour, held back to the first
+point of any package not yet resolved), so a feed pumped after every step and one pumped once after a load write the same forms
+in the same order. A played package is left to its session's posts.
+
+**The facts rebuilt on a load.** `HeardRecord` keeps the campaign hour heard and written, the bearing, the precedence, the chain
+post and whether the square was the battery's (filled by `MissionSession`'s heard source; saved when known). The feed reads every
+`Complete` action's `outcome.heard` and makes the facts the session made: a read call on the fast road an `Intercept` fact from the
+post's liaison (`intercept_played:<package>:<call>`), a heard report naming the battery's square an `EnemyKnowsBattery` fact for the
+regiment's chief of staff (`intercept_played_knows:`), one per call whichever posts logged it. A save made before S6 has no hours:
+the package's time over target stands in. Since the feed is a function of the campaign's history, a load gives the same facts.
+
+**The enemy's listeners on the campaign screen.** `PlaceCampaignListeners` (air_war_feed.hpp) places the data's receivers for the
+campaign's enemy on the campaign's `EmRadio` from `radio.mode` 1 (none before, and the enemy hears everything, as in P3); the
+campaign screen (`USimAirCampaignSubsystem::StartInfoNet`) calls it and gives the feed the intercept data. The data's listeners
+were inside our country in B9; they now stand behind each front: the Pact's front intercept post 160 km north (30 m) and an Il-20
+on its orbit (8,000 m); NATO's ground post 200 km west and an RC-135 orbit (9,000 m); the rebels' post unchanged.
+
+**Teaball's relay (section 6).** A faction's `radio.teaball` block (`on`, `delay_s`, `fail`, `error_m`, its source). NATO's is
+written and **off**: a Teaball-type warning service for Europe by 1985 was not found, so turning it on is the owner's choice.
+In the abstract fight (`air_fight.hpp`), with the relay on and our GCI not jammed, the surprise of our pass is lost with chance
+1 - `fail`, on a draw of its own. In a session (`air_fight_def.hpp`'s `teaball`, the scenario's `air_fight.teaball` naming an
+enemy controller as `relay`): each vector our controller says is overheard when the two antennas are within the radio horizon of
+each other, and `delay_s` later, unless the relay fails, the relay's controller warns each of its fighters it may vector of our
+fighter where he was, with `error_m` of error, on its own net (`AirFightSession::TeaballOverheard`, `TeaballWarnings`). The raid
+builder puts no enemy controller in a session yet, so the relay is not in a generated raid.
+
+**Deception with dummy traffic (section 8).** Ours: each day `radio.our_dummy_corridors` false corridors, a working airfield's real
+corridor turned `radio.our_dummy_turn_deg` about the airfield (the side alternating by day), are used on our GCI's and the notices'
+nets at the real one's hours (`AirCampaign::FeedDummyCorridors`), so the enemy's corridor learning of S1 can believe a corridor
+where our fighters never fly; a raid timed into one gets no held fire (`own_corridor_found` false). `vr_1985_plss` (dummy
+transmitters, imitated traffic) and `nazarenko_1984` (radio disinformation and imitation, tier 1, a Czechoslovak digest of
+*Военная мысль* 9/1984) are the practice; the count and the angle are game values. Theirs: a deception package's flights, or a
+decoy flight, talk as a strike would (the IP call naming a square) with the faction's `radio.demonstration` share (the Pact and
+NATO 0.5: `nazarenko_1984`'s radio demonstration, NATO's air nets in the Vintex-75 feint; the rebels and the neutral 0, nothing
+found), plus `radio.demonstration_quirk` with a feint artist or a decoy man planning or commanding it, so our analysts read a raid
+where there is none.
+
+**The canary.** `test_air_radio.cpp`'s canary: an enemy call with a marked call sign is said near the battery in a mission session;
+every output a player's character could meet (the battery's nets, the radiotelephonist's journal, the deliveries and papers, the
+commander's log, the radar company's log, the crew's calls, the code groups heard, the reports and orders made) is searched for
+it; it may appear only as the regiment's telling of the intercept post's report and in the air section's summary, and must appear
+there. In the campaign, every fact made of the enemy's calls is held by a person of the chain, and the player's character has it
+only from someone who told him.
+
+**Tests.** `test_air_radio.cpp` (S6): the abstract calls' rules and the demonstration share; the horizon, the HF set and the DF
+spread; a campaign's abstract raids into the day summary, identical pumped step by step and once after a load, silent at mode 0;
+a played session's records rebuilt from the save and none from a save made before S6; the listeners placed from mode 1 only; the
+canary; the B9 listener test moved to the new places and the save test extended to the new fields. `test_air_fight.cpp` (S6): the
+relay in the abstract fight (off in the data, on, always failing, mode 0) and in a session (within the horizon and beyond), and its
+scenario block. `test_own_air.cpp` (S6): the dummy corridors heard and believed, none at mode 0.
+
+**Balance.** See `docs/air_war/09_BALANCE.md` section 23.
+
+**Left.**
+- **The fast road for abstract calls.** The abstract level feeds only the day summary (section 2.4); a heard divert naming the
+  battery in an abstract raid does not reach the battery in minutes.
+- **A1.** A flight flown coarsely in a session is still one node per aircraft.
+- **Teaball in a generated raid.** The raid builder places no enemy controller (B5, B8's Left), so the relay works only in a
+  hand-written fight; NATO's relay stays off until a source or the owner says otherwise.
+- **Our dummy traffic in a session.** The false corridors are traffic in the campaign's learning only; no dummy transmitter is
+  placed on our GCI's net in a session (`EmWorld::AddDummyTraffic` is not called from the battery's scenario).
+- **The codeword's word.** The session draws a squadron's codeword with `std::hash`, the campaign with a stable hash: the same
+  squadron can have different words in the two, so a habit learned in one is not the other's.
+- **The listeners under attack.** The enemy's listeners are fixed; none is struck, moved or put on a schedule (`from_h`,
+  `until_h`).
+- **The airborne listener's reach.** `EmRadio` takes the loss past the horizon as one knife edge over the earth's bulge, which
+  loses too little (about 24 dB at 670 km): the Il-20 at 8,000 m hears a 3 m whip far past its 375 km horizon, and an RC-135
+  likewise. Smooth-earth diffraction (ITU-R P.526) in the EM layer would bound it; until then the airborne listeners hear
+  most of the country, as the enemy did with none placed before S6.

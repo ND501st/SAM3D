@@ -1373,3 +1373,61 @@ values) or in the bench's analogues (they set their own flights).
 **Left:** the neutral's nerve has not yet been seen to act. Seeing it needs a played raid, or a bench of larger neutral
 packages under losses before release. Played raids now carry the spotted turn-back and the initiative gate, which the
 abstract resolver does not model (§13 of `10_FACTIONS.md`).
+
+## 23. Radio and intercept (roadmap S6, 20 November 2026)
+
+S6 (`docs/air_battle/09_COMMS_AND_INTERCEPT.md`, "As built (S6)") makes new campaigns play `radio.mode` 1; a save without
+`"radio_mode"` replays at 0. Most of what it adds changes no outcome in `air_war_balance`:
+- **The abstract level's calls** are heard by our intercept posts and written into the air section's day summary by
+  `CampaignFeed`, which the bench does not run (the facts reach the chain of command's people, not the enemy's plans).
+- **The listeners** go on the campaign's `EmRadio` (the campaign screen's information net), which the bench does not run.
+- **Teaball's relay** is off in NATO's data (no source for Europe by 1985), so the abstract fight's surprise is unchanged.
+- **The enemy's radio demonstration** changes only which calls a deception or decoy flight says, which our posts hear.
+
+One thing reaches the campaign layer: **our dummy traffic** (`radio.our_dummy_corridors` 1 a day, turned
+`radio.our_dummy_turn_deg` 40 degrees off a working airfield's real corridor), which the enemy's corridor learning of S1
+hears and may believe. A raid timed into a false corridor gets no held fire from our side.
+
+The benches were run on the same build with the old mode (`--set radio.mode=0`) and the new default, the same seeds.
+
+`air_war_balance data 20 7` (the district), mode 0 → mode 1, every band PASS in both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 20.2 -> 20.2 | 0.3 -> 0.3 | 1.7% -> 1.7% | 0% -> 0% | - |
+| Rebels, careful | 21.3 -> 21.3 | 0.5 -> 0.5 | 2.3% -> 2.3% | 0% -> 0% | - |
+| Neutral, careless | 41.2 -> 41.2 | 1.1 -> 1.1 | 2.8% -> 2.7% | 0% -> 0% | - |
+| Neutral, careful | 38.0 -> 38.0 | 0.8 -> 0.8 | 2.2% -> 2.2% | 0% -> 0% | - |
+| Warsaw Pact, careless | 562.5 -> 562.5 | 9.8 -> 9.8 | 1.7% -> 1.7% | 65% -> 65% | 1.46 -> 1.46 |
+| Warsaw Pact, careful | 559.4 -> 559.4 | 10.6 -> 10.6 | 1.9% -> 1.9% | 0% -> 0% | 1.43 -> 1.43 |
+| NATO, careless | 537.3 -> 536.9 | 7.0 -> 7.2 | 1.3% -> 1.3% | 95% -> 95% | 0.61 -> 0.62 |
+| NATO, careful | 539.6 -> 539.6 | 7.1 -> 7.1 | 1.3% -> 1.3% | 15% -> 15% | 0.56 -> 0.56 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), mode 0 → mode 1, every band PASS in
+both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 2.4 -> 2.4 | 16.9% -> 16.9% | 0% -> 0% | - |
+| Rebels, careful | 14.4 -> 14.4 | 2.0 -> 2.0 | 13.9% -> 13.9% | 0% -> 0% | - |
+| Neutral, careless | 25.0 -> 25.0 | 1.2 -> 1.2 | 4.8% -> 4.8% | 0% -> 0% | - |
+| Neutral, careful | 20.3 -> 20.3 | 1.3 -> 1.3 | 6.4% -> 6.4% | 0% -> 0% | - |
+| Warsaw Pact, careless | 987.7 -> 987.7 | 35.4 -> 35.4 | 3.6% -> 3.6% | 80% -> 80% | 1.32 -> 1.32 |
+| Warsaw Pact, careful | 952.7 -> 952.7 | 34.9 -> 34.9 | 3.7% -> 3.7% | 10% -> 10% | 2.14 -> 2.14 |
+| NATO, careless | 763.3 -> 763.3 | 17.3 -> 17.3 | 2.3% -> 2.3% | 10% -> 10% | 0.55 -> 0.55 |
+| NATO, careful | 749.3 -> 749.3 | 16.4 -> 16.4 | 2.2% -> 2.2% | 10% -> 10% | 0.42 -> 0.42 |
+
+What moved, and why:
+
+- **Only the neutral's and NATO's runs moved, by a tenth at most.** The false corridor is heard about once in a few days
+  (`test_own_air.cpp`'s S6 test: 5-6 times over three seeds' eight days), and only a raid planned on a corridor the
+  enemy has come to believe is affected. On the district, NATO's careless run lost 7.2 aircraft a campaign (7.0) and the
+  neutral's careless run's loss rate fell a tenth of a point; on the nation the runs differ only in the false claims found
+  out and the alert pools. The Pact's and the rebels' runs did not move.
+- **No value was changed and no band loosened.**
+
+`air_battle_bench` and `air_war_bench` were not re-run: S6 changes nothing in the testbed's waves or the bench's
+analogues (Teaball is off, and the bench's fights set their own controllers).
+
+**Left:** with Teaball turned on for NATO (the owner's choice), the abstract fight's surprise falls with chance 1 - `fail`
+whenever our GCI is not jammed; that run, and its exchange band, are not measured.

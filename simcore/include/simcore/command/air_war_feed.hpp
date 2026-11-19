@@ -14,10 +14,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "simcore/air_war/abstract_radio.hpp"
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
@@ -65,7 +68,22 @@ public:
         battery_people_.clear();
         battery_places_.clear();
         if (net_ != nullptr) regiment_ = net_->Data().unit_regiment;
+        ResetIntercept();
     }
+
+    // Our radio intercept service in the campaign (roadmap S6, radio.mode 1): the posts of data/command/intercept.json hear
+    // the abstract packages' calls (air_war/abstract_radio.hpp) and the desk writes them up for the air section's day summary;
+    // the calls our posts logged in a played session (PackageOutcome::heard) become the same facts they made there. Call after
+    // Bind, before the first Pump; without it (or at radio.mode 0) the feed is as before S6.
+    void UseIntercept(const InterceptData& data) {
+        idata_ = data;
+        intercept_ = true;
+        ResetIntercept();
+    }
+    // What the posts wrote of the abstract calls (the debrief's), and the hearing behind it.
+    const InterceptDesk& AbstractDesk() const { return desk_; }
+    const std::vector<airwar::Heard>& AbstractHeard() const { return heard_; }
+    const std::vector<airwar::AbstractCall>& AbstractCalls() const { return calls_; }
 
     // The staff's operational security shows (or not) in its administrative traffic hours before a raid (roadmap B9,
     // docs/air_battle/09 section 5.3): a draw keyed on the package, so a loaded campaign replays it. Our centre has it as a fact.
@@ -195,6 +213,10 @@ public:
             if (!FromJournal(c, j, f)) continue;
             net_->AddFact(f);
         }
+        if (intercept_ && c.Data().tuning.Get("radio.mode") >= 1.0 && c.Data().faction.radio.present) {
+            PumpHeard(c);
+            PumpAbstract(c);
+        }
         net_->AdvanceTo(c.Now());
     }
 
@@ -228,6 +250,209 @@ private:
     std::vector<std::string> battery_people_;
     std::vector<std::string> battery_places_;
     std::string regiment_;
+    // Roadmap S6: the intercept service's state (a function of the campaign's history, rebuilt the same on a load).
+    bool intercept_ = false;
+    bool intercept_ready_ = false;
+    InterceptData idata_;
+    InterceptDesk desk_;
+    AirRadioDef def_;
+    std::vector<airwar::ListeningPost> posts_;
+    std::size_t actions_read_ = 0;
+    std::size_t c2_read_ = 0;
+    std::set<int> abstract_seen_;
+    std::vector<std::size_t> c2_pending_;                          // messages not yet past the watermark
+    std::vector<std::pair<airwar::Heard, airwar::Call>> pending_;  // heard, not yet written up
+    std::vector<airwar::Heard> heard_;
+    std::vector<airwar::AbstractCall> calls_;
+    double next_summary_h_ = -1.0;
+    double summary_from_h_ = 0.0;
+    int summaries_ = 0;
+
+    void ResetIntercept() {
+        intercept_ready_ = false;
+        posts_.clear();
+        actions_read_ = c2_read_ = 0;
+        abstract_seen_.clear();
+        c2_pending_.clear();
+        pending_.clear();
+        heard_.clear();
+        calls_.clear();
+        next_summary_h_ = -1.0;
+        summary_from_h_ = 0.0;
+        summaries_ = 0;
+    }
+
+    static double ClockStartS(const airwar::AirCampaign& c) { return c.Data().theatre.start_hour * 3600.0; }
+
+    // The desk, the tuning and our posts at their chain places (theatre frame), once.
+    void ReadyIntercept(const airwar::AirCampaign& c) {
+        if (intercept_ready_) return;
+        intercept_ready_ = true;
+        const airwar::FactionRadio& fr = c.Data().faction.radio;
+        desk_.Init(&idata_, c.Seed(), ClockStartS(c));
+        def_ = AirRadioDef();
+        def_.on = true;
+        def_.faction = c.Data().faction.id;
+        def_.freq_hz = fr.band_mhz * 1e6;
+        def_.language = fr.language;
+        def_.discipline = fr.discipline;
+        for (const auto& kv : AirRadioTuningDefaults()) def_.tune[kv.first] = c.Data().tuning.Get(kv.first);
+        const ChainData& d = net_->Data();
+        for (const InterceptPostData& p : idata_.posts) {
+            const Position* pos = d.FindPosition(p.position);
+            const Place* pl = pos != nullptr ? d.FindPlace(pos->place) : nullptr;
+            if (pl == nullptr) continue;
+            for (int hf = 0; hf < 2; ++hf) {  // a VHF and UHF receiver and an HF one at each post, as in a session
+                airwar::ListeningPost lp;
+                lp.id = p.id + (hf != 0 ? "_hf" : "");
+                lp.chain_post = p.id;
+                lp.at = pl->pos;
+                lp.mast_m = kPostMastM;
+                lp.hf = hf != 0;
+                posts_.push_back(lp);
+                AirRadioPostDef pd;
+                pd.id = lp.id;
+                pd.name = pl->name;
+                pd.at = lp.at;
+                pd.mast_m = lp.mast_m;
+                pd.chain_post = p.id;
+                def_.posts.push_back(pd);
+            }
+        }
+        // The first day summary at the section's hour (local; the campaign's hour 0 is the theatre's start hour).
+        next_summary_h_ = idata_.daily_summary_hour - c.Data().theatre.start_hour;
+        while (next_summary_h_ <= 0.0) next_summary_h_ += 24.0;
+    }
+
+    // The calls our posts logged in the played sessions (PackageOutcome::heard, kept in the campaign's Complete actions and
+    // its save), made into the facts they made in the session: the fast road's to the division, a report naming the battery's
+    // square to the regiment's chief of staff. A save made before S6 has no hours: the package's time over target stands in.
+    void PumpHeard(const airwar::AirCampaign& c) {
+        ReadyIntercept(c);
+        const auto& actions = c.Actions();
+        for (; actions_read_ < actions.size(); ++actions_read_) {
+            const airwar::CampaignAction& a = actions[actions_read_];
+            if (a.kind != airwar::CampaignAction::Kind::Complete) continue;
+            double tot_h = a.end_h;
+            for (const airwar::Package& p : c.Packages()) {
+                if (p.id == a.outcome.package_id) tot_h = p.tot_h;
+            }
+            for (std::size_t ri = 0; ri < a.outcome.heard.size(); ++ri) {
+                const airwar::HeardRecord& r = a.outcome.heard[ri];
+                airwar::CallKind k = airwar::CallKind::Admin;
+                if (!r.understood || !airwar::ParseCallKind(r.kind, k)) continue;
+                Logged l;
+                l.post = r.post;
+                l.chain_post = r.chain_post.empty() ? r.post : r.chain_post;
+                l.understood = true;
+                l.text = r.text;
+                l.kind = k;
+                l.codeword = k == airwar::CallKind::Codeword;
+                l.heard_s = (r.h >= 0.0 ? r.h : tot_h) * 3600.0;
+                l.written_s = (r.written_h >= 0.0 ? r.written_h : (r.h >= 0.0 ? r.h : tot_h)) * 3600.0;
+                l.bearing_deg = r.bearing_deg;
+                l.precedence = r.precedence;
+                l.names_battery = r.names_battery;
+                l.fast = !r.fact.empty();
+                // The call's number from the fact's key ("intercept:<call>:<post>"), else the record's place in the outcome.
+                l.call = -1;
+                if (r.fact.compare(0, 10, "intercept:") == 0) {
+                    const std::size_t colon = r.fact.find(':', 10);
+                    if (colon != std::string::npos) l.call = std::atoi(r.fact.substr(10, colon - 10).c_str());
+                }
+                if (l.call < 0) l.call = 100000 + static_cast<int>(ri);
+                const std::string call_key = std::to_string(a.outcome.package_id) + ":" + std::to_string(l.call);
+                for (Fact f : InterceptFacts(l, idata_, l.chain_post, ClockStartS(c))) {
+                    // One telling per call: a second post's record of it has the same key.
+                    f.key = (f.kind == FactKind::Intercept ? "intercept_played:" : "intercept_played_knows:") + call_key;
+                    net_->AddFact(f);
+                }
+            }
+        }
+    }
+
+    // The abstract packages' calls (section 2.4): made when a package is resolved, heard in closed form, and written up in
+    // order of time once no package still unresolved can say anything earlier (the watermark), so a campaign pumped step by
+    // step and one pumped once after its load write the same forms in the same order. The day's summary at its hour is a
+    // document from army intelligence, the slow road (section 5.2); abstract calls take no fast road.
+    void PumpAbstract(const airwar::AirCampaign& c) {
+        ReadyIntercept(c);
+        const airwar::FactionRadio& fr = c.Data().faction.radio;
+        const std::uint64_t seed = static_cast<std::uint64_t>(c.Seed());
+        const auto hear = [&](const airwar::AbstractCall& a) {
+            calls_.push_back(a);
+            for (const airwar::ListeningPost& lp : posts_) {
+                airwar::Heard h;
+                if (airwar::HearAbstract(a, lp, def_, seed, h)) pending_.push_back({h, a.call});
+            }
+        };
+        double watermark_h = c.Now();
+        for (const airwar::Package& p : c.Packages()) {
+            if (!p.resolved) watermark_h = std::min(watermark_h, p.FirstH());
+        }
+        for (const airwar::Package& p : c.Packages()) {
+            if (!p.resolved || p.played || !abstract_seen_.insert(p.id).second) continue;
+            for (const airwar::AbstractCall& a : airwar::AbstractPackageCalls(p, fr, c.Staff(), def_, seed)) hear(a);
+        }
+        // The command's messages: decided once past the watermark (by then a played package is known as played).
+        const airwar::AirC2& c2 = c.C2();
+        const auto& log = c2.Log();
+        for (; c2_read_ < log.size(); ++c2_read_) c2_pending_.push_back(c2_read_);
+        std::vector<std::size_t> keep;
+        for (std::size_t i : c2_pending_) {
+            const airwar::C2Message& m = log[i];
+            if (m.sent_h >= watermark_h) {
+                keep.push_back(i);
+                continue;
+            }
+            const airwar::Package* p = nullptr;
+            for (const airwar::Package& q : c.Packages()) {
+                if (q.id == m.package_id) p = &q;
+            }
+            if (p != nullptr && p->played) continue;  // the session's posts heard what was said about it
+            airwar::AbstractCall a;
+            if (airwar::AbstractC2Call(m, p, c2, fr, def_, a)) hear(a);
+        }
+        c2_pending_.swap(keep);
+        // Written up in order of time, up to the watermark.
+        using HeardCall = std::pair<airwar::Heard, airwar::Call>;
+        std::stable_sort(pending_.begin(), pending_.end(), [](const HeardCall& x, const HeardCall& y) {
+            if (x.first.start_s != y.first.start_s) return x.first.start_s < y.first.start_s;
+            if (x.first.call != y.first.call) return x.first.call < y.first.call;
+            return x.first.post < y.first.post;
+        });
+        const airwar::TheatreObject& battery = c.Data().theatre.objects[static_cast<std::size_t>(c.PlayerIndex())];
+        std::size_t done = 0;
+        for (; done < pending_.size() && pending_[done].first.start_s < watermark_h * 3600.0; ++done) {
+            const double h = pending_[done].first.start_s / 3600.0;
+            while (next_summary_h_ <= h) Summary();  // the day's summary is cut at its hour: the forms before it are in it
+            Vec3 at = battery.pos;  // the battery where it stood then: a square this near is the battery's
+            for (const auto& t : c.BatteryTrack()) {
+                if (t.first <= h) at = t.second;
+            }
+            desk_.ClearWatch();
+            desk_.Watch(at);
+            desk_.WriteUpCall(def_, pending_[done].first, pending_[done].second);
+            heard_.push_back(pending_[done].first);
+        }
+        pending_.erase(pending_.begin(), pending_.begin() + static_cast<std::ptrdiff_t>(done));
+        while (next_summary_h_ <= watermark_h) Summary();
+    }
+
+    void Summary() {
+        const double from_h = summary_from_h_, to_h = next_summary_h_;
+        summary_from_h_ = next_summary_h_;
+        next_summary_h_ += 24.0;
+        int n = 0;
+        for (const Logged& l : desk_.Log()) n += (l.heard_s >= from_h * 3600.0 && l.heard_s < to_h * 3600.0) ? 1 : 0;
+        if (n == 0) return;  // nothing heard: no paper
+        const std::string text = desk_.DailySummary(from_h * 3600.0, to_h * 3600.0, def_.Tune("radio.continuity_name_at"), def_, heard_);
+        Fact f = SummaryFact(text, ++summaries_, to_h * 3600.0);
+        f.key = "intercept_intsum_campaign:" + std::to_string(summaries_);
+        f.audience = regiment_;
+        net_->AddFact(f);
+    }
+    static constexpr double kPostMastM = 30.0;  // sam3d: the posts' antennas, as in the mission session (docs/air_battle/09 section 4.2)
 
     static bool Starts(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
     static bool Has(const std::string& s, const char* p) { return s.find(p) != std::string::npos; }
@@ -322,6 +547,14 @@ private:
         return false;  // "warning net": the observed raids carry it
     }
 };
+
+// The enemy's listeners on the campaign's radio (roadmap S6, docs/air_battle/09 section 6): the campaign screen's EmRadio
+// hears our nets only at the receivers the data places for the campaign's enemy (PlaceEnemyListeners). At radio.mode 0 none
+// is placed and the enemy hears everything, as before S6. Returns the number placed.
+inline int PlaceCampaignListeners(EmRadio& radio, const InterceptData& data, const airwar::AirCampaign& c) {
+    if (c.Data().tuning.Get("radio.mode") < 1.0) return 0;
+    return PlaceEnemyListeners(radio, data, c.Data().faction.id);
+}
 
 }  // namespace command
 }  // namespace simcore
