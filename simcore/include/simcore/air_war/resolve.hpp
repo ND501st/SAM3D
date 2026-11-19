@@ -409,8 +409,9 @@ private:
         return 1.0;
     }
     // Its damaged aircraft come home over its own ground air defence (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): off
-    // the minimum risk route and with Mode 4 failed, each by a chance, and then its own belt may shoot one down; written in
-    // its records as lost to its own fire. Draws from a fork of the package's stream keyed on kOwnAirKey + 0x900 (none taken).
+    // its way home (NATO's minimum risk route, the Pact's return corridor) and with its IFF answer failed (Mode 4; Kremniy or
+    // Parol), each by a chance, and then its own belt may shoot one down; written in its records as lost to its own fire, in
+    // the faction's own words (OwnAdDef). Draws from a fork of the package's stream keyed on kOwnAirKey + 0x900 (none taken).
     void OwnBelt(Package& p, std::size_t fi) {
         const AirWarData& d = *c_->data;
         const OwnAdDef& a = d.faction.own_ad;
@@ -435,7 +436,7 @@ private:
             run.out.losses.push_back(lr);
             ++fl.lost;
             Event(AirEvent::Kind::Loss, fl.route.back().t_h, fi, a.belt, lr.where, fl.count - fl.lost);
-            run.out.notes.push_back(fl.callsign + ": a damaged aircraft lost to its own " + a.belt + " coming home off its minimum risk route, Mode 4 failed");
+            run.out.notes.push_back(fl.callsign + ": a damaged aircraft lost to its own " + a.belt + " coming home " + a.route + ", " + a.iff);
         }
     }
 

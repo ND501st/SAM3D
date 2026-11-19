@@ -819,53 +819,77 @@ SC_TEST("own air S1: the enemy hears our corridors used day by day, learns them,
     }
 }
 
-SC_TEST("own air S1: NATO's damaged aircraft coming home may fall to its own belt; nobody else's does, and not before S1") {
-    int own_fire = 0;
-    for (const char* faction : {"nato", "warsaw_pact"}) {
+SC_TEST("own air S1: NATO's and the Pact's damaged aircraft coming home may fall to their own belts; the rebels' and the neutral's never do, and not before S1") {
+    // The data: NATO's belt and the Pact's, each in its own words; NATO's words the defaults; no belt for the other two.
+    const airwar::AirWarData nato = War("nato", 1.0);
+    const airwar::AirWarData pact = War("warsaw_pact", 1.0);
+    SC_EXPECT(nato.faction.own_ad.present && pact.faction.own_ad.present);
+    SC_EXPECT(nato.faction.own_ad.belt == "Hawk and Nike belt" && pact.faction.own_ad.belt != nato.faction.own_ad.belt);
+    SC_EXPECT(nato.faction.own_ad.route == "off its minimum risk route" && nato.faction.own_ad.iff == "Mode 4 failed");
+    SC_EXPECT(pact.faction.own_ad.route.find("corridor") != std::string::npos && pact.faction.own_ad.iff.find("Parol") != std::string::npos);
+    // Its own fratricide lower than NATO's (section 10: Parol and the Osa-AKM's launch block for its Soviet units).
+    const auto per_damaged = [](const airwar::OwnAdDef& a) { return a.off_mrr_damaged * a.mode4_failed_damaged * a.belt_kill; };
+    SC_EXPECT(per_damaged(pact.faction.own_ad) < per_damaged(nato.faction.own_ad));
+    for (const char* faction : {"rebels", "neutral"}) SC_EXPECT(!War(faction, 1.0).faction.own_ad.present);
+
+    int own_fire[2] = {0, 0};
+    for (const char* faction : {"nato", "warsaw_pact", "rebels", "neutral"}) {
+        const std::string f = faction;
+        const bool belted = f == "nato" || f == "warsaw_pact";
         for (double mode : {1.0, 0.0}) {
+            if (!belted && mode < 1.0) continue;  // nothing to switch off
             const airwar::AirWarData d = War(faction, mode);
-            for (unsigned seed = 1; seed <= 3; ++seed) {
+            for (unsigned seed = 1; seed <= (belted ? 3u : 2u); ++seed) {
                 airwar::AirCampaign c;
                 c.Init(d, seed);
-                const std::string f = faction;
                 const std::string belt = d.faction.own_ad.belt;
                 c.ObserveOutcomes([&](const airwar::Package& p, const airwar::PackageOutcome& o) {
                     for (const airwar::LossRecord& l : o.losses) {
                         if (!l.own_fire) continue;
-                        SC_EXPECT(f == "nato" && mode >= 1.0 && l.by == belt);
+                        SC_EXPECT(belted && mode >= 1.0 && l.by == belt);
                         // Only a damaged aircraft comes home over its belt off its route.
                         if (l.flight >= 0 && static_cast<std::size_t>(l.flight) < p.flights.size()) SC_EXPECT(p.flights[static_cast<std::size_t>(l.flight)].damaged > 0);
-                        own_fire += 1;
+                        own_fire[f == "nato" ? 0 : 1] += 1;
                     }
                 });
                 Run(c, 6.0);
             }
         }
     }
-    std::printf("    %d of NATO's aircraft lost to its own belt over 3 campaigns of 6 days\n", own_fire);
+    std::printf("    lost to their own belts over 3 campaigns of 6 days: NATO %d, the Pact %d\n", own_fire[0], own_fire[1]);
     // Every chance at 1 (a test's figures, not the data's): each damaged aircraft that came home is lost to the belt, so a
-    // campaign with any damaged aircraft has such losses, each written to the belt and only to damaged flights.
-    airwar::AirWarData sure = War("nato", 1.0);
-    sure.faction.own_ad.off_mrr_damaged = 1.0;
-    sure.faction.own_ad.mode4_failed_damaged = 1.0;
-    sure.faction.own_ad.belt_kill = 1.0;
-    int damaged = 0, belt = 0;
-    for (unsigned seed = 1; seed <= 2; ++seed) {
-        airwar::AirCampaign c;
-        c.Init(sure, seed);
-        c.ObserveOutcomes([&](const airwar::Package& p, const airwar::PackageOutcome& o) {
-            for (const airwar::Flight& fl : p.flights) damaged += fl.role == airwar::FlightRole::Missile ? 0 : fl.damaged;
-            for (const airwar::LossRecord& l : o.losses) {
-                if (!l.own_fire) continue;
-                ++belt;
-                SC_EXPECT(l.by == sure.faction.own_ad.belt);
-                if (l.flight >= 0 && static_cast<std::size_t>(l.flight) < p.flights.size()) SC_EXPECT(p.flights[static_cast<std::size_t>(l.flight)].damaged > 0);
-            }
-        });
-        Run(c, 4.0);
+    // campaign with any damaged aircraft has such losses, each written to the belt by its name, only to damaged flights,
+    // and noted in the faction's own words.
+    for (const char* faction : {"nato", "warsaw_pact"}) {
+        airwar::AirWarData sure = War(faction, 1.0);
+        sure.faction.own_ad.off_mrr_damaged = 1.0;
+        sure.faction.own_ad.mode4_failed_damaged = 1.0;
+        sure.faction.own_ad.belt_kill = 1.0;
+        const std::string words = sure.faction.own_ad.route + ", " + sure.faction.own_ad.iff;
+        int damaged = 0, belt = 0, noted = 0;
+        for (unsigned seed = 1; seed <= 2; ++seed) {
+            airwar::AirCampaign c;
+            c.Init(sure, seed);
+            c.ObserveOutcomes([&](const airwar::Package& p, const airwar::PackageOutcome& o) {
+                for (const airwar::Flight& fl : p.flights) damaged += fl.role == airwar::FlightRole::Missile ? 0 : fl.damaged;
+                for (const airwar::LossRecord& l : o.losses) {
+                    if (!l.own_fire) continue;
+                    ++belt;
+                    SC_EXPECT(l.by == sure.faction.own_ad.belt);
+                    if (l.flight >= 0 && static_cast<std::size_t>(l.flight) < p.flights.size()) SC_EXPECT(p.flights[static_cast<std::size_t>(l.flight)].damaged > 0);
+                }
+                for (const std::string& n : o.notes) {
+                    if (n.find("lost to its own " + sure.faction.own_ad.belt) == std::string::npos) continue;
+                    ++noted;
+                    SC_EXPECT(n.find(words) != std::string::npos);
+                }
+            });
+            Run(c, 4.0);
+        }
+        std::printf("    %s, every chance 1: %d damaged, %d lost to the belt, %d noted\n", faction, damaged, belt, noted);
+        SC_EXPECT(damaged == 0 || belt > 0);
+        SC_EXPECT(noted == belt);
     }
-    std::printf("    every chance 1: %d damaged, %d lost to the belt\n", damaged, belt);
-    SC_EXPECT(damaged == 0 || belt > 0);
 }
 
 SC_TEST("own air S1: a save keeps its own_air mode; one made before S1 loads with it off and replays as played") {

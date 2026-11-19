@@ -126,6 +126,17 @@
       "notes": "Roadmap S2."
     }
   },
+  "own_ad": {
+    "off_mrr_damaged": 0.3,
+    "mode4_failed_damaged": 0.15,
+    "belt_kill": 0.2,
+    "belt": "S-200, S-75 and S-125 belt",
+    "route": "off its return corridor",
+    "iff": "its Kremniy/Parol answer failed",
+    "source": "Sourced: the belt's types in service in 1985 with the allies and the groups of forces whose ground a raid flies home over (pvo_guns, compiling the developers' histories: the S-75's SA-75M built for the socialist countries and the S-75 in the GDR, the S-125's Pechora with Bulgaria, Hungary, Poland and Czechoslovakia, and the Soviet S-125M battalions given Parol-3P or Parol-4P ground interrogators; ganin_tiv_2003_s200: the S-200 with the PVO Strany since 1967, the S-200VE to the allies only after 1984; nordkurier_wega: the NVA's S-200 in the mid-1980s); the rules its returning aircraft meet (mitronin_1976 p. 7: corridors for our aircraft in the majority of cases, covered by units with identification means; pvo_bu_x_1984 art. 37: the corridor of passage on the commander's map; mt_turchin_coop pp. 10-12: up to 25% of the targets fired on in an exercise were our own, warnings no substitute for recognition; soviet_iff: Kremniy-2M for all, Parol in Soviet service from 1977, not with the allies). Game values: the three chances, as docs/air_battle/08_OUR_FIGHTERS.md section 10 reads the rules: off its corridor as NATO off its route (no rate found for either), its answer failing less often than NATO's Mode 4 (Parol for its Soviet units and their interrogators, Kremniy-2M for its allies), and its belt killing fewer of those (the corridors covered by units with identification means), so its own fratricide per damaged aircraft is half NATO's",
+    "confidence": "estimate",
+    "notes": "The war's year is 1985. Left out of the belt: the S-300P and the Buk. In 1985 the S-300P (the S-300PT accepted in 1978, its first regiment on duty in 1979, the S-300PS in 1982: ganin_nb_1997_s300, pvo_guns) was the PVO Strany's, inside the USSR, and the Buk (accepted by the Ground Forces' air defence in 1980, the Buk-M1 in 1983, in army brigades only beginning to come in: pvo_guns, techinsider_2022_buk; ru_wiki gives 1979) was the Soviet Ground Forces'; neither was with the allies (their S-300s came in 1989-90: nva_sensitive_1990) and no source puts either in the forward belt. The S-200 reached the allies (the GDR, Poland, Czechoslovakia, Hungary, Bulgaria) from the mid-1980s, no year given per country. No Soviet document on the PVO Strany's corridors for its returning aircraft was found: the Ground Forces' rules (Mitronin) are read for the whole belt."
+  },
   "hot_phase": {
     "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
     "confidence": "estimate",

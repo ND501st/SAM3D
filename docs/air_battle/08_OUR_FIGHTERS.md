@@ -429,7 +429,8 @@ The enemy's raids end over their own ground air defence, and our fighters may fo
   pilots and gunners claim it. Our fighters pursuing past Turchin's 25-30 km line meet the belt under weapons free: the
   pursuit limit of section 3 keeps them out, and a flight that breaks it takes a loss chance (a game value).
 - **Warsaw Pact.** The same Mitronin rules for its own aircraft; Soviet units with Parol and, where they have the Osa-AKM,
-  the launch block, so its own fratricide is lower for Soviet units than for its allies or for us.
+  the launch block, so its own fratricide is lower for Soviet units than for its allies or for us. Built as its own
+  S-200, S-75 and S-125 belt (`faction_warsaw_pact.json`'s `"own_ad"`): see "The Pact's own belt" under "As built".
 - **Neutral and rebels.** No SAM zones; the neutral's guns identify by sight and procedure; the rebels have nothing.
   Low confidence; no rule beyond "fire on what attacks".
 
@@ -667,6 +668,24 @@ the record of what B10 left.
   values on `fm44_1_2_1984`, `fm_100_42_1976` and `cbo_1986_amraam`, in `faction_nato.json`'s `"own_ad"`. The draws come
   from a fork of the package's stream, keyed +0x900. The loss is written into the enemy's records as `own_fire`, by its
   belt.
+- **The Pact's own belt.** The same model on the Pact's `"own_ad"` (`faction_warsaw_pact.json`), in its own words: a
+  damaged aircraft coming home may be off its return corridor (0.3) and its Kremniy or Parol answer may have failed
+  (0.15), each by a chance; with both, its own S-200, S-75 and S-125 belt may shoot it down (0.2). So its own fratricide
+  per damaged aircraft is half NATO's (0.009 against 0.018), as the bullet above asks. What is sourced is the belt and the
+  rules. The belt is the one a raid flies home over in 1985, the allies' and the groups of forces': the S-75 and the
+  S-125, with every ally (`pvo_guns`), and the S-200, with the PVO Strany since 1967 and reaching the allies from the
+  mid-1980s (`ganin_tiv_2003_s200`, `nordkurier_wega`). The S-300P and the Buk are left out: in 1985 the S-300P
+  (1978-79) was the PVO Strany's inside the USSR and the Buk (1980) the Soviet Ground Forces' army brigades', only
+  beginning to come in (`ganin_nb_1997_s300`, `pvo_guns`, `techinsider_2022_buk`); neither was with the allies, and no
+  source puts either in the forward belt. Returning aircraft flew corridors covered by units with identification means
+  (`mitronin_1976` p. 7, `pvo_bu_x_1984` art. 37); Parol was Soviet only (`soviet_iff`), and the Soviet S-125M
+  battalions had Parol ground interrogators (`pvo_guns`). The three chances are game values: off its corridor as NATO
+  off its route (no rate for either), its answer failing less than Mode 4 (Parol for Soviet units, Kremniy-2M for the
+  allies) and its belt killing fewer (the corridors' units with identification means). Turchin's exercise figure, up to
+  25% of the targets fired on our own (`mt_turchin_coop`), warns that the rules did not make it rare. No Soviet document
+  on the PVO Strany's corridors for its own returning aircraft was found: the Ground Forces' rules are read for the whole
+  belt. `OwnAdDef`'s `route` and `iff` carry each faction's words into its records' note; NATO's are the defaults. The
+  rebels and the neutral have no `"own_ad"`, so no belt.
 
 **Through the pipeline.** Each of ours down becomes the fighter regiment's loss report: in air combat (the air fight's
 kill), "by fire from the ground" (its wingman within 15 km saw it), or "cause unknown". A seen loss is reported after
@@ -712,6 +731,9 @@ The project's balance runs before (the b-b14 executables on its data) and after:
   0.56 to 0.54), every band passing. The causes: our defences near a corridor the enemy believes hold fire for ours (the
   careful posture's SAM sites kill 2.6 a campaign, not 3.0), packages timed into a corridor, and NATO's own belt (0.1 a
   campaign, listed as "their own air defence"). The Pact's 8 days learn no corridor it times a raid into (the S1 test).
+  The Pact's own belt (19 Nov 2026): `air_war_balance data 20 7 warsaw_pact` is the same to the line before and after it,
+  none of its aircraft lost to it (half NATO's chance a damaged aircraft, and few of them come home damaged);
+  `own_air_balance data 20`, our own fire, is the same too.
 - `air_war_balance --theatre theatre_pannonia_nation.json data 10 7`: the same shifts, a few tenths (losses a sortie
   3.61 to 3.58, 1.94 to 1.91, 2.21 to 2.19 per cent), every band passing.
 - `air_war_bench data 400`: two NATO cases a tenth or two higher (Yom Kippur's F-4Es 25.2 to 25.4 lost a 100 sorties, the
@@ -728,8 +750,8 @@ by hop; the regiment's check (a loss meeting a launch, a debit when the journal 
 alert zones; in a session, the table's code changed, ordered and the switch turned at the senior operator's speed; the
 notice said and a violator reported (3 of 3); a loss seen by the wingman reaching the battery's net; the alert pair in its
 zone and no pair past its limit; the Pact's allies on our filters (17 of 48 aircraft, 3 answered friend); the corridors
-learnt over 8 days (NATO seed 2: 7 packages timed into one); NATO's belt (none at the data's chances over three
-campaigns; with every chance at 1, each damaged aircraft home is lost to it); a save's mode. `test_battery_mission.cpp`:
+learnt over 8 days (NATO seed 2: 7 packages timed into one); NATO's and the Pact's belts (none at the data's chances over three campaigns; with every chance at 1, each damaged
+aircraft home is lost to it, by its belt's name and noted in its own words; the rebels' and the neutral's never); a save's mode. `test_battery_mission.cpp`:
 the task's plan of cooperation in the order and on the working map. `test_dynamic_campaign.cpp`: the waves' flights live
 in the air fight, ours on the day's codes. `test_crew_talk.cpp` checks `report_violator`'s place in the menu. The fx
 raid test keeps our pairs out (`own_air.mode` 0) since it measures the bombs alone. Two fixes found by the tests: a pair
