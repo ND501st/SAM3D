@@ -544,8 +544,9 @@ results:
 - The neutral's nerve is 0.3 fresh, and falls to 0 (clamped to 0.05) at its tolerance of one aircraft a day.
 - The leader's own `abort_threshold` quirk now acts only through his press-on shift (0.1 of it), no longer adding 0.15 on top.
 
-`air_war_balance` was not re-run in this pass. The neutral's and the rebels' week-1 losses are the numbers to watch
-(`09_BALANCE.md` §5).
+`air_war_balance` was run at mode 1 and mode 2 on the district (20 seeds) and the nation (10 seeds), and every band
+passes at both (`docs/air_war/09_BALANCE.md` §21). The neutral's and the rebels' losses did not move: their few losses
+never fall before a release at a share between the two nerves. The Pact and NATO moved within the seeds' spread.
 
 **§8.5's weights.** `chatterbox` and `silent_runner` draw at §8.5's tier weights from mode 2. B9's weights are kept as
 `tier_weight_mode1` (`data.hpp` `QuirkDef::TierWeight`), so older saves draw the same staff. Their effect key stays
@@ -615,8 +616,9 @@ B9's `radio_chatter`: its ±1 is §8.5's ∓0.1 of radio discipline.
 - **The pilot's experience on the no-reaction chance and the find chance (§8.3).** Not wired: the tables' tier comes from
   the session's pilot skill, which the raid builder does not yet move by sorties.
 - **The testbed's waves** (`test_waves.hpp`) carry no `"hot"` values; they fly as before.
-- **Balance.** `air_war_balance` has not been re-run at mode 2. §9.3's nerve and the spotted turn-back lower the neutral's
-  and the rebels' pressing, by an amount only a run shows.
+- **Balance.** Every band passes at mode 2 (`09_BALANCE.md` §21). The abstract resolver models neither the spotted
+  turn-back nor the initiative gate, so their effect shows only in played raids. The neutral's lower nerve has not yet
+  been seen to act in a run.
 - **Sources.** The neutral's and the rebels' hours are game values, and the Pact's rest on a 1969 estimate (Left open
   below).
 

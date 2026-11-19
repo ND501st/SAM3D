@@ -1222,3 +1222,68 @@ chance, inside the calibrated totals' spread (§9, roadmap 6.7).
 
 **Left:** the abstract resolver's damaged aircraft fly no escorts and leak no fuel (only a session's do); the share of
 damaged aircraft escorted home (`escort_share` 0.5) has no source.
+
+## 21. The faction values read (roadmap S5, 20 November 2026)
+
+S5 (`docs/air_battle/10_FACTIONS.md` §13) makes new campaigns play `hot_phase.mode` 2. Most of what it adds is read in
+a played session: the leader's initiative and route gate, plan adherence, the spotted turn-back, the pilots' delays,
+the held jammers, the air fight's turn-back. Three things reach the campaign layer:
+- **§9.3's nerve** in the abstract resolver: `0.1 + 0.5 × press_on`, less `husbanding` × the day's losses over
+  tolerance, plus the planner's quirk. The leader's own `abort_threshold` acts only through his press-on shift (±0.05 of
+  the nerve), no longer adding its separate ±0.15.
+- **§8.5's tier weights** for `chatterbox` and `silent_runner`, which change the generated officers.
+- **The squadrons' combat sorties**, counted always but read only by the raid builder.
+
+The benches were run on the same build with the old mode (`--set hot_phase.mode=1`) and the new default, the same seeds.
+
+`air_war_balance data 20 7` (the district), mode 1 → mode 2, every band PASS in both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 20.6 -> 20.6 | 0.6 -> 0.6 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Rebels, careful | 22.0 -> 22.0 | 0.6 -> 0.6 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Neutral, careless | 39.8 -> 39.8 | 1.2 -> 1.2 | 3.1% -> 3.1% | 0% -> 0% | - |
+| Neutral, careful | 35.9 -> 35.9 | 1.4 -> 1.4 | 3.8% -> 3.8% | 0% -> 0% | - |
+| Warsaw Pact, careless | 567.0 -> 568.0 | 10.2 -> 10.2 | 1.8% -> 1.8% | 70% -> 70% | 1.61 -> 1.63 |
+| Warsaw Pact, careful | 560.5 -> 560.5 | 11.4 -> 11.4 | 2.0% -> 2.0% | 15% -> 15% | 1.71 -> 1.71 |
+| NATO, careless | 535.6 -> 535.3 | 8.7 -> 8.7 | 1.6% -> 1.6% | 90% -> 85% | 0.67 -> 0.68 |
+| NATO, careful | 536.2 -> 535.8 | 8.1 -> 8.2 | 1.5% -> 1.5% | 25% -> 25% | 0.69 -> 0.67 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), mode 1 → mode 2, every band PASS in
+both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 2.4 -> 2.4 | 16.9% -> 16.9% | 0% -> 0% | - |
+| Rebels, careful | 14.4 -> 14.4 | 2.0 -> 2.0 | 13.9% -> 13.9% | 0% -> 0% | - |
+| Neutral, careless | 25.0 -> 25.0 | 1.2 -> 1.2 | 4.8% -> 4.8% | 0% -> 0% | - |
+| Neutral, careful | 20.3 -> 20.3 | 1.3 -> 1.3 | 6.4% -> 6.4% | 0% -> 0% | - |
+| Warsaw Pact, careless | 976.5 -> 971.8 | 39.9 -> 38.9 | 4.1% -> 4.0% | 90% -> 80% | 1.60 -> 1.61 |
+| Warsaw Pact, careful | 964.3 -> 965.8 | 34.3 -> 34.2 | 3.6% -> 3.5% | 10% -> 10% | 2.10 -> 2.05 |
+| NATO, careless | 772.6 -> 772.2 | 16.3 -> 16.3 | 2.1% -> 2.1% | 20% -> 20% | 0.57 -> 0.58 |
+| NATO, careful | 753.8 -> 753.8 | 17.7 -> 17.7 | 2.3% -> 2.3% | 10% -> 10% | 0.51 -> 0.51 |
+
+What moved, and why:
+
+- **The rebels and the neutral did not move in their losses or sorties.** Two things have to meet for §9.3's lower
+  nerve to act: a loss before the release, and a loss share between the old nerve (about 0.4) and the new one. The
+  neutral's new nerve is 0.3 fresh and falls with the day's losses. But each campaign loses about one aircraft a week, so
+  the two never meet: a pair losing one aircraft has lost 0.5 and turns back under either nerve, and a four losing one
+  (0.25) goes on under both unless that day's losses have already lowered the new one. The neutral's district runs differ only in its knowledge of the battery on day 5 (0.35 →
+  0.36) and the reports sent to intelligence (3.5 → 3.4). Those are the radio's: §8.5's weights change which generated
+  officers are chatterboxes or silent runners, and our intercept hears their flights' calls.
+- **The Pact and NATO moved by a few sorties and a tenth of a point of loss**, the size of the seeds' spread. An average
+  leader of either keeps the old 0.4, so what changes is the spread over leaders:
+  - A bold leader no longer gains up to +0.15 from his own `abort_threshold` quirk, only his press-on shift.
+  - The generated officers differ where §8.5's weights changed a draw.
+  - These move which packages turn back and so which fights follow. On the nation, the careless Pact run's battery was
+    wrecked in 80% of runs (90%); the band is 50-100% on the district, and the nation has no band for this run.
+- **The suspects the review named are not at work.** The neutral's and rebels' week-1 losses are unchanged. The dropped
+  0.15 quirk term moved no band. No value was changed and no band loosened.
+
+`air_battle_bench` and `air_war_bench` were not re-run: S5 changes nothing in the testbed's waves (they carry no `"hot"`
+values) or in the bench's analogues (they set their own flights).
+
+**Left:** the neutral's nerve has not yet been seen to act. Seeing it needs a played raid, or a bench of larger neutral
+packages under losses before release. Played raids now carry the spotted turn-back and the initiative gate, which the
+abstract resolver does not model (§13 of `10_FACTIONS.md`).
