@@ -20,6 +20,7 @@
 
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/planner.hpp"
@@ -55,6 +56,8 @@ struct ResolveContext {
     // Our fighters' corridors as they are (S1, docs/air_battle/08_OUR_FIGHTERS.md section 9; theatre ENU, hours of the day):
     // a package timed into one its staff believes in meets defences near it holding fire for ours at its hours.
     std::vector<command::OwnAirZone> own_corridors;
+    // The enemy's losses so far today (roadmap S5: §9.3's husbanding, read under hot_phase.mode 2).
+    double losses_today = 0.0;
 };
 
 // The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
@@ -80,13 +83,19 @@ inline double PackageAirmanship(const Package& p, const AirStaff& staff) {
 
 // The package leader's nerve: the share of the package he will lose before turning back (0.25 + 0.3 x boldness, the
 // planner's and his own abort_threshold quirks). One rule for the abstract resolver and the played raid (flights.hpp's
-// package, roadmap B1), so the two turn back alike.
-inline double PackageNerve(const Package& p, const AirStaff& staff) {
+// package, roadmap B1), so the two turn back alike. Phase two (hot_phase.mode 2, roadmap S5, 10_FACTIONS.md §9.3): his
+// faction's press_on moved by him, less its husbanding as the day's losses near its tolerance (hot_phase.hpp HotNerve), and
+// the planner's quirk as before.
+inline double PackageNerve(const Package& p, const AirStaff& staff, const FactionDef* faction = nullptr, int hot_mode = 0, double losses_today = 0.0) {
     const Officer* leader = p.leader >= 0 ? &staff.officers[static_cast<std::size_t>(p.leader)] : nullptr;
-    double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
-    if (const Officer* pln = p.planner >= 0 ? &staff.officers[static_cast<std::size_t>(p.planner)] : nullptr) {
-        nerve += 0.1 * pln->Quirk("abort_threshold");
+    const Officer* pln = p.planner >= 0 ? &staff.officers[static_cast<std::size_t>(p.planner)] : nullptr;
+    if (faction != nullptr && hot_mode >= 2 && faction->hot.present) {
+        double nerve = HotNerve(*faction, FlightRole::Strike, leader, true, nullptr, losses_today);
+        if (pln != nullptr) nerve += 0.1 * pln->Quirk("abort_threshold");
+        return ClampTo(nerve, 0.05, 0.9);
     }
+    double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
+    if (pln != nullptr) nerve += 0.1 * pln->Quirk("abort_threshold");
     if (leader != nullptr) nerve += 0.15 * leader->Quirk("abort_threshold");
     return ClampTo(nerve, 0.05, 0.9);
 }
@@ -306,7 +315,8 @@ public:
         run.jam = p.Has(FlightRole::Jammer);
         run.supp_base = PackageSuppression(p, *c.staff, d.tuning);
         run.airmanship = PackageAirmanship(p, *c.staff);
-        run.nerve = PackageNerve(p, *c.staff);  // the share of the package he will lose before turning back
+        // The share of the package he will lose before turning back (phase two under hot_phase.mode 2, roadmap S5).
+        run.nerve = PackageNerve(p, *c.staff, &d.faction, static_cast<int>(d.tuning.Get("hot_phase.mode")), c.losses_today);
         run.package_size = std::max(1, p.Aircraft());
         run.suppressed.assign(d.theatre.objects.size(), 0.0);
         run.engaged.assign(d.theatre.objects.size(), false);

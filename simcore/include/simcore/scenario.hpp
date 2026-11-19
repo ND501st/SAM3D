@@ -1260,6 +1260,48 @@ private:
         return true;
     }
 
+    // A "reactions" block's "hot" (roadmap S5, reactions.hpp ReactionPilotDef::Hot; air_war/raid_scenario.hpp writes it
+    // under hot_phase.mode 2): {"initiative", "plan_adherence", "turn_back" (0..1), "leader_may" (§7.3's acts; absent: all),
+    // "delay_s": [lo, hi], "improvised_extra_s", "husbanding_shift" (-1..0)}.
+    bool LoadReactionHot(const json::Value& r, const std::string& rp, ReactionPilotDef::Hot& h) {
+        const json::Value* v = r.Find("hot");
+        if (v == nullptr) return true;
+        const std::string p = Join(rp, "hot");
+        std::vector<std::string> may;
+        bool has_may = v->Find("leader_may") != nullptr;
+        if (!Keys(*v, p, {"initiative", "plan_adherence", "turn_back", "leader_may", "delay_s", "improvised_extra_s", "husbanding_shift", "notes"}) ||
+            !OptionalNumber(*v, p, "initiative", h.initiative) || !OptionalNumber(*v, p, "plan_adherence", h.plan_adherence) ||
+            !OptionalNumber(*v, p, "turn_back", h.turn_back) || !OptionalNumber(*v, p, "improvised_extra_s", h.improvised_extra_s) ||
+            !OptionalNumber(*v, p, "husbanding_shift", h.husbanding_shift) ||
+            !StringList(*v, p, "leader_may", may, [](const std::string& s) {
+                const std::vector<std::string>& acts = airwar::HotLeaderActs();
+                return std::find(acts.begin(), acts.end(), s) != acts.end() ? std::string() : std::string("not a leader's act");
+            })) {
+            return false;
+        }
+        for (const double x : {h.initiative, h.plan_adherence, h.turn_back}) {
+            if (x < 0.0 || x > 1.0) return Fail(p, "initiative, plan_adherence and turn_back are 0 to 1");
+        }
+        if (h.husbanding_shift > 0.0 || h.husbanding_shift < -1.0) return Fail(Join(p, "husbanding_shift"), "-1 to 0");
+        if (h.improvised_extra_s < 0.0 || h.improvised_extra_s > 60.0) return Fail(Join(p, "improvised_extra_s"), "0 to 60 s");
+        if (const json::Value* ds = v->Find("delay_s")) {
+            if (!ds->Is(json::Type::Array) || ds->items.size() != 2 || !ds->items[0].Is(json::Type::Number) || !ds->items[1].Is(json::Type::Number) ||
+                ds->items[0].number < 0.0 || ds->items[1].number < ds->items[0].number || ds->items[1].number > 60.0) {
+                return Fail(Join(p, "delay_s"), "[lo, hi] seconds, 0 <= lo <= hi <= 60");
+            }
+            h.delay_lo_s = ds->items[0].number;
+            h.delay_hi_s = ds->items[1].number;
+        }
+        if (has_may) {
+            const auto has = [&may](const char* a) { return std::find(may.begin(), may.end(), a) != may.end(); };
+            h.may_route = has("route") || has("everything");
+            h.may_turn_back = has("abort") || has("break_off") || has("everything");
+            h.may_programme = has("programme") || has("everything");
+        }
+        h.on = true;
+        return true;
+    }
+
     // A target's "arms" (ArmCarrierDef): its warning receiver tells it what to fire at, so it needs one.
     // A target's "reactions" (roadmap B4, reactions.hpp): {"profile", "aircraft", "chaff", "flares", "tanks", "stores",
     // "nerve", "press_on_shift", "jettison_shift", "zones": [{"east_m", "north_m", "radius_m"}]}. Not with "evade" or
@@ -1270,7 +1312,7 @@ private:
         const std::string p = Join(tp, "reactions");
         if (t.Find("evade") != nullptr || t.Find("evade_on_launch") != nullptr) return Fail(p, "a target has \"reactions\" or \"evade\", not both");
         ReactionPilotDef& d = tg.reactions;
-        if (!Keys(*r, p, {"profile", "aircraft", "chaff", "flares", "tanks", "stores", "nerve", "press_on_shift", "jettison_shift", "zones", "notes"}) ||
+        if (!Keys(*r, p, {"profile", "aircraft", "chaff", "flares", "tanks", "stores", "nerve", "press_on_shift", "jettison_shift", "zones", "hot", "notes"}) ||
             !RequireString(*r, p, "profile", d.profile) || !OptionalString(*r, p, "aircraft", d.aircraft) ||
             !OptionalInt(*r, p, "chaff", d.chaff) || !OptionalInt(*r, p, "flares", d.flares) || !OptionalInt(*r, p, "tanks", d.tanks) ||
             !OptionalString(*r, p, "stores", d.stores) || !OptionalNumber(*r, p, "nerve", d.nerve) ||
@@ -1279,6 +1321,7 @@ private:
         }
         if (d.nerve < 0.0 || d.nerve > 1.0) return Fail(Join(p, "nerve"), "0 to 1");
         if (std::fabs(d.press_on_shift) > 0.2 || std::fabs(d.jettison_shift) > 0.2) return Fail(p, "an officer's shift is at most 0.2 either way");
+        if (!LoadReactionHot(*r, p, d.hot)) return false;
         if (const json::Value* zs = OptionalArray(*r, p, "zones")) {
             for (std::size_t i = 0; i < zs->items.size(); ++i) {
                 const std::string zp = Index(Join(p, "zones"), i);
@@ -1543,9 +1586,9 @@ private:
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
         airwar::AirFightDef& a = out.air_fight;
         std::string combat = "air_war/air_combat.json", sensors = "air_war/sensors.json";
-        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "source", "confidence", "notes"}) ||
+        if (!Keys(*v, p, {"year", "combat", "sensors", "fighters", "controllers", "hot_mode", "source", "confidence", "notes"}) ||
             !OptionalInt(*v, p, "year", a.year) || !OptionalString(*v, p, "combat", combat) || !OptionalString(*v, p, "sensors", sensors) ||
-            !Provenance(*v, p)) {
+            !OptionalInt(*v, p, "hot_mode", a.hot_mode) || !Provenance(*v, p)) {
             return false;
         }
         std::string e;
@@ -1589,12 +1632,15 @@ private:
             const json::Value& fv = arr->items[i];
             const std::string fp = Index(Join(p, "fighters"), i);
             airwar::AirFightFighterDef f;
-            if (!Keys(fv, fp, {"target", "type", "faction", "role", "regiment", "controller", "skill", "notes"}) || !RequireString(fv, fp, "target", f.target) ||
-                !RequireString(fv, fp, "type", f.type) || !RequireString(fv, fp, "faction", f.faction) || !OptionalString(fv, fp, "role", f.role) ||
-                !OptionalString(fv, fp, "regiment", f.regiment) || !OptionalString(fv, fp, "controller", f.controller) ||
-                !OptionalNumber(fv, fp, "skill", f.skill)) {
+            if (!Keys(fv, fp, {"target", "type", "faction", "role", "regiment", "controller", "skill", "turn_back_lost", "unwarned_break", "notes"}) ||
+                !RequireString(fv, fp, "target", f.target) || !RequireString(fv, fp, "type", f.type) || !RequireString(fv, fp, "faction", f.faction) ||
+                !OptionalString(fv, fp, "role", f.role) || !OptionalString(fv, fp, "regiment", f.regiment) ||
+                !OptionalString(fv, fp, "controller", f.controller) || !OptionalNumber(fv, fp, "skill", f.skill) ||
+                !OptionalNumber(fv, fp, "turn_back_lost", f.turn_back_lost) || !OptionalNumber(fv, fp, "unwarned_break", f.unwarned_break)) {
                 return false;
             }
+            if (f.turn_back_lost > 1.0) return Fail(Join(fp, "turn_back_lost"), "a chance 0 to 1 (absent: none)");
+            if (f.unwarned_break < 0.0 || f.unwarned_break > 1.0) return Fail(Join(fp, "unwarned_break"), "0 to 1");
             bool known = false;
             for (const ScenarioTarget& t : out.targets) known = known || t.id == f.target;
             if (!known) return Fail(Join(fp, "target"), "no target '" + f.target + "'");
@@ -2423,19 +2469,21 @@ private:
     }
 
     // An "em" block's jammers: each a library jammer on a target (self-screening) or at a position (stand-off), on and
-    // off at times.
+    // off at times; "until_painted" (roadmap S5, a self-screening one): held off until its carrier is locked on or fired at.
     bool LoadEmJammers(const json::Value& em, const std::string& path, EmLinkDef& out) {
         const json::Value* jm = OptionalArray(em, path, "jammers");
         if (jm == nullptr) return message_.empty();
         for (std::size_t i = 0; i < jm->items.size(); ++i) {
             const std::string jp = Index(Join(path, "jammers"), i);
             const json::Value& j = jm->items[i];
-            if (!Keys(j, jp, {"jammer", "target", "position", "on_at_s", "off_at_s", "notes"})) return false;
+            if (!Keys(j, jp, {"jammer", "target", "position", "on_at_s", "off_at_s", "until_painted", "notes"})) return false;
             EmJammerDef jd;
             if (!RequireString(j, jp, "jammer", jd.jammer_id) || !OptionalString(j, jp, "target", jd.target_id) ||
-                !OptionalNumber(j, jp, "on_at_s", jd.on_at_s) || !OptionalNumber(j, jp, "off_at_s", jd.off_at_s)) {
+                !OptionalNumber(j, jp, "on_at_s", jd.on_at_s) || !OptionalNumber(j, jp, "off_at_s", jd.off_at_s) ||
+                !OptionalBool(j, jp, "until_painted", jd.until_painted)) {
                 return false;
             }
+            if (jd.until_painted && jd.target_id.empty()) return Fail(Join(jp, "until_painted"), "a self-screening jammer's (with a target)");
             if (out.library.Jammer(jd.jammer_id) < 0) return Fail(Join(jp, "jammer"), "unknown jammer '" + jd.jammer_id + "' (add its file to extra_libraries)");
             const json::Value* jpos = j.Find("position");
             if (jd.target_id.empty() == (jpos == nullptr)) return Fail(jp, "give either a target (self-screening) or a position (stand-off)");

@@ -74,7 +74,8 @@
     "husbanding": {"value": 0.15, "range": [0.0, 0.3], "source": "game value on angola_saaf_1987 (the pattern: a small force cuts its sorties as the threat rises) and the faction's loss_tolerance_per_day", "confidence": "estimate"},
     "reaction_delay_s": {"value": [4, 10], "improvised_extra_s": 0, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (green pilots 4-10 s)", "confidence": "estimate"},
     "authority": {"beyond_task": ["strike", "harassment", "helo_raid", "recce", "armed_recce", "cas"], "retask_by": [], "retask_kinds": [], "recall_only": false, "leader_may": ["everything"], "source": "SAM3D assumption (c2-41: no net, no retasking; docs/research/air_battle_2026-11/c2_retasking.md): anything that looks military", "confidence": "estimate"},
-    "on_control_lost": {"green": "continue", "skilled": "continue", "source": "docs/research/air_battle_2026-11/air_combat.md reb-01 (no controller to lose); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"}
+    "on_control_lost": {"green": "continue", "skilled": "continue", "source": "docs/research/air_battle_2026-11/air_combat.md reb-01 (no controller to lose); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"},
+    "pilots": {"hours_per_year": 60, "start_sorties": 0, "source": "game value (docs/air_battle/10_FACTIONS.md section 8.3: the rebels start green, flying little)", "confidence": "estimate"}
   },
   "doctrine": {
     "routing": { "crossing": "none", "letdown_m": 10000, "max_turn_points": 4, "variants": ["covered"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0.5, "return": "same_entry", "deviation": "any", "source": "game values: design inference, no period source on the rebels' routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate", "notes": "At night, low, by roads, rivers and villages; clear of known guns; home the way they came." },

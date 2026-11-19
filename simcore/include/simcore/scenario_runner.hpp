@@ -3301,11 +3301,27 @@ private:
             if (wf.faction == "ours") {
                 f.regiment = regiment;
                 f.controller = gci;
+                OurHot(f);
             }
             std::string e;
             if (!air_fight_->AddFighter(f, static_cast<int>(it->second), &e)) Event("air fight", e);
         }
         wave_fight_.clear();
+    }
+    // Our pair's hot phase (roadmap S5, 10_FACTIONS.md §6-7: data/command/own_air.json's hot_phase), when the session's air
+    // fight was built under hot_phase.mode 2: once his GCI is lost he turns back with our side's turn_back for his role (CAP
+    // and escort 0.6), and with no word from it he breaks the later (2-5 s under its warning, 4-10 s jammed).
+    void OurHot(airwar::AirFightFighterDef& f) const {
+        const airwar::HotPhaseDef& h = def_.own_air.def.hot;
+        if (def_.air_fight.hot_mode < 2 || !h.present) return;
+        airwar::FlightRole role = airwar::FlightRole::Cap;  // an interceptor holds his zone as a CAP does
+        if (f.role == "escort") role = airwar::FlightRole::Escort;
+        if (f.role == "sweep") role = airwar::FlightRole::Sweep;
+        f.turn_back_lost = airwar::Clamp01(h.Value(airwar::HotParam::TurnBack).For(role, true));
+        const airwar::HotDelayDef& dl = h.reaction_delay;
+        if (dl.HasJammed() && dl.jammed_hi_s + dl.jammed_lo_s > 0.0) {
+            f.unwarned_break = std::min(1.0, (dl.lo_s + dl.hi_s) / (dl.jammed_lo_s + dl.jammed_hi_s));
+        }
     }
 
     void EnterWaveTarget(ScenarioTarget t) {
@@ -3669,6 +3685,11 @@ private:
     // and the jettison are B4's): a lock or a launch on his receiver, or a launch seen by eye (its dust and flash, its
     // smoke trail), turns him with the place he believes it to be, never the unit's true one.
     void ReactToSighting(std::size_t i, const airwar::Sighting& sg) {
+        // Emission discipline (roadmap S5): a lock or a launch on his receiver is when his held jammer is needed.
+        if (em_link_ && sg.by == airwar::SightBy::Rwr && sg.kind == airwar::SightKind::Emitter &&
+            (sg.rwr == airwar::RwrState::Lock || sg.rwr == airwar::RwrState::Launch)) {
+            em_link_->Painted(def_.targets[i].id);
+        }
         if (reactions_.On(static_cast<int>(i))) {  // roadmap B4: the chain (reaction_chain.hpp); "evade" targets below
             reactions_.Sighted(static_cast<int>(i), sg, time_, ReactionContext());
             return;
@@ -4258,6 +4279,7 @@ private:
             f.skill = r->skill;
             f.has_home = true;  // recalled or out of fuel, the pair flies to its base (S1)
             f.home = Vec3{r->base_pos.x, r->base_pos.y, 0.0};
+            OurHot(f);
             std::string e;
             if (!air_fight_->AddFighter(f, static_cast<int>(first + k), &e)) Event("air fight", e);
         }

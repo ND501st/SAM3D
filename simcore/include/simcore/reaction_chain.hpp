@@ -111,6 +111,9 @@ public:
         int cues = 0, reactions = 0, no_reaction = 0, programmed = 0, calls = 0, heard = 0;
         int chaff = 0, flares = 0, jettisons = 0, decisions = 0, press_on = 0, go_round = 0, aborts = 0, self_decided = 0;
         int scripted = 0;  // scripted rows' cues acted on (a hand-written "evade")
+        // Roadmap S5 (a pilot with "hot" values): a go-round his leader did not take on his own and held the plan instead;
+        // flights that knew they were seen; of them, those that turned back; detours whose time was made up.
+        int held_plan = 0, spotted = 0, spotted_back = 0, made_up = 0;
     };
 
     void Configure(const ReactionTable* table, std::uint64_t seed, int year) {
@@ -137,6 +140,8 @@ public:
         s.nerve = std::clamp(d.nerve, 0.0, 1.0);
         s.press_on_shift = d.press_on_shift;
         s.jettison_shift = d.jettison_shift;
+        s.hot = d.hot;
+        if (s.hot.on) s.delay_scale = FactionDelayScale(*table_, s.hot.delay_lo_s, s.hot.delay_hi_s);
         const Loadout l = table_->LoadoutOf(d.aircraft, year_);
         s.chaff = d.chaff >= 0 ? d.chaff : l.chaff;
         s.flares = d.flares >= 0 ? d.flares : l.flares;
@@ -197,7 +202,10 @@ public:
     }
     // Its load is gone by its own release (the waves, the bridge): nothing left to jettison but its tanks.
     void Released(int target) {
-        if (Pilot* s = P(target)) s->stores = false;
+        if (Pilot* s = P(target)) {
+            s->stores = false;
+            s->released = true;
+        }
     }
     bool StoresGone(int target) const {
         const Pilot* s = P(target);
@@ -233,6 +241,16 @@ public:
     void Sighted(int target, const airwar::Sighting& sg, double now, const Context& ctx) {
         Pilot* s = P(target);
         if (s == nullptr) return;
+        // Roadmap S5: a search paint on his receiver tells him he is seen; his leader may turn the flight back (Spotted).
+        if (s->hot.on && !s->spotted_queued && sg.by == airwar::SightBy::Rwr && sg.kind == airwar::SightKind::Emitter &&
+            sg.rwr == airwar::RwrState::Search) {
+            s->spotted_queued = true;
+            Item it;
+            it.kind = Item::Kind::Spotted;
+            it.target = target;
+            it.due_s = now;
+            items_.push_back(it);
+        }
         ThreatCue c;
         if (!Classify(sg, *s, now, c)) return;
         c.noticed_s = now;
@@ -323,6 +341,10 @@ private:
         double nerve = 0.5;
         double press_on_shift = 0.0;  // his officer's (roadmap B11)
         double jettison_shift = 0.0;
+        ReactionPilotDef::Hot hot;    // his faction's values as his flight reads them (roadmap S5)
+        double delay_scale = 1.0;     // his faction's trained band over the tables' (S5)
+        bool released = false;        // his load went at his release point
+        bool spotted_queued = false;  // his first search paint is on its way to his flight's decision (S5)
         double stress = 0.0;
         double stress_t = 0.0;
         int chaff = 0, flares = 0, tanks = 0;
@@ -337,7 +359,7 @@ private:
         double chaff_s = -1e9;
     };
     struct Item {
-        enum class Kind { Act, Pull, Dispense, Hear, Decision, SelfDecide };
+        enum class Kind { Act, Pull, Dispense, Hear, Decision, SelfDecide, Spotted };
         Kind kind = Kind::Act;
         int target = -1;
         double due_s = 0.0;
@@ -432,7 +454,7 @@ private:
         if (last != s.last.end() && now - last->second.first < table_->refractory_s && c.level <= last->second.second) return;
         const Aircraft* a = ctx.air ? ctx.air(target) : nullptr;
         if (a == nullptr || !a->alive) return;
-        if (s.profile->programme && IsSam(c.threat) && c.threat != ThreatClass::SamIr) {
+        if (s.profile->programme && (!s.hot.on || s.hot.may_programme) && IsSam(c.threat) && c.threat != ThreatClass::SamIr) {
             c.zone = ProgrammeZoneOf(s, *a, c);
             c.programmed = c.zone >= 0;
         }
@@ -441,6 +463,10 @@ private:
         nc.two_seat = s.two_seat;
         nc.stress = Stress(target, now);
         nc.programmed = c.programmed;
+        if (s.hot.on) {  // roadmap S5: his faction's band, and the extra of a manoeuvre off the programme
+            nc.faction_scale = s.delay_scale;
+            nc.improvised_extra_s = s.hot.improvised_extra_s;
+        }
         const double agl = ctx.agl_m ? ctx.agl_m(target) : 1000.0;
         nc.workload = (ctx.attacking && ctx.attacking(target)) || (agl < table_->workload_agl_m && a->speed_mps > table_->workload_mps);
         if (ReactionU(seed_, s.key, c.serial, ReactionDraw::NoReaction) < NoReactionChance(*table_, s.skill, nc)) {
@@ -508,7 +534,36 @@ private:
                 return;
             }
             case Item::Kind::SelfDecide: SelfDecide(it, *s, now, fl, acts); return;
+            case Item::Kind::Spotted: Spotted(it.target, *s, *a, now, fl, acts); return;
         }
+    }
+
+    // Roadmap S5 (10_FACTIONS.md §7.1 turn_back, plan_adherence, §7.3 leader_may): the leader knows his flight is seen
+    // before anyone has fired. Once per flight, on the way in with its load still on: the plan absorbs plan_adherence of
+    // it, and of the rest he turns back with the chance turn_back, if he may turn back on his own call. A keyed draw.
+    void Spotted(int target, Pilot& s, const Aircraft& a, double now, Flights& fl, std::vector<ReactionAct>& acts) {
+        const int fi = fl.FlightOf(target);
+        if (fi >= 0 && (!fl.IsLeader(target) || fl.All()[static_cast<std::size_t>(fi)].weapons)) return;
+        if (s.released || s.stores_jettisoned) return;
+        if (const FlightSlot* sl = fl.SlotOf(target)) {
+            if (a.next_waypoint < sl->legs.size()) {
+                const std::string ph = PhaseOfTag(sl->legs[a.next_waypoint].tag);
+                if (ph == "attack" || ph == "egress") return;
+            }
+        }
+        const int key = fi >= 0 ? fi : -1 - target;
+        if (!spotted_.insert(key).second) return;
+        ++counts_.spotted;
+        if (ReactionU(seed_, s.key, 0x5B07u, ReactionDraw::TurnBack) >= SpottedTurnBackChance(s.hot)) return;
+        ++counts_.spotted_back;
+        if (fi < 0) {
+            Abort(target, now, acts, "seen before the target: turns for home");
+            return;
+        }
+        FlightOrder home;
+        home.kind = OrderKind::ReturnHome;
+        home.by = "leader";
+        if (fl.Order(fi, home, now)) Event(acts, target, "the leader knows the raid is seen: the flight turns for home");
     }
 
     // His reaction: the manoeuvre (a late pull waits), the dispense, the call, and the flight's decision.
@@ -518,6 +573,7 @@ private:
         const ReactionRow& row = ChooseRow(*s.profile, c.source, c.threat);
         Manoeuvre m = row.manoeuvre;
         if (m == Manoeuvre::Programme && !c.programmed) m = Manoeuvre::Break;  // a site he was not briefed on: unplanned
+        if (m == Manoeuvre::Programme && s.hot.on && !s.hot.may_programme) m = Manoeuvre::Break;  // S5: not his leader's to fly
         if (c.programmed) ++counts_.programmed;
         if (m == Manoeuvre::BreakLate && c.level >= 2) {
             const double wait = LateBreakWaitS(*table_, c.range_m);
@@ -755,10 +811,18 @@ private:
         if (fi >= 0 && fl.All()[static_cast<std::size_t>(fi)].weapons) return;
         const int key = fi >= 0 ? fi : -1 - target;  // a lone aircraft decides for himself
         if (decided_.count({key, sit}) != 0) return;
-        const FlightDecision d = DecideFlight(*table_, ShiftedRow(row, s.press_on_shift, s.jettison_shift), Stress(target, now), s.nerve,
-                                              ReactionU(seed_, s.key, c.serial, ReactionDraw::Jettison),
-                                              ReactionU(seed_, s.key, c.serial, ReactionDraw::TanksOnly),
-                                              ReactionU(seed_, s.key, c.serial, ReactionDraw::Choice));
+        FlightDecision d = DecideFlight(*table_, ShiftedRow(row, s.press_on_shift + s.hot.husbanding_shift, s.jettison_shift), Stress(target, now), s.nerve,
+                                        ReactionU(seed_, s.key, c.serial, ReactionDraw::Jettison),
+                                        ReactionU(seed_, s.key, c.serial, ReactionDraw::TanksOnly),
+                                        ReactionU(seed_, s.key, c.serial, ReactionDraw::Choice));
+        // Roadmap S5 (10_FACTIONS.md §7.1 initiative, §7.3 leader_may): going round a site the plan did not know is the
+        // leader's own act. He takes it only if his faction lets its leaders change the route and his initiative draws it;
+        // else he holds the plan and reports the site.
+        bool held = false;
+        if (s.hot.on && d.choice == FlightChoice::GoRound && fi >= 0) {
+            held = !s.hot.may_route || ReactionU(seed_, s.key, c.serial, ReactionDraw::Initiative) >= s.hot.initiative;
+            if (held) d.choice = FlightChoice::PressOn;
+        }
         Decided rec;
         rec.choice = d.choice;
         rec.jettison = d.jettison;
@@ -797,7 +861,17 @@ private:
         }
         if (d.choice == FlightChoice::PressOn) {
             ++counts_.press_on;
-            Event(acts, target, "the leader presses on");
+            if (held) {  // S5: he reports what he saw on the net and keeps his route
+                ++counts_.held_plan;
+                const double b = std::atan2(c.where.x - a.position.x, c.where.y - a.position.y);
+                const std::string words = name + ", " + (IsSam(c.threat) ? "SAM" : IsFlak(c.threat) ? "flak" : "threat") + " at " +
+                                          std::to_string(ClockOf(b, a.heading_rad)) + " o'clock, holding the plan";
+                ++counts_.calls;
+                if (ctx.radio != nullptr) ctx.radio->Say(f.id, f.slots[static_cast<std::size_t>(f.leader_slot)].number, true, words, now, true, c.where);
+                Event(acts, target, "the leader holds the plan and reports the site");
+            } else {
+                Event(acts, target, "the leader presses on");
+            }
             NoteHeard(fl, fi, target, sit, now, d, false);
             return;
         }
@@ -822,6 +896,7 @@ private:
             return;
         }
         ++counts_.go_round;
+        if (s.hot.on && MakeUpTime(legs, a, s.hot.plan_adherence)) ++counts_.made_up;
         FlightOrder round;
         round.kind = OrderKind::Divert;
         round.legs = std::move(legs);
@@ -866,7 +941,7 @@ private:
         ++counts_.self_decided;
         const ReactionRow& row = ChooseRow(*s.profile, it.cue.source, it.cue.threat);
         const std::uint64_t k = it.cue.serial + 7919u;
-        const FlightDecision d = DecideFlight(*table_, ShiftedRow(row, s.press_on_shift, s.jettison_shift), Stress(it.target, now), s.nerve,
+        const FlightDecision d = DecideFlight(*table_, ShiftedRow(row, s.press_on_shift + s.hot.husbanding_shift, s.jettison_shift), Stress(it.target, now), s.nerve,
                                               ReactionU(seed_, s.key, k, ReactionDraw::Jettison),
                                               ReactionU(seed_, s.key, k, ReactionDraw::TanksOnly), ReactionU(seed_, s.key, k, ReactionDraw::Choice));
         if (d.jettison) Jettison(it.target, s, d.tanks_only, now, "his own decision, nothing heard from the lead", acts);
@@ -947,6 +1022,33 @@ private:
         return true;
     }
 
+    // Roadmap S5 (10_FACTIONS.md §7.1 plan_adherence; §11's "keeps his TOT"): the time the detour costs at his speed,
+    // made up by plan_adherence of it on the legs after it up to the attack (or the route's end), no faster than his top
+    // speed. True if a leg was sped up.
+    static bool MakeUpTime(std::vector<RouteLeg>& legs, const Aircraft& a, double adherence) {
+        if (adherence <= 0.0 || legs.size() < 2) return false;
+        const double v = std::max(1.0, a.speed_mps);
+        const auto flat = [](const Vec3& p, const Vec3& q) { return std::hypot(q.x - p.x, q.y - p.y); };
+        const double lost_s = std::max(0.0, flat(a.position, legs[0].to) + flat(legs[0].to, legs[1].to) - flat(a.position, legs[1].to)) / v;
+        double rest_m = 0.0;
+        std::size_t end = 1;
+        Vec3 from = legs[0].to;
+        for (std::size_t k = 1; k < legs.size(); ++k) {
+            const std::string ph = PhaseOfTag(legs[k].tag);
+            if (ph == "attack" || ph == "egress") break;
+            rest_m += flat(from, legs[k].to);
+            from = legs[k].to;
+            end = k + 1;
+        }
+        if (rest_m <= 1.0 || lost_s <= 0.0) return false;
+        const double want_s = rest_m / v - std::min(1.0, adherence) * lost_s;
+        double fast = want_s > 1.0 ? rest_m / want_s : 1e9;
+        if (a.max_speed_mps > 0.0) fast = std::min(fast, a.max_speed_mps);
+        if (fast <= v + 1e-6) return false;
+        for (std::size_t k = 1; k < end; ++k) legs[k].speed_mps = std::max(legs[k].speed_mps, fast);
+        return true;
+    }
+
     const ReactionTable* table_ = nullptr;
     std::uint64_t seed_ = 0;
     int year_ = 1985;
@@ -964,6 +1066,7 @@ private:
     std::vector<ScriptedRow> scripted_;
     std::vector<Item> items_;
     std::map<std::pair<int, int>, Decided> decided_;  // (flight, situation) -> the leader's decision
+    std::set<int> spotted_;                           // flights (or lone aircraft, -1 - target) that knew they were seen (S5)
     std::vector<JettisonRecord> jettisons_;
     Counts counts_;
 };

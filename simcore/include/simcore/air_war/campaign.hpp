@@ -776,6 +776,7 @@ private:
         rc.opportunity_seed = static_cast<std::uint64_t>(seed_) * 0x9E3779B97F4A7C15ull + 0xB6A0ull;  // roadmap B6's keyed draws
         rc.phase = phase_;
         rc.own_corridors = OwnCorridors();
+        rc.losses_today = politics_.losses_today;
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -1400,6 +1401,18 @@ private:
                 if (s.id == fl.squadron) ++s.lost;
             }
             ++lost;
+        }
+        // The combat sorties its pilots came back from (roadmap S5, 10_FACTIONS.md §8.3): each flight's aircraft less its
+        // losses. Counted always; read only under hot_phase.mode 2 (HotPilotOf), so an older mode's replay is unmoved.
+        for (std::size_t fi = 0; fi < p.flights.size(); ++fi) {
+            const Flight& fl = p.flights[fi];
+            const AircraftType* a = f.Aircraft(fl.aircraft);
+            if (a != nullptr && (a->drone || a->missile)) continue;
+            int down = 0;
+            for (const LossRecord& l : o.losses) down += l.flight == static_cast<int>(fi) ? 1 : 0;
+            for (SquadronState& s : squadrons_) {
+                if (s.id == fl.squadron) s.combat_sorties += std::max(0, fl.count - down);
+            }
         }
         // The damaged back in service after their repair (damage.mode 1, roadmap S4: by its level, a heavy one
         // damage.heavy_repair_factor times as long; a played session's on their own flights, the rest drawn as before and

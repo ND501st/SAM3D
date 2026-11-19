@@ -42,6 +42,7 @@ struct Sky {
     ReactionChain::Context ctx;
     double t = 0.0;
     std::vector<ReactionAct> acts;
+    ReactionPilotDef::Hot hot;  // roadmap S5: the hot values every new pilot gets (off: none)
 
     explicit Sky(std::uint64_t seed = 7, int year = 1985) : table(Table()) {
         chain.Configure(&table, seed, year);
@@ -70,6 +71,7 @@ struct Sky {
         d.aircraft = aircraft;
         d.stores = "mk82";
         d.zones = std::move(zones);
+        d.hot = hot;
         chain.Register(i, id, d, skill, false);
         return i;
     }
@@ -592,4 +594,164 @@ SC_TEST("reactions S4: in a played session a hand-written evade breaks on the la
         SC_EXPECT(n.scripted >= 1 && n.cues == 0);
         SC_EXPECT(runner.Debrief().find("break") != std::string::npos);
     }
+}
+
+// ---- Roadmap S5: the faction's hot-phase values read by the chain (docs/air_battle/10_FACTIONS.md, "As built (S5)").
+
+namespace {
+
+// Forty NATO two-ships, each 80 km from its next turn point, their leaders painted by a low SAM 6 km off their track
+// (placeholder geometry); every pilot's hot values as given. Returns the chain's counts and the leaders' events.
+struct HotRun {
+    ReactionChain::Counts n;
+    int held_events = 0, turned_events = 0;
+};
+HotRun GoRoundSky(bool on, bool may_route, double initiative, double adherence, airwar::RwrState paint = airwar::RwrState::Lock,
+                  double turn_back = 0.0, bool may_turn_back = true, bool wingmen_too = false) {
+    Sky sky(5);
+    sky.hot.on = on;
+    sky.hot.may_route = may_route;
+    sky.hot.initiative = initiative;
+    sky.hot.plan_adherence = adherence;
+    sky.hot.turn_back = turn_back;
+    sky.hot.may_turn_back = may_turn_back;
+    std::vector<int> leads, wings;
+    std::vector<double> xs;
+    for (int k = 0; k < 40; ++k) {
+        const double x = 30000.0 * k;
+        const int fi = sky.Flight("f" + std::to_string(k), "pk", 2, Vec3{x, 0.0, 1000.0}, "nato", 0.7);
+        for (const FlightSlot& s : sky.flights.All()[static_cast<std::size_t>(fi)].slots) {
+            Aircraft& a = sky.air[static_cast<std::size_t>(s.target)];
+            a.waypoints = {Vec3{x, 80000.0, 1000.0}};
+            a.next_waypoint = 0;
+            (s.number == 1 ? leads : wings).push_back(s.target);
+        }
+        xs.push_back(x);
+    }
+    for (std::size_t k = 0; k < leads.size(); ++k) {
+        sky.chain.Sighted(leads[k], RwrSighting(paint, Vec3{xs[k] + 6000.0, 15000.0, 0.0}, 16000.0), 0.0, sky.ctx);
+        if (wingmen_too) sky.chain.Sighted(wings[k], RwrSighting(paint, Vec3{xs[k] + 6000.0, 15000.0, 0.0}, 16000.0), 0.0, sky.ctx);
+    }
+    sky.Run(60.0);
+    HotRun r;
+    r.n = sky.chain.Totals();
+    for (const ReactionAct& a : sky.acts) {
+        r.held_events += a.what == "the leader holds the plan and reports the site" ? 1 : 0;
+        r.turned_events += a.what == "the leader knows the raid is seen: the flight turns for home" ? 1 : 0;
+    }
+    return r;
+}
+
+}  // namespace
+
+SC_TEST("reactions S5: a leader goes round a site only if his faction lets him change the route and his initiative draws it") {
+    const HotRun off = GoRoundSky(false, true, 0.0, 1.0);
+    const HotRun no_route = GoRoundSky(true, false, 1.0, 1.0);
+    const HotRun bold = GoRoundSky(true, true, 1.0, 1.0);
+    const HotRun half = GoRoundSky(true, true, 0.5, 1.0);
+    std::printf("    go round: off %d; may not route %d (held %d); initiative 1: %d; initiative 0.5: %d (held %d)\n", off.n.go_round,
+                no_route.n.go_round, no_route.n.held_plan, bold.n.go_round, half.n.go_round, half.n.held_plan);
+    SC_EXPECT(off.n.go_round >= 3 && off.n.held_plan == 0 && off.n.made_up == 0);
+    // The same draws decide: what would have gone round is held, and reported on the net.
+    SC_EXPECT(no_route.n.go_round == 0 && no_route.n.held_plan == off.n.go_round && no_route.held_events == no_route.n.held_plan);
+    SC_EXPECT(no_route.n.calls >= no_route.n.held_plan);
+    SC_EXPECT(bold.n.go_round == off.n.go_round && bold.n.held_plan == 0);
+    SC_EXPECT(half.n.go_round + half.n.held_plan == off.n.go_round && half.n.go_round > 0 && half.n.held_plan > 0);
+    SC_EXPECT(no_route.n.decisions == off.n.decisions && bold.n.decisions == off.n.decisions);
+}
+
+SC_TEST("reactions S5: plan adherence makes up the detour's time on the legs to the attack; none, none") {
+    const HotRun keeps = GoRoundSky(true, true, 1.0, 0.9);
+    const HotRun loose = GoRoundSky(true, true, 1.0, 0.0);
+    SC_EXPECT(keeps.n.go_round > 0 && keeps.n.made_up == keeps.n.go_round);
+    SC_EXPECT(loose.n.go_round == keeps.n.go_round && loose.n.made_up == 0);
+}
+
+SC_TEST("reactions S5: a leader who knows the raid is seen turns back by turn_back of what the plan does not absorb, once a flight") {
+    using airwar::RwrState;
+    const HotRun off = GoRoundSky(false, true, 0.0, 0.0, RwrState::Search, 1.0);
+    const HotRun all = GoRoundSky(true, true, 0.0, 0.0, RwrState::Search, 1.0, true, true);
+    const HotRun pact = GoRoundSky(true, true, 0.0, 0.0, RwrState::Search, 1.0, false);
+    const HotRun some = GoRoundSky(true, true, 0.0, 0.5, RwrState::Search, 0.5);
+    const HotRun absorbed = GoRoundSky(true, true, 0.0, 1.0, RwrState::Search, 1.0);
+    std::printf("    spotted: off %d; all %d of %d back; may not turn back %d; 0.5 x 0.5: %d of %d\n", off.n.spotted, all.n.spotted_back,
+                all.n.spotted, pact.n.spotted_back, some.n.spotted_back, some.n.spotted);
+    SC_EXPECT(off.n.spotted == 0 && off.n.spotted_back == 0);
+    // Once a flight: the wingmen's paints add nothing; the leader's order goes out.
+    SC_EXPECT(all.n.spotted == 40 && all.n.spotted_back == 40 && all.turned_events == 40);
+    SC_EXPECT(pact.n.spotted == 40 && pact.n.spotted_back == 0);
+    SC_EXPECT(some.n.spotted_back > 0 && some.n.spotted_back < 20);
+    SC_EXPECT(absorbed.n.spotted_back == 0);
+    // A search paint is still no reaction: no cue.
+    SC_EXPECT(all.n.cues == 0);
+    ReactionPilotDef::Hot h;
+    h.on = true;
+    h.turn_back = 0.4;
+    h.plan_adherence = 0.25;
+    SC_EXPECT_NEAR(SpottedTurnBackChance(h), 0.3, 1e-12);
+    h.may_turn_back = false;
+    SC_EXPECT_NEAR(SpottedTurnBackChance(h), 0.0, 1e-12);
+}
+
+SC_TEST("reactions S5: the faction's delay band scales the tables' delay, and an improvised manoeuvre adds its extra") {
+    const ReactionTable t = Table();
+    double mid = 0.0;
+    for (const ReactionTier& r : t.tiers) mid = r.id == "trained" ? 0.5 * (r.delay_min_s + r.delay_max_s) : mid;
+    SC_EXPECT(mid > 0.0);
+    SC_EXPECT_NEAR(FactionDelayScale(t, 4.0, 10.0), 7.0 / mid, 1e-12);
+    SC_EXPECT_NEAR(FactionDelayScale(t, -1.0, -1.0), 1.0, 1e-12);
+    NoticeContext c;
+    c.source = CueSource::Eye;
+    const double base = NoticeDelayS(t, 0.7, c, 0.5);
+    c.faction_scale = 2.0;
+    SC_EXPECT_NEAR(NoticeDelayS(t, 0.7, c, 0.5), 2.0 * base, 1e-9);
+    c.improvised_extra_s = 2.0;
+    SC_EXPECT_NEAR(NoticeDelayS(t, 0.7, c, 0.5), 2.0 * base + 2.0 * t.eye_factor, 1e-9);
+    c.source = CueSource::Damage;  // a hit is no manoeuvre to improvise: no extra
+    NoticeContext d = c;
+    d.improvised_extra_s = 0.0;
+    SC_EXPECT_NEAR(NoticeDelayS(t, 0.7, c, 0.5), NoticeDelayS(t, 0.7, d, 0.5), 1e-12);
+    c.source = CueSource::Eye;
+    c.programmed = true;  // the programme is flown at once, whatever the band
+    d = c;
+    d.faction_scale = 1.0;
+    d.improvised_extra_s = 0.0;
+    SC_EXPECT_NEAR(NoticeDelayS(t, 0.7, c, 0.5), NoticeDelayS(t, 0.7, d, 0.5), 1e-12);
+}
+
+SC_TEST("reactions S5: a scenario's \"hot\" block loads, its leader_may sets what the leader may do, and bad ones are refused") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const std::string rx = R"(, "reactions": { "profile": "warsaw_pact", "aircraft": "mig23ml",
+        "hot": { "initiative": 0.3, "plan_adherence": 0.9, "turn_back": 0.2, "leader_may": ["targets_in_flight", "programme"],
+                 "delay_s": [2.5, 6], "improvised_extra_s": 2, "husbanding_shift": -0.1 } })";
+    SC_EXPECT(LoadScenario(ReactingScenario(rx), kData, def, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(def.targets.size() == 1);
+    if (def.targets.size() != 1) return;
+    const ReactionPilotDef::Hot& h = def.targets[0].reactions.hot;
+    SC_EXPECT(h.on && !h.may_route && !h.may_turn_back && h.may_programme);
+    SC_EXPECT_NEAR(h.initiative, 0.3, 1e-12);
+    SC_EXPECT_NEAR(h.plan_adherence, 0.9, 1e-12);
+    SC_EXPECT_NEAR(h.delay_lo_s, 2.5, 1e-12);
+    SC_EXPECT_NEAR(h.delay_hi_s, 6.0, 1e-12);
+    SC_EXPECT_NEAR(h.husbanding_shift, -0.1, 1e-12);
+    const auto refused = [&](const std::string& hot) {
+        ScenarioDef d2;
+        ConsoleData c2;
+        std::string why;
+        const bool ok = LoadScenario(ReactingScenario(R"(, "reactions": { "profile": "nato", "aircraft": "f4e", "hot": )" + hot + " }"), kData, d2, c2, &why);
+        return !ok && why.find("hot") != std::string::npos;
+    };
+    SC_EXPECT(refused(R"({ "initiative": 1.5 })"));
+    SC_EXPECT(refused(R"({ "leader_may": ["fly_to_the_moon"] })"));
+    SC_EXPECT(refused(R"({ "delay_s": [5, 2] })"));
+    SC_EXPECT(refused(R"({ "husbanding_shift": 0.2 })"));
+    SC_EXPECT(refused(R"({ "boldness": 0.2 })"));
+    // Without it: off, as before.
+    ScenarioDef plain;
+    ConsoleData c3;
+    SC_EXPECT(LoadScenario(ReactingScenario(R"(, "reactions": { "profile": "nato", "aircraft": "f4e" })"), kData, plain, c3, &e));
+    SC_EXPECT(plain.targets.size() == 1 && !plain.targets[0].reactions.hot.on);
 }

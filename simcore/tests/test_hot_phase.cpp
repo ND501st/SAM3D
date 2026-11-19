@@ -14,6 +14,7 @@
 #include "simcore/air_war.hpp"
 #include "simcore/air_war/hot_phase.hpp"
 #include "simcore/command/own_air.hpp"
+#include "simcore/scenario.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -357,8 +358,10 @@ SC_TEST("hot phase (B11): the new effect keys are known; the hot quirks come fro
     SC_EXPECT(hot == 2);
     // The Pact's generated squadron leaders: the same seed gives the same staff; some have the controller-bound habit; under
     // mode 0 none has a hot quirk and every other quirk is as under mode 1 (the hot draw moves no other draw).
+    // (Mode 1: from mode 2 the chatterbox and silent runner draw at section 8.5's weights, roadmap S5.)
     AirWarData d1 = LoadHot("warsaw_pact");
     AirWarData d0 = LoadHot("warsaw_pact");
+    d1.tuning.values["hot_phase.mode"] = 1.0;
     d0.tuning.values["hot_phase.mode"] = 0.0;
     int bound = 0, generated = 0;
     for (unsigned seed = 1; seed <= 30; ++seed) {
@@ -462,7 +465,7 @@ SC_TEST("hot phase (B11): a save keeps its hot mode; one made before B11 loads w
     std::string e;
     AirCampaign now;
     SC_EXPECT(LoadCampaignJson(text, kData, now, &e));
-    SC_EXPECT_NEAR(now.Data().tuning.Get("hot_phase.mode"), 1.0, 1e-12);
+    SC_EXPECT_NEAR(now.Data().tuning.Get("hot_phase.mode"), 2.0, 1e-12);
     SC_EXPECT(now.Journal().size() == c.Journal().size());
     const std::size_t at = text.find("\"hot_mode\"");
     SC_EXPECT(at != std::string::npos);
@@ -532,4 +535,152 @@ SC_TEST("balance (B14): the bands load, each with its source; the bench's measur
         const double s = RetaskAirS(pact.faction, "armed_recce", 0.99, u);
         SC_EXPECT(s >= rp->lo * 60.0 - 1e-9 && s <= rp->hi * 60.0 + 1e-9);
     }
+}
+
+// ---- Roadmap S5: the faction values read (hot_phase.mode 2; 10_FACTIONS.md "As built (S5)").
+
+SC_TEST("hot phase S5: new campaigns play mode 2; the chatterbox and silent runner draw at section 8.5's weights there, B9's below") {
+    const AirWarData d = LoadHot("nato");
+    SC_EXPECT_NEAR(d.tuning.Get("hot_phase.mode"), 2.0, 1e-12);
+    const QuirkDef* chat = d.Quirk("chatterbox");
+    const QuirkDef* silent = d.Quirk("silent_runner");
+    SC_EXPECT(chat != nullptr && silent != nullptr);
+    if (chat == nullptr || silent == nullptr) return;
+    // Section 8.5: the chatterbox 2.0 / 1.0 / 0.5 / 0.3 by tier, the silent runner 0.3 / 0.7 / 1.2 / 1.2.
+    const Tier tiers[4] = {Tier::Inferior, Tier::NearPeer, Tier::Peer, Tier::Superior};
+    const double c85[4] = {2.0, 1.0, 0.5, 0.3}, s85[4] = {0.3, 0.7, 1.2, 1.2};
+    for (int i = 0; i < 4; ++i) {
+        SC_EXPECT_NEAR(chat->TierWeight(tiers[i], 2), c85[i], 1e-12);
+        SC_EXPECT_NEAR(silent->TierWeight(tiers[i], 2), s85[i], 1e-12);
+        // An older save's weights are B9's, unchanged.
+        SC_EXPECT_NEAR(chat->TierWeight(tiers[i], 1), chat->tier_weight_mode1[i], 1e-12);
+        SC_EXPECT_NEAR(chat->TierWeight(tiers[i], 0), chat->TierWeight(tiers[i], 1), 1e-12);
+        SC_EXPECT_NEAR(silent->TierWeight(tiers[i], 0), silent->TierWeight(tiers[i], 1), 1e-12);
+    }
+    SC_EXPECT(chat->TierWeight(Tier::Inferior, 1) != chat->TierWeight(Tier::Inferior, 2));
+}
+
+SC_TEST("hot phase S5: each faction's pilots load with their hours; a squadron's sorties and the war's hours make their experience and currency") {
+    for (const char* f : {"rebels", "neutral", "warsaw_pact", "nato"}) {
+        const AirWarData d = LoadHot(f);
+        const HotPilotsDef& p = d.faction.hot.pilots;
+        SC_EXPECT(p.set && p.hours_per_year > 0.0 && !p.source.empty() && !p.confidence.empty());
+    }
+    const AirWarData nato = LoadHot("nato"), pact = LoadHot("warsaw_pact"), reb = LoadHot("rebels");
+    SC_EXPECT(nato.faction.hot.pilots.hours_per_year > pact.faction.hot.pilots.hours_per_year);
+    SC_EXPECT(pact.faction.hot.pilots.hours_per_year > reb.faction.hot.pilots.hours_per_year);
+    const double ref = nato.tuning.Get("hot_phase.currency_reference_h"), sortie = nato.tuning.Get("hot_phase.sortie_h");
+    SC_EXPECT(ref > 0.0 && sortie > 0.0);
+    // 24 sorties come back over 12 pilots: two each.
+    const HotPilot n = HotPilotOf(nato.faction, 24, 12, ref, sortie);
+    SC_EXPECT(n.combat_sorties == static_cast<int>(std::lround(nato.faction.hot.pilots.start_sorties + 2.0)));
+    SC_EXPECT_NEAR(n.currency, std::min(1.2, (nato.faction.hot.pilots.hours_per_year + 2.0 * sortie) / ref), 1e-12);
+    const HotPilot green = HotPilotOf(reb.faction, 0, 8, ref, sortie);
+    SC_EXPECT(green.currency < 1.0 && green.currency < n.currency);
+    SC_EXPECT(HotPilotOf(nato.faction, 10000, 1, ref, sortie).currency <= 1.2 + 1e-12);
+    // His experience and currency move his air combat and quicken his reaction (§8.3).
+    SC_EXPECT(HotPhase(nato.faction, HotParam::AirCombat, FlightRole::Escort, nato.faction.pool, nullptr, &n) >
+              HotPhase(nato.faction, HotParam::AirCombat, FlightRole::Escort, nato.faction.pool, nullptr, nullptr) - 1e-12);
+    HotWho vet;
+    const HotPilot veteran = HotPilotOf(pact.faction, 200, 10, ref, sortie);
+    vet.pilot = &veteran;
+    SC_EXPECT(ReactionDelayS(pact.faction, pact.faction.pool, vet, false).hi_s < ReactionDelayS(pact.faction, pact.faction.pool, HotWho(), false).hi_s);
+    // Without a pilots block: current, no veterans.
+    FactionDef bare;
+    const HotPilot b = HotPilotOf(bare, 6, 3, ref, sortie);
+    SC_EXPECT(b.combat_sorties == 2);
+    SC_EXPECT_NEAR(b.currency, 1.0, 1e-12);
+}
+
+SC_TEST("hot phase S5 9.3: the package's nerve is its leader's press-on less the faction's husbanding as the day's losses near its tolerance") {
+    const AirWarData nato = LoadHot("nato"), pact = LoadHot("warsaw_pact"), neu = LoadHot("neutral");
+    const auto nerve = [](const AirWarData& d, double losses) { return HotNerve(d.faction, FlightRole::Strike, nullptr, true, nullptr, losses); };
+    // An average NATO or Pact leader keeps the old 0.4 (0.25 + 0.3 x 0.5); the neutral's is lower.
+    SC_EXPECT_NEAR(nerve(nato, 0.0), 0.1 + 0.5 * nato.faction.hot.Value(HotParam::PressOn).For(FlightRole::Strike), 1e-12);
+    SC_EXPECT_NEAR(nerve(nato, 0.0), 0.4, 1e-9);
+    SC_EXPECT_NEAR(nerve(pact, 0.0), 0.4, 1e-9);
+    SC_EXPECT(nerve(neu, 0.0) < nerve(nato, 0.0));
+    // At its day's tolerance and beyond, the neutral loses all its husbanding; the Pact husbands nothing.
+    const double tol = neu.faction.politics.loss_tolerance_per_day;
+    const double hb = neu.faction.hot.Value(HotParam::Husbanding).For(FlightRole::Strike);
+    SC_EXPECT(hb > 0.0);
+    SC_EXPECT_NEAR(nerve(neu, std::max(0.3, tol)), nerve(neu, 0.0) - hb, 1e-9);
+    SC_EXPECT_NEAR(nerve(neu, 10.0 * tol + 10.0), nerve(neu, 0.0) - hb, 1e-9);
+    SC_EXPECT_NEAR(nerve(pact, 100.0), nerve(pact, 0.0), 1e-12);
+    SC_EXPECT_NEAR(HusbandingShift(neu.faction, FlightRole::Strike, 10.0 * tol + 10.0), -hb, 1e-12);
+    SC_EXPECT_NEAR(HusbandingShift(neu.faction, FlightRole::Strike, 0.0), 0.0, 1e-12);
+    SC_EXPECT(HusbandingShift(pact.faction, FlightRole::Strike, 100.0) == 0.0);
+    // PackageNerve: as before below mode 2, the hot nerve from it.
+    Package p;
+    AirStaff staff;
+    SC_EXPECT_NEAR(PackageNerve(p, staff), 0.4, 1e-12);
+    SC_EXPECT_NEAR(PackageNerve(p, staff, &neu.faction, 1, 50.0), 0.4, 1e-12);
+    SC_EXPECT_NEAR(PackageNerve(p, staff, &neu.faction, 2, 0.0), nerve(neu, 0.0), 1e-12);
+    SC_EXPECT(PackageNerve(p, staff, &neu.faction, 2, 50.0) < PackageNerve(p, staff, &neu.faction, 2, 0.0));
+}
+
+SC_TEST("hot phase S5 7.3: what each faction's leader may do himself: route round a site, turn back on his own call") {
+    const AirWarData nato = LoadHot("nato"), pact = LoadHot("warsaw_pact"), neu = LoadHot("neutral"), reb = LoadHot("rebels");
+    SC_EXPECT(LeaderMayRoute(nato.faction.hot.authority) && LeaderMayTurnBack(nato.faction.hot.authority));
+    SC_EXPECT(!LeaderMayRoute(pact.faction.hot.authority) && !LeaderMayTurnBack(pact.faction.hot.authority));
+    SC_EXPECT(!LeaderMayRoute(neu.faction.hot.authority) && LeaderMayTurnBack(neu.faction.hot.authority));
+    SC_EXPECT(LeaderMayRoute(reb.faction.hot.authority) && LeaderMayTurnBack(reb.faction.hot.authority));
+}
+
+SC_TEST("hot phase S5: a played raid at mode 2 carries each pilot's hot values and the hot nerve; at mode 1 none; the sorties count") {
+    for (const double mode : {1.0, 2.0}) {
+        AirWarData d = LoadHot("nato");
+        d.tuning.values["hot_phase.mode"] = mode;
+        AirCampaign c;
+        SC_EXPECT(c.Init(d, 4));
+        int built = 0, with_hot = 0, loaded = 0;
+        while (c.Now() < 4.0 * 24.0 && built < 1) {
+            if (!c.Advance(4.0 * 24.0)) continue;
+            const Package* p = c.PlayerMission();
+            RaidScenarioBuilder builder;
+            const RaidScenario rs = builder.Build(c, *p);
+            c.SkipPlayerMission();
+            if (!rs.ok) continue;
+            ++built;
+            with_hot += rs.json_text.find("\"hot\"") != std::string::npos ? 1 : 0;
+            ScenarioDef def;
+            ConsoleData console;
+            std::string e;
+            if (LoadScenario(rs.json_text, kData, def, console, &e)) {
+                ++loaded;
+                int hot = 0;
+                for (const ScenarioTarget& t : def.targets) hot += t.reactions.hot.on ? 1 : 0;
+                if (mode >= 2.0) SC_EXPECT(hot > 0);
+                else SC_EXPECT(hot == 0);
+                for (const ScenarioTarget& t : def.targets) {
+                    if (!t.reactions.hot.on) continue;
+                    SC_EXPECT(t.reactions.hot.may_route && t.reactions.hot.may_turn_back && !t.reactions.hot.may_programme);  // NATO's leader_may
+                    SC_EXPECT(t.reactions.hot.delay_lo_s > 0.0 && t.reactions.hot.delay_hi_s >= t.reactions.hot.delay_lo_s);
+                }
+            } else {
+                std::printf("    %s\n", e.c_str());
+            }
+        }
+        SC_EXPECT(built == 1 && loaded == 1);
+        SC_EXPECT(with_hot == (mode >= 2.0 ? 1 : 0));
+        // A day on: the packages that came back are counted on their squadrons.
+        const double until = c.Now() + 24.0;
+        while (c.Now() < until) {
+            if (c.Advance(until)) c.SkipPlayerMission();
+        }
+        int sorties = 0;
+        for (const SquadronState& s : c.Squadrons()) sorties += s.combat_sorties;
+        SC_EXPECT(sorties > 0);
+    }
+}
+
+SC_TEST("hot phase S5: our side's jammed delay loads, and our scrambled pairs' unwarned break is its band over the jammed") {
+    command::OwnAirDef ours;
+    std::string e;
+    SC_EXPECT(command::LoadOwnAirFile(kData + "/command/own_air.json", ours, &e));
+    const HotDelayDef& r = ours.hot.reaction_delay;
+    SC_EXPECT(r.HasJammed() && r.jammed_lo_s > r.lo_s && r.jammed_hi_s > r.hi_s);
+    SC_EXPECT_NEAR((r.lo_s + r.hi_s) / (r.jammed_lo_s + r.jammed_hi_s), 0.5, 1e-12);
+    // The factions have none.
+    SC_EXPECT(!LoadHot("nato").faction.hot.reaction_delay.HasJammed());
 }

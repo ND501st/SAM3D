@@ -262,7 +262,7 @@ kept on the flight; stress and losses update it at events, not every step.
 **Phase one changes no abstract number.** Only played flights (A2, A1) read the block. The abstract resolver keeps its
 nerve (`resolve.hpp:117-122`: 0.25 + 0.3 boldness + the quirks) so `air_war_balance` and `air_war_bench` stay byte for
 byte. Phase two, with the stepped resolver (A0), moves the nerve onto `press_on` and `husbanding` and re-runs the balance
-(§9.3).
+(§9.3). (S5 took phase two under `hot_phase.mode` 2 without waiting for A0: §13.)
 
 ## 8. Officers and pilots move them
 
@@ -504,12 +504,121 @@ keeps:
 **Tests.** `tests/test_hot_phase.cpp` covers each item of §11.
 
 **Left:**
-- Most values are data that played flights do not read yet. Played flights now read the officer's press-on and jettison shifts, the opportunity, the radio discipline, the alert pools and the free hunt. They do not yet read `initiative`, `plan_adherence`, `emission_discipline`, `turn_back` (with its control-lost role values), `husbanding`, `reaction_delay_s` or `leader_may`. Wiring each one needs the behaviour it governs to exist in the session first: the leader's re-route (B2/B4), timing at gates (B2), our controller lost in a played raid (B8/B10), the stepped resolver (§9.3).
+- ~~Most values are data that played flights do not read yet~~ **Settled by S5 (20 Nov 2026, §13):** `initiative`, `plan_adherence`, `emission_discipline`, `turn_back`, `husbanding`, `reaction_delay_s` and `leader_may` are read by played flights under `hot_phase.mode` 2, and §9.3's nerve by the abstract resolver; what is still not read is §13's Left.
 - ~~`retask_air` with no caller~~ **Settled by B14 (18 Nov 2026):** under `balance.mode` 1 B5's divert waits for `RetaskAirS`, so an airborne Pact flight has its new task 10-30 min after the decision, not in the order's 160-490 s of hops (`c2.hpp`, `docs/air_war/09_BALANCE.md` §17.3 item 3). `AlertTakeoffS` and `RecallS` are read by the bench only. The loader does not check the composition.
-- The pilot's shift needs pilots with sorties, currency and nerve. The session's nerve is passed; the sorties and currency are B12's.
-- Our side's 4-10 s reaction delay when jammed is not modelled. The jammed state does not reach a flight.
+- ~~The pilot's shift needs pilots with sorties, currency and nerve~~ **Settled by S5 (§13):** a squadron's combat sorties and each faction's peacetime hours make its pilots' experience and currency.
+- ~~Our side's 4-10 s reaction delay when jammed is not modelled~~ **Settled by S5 (§13):** our scrambled pairs break later without their GCI's word.
 - NATO's `redirect_before_ip` line (c2, 10%) is not counted as a retask: `RetaskAirS` says interdiction is never retasked.
-- §8.5's tier weights for `chatterbox` and `silent_runner` were not applied (see above).
+- ~~§8.5's tier weights for `chatterbox` and `silent_runner` were not applied~~ **Settled by S5 (§13):** they are, from mode 2.
+
+## 13. As built (S5, 20 November 2026, branch `tbr-s5`)
+
+S5 makes the faction values govern the behaviour they name. Everything below is under a new save mode,
+`hot_phase.mode` 2 (`data/gameplay/air_war.json`), which new campaigns play. A save carries its `hot_mode`, so a save
+made at mode 1 (B11 to S5) or mode 0 (before B11) replays as it was played; the replay fingerprint of
+`tests/test_routes.cpp` is unchanged. The new randomness is drawn from keyed draws on the streams the behaviour already
+used (no new stream, and no extra draw in an older mode).
+
+**How a played flight reads them.** The raid builder (`raid_scenario.hpp`) works out each flight's values at the
+hand-over. It takes the faction's value for the flight's role, moved by its officer (§8.2) and its pilots (§8.3), and
+writes them into each aircraft's `"reactions"` as a `"hot"` block (`scenario.hpp` `LoadReactionHot`). The reaction chain
+(`reaction_chain.hpp`) reads that block.
+
+| Value | What it now does | Where |
+|---|---|---|
+| `initiative` | When the chain decides a flight goes round a site its plan did not know, the leader goes round only with the chance `initiative`. If not, he holds the plan, reports the site on the flight's net ("SAM at 2 o'clock, holding the plan"), and the flight presses on. | `ReactionChain::Decide`; draw `ReactionDraw::Initiative` |
+| `leader_may` | A leader goes round a site at all only if his faction lists `route` (or `everything`). He turns back on his own call only with `abort`, `break_off` or `everything`. His pilots fly the preset counter-SAM programme only with `programme`. So the Pact's leaders hold the route and keep the programme, the neutral's may break off but not re-route, NATO's may do both, and the rebels' may do everything. | `LeaderMayRoute`, `LeaderMayTurnBack` (`hot_phase.hpp`); the chain's `may_route`, `may_turn_back`, `may_programme` |
+| `plan_adherence` | After a go-round, the legs up to the attack are flown faster, so the flight makes up `plan_adherence` of the time the detour cost (its time on target), no faster than the aircraft's top speed. It is also the share of "we are seen" that the plan absorbs (next row). | `ReactionChain::MakeUpTime` |
+| `turn_back` | **Spotted.** The first time the leader's warning receiver shows a search radar on the way in, with his load still on, he turns the flight for home with the chance `turn_back × (1 − plan_adherence)`. It happens once a flight, only if he may turn back. The Pact's chance is therefore 0, and the neutral's is the highest. **Control lost.** In an air fight, a fighter that has lost its controller turns back with the chance of its control-lost value, where its doctrine would have it go on. | `ReactionChain::Spotted`, draw `ReactionDraw::TurnBack`; `AirFightSession`, key `0x5B5` on its stream |
+| `reaction_delay_s` | Each pilot's delay from cue to manoeuvre is the tables' delay for his skill, scaled by his faction's band over the tables' trained tier. The band is moved by his officer's airmanship and his own experience. A manoeuvre he improvises (not the Pact's preset programme) adds the band's `improvised_extra_s`. A hit or an order does not add it. | `FactionDelayScale`, `NoticeDelayS` (`reactions.hpp`) |
+| `husbanding` | His flight's press-on falls by `husbanding × min(1, the day's losses / loss_tolerance_per_day)`, beside the officer's shift. | `HusbandingShift`; the chain's `ShiftedRow` |
+| `emission_discipline` | Each flight is drawn disciplined with the chance `emission_discipline`, moved by its officer. A disciplined flight's self-screening jammers stay off until the carrier's warning receiver shows a lock or a launch. Stand-off jammers are not affected. | `raid_scenario.hpp`, a keyed draw on the opportunity stream; `"until_painted"` (`em_link.hpp`, the runner's `Painted`) |
+| `air_combat_skill` | An enemy aircraft in the air fight flies at its flight's value, moved by its officer and its pilots, instead of the doctrine's flat skill. | `"skill"` in the raid's `"air_fight"` |
+
+**§9.3, the second phase.** The package's nerve is `0.1 + 0.5 × press_on`, where `press_on` is the faction's
+strike value moved by the package leader. From that, `husbanding × min(1, losses today / tolerance)` is taken away, the
+planner's `abort_threshold` quirk is added as before, and the result is clamped to 0.05-0.9. Both the abstract resolver
+(`resolve.hpp` `PackageNerve`, with `ResolveContext::losses_today`) and a played package's `turn_back_share` use it. The
+results:
+- An average NATO or Pact leader keeps the old 0.4.
+- The neutral's nerve is 0.3 fresh, and falls to 0 (clamped to 0.05) at its tolerance of one aircraft a day.
+- The leader's own `abort_threshold` quirk now acts only through his press-on shift (0.1 of it), no longer adding 0.15 on top.
+
+`air_war_balance` was not re-run in this pass. The neutral's and the rebels' week-1 losses are the numbers to watch
+(`09_BALANCE.md` §5).
+
+**§8.5's weights.** `chatterbox` and `silent_runner` draw at §8.5's tier weights from mode 2. B9's weights are kept as
+`tier_weight_mode1` (`data.hpp` `QuirkDef::TierWeight`), so older saves draw the same staff. Their effect key stays
+B9's `radio_chatter`: its ±1 is §8.5's ∓0.1 of radio discipline.
+
+**The pilots (§8.3).**
+- *The data.* Each faction file's `hot_phase` gains a `pilots` block: the hours a pilot flies in a peacetime year, and
+  the combat sorties a pilot already has when the war starts (`hot_phase_def.hpp` `HotPilotsDef`).
+
+  | Faction | Hours a year | Starting sorties | Basis |
+  |---|---|---|---|
+  | NATO | 207 | 0 | `gao_1986_flying_hours`, `hansard_1981_nato_hours`; Red Flag counts as training |
+  | Pact | 140 | 1 | `cia_1969_soviet_tac_training` (1969, the only figure; 125-160 h); a few Afghanistan veterans, a game value |
+  | Neutral | 130 | 0 | game value |
+  | Rebels | 60 | 0 | game value |
+
+- *Sorties.* The campaign counts each squadron's combat sorties as its flights come back, each flight's aircraft less its
+  losses (`SquadronState::combat_sorties`).
+- *A flight's pilots* (`HotPilotOf`). Their experience is the faction's starting sorties plus the squadron's sorties per
+  pilot. Their currency is the year's hours, plus the war's sorties at `hot_phase.sortie_h` (1.5 h) each, over
+  `hot_phase.currency_reference_h` (180 h, NATO's guide of 15 h a month), capped at 1.2.
+- *What they move.* Air combat skill, the reaction delay, and plan adherence, as §8.3 says. Their nerve is the session's
+  (B4's `nerve`).
+
+**Our side's jammed delay.** `own_air.json`'s `reaction_delay_s` gains `"jammed_s": [4, 10]`, from §7.2's table.
+- *Who it applies to.* In a raid built at mode 2, the air fight carries `"hot_mode": 2`. The runner then gives our
+  scrambled pairs our side's values (`ScenarioRunner::OurHot`).
+- *Turning back.* A pair that loses its GCI turns back with our `turn_back` for its role with control lost (0.6).
+- *The late break.* A pilot bound to a GCI who has had no vector from it within the doctrine's `control_lost_s` breaks
+  from a missile with his timing multiplied by the band over the jammed band: (2+5)/(4+10) = 0.5
+  (`AirFightFighterDef::unwarned_break`). His warning comes from the GCI; jammed, he sees the missile later.
+
+**Tests.**
+- `test_hot_phase.cpp`:
+  - mode 2 is the default, and §8.5's weights apply from it while modes 0 and 1 keep B9's;
+  - the pilots load, and a squadron's sorties and hours give their experience and currency;
+  - §9.3's nerve: an average NATO or Pact leader keeps 0.4, the neutral's is lower and falls by its husbanding at its
+    tolerance, the Pact's does not fall, and `PackageNerve` is unchanged below mode 2;
+  - each faction's `leader_may` gates;
+  - a NATO raid built at mode 2 carries `"hot"` and loads, a raid at mode 1 carries none, and the sorties are counted;
+  - our side's jammed band.
+- `test_reactions.cpp`:
+  - with the same draws, a go-round is held and reported when the leader may not re-route, taken at initiative 1, and
+    split at 0.5;
+  - plan adherence makes up the detour's time;
+  - the spotted turn-back happens once a flight, never for a leader who may not turn back, and never when the plan
+    absorbs all of it;
+  - the delay scale and the improvised extra;
+  - the `"hot"` block's loader.
+- `test_em_link.cpp`: a jammer held until its carrier is painted, and its loader.
+- `test_air_fight.cpp`: a skilled pilot who lost his GCI turns back by `turn_back_lost` and goes on without it; the
+  air fight's new keys load.
+
+**Left:**
+- **Emission discipline of aircraft radars.** Fighter radars are not emitters in a session yet (roadmap S3), so only the
+  jammers read the value. A disciplined fighter's radar, off until needed, waits for S3.
+- **`leader_may`'s `attack_mode`, `direction`, `release_height` and `alternate`.** No played behaviour exists for them to
+  gate: the attack is flown as planned, and there is no alternate target. `targets_in_flight` and `attack` stay with
+  B6's opportunity gates.
+- **`plan_adherence` at gates.** The planner already spaces the gates (`gate_window_s`), and a played flight keeps no
+  timing at a gate that adherence could loosen. Adherence reads only the make-up after a detour and the spotted
+  turn-back.
+- **`initiative` on the other unplanned cues.** It reads only the go-round round a site. The frag's alternate and the
+  free hunt are B6's.
+- **The enemy escorts' turn-back with control lost.** It is written into the raid's air fight, but played raids give the
+  enemy no controller (B8's E-3A is not placed in a raid), so it acts only in a session that has one.
+- **The pilot's experience on the no-reaction chance and the find chance (§8.3).** Not wired: the tables' tier comes from
+  the session's pilot skill, which the raid builder does not yet move by sorties.
+- **The testbed's waves** (`test_waves.hpp`) carry no `"hot"` values; they fly as before.
+- **Balance.** `air_war_balance` has not been re-run at mode 2. §9.3's nerve and the spotted turn-back lower the neutral's
+  and the rebels' pressing, by an amount only a run shows.
+- **Sources.** The neutral's and the rebels' hours are game values, and the Pact's rest on a 1969 estimate (Left open
+  below).
 
 ## Done when
 
