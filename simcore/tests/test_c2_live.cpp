@@ -30,6 +30,14 @@ AirWarData LoadWar(const std::string& faction) {
     return d;
 }
 
+// The tuned theatre undated, its parts of the day the buckets (light.mode 0, roadmap S8): the tests written on them
+// before the theatre had a date, whose seeds and hours were picked on the buckets' dusk and dawn.
+AirWarData Buckets(AirWarData d) {
+    d.tuning.values["light.mode"] = 0.0;
+    ApplyLightMode(d);
+    return d;
+}
+
 // An AirC2 alone, as test_c2.cpp's: the posts read the data, the staff, the truth and where our battery listens.
 struct Bench {
     AirWarData d;
@@ -426,8 +434,8 @@ SC_TEST("c2 live (S2): our jamming takes a share of the hops of a post marked fo
 }
 
 SC_TEST("c2 live (S2): a BAI target learned in the war waits nomination_h before the planner strikes it; one known before the war and a deep one do not") {
-    const AirWarData nato = LoadWar("nato");
-    const AirWarData pact = LoadWar("warsaw_pact");
+    const AirWarData nato = Buckets(LoadWar("nato"));
+    const AirWarData pact = Buckets(LoadWar("warsaw_pact"));
     const double nom = nato.faction.c2.nomination_h;
     SC_EXPECT(nom == 48.0);  // gallant_knight_1983
     IntelEntry e;

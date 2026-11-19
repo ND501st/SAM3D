@@ -170,6 +170,12 @@ server or alone, the local runner's clock is the sky's. A new scenario forgets t
 
 ## 7. Left
 
+- The battery's mission session (`campaign::MissionSession`, `mission_demo --war`) runs its war undated by default
+  (`MissionSessionDef::light_mode` 0): the bridges mission starts at 19:00, and its package on the march was the
+  buckets' dusk (18-21); by the sun the dusk is 16:13-17:25 and the package would come before the session. Dating it
+  needs the mission's clock moved into the sun's dusk, and its tests' times with it. Three air-war tests written on
+  the buckets' hours (`test_c2.cpp`'s alert pools and on-call package, `test_c2_live.cpp`'s nomination) pin the tuned
+  theatre undated the same way (`Buckets`).
 - The moon is in simcore only: Unreal draws no moon and its night light is not raised by it.
 - The Unreal side (S8's `ClientReceiveSky`) is compiled but not yet looked at in a session with a client.
 - `brown_1952`'s twilight illuminance table is from memory, not a fetched copy; its values should be checked against
