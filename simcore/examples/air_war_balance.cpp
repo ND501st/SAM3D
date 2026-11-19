@@ -521,6 +521,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         for (const auto& kv : sets) data.tuning.values[kv.first] = kv.second;
+        ApplyLightMode(data);  // --set light.mode=0: the tuned theatre undated, as before roadmap S8
         for (int careful = 0; careful < 2; ++careful) {
             RunStats r;
             for (int s = 1; s <= seeds; ++s) {

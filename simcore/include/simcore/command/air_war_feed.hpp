@@ -27,12 +27,14 @@ namespace command {
 
 // The campaign's sky on its information net (roadmap R7, docs/LIGHT.md): on a dated theatre the couriers' night is the
 // sun's at the theatre's origin, as the air war's parts of the day are (airwar::TheatrePartAt); an undated theatre keeps
-// the net's fixed 20:00-06:00. Call after InfoNet::Init with the theatre's start_hour. True when a sky was given.
-inline bool GiveTheatreSky(InfoNet& net, const airwar::TheatreDef& t, const LightValues& values = LightValues()) {
+// the net's fixed 20:00-06:00. Call after InfoNet::Init with the theatre's start_hour. True when a sky was given. The
+// light's values are the theatre's (light.json's, roadmap S8) unless others are given.
+inline bool GiveTheatreSky(InfoNet& net, const airwar::TheatreDef& t, const LightValues& values) {
     if (t.day_of_year <= 0) return false;
     net.SetSky(airwar::TheatreSky(t), values);
     return true;
 }
+inline bool GiveTheatreSky(InfoNet& net, const airwar::TheatreDef& t) { return GiveTheatreSky(net, t, t.light); }
 
 // Who first knows each kind of news, and the air war's effects on the pipeline (game values, docs/command/06).
 struct FeedRoles {

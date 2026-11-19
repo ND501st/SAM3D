@@ -152,5 +152,10 @@
     "mode": 1,
     "source": "game value: the switch of roadmap S1 (docs/air_battle/08_OUR_FIGHTERS.md, As built (S1))",
     "notes": "Our fighters in the campaign (roadmap S1). mode: 1 our pairs in the played raids beside the package's own fighters, the corridors the enemy learns and times raids into, our defences' holding of fire there, the fighter regiments' reports, NATO's own belt; 0 as before S1 (a save made before S1 loads with it and replays as played)."
+  },
+  "light": {
+    "mode": 1,
+    "source": "game value: the switch of roadmap S8 (docs/LIGHT.md section 5)",
+    "notes": "The light in the air war (roadmap S8). mode: 1 the tuned theatre (theatre_pannonia.json, its \"dated_from_light_mode\": 1) dated 15 October 1985, its parts of the day by the sun at its origin, and every theatre's light thresholds read from data/gameplay/light.json; 0 as before S8 (a save made before it has no key and replays with it): the tuned theatre undated, its fixed buckets, the code's light defaults."
   }
 }

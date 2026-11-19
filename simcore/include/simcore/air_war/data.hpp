@@ -184,8 +184,15 @@ struct TheatreDef {
     int year = 1985;            // the war's year: only what is in service by then flies (AircraftType::in_service_year)
     // "date": the war's first day (roadmap R7, docs/LIGHT.md). With one, the parts of the day are the sun's at the
     // theatre's origin (DayPartBySun); without (0), the fixed buckets (DayPartAt) the first balance pass was tuned on.
+    // day_of_year is the one in force: the file's (date_day_of_year) unless the campaign's light.mode is below the
+    // theatre's "dated_from_light_mode" (roadmap S8: the tuned theatre dated, a save made before it replays undated).
     int day_of_year = 0;
     double utc_offset_h = 1.0;
+    int date_day_of_year = 0;
+    int dated_from_light_mode = 0;
+    // The light's thresholds the theatre's parts of the day are read by (roadmap S8): data/gameplay/light.json's under
+    // light.mode 1, the code's defaults (equal today) under 0.
+    LightValues light;
     std::vector<FrontDef> fronts;
     std::vector<TheatreObject> objects;  // a supply line's columns among them, after the written objects
     std::vector<SupplyLineDef> supply_lines;
@@ -227,11 +234,13 @@ inline SkyClock TheatreSky(const TheatreDef& t) {
     c.day_of_year = t.day_of_year > 0 ? t.day_of_year : 288;
     c.utc_offset_h = t.utc_offset_h;
     c.start_local_h = t.start_hour;
+    c.year = t.year;
     return c;
 }
 
-// The part of the day by the sun at an absolute local hour (start_hour + campaign hour): light.hpp's phases.
-inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const LightValues& v = LightValues()) {
+// The part of the day by the sun at an absolute local hour (start_hour + campaign hour): light.hpp's phases, by the
+// theatre's light values (light.json's, roadmap S8) unless others are given.
+inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const LightValues& v) {
     switch (LightAt(TheatreSky(t), (abs_local_h - t.start_hour) * 3600.0, v).phase) {
         case LightPhase::Day: return DayPart::Day;
         case LightPhase::Dawn: return DayPart::Dawn;
@@ -240,6 +249,7 @@ inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const Light
     }
     return DayPart::Day;
 }
+inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h) { return DayPartBySun(t, abs_local_h, t.light); }
 
 // The local hour a planner aims at for a part on the campaign's day `day` (0 the first): the middle of the part by the
 // sun, sunrise for the dawn and sunset for the dusk (the sun on the horizon, between low_sun and twilight), noon for the
@@ -1088,6 +1098,9 @@ struct TuningTable {
             // our fighters (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md): 1 our pairs in the played raids, the enemy's
             // learning of our corridors and its use of them, its own belt on its damaged aircraft; 0 before (a save made before S1)
             {"own_air.mode", 1.0},
+            // the light (roadmap S8, docs/LIGHT.md): 1 the tuned theatre dated (its parts of the day by the sun) and the
+            // theatre's light values light.json's; 0 before it (a save made before S8: the buckets, the code's light)
+            {"light.mode", 1.0},
             {"route.start_before_gate_m", 80000.0}, // the route starts this far behind its gate (at most at the bases)
             {"route.bend_deg", 30.0},               // a river vertex turning more is a bend, a turn point
             {"route.fallback_grid_m", 15000.0},     // the lattice of a theatre without a map
@@ -1196,8 +1209,8 @@ public:
     // added, one with a base object's id replacing it where it stands.
     bool LoadTheatre(const json::Value& root, TheatreDef& out, const TheatreDef* base = nullptr) {
         if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "extends", "remove", "country",
-                             "origin", "ground_height_m", "start_hour", "year", "date", "utc_offset_h", "fronts", "objects", "supply_lines",
-                             "country_map"})) {
+                             "origin", "ground_height_m", "start_hour", "year", "date", "dated_from_light_mode", "utc_offset_h", "fronts",
+                             "objects", "supply_lines", "country_map"})) {
             return false;
         }
         if (root.Find("extends") != nullptr && base == nullptr) {
@@ -1247,15 +1260,20 @@ public:
         return OptionalString(root, "", "country_map", out.country_map) && LoadSupplyLines(root, out) && MakeColumns(out);
     }
 
-    // "date": "1985-10-15" (its year the war's "year"), "utc_offset_h": the theatre's clock ahead of UTC (R7).
+    // "date": "1985-10-15" (its year the war's "year"), "utc_offset_h": the theatre's clock ahead of UTC (R7);
+    // "dated_from_light_mode": the least light.mode its date is read under (roadmap S8; 0, the default, always).
     bool LoadDate(const json::Value& root, TheatreDef& out) {
         std::string date;
         if (!OptionalString(root, "", "date", date)) return false;
         if (!date.empty()) {
             int y = 0;
-            if (!ParseIsoDate(date, y, out.day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
+            if (!ParseIsoDate(date, y, out.date_day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
             if (y != out.year) return Fail("date", "its year must be the war's \"year\"");
+            out.dated_from_light_mode = 0;  // a date of its own: its own rule, not its base's
         }
+        if (!Int(root, "", "dated_from_light_mode", out.dated_from_light_mode, 0, 1)) return false;
+        if (root.Find("dated_from_light_mode") != nullptr && date.empty()) return Fail("dated_from_light_mode", "only with a \"date\"");
+        out.day_of_year = out.date_day_of_year;
         return Num(root, "", "utc_offset_h", out.utc_offset_h, -12.0, 14.0);
     }
 
@@ -2804,6 +2822,7 @@ struct AirWarData {
     AaaTable aaa;             // how the guns fire by range (data/gameplay/aaa.json): a played raid's guns shown (roadmap S4)
     command::OwnAirDef own_air;  // our fighters' rules (data/command/own_air.json, roadmap S1; absent: none of it)
     bool has_own_air = false;
+    LightValues light_file;  // data/gameplay/light.json (roadmap S8; absent: the code's defaults)
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
 
     const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
@@ -2823,6 +2842,17 @@ struct AirWarData {
     }
 };
 
+// The light's save mode (roadmap S8, air_war.json's "light"): under light.mode 1 the theatre's date is read whatever
+// its dated_from_light_mode and its parts of the day by light.json's values; under 0 (a save made before S8) a theatre
+// dated only from mode 1 (the tuned theatre_pannonia.json) is undated, the buckets as tuned, and the light the code's
+// defaults. Called by LoadAirWarData and LoadCampaignJson after the tuning is set; call it again after changing it.
+inline void ApplyLightMode(AirWarData& d) {
+    const double mode = d.tuning.Get("light.mode");
+    TheatreDef& t = d.theatre;
+    t.day_of_year = t.date_day_of_year > 0 && mode >= static_cast<double>(t.dated_from_light_mode) ? t.date_day_of_year : 0;
+    t.light = mode >= 1.0 ? d.light_file : LightValues();
+}
+
 // data_dir: the repo's data folder. faction_file and theatre_file relative to it ("air_war/faction_nato.json").
 inline bool LoadAirWarData(const std::string& data_dir, const std::string& theatre_file, const std::string& faction_file,
                            AirWarData& out, std::string* error = nullptr) {
@@ -2831,6 +2861,10 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadFactionFile(data_dir + "/" + faction_file, d.faction, error)) return false;
     if (!LoadQuirksFile(data_dir + "/air_war/traits.json", d.quirks, error)) return false;
     if (!LoadTuningFile(data_dir + "/gameplay/air_war.json", d.tuning, error)) return false;
+    if (std::ifstream(data_dir + "/gameplay/light.json").good() && !LoadLightValues(data_dir, "gameplay/light.json", d.light_file, error)) {
+        return false;  // there but wrong; a data folder without it keeps the code's
+    }
+    ApplyLightMode(d);
     if (!LoadWeaponsFile(data_dir + "/air_war/weapons.json", d.weapons, error)) return false;
     if (!LoadAirCombatFile(data_dir + "/air_war/air_combat.json", d.air_combat, error)) return false;
     if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;

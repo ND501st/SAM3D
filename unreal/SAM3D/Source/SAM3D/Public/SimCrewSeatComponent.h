@@ -89,6 +89,7 @@ public:
 	double& SendAccumulator() { return Accumulator; }
 	uint32 NextSnapshotSeq() { return ++SnapshotSeq; }
 	void SendConsole(const TArray<uint8>& Bytes) { ClientReceiveConsole(Bytes); }
+	void SendSky(double StartLocalHours, int32 DayOfYear, int32 Year, double SimSeconds) { ClientReceiveSky(StartLocalHours, DayOfYear, Year, SimSeconds); }
 	FString DebriefName() const;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -120,6 +121,10 @@ protected:
 
 	UFUNCTION(Client, Unreliable)
 	void ClientReceiveConsole(const TArray<uint8>& Bytes);
+
+	/** The server's sky clock and time (roadmap S8): sent with every console snapshot, the newest wins. */
+	UFUNCTION(Client, Unreliable)
+	void ClientReceiveSky(double StartLocalHours, int32 DayOfYear, int32 Year, double ServerSimSeconds);
 
 	UFUNCTION(Client, Reliable)
 	void ClientActionResult(const FString& ControlId, bool bMoved, const FString& Why);

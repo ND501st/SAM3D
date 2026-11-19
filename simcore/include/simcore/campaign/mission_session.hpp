@@ -51,6 +51,11 @@ struct MissionSessionDef {
     int day = 1;                                        // the war's day the mission's clock falls on
     std::string tasking;                                // the regiment's tasking rules ("campaign/tasking.json"); "" none
     double hours = 0.0;                                 // the session's length from its start (0: the scenario's own end)
+    // The war's light mode (air_war.json's light.mode, roadmap S8). 0 by default: the tuned theatre undated, its parts
+    // of the day the buckets, because the bridges mission (19:00, a package on the march) and its tests were built on
+    // the buckets' dusk (18-21); by the sun that dusk is 16:13-17:25 and its package comes before the session starts.
+    // -1: the war data's own (1, the theatre dated). docs/LIGHT.md section 7.
+    int light_mode = 0;
 };
 
 class MissionSession {
@@ -82,6 +87,10 @@ public:
         if (clock_start_s < 0.0) return fail(d.scenario + ": no \"clock_start\" to put the air war's day on");
         airwar::AirWarData war;
         if (!airwar::LoadAirWarData(data_dir, d.theatre, "air_war/faction_" + d.faction + ".json", war, &e)) return fail(e);
+        if (d.light_mode >= 0) {
+            war.tuning.values["light.mode"] = static_cast<double>(d.light_mode);
+            airwar::ApplyLightMode(war);
+        }
         campaign_ = std::make_unique<airwar::AirCampaign>();
         if (!campaign_->Init(war, d.seed)) return fail("the air war does not start");
         // The battery stands where the mission has it from the war's first hour, so the enemy's intelligence has

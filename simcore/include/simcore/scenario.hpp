@@ -2705,6 +2705,7 @@ private:
         std::string date;
         if (!OptionalString(root, "", "date", date)) return false;
         if (!date.empty() && !ParseIsoDate(date, out.year, c.day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
+        c.year = out.year;  // the moon's (roadmap S8)
         c.utc_offset_h = std::round(c.lon_deg / 15.0);
         if (!OptionalNumber(root, "", "utc_offset_h", c.utc_offset_h)) return false;
         if (c.utc_offset_h < -12.0 || c.utc_offset_h > 14.0) return Fail("utc_offset_h", "hours ahead of UTC, -12 to 14");
