@@ -241,6 +241,9 @@ add_executable(perception_bench examples/perception_bench.cpp)
 simcore_configure_target(perception_bench)
 add_executable(aaa_bench examples/aaa_bench.cpp)
 simcore_configure_target(aaa_bench)
+# The live air fight, B8's beside roadmap S3's, and the far fight on and off (docs/air_battle/07_AIR_TO_AIR.md section 9).
+add_executable(air_combat_bench examples/air_combat_bench.cpp)
+simcore_configure_target(air_combat_bench)
 
 # The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
 # as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact,

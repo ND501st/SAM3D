@@ -67,7 +67,9 @@
     "authority": [
       { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
       { "post": "tasking", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
-      { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" }
+      { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
+      { "post": "radar_control", "act": "vector", "missions": ["fighters"], "where": "any", "source": "SAM3D assumption (docs/air_battle/07_AIR_TO_AIR.md section 9: a small air force's fighters under its own GCI)", "confidence": "low",
+        "notes": "Roadmap S3: the air fight reads it." }
     ],
     "timing": {
       "report": { "relay_s": [60, 180], "decide_s": [300, 900], "encode_s": [20, 60],

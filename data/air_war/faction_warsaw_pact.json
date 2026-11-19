@@ -95,7 +95,9 @@
         "source": "fm_100_2_1_1984 p. 12-7 (\"occasionally\"); the chance a game value", "confidence": "low" },
       { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "fm_100_2_1_1984 p. 12-8 (ground control); lambeth_1984", "confidence": "medium" },
       { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "mt_1962_front_aviation; lambeth_1984", "confidence": "medium" },
-      { "post": "radar_control", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "mt_1962_front_aviation", "confidence": "medium" }
+      { "post": "radar_control", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "mt_1962_front_aviation", "confidence": "medium" },
+      { "post": "radar_control", "act": "vector", "missions": ["fighters"], "where": "any", "source": "mt_1962_front_aviation; lambeth_1984 (close ground control of the fighters to the contact); pennington_1985", "confidence": "medium",
+        "notes": "Roadmap S3: the air fight reads it. The Pact's airborne warning post controls no fighter in 1985 (the A-50 from 1989), so it has no line." }
     ],
     "timing": {
       "report": { "relay_s": [20, 60], "decide_s": [60, 180], "encode_s": [20, 40],

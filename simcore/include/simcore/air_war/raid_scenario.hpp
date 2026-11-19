@@ -1212,6 +1212,8 @@ public:
             // The package's aircraft in the fight (S1): its escorts fight our pairs, the rest only defend themselves; our pairs
             // engage only aircraft the fight has. A type without a fit is unarmed (air_combat.json's "unarmed").
             const AirCombatDef& ac = d.air_combat;
+            const bool s3 = d.tuning.Get("air_fight.mode") >= 1.0;
+            Put(af, "mode", Num(s3 ? 1.0 : 0.0));
             if (ac.Doctrine(f.id) != nullptr) {
                 json::Value fighters = Arr();
                 for (const RaidAircraft& ra : m.aircraft) {
@@ -1223,7 +1225,11 @@ public:
                     Put(fv, "target", Str(ra.target_id));
                     Put(fv, "type", Str(type));
                     Put(fv, "faction", Str(f.id));
-                    Put(fv, "role", Str(ra.role == FlightRole::Escort ? "escort" : "strike"));
+                    // S3 (air_fight.mode 1): its sweep and CAP fight as fighters too; before, as strikers.
+                    const char* role = ra.role == FlightRole::Escort ? "escort" : "strike";
+                    if (s3 && ra.role == FlightRole::Sweep) role = "sweep";
+                    if (s3 && ra.role == FlightRole::Cap) role = "cap";
+                    Put(fv, "role", Str(role));
                     Push(fighters, fv);
                 }
                 if (!fighters.items.empty()) Put(af, "fighters", fighters);

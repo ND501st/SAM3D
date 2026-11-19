@@ -434,7 +434,10 @@ SC_TEST("c2 live (S2): our jamming takes a share of the hops of a post marked fo
 }
 
 SC_TEST("c2 live (S2): a BAI target learned in the war waits nomination_h before the planner strikes it; one known before the war and a deep one do not") {
-    const AirWarData nato = Buckets(LoadWar("nato"));
+    // The wars this was written on: B8's abstract fight (air_fight.mode 0). S3's moves which targets the recce learns, and
+    // in these four wars only one in-war target falls in the BAI area even then.
+    AirWarData nato = Buckets(LoadWar("nato"));
+    nato.tuning.values["air_fight.mode"] = 0.0;
     const AirWarData pact = Buckets(LoadWar("warsaw_pact"));
     const double nom = nato.faction.c2.nomination_h;
     SC_EXPECT(nom == 48.0);  // gallant_knight_1983
@@ -760,3 +763,4 @@ SC_TEST("c2 live (S2): a raid in a session: the campaign's posts speak on its ra
         }
     }
 }
+

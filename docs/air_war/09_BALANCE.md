@@ -1253,3 +1253,58 @@ everywhere: the dusk and night by the sun begin some three hours earlier than th
 
 **No rebalance is needed.** The seven sample raids of the missions menu were regenerated from the dated theatre
 (`docs/LIGHT.md` §5; the command in each file's notes).
+
+## 20. The air fight in detail: before and after (roadmap S3, 19 November 2026)
+
+S3 (`docs/air_battle/07_AIR_TO_AIR.md` §9) changes the live fight (fighter radars as emitters with their look-down,
+authority lines for vectors, the beam, slash, turn and drag, flown rounds that run out of energy, the strikers' chaff
+and flares, the escort's station, the far fight) behind the scenario's `air_fight` `"mode"` (1; a played session's
+outcome is saved, so no replay moves), and the abstract fight (A0) behind the tuning's `air_fight.mode` (1 in
+`data/gameplay/air_war.json`, saved as `"air_fight_mode"`; a save without it replays B8's A0 with 0). In A0: beam shots
+from the beam, the slash's one pass and its share back (`a0_slash_return` 0.4), a turning doctrine's extra round
+(`a0_turn_rounds` 1), a radar round from beyond sight dragged at `a0_drag` (0.6) times the skill, and strikers that saw
+the shot answering with flares or chaff by `gameplay/reactions.json`. The raid builder writes the package's sweep and
+CAP as `sweep` and `cap` (before, as strikers). The benches were run on the branch's base and on S3, the same seeds; the
+replay fingerprint (`test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) is unchanged.
+
+`air_war_balance data 20 7` (the district), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost | Exchange (band) |
+|---|---|---|---|---|---|
+| Rebels, careless | 20.6 -> 20.6 | 2.7% -> 2.7% | 0% -> 0% | 0.1/0.0 -> 0.1/0.0 | - |
+| Rebels, careful | 22.0 -> 22.0 | 2.7% -> 2.7% | 0% -> 0% | 0.2/0.0 -> 0.2/0.0 | - |
+| Neutral, careless | 39.8 -> 39.8 | 3.1% -> 3.1% | 0% -> 0% | 0.3/0.1 -> 0.3/0.1 | - |
+| Neutral, careful | 35.9 -> 35.9 | 3.8% -> 3.8% | 0% -> 0% | 0.5/0.1 -> 0.5/0.1 | - |
+| Warsaw Pact, careless | 567.6 -> 568.5 | 1.9% -> 1.7% | 70% -> 65% | 4.3/2.7 -> 3.7/2.7 | 1.59 -> 1.37 |
+| Warsaw Pact, careful | 562.0 -> 567.5 | 2.0% -> 1.8% | 15% -> 15% | 5.3/3.0 -> 3.9/3.2 | 1.74 -> 1.20 |
+| NATO, careless | 538.9 -> 536.5 | 1.7% -> 1.5% | 90% -> 100% | 4.0/5.5 -> 3.1/5.2 | 0.73 -> 0.60 |
+| NATO, careful | 536.4 -> 538.1 | 1.5% -> 1.5% | 25% -> 25% | 3.4/4.9 -> 3.4/4.8 | 0.69 -> 0.69 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost | Exchange (band) |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 16.9% -> 16.9% | 0% -> 0% | 0.1/0.0 -> 0.1/0.0 | - |
+| Rebels, careful | 14.4 -> 14.4 | 13.9% -> 13.9% | 0% -> 0% | 0.2/0.0 -> 0.2/0.0 | - |
+| Neutral, careless | 25.0 -> 25.0 | 4.8% -> 4.8% | 0% -> 0% | 0.3/0.0 -> 0.3/0.0 | - |
+| Neutral, careful | 20.3 -> 20.3 | 6.4% -> 6.4% | 0% -> 0% | 0.6/0.0 -> 0.6/0.0 | - |
+| Warsaw Pact, careless | 978.2 -> 982.6 | 4.0% -> 3.6% | 90% -> 80% | 9.4/5.9 -> 7.7/5.4 | 1.59 -> 1.43 |
+| Warsaw Pact, careful | 964.1 -> 956.8 | 3.5% -> 3.6% | 10% -> 0% | 8.9/4.4 -> 8.0/4.0 | 2.02 -> 2.00 |
+| NATO, careless | 771.4 -> 763.8 | 2.0% -> 2.3% | 20% -> 10% | 3.4/7.2 -> 4.6/8.2 | 0.47 -> 0.56 |
+| NATO, careful | 761.4 -> 749.3 | 2.1% -> 2.2% | 10% -> 10% | 2.6/7.2 -> 3.5/8.3 | 0.36 -> 0.42 |
+
+The rebels and the neutral neighbour do not move: their raids meet few of our fighters and their doctrines turn (no
+slash, no beam). Against the Pact the exchange falls (district 1.59-1.74 -> 1.20-1.37, nation 1.59-2.02 -> 1.43-2.00):
+its MiG-23MLs slash and extend instead of staying in a fight that our MiG-21s' R-60s and guns win, and drag our R-23Rs
+from beyond sight; its losses fall (district 4.3-5.3 -> 3.7-3.9 a campaign) while ours hold. Against NATO on the
+nation both sides lose more (theirs 2.6-3.4 -> 3.5-4.6, ours 7.2 -> 8.2-8.3) and the exchange rises (0.36-0.47 ->
+0.42-0.56); on the district it stays (0.69) or falls (the careless run's 0.73 -> 0.60). A0's beam shots, drags and the
+strikers' decoys move both sides' losses; how much each part gives was not isolated. All stay inside
+their bands (0.80-2.50 against the Pact, 0.25-1.20 against NATO). Losses a sortie moved by at most 0.4 points; the
+careless NATO run's battery is wrecked in all 20 district runs (90% before), the careless Pact run's in 65% (70%).
+
+`air_combat_bench data 50` (new, `simcore/examples/air_combat_bench.cpp`) flies the live fight's cases in a small world
+of its own, B8's beside S3's and the far fight off and on; its table and reading are in `07_AIR_TO_AIR.md` §9.
+
+**Left:** the live fight's exchange is not banded (`air_combat_bench` counts, it does not judge); the bands above are
+the abstract fight's.

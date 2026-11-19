@@ -101,7 +101,11 @@
       { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "rippe_1985_airland (tactical control of the offensive aircraft)", "confidence": "medium" },
       { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "smart_1985_tacs", "confidence": "high" },
       { "post": "radar_control", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "smart_1985_tacs ch. 3 (with TACC concurrence)", "confidence": "medium" },
-      { "post": "airborne_warning", "act": "warn", "missions": ["any"], "where": "any", "source": "afmag_1984_nato; rippe_1985_airland; no strike retasking by the E-3A in a period source", "confidence": "medium" }
+      { "post": "airborne_warning", "act": "warn", "missions": ["any"], "where": "any", "source": "afmag_1984_nato; rippe_1985_airland; no strike retasking by the E-3A in a period source", "confidence": "medium" },
+      { "post": "radar_control", "act": "vector", "missions": ["cap", "intercept"], "where": "any", "source": "smart_1985_tacs (the CRC's control of the air defence's fighters)", "confidence": "medium",
+        "notes": "Roadmap S3: the air fight reads it. A sweep and a close escort fly on their own radar and the E-3A's broadcast picture; no period source has a ground controller vector them over the other side." },
+      { "post": "airborne_warning", "act": "vector", "missions": ["fighters"], "where": "any", "from_year": 1982, "source": "afmag_1984_nato (the E-3A's control of NATO fighters); anderegg_2001 (the AWACS's calls to the fighters)", "confidence": "medium",
+        "notes": "Roadmap S3: the air fight reads it." }
     ],
     "timing": {
       "report": { "relay_s": [30, 120], "decide_s": [60, 300], "encode_s": [10, 30],

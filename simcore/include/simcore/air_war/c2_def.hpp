@@ -46,7 +46,8 @@ struct C2PostDef {
 // whose agreement, from a year.
 struct C2AuthorityDef {
     std::string post;                   // a post kind
-    std::string act;                    // warn, designate, approve, divert_airborne, redirect_before_ip, divert_recovery, scramble, recall
+    std::string act;                    // warn, designate, approve, divert_airborne, redirect_before_ip, divert_recovery, scramble, recall,
+                                        // vector (roadmap S3: a controller's vectors to fighters, read by the air fight)
     std::vector<std::string> missions;  // mission names (MissionKindName, "bai", "fighters"), or "any"
     std::string where = "any";          // own_corps, within_allocation, own_area, free_hunt_zone, any
     std::string needs;                  // "army": the corps' agreement (or silence for silence_consent_s)
@@ -157,7 +158,7 @@ inline const std::vector<std::string>& C2PostKinds() {
 }
 inline const std::vector<std::string>& C2Acts() {
     static const std::vector<std::string> k = {"warn", "designate", "approve", "divert_airborne", "redirect_before_ip", "divert_recovery",
-                                               "scramble", "recall"};
+                                               "scramble", "recall", "vector"};
     return k;
 }
 inline const std::vector<std::string>& C2Wheres() {
