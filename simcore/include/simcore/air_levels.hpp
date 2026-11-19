@@ -49,7 +49,7 @@ inline const char* AirLevelName(AirLevel l) {
 
 // data/gameplay/air_levels.json (game values). Without the file every aircraft of a session is at A2, as before B12.
 struct AirLevelValues {
-    int mode = 0;                     // 0: every aircraft at A2; 1: flights far from our units at A1
+    int mode = 0;                     // 0: every aircraft at A2; 1: flights far from our units at A1; 2: and roadmap S7's (below)
     double radar_m = 45000.0;         // our launchers' radars: the session's own vehicle, the battery's, the neighbours'
     double post_radar_m = 0.0;        // the PU-12M's radar (0: not counted)
     double fighter_radar_m = 30000.0; // our fighters in the session
@@ -58,6 +58,13 @@ struct AirLevelValues {
     double down_factor = 1.2;         // down to A1 only beyond this times the near range...
     double down_dwell_s = 30.0;       // ...and after this long there
     double engaged_s = 60.0;          // a launch, a burst or a lock seen within this keeps the flight at A2
+    // Mode 2 (roadmap S7): a wingman at A1 scans the ground ahead only every a1_height_scan_s (TargetPilot::
+    // SetHeightScanEvery); a radar locked on him alone gives him back his own receiver; a flight's stagger by a serial
+    // fixed when it first flew, not by a hash of its id.
+    double a1_height_scan_s = 0.5;
+    // And the receivers skip the path to a beam that cannot reach them (em/esm_system.hpp, EmScene::esm_sidelobe_bound;
+    // 1 on, 0 off): the same intercepts, the path cache refreshed less often.
+    double receiver_bound = 1.0;
 };
 
 // The stagger's phase in [0, 1) for a fixed serial.
@@ -68,6 +75,14 @@ inline double StaggerPhase(std::uint64_t serial) {
 inline bool StaggerDue(std::uint64_t serial, double hz, double t_prev, double t) {
     if (hz <= 0.0) return false;
     const double ph = StaggerPhase(serial);
+    return std::floor(t * hz + ph + 1e-9) > std::floor(t_prev * hz + ph + 1e-9);
+}
+
+// The same with the phases spread evenly by a serial given in order (roadmap S7, mode 2: the golden ratio's sequence, so
+// flights that came into the sky one after another never share a step by chance, as two hashed ids may).
+inline bool StaggerDueEven(std::uint64_t serial, double hz, double t_prev, double t) {
+    if (hz <= 0.0) return false;
+    const double ph = std::fmod(static_cast<double>(serial % 1000003ull) * 0.6180339887498949, 1.0);
     return std::floor(t * hz + ph + 1e-9) > std::floor(t_prev * hz + ph + 1e-9);
 }
 
@@ -98,6 +113,7 @@ public:
         bool seen = false;
         double far_since_s = -1.0;  // since when it has been beyond down_factor times the near range (< 0: not)
         int changes = 0;            // how often it changed level
+        std::uint64_t serial = 0;   // its place in the order the flights first flew (roadmap S7: its stagger, StaggerDueEven)
     };
 
     void Configure(const AirLevelValues& v) { v_ = v; }
@@ -126,6 +142,7 @@ public:
             e.far_since_s = -1.0;  // between the near range and its margin: as it is
         }
         const bool was_seen = e.seen;
+        if (!was_seen) e.serial = next_serial_++;
         e.seen = true;
         if (next == e.level) return false;
         e.level = next;
@@ -145,6 +162,7 @@ public:
 private:
     AirLevelValues v_;
     std::vector<Entry> e_;
+    std::uint64_t next_serial_ = 0;
 };
 
 namespace detail {
@@ -165,7 +183,8 @@ public:
                                                         {"down_factor", &out.down_factor},
                                                         {"down_dwell_s", &out.down_dwell_s},
                                                         {"engaged_s", &out.engaged_s}};
-        if (!Keys(*values, "values", {"mode", "radar_m", "post_radar_m", "fighter_radar_m", "ground_m", "margin_m", "down_factor", "down_dwell_s", "engaged_s"})) {
+        if (!Keys(*values, "values", {"mode", "radar_m", "post_radar_m", "fighter_radar_m", "ground_m", "margin_m", "down_factor", "down_dwell_s", "engaged_s",
+                                          "a1_height_scan_s", "receiver_bound"})) {
             return false;
         }
         for (const auto& e : each) {
@@ -177,7 +196,18 @@ public:
             if (n == nullptr || !n->Is(json::Type::Number) || !(n->number >= 0.0)) return Fail(Join(p, "value"), "a number >= 0");
             *e.second = n->number;
         }
-        if (mode != 0.0 && mode != 1.0) return Fail("values.mode.value", "0 (every aircraft at A2) or 1 (the levels)");
+        // Optional (roadmap S7): a file written before S7 keeps the defaults.
+        const std::pair<const char*, double*> s7[] = {{"a1_height_scan_s", &out.a1_height_scan_s}, {"receiver_bound", &out.receiver_bound}};
+        for (const auto& e : s7) {
+            const json::Value* v = values->Find(e.first);
+            if (v == nullptr) continue;
+            const std::string p = Join("values", e.first);
+            const json::Value* n = v->Find("value");
+            if (!Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number >= 0.0)) return Fail(Join(p, "value"), "a number >= 0");
+            *e.second = n->number;
+        }
+        if (mode != 0.0 && mode != 1.0 && mode != 2.0) return Fail("values.mode.value", "0 (every aircraft at A2), 1 (the levels) or 2 (and S7's)");
         out.mode = static_cast<int>(mode);
         if (out.down_factor < 1.0) return Fail("values.down_factor.value", "at least 1");
         return true;

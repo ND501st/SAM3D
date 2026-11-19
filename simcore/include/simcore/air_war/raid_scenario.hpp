@@ -493,7 +493,13 @@ public:
             };
             std::vector<Vec3> pts;
             const Vec3 aim_moved = moved_by(fl.aim_key);  // a run at the battery or a dummy follows it to where it stands
-            for (const RoutePoint& r : fl.route) pts.push_back(to_scen(r.pos + aim_moved));
+            // Its navigation error between fixes (roadmap S7, route.mode 2): the faction's drift, the same for the flight.
+            std::vector<Vec3> drift(fl.route.size());
+            if (tune.Get("route.mode") >= 2.0) {
+                drift = NavigationDrift(fl.route, f.doctrine.routing.nav_drift_share, tune.Get("route.nav_fix_m"),
+                                        static_cast<std::uint64_t>(p.id) * 1315423911ull + fi);
+            }
+            for (std::size_t ri = 0; ri < fl.route.size(); ++ri) pts.push_back(to_scen(fl.route[ri].pos + aim_moved + drift[ri]));
             bool inside_prev = Vec3{pts[0].x, pts[0].y, 0.0}.HorizontalLength() < clip;
             if (inside_prev) {
                 cl.pts.push_back(pts[0]);

@@ -591,27 +591,83 @@ older than this branch). `air_war_bench` with `route.mode` 0 is identical to the
 - **The district** moves less: the neutral flies more (16.6 to 20.9 packages careless) and loses less (4.4 % to 2.4 %);
   the Pact wrecks the careless battery in 75 % (90 %) and the careful in 40 % (25 %); NATO 95 % and 10 % (90 %, 5 %).
 
+## As built (S7, 20 Nov 2026, branch `tbr-s7`)
+
+Roadmap S7 takes B2's "Left open" on the routes. All of it is behind the tuning's `route.mode` 2 (the default now,
+`data/gameplay/air_war.json`). A save writes its `route_mode`, so a save made before S7 (which wrote 1) replays B2's
+routes exactly; the replay fingerprint (`test_routes.cpp`) is unchanged.
+
+- **A gate with no feature.** `RouteGround::LinkFar`: a gate, an exit or a target that no feature joins within
+  `route.max_leg_m` is joined to its nearest features however far, so the search always has a first leg. Before, such
+  a route fell back to the straight line with no turn points.
+- **The believed fighter picture.** `BelievedFighterThreats`: our airfields in the enemy's intel picture (not its
+  ghosts, and only while it believes them at least 15 % working), each a ring of `route.fighter_reach_m` (40 km, plus
+  half the entry's uncertainty) whose second inside costs `route.fighter_weight` (0.15) times the front's
+  `friendly_fighters` times the base's believed working share, times `route.fighter_low_share` (0.3) for a Low flight
+  or a helicopter (the period's radars looked down poorly). A fighter
+  ring is not a SAM's: it is not masked, it does not make an escape (`ZoneEscape`) and it is not a continuous run nor
+  the worst threat on the route (`WorstOnRoute`). Believed CAP stations are not in the picture yet (Left).
+- **Navigation error.** `NavigationDrift`: between fixes a flight drifts along one direction, drawn once per stretch
+  from a key of the package and the flight (no draw on a campaign stream), by the faction's `routing.navigation.drift_share`
+  of the distance flown since the fix, at most `route.nav_fix_m` (3 km). A fix is the first point, any point on a map
+  feature, the IP and the target; the drift there is nil. The raid builder adds it to the flown waypoints only: the
+  plan, the timing and the resolver keep the planned route. Drift shares are estimates: NATO 0.5 % (INS and the
+  Pave Tack era's updates), the Pact 1 % (Doppler and a navigator's dead reckoning), the neutral 2 %, the rebels 3 %
+  (map and stopwatch). A research pass is left (below).
+- **The testbed's waves on planned routes, in first form.** The waves have no believed picture to plan on, so they
+  do not get the RoutePlanner. A low strike or DEAD (not a helicopter) flies round our rings on its way to the IP
+  (`TestWaves::AroundRings`): the session's own unit and the battery's vehicles at `route_own_ring_km` (10 km), a
+  neighbour at its own reach, `route_margin_km` (3 km) outside each; the ring cut deepest first, its turn point 1.2
+  times the ring and margin out at the place nearest the straight line, then each half again (two levels). A ring
+  round the entry or the IP is flown through. No draws, so the waves' streams do not move.
+- **Routes as flown fed back.** A played raid's outcome now carries where each flight's last seen aircraft was and when
+  (`PackageOutcome::flown`, saved as `"flown"` only when there is one). `AirCampaign::CompletePlayed` inserts that
+  point into the flight's route (`FlownInto`) and moves the later points' times to when it can reach them; the release
+  index and the escapes' indices move with it. What the campaign then resolves and records for the rest of the flight
+  starts where the session left it.
+- **Tests of the umbrella and `axis_vary`.** The Pact's helicopters beyond their fighter umbrella
+  (`helo_beyond_umbrella` 0 against 1) and a planner officer with `axis_vary` against one without, over three days.
+- **B2's lattice without a map.** With no country map the lattice is `route.fallback_grid2_m` (25 km, was 15 km)
+  and the IP has `route.run_in_headings_nomap` (4, was 8) headings, to pay for the new fighter term and the joined gates: the district's balance run costs what it did before
+  S7, not less (`docs/air_war/09_BALANCE.md` section 22).
+- **Learning (B14's leftovers), behind the tuning's `learning.mode` 1** (saved as `"learning_mode"`; a save without it
+  replays with 0):
+  - *Losses it cannot explain.* After a raid, a loss no fighter claimed and no known site's fire explains (no shooter
+    reported, or the shooter it believes in fired and no survivor came home to say from where) becomes a suspected
+    air defence site in its picture: a ghost report where the loss was, `learning.unexplained_sigma_m` (8 km) off by a
+    keyed draw, believed to exist at `learning.unexplained_exists` (0.4), with a ring of
+    `learning.unexplained_radius_m` (10 km) and a lethality of `learning.unexplained_lethality` (0.15), labelled "a loss
+    nobody saw". Its routes then go round the place. A played raid's losses are now placed in the theatre's frame
+    (they were in the scenario's), under this mode only.
+  - *The rebels finding the mobile batteries.* A faction's `intelligence.humint_air_defence_per_day` (the rebels 2,
+    the others none) is a sympathisers' rate: each step's draw (keyed on the minute, not on the campaign's stream) pick a
+    mobile air defence unit of ours, or the player's battery, within the faction's humint reach of the front, weighted 1 near a town
+    (within `learning.watch_m`, 15 km) and `learning.countryside_share` (0.3) in the country, halved for the player's
+    battery under its nets. The report is a humint one by the faction's own rules (its delay and its errors); its false
+    share is a ghost 8 km off. All values are game values.
+
 ## Left open
 
 - **Numbers no period source gives**: leg lengths, turn-point counts, the IP's distance, the let-down's distance, a
   stand-off from a ring, the Pact's low-level speeds. Game values until a source is found (routing §7).
 - **Who controls a Pact group between the checkpoint and the target** (routing §7); the НПП and КБП limits on ПМВ by
   skill class are not public, so the Pact's lowest height does not yet vary by pilot class.
-- **The believed fighter picture.** Routes do not yet avoid our believed CAP areas or air bases; today our fighters are
-  one number per front. B8 and B10 add believed CAPs to the intel picture; a fighter term in §6.3 follows.
-- **Navigation error.** INS and Doppler drift between fixes, and the IP on a feature as the last fix, are not modelled;
-  the period's practice needs a research pass before data (`map/routes.md` §10.3).
+- **The believed fighter picture** (S7 did the air bases): our believed CAP stations are not in the intel picture
+  yet; when B8's and B10's CAPs reach it, they take the same fighter term.
+- **Navigation error** (S7 in first form): the drift shares and the fix's cap are estimates; the period's INS and
+  Doppler drift rates and how crews took their fixes need a research pass (`map/routes.md` §10.3).
 - **Corridor suppression in a played session**: whether the land battle's artillery suppressing our forward defences
   is shown or only resolved abstractly (B5).
-- **The testbed's waves** (`test_waves.hpp`) keep their own straight legs; they have no believed picture to plan on, and
-  routing them needs one.
+- **The testbed's waves** (S7 in first form): low strikes go round our rings, but the waves still have no believed
+  picture, so they do not get the RoutePlanner's corridors, gates and features.
 - **Masking in `PassKillChance`**: whether the balance holds without `low_vs_long_range_sam` on maps with ground, and
   whether the long-range SAMs' masking then matches `docs/air_war/09_BALANCE.md` §8, is for the balance pass to show.
 - **The Tornado GR1's night height** rests on an undated account that may be after 1985 (`napier_hushkit_2022`).
 - **The 35 s helicopter rule** (`fm_17_50_1977`) is garbled in the scan; 20 s (`crawford_1977_rand`) is used for all.
 - **The rebels' losses on the nation** (14-20 %, see "As built"): their exposure weight or their target choice against
   believed defences needs a tuning pass.
-- **The cost on a theatre without a map**: the lattice searches make the district's balance run many times slower than
-  before; a coarser lattice or fewer IP headings there would cut it.
+- **The cost on a theatre without a map**: S7's coarser lattice and fewer IP headings pay for S7's own additions but
+  do not bring the district's balance run back to its pre-B2 time (09_BALANCE section 22); a cheaper search there is
+  still wanted, and whether the coarser routes suit its small theatre is to be seen in play.
 - **Weights.** Small changes to a leg's weight can give an entirely different route (`dorsett_1980`). That is true to
   the period's planning, but it means the routes move with any tuning; the tests pin them only on synthetic maps.

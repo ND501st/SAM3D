@@ -1373,3 +1373,70 @@ values) or in the bench's analogues (they set their own flights).
 **Left:** the neutral's nerve has not yet been seen to act. Seeing it needs a played raid, or a bench of larger neutral
 packages under losses before release. Played raids now carry the spotted turn-back and the initiative gate, which the
 abstract resolver does not model (§13 of `10_FACTIONS.md`).
+
+## 22. Routes, perception, cost and learning: before and after (roadmap S7, 20 November 2026)
+
+S7 (`docs/air_battle/01_ROUTES.md` "As built (S7)", `03_PERCEPTION.md` 5.10, `02_FLIGHTS_AND_PILOTS.md` 5.4) changes the
+campaign behind three switches in `data/gameplay/air_war.json`, each saved with the campaign: `route.mode` 2 (a gate with
+no feature joined to its nearest features, our believed airfields in a leg's cost, the coarser lattice without a map,
+navigation drift in the raids built, the routes as flown fed back; a save made before S7 wrote 1), `learning.mode` 1 (a
+loss nobody can explain becomes a suspected defence; the rebels' sympathisers find our mobile batteries) and
+`weather.mode` 1 (the share of days not clear by the month of a dated theatre). A save without `learning_mode` or
+`weather_mode` reads 0. The replay fingerprint (`test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages)
+is unchanged. "Before" is the branch with `--set route.mode=1 --set learning.mode=0 --set weather.mode=0`, "after" the
+data as shipped, the same seeds; the two ran side by side on a shared machine.
+
+`air_war_balance data 20 7` (the district), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost |
+|---|---|---|---|---|
+| Rebels, careless | 20.2 -> 19.0 | 1.7% -> 2.9% | 0% -> 0% | 0.1/0.0 -> 0.0/0.0 |
+| Rebels, careful | 21.3 -> 20.5 | 2.3% -> 2.2% | 0% -> 0% | 0.2/0.0 -> 0.1/0.0 |
+| Neutral, careless | 41.2 -> 40.6 | 2.8% -> 2.7% | 0% -> 0% | 0.2/0.1 -> 0.3/0.1 |
+| Neutral, careful | 38.0 -> 36.8 | 2.2% -> 2.0% | 0% -> 0% | 0.2/0.1 -> 0.2/0.1 |
+| Warsaw Pact, careless | 562.0 -> 533.8 | 1.8% -> 1.7% | 65% -> 60% | 4.2/2.9 -> 3.8/2.4 |
+| Warsaw Pact, careful | 558.7 -> 537.2 | 1.9% -> 1.9% | 0% -> 20% | 3.9/2.6 -> 3.5/2.5 |
+| NATO, careless | 537.4 -> 516.3 | 1.3% -> 1.4% | 95% -> 95% | 2.6/4.5 -> 2.9/4.8 |
+| NATO, careful | 539.6 -> 519.3 | 1.3% -> 1.3% | 15% -> 5% | 3.0/5.3 -> 2.6/4.6 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost |
+|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 12.8 | 16.9% -> 13.3% | 0% -> 0% | 0.1/0.0 -> 0.0/0.0 |
+| Rebels, careful | 14.4 -> 12.5 | 13.9% -> 17.6% | 0% -> 0% | 0.2/0.0 -> 0.2/0.0 |
+| Neutral, careless | 25.0 -> 22.2 | 4.8% -> 6.3% | 0% -> 0% | 0.3/0.0 -> 0.2/0.0 |
+| Neutral, careful | 20.3 -> 17.3 | 6.4% -> 5.8% | 0% -> 0% | 0.6/0.0 -> 0.4/0.0 |
+| Warsaw Pact, careless | 982.6 -> 921.9 | 3.6% -> 3.5% | 80% -> 30% | 7.7/5.4 -> 8.7/5.9 |
+| Warsaw Pact, careful | 956.8 -> 934.4 | 3.6% -> 3.3% | 0% -> 0% | 8.0/4.0 -> 8.2/5.8 |
+| NATO, careless | 763.8 -> 735.8 | 2.3% -> 1.9% | 10% -> 20% | 4.6/8.2 -> 3.4/8.8 |
+| NATO, careful | 749.3 -> 717.3 | 2.2% -> 2.0% | 10% -> 0% | 3.5/8.3 -> 3.8/8.7 |
+
+**Sorties fall 2-15 %** on both theatres and for every faction: the tuned theatres are dated 15 October, when the
+month's share of days not clear (about 0.67, interpolated between `crawford_1977_rand`'s summer and winter) is above the
+theatre's fixed half, so more days are cloudy or poor and fewer packages fly. With `weather.mode` 0 alone the Pact's
+sorties on the nation are back at 986 and 1,008 (careless, careful).
+
+**The Pact's careless battery on the nation** is wrecked in 30 % of runs (80 % before). Each switch off alone, over the
+same ten seeds: `route.mode` 1, 70 %; `weather.mode` 0, 60 %; `learning.mode` 0, 30 %. The routes give most of it: the
+Pact's routes now cost the legs near our believed airfields and join gates that had no feature, so fewer of its
+packages come the short way past the battery; the autumn weather gives the rest. Ten seeds move a share like this by
+10-15 points, so it is a direction, not a measure. The careful battery is not wrecked either way. Elsewhere the wrecked
+shares move within that noise (the district's careful Pact run 0 % -> 20 %, NATO careful 15 % -> 5 %).
+
+**The rebels on the nation** stay out of the period's "few per cent" (13-18 %), as since B2 (`01_ROUTES.md` Left open);
+their sympathisers report our mobile batteries (five reports in three days in `test_routes.cpp`). Raids through the
+battery's sector a campaign: on the district 1.6 -> 1.9 careless and 0.9 -> 0.9 careful, on the nation 7.3 -> 6.1 and
+2.2 -> 3.1: the careful battery, the one the other sources find least, is found more on the nation. Losses a
+sortie elsewhere move by less than 0.6 points.
+
+**Cost.** The district's run took 27.6 min with S7 and 28.0 min without, the nation's 68.6 and 68.7 min, each pair side
+by side on a machine shared with other builds: the coarser lattice and fewer IP headings without a map pay for the new
+fighter term and the joined gates, but the district's run is no cheaper than before.
+
+`air_battle_bench data --compare 600` (the testbed, `air_levels.json` mode 2 against the levels off): identical, two
+level changes, launches 2 and 2. The levels' mode 2 moves nothing a test or the bench can see; the receivers' bound is
+not bit-exact through the path cache (`02_FLIGHTS_AND_PILOTS.md` 5.4) but changed no line here.
+
+**Left:** the rebels' losses on the nation; the share of wrecked batteries needs more seeds than ten to say how much each
+switch moves it.
