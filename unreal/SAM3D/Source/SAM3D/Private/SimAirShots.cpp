@@ -35,6 +35,7 @@ namespace
 		AamLaunch,   // an AamLaunch: the missile off its rail, its motor and smoke
 		AamEnd,      // an AamEnd that met its target or passed it: the burst
 		AirGuns,     // an AirGunBurst: tracers from the shooter at its target
+		OsaMissile,  // our own 9M33 in flight (an entity of the simulation): its motor and smoke, against the AAM's
 	};
 
 	struct FSimAirShotSubject
@@ -45,12 +46,23 @@ namespace
 		bool bTaken = false;
 	};
 
+	/** A scenario the check plays, and the subjects it is played for (empty: all). */
+	struct FSimAirShotStage
+	{
+		FString File;  // empty: the one the director started
+		TArray<ESimAirShotKind> Kinds;
+	};
+
 	constexpr double SimAirShotRealLimitS = 1800.0;  // wall clock, the whole run
 	constexpr double SimAirShotWaitRunnerS = 240.0;
 	constexpr double SimAirShotAimS = 0.5;           // a picture's settle (temporal AA, auto exposure)
 	constexpr double SimAirShotAfterS = 0.35;
 	constexpr double SimAirShotBankDeg = 30.0;
 	constexpr double SimAirShotFormationCm = 150000.0;
+	constexpr double SimAirShotFormationBackCm = 9000.0;  // behind the hindmost member, on the line from the others
+	constexpr double SimAirShotFormationUpCm = 2000.0;
+	constexpr double SimAirShotFormationSideCm = 1500.0;
+	constexpr double SimAirShotStuckS = 15.0;  // a subject in hand whose scenario has ended: dropped after this (wall)
 
 	bool SimAirShotIsAircraft(const FSimEntityState& S)
 	{
@@ -86,6 +98,9 @@ struct FSimAirShots::FState
 	double PhaseAt = 0.0;
 	double MaxSimS = 900.0;
 	TArray<FSimAirShotSubject> Subjects;
+	TArray<FSimAirShotStage> Stages;
+	int32 Stage = 0;
+	double SubjectClock = 0.0;  // wall clock when the subject in hand happened
 	const void* RunnerSeen = nullptr;
 	uint64 Cursor = 0;
 
@@ -128,6 +143,7 @@ namespace
 		Add(ESimAirShotKind::AamLaunch, TEXT("aam_launch"), {0.3, 1.2});
 		Add(ESimAirShotKind::AamEnd, TEXT("aam_end"), {0.05, 0.8});
 		Add(ESimAirShotKind::AirGuns, TEXT("air_guns"), {0.2, 0.8});
+		Add(ESimAirShotKind::OsaMissile, TEXT("osa_missile"), {1.0, 3.0});
 	}
 
 	/** The subject an fx event is, or -1 (taken already, or nothing of the air battle). */
@@ -174,6 +190,14 @@ namespace
 		const TArray<FSimEntityState>& All = Sim.GetEntityStatesCached();
 		for (const FSimEntityState& A : All)
 		{
+			if (Kind == ESimAirShotKind::OsaMissile)
+			{
+				if (A.bAlive && A.bIsMissile && A.Id > SimFxIds::MissileBase && A.Id < SimFxIds::ArmBase)
+				{
+					return A.Id;
+				}
+				continue;
+			}
 			if (!SimAirShotIsAircraft(A))
 			{
 				continue;
@@ -241,28 +265,52 @@ namespace
 			BackCm = 1500.0;
 			UpCm = 500.0;
 			break;
+		case ESimAirShotKind::OsaMissile:
+			// Beside and behind it: the motor, and its smoke trailing back past the camera.
+			SideCm = 3000.0;
+			BackCm = 2500.0;
+			UpCm = 600.0;
+			break;
 		case ESimAirShotKind::Formation:
 		{
-			// The flight round it: its middle, from far enough back and above to have them all.
-			FVector Sum = P;
-			double Spread = 0.0;
-			int32 N = 1;
+			// Over the shoulder of the flight's hindmost member, looking along the line from it to the others: it large in
+			// the foreground, the others beyond it at their spacing. A wide shot of a tactical formation (hundreds of
+			// metres between its members) showed only specks.
+			TArray<FVector> Members;
+			Members.Add(P);
 			for (const FSimEntityState& B : Sim.GetEntityStatesCached())
 			{
 				if (B.Id != S.EntityId && SimAirShotIsAircraft(B) && FVector::Dist(B.Location, P) < SimAirShotFormationCm)
 				{
-					const FVector BP = Sim.GetRenderLocation(B);
-					Sum += BP;
-					Spread = FMath::Max(Spread, FVector::Dist(BP, P));
-					++N;
+					Members.Add(Sim.GetRenderLocation(B));
 				}
 			}
-			At = Sum / N;
-			const double D = FMath::Max(Spread * 1.3, 15000.0);
-			BackCm = D;
-			SideCm = 0.4 * D;
-			UpCm = 0.35 * D;
-			break;
+			int32 Hind = 0;
+			for (int32 I = 1; I < Members.Num(); ++I)
+			{
+				if (FVector::DotProduct(Members[I] - P, Fwd) < FVector::DotProduct(Members[Hind] - P, Fwd))
+				{
+					Hind = I;
+				}
+			}
+			FVector Rest = FVector::ZeroVector;
+			for (int32 I = 0; I < Members.Num(); ++I)
+			{
+				Rest += I == Hind ? FVector::ZeroVector : Members[I];
+			}
+			Rest /= FMath::Max(Members.Num() - 1, 1);
+			const FVector Trail = Members[Hind];
+			FVector Line = Trail - Rest;
+			Line = Line.SizeSquared() > 1.0 ? Line.GetSafeNormal() : -Fwd;
+			const FVector Side = FVector::CrossProduct(Line, Up).GetSafeNormal(UE_SMALL_NUMBER, Across);
+			OutFrom = Trail + Line * SimAirShotFormationBackCm + Up * SimAirShotFormationUpCm + Side * SimAirShotFormationSideCm;
+			// Aimed between the two, so the near one and the far ones are both in the frame.
+			const FVector ToNear = (Trail - OutFrom).GetSafeNormal();
+			const FVector ToFar = (Rest - OutFrom).GetSafeNormal();
+			OutAt = OutFrom + (ToNear + ToFar).GetSafeNormal(UE_SMALL_NUMBER, ToFar) * 100000.0;
+			S.LastAtU = P;
+			S.LastFwdU = Fwd;
+			return;
 		}
 		case ESimAirShotKind::Flares:
 		{
@@ -399,7 +447,24 @@ FSimAirShots::FSimAirShots(UWorld* InWorld, const FString& InFolder)
 	{
 		State->MaxSimS = MaxS;
 	}
-	UE_LOG(LogSAM3D, Log, TEXT("SimAirShots: %d subjects into %s within %.0f s of the scenario"), State->Subjects.Num(), *Folder, State->MaxSimS);
+	// The check's own two scenarios when none is named (the director starts the first): the air battle for all but the
+	// flares, then a NATO flight over a Strela-2 team for them (no IR SAM fires in the first). A named one: all of it.
+	FString Named;
+	if (FParse::Value(FCommandLine::Get(), TEXT("SimScenario="), Named) && !Named.IsEmpty())
+	{
+		State->Stages.AddDefaulted();
+	}
+	else
+	{
+		FSimAirShotStage& First = State->Stages.AddDefaulted_GetRef();
+		First.Kinds = {ESimAirShotKind::Banked, ESimAirShotKind::Formation, ESimAirShotKind::OurFighter, ESimAirShotKind::Chaff,
+			ESimAirShotKind::Jettison, ESimAirShotKind::AamLaunch, ESimAirShotKind::AamEnd, ESimAirShotKind::AirGuns, ESimAirShotKind::OsaMissile};
+		FSimAirShotStage& Second = State->Stages.AddDefaulted_GetRef();
+		Second.File = TEXT("scenarios/air_battle_flares.json");
+		Second.Kinds = {ESimAirShotKind::Flares};
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("SimAirShots: %d subjects into %s in %d scenario(s), each within %.0f s"), State->Subjects.Num(), *Folder,
+		State->Stages.Num(), State->MaxSimS);
 }
 
 FSimAirShots::~FSimAirShots() = default;
@@ -542,9 +607,34 @@ void FSimAirShots::Tick(USimFxSubsystem& Fx, float RealDt)
 			Finish(TEXT("every subject"));
 			return;
 		}
-		if (RunnerT > S.MaxSimS)
+		// This scenario done: its subjects taken, its end (a finished runner's clock stands still, never past the time
+		// limit), or the check's time for it. Then the next scenario, or quit.
+		const FSimAirShotStage& Stage = S.Stages[S.Stage];
+		bool bStageTaken = true;
+		for (const FSimAirShotSubject& Sub : S.Subjects)
 		{
-			Finish(TEXT("the scenario's time for it"));
+			bStageTaken = bStageTaken && (Sub.bTaken || (Stage.Kinds.Num() > 0 && !Stage.Kinds.Contains(Sub.Kind)));
+		}
+		const TCHAR* Why = bStageTaken ? TEXT("its subjects taken") : Runner->Finished() ? TEXT("its end") :
+			RunnerT >= S.MaxSimS ? TEXT("the check's time for it") : nullptr;
+		if (Why != nullptr)
+		{
+			if (S.Stage + 1 >= S.Stages.Num())
+			{
+				Finish(Why);
+				return;
+			}
+			++S.Stage;
+			const FString Next = S.Stages[S.Stage].File;
+			UE_LOG(LogSAM3D, Log, TEXT("SimAirShots: the scenario done (%s) at %.0f s; next %s"), Why, RunnerT, *Next);
+			FString Error;
+			if (!Sim->LoadScenario(Next, Error))
+			{
+				UE_LOG(LogSAM3D, Error, TEXT("SimAirShots: %s failed to load: %s"), *Next, *Error);
+				Finish(TEXT("the next scenario failed to load"));
+				return;
+			}
+			S.Phase = FState::EPhase::WaitRunner;  // the new runner is seen next frame
 			return;
 		}
 		int32 Found = -1;
@@ -571,7 +661,8 @@ void FSimAirShots::Tick(USimFxSubsystem& Fx, float RealDt)
 			for (int32 I = 0; I < S.Subjects.Num() && Found < 0; ++I)
 			{
 				const FSimAirShotSubject& Sub = S.Subjects[I];
-				if (Sub.bTaken || (Sub.Kind != ESimAirShotKind::Banked && Sub.Kind != ESimAirShotKind::Formation && Sub.Kind != ESimAirShotKind::OurFighter))
+				if (Sub.bTaken || (Sub.Kind != ESimAirShotKind::Banked && Sub.Kind != ESimAirShotKind::Formation && Sub.Kind != ESimAirShotKind::OurFighter &&
+					Sub.Kind != ESimAirShotKind::OsaMissile))
 				{
 					continue;
 				}
@@ -592,6 +683,7 @@ void FSimAirShots::Tick(USimFxSubsystem& Fx, float RealDt)
 		{
 			S.Subject = Found;
 			S.Shot = 0;
+			S.SubjectClock = S.Clock;
 			S.LastAtU = FVector::ZeroVector;
 			UE_LOG(LogSAM3D, Log, TEXT("SimAirShots: %s at %.2f s (entity %d, %s)"), *S.Subjects[Found].Name, S.T0, S.EntityId,
 				S.Source.IsEmpty() ? TEXT("-") : *S.Source);
@@ -603,6 +695,15 @@ void FSimAirShots::Tick(USimFxSubsystem& Fx, float RealDt)
 
 	case FState::EPhase::Running:
 	{
+		if (Runner->Finished() && S.Clock - S.SubjectClock > SimAirShotStuckS)
+		{
+			// Its scenario ended before its next delay came (the render clock stops with it): let it go.
+			UE_LOG(LogSAM3D, Log, TEXT("SimAirShots: %s dropped: the scenario ended before its picture at %.2f s"), *S.Subjects[S.Subject].Name,
+				S.Subjects[S.Subject].Delays[S.Shot]);
+			S.Subject = -1;
+			S.Phase = FState::EPhase::Idle;
+			break;
+		}
 		AimSubject();
 		const FSimAirShotSubject& Sub = S.Subjects[S.Subject];
 		if (RenderT >= S.T0 + Sub.Delays[S.Shot])

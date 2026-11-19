@@ -731,3 +731,39 @@ SC_TEST("air fight B13: the air battle shot check's scenario does in the first m
         SC_EXPECT(n[k] > 0);
     }
 }
+
+SC_TEST("air fight B13: the shot check's second scenario gives flares in its first three minutes, by the reaction chain") {
+    // scenarios/air_battle_flares.json (-SimAirShots plays it after air_battle_shots.json): NATO's waves low over a Strela-2
+    // team. A pilot who sees its launch fires flares by his reactions (gameplay/reactions.json sam_ir: flares); each salvo
+    // is the chain's own (its count), at an aircraft of the waves, near the battery where the check's camera goes.
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const bool ok = LoadScenario(ReadFile(kData + "/scenarios/air_battle_flares.json"), kData, def, console, &e);
+    if (!ok) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(ok && def.waves != nullptr && !def.neighbours.empty());
+    if (!ok) return;
+    ScenarioRunner r(std::move(def), std::move(console));
+    int launches = 0, flares = 0;
+    double first_s = -1.0, first_range_m = 0.0;
+    std::uint64_t cursor = 0;
+    while (r.Time() < 180.0 && !r.Finished()) {
+        r.Step(0.1);
+        for (const fx::Event& ev : r.Fx().Since(cursor)) {
+            if (ev.kind == fx::EventKind::SamLaunch) ++launches;
+            if (ev.kind != fx::EventKind::FlareDrop) continue;
+            SC_EXPECT(ev.number > 0 && ev.world_id >= 0);
+            if (flares++ == 0) {
+                first_s = ev.t_s;
+                first_range_m = std::hypot(ev.position.x, ev.position.y);
+            }
+        }
+        cursor = r.Fx().Last();
+    }
+    std::printf("    %d IR SAM launches, %d flare salvos (the chain's %d), the first at %.0f s, %.1f km from the battery\n", launches,
+                flares, r.Reactions().Totals().flares, first_s, first_range_m / 1000.0);
+    SC_EXPECT(launches > 0);
+    SC_EXPECT(flares > 0 && first_s > 0.0 && first_s < 180.0);
+    SC_EXPECT(flares == r.Reactions().Totals().flares);
+    SC_EXPECT(first_range_m < 8000.0);
+}
