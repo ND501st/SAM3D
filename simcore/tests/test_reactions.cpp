@@ -539,3 +539,57 @@ SC_TEST("reactions B4: a generated raid writes reactions and damage states, and 
     std::printf("    %d raids: %d pilots reacting (%d briefed on zones), %d cues\n", played, reacting, with_zones, cues);
     SC_EXPECT(played >= 1 && reacting > 0);
 }
+
+SC_TEST("reactions S4: a hand-written evade is a scripted row: its cue only, from the picture, no tables, not On()") {
+    Sky sky;
+    EvadeDef launch;
+    launch.present = true;
+    launch.on = EvadeDef::On::Launch;
+    EvadeDef lock = launch;
+    lock.on = EvadeDef::On::Lock;
+    sky.chain.RegisterScripted(0, "s-1", launch);
+    sky.chain.RegisterScripted(1, "s-2", lock);
+    sky.chain.RegisterScripted(2, "s-3", EvadeDef());  // not present: no row
+    SC_EXPECT(sky.chain.Scripted(0) && sky.chain.Scripted(1) && !sky.chain.Scripted(2));
+    SC_EXPECT(!sky.chain.On(0) && !sky.chain.On(1));
+    ReactionChain::ScriptedCue cue;
+    const Vec3 believed{2000.0, 9000.0, 0.0};
+    // A search paint is no cue for either; a lock is the lock row's (not a launch), a launch on the receiver the launch row's.
+    SC_EXPECT(!sky.chain.SightedScripted(0, RwrSighting(airwar::RwrState::Search, believed, 9000.0), cue));
+    SC_EXPECT(!sky.chain.SightedScripted(1, RwrSighting(airwar::RwrState::Search, believed, 9000.0), cue));
+    SC_EXPECT(!sky.chain.SightedScripted(0, RwrSighting(airwar::RwrState::Lock, believed, 9000.0), cue));
+    SC_EXPECT(sky.chain.SightedScripted(1, RwrSighting(airwar::RwrState::Lock, believed, 9000.0), cue));
+    SC_EXPECT(!cue.launch && (cue.from - believed).Length() < 1e-9);
+    SC_EXPECT(sky.chain.SightedScripted(0, RwrSighting(airwar::RwrState::Launch, believed, 9000.0), cue));
+    SC_EXPECT(cue.launch && (cue.from - believed).Length() < 1e-9);
+    // A launch seen by eye: the place he believes the trail began, not the unit's.
+    airwar::Sighting trail = EyeSighting(airwar::SightKind::Trail, "SAM trail", Vec3{0.0, 5000.0, 800.0}, 5000.0);
+    trail.has_origin = true;
+    trail.origin_enu = Vec3{300.0, 7000.0, 0.0};
+    SC_EXPECT(sky.chain.SightedScripted(0, trail, cue));
+    SC_EXPECT(cue.launch && (cue.from - trail.origin_enu).Length() < 1e-9);
+    SC_EXPECT(!sky.chain.SightedScripted(1, trail, cue));  // a lock row: no
+    // An aircraft seen is nothing to a scripted row; the instructor's order is any row's.
+    SC_EXPECT(!sky.chain.SightedScripted(0, EyeSighting(airwar::SightKind::Aircraft, "mig23ml", believed, 8000.0, true), cue));
+    SC_EXPECT(sky.chain.OrderedScripted(1) && !sky.chain.OrderedScripted(2));
+    SC_EXPECT(sky.chain.Totals().scripted == 4 && sky.chain.Totals().cues == 0);  // the lock, two launches, the order
+    sky.Run(10.0);
+    SC_EXPECT(sky.acts.empty());  // the chain's own acts: none (the pilot flies the evasion himself)
+}
+
+// (A lock reaches him only on a warning receiver, which this target has none of: the launch, seen by eye.)
+SC_TEST("reactions S4: in a played session a hand-written evade breaks on the launch his picture holds") {
+    for (const char* on : {"launch"}) {
+        ScenarioDef def;
+        ConsoleData console;
+        std::string e;
+        SC_EXPECT(LoadScenario(ReactingScenario(std::string(R"(, "evade": { "on": ")") + on + R"(", "kind": "break" })"), kData, def, console, &e));
+        if (!e.empty()) std::printf("    %s\n", e.c_str());
+        ScenarioRunner runner(std::move(def), std::move(console));
+        runner.RunToEnd(0.1, 700.0);
+        const ReactionChain::Counts& n = runner.Reactions().Totals();
+        std::printf("    evade on %s: scripted cues %d (chain cues %d)\n", on, n.scripted, n.cues);
+        SC_EXPECT(n.scripted >= 1 && n.cues == 0);
+        SC_EXPECT(runner.Debrief().find("break") != std::string::npos);
+    }
+}

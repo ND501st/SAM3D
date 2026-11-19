@@ -107,6 +107,19 @@ When it reaches heavy, it draws:
 - jettisoning (`heavy_jettison`);
 - whether it crashes (`heavy_crash`) and when, 10-300 s later.
 
+What it leaves him (roadmap S4, `DamagedLimits`; game values in `damage.json`):
+
+- his g limit and turn rates times `moderate_g_factor` (0.8) or `heavy_g_factor` (0.5), never under 1.5 g;
+- his acceleration times `moderate_thrust_factor` (0.9) or `heavy_thrust_factor` (0.6), and his top speed times its
+  root (the drag rising with the square of the speed): a heavily damaged jet tops out at 0.77 of its speed;
+- a holed tank `moderate_fuel_leak` (0.15) or `heavy_fuel_leak` (0.35) of the time: he falls 300-1200 s later if
+  still in the session (the window after `affdl_tr_77_115`'s kill severities, the rest game values);
+- turning for home, a wingman sent with him as escort `escort_share` (0.5) of the time: the first other live
+  aircraft of his flight, ordered home by the lead.
+
+Each is a keyed draw (`em::Stream::Reaction`, his id and level), so it does not move the session's other draws. A
+table without these keys flies its damaged aircraft as before.
+
 ## 2. The guns' fire by range (`aaa.hpp`)
 
 ### The fire control's errors
@@ -199,7 +212,23 @@ When damage rises (`OnDamage`):
 - the feed gets an `AircraftDamaged` (moderate or heavy: its smoke and fire);
 - a jettison releases the aircraft's loads, which fall inert (`TestWaves::Jettison`, delivery `"jettison"`);
 - an abort sends it straight for its way out;
-- a heavy aircraft's crash timer brings it down later (`CrashDamaged`).
+- a heavy aircraft's crash timer brings it down later (`CrashDamaged`);
+- our crew records what it saw (roadmap S4, `CrewCalls`): a target the judge called destroyed with fire on the TV that
+  then flies on is a "hit" (the commander's correction on the battery net is «цель подбита, горит, продолжает полёт», the post's
+  log writes "hit", the combat report counts it apart from the kills); chaff seen on the senior operator's scope and a
+  load seen thrown off on the TV are "chaff" and "jettisoned". Nothing unseen is written.
+
+In the air war (roadmap S4, `data/gameplay/air_war.json` `damage`, saved with the campaign as `damage_mode`): a played
+session's damaged aircraft that got away go back to the outcome on their own flights with their levels
+(`PackageOutcome::damaged_list`); the campaign repairs a heavily damaged one `heavy_repair_factor` (3) times its
+faction's `damaged_return_h`, a moderately damaged one in `damaged_return_h`; the abstract resolver's damaged are drawn
+heavy at `heavy_share` (0.3) by a keyed draw. A save without `damage_mode` replays with mode 0 (every damaged aircraft
+`damaged_return_h`).
+
+The bridge mission's guns (`MissionBridge::FxGunPass`, roadmap S4) are shown as the testbed's: with the guns' tables
+(`AirWarData::aaa`) a contact gun's `GunPass` carries its fire control's drawn errors, and a time-fuzed gun's shells are
+fired shell by shell and burst where their fuze puts them (`FlakBurst`, exact), no longer scattered by `flak_offset_m`.
+What a pass does is still its chance per pass (`Engage`); these draws are the presentation's own.
 
 Unreal (`SimFxEffects.cpp`):
 
@@ -210,10 +239,10 @@ Unreal (`SimFxEffects.cpp`):
 
 ## 5. Left
 
-- The Osa's own resolver still destroys outright on a hit: its hits are not yet split between destroyed and heavy.
-- The air war's abstract resolution does not keep damaged aircraft, and the enemy does not repair them (R1's
-  "availability").
-- The bridge mission's guns (`MissionFx`) still scatter their flak by `effects.json`'s `flak_offset_m`. Only the
-  testbed's guns are computed.
-- Our crews' journal does not yet record "hit" for a smoking aircraft that flies on (R1's first-person record).
+- The bridge mission's guns are drawn by the guns' tables but still decide by their chance per pass: a shell shown
+  bursting near an aircraft does not damage it (the testbed's do). Unreal's own `flak_offset_m` stays for events that
+  are not exact (the U2 track's).
+- The abstract resolver's damaged aircraft have no escorts and no fuel leak: only a played session's do.
+- No source was read for how often a wingman escorted a damaged aircraft home (`04_REACTIONS.md` Left); the share
+  is a game value.
 - The defensive reactions to flak and warnings are R4.

@@ -1187,7 +1187,10 @@ private:
     // Before roadmap B5 (c2.mode 0, a save of version 1 replayed to the bit): the package resolved whole at its first hour
     // from the campaign's stream, close support aimed where our troops really were (the FAC's sighting came with B5).
     bool Legacy() const { return data_.tuning.Get("c2.mode") < 1.0; }
+    // Legacy only (roadmap S4 made it explicit): with c2.mode 1 the FAC's brief (c2.hpp AirC2::Brief) aims close support
+    // at his believed sighting; this truth-read aim is kept so a save from before B5 replays to the bit.
     void AimOnCall(Package& p) {
+        if (!Legacy()) return;
         if (p.kind != MissionKind::Cas && p.kind != MissionKind::HeloRaid) return;
         const int i = p.target_object.empty() ? -1 : data_.theatre.IndexOf(p.target_object);
         if (i < 0 || data_.theatre.objects[static_cast<std::size_t>(i)].kind != ObjectKind::Troops) return;
@@ -1398,11 +1401,26 @@ private:
             }
             ++lost;
         }
+        // The damaged back in service after their repair (damage.mode 1, roadmap S4: by its level, a heavy one
+        // damage.heavy_repair_factor times as long; a played session's on their own flights, the rest drawn as before and
+        // heavy by a keyed draw of damage.heavy_share); damage.mode 0 as before S4.
+        const bool by_level = data_.tuning.Get("damage.mode") >= 1.0;
         for (int k = 0; k < o.damaged; ++k) {
             if (p.flights.empty()) break;
-            const Flight& fl = p.flights[static_cast<std::size_t>(rng_.Index(static_cast<int>(p.flights.size())))];
+            const bool listed = by_level && static_cast<std::size_t>(k) < o.damaged_list.size() && o.damaged_list[static_cast<std::size_t>(k)].flight >= 0 &&
+                                o.damaged_list[static_cast<std::size_t>(k)].flight < static_cast<int>(p.flights.size());
+            const std::size_t fi = listed ? static_cast<std::size_t>(o.damaged_list[static_cast<std::size_t>(k)].flight)
+                                          : static_cast<std::size_t>(rng_.Index(static_cast<int>(p.flights.size())));
+            const Flight& fl = p.flights[fi];
+            double repair_h = f.logistics.damaged_return_h;
+            if (by_level) {
+                const bool heavy = listed ? o.damaged_list[static_cast<std::size_t>(k)].heavy
+                                          : em::Uniform01(em::DrawHash(seed_, em::Stream::Opportunity, static_cast<std::uint64_t>(p.id), 0xDA5u,
+                                                                       static_cast<std::uint64_t>(k))) < data_.tuning.Get("damage.heavy_share");
+                if (heavy) repair_h *= data_.tuning.Get("damage.heavy_repair_factor");
+            }
             for (SquadronState& s : squadrons_) {
-                if (s.id == fl.squadron) s.damaged_until.push_back(now_h_ + f.logistics.damaged_return_h);
+                if (s.id == fl.squadron) s.damaged_until.push_back(now_h_ + repair_h);
             }
         }
         politics_.losses_today += lost;

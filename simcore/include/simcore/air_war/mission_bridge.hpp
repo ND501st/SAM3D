@@ -200,6 +200,7 @@ public:
             }
         }
         Neighbours(r);
+        FxGunShows(r);  // the time-fuzed guns' shells fired this step (roadmap S4)
         ReadEmArms(r);
         if (unit_destroyed_) return;
         // Weapons arriving.
@@ -387,6 +388,18 @@ public:
             if (a.has_release) flight_has_release[fi] = true;
             if (state_[i].released) flight_released[fi] = true;
             if (!down[i]) flight_alive[fi] = true;
+            // Damaged and got away (roadmap S4): its flight and its level, for the campaign's repair.
+            if (!down[i] && !a.missile && !a.drone && d_->tuning.Get("damage.mode") >= 1.0) {
+                if (const AircraftDamage* dm = r.TargetDamage(a.target_id)) {
+                    if (dm->level == DamageLevel::Moderate || dm->level == DamageLevel::Heavy) {
+                        PackageOutcome::DamagedRecord d;
+                        d.flight = a.flight;
+                        d.heavy = dm->level == DamageLevel::Heavy;
+                        o.damaged_list.push_back(d);
+                        ++o.damaged;
+                    }
+                }
+            }
             if (!down[i] || a.drone) continue;
             if (a.missile) {
                 // Shot down before it struck: the defence's (the battery's or a neighbour's), never a crew lost.
@@ -540,6 +553,8 @@ private:
         int aircraft = -1;
         Vec3 where;
         bool done = false;
+        int opp = 0;                 // a dive-bombing pass's (roadmap S4): its pass number, its draws keyed; 0 a release
+        OpportunityRun::Fire fire;   // that pass
     };
     struct Arm {
         double t = 0.0;
@@ -638,6 +653,10 @@ private:
         s.release_fit = fit;
         if (std::isnan(prev_fit)) return latest;  // the first look: nothing to compare with yet
         if ((fit <= 0.0) != (prev_fit <= 0.0)) return true;  // the throw has come to reach the aim
+        // A pop-up in its dive with the aim still beyond his throw holds on, down to his release point: since the climb is
+        // flown as a path angle (roadmap S4) he tops out early and dives toward his release height, his throw shrinking
+        // faster than the aim comes nearer, until it reaches the aim.
+        if (a.delivery == Delivery::PopUp && fit > 0.0) return latest;
         if (std::fabs(fit) > std::fabs(prev_fit)) return true;  // they came closest a step ago: no nearer from here
         return latest;
     }
@@ -881,22 +900,70 @@ private:
         const bool burnt = Blast(r, imp, at_t);
         const RaidAircraft& a = m_.aircraft[static_cast<std::size_t>(imp.aircraft)];
         if (!a.missile) FxImpact(r, a, imp.where, burnt, at_t);
+        if (imp.opp > 0) opp_.NoteResult(imp.fire, blast_kills_, blast_what_);  // the pilots' claims from what it did
+    }
+    int blast_kills_ = 0;
+    std::string blast_what_;
+
+    // A dive-bombing pass released its load at what it found (roadmap S4): it falls from here (weapon_flight.hpp) and
+    // lands about the aim by the dive's circular error (delivery.cep_dive_m, by eye at night times its factor), drawn by
+    // keys; what it hurts is the bridge's Blast when it lands.
+    void BombsFired(ScenarioRunner& r, const OpportunityRun::Fire& f) {
+        const TuningTable& tune = d_->tuning;
+        const RaidAircraft& a = m_.aircraft[f.aircraft];
+        AircraftState& s = state_[f.aircraft];
+        s.released = true;  // its load is gone (owed to its target or not)
+        r.NoteReleased(a.target_id);
+        const int n = ++pass_fires_;
+        const AircraftType* type = d_->faction.Aircraft(a.aircraft);
+        const bool night_eye = m_.night && (type == nullptr || !type->night);
+        const double cep = tune.Get("delivery.cep_dive_m") * (night_eye ? tune.Get("delivery.night_visual_factor") : 1.0);
+        const double u1 = OppDraw(opp_seed_, f.aircraft, static_cast<std::uint64_t>(n), 42, 0);
+        const double u2 = OppDraw(opp_seed_, f.aircraft, static_cast<std::uint64_t>(n), 43, 0);
+        const double miss = cep * std::sqrt(-std::log(std::max(1e-12, 1.0 - u1)) / std::log(2.0));  // half within the CEP
+        Impact imp;
+        imp.aircraft = static_cast<int>(f.aircraft);
+        imp.opp = n;
+        imp.fire = f;
+        imp.where = Vec3{f.aim.x + std::cos(6.283185307179586 * u2) * miss, f.aim.y + std::sin(6.283185307179586 * u2) * miss, 0.0};
+        const Vec3 pos = r.TargetPosition(a.target_id);
+        const Vec3 vel = r.TargetVelocity(a.target_id);
+        const Vec3 ground = r.GroundEnu(imp.where.x, imp.where.y);
+        const std::string delivery = DeliveryId(Delivery::Dive);
+        const ReleaseState st = ReleaseStateOf(r.GetWorld().Frame(), pos, vel, delivery);
+        const double agl = r.GetWorld().Frame().AltitudeOf(pos) - r.GroundHeightAt(imp.where.x, imp.where.y);
+        const double fall = WeaponFlightOf(delivery, f.weapon, agl, st.speed_mps, st.path_deg, (ground - pos).Length(), &d_->weapons).time_s;
+        imp.t = r.Time() + (fall > 0.0 ? fall : tune.Get("scenario.weapon_fall_s"));
+        impacts_.push_back(imp);
+        FxRelease(r, a, pos, vel, ground, imp.t);
+        Log(r, a.target_id, "dive-bombs what it found");
     }
 
     // What the load hurts; true if it hit something (a vehicle, an object; not a near miss or a dummy).
     bool Blast(ScenarioRunner& r, const Impact& imp, double at_t) {
         const TuningTable& tune = d_->tuning;
         const RaidAircraft& a = m_.aircraft[static_cast<std::size_t>(imp.aircraft)];
+        // A dive-bombing pass's load (roadmap S4) draws by keys of its own (em::Stream::Opportunity), so the bridge's own
+        // stream falls as without it; a release draws on the bridge's stream as before.
+        int draw = 0;
+        const auto chance = [&](double p) {
+            if (imp.opp <= 0) return rng_.Chance(p);
+            return OppDraw(opp_seed_, static_cast<std::size_t>(imp.aircraft), static_cast<std::uint64_t>(imp.opp), 44, static_cast<std::uint64_t>(draw++)) < p;
+        };
+        blast_kills_ = 0;
+        blast_what_.clear();
         const double lethal = tune.Get("scenario.bomb_lethal_m") * (a.helicopter ? 0.6 : 1.0);
         const double pk = (a.helicopter ? tune.Get("scenario.rocket_pk_vehicle") : tune.Get("scenario.bomb_pk_vehicle")) *
                           std::min(1.5, std::max(0.2, a.strike_power * 2.0));
-        delivered_ = true;
+        if (imp.opp <= 0 || imp.fire.contact < 0) delivered_ = true;
         bool hit = false;
         bool burnt = false;
         // Our vehicle.
         if (Dist2d(imp.where, m_.own_enu) < lethal) {
             hit = true;
-            if (rng_.Chance(pk)) {
+            if (chance(pk)) {
+                ++blast_kills_;
+                blast_what_ = m_.own_object;
                 unit_destroyed_ = true;
                 AddDamage(m_.own_object, 0.25);
                 Log(r, a.target_id, "bombs: our vehicle is hit and out of action", at_t);
@@ -907,8 +974,10 @@ private:
         }
         // The battery's other vehicles: each one lost costs the battery a quarter of its strength.
         for (const auto& v : m_.battery) {
-            if (Dist2d(imp.where, v.second) < lethal && rng_.Chance(pk)) {
+            if (Dist2d(imp.where, v.second) < lethal && chance(pk)) {
                 hit = true;
+                ++blast_kills_;
+                if (blast_what_.empty()) blast_what_ = v.first;
                 hit_something_ = true;
                 burnt = true;
                 AddDamage(m_.own_object, v.first == "PU-12" ? 0.15 : 0.2);
@@ -931,7 +1000,9 @@ private:
             if (Dist2d(imp.where, ob.second) > tune.Get("strike.stale_miss_m") * 0.5) continue;
             const TheatreObject* def = d_->theatre.Find(ob.first);
             const double hard = def != nullptr ? def->hardness : 0.5;
-            if (rng_.Chance(tune.Get("strike.hit_chance"))) {
+            if (chance(tune.Get("strike.hit_chance"))) {
+                ++blast_kills_;
+                if (blast_what_.empty()) blast_what_ = ob.first;
                 const double x = a.strike_power * (1.0 - 0.7 * hard);
                 AddDamage(ob.first, x);
                 hit = true;
@@ -949,6 +1020,10 @@ private:
     // a mover on the roads); nothing there, it hits nothing. One keyed draw against the weapon's per_pass for its class
     // (attack_pass.hpp GunPassEffect: moving, under fire, by eye at night). Its first planned pass is its load's release.
     void PassFired(ScenarioRunner& r, const OpportunityRun::Fire& f) {
+        if (f.bombs) {
+            BombsFired(r, f);
+            return;
+        }
         const TuningTable& tune = d_->tuning;
         const RaidAircraft& a = m_.aircraft[f.aircraft];
         AircraftState& s = state_[f.aircraft];
@@ -1236,11 +1311,39 @@ private:
         if (system == "ks30") return 12.0;
         return 2000.0;  // zu23, aaa
     }
+    // With the guns' tables (AirWarData::aaa, data/gameplay/aaa.json; roadmap S4) the pass is shown as the testbed's
+    // guns fire (aaa.hpp): its fire control's errors drawn for the pass, a contact gun's GunPass carrying them, a
+    // time-fuzed gun's shells fired one by one at the aircraft as it flies on and bursting where the fuze puts them
+    // (FlakBurst, exact: no offset of the picture's own). What the pass does stays its chance per pass (Engage); these
+    // are the presentation's own draws (fx_rng_).
     void FxGunPass(ScenarioRunner& r, std::size_t i, std::size_t j, double pass_s) {
         if (!r.FxOn()) return;
         const RaidAircraft& a = m_.aircraft[i];
         const RaidNeighbour& nb = m_.neighbours[j];
+        const GunDef* g = d_->aaa.Gun(nb.defence.system);
+        const FireControlDef* fc = g != nullptr ? d_->aaa.Control(g->fire_control) : nullptr;
+        GunShow show;
+        if (g != nullptr) {
+            show.aircraft = i;
+            show.neighbour = j;
+            show.start_s = show.next_group_s = r.Time();
+            show.end_s = r.Time() + std::max(0.0, pass_s);
+            show.errors = fc != nullptr ? DrawPassErrors(*fc, r.TargetVelocity(a.target_id), m_.night, fx_rng_) : PassErrors{};
+            if (g->time_fuze) {
+                gun_shows_.push_back(show);
+                FxGunShows(r);
+                return;
+            }
+        }
         fx::Event e = FxEvent(fx::EventKind::GunPass, r.Time());
+        if (g != nullptr) {
+            e.aim_across_rad = show.errors.across_rad;
+            e.aim_up_rad = show.errors.up_rad;
+            e.range_share = show.errors.range_share;
+            e.lead_error = show.errors.velocity_mps;
+            e.correction_per_s = fc != nullptr ? fc->correction_per_s : 0.0;
+            e.spread_mrad = g->dispersion_mrad;
+        }
         e.position = FxSite(r, nb);
         e.aim = r.TargetPosition(a.target_id);
         e.end_t_s = r.Time() + std::max(0.0, pass_s);
@@ -1250,6 +1353,61 @@ private:
         e.number = static_cast<int>(std::lround(GunRoundsPerMin(nb.defence.system) / 60.0 * std::max(0.0, pass_s)));
         e.weapon = nb.defence.system;
         r.Fx().Push(e);
+    }
+
+    // A time-fuzed gun's pass shown shell by shell (roadmap S4): each group due by now aimed where the fire control
+    // predicts the aircraft (its errors as corrected so far), each shell's burst where its fuze puts it (aaa.hpp).
+    struct GunShow {
+        std::size_t aircraft = 0;
+        std::size_t neighbour = 0;
+        double start_s = 0.0;
+        double end_s = 0.0;
+        double next_group_s = 0.0;
+        double rounds_due = 0.0;
+        PassErrors errors;
+    };
+    std::vector<GunShow> gun_shows_;
+    static constexpr double kGunMuzzleUpM = 2.0;  // the guns' muzzles over the ground (as the runner's and the picture's)
+    void FxGunShows(ScenarioRunner& r) {
+        for (std::size_t k = 0; k < gun_shows_.size();) {
+            GunShow& s = gun_shows_[k];
+            const RaidAircraft& a = m_.aircraft[s.aircraft];
+            const RaidNeighbour& nb = m_.neighbours[s.neighbour];
+            const GunDef* g = d_->aaa.Gun(nb.defence.system);
+            const int wid = r.TargetWorldId(a.target_id);
+            if (g == nullptr || !r.TargetAlive(a.target_id) || s.next_group_s >= s.end_s || !r.FxOn()) {
+                gun_shows_.erase(gun_shows_.begin() + static_cast<std::ptrdiff_t>(k));
+                continue;
+            }
+            const FireControlDef* fc = d_->aaa.Control(g->fire_control);
+            const Vec3 pos = r.TargetPosition(a.target_id);
+            const Vec3 vel = r.TargetVelocity(a.target_id);
+            const Vec3 muzzle = FxSite(r, nb) + Vec3{0.0, 0.0, kGunMuzzleUpM};
+            while (s.next_group_s <= r.Time() + 1e-9 && s.next_group_s < s.end_s) {
+                const double fired_s = s.next_group_s;
+                s.rounds_due += g->rate_rpm / 60.0 * g->group_s;
+                s.next_group_s += g->group_s;
+                const int n = static_cast<int>(std::floor(s.rounds_due + 1e-9));
+                if (n <= 0) continue;
+                s.rounds_due -= n;
+                const PassErrors e = fc != nullptr ? Corrected(s.errors, *fc, fired_s - s.start_s) : PassErrors{};
+                const GunAim aim = AimGun(*g, muzzle, pos - vel * (r.Time() - fired_s), vel, e);
+                for (int q = 0; q < n; ++q) {
+                    const ShellBurst b = TimeShellBurst(*g, muzzle, aim, fx_rng_);
+                    fx::Event ev = FxEvent(fx::EventKind::FlakBurst, fired_s);
+                    ev.end_t_s = fired_s + b.after_s;
+                    ev.position = muzzle;
+                    ev.velocity = b.dir * g->muzzle_mps;
+                    ev.aim = b.position;
+                    ev.source = nb.id;
+                    ev.target = a.target_id;
+                    ev.world_id = wid;
+                    ev.weapon = nb.defence.system;
+                    r.Fx().Push(ev);
+                }
+            }
+            ++k;
+        }
     }
 
     // A missile neighbour's round: SamLaunch from its site toward the aircraft, SamEnd where it bursts. Both carry the

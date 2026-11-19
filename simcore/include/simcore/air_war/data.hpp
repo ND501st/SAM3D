@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/aaa.hpp"
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/c2_def.hpp"
@@ -1121,6 +1122,10 @@ struct TuningTable {
             {"route.helo_hide_agl_m", 5.0},
             {"route.helo_popup_agl_m", 25.0},
             {"route.hide_penalty_s", 600.0},        // a battle position seen, or not seeing its target
+            // A damaged aircraft back in service (roadmap S4, campaign.hpp): 1 by its level; 0 as before S4.
+            {"damage.mode", 0.0},
+            {"damage.heavy_share", 0.3},
+            {"damage.heavy_repair_factor", 3.0},
         };
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
         for (const auto& kv : C2TuningDefaults()) m.insert(kv);        // its command in the air (roadmap B5, c2_def.hpp)
@@ -2791,6 +2796,7 @@ struct AirWarData {
     AirCombatDef air_combat;  // the air-to-air missiles, guns and fits, the chain's numbers (data/air_war/air_combat.json, track B7)
     SensorsDef sensors;       // the airborne sensors by type and year (data/air_war/sensors.json)
     CounterC2Def counter_c2;  // our side against the enemy's command in the air (data/command/counter_c2.json, roadmap S2)
+    AaaTable aaa;             // how the guns fire by range (data/gameplay/aaa.json): a played raid's guns shown (roadmap S4)
     command::OwnAirDef own_air;  // our fighters' rules (data/command/own_air.json, roadmap S1; absent: none of it)
     bool has_own_air = false;
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
@@ -2824,6 +2830,7 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadAirCombatFile(data_dir + "/air_war/air_combat.json", d.air_combat, error)) return false;
     if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;
     if (!LoadCounterC2File(data_dir + "/command/counter_c2.json", d.counter_c2, error)) return false;
+    if (!LoadAaaFile(data_dir, "gameplay/aaa.json", d.aaa, error)) return false;
     {
         const std::string own = data_dir + "/command/own_air.json";
         std::ifstream probe(own);

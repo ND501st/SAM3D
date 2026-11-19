@@ -103,6 +103,7 @@ inline std::vector<std::pair<std::string, double>> OpportunityTuningDefaults() {
         {"opportunity.a0_find_scale", 1.0},        // the abstract level's find chance per mover passed, times the type's ease
         {"opportunity.a0_column_hit", 0.12},       // the share of a column's function one attacking aircraft removes in a pass
         {"opportunity.a0_column_guns", 0.02},      // a column's own air defence brings an attacker down
+        {"opportunity.bomb_dive_deg", 30.0},       // a dive-bombing pass on what he found (roadmap S4, opportunity.mode 2)
     };
 }
 

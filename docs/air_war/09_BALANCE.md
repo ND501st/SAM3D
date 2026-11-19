@@ -1139,3 +1139,86 @@ Nothing runs per step.
 - Diverts too rare in the campaigns to read their latency there (item 3); the `divert_min` band waits for them.
 - The exchange bands are wide: the abstract fight is calibrated to 1967-72 rates and flown with 1985 missiles.
 - B13 (Unreal) is the owner's; the hot phase's look will need its own pass once it is drawn.
+
+## 18. Attack passes, reactions and damage: before and after (roadmap S4, 19 November 2026)
+
+S4 (`docs/air_battle/06_OPPORTUNITY.md` §10, `04_REACTIONS.md` §6 and §13, `02_FLIGHTS_AND_PILOTS.md` §3,
+`docs/DAMAGE.md`) changes what a session flies (passes in their dive, the climb as a path angle, top speed and
+acceleration by altitude, damaged aircraft cut and escorted) and one thing in the campaign: a damaged aircraft comes back
+into service by its level (`damage.mode` 1 in `data/gameplay/air_war.json`, saved with the campaign; a save without the
+key replays with 0, as before). Targets of opportunity may now be dive-bombed in a session (`opportunity.mode` 2; a save
+with 1 replays without the bombs). The benches were run on the branch's base and on S4, the same seeds.
+
+`air_war_balance data 20 7` (the district), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|
+| Rebels, careless | 20.6 -> 20.6 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Rebels, careful | 22.0 -> 22.0 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Neutral, careless | 39.9 -> 39.9 | 3.1% -> 3.1% | 0% -> 0% | - |
+| Neutral, careful | 35.6 -> 35.6 | 3.8% -> 3.8% | 0% -> 0% | - |
+| Warsaw Pact, careless | 568.5 -> 567.8 | 1.9% -> 1.8% | 70% -> 70% | 1.53 -> 1.54 |
+| Warsaw Pact, careful | 562.0 -> 560.5 | 2.1% -> 2.1% | 15% -> 15% | 1.77 -> 1.75 |
+| NATO, careless | 539.0 -> 538.1 | 1.7% -> 1.7% | 90% -> 90% | 0.73 -> 0.70 |
+| NATO, careful | 536.4 -> 536.2 | 1.5% -> 1.5% | 20% -> 20% | 0.71 -> 0.70 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 16.9% -> 16.9% | 0% -> 0% | - |
+| Rebels, careful | 14.4 -> 14.4 | 13.9% -> 13.9% | 0% -> 0% | - |
+| Neutral, careless | 25.0 -> 25.0 | 4.8% -> 4.8% | 0% -> 0% | - |
+| Neutral, careful | 20.3 -> 20.3 | 6.4% -> 6.4% | 0% -> 0% | - |
+| Warsaw Pact, careless | 975.4 -> 971.9 | 4.2% -> 4.3% | 70% -> 70% | 1.56 -> 1.51 |
+| Warsaw Pact, careful | 964.0 -> 964.2 | 3.6% -> 3.6% | 10% -> 10% | 1.96 -> 2.02 |
+| NATO, careless | 761.3 -> 762.5 | 2.0% -> 2.1% | 20% -> 20% | 0.49 -> 0.57 |
+| NATO, careful | 760.9 -> 759.0 | 2.1% -> 2.3% | 10% -> 10% | 0.36 -> 0.49 |
+
+What moved, and why:
+
+- **The rebels and the neutral did not move**: they have few damaged aircraft, and those few came back as before.
+- **The Pact and NATO moved by a few sorties and a tenth of a point of loss.** A heavily damaged aircraft is now out
+  three times its faction's `damaged_return_h` (`damage.heavy_repair_factor`), a moderately damaged one as before, so
+  a few fewer sorties are flown later in the week; the abstract resolver draws a damaged aircraft heavy at
+  `damage.heavy_share` (0.3) by a keyed draw. The aircraft that would have flown change which fights happen after them,
+  which moves the exchange of the air battle (NATO's on the nation 0.36-0.49 → 0.49-0.57, inside its band of 0.25-1.2;
+  the Pact's 1.51-2.02, inside its band of 0.8-2.5). The battery's fate did not change in any run.
+
+The other benches:
+
+- `air_war_bench data 400`: the same rows, before and after.
+- `crew_balance data 10`: the same before and after, and the same again with the late window off (its targets do not
+  manoeuvre).
+- `air_battle_bench data --compare 600`: identical (the testbed off against off, off against on, the same launches and
+  level changes).
+- `ground_check data 3600`: PASS, 0 of 15 scenarios with anything off the ground, before and after (the passes' dives
+  keep `kPassFloorM`, 30 m, and the ground floor).
+- `helper_coverage`: 19 gaps before and after, the same ones; only `dynamic_campaign_test`'s rows moved (its waves'
+  aircraft fly passes, cut limits and escorts now, so the session's targets differ), its page regenerated.
+
+**After merging track-br** (S1, our fighters in full, and the stable sorts) the two theatres were run again: every band
+PASS. The moves from S4's numbers above come with S1 (our pairs in the played raids, its own changes to
+the air battle) meeting S4: on the district the Pact's exchange 1.54-1.75 → 1.61-1.71 and NATO's
+0.70 → 0.67-0.69, the careful NATO run's battery wrecked in 25% of runs (20%); on the nation the careless Pact run's
+battery wrecked in 90% (70%), its exchange 1.51-2.02 → 1.60-2.10, NATO's 0.49-0.57 → 0.51-0.57. Losses a sortie
+moved by at most 0.2 points.
+
+**The late window (`manoeuvre_window_s`).** S4 turns it on in the Osa's tuning at 8 s (`data/gameplay/osa_ak.json`). The
+14 scenarios with targets that may break (the range days and battles, `osa_decoys`, `osa_low_level_em`,
+`osa_soj_strike`, `osa_jamming_em`, `kesmark_range_test` and the six `air_war_*` samples) were played by `scenario_demo`
+with the window at 8 s and at 0 (the whole flight, as before):
+
+| Scenario | Shots | Hits | Summed chance, window 0 → 8 s |
+|---|---|---|---|
+| `osa_jamming_em` | 1 | 1 | 0.25 → 0.41 (a 10 deg/s break finished before the missile closed) |
+| `osa_angola_night` | 4 | 2 | 2.07 → 2.14 (one shot's break 7 → 4 deg/s in the window) |
+| the other twelve | 13 | 5 | 3.62 → 3.62 |
+| all | 18 | 8 | 5.94 → 6.17 |
+
+No hit changed. `manoeuvre_penalty_per_deg_s` stays 0.04: the rise is the window's intent (a break flown on the launch
+and over long before the missile arrives gains little, `checo_1967_tactics` p. 31) and is a few per cent of the summed
+chance, inside the calibrated totals' spread (§9, roadmap 6.7).
+
+**Left:** the abstract resolver's damaged aircraft fly no escorts and leak no fuel (only a session's do); the share of
+damaged aircraft escorted home (`escort_share` 0.5) has no source.

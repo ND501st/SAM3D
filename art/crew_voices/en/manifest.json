@@ -3764,6 +3764,36 @@
    "word_error": 0.0,
    "phonemes": "tˈɑːɹɡɪt ɪnðə zˈoʊn!"
   },
+  "deputy_commander/target_jettison": {
+   "seat": "deputy_commander",
+   "id": "target_jettison",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "On the TV: the target has dropped its load!",
+   "spoken": "On the T V: the target has dropped its load!",
+   "voice": "am_michael",
+   "settings": {
+    "spoken": "On the T V: the target has dropped its load!",
+    "engine_text": "On the T V: the target has dropped its load!",
+    "voice": "am_michael",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ɔnðə tˈiː vˈiː: ðə tˈɑːɹɡɪt hɐz dɹˈɑːpt ɪts lˈoʊd!",
+   "duration_s": 3.12,
+   "speech_s": 2.61,
+   "slot_s": 2.15,
+   "rms_db": -19.5,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "On the TV, the target has dropped its load.",
+   "word_error": 0.0
+  },
   "deputy_commander/target_near_zone": {
    "seat": "deputy_commander",
    "id": "target_near_zone",
@@ -5603,6 +5633,34 @@
    "transcript": "Sertrade are ready.",
    "word_error": 0.67,
    "phonemes": "sˈɜːtʃ ɹˈeɪdɑːɹ ɹˈɛdi!"
+  },
+  "senior_operator/target_chaff": {
+   "seat": "senior_operator",
+   "id": "target_chaff",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "The target is dropping chaff!",
+   "spoken": "The target is dropping chaff!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "The target is dropping chaff!",
+    "engine_text": "The target is dropping chaff!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə tˈɑːɹɡɪt ɪz dɹˈɑːpɪŋ tʃˈæf!",
+   "duration_s": 1.54,
+   "speech_s": 1.4,
+   "slot_s": 1.8,
+   "rms_db": -18.4,
+   "peak_db": -1.8,
+   "flags": [],
+   "transcript": "The target is dropping chaff.",
+   "word_error": 0.0
   },
   "squad_leader/ack": {
    "seat": "squad_leader",
