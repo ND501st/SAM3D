@@ -49,6 +49,11 @@ struct AirFightFighterDef {
     // Ours with a base (S1, a pair the duty scrambled): sent home, he flies to it, not away from the fight and on.
     bool has_home = false;
     Vec3 home;               // ENU (the scenario's)
+    // His faction's hot phase (roadmap S5, 10_FACTIONS.md §7.1-7.2): the chance he turns for home once he has lost his
+    // controller, when his doctrine would have him go on (< 0: the doctrine alone); and his break's timing without his
+    // controller's word (our side's 2-5 s under the GCI's warning over its 4-10 s jammed: 1 none).
+    double turn_back_lost = -1.0;
+    double unwarned_break = 1.0;
 };
 
 struct AirFightControllerDef {
@@ -67,6 +72,9 @@ struct AirFightDef {
     int far_fight = -1;      // the far fight at A1: -1 with mode 1, 0 off, 1 on
     // Each faction's "vector" lines from its c2 authority table (roadmap S3): which post kind may vector which fighters.
     std::map<std::string, std::vector<C2AuthorityDef>> vector_lines;
+    // The air war's hot_phase.mode the session was built in (roadmap S5): 2 and up, our scrambled pairs read our side's
+    // hot phase (turn back once control is lost, the jammed break). 0: a hand-written fight, as before.
+    int hot_mode = 0;
     std::vector<AirFightFighterDef> fighters;
     std::vector<AirFightControllerDef> controllers;
     AirCombatDef combat;  // data/air_war/air_combat.json

@@ -433,6 +433,11 @@ private:
     double U(std::uint64_t who, std::uint64_t n, std::uint64_t link) const {
         return em::Uniform01(em::DrawHash(seed_, em::Stream::AirCombat, who, n, link));
     }
+    // No word from his controller (roadmap S5): bound to one, and no vector heard within control_lost_s (or none yet).
+    bool Unwarned(const Fighter& f, double t) const {
+        if (def_->Controller(f.def->controller) == nullptr) return false;
+        return f.control_lost || f.last_vector_s < 0.0 || t - f.last_vector_s > def_->combat.fight.control_lost_s;
+    }
     double N(std::uint64_t who, std::uint64_t n, std::uint64_t link) const {
         return em::StandardNormal(em::DrawHash(seed_, em::Stream::AirCombat, who, n, link));
     }
@@ -660,6 +665,12 @@ private:
                 if (w.event) w.event(f.def->target, "has lost his controller: " + what);
                 if (what == "abort") {
                     GoHome(f, me, t, w, "lost control");
+                    return;
+                }
+                // His faction's turn_back once control is lost (roadmap S5, 10_FACTIONS.md §7.1-7.2): a keyed draw, made only
+                // for a fighter given the value.
+                if (f.def->turn_back_lost >= 0.0 && U(f.key, 0, 0x5B5u) < f.def->turn_back_lost) {
+                    GoHome(f, me, t, w, "lost control: turns back");
                     return;
                 }
                 f.free = what == "pairs";
@@ -1172,6 +1183,9 @@ private:
                 const Fighter* tf = FighterAt(m.target);
                 const double sk = tf != nullptr ? tf->skill : 0.5;
                 k.break_timing = 0.4 + 0.5 * sk;
+                // Roadmap S5: a fighter bound to a controller who has had no word from him (his net jammed, out of reach,
+                // lost) breaks the later for it (our side's 4-10 s jammed against 2-5 s under the GCI's warning).
+                if (tf != nullptr && tf->def->unwarned_break < 1.0 && Unwarned(*tf, t)) k.break_timing *= tf->def->unwarned_break;
                 k.target_g = tg->max_load_g > 0.0 ? std::min(fp.break_g, tg->max_load_g) : fp.break_g;
             }
             if (m.lock_lost_s >= 0.0) k.lock_lost_before_impact_s = std::max(0.0, m.arrive_s - m.lock_lost_s);

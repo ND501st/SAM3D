@@ -81,8 +81,24 @@ struct HotDelayDef {
     bool set = false;
     double lo_s = 2.0, hi_s = 5.0;
     double improvised_extra_s = 0.0;
+    // Our side's (§7.2): the band with its nets jammed, its GCI's warning not reaching it (roadmap S5). < 0: none.
+    double jammed_lo_s = -1.0, jammed_hi_s = -1.0;
     std::string source;
     std::string confidence;
+
+    bool HasJammed() const { return jammed_lo_s >= 0.0 && jammed_hi_s >= jammed_lo_s; }
+};
+
+// The faction's pilots as the hot phase reads them (§8.3, roadmap S5): the hours its pilots fly in a peacetime year
+// (their currency is these over the reference, data/gameplay/air_war.json hot_phase.currency_reference_h) and the combat
+// sorties a pilot has survived when the war starts (its veterans).
+struct HotPilotsDef {
+    bool set = false;
+    double hours_per_year = 0.0;
+    double start_sorties = 0.0;
+    std::string source;
+    std::string confidence;
+    std::string notes;
 };
 
 // An airborne flight changed (§7.4): within delay_s through the faction's posts, for the mission kinds its authority
@@ -136,6 +152,7 @@ struct HotPhaseDef {
     RetaskAirDef retask_air;
     HotAuthorityDef authority;
     HotControlLostDef on_control_lost;
+    HotPilotsDef pilots;
     std::string source;
     std::string confidence;
     std::string notes;
@@ -284,7 +301,7 @@ inline bool LoadAlert(const Reader& r, const json::Value& v, const std::string& 
 inline bool LoadHotPhase(const json::Value& b, const std::string& p, HotPhaseDef& out, std::string* error) {
     hot_detail::Reader r;
     r.error = error;
-    std::vector<std::string> keys = {"reaction_delay_s", "alert", "retask_air", "authority", "on_control_lost", "source", "confidence", "notes"};
+    std::vector<std::string> keys = {"reaction_delay_s", "alert", "retask_air", "authority", "on_control_lost", "pilots", "source", "confidence", "notes"};
     for (int i = 0; i < kHotParams; ++i) keys.push_back(HotParamName(static_cast<HotParam>(i)));
     if (!r.Keys(b, p, keys) || !r.Cite(b, p, out.source, out.confidence)) return false;
     if (const json::Value* n = b.Find("notes")) out.notes = n->Is(json::Type::String) ? n->string : std::string();
@@ -298,7 +315,7 @@ inline bool LoadHotPhase(const json::Value& b, const std::string& p, HotPhaseDef
         const std::string dp = p + ".reaction_delay_s";
         const json::Value* d = b.Find("reaction_delay_s");
         if (d == nullptr) return r.Fail(dp, "required");
-        if (!r.Keys(*d, dp, {"value", "improvised_extra_s", "source", "confidence", "notes"}) ||
+        if (!r.Keys(*d, dp, {"value", "improvised_extra_s", "jammed_s", "source", "confidence", "notes"}) ||
             !r.Cite(*d, dp, out.reaction_delay.source, out.reaction_delay.confidence)) {
             return false;
         }
@@ -308,7 +325,23 @@ inline bool LoadHotPhase(const json::Value& b, const std::string& p, HotPhaseDef
         if (const json::Value* x = d->Find("improvised_extra_s")) {
             if (!r.Number(*x, dp + ".improvised_extra_s", out.reaction_delay.improvised_extra_s, 0.0, 60.0)) return false;
         }
+        if (const json::Value* x = d->Find("jammed_s")) {
+            if (!r.Pair(*x, dp + ".jammed_s", out.reaction_delay.jammed_lo_s, out.reaction_delay.jammed_hi_s, 0.0, 60.0)) return false;
+        }
         out.reaction_delay.set = true;
+    }
+    if (const json::Value* pl = b.Find("pilots")) {
+        const std::string pp = p + ".pilots";
+        HotPilotsDef& d = out.pilots;
+        if (!r.Keys(*pl, pp, {"hours_per_year", "start_sorties", "source", "confidence", "notes"}) || !r.Cite(*pl, pp, d.source, d.confidence)) return false;
+        const json::Value* h = pl->Find("hours_per_year");
+        if (h == nullptr) return r.Fail(pp + ".hours_per_year", "required");
+        if (!r.Number(*h, pp + ".hours_per_year", d.hours_per_year, 1.0, 1000.0)) return false;
+        if (const json::Value* s = pl->Find("start_sorties")) {
+            if (!r.Number(*s, pp + ".start_sorties", d.start_sorties, 0.0, 100.0)) return false;
+        }
+        if (const json::Value* n = pl->Find("notes")) d.notes = n->Is(json::Type::String) ? n->string : std::string();
+        d.set = true;
     }
     if (const json::Value* al = b.Find("alert")) {
         if (!al->Is(json::Type::Array)) return r.Fail(p + ".alert", "a list of pools");

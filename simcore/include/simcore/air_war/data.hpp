@@ -849,6 +849,9 @@ struct QuirkDef {
     double tier_weight[4] = {1.0, 1.0, 1.0, 1.0};
     // The weights a campaign saved before roadmap B11 drew with (hot_phase.mode 0; 10_FACTIONS.md §9.1), where they differ.
     double tier_weight_mode0[4] = {-1.0, -1.0, -1.0, -1.0};
+    // The weights a campaign saved before roadmap S5 drew with (hot_phase.mode 0 and 1; 10_FACTIONS.md §8.5's weights for
+    // the chatterbox and the silent runner came in S5), where they differ. Mode 0 reads tier_weight_mode0 first.
+    double tier_weight_mode1[4] = {-1.0, -1.0, -1.0, -1.0};
     // A habit of the hot phase only (10_FACTIONS.md §8.5): drawn apart from the officer's other quirks, from a stream keyed
     // on him (officers.hpp), so adding one moves no other draw.
     bool hot_draw = false;
@@ -856,7 +859,9 @@ struct QuirkDef {
 
     double TierWeight(Tier t, int hot_mode) const {
         const int i = static_cast<int>(t);
-        return hot_mode < 1 && tier_weight_mode0[i] >= 0.0 ? tier_weight_mode0[i] : tier_weight[i];
+        if (hot_mode < 1 && tier_weight_mode0[i] >= 0.0) return tier_weight_mode0[i];
+        if (hot_mode < 2 && tier_weight_mode1[i] >= 0.0) return tier_weight_mode1[i];
+        return tier_weight[i];
     }
 
     double Effect(const std::string& key) const {
@@ -1090,8 +1095,14 @@ struct TuningTable {
             // routes as flown (route_planner.hpp, docs/air_battle/01_ROUTES.md): game values
             {"route.mode", 1.0},                    // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner
             // the hot phase (hot_phase.hpp, docs/air_battle/10_FACTIONS.md): 1 roadmap B11's planning (NATO's medium altitude
-            // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11)
-            {"hot_phase.mode", 1.0},
+            // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11);
+            // 2 roadmap S5's (the faction values read by played flights, the nerve on press_on and husbanding, section 8.5's
+            // weights, the pilots' sorties and currency)
+            {"hot_phase.mode", 2.0},
+            // a pilot's currency (10_FACTIONS.md §8.3): his hours in the last year over the reference (NATO's guide, 15 h a
+            // month: hansard_1981_nato_hours), a combat sortie's hours (a game value)
+            {"hot_phase.currency_reference_h", 180.0},
+            {"hot_phase.sortie_h", 1.5},
             // the balance pass (roadmap B14, docs/air_war/09_BALANCE.md section 17): 1 its changes (an airborne flight's
             // divert waits for the faction's retask delay, the strikers' abort a share of the attacked flights, no surprise
             // under an E-3A that sees our fighters, its factor a0_awacs_meet), 0 before it (a save made before B14)
@@ -2523,7 +2534,7 @@ public:
             QuirkDef qd;
             std::vector<std::string> roles;
             if (!Keys(q, p, {"id", "name", "description", "signature", "intel_hint", "weakness", "effects", "tier_weight",
-                             "tier_weight_mode0", "hot_draw", "roles", "source", "notes"}) ||
+                             "tier_weight_mode0", "tier_weight_mode1", "hot_draw", "roles", "source", "notes"}) ||
                 !RequireString(q, p, "id", qd.id) || !RequireString(q, p, "name", qd.name) ||
                 !RequireString(q, p, "description", qd.description) || !RequireString(q, p, "signature", qd.signature) ||
                 !RequireString(q, p, "intel_hint", qd.intel_hint) || !OptionalBool(q, p, "weakness", qd.weakness) ||
@@ -2545,27 +2556,24 @@ public:
                 if (!e->items[k].Is(json::Type::Number)) return Fail(Join(Join(p, "effects"), e->keys[k]), "expected a number");
                 qd.effects[e->keys[k]] = e->items[k].number;
             }
-            if (const json::Value* tw = q.Find("tier_weight")) {
-                if (!tw->Is(json::Type::Object)) return Fail(Join(p, "tier_weight"), "expected {tier: weight}");
+            // The weights now, and those of the older modes where they differ (tier_weight_mode0, tier_weight_mode1).
+            const auto weights = [&](const char* key, double* into) {
+                const json::Value* tw = q.Find(key);
+                if (tw == nullptr) return true;
+                if (!tw->Is(json::Type::Object)) return Fail(Join(p, key), "expected {tier: weight}");
                 for (std::size_t k = 0; k < tw->keys.size(); ++k) {
                     Tier t;
-                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, "tier_weight"), tw->keys[k]), "unknown tier");
+                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, key), tw->keys[k]), "unknown tier");
                     if (!tw->items[k].Is(json::Type::Number) || tw->items[k].number < 0.0) {
-                        return Fail(Join(Join(p, "tier_weight"), tw->keys[k]), "a weight >= 0");
+                        return Fail(Join(Join(p, key), tw->keys[k]), "a weight >= 0");
                     }
-                    qd.tier_weight[static_cast<int>(t)] = tw->items[k].number;
+                    into[static_cast<int>(t)] = tw->items[k].number;
                 }
-            }
-            if (const json::Value* tw = q.Find("tier_weight_mode0")) {
-                if (!tw->Is(json::Type::Object)) return Fail(Join(p, "tier_weight_mode0"), "expected {tier: weight}");
-                for (std::size_t k = 0; k < tw->keys.size(); ++k) {
-                    Tier t;
-                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, "tier_weight_mode0"), tw->keys[k]), "unknown tier");
-                    if (!tw->items[k].Is(json::Type::Number) || tw->items[k].number < 0.0) {
-                        return Fail(Join(Join(p, "tier_weight_mode0"), tw->keys[k]), "a weight >= 0");
-                    }
-                    qd.tier_weight_mode0[static_cast<int>(t)] = tw->items[k].number;
-                }
+                return true;
+            };
+            if (!weights("tier_weight", qd.tier_weight) || !weights("tier_weight_mode0", qd.tier_weight_mode0) ||
+                !weights("tier_weight_mode1", qd.tier_weight_mode1)) {
+                return false;
             }
             for (const QuirkDef& other : out) {
                 if (other.id == qd.id) return Fail(p, "duplicate quirk '" + qd.id + "'");

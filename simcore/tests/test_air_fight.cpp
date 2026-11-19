@@ -543,6 +543,79 @@ SC_TEST("air fight B8 live: a Pact pilot whose GCI is not heard loses control: t
     }
 }
 
+SC_TEST("air fight S5 live: a skilled pilot who lost his GCI turns back by his faction's turn_back; without the value, on as before") {
+    for (const double turn_back : {-1.0, 0.0, 1.0}) {
+        AirFightDef def = Def();
+        HandWorld w;
+        w.heard_at = [](int) { return -1.0; };  // every vector jammed out
+        w.Add(Vec3{0.0, 0.0, 5000.0}, Vec3{0.0, 230.0, 0.0});
+        w.Add(Vec3{0.0, 140000.0, 5000.0}, Vec3{0.0, -200.0, 0.0});
+        AirFightFighterDef me = Fighter("flogger", "mig23ml_wp", "warsaw_pact", "sweep", "gci", 0.8);
+        me.turn_back_lost = turn_back;
+        def.fighters.push_back(me);
+        def.fighters.push_back(Fighter("red", "mig21mf", "ours", "strike"));
+        AirFightControllerDef c;
+        c.id = "gci";
+        c.side = "enemy";
+        c.kind = "radar_control";
+        c.pos = Vec3{0.0, -60000.0, 0.0};
+        c.range_m = 300000.0;
+        c.post = "gci";
+        def.controllers.push_back(c);
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"flogger", "red"}, 3, &e));
+        for (double t = 0.25; t <= 90.0; t += 0.25) {
+            w.Move(0.25);
+            s.Step(t, w.World());
+        }
+        SC_EXPECT(s.ControlLost("flogger"));
+        if (turn_back >= 1.0) {
+            SC_EXPECT(s.ModeOf("flogger") == AirFightSession::Mode::Home && s.WhyHome("flogger") == "lost control: turns back");
+        } else {
+            SC_EXPECT(s.ModeOf("flogger") != AirFightSession::Mode::Home);
+        }
+    }
+}
+
+SC_TEST("air fight S5: a fight's hot_mode and a fighter's turn_back_lost and unwarned_break load; bad ones are refused") {
+    const std::string text = ReadFile(kData + "/scenarios/osa_practice.json");
+    const std::size_t a = text.find("\"targets\"");
+    const std::size_t b = text.find("\"triggers\"");
+    SC_EXPECT(a != std::string::npos && b != std::string::npos && b > a);
+    if (a == std::string::npos || b == std::string::npos) return;
+    const auto with = [&](const std::string& fighter) {
+        const std::string targets = R"j("targets": [
+    { "id": "red11", "name": "Our MiG-21MF (placeholder)", "type": "Air+FixedWing", "class": "fighter", "iff": "friend",
+      "start": { "east_m": 0, "north_m": 40000, "up_m": 5000 }, "waypoints": [ { "east_m": 0, "north_m": 140000, "up_m": 5000 } ],
+      "speed_mps": 230, "rcs_m2": 3 },
+    { "id": "t1", "name": "An enemy strike jet (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": 3000, "north_m": 110000, "up_m": 4000 }, "waypoints": [ { "east_m": 3000, "north_m": 20000, "up_m": 4000 } ],
+      "speed_mps": 220, "rcs_m2": 6 } ],
+  "air_fight": { "year": 1985, "hot_mode": 2, "source": "sam3d", "confidence": "estimate",
+    "fighters": [ { "target": "red11", "type": "mig21mf", "faction": "ours", "role": "cap", "regiment": "fighter_rgt_1", "controller": "gci", )j" +
+                                    fighter + R"j( } ],
+    "controllers": [ { "id": "gci", "side": "ours", "kind": "radar_control", "east_m": 0, "north_m": 0, "range_m": 200000 } ] },
+  )j";
+        return text.substr(0, a) + targets + text.substr(b);
+    };
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(with(R"("turn_back_lost": 0.6, "unwarned_break": 0.5)"), kData, def, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(def.air_fight.hot_mode == 2 && def.air_fight.fighters.size() == 1);
+    if (def.air_fight.fighters.size() == 1) {
+        SC_EXPECT_NEAR(def.air_fight.fighters[0].turn_back_lost, 0.6, 1e-12);
+        SC_EXPECT_NEAR(def.air_fight.fighters[0].unwarned_break, 0.5, 1e-12);
+    }
+    for (const char* bad : {R"("turn_back_lost": 1.5)", R"("unwarned_break": 1.5)", R"("unwarned_break": -0.1)"}) {
+        ScenarioDef d2;
+        ConsoleData c2;
+        SC_EXPECT(!LoadScenario(with(bad), kData, d2, c2, &e));
+    }
+}
+
 SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an enemy jet and fires; a kill names the regiment") {
     std::string text = ReadFile(kData + "/scenarios/osa_practice.json");
     const std::size_t a = text.find("\"targets\"");

@@ -325,6 +325,10 @@ struct SquadronState {
     int lost = 0;
     std::vector<double> damaged_until;  // campaign hour each damaged aircraft returns
     double sorties_left = 0.0;          // this cycle
+    // Combat sorties its pilots flew and came back from (roadmap S5, 10_FACTIONS.md §8.3: a pilot's experience is his
+    // sorties survived; hot_phase.hpp HotPilotOf reads them per pilot). Rebuilt by the replay; read only under
+    // hot_phase.mode 2.
+    int combat_sorties = 0;
 
     int Damaged(double now_h) const {
         int n = 0;

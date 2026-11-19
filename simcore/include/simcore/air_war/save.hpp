@@ -16,7 +16,8 @@
 // package; a version 1 save was planned with the old shapes, its packages resolved whole at their first hour with no
 // posts, and replays with route.mode 0 and c2.mode 0, to the bit. A save without "hot_mode" was made before roadmap B11
 // (10_FACTIONS.md §9: NATO's medium altitude gated by the defences, the rollback's new shares, the quirk weights) and
-// replays with hot_phase.mode 0, as it was played. A save without "balance_mode" was made before roadmap B14 (an airborne
+// replays with hot_phase.mode 0, as it was played; one with "hot_mode": 1 was made before roadmap S5 (§9.3's nerve,
+// §8.5's quirk weights, the played flights' "hot" values) and replays with mode 1. A save without "balance_mode" was made before roadmap B14 (an airborne
 // flight's divert at the faction's retask delay, the strikers' abort and the E-3A's warning in an air fight;
 // 09_BALANCE.md section 17) and replays with balance.mode 0. A save without "own_air_mode" was made before roadmap S1 (our pairs
 // in the played raids, the enemy's learning and use of our corridors, its own belt on its damaged aircraft) and replays with

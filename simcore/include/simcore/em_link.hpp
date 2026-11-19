@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <string>
 #include <utility>
@@ -50,6 +51,9 @@ struct EmJammerDef {
     Vec3 position;          // stand-off position (ENU)
     double on_at_s = 0.0;
     double off_at_s = -1.0;  // < 0: stays on
+    // Emission discipline (roadmap S5, 10_FACTIONS.md §7.1): a self-screening jammer held off until its carrier's warning
+    // receiver shows it locked on or fired at (the runner tells the link: Painted), then on from its time.
+    bool until_painted = false;
 };
 
 // A scripted chaff drop: a cloud at the target's position at a time.
@@ -367,6 +371,11 @@ public:
         }
         return false;
     }
+    // Its warning receiver showed it locked on or fired at (roadmap S5): a jammer held for that comes on from its time.
+    void Painted(const std::string& target_id) {
+        if (!target_id.empty()) painted_.insert(target_id);
+    }
+    bool WasPainted(const std::string& target_id) const { return painted_.count(target_id) != 0; }
     // Is its jammer radiating now (by the scenario's times or the instructor's switch)?
     bool TargetJamming(const std::string& target_id) const {
         for (std::size_t i = 0; i < effects_.jammers.size(); ++i) {
@@ -1219,6 +1228,7 @@ private:
             em::JammerState* js = world_.Scene().FindJammer(jammer_ids_[i]);
             if (js == nullptr) continue;
             bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            if (j.until_painted && painted_.count(j.target_id) == 0) on = false;  // S5: held until it is needed
             const auto sw = j.target_id.empty() ? jam_switch_.end() : jam_switch_.find(j.target_id);
             if (sw != jam_switch_.end()) on = sw->second;  // the instructor's switch
             if (on != js->on) {
@@ -1411,6 +1421,7 @@ private:
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
     std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
     std::map<std::string, bool> jam_switch_;             // target id -> the instructor's jammer switch
+    std::set<std::string> painted_;                      // targets whose receivers showed a lock or a launch (S5)
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {
