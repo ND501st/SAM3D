@@ -296,7 +296,11 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
     double last_release_s = -1.0, last_impact_s = -1.0;
     for (; seed <= 12; ++seed) {
         first = RunFirstPackage(d, seed);
-        if (!first.ok || first.releases.empty()) continue;
+        // A package whose loads went at its planned aim: one whose flight spent them on what it found on the way (a
+        // dive-bombing pass at a target of opportunity, roadmap S4) delivered nothing even run to its end, so the
+        // shortened run's "delivered" below would test nothing. Since S5's hot phase (the quirks' weights, so the
+        // officers and their raids) seed 3's first NATO package, Falcon 70, is such a one.
+        if (!first.ok || first.releases.empty() || !first.played.outcome.delivered) continue;
         last_release_s = last_impact_s = -1.0;
         for (const fx::Event& ev : first.releases) {
             last_release_s = std::fmax(last_release_s, ev.t_s);
