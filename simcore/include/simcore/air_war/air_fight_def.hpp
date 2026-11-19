@@ -77,6 +77,16 @@ struct AirFightDef {
     int hot_mode = 0;
     std::vector<AirFightFighterDef> fighters;
     std::vector<AirFightControllerDef> controllers;
+    // Teaball's relay (roadmap S6, docs/air_battle/09 section 6): an enemy controller whose listeners overhear our controllers'
+    // vectors within the radio horizon between them and, `delay_s` later unless the relay fails, warn its own fighters of
+    // ours, where ours was, with `error_m` of error (boyne_2008_teaball, checo_1978_linebacker: 1972). "" no relay.
+    struct Teaball {
+        std::string relay;         // the enemy controller that relays
+        double delay_s = 60.0;
+        double fail = 0.15;
+        double error_m = 3000.0;
+        double our_mast_m = 30.0;  // our controller's antenna (section 4.2's table)
+    } teaball;
     AirCombatDef combat;  // data/air_war/air_combat.json
     SensorsDef sensors;   // data/air_war/sensors.json
     em::EmLibrary radar_library;  // S3: the libraries its radars' EM entries are in (data/em/fighter_radars_1985.json), merged

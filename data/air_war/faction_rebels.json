@@ -21,7 +21,8 @@
     "have_quick_share": 0.0,
     "secure_voice_share": 0.0,
     "gci_channels_per_post": 1,
-    "source": "nsa_purple_dragon_1993 p. 68 (a guerrilla army's intercept service lives on plain voice); estimate (their few aircraft talk in our language on civil or captured sets)",
+    "demonstration": 0.0,
+    "source": "nsa_purple_dragon_1993 p. 68 (a guerrilla army's intercept service lives on plain voice); estimate (their few aircraft talk in our language on civil or captured sets); demonstration 0: nothing found",
     "confidence": "estimate",
     "notes": "Call signs never change (a game value, rotation 0 = never); low opsec."
   },

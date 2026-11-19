@@ -771,6 +771,21 @@ struct FactionRadio {
     double discipline_gci_fighters = 0.0;
     std::string source;
     std::string confidence;
+    // Roadmap S6 (docs/air_battle/09 section 8): radio demonstration, the share of a deception package's flights that talk as a
+    // strike would, naming their target, so our analysts read a raid where there is none (nazarenko_1984: radio
+    // disinformation, imitation and demonstration in the Pact's doctrine; NATO's air nets in the Vintex-75 feint).
+    double demonstration = 0.0;
+    // Teaball's relay (section 6): our GCI's vectors overheard by its listeners and relayed as warnings of our fighters to its
+    // own (boyne_2008_teaball, checo_1978_linebacker: 1972). Off unless the faction's file turns it on: a Teaball for
+    // Europe by 1985 was not found, so it is the owner's design choice, not a documented practice.
+    struct Teaball {
+        bool on = false;
+        double delay_s = 60.0;   // from our call to the warning on its net (checo_1978_linebacker p. 52: a plot a minute)
+        double fail = 0.15;      // the relay's outages (boyne_2008_teaball: "unexpected outages"; the share a game value)
+        double error_m = 3000.0; // the warned position's error (a game value)
+        std::string source;
+        std::string confidence;
+    } teaball;
 };
 
 // Its own ground air defence as its returning aircraft meet it (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): a damaged
@@ -1699,14 +1714,26 @@ public:
         if (!r->Is(json::Type::Object)) return Fail(p, "expected an object");
         FactionRadio& b = out.radio;
         if (!Keys(*r, p, {"air_radio", "ground_radio", "band_mhz", "modulation", "language", "callsign_rotation_h", "opsec", "have_quick_share",
-                          "secure_voice_share", "gci_channels_per_post", "source", "confidence", "notes"}) ||
+                          "secure_voice_share", "gci_channels_per_post", "demonstration", "teaball", "source", "confidence", "notes"}) ||
             !Provenance(*r, p) || !RequireString(*r, p, "source", b.source) || !RequireString(*r, p, "confidence", b.confidence) ||
             !RequireString(*r, p, "air_radio", b.air_radio) || !OptionalString(*r, p, "ground_radio", b.ground_radio) ||
             !OptionalString(*r, p, "modulation", b.modulation) || !RequireString(*r, p, "language", b.language) ||
             !Num(*r, p, "band_mhz", b.band_mhz, 3.0, 1000.0) || !Num(*r, p, "callsign_rotation_h", b.callsign_rotation_h, 0.0, 720.0) ||
             !Num(*r, p, "opsec", b.opsec, 0.0, 1.0) || !Num(*r, p, "have_quick_share", b.have_quick_share, 0.0, 1.0) ||
-            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0)) {
+            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0) ||
+            !Num(*r, p, "demonstration", b.demonstration, 0.0, 1.0)) {
             return false;
+        }
+        // Teaball's relay (roadmap S6): its own source; off unless "on".
+        if (const json::Value* t = r->Find("teaball")) {
+            const std::string tp = Join(p, "teaball");
+            FactionRadio::Teaball& tb = b.teaball;
+            if (!t->Is(json::Type::Object)) return Fail(tp, "expected an object");
+            if (!Keys(*t, tp, {"on", "delay_s", "fail", "error_m", "source", "confidence", "notes"}) || !Provenance(*t, tp) ||
+                !RequireString(*t, tp, "source", tb.source) || !RequireString(*t, tp, "confidence", tb.confidence) || !OptionalBool(*t, tp, "on", tb.on) ||
+                !Num(*t, tp, "delay_s", tb.delay_s, 0.0, 3600.0) || !Num(*t, tp, "fail", tb.fail, 0.0, 1.0) || !Num(*t, tp, "error_m", tb.error_m, 0.0, 50000.0)) {
+                return false;
+            }
         }
         b.present = true;
         return true;

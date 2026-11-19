@@ -819,6 +819,48 @@ SC_TEST("own air S1: the enemy hears our corridors used day by day, learns them,
     }
 }
 
+SC_TEST("own air S6: our dummy traffic in false corridors is heard and believed like the real; a raid timed into one gets no held fire; not at radio.mode 0") {
+    const auto dummy_id = [](const std::string& id) { return id.size() > 2 && id.compare(id.size() - 2, 2, " B") == 0; };
+    for (const char* faction : {"warsaw_pact", "nato"}) {
+        const airwar::AirWarData on = War(faction, 1.0);
+        airwar::AirWarData off = War(faction, 1.0);
+        off.tuning.values["radio.mode"] = 0.0;
+        int dummy_heard = 0, dummy_timed = 0, real_timed = 0;
+        for (unsigned seed = 1; seed <= 3; ++seed) {
+            airwar::AirCampaign c;
+            c.Init(on, seed);
+            Run(c, 8.0);
+            const std::vector<OwnAirZone> real = c.OwnCorridors();
+            for (const BelievedCorridor& b : c.CorridorIntel().Heard()) {
+                if (!dummy_id(b.id)) continue;
+                dummy_heard += b.heard;
+                // The false corridor leaves the real one's airfield on another way.
+                const std::string base = b.id.substr(0, b.id.size() - 2);
+                for (const OwnAirZone& z : real) {
+                    if (z.id == base && !b.path.empty()) SC_EXPECT(z.DistanceM(b.path.back()) > z.half_width_m);
+                }
+            }
+            for (const airwar::Package& p : c.Packages()) {
+                if (p.own_corridor.empty()) continue;
+                if (dummy_id(p.own_corridor)) {
+                    ++dummy_timed;
+                    SC_EXPECT(!p.own_corridor_found);  // our defences hold no fire for a corridor nobody flies
+                } else {
+                    ++real_timed;
+                }
+            }
+            // Before S6: only the real corridors are talked on.
+            airwar::AirCampaign b;
+            b.Init(off, seed);
+            Run(b, 4.0);
+            for (const BelievedCorridor& x : b.CorridorIntel().Heard()) SC_EXPECT(!dummy_id(x.id));
+        }
+        std::printf("    %s: dummy corridors heard %d times over three seeds' eight days; raids timed into a dummy %d, into a real one %d\n", faction, dummy_heard,
+                    dummy_timed, real_timed);
+        SC_EXPECT(dummy_heard > 0);
+    }
+}
+
 SC_TEST("own air S1: NATO's and the Pact's damaged aircraft coming home may fall to their own belts; the rebels' and the neutral's never do, and not before S1") {
     // The data: NATO's belt and the Pact's, each in its own words; NATO's words the defaults; no belt for the other two.
     const airwar::AirWarData nato = War("nato", 1.0);

@@ -10,6 +10,8 @@
 // Std only; the loader is in scenario.hpp.
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <map>
 #include <string>
 #include <vector>
@@ -48,6 +50,12 @@ struct AirRadioPostDef {
     std::string chain_post;          // intercept: the post in the chain of command it is (data/command/intercept.json)
 };
 
+// The radio horizon between two antennas over the 4/3 earth: 4.12 km per square root of each height in metres (textbook;
+// vr_1989_tr1: R = 4.12 sqrt(H)). Section 4.2's table: a 15 m mast to our 30 m one about 39 km, an E-3A at 9,000 m about 413 km.
+inline double RadioHorizonM(double h1_m, double h2_m) {
+    return 4120.0 * (std::sqrt(std::max(0.0, h1_m)) + std::sqrt(std::max(0.0, h2_m)));
+}
+
 // The tuning of the calls (data/gameplay/air_war.json "radio"; the air war's TuningTable lists the same keys). Game values
 // unless the notes there say otherwise.
 inline const std::map<std::string, double>& AirRadioTuningDefaults() {
@@ -81,6 +89,19 @@ inline const std::map<std::string, double>& AirRadioTuningDefaults() {
         {"radio.discipline_loose_lips", 0.2}, // discipline lost on his nets
         {"radio.discipline_chatter", 0.15},   // the chatterbox's and the silent runner's step
         {"radio.abstract_calls", 6.0},        // calls an abstract package's flight makes on the way (section 2.4)
+        // Roadmap S6 (docs/air_battle/09 "As built (S6)"): 1 the abstract packages' calls heard by our posts into the
+        // campaign's pipeline, the intercept facts rebuilt from a save, our dummy traffic on our fighters' nets and the Teaball
+        // relay where a faction has one; 0 before it (a save made before S6 replays without them).
+        {"radio.mode", 1.0},
+        {"radio.abstract_hear", 0.9},             // an abstract call in reach is logged (a fade, a busy operator: a game value)
+        {"radio.abstract_range_m", 420000.0},     // no air set is heard beyond this (about the E-3A's horizon, section 4.2's table)
+        {"radio.abstract_hf_range_m", 600000.0},  // the HF request net's sky wave has no horizon (fm_100_2_1_1984 p. 15-2); a game value
+        {"radio.abstract_mast_m", 15.0},          // a ground post's antenna (section 4.2's table)
+        {"radio.awacs_height_m", 9000.0},         // an airborne post on its orbit (section 4.2's table)
+        {"radio.df_sigma_deg", 3.5},              // VHF DF "usually within 3.5 deg" (fm_100_2_1_1984 p. 15-2)
+        {"radio.our_dummy_corridors", 1.0},       // our false corridors fed dummy traffic a day (vr_1985_plss, nazarenko_1984; the count a game value)
+        {"radio.our_dummy_turn_deg", 40.0},       // a false corridor leaves its airfield this far off the real one's way (a game value)
+        {"radio.demonstration_quirk", 0.2},       // a feint artist or a decoy man adds this to his faction's radio demonstration share
     };
     return d;
 }

@@ -59,6 +59,7 @@
 #include <vector>
 
 #include "simcore/aircraft.hpp"
+#include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat.hpp"
 #include "simcore/air_war/air_fight_def.hpp"
 #include "simcore/air_war/perception.hpp"
@@ -223,6 +224,9 @@ public:
     const std::vector<ShotRecord>& Shots() const { return shots_; }
     int VectorsSent() const { return vectors_sent_; }
     int VectorsHeard() const { return vectors_heard_; }
+    // Teaball's relay (roadmap S6): our vectors its listeners overheard, and the warnings it passed to its fighters.
+    int TeaballOverheard() const { return teaball_overheard_; }
+    int TeaballWarnings() const { return teaball_warnings_; }
 
     // A fighter's state by its target id (tests, the debrief).
     Mode ModeOf(const std::string& target) const {
@@ -528,6 +532,7 @@ private:
 
     void Controllers(double t, const AirFightWorld& w) {
         const FightParams& fp = def_->combat.fight;
+        Relay(t, w);
         for (std::size_t ci = 0; ci < def_->controllers.size(); ++ci) {
             const AirFightControllerDef& c = def_->controllers[ci];
             // Ours vector on our picture (B10); the others on what is in their range.
@@ -599,8 +604,71 @@ private:
                 }
                 if (w.event) w.event(c.id, words + (v.heard_s < 0.0 ? " (not heard)" : ""));
                 if (v.heard_s >= 0.0) vectors_.push_back(v);
+                if (c.side == "ours") Overhear(c, ci, n, *me, f.target, t);
             }
         }
+    }
+
+    // Teaball's relay (roadmap S6, docs/air_battle/09 section 6): our controller's vector, said on the air, is overheard by the
+    // enemy's relay when the two antennas are within the radio horizon of each other (4/3 earth), and passed on `delay_s`
+    // later unless the relay fails, as a warning of our fighter where he was then, with `error_m` of error.
+    struct TeaballWarning {
+        double due_s = 0.0;
+        Vec3 point;
+        Vec3 vel;
+        int truth = -1;
+        bool passed = false;
+    };
+    void Overhear(const AirFightControllerDef& c, std::size_t ci, std::uint64_t n, const Aircraft& ours, int our_target, double t) {
+        const AirFightDef::Teaball& tb = def_->teaball;
+        if (tb.relay.empty()) return;
+        const AirFightControllerDef* rc = def_->Controller(tb.relay);
+        if (rc == nullptr) return;
+        const double reach = RadioHorizonM(c.kind == "airborne_warning" ? c.pos.z : tb.our_mast_m, std::max(0.0, rc->pos.z));
+        if (std::hypot(c.pos.x - rc->pos.x, c.pos.y - rc->pos.y) > reach) return;
+        ++teaball_overheard_;
+        if (U(0x7EAB0000ull + ci, n, 1) < tb.fail) return;  // the relay's outage
+        TeaballWarning tw;
+        tw.due_s = t + tb.delay_s;
+        tw.point = ours.position + Vec3{tb.error_m * N(0x7EAB0000ull + ci, n, 2), tb.error_m * N(0x7EAB0000ull + ci, n, 3), 0.0};
+        tw.vel = ours.velocity;
+        tw.truth = our_target;
+        teaball_.push_back(tw);
+    }
+    // The warnings due now, on the relay's net to each of its own fighters it may vector (as a vector: heard by its post's
+    // link when it has one, else at once).
+    void Relay(double t, const AirFightWorld& w) {
+        if (teaball_.empty()) return;
+        const AirFightControllerDef* rc = def_->Controller(def_->teaball.relay);
+        for (TeaballWarning& tw : teaball_) {
+            if (tw.due_s > t || tw.passed || rc == nullptr) continue;
+            for (std::size_t i = 0; i < fighters_.size(); ++i) {
+                const Fighter& f = fighters_[i];
+                if (f.gone || f.ours || f.striker || f.start_s < 0.0 || f.mode == Mode::Home || f.def->controller != rc->id) continue;
+                const Aircraft* me = w.air ? w.air(f.target) : nullptr;
+                if (me == nullptr) continue;
+                const Vec3 d = tw.point - me->position;
+                const double brg = std::fmod(std::atan2(d.x, d.y) * 180.0 / chain_detail::kPi + 360.0, 360.0);
+                const std::string words = f.def->target + ", bandits, bearing " + std::to_string(static_cast<int>(std::lround(brg))) + ", " +
+                                          std::to_string(static_cast<int>(std::lround(d.Length() / 1000.0))) + " km";
+                Vector v;
+                v.fighter = i;
+                v.point = tw.point;
+                v.vel = tw.vel;
+                v.truth = tw.truth;
+                if (!rc->post.empty() && w.say && w.heard) {
+                    const int call = w.say(rc->post, f.target, words, t);
+                    v.heard_s = call >= 0 ? w.heard(call, f.target, t) : -1.0;
+                } else {
+                    v.heard_s = t;
+                }
+                ++teaball_warnings_;
+                if (w.event) w.event(rc->id, words + " (relayed)" + (v.heard_s < 0.0 ? " (not heard)" : ""));
+                if (v.heard_s >= 0.0) vectors_.push_back(v);
+            }
+            tw.passed = true;
+        }
+        teaball_.erase(std::remove_if(teaball_.begin(), teaball_.end(), [](const TeaballWarning& x) { return x.passed; }), teaball_.end());
     }
 
     void Deliver(double t) {
@@ -1287,6 +1355,9 @@ private:
     std::uint64_t sense_count_ = 0;
     int vectors_sent_ = 0;
     int vectors_heard_ = 0;
+    std::vector<TeaballWarning> teaball_;
+    int teaball_overheard_ = 0;
+    int teaball_warnings_ = 0;
 };
 
 }  // namespace airwar

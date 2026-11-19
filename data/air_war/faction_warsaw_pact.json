@@ -27,7 +27,8 @@
     "have_quick_share": 0.0,
     "secure_voice_share": 0.0,
     "gci_channels_per_post": 3,
-    "source": "mt_1964_air_army p. 6 (complete radio silence on the move); fm_100_2_1_1984 p. 12-8 (radio reduced to a minimum or prohibited on the attack); mt_1962_front_aviation (30-40 groups for twelve command posts: about three per post); valka_r832m; lawrence_1982 (planning on landlines and couriers)",
+    "demonstration": 0.5,
+    "source": "mt_1964_air_army p. 6 (complete radio silence on the move); fm_100_2_1_1984 p. 12-8 (radio reduced to a minimum or prohibited on the attack); mt_1962_front_aviation (30-40 groups for twelve command posts: about three per post); valka_r832m; lawrence_1982 (planning on landlines and couriers); nazarenko_1984 (demonstration: radio disinformation, imitation and demonstration as the Pact's operational maskirovka, centrally organised)",
     "confidence": "low",
     "notes": "The radio discipline is the hot phase's (hot_phase.radio_discipline, roadmap B11): strike groups keep radio silence on the way in and the attack; fighters talk to GCI. Call signs change per planning cycle (a game value, 12 h). Staff opsec high: planning on landlines and couriers."
   },

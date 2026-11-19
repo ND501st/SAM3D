@@ -274,6 +274,13 @@ private:
                 h.text = l.text;
                 h.understood = l.understood;
                 if (l.fast) h.fact = "intercept:" + std::to_string(l.call) + ":" + l.post;
+                // Roadmap S6: what the campaign's feed needs to make the same facts on a load (command/air_war_feed.hpp).
+                h.chain_post = l.chain_post;
+                h.h = live_->HourOf(l.heard_s);
+                h.written_h = live_->HourOf(l.written_s);
+                h.bearing_deg = l.bearing_deg;
+                h.precedence = l.precedence;
+                h.names_battery = l.names_battery;
                 out.push_back(h);
             }
             return out;
