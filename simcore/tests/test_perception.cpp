@@ -217,6 +217,32 @@ SC_TEST("perception: a silent camouflaged battery is found at most at its P_max;
     SC_EXPECT(worst_err < 6000.0);  // his estimate is off by the eye's errors (a trail's nearest point is not the site), not wild
 }
 
+SC_TEST("perception (B6 left, S4): a battery deployed and silent is found far less often than the same battery on the march") {
+    // The runner names the battery's class by what it does (scenario_runner.hpp: osa_battery_silent halted,
+    // column_moving on the road): small and low-contrast against a line feature of medium contrast (nwc_tp6005_1978's
+    // P_max 0.25 against 0.75; agard_cp100_1972, movement and line features help). The same passes, the same seeds.
+    const World w;
+    const double v = 450.0 * 0.5144;
+    int found[2] = {0, 0};
+    const int runs = 400;
+    for (int seed = 1; seed <= runs; ++seed) {
+        for (int march = 0; march < 2; ++march) {
+            PerceptionHub hub(PerceptionData(), static_cast<std::uint64_t>(seed));
+            hub.AddGround(march ? "column_moving" : "osa_battery_silent", Vec3{0.0, 0.0, 0.0}, "battery");
+            ObserverIn ob = Observer("a", Vec3{0.0, -20000.0, 150.0}, Vec3{0.0, v, 0.0});
+            for (double t = 0.0; t < 20000.0 / v; t += 0.25) {
+                ob.pos = Vec3{0.0, -20000.0 + v * t, 150.0};
+                if (hub.Due(ob.key, t)) hub.Tick(ob, w.env, t, {}, {}, nullptr);
+            }
+            found[march] += Holds(hub, ob, SightKind::GroundObject, 1e9) ? 1 : 0;
+        }
+    }
+    const double silent = static_cast<double>(found[0]) / runs, marching = static_cast<double>(found[1]) / runs;
+    std::printf("    deployed and silent found in %.1f %%, on the march in %.1f %% of %d passes\n", 100.0 * silent, 100.0 * marching, runs);
+    SC_EXPECT(marching > 2.0 * silent);
+    SC_EXPECT(marching > 0.4);
+}
+
 // ---------------------------------------------------------------------------------------------- the eye's ranges
 
 SC_TEST("perception: a small SAM's trail in day VMC is seen at 3-6 km; first sightings of a fighter fall in 1-5 nm; a contrail at up to 20 nm") {

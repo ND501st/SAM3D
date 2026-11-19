@@ -37,6 +37,7 @@
 #include "simcore/damage.hpp"
 #include "simcore/flights.hpp"
 #include "simcore/reactions.hpp"
+#include "simcore/target_behaviour.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -109,6 +110,7 @@ public:
     struct Counts {
         int cues = 0, reactions = 0, no_reaction = 0, programmed = 0, calls = 0, heard = 0;
         int chaff = 0, flares = 0, jettisons = 0, decisions = 0, press_on = 0, go_round = 0, aborts = 0, self_decided = 0;
+        int scripted = 0;  // scripted rows' cues acted on (a hand-written "evade")
     };
 
     void Configure(const ReactionTable* table, std::uint64_t seed, int year) {
@@ -144,6 +146,51 @@ public:
         return true;
     }
     bool On(int target) const { return P(target) != nullptr; }
+
+    // ---- A hand-written "evade" as a scripted profile (04_REACTIONS.md §12.3, roadmap S4). One row: its cue (a launch,
+    // on his receiver or seen by eye; or a lock on his receiver; or the instructor's order alone), no delay, no
+    // countermeasure, no jettison, no call and no flight's decision; he acts on it in the step it reaches him. The
+    // manoeuvre is the pilot's own (TargetPilot::Evade): its kind, turn rate and evade_s, the beam taken from the cue's
+    // bearing (for our own Osa's lock and launch our vehicle's place), and the follow-on today's code gives it. It needs no
+    // reaction tables, and a scripted pilot is not On(): his damage and stores are the old path's.
+    struct ScriptedCue {
+        bool launch = false;  // a launch (else a lock)
+        Vec3 from;            // where he believes the threat is
+    };
+    void RegisterScripted(int target, const std::string& id, const EvadeDef& e) {
+        if (target < 0 || !e.present) return;
+        if (static_cast<std::size_t>(target) >= scripted_.size()) scripted_.resize(static_cast<std::size_t>(target) + 1);
+        ScriptedRow& r = scripted_[static_cast<std::size_t>(target)];
+        r = ScriptedRow();
+        r.on = true;
+        r.id = id;
+        r.cue = e.on;
+    }
+    bool Scripted(int target) const { return SR(target) != nullptr; }
+    // A new sighting in his picture: true, and the cue, if it is his row's.
+    bool SightedScripted(int target, const airwar::Sighting& sg, ScriptedCue& out) {
+        const ScriptedRow* r = SR(target);
+        if (r == nullptr) return false;
+        const bool rwr = sg.by == airwar::SightBy::Rwr && sg.kind == airwar::SightKind::Emitter;
+        const bool eye_launch = sg.by == airwar::SightBy::Eye && (sg.kind == airwar::SightKind::LaunchSign || sg.kind == airwar::SightKind::Trail);
+        if (r->cue == EvadeDef::On::Launch && ((rwr && sg.rwr == airwar::RwrState::Launch) || eye_launch)) {
+            out.launch = true;
+            out.from = eye_launch && sg.has_origin ? sg.origin_enu : sg.believed_enu;
+        } else if (r->cue == EvadeDef::On::Lock && rwr && sg.rwr == airwar::RwrState::Lock) {
+            out.launch = false;
+            out.from = sg.believed_enu;
+        } else {
+            return false;
+        }
+        ++counts_.scripted;
+        return true;
+    }
+    // The instructor's order to manoeuvre (cue source `order`): any row takes it.
+    bool OrderedScripted(int target) {
+        if (SR(target) == nullptr) return false;
+        ++counts_.scripted;
+        return true;
+    }
     double Stress(int target, double now) const {
         const Pilot* s = P(target);
         return s == nullptr ? 0.0 : StressDecay(s->stress, now - s->stress_t, table_->stress_half_life_s);
@@ -904,6 +951,17 @@ private:
     std::uint64_t seed_ = 0;
     int year_ = 1985;
     std::vector<Pilot> pilots_;
+    struct ScriptedRow {
+        bool on = false;
+        std::string id;
+        EvadeDef::On cue = EvadeDef::On::Launch;
+    };
+    const ScriptedRow* SR(int target) const {
+        if (target < 0 || static_cast<std::size_t>(target) >= scripted_.size()) return nullptr;
+        const ScriptedRow& r = scripted_[static_cast<std::size_t>(target)];
+        return r.on ? &r : nullptr;
+    }
+    std::vector<ScriptedRow> scripted_;
     std::vector<Item> items_;
     std::map<std::pair<int, int>, Decided> decided_;  // (flight, situation) -> the leader's decision
     std::vector<JettisonRecord> jettisons_;

@@ -126,7 +126,8 @@ struct BoardRecord {
 struct LogEntry {
     double time_s = 0.0;
     std::string callsign;
-    std::string kind;  // "launch", "destroyed", "missed", "not destroyed" (a kill taken back)
+    std::string kind;  // "launch", "destroyed", "missed", "not destroyed" (a kill taken back), "hit" (a kill taken back as hit,
+                       // seen burning and flying on: roadmap S4)
     int number = 0;    // the target's board number as reported (0: not said)
 };
 // A report the radar company said on the air-picture net, as its own log has it.
@@ -222,6 +223,7 @@ struct CombatReport {
     std::vector<LogEntry> claims;       // the launchers' reports
     int missiles = 0;                   // launches reported
     int destroyed = 0;                  // kills reported and not taken back
+    int damaged = 0;                    // ...taken back as hit, flying on (roadmap S4)
     int unreadable = 0;                 // air-picture lines of the journal that don't read as a report
 
     const ReportTarget* Target(int number) const {
@@ -320,6 +322,10 @@ inline CombatReport CompileReport(const std::string& unit, double from_s, double
         if (e.kind == "launch") ++r.missiles;
         if (e.kind == "destroyed") ++r.destroyed;
         if (e.kind == "not destroyed") --r.destroyed;
+        if (e.kind == "hit") {  // reported destroyed, then hit and flying on (roadmap S4)
+            --r.destroyed;
+            ++r.damaged;
+        }
     }
     r.destroyed = std::max(0, r.destroyed);
     return r;
@@ -370,6 +376,13 @@ inline std::string ReportText(const CombatReport& r, const std::function<std::st
         if (e.kind == "destroyed") kills += (kills.empty() ? " (" : ", ") + (e.number > 0 ? BoardNumber(e.number) : std::string("a target")) + " by " + e.callsign;
     }
     s += kills.empty() ? "." : kills + ").";
+    if (r.damaged > 0) {  // roadmap S4: hit and seen flying on
+        std::string hits;
+        for (const LogEntry& e : r.claims) {
+            if (e.kind == "hit") hits += (hits.empty() ? " (" : ", ") + (e.number > 0 ? BoardNumber(e.number) : std::string("a target")) + " by " + e.callsign;
+        }
+        s += " Targets hit and flying on: " + std::to_string(r.damaged) + hits + ").";
+    }
     if (r.unreadable > 0) s += " Lines of the journal that do not read: " + std::to_string(r.unreadable) + ".";
     return s;
 }

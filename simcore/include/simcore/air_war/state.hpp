@@ -183,6 +183,14 @@ struct PackageOutcome {
     int package_id = 0;
     std::vector<LossRecord> losses;
     int damaged = 0;
+    // A played session's damaged aircraft that got away (roadmap S4): its flight and whether heavily damaged (else
+    // moderately). The campaign repairs each by its level (damage.mode 1); the rest of `damaged` (the abstract resolver's)
+    // go to a flight drawn as before.
+    struct DamagedRecord {
+        int flight = -1;
+        bool heavy = false;
+    };
+    std::vector<DamagedRecord> damaged_list;
     std::vector<std::pair<std::string, double>> damage;   // truth object id -> working share removed
     std::vector<std::string> destroyed;                   // truth object ids wrecked by it
     std::vector<std::string> decoys_hit;

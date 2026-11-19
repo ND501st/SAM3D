@@ -367,11 +367,11 @@ Where it differs from 3.1-3.4:
   climb capped at `climb_mps`. Terrain following (`TargetPilot::HoldHeight`) still sets the height after the step, as
   before; the step then flies the horizontal at v cos(gamma), and the energy model takes -g sin(gamma) from the
   vertical speed flown. The type's `climb_mps` caps the height layer's climbs. So a terrain-following climb costs
-  speed, but its rate is not yet asked of the aircraft as a path angle.
+  speed; since S4 a bank-to-turn jet's is asked as a path angle (below).
 - **Pitch.** The path angle and an angle of attack of 3 deg at 1 g, times n and (the speed told / the airspeed)^2,
   at most 15 deg. A helicopter's pitch is its lean, -atan((v / v_max)^2 tan 10 deg + (dv/dt) / g).
-- **Helicopters** have no energy model yet: they fly their told speed, as before. A pop-up helicopter stops at its
-  hide on the spot; with an energy model it would slide several hundred metres past it until the pilot plans his stop. Their bank limit
+- **Helicopters** have no energy model of a jet's kind: since S4 they gain and lose speed at a rate (below), and a
+  pop-up helicopter plans its stop at its hide. Their bank limit
   is acos(1 / max_load_g); in the hover (under 2 m/s) they turn on the spot at `max_turn_deg_s`, level.
 - **Type data.** The new values are in each aircraft's `"flight"` object, with their own `source` and `confidence`
   (the type's own source is about its role and numbers, not its flight). All are game values, `estimate`. The
@@ -382,9 +382,24 @@ Where it differs from 3.1-3.4:
 - **Not reused.** `fx::WreckFall::Accel`'s banked lift was not needed: the coordinated turn is the two lines of 3.1.
 - **Drawn.** Unreal takes yaw and pitch from the nose (`heading_rad`, `pitch_rad`) and the roll from `bank_rad`, for
   every aircraft but a weapon (`USimWorldSubsystem::BuildEntityList`). Tacview gets the same attitude.
-- **Left.** Damage (R1's moderate and heavy) does not lower the g limit or the acceleration yet. Helicopters' energy.
-  The terrain-following climb as a path angle. The flight model at altitude (v_max is one number per type, the top
-  speed at the heights it flies).
+- **Roadmap S4** (19 Nov 2026):
+  - *At altitude.* A type's `accel_mps2` and `max_mps` are at sea level; at height h the thrust falls as sigma^0.7
+    (sigma the ISA density ratio, `DensityRatioAt`; the turbojet's lapse, `anderson_flight`) and the drag as sigma v^2,
+    so the acceleration is A sigma^0.7 and the top speed v_max sigma^-0.15 (`AccelMps2`, `TopSpeedMps`): at 6,000 m
+    0.649 and 1.097 of sea level's. The height is the frame's altitude plus z (`Aircraft::frame_alt_m`, set at spawn).
+    The exponent 0.7 is a game value inside the textbook's range.
+  - *The climb as a path angle.* The pilot's height layer asks a bank-to-turn jet's climb or descent as a path angle
+    (`Aircraft::path_asked`, `asked_path_angle_rad` = asin(vz / v), at most 0.9): the step pulls onto it within the g
+    limit and one second's lag and flies it, and the energy model pays g sin(gamma). The ground floor still pushes him
+    up. A helicopter keeps the old way (its height set after the step).
+  - *Helicopters' energy.* A helicopter gains speed at its type's `accel_mps2` or 2 m/s2 and loses it in a flare of
+    3 m/s2 (`kHeliAccelMps2`, `kHeliDecelMps2`, game values; the lean takes the flare's dv/dt, nose up). A pop-up
+    helicopter plans its stop: on its way to the hide its speed is held to sqrt(2 a d), so it hovers at the hide
+    instead of sliding past it (`HeliStopDistanceM`, 1,067 m from 80 m/s).
+  - *Damage.* Moderate and heavy damage lower the g limit, the turn rates, the acceleration and the top speed
+    (`docs/DAMAGE.md` §1).
+- **Left.** The lapse's exponent per engine (the turbofans' smaller), the afterburner, and the drag's own Mach rise.
+  A helicopter's climb as a path angle. Fuel burnt and the weight it takes off.
 
 ## 4. Pilots as people
 

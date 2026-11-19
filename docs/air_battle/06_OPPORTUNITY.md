@@ -471,9 +471,28 @@ NATO's close support holds (`Hold` by its leader, `hold_s` 5-15 min) and asks ag
 Pact's attacks on its plan. The abstract campaign does the same at the brief (`AirC2::Brief`). `Played` counts the
 marks, the unheard marks, the holds and the aborts. Off with `c2.live_mode` 0.
 
-**Left:** `TestWaves::Releases` through `AttackPass`; bombs dropped on targets of opportunity in a session; the dive flown
-in the pass; A1 (the coarse flown level); a check that a silent battery is found less often than one on the march;
-the 24 h `mission_demo` counts per faction (§ Done when 3) as a test; `AimOnCall` (already legacy only).
+**S4 (19 November 2026, branch `tbr-s4`).** The dive is flown: through a pass's setup and run the override carries the
+weapon's dive and open-fire range (`PilotOverride::dive_rad`, `open_fire_m`, `pass_aim`), and the pilot's height layer
+(`TargetPilot::SetPass`) holds the roll-in height, (open-fire slant x cos(dive) + 1 km) x tan(dive) over the aim's
+ground, then dives on the line to the aim, never under 30 m; at the recovery he climbs back to his own height. The A-10's
+GAU-8 pass is flown in its 3.3 degree dive. Bombs on what is found: with `opportunity.mode` 2 a fixed-wing aircraft
+carrying bombs that fall (`bomb`, `retarded_bomb`, `cluster`) and not owed to its target (or on a hunting mission) may
+dive-bomb a contact the chain lets it attack, one pass with its whole load, in a `opportunity.bomb_dive_deg` (30) dive
+released at `delivery.dive_release_m` over the ground; the bridge lands the load with the dive delivery's CEP and its
+flight (`MissionBridge::BombsFired`), and the blast's chances are keyed draws of the stream (`OppDraw`). A save
+without the key replays with mode 1 (no bombs). The testbed's guns and rockets from fixed-wing aircraft are fired from
+passes (`TestWaves::Releases` with a `PassControl`): begun 6 km out, flown on the override layer, released at the open-fire
+gate, the load's scatter a keyed draw; a pass the layer will not take (breaking under fire) is tried again next step,
+one that never lines up goes off without firing. A deployed, silent battery (`osa_battery_silent`) is found on 17 in
+100 passes straight over it at 150 m where the same battery on the march (`column_moving`) is found on 50 (`test_perception.cpp`; § Done when 4).
+`AimOnCall` now returns at once unless the campaign is legacy (`c2.mode` 0, a save from before B5): close support is
+aimed by the FAC's brief on his believed sighting (§ Done when 7).
+
+**Left:** A1 (the coarse flown level). The 24 h `mission_demo` counts per faction (§ Done when 3) as a test: the
+measured order is not the one written there (B6's own balance: NATO's attacks on unbriefed targets outnumber the
+Pact's and the rebels attack least, for want of aircraft with guns near our lines), so the order is to be decided
+before it is tested, and a 24 h session per faction is too slow for the suite. A bomb pass's own re-attack (one pass
+with the whole load). Dive-bombing by the testbed's waves (their bombs still fall at their range).
 
 ## Done when
 

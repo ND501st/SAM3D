@@ -394,12 +394,23 @@ SC_TEST("opportunity (bridge): two A-10s fly their planned GAU-8 attack as passe
     SC_EXPECT(bridge.Opportunities().On());
     SC_EXPECT(bridge.Opportunities().PlannedPass(0) && bridge.Opportunities().PlannedPass(1));
     bool attack_flown = false;
+    double steepest = 0.0, lowest = 1e9;  // the dive flown in the pass (roadmap S4): his path angle and height over the ground
     std::vector<std::string> fired_by;
     while (!runner.Finished() && !bridge.UnitDestroyed() && runner.Time() < built.manifest.end_s + 60.0 && fired_by.size() < 2) {
         runner.Step(0.1);
         bridge.Step(runner);
         for (const RaidAircraft& a : built.manifest.aircraft) {
-            if (const PilotOverride* ov = runner.PassOf(a.target_id)) attack_flown |= ov->kind == PilotOverride::Kind::Attack;
+            if (const PilotOverride* ov = runner.PassOf(a.target_id)) {
+                attack_flown |= ov->kind == PilotOverride::Kind::Attack;
+                if (ov->kind == PilotOverride::Kind::Attack && ov->dive_rad > 0.0) {
+                    const Aircraft* ac = runner.GetWorld().FindAircraft(runner.TargetWorldId(a.target_id));
+                    if (ac != nullptr) {
+                        steepest = std::min(steepest, ac->velocity.z / std::max(1.0, ac->velocity.Length()));
+                        const Vec3 g = runner.GroundEnu(ac->position.x, ac->position.y);
+                        lowest = std::min(lowest, ac->position.z - g.z);
+                    }
+                }
+            }
         }
         fired_by.clear();
         for (const fx::Event& ev : OfKindOpp(runner.Fx().Since(0), fx::EventKind::WeaponRelease)) {
@@ -407,6 +418,9 @@ SC_TEST("opportunity (bridge): two A-10s fly their planned GAU-8 attack as passe
         }
     }
     SC_EXPECT(attack_flown);
+    std::printf("    the pass flown in its dive: steepest %.1f deg down, lowest %.0f m over the ground\n", -RadToDeg(std::asin(steepest)), lowest);
+    SC_EXPECT(-RadToDeg(std::asin(steepest)) > 1.5);  // the GAU-8's 3.3 degree dive (cdat_array20_1980)
+    SC_EXPECT(lowest >= 25.0);                        // never under the pass's floor (kPassFloorM 30 m, less a step's sink)
     SC_EXPECT(fired_by.size() == 2);
     for (const fx::Event& ev : OfKindOpp(runner.Fx().Since(0), fx::EventKind::WeaponRelease)) {
         const RaidAircraft* a = nullptr;
@@ -560,7 +574,7 @@ SC_TEST("opportunity: the records are saved and read back; a save from before B6
     SC_EXPECT_NEAR(old.Data().tuning.Get("opportunity.mode"), 0.0, 1e-12);
     AirCampaign now;
     SC_EXPECT(LoadCampaignJson(SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json"), kData, now, &e));
-    SC_EXPECT_NEAR(now.Data().tuning.Get("opportunity.mode"), 1.0, 1e-12);
+    SC_EXPECT_NEAR(now.Data().tuning.Get("opportunity.mode"), 2.0, 1e-12);  // roadmap S4: bombs on what is found
 }
 
 // The abstract level (resolve.hpp FindOpportunity): with no finds it runs as before B6, its draws keyed apart from the
@@ -592,4 +606,87 @@ SC_TEST("opportunity (A0): with no finds a campaign runs as before B6; with them
         total += found;
     }
     SC_EXPECT(total > 0);
+}
+
+SC_TEST("opportunity (S4): a dive-bombing pass from the tuning; only bombs that fall are dive-bombed; mode 2 is saved") {
+    const AirWarData d = LoadOpp("nato");
+    SC_EXPECT_NEAR(d.tuning.Get("opportunity.mode"), 2.0, 1e-12);
+    const GunPassDef p = OpportunityRun::BombPass(d.tuning);
+    SC_EXPECT(p.present);
+    SC_EXPECT_NEAR(p.dive_deg, d.tuning.Get("opportunity.bomb_dive_deg"), 1e-12);
+    // He releases at the dive delivery's height (delivery.dive_release_m) on the line of his dive: the slant h / sin(theta).
+    SC_EXPECT_NEAR(p.open_fire_m * std::sin(DegToRad(p.dive_deg)), d.tuning.Get("delivery.dive_release_m"), 1e-9);
+    WeaponDef w;
+    for (const char* k : {"bomb", "retarded_bomb", "cluster"}) {
+        w.kind = k;
+        SC_EXPECT(OpportunityRun::IsFallingBomb(w));
+    }
+    for (const char* k : {"gun", "rockets", "guided_bomb", "missile", "atgm", "runway"}) {
+        w.kind = k;
+        SC_EXPECT(!OpportunityRun::IsFallingBomb(w));
+    }
+    // With bombs the chain's act is an attack, not a gun run.
+    OppSituation s = Seen(MissionKind::ArmedRecce, OppTarget::Column, 0.8);
+    s.has_bombs = true;
+    OppLeader l;
+    l.traits.boldness = 1.0;
+    l.traits.ambition = 1.0;
+    l.traits.rigidity = 0.0;
+    int attacks = 0, guns = 0;
+    for (std::uint64_t k = 0; k < 50; ++k) {
+        const OppDecision dec = RunChain(d.faction.opportunity, s, l, d.tuning, 11, 1, k);
+        attacks += dec.act == OppAct::Attack ? 1 : 0;
+        guns += dec.act == OppAct::GunRun ? 1 : 0;
+    }
+    SC_EXPECT(attacks > 0 && guns == 0);
+}
+
+SC_TEST("damage in the air war (S4): a played session's damaged aircraft saved with their levels; a save from before replays with mode 0") {
+    PackageOutcome o;
+    o.damaged = 2;
+    PackageOutcome::DamagedRecord a;
+    a.flight = 1;
+    a.heavy = true;
+    PackageOutcome::DamagedRecord b;
+    b.flight = 0;
+    o.damaged_list = {a, b};
+    save_detail::Reader rd;
+    const PackageOutcome back = rd.Outcome(save_detail::OutcomeJson(o));
+    SC_EXPECT(back.damaged == 2 && back.damaged_list.size() == 2);
+    if (back.damaged_list.size() == 2) {
+        SC_EXPECT(back.damaged_list[0].flight == 1 && back.damaged_list[0].heavy);
+        SC_EXPECT(back.damaged_list[1].flight == 0 && !back.damaged_list[1].heavy);
+    }
+    SC_EXPECT(save_detail::OutcomeJson(PackageOutcome()).Find("damaged_list") == nullptr);
+    const AirWarData d = LoadOpp("nato");
+    SC_EXPECT_NEAR(d.tuning.Get("damage.mode"), 1.0, 1e-12);
+    SC_EXPECT(d.tuning.Get("damage.heavy_repair_factor") > 1.0);
+    AirCampaign c;
+    c.Init(d, 5u);
+    if (c.Advance(12.0)) c.SkipPlayerMission();
+    std::string text = SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_nato.json");
+    const std::size_t at = text.find("\"damage_mode\"");
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const std::size_t end = text.find_first_of(",}", at);
+    if (text[end] == ',') {
+        text.erase(at, end - at + 1);
+    } else {
+        const std::size_t comma = text.rfind(',', at);
+        text.erase(comma, end - comma);
+    }
+    AirCampaign old, now;
+    std::string e;
+    SC_EXPECT(LoadCampaignJson(text, kData, old, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT_NEAR(old.Data().tuning.Get("damage.mode"), 0.0, 1e-12);
+    SC_EXPECT(LoadCampaignJson(SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_nato.json"), kData, now, &e));
+    SC_EXPECT_NEAR(now.Data().tuning.Get("damage.mode"), 1.0, 1e-12);
+    // With damage.mode 0 a campaign runs as before S4: the same journal as one whose heavy share is nothing and whose
+    // heavy repair is as long as a moderate one's (the only ways mode 1 differs once no session is played).
+    AirWarData d0 = LoadOpp("nato");
+    d0.tuning.values["damage.mode"] = 0.0;
+    AirWarData d1 = LoadOpp("nato");
+    d1.tuning.values["damage.heavy_repair_factor"] = 1.0;
+    SC_EXPECT(JournalText(RunDays(d0, 9u, 3.0)) == JournalText(RunDays(d1, 9u, 3.0)));
 }

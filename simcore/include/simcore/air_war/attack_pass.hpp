@@ -9,8 +9,9 @@
 //            within kBoresightDeg of his nose (the A-10's test: a mean 1,115 m slant in a 3.3 degree dive,
 //            cdat_array20_1980; rockets from a 10-25 degree dive, mt_1970_bukhantsev);
 //   recover  past the aim and off to the side, opportunity.recover_m out, then back to his flight or his route.
-// The aircraft's height stays its pilot's (the height layer holds his low level): the dive is in the pass's open-fire
-// range and its effect, not flown (a first form). What one pass does to what is really at the aim is GunPassEffect: the
+// The dive is flown (roadmap S4): through the setup and the run the override carries the weapon's dive and open-fire range,
+// and the pilot's height layer (TargetPilot::SetPass) climbs to the roll-in height and dives along the line to the aim;
+// at the recovery he pulls out to his own height again. What one pass does to what is really at the aim is GunPassEffect: the
 // weapon's per_pass for the target's class (what a pass does to a found, stationary, undefended aim point), times its
 // moving_factor on a moving target and opportunity.gun_burst_under_fire when the pass is flown under fire.
 #pragma once
@@ -93,6 +94,11 @@ public:
         o.after = PilotOverride::After::Rejoin;
         o.end = PilotOverride::End::Point;
         o.until_s = t + 600.0;
+        if (phase_ == Phase::Setup || phase_ == Phase::Run) {  // flown in its dive (roadmap S4)
+            o.dive_rad = DegToRad(std::max(0.0, def_.dive_deg));
+            o.open_fire_m = def_.open_fire_m;
+            o.pass_aim = aim_;
+        }
         switch (phase_) {
             case Phase::Setup: o.point = setup_; break;
             case Phase::Run: o.point = aim_; break;

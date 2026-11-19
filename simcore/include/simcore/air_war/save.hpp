@@ -18,7 +18,9 @@
 // (10_FACTIONS.md §9: NATO's medium altitude gated by the defences, the rollback's new shares, the quirk weights) and
 // replays with hot_phase.mode 0, as it was played. A save without "balance_mode" was made before roadmap B14 (an airborne
 // flight's divert at the faction's retask delay, the strikers' abort and the E-3A's warning in an air fight;
-// 09_BALANCE.md section 17) and replays with balance.mode 0.
+// 09_BALANCE.md section 17) and replays with balance.mode 0. A save without "damage_mode" was made before roadmap S4 (a
+// damaged aircraft repaired by its level, a played session's damaged aircraft on their own flights) and replays with
+// damage.mode 0.
 #pragma once
 
 #include <cmath>
@@ -91,6 +93,16 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     }
     Put(v, "losses", losses);
     Put(v, "damaged", Num(o.damaged));
+    if (!o.damaged_list.empty()) {  // roadmap S4
+        json::Value list = Arr();
+        for (const PackageOutcome::DamagedRecord& d : o.damaged_list) {
+            json::Value x = Obj();
+            Put(x, "flight", Num(d.flight));
+            Put(x, "heavy", Bool(d.heavy));
+            Push(list, x);
+        }
+        Put(v, "damaged_list", list);
+    }
     Put(v, "damage", Pairs(o.damage));
     Put(v, "destroyed", Strings(o.destroyed));
     Put(v, "decoys_hit", Strings(o.decoys_hit));
@@ -298,6 +310,14 @@ public:
             }
         }
         o.damaged = Int(v, "damaged");
+        if (const json::Value* list = v.Find("damaged_list")) {
+            for (const json::Value& x : list->items) {
+                PackageOutcome::DamagedRecord d;
+                d.flight = Int(x, "flight", -1);
+                d.heavy = Boolean(x, "heavy");
+                o.damaged_list.push_back(d);
+            }
+        }
         o.damage = Pairs(v, "damage");
         o.destroyed = Strings(v, "destroyed");
         o.decoys_hit = Strings(v, "decoys_hit");
@@ -421,6 +441,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "hot_mode", Num(c.Data().tuning.Get("hot_phase.mode")));
     Put(root, "balance_mode", Num(c.Data().tuning.Get("balance.mode")));
     Put(root, "c2_live_mode", Num(c.Data().tuning.Get("c2.live_mode")));
+    Put(root, "damage_mode", Num(c.Data().tuning.Get("damage.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -515,6 +536,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double balance_mode = r.Number(root, "balance_mode", 0.0);
     // And the command live in the session (roadmap S2): a save made before it has no key, and replays as it was played.
     const double c2_live_mode = r.Number(root, "c2_live_mode", 0.0);
+    // And the damaged aircraft repaired by their level (roadmap S4): a save made before it has no key, and replays as it was.
+    const double damage_mode = r.Number(root, "damage_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -584,6 +607,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["hot_phase.mode"] = hot_mode;
     data.tuning.values["balance.mode"] = balance_mode;
     data.tuning.values["c2.live_mode"] = c2_live_mode;
+    data.tuning.values["damage.mode"] = damage_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

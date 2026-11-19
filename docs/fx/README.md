@@ -435,12 +435,12 @@ a smoke column take its place). Vehicle models are not changed.
   points are set from the throw (`delivery.release_loft_m`, `loft_pull_m`, `loft_release_m` in
   `data/gameplay/air_war.json`, a balance pass of their own); an aircraft shot down after that early release has still
   delivered.
-* A pop-up lets go in its dive, but the runner's terrain-following climb (`max_climb_mps` 120, 1.5 g) tops out near
-  the release point, about 1140 m up and 2 km short of the aim, rather than at the planner's apex (1200 m, 3.75 km
-  short), and the descent to `delivery.popup_release_m` is almost level: from there the throw (about 3.9 km) already
-  reaches past the aim, so it lets go at the first step past the top with the aim half its throw (`test_fx_bridge.cpp`:
-  ratio 0.49-0.58, path -0.4 degrees). The bombs still land at the aim (the bridge's impact point); the drawn fall is
-  long and shallow. Left until the runner flies a pop-up's roll-in and dive (a dive angle the route can command).
+* A pop-up lets go in its dive. Since S4 the runner flies the climb as a path angle: it tops out near the planner's
+  apex and dives toward `delivery.popup_release_m`, its throw shrinking faster than the aim comes nearer, so the bridge
+  holds the load while the aim is beyond the throw and lets go where the throw meets it (`test_fx_bridge.cpp`: about
+  700 m up in a 7-8 degree dive, ratio 0.99-1.00). Before S4 the climb topped out 2 km short and went on almost level,
+  and the load went at once with the aim half the throw. Left until the runner flies a pop-up's roll-in and dive at the
+  aim (a dive angle the route can command).
 
 ## 8. Tests
 

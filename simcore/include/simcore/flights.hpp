@@ -133,6 +133,11 @@ struct PilotOverride {
     double sign = 1.0;
     double period_s = 4.0;
     double flip_s = 0.0;
+    // An attack pass flown in its dive (roadmap S4, attack_pass.hpp): the pilot's height layer climbs to the roll-in and
+    // dives at dive_rad along the line to pass_aim, opening fire open_fire_m out (TargetPilot::SetPass). 0: level.
+    double dive_rad = 0.0;
+    double open_fire_m = 0.0;
+    Vec3 pass_aim;
 };
 inline const char* ToString(PilotOverride::Kind k) {
     switch (k) {

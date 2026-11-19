@@ -231,3 +231,26 @@ SC_TEST("aaa: a time-fuzed shell bursts round the predicted meeting, further off
     // Most heavy shells burst well clear: the fuze's error alone is ~0.15 s of the shell's flight, ~100 m at 5 km.
     SC_EXPECT(miss5 > 60.0 && miss5 < 400.0);
 }
+
+SC_TEST("damage (S4): a damaged aircraft's g limit and thrust by its level; the fuel leak and the escort's shares load") {
+    const DamageTable t = LoadDamage();
+    const DamagedLimitsOut none = DamagedLimits(t, DamageLevel::Light);
+    SC_EXPECT_NEAR(none.g, 1.0, 1e-12);
+    SC_EXPECT_NEAR(none.thrust, 1.0, 1e-12);
+    const DamagedLimitsOut mod = DamagedLimits(t, DamageLevel::Moderate);
+    const DamagedLimitsOut heavy = DamagedLimits(t, DamageLevel::Heavy);
+    SC_EXPECT_NEAR(mod.g, 0.8, 1e-12);
+    SC_EXPECT_NEAR(heavy.g, 0.5, 1e-12);
+    SC_EXPECT_NEAR(mod.thrust, 0.9, 1e-12);
+    SC_EXPECT_NEAR(heavy.thrust, 0.6, 1e-12);
+    // The drag rising with the square of the speed: the top speed falls with the root of the thrust (0.6 -> 0.775).
+    SC_EXPECT_NEAR(heavy.top, std::sqrt(0.6), 1e-12);
+    SC_EXPECT(heavy.g < mod.g && heavy.thrust < mod.thrust);
+    SC_EXPECT(t.heavy_fuel_leak > t.moderate_fuel_leak && t.moderate_fuel_leak > 0.0);
+    SC_EXPECT(t.fuel_leak_min_s > 0.0 && t.fuel_leak_max_s >= t.fuel_leak_min_s);
+    SC_EXPECT(t.escort_share > 0.0 && t.escort_share <= 1.0);
+    // A table without them (before S4) leaves a damaged aircraft as it was: no cut, no leak, no escort.
+    DamageTable plain;
+    SC_EXPECT_NEAR(DamagedLimits(plain, DamageLevel::Heavy).g, 1.0, 1e-12);
+    SC_EXPECT_NEAR(plain.escort_share + plain.moderate_fuel_leak + plain.heavy_fuel_leak, 0.0, 1e-12);
+}

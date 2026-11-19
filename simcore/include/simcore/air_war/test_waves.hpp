@@ -13,12 +13,17 @@
 // A strike aircraft's load is released when it comes within its weapon's release range of its aim, still flying (the
 // runner asks Releases each step): a WaveRelease, which the runner gives the presentation feed as the load's release
 // and, after its flight (weapon_flight.hpp), its impact; the game draws and sounds both. A cruise missile is a target
-// of the session ("weapon": its impact ends it). All numbers are game values for a testbed.
+// of the session ("weapon": its impact ends it). A fixed-wing aircraft's gun or rockets are fired from a pass flown
+// (roadmap S4, attack_pass.hpp): within kPassRunInM of its aim the runner flies it on the override layer, set up, run in in
+// its dive and released at the pass's open-fire gate; the load's scatter then is a keyed draw (em::Stream::Opportunity,
+// the carrier's id), so when a pass releases does not move the waves' own stream. All numbers are game values for a
+// testbed.
 #pragma once
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
 #include <map>
@@ -28,6 +33,8 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/attack_pass.hpp"
+#include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/planner.hpp"
 #include "simcore/air_war/test_waves_data.hpp"
 #include "simcore/air_war/weapon_flight.hpp"
@@ -79,7 +86,8 @@ using AircraftLookup = std::function<bool(const std::string& target_id, Vec3& po
 
 class TestWaves {
 public:
-    TestWaves(std::shared_ptr<const WavesDef> def, unsigned seed) : def_(std::move(def)), rng_(seed * 2654435761u + 97u) {
+    TestWaves(std::shared_ptr<const WavesDef> def, unsigned seed)
+        : def_(std::move(def)), rng_(seed * 2654435761u + 97u), key_seed_(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 0x54ull) {
         next_s_ = def_->first_wave_s;
     }
 
@@ -115,9 +123,20 @@ public:
         return w;
     }
 
+    // The runner's override layer for the passes (roadmap S4): fly a pass's override (false: he is breaking or diving
+    // under fire, no pass now), whether it is still on (its point not yet passed), and end it.
+    struct PassControl {
+        std::function<bool(const std::string&, const PilotOverride&)> fly;
+        std::function<bool(const std::string&)> flying;
+        std::function<void(const std::string&)> end;
+    };
+    static constexpr double kPassRunInM = 6000.0;    // the pass is set up this far out (opportunity.run_in_m's value)
+    static constexpr double kPassRecoverM = 2500.0;  // and recovered this far past (opportunity.recover_m's)
+
     // The loads released by `t`: each aircraft with a load still to drop that has come within its weapon's release range
-    // of its aim. One shot down or gone first drops nothing.
-    std::vector<WaveRelease> Releases(double t, const WaveScene& scene, const AircraftLookup& lookup) {
+    // of its aim, or a pass's that reached its open-fire gate (`passes`; null: by the range, as before S4). One shot down
+    // or gone first drops nothing.
+    std::vector<WaveRelease> Releases(double t, const WaveScene& scene, const AircraftLookup& lookup, const PassControl* passes = nullptr) {
         std::vector<WaveRelease> out;
         for (Pending& p : pending_) {
             if (p.done) continue;
@@ -132,7 +151,11 @@ public:
                 continue;
             }
             const double d = std::hypot(pos.x - p.aim.x, pos.y - p.aim.y);
-            if (d > p.release_m) continue;
+            if (passes != nullptr && p.pass.present) {
+                if (!FlyPass(p, t, pos, vel, OnGround(scene, p.aim.x, p.aim.y, 0.0), d, *passes)) continue;
+            } else if (d > p.release_m) {
+                continue;
+            }
             p.done = true;
             const WeaponDef* wd = def_->weapons.Find(p.weapon);
             const WaveWeaponKind* k = wd != nullptr ? def_->Kind(wd->kind) : nullptr;
@@ -147,7 +170,13 @@ public:
             r.t_s = t;
             r.position = pos;
             r.velocity = vel;
-            r.impact = OnGround(scene, p.aim.x + Uniform(-k->scatter_m, k->scatter_m), p.aim.y + Uniform(-k->scatter_m, k->scatter_m), 0.0);
+            if (p.pass_begun) {  // a pass's: keyed (roadmap S4)
+                const std::uint64_t key = ObjectKeyOf(p.carrier);
+                const double ux = OppDraw(key_seed_, key, 0, 50, 0), uy = OppDraw(key_seed_, key, 0, 51, 0);
+                r.impact = OnGround(scene, p.aim.x + (2.0 * ux - 1.0) * k->scatter_m, p.aim.y + (2.0 * uy - 1.0) * k->scatter_m, 0.0);
+            } else {
+                r.impact = OnGround(scene, p.aim.x + Uniform(-k->scatter_m, k->scatter_m), p.aim.y + Uniform(-k->scatter_m, k->scatter_m), 0.0);
+            }
             // It lands after its own flight from here (weapon_flight.hpp, as the raids' loads): by its kind, the delivery,
             // the aircraft's height over the ground where it lands, its speed and its path angle.
             const ReleaseState st = ReleaseStateOf(*scene.frame, pos, vel, p.delivery);
@@ -155,6 +184,7 @@ public:
             const double flight = WeaponFlightOf(p.delivery, p.weapon, agl, st.speed_mps, st.path_deg, (r.impact - pos).Length(),
                                                  &def_->weapons).time_s;
             r.impact_t_s = t + (flight > 0.0 ? flight : 15.0);
+            if (p.pass_begun) ++pass_drops_;
             out.push_back(std::move(r));
             ++drops_;
         }
@@ -192,6 +222,7 @@ public:
     }
 
     int Drops() const { return drops_; }
+    int PassDrops() const { return pass_drops_; }  // of them, released at a pass's open-fire gate (roadmap S4)
     // The adversaries' aircraft types flown so far (faction id, type id), and our own (id).
     const std::vector<std::pair<std::string, std::string>>& EnemyTypesFlown() const { return enemy_flown_; }
     const std::vector<std::string>& FriendlyTypesFlown() const { return friendly_flown_; }
@@ -228,7 +259,40 @@ private:
         double not_before_s = 0.0;
         double give_up_s = 0.0;
         bool done = false;
+        GunPassDef pass;          // a fixed-wing aircraft's gun or rockets: flown as a pass (roadmap S4)
+        bool pass_begun = false;
+        bool pass_flying = false;  // its override is on the layer
+        AttackPass ap;
+        AttackPass::Phase phase = AttackPass::Phase::Done;
     };
+    // A pass's step (after the aircraft moved): true at its open-fire gate. Begun within kPassRunInM; if the layer would not
+    // take it (breaking under fire) it is tried again next step; one that never lined up goes off without firing.
+    static bool FlyPass(Pending& p, double t, const Vec3& pos, const Vec3& vel, const Vec3& aim_ground, double d, const PassControl& pc) {
+        if (!p.pass_begun) {
+            if (d > std::max(kPassRunInM, 1.5 * p.pass.open_fire_m)) return false;
+            p.ap.Begin(pos, vel, aim_ground, p.pass, kPassRunInM, kPassRecoverM, 0.0, t);
+            p.phase = p.ap.GetPhase();
+            p.pass_flying = pc.fly(p.carrier, p.ap.Override(t));
+            p.pass_begun = p.pass_flying;
+            return false;
+        }
+        const bool reached = !pc.flying(p.carrier);
+        const bool fire = p.ap.Step(pos, vel, aim_ground, reached, t);
+        if (fire || p.ap.GetPhase() == AttackPass::Phase::Recover || p.ap.Done()) {
+            pc.end(p.carrier);  // the release (or off without one): back to his route or his flight
+            p.pass_flying = false;
+            if (!fire) p.done = true;
+            return fire;
+        }
+        if (reached || p.ap.GetPhase() != p.phase) {
+            p.phase = p.ap.GetPhase();
+            if (!pc.fly(p.carrier, p.ap.Override(t))) {
+                p.done = true;  // breaking under fire: no pass, no release
+                return false;
+            }
+        }
+        return false;
+    }
     // A height mode for a route: above the ground (terrain following) or a height above sea level.
     struct Leg {
         Vec3 at;           // horizontal place (z ignored)
@@ -586,6 +650,7 @@ private:
                     // A gun or rockets from a fixed-wing aircraft: a pass that opens fire at its slant range (roadmap B6,
                     // attack_pass.hpp), a strafe or a gentle dive.
                     if (wd->pass.present && !a.helicopter) {
+                        p.pass = wd->pass;
                         p.release_m = wd->pass.open_fire_m;
                         if (wd->Can(Delivery::Strafe)) p.delivery = DeliveryName(Delivery::Strafe);
                         else if (wd->Can(Delivery::GentleDive)) p.delivery = DeliveryName(Delivery::GentleDive);
@@ -664,10 +729,12 @@ private:
 
     std::shared_ptr<const WavesDef> def_;
     std::mt19937 rng_;
+    std::uint64_t key_seed_ = 0;  // the passes' keyed draws (roadmap S4)
     double next_s_ = 0.0;
     int waves_ = 0;
     int flight_no_ = 10;
     int drops_ = 0;
+    int pass_drops_ = 0;
     std::vector<std::pair<std::size_t, std::size_t>> deck_;  // (faction, aircraft type) still to come round
     std::vector<std::size_t> fdeck_;
     std::vector<Pending> pending_;
