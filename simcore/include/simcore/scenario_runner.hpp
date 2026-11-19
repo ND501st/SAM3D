@@ -2066,21 +2066,35 @@ private:
         const SunLight l = LightAt(def_.clock, time_, def_.light_values);
         const bool changed = !light_init_ || l.daylight != light_.daylight || l.dark != light_.dark;
         const bool phase = light_init_ && l.phase != light_.phase;
+        // The TV's threshold through the twilight (roadmap S8): told to the engagement as it moves, without an event.
+        const bool tv_light = !light_init_ || std::fabs(l.tv_threshold_factor - light_.tv_threshold_factor) > 1e-3;
         light_ = l;
-        if (!changed && !phase) return;
-        if (changed) {
+        if (changed || tv_light) {
             em::OpticalConditions o = def_.optics;
             o.daylight = light_.daylight;
+            o.threshold_factor = light_.tv_threshold_factor;
             engagement_.SetOpticalConditions(o);
+        }
+        if (!changed && !phase) return;
+        if (changed) {
             if (battery_) battery_->SetNight(light_.dark);
             if (order_net_) order_net_->SetNight(light_.dark);
         }
         if (light_init_) {
-            char buf[96];
+            char buf[192];
             std::snprintf(buf, sizeof(buf), "%s: the sun %.1f deg %s the horizon%s", LightPhaseName(light_.phase),
                           std::fabs(light_.sun_elevation_deg), light_.sun_elevation_deg < 0.0 ? "below" : "above",
                           changed ? (light_.dark ? ", dark" : (light_.daylight ? ", daylight" : "")) : "");
-            Event("light", buf);
+            std::string line = buf;
+            if (light_.phase == LightPhase::Night) {  // the moon of the night (S8)
+                if (light_.moon_elevation_deg > 0.0) {
+                    std::snprintf(buf, sizeof(buf), "; the moon %.0f %% lit, %.0f deg up", 100.0 * light_.moon_illuminated, light_.moon_elevation_deg);
+                    line += buf;
+                } else {
+                    line += "; no moon";
+                }
+            }
+            Event("light", line);
         }
         light_init_ = true;
     }
@@ -5340,7 +5354,7 @@ private:
     void StepNav(double dt) {
         if (!nav_) return;
         const Vec3 eye = battery_ && battery_->Own() != nullptr ? battery_->Own()->position : def_.unit_position;
-        const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range());
+        const double range = nav::VisualRangeM(def_.weather.visibility_km * 1000.0, light_.sun_elevation_deg, nav_->Range(), light_.moon_share);
         nav_->Step(time_, dt, {{eye.x, eye.y}}, range);
     }
 

@@ -852,7 +852,7 @@ public:
         Put(root, "origin", og);
         // The raid's clock (roadmap R7): on a dated theatre, the local time at its second 0 and the theatre's date, so the
         // scenario's light is the sun's there and then (light.hpp), as the planner's part was by the sun. An undated theatre
-        // (the tuned theatre_pannonia.json) planned by the fixed buckets: its raid keeps the legacy light keys
+        // (the tuned theatre_pannonia.json replayed from a save made before roadmap S8) planned by the fixed buckets: its raid keeps the legacy light keys
         // (battery.night, environment.daylight) from the planner's part and no clock, so it plays in the light it was planned in.
         const bool dated = th.day_of_year > 0;
         if (dated) {

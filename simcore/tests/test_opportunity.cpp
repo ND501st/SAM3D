@@ -446,7 +446,7 @@ SC_TEST("opportunity (bridge): a Pact strike flight passing our battery reports 
     p.target_label = "the P-40 post";
     p.entry = "W3";
     p.exit = "W3";
-    p.tot_h = 2.0;
+    p.tot_h = 8.0;  // 12:00 local: by day by the dated theatre's sun (roadmap S8), as its part says
     Flight fl;
     fl.callsign = "Rook 30";
     fl.role = FlightRole::Strike;
@@ -464,7 +464,7 @@ SC_TEST("opportunity (bridge): a Pact strike flight passing our battery reports 
     r.push_back({post - dir * 1500.0, agl, 0.0, "target"});
     r.push_back({post + side * 15000.0, agl, 0.0, "egress"});
     r.push_back({post + side * 15000.0 - dir * 40000.0, agl, 0.0, "exit"});
-    TimeRoute(r, ri, 2.0, 220.0);
+    TimeRoute(r, ri, 8.0, 220.0);
     fl.route = r;
     fl.release_index = static_cast<int>(ri);
     fl.aim_pos = post;

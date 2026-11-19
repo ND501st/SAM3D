@@ -20,7 +20,8 @@
 // flight's divert at the faction's retask delay, the strikers' abort and the E-3A's warning in an air fight;
 // 09_BALANCE.md section 17) and replays with balance.mode 0. A save without "own_air_mode" was made before roadmap S1 (our pairs
 // in the played raids, the enemy's learning and use of our corridors, its own belt on its damaged aircraft) and replays with
-// own_air.mode 0.
+// own_air.mode 0. A save without "light_mode" was made before roadmap S8 (the tuned theatre dated, the light's values from
+// light.json: docs/LIGHT.md) and replays with light.mode 0, its theatre as it was then dated.
 #pragma once
 
 #include <cmath>
@@ -426,6 +427,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "balance_mode", Num(c.Data().tuning.Get("balance.mode")));
     Put(root, "c2_live_mode", Num(c.Data().tuning.Get("c2.live_mode")));
     Put(root, "own_air_mode", Num(c.Data().tuning.Get("own_air.mode")));
+    Put(root, "light_mode", Num(c.Data().tuning.Get("light.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -522,6 +524,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double c2_live_mode = r.Number(root, "c2_live_mode", 0.0);
     // And our fighters (roadmap S1): a save made before them has no key, and replays as it was played.
     const double own_air_mode = r.Number(root, "own_air_mode", 0.0);
+    // And the light (roadmap S8): a save made before it has no key, and replays on its theatre as it was then dated.
+    const double light_mode = r.Number(root, "light_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -592,6 +596,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["balance.mode"] = balance_mode;
     data.tuning.values["c2.live_mode"] = c2_live_mode;
     data.tuning.values["own_air.mode"] = own_air_mode;
+    data.tuning.values["light.mode"] = light_mode;
+    ApplyLightMode(data);
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;
