@@ -347,6 +347,7 @@ bool FSimFxTuning::Load(const FString& Path, FString* OutError)
 		S.Num("chaff_opacity", A.ChaffOpacity);
 		S.Colour("chaff_colour", A.ChaffColour);
 		S.Int("chaff_glints", A.ChaffGlints);
+		S.Num("chaff_glint_brightness", A.ChaffGlintBrightness);
 		S.Num("flare_burn_s", A.FlareBurnS);
 		S.Num("flare_eject_mps", A.FlareEjectMps);
 		S.Num("flare_drag_per_s", A.FlareDragPerS);
