@@ -760,12 +760,16 @@ struct FactionRadio {
 // Its own ground air defence as its returning aircraft meet it (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): a damaged
 // aircraft comes home off its minimum risk route, or with its Mode 4 failed, by a chance each; with both, its own belt may
 // shoot it down (fm44_1_2_1984, fm_100_42_1976: weapons free against anything not positively friendly). Game values.
+// The faction's own words for the two failures go into its records' note: NATO's (the defaults) are its minimum risk route
+// and Mode 4; the Pact's are its return corridor and its Kremniy or Parol answer (mitronin_1976 p. 7, soviet_iff).
 struct OwnAdDef {
     bool present = false;
-    double off_mrr_damaged = 0.3;
-    double mode4_failed_damaged = 0.2;
+    double off_mrr_damaged = 0.3;      // off its way home: NATO's minimum risk route, the Pact's return corridor
+    double mode4_failed_damaged = 0.2; // its IFF answer failed: NATO's Mode 4, the Pact's Kremniy or Parol
     double belt_kill = 0.3;
     std::string belt = "own belt";
+    std::string route = "off its minimum risk route";
+    std::string iff = "Mode 4 failed";
 };
 
 struct FactionDef {
@@ -1540,10 +1544,11 @@ public:
         if (!ParseTier(tier, out.tier)) return Fail("tier", "inferior, near_peer, peer or superior");
         if (const json::Value* oa = root.Find("own_ad")) {  // S1: its own belt as its damaged aircraft come home
             OwnAdDef& a = out.own_ad;
-            if (!Keys(*oa, "own_ad", {"off_mrr_damaged", "mode4_failed_damaged", "belt_kill", "belt", "source", "confidence", "notes"}) ||
+            if (!Keys(*oa, "own_ad", {"off_mrr_damaged", "mode4_failed_damaged", "belt_kill", "belt", "route", "iff", "source", "confidence", "notes"}) ||
                 !OptionalNumber(*oa, "own_ad", "off_mrr_damaged", a.off_mrr_damaged) ||
                 !OptionalNumber(*oa, "own_ad", "mode4_failed_damaged", a.mode4_failed_damaged) ||
-                !OptionalNumber(*oa, "own_ad", "belt_kill", a.belt_kill) || !OptionalString(*oa, "own_ad", "belt", a.belt) || !Provenance(*oa, "own_ad")) {
+                !OptionalNumber(*oa, "own_ad", "belt_kill", a.belt_kill) || !OptionalString(*oa, "own_ad", "belt", a.belt) ||
+                !OptionalString(*oa, "own_ad", "route", a.route) || !OptionalString(*oa, "own_ad", "iff", a.iff) || !Provenance(*oa, "own_ad")) {
                 return false;
             }
             for (double v : {a.off_mrr_damaged, a.mode4_failed_damaged, a.belt_kill}) {
