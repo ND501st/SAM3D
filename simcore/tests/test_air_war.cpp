@@ -1058,6 +1058,61 @@ SC_TEST("air war on the nation's theatre: the rollback hunts SAM sites, never gu
     }
 }
 
+SC_TEST("air war: a supply line's columns start at its depot, however the objects' vector grows under them") {
+    // MakeColumns once read each column's depot through a pointer into `objects` that the previous column's push_back
+    // could move (air_war_balance crashed on the nation).
+    const auto at_depots = [](const TheatreDef& t) {
+        int columns = 0, wrong = 0;
+        for (const TheatreObject& o : t.objects) {
+            if (o.supply_line < 0) continue;
+            ++columns;
+            const TheatreObject* depot = t.Find(t.supply_lines[static_cast<std::size_t>(o.supply_line)].from);
+            if (depot == nullptr || Dist2d(o.pos, depot->pos) > 1e-9 || std::fabs(o.pos.z - depot->pos.z) > 1e-9) ++wrong;
+        }
+        return std::make_pair(columns, wrong);
+    };
+    // The nation's lines as loaded.
+    TheatreDef nation;
+    std::string e;
+    SC_EXPECT(LoadTheatreFile(kData + "/air_war/theatre_pannonia_nation.json", nation, &e));
+    const auto loaded = at_depots(nation);
+    SC_EXPECT(nation.supply_lines.size() > 1 && loaded.first > 2 && loaded.second == 0);
+
+    // Generic placeholder theatre: three lines of three columns, and an objects vector with no spare room that is large
+    // enough (8 MB) that the heap hands its old block back to the system when it moves (a read through the old block
+    // then faults rather than finding the old bytes).
+    TheatreDef t;
+    const std::size_t fill = (std::size_t{8} << 20) / sizeof(TheatreObject);
+    t.objects.reserve(fill + 4);
+    for (int d = 0; d < 3; ++d) {
+        TheatreObject depot;
+        depot.id = "depot_" + std::to_string(d);
+        depot.kind = ObjectKind::Depot;
+        depot.pos = Vec3{1000.0 * (d + 1), -2000.0 * (d + 1), 10.0 * (d + 1)};
+        t.objects.push_back(depot);
+    }
+    TheatreObject troops;
+    troops.id = "troops";
+    troops.kind = ObjectKind::Troops;
+    troops.pos = Vec3{0.0, 50000.0, 0.0};
+    t.objects.push_back(troops);
+    t.objects.resize(fill + 4);  // the filler: default objects with empty ids
+    SC_EXPECT(t.objects.capacity() == t.objects.size());
+    for (int d = 0; d < 3; ++d) {
+        SupplyLineDef l;
+        l.id = "line_" + std::to_string(d);
+        l.name = "Line " + std::to_string(d);
+        l.from = "depot_" + std::to_string(d);
+        l.to = "troops";
+        l.columns = 3;
+        t.supply_lines.push_back(l);
+    }
+    simcore::airwar::detail::AirWarLoader loader;
+    SC_EXPECT(loader.MakeColumns(t));
+    const auto made = at_depots(t);
+    SC_EXPECT(made.first == 9 && made.second == 0);
+}
+
 SC_TEST("air war: a defence engages as many of a passing flight as it has fire channels") {
     AirWarData d = Load("nato");
     AirCampaign base;
