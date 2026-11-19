@@ -2,15 +2,20 @@
 // the day's identification codes and who holds them, the plan of cooperation, the notices of our flights down the chain
 // and the crews' rule on them, the fighter regiments' duty scrambling pairs on our GCI's picture, the friendly-fire trace
 // from the records, and what the enemy learns of our corridors. Cases are picked by property over several seeds.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <memory>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "simcore/air_war.hpp"
+#include "simcore/campaign/report.hpp"
 #include "simcore/command/data.hpp"
 #include "simcore/command/own_air.hpp"
 #include "simcore/command/own_flights.hpp"
@@ -444,4 +449,444 @@ SC_TEST("own air B10: the post, the regiment's picture and the neighbours identi
     SC_EXPECT(count("c.transponder = t.friendly") == 0);           // the post's interrogator
     SC_EXPECT(count("  t.friendly = def_.targets[i].friendly") == 0);  // the battery fire model's and the neighbours'
     SC_EXPECT(count("RegimentHoldsFire(i, a->position)") == 3);
+}
+
+// ------------------------------------------------------------------------------------------------ S1: our fighters in full
+
+namespace {
+
+std::vector<std::string> Said(const ScenarioRunner& r) {
+    std::vector<std::string> out;
+    if (r.Callouts() == nullptr) return out;
+    for (const SpokenCallout& s : r.Callouts()->Log()) out.push_back(s.id);
+    return out;
+}
+bool Has(const std::vector<std::string>& v, const std::string& id) { return std::find(v.begin(), v.end(), id) != v.end(); }
+
+// The session's text with the Osa's interrogator code switch set at the start (a position, the code less one).
+std::string WithKnob(std::string text, int position) {
+    const std::string at = "\"readiness\": \"deployed\",";
+    const std::size_t p = text.find(at);
+    if (p != std::string::npos) text.insert(p + at.size(), " \"controls\": { \"iff.code\": " + std::to_string(position) + " },");
+    return text;
+}
+
+airwar::AirWarData War(const std::string& faction, double own_air_mode) {
+    airwar::AirWarData d;
+    std::string e;
+    if (!airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_" + faction + ".json", d, &e)) std::printf("    %s\n", e.c_str());
+    d.tuning.values["own_air.mode"] = own_air_mode;
+    return d;
+}
+void Run(airwar::AirCampaign& c, double days) {
+    while (c.Now() < days * 24.0) {
+        if (c.Advance(days * 24.0)) c.SkipPlayerMission();
+    }
+}
+
+}  // namespace
+
+SC_TEST("own air S1: a fighter regiment's loss or claim said on the net and read back from the journal is the same report") {
+    const LocalFrame frame(GeoPoint::FromDegrees(46.9, 19.7, 110.0));
+    std::mt19937 rng(11);
+    std::uniform_real_distribution<double> u(0.0, 1.0);
+    const char* const causes[] = {"in air combat", "by fire from the ground", "cause unknown"};
+    for (int k = 0; k < 40; ++k) {
+        OwnAirReport r;
+        r.kind = k % 2 == 0 ? OwnAirReportKind::Loss : OwnAirReportKind::Claim;
+        r.regiment = k % 3 == 0 ? "fighter_rgt_1" : "kecel_fighters";
+        r.flight = "Sokol " + std::to_string(k + 1);
+        r.type = k % 2 == 0 ? "MiG-21" : "F-16A";
+        r.count = 1 + k % 3;
+        r.clock_h = 6.0 + 14.0 * u(rng);
+        r.where = Vec3{(u(rng) - 0.5) * 120000.0, (u(rng) - 0.5) * 120000.0, 0.0};
+        r.cause = r.kind == OwnAirReportKind::Loss ? causes[k % 3] : "";
+        const std::string words = OwnAirReportWords(r, frame);
+        OwnAirReport back;
+        SC_EXPECT(ReadOwnAirReport("radio: " + words, frame, Vec3{}, r.clock_h + 0.2, back));
+        SC_EXPECT(back.kind == r.kind && back.regiment == r.regiment && back.flight == r.flight && back.type == r.type && back.count == r.count);
+        SC_EXPECT(std::fabs(back.clock_h - r.clock_h) <= 1.0 / 60.0 + 1e-9);   // to the minute
+        SC_EXPECT((back.where - r.where).HorizontalLength() <= 10000.0);        // within the grid's small square
+        SC_EXPECT(back.cause == r.cause);
+    }
+    OwnAirReport none;
+    SC_EXPECT(!ReadOwnAirReport("402. Notice 101. Own aircraft: 2 MiG-21", frame, Vec3{}, 10.0, none));
+}
+
+SC_TEST("own air S1: a loss goes down the chain as our damage and a claim as a raid's result, each hop with its coding work") {
+    ChainData chain;
+    std::string e;
+    SC_EXPECT(LoadChainData(kData, "command/chain_pannonia.json", chain, &e));
+    const OwnAirDef d = Rules();
+    const LocalFrame frame(GeoPoint::FromDegrees(46.9, 19.7, 110.0));
+    for (unsigned seed = 1; seed <= 6; ++seed) {
+        for (OwnAirReportKind kind : {OwnAirReportKind::Loss, OwnAirReportKind::Claim}) {
+            OwnAirReport r;
+            r.kind = kind;
+            r.regiment = "fighter_rgt_1";
+            r.flight = "Sokol 1";
+            r.clock_h = 10.25;
+            const NoticeTrace t = RunOwnAirReport(chain, r, static_cast<int>(seed), OwnAirReportWords(r, frame), "fighter_rgt_duty", "rgt_cp_duty", 0.25,
+                                                  d.reports, seed, 10.0);
+            SC_EXPECT(!t.hops.empty() && t.flight == "Sokol 1");
+            if (t.hops.empty()) continue;
+            SC_EXPECT(t.hops.back().post == "rgt_cp_duty");
+            double prev = t.sent_h;
+            for (const NoticeHop& h : t.hops) {
+                SC_EXPECT(h.h >= prev + d.reports.hop_work_s / 3600.0 - 1e-9);
+                prev = h.h;
+            }
+        }
+    }
+}
+
+SC_TEST("own air S1: the regiment's check meets a launch with a loss report; a notice in the journal before the launch makes it a debit") {
+    const LocalFrame frame(GeoPoint::FromDegrees(46.9, 19.7, 110.0));
+    const OwnAirDef d = Rules();
+    const double clock0 = 10.0;
+    OwnFlightNotice n;
+    n.number = 101;
+    n.flight = "Sokol 1";
+    n.route = {Vec3{0.0, 30000.0, 0.0}, Vec3{0.0, -30000.0, 0.0}};
+    n.floor_m = 500.0;
+    n.ceiling_m = 3000.0;
+    n.cross_from_h = 10.0;
+    n.cross_to_h = 11.0;
+    OwnAirReport loss;
+    loss.regiment = "fighter_rgt_1";
+    loss.flight = "Sokol 1";
+    loss.clock_h = clock0 + 600.0 / 3600.0;
+    loss.where = Vec3{500.0, 2000.0, 0.0};
+    loss.cause = "cause unknown";
+    std::vector<campaign::BoardRecord> board = {{7, 590.0, Vec3{400.0, 2100.0, 0.0}, 15, 9, 1}, {8, 900.0, Vec3{40000.0, 40000.0, 0.0}, 15, 9, 1}};
+    std::vector<campaign::LogEntry> log = {{600.0, "21", "launch", 7}, {905.0, "21", "launch", 8}, {1500.0, "21", "launch", 9}};
+    const std::vector<campaign::JournalLine> with_notice = {{100.0, "regiment", "rgt", NoticeWords(n, frame)},
+                                                           {800.0, "regiment", "rgt", OwnAirReportWords(loss, frame)}};
+    const std::vector<campaign::JournalLine> without = {{800.0, "regiment", "rgt", OwnAirReportWords(loss, frame)}};
+    const campaign::OwnAirCheck a = campaign::CheckOwnAir(with_notice, board, log, frame, Vec3{}, clock0, d.reports);
+    const campaign::OwnAirCheck b = campaign::CheckOwnAir(without, board, log, frame, Vec3{}, clock0, d.reports);
+    SC_EXPECT(a.notices == 1 && a.losses == 1 && b.notices == 0 && b.losses == 1);
+    SC_EXPECT(a.launches.size() == 3 && b.launches.size() == 3);
+    // Number 7 at the loss's place and minute: met; 8 far away and 9 without a mark: not.
+    SC_EXPECT(a.Met() == 1 && b.Met() == 1 && a.launches[0].loss_met && !a.launches[1].loss_met && !a.launches[2].placed);
+    SC_EXPECT(a.AgainstRecord() == 1 && b.AgainstRecord() == 0);
+    std::printf("    %s\n", campaign::OwnAirCheckText(a, [](double s) { return std::to_string(static_cast<int>(s)) + " s"; }).c_str());
+    campaign::ReportTrust ta, tb;
+    ta.Checked("bty21", a);
+    tb.Checked("bty21", b);
+    SC_EXPECT(ta.Of("bty21") < tb.Of("bty21"));  // fired against its own journal: believed less
+    // A loss report written before the notice reached the battery is no debit: the notice came after the launch.
+    const std::vector<campaign::JournalLine> late = {{700.0, "regiment", "rgt", NoticeWords(n, frame)}, {800.0, "regiment", "rgt", OwnAirReportWords(loss, frame)}};
+    SC_EXPECT(campaign::CheckOwnAir(late, board, log, frame, Vec3{}, clock0, d.reports).AgainstRecord() == 0);
+}
+
+SC_TEST("own air S1: the pursuit limit is 25-30 km past the front by regiment; airborne-alert zones lie behind the front in their band") {
+    const OwnAirDef d = Rules();
+    const Vec3 front{10000.0, 20000.0, 0.0};
+    const Vec3 to_enemy{0.6, 0.8, 0.0};
+    for (std::uint64_t seed = 1; seed <= 5; ++seed) {
+        for (int k = 0; k < 10; ++k) {
+            const std::uint64_t key = FighterDuty::Key("rgt_" + std::to_string(k));
+            const double lim = PursuitLimitM(d, seed, key);
+            SC_EXPECT(lim >= 1000.0 * d.pursuit_min_km - 1e-6 && lim <= 1000.0 * d.pursuit_max_km + 1e-6);
+            SC_EXPECT(lim == PursuitLimitM(d, seed, key));  // keyed: the same regiment, the same line
+            for (bool low : {true, false}) {
+                const AlertZone z = AlertZoneOf(d, front, to_enemy, low, seed, key);
+                const double behind = -Dot(z.centre - front, to_enemy);
+                SC_EXPECT(behind >= 1000.0 * d.alert_inside_min_km - 1e-6 && behind <= 1000.0 * d.alert_inside_max_km + 1e-6);
+                if (low) SC_EXPECT(z.alt_m >= d.alert_low_min_m - 1e-9 && z.alt_m <= d.alert_low_max_m + 1e-9);
+                else SC_EXPECT(z.alt_m >= d.alert_high_min_m - 1e-9 && z.alt_m <= d.alert_high_max_m + 1e-9);
+            }
+        }
+    }
+}
+
+SC_TEST("own air S1 in a session: the table's code changed, the commander orders it and the senior operator turns the interrogator's switch") {
+    const std::string block = R"JSON({ "source": "sam3d", "confidence": "estimate", "notes": "a test", "fixed_code": 10 })JSON";
+    const OwnAirDef d = Rules();
+    int set = 0;
+    for (unsigned seed = 1; seed <= 3; ++seed) {
+        // Both come in at 120 s, after the switch is turned: ours then answers on the battery's code.
+        std::string text = WithKnob(Session(OursAndHostile(R"JSON("iff_code": 10,)JSON"), block, seed), 2);
+        for (std::size_t at = text.find("\"appear_at_s\": 20"); at != std::string::npos; at = text.find("\"appear_at_s\": 20", at + 1)) {
+            text.replace(at, 17, "\"appear_at_s\": 120");
+        }
+        std::unique_ptr<ScenarioRunner> r = Load(text);
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        double first_s = -1.0, set_s = -1.0;
+        while (!r->Finished() && r->Time() < 300.0) {
+            r->Step(0.1);
+            if (first_s < 0.0 && r->BatteryIffCode() != 0) first_s = r->Time();
+            if (first_s >= 0.0 && r->Time() - first_s < 1.0) SC_EXPECT(r->BatteryIffCode() == 3);  // the switch as the crew found it
+            if (set_s < 0.0 && r->BatteryIffCode() == 10) set_s = r->Time();
+        }
+        const std::vector<std::string> said = Said(*r);
+        std::printf("    seed %u: the switch at 10 after %.0f s; ordered %d, reported %d\n", seed, set_s, Has(said, "order_iff_code") ? 1 : 0,
+                    Has(said, "iff_code_set") ? 1 : 0);
+        if (set_s < 0.0) continue;
+        ++set;
+        SC_EXPECT(Has(said, "order_iff_code") && Has(said, "iff_code_set"));
+        SC_EXPECT(set_s - first_s >= d.iff_change.job_s / 2.0);   // the turn takes its time, even for a quick hand
+        SC_EXPECT(r->Engagement().KnownFriend("ours") || !r->TargetAircraft("ours"));  // then ours answers on it
+    }
+    SC_EXPECT(set == 3);
+}
+
+SC_TEST("own air S1 in a session: the crew says the notice it read; a friend's reply off every notice is reported as a violator") {
+    // A notice for a flight far to the north-east; ours answers the battery's code 10 over the battery: a violator.
+    const std::string block = R"JSON({ "source": "sam3d", "confidence": "estimate", "notes": "a test", "fixed_code": 10,
+        "notices": [ { "flight": "Sokol 7", "type": "MiG-21", "count": 2, "route_m": [ [ 60000, 60000 ], [ 90000, 90000 ] ], "half_width_m": 5000,
+                       "floor_m": 3000, "ceiling_m": 6000, "cross_from_s": 0, "cross_to_s": 1200, "sent_s": -3600 } ] })JSON";
+    int told = 0, violators = 0;
+    for (unsigned seed = 1; seed <= 3; ++seed) {
+        std::unique_ptr<ScenarioRunner> r = Load(Session(OursAndHostile(R"JSON("iff_code": 10,)JSON"), block, seed));
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        while (!r->Finished() && r->Time() < 300.0) r->Step(0.1);
+        const std::vector<std::string> said = Said(*r);
+        told += Has(said, "own_air_told") ? 1 : 0;
+        violators += Has(said, "report_violator") ? 1 : 0;
+        SC_EXPECT(!Has(said, "fire_prohibited_own"));  // nothing silent in a corridor here
+    }
+    std::printf("    told %d of 3, the violator reported %d of 3\n", told, violators);
+    SC_EXPECT(told == 3);
+    SC_EXPECT(violators >= 2);
+}
+
+SC_TEST("own air S1 in a session: one of ours shot down, its wingman saw it: the regiment's loss report reaches the battery's net") {
+    const std::string targets = R"JSON([
+        { "id": "ours", "name": "Our MiG-21 (placeholder)", "class": "fighter", "iff": "friend", "iff_code": 9,
+          "start": { "east_m": -600, "north_m": 9000, "up_m": 1200 }, "waypoints": [ { "east_m": -600, "north_m": -20000, "up_m": 1200 } ],
+          "speed_mps": 160, "rcs_m2": 3, "appear_at_s": 20 },
+        { "id": "wing", "name": "Our MiG-21 (placeholder)", "class": "fighter", "iff": "friend", "iff_code": 9,
+          "start": { "east_m": -1600, "north_m": 10500, "up_m": 1300 }, "waypoints": [ { "east_m": -1600, "north_m": -18500, "up_m": 1300 } ],
+          "speed_mps": 160, "rcs_m2": 3, "appear_at_s": 20 } ])JSON";
+    const std::string block = R"JSON({ "source": "sam3d", "confidence": "estimate", "notes": "a test", "fixed_code": 10 })JSON";
+    const OwnAirDef d = Rules();
+    int down = 0, reported = 0;
+    for (unsigned seed = 1; seed <= 4; ++seed) {
+        // The session runs on after both are down (it would end once every target is gone): the reports come later.
+        std::string text = Session(targets, block, seed, "", 700.0);
+        const std::string limit = R"JSON("time_limit_s": 700)JSON";
+        text.replace(text.find(limit), limit.size(), limit + R"JSON(, "when_targets_gone": false)JSON");
+        std::unique_ptr<ScenarioRunner> r = Load(text);
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        std::map<std::string, double> down_s;
+        while (!r->Finished() && r->Time() < 600.0) {
+            r->Step(0.1);
+            for (const char* id : {"ours", "wing"}) {
+                const Aircraft* a = r->TargetAircraft(id);
+                if (down_s.count(id) == 0 && a != nullptr && !a->alive) down_s[id] = r->Time();
+            }
+        }
+        const std::vector<OwnAirReport> reps = r->OwnAirReports();
+        for (const OwnAirReport& rep : reps) {
+            SC_EXPECT(rep.kind == OwnAirReportKind::Loss && down_s.count(rep.flight) == 1);  // only what went down, never a claim here
+            std::printf("    seed %u: %s\n", seed, OwnAirReportWords(rep, LocalFrame(GeoPoint::FromDegrees(46.9, 19.7, 110.0))).c_str());
+        }
+        for (const auto& kv : down_s) {
+            ++down;
+            if (kv.second + d.reports.seen_s > 590.0) continue;  // not due within the session
+            // Seen by the other while it flew within 15 km: by fire from the ground, said after seen_s; nobody near: missing.
+            for (const OwnAirReport& rep : reps) {
+                if (rep.flight != kv.first) continue;
+                ++reported;
+                SC_EXPECT(rep.cause == "by fire from the ground" || rep.cause == "cause unknown");
+            }
+        }
+    }
+    std::printf("    %d of ours down, %d loss reports heard\n", down, reported);
+    SC_EXPECT(down >= 1);
+    SC_EXPECT(reported >= 1);
+}
+
+SC_TEST("own air S1 in a session: the raid warning sends a pair to its airborne-alert zone; no pair of ours flies past its pursuit limit") {
+    const std::string targets = R"JSON([
+        { "id": "raid1", "name": "Strike jet (placeholder)", "class": "fighter", "start": { "east_m": 2000, "north_m": 80000, "up_m": 3000 },
+          "waypoints": [ { "east_m": 2000, "north_m": 5000, "up_m": 3000 }, { "east_m": 2000, "north_m": 160000, "up_m": 3000 } ],
+          "speed_mps": 200, "rcs_m2": 6, "appear_at_s": 0 } ])JSON";
+    const std::string air_fight = R"JSON( "air_fight": { "year": 1985, "source": "sam3d", "confidence": "estimate", "notes": "our GCI only",
+        "controllers": [ { "id": "our_gci", "side": "ours", "kind": "radar_control", "east_m": 0, "north_m": -30000, "range_m": 220000 } ] },)JSON";
+    const std::string block = R"JSON({ "source": "sam3d", "confidence": "estimate", "notes": "a test", "raid_warning_s": 0,
+        "front": { "east_m": 0, "north_m": 20000, "enemy_bearing_deg": 0 },
+        "regiments": [ { "id": "fighter_rgt_1", "base": "kecel_airbase", "base_east_m": -25000, "base_north_m": -60000, "area_east_m": 0, "area_north_m": 0,
+                         "gci": "our_gci" } ],
+        "gci": { "east_m": 0, "north_m": -30000 } })JSON";
+    const OwnAirDef d = Rules();
+    int alerts = 0;
+    double worst_past_km = -1e9;
+    for (unsigned seed = 1; seed <= 3; ++seed) {
+        std::unique_ptr<ScenarioRunner> r = Load(Session(targets, block, seed, air_fight, 1300.0));
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        const double limit = PursuitLimitM(d, seed, FighterDuty::Key("fighter_rgt_1"));
+        while (!r->Finished() && r->Time() < 1200.0) {
+            r->Step(0.1);
+            for (const ScenarioTarget& t : r->Def().targets) {
+                if (!t.friendly) continue;
+                const Aircraft* a = r->TargetAircraft(t.id);
+                if (a == nullptr || !a->alive) continue;
+                const double past = a->position.y - 20000.0;
+                worst_past_km = std::max(worst_past_km, (past - limit) / 1000.0);
+                SC_EXPECT(past <= limit + 8000.0);  // recalled at the line; the turn home takes a few km
+            }
+        }
+        for (const Scramble& s : r->OwnScrambles()) {
+            if (!s.alert) continue;
+            ++alerts;
+            SC_EXPECT(s.ordered_s <= 1.0);
+            const double behind_km = (20000.0 - s.toward.y) / 1000.0;
+            SC_EXPECT(behind_km >= d.alert_inside_min_km - 1e-6 && behind_km <= d.alert_inside_max_km + 1e-6);
+        }
+    }
+    std::printf("    %d alert pairs; our furthest past its pursuit limit %.1f km\n", alerts, worst_past_km);
+    SC_EXPECT(alerts == 3 * d.alert_pairs);
+}
+
+SC_TEST("own air S1 in a session: in a war with the Pact some of its aircraft are allies' on our Kremniy filters, and answer when the codes meet") {
+    std::string targets = "[";
+    for (int k = 0; k < 6; ++k) {
+        targets += std::string(k ? "," : "") + "{ \"id\": \"pact" + std::to_string(k) + "\", \"name\": \"MiG-23 (placeholder)\", \"class\": \"fighter\", " +
+                   "\"start\": { \"east_m\": " + std::to_string(-15000 + 6000 * k) + ", \"north_m\": 30000, \"up_m\": 3000 }, \"waypoints\": [ { \"east_m\": " +
+                   std::to_string(-15000 + 6000 * k) + ", \"north_m\": -30000, \"up_m\": 3000 } ], \"speed_mps\": 220, \"rcs_m2\": 4, \"appear_at_s\": 0 }";
+    }
+    targets += "]";
+    const std::string block = R"JSON({ "source": "sam3d", "confidence": "estimate", "notes": "a test", "war": true, "enemy_allies": true })JSON";
+    int allied = 0, all = 0, answered = 0;
+    for (unsigned seed = 1; seed <= 8; ++seed) {
+        std::unique_ptr<ScenarioRunner> r = Load(Session(targets, block, seed, "", 200.0));
+        SC_EXPECT(r != nullptr);
+        if (!r) return;
+        while (!r->Finished() && r->Time() < 120.0) r->Step(0.1);
+        for (int k = 0; k < 6; ++k) {
+            const std::string id = "pact" + std::to_string(k);
+            ++all;
+            const int code = r->TargetIffCode(id);
+            if (r->IsAlliedEnemy(id)) {
+                ++allied;
+                SC_EXPECT(code >= 9 && code <= 12);  // the allies' own schedule of the war filters
+            } else {
+                SC_EXPECT(code <= 0);
+            }
+        }
+        for (const std::string& f : r->FalseFriends()) {
+            ++answered;
+            SC_EXPECT(r->IsAlliedEnemy(f));  // only an ally's aircraft answers friend, and only on our code
+        }
+    }
+    std::printf("    %d of %d the allies', %d answered friend\n", allied, all, answered);
+    SC_EXPECT(allied >= all / 4 && allied <= 3 * all / 4);
+}
+
+SC_TEST("own air S1: the enemy hears our corridors used day by day, learns them, and a creative planner times a raid into one") {
+    for (const char* faction : {"warsaw_pact", "nato"}) {
+        const airwar::AirWarData on = War(faction, 1.0);
+        const airwar::AirWarData off = War(faction, 0.0);
+        SC_EXPECT(on.has_own_air);
+        for (unsigned seed = 1; seed <= 2; ++seed) {
+            airwar::AirCampaign c;
+            c.Init(on, seed);
+            const std::vector<OwnAirZone> zs = c.OwnCorridors();
+            int airfields = 0;
+            for (const airwar::TheatreObject& o : on.theatre.objects) airfields += o.kind == airwar::ObjectKind::Airfield ? 1 : 0;
+            SC_EXPECT(static_cast<int>(zs.size()) == airfields);
+            for (const OwnAirZone& z : zs) SC_EXPECT(z.path.size() == 2 && z.floor_m == 2000.0 && z.ceiling_m == 6000.0 && z.from_h < z.to_h);
+            Run(c, 8.0);
+            int heard_lines = 0, heard = 0, timed = 0;
+            for (const airwar::JournalEntry& j : c.Journal()) heard_lines += j.text.find("our fighters' traffic in corridor") != std::string::npos ? 1 : 0;
+            for (const BelievedCorridor& b : c.CorridorIntel().Heard()) heard += b.heard;
+            SC_EXPECT(heard_lines == heard);  // each hearing in the enemy's journal, never seen by our side
+            for (const airwar::Package& p : c.Packages()) {
+                if (p.own_corridor.empty()) continue;
+                ++timed;
+                bool why = false;
+                for (const std::string& s : p.rationale) why = why || s.find("timed into our fighters' " + p.own_corridor) != std::string::npos;
+                SC_EXPECT(why);
+                SC_EXPECT(c.CorridorIntel().Heard().size() > 0);
+            }
+            std::printf("    %s seed %u: %zu corridors, heard %d times, %zu believed by day 8, %d packages timed into one\n", faction, seed, zs.size(), heard,
+                        c.CorridorIntel().Believed(c.Now()).size(), timed);
+            // Before S1 (a save's own_air.mode 0): none of it.
+            airwar::AirCampaign b;
+            b.Init(off, seed);
+            SC_EXPECT(b.OwnCorridors().empty());
+            Run(b, 3.0);
+            for (const airwar::Package& p : b.Packages()) SC_EXPECT(p.own_corridor.empty());
+            SC_EXPECT(b.CorridorIntel().Heard().empty());
+        }
+    }
+}
+
+SC_TEST("own air S1: NATO's damaged aircraft coming home may fall to its own belt; nobody else's does, and not before S1") {
+    int own_fire = 0;
+    for (const char* faction : {"nato", "warsaw_pact"}) {
+        for (double mode : {1.0, 0.0}) {
+            const airwar::AirWarData d = War(faction, mode);
+            for (unsigned seed = 1; seed <= 3; ++seed) {
+                airwar::AirCampaign c;
+                c.Init(d, seed);
+                const std::string f = faction;
+                const std::string belt = d.faction.own_ad.belt;
+                c.ObserveOutcomes([&](const airwar::Package& p, const airwar::PackageOutcome& o) {
+                    for (const airwar::LossRecord& l : o.losses) {
+                        if (!l.own_fire) continue;
+                        SC_EXPECT(f == "nato" && mode >= 1.0 && l.by == belt);
+                        // Only a damaged aircraft comes home over its belt off its route.
+                        if (l.flight >= 0 && static_cast<std::size_t>(l.flight) < p.flights.size()) SC_EXPECT(p.flights[static_cast<std::size_t>(l.flight)].damaged > 0);
+                        own_fire += 1;
+                    }
+                });
+                Run(c, 6.0);
+            }
+        }
+    }
+    std::printf("    %d of NATO's aircraft lost to its own belt over 3 campaigns of 6 days\n", own_fire);
+    // Every chance at 1 (a test's figures, not the data's): each damaged aircraft that came home is lost to the belt, so a
+    // campaign with any damaged aircraft has such losses, each written to the belt and only to damaged flights.
+    airwar::AirWarData sure = War("nato", 1.0);
+    sure.faction.own_ad.off_mrr_damaged = 1.0;
+    sure.faction.own_ad.mode4_failed_damaged = 1.0;
+    sure.faction.own_ad.belt_kill = 1.0;
+    int damaged = 0, belt = 0;
+    for (unsigned seed = 1; seed <= 2; ++seed) {
+        airwar::AirCampaign c;
+        c.Init(sure, seed);
+        c.ObserveOutcomes([&](const airwar::Package& p, const airwar::PackageOutcome& o) {
+            for (const airwar::Flight& fl : p.flights) damaged += fl.role == airwar::FlightRole::Missile ? 0 : fl.damaged;
+            for (const airwar::LossRecord& l : o.losses) {
+                if (!l.own_fire) continue;
+                ++belt;
+                SC_EXPECT(l.by == sure.faction.own_ad.belt);
+                if (l.flight >= 0 && static_cast<std::size_t>(l.flight) < p.flights.size()) SC_EXPECT(p.flights[static_cast<std::size_t>(l.flight)].damaged > 0);
+            }
+        });
+        Run(c, 4.0);
+    }
+    std::printf("    every chance 1: %d damaged, %d lost to the belt\n", damaged, belt);
+    SC_EXPECT(damaged == 0 || belt > 0);
+}
+
+SC_TEST("own air S1: a save keeps its own_air mode; one made before S1 loads with it off and replays as played") {
+    const airwar::AirWarData d = War("warsaw_pact", 1.0);
+    airwar::AirCampaign c;
+    c.Init(d, 3);
+    Run(c, 2.0);
+    const std::string text = airwar::SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json");
+    SC_EXPECT(text.find("\"own_air_mode\"") != std::string::npos);
+    airwar::AirCampaign loaded;
+    std::string e;
+    SC_EXPECT(airwar::LoadCampaignJson(text, kData, loaded, &e));
+    SC_EXPECT(loaded.Data().tuning.Get("own_air.mode") == 1.0 && loaded.Packages().size() == c.Packages().size());
+    std::string old = text;
+    const std::size_t at = old.find("\"own_air_mode\"");
+    if (at != std::string::npos) {
+        const std::size_t end = old.find_first_of(",}", at);
+        old.erase(at, end - at + (old[end] == ',' ? 1 : 0));
+    }
+    airwar::AirCampaign before;
+    SC_EXPECT(airwar::LoadCampaignJson(old, kData, before, &e));
+    SC_EXPECT(before.Data().tuning.Get("own_air.mode") == 0.0);
+    SC_EXPECT(before.OwnCorridors().empty());
 }

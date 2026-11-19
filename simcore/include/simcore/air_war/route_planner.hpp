@@ -161,7 +161,7 @@ public:
         } else {
             BuildTheatreFeatures(d, tune);
         }
-        std::sort(features_.begin(), features_.end(), [](const RouteFeature& a, const RouteFeature& b) { return a.id < b.id; });
+        std::stable_sort(features_.begin(), features_.end(), [](const RouteFeature& a, const RouteFeature& b) { return a.id < b.id; });
         BuildBuckets();
     }
     // A ground and features of the caller's (tests: a synthetic map).
@@ -368,7 +368,7 @@ private:
                 const CountrySettlementDef* s = country_->NearestSettlement(node.at.east_m, node.at.north_m, &d);
                 js.push_back({s != nullptr ? s->id : std::string("none"), d, node.at.east_m, node.at.north_m});
             }
-            std::sort(js.begin(), js.end(), [](const J& a, const J& b) {
+            std::stable_sort(js.begin(), js.end(), [](const J& a, const J& b) {
                 if (a.town != b.town) return a.town < b.town;
                 if (a.d != b.d) return a.d < b.d;
                 if (a.e != b.e) return a.e < b.e;
@@ -1226,7 +1226,7 @@ inline std::vector<RouteThreat> BelievedRouteThreats(const std::vector<const Int
         r.masked = ground && p == Profile::Low;
         out.push_back(r);
     }
-    std::sort(out.begin(), out.end(), [](const RouteThreat& x, const RouteThreat& y) { return x.key < y.key; });
+    std::stable_sort(out.begin(), out.end(), [](const RouteThreat& x, const RouteThreat& y) { return x.key < y.key; });
     return out;
 }
 

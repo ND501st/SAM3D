@@ -173,6 +173,8 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
                 std::string kind = "(unknown)";
                 if (l.fighter) {
                     kind = "our fighters";
+                } else if (l.own_fire) {
+                    kind = "their own air defence";  // S1: NATO's belt, not one of our objects
                 } else if (l.by == player) {
                     kind = "the player's battery";
                 } else {

@@ -214,8 +214,10 @@ struct ScenarioFormat {
     bool damage_states = true;
     // Our fighters (roadmap B10, command/own_air.hpp): the theatre's airfields as our fighter regiments' bases, their duty
     // scrambling pairs on our GCI's picture as the raid comes in, the day's identification codes and the notices of the
-    // pairs down the chain. Off (the default): no fighters of ours in a played raid, as before B10.
-    bool our_fighters = false;
+    // pairs down the chain; the package's aircraft in the air fight with them, our GCI on our radio, the front line for the
+    // airborne alert and the pursuit limit, the Pact's allies on our filters (S1). On by default from S1 (a campaign's
+    // own_air.mode 1; a save made before S1 plays its raids without them).
+    bool our_fighters = true;
 };
 
 
@@ -1149,7 +1151,7 @@ public:
         // 1985 regiments, MiG-21MF), its function the share it launches; one GCI at the battery's sector command post's
         // radar, 40 km behind the battery from the raid (a game value, docs/air_battle/08 section 4).
         json::Value own_air_regs = Arr();
-        if (fmt.our_fighters) {
+        if (fmt.our_fighters && tune.Get("own_air.mode") >= 1.0) {
             for (std::size_t oi = 0; oi < th.objects.size(); ++oi) {
                 const TheatreObject& ob = th.objects[oi];
                 const ObjectState& os = c.Truth()[oi];
@@ -1185,9 +1187,47 @@ public:
             Put(ctl, "east_m", Num(std::round(gci.x)));
             Put(ctl, "north_m", Num(std::round(gci.y)));
             Put(ctl, "range_m", Num(220000.0));
+            // Our GCI's vectors on our radio (S1): with the enemy's radio in the session, our side's set and our GCI's post.
+            for (std::size_t ki = 0; ki < root.keys.size() && ki < root.items.size(); ++ki) {
+                if (root.keys[ki] != "air_radio") continue;
+                json::Value& ar = root.items[ki];
+                Put(ar, "our_radio", Str("pact_air_r832m"));
+                Put(ar, "our_freq_mhz", Num(124.0));
+                for (std::size_t kj = 0; kj < ar.keys.size() && kj < ar.items.size(); ++kj) {
+                    if (ar.keys[kj] != "posts") continue;
+                    json::Value post = Obj();
+                    Put(post, "id", Str("our_gci_post"));
+                    Put(post, "name", Str("our sector's GCI"));
+                    Put(post, "kind", Str("our_gci"));
+                    Put(post, "east_m", Num(std::round(gci.x)));
+                    Put(post, "north_m", Num(std::round(gci.y)));
+                    Put(post, "mast_m", Num(25.0));
+                    Push(ar.items[kj], post);
+                    Put(ctl, "post", Str("our_gci_post"));
+                }
+            }
             json::Value ctls = Arr();
             Push(ctls, ctl);
             Put(af, "controllers", ctls);
+            // The package's aircraft in the fight (S1): its escorts fight our pairs, the rest only defend themselves; our pairs
+            // engage only aircraft the fight has. A type without a fit is unarmed (air_combat.json's "unarmed").
+            const AirCombatDef& ac = d.air_combat;
+            if (ac.Doctrine(f.id) != nullptr) {
+                json::Value fighters = Arr();
+                for (const RaidAircraft& ra : m.aircraft) {
+                    if (ra.missile || ra.drone || ra.role == FlightRole::Decoy || ra.role == FlightRole::Missile) continue;
+                    std::string type = ra.aircraft;
+                    if (ac.Fit(type) == nullptr) type = ra.helicopter ? "helicopters" : "unarmed";
+                    if (ac.Fit(type) == nullptr) continue;
+                    json::Value fv = Obj();
+                    Put(fv, "target", Str(ra.target_id));
+                    Put(fv, "type", Str(type));
+                    Put(fv, "faction", Str(f.id));
+                    Put(fv, "role", Str(ra.role == FlightRole::Escort ? "escort" : "strike"));
+                    Push(fighters, fv);
+                }
+                if (!fighters.items.empty()) Put(af, "fighters", fighters);
+            }
             Put(af, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md section 4 (our GCI; a game value for its place)"));
             Put(af, "confidence", Str("low"));
             Put(root, "air_fight", af);
@@ -1199,6 +1239,30 @@ public:
             Put(g, "north_m", Num(std::round(gci.y)));
             Put(oa, "gci", g);
             Put(oa, "raid_warning_s", Num(std::round(warn_after_s)));
+            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it).
+            if (const FrontDef* front = th.FrontFor(f.front)) {
+                if (!front->line.empty()) {
+                    Vec3 best = front->line.front();
+                    for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {
+                        const Vec3 p0 = front->line[k], p1 = front->line[k + 1];
+                        const Vec3 dl = p1 - p0;
+                        const double l2 = dl.x * dl.x + dl.y * dl.y;
+                        double u = l2 > 1e-9 ? ((bst.pos.x - p0.x) * dl.x + (bst.pos.y - p0.y) * dl.y) / l2 : 0.0;
+                        u = std::max(0.0, std::min(1.0, u));
+                        const Vec3 q = p0 + dl * u;
+                        if (Dist2d(q, bst.pos) < Dist2d(best, bst.pos)) best = q;
+                    }
+                    const Vec3 fs = to_scen(best);
+                    if (fs.HorizontalLength() > 1.0) {
+                        json::Value fr = Obj();
+                        Put(fr, "east_m", Num(std::round(fs.x)));
+                        Put(fr, "north_m", Num(std::round(fs.y)));
+                        Put(fr, "enemy_bearing_deg", Num(std::round(RadToDeg(std::atan2(fs.x, fs.y)) * 10.0) / 10.0));
+                        Put(oa, "front", fr);
+                    }
+                }
+            }
+            if (f.id == "warsaw_pact") Put(oa, "enemy_allies", Bool(true));  // the Pact's allies on our Kremniy (S1)
             Put(oa, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md (roadmap B10)"));
             Put(oa, "confidence", Str("low"));
             Put(root, "own_air", oa);

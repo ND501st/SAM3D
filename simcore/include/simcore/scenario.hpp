@@ -1619,14 +1619,15 @@ private:
         if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
         command::OwnAirScenarioDef& o = out.own_air;
         if (!Keys(*v, p, {"data", "codes", "war", "day", "fixed_code", "battery_table_s", "battery_last_code", "post_table_s", "post_last_code",
-                          "chain", "origin", "notice_post", "plan", "notices", "regiments", "gci", "raid_warning_s", "source", "confidence", "notes"}) ||
+                          "chain", "origin", "notice_post", "plan", "notices", "regiments", "gci", "raid_warning_s", "front", "enemy_allies", "source",
+                          "confidence", "notes"}) ||
             !OptionalString(*v, p, "data", o.data_file) || !OptionalString(*v, p, "codes", o.codes_file) || !OptionalBool(*v, p, "war", o.war) ||
             !OptionalInt(*v, p, "day", o.day) || !OptionalInt(*v, p, "fixed_code", o.fixed_code) ||
             !OptionalNumber(*v, p, "battery_table_s", o.battery_table_s) || !OptionalInt(*v, p, "battery_last_code", o.battery_last_code) ||
             !OptionalNumber(*v, p, "post_table_s", o.post_table_s) || !OptionalInt(*v, p, "post_last_code", o.post_last_code) ||
             !OptionalString(*v, p, "chain", o.chain_file) || !OptionalString(*v, p, "origin", o.origin) ||
             !OptionalString(*v, p, "notice_post", o.notice_post) || !OptionalNumber(*v, p, "raid_warning_s", o.raid_warning_s) ||
-            !Provenance(*v, p)) {
+            !OptionalBool(*v, p, "enemy_allies", o.enemy_allies) || !Provenance(*v, p)) {
             return false;
         }
         std::string e;
@@ -1641,6 +1642,19 @@ private:
         }
         if (const json::Value* pl = v->Find("plan")) {
             if (!command::LoadCooperationPlan(*pl, Join(p, "plan"), o.plan, &e)) return Fail(Join(p, "plan"), e);
+        } else if (out.has_task && out.task.own_air.present) {
+            o.plan = out.task.own_air;  // the plan of cooperation the regiment's task gave the battery (S1)
+        }
+        if (const json::Value* fr = v->Find("front")) {  // S1: the front line (airborne alert, the pursuit limit)
+            const std::string fp = Join(p, "front");
+            double fe = 0.0, fn = 0.0, bearing = 0.0;
+            if (!Keys(*fr, fp, {"east_m", "north_m", "enemy_bearing_deg", "notes"}) || !RequireNumber(*fr, fp, "east_m", fe) ||
+                !RequireNumber(*fr, fp, "north_m", fn) || !RequireNumber(*fr, fp, "enemy_bearing_deg", bearing)) {
+                return false;
+            }
+            o.has_front = true;
+            o.front = Vec3{fe, fn, 0.0};
+            o.to_enemy = Vec3{std::sin(DegToRad(bearing)), std::cos(DegToRad(bearing)), 0.0};
         }
         const double clock0_h = out.clock_start_s >= 0.0 ? out.clock_start_s / 3600.0 : 0.0;
         const auto read_path = [&](const json::Value& n, const std::string& np, std::vector<Vec3>& path) {

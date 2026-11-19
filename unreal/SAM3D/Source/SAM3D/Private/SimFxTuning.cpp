@@ -335,6 +335,37 @@ bool FSimFxTuning::Load(const FString& Path, FString* OutError)
 		S.Num("barrel_spacing_m", G.BarrelSpacingM);
 	}
 	{
+		const FSimFxTuningSection S = Section("air_battle");
+		FAirBattle& A = AirBattle;
+		S.Int("chaff_puffs_per_cartridge", A.ChaffPuffsPerCartridge);
+		S.Int("chaff_puffs_max", A.ChaffPuffsMax);
+		S.Num("chaff_bloom_m", A.ChaffBloomM);
+		S.Num("chaff_bloom_s", A.ChaffBloomS);
+		S.Num("chaff_s", A.ChaffS);
+		S.Num("chaff_spread_m", A.ChaffSpreadM);
+		S.Num("chaff_drag_per_s", A.ChaffDragPerS);
+		S.Num("chaff_opacity", A.ChaffOpacity);
+		S.Colour("chaff_colour", A.ChaffColour);
+		S.Int("chaff_glints", A.ChaffGlints);
+		S.Num("flare_burn_s", A.FlareBurnS);
+		S.Num("flare_eject_mps", A.FlareEjectMps);
+		S.Num("flare_drag_per_s", A.FlareDragPerS);
+		S.Num("flare_size_m", A.FlareSizeM);
+		S.Num("flare_brightness", A.FlareBrightness);
+		S.Colour("flare_colour", A.FlareColour);
+		S.Num("flare_lumens", A.FlareLumens);
+		S.Num("flare_salvo_s", A.FlareSalvoS);
+		S.Int("flares_max", A.FlaresMax);
+		S.Num("flare_smoke_width_m", A.FlareSmokeWidthM);
+		S.Num("flare_smoke_s", A.FlareSmokeS);
+		S.Num("flare_smoke_point_m", A.FlareSmokePointM);
+		S.Colour("flare_smoke_colour", A.FlareSmokeColour);
+		S.Num("tumble_deg_per_s", A.TumbleDegPerS);
+		S.Num("aam_fly_on_s", A.AamFlyOnS);
+		S.Num("aam_turn_per_s", A.AamTurnPerS);
+		S.Num("air_gun_dispersion_mrad", A.AirGunDispersionMrad);
+	}
+	{
 		const FSimFxTuningSection S = Section("wreck");
 		FWreck& W = Wreck;
 		S.Num("smoke_width_m", W.SmokeWidthM);

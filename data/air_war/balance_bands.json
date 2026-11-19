@@ -74,6 +74,10 @@
     { "id": "on_call_min", "tool": "air_war_balance", "faction": "nato", "lo": 15.0, "hi": 60.0,
       "source": "luke_2002_cas (immediate close support in 40-50 min in Korea, the goal 15-20 min)", "confidence": "low" },
     { "id": "divert_min", "tool": "air_war_balance", "faction": "warsaw_pact", "lo": 10.0, "hi": 40.0,
-      "source": "SAM3D estimate: the retask delay of 10-30 min after the decision (docs/air_battle/10_FACTIONS.md section 7.4) and the report's way to the post", "confidence": "low" }
+      "source": "SAM3D estimate: the retask delay of 10-30 min after the decision (docs/air_battle/10_FACTIONS.md section 7.4) and the report's way to the post", "confidence": "low" },
+    { "id": "own_fired_share_1960s", "tool": "own_air_balance", "lo": 0.15, "hi": 0.35,
+      "source": "mt_turchin_coop pp. 11-12 (a Baltic exercise: up to 25 per cent of the targets fired on were our own aircraft, under the recognition and warning of the time); the sweep's mix of ours, a game value, carries it", "confidence": "low" },
+    { "id": "own_fired_share_working", "tool": "own_air_balance", "lo": 0.0, "hi": 0.05,
+      "source": "game value: with the day's codes and timely notices our own aircraft are rarely fired on (docs/air_battle/08_OUR_FIGHTERS.md section 8, Calibration)", "confidence": "estimate" }
   ]
 }

@@ -2292,7 +2292,22 @@ const FSimAircraftLook& USimWorldSubsystem::AircraftLookOf(const simcore::Aircra
 			{
 				if (Models != nullptr)
 				{
-					Look.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
+					std::string Model = T.model;
+					if (Model.empty() && Runner->Def().air_fight.present)
+					{
+						// A fighter of the scenario's air battle with no model of its own (roadmap B13): its type's, when the
+						// library draws it. Never for ours: an enemy's type id would draw one of ours as the enemy (our
+						// regiments' pairs carry their own model, B10).
+						for (const simcore::airwar::AirFightFighterDef& F : Runner->Def().air_fight.fighters)
+						{
+							if (F.target == T.id && F.faction != "ours" && Models->Find(F.type) != nullptr)
+							{
+								Model = F.type;
+								break;
+							}
+						}
+					}
+					Look.Model = ToF(Models->ForTarget(Model, T.target_class, T.type));
 				}
 				Look.bFriendly = T.friendly;
 				Look.bIsWeapon = T.weapon;

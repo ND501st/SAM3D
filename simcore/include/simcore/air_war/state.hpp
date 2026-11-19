@@ -97,6 +97,10 @@ struct Package {
     double gate_h = -1.0;
     double gate_window_s = 0.0;
     bool corridor_suppression = false;
+    // Timed into our fighters' corridor its staff believes in (S1, docs/air_battle/08_OUR_FIGHTERS.md section 9): the
+    // corridor's id, and whether the belief found the real one (its defences then hold fire for ours at its hours).
+    std::string own_corridor;
+    bool own_corridor_found = false;
     std::vector<std::string> rationale;
     bool resolved = false;
     bool played = false;        // flown as the player's mission
@@ -157,6 +161,7 @@ struct LossRecord {
     bool officer = false;  // a staff officer was in it
     bool captured = false; // the crew came down alive in the player's country
     bool fighter = false;  // shot down by our fighters (roadmap B8, air_fight.hpp): `by` is the regiment
+    bool own_fire = false; // shot down by its own side's ground air defence coming home (S1): `by` is its belt
 };
 
 // An order a played package's flight was given from outside it (roadmap B1, flights.hpp): retasked, diverted, held.

@@ -57,8 +57,18 @@ struct WaveScene {
     const em::EmLibrary* em = nullptr;  // the session's EM library (null: no warning receivers, ARMs or jammers)
 };
 
+// A wave aircraft's place in the session's air fight (roadmap S1, air_fight_session.hpp): our CAP and interceptors fight,
+// the enemy's escorts fight back, its others only defend themselves. The type is its fit in air_combat.json.
+struct WaveFighter {
+    std::string target;
+    std::string type;
+    std::string faction;  // ours, or the enemy's faction id
+    std::string role;     // intercept, cap, escort, strike
+};
+
 struct Wave {
     int number = 0;
+    std::vector<WaveFighter> fight;  // its aircraft in the air fight (S1)
     double at_s = 0.0;
     std::vector<ScenarioTarget> aircraft;
     std::vector<EmJammerDef> jammers;
@@ -660,6 +670,9 @@ private:
                     pending_.push_back(p);
                 }
             }
+            if (!a.missile && !a.drone && role != FlightRole::Decoy && role != FlightRole::Missile) {
+                w.fight.push_back({t.id, a.id, f.id, role == FlightRole::Escort ? "escort" : "strike"});
+            }
             w.aircraft.push_back(std::move(t));
         }
         char line[200];
@@ -714,6 +727,9 @@ private:
             t.flight = flight_id;
             t.slot = k + 1;
             Slot(t, forms, k);
+            // Our CAP and interceptors in the air fight (S1), on the day's codes (own_air's table).
+            t.iff_table = true;
+            if (role == "cap" || role == "intercept") w.fight.push_back({t.id, a.fit.empty() ? a.id : a.fit, "ours", role});
             w.aircraft.push_back(std::move(t));
         }
         w.flight_defs.push_back(FlightDef(flight_id, cs + " " + std::to_string(number), true, true, forms));

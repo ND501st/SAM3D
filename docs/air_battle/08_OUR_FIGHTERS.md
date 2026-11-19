@@ -508,7 +508,7 @@ link to the battery beyond the PU-12's own.
 
 A first form of sections 3-9: the codes, the notices, the crews' rule, the duty and its pairs, the trace and the enemy's
 learning are in simcore and tested; the crew's lines, the task file's block, the report and the campaign are not (the
-**Left** list below).
+**Left** list below, finished by S1: "As built (S1)").
 
 **Code and data.**
 
@@ -604,6 +604,155 @@ model read no `t.friendly`.
 - Airborne alert zones, the pursuit limit and recall rules are in the data and not yet flown; the allied false friend
   (a Pact enemy on our filters) and NATO's own belt are not built.
 - `own_air_balance` is not written.
+
+## As built (S1, 19 Nov 2026, branch `tbr-s1`)
+
+S1 finishes B10's **Left** list. The items below are in simcore and tested; the earlier B10 **Left** list above stands as
+the record of what B10 left.
+
+**The crew.**
+
+- Lines in `data/crew/osa_ak_crew.json`, each with its `"menu"` place: `own_air_told` (the commander tells the crew a notice
+  it read), `fire_prohibited_own` (he holds fire on a track the notices hold), `order_iff_code` (an order to the senior
+  operator: change the interrogator's code), `iff_code_set` (his report), and `report_violator` (on the battery net: a
+  track answering friend off every notice, with its azimuth in mils, once per track; the player's commander may say it
+  once one is held). In `data/crew/pu12m_crew.json`: the radiotelephonist's `own_air_notice`, the battery commander's
+  `own_air_battery` and `fire_prohibited_battery` (when a notice's window opens). The NPC says each through
+  `ScenarioRunner::NpcDoes`. The lines are recorded in English (`art/crew_voices/en/`).
+- The Kremniy's code as a seat's act: `iff.code`, a 12-position pointer knob at the senior operator's station
+  (`data/procedures/osa_ak.json`, `data/cabins/osa_ak.json`). The Osa-AK's interrogator panel is not documented in the
+  sources we hold (**Left open**: `mon_2112_80`), so the knob and its place are a game value, standing for the filter
+  switch the Kremniy-2M sets by hand (`soviet_iff`). The interrogator asks on the knob's code. When the table the crew
+  holds changes, the commander orders the change and the senior operator turns the knob, taking `iff_change.job_s` at
+  his seat's speed. A player at either seat does it himself; the helper shows the move.
+
+**The battery's papers.**
+
+- The task file's `"own_air"` block (`data/campaign/tasks/bty21_cover_bridges.json`): cooperation by zones, corridor 2
+  north of Kesmark at 2,000-6,000 m from 06:00 to 20:00, and the fighter regiment's duty zone 1. The free-text
+  coordination line is gone: `TaskDocument` writes `CooperationPlan::Words()`, and a scenario with a `"task"` and no
+  `"plan"` takes it.
+- The battery commander's working map (`campaign/battery_plan.hpp`, `WorkingMap`): the main, reserve and dummy
+  positions, the TZM's place, the covered object, and each corridor and zone with its heights, hours and distance from
+  the main position. `PlanText` ends with "On the working map: ...".
+- The regiment's check against the notices (`campaign/report.hpp`, `CheckOwnAir`). It reads the post's journal (each
+  group 402 notice and 403 loss report, as written), the board and the commander's log. For each launch it finds the
+  board mark of that number, then tests it against the notices written before the launch and the losses within
+  `reports.match_s` and `match_m`. `ReportTrust::Checked(unit, OwnAirCheck)` counts a launch that a loss meets: it agrees
+  when no notice in the journal covered it, and is a debit when one did. `ScenarioRunner::CheckOwnAirRecords` runs it
+  on a session's records.
+
+**In the war.**
+
+- The raid builder (`air_war/raid_scenario.hpp`) writes our pairs into the campaign's played raids by default
+  (`ScenarioFormat::our_fighters` on, gated by the campaign's `own_air.mode`). Its `"air_fight"` holds the package's
+  aircraft: escorts fight our pairs, the rest defend themselves, and types without a fit fly unarmed. Its `"own_air"`
+  holds the front line's nearest point and, against the Pact, `"enemy_allies"`. When the raid has the enemy's radio, our
+  GCI's vectors go out on `our_radio` (`pact_air_r832m`, 124 MHz, a game value) from a post of kind `our_gci`.
+- The testbed's friendly flights are live (`air_war/test_waves.hpp`, `Wave::fight`, the runner's `WaveFightersIn`):
+  our CAP and interceptors join the air fight under our GCI, and the enemy's aircraft join as escorts or strikers. Our
+  pilots fly on the day's codes (`iff_table`). `test_waves.json` gives the MiG-21 its fit (`mig21bis`), and the testbed
+  scenario has `"own_air"` and an `"air_fight"`.
+- **Airborne alert.** On the raid warning, each regiment puts `airborne_alert.pairs` (1) pairs up to a zone 50-60 km
+  behind the front at 1,500-2,000 m (`mt_turchin_coop` pp. 6-7; `AlertZoneOf`, keyed +0xA00). They orbit there for
+  `orbit_s`, a game value, until vectored (`FighterDuty::Alert`, `Scramble::alert`).
+- **The pursuit limit.** A pair of ours more than 25-30 km past the front, a keyed draw per regiment (+0x700), is
+  recalled (`AirFightSession::Recall`) and flies home (`mt_turchin_coop` p. 9).
+- **The allied false friend.** In a war with the Pact, each enemy aircraft is, by a keyed chance (`false_friend.allied_share`
+  0.5, a game value; +0x600), an ally's on our Kremniy filters, keeping the allies' own day of codes (+0x610). When the
+  allies' code meets the battery's, it answers friend. The log records it as a deviation (`FalseFriends`), and the
+  debrief says it was the enemy. Only the gameplay IFF path knows the ally: see **Left**.
+- **NATO's own belt.** A damaged aircraft coming home may be off its minimum risk route (0.3) and have Mode 4 failed
+  (0.2), each by a chance. With both, its own Hawk and Nike belt may shoot it down (0.3). All three chances are game
+  values on `fm44_1_2_1984`, `fm_100_42_1976` and `cbo_1986_amraam`, in `faction_nato.json`'s `"own_ad"`. The draws come
+  from a fork of the package's stream, keyed +0x900. The loss is written into the enemy's records as `own_fire`, by its
+  belt.
+
+**Through the pipeline.** Each of ours down becomes the fighter regiment's loss report: in air combat (the air fight's
+kill), "by fire from the ground" (its wingman within 15 km saw it), or "cause unknown". A seen loss is reported after
+`reports.seen_s` (120 s); a missing one after a keyed 30-60 min (+0x800). Each claim our pilots make is reported after
+`claim_s`. They go as talk-table group 403 (`OwnAirReportWords`, read back by `ReadOwnAirReport`) down the chain
+(`RunOwnAirReport`: a loss as `FactKind::OwnDamage`, a claim as `RaidResult`). The regiment then says them on its
+R-111 into the post's journal, or as the battery commander's line on the battery net.
+
+**The enemy's learning.** The campaign (`air_war/campaign.hpp`) builds our corridors from our working airfields to the
+front at 2,000-6,000 m, by day for `hours_per_day` (`OwnCorridors`). Each day one use of each corridor is fed to
+`EnemyCorridorIntel`; a use heard writes a hidden COMINT line in the enemy's journal, and a corridor heard again widens
+its hours. A planner whose creativity reaches `use_creativity` times a package whose target lies near a believed
+corridor into its hours, at most `shift_h` (2 h) later, and writes the rationale (`mt_umnov_1968` pp. 10-11). When the
+belief found the real corridor, the resolver's defences within `near_m` of it at its hours hold fire for ours by
+`hold_fire` (0.5, a game value; `mt_1973_nvn` pp. 13-14). A save writes `own_air_mode`; one made before S1 loads with 0
+and replays as played. Losses to its own belt carry `own_fire` in the save.
+
+**Random draws.** No new stream. New `AirCombat` keys: +0x600 and +0x610 (the allies), +0x700 (pursuit), +0x800 (a missing
+loss's delay), +0x900 (the belt's fork), +0xA00 (alert zones). The corridor intel's seed is the campaign's.
+
+**Balance.** `own_air_balance data 40 5` (`simcore/examples/own_air_balance.cpp`) plays 40 exercise sessions: an Osa with an NPC
+crew and five crossings, each of ours by a chance of 0.3 (a game value), routes snapped to the PVO grid's squares, in four
+settings:
+
+| Settings | Ours flown | Notices read | Targets fired on | Ours among them | Share | Band |
+|---|---|---|---|---|---|---|
+| 1960s: no codes, notices too late | 59 | 0 | 134 | 39 | 0.29 | 0.15-0.35 (`mt_turchin_coop` pp. 11-12: up to 25 per cent) |
+| notices an hour ahead, no codes | 59 | 59 | 80 | 0 | 0.00 | - |
+| the day's codes, notices too late | 59 | 0 | 92 | 2 | 0.02 | - |
+| working: codes and timely notices | 59 | 59 | 81 | 0 | 0.00 | 0.00-0.05 (game value) |
+
+The 1960s share follows the mix of ours in the air: with nothing to tell ours from the enemy, the crew fires on what it
+sees, so the 25 per cent anchor is met by the sweep's mix (a game value) and is not found independently. A notice must
+leave about an hour ahead to be timely: the default chain takes some 45 minutes from the fighter regiment's duty to the
+regiment's command post. Holding fire has its cost: 95 of the enemy fired on in the 1960s setting, 80-81 with the notices
+(the corridors spare some of them). Both bands are in `data/air_war/balance_bands.json` (tool `own_air_balance`).
+
+The project's balance runs before (the b-b14 executables on its data) and after:
+
+- `crew_balance data 10`: the same to the line.
+- `air_war_balance data 20 7`: the rebels and the Warsaw Pact unchanged; the Noric Republic and NATO move by a few tenths
+  (NATO's losses a sortie 1.60 to 1.58 per cent careless, 1.47 to 1.40 careful; theirs lost for each of ours 0.68 to 0.64,
+  0.56 to 0.54), every band passing. The causes: our defences near a corridor the enemy believes hold fire for ours (the
+  careful posture's SAM sites kill 2.6 a campaign, not 3.0), packages timed into a corridor, and NATO's own belt (0.1 a
+  campaign, listed as "their own air defence"). The Pact's 8 days learn no corridor it times a raid into (the S1 test).
+- `air_war_balance --theatre theatre_pannonia_nation.json data 10 7`: the same shifts, a few tenths (losses a sortie
+  3.61 to 3.58, 1.94 to 1.91, 2.21 to 2.19 per cent), every band passing.
+- `air_war_bench data 400`: two NATO cases a tenth or two higher (Yom Kippur's F-4Es 25.2 to 25.4 lost a 100 sorties, the
+  Bekaa's package 6.5 to 6.6): the damaged aircraft that fall to their own belt. The friendly-fire rows (B14: notices only
+  22.49 per cent, notices and codes 0.38) are unchanged.
+- `helper_coverage`: only the dynamic campaign testbed's table moves, its friendly flights and the air fight now live
+  (the NPC crew fires 2 missiles, not 6, for the same 15 kills: our CAP takes some of the waves); the Gaps list is the
+  same.
+- `ground_check data 3600`: nothing under the ground, before or after. The testbed's hour, with its air fight, plays in
+  85 s alone on the PC (283 s and 512 s in the suites, each run beside other jobs).
+
+**Tests.** `test_own_air.cpp`'s S1 cases: a loss or claim said and read back from the journal; the report down the chain, hop
+by hop; the regiment's check (a loss meeting a launch, a debit when the journal held a notice); the pursuit limit and the
+alert zones; in a session, the table's code changed, ordered and the switch turned at the senior operator's speed; the
+notice said and a violator reported (3 of 3); a loss seen by the wingman reaching the battery's net; the alert pair in its
+zone and no pair past its limit; the Pact's allies on our filters (17 of 48 aircraft, 3 answered friend); the corridors
+learnt over 8 days (NATO seed 2: 7 packages timed into one); NATO's belt (none at the data's chances over three
+campaigns; with every chance at 1, each damaged aircraft home is lost to it); a save's mode. `test_battery_mission.cpp`:
+the task's plan of cooperation in the order and on the working map. `test_dynamic_campaign.cpp`: the waves' flights live
+in the air fight, ours on the day's codes. `test_crew_talk.cpp` checks `report_violator`'s place in the menu. The fx
+raid test keeps our pairs out (`own_air.mode` 0) since it measures the bombs alone. Two fixes found by the tests: a pair
+sent home flies to its base (`AirFightFighterDef::has_home`), not away from the fight and on; and the violator's report
+no longer drops a track at a negative azimuth (a contact's azimuth runs from -180 to 180 degrees).
+
+**What Unreal needs.** The `iff.code` knob comes from the cabin data and needs drawing and working in the Osa's cabin
+(no Unreal C++ was changed). The new lines play from their recordings. The testbed's air fight and our alert pairs are
+ordinary session aircraft.
+
+**Left:**
+
+- The EM layer's radar system still answers by side: the allied false friend works only on the gameplay IFF path
+  (`engagement.hpp`), not through `em_link`.
+- The 3,000 m floor from the regiment's record of a battery on the march (the task's `floor_unable_m` is in the plan,
+  but no rule reads the regiment's record).
+- The regiment's word to the battery after a friendly-fire launch, and a line for one of ours near the target.
+- Flights beyond the GCI's channels search on their own only as B8's lost control.
+- Our corridors in the campaign are one per working airfield to the nearest front point: the task file's corridors are
+  not the campaign's, and the corridor's use is one per day, not the sessions' flights.
+- `own_air_balance` meets the 25% anchor through its mix of ours (a game value), not independently: with neither codes
+  nor timely notices the crew cannot tell ours, so the share of ours among the targets fired on is the share of ours in
+  the air.
 
 ## Left open
 

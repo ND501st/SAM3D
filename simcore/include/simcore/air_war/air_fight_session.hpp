@@ -70,6 +70,14 @@ struct AirFightWorld {
     // Our controllers' picture (B10): a controller of side "ours" with one vectors on it; without one, on the truth in his
     // range (B8's behaviour, for the enemy's E-3A and a range day's GCI).
     std::function<std::vector<AirTrack>(const std::string& controller, double t)> tracks;
+    // The presentation feed (fx/events.hpp, roadmap B13; may be empty): told each shot as the fight decides it. Nothing in
+    // the fight reads what they do, and they draw nothing from its generators.
+    //   fx_launch  a missile leaves the shooter: its def, the shooter's shot number, its resolution time;
+    //   fx_end     that shot resolved (`kill`), or its target gone before it arrived (`gone`);
+    //   fx_gun     a gun burst of `burst_s` from t, and whether it brought the target down.
+    std::function<void(int shooter, int target, const AamDef& aam, int shot, double t, double arrive_s)> fx_launch;
+    std::function<void(int shooter, int target, const AamDef& aam, int shot, double t, bool kill, bool gone)> fx_end;
+    std::function<void(int shooter, int target, const AirGunDef& gun, double t, double burst_s, bool kill)> fx_gun;
 };
 
 class AirFightSession {
@@ -183,6 +191,16 @@ public:
         const Fighter* f = Find(target);
         return f != nullptr ? f->why_home : std::string();
     }
+    // Sent home by his command (S1: our fighters' pursuit limit past the front line, mt_turchin_coop p. 9): he turns for home at
+    // his next think. False if no such fighter, or he is already going home.
+    bool Recall(const std::string& target, const std::string& why) {
+        for (Fighter& f : fighters_) {
+            if (f.def->target != target || f.gone || f.mode == Mode::Home) continue;
+            f.recall = why;
+            return true;
+        }
+        return false;
+    }
     // Is this target one of our fighters, and its regiment.
     bool IsOurs(const std::string& target) const {
         const Fighter* f = Find(target);
@@ -232,6 +250,7 @@ private:
         bool steering = false;
         bool gone = false;
         std::string why_home;
+        std::string recall;       // sent home by his command (S1)
         std::uint64_t shots = 0;
         double start_s = -1.0;    // first in the air in this battle
     };
@@ -428,6 +447,7 @@ private:
     void Think(Fighter& f, const Aircraft& me, double t, const AirFightWorld& w) {
         const FightParams& fp = def_->combat.fight;
         if (f.mode == Mode::Home) return;
+        if (!f.recall.empty()) return GoHome(f, me, t, w, f.recall);
         Sense(f, me, t, w);
         f.contacts.erase(std::remove_if(f.contacts.begin(), f.contacts.end(), [&](const Contact& c) { return t - c.t_s > fp.contact_hold_s; }),
                          f.contacts.end());
@@ -620,15 +640,17 @@ private:
         for (const Contact& c : f.contacts) {
             if (c.hostile) away = me.position - c.believed;
         }
+        if (f.def->has_home) away = f.def->home - me.position;  // S1: ours with a base fly to it
         away.z = 0.0;
         if (away.Length() < 1.0) away = Vec3{0.0, 1.0, 0.0};
         PilotOverride ov;
         ov.kind = PilotOverride::Kind::TurnAway;
         ov.end = PilotOverride::End::Point;
         ov.after = PilotOverride::After::Home;
-        ov.point = me.position + away * (30000.0 / away.Length());
+        ov.point = f.def->has_home ? Vec3{f.def->home.x, f.def->home.y, me.position.z} : me.position + away * (30000.0 / away.Length());
         ov.turn_rate_rad_s = me.max_turn_rate_rad_s;
-        ov.until_s = t + 600.0;
+        const double speed = std::max(50.0, me.velocity.Length());
+        ov.until_s = t + std::max(600.0, 1.5 * away.Length() / speed);
         w.steer(f.target, ov);
     }
 
@@ -667,6 +689,7 @@ private:
                 gp.window_s = burst;
                 gp.target_g = std::max(1.0, tg->load_g);
                 const GunResult gr = ResolveGunPass(*f.gun, ch, gp, pl, seed_, f.key, ++f.shots);
+                if (w.fx_gun) w.fx_gun(f.target, c.truth, *f.gun, t, burst, gr.kill);
                 Record(f, c.truth, f.gun->id, t, gr.kill, gr.reason, c.what, w);
                 if (gr.kill) Down(f, c.truth, f.gun->id, t, w);
                 return;
@@ -692,6 +715,7 @@ private:
                 ms.shot = shot;
                 ms.believed = c.what;
                 missiles_.push_back(ms);
+                if (w.fx_launch) w.fx_launch(f.target, c.truth, *m.first, static_cast<int>(shot), t, ms.arrive_s);
                 f.next_shot_s = t + 4.0;
                 if (w.event) w.event(f.def->target, "fires " + m.first->name + " at " + c.what + " " + std::to_string(static_cast<int>(g.range_m)) + " m");
                 return;
@@ -713,7 +737,10 @@ private:
             if (t < m.arrive_s) continue;
             m.done = true;
             const Aircraft* tg = w.air(m.target);
-            if (tg == nullptr) continue;  // gone already
+            if (tg == nullptr) {  // gone already
+                if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, false, true);
+                continue;
+            }
             ShotConditions k;
             // His break, if he knew of the shot: a lock or a launch on his receiver, or the trail or the shooter seen since.
             bool knew = false;
@@ -736,6 +763,7 @@ private:
             }
             if (m.lock_lost_s >= 0.0) k.lock_lost_before_impact_s = std::max(0.0, m.arrive_s - m.lock_lost_s);
             const ShotResult r = ResolveShot(*m.aam, def_->combat.calibration.chain, m.geo, k, Pilot{f.skill, 0.4, false}, seed_, f.key, m.shot);
+            if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, r.kill, false);
             Record(f, m.target, m.aam->id, t, r.kill, r.reason, m.believed, w);
             if (r.kill) Down(f, m.target, m.aam->id, t, w);
         }

@@ -1197,6 +1197,13 @@ The other benches:
 - `helper_coverage`: 19 gaps before and after, the same ones; only `dynamic_campaign_test`'s rows moved (its waves'
   aircraft fly passes, cut limits and escorts now, so the session's targets differ), its page regenerated.
 
+**After merging track-br** (S1, our fighters in full, and the stable sorts) the two theatres were run again: every band
+PASS. The moves from S4's numbers above come with S1 (our pairs in the played raids, its own changes to
+the air battle) meeting S4: on the district the Pact's exchange 1.54-1.75 → 1.61-1.71 and NATO's
+0.70 → 0.67-0.69, the careful NATO run's battery wrecked in 25% of runs (20%); on the nation the careless Pact run's
+battery wrecked in 90% (70%), its exchange 1.51-2.02 → 1.60-2.10, NATO's 0.49-0.57 → 0.51-0.57. Losses a sortie
+moved by at most 0.2 points.
+
 **The late window (`manoeuvre_window_s`).** S4 turns it on in the Osa's tuning at 8 s (`data/gameplay/osa_ak.json`). The
 14 scenarios with targets that may break (the range days and battles, `osa_decoys`, `osa_low_level_em`,
 `osa_soj_strike`, `osa_jamming_em`, `kesmark_range_test` and the six `air_war_*` samples) were played by `scenario_demo`

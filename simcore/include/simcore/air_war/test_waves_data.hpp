@@ -43,6 +43,7 @@ struct WaveFriendlyType {
     double rcs_m2 = 3.0;
     int count_min = 1;
     int count_max = 2;
+    std::string fit;  // its fit in air_combat.json for the air fight (S1; "": its id)
 };
 
 struct WavesDef {
@@ -236,7 +237,8 @@ private:
                 const std::string p = Index("friendly", i);
                 WaveFriendlyType t;
                 double cmin = t.count_min, cmax = t.count_max;
-                if (!Keys(v, p, {"id", "name", "model", "class", "roles", "helicopter", "speed_mps", "alt_m", "rcs_m2", "count", "notes"}) ||
+                if (!Keys(v, p, {"id", "name", "model", "class", "roles", "helicopter", "speed_mps", "alt_m", "rcs_m2", "count", "fit", "notes"}) ||
+                    !OptionalString(v, p, "fit", t.fit) ||
                     !RequireString(v, p, "id", t.id) || !RequireString(v, p, "name", t.name) || !RequireString(v, p, "model", t.model) ||
                     !OptionalString(v, p, "class", t.target_class) || !OptionalBool(v, p, "helicopter", t.helicopter) ||
                     !OptionalNumber(v, p, "speed_mps", t.speed_mps) || !OptionalNumber(v, p, "alt_m", t.alt_m) ||

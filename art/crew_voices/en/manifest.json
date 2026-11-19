@@ -66,6 +66,36 @@
    "word_error": 0.0,
    "phonemes": "dˈʌn!"
   },
+  "battery_commander/fire_prohibited_battery": {
+   "seat": "battery_commander",
+   "id": "fire_prohibited_battery",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "All stations: hold fire, our own aircraft!",
+   "spoken": "All stations: hold fire, our own aircraft!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "All stations: hold fire, our own aircraft!",
+    "engine_text": "All stations: hold fire, our own aircraft!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ˈɔːl stˈeɪʃənz: hˈoʊld fˈaɪɚ, ˌaʊɚɹ ˈoʊn ˈɛɹkɹæft!",
+   "duration_s": 2.56,
+   "speech_s": 2.25,
+   "slot_s": 1.8,
+   "rms_db": -18.6,
+   "peak_db": -1.9,
+   "flags": [
+    "long"
+   ],
+   "transcript": "All stations, hold fire our own aircraft.",
+   "word_error": 0.0
+  },
   "battery_commander/order_all_clear_covered": {
    "seat": "battery_commander",
    "id": "order_all_clear_covered",
@@ -1136,6 +1166,36 @@
    "word_error": 0.0,
    "phonemes": "wˈɔːɹn ðə kˈʌvɚd jˈuːnɪt: ˈɛɹ!"
   },
+  "battery_commander/own_air_battery": {
+   "seat": "battery_commander",
+   "id": "own_air_battery",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "All stations: our own aircraft in the zone!",
+   "spoken": "All stations: our own aircraft in the zone!",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "All stations: our own aircraft in the zone!",
+    "engine_text": "All stations: our own aircraft in the zone!",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ˈɔːl stˈeɪʃənz: ˌaʊɚɹ ˈoʊn ˈɛɹkɹæft ɪnðə zˈoʊn!",
+   "duration_s": 2.54,
+   "speech_s": 2.22,
+   "slot_s": 2.15,
+   "rms_db": -18.6,
+   "peak_db": -2.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "All stations, our own aircraft in the zone.",
+   "word_error": 0.0
+  },
   "battery_commander/say_again": {
    "seat": "battery_commander",
    "id": "say_again",
@@ -1255,6 +1315,36 @@
    "transcript": "Launch permitted.",
    "word_error": 0.0,
    "phonemes": "lˈɑːntʃ pɚmˈɪɾᵻd!"
+  },
+  "commander/fire_prohibited_own": {
+   "seat": "commander",
+   "id": "fire_prohibited_own",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Hold fire! Our own aircraft!",
+   "spoken": "Hold fire! Our own aircraft!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Hold fire! Our own aircraft!",
+    "engine_text": "Hold fire! Our own aircraft!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "hˈoʊld fˈaɪɚ! ˌaʊɚɹ ˈoʊn ˈɛɹkɹæft!",
+   "duration_s": 2.05,
+   "speech_s": 1.81,
+   "slot_s": 1.45,
+   "rms_db": -18.5,
+   "peak_db": -1.1,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Hold fire our own aircraft.",
+   "word_error": 0.0
   },
   "commander/hold_fire": {
    "seat": "commander",
@@ -2107,6 +2197,36 @@
    "word_error": 0.0,
    "phonemes": "ɪntˈɛɹəɡˌeɪt!"
   },
+  "commander/order_iff_code": {
+   "seat": "commander",
+   "id": "order_iff_code",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Change the IFF code!",
+   "spoken": "Change the IFF code!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Change the IFF code!",
+    "engine_text": "Change the IFF code!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "tʃˈeɪndʒ ðɪ ˌaɪˌɛfˈɛf kˈoʊd!",
+   "duration_s": 2.04,
+   "speech_s": 1.85,
+   "slot_s": 1.45,
+   "rms_db": -18.4,
+   "peak_db": -3.5,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Change the IFF code.",
+   "word_error": 0.0
+  },
   "commander/order_jammer": {
    "seat": "commander",
    "id": "order_jammer",
@@ -2790,6 +2910,36 @@
    "transcript": "Look the target over on the TV.",
    "word_error": 0.0,
    "phonemes": "lˈʊk ðə tˈɑːɹɡɪt ˌoʊvɚɹ ɔnðə tˈiː vˈiː!"
+  },
+  "commander/own_air_told": {
+   "seat": "commander",
+   "id": "own_air_told",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Attention! Our own aircraft in the zone!",
+   "spoken": "Attention! Our own aircraft in the zone!",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Attention! Our own aircraft in the zone!",
+    "engine_text": "Attention! Our own aircraft in the zone!",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ɐtˈɛnʃən! ˌaʊɚɹ ˈoʊn ˈɛɹkɹæft ɪnðə zˈoʊn!",
+   "duration_s": 2.61,
+   "speech_s": 2.27,
+   "slot_s": 2.15,
+   "rms_db": -19.8,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Attention our own aircraft in the zone.",
+   "word_error": 0.0
   },
   "commander/say_again": {
    "seat": "commander",
@@ -4795,6 +4945,34 @@
    "word_error": 0.5,
    "phonemes": "mˈæst ˈʌp!"
   },
+  "radio_operator/own_air_notice": {
+   "seat": "radio_operator",
+   "id": "own_air_notice",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Sir, a notice of our own aircraft!",
+   "spoken": "Sir, a notice of our own aircraft!",
+   "voice": "am_fenrir",
+   "settings": {
+    "spoken": "Sir, a notice of our own aircraft!",
+    "engine_text": "Sir, a notice of our own aircraft!",
+    "voice": "am_fenrir",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "sˌɜː, ɐ nˈoʊɾɪs ʌv ˌaʊɚɹ ˈoʊn ˈɛɹkɹæft!",
+   "duration_s": 1.77,
+   "speech_s": 1.6,
+   "slot_s": 2.5,
+   "rms_db": -18.4,
+   "peak_db": -1.1,
+   "flags": [],
+   "transcript": "Sir, a notice of our own aircraft.",
+   "word_error": 0.0
+  },
   "radio_operator/r111_protect": {
    "seat": "radio_operator",
    "id": "r111_protect",
@@ -5079,6 +5257,36 @@
    "transcript": "Done.",
    "word_error": 0.0,
    "phonemes": "dˈʌn!"
+  },
+  "senior_operator/iff_code_set": {
+   "seat": "senior_operator",
+   "id": "iff_code_set",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "IFF code changed!",
+   "spoken": "IFF code changed!",
+   "voice": "am_puck",
+   "settings": {
+    "spoken": "IFF code changed!",
+    "engine_text": "IFF code changed!",
+    "voice": "am_puck",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ˌaɪˌɛfˈɛf kˈoʊd tʃˈeɪndʒd!",
+   "duration_s": 1.45,
+   "speech_s": 1.31,
+   "slot_s": 1.1,
+   "rms_db": -18.4,
+   "peak_db": -2.3,
+   "flags": [
+    "long"
+   ],
+   "transcript": "IFF code changed.",
+   "word_error": 0.0
   },
   "senior_operator/iff_friend": {
    "seat": "senior_operator",

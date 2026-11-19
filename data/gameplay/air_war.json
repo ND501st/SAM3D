@@ -147,5 +147,10 @@
     "mode": 1,
     "source": "game value: the switch of roadmap B14 (docs/air_war/09_BALANCE.md section 17)",
     "notes": "The balance pass (roadmap B14). mode: 1 its changes: an airborne flight diverted by a post has its new task no sooner than its faction's retask delay (hot_phase.hpp RetaskAirS) after the decision; in the abstract air fight the strikers' abort is drawn at its own rate, a package under an E-3A that sees our fighters coming is not surprised, and the E-3A brings its fighters to the fight by air_combat.json's a0_awacs_meet. 0 before it (a save made before B14 replays with it): the order's hops alone, the abort as a share of abort and press on, the surprise as before and a0_awacs_meet_mode0."
+  },
+  "own_air": {
+    "mode": 1,
+    "source": "game value: the switch of roadmap S1 (docs/air_battle/08_OUR_FIGHTERS.md, As built (S1))",
+    "notes": "Our fighters in the campaign (roadmap S1). mode: 1 our pairs in the played raids beside the package's own fighters, the corridors the enemy learns and times raids into, our defences' holding of fire there, the fighter regiments' reports, NATO's own belt; 0 as before S1 (a save made before S1 loads with it and replays as played)."
   }
 }

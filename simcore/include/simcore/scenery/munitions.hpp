@@ -119,7 +119,8 @@ struct MunitionSpec {
     std::string id;
     std::string name;
     std::string kind;           // bomb, retarded, ballute, parachute, cluster, guided, glide, rocket, missile, sam, arm,
-                                // cruise, shell (a gun's round: a mesh and ballistics), gun (an aircraft's: ballistics only)
+                                // cruise, tank (a drop tank: an empty store thrown off), shell (a gun's round: a mesh and
+                                // ballistics), gun (an aircraft's: ballistics only)
     double length_m = 0.0;
     double diameter_m = 0.0;    // the body's from the nose (`sections` change it further aft)
     double mass_kg = 0.0;
@@ -745,7 +746,7 @@ private:
             return false;
         }
         if (!OneOf(m.kind, {"bomb", "retarded", "ballute", "parachute", "cluster", "guided", "glide", "rocket", "missile", "sam", "arm", "cruise",
-                            "shell", "gun"})) {
+                            "tank", "shell", "gun"})) {
             return Fail(Join(p, "kind"), "unknown kind '" + m.kind + "'");
         }
         if (m.mass_kg < 0.0 || m.charge_kg < 0.0 || m.smoke_s < 0.0) return Fail(p, "mass_kg, charge_kg and smoke_s must not be negative");

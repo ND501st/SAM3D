@@ -25,6 +25,7 @@
 #include "simcore/air_war/hot_phase_def.hpp"
 #include "simcore/air_war/opportunity_def.hpp"
 #include "simcore/air_war/types.hpp"
+#include "simcore/command/own_air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/country_map.hpp"
 #include "simcore/geo.hpp"
@@ -757,7 +758,19 @@ struct FactionRadio {
     std::string confidence;
 };
 
+// Its own ground air defence as its returning aircraft meet it (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): a damaged
+// aircraft comes home off its minimum risk route, or with its Mode 4 failed, by a chance each; with both, its own belt may
+// shoot it down (fm44_1_2_1984, fm_100_42_1976: weapons free against anything not positively friendly). Game values.
+struct OwnAdDef {
+    bool present = false;
+    double off_mrr_damaged = 0.3;
+    double mode4_failed_damaged = 0.2;
+    double belt_kill = 0.3;
+    std::string belt = "own belt";
+};
+
 struct FactionDef {
+    OwnAdDef own_ad;
     std::string id;
     std::string name;
     std::string short_name;
@@ -1068,6 +1081,9 @@ struct TuningTable {
             // divert waits for the faction's retask delay, the strikers' abort a share of the attacked flights, no surprise
             // under an E-3A that sees our fighters, its factor a0_awacs_meet), 0 before it (a save made before B14)
             {"balance.mode", 1.0},
+            // our fighters (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md): 1 our pairs in the played raids, the enemy's
+            // learning of our corridors and its use of them, its own belt on its damaged aircraft; 0 before (a save made before S1)
+            {"own_air.mode", 1.0},
             {"route.start_before_gate_m", 80000.0}, // the route starts this far behind its gate (at most at the bases)
             {"route.bend_deg", 30.0},               // a river vertex turning more is a bend, a turn point
             {"route.fallback_grid_m", 15000.0},     // the lattice of a theatre without a map
@@ -1517,7 +1533,7 @@ public:
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
                              "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2",
-                             "opportunity_rules", "hot_phase"}) ||
+                             "opportunity_rules", "hot_phase", "own_ad"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1527,6 +1543,19 @@ public:
         }
         if (out.callsigns.empty()) out.callsigns.push_back("Flight");
         if (!ParseTier(tier, out.tier)) return Fail("tier", "inferior, near_peer, peer or superior");
+        if (const json::Value* oa = root.Find("own_ad")) {  // S1: its own belt as its damaged aircraft come home
+            OwnAdDef& a = out.own_ad;
+            if (!Keys(*oa, "own_ad", {"off_mrr_damaged", "mode4_failed_damaged", "belt_kill", "belt", "source", "confidence", "notes"}) ||
+                !OptionalNumber(*oa, "own_ad", "off_mrr_damaged", a.off_mrr_damaged) ||
+                !OptionalNumber(*oa, "own_ad", "mode4_failed_damaged", a.mode4_failed_damaged) ||
+                !OptionalNumber(*oa, "own_ad", "belt_kill", a.belt_kill) || !OptionalString(*oa, "own_ad", "belt", a.belt) || !Provenance(*oa, "own_ad")) {
+                return false;
+            }
+            for (double v : {a.off_mrr_damaged, a.mode4_failed_damaged, a.belt_kill}) {
+                if (v < 0.0 || v > 1.0) return Fail("own_ad", "chances between 0 and 1");
+            }
+            a.present = true;
+        }
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
@@ -2768,6 +2797,8 @@ struct AirWarData {
     SensorsDef sensors;       // the airborne sensors by type and year (data/air_war/sensors.json)
     CounterC2Def counter_c2;  // our side against the enemy's command in the air (data/command/counter_c2.json, roadmap S2)
     AaaTable aaa;             // how the guns fire by range (data/gameplay/aaa.json): a played raid's guns shown (roadmap S4)
+    command::OwnAirDef own_air;  // our fighters' rules (data/command/own_air.json, roadmap S1; absent: none of it)
+    bool has_own_air = false;
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
 
     const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
@@ -2800,6 +2831,15 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;
     if (!LoadCounterC2File(data_dir + "/command/counter_c2.json", d.counter_c2, error)) return false;
     if (!LoadAaaFile(data_dir, "gameplay/aaa.json", d.aaa, error)) return false;
+    {
+        const std::string own = data_dir + "/command/own_air.json";
+        std::ifstream probe(own);
+        if (probe) {
+            probe.close();
+            if (!command::LoadOwnAirFile(own, d.own_air, error)) return false;
+            d.has_own_air = true;
+        }
+    }
     if (!d.theatre.country_map.empty()) {
         d.country = LoadCountryMap(data_dir, d.theatre.country_map, error);
         if (d.country == nullptr) {

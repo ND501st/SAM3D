@@ -800,4 +800,114 @@ bool FSimFxFixUpTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimFxAirBattleTest, "SAM3D.Fx.AirBattle",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimFxAirBattleTest::RunTest(const FString& Parameters)
+{
+	// The air battle drawn (roadmap B13). Chaff: puffs by cartridges, at least one cartridge's, at most the cap.
+	TestEqual(TEXT("chaff: 3 cartridges, 2 puffs each"), SimFxLogic::ChaffPuffs(3, 2, 24), 6);
+	TestEqual(TEXT("chaff: none counted still one cartridge"), SimFxLogic::ChaffPuffs(0, 2, 24), 2);
+	TestEqual(TEXT("chaff: a long salvo capped"), SimFxLogic::ChaffPuffs(60, 2, 24), 24);
+
+	// Flares thrown down and out to alternate sides, a little back, never up or forward.
+	const FVector Fwd(1.0, 0.0, 0.0);
+	const FVector D0 = SimFxLogic::FlareEjectDir(0, Fwd);
+	const FVector D1 = SimFxLogic::FlareEjectDir(1, Fwd);
+	TestTrue(TEXT("flare: unit"), FMath::IsNearlyEqual(D0.Size(), 1.0, 1e-6));
+	TestTrue(TEXT("flare: down"), D0.Z < -0.5 && D1.Z < -0.5);
+	TestTrue(TEXT("flare: back, not forward"), D0.X < 0.0 && D1.X < 0.0);
+	TestTrue(TEXT("flare: alternate sides"), D0.Y * D1.Y < 0.0);
+	TestTrue(TEXT("flare: a climbing aircraft's still thrown down"), SimFxLogic::FlareEjectDir(0, FVector(0.3, 0.0, 0.95)).Z < -0.5);
+
+	// A flare's glow: up at once, whole while it burns, fading at the end, out after.
+	TestEqual(TEXT("glow: before"), SimFxLogic::FlareGlowAt(-0.1, 4.5), 0.0f);
+	TestEqual(TEXT("glow: burning"), SimFxLogic::FlareGlowAt(2.0, 4.5), 1.0f);
+	TestTrue(TEXT("glow: fading"), SimFxLogic::FlareGlowAt(4.2, 4.5) > 0.0f && SimFxLogic::FlareGlowAt(4.2, 4.5) < 1.0f);
+	TestEqual(TEXT("glow: out"), SimFxLogic::FlareGlowAt(4.5, 4.5), 0.0f);
+
+	// A thrown store tumbles at a keyed rate under the fastest, the same for the same key, from no turn at release.
+	const FRotator R0 = SimFxLogic::TumbleAt(42, 0.0, 120.0);
+	TestTrue(TEXT("tumble: none at release"), FMath::IsNearlyZero(R0.Pitch) && FMath::IsNearlyZero(R0.Roll));
+	const FRotator R1 = SimFxLogic::TumbleAt(42, 1.0, 120.0);
+	TestTrue(TEXT("tumble: keyed"), R1.Equals(SimFxLogic::TumbleAt(42, 1.0, 120.0)));
+	TestTrue(TEXT("tumble: turning"), FMath::Abs(R1.Pitch) >= 0.35 * 120.0 - 1e-6 && FMath::Abs(R1.Pitch) <= 120.0 + 1e-6);
+	TestFalse(TEXT("tumble: another store another way"), R1.Equals(SimFxLogic::TumbleAt(43, 1.0, 120.0)));
+
+	// The feed's air battle into the effects: a flare salvo, an AAM chasing its target until its end, a gun burst.
+	TUniquePtr<FSimFxWorld> W = MakeUnique<FSimFxWorld>();
+	simcore::fx::Event Flare;
+	Flare.kind = simcore::fx::EventKind::FlareDrop;
+	Flare.t_s = 10.0;
+	Flare.world_id = 3;
+	Flare.number = 4;
+	Flare.position = simcore::Vec3{0.0, 0.0, 3000.0};
+	Flare.velocity = simcore::Vec3{0.0, 250.0, 0.0};
+	W->FlareDrop(Flare);
+	if (TestEqual(TEXT("flares: one each"), W->Flares.Num(), 4))
+	{
+		TestTrue(TEXT("flares: one after another"), W->Flares[1].BornT > W->Flares[0].BornT);
+		TestTrue(TEXT("flares: thrown down"), W->Flares[0].Eject.z < 0.0);
+	}
+	Flare.number = 100;
+	W->FlareDrop(Flare);
+	TestEqual(TEXT("flares: a long salvo drawn as at most the cap"), W->Flares.Num(), 4 + W->Tune.AirBattle.FlaresMax);
+
+	simcore::fx::Event Launch;
+	Launch.kind = simcore::fx::EventKind::AamLaunch;
+	Launch.t_s = 20.0;
+	Launch.end_t_s = 26.0;
+	Launch.world_id = 5;
+	Launch.target_world_id = 6;
+	Launch.source = "red11";
+	Launch.target = "t1";
+	Launch.weapon = "r60m";
+	Launch.number = 2;
+	Launch.position = simcore::Vec3{0.0, 0.0, 4000.0};
+	Launch.velocity = simcore::Vec3{0.0, 250.0, 0.0};
+	Launch.aim = simcore::Vec3{0.0, 5000.0, 4000.0};
+	W->AamLaunch(Launch);
+	if (TestEqual(TEXT("aam: one missile"), W->Missiles.Num(), 1))
+	{
+		const FSimFxMissile& M = W->Missiles[0];
+		TestTrue(TEXT("aam: an air-to-air missile chasing its target until its end"), M.bAam && M.bWaitForEnd && M.TargetId == 6);
+		TestTrue(TEXT("aam: its munitions.json shape"), M.Mun != nullptr && M.Weapon == TEXT("r60m"));
+		TestTrue(TEXT("aam: off the rail at the shooter's speed"), M.V0.Length() >= 249.0);
+	}
+	simcore::fx::Event End = Launch;
+	End.kind = simcore::fx::EventKind::AamEnd;
+	End.t_s = 26.0;
+	End.end = simcore::fx::BurstEnd::Wide;
+	End.position = End.aim;
+	End.number = 3;
+	W->AamEnd(End);
+	TestTrue(TEXT("aam end: another shot's end leaves it chasing"), W->Missiles.Num() == 1 && W->Missiles[0].bWaitForEnd);
+	End.number = 2;
+	W->AamEnd(End);
+	if (W->Missiles.Num() == 1)
+	{
+		const FSimFxMissile& M = W->Missiles[0];
+		TestTrue(TEXT("aam end: a miss flies on and bursts"), !M.bWaitForEnd && M.bBurstAtEnd && !M.bDone);
+	}
+
+	simcore::fx::Event Gun;
+	Gun.kind = simcore::fx::EventKind::AirGunBurst;
+	Gun.t_s = 30.0;
+	Gun.end_t_s = 31.5;
+	Gun.world_id = 5;
+	Gun.target_world_id = 6;
+	Gun.weapon = "gsh23l";
+	Gun.position = simcore::Vec3{0.0, 0.0, 4000.0};
+	Gun.velocity = simcore::Vec3{0.0, 250.0, 0.0};
+	Gun.aim = simcore::Vec3{0.0, 600.0, 4000.0};
+	W->AirGunBurst(Gun);
+	if (TestEqual(TEXT("gun: one pass"), W->GunPasses.Num(), 1))
+	{
+		const FSimFxGunPass& G = W->GunPasses[0];
+		TestTrue(TEXT("gun: from the shooter, one burst for its seconds"),
+			G.bAir && G.SiteId == 5 && G.Bursts.Num() == 1 && FMath::IsNearlyEqual(G.T1, 31.5));
+	}
+	return true;
+}
+
 #endif  // WITH_DEV_AUTOMATION_TESTS
