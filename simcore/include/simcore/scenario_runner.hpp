@@ -11232,6 +11232,7 @@ private:
     struct ScopeTrail {
         std::vector<std::pair<double, Vec3>> marks;  // when and where (the crew's frame, the vehicle at the origin)
         double last_seen_s = 0.0;
+        double taken_s = -1e9;  // when the mark took this trail over from another (InheritTrail): its own looks since
         bool heading_in = false;
         bool called = false;
     };
@@ -11659,10 +11660,23 @@ private:
             const double speed = v.Length();
             const double closing = p.Length() > 1.0 ? -Dot(v, p.Normalized()) : 0.0;
             const bool at_us = speed > 1.0 && closing > kZeroParameterCos * speed;
-            if (speed > kArmMarkSpeedMps && at_us) {
-                tr.called = true;
-                ArmSignSeen(c, "arm_launch");
-                continue;
+            // The ARM's sign by the mark's own looks since it came up: a trail taken over from another mark (InheritTrail)
+            // keeps that mark's earlier looks, and between bursts a formation's marks come up beside each other, so a
+            // trail stitched from one aircraft to its wingman reads a jump of a slot's spacing as a speed no aircraft
+            // flies (the Pact's DEAD raid: two MiG-27s called ARMs as they popped up). The turn away below still reads
+            // the whole trail, which is what the stitch is for.
+            std::size_t own = 0;
+            while (own + 1 < tr.marks.size() && tr.marks[own].first < tr.taken_s) ++own;
+            const double own_span = time_ - tr.marks[own].first;
+            if (own_span >= 1.5) {
+                const Vec3 vo = (p - tr.marks[own].second) / own_span;
+                const double own_speed = vo.Length();
+                const double own_closing = p.Length() > 1.0 ? -Dot(vo, p.Normalized()) : 0.0;
+                if (own_speed > kArmMarkSpeedMps && own_closing > kZeroParameterCos * own_speed) {
+                    tr.called = true;
+                    ArmSignSeen(c, "arm_launch");
+                    continue;
+                }
             }
             if (regime_crew_.kind != EmissionKind::Arm || span < 3.0) continue;
             if (at_us && speed > 100.0) tr.heading_in = true;
@@ -11706,6 +11720,7 @@ private:
         }
         if (best.empty()) return;
         ScopeTrail moved = scope_trails_[best];
+        moved.taken_s = time_;
         scope_trails_.erase(best);
         scope_trails_[id] = moved;
     }
