@@ -139,8 +139,15 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 		const int R111 = Lib.Radio("r111");
 		if (Em.ok && R123 >= 0 && R111 >= 0)
 		{
+			// The country's woods and towns on the paths as ITU-R P.1812's clutter (roadmap S9, data/gameplay/clutter.json).
+			simcore::ClutterHeights Clutter;
+			std::string ClutterError;
+			if (!simcore::LoadClutterHeights(AirWarToStd(DataDirectory()), Clutter, &ClutterError))
+			{
+				UE_LOG(LogSAM3D, Warning, TEXT("Air war: %s: the radios' paths over the bare ground"), *AirWarToF(ClutterError));
+			}
 			auto Radio = std::make_shared<simcore::command::EmRadio>(Lib.radios[static_cast<std::size_t>(R123)],
-				std::make_shared<simcore::command::CountryGround>(Campaign->Data().country));
+				std::make_shared<simcore::command::CountryGround>(Campaign->Data().country, Clutter));
 			Radio->EquipCommandPosts(NewNet->Data(), 3, Radio->AddSet(Lib.radios[static_cast<std::size_t>(R111)]));
 			if (bIntercept)
 			{

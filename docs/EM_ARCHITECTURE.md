@@ -521,7 +521,9 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     the same way, beyond the map proper too (the forests' 100 m blocks running out past it, the far ground's woods, the
     towns laid beyond it such as Novo Varosd); where no box stands in the far ground's towns the map does not lay out, a
     representative clutter height (`data/gameplay/clutter.json`: dense urban 20 m within 0.45 of the radius, suburban
-    10 m beyond; villages suburban), so what the game draws there blocks sight too. The obstacle grids
+    10 m beyond; villages suburban; `simcore/clutter.hpp` `TownClutterClass`), so what the game draws there blocks
+    sight too. The heights are P.1812-6's section 3.2 Table 2 (checked against the text, S9, 20 Nov 2026; the same in
+    P.1812-8's section 3.2.1). The obstacle grids
     (`ObstacleGrid`, `DetailObstacleGrids`) remain as a picture: each node holds what stands over it.
   * **Footprints between the samples** (`terrain.hpp` `ObstaclesAlong`; `Terrain::ObstacleSpacingM`, `ObstacleTopAt`,
     `ObstacleTopBoundM`). A path sampled every 50-100 m would step over a 7 m house, so where the terrain has footprints
@@ -547,7 +549,15 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     obstacles, here and ahead (the footprints between its 100 m look-ahead points too, where one may top what he holds
     over already); a terrain-following helicopter over a forest flies its height over the treetops. The
     ground floor (R5) is still over the bare ground.
-  * The country's own ground (`command/em_radio.hpp`'s `CountryGround`) carries no obstacles yet.
+  * **The country's own ground** (`command/em_radio.hpp` `CountryGround`, the PU-12M's radios and the information
+    pipeline's means over the whole country; roadmap S9, 20 Nov 2026) carries P.1812's representative clutter a class
+    per 250 m cell from the country's land cover (`CountryMap::BakeClutter`, `ClutterClassAt`; `simcore/clutter.hpp`
+    `ClutterRaster`): lakes and rivers water/sea, forest urban/trees/forest (15 m), a town's middle dense urban (20 m)
+    and the rest of it suburban (10 m) by `TownClutterClass`, marsh and everything else open/rural (0 m). The heights
+    are `data/gameplay/clutter.json`'s (`LoadClutterHeights`; the game passes them, `USimAirCampaignSubsystem`); a
+    `CountryGround` made without them stays bare, as before. It has no footprints: the samples alone, as P.1812 adds
+    its clutter to the profile's points. The map's far ground keeps its own: its woods are boxes the map lays out (what
+    is drawn blocks sight), its towns not laid out the same `TownClutterClass` by distance.
   * **What is drawn is what blocks sight.** The game draws the woods as trees and masses from the same boxes
     (`scenery/map_dressing.hpp` `PlaceTrees`), each tree's top clamped to the ground plus `ObstacleHeight` where it
     stands: nothing drawn stands above the profile the sight lines use. The other way round, a ray is blocked only
@@ -559,10 +569,15 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     where the ray runs under the blocks' bound (`ObstacleTopCeilingM` first: the tallest top anywhere). The dynamic
     campaign test's hour in `ground_check data 3600`: 64.1 s of wall time with the exact cuts (69.4 s at the
     narrowest side's spacing, 88.6 s before the footprints), against r-track's 48.4 s, run in turn on one machine: a
-    third slower than before the obstacles; Kesmark's raid 0.5 s against 0.4 s. If it tells in the game's fixed step:
-    obstacle profiles cached per path.
-* Left: sea areas and ducting; obstacles on the country's ground for the radios; a land-cover clutter class per cell
-  (fields, orchards) in place of the towns' two heights.
+    third slower than before the obstacles; Kesmark's raid 0.5 s against 0.4 s. **Profiles cached per path: not
+    built** (S9, 20 Nov 2026). Measured in turn on a shared machine, the hour took 132.5 s and 181.7 s before S9 and
+    122.3 s after it (one run after it took 917 s while the machine was loaded: the 600 s school missions slowed
+    fivefold with it), so S9 added nothing measurable; and the hour at about 125 s is some 35 ms of one core per
+    simulated second, a few per cent of the game's fixed step at real time. A cache keyed on a path's two ends would
+    seldom hit (every target moves every step) and would need invalidating when a wood or a building changes. To
+    revisit if a profile of the game's step shows the sight lines on top.
+* Left: sea areas and ducting; orchards, vineyards and parkland as clutter classes of their own (the country's land
+  cover has none); the map's far ground still clutters only its towns (its woods are boxes).
 
 ## 28. Scale (E8, started 16 October 2026)
 
