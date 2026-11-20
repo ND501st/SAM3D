@@ -310,6 +310,58 @@ decisions an hour from the queue, routes only on orders and cached, pictures upd
 - **First person.** Our AD commanders' inputs (F4) come only from facts; a test breaks the truth after a report and
   checks the decision did not move.
 
+## As built: F3.1 and F3.2 (20 Nov 2026)
+
+Nothing runs the ground war yet: no loader on the campaign's path reads these files, so every balance tool and save
+is as before (proved byte for byte at the commit). F3.3 adds `ground.mode` and the clock.
+
+**The tables** (`data/gameplay/ground_war.json`, `GroundTables`, `LoadGroundTables`). Every scalar is
+`{"value", "source", "confidence"}` and every range `{"min", "max", "source", "confidence"}`; a source is an id in
+`docs/SOURCES.md` or `game_value` / `sam3d_estimate`. Weights by equipment type in T-55 equivalents
+(`mt_perventsev_balance`'s method, the 1985 weights SAM3D estimates; a type not listed weighs nothing, so support and
+air defence count only by their people at 0.01 a man); supply and cohesion floors (0.5, 0.3); Dupuy's posture factors
+(`ciano_1988_qjm`); the ground's factors on the defender and the advance (forest 1.3 and 0.6, hills, mountains,
+marsh, urban: game values); night 0.8 and poor visibility 0.9 on the attacker, a river line 1.5 on the defender;
+FM 101-10-1's eleven actions (`fm_101_10_1_1976` table 5-8) with the reference ratio 3, `k` = 0.5 and the clip
+0.25-4; its tank table 7-7 (five commitments, three days, 80 % reparable); HERO's classes (`hero_1972_oralfore`
+p. IV-2, thresholds 1.5/2.5/4/6 a SAM3D mapping) and the draw's sigma 0.35; crossing 2 h intact, 12 h cut, x 0.5
+with a pontoon park; decision times by echelon (`fm_100_2_1_1984` p. 5-14); the trait's shift (0.2 of a range,
+README decision 6); cohesion, dispersal, march, report and level values for F3.3-F3.6.
+
+**The enemy** (`data/air_war/ground_<faction>.json`, `GroundForceDef`, `LoadGroundForce(data_dir, faction)`): an
+`"oob"` in `oob_pannonia.json`'s format (read by `command::detail::OobLoader`), a commanders' pool by rank and the
+named commanders, the doctrine (attack and breakthrough ratios, withdrawal only on order, the second echelon to
+success, effectiveness lines for the Pact, breakpoint ranges for NATO and the small forces, advance caps, frontages)
+and the plan. The owner's open decisions are taken as proposed (SAM3D estimates): the Pact attacks 2 h into its air
+operation on two axes (the 35th and 39th MRDs on Mezovar and the capital, the 9th TD behind them; the 57th by Rava),
+NATO after 96 h of rollback (the 2nd ACR, 1st AD and 5th Pz Div on Kisvar, the 3rd MD on Saldanj); the rebels hold a
+ragged line and raid by night where the ratio reaches 3:1 (two raids a night, 15 km deep); the neutral pushes to a
+hold line 40 km in and holds. Places are the country map's ids (settlements, landmarks, crossings `<line>@<river>`,
+F1's sites when they come); a place the map lacks is a `places_todo` entry with `anchor_todo: true` and suggested
+coordinates, for F1 to add.
+
+**Our side** (`data/campaign/ground_defence.json`, `GroundDefenceDef`, `LoadGroundDefence`): the order of battle is
+`command/oob_pannonia.json`, unchanged on disk; `equipment_fill` gives the regiments that list none their tanks, BMPs
+or BTRs and guns in memory (estimates labelled). The doctrine (our lines, caps, the counterattack that stops at the
+border, frontages from `vr_poltikovic_1984`, the security zone) and one deployment per adversary: each unit's role
+(first echelon, second, reserve, flank screen, support), its stretch of the front line as `from_km`/`to_km` along the
+nation theatre's front (F2.1's measure) or a place for reserves.
+
+**The combat** (`ground_war/units.hpp`, `combat.hpp`): `StrengthOf`, `UnitPower` (strength x the supply and cohesion
+factor), `EffectivenessByLines`, `DrawBreakpoint` (a range drawn at `u`, moved by a trait's pull);
+`ResolveSector(tables, attacker, defender, conditions, caps, draw, hours)` returns the ratio, the opposition, each
+side's daily rate and its loss over the hours (`1 - (1 - daily)^(h/24)`, so a quiet sector closes in one call), and the
+advance: the class's rate x the ground x the draw, then the faction's cap (breakthrough against a defence, depth
+against a delay, withdrawal or meeting, broken against a broken enemy or none), stopped at a river line's bank.
+`CrossingHours`, `TankLossShare` and `DecisionHours` are the other tables. No state, no allocation: a call costs about
+COST_NS ns (`test_ground_combat.cpp` times a million), 240 calls (10 contested sectors an hour) about COST_DAY ms a
+campaign day, against the budget's 20 ms.
+
+**Left** to later tasks: `ground.mode` and the runner (F3.3); the enemy's equipment types' basic models (F5.2); the
+enemy's own air defence units (not in these orders of battle; the air war's objects hold them); the tank table is a
+lookup, not yet applied by `ResolveSector` (F3.3 applies equipment losses); place lookup through F1's anchors (the
+test resolves ids against the map now); NATO's frontages and every weight are estimates for F6 to check.
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its

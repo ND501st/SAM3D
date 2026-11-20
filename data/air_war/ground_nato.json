@@ -1,0 +1,133 @@
+{
+  "ground_id": "nato",
+  "faction": "nato",
+  "name": "NATO's ground forces against Pannonia: an allied corps",
+  "status": "F3.1 (20 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md section 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "source": "a corps of three divisions and a cavalry regiment (docs/fronts/03_GROUND_WAR.md section 3.1); doctrine from fm_100_5_1976, fm_100_5_1982, fm_71_100_1978, clark_1954_oro and hero_1982_termination (docs/research/fronts_2026-11/nato_ground.md); NATO's own frontages are SAM3D estimates (no period manual gives them); the brigades' equipment placeholders; the invasion of Pannonia is the game's fiction and its plan a SAM3D estimate",
+  "confidence": "estimate",
+  "notes": "Two US-pattern divisions (one armoured, one mechanised on older equipment) and a German-pattern armoured division, with an armoured cavalry regiment as the covering force and the corps' artillery. Numbers are placeholders as the factions' aircraft are. Equipment types are the strength weights' ids (data/gameplay/ground_war.json); no basic models yet (F5.2).",
+  "places_todo": [
+    { "id": "nato_assembly_centre", "name": "The corps' main assembly area beyond the western border", "east_km": -195, "north_km": 45, "anchor_todo": true, "notes": "Behind the western road crossing (bx_road_west)." },
+    { "id": "nato_assembly_south", "name": "The corps' southern assembly area", "east_km": -195, "north_km": -10, "anchor_todo": true, "notes": "Behind the western border's southern stretch." },
+    { "id": "bx_road_southwest_group", "name": "A road crossing on the western border south of the Lenta", "east_km": -170, "north_km": 8, "anchor_todo": true, "notes": "The road south from Kisvar (s_west_group) ends at (-125, 10); a crossing to the border there is needed for this axis." }
+  ],
+  "oob": {
+    "oob_id": "nato_corps",
+    "name": "The allied corps",
+    "source": "estimate (SAM3D): a corps of three divisions and a cavalry regiment, brigades of two tank and one mechanised battalion or the reverse; numbers placeholders",
+    "confidence": "estimate",
+    "notes": "Each division: three brigades, its artillery and its own troops (cavalry squadron, engineers, aviation and support) on the division itself.",
+    "services": [
+      { "id": "allied_land_forces", "name": "The allied land forces" }
+    ],
+    "units": [
+      { "id": "nato_corps", "name": "The allied corps", "service": "allied_land_forces", "kind": "army", "garrison": "nato_assembly_centre",
+        "equipment": { "m110": 36, "mlrs": 18, "m109": 36 }, "personnel": { "officers": 600, "ncos": 1400, "conscripts": 6000, "basis": "estimate: the corps artillery and support" },
+        "notes": "A corps (kind army: the order of battle's word for the formation above the divisions)." },
+
+      { "id": "nato_ad_1", "name": "1st Armored Division", "service": "allied_land_forces", "kind": "division", "parent": "nato_corps", "garrison": "nato_assembly_centre",
+        "equipment": { "m3": 40 }, "personnel": { "officers": 500, "ncos": 1100, "conscripts": 3400, "basis": "estimate: the division's own troops" } },
+      { "id": "nato_ad_1_b1", "name": "1st Brigade, 1st Armored Division", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_ad_1",
+        "equipment": { "m1": 116, "m2": 54 }, "personnel": { "officers": 180, "ncos": 600, "conscripts": 2200, "basis": "estimate: two tank and one mechanised battalion" } },
+      { "id": "nato_ad_1_b2", "name": "2nd Brigade, 1st Armored Division", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_ad_1",
+        "equipment": { "m1": 116, "m2": 54 }, "personnel": { "officers": 180, "ncos": 600, "conscripts": 2200, "basis": "estimate: two tank and one mechanised battalion" } },
+      { "id": "nato_ad_1_b3", "name": "3rd Brigade, 1st Armored Division", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_ad_1",
+        "equipment": { "m1": 58, "m2": 108 }, "personnel": { "officers": 190, "ncos": 640, "conscripts": 2370, "basis": "estimate: one tank and two mechanised battalions" } },
+      { "id": "nato_ad_1_art", "name": "1st Armored Division Artillery", "service": "allied_land_forces", "kind": "regiment", "parent": "nato_ad_1",
+        "equipment": { "m109": 72, "m110": 12, "mlrs": 9 }, "personnel": { "officers": 150, "ncos": 500, "conscripts": 2150, "basis": "estimate" } },
+
+      { "id": "nato_md_3", "name": "3rd Mechanized Division", "service": "allied_land_forces", "kind": "division", "parent": "nato_corps", "garrison": "nato_assembly_south",
+        "equipment": { "m3": 40 }, "personnel": { "officers": 500, "ncos": 1100, "conscripts": 3400, "basis": "estimate: the division's own troops" } },
+      { "id": "nato_md_3_b1", "name": "1st Brigade, 3rd Mechanized Division", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_md_3",
+        "equipment": { "m60a3": 58, "m113": 108 }, "personnel": { "officers": 190, "ncos": 640, "conscripts": 2370, "basis": "estimate: one tank and two mechanised battalions" } },
+      { "id": "nato_md_3_b2", "name": "2nd Brigade, 3rd Mechanized Division", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_md_3",
+        "equipment": { "m60a3": 58, "m113": 108 }, "personnel": { "officers": 190, "ncos": 640, "conscripts": 2370, "basis": "estimate: one tank and two mechanised battalions" } },
+      { "id": "nato_md_3_b3", "name": "3rd Brigade, 3rd Mechanized Division", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_md_3",
+        "equipment": { "m60a3": 116, "m113": 54 }, "personnel": { "officers": 180, "ncos": 600, "conscripts": 2200, "basis": "estimate: two tank and one mechanised battalion" } },
+      { "id": "nato_md_3_art", "name": "3rd Mechanized Division Artillery", "service": "allied_land_forces", "kind": "regiment", "parent": "nato_md_3",
+        "equipment": { "m109": 72, "m110": 12 }, "personnel": { "officers": 150, "ncos": 500, "conscripts": 2150, "basis": "estimate" } },
+
+      { "id": "nato_pzd_5", "name": "5th Panzer Division", "service": "allied_land_forces", "kind": "division", "parent": "nato_corps", "garrison": "nato_assembly_centre",
+        "equipment": { "leopard1": 30 }, "personnel": { "officers": 450, "ncos": 1000, "conscripts": 3300, "basis": "estimate: the division's own troops" } },
+      { "id": "nato_pzd_5_b1", "name": "Panzer Brigade 13", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_pzd_5",
+        "equipment": { "leopard2": 110, "marder": 40, "m109": 18 }, "personnel": { "officers": 170, "ncos": 650, "conscripts": 2180, "basis": "estimate" } },
+      { "id": "nato_pzd_5_b2", "name": "Panzer Brigade 14", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_pzd_5",
+        "equipment": { "leopard2": 110, "marder": 40, "m109": 18 }, "personnel": { "officers": 170, "ncos": 650, "conscripts": 2180, "basis": "estimate" } },
+      { "id": "nato_pzd_5_b3", "name": "Panzergrenadier Brigade 15", "service": "allied_land_forces", "kind": "brigade", "parent": "nato_pzd_5",
+        "equipment": { "leopard2": 55, "marder": 90, "m109": 18 }, "personnel": { "officers": 180, "ncos": 700, "conscripts": 2320, "basis": "estimate" } },
+      { "id": "nato_pzd_5_art", "name": "Artillery Regiment 5", "service": "allied_land_forces", "kind": "regiment", "parent": "nato_pzd_5",
+        "equipment": { "m110": 12, "m109": 18 }, "personnel": { "officers": 90, "ncos": 300, "conscripts": 1110, "basis": "estimate" } },
+
+      { "id": "nato_acr_2", "name": "2nd Armored Cavalry Regiment", "service": "allied_land_forces", "kind": "regiment", "parent": "nato_corps", "garrison": "nato_assembly_centre",
+        "equipment": { "m1": 123, "m3": 116, "m109": 24 }, "personnel": { "officers": 280, "ncos": 900, "conscripts": 3420, "basis": "estimate" },
+        "notes": "The corps' covering force (fm_100_5_1976 p. 5-12)." }
+    ]
+  },
+  "commanders": {
+    "pool": {
+      "ranks": { "army": "Lieutenant General", "division": "Major General", "brigade": "Colonel", "regiment": "Colonel", "battalion": "Lieutenant Colonel" },
+      "first_names": ["James", "Robert", "William", "Michael", "David", "Richard", "Thomas", "John", "Hans", "Klaus", "Dieter", "Wolfgang", "Jürgen"],
+      "last_names": ["Hayes", "Collins", "Burke", "Sullivan", "Grant", "Fischer", "Schäfer", "Kühn", "Becker", "Ward", "Parker", "Doyle", "Ritter"],
+      "backgrounds": ["armor officer", "infantry officer", "cavalry officer", "Command and General Staff College", "Bundeswehr Führungsakademie", "Vietnam veteran"],
+      "trait_mean": { "boldness": 0.5, "methodical": 0.65, "creativity": 0.55, "rigidity": 0.4, "ambition": 0.6, "skepticism": 0.55, "vindictiveness": 0.3, "composure": 0.7 },
+      "trait_sd": 0.15,
+      "source": "game value: NATO's commanders drawn as its air officers are (data/air_war/faction_nato.json officer_pool)",
+      "confidence": "estimate"
+    },
+    "authored": [
+      { "id": "nato_corps_cdr", "name": "Richard A. Hayes", "unit": "nato_corps", "age": 55, "background": "Armor officer, two tours in Vietnam",
+        "bio": "Wrote his part of the Active Defense and then argued against it. Wants the deep battle before the close one.",
+        "traits": { "boldness": 0.55, "methodical": 0.75, "creativity": 0.6, "rigidity": 0.35, "ambition": 0.7, "skepticism": 0.6, "vindictiveness": 0.25, "composure": 0.75 } },
+      { "id": "nato_acr_2_cdr", "name": "John Doyle", "unit": "nato_acr_2", "age": 46, "background": "Cavalry officer",
+        "bio": "Runs the covering force from his own command track, forward.",
+        "traits": { "boldness": 0.7, "methodical": 0.5, "creativity": 0.6, "rigidity": 0.3, "ambition": 0.65, "skepticism": 0.5, "vindictiveness": 0.3, "composure": 0.7 } }
+    ]
+  },
+  "doctrine": {
+    "source": "docs/fronts/03_GROUND_WAR.md section 5.3 from docs/research/fronts_2026-11/nato_ground.md",
+    "confidence": "medium",
+    "attack_ratio": { "value": 3.0, "source": "fm_100_5_1976 pp. 3-4, 3-5: 3:1 or better in the sector", "confidence": "medium" },
+    "breakthrough_ratio": { "min": 6.0, "max": 6.0, "source": "fm_100_5_1976 pp. 3-4, 3-5: seeks 6:1 at the point of decision", "confidence": "medium" },
+    "defend_ratio": { "min": 3.0, "max": 5.0, "source": "fm_100_5_1976 p. 5-3: holds while under 3:1, briefly to 5:1 with air and artillery on good ground, then delays", "confidence": "medium" },
+    "withdraw_needs_order": { "value": false, "source": "hero_1982_termination: battles end on the mission; a NATO commander stops his attack on his own losses (docs/fronts/03_GROUND_WAR.md section 5.3)", "confidence": "low" },
+    "counterattack_by_senior": { "value": false, "source": "estimate (SAM3D): NATO's divisions decide their own counterattacks within the corps' plan (docs/fronts/03_GROUND_WAR.md section 5.3)", "confidence": "estimate" },
+    "second_echelon_to_success": { "value": false, "source": "estimate (SAM3D): no Soviet-style echelons; the corps commits its reserve where its commander judges (fm_100_5_1982 ch. 8 on the offence)", "confidence": "estimate" },
+    "covering_force_share": { "min": 0.3, "max": 0.5, "source": "fm_71_100_1978 p. 5-13; fm_101_10_1_1976 p. 7-16: 30-50% of a division's manoeuvre units", "confidence": "medium" },
+    "effectiveness": {
+      "kind": "breakpoints",
+      "attack_stop_losses": { "min": 0.15, "max": 0.35, "source": "estimate (SAM3D) within clark_1954_oro's ranges by mission and hero_1982_termination: an attack stops at 15-35% cumulative losses, drawn per unit", "confidence": "estimate" },
+      "defence_break_losses": { "min": 0.25, "max": 0.5, "source": "estimate (SAM3D) within clark_1954_oro's ranges by mission: a defence breaks at 25-50% cumulative losses, drawn per unit", "confidence": "estimate" }
+    },
+    "advance_caps_km_per_day": {
+      "breakthrough": { "value": 30, "source": "estimate (SAM3D): no NATO norm for a deliberate attack's day; as the Pact's 25-30 (the HERO rates set the pace below it)", "confidence": "estimate" },
+      "depth": { "value": 50, "source": "fm_100_5_1982 p. 8-7: corps and division operations may cover 50-80 km daily (its low end short of an exploitation)", "confidence": "medium" },
+      "broken": { "value": 80, "source": "fm_100_5_1982 p. 8-7: 50-80 km daily in an exploitation", "confidence": "medium" }
+    },
+    "frontages_km": [
+      { "echelon": "division", "posture": "defence", "width_min": 25, "width_max": 40, "source": "estimate (SAM3D) bounded by fm_100_5_1976 p. 5-3 (6-8 battalions on one fifth of a division's front); no period manual gives NATO's own", "confidence": "estimate" },
+      { "echelon": "brigade", "posture": "defence", "width_min": 8, "width_max": 15, "source": "estimate (SAM3D) bounded by fm_100_5_1976 p. 5-3", "confidence": "estimate" },
+      { "echelon": "battalion", "posture": "defence", "width_min": 3, "width_max": 6, "source": "estimate (SAM3D) bounded by fm_100_5_1976 p. 5-3", "confidence": "estimate" },
+      { "echelon": "division", "posture": "attack", "width_min": 10, "width_max": 20, "source": "estimate (SAM3D) bounded by fm_100_5_1976 p. 5-3", "confidence": "estimate" },
+      { "echelon": "brigade", "posture": "attack", "width_min": 3, "width_max": 6, "source": "estimate (SAM3D): a main attack brigade (nato_ground.md section 3)", "confidence": "estimate" }
+    ]
+  },
+  "plan": {
+    "kind": "offensive",
+    "start_after_h": { "value": 96, "source": "SAM3D estimate: the owner's open decision 3 taken as proposed (docs/fronts/README.md): NATO's corps attacks after a few days of the air force's rollback", "confidence": "estimate" },
+    "source": "SAM3D estimate: the axes and objectives are the game's fiction on the country map; depth in hours by fm_100_5_1982 p. 6-2 (the corps' area of influence 72 h)",
+    "confidence": "estimate",
+    "notes": "The main attack along the western road through Kisvar to Novo Varosd and the industrial belt with two divisions, the cavalry regiment covering it; a supporting attack south of the Lenta towards Saldanj. No Soviet-style second echelon: each division keeps a brigade back as its own reserve, its commander's to commit.",
+    "objectives": [
+      { "id": "kisvar", "name": "Kisvar", "place": "kisvar", "by_day": 5, "notes": "The first day's objective, 50 km in." },
+      { "id": "saldanj", "name": "Saldanj", "place": "saldanj", "by_day": 7, "notes": "The supporting attack's objective." },
+      { "id": "novo_varosd", "name": "Novo Varosd and the army's headquarters", "place": "novo_varosd", "by_day": 7, "notes": "The corps' objective, within its 72 hours' area of influence." }
+    ],
+    "axes": [
+      { "id": "main", "name": "The western road", "main": true, "route": ["nato_assembly_centre", "bx_road_west", "kisvar", "novo_varosd"],
+        "first_echelon": ["nato_acr_2", "nato_ad_1", "nato_pzd_5"], "second_echelon": [], "objective": "novo_varosd" },
+      { "id": "south", "name": "South of the Lenta", "main": false, "route": ["nato_assembly_south", "bx_road_southwest_group", "saldanj"],
+        "first_echelon": ["nato_md_3"], "second_echelon": [], "objective": "saldanj" }
+    ],
+    "reserve": []
+  }
+}

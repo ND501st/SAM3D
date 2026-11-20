@@ -1,0 +1,1245 @@
+// simcore/ground_war/ground_data.hpp — the ground war's data (track F, F3.1; docs/fronts/03_GROUND_WAR.md sections 3, 5,
+// 8 and 11): the sector's combat tables (data/gameplay/ground_war.json), each enemy faction's ground forces, doctrine and
+// plan (data/air_war/ground_<faction>.json), and our side's defence by adversary (data/campaign/ground_defence.json).
+//
+// Orders of battle are in command::OrderOfBattle's format, read by its loader (command/oob.hpp), so one loader reads both
+// sides. Places are the country map's ids (settlements, landmarks, river crossings; F1's sites); a place the map lacks yet
+// is listed in the file's places_todo with a suggested position, for F1 to add.
+//
+// Nothing here runs the ground war (F3.3) and no campaign reads these files yet: loading them changes nothing.
+#pragma once
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "simcore/air_war/data.hpp"
+#include "simcore/crew_data.hpp"  // detail::ReadTextFile, which command/oob.hpp uses without including it
+#include "simcore/command/oob.hpp"
+#include "simcore/console_data.hpp"
+#include "simcore/json.hpp"
+
+namespace simcore {
+namespace groundwar {
+
+// ------------------------------------------------------------------------------------------------------------ the enums
+
+// Dupuy's postures (ciano_1988_qjm fig. 24): a defender's multiplies its power; an attacker's is Attack.
+enum class Posture : std::uint8_t { Attack, HastyDefence, PreparedDefence, FortifiedDefence, Delay, Withdrawal };
+constexpr std::size_t kPostureCount = 6;
+
+// FM 101-10-1 table 5-8's actions (fm_101_10_1_1976 p. 5-8), plus a division in reserve.
+enum class LossAction : std::uint8_t {
+    Covering,
+    AttackMeeting,
+    AttackPosition,
+    AttackFortified,
+    DefenceMeeting,
+    DefencePosition,
+    DefenceSector,
+    Inactive,
+    Pursuit,
+    Delay,
+    Reserve
+};
+constexpr std::size_t kLossActionCount = 11;
+
+enum class Terrain : std::uint8_t { Open, Forest, Hills, Mountains, Marsh, Urban };
+constexpr std::size_t kTerrainCount = 6;
+
+// HERO's oppositions (hero_1972_oralfore p. IV-2), Stalled below the first threshold, Unopposed with no defender.
+enum class Opposition : std::uint8_t { Stalled, Intense, Moderate, Slight, Negligible, Unopposed };
+constexpr std::size_t kAdvanceClassCount = 5;  // Stalled to Negligible: the table's rows
+
+// FM 101-10-1 table 7-7's commitments (fm_101_10_1_1976 p. 7-16).
+enum class TankCommitment : std::uint8_t { DelayLight, DelayModerate, DelayHeavy, DefendModerate, DefendHeavy };
+constexpr std::size_t kTankCommitmentCount = 5;
+
+// The echelons FM 100-2-1 gives reaction and planning times for (fm_100_2_1_1984 p. 5-14).
+enum class Echelon : std::uint8_t { Division, Regiment, Battalion };
+constexpr std::size_t kEchelonCount = 3;
+
+enum class DeployRole : std::uint8_t { FirstEchelon, SecondEchelon, FlankScreen, Reserve, Support };
+enum class PlanKind : std::uint8_t { Offensive, LimitedIncursion, Raids };
+enum class EffectivenessKind : std::uint8_t { Lines, Breakpoints };
+
+inline const char* PostureName(Posture p) {
+    static const char* const names[kPostureCount] = {"attack", "hasty_defence", "prepared_defence", "fortified_defence", "delay", "withdrawal"};
+    return names[static_cast<std::size_t>(p)];
+}
+inline const char* LossActionName(LossAction a) {
+    static const char* const names[kLossActionCount] = {"covering", "attack_meeting", "attack_position", "attack_fortified",
+                                                        "defence_meeting", "defence_position", "defence_sector", "inactive",
+                                                        "pursuit", "delay", "reserve"};
+    return names[static_cast<std::size_t>(a)];
+}
+inline const char* TerrainName(Terrain t) {
+    static const char* const names[kTerrainCount] = {"open", "forest", "hills", "mountains", "marsh", "urban"};
+    return names[static_cast<std::size_t>(t)];
+}
+inline const char* OppositionName(Opposition o) {
+    static const char* const names[] = {"stalled", "intense", "moderate", "slight", "negligible", "unopposed"};
+    return names[static_cast<std::size_t>(o)];
+}
+inline const char* TankCommitmentName(TankCommitment c) {
+    static const char* const names[kTankCommitmentCount] = {"delay_light", "delay_moderate", "delay_heavy", "defend_moderate", "defend_heavy"};
+    return names[static_cast<std::size_t>(c)];
+}
+inline const char* EchelonName(Echelon e) {
+    static const char* const names[kEchelonCount] = {"division", "regiment", "battalion"};
+    return names[static_cast<std::size_t>(e)];
+}
+inline const char* DeployRoleName(DeployRole r) {
+    static const char* const names[] = {"first_echelon", "second_echelon", "flank_screen", "reserve", "support"};
+    return names[static_cast<std::size_t>(r)];
+}
+inline const char* PlanKindName(PlanKind k) {
+    static const char* const names[] = {"offensive", "limited_incursion", "raids"};
+    return names[static_cast<std::size_t>(k)];
+}
+
+// A name back to its enum; false if unknown. `count` names from `name_of`.
+template <typename E, typename NameOf>
+bool ParseEnum(const std::string& s, std::size_t count, NameOf name_of, E& out) {
+    for (std::size_t i = 0; i < count; ++i) {
+        if (s == name_of(static_cast<E>(i))) {
+            out = static_cast<E>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+// A range from a table: a norm's low and high ends.
+struct ValueRange {
+    double lo = 0.0;
+    double hi = 0.0;
+    double At(double u) const { return lo + (hi - lo) * u; }
+    double Mid() const { return 0.5 * (lo + hi); }
+};
+
+// --------------------------------------------------------------------------------- data/gameplay/ground_war.json
+
+struct LossRow {
+    double battle_first = 0.0;  // a day's battle losses on the action's first day, a fraction of strength
+    double battle_later = 0.0;  // on later days
+    double nonbattle = 0.0;     // every day
+};
+
+struct GroundTables {
+    // Strength: weighted equipment plus personnel, in T-55 equivalents.
+    double personnel_per_man = 0.0;
+    std::vector<std::pair<std::string, double>> weights;  // by type, sorted
+
+    // Power.
+    double supply_floor = 0.5;
+    double cohesion_floor = 0.3;
+    std::array<double, kPostureCount> posture{};
+    std::array<double, kTerrainCount> terrain_defender{};
+    std::array<double, kTerrainCount> terrain_advance{};
+    double night_attacker = 1.0;
+    double poor_visibility_attacker = 1.0;
+    double river_line_defender = 1.0;
+
+    // Losses.
+    std::array<LossRow, kLossActionCount> losses{};
+    double reference_ratio = 3.0;
+    double ratio_exponent = 0.5;
+    double scale_lo = 0.25;
+    double scale_hi = 4.0;
+    std::array<std::array<double, 3>, kTankCommitmentCount> tank_losses{};  // days 1-3, fractions
+    double reparable_share = 0.8;
+
+    // Advance.
+    std::array<double, kAdvanceClassCount> class_from_ratio{};
+    std::array<double, kAdvanceClassCount> class_km_per_day{};
+    double unopposed_km_per_day = 0.0;
+    double draw_sigma = 0.0;
+
+    // River crossings.
+    double crossing_intact_h = 0.0;
+    double crossing_cut_h = 0.0;
+    double pontoon_factor = 1.0;
+
+    // Commanders.
+    std::array<ValueRange, kEchelonCount> reaction_h{};
+    std::array<ValueRange, kEchelonCount> planning_h{};
+    double trait_shift = 0.2;
+
+    // Cohesion and dispersal.
+    double cohesion_loss_per_strength_loss = 0.0;
+    double cohesion_air_attack_loss = 0.0;
+    double cohesion_recovery_per_day = 0.0;
+    double cohesion_break_below = 0.0;
+    ValueRange reassemble_days;
+    double straggler_loss = 0.0;
+
+    // The march.
+    ValueRange road_day_kmh;
+    ValueRange road_night_kmh;
+    ValueRange cross_country_kmh;
+    ValueRange halt_h;
+    ValueRange halt_every_h;
+
+    // Reports and levels.
+    int division_reports_per_day = 2;
+    double levels_down_after_h = 6.0;
+
+    // A type's weight (0 for a type not in the table: support and air defence do not count); `known` says if listed.
+    double WeightOf(const std::string& type, bool* known = nullptr) const {
+        const auto it = std::lower_bound(weights.begin(), weights.end(), type,
+                                         [](const std::pair<std::string, double>& w, const std::string& t) { return w.first < t; });
+        const bool found = it != weights.end() && it->first == type;
+        if (known != nullptr) *known = found;
+        return found ? it->second : 0.0;
+    }
+};
+
+// ------------------------------------------------------------------------------------- doctrine, plans, commanders
+
+struct EffectivenessDef {
+    EffectivenessKind kind = EffectivenessKind::Lines;
+    // Lines (the Pact and our side): a strength fraction below which the unit is degraded or ineffective.
+    double degraded_below = 0.0;
+    double ineffective_below = 0.0;
+    double hq_hit_ineffective_below = 0.0;  // with its command, rockets and artillery hit
+    // Breakpoints (NATO and the small forces): cumulative losses at which an attack stops or a defence breaks, drawn per unit.
+    ValueRange attack_stop_losses;
+    ValueRange defence_break_losses;
+};
+
+struct AdvanceCaps {
+    double breakthrough_km_per_day = 0.0;  // through a hasty, prepared or fortified defence
+    double depth_km_per_day = 0.0;         // against a delay, a withdrawal or a meeting engagement
+    double broken_km_per_day = 0.0;        // against a broken enemy or none
+};
+
+struct FrontageDef {
+    std::string echelon;  // army, division, brigade, regiment, battalion
+    std::string posture;  // attack, breakthrough, defence
+    ValueRange width_km;
+    ValueRange depth_km;  // {0, 0} when the norm gives none
+};
+
+struct GroundDoctrineDef {
+    double attack_ratio = 3.0;
+    ValueRange breakthrough_ratio;
+    ValueRange defend_ratio;  // {0, 0}: the doctrine gives none
+    bool withdraw_needs_order = true;
+    bool counterattack_by_senior = true;
+    bool second_echelon_to_success = false;
+    bool disperse_rather_than_retreat = false;
+    bool counterattack_stops_at_border = false;
+    int echelons_against_deep_defence = 1;
+    double reserve_share = 0.0;
+    ValueRange covering_force_share;
+    EffectivenessDef effectiveness;
+    AdvanceCaps caps;
+    std::vector<FrontageDef> frontages;
+    // Our side only (security_zone and prepared_positions present).
+    bool has_security_zone = false;
+    ValueRange security_zone_depth_km;
+    ValueRange security_line_spacing_km;
+    ValueRange security_delay_per_line_h;
+    ValueRange division_prepared_positions;
+    ValueRange regiment_prepared_positions;
+    ValueRange restore_control_h;
+
+    const FrontageDef* Frontage(const std::string& echelon, const std::string& posture) const {
+        for (const FrontageDef& f : frontages) {
+            if (f.echelon == echelon && f.posture == posture) return &f;
+        }
+        return nullptr;
+    }
+};
+
+// A place the country map lacks yet, with the position suggested for it (F1 adds it as a site; docs/fronts/01_ANCHORS.md §3).
+struct PlaceTodoDef {
+    std::string id;
+    std::string name;
+    double east_km = 0.0;
+    double north_km = 0.0;
+    std::string notes;
+};
+
+struct GroundCommanderDef {
+    std::string id;
+    std::string name;
+    std::string unit;  // the order of battle's unit he commands
+    std::string post;  // our chain of command's position (chain_<id>.json), or ""
+    int age = 45;
+    std::string background;
+    std::string bio;
+    airwar::Traits traits;
+};
+
+struct GroundCommandersDef {
+    airwar::OfficerPoolDef pool;  // ranks by echelon (army, division, brigade, regiment, battalion)
+    std::vector<GroundCommanderDef> authored;
+};
+
+struct ObjectiveDef {
+    std::string id;
+    std::string name;
+    std::string place;
+    int by_day = 0;  // the plan's day for it (whole days after the offensive's start)
+    std::string notes;
+};
+
+struct AxisDef {
+    std::string id;
+    std::string name;
+    bool main = false;
+    std::vector<std::string> route;  // places, the start first
+    std::vector<std::string> first_echelon;
+    std::vector<std::string> second_echelon;
+    std::string objective;  // an ObjectiveDef id
+};
+
+struct RaidsDef {
+    bool night_only = true;
+    double min_ratio = 3.0;
+    double max_depth_km = 0.0;
+    int per_night = 0;
+    std::vector<std::string> lines;  // the units holding the line that raid from it
+};
+
+struct GroundPlanDef {
+    PlanKind kind = PlanKind::Offensive;
+    double start_after_h = 0.0;  // hours after the air war's start
+    double max_depth_km = 0.0;   // 0: no political limit
+    std::vector<ObjectiveDef> objectives;
+    std::vector<AxisDef> axes;
+    std::vector<std::string> reserve;
+    bool has_raids = false;
+    RaidsDef raids;
+
+    const ObjectiveDef* Objective(const std::string& id) const {
+        for (const ObjectiveDef& o : objectives) {
+            if (o.id == id) return &o;
+        }
+        return nullptr;
+    }
+    const AxisDef* MainAxis() const {
+        for (const AxisDef& a : axes) {
+            if (a.main) return &a;
+        }
+        return axes.empty() ? nullptr : &axes.front();
+    }
+};
+
+// An enemy faction's ground forces (data/air_war/ground_<faction>.json).
+struct GroundForceDef {
+    std::string ground_id;
+    std::string faction;
+    std::string name;
+    std::vector<PlaceTodoDef> places_todo;
+    command::OrderOfBattle oob;
+    GroundCommandersDef commanders;
+    GroundDoctrineDef doctrine;
+    GroundPlanDef plan;
+
+    const PlaceTodoDef* PlaceTodo(const std::string& id) const {
+        for (const PlaceTodoDef& p : places_todo) {
+            if (p.id == id) return &p;
+        }
+        return nullptr;
+    }
+    // Every place the file names, once each: the units' garrisons, the axes' routes, the objectives.
+    std::vector<std::string> NamedPlaces() const {
+        std::vector<std::string> out;
+        const auto add = [&out](const std::string& id) {
+            if (!id.empty() && std::find(out.begin(), out.end(), id) == out.end()) out.push_back(id);
+        };
+        for (const command::OobUnit& u : oob.units) add(u.garrison);
+        for (const AxisDef& a : plan.axes) {
+            for (const std::string& p : a.route) add(p);
+        }
+        for (const ObjectiveDef& o : plan.objectives) add(o.place);
+        return out;
+    }
+};
+
+struct DeployedUnitDef {
+    std::string unit;
+    DeployRole role = DeployRole::FirstEchelon;
+    double from_km = 0.0;  // along the adversary's front line (FrontDef::line), as F2.1's sectors
+    double to_km = 0.0;
+    std::string place;  // where it stands or assembles
+};
+
+struct DeploymentDef {
+    std::string adversary;  // a faction id
+    double security_zone_km = 0.0;
+    std::vector<DeployedUnitDef> units;
+
+    const DeployedUnitDef* Find(const std::string& unit) const {
+        for (const DeployedUnitDef& d : units) {
+            if (d.unit == unit) return &d;
+        }
+        return nullptr;
+    }
+};
+
+struct EquipmentFillDef {
+    std::string unit;
+    std::vector<std::pair<std::string, int>> equipment;
+};
+
+// Our side's defence (data/campaign/ground_defence.json): the order of battle it names, with its equipment filled.
+struct GroundDefenceDef {
+    std::string defence_id;
+    std::string name;
+    std::string oob_file;
+    std::vector<PlaceTodoDef> places_todo;
+    std::vector<EquipmentFillDef> equipment_fill;
+    command::OrderOfBattle oob;  // oob_file's, equipment_fill applied
+    GroundCommandersDef commanders;
+    GroundDoctrineDef doctrine;
+    std::vector<DeploymentDef> deployments;
+
+    const DeploymentDef* For(const std::string& adversary) const {
+        for (const DeploymentDef& d : deployments) {
+            if (d.adversary == adversary) return &d;
+        }
+        return nullptr;
+    }
+};
+
+// ------------------------------------------------------------------------------------------------------- the loader
+
+namespace detail {
+
+class GroundLoader : public simcore::detail::ConsoleLoader {
+public:
+    bool LoadTables(const json::Value& root, GroundTables& out) {
+        if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
+                             "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
+                             "cohesion", "dispersal", "march", "reports", "levels"}) ||
+            !Provenance(root, "")) {
+            return false;
+        }
+        const json::Value* st = Object(root, "", "strength");
+        if (st == nullptr || !Keys(*st, "strength", {"unit", "personnel_per_man", "weights", "notes"}) ||
+            !Sourced(*st, "strength", "personnel_per_man", out.personnel_per_man, 0.0, 1.0)) {
+            return false;
+        }
+        const json::Value* w = OptionalArray(*st, "strength", "weights");
+        if (w == nullptr || w->items.empty()) return message_.empty() ? Fail("strength.weights", "required, a non-empty list") : false;
+        for (std::size_t i = 0; i < w->items.size(); ++i) {
+            const std::string p = Index("strength.weights", i);
+            std::string type;
+            double weight = 0.0;
+            if (!Keys(w->items[i], p, {"type", "weight", "source", "confidence", "notes"}) || !Provenance(w->items[i], p) ||
+                !RequireString(w->items[i], p, "type", type) || !Num(w->items[i], p, "weight", weight, 0.0, 10.0)) {
+                return false;
+            }
+            for (const auto& e : out.weights) {
+                if (e.first == type) return Fail(Join(p, "type"), "'" + type + "' is listed twice");
+            }
+            out.weights.push_back({type, weight});
+        }
+        std::stable_sort(out.weights.begin(), out.weights.end(),
+                         [](const std::pair<std::string, double>& a, const std::pair<std::string, double>& b) { return a.first < b.first; });
+
+        const json::Value* pw = Object(root, "", "power");
+        if (pw == nullptr || !Keys(*pw, "power", {"supply_floor", "cohesion_floor", "notes"}) ||
+            !Sourced(*pw, "power", "supply_floor", out.supply_floor, 0.0, 1.0) ||
+            !Sourced(*pw, "power", "cohesion_floor", out.cohesion_floor, 0.0, 1.0)) {
+            return false;
+        }
+        const json::Value* po = Object(root, "", "posture");
+        if (po == nullptr || !Keys(*po, "posture", {"attack", "hasty_defence", "prepared_defence", "fortified_defence", "delay", "withdrawal", "notes"})) {
+            return false;
+        }
+        for (std::size_t i = 0; i < kPostureCount; ++i) {
+            if (!Sourced(*po, "posture", PostureName(static_cast<Posture>(i)), out.posture[i], 0.1, 5.0)) return false;
+        }
+        if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
+            !LoadDecisionTimes(root, out) || !LoadRest(root, out)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool LoadForce(const json::Value& root, GroundForceDef& out) {
+        if (!Keys(root, "", {"ground_id", "faction", "name", "status", "source", "confidence", "notes", "places_todo", "oob",
+                             "commanders", "doctrine", "plan"}) ||
+            !Provenance(root, "") || !RequireString(root, "", "ground_id", out.ground_id) ||
+            !RequireString(root, "", "faction", out.faction) || !RequireString(root, "", "name", out.name) ||
+            !PlacesTodo(root, out.places_todo) || !Oob(root, out.oob) || !Commanders(root, out.oob, out.commanders) ||
+            !Doctrine(root, out.doctrine) || !Plan(root, out)) {
+            return false;
+        }
+        return true;
+    }
+
+    // `oob` is the order of battle the file names, already loaded.
+    bool LoadDefence(const json::Value& root, const command::OrderOfBattle& oob, GroundDefenceDef& out) {
+        if (!Keys(root, "", {"defence_id", "name", "status", "source", "confidence", "notes", "oob", "places_todo", "equipment_fill",
+                             "commanders", "doctrine", "deployments"}) ||
+            !Provenance(root, "") || !RequireString(root, "", "defence_id", out.defence_id) ||
+            !RequireString(root, "", "name", out.name) || !RequireString(root, "", "oob", out.oob_file) ||
+            !PlacesTodo(root, out.places_todo)) {
+            return false;
+        }
+        out.oob = oob;
+        if (!EquipmentFill(root, out) || !Commanders(root, out.oob, out.commanders) || !Doctrine(root, out.doctrine)) return false;
+        if (!out.doctrine.has_security_zone) return Fail("doctrine.security_zone", "required for our side");
+        return Deployments(root, out);
+    }
+
+    // The order of battle file named by a defence file, before it is loaded.
+    static bool OobFileOf(const json::Value& root, std::string& file) {
+        const json::Value* v = root.Find("oob");
+        if (v == nullptr || !v->Is(json::Type::String) || v->string.empty()) return false;
+        file = v->string;
+        return true;
+    }
+
+private:
+    // ---- the helpers
+
+    const json::Value* Object(const json::Value& obj, const std::string& path, const char* key) {
+        const json::Value* v = obj.Find(key);
+        if (v == nullptr) {
+            Fail(Join(path, key), "required");
+            return nullptr;
+        }
+        if (!v->Is(json::Type::Object)) {
+            Fail(Join(path, key), "expected an object");
+            return nullptr;
+        }
+        return v;
+    }
+
+    // A required number in [lo, hi].
+    bool Num(const json::Value& obj, const std::string& path, const char* key, double& out, double lo, double hi) {
+        const json::Value* v = obj.Find(key);
+        if (v == nullptr) return Fail(Join(path, key), "required");
+        if (!v->Is(json::Type::Number) || v->number < lo || v->number > hi) {
+            return Fail(Join(path, key), "a number in [" + Fmt(lo) + ", " + Fmt(hi) + "]");
+        }
+        out = v->number;
+        return true;
+    }
+
+    bool WholeNum(const json::Value& obj, const std::string& path, const char* key, int& out, int lo, int hi) {
+        double d = 0.0;
+        if (!Num(obj, path, key, d, static_cast<double>(lo), static_cast<double>(hi))) return false;
+        if (d != static_cast<double>(static_cast<int>(d))) return Fail(Join(path, key), "a whole number");
+        out = static_cast<int>(d);
+        return true;
+    }
+
+    // A sourced value: {"value": n, "source": ..., "confidence": ...}, n in [lo, hi].
+    bool Sourced(const json::Value& obj, const std::string& path, const char* key, double& out, double lo, double hi) {
+        const json::Value* v = Object(obj, path, key);
+        const std::string p = Join(path, key);
+        return v != nullptr && Keys(*v, p, {"value", "source", "confidence", "notes"}) && Provenance(*v, p) && Num(*v, p, "value", out, lo, hi);
+    }
+
+    bool WholeSourced(const json::Value& obj, const std::string& path, const char* key, int& out, int lo, int hi) {
+        double d = 0.0;
+        if (!Sourced(obj, path, key, d, static_cast<double>(lo), static_cast<double>(hi))) return false;
+        if (d != static_cast<double>(static_cast<int>(d))) return Fail(Join(Join(path, key), "value"), "a whole number");
+        out = static_cast<int>(d);
+        return true;
+    }
+
+    // A sourced flag: {"value": true, "source": ..., "confidence": ...}.
+    bool Flag(const json::Value& obj, const std::string& path, const char* key, bool& out) {
+        const json::Value* v = Object(obj, path, key);
+        const std::string p = Join(path, key);
+        if (v == nullptr || !Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
+        const json::Value* b = v->Find("value");
+        if (b == nullptr || !b->Is(json::Type::Bool)) return Fail(Join(p, "value"), "true or false");
+        out = b->boolean;
+        return true;
+    }
+
+    // A sourced range: {"min": a, "max": b, "source": ..., "confidence": ...}, lo <= a <= b <= hi.
+    bool RangeOf(const json::Value& obj, const std::string& path, const char* key, ValueRange& out, double lo, double hi) {
+        const json::Value* v = Object(obj, path, key);
+        const std::string p = Join(path, key);
+        if (v == nullptr || !Keys(*v, p, {"min", "max", "source", "confidence", "notes"}) || !Provenance(*v, p) ||
+            !Num(*v, p, "min", out.lo, lo, hi) || !Num(*v, p, "max", out.hi, lo, hi)) {
+            return false;
+        }
+        if (out.hi < out.lo) return Fail(Join(p, "max"), "at least min");
+        return true;
+    }
+
+    static std::string Fmt(double d) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%g", d);
+        return buf;
+    }
+
+    bool Ids(const json::Value& obj, const std::string& path, const char* key, std::vector<std::string>& out) {
+        return StringList(obj, path, key, out, [](const std::string& s) { return s.empty() ? std::string("an empty id") : std::string(); });
+    }
+
+    // ---- the tables
+
+    bool LoadGround(const json::Value& root, GroundTables& out) {
+        const json::Value* g = OptionalArray(root, "", "ground");
+        if (g == nullptr) return message_.empty() ? Fail("ground", "required") : false;
+        std::array<bool, kTerrainCount> seen{};
+        for (std::size_t i = 0; i < g->items.size(); ++i) {
+            const std::string p = Index("ground", i);
+            const json::Value& r = g->items[i];
+            std::string name;
+            Terrain t = Terrain::Open;
+            if (!Keys(r, p, {"terrain", "defender", "advance", "source", "confidence", "notes"}) || !Provenance(r, p) ||
+                !RequireString(r, p, "terrain", name)) {
+                return false;
+            }
+            if (!ParseEnum(name, kTerrainCount, TerrainName, t)) return Fail(Join(p, "terrain"), "unknown terrain '" + name + "'");
+            const std::size_t k = static_cast<std::size_t>(t);
+            if (seen[k]) return Fail(Join(p, "terrain"), "'" + name + "' is listed twice");
+            seen[k] = true;
+            if (!Num(r, p, "defender", out.terrain_defender[k], 0.5, 5.0) || !Num(r, p, "advance", out.terrain_advance[k], 0.0, 1.0)) return false;
+        }
+        for (std::size_t k = 0; k < kTerrainCount; ++k) {
+            if (!seen[k]) return Fail("ground", std::string("no row for ") + TerrainName(static_cast<Terrain>(k)));
+        }
+        const json::Value* c = Object(root, "", "conditions");
+        return c != nullptr && Keys(*c, "conditions", {"night_attacker", "poor_visibility_attacker", "river_line_defender", "notes"}) &&
+               Sourced(*c, "conditions", "night_attacker", out.night_attacker, 0.1, 1.0) &&
+               Sourced(*c, "conditions", "poor_visibility_attacker", out.poor_visibility_attacker, 0.1, 1.0) &&
+               Sourced(*c, "conditions", "river_line_defender", out.river_line_defender, 1.0, 5.0);
+    }
+
+    bool LoadLosses(const json::Value& root, GroundTables& out) {
+        const json::Value* l = Object(root, "", "losses");
+        if (l == nullptr || !Keys(*l, "losses", {"notes", "actions", "reference_ratio", "ratio_exponent", "scale_min", "scale_max"})) return false;
+        const json::Value* a = OptionalArray(*l, "losses", "actions");
+        if (a == nullptr) return message_.empty() ? Fail("losses.actions", "required") : false;
+        std::array<bool, kLossActionCount> seen{};
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const std::string p = Index("losses.actions", i);
+            const json::Value& r = a->items[i];
+            std::string name;
+            LossAction act = LossAction::Inactive;
+            double first = 0.0;
+            double later = 0.0;
+            double non = 0.0;
+            if (!Keys(r, p, {"action", "battle_first_pct", "battle_later_pct", "nonbattle_pct", "source", "confidence", "notes"}) ||
+                !Provenance(r, p) || !RequireString(r, p, "action", name) || !Num(r, p, "battle_first_pct", first, 0.0, 50.0) ||
+                !Num(r, p, "battle_later_pct", later, 0.0, 50.0) || !Num(r, p, "nonbattle_pct", non, 0.0, 50.0)) {
+                return false;
+            }
+            if (!ParseEnum(name, kLossActionCount, LossActionName, act)) return Fail(Join(p, "action"), "unknown action '" + name + "'");
+            const std::size_t k = static_cast<std::size_t>(act);
+            if (seen[k]) return Fail(Join(p, "action"), "'" + name + "' is listed twice");
+            seen[k] = true;
+            out.losses[k] = {first / 100.0, later / 100.0, non / 100.0};
+        }
+        for (std::size_t k = 0; k < kLossActionCount; ++k) {
+            if (!seen[k]) return Fail("losses.actions", std::string("no row for ") + LossActionName(static_cast<LossAction>(k)));
+        }
+        if (!Sourced(*l, "losses", "reference_ratio", out.reference_ratio, 0.5, 10.0) ||
+            !Sourced(*l, "losses", "ratio_exponent", out.ratio_exponent, 0.0, 3.0) || !Sourced(*l, "losses", "scale_min", out.scale_lo, 0.0, 1.0) ||
+            !Sourced(*l, "losses", "scale_max", out.scale_hi, 1.0, 20.0)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool LoadTankLosses(const json::Value& root, GroundTables& out) {
+        const json::Value* t = Object(root, "", "tank_losses");
+        if (t == nullptr || !Keys(*t, "tank_losses", {"notes", "commitments", "reparable_share"}) ||
+            !Sourced(*t, "tank_losses", "reparable_share", out.reparable_share, 0.0, 1.0)) {
+            return false;
+        }
+        const json::Value* c = OptionalArray(*t, "tank_losses", "commitments");
+        if (c == nullptr) return message_.empty() ? Fail("tank_losses.commitments", "required") : false;
+        std::array<bool, kTankCommitmentCount> seen{};
+        for (std::size_t i = 0; i < c->items.size(); ++i) {
+            const std::string p = Index("tank_losses.commitments", i);
+            const json::Value& r = c->items[i];
+            std::string name;
+            TankCommitment tc = TankCommitment::DelayLight;
+            std::array<double, 3> pct{};
+            if (!Keys(r, p, {"commitment", "day1_pct", "day2_pct", "day3_pct", "source", "confidence", "notes"}) || !Provenance(r, p) ||
+                !RequireString(r, p, "commitment", name) || !Num(r, p, "day1_pct", pct[0], 0.0, 100.0) ||
+                !Num(r, p, "day2_pct", pct[1], 0.0, 100.0) || !Num(r, p, "day3_pct", pct[2], 0.0, 100.0)) {
+                return false;
+            }
+            if (!ParseEnum(name, kTankCommitmentCount, TankCommitmentName, tc)) return Fail(Join(p, "commitment"), "unknown commitment '" + name + "'");
+            const std::size_t k = static_cast<std::size_t>(tc);
+            if (seen[k]) return Fail(Join(p, "commitment"), "'" + name + "' is listed twice");
+            seen[k] = true;
+            if (pct[0] + pct[1] + pct[2] > 100.0) return Fail(p, "the three days' losses add up to more than all the tanks");
+            for (std::size_t d = 0; d < 3; ++d) out.tank_losses[k][d] = pct[d] / 100.0;
+        }
+        for (std::size_t k = 0; k < kTankCommitmentCount; ++k) {
+            if (!seen[k]) return Fail("tank_losses.commitments", std::string("no row for ") + TankCommitmentName(static_cast<TankCommitment>(k)));
+        }
+        return true;
+    }
+
+    bool LoadAdvance(const json::Value& root, GroundTables& out) {
+        const json::Value* a = Object(root, "", "advance");
+        if (a == nullptr || !Keys(*a, "advance", {"notes", "classes", "unopposed_km_per_day", "draw_sigma"}) ||
+            !Sourced(*a, "advance", "unopposed_km_per_day", out.unopposed_km_per_day, 0.0, 300.0) ||
+            !Sourced(*a, "advance", "draw_sigma", out.draw_sigma, 0.0, 2.0)) {
+            return false;
+        }
+        const json::Value* c = OptionalArray(*a, "advance", "classes");
+        if (c == nullptr) return message_.empty() ? Fail("advance.classes", "required") : false;
+        if (c->items.size() != kAdvanceClassCount) return Fail("advance.classes", "five rows: stalled, intense, moderate, slight, negligible");
+        for (std::size_t i = 0; i < c->items.size(); ++i) {
+            const std::string p = Index("advance.classes", i);
+            const json::Value& r = c->items[i];
+            std::string name;
+            if (!Keys(r, p, {"opposition", "from_ratio", "km_per_day", "source", "confidence", "notes"}) || !Provenance(r, p) ||
+                !RequireString(r, p, "opposition", name) || !Num(r, p, "from_ratio", out.class_from_ratio[i], 0.0, 100.0) ||
+                !Num(r, p, "km_per_day", out.class_km_per_day[i], 0.0, 300.0)) {
+                return false;
+            }
+            if (name != OppositionName(static_cast<Opposition>(i))) {
+                return Fail(Join(p, "opposition"), std::string("expected '") + OppositionName(static_cast<Opposition>(i)) + "' in this row");
+            }
+            if (i == 0 && out.class_from_ratio[0] != 0.0) return Fail(Join(p, "from_ratio"), "the first class starts at 0");
+            if (i > 0 && !(out.class_from_ratio[i] > out.class_from_ratio[i - 1])) return Fail(Join(p, "from_ratio"), "rising");
+            if (i > 0 && out.class_km_per_day[i] < out.class_km_per_day[i - 1]) return Fail(Join(p, "km_per_day"), "not below the class before");
+        }
+        if (out.unopposed_km_per_day < out.class_km_per_day[kAdvanceClassCount - 1]) {
+            return Fail("advance.unopposed_km_per_day", "not below the negligible class");
+        }
+        return true;
+    }
+
+    bool LoadDecisionTimes(const json::Value& root, GroundTables& out) {
+        const json::Value* d = OptionalArray(root, "", "decision_times_h");
+        if (d == nullptr) return message_.empty() ? Fail("decision_times_h", "required") : false;
+        std::array<bool, kEchelonCount> seen{};
+        for (std::size_t i = 0; i < d->items.size(); ++i) {
+            const std::string p = Index("decision_times_h", i);
+            const json::Value& r = d->items[i];
+            std::string name;
+            Echelon e = Echelon::Division;
+            ValueRange re;
+            ValueRange pl;
+            if (!Keys(r, p, {"echelon", "reaction_min", "reaction_max", "planning_min", "planning_max", "source", "confidence", "notes"}) ||
+                !Provenance(r, p) || !RequireString(r, p, "echelon", name) || !Num(r, p, "reaction_min", re.lo, 0.0, 48.0) ||
+                !Num(r, p, "reaction_max", re.hi, 0.0, 48.0) || !Num(r, p, "planning_min", pl.lo, 0.0, 48.0) ||
+                !Num(r, p, "planning_max", pl.hi, 0.0, 48.0)) {
+                return false;
+            }
+            if (!ParseEnum(name, kEchelonCount, EchelonName, e)) return Fail(Join(p, "echelon"), "unknown echelon '" + name + "'");
+            if (re.hi < re.lo || pl.hi < pl.lo) return Fail(p, "each max at least its min");
+            const std::size_t k = static_cast<std::size_t>(e);
+            if (seen[k]) return Fail(Join(p, "echelon"), "'" + name + "' is listed twice");
+            seen[k] = true;
+            out.reaction_h[k] = re;
+            out.planning_h[k] = pl;
+        }
+        for (std::size_t k = 0; k < kEchelonCount; ++k) {
+            if (!seen[k]) return Fail("decision_times_h", std::string("no row for ") + EchelonName(static_cast<Echelon>(k)));
+        }
+        return true;
+    }
+
+    bool LoadRest(const json::Value& root, GroundTables& out) {
+        const json::Value* cr = Object(root, "", "crossing");
+        if (cr == nullptr || !Keys(*cr, "crossing", {"intact_bridge_h", "cut_bridge_h", "pontoon_factor", "notes"}) ||
+            !Sourced(*cr, "crossing", "intact_bridge_h", out.crossing_intact_h, 0.0, 240.0) ||
+            !Sourced(*cr, "crossing", "cut_bridge_h", out.crossing_cut_h, 0.0, 240.0) ||
+            !Sourced(*cr, "crossing", "pontoon_factor", out.pontoon_factor, 0.0, 1.0) || !Sourced(root, "", "trait_shift", out.trait_shift, 0.0, 0.5)) {
+            return false;
+        }
+        if (out.crossing_cut_h < out.crossing_intact_h) return Fail("crossing.cut_bridge_h", "at least intact_bridge_h");
+        const json::Value* co = Object(root, "", "cohesion");
+        if (co == nullptr || !Keys(*co, "cohesion", {"loss_per_strength_loss", "air_attack_loss", "recovery_per_day", "break_below", "notes"}) ||
+            !Sourced(*co, "cohesion", "loss_per_strength_loss", out.cohesion_loss_per_strength_loss, 0.0, 20.0) ||
+            !Sourced(*co, "cohesion", "air_attack_loss", out.cohesion_air_attack_loss, 0.0, 1.0) ||
+            !Sourced(*co, "cohesion", "recovery_per_day", out.cohesion_recovery_per_day, 0.0, 1.0) ||
+            !Sourced(*co, "cohesion", "break_below", out.cohesion_break_below, 0.0, 1.0)) {
+            return false;
+        }
+        const json::Value* di = Object(root, "", "dispersal");
+        if (di == nullptr || !Keys(*di, "dispersal", {"reassemble_min_days", "reassemble_max_days", "straggler_loss", "notes"}) ||
+            !Sourced(*di, "dispersal", "reassemble_min_days", out.reassemble_days.lo, 0.0, 30.0) ||
+            !Sourced(*di, "dispersal", "reassemble_max_days", out.reassemble_days.hi, 0.0, 30.0) ||
+            !Sourced(*di, "dispersal", "straggler_loss", out.straggler_loss, 0.0, 1.0)) {
+            return false;
+        }
+        if (out.reassemble_days.hi < out.reassemble_days.lo) return Fail("dispersal.reassemble_max_days", "at least reassemble_min_days");
+        const json::Value* m = Object(root, "", "march");
+        if (m == nullptr || !Keys(*m, "march", {"road_day_kmh", "road_night_kmh", "cross_country_kmh", "halt_h", "halt_every_h", "notes"}) ||
+            !RangeOf(*m, "march", "road_day_kmh", out.road_day_kmh, 1.0, 120.0) ||
+            !RangeOf(*m, "march", "road_night_kmh", out.road_night_kmh, 1.0, 120.0) ||
+            !RangeOf(*m, "march", "cross_country_kmh", out.cross_country_kmh, 1.0, 120.0) || !RangeOf(*m, "march", "halt_h", out.halt_h, 0.0, 24.0) ||
+            !RangeOf(*m, "march", "halt_every_h", out.halt_every_h, 0.1, 48.0)) {
+            return false;
+        }
+        const json::Value* r = Object(root, "", "reports");
+        const json::Value* lv = Object(root, "", "levels");
+        return r != nullptr && lv != nullptr && Keys(*r, "reports", {"division_per_day", "notes"}) &&
+               WholeSourced(*r, "reports", "division_per_day", out.division_reports_per_day, 1, 24) && Keys(*lv, "levels", {"down_after_h", "notes"}) &&
+               Sourced(*lv, "levels", "down_after_h", out.levels_down_after_h, 0.0, 72.0);
+    }
+
+    // ---- the force files
+
+    bool PlacesTodo(const json::Value& root, std::vector<PlaceTodoDef>& out) {
+        const json::Value* a = OptionalArray(root, "", "places_todo");
+        if (a == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const std::string p = Index("places_todo", i);
+            const json::Value& r = a->items[i];
+            PlaceTodoDef d;
+            bool todo = false;
+            if (!Keys(r, p, {"id", "name", "east_km", "north_km", "anchor_todo", "notes"}) || !RequireString(r, p, "id", d.id) ||
+                !RequireString(r, p, "name", d.name) || !Num(r, p, "east_km", d.east_km, -1000.0, 1000.0) ||
+                !Num(r, p, "north_km", d.north_km, -1000.0, 1000.0) || !OptionalBool(r, p, "anchor_todo", todo) ||
+                !OptionalString(r, p, "notes", d.notes)) {
+                return false;
+            }
+            if (!todo) return Fail(Join(p, "anchor_todo"), "true: a place listed here waits for F1 to add it to the map");
+            for (const PlaceTodoDef& o : out) {
+                if (o.id == d.id) return Fail(Join(p, "id"), "'" + d.id + "' is listed twice");
+            }
+            out.push_back(std::move(d));
+        }
+        return true;
+    }
+
+    bool Oob(const json::Value& root, command::OrderOfBattle& out) {
+        const json::Value* o = Object(root, "", "oob");
+        if (o == nullptr) return false;
+        command::detail::OobLoader loader;
+        if (!loader.Load(*o, out)) return Fail("oob", loader.Message());
+        return true;
+    }
+
+    bool TraitsOf(const json::Value& v, const std::string& p, airwar::Traits& t) {
+        return Keys(v, p, {"boldness", "methodical", "creativity", "rigidity", "ambition", "skepticism", "vindictiveness", "composure"}) &&
+               Num(v, p, "boldness", t.boldness, 0.0, 1.0) && Num(v, p, "methodical", t.methodical, 0.0, 1.0) &&
+               Num(v, p, "creativity", t.creativity, 0.0, 1.0) && Num(v, p, "rigidity", t.rigidity, 0.0, 1.0) &&
+               Num(v, p, "ambition", t.ambition, 0.0, 1.0) && Num(v, p, "skepticism", t.skepticism, 0.0, 1.0) &&
+               Num(v, p, "vindictiveness", t.vindictiveness, 0.0, 1.0) && Num(v, p, "composure", t.composure, 0.0, 1.0);
+    }
+
+    bool Commanders(const json::Value& root, const command::OrderOfBattle& oob, GroundCommandersDef& out) {
+        const json::Value* c = Object(root, "", "commanders");
+        if (c == nullptr || !Keys(*c, "commanders", {"pool", "authored", "notes"})) return false;
+        const json::Value* pl = Object(*c, "commanders", "pool");
+        const std::string pp = "commanders.pool";
+        airwar::OfficerPoolDef& pool = out.pool;
+        const auto name = [](const std::string& s) { return s.empty() ? std::string("an empty name") : std::string(); };
+        if (pl == nullptr ||
+            !Keys(*pl, pp, {"ranks", "first_names", "last_names", "backgrounds", "trait_mean", "trait_sd", "source", "confidence", "notes"}) ||
+            !Provenance(*pl, pp) || !StringList(*pl, pp, "first_names", pool.first_names, name) ||
+            !StringList(*pl, pp, "last_names", pool.last_names, name) || !StringList(*pl, pp, "backgrounds", pool.backgrounds, name) ||
+            !Num(*pl, pp, "trait_sd", pool.trait_sd, 0.0, 0.5)) {
+            return false;
+        }
+        if (pool.first_names.empty() || pool.last_names.empty()) return Fail(pp, "needs first_names and last_names");
+        pool.quirks_min = pool.quirks_max = 0;  // the ground's commanders have no quirks yet (F3.4)
+        const json::Value* tm = Object(*pl, pp, "trait_mean");
+        if (tm == nullptr || !TraitsOf(*tm, Join(pp, "trait_mean"), pool.trait_mean)) return false;
+        const json::Value* r = Object(*pl, pp, "ranks");
+        if (r == nullptr) return false;
+        static const char* const echelons[] = {"army", "division", "brigade", "regiment", "battalion"};
+        for (std::size_t k = 0; k < r->keys.size(); ++k) {
+            bool ok = false;
+            for (const char* e : echelons) ok = ok || r->keys[k] == e;
+            if (!ok) return Fail(Join(Join(pp, "ranks"), r->keys[k]), "unknown echelon (army, division, brigade, regiment, battalion)");
+            if (!r->items[k].Is(json::Type::String) || r->items[k].string.empty()) return Fail(Join(Join(pp, "ranks"), r->keys[k]), "a rank title");
+            pool.ranks[r->keys[k]] = r->items[k].string;
+        }
+        const json::Value* a = OptionalArray(*c, "commanders", "authored");
+        if (a == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const std::string p = Index("commanders.authored", i);
+            const json::Value& v = a->items[i];
+            GroundCommanderDef d;
+            if (!Keys(v, p, {"id", "name", "unit", "post", "age", "background", "bio", "traits", "notes"}) || !RequireString(v, p, "id", d.id) ||
+                !RequireString(v, p, "name", d.name) || !RequireString(v, p, "unit", d.unit) || !OptionalString(v, p, "post", d.post) ||
+                !WholeNum(v, p, "age", d.age, 25, 75) || !OptionalString(v, p, "background", d.background) ||
+                !OptionalString(v, p, "bio", d.bio)) {
+                return false;
+            }
+            const json::Value* t = Object(v, p, "traits");
+            if (t == nullptr || !TraitsOf(*t, Join(p, "traits"), d.traits)) return false;
+            if (oob.Find(d.unit) == nullptr) return Fail(Join(p, "unit"), "unknown unit '" + d.unit + "'");
+            for (const GroundCommanderDef& o : out.authored) {
+                if (o.id == d.id) return Fail(Join(p, "id"), "'" + d.id + "' is listed twice");
+                if (o.unit == d.unit) return Fail(Join(p, "unit"), "'" + d.unit + "' has two commanders");
+            }
+            out.authored.push_back(std::move(d));
+        }
+        return true;
+    }
+
+    bool Doctrine(const json::Value& root, GroundDoctrineDef& out) {
+        const json::Value* d = Object(root, "", "doctrine");
+        const std::string p = "doctrine";
+        if (d == nullptr ||
+            !Keys(*d, p, {"source", "confidence", "notes", "attack_ratio", "breakthrough_ratio", "defend_ratio", "withdraw_needs_order",
+                          "counterattack_by_senior", "second_echelon_to_success", "disperse_rather_than_retreat",
+                          "counterattack_stops_at_border", "echelons_against_deep_defence", "reserve_share", "covering_force_share",
+                          "effectiveness", "advance_caps_km_per_day", "frontages_km", "security_zone", "prepared_positions",
+                          "restore_control_h"}) ||
+            !Provenance(*d, p) || !Sourced(*d, p, "attack_ratio", out.attack_ratio, 1.0, 20.0) ||
+            !RangeOf(*d, p, "breakthrough_ratio", out.breakthrough_ratio, 1.0, 20.0) || !Flag(*d, p, "withdraw_needs_order", out.withdraw_needs_order) ||
+            !Flag(*d, p, "counterattack_by_senior", out.counterattack_by_senior) ||
+            !Flag(*d, p, "second_echelon_to_success", out.second_echelon_to_success)) {
+            return false;
+        }
+        if (d->Find("defend_ratio") != nullptr && !RangeOf(*d, p, "defend_ratio", out.defend_ratio, 1.0, 20.0)) return false;
+        if (d->Find("disperse_rather_than_retreat") != nullptr && !Flag(*d, p, "disperse_rather_than_retreat", out.disperse_rather_than_retreat)) return false;
+        if (d->Find("counterattack_stops_at_border") != nullptr && !Flag(*d, p, "counterattack_stops_at_border", out.counterattack_stops_at_border)) return false;
+        if (d->Find("echelons_against_deep_defence") != nullptr && !WholeSourced(*d, p, "echelons_against_deep_defence", out.echelons_against_deep_defence, 1, 3)) return false;
+        if (d->Find("reserve_share") != nullptr && !Sourced(*d, p, "reserve_share", out.reserve_share, 0.0, 0.5)) return false;
+        if (d->Find("covering_force_share") != nullptr && !RangeOf(*d, p, "covering_force_share", out.covering_force_share, 0.0, 1.0)) return false;
+        if (!Effectiveness(*d, out.effectiveness) || !Caps(*d, out.caps) || !Frontages(*d, out.frontages)) return false;
+        if (const json::Value* sz = d->Find("security_zone")) {
+            const std::string sp = Join(p, "security_zone");
+            if (!sz->Is(json::Type::Object) || !Keys(*sz, sp, {"depth_km", "line_spacing_km", "delay_per_line_h", "notes"}) ||
+                !RangeOf(*sz, sp, "depth_km", out.security_zone_depth_km, 0.0, 100.0) ||
+                !RangeOf(*sz, sp, "line_spacing_km", out.security_line_spacing_km, 0.1, 50.0) ||
+                !RangeOf(*sz, sp, "delay_per_line_h", out.security_delay_per_line_h, 0.0, 48.0)) {
+                return message_.empty() ? Fail(sp, "expected an object") : false;
+            }
+            const json::Value* pp = Object(*d, p, "prepared_positions");
+            const std::string ppp = Join(p, "prepared_positions");
+            if (pp == nullptr || !Keys(*pp, ppp, {"division", "regiment", "notes"}) ||
+                !RangeOf(*pp, ppp, "division", out.division_prepared_positions, 1.0, 10.0) ||
+                !RangeOf(*pp, ppp, "regiment", out.regiment_prepared_positions, 1.0, 10.0) ||
+                !RangeOf(*d, p, "restore_control_h", out.restore_control_h, 0.0, 48.0)) {
+                return false;
+            }
+            out.has_security_zone = true;
+        }
+        return true;
+    }
+
+    bool Effectiveness(const json::Value& d, EffectivenessDef& out) {
+        const std::string p = "doctrine.effectiveness";
+        const json::Value* e = Object(d, "doctrine", "effectiveness");
+        std::string kind;
+        if (e == nullptr || !RequireString(*e, p, "kind", kind)) return false;
+        if (kind == "lines") {
+            out.kind = EffectivenessKind::Lines;
+            if (!Keys(*e, p, {"kind", "degraded_below", "ineffective_below", "hq_hit_ineffective_below", "notes"}) ||
+                !Sourced(*e, p, "degraded_below", out.degraded_below, 0.0, 1.0) || !Sourced(*e, p, "ineffective_below", out.ineffective_below, 0.0, 1.0) ||
+                !Sourced(*e, p, "hq_hit_ineffective_below", out.hq_hit_ineffective_below, 0.0, 1.0)) {
+                return false;
+            }
+            if (!(out.ineffective_below < out.degraded_below)) return Fail(Join(p, "ineffective_below"), "below degraded_below");
+            if (out.hq_hit_ineffective_below < out.ineffective_below) return Fail(Join(p, "hq_hit_ineffective_below"), "at least ineffective_below");
+            return true;
+        }
+        if (kind == "breakpoints") {
+            out.kind = EffectivenessKind::Breakpoints;
+            return Keys(*e, p, {"kind", "attack_stop_losses", "defence_break_losses", "notes"}) &&
+                   RangeOf(*e, p, "attack_stop_losses", out.attack_stop_losses, 0.0, 1.0) &&
+                   RangeOf(*e, p, "defence_break_losses", out.defence_break_losses, 0.0, 1.0);
+        }
+        return Fail(Join(p, "kind"), "lines or breakpoints");
+    }
+
+    bool Caps(const json::Value& d, AdvanceCaps& out) {
+        const std::string p = "doctrine.advance_caps_km_per_day";
+        const json::Value* c = Object(d, "doctrine", "advance_caps_km_per_day");
+        if (c == nullptr || !Keys(*c, p, {"breakthrough", "depth", "broken", "notes"}) ||
+            !Sourced(*c, p, "breakthrough", out.breakthrough_km_per_day, 0.0, 300.0) || !Sourced(*c, p, "depth", out.depth_km_per_day, 0.0, 300.0) ||
+            !Sourced(*c, p, "broken", out.broken_km_per_day, 0.0, 300.0)) {
+            return false;
+        }
+        if (out.depth_km_per_day < out.breakthrough_km_per_day || out.broken_km_per_day < out.depth_km_per_day) {
+            return Fail(p, "breakthrough <= depth <= broken");
+        }
+        return true;
+    }
+
+    bool Frontages(const json::Value& d, std::vector<FrontageDef>& out) {
+        const json::Value* a = OptionalArray(d, "doctrine", "frontages_km");
+        if (a == nullptr) return message_.empty() ? Fail("doctrine.frontages_km", "required") : false;
+        static const char* const echelons[] = {"army", "division", "brigade", "regiment", "battalion"};
+        static const char* const postures[] = {"attack", "breakthrough", "defence"};
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const std::string p = Index("doctrine.frontages_km", i);
+            const json::Value& r = a->items[i];
+            FrontageDef f;
+            if (!Keys(r, p, {"echelon", "posture", "width_min", "width_max", "depth_min", "depth_max", "source", "confidence", "notes"}) ||
+                !Provenance(r, p) || !RequireString(r, p, "echelon", f.echelon) || !RequireString(r, p, "posture", f.posture) ||
+                !Num(r, p, "width_min", f.width_km.lo, 0.0, 300.0) || !Num(r, p, "width_max", f.width_km.hi, 0.0, 300.0)) {
+                return false;
+            }
+            bool ok_e = false;
+            bool ok_p = false;
+            for (const char* e : echelons) ok_e = ok_e || f.echelon == e;
+            for (const char* q : postures) ok_p = ok_p || f.posture == q;
+            if (!ok_e) return Fail(Join(p, "echelon"), "unknown echelon '" + f.echelon + "'");
+            if (!ok_p) return Fail(Join(p, "posture"), "attack, breakthrough or defence");
+            if (r.Find("depth_min") != nullptr || r.Find("depth_max") != nullptr) {
+                if (!Num(r, p, "depth_min", f.depth_km.lo, 0.0, 300.0) || !Num(r, p, "depth_max", f.depth_km.hi, 0.0, 300.0)) return false;
+            }
+            if (f.width_km.hi < f.width_km.lo || f.depth_km.hi < f.depth_km.lo) return Fail(p, "each max at least its min");
+            for (const FrontageDef& o : out) {
+                if (o.echelon == f.echelon && o.posture == f.posture) return Fail(p, "'" + f.echelon + " " + f.posture + "' is listed twice");
+            }
+            out.push_back(std::move(f));
+        }
+        return true;
+    }
+
+    bool Plan(const json::Value& root, GroundForceDef& out) {
+        const json::Value* pl = Object(root, "", "plan");
+        const std::string p = "plan";
+        GroundPlanDef& plan = out.plan;
+        std::string kind;
+        if (pl == nullptr ||
+            !Keys(*pl, p, {"kind", "start_after_h", "max_depth_km", "source", "confidence", "notes", "objectives", "axes", "reserve", "raids"}) ||
+            !Provenance(*pl, p) || !RequireString(*pl, p, "kind", kind) || !Sourced(*pl, p, "start_after_h", plan.start_after_h, 0.0, 24.0 * 60.0) ||
+            !Ids(*pl, p, "reserve", plan.reserve)) {
+            return false;
+        }
+        if (!ParseEnum(kind, 3, PlanKindName, plan.kind)) return Fail(Join(p, "kind"), "offensive, limited_incursion or raids");
+        if (pl->Find("max_depth_km") != nullptr && !Sourced(*pl, p, "max_depth_km", plan.max_depth_km, 0.0, 1000.0)) return false;
+        if (plan.kind == PlanKind::LimitedIncursion && !(plan.max_depth_km > 0.0)) return Fail(Join(p, "max_depth_km"), "required for a limited incursion");
+        const json::Value* obs = OptionalArray(*pl, p, "objectives");
+        if (obs == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; obs != nullptr && i < obs->items.size(); ++i) {
+            const std::string op = Index("plan.objectives", i);
+            const json::Value& r = obs->items[i];
+            ObjectiveDef o;
+            if (!Keys(r, op, {"id", "name", "place", "by_day", "notes"}) || !RequireString(r, op, "id", o.id) ||
+                !RequireString(r, op, "name", o.name) || !RequireString(r, op, "place", o.place) || !WholeNum(r, op, "by_day", o.by_day, 0, 60) ||
+                !OptionalString(r, op, "notes", o.notes)) {
+                return false;
+            }
+            if (plan.Objective(o.id) != nullptr) return Fail(Join(op, "id"), "'" + o.id + "' is listed twice");
+            plan.objectives.push_back(std::move(o));
+        }
+        // Every unit the plan names is in the order of battle, and in one role only.
+        std::vector<std::string> placed;
+        const auto unit_once = [&](const std::string& path, const std::string& id) {
+            if (out.oob.Find(id) == nullptr) return Fail(path, "unknown unit '" + id + "'");
+            for (const std::string& u : placed) {
+                if (u == id || out.oob.Under(id, u) || out.oob.Under(u, id)) return Fail(path, "'" + id + "' is placed twice in the plan (itself or with its parent)");
+            }
+            placed.push_back(id);
+            return true;
+        };
+        const json::Value* axes = OptionalArray(*pl, p, "axes");
+        if (axes == nullptr && !message_.empty()) return false;
+        for (std::size_t i = 0; axes != nullptr && i < axes->items.size(); ++i) {
+            const std::string ap = Index("plan.axes", i);
+            const json::Value& r = axes->items[i];
+            AxisDef a;
+            if (!Keys(r, ap, {"id", "name", "main", "route", "first_echelon", "second_echelon", "objective", "notes"}) ||
+                !RequireString(r, ap, "id", a.id) || !RequireString(r, ap, "name", a.name) || !OptionalBool(r, ap, "main", a.main) ||
+                !Ids(r, ap, "route", a.route) || !Ids(r, ap, "first_echelon", a.first_echelon) || !Ids(r, ap, "second_echelon", a.second_echelon) ||
+                !RequireString(r, ap, "objective", a.objective)) {
+                return false;
+            }
+            if (a.route.size() < 2) return Fail(Join(ap, "route"), "at least a start and an end");
+            if (a.first_echelon.empty()) return Fail(Join(ap, "first_echelon"), "at least one unit");
+            if (plan.Objective(a.objective) == nullptr) return Fail(Join(ap, "objective"), "unknown objective '" + a.objective + "'");
+            for (const AxisDef& o : plan.axes) {
+                if (o.id == a.id) return Fail(Join(ap, "id"), "'" + a.id + "' is listed twice");
+                if (o.main && a.main) return Fail(Join(ap, "main"), "only one main axis");
+            }
+            for (std::size_t k = 0; k < a.first_echelon.size(); ++k) {
+                if (!unit_once(Index(Join(ap, "first_echelon"), k), a.first_echelon[k])) return false;
+            }
+            for (std::size_t k = 0; k < a.second_echelon.size(); ++k) {
+                if (!unit_once(Index(Join(ap, "second_echelon"), k), a.second_echelon[k])) return false;
+            }
+            plan.axes.push_back(std::move(a));
+        }
+        for (std::size_t k = 0; k < plan.reserve.size(); ++k) {
+            if (!unit_once(Index("plan.reserve", k), plan.reserve[k])) return false;
+        }
+        if (plan.kind != PlanKind::Raids && plan.axes.empty()) return Fail("plan.axes", "an offensive or an incursion needs an axis");
+        if (const json::Value* rd = pl->Find("raids")) {
+            const std::string rp = "plan.raids";
+            RaidsDef& raids = plan.raids;
+            if (!rd->Is(json::Type::Object) || !Keys(*rd, rp, {"night_only", "min_ratio", "max_depth_km", "per_night", "lines", "notes"}) ||
+                !Flag(*rd, rp, "night_only", raids.night_only) || !Sourced(*rd, rp, "min_ratio", raids.min_ratio, 1.0, 20.0) ||
+                !Sourced(*rd, rp, "max_depth_km", raids.max_depth_km, 0.0, 200.0) || !WholeSourced(*rd, rp, "per_night", raids.per_night, 0, 50) ||
+                !Ids(*rd, rp, "lines", raids.lines)) {
+                return message_.empty() ? Fail(rp, "expected an object") : false;
+            }
+            if (raids.lines.empty()) return Fail(Join(rp, "lines"), "at least one unit");
+            for (std::size_t k = 0; k < raids.lines.size(); ++k) {
+                if (!unit_once(Index(Join(rp, "lines"), k), raids.lines[k])) return false;
+            }
+            plan.has_raids = true;
+        }
+        if (plan.kind == PlanKind::Raids && !plan.has_raids) return Fail("plan.raids", "required for raids");
+        return true;
+    }
+
+    // ---- our side
+
+    bool EquipmentFill(const json::Value& root, GroundDefenceDef& out) {
+        const json::Value* a = OptionalArray(root, "", "equipment_fill");
+        if (a == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const std::string p = Index("equipment_fill", i);
+            const json::Value& r = a->items[i];
+            EquipmentFillDef f;
+            if (!Keys(r, p, {"unit", "equipment", "source", "confidence", "notes"}) || !Provenance(r, p) || !RequireString(r, p, "unit", f.unit)) return false;
+            command::OobUnit* u = nullptr;
+            for (command::OobUnit& x : out.oob.units) u = x.id == f.unit ? &x : u;
+            if (u == nullptr) return Fail(Join(p, "unit"), "unknown unit '" + f.unit + "' in " + out.oob_file);
+            if (!u->equipment.empty()) return Fail(Join(p, "unit"), "'" + f.unit + "' has equipment in " + out.oob_file + ": the fill is for units with none");
+            const json::Value* eq = Object(r, p, "equipment");
+            if (eq == nullptr) return false;
+            for (std::size_t k = 0; k < eq->keys.size(); ++k) {
+                const json::Value& c = eq->items[k];
+                if (!c.Is(json::Type::Number) || c.number < 0.0 || c.number != static_cast<double>(static_cast<int>(c.number))) {
+                    return Fail(Join(Join(p, "equipment"), eq->keys[k]), "a whole number >= 0");
+                }
+                f.equipment.push_back({eq->keys[k], static_cast<int>(c.number)});
+            }
+            if (f.equipment.empty()) return Fail(Join(p, "equipment"), "at least one type");
+            u->equipment = f.equipment;
+            out.equipment_fill.push_back(std::move(f));
+        }
+        return true;
+    }
+
+    bool Deployments(const json::Value& root, GroundDefenceDef& out) {
+        const json::Value* a = OptionalArray(root, "", "deployments");
+        if (a == nullptr || a->items.empty()) return message_.empty() ? Fail("deployments", "required, a non-empty list") : false;
+        for (std::size_t i = 0; i < a->items.size(); ++i) {
+            const std::string p = Index("deployments", i);
+            const json::Value& r = a->items[i];
+            DeploymentDef d;
+            if (!Keys(r, p, {"adversary", "security_zone_km", "source", "confidence", "notes", "units"}) || !Provenance(r, p) ||
+                !RequireString(r, p, "adversary", d.adversary) || !Sourced(r, p, "security_zone_km", d.security_zone_km, 0.0, 100.0)) {
+                return false;
+            }
+            if (out.For(d.adversary) != nullptr) return Fail(Join(p, "adversary"), "'" + d.adversary + "' is listed twice");
+            const json::Value* us = OptionalArray(r, p, "units");
+            if (us == nullptr || us->items.empty()) return message_.empty() ? Fail(Join(p, "units"), "required, a non-empty list") : false;
+            for (std::size_t k = 0; k < us->items.size(); ++k) {
+                const std::string up = Index(Join(p, "units"), k);
+                const json::Value& v = us->items[k];
+                DeployedUnitDef du;
+                std::string role;
+                if (!Keys(v, up, {"unit", "role", "from_km", "to_km", "place", "notes"}) || !RequireString(v, up, "unit", du.unit) ||
+                    !RequireString(v, up, "role", role) || !OptionalString(v, up, "place", du.place)) {
+                    return false;
+                }
+                if (!ParseEnum(role, 5, DeployRoleName, du.role)) {
+                    return Fail(Join(up, "role"), "first_echelon, second_echelon, flank_screen, reserve or support");
+                }
+                if (out.oob.Find(du.unit) == nullptr) return Fail(Join(up, "unit"), "unknown unit '" + du.unit + "' in " + out.oob_file);
+                for (const DeployedUnitDef& o : d.units) {
+                    if (o.unit == du.unit || out.oob.Under(du.unit, o.unit) || out.oob.Under(o.unit, du.unit)) {
+                        return Fail(Join(up, "unit"), "'" + du.unit + "' is deployed twice (itself or with its parent)");
+                    }
+                }
+                const bool on_line = du.role == DeployRole::FirstEchelon || du.role == DeployRole::SecondEchelon || du.role == DeployRole::FlankScreen;
+                if (on_line) {
+                    if (!Num(v, up, "from_km", du.from_km, 0.0, 2000.0) || !Num(v, up, "to_km", du.to_km, 0.0, 2000.0)) return false;
+                    if (!(du.to_km > du.from_km)) return Fail(Join(up, "to_km"), "beyond from_km");
+                } else {
+                    if (v.Find("from_km") != nullptr || v.Find("to_km") != nullptr) return Fail(up, "a reserve or support unit holds no stretch of the line");
+                    if (du.place.empty()) return Fail(Join(up, "place"), "required for a reserve or support unit");
+                }
+                d.units.push_back(std::move(du));
+            }
+            out.deployments.push_back(std::move(d));
+        }
+        return true;
+    }
+};
+
+template <typename Fn>
+bool LoadGroundJsonWith(const std::string& text, const char* what, std::string* error, Fn&& fn) {
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text, root, &parse_error)) {
+        if (error) *error = std::string(what) + ": " + parse_error;
+        return false;
+    }
+    GroundLoader loader;
+    if (!fn(loader, root)) {
+        if (error) *error = std::string(what) + ": " + loader.Message();
+        return false;
+    }
+    return true;
+}
+
+}  // namespace detail
+
+// ------------------------------------------------------------------------------------------------------- the loaders
+
+inline bool LoadGroundTablesJson(const std::string& text, GroundTables& out, std::string* error = nullptr) {
+    return detail::LoadGroundJsonWith(text, "ground war tables", error,
+                                      [&out](detail::GroundLoader& l, const json::Value& root) { return l.LoadTables(root, out); });
+}
+
+// data/gameplay/ground_war.json.
+inline bool LoadGroundTables(const std::string& data_dir, GroundTables& out, std::string* error = nullptr) {
+    std::string text;
+    if (!simcore::detail::ReadTextFile(data_dir + "/gameplay/ground_war.json", text)) {
+        if (error) *error = "cannot open gameplay/ground_war.json";
+        return false;
+    }
+    return LoadGroundTablesJson(text, out, error);
+}
+
+inline bool LoadGroundForceJson(const std::string& text, GroundForceDef& out, std::string* error = nullptr) {
+    return detail::LoadGroundJsonWith(text, "ground forces", error,
+                                      [&out](detail::GroundLoader& l, const json::Value& root) { return l.LoadForce(root, out); });
+}
+
+// data/air_war/ground_<faction>.json.
+inline bool LoadGroundForce(const std::string& data_dir, const std::string& faction, GroundForceDef& out, std::string* error = nullptr) {
+    const std::string file = "air_war/ground_" + faction + ".json";
+    std::string text;
+    if (!simcore::detail::ReadTextFile(data_dir + "/" + file, text)) {
+        if (error) *error = "cannot open " + file;
+        return false;
+    }
+    if (!LoadGroundForceJson(text, out, error)) return false;
+    if (out.faction != faction) {
+        if (error) *error = file + ": faction '" + out.faction + "', expected '" + faction + "'";
+        return false;
+    }
+    return true;
+}
+
+// Our side's defence; `oob` is the order of battle its "oob" names (command::LoadOrderOfBattle).
+inline bool LoadGroundDefenceJson(const std::string& text, const command::OrderOfBattle& oob, GroundDefenceDef& out, std::string* error = nullptr) {
+    return detail::LoadGroundJsonWith(text, "ground defence", error,
+                                      [&](detail::GroundLoader& l, const json::Value& root) { return l.LoadDefence(root, oob, out); });
+}
+
+// data/<file> (default campaign/ground_defence.json) with the order of battle it names.
+inline bool LoadGroundDefence(const std::string& data_dir, GroundDefenceDef& out, std::string* error = nullptr,
+                              const std::string& file = "campaign/ground_defence.json") {
+    std::string text;
+    if (!simcore::detail::ReadTextFile(data_dir + "/" + file, text)) {
+        if (error) *error = "cannot open " + file;
+        return false;
+    }
+    json::Value root;
+    std::string oob_file;
+    if (!json::Parse(text, root, nullptr) || !detail::GroundLoader::OobFileOf(root, oob_file)) {
+        return LoadGroundDefenceJson(text, command::OrderOfBattle(), out, error);  // reports the file's own fault
+    }
+    command::OrderOfBattle oob;
+    if (!command::LoadOrderOfBattle(data_dir, oob_file, oob, error)) return false;
+    return LoadGroundDefenceJson(text, oob, out, error);
+}
+
+}  // namespace groundwar
+}  // namespace simcore

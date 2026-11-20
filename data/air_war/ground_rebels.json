@@ -1,0 +1,95 @@
+{
+  "ground_id": "rebels",
+  "faction": "rebels",
+  "name": "The Rava Liberation Front's fighters in the southern valley",
+  "status": "F3.1 (20 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md sections 8 and 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "source": "SAM3D estimate: the research gives patterns, not norms (docs/research/FRONTS_RESEARCH_2026-11.md section 4): rebels without air defence cannot hold ground against an air force (cia_1986_nicaragua_af); they raid where we are thin, mostly by night. The owner's open decision 2 taken as proposed (docs/fronts/README.md)",
+  "confidence": "estimate",
+  "notes": "Brigade-sized groups with light equipment and a few captured vehicles. They hold a ragged front in the southern valley and raid where we are thin, by night, then disperse rather than retreat as a unit. All numbers placeholders.",
+  "places_todo": [
+    { "id": "rlf_base_west", "name": "The Front's western base in the southern valley", "east_km": -40, "north_km": -115, "anchor_todo": true, "notes": "Rebel-held ground south of the front line." },
+    { "id": "rlf_base_forest", "name": "The Front's base in the rebels' forest", "east_km": 40, "north_km": -110, "anchor_todo": true, "notes": "In the southern forest (data/maps/pannonia.json southern_forest)." }
+  ],
+  "oob": {
+    "oob_id": "rlf",
+    "name": "The Rava Liberation Front's fighting groups",
+    "source": "estimate (SAM3D): brigade-sized groups of light infantry with mortars, recoilless guns, armed pick-ups and a few captured armoured vehicles; numbers placeholders",
+    "confidence": "estimate",
+    "services": [
+      { "id": "rlf_fighters", "name": "The Front's fighters" }
+    ],
+    "units": [
+      { "id": "rlf_command", "name": "The Front's military command", "service": "rlf_fighters", "kind": "group", "garrison": "petrovo",
+        "personnel": { "officers": 40, "ncos": 60, "conscripts": 400, "basis": "estimate: the command, its guard and couriers" } },
+      { "id": "rlf_bde_1", "name": "1st Brigade 'Rava'", "service": "rlf_fighters", "kind": "brigade", "parent": "rlf_command", "garrison": "rlf_base_west",
+        "equipment": { "technical": 20, "mortar_82": 12, "spg9": 8, "t55": 3, "btr60": 4 }, "personnel": { "officers": 60, "ncos": 140, "conscripts": 1600, "basis": "estimate" } },
+      { "id": "rlf_bde_2", "name": "2nd Brigade 'Petrovo'", "service": "rlf_fighters", "kind": "brigade", "parent": "rlf_command", "garrison": "petrovo",
+        "equipment": { "technical": 20, "mortar_82": 12, "spg9": 8, "btr60": 2 }, "personnel": { "officers": 60, "ncos": 140, "conscripts": 1600, "basis": "estimate" } },
+      { "id": "rlf_bde_3", "name": "3rd Brigade 'Forest'", "service": "rlf_fighters", "kind": "brigade", "parent": "rlf_command", "garrison": "rlf_base_forest",
+        "equipment": { "technical": 15, "mortar_82": 10, "spg9": 6 }, "personnel": { "officers": 50, "ncos": 120, "conscripts": 1330, "basis": "estimate" } },
+      { "id": "rlf_bde_4", "name": "4th Brigade 'Border'", "service": "rlf_fighters", "kind": "brigade", "parent": "rlf_command", "garrison": "rlf_base_forest",
+        "equipment": { "technical": 15, "mortar_82": 10, "spg9": 6 }, "personnel": { "officers": 50, "ncos": 120, "conscripts": 1330, "basis": "estimate" } }
+    ]
+  },
+  "commanders": {
+    "pool": {
+      "ranks": { "army": "Commander", "brigade": "Commander", "regiment": "Commander", "battalion": "Captain" },
+      "first_names": ["Ante", "Branko", "Davor", "Goran", "Ivan", "Josip", "Luka", "Marko", "Nikola", "Stjepan", "Vlado", "Zdravko"],
+      "last_names": ["Babic", "Horvat", "Kovacevic", "Maric", "Novak", "Pavlovic", "Radic", "Simic", "Tomic", "Vidovic", "Zoric", "Lukic"],
+      "backgrounds": ["reserve officer", "deserter from the army", "schoolteacher", "forester", "mine foreman"],
+      "trait_mean": { "boldness": 0.65, "methodical": 0.35, "creativity": 0.65, "rigidity": 0.25, "ambition": 0.5, "skepticism": 0.4, "vindictiveness": 0.65, "composure": 0.45 },
+      "trait_sd": 0.18,
+      "source": "game value: as the Front's air officers (data/air_war/faction_rebels.json officer_pool)",
+      "confidence": "estimate"
+    },
+    "authored": [
+      { "id": "rlf_cdr", "name": "Josip Radic", "unit": "rlf_command", "age": 44, "background": "Reserve officer, forester",
+        "bio": "Knows every track in the southern forest. Fights by night and never where the army is ready.",
+        "traits": { "boldness": 0.6, "methodical": 0.5, "creativity": 0.75, "rigidity": 0.2, "ambition": 0.55, "skepticism": 0.55, "vindictiveness": 0.6, "composure": 0.6 } }
+    ]
+  },
+  "doctrine": {
+    "source": "SAM3D estimate from cia_1986_nicaragua_af (docs/fronts/03_GROUND_WAR.md section 8): no hold against an air force; raids where we are thin, mostly by night; disperse rather than retreat",
+    "confidence": "estimate",
+    "attack_ratio": { "value": 3.0, "source": "estimate (SAM3D): a raid goes in only where the Front's local ratio is high", "confidence": "estimate" },
+    "breakthrough_ratio": { "min": 3.0, "max": 5.0, "source": "estimate (SAM3D)", "confidence": "estimate" },
+    "withdraw_needs_order": { "value": false, "source": "estimate (SAM3D): groups slip away on their own leaders' word", "confidence": "estimate" },
+    "counterattack_by_senior": { "value": false, "source": "estimate (SAM3D)", "confidence": "estimate" },
+    "second_echelon_to_success": { "value": false, "source": "estimate (SAM3D)", "confidence": "estimate" },
+    "disperse_rather_than_retreat": { "value": true, "source": "estimate (SAM3D) from cia_1986_nicaragua_af: without air defence they cannot hold ground against an air force", "confidence": "estimate" },
+    "effectiveness": {
+      "kind": "breakpoints",
+      "attack_stop_losses": { "min": 0.05, "max": 0.15, "source": "estimate (SAM3D): a raid breaks off early, the group conserves itself", "confidence": "estimate" },
+      "defence_break_losses": { "min": 0.1, "max": 0.25, "source": "estimate (SAM3D): a group under heavy fire disperses", "confidence": "estimate" }
+    },
+    "advance_caps_km_per_day": {
+      "breakthrough": { "value": 2, "source": "estimate (SAM3D): their advance capped at a few km a day (docs/fronts/03_GROUND_WAR.md section 8)", "confidence": "estimate" },
+      "depth": { "value": 3, "source": "estimate (SAM3D)", "confidence": "estimate" },
+      "broken": { "value": 5, "source": "estimate (SAM3D)", "confidence": "estimate" }
+    },
+    "frontages_km": [
+      { "echelon": "brigade", "posture": "defence", "width_min": 15, "width_max": 40, "source": "estimate (SAM3D): a ragged line held by small groups", "confidence": "estimate" },
+      { "echelon": "brigade", "posture": "attack", "width_min": 1, "width_max": 3, "source": "estimate (SAM3D): a raid on one object", "confidence": "estimate" }
+    ]
+  },
+  "plan": {
+    "kind": "raids",
+    "start_after_h": { "value": 0, "source": "SAM3D estimate: the rising's fighting goes on from the war's first hour", "confidence": "estimate" },
+    "source": "SAM3D estimate: the owner's open decision 2 taken as proposed (docs/fronts/README.md; docs/fronts/03_GROUND_WAR.md section 8)",
+    "confidence": "estimate",
+    "notes": "No axis of advance: the brigades hold their stretches of the ragged line and raid what is near and weakly held.",
+    "objectives": [
+      { "id": "ralje", "name": "Ralje and its bridge", "place": "ralje", "by_day": 0, "notes": "Raided, not held." },
+      { "id": "hollos", "name": "Hollos", "place": "hollos", "by_day": 0, "notes": "Raided, not held." }
+    ],
+    "axes": [],
+    "reserve": ["rlf_bde_4"],
+    "raids": {
+      "night_only": { "value": true, "source": "estimate (SAM3D) from cia_1986_nicaragua_af: by night, when our air is not near", "confidence": "estimate" },
+      "min_ratio": { "value": 3.0, "source": "estimate (SAM3D): only where their local ratio is high", "confidence": "estimate" },
+      "max_depth_km": { "value": 15, "source": "estimate (SAM3D): a night's march in and out", "confidence": "estimate" },
+      "per_night": { "value": 2, "source": "game value: raids a night across the front", "confidence": "estimate" },
+      "lines": ["rlf_bde_1", "rlf_bde_2", "rlf_bde_3"]
+    }
+  }
+}

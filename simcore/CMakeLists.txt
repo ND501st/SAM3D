@@ -133,6 +133,8 @@ add_executable(simcore_tests
   tests/test_world_map.cpp
   tests/test_light.cpp
   tests/test_country_map.cpp
+  tests/test_ground_data.cpp
+  tests/test_ground_combat.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp
   tests/test_fx_bridge.cpp
