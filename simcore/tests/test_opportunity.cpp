@@ -516,6 +516,121 @@ SC_TEST("opportunity (bridge): a Pact strike flight passing our battery reports 
     SC_EXPECT(!bridge.UnitDestroyed());
 }
 
+// A strike flight's load is fragged to its target wherever that target lies (06 §3.4: before the release on its primary
+// a planned strike keeps its weapons for it; only armed reconnaissance, close support or a helicopter raid hunts with
+// its load). A rebel strike pair (the faction attacks what it finds if able: garrison_biafra) passes low by our battery
+// on its way to a target beyond the session's circle: the load it carries is owed to that target although its release
+// is not in the session, so it reports the battery and drops nothing on it. Before opportunity.mode 3 a release outside
+// the circle left the load "free" and the pair could dive-bomb what it found (the leader's draw alone held it back).
+SC_TEST("opportunity (bridge): a strike flight whose target lies beyond the session keeps its bombs for it") {
+    AirWarData d;
+    std::string e;
+    SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_rebels.json", d, &e));
+    SC_EXPECT(d.faction.opportunity.strike_on_task == "attack");
+    SC_EXPECT_NEAR(d.tuning.Get("opportunity.mode"), 3.0, 1e-12);
+    const auto run = [&](double mode, std::vector<PackageOutcome::OpportunityRecord>& recs, int& bomb_releases, bool& outside) {
+        AirWarData dm = d;
+        dm.tuning.values["opportunity.mode"] = mode;
+        AirCampaign c;
+        SC_EXPECT(c.Init(dm, 4u));
+        const Vec3 bat = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos;
+        // Its target: a theatre object well beyond the session's circle (scenario.clip_m).
+        const double clip = c.Data().tuning.Get("scenario.clip_m");
+        std::size_t ti = 0;
+        bool found = false;
+        for (std::size_t i = 0; i < c.Data().theatre.objects.size() && !found; ++i) {
+            const double dist = Dist2d(c.Truth()[i].pos, bat);
+            if (dist > clip + 30000.0 && dist < clip + 80000.0) {
+                ti = i;
+                found = true;
+            }
+        }
+        SC_EXPECT(found);
+        if (!found) return;
+        const Vec3 aim = c.Truth()[ti].pos;
+        const Vec3 dir = Vec3{aim.x - bat.x, aim.y - bat.y, 0.0}.Normalized();
+        const Vec3 side{-dir.y, dir.x, 0.0};
+        Package p;
+        p.id = 98;
+        p.kind = MissionKind::Strike;
+        p.part = DayPart::Day;
+        p.target_object = c.Data().theatre.objects[ti].id;
+        p.target_label = c.Data().theatre.objects[ti].name;
+        p.entry = "W3";
+        p.exit = "W3";
+        p.tot_h = 8.5;  // by day by the dated theatre's sun
+        Flight fl;
+        fl.callsign = "Jastreb 20";
+        fl.role = FlightRole::Strike;
+        fl.aircraft = "galeb";
+        fl.count = 2;
+        fl.profile = Profile::Low;
+        fl.weapon = "fab250";
+        fl.weapons = 2;
+        fl.delivery = Delivery::PopUp;
+        const double agl = 150.0;
+        std::vector<RoutePoint> r;
+        r.push_back({bat - dir * 30000.0 + side * 1200.0, agl, 0.0, "entry"});
+        r.push_back({bat + side * 1200.0, agl, 0.0, "nav"});
+        r.push_back({aim - dir * 20000.0, agl, 0.0, "ip"});
+        const std::size_t ri = r.size();
+        r.push_back({aim - dir * 1500.0, agl, 0.0, "target"});
+        r.push_back({aim + side * 15000.0, agl, 0.0, "egress"});
+        r.push_back({bat + side * 40000.0 - dir * 40000.0, agl, 0.0, "exit"});
+        TimeRoute(r, ri, p.tot_h, 180.0);
+        fl.route = r;
+        fl.release_index = static_cast<int>(ri);
+        fl.aim_pos = aim;
+        p.flights = {fl};
+        RaidScenarioBuilder builder;
+        const RaidScenario built = builder.Build(c, p);
+        SC_EXPECT(built.ok);
+        if (!built.ok) return;
+        outside = !built.manifest.aircraft.empty();
+        for (const RaidAircraft& a : built.manifest.aircraft) outside = outside && !a.has_release && a.primary;
+        ScenarioDef def;
+        ConsoleData console;
+        SC_EXPECT(LoadScenario(built.json_text, kData, def, console, &e));
+        def.has_crew_data = false;
+        for (ScenarioTarget& pilot : def.targets) pilot.rwr.clear();
+        ScenarioRunner runner(std::move(def), std::move(console));
+        MissionBridge bridge(built.manifest, c.Data(), 4u);
+        while (!runner.Finished() && !bridge.UnitDestroyed() && runner.Time() < built.manifest.end_s + 60.0) {
+            runner.Step(0.1);
+            bridge.Step(runner);
+        }
+        recs = bridge.Opportunities().Records();
+        bomb_releases = 0;
+        for (const fx::Event& ev : OfKindOpp(runner.Fx().Since(0), fx::EventKind::WeaponRelease)) bomb_releases += ev.delivery != "jettison" ? 1 : 0;
+    };
+    std::vector<PackageOutcome::OpportunityRecord> recs;
+    int bombs = 0;
+    bool outside = false;
+    run(3.0, recs, bombs, outside);
+    SC_EXPECT(outside);  // its release is beyond the circle, its load still fragged to its target
+    bool owed_seen = false;
+    for (const PackageOutcome::OpportunityRecord& rec : recs) {
+        std::printf("    mode 3: %s: %s, stopped at %s (%s), %d passes\n", rec.believed.c_str(), rec.act.c_str(), rec.stopped.c_str(), rec.why.c_str(),
+                    rec.passes);
+        SC_EXPECT(rec.passes == 0 && rec.act != "attack" && rec.act != "reattack" && rec.act != "gun_run");
+        owed_seen = owed_seen || (rec.stopped == "able" && rec.why == "his stores are for the target");
+    }
+    SC_EXPECT(owed_seen);  // it saw the battery, was allowed, and held its load for its target
+    SC_EXPECT(bombs == 0);
+    // The same pair under mode 2 (a campaign saved before): the load counted free, the chain got past "able" (to the
+    // leader's draw whether to attack it with that load).
+    std::vector<PackageOutcome::OpportunityRecord> old_recs;
+    int old_bombs = 0;
+    bool old_outside = false;
+    run(2.0, old_recs, old_bombs, old_outside);
+    SC_EXPECT(old_outside && !old_recs.empty());
+    for (const PackageOutcome::OpportunityRecord& rec : old_recs) {
+        std::printf("    mode 2: %s: %s, stopped at %s (%s), %d passes\n", rec.believed.c_str(), rec.act.c_str(), rec.stopped.c_str(), rec.why.c_str(),
+                    rec.passes);
+        SC_EXPECT(rec.stopped == "act" || rec.stopped == "worth");
+    }
+}
+
 SC_TEST("opportunity: the records are saved and read back; a save from before B6 replays without them") {
     PackageOutcome o;
     o.package_id = 4;
@@ -574,7 +689,7 @@ SC_TEST("opportunity: the records are saved and read back; a save from before B6
     SC_EXPECT_NEAR(old.Data().tuning.Get("opportunity.mode"), 0.0, 1e-12);
     AirCampaign now;
     SC_EXPECT(LoadCampaignJson(SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json"), kData, now, &e));
-    SC_EXPECT_NEAR(now.Data().tuning.Get("opportunity.mode"), 2.0, 1e-12);  // roadmap S4: bombs on what is found
+    SC_EXPECT_NEAR(now.Data().tuning.Get("opportunity.mode"), 3.0, 1e-12);  // roadmap S4: bombs on what is found; mode 3 a load owed beyond the circle
 }
 
 // The abstract level (resolve.hpp FindOpportunity): with no finds it runs as before B6, its draws keyed apart from the
@@ -608,9 +723,9 @@ SC_TEST("opportunity (A0): with no finds a campaign runs as before B6; with them
     SC_EXPECT(total > 0);
 }
 
-SC_TEST("opportunity (S4): a dive-bombing pass from the tuning; only bombs that fall are dive-bombed; mode 2 is saved") {
+SC_TEST("opportunity (S4): a dive-bombing pass from the tuning; only bombs that fall are dive-bombed; the mode is saved") {
     const AirWarData d = LoadOpp("nato");
-    SC_EXPECT_NEAR(d.tuning.Get("opportunity.mode"), 2.0, 1e-12);
+    SC_EXPECT_NEAR(d.tuning.Get("opportunity.mode"), 3.0, 1e-12);
     const GunPassDef p = OpportunityRun::BombPass(d.tuning);
     SC_EXPECT(p.present);
     SC_EXPECT_NEAR(p.dive_deg, d.tuning.Get("opportunity.bomb_dive_deg"), 1e-12);

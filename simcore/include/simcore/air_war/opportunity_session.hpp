@@ -12,7 +12,10 @@
 //     in trail; after them the leader may come round again (Reattack).
 // It also flies the planned gun and rocket attacks of fixed-wing aircraft as passes (BeginPlanned) in place of the
 // release at a waypoint. With opportunity.mode 2 (roadmap S4) a fixed-wing aircraft with bombs not owed to its target (its
-// own mission an armed reconnaissance or close support, or a load with no planned release) may dive-bomb what it found:
+// own mission an armed reconnaissance or close support, or a load with no planned release) may dive-bomb what it found.
+// With mode 3 a load is owed to its flight's target wherever that lies, inside the session or beyond its circle
+// (RaidAircraft::primary; 06_OPPORTUNITY.md section 3.4: a planned strike keeps its weapons for its primary); under mode 2
+// a release beyond the circle left the load free. The dive-bombing is
 // one pass in a dive of opportunity.bomb_dive_deg, released at the slant that puts it at delivery.dive_release_m over the
 // ground (the MiG-27's dive delivery, mig27_book); the bridge throws the load and lands it where it falls.
 // What a pass did is the bridge's to decide (it holds the truth): Step hands back each pass that
@@ -76,6 +79,7 @@ public:
         d_ = &d;
         seed_ = static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 0xB6ull;
         on_ = d.tuning.Get("opportunity.mode") >= 1.0 && !m.leaders.empty();
+        owed_beyond_ = d.tuning.Get("opportunity.mode") >= 3.0;
         flights_.assign(m.flight_ids.size(), FlightRun{});
         ac_.assign(m.aircraft.size(), AircraftRun{});
         for (std::size_t i = 0; i < m.aircraft.size(); ++i) {
@@ -253,6 +257,13 @@ private:
     };
 
     std::uint64_t Flight(std::size_t aircraft) const { return static_cast<std::uint64_t>(std::max(0, m_->aircraft[aircraft].flight)); }
+    // Its load is fragged to its flight's target: one it releases in the session, or (mode 3) one beyond the circle.
+    bool Fragged(std::size_t i) const {
+        const RaidAircraft& a = m_->aircraft[i];
+        return a.has_release || (owed_beyond_ && a.primary);
+    }
+    // ... and not yet released: owed to that target (06 section 3.4), not to what he finds on the way.
+    bool Owed(std::size_t i) const { return Fragged(i) && i < released_.size() && !released_[i]; }
 
     // The leader's chain on his flight's picture.
     void Chain(ScenarioRunner& r, std::size_t fi) {
@@ -379,7 +390,7 @@ private:
             const RaidAircraft& a = m.aircraft[i];
             if (!r.TargetAlive(a.target_id)) continue;
             const AircraftRun& ar = ac_[i];
-            const bool owed = a.has_release && i < released_.size() && !released_[i];  // its load is for the target still
+            const bool owed = Owed(i);  // its load is for the target still
             due = due || owed;
             if (ar.left > 0 && ar.gun && (!ar.planned_pass || !owed)) gun = true;
             if (ar.left > 0 && ar.rockets && !owed) rockets = true;
@@ -458,12 +469,12 @@ private:
             if (!r.TargetAlive(m.aircraft[i].target_id) || ar.flying) continue;
             // His bombs (roadmap S4): if his gun and rockets have nothing for it, or the leader said attack, and the chain let
             // them go on it (not owed to the target, or his own mission is to hunt).
-            const bool owed = m.aircraft[i].has_release && i < released_.size() && !released_[i];
+            const bool owed = Owed(i);
             const bool bombs_free = ar.bombs && ar.bomb_passes > 0 && s.has_bombs && (!owed || !s.primary_due || OwnHunt(s.mission)) &&
                                     !(i < released_.size() && released_[i]);
             const bool use_bombs = !recce && bombs_free && (dec.act == OppAct::Attack || ar.left <= 0 || (!ar.gun && !ar.rockets));
             if (!recce && !use_bombs && (ar.left <= 0 || (!ar.gun && !ar.rockets))) continue;
-            if (!recce && !use_bombs && ar.planned_pass && !ar.planned_begun && m.aircraft[i].has_release && ar.rockets) continue;  // rockets owed to the target
+            if (!recce && !use_bombs && ar.planned_pass && !ar.planned_begun && Fragged(i) && ar.rockets) continue;  // rockets owed to the target
             const double delay = place * d_->tuning.Get("opportunity.trail_m") / std::max(50.0, s.speed_mps);
             const double off = c.passes > 0 ? DegToRad(d_->tuning.Get("opportunity.reattack_heading_deg")) : 0.0;
             ar.pass_bombs = use_bombs;
@@ -653,6 +664,7 @@ private:
     const AirWarData* d_ = nullptr;
     std::uint64_t seed_ = 0;
     bool on_ = false;
+    bool owed_beyond_ = false;  // opportunity.mode 3: a load fragged to a target beyond the circle is owed too
     std::vector<FlightRun> flights_;
     std::vector<AircraftRun> ac_;
     std::vector<Contact> contacts_;

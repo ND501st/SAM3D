@@ -35,6 +35,9 @@
 // weather by month) with weather.mode 0.
 // A save without "radio_mode" was made before roadmap S6 (the abstract packages' calls heard by our posts, the intercept
 // facts rebuilt on a load, our dummy traffic on our fighters' nets, the Teaball relay) and replays with radio.mode 0.
+// An "opportunity_mode" of 2 was saved before a played session's strike flight owed its load to a target beyond the
+// session's circle (opportunity_session.hpp, mode 3; 06_OPPORTUNITY.md section 3.4); it replays with mode 2. The played
+// raids' outcomes are in the save, so the mode only reaches sessions played after the load.
 #pragma once
 
 #include <cmath>

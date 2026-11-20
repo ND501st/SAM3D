@@ -231,7 +231,10 @@ struct RaidAircraft {
     std::string aircraft;
     bool helicopter = false;
     bool drone = false;
-    bool has_release = false;
+    bool has_release = false;  // it releases its load in the session (its release point inside the scenario's circle)
+    // Its load is fragged to a target: its flight's route has a release, in the session or beyond the scenario's circle
+    // (opportunity_session.hpp: owed to that target until released, opportunity.mode 3; 06_OPPORTUNITY.md section 3.4).
+    bool primary = false;
     Vec3 release_enu;  // where it releases its weapons (scenario ENU)
     Vec3 aim_enu;      // where they are aimed
     int arms = 0;
@@ -864,9 +867,10 @@ public:
                 ra.aircraft = a->id;
                 ra.helicopter = a->helicopter;
                 ra.drone = a->drone;
-                ra.has_release = cl.release && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
-                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
-                                                fl.role == FlightRole::Missile);
+                ra.primary = fl.release_index >= 0 && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
+                                                       fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
+                                                       fl.role == FlightRole::Missile);
+                ra.has_release = cl.release && ra.primary;
                 ra.release_enu = cl.release_pt;
                 if (cl.release_i >= 0) {
                     const Vec3 sh = shift_at(static_cast<std::size_t>(cl.release_i), false);
