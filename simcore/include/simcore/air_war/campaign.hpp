@@ -722,6 +722,7 @@ private:
     AirStaff staff_;
     IntelPicture intel_;
     command::EnemyCorridorIntel corridor_intel_;  // what its COMINT heard of our fighters' corridors (roadmap S1)
+    std::map<std::pair<int, std::string>, bool> session_heard_;  // (day, false corridor) -> heard in a played session (S6 follow-ups)
     int corridor_days_fed_ = 0;
     std::vector<Package> packages_;
     std::vector<JournalEntry> journal_;
@@ -1112,6 +1113,19 @@ public:
     }
     // What the enemy has heard of them.
     const command::EnemyCorridorIntel& CorridorIntel() const { return corridor_intel_; }
+    // Our dummy traffic's false corridors on campaign day `day` (0: the first; FeedDummyCorridors' rule), none before
+    // radio.mode 1 or without our aviation. A use's hours are each corridor's from_h and to_h on that day (clock hours).
+    std::vector<command::OwnAirZone> FalseCorridorsOn(int day) const {
+        if (!OwnAirOn() || data_.tuning.Get("radio.mode") < 1.0) return {};
+        return FalseCorridorsOf(OwnCorridors(), day);
+    }
+    // A played session's word on a false corridor's use that day (roadmap S6's follow-ups, radio.mode 2): whether the enemy's
+    // listeners in its EM world heard the dummy transmitter's traffic. The daily feed then counts it as heard or not, with no
+    // chance drawn. Not saved: a session that played in a saved campaign hands back no such word (a save replays as played).
+    void SessionHeardCorridor(int day, const std::string& corridor_id, bool heard) {
+        bool& h = session_heard_[{day, corridor_id}];
+        h = h || heard;
+    }
 
 private:
     // Each day gone by, each corridor from a working airfield used once (by day): the enemy's COMINT on our GCI's and the
@@ -1137,25 +1151,28 @@ private:
     // day), are talked on by our GCI and notices at the real one's hours, so the enemy's COMINT can learn a corridor where
     // our fighters never fly (vr_1985_plss: dummy transmitters and imitated traffic; nazarenko_1984: radio disinformation and
     // imitation). A raid timed into one gets no held fire. The enemy's journal names it as it heard it.
+    // From radio.mode 2 a played session's EM world may have decided whether the enemy's listeners heard a false corridor's
+    // traffic that day (SessionHeardCorridor): that use is counted as heard or not without the chance.
     void FeedDummyCorridors(const std::vector<command::OwnAirZone>& zs) {
         if (data_.tuning.Get("radio.mode") < 1.0 || zs.empty()) return;
-        const int n = static_cast<int>(std::floor(data_.tuning.Get("radio.our_dummy_corridors") + 1e-9));
-        const double turn = data_.tuning.Get("radio.our_dummy_turn_deg") * 3.14159265358979323846 / 180.0;
-        for (int k = 0; k < n; ++k) {
-            const command::OwnAirZone& real = zs[static_cast<std::size_t>(corridor_days_fed_ + k) % zs.size()];
-            const int i = data_.theatre.IndexOf(real.id.substr(9));
-            if (i < 0 || truth_[static_cast<std::size_t>(i)].function <= 0.05 || real.path.size() < 2) continue;
-            const double a = ((corridor_days_fed_ + k) % 2 == 0 ? 1.0 : -1.0) * turn;
-            const Vec3 o = real.path.front(), e = real.path.back();
-            const double dx = e.x - o.x, dy = e.y - o.y;
-            command::OwnAirZone z = real;
-            z.id = real.id + " B";  // as the enemy would label a second corridor from the same field
-            z.path = {o, Vec3{o.x + dx * std::cos(a) + dy * std::sin(a), o.y - dx * std::sin(a) + dy * std::cos(a), 0.0}};
+        const bool sessions = data_.tuning.Get("radio.mode") >= 2.0;
+        for (const command::OwnAirZone& z : FalseCorridorsOf(zs, corridor_days_fed_)) {
             const double h = corridor_days_fed_ * 24.0 + z.from_h - data_.theatre.start_hour;
-            if (corridor_intel_.Use(z, h)) {
+            const auto told = session_heard_.find({corridor_days_fed_, z.id});
+            const bool heard = sessions && told != session_heard_.end() ? corridor_intel_.UseHeard(z, h, told->second) : corridor_intel_.Use(z, h);
+            if (heard) {
                 Log("intel", "COMINT", "our fighters' traffic in " + z.id + " heard (" + std::to_string(corridor_days_fed_ + 1) + ". day)", false);
             }
         }
+    }
+    // The day's false corridors (command::FalseCorridors' rule) from the real ones, a real one's airfield working.
+    std::vector<command::OwnAirZone> FalseCorridorsOf(const std::vector<command::OwnAirZone>& zs, int day) const {
+        const int n = static_cast<int>(std::floor(data_.tuning.Get("radio.our_dummy_corridors") + 1e-9));
+        const double turn = data_.tuning.Get("radio.our_dummy_turn_deg") * 3.14159265358979323846 / 180.0;
+        return command::FalseCorridors(zs, day, n, turn, [this](const command::OwnAirZone& real) {
+            const int i = data_.theatre.IndexOf(real.id.substr(9));
+            return i >= 0 && truth_[static_cast<std::size_t>(i)].function > 0.05;
+        });
     }
     // A creative planner with a fresh belief of our corridor near the package's target times it into the corridor's hours,
     // when that is at most shift_h later (mt_umnov_1968 pp. 10-11, the Syrian landing case; Mitronin's warning, mitronin_1976

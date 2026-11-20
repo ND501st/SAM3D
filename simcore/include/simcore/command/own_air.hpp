@@ -588,6 +588,29 @@ struct OwnAirZone {
     }
 };
 
+// Our dummy traffic's false corridors on a day (roadmap S6, docs/air_battle/09 section 8): `count` a day, the k-th from the
+// real corridor (day + k) in turn of `real`, turned `turn_rad` about its airfield (its first point), one way on even turns and
+// the other on odd ones, named "<real id> B" as the enemy would label a second corridor from the same field. A real one whose
+// airfield is not working (`working(z)` false) or that has no way out gives none that turn. The campaign's daily feed
+// (AirCampaign::FeedDummyCorridors) and a session's dummy transmitters (campaign/mission_session.hpp) take the same corridors.
+template <class Working>
+inline std::vector<OwnAirZone> FalseCorridors(const std::vector<OwnAirZone>& real, int day, int count, double turn_rad, Working working) {
+    std::vector<OwnAirZone> out;
+    if (real.empty()) return out;
+    for (int k = 0; k < count; ++k) {
+        const OwnAirZone& r = real[static_cast<std::size_t>(day + k) % real.size()];
+        if (r.path.size() < 2 || !working(r)) continue;
+        const double a = ((day + k) % 2 == 0 ? 1.0 : -1.0) * turn_rad;
+        const Vec3 o = r.path.front(), e = r.path.back();
+        const double dx = e.x - o.x, dy = e.y - o.y;
+        OwnAirZone z = r;
+        z.id = r.id + " B";
+        z.path = {o, Vec3{o.x + dx * std::cos(a) + dy * std::sin(a), o.y - dx * std::sin(a) + dy * std::cos(a), 0.0}};
+        out.push_back(z);
+    }
+    return out;
+}
+
 enum class CooperationMethod { ByZones, OneZone };
 
 inline const char* CooperationMethodName(CooperationMethod m) { return m == CooperationMethod::ByZones ? "by_zones" : "one_zone"; }
@@ -950,6 +973,38 @@ public:
         const std::uint64_t n = ++uses_;
         const double p = std::min(1.0, def_.heard_per_use + def_.break_talk_table * (1.0 - def_.heard_per_use));
         if (em::Uniform01(em::DrawHash(seed_, em::Stream::AirCombat, kOwnAirKey + 0x500ull, n, 1)) >= p) return false;
+        Record(z, h, n);
+        return true;
+    }
+    // One use whose hearing a session's EM world decided (roadmap S6's follow-ups: its listeners heard the use's traffic by
+    // link margin, or did not): counted as a use like Use, with no draw of the chance. True when heard.
+    bool UseHeard(const OwnAirZone& z, double h, bool heard) {
+        const std::uint64_t n = ++uses_;
+        if (!heard) return false;
+        Record(z, h, n);
+        return true;
+    }
+    // A save's state (S1): what it heard so far and how many uses it has counted (the draws are keyed on the count).
+    const std::vector<BelievedCorridor>& Heard() const { return heard_; }
+    std::uint64_t Uses() const { return uses_; }
+    void Restore(const std::vector<BelievedCorridor>& heard, std::uint64_t uses) {
+        heard_ = heard;
+        uses_ = uses;
+    }
+    // The corridors it believes at hour h: heard often enough, recently enough.
+    std::vector<BelievedCorridor> Believed(double h) const {
+        std::vector<BelievedCorridor> out;
+        for (const BelievedCorridor& c : heard_) {
+            if (c.heard >= def_.learn_after && h - c.last_h <= def_.use_age_h) out.push_back(c);
+        }
+        return out;
+    }
+    // Does a planner of this creativity send a raid by a believed corridor? (Only a creative one: use_creativity.)
+    bool Exploits(double creativity, double h) const { return creativity >= def_.use_creativity && !Believed(h).empty(); }
+
+private:
+    // A use heard: the corridor believed where it was heard (placed within sigma_m on its first hearing), its hours widened.
+    void Record(const OwnAirZone& z, double h, std::uint64_t n) {
         BelievedCorridor* b = nullptr;
         for (BelievedCorridor& c : heard_) {
             if (c.id == z.id) b = &c;
@@ -972,27 +1027,8 @@ public:
         }
         ++b->heard;
         b->last_h = h;
-        return true;
     }
-    // A save's state (S1): what it heard so far and how many uses it has counted (the draws are keyed on the count).
-    const std::vector<BelievedCorridor>& Heard() const { return heard_; }
-    std::uint64_t Uses() const { return uses_; }
-    void Restore(const std::vector<BelievedCorridor>& heard, std::uint64_t uses) {
-        heard_ = heard;
-        uses_ = uses;
-    }
-    // The corridors it believes at hour h: heard often enough, recently enough.
-    std::vector<BelievedCorridor> Believed(double h) const {
-        std::vector<BelievedCorridor> out;
-        for (const BelievedCorridor& c : heard_) {
-            if (c.heard >= def_.learn_after && h - c.last_h <= def_.use_age_h) out.push_back(c);
-        }
-        return out;
-    }
-    // Does a planner of this creativity send a raid by a believed corridor? (Only a creative one: use_creativity.)
-    bool Exploits(double creativity, double h) const { return creativity >= def_.use_creativity && !Believed(h).empty(); }
 
-private:
     EnemyLearningDef def_;
     std::uint64_t seed_ = 0;
     std::vector<BelievedCorridor> heard_;

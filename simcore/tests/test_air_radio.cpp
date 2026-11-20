@@ -585,10 +585,16 @@ SC_TEST("air radio B9: the enemy's placed listeners hear our nets by link margin
     // Il-20 on its orbit (20 km east, 200 km north, 8,000 m).
     SC_EXPECT(command::PlaceEnemyListeners(radio, data, "warsaw_pact") == 2);
     const command::RadioPath near_p = radio.Hop(0, 1, Vec3{30000.0, 155000.0, 0.0}, Vec3{25000.0, 155000.0, 0.0}, 1.0);
-    // Far beyond the Il-20's horizon (about 375 km to a 3 m whip) and the ground post's: 1,200 km. The EM layer's one knife edge
-    // over the earth's bulge loses too little past the horizon (about 24 dB at 670 km), so nearer points are still heard.
-    const command::RadioPath far_p = radio.Hop(0, 1, Vec3{20000.0, -1000000.0, 0.0}, Vec3{15000.0, -1000000.0, 0.0}, 1.0);
+    // The Il-20 at 8,000 m sees a 3 m whip out to its radio horizon, about 376 km over the 4/3 earth: 350 km off, still short
+    // of it, it hears the net (an airborne post "extends intercept" over the whole country: FM 100-2-1). 460 km off, some 85 km
+    // past the horizon, the smooth earth's diffraction (ITU-R P.526-16 section 3) loses tens of dB more and nothing is heard.
+    // (Until the S6 follow-ups the EM layer had only one knife edge over the bulge, about 24 dB at 670 km, and this point had
+    // to be put 1,200 km off.)
+    const command::RadioPath edge_p = radio.Hop(0, 1, Vec3{20000.0, -150000.0, 0.0}, Vec3{15000.0, -150000.0, 0.0}, 1.0);
+    const command::RadioPath far_p = radio.Hop(0, 1, Vec3{20000.0, -260000.0, 0.0}, Vec3{15000.0, -260000.0, 0.0}, 1.0);
+    std::printf("    the Il-20 hears a whip 350 km off %.2f, 460 km off %.3f\n", edge_p.heard, far_p.heard);
     SC_EXPECT(near_p.heard > 0.9);
+    SC_EXPECT(edge_p.heard > 0.9);
     SC_EXPECT(far_p.heard < 0.05);
     command::EmRadio none(set, nullptr, 50e6);  // none placed: the abstract service hears everything (P3)
     SC_EXPECT(none.Hop(0, 1, Vec3{-90000.0, 60000.0, 0.0}, Vec3{-95000.0, 60000.0, 0.0}, 1.0).heard == 1.0);
@@ -1079,9 +1085,71 @@ SC_TEST("air radio S6: the enemy's listeners go on the campaign's radio from rad
     SC_EXPECT(command::PlaceCampaignListeners(none, idata, c0) == 0);
     SC_EXPECT(none.Hop(0, 1, Vec3{20000.0, -1000000.0, 0.0}, Vec3{15000.0, -1000000.0, 0.0}, 1.0).heard == 1.0);
     const double near_heard = radio.Hop(0, 1, Vec3{30000.0, 155000.0, 0.0}, Vec3{25000.0, 155000.0, 0.0}, 1.0).heard;
-    const double far_heard = radio.Hop(0, 1, Vec3{20000.0, -1000000.0, 0.0}, Vec3{15000.0, -1000000.0, 0.0}, 1.0).heard;
-    std::printf("    the Pact's listeners hear a call by their post %.2f, 1,200 km off %.3f\n", near_heard, far_heard);
+    // 460 km from the Il-20, past its 376 km radio horizon (the B9 listeners' test says why this distance)
+    const double far_heard = radio.Hop(0, 1, Vec3{20000.0, -260000.0, 0.0}, Vec3{15000.0, -260000.0, 0.0}, 1.0).heard;
+    std::printf("    the Pact's listeners hear a call by their post %.2f, 460 km off %.3f\n", near_heard, far_heard);
     SC_EXPECT(near_heard > 0.9 && far_heard < 0.05);
+}
+
+SC_TEST("air radio S6 follow-ups: our dummy transmitter talks on our fighters' net in its corridor's hours; the enemy's listeners hear it by the horizon, ours log nothing") {
+    AirRadioDef def = Def();
+    def.our_radio = "pact_air_r832m";
+    def.our_freq_hz = 124e6;
+    AirRadioPostDef dummy;
+    dummy.id = "dummy_1";
+    dummy.kind = "our_dummy";
+    dummy.at = Vec3{0.0, 0.0, 0.0};
+    dummy.mast_m = 10.0;
+    dummy.corridor = "c1 B";
+    dummy.from_s = 60.0;
+    dummy.until_s = 600.0;
+    dummy.period_s = 60.0;
+    def.posts.push_back(dummy);
+    // An Il-20 200 km off at 8,000 m (inside the 381 km horizon to a 10 m mast); a ground post 100 km off on a 30 m mast
+    // (past the 36 km horizon between the two masts); our own intercept post beside the transmitter.
+    AirRadioPostDef il20 = Listener("il20", 0.0, 200000.0, "");
+    il20.kind = "enemy_intercept";
+    il20.mast_m = 8000.0;
+    def.posts.push_back(il20);
+    AirRadioPostDef ground = Listener("ground", 0.0, 100000.0, "");
+    ground.kind = "enemy_intercept";
+    def.posts.push_back(ground);
+    def.posts.push_back(Listener("p1", 5000.0, 0.0));
+    Air a(def);
+    a.Run(900.0);
+    int heard = 0;
+    for (const airwar::EnemyHeard& h : a.radio.EnemyHeardLog()) {
+        SC_EXPECT(h.post == "il20");
+        SC_EXPECT(h.dummy == "dummy_1" && h.corridor == "c1 B" && h.call == -1);
+        // a call due by 600 s goes out with the next step and the net's turn (the last at 600.5 s)
+        SC_EXPECT(h.start_s >= 60.0 - 1e-6 && h.start_s <= 600.0 + 2.0);
+        ++heard;
+    }
+    std::printf("    the Il-20 heard the dummy %d times between 60 and 600 s; the ground post past the horizon none\n", heard);
+    SC_EXPECT(heard >= 8 && heard <= 10);  // every hearing's post is checked above: the ground post's would have failed it
+    SC_EXPECT(a.radio.EnemyHeardDummy("dummy_1"));
+    SC_EXPECT(!a.radio.EnemyHeardDummy("p1"));
+    SC_EXPECT(a.radio.HeardLog().empty());  // our own intercept post: not its business
+}
+
+SC_TEST("air radio S6 follow-ups: from radio.mode 2 the session and the campaign key names alike, the same on every compiler") {
+    // FNV-1a's step by hand ("a" = 0x61), then SplitMix64's finaliser: no std::hash anywhere. The basis is the one every FNV
+    // key in simcore has used since the air war began (1469598103934665603: the standard's 14695981039346656037 with its last
+    // digit dropped); any odd basis spreads as well, and changing it would move every saved campaign's draws.
+    SC_EXPECT(em::StringKey("") == em::Mix64(1469598103934665603ull));
+    SC_EXPECT(em::StringKey("a") == em::Mix64((1469598103934665603ull ^ 0x61ull) * 1099511628211ull));
+    SC_EXPECT(airwar::AbstractKeyOf("sq_1") == em::StringKey("sq_1"));
+    SC_EXPECT(airwar::RadioKeyOf("sq_1", true) == em::StringKey("sq_1"));
+    // A squadron's codeword and fit, and a flight's call sign on a later day, are one function in both levels.
+    const airwar::SquadronFit f = airwar::SquadronRadioFit("sq_1", 0.5, 0.5, 7u);
+    const airwar::SquadronFit g = airwar::SquadronRadioFit("sq_1", 0.5, 0.5, 7u);
+    SC_EXPECT(!f.codeword.empty() && f.codeword == g.codeword && f.have_quick == g.have_quick && f.secure_voice == g.secure_voice);
+    SC_EXPECT(airwar::CallsignAt("Ford 1", 30.0, 24.0, 7u, true) == airwar::CallsignAt("Ford 1", 30.0, 24.0, 7u, true));
+    SC_EXPECT(airwar::CallsignAt("Ford 1", 30.0, 24.0, 7u, true) != "Ford 1");
+    AirRadioDef def = Def();
+    SC_EXPECT(airwar::StableRadioKeys(def));  // the data's radio.mode is 2
+    def.tune["radio.mode"] = 1.0;
+    SC_EXPECT(!airwar::StableRadioKeys(def));  // a save from before keeps std::hash's keys and replays as played
 }
 
 SC_TEST("air radio S6: the canary: an enemy call reaches the battery only as our intercept post's report through the pipeline, never on any other output") {

@@ -26,12 +26,8 @@
 namespace simcore {
 namespace airwar {
 
-// A string's key for the draws, the same on every compiler (FNV-1a, then mixed).
-inline std::uint64_t AbstractKeyOf(const std::string& s) {
-    std::uint64_t h = 1469598103934665603ull;
-    for (char ch : s) h = (h ^ static_cast<unsigned char>(ch)) * 1099511628211ull;
-    return em::Mix64(h);
-}
+// A string's key for the draws, the same on every compiler (em::StringKey: FNV-1a, then mixed).
+inline std::uint64_t AbstractKeyOf(const std::string& s) { return em::StringKey(s); }
 
 // One call of an abstract package: the call as air_radio.hpp keeps it (times in campaign seconds, hour x 3600), where it
 // was said from (theatre ENU) and the speaker's antenna above the ground.
@@ -55,8 +51,6 @@ struct ListeningPost {
 namespace detail_abstract {
 
 inline double CallLengthS(CallKind k, const AirRadioDef& d) { return d.Tune(std::string("radio.call_") + CallKindId(k) + "_s"); }
-
-inline const char* const kCodewords[] = {"SUPERFUSE", "LONGBOW", "REDWING", "SLEDGE", "TIDEWATER"};
 
 inline Vec3 RouteAt(const Flight& f, double h, double* agl_m) {
     if (f.route.empty()) return Vec3();
@@ -129,10 +123,11 @@ inline std::vector<AbstractCall> AbstractPackageCalls(const Package& p, const Fa
         const bool demo = Demonstrates(p, fi, fr, staff, td, seed);
         const bool strike_like = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Recce || demo;
         const bool comm_out = !demo && strike_like && fr.discipline >= 0.5 && rng.Uniform(em::Stream::AirRadio, fkey, 11) < discipline;
-        const std::uint64_t sq = AbstractKeyOf(fl.squadron);
-        const bool have_quick = rng.Uniform(em::Stream::AirRadio, sq, 31) < fr.have_quick_share;
-        const bool secure = rng.Uniform(em::Stream::AirRadio, sq, 32) < fr.secure_voice_share;
-        const std::string codeword = detail_abstract::kCodewords[sq % 5];
+        // The squadron's fit and codeword as a session draws them (SquadronRadioFit: the same seed, keys and words as before).
+        const SquadronFit fit = SquadronRadioFit(fl.squadron, fr.have_quick_share, fr.secure_voice_share, seed);
+        const bool have_quick = fit.have_quick;
+        const bool secure = fit.secure_voice;
+        const std::string codeword = fit.codeword;
         const int alive = std::max(0, fl.count - fl.lost);
         const bool no_aim = fl.aim_pos.x == 0.0 && fl.aim_pos.y == 0.0;
         const Vec3 aim = no_aim ? p.target_pos : fl.aim_pos;
@@ -149,7 +144,7 @@ inline std::vector<AbstractCall> AbstractPackageCalls(const Package& p, const Fa
             c.speaker = fl.callsign + " 1";
             c.flight = fl.callsign;
             c.unit = fl.squadron.empty() ? fl.callsign : fl.squadron;
-            c.callsign = CallsignAt(fl.callsign, at.t_h, rotation, seed);
+            c.callsign = CallsignAt(fl.callsign, at.t_h, rotation, seed, StableRadioKeys(td));
             c.language = fr.language;
             c.words = words;
             c.has_where = has_where;

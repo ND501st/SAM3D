@@ -1555,18 +1555,26 @@ private:
                 const std::string pp = Index(Join(p, "posts"), i);
                 AirRadioPostDef d;
                 double e = 0.0, n = 0.0, freq = 0.0;
-                if (!Keys(pv, pp, {"id", "name", "kind", "east_m", "north_m", "mast_m", "esm", "radio", "freq_mhz", "channels", "chain_post", "notes"}) ||
+                if (!Keys(pv, pp, {"id", "name", "kind", "east_m", "north_m", "mast_m", "esm", "radio", "freq_mhz", "channels", "chain_post", "corridor",
+                                   "from_s", "until_s", "period_s", "notes"}) ||
                     !RequireString(pv, pp, "id", d.id) || !OptionalString(pv, pp, "name", d.name) || !OptionalString(pv, pp, "kind", d.kind) ||
                     !OptionalNumber(pv, pp, "east_m", e) || !OptionalNumber(pv, pp, "north_m", n) || !OptionalNumber(pv, pp, "mast_m", d.mast_m) ||
                     !OptionalString(pv, pp, "esm", d.esm) || !OptionalString(pv, pp, "radio", d.radio) || !OptionalNumber(pv, pp, "freq_mhz", freq) ||
-                    !OptionalInt(pv, pp, "channels", d.channels) || !OptionalString(pv, pp, "chain_post", d.chain_post)) {
+                    !OptionalInt(pv, pp, "channels", d.channels) || !OptionalString(pv, pp, "chain_post", d.chain_post) ||
+                    !OptionalString(pv, pp, "corridor", d.corridor) || !OptionalNumber(pv, pp, "from_s", d.from_s) ||
+                    !OptionalNumber(pv, pp, "until_s", d.until_s) || !OptionalNumber(pv, pp, "period_s", d.period_s)) {
                     return false;
                 }
-                if (d.kind != "intercept" && d.kind != "gci" && d.kind != "crc" && d.kind != "fac" && d.kind != "awacs" && d.kind != "our_gci") {
-                    return Fail(Join(pp, "kind"), "intercept, gci, crc, fac, awacs or our_gci");
+                if (d.kind != "intercept" && d.kind != "gci" && d.kind != "crc" && d.kind != "fac" && d.kind != "awacs" && d.kind != "our_gci" &&
+                    d.kind != "our_dummy" && d.kind != "enemy_intercept") {
+                    return Fail(Join(pp, "kind"), "intercept, gci, crc, fac, awacs, our_gci, our_dummy or enemy_intercept");
                 }
-                if (d.kind == "our_gci" && d.radio.empty() && a.our_radio.empty()) return Fail(pp, "our GCI speaks on our_radio: give it");
-                if (d.kind == "intercept" && d.esm.empty()) return Fail(pp, "an intercept post needs its receiver (the esm key)");
+                if ((d.kind == "our_gci" || d.kind == "our_dummy") && d.radio.empty() && a.our_radio.empty()) return Fail(pp, "our side speaks on our_radio: give it");
+                if ((d.kind == "intercept" || d.kind == "enemy_intercept") && d.esm.empty()) return Fail(pp, "a listening post needs its receiver (the esm key)");
+                if (d.kind != "our_dummy" && (!d.corridor.empty() || pv.Find("from_s") != nullptr || pv.Find("until_s") != nullptr || pv.Find("period_s") != nullptr)) {
+                    return Fail(pp, "corridor, from_s, until_s and period_s are a dummy transmitter's (kind our_dummy)");
+                }
+                if (d.kind == "our_dummy" && (d.until_s < d.from_s || d.period_s < 0.0)) return Fail(pp, "a dummy transmitter talks from from_s until until_s, every period_s >= 0");
                 d.at = Vec3{e, n, 0.0};
                 d.freq_hz = freq * 1e6;
                 a.posts.push_back(std::move(d));

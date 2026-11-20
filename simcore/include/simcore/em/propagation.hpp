@@ -11,6 +11,9 @@
 //       J(v) = 6.9 + 20 log10( sqrt((v - 0.1)^2 + 1) + v - 0.1 )  dB, for v > -0.78, else 0.
 //     At centimetre wavelengths a ridge costs tens of dB (radar behind a hill is blind);
 //     at VHF the same ridge costs ~10 dB (radios still talk over it). One formula, both effects.
+//   * The earth's curve, 10 MHz to 1 GHz: ITU-R P.526-16's smooth spherical earth (section 3.2, the residue series' first
+//     term past the horizon), joined to the terrain's edges by section 4.5.2's eq. (66). One knife edge over the bulge lost
+//     far too little past the horizon (24 dB at 670 km for a 3 m whip and an 8,000 m listener; the first term 131 dB).
 //   * Gases: a coarse sea-level table read from ITU-R P.676 (dry air plus 7.5 g/m^3 water
 //     vapour), thinned with altitude. Small below 10 GHz, which is the point.
 //   * Ground reflection (multipath), microwave: two-ray model over a spherical Earth with
@@ -54,6 +57,116 @@ inline double KnifeEdgeLossDb(double v) {
     if (v <= -0.78) return 0.0;
     const double t = v - 0.1;
     return 6.9 + 20.0 * std::log10(std::sqrt(t * t + 1.0) + t);
+}
+
+// --------------------------------------------------------------------------- the smooth spherical earth
+//
+// ITU-R P.526-16 (11/2025) section 3, "Diffraction over a spherical Earth", for 10 MHz and above. Past the radio horizon
+// only the first term of the residue series counts (section 3.1), the product of a distance term and two height-gain terms:
+//   20 log10(E/E0) = F(X) + G(Y1) + G(Y2)                                       eq. (13)
+//   X = 2.188 beta f^(1/3) ae^(-2/3) d,   Y = 9.575e-3 beta f^(2/3) ae^(-1/3) h  eqs. (14a), (15a)   (f MHz, ae km, d km, h m)
+//   F(X) = 11 + 10 log10 X - 17.6 X (X >= 1.6),  -20 log10 X - 5.6488 X^1.425 (X < 1.6)            eqs. (17a), (17b)
+//   G(Y) = 17.6 (B - 1.1)^0.5 - 5 log10(B - 1.1) - 8 (B > 2),  20 log10(B + 0.1 B^3) (B <= 2),  B = beta Y,
+//          never below 2 + 20 log10 K                                          eqs. (18), (18a), (18b)
+// with K the surface admittance (eqs. 11a, 12a) and beta from it (eq. 16). Section 3.2 makes it a loss for any distance:
+// beyond the marginal line-of-sight distance (eq. 21) the first term; short of it, none if the ray clears the curved earth
+// by 0.552 of the first Fresnel radius (eqs. 22-23), else the first term over a notional earth just grazed at this distance
+// (eq. 24), scaled down by the clearance (eq. 25). The ground is the land of section 3.1.1.1's Fig. 2 (epsilon 15, sigma
+// 1e-3 S/m), vertically polarised (the radios' whips); at these frequencies the ground changes only G's floor.
+constexpr double kSphericalEarthMinFreqHz = 10e6;  // section 3: below 10 MHz only "LFMF-SmoothEarth" (ITU-R P.368)
+constexpr double kGroundPermittivity = 15.0;       // P.526-16 Fig. 2's medium land
+constexpr double kGroundConductivitySm = 1e-3;
+
+// Normalised surface admittance K, eqs. (11a) and (12a): f MHz, ae km.
+inline double SurfaceAdmittanceK(double freq_mhz, double ae_km, bool vertical = true, double permittivity = kGroundPermittivity,
+                                 double conductivity_s_m = kGroundConductivitySm) {
+    const double x = 18000.0 * conductivity_s_m / freq_mhz;
+    const double kh = 0.36 * std::pow(ae_km * freq_mhz, -1.0 / 3.0) *
+                      std::pow((permittivity - 1.0) * (permittivity - 1.0) + x * x, -0.25);
+    return vertical ? kh * std::sqrt(permittivity * permittivity + x * x) : kh;
+}
+
+// beta from K, eq. (16).
+inline double SphericalBeta(double k) {
+    const double k2 = k * k, k4 = k2 * k2;
+    return (1.0 + 1.6 * k2 + 0.67 * k4) / (1.0 + 4.5 * k2 + 1.53 * k4);
+}
+
+// The distance term F(X) (dB), eqs. (17a) and (17b).
+inline double SphericalDistanceTermDb(double x) {
+    if (x <= 0.0) return 0.0;
+    if (x >= 1.6) return 11.0 + 10.0 * std::log10(x) - 17.6 * x;
+    return -20.0 * std::log10(x) - 5.6488 * std::pow(x, 1.425);
+}
+
+// The height-gain term G(Y) (dB), eqs. (18), (18a), (18b) and the floor 2 + 20 log10 K.
+inline double SphericalHeightGainDb(double y, double beta, double k) {
+    const double b = beta * y;
+    double g;
+    if (b > 2.0) g = 17.6 * std::sqrt(b - 1.1) - 5.0 * std::log10(b - 1.1) - 8.0;
+    else g = 20.0 * std::log10(std::max(b + 0.1 * b * b * b, 1e-30));
+    const double least = 2.0 + 20.0 * std::log10(std::max(k, 1e-30));
+    return g < least ? least : g;
+}
+
+// The residue series' first term, 20 log10(E/E0) in dB (eq. 13; generally negative), for antennas h1, h2 (m) above a
+// sphere of radius ae (m), d (m) apart along it, at freq_hz.
+inline double SphericalFirstTermDb(double d_m, double h1_m, double h2_m, double freq_hz, double ae_m) {
+    const double f = freq_hz * 1e-6, ae = ae_m * 1e-3, d = d_m * 1e-3;
+    const double k = SurfaceAdmittanceK(f, ae);
+    const double beta = SphericalBeta(k);
+    const double cf = std::cbrt(f), ca = std::cbrt(ae);
+    const double x = 2.188 * beta * cf / (ca * ca) * d;
+    const double ky = 9.575e-3 * beta * cf * cf / ca;
+    return SphericalDistanceTermDb(x) + SphericalHeightGainDb(ky * h1_m, beta, k) + SphericalHeightGainDb(ky * h2_m, beta, k);
+}
+
+// Section 3.2's geometry, the same at every frequency: whether the path is past the marginal line of sight (eq. 21) and,
+// short of it, the smallest clearance h between the curved earth and the ray and d1 d2 / d at that point (eqs. 22-22e),
+// so that h_req (eq. 23) is 0.552 sqrt(fresnel_m2 lambda).
+struct SphericalClearance {
+    bool beyond = false;
+    double h_m = 0.0;
+    double fresnel_m2 = 0.0;
+};
+inline SphericalClearance SphericalClearanceOf(double d_m, double h1, double h2, double ae_m) {
+    SphericalClearance out;
+    const double d_los = std::sqrt(2.0 * ae_m) * (std::sqrt(h1) + std::sqrt(h2));  // eq. (21)
+    if (d_m >= d_los) {
+        out.beyond = true;
+        return out;
+    }
+    // h1 + h2 > 0 here, since d >= 1 m.
+    const double c = (h1 - h2) / (h1 + h2);
+    const double m = d_m * d_m / (4.0 * ae_m * (h1 + h2));
+    double arg = 1.5 * c * std::sqrt(3.0 * m / ((m + 1.0) * (m + 1.0) * (m + 1.0)));
+    arg = arg < -1.0 ? -1.0 : (arg > 1.0 ? 1.0 : arg);
+    const double b = 2.0 * std::sqrt((m + 1.0) / (3.0 * m)) * std::cos(kPi / 3.0 + std::acos(arg) / 3.0);
+    const double d1 = 0.5 * d_m * (1.0 + b);
+    const double d2 = d_m - d1;
+    out.h_m = ((h1 - d1 * d1 / (2.0 * ae_m)) * d2 + (h2 - d2 * d2 / (2.0 * ae_m)) * d1) / d_m;
+    out.fresnel_m2 = std::max(d1 * d2, 0.0) / d_m;
+    return out;
+}
+
+// Section 3.2's diffraction loss (dB, >= 0) over a smooth sphere of effective radius ae (m) for any distance, eqs. (21)-(25).
+// 0 below 10 MHz (section 3) and for degenerate input.
+inline double SphericalEarthLossDb(double d_m, double h1_m, double h2_m, double freq_hz, double ae_m) {
+    if (freq_hz < kSphericalEarthMinFreqHz || d_m < 1.0 || ae_m <= 0.0) return 0.0;
+    const double h1 = h1_m > 0.0 ? h1_m : 0.0, h2 = h2_m > 0.0 ? h2_m : 0.0;
+    const SphericalClearance cl = SphericalClearanceOf(d_m, h1, h2, ae_m);
+    if (cl.beyond) {
+        const double a = -SphericalFirstTermDb(d_m, h1, h2, freq_hz, ae_m);
+        return a > 0.0 ? a : 0.0;
+    }
+    const double h = cl.h_m;
+    const double h_req = 0.552 * std::sqrt(cl.fresnel_m2 * WavelengthOf(freq_hz));  // eq. (23)
+    if (h > h_req) return 0.0;
+    const double s = std::sqrt(h1) + std::sqrt(h2);
+    const double aem = 0.5 * (d_m / s) * (d_m / s);  // eq. (24)
+    const double ah = -SphericalFirstTermDb(d_m, h1, h2, freq_hz, aem);
+    if (ah < 0.0) return 0.0;
+    return h_req > 0.0 ? (1.0 - h / h_req) * ah : ah;  // eq. (25)
 }
 
 // Specific gaseous attenuation at sea level (dB/km, one way), standard atmosphere.
@@ -145,6 +258,16 @@ struct PathGeometry {
     // units. -1e9: none. Only these two are used (the classic three-edge form).
     double sub_v_geometry_a = -1e9;
     double sub_v_geometry_b = -1e9;
+    // ITU-R P.526-16 section 4.5.2's smooth path: the antennas' heights above a smooth surface fitted to the profile (eqs.
+    // 58-64; 0: not worked out, a path under 1 m), the earth's effective radius, and the same edge as worst_v_geometry
+    // found over that smooth surface with the earth's bulge alone. DiffractionLossDb adds the spherical earth's loss over
+    // what this smooth edge already costs (eq. 66).
+    double smooth_h1_m = 0.0;
+    double smooth_h2_m = 0.0;
+    double earth_radius_m = 0.0;
+    double smooth_v_geometry = -1e9;
+    SphericalClearance smooth_clearance;  // section 3.2's geometry over the smooth surface (frequency-free; a path clear of
+                                          // h_req at a band skips the spherical term's work)
     int samples = 0;  // profile samples taken (for profiling)
 };
 
@@ -270,18 +393,113 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
             }
         }
     }
+    // ITU-R P.526-16 section 4.5.2: a smooth surface fitted to the profile by least squares (eqs. 58-60), lowered under the
+    // highest obstruction of the straight line between the antennas (eqs. 61-62) and never above the ground under either
+    // antenna (eq. 63); the antennas' heights above it (eq. 64). Flat-earth geometry, the woods and buildings on the profile,
+    // the bare ground under the antennas.
+    {
+        const double ground_a = terrain.HeightAt(a_enu.x, a_enu.y);
+        const double ground_b = terrain.HeightAt(b_enu.x, b_enu.y);
+        double v1 = 0.0, v2 = 0.0;
+        double prev_s = 0.0, prev_h = ground_a;
+        double h_obs = -1e300, a_obt = -1e300, a_obr = -1e300;
+        const auto add = [&](double s, double h) {
+            const double ds = s - prev_s;
+            v1 += ds * (h + prev_h);                                            // eq. (58)
+            v2 += ds * (h * (2.0 * s + prev_s) + prev_h * (s + 2.0 * prev_s));  // eq. (59)
+            prev_s = s;
+            prev_h = h;
+        };
+        for (int i = 0; i < count; ++i) {
+            const double s = profile[static_cast<std::size_t>(i)].s;
+            const double h = profile[static_cast<std::size_t>(i)].h - bulge_at(s);
+            add(s, h);
+            const double obi = h - ray_at(s);  // eq. (61d)
+            if (obi > h_obs) h_obs = obi;      // eq. (61a)
+            // eqs. (61b), (61c): only an obstruction (obi > 0) can set the slopes the correction uses, which it applies
+            // only when there is one
+            if (obi > 0.0) {
+                if (obi / s > a_obt) a_obt = obi / s;
+                if (obi / (range - s) > a_obr) a_obr = obi / (range - s);
+            }
+        }
+        add(range, ground_b);
+        double hst = (2.0 * v1 * range - v2) / (range * range);  // eq. (60a)
+        double hsr = (v2 - v1 * range) / (range * range);        // eq. (60b)
+        if (h_obs > 0.0 && a_obt + a_obr > 0.0) {                // eqs. (62a)-(62f)
+            hst -= h_obs * a_obt / (a_obt + a_obr);
+            hsr -= h_obs * a_obr / (a_obt + a_obr);
+        }
+        if (hst > ground_a) hst = ground_a;  // eq. (63)
+        if (hsr > ground_b) hsr = ground_b;
+        g.smooth_h1_m = a_alt_m - hst;  // eq. (64)
+        g.smooth_h2_m = b_alt_m - hsr;
+        g.earth_radius_m = re;
+        g.smooth_clearance = SphericalClearanceOf(range, g.smooth_h1_m > 0.0 ? g.smooth_h1_m : 0.0, g.smooth_h2_m > 0.0 ? g.smooth_h2_m : 0.0, re);
+        // The edge over the smooth surface: the bulge above the ray from the antennas' heights over it (section 4.5.2's
+        // smooth Bullington path, as this file's edge rather than Bullington's). The bulge less a line, weighted by
+        // sqrt(1/s + 1/(d - s)), has one peak between the ends: found by golden section, not sample by sample.
+        const double h1s = g.smooth_h1_m, h2s = g.smooth_h2_m;
+        const auto smooth_vg = [&](double s) {
+            return (bulge_at(s) - (h1s + (h2s - h1s) * (s / range))) * std::sqrt(1.0 / s + 1.0 / (range - s));
+        };
+        constexpr double kGolden = 0.6180339887498949;
+        double lo = 1e-6 * range, hi = range - 1e-6 * range;
+        double x1 = hi - kGolden * (hi - lo), x2 = lo + kGolden * (hi - lo);
+        double f1 = smooth_vg(x1), f2 = smooth_vg(x2);
+        for (int it = 0; it < 48; ++it) {
+            if (f1 < f2) {
+                lo = x1;
+                x1 = x2;
+                f1 = f2;
+                x2 = lo + kGolden * (hi - lo);
+                f2 = smooth_vg(x2);
+            } else {
+                hi = x2;
+                x2 = x1;
+                f2 = f1;
+                x1 = hi - kGolden * (hi - lo);
+                f1 = smooth_vg(x1);
+            }
+        }
+        g.smooth_v_geometry = f1 > f2 ? f1 : f2;
+    }
     return g;
 }
 
-// Diffraction loss (dB) of a path at a frequency: the main edge plus Deygout's two sub-edges (ITU-R P.526 section
-// 4.3; a ridge line costs more than its highest crest alone, as it does in measurements).
-inline double DiffractionLossDb(const PathGeometry& g, double freq_hz) {
+// Above this the spherical earth's term is left out of DiffractionLossDb: the microwave links take the earth's curve through
+// the two-ray reflection over the sphere (ComputeReflection, LinkLossCore), whose rays cancel near the horizon; P.526's
+// interpolation inside the horizon would count the same cancelling twice (a 5 m radar at 10 GHz on a 50 m target at its
+// 38 km horizon: two rays and the edge 19 dB one way, P.526 15 dB). Past the horizon the two rays lose less than P.526's first
+// term (35 dB against 56 dB 22 km past it): left (docs/EM_ARCHITECTURE.md, "Smooth-earth diffraction").
+constexpr double kSphericalEarthMaxFreqHz = 1e9;
+
+// The terrain's edges alone (dB): the main edge plus Deygout's two sub-edges (ITU-R P.526 section 4.3; a ridge line costs
+// more than its highest crest alone, as it does in measurements).
+inline double TerrainEdgesLossDb(const PathGeometry& g, double freq_hz) {
     if (g.ground_range_m < 1.0 || freq_hz <= 0.0) return 0.0;
     const double k = std::sqrt(2.0 / WavelengthOf(freq_hz));
     double loss = KnifeEdgeLossDb(g.worst_v_geometry * k);
     if (g.sub_v_geometry_a > -1e8) loss += KnifeEdgeLossDb(g.sub_v_geometry_a * k);
     if (g.sub_v_geometry_b > -1e8) loss += KnifeEdgeLossDb(g.sub_v_geometry_b * k);
     return loss;
+}
+
+// Diffraction loss (dB) of a path at a frequency, ITU-R P.526-16 section 4.5.2's eq. (66) with this file's edges in place
+// of Bullington's: L = L_edges(actual profile) + max(L_sph - L_edges(smooth profile), 0). The terrain's edges as before,
+// plus the smooth spherical earth's loss (section 3.2) over what the edge of the bare bulge already costs, so a path over
+// smooth ground takes the spherical earth's loss and a ridge adds its own. From 10 MHz (section 3) to 1 GHz
+// (kSphericalEarthMaxFreqHz); the edges alone outside it.
+inline double DiffractionLossDb(const PathGeometry& g, double freq_hz) {
+    const double edges = TerrainEdgesLossDb(g, freq_hz);
+    if (g.earth_radius_m <= 0.0 || freq_hz < kSphericalEarthMinFreqHz || freq_hz >= kSphericalEarthMaxFreqHz) return edges;
+    // Short of the horizon with the clearance over h_req (eq. 23) the spherical term is zero: most paths stop here.
+    const SphericalClearance& cl = g.smooth_clearance;
+    if (!cl.beyond && cl.h_m > 0.552 * std::sqrt(cl.fresnel_m2 * WavelengthOf(freq_hz))) return edges;
+    const double sph = SphericalEarthLossDb(g.ground_range_m, g.smooth_h1_m, g.smooth_h2_m, freq_hz, g.earth_radius_m);
+    if (sph <= 0.0) return edges;
+    const double smooth = KnifeEdgeLossDb(g.smooth_v_geometry * std::sqrt(2.0 / WavelengthOf(freq_hz)));
+    return edges + (sph > smooth ? sph - smooth : 0.0);
 }
 
 // --------------------------------------------------------------------------- ground reflection
