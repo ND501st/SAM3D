@@ -354,6 +354,104 @@ public:
         }
         return "open";
     }
+
+    // The land cover at (e, n) as ITU-R P.1812's clutter category (simcore/clutter.hpp; roadmap S9), in LandCoverAt's
+    // order: a lake or river water/sea, a marsh open/rural, a forest urban/trees/forest, a town by TownClutterClass (its
+    // middle, within `dense_share` of its radius, dense urban unless a village), the rest open/rural.
+    ClutterClass ClutterClassAt(double e, double n, double dense_share) const {
+        const std::string cover = LandCoverAt(e, n);
+        if (cover == "lake" || cover == "river") return ClutterClass::WaterSea;
+        if (cover == "forest") return ClutterClass::UrbanTreesForest;
+        if (cover != "town") return ClutterClass::OpenRural;
+        ClutterClass best = ClutterClass::OpenRural;
+        for (const CountrySettlementDef& s : def_.settlements) {
+            const ClutterClass c = TownClutterClass(s.kind, std::hypot(s.centre.east_m - e, s.centre.north_m - n), s.radius_m, dense_share);
+            if (static_cast<int>(c) > static_cast<int>(best)) best = c;
+        }
+        return best;
+    }
+
+    // ClutterClassAt at the centre of every `cell_m` cell over the country's extent, each feature stamped over its own
+    // bounds only (well under a second for the whole country at 250 m): what the country's own ground carries as
+    // obstacles (command/em_radio.hpp CountryGround).
+    ClutterRaster BakeClutter(double cell_m, double dense_share) const {
+        const MapDef& g = def_.ground;
+        ClutterRaster r;
+        r.cell_m = cell_m;
+        r.west_m = g.west_m;
+        r.south_m = g.south_m;
+        r.cols = std::max(1, static_cast<int>(std::ceil((g.east_m - g.west_m) / cell_m - 1e-9)));
+        r.rows = std::max(1, static_cast<int>(std::ceil((g.north_m - g.south_m) / cell_m - 1e-9)));
+        r.cells.assign(static_cast<std::size_t>(r.cols) * static_cast<std::size_t>(r.rows), static_cast<std::uint8_t>(ClutterClass::OpenRural));
+        int c0 = 0, c1 = 0, r0 = 0, r1 = 0;
+        const auto bounds = [](const std::vector<MapPoint>& pts, double& w, double& s, double& e, double& n) {
+            w = s = 1e300;
+            e = n = -1e300;
+            for (const MapPoint& p : pts) {
+                w = std::min(w, p.east_m);
+                e = std::max(e, p.east_m);
+                s = std::min(s, p.north_m);
+                n = std::max(n, p.north_m);
+            }
+        };
+        // Stamped in the reverse of LandCoverAt's order, so what it looks at first is stamped last.
+        for (const CountrySettlementDef& s : def_.settlements) {
+            if (!r.CellsIn(s.centre.east_m - s.radius_m, s.centre.north_m - s.radius_m, s.centre.east_m + s.radius_m, s.centre.north_m + s.radius_m, c0,
+                           c1, r0, r1)) {
+                continue;
+            }
+            for (int y = r0; y <= r1; ++y) {
+                for (int x = c0; x <= c1; ++x) {
+                    const ClutterClass c = TownClutterClass(s.kind, std::hypot(r.CentreEast(x) - s.centre.east_m, r.CentreNorth(y) - s.centre.north_m),
+                                                            s.radius_m, dense_share);
+                    if (static_cast<int>(c) > static_cast<int>(r.ClassAt(r.CentreEast(x), r.CentreNorth(y)))) r.Set(x, y, c);
+                }
+            }
+        }
+        const auto polygons = [&](const std::vector<MapPolygonDef>& list, ClutterClass k) {
+            for (const MapPolygonDef& f : list) {
+                double w = 0.0, s = 0.0, e = 0.0, n = 0.0;
+                bounds(f.points, w, s, e, n);
+                if (f.points.size() < 3 || !r.CellsIn(w, s, e, n, c0, c1, r0, r1)) continue;
+                for (int y = r0; y <= r1; ++y) {
+                    for (int x = c0; x <= c1; ++x) {
+                        if (mapgeo::InPolygon(f.points, r.CentreEast(x), r.CentreNorth(y))) r.Set(x, y, k);
+                    }
+                }
+            }
+        };
+        polygons(g.forests, ClutterClass::UrbanTreesForest);
+        polygons(g.marshes, ClutterClass::OpenRural);
+        for (const MapLineDef& line : g.rivers) {
+            const double half = 0.5 * line.width_m;
+            for (std::size_t i = 1; i < line.points.size(); ++i) {
+                const MapPoint& a = line.points[i - 1];
+                const MapPoint& b = line.points[i];
+                if (!r.CellsIn(std::min(a.east_m, b.east_m) - half, std::min(a.north_m, b.north_m) - half, std::max(a.east_m, b.east_m) + half,
+                               std::max(a.north_m, b.north_m) + half, c0, c1, r0, r1)) {
+                    continue;
+                }
+                for (int y = r0; y <= r1; ++y) {
+                    for (int x = c0; x <= c1; ++x) {
+                        if (mapgeo::DistToSegment(r.CentreEast(x), r.CentreNorth(y), a.east_m, a.north_m, b.east_m, b.north_m) < half) {
+                            r.Set(x, y, ClutterClass::WaterSea);
+                        }
+                    }
+                }
+            }
+        }
+        for (const MapLakeDef& l : g.lakes) {
+            double w = 0.0, s = 0.0, e = 0.0, n = 0.0;
+            bounds(l.points, w, s, e, n);
+            if (l.points.size() < 3 || !r.CellsIn(w, s, e, n, c0, c1, r0, r1)) continue;
+            for (int y = r0; y <= r1; ++y) {
+                for (int x = c0; x <= c1; ++x) {
+                    if (mapgeo::InPolygon(l.points, r.CentreEast(x), r.CentreNorth(y))) r.Set(x, y, ClutterClass::WaterSea);
+                }
+            }
+        }
+        return r;
+    }
     const std::vector<CountryCrossing>& Crossings() const { return crossings_; }
 
     const CountryCrossing* Crossing(const std::string& id) const {
