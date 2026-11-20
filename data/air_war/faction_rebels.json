@@ -110,6 +110,14 @@
     "source": "game values: a defector now and then, no spares",
     "confidence": "estimate"
   },
+  "air_front": {
+    "kind": "surge", "cover_at_most": 0.0, "mobile_destroyed_at_least": 1.0, "loss_line": 0.01, "loss_days": 2,
+    "delay_h": [6, 24], "max_depth_km": 40, "min_reward": 1.0, "crisis": "helicopters", "crisis_h": [24, 72],
+    "surge_h": [24, 72], "surge_rest_h": 72,
+    "source": "SAM3D estimates bounded by the cases (docs/research/fronts_2026-11/air_ground_cases.md section 5.1): a small air force goes forward for days only where the enemy's troops are believed without SAM cover, then cuts back (cia_1985_angola_offensive; cia_1986_angola_saaf); loss-shy, 1% a sortie (jvl_1973_losses: the normal 1973 rate); its helicopters may break the rule once in a crisis, at the price werrell_2005 p. 153 records. min_reward and surge_rest_h are game values",
+    "confidence": "estimate",
+    "notes": "docs/fronts/02_AIR_FRONT.md section 3, the rebels' surge: 40 km at most, 1-3 days, then back to the border and a rest. Only in a sector where our mobile SAMs were once believed and are now believed gone (air_front.min_baseline)."
+  },
   "politics": {
     "support": 0.8, "pressure": 0.5, "loss_tolerance_per_day": 0.3, "pow_sensitivity": 0.6, "collateral_sensitivity": 0.3,
     "no_strike_city_radius_km": 0, "max_depth_km": 80, "banned": [ "city" ], "interference_per_cycle": 0.02,

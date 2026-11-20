@@ -837,6 +837,8 @@ struct FactionDef {
     // The loader also writes from it what the earlier blocks read: opportunity.tendency, c2.free_hunt, c2.alert,
     // radio.discipline and radio.discipline_gci_fighters.
     HotPhaseDef hot;
+    // How its air staff moves its air front by sector (the "air_front" block, track F, F2.3; air_front_def.hpp).
+    AirFrontDef air_front;
 
     // A class's formations by phase, as a flight carries them (flights.hpp FlightState::formations); empty: none given.
     std::map<std::string, std::vector<Vec3>> FormationsFor(const std::string& cls) const {
@@ -1682,7 +1684,7 @@ public:
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
                              "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2",
-                             "opportunity_rules", "hot_phase", "own_ad"}) ||
+                             "opportunity_rules", "hot_phase", "own_ad", "air_front"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1709,7 +1711,8 @@ public:
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
-            !LoadCommsJamming(root, out) || !LoadFormations(root, out) || !LoadRadioBlock(root, out) || !LoadC2Block(root, out)) {
+            !LoadCommsJamming(root, out) || !LoadFormations(root, out) || !LoadRadioBlock(root, out) || !LoadC2Block(root, out) ||
+            !LoadAirFrontBlock(root, out)) {
             return false;
         }
         if (const json::Value* op = root.Find("opportunity_rules")) {
@@ -1717,6 +1720,76 @@ public:
             if (!LoadOpportunityRules(*op, out.opportunity, &why)) return Fail("opportunity_rules", why);
         }
         return LoadHotPhaseBlock(root, out);
+    }
+
+    // The "air_front" block (track F, F2.3; docs/fronts/02_AIR_FRONT.md §3 and §6): optional (without it the faction's air
+    // front never moves). Strict: an unknown key, a value out of its range, a surge's keys on another kind, a border kind
+    // without its event or an event its politics does not have fails.
+    bool LoadAirFrontBlock(const json::Value& root, FactionDef& out) {
+        const json::Value* b = root.Find("air_front");
+        if (b == nullptr) return true;
+        const std::string p = "air_front";
+        if (!b->Is(json::Type::Object)) return Fail(p, "expected an object");
+        AirFrontDef& a = out.air_front;
+        std::string kind, crisis = "none";
+        double depth_km = a.max_depth_m / 1000.0;
+        if (!Keys(*b, p, {"kind", "cover_at_most", "mobile_destroyed_at_least", "loss_line", "loss_days", "delay_h", "max_depth_km",
+                          "min_reward", "crisis", "crisis_h", "surge_h", "surge_rest_h", "after_event", "source", "confidence", "notes"}) ||
+            !Provenance(*b, p) || !RequireString(*b, p, "source", a.source) || !RequireString(*b, p, "confidence", a.confidence) ||
+            !RequireString(*b, p, "kind", kind) || !OptionalString(*b, p, "crisis", crisis) ||
+            !Num(*b, p, "cover_at_most", a.cover_at_most, 0.0, 1.0) ||
+            !Num(*b, p, "mobile_destroyed_at_least", a.mobile_destroyed_at_least, 0.0, 1.0) ||
+            !Num(*b, p, "loss_line", a.loss_line, 0.0, 1.0) || !Int(*b, p, "loss_days", a.loss_days, 1, 3) ||
+            !Num(*b, p, "max_depth_km", depth_km, 0.0, 200.0) || !Num(*b, p, "min_reward", a.min_reward, 0.0, 1000.0) ||
+            !Num(*b, p, "surge_rest_h", a.surge_rest_h, 0.0, 720.0) || !OptionalString(*b, p, "after_event", a.after_event) ||
+            !HourPair(*b, p, "delay_h", a.delay_lo_h, a.delay_hi_h) || !HourPair(*b, p, "crisis_h", a.crisis_lo_h, a.crisis_hi_h) ||
+            !HourPair(*b, p, "surge_h", a.surge_lo_h, a.surge_hi_h)) {
+            return false;
+        }
+        a.max_depth_m = depth_km * 1000.0;
+        if (kind == "advance") {
+            a.kind = AirFrontKind::Advance;
+        } else if (kind == "surge") {
+            a.kind = AirFrontKind::Surge;
+        } else if (kind == "border") {
+            a.kind = AirFrontKind::Border;
+        } else {
+            return Fail(Join(p, "kind"), "advance, surge or border");
+        }
+        if (crisis == "none") {
+            a.crisis = AirFrontCrisis::None;
+        } else if (crisis == "advance") {
+            a.crisis = AirFrontCrisis::Advance;
+        } else if (crisis == "helicopters") {
+            a.crisis = AirFrontCrisis::Helicopters;
+        } else {
+            return Fail(Join(p, "crisis"), "none, advance or helicopters");
+        }
+        if (a.kind != AirFrontKind::Surge && (b->Find("surge_h") != nullptr || b->Find("surge_rest_h") != nullptr)) {
+            return Fail(Join(p, "surge_h"), "only a surge's");
+        }
+        if (a.kind == AirFrontKind::Border) {
+            if (a.after_event.empty()) return Fail(Join(p, "after_event"), "a border's air front moves only after a political event: name it");
+            bool found = false;
+            for (const PoliticalEventDef& e : out.politics.events) found = found || e.id == a.after_event;
+            if (!found) return Fail(Join(p, "after_event"), "no political event '" + a.after_event + "' in its politics");
+        } else if (!a.after_event.empty()) {
+            return Fail(Join(p, "after_event"), "only a border's");
+        }
+        a.present = true;
+        return true;
+    }
+    // A pair of hours [lo, hi], 0 <= lo <= hi <= 720 (absent: left as it is).
+    bool HourPair(const json::Value& obj, const std::string& path, const char* key, double& lo, double& hi) {
+        const json::Value* v = obj.Find(key);
+        if (v == nullptr) return true;
+        if (!v->Is(json::Type::Array) || v->items.size() != 2 || !v->items[0].Is(json::Type::Number) || !v->items[1].Is(json::Type::Number) ||
+            v->items[0].number < 0.0 || v->items[0].number > v->items[1].number || v->items[1].number > 720.0) {
+            return Fail(Join(path, key), "[lo, hi] hours, 0 <= lo <= hi <= 720");
+        }
+        lo = v->items[0].number;
+        hi = v->items[1].number;
+        return true;
     }
 
     // The "hot_phase" block (roadmap B11, 10_FACTIONS.md §7.5): required. It holds the values the earlier blocks parked

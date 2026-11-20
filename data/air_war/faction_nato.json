@@ -234,6 +234,13 @@
     "source": "afmag_1989_slam (HARM in short supply, Shrike older: a stock the rollback spends in two or three days); the numbers are game values (balance pass, docs/air_war/09_BALANCE.md)",
     "confidence": "estimate"
   },
+  "air_front": {
+    "kind": "advance", "cover_at_most": 0.30, "mobile_destroyed_at_least": 0.5, "loss_line": 0.02, "loss_days": 2,
+    "delay_h": [6, 24], "max_depth_km": 60, "min_reward": 1.0, "crisis": "advance", "crisis_h": [24, 72],
+    "source": "SAM3D estimates bounded by the cases (docs/research/fronts_2026-11/air_ground_cases.md section 7): the superior faction opens a sector when the believed working fire units over a 20 km strip fall to 30% of their pre-war number (brant_1986_bai_1973 ch. 4, a SAM-free corridor about 24 km wide; werrell_2005 p. 153, full close support under 24 h from the first sites destroyed: the delay); pulls back above 2% lost a sortie (jvl_1973_losses, werrell_2005 pp. 151, 154: the normal 1973 rate just over 1%, the IAF's 4% that stopped it); 60 km greatest depth; a crisis on its own ground front lets it ignore the loss gate for 1-3 days (entwistle_1988 ch. 4-5, the Golan). min_reward is a game value",
+    "confidence": "estimate",
+    "notes": "docs/fronts/02_AIR_FRONT.md section 3. The chief's traits move the gates by at most air_front.trait_shift of their value; the gates never open in a sector no band of which was ever believed covered (air_front.min_baseline)."
+  },
   "politics": {
     "support": 0.65, "pressure": 0.35, "loss_tolerance_per_day": 4, "pow_sensitivity": 0.9, "collateral_sensitivity": 0.9,
     "no_strike_city_radius_km": 4, "banned": [ "city", "power_plant", "substation", "dam" ], "interference_per_cycle": 0.06,

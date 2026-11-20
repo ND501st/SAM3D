@@ -217,6 +217,13 @@
     "source": "game values: the second echelon's aircraft; Kh-58 and Kh-25MP stocks are not known",
     "confidence": "estimate"
   },
+  "air_front": {
+    "kind": "advance", "cover_at_most": 0.20, "mobile_destroyed_at_least": 0.5, "loss_line": 0.04, "loss_days": 2,
+    "delay_h": [6, 24], "max_depth_km": 60, "min_reward": 1.0, "crisis": "advance", "crisis_h": [24, 72],
+    "source": "SAM3D estimates bounded by the cases (docs/research/fronts_2026-11/air_ground_cases.md section 7): the peer faction opens a sector when the believed working fire units over a 20 km strip fall to 20% of their pre-war number (mt_1965_krasovskiy_conventional p. 8: good penetration needs 60-80% of the SAM fire system neutralised) and half our mobile air defence there is believed destroyed (fm_100_2_1_1984 p. 8-1: 'destroyed' at 50% of elements); delay 6-24 h (werrell_2005 p. 153); pulls back above 4% lost a sortie (jvl_1973_losses, werrell_2005 p. 151: the IAF's rate over the Suez front); 60 km greatest depth; the crisis override (entwistle_1988). min_reward is a game value",
+    "confidence": "estimate",
+    "notes": "docs/fronts/02_AIR_FRONT.md section 3. The chief's traits move the gates by at most air_front.trait_shift of their value; the gates never open in a sector no band of which was ever believed covered (air_front.min_baseline)."
+  },
   "politics": {
     "support": 0.8, "pressure": 0.5, "loss_tolerance_per_day": 6, "pow_sensitivity": 0.3, "collateral_sensitivity": 0.3,
     "no_strike_city_radius_km": 0, "banned": [ "city" ], "interference_per_cycle": 0.08,
