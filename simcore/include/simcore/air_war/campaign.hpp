@@ -1873,8 +1873,21 @@ private:
     // post; the commander's while it is empty) on the picture, the measure, the losses and the politics; each move in the
     // journal; the depths written for the planner (F2.4). No draw: the war's sequence is the same as at mode 0.
     void DecideAirFrontNow() {
-        const TuningTable& tune = data_.tuning;
         AirFrontRules rules;
+        AirFrontInputs in;
+        AirFrontChief who;
+        const Officer* chief = AirFrontDecisionInputs(rules, in, who);
+        DecideAirFront(data_.faction.air_front, rules, in, who, air_front_, air_front_moves_, &air_front_reward_, &air_front_scratch_);
+        air_front_.Depths(air_front_depth_);
+        const std::string title = chief != nullptr ? chief->Title() : std::string("air staff");
+        for (const AirFrontMove& m : air_front_moves_) Log("air_front", title, AirFrontLine(m), false);
+    }
+
+public:
+    // What the decision reads now (fronts_bench times it on these): the game values, the enemy's own picture, the last
+    // measure, its losses and politics, and its air operations chief (returned; null: the post empty, default traits).
+    const Officer* AirFrontDecisionInputs(AirFrontRules& rules, AirFrontInputs& in, AirFrontChief& who) const {
+        const TuningTable& tune = data_.tuning;
         rules.step_m = tune.Get("air_front.step_m");
         rules.min_baseline = tune.Get("air_front.min_baseline");
         rules.min_sorties = tune.Get("air_front.min_sorties");
@@ -1882,13 +1895,13 @@ private:
         rules.trait_shift = tune.Get("air_front.trait_shift");
         const Officer* chief = staff_.HolderPtr(StaffRole::Planner);
         if (chief == nullptr) chief = staff_.HolderPtr(StaffRole::Commander);
-        AirFrontChief who;
+        who = AirFrontChief();
         if (chief != nullptr) {
             who.traits = chief->def.traits;
             who.stress = chief->stress;
         }
         const AirFrontDef& def = data_.faction.air_front;
-        AirFrontInputs in;
+        in = AirFrontInputs();
         in.picture = &intel_;
         in.line = &front_line_;
         in.cover = &sector_cover_;
@@ -1899,11 +1912,10 @@ private:
         in.event_fired = !def.after_event.empty() && politics_.fired_events.count(def.after_event) > 0;
         in.crisis = nullptr;  // its own ground front's crisis: F3.5's picture (a stub until then)
         in.now_h = now_h_;
-        DecideAirFront(def, rules, in, who, air_front_, air_front_moves_, &air_front_reward_, &air_front_scratch_);
-        air_front_.Depths(air_front_depth_);
-        const std::string title = chief != nullptr ? chief->Title() : std::string("air staff");
-        for (const AirFrontMove& m : air_front_moves_) Log("air_front", title, AirFrontLine(m), false);
+        return chief;
     }
+
+private:
     // A move as the enemy's journal tells it (its side of the debrief, tools/air_war_view.py).
     std::string AirFrontLine(const AirFrontMove& m) const {
         char buf[256];
