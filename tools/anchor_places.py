@@ -5,21 +5,23 @@ are. This is the one-off migration that moved the coordinates out of the theatre
 the map's "sites" list:
 
   * data/air_war/theatre_pannonia.json and theatre_pannonia_nation.json: an object's east_km/north_km becomes
-    "at": <place>; each prepared position and each front's bases, battery_position and missile_launch becomes
-    {"at": <place>}. A front's line and entries stay coordinates (the fronts' geometry, tracks F2 and F3);
+    "at": <place>; each prepared position, each point of a front's line and each front's bases, battery_position and
+    missile_launch becomes {"at": <place>}, each of its entry points {"id": ..., "at": <place>};
   * data/command/places_pannonia.json: each place's east_km/north_km becomes "at": <place>;
   * data/maps/pannonia.json: a new "sites" list after its landmarks; each file above gets "place_map".
 
 A place is a settlement's centre, a landmark or a site, one namespace. A position at a settlement's or a landmark's exact
 point takes that place; positions at the same exact point share one site; any other gets its own site, named after its
-object (an object: its id; a prepared position: "<object>_pos<n>"; a front's point: "<faction>_<key>"; a chain place:
-its id; "_site" added where a place of the map already has that id). A site keeps the old number's text, so the
+object (an object: its id; a prepared position: "<object>_pos<n>"; a front's point: "<faction>_<key>", its line's
+"<faction>_line<n>", its entries' "<faction>_entry_<id>"; a chain place: its id; "_site" added where a place of the map
+already has that id). A site keeps the old number's text, so the
 loader's km * 1000.0 is the same double as before, bit for bit. With --crossings (country_dump's JSON), a bridge
 object's site names the crossing simcore's supply network links it to.
 
     python tools/anchor_places.py [--data data] [--crossings out/pannonia_map.json] [--dry-run]
 
-Run on data already migrated it finds nothing to move and changes nothing.
+Run on data already migrated it finds nothing to move and changes nothing; run on data partly migrated it anchors the
+rest, adding its sites after the map's.
 """
 import argparse
 import json
@@ -66,6 +68,8 @@ def role(kind, path):
         if len(path) == 4 and path[0] == "objects" and path[2] == "positions":
             return "position"
         if len(path) == 3 and path[0] == "fronts" and path[2] in FRONT_POINTS:
+            return "front"
+        if len(path) == 4 and path[0] == "fronts" and path[2] in ("line", "entries"):
             return "front"
         return None
     if kind == "places" and len(path) == 2 and path[0] == "places":
@@ -118,6 +122,12 @@ def site_wanted(kind, doc, path):
         n = path[3] + 1
         return f"{o['id']}_pos{n}", f"{o['name']}: prepared position {n}"
     f = doc["fronts"][path[1]]
+    if path[2] == "line":
+        n = path[3] + 1
+        return f"{f['faction']}_line{n}", f"{f['name']}: line point {n}"
+    if path[2] == "entries":
+        eid = f["entries"][path[3]]["id"]
+        return f"{f['faction']}_entry_{eid.lower()}", f"{f['name']}: entry point {eid}"
     return f"{f['faction']}_{path[2]}", f"{f['name']}: {path[2].replace('_', ' ')}"
 
 
@@ -163,12 +173,14 @@ def add_sites(map_text, sites):
     if not sites:
         return map_text
     lines = ",\n".join(site_line(s) for s in sites)
-    if '"sites": [' in map_text:
-        raise ValueError("the map already has sites; this migration adds them once")
     end = map_text.rstrip()
     if not end.endswith("]\n}") and not end.endswith("]\r\n}"):
-        raise ValueError("the map must end with its last list (landmarks)")
+        raise ValueError("the map must end with its last list (landmarks, then sites)")
     cut = end.rfind("]")
+    if '"sites": [' in map_text:  # partly migrated: the new sites after the map's
+        if end.rfind('"sites": [') < end.rfind('"landmarks": ['):
+            raise ValueError("the map's sites must be its last list")
+        return end[:cut].rstrip() + ",\n" + lines + "\n  ]\n}\n"
     return end[:cut].rstrip() + "\n  ],\n  \"sites\": [\n" + lines + "\n  ]\n}\n"
 
 

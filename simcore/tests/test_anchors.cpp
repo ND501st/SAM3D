@@ -75,6 +75,13 @@ void AnchorsOf(const json::Value& file, std::map<std::string, std::string>& at) 
     if (const json::Value* fronts = file.Find("fronts")) {
         for (const json::Value& f : fronts->items) {
             const std::string faction = f.Find("faction")->string;
+            const std::string front = "front:" + faction + ".";
+            for (auto it = at.lower_bound(front); it != at.end() && it->first.rfind(front, 0) == 0;) it = at.erase(it);
+            const json::Value* line = f.Find("line");
+            for (std::size_t k = 0; line != nullptr && k < line->items.size(); ++k) at[front + "line#" + std::to_string(k)] = AtOf(line->items[k]);
+            if (const json::Value* entries = f.Find("entries")) {
+                for (const json::Value& en : entries->items) at[front + "entry." + en.Find("id")->string] = AtOf(en);
+            }
             for (const char* key : {"bases", "battery_position", "missile_launch"}) {
                 const json::Value* p = f.Find(key);
                 if (p != nullptr) {
@@ -103,11 +110,13 @@ bool LoadAll(const MapPlaces* places, airwar::TheatreDef& district, airwar::Thea
 }
 
 // A theatre on a place map, small enough to break one piece at a time.
-std::string SmallTheatre(const std::string& object_point, const std::string& more = "", const std::string& bases = R"("at": "kesmark")") {
+const char* const kSmallLine = R"("line": [{"at": "rebels_line1"}, {"at": "rebels_line2"}], "entries": [{"id": "S1", "at": "rebels_entry_s1"}])";
+
+std::string SmallTheatre(const std::string& object_point, const std::string& more = "", const std::string& bases = R"("at": "kesmark")",
+                         const std::string& line = kSmallLine) {
     return R"({"theatre_id": "t", "name": "t", "source": "test", "confidence": "estimate", "place_map": "maps/pannonia.json",
       "origin": {"lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 100},
-      "fronts": [{"faction": "rebels", "name": "f", "line": [{"east_km": -5, "north_km": -20}, {"east_km": 5, "north_km": -20}],
-                  "entries": [{"id": "S1", "east_km": 0, "north_km": -30}], "bases": {)" + bases + R"(}}],
+      "fronts": [{"faction": "rebels", "name": "f", )" + line + R"(, "bases": {)" + bases + R"(}}],
       "objects": [{"id": "b", "name": "b", "kind": "sam_site", )" + object_point + R"(, "player": true,
                    "defence": {"system": "osa", "radius_km": 10, "lethality": 0.2}})" + more + "]}";
 }
@@ -145,7 +154,12 @@ SC_TEST("anchors (F1): the map's places are one namespace, built once; the theat
     const auto check = [&](const airwar::TheatreDef& t, const std::map<std::string, std::string>& names) {
         for (const auto& [label, pos] : Points(t)) {
             const auto it = names.find(label);
-            if (it == names.end()) continue;  // a front's line and entries (tracks F2, F3), a supply line's columns
+            if (it == names.end()) {  // only a supply line's columns, which start at their depot, name no place
+                const airwar::TheatreObject* o = label.rfind("obj:", 0) == 0 ? t.Find(label.substr(4)) : nullptr;
+                SC_EXPECT(o != nullptr && o->supply_line >= 0);
+                if (o == nullptr || o->supply_line < 0) std::printf("    %s names no place\n", label.c_str());
+                continue;
+            }
             const MapPoint* p = places.Find(it->second);
             SC_EXPECT(p != nullptr);
             if (p == nullptr) {
@@ -195,6 +209,10 @@ SC_TEST("anchors (F1): a place moved 2 km on the map moves everything anchored t
         {"kesmark", 0.0, -2000.0, {"obj:kesmark", "place:kesmark"}},
         {"s75_capital_nw_pos1", 1414.0, 1414.0, {"obj:s75_capital_nw#1"}},
         {"nato_bases", 0.0, 2000.0, {"front:nato.bases"}},
+        {"nato_line2", 2000.0, 0.0, {"front:nato.line#1"}},
+        {"warsaw_pact_entry_n2", -2000.0, 0.0, {"front:warsaw_pact.entry.N2"}},
+        // A depot: its supply lines' columns start where it stands.
+        {"central_ammo_depot", 0.0, 2000.0, {"obj:central_ammo_depot", "obj:tr93_ammo_road_1", "obj:west_road_1", "obj:mrd9_ammo_road_1"}},
     };
     for (const Case& k : cases) {
         MapPlaces moved = places;
@@ -269,10 +287,28 @@ SC_TEST("anchors (F1): a file naming a place the map lacks is refused, and so ar
     SC_EXPECT(refused(SmallTheatre(R"("at": "osa_21")", R"(, {"id": "s", "name": "s", "kind": "sam_site", "at": "s75_capital_nw", "mobile": true,
                       "relocate_h": 24, "positions": [{"at": "s75_capital_nw_pos1"}, {"at": "s75_capital_nw_pos9"}]})"),
                       &places, "objects[1].positions[1].at: no place 's75_capital_nw_pos9'"));
+    // A front's line and entry points too.
+    SC_EXPECT(refused(SmallTheatre(R"("at": "osa_21")", "", R"("at": "kesmark")",
+                                   R"("line": [{"at": "rebels_line1"}, {"at": "rebels_line9"}], "entries": [{"id": "S1", "at": "rebels_entry_s1"}])"),
+                      &places, "fronts[0].line[1].at: no place 'rebels_line9'"));
+    SC_EXPECT(refused(SmallTheatre(R"("at": "osa_21")", "", R"("at": "kesmark")",
+                                   R"("line": [{"at": "rebels_line1"}, {"at": "rebels_line2"}], "entries": [{"id": "S1", "east_km": 0, "north_km": -30}])"),
+                      &places, "fronts[0].entries[0]: a theatre on a place map"));
     // A theatre of coordinates (tests' inline theatres) has no places to name.
-    std::string coords = SmallTheatre(R"("at": "osa_21")", "", R"("east_km": 0, "north_km": -40)");
+    const std::string coord_line = R"("line": [{"east_km": -5, "north_km": -20}, {"east_km": 5, "north_km": -20}], "entries": [{"id": "S1", "east_km": 0, "north_km": -30}])";
+    std::string coords = SmallTheatre(R"("at": "osa_21")", "", R"("east_km": 0, "north_km": -40)", coord_line);
     coords.replace(coords.find("\"place_map\": \"maps/pannonia.json\","), 34, "");
     SC_EXPECT(refused(coords, &places, "objects[0].at: a place needs the theatre's \"place_map\""));
+    std::string coords_entry = SmallTheatre(R"("east_km": 6, "north_km": -10)", "", R"("east_km": 0, "north_km": -40)",
+                                            R"("line": [{"east_km": -5, "north_km": -20}, {"east_km": 5, "north_km": -20}], "entries": [{"id": "S1", "at": "rebels_entry_s1"}])");
+    coords_entry.replace(coords_entry.find("\"place_map\": \"maps/pannonia.json\","), 34, "");
+    SC_EXPECT(refused(coords_entry, &places, "fronts[0].entries[0].at: a place needs the theatre's \"place_map\""));
+    coords = SmallTheatre(R"("east_km": 6, "north_km": -10)", "", R"("east_km": 0, "north_km": -40)", coord_line);
+    coords.replace(coords.find("\"place_map\": \"maps/pannonia.json\","), 34, "");
+    std::string coords_err;
+    SC_EXPECT(airwar::LoadTheatreJson(coords, t, &coords_err));
+    if (!coords_err.empty()) std::printf("    %s\n", coords_err.c_str());
+    SC_EXPECT(t.fronts.size() == 1 && t.fronts[0].entries[0].pos.y == -30000.0 && t.objects[0].pos.x == 6000.0);
 
     // Our chain's places file: the same rule.
     std::string chain_text, places_text, means_text;

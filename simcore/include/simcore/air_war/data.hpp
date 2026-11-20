@@ -198,8 +198,8 @@ struct TheatreDef {
     std::vector<TheatreObject> objects;  // a supply line's columns among them, after the written objects
     std::vector<SupplyLineDef> supply_lines;
     std::string country_map;  // the country's map its supply lines follow (data/maps/, simcore/country_map.hpp); "" none
-    // The map its points are places of (roadmap F1): its objects, prepared positions and fronts' bases, battery positions
-    // and missile launch points name a place ("at") and stand at its point. "" none: they carry east_km and north_km
+    // The map its points are places of (roadmap F1): its objects, prepared positions and fronts' lines, entry points,
+    // bases, battery positions and missile launch points name a place ("at") and stand at its point. "" none: they carry east_km and north_km
     // (tests' inline theatres). Not country_map: that also routes the supply lines on the map's roads.
     std::string place_map;
 
@@ -1547,7 +1547,7 @@ public:
         if (line == nullptr || line->items.size() < 2) return message_.empty() ? Fail(Join(p, "line"), "at least two points") : false;
         for (std::size_t i = 0; i < line->items.size(); ++i) {
             Vec3 v;
-            if (!Km(line->items[i], Index(Join(p, "line"), i), v)) return false;
+            if (!Where(line->items[i], Index(Join(p, "line"), i), v)) return false;
             fr.line.push_back(v);
         }
         const json::Value* entries = OptionalArray(f, p, "entries");
@@ -1556,12 +1556,14 @@ public:
             const json::Value& e = entries->items[i];
             const std::string ep = Index(Join(p, "entries"), i);
             EntryPoint en;
-            double ekm = 0.0, nkm = 0.0;
-            if (!Keys(e, ep, {"id", "east_km", "north_km", "notes"}) || !RequireString(e, ep, "id", en.id) ||
-                !OptionalNumber(e, ep, "east_km", ekm) || !OptionalNumber(e, ep, "north_km", nkm)) {
-                return false;
+            if (!Keys(e, ep, {"id", "east_km", "north_km", "at", "notes"}) || !RequireString(e, ep, "id", en.id)) return false;
+            if (anchored_ || e.Find("at") != nullptr) {
+                if (!Where(e, ep, en.pos, false)) return false;
+            } else {
+                double ekm = 0.0, nkm = 0.0;  // a theatre of coordinates: a missing one is 0, as it always was
+                if (!OptionalNumber(e, ep, "east_km", ekm) || !OptionalNumber(e, ep, "north_km", nkm)) return false;
+                en.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
             }
-            en.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
             fr.entries.push_back(en);
         }
         const json::Value* b = f.Find("bases");

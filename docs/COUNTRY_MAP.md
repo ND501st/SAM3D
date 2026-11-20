@@ -19,7 +19,7 @@ is one small part of a large war (`docs/campaign/`).
 | **Roads, railways, pipelines** | Networks: every vertex shared by two lines is a junction, every river crossing a named bridge (or a pipeline crossing). Main roads between the capital and the towns and to the border crossings, and secondary roads to the western group and down the Lenta valley to the south-western group and its depot; the railway the Soviet systems' missiles come in by, from the Pact border through the capital; the main oil pipeline from the Pact neighbour and the smaller line from the neutral one, both ending at the refinery. Our supply lines run on them (`docs/air_war/14_LOGISTICS.md`) |
 | **Places** | The capital (on the Rava, 59 km north of Kesmark; its name to come), Novo Varosd, twelve towns, the Kesmark district's villages, with populations (game values) |
 | **Landmarks** | The refinery, the Rava dam, the two pipeline stations, the border crossings, the capital's river port: the points the theatre's new objects will stand at (N2) |
-| **Sites** | (F1, 20 Nov 2026) Every other point something placed stands at: each theatre object not at a town's centre or a landmark, each prepared position, the fronts' air bases, battery positions and missile launch points, our chain's posts and offices. A bridge's site names the crossing it stands on. With the settlements and landmarks they are the map's **places**, one namespace by id (see "Anchors" below) |
+| **Sites** | (F1, 20 Nov 2026) Every other point something placed stands at: each theatre object not at a town's centre or a landmark, each prepared position, the fronts' lines, entry points, air bases, battery positions and missile launch points, our chain's posts and offices. A bridge's site names the crossing it stands on. With the settlements and landmarks they are the map's **places**, one namespace by id (see "Anchors" below) |
 
 ## How it agrees with what was already built
 
@@ -43,17 +43,18 @@ with them.
 
 ## Anchors: the map as the source of truth (F1)
 
-The map is the only source of truth for where things are (track F, F1, 20 Nov 2026; `docs/fronts/F1_ANCHORS_AS_BUILT.md`).
-A theatre (`data/air_war/theatre_pannonia*.json`) and our chain's places (`data/command/places_pannonia.json`) name the
-map they stand on (`"place_map": "maps/pannonia.json"`) and give each point as a place of it, `"at": "<id>"`: an object,
-each of its prepared positions (`"positions": [{"at": ...}]`), each front's `bases`, `battery_position` and
+The map is the only source of truth for where things are (track F, F1, 20 Nov 2026;
+`docs/fronts/F1_ANCHORS_AS_BUILT.md`). A theatre (`data/air_war/theatre_pannonia*.json`) and our chain's places
+(`data/command/places_pannonia.json`) name the map they stand on (`"place_map": "maps/pannonia.json"`) and give each
+point as a place of it, `"at": "<id>"`: an object, each of its prepared positions (`"positions": [{"at": ...}]`), each
+point of a front's `line`, each of its `entries` (`{"id": "W1", "at": ...}`), its `bases`, `battery_position` and
 `missile_launch`, each post and office. The loaders read the map's places once into a hash map (`MapPlaces`,
 `LoadMapPlaces`: the three lists, not the ground) and keep each point, so nothing looks a place up while the war runs.
 They refuse a place the map lacks (`objects[3].at: no place 'x' on the map maps/pannonia.json (add it to its sites)`)
 and coordinates where a place belongs. **Move a site's `east_km` or `north_km` and everything anchored to it moves**,
-with no other edit: the objects, positions and posts that name it, and a depot's columns. A front's line and entry
-points stay coordinates (the fronts' geometry, F2 and F3). `tools/anchor_places.py` made the move, every point the same
-double as before; `tests/test_anchors.cpp` moves places 2 km and checks the rest stayed to the bit.
+with no other edit: the objects, positions, fronts' points and posts that name it, and a depot's columns.
+`tools/anchor_places.py` made the move, every point the same double as before; `tests/test_anchors.cpp` moves places 2
+km and checks the rest stayed to the bit.
 
 ## The nation's assets on it (N2)
 

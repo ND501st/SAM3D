@@ -12,7 +12,8 @@ track F, row F1 (`docs/DEVELOPMENT_ROADMAP.md`). Every placed object now takes i
 - **Anchors.** A file on a place map names it (`"place_map": "maps/pannonia.json"`, relative to the data folder) and
   gives each point as `"at": "<place>"` instead of coordinates:
   - the theatres (`data/air_war/theatre_pannonia.json`, `theatre_pannonia_nation.json`): every object, each of its
-    prepared positions (`"positions": [{"at": ...}]`), each front's `bases`, `battery_position` and `missile_launch`;
+    prepared positions (`"positions": [{"at": ...}]`), each point of a front's `line`, each of its entry points
+    (`{"id": "W1", "at": "nato_entry_w1"}`), its `bases`, `battery_position` and `missile_launch`;
   - our chain's places (`data/command/places_pannonia.json`).
 
   Depots and the supply lines' ends were already objects by id (`from`, `to`, `via`), and the columns start at their
@@ -24,22 +25,26 @@ track F, row F1 (`docs/DEVELOPMENT_ROADMAP.md`). Every placed object now takes i
   names a place. Loaders return false with the message: no exceptions.
 - **Moving a place moves everything anchored to it**, with no other edit: change a site's `east_km` in the map, and the
   objects, prepared positions, front points and chain places that name it, and the columns at a depot that does, move
-  with it on the next load.
+  with it on the next load. A front's line is a place per point (`nato_line1` ...), so moving one moves the base line
+  that F2.1's stations are measured along (`01_ANCHORS.md`).
 
 ## Cheap at load, nothing at run time
 
 `MapPlaces` (`simcore/country_map.hpp`) is a hash map from id to point, built once when a file on a place map loads
 (`LoadMapPlaces` reads only the map's three lists, not its ground, so no grid is baked for it). The loaders resolve each
-id to its point there and keep the point (`TheatreObject::pos`, `prepared`, `FrontDef::bases`, `command::Place::pos`):
+id to its point there and keep the point (`TheatreObject::pos`, `prepared`, `FrontDef::line`, `entries`, `bases`,
+`command::Place::pos`):
 the war never looks a place up by name. An extending theatre on the same map as its base reads the map's places once.
 
 ## Bit-identical
 
-The migration, `tools/anchor_places.py`, moved 349 points into 299 new sites. A point at a settlement's or a landmark's
-exact point takes that place; points at the same exact point share one site (the district's and the nation's copies of
-an object; a chain place at its theatre object, e.g. `nv_works` at `csepely_works`); any other gets its own. A site keeps
-the old number's text, and both loaders compute `km * 1000.0`, so every position is the same double as before. Proven
-three ways:
+The migration, `tools/anchor_places.py`, moved 389 points into 325 new sites (in two runs: the objects, positions,
+fronts' bases and posts first, 349 points into 299 sites; then the fronts' lines and entry points, 40 points into 26
+sites, which the district's and the nation's copies of a front share; a run on a map that has sites adds the new ones
+after them). A point at a settlement's or a landmark's exact point takes that place; points at the same exact point
+share one site (the district's and the nation's copies of an object; a chain place at its theatre object, e.g.
+`nv_works` at `csepely_works`); any other gets its own. A site keeps the old number's text, and both loaders compute `km
+* 1000.0`, so every position is the same double as before. Proven three ways:
 
 - the script refuses to write unless every point, read through the new map, equals the old `km * 1000.0` (and its
   pytest, `tools/tests/test_anchor_places.py`, checks the real data against the commit before the migration);
@@ -60,18 +65,24 @@ three ways:
   bridge to a crossing would have moved it. Its site names the crossing instead, and `tests/test_anchors.cpp` checks
   it is the crossing the supply network finds under the bridge (`air_war/logistics.hpp`, within 800 m): move a road and
   the test says which bridge to move.
-- **A front's line and entry points stay coordinates.** They are the fronts' geometry, which F2 (the air front by
-  sector) and F3 (the line drawn from the units) replace; they are not placed objects.
+- **A front's line and entry points are places too.** F0's design (`01_ANCHORS.md` section 2) builds F2.1's sectors as
+  stations along each front's base line and F3's line of contact as offsets from it, so the base line belongs on the
+  map with everything else. They are sites of their own (`<faction>_line<n>`, `<faction>_entry_<id>`), not
+  settlements: a front's point does not follow a town. In a theatre of coordinates an entry point missing a coordinate
+  is still 0, as before.
 
 ## Tests
 
 `simcore/tests/test_anchors.cpp`: the places are one namespace and every anchored point stands on its place to the bit;
-four places moved (a factory 2 km east, the town of Kesmark 2 km south, a prepared position, NATO's air bases): what
-names each moved by exactly that, and nothing else moved a bit; the refusals (a missing place for an object, a prepared
-position, a front's bases and a chain place; coordinates on a place map; a place without one; a theatre on a place map
-loaded without its places; an id twice on the map; a district map as a place map); the bridges' crossings.
-`tools/tests/test_anchor_places.py` and `tools/tests/test_map_view.py` (the map view reads the points through the
-places).
+seven places moved (a factory 2 km east, the town of Kesmark 2 km south, a prepared position, NATO's air bases, a point
+of NATO's line, a Pact entry point, the central ammunition depot with its three supply lines' columns): what names each
+moved by exactly that, and nothing else moved a bit; every point of both theatres names a place but a supply line's
+columns; the refusals (a missing place for an object, a prepared position, a front's line point and bases and a chain
+place; coordinates for an entry point on a place map, a place for one off it; coordinates on a place map; a place
+without one; a theatre on a place map loaded without its places; an id twice on the map; a district map as a place map);
+the bridges' crossings. `tests/test_world_map.cpp` compares the Kesmark range's towns and sites with the theatre's
+and the chain's places through the country map's places. `tools/tests/test_anchor_places.py` and `tools/tests/test_map_view.py` (the map view reads the
+points through the places).
 
 ## Left
 
@@ -82,3 +93,4 @@ places).
   Kesmark bridges, battery 21's position) needs the district's edit too.
 - Scenarios (`data/scenarios/`) place their units in their own frame; a scenario's `"nav"` already asks routes between
   anchors by id (`simcore/nav/`).
+- **Places relative to a town** (an office that moves with its town's centre): not built; every site is its own point.

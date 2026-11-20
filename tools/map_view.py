@@ -151,7 +151,8 @@ def map_places(map_path):
 
 def place_points(t, places):
     """Gives every point of a theatre on a place map its east_km and north_km from the place it names ("at"): its
-    objects, their prepared positions, its fronts' bases, battery positions and missile launch points."""
+    objects, their prepared positions, its fronts' line and entry points, bases, battery positions and missile launch
+    points."""
     def put(d):
         if isinstance(d, dict) and "at" in d and "east_km" not in d:
             if d["at"] not in places:
@@ -162,6 +163,8 @@ def place_points(t, places):
         for p in o.get("positions", []):
             put(p)
     for f in t.get("fronts", []):
+        for p in f.get("line", []) + f.get("entries", []):
+            put(p)
         for key in ("bases", "battery_position", "missile_launch"):
             put(f.get(key))
     return t

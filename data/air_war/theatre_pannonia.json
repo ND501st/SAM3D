@@ -17,11 +17,11 @@
   "fronts": [
     {
       "faction": "rebels", "name": "The southern rebel front (the Rava valley)",
-      "line": [ { "east_km": -70, "north_km": -95 }, { "east_km": 0, "north_km": -90 }, { "east_km": 80, "north_km": -100 } ],
+      "line": [ { "at": "rebels_line1" }, { "at": "rebels_line2" }, { "at": "rebels_line3" } ],
       "entries": [
-        { "id": "S1", "east_km": -40, "north_km": -110 },
-        { "id": "S2", "east_km": 15, "north_km": -105 },
-        { "id": "S3", "east_km": 60, "north_km": -115 }
+        { "id": "S1", "at": "rebels_entry_s1" },
+        { "id": "S2", "at": "rebels_entry_s2" },
+        { "id": "S3", "at": "rebels_entry_s3" }
       ],
       "bases": { "at": "rebels_bases", "notes": "Grass strips and a crop-sprayer field in the rebel-held south." },
       "friendly_fighters": 0.15,
@@ -30,11 +30,11 @@
     },
     {
       "faction": "neutral", "name": "The south-western border with the Noric Republic",
-      "line": [ { "east_km": -160, "north_km": -40 }, { "east_km": -110, "north_km": -100 }, { "east_km": -60, "north_km": -150 } ],
+      "line": [ { "at": "neutral_line1" }, { "at": "neutral_line2" }, { "at": "neutral_line3" } ],
       "entries": [
-        { "id": "SW1", "east_km": -175, "north_km": -55 },
-        { "id": "SW2", "east_km": -130, "north_km": -115 },
-        { "id": "SW3", "east_km": -80, "north_km": -165 }
+        { "id": "SW1", "at": "neutral_entry_sw1" },
+        { "id": "SW2", "at": "neutral_entry_sw2" },
+        { "id": "SW3", "at": "neutral_entry_sw3" }
       ],
       "bases": { "at": "neutral_bases", "notes": "The neighbour's air bases in its hills." },
       "friendly_fighters": 0.25,
@@ -42,24 +42,24 @@
     },
     {
       "faction": "warsaw_pact", "name": "The north-eastern border with the Warsaw Pact",
-      "line": [ { "east_km": -60, "north_km": 130 }, { "east_km": 40, "north_km": 120 }, { "east_km": 150, "north_km": 90 } ],
+      "line": [ { "at": "warsaw_pact_line1" }, { "at": "warsaw_pact_line2" }, { "at": "warsaw_pact_line3" } ],
       "entries": [
-        { "id": "N1", "east_km": -40, "north_km": 150 },
-        { "id": "N2", "east_km": 20, "north_km": 140 },
-        { "id": "N3", "east_km": 80, "north_km": 125 },
-        { "id": "N4", "east_km": 140, "north_km": 105 }
+        { "id": "N1", "at": "warsaw_pact_entry_n1" },
+        { "id": "N2", "at": "warsaw_pact_entry_n2" },
+        { "id": "N3", "at": "warsaw_pact_entry_n3" },
+        { "id": "N4", "at": "warsaw_pact_entry_n4" }
       ],
       "bases": { "at": "warsaw_pact_bases", "notes": "The Group of Forces' air bases beyond the border." },
       "friendly_fighters": 0.35
     },
     {
       "faction": "nato", "name": "The western border with NATO",
-      "line": [ { "east_km": -150, "north_km": 140 }, { "east_km": -160, "north_km": 40 }, { "east_km": -165, "north_km": -40 } ],
+      "line": [ { "at": "nato_line1" }, { "at": "nato_line2" }, { "at": "nato_line3" } ],
       "entries": [
-        { "id": "W1", "east_km": -175, "north_km": 110 },
-        { "id": "W2", "east_km": -180, "north_km": 55 },
-        { "id": "W3", "east_km": -185, "north_km": 5 },
-        { "id": "W4", "east_km": -185, "north_km": -35 }
+        { "id": "W1", "at": "nato_entry_w1" },
+        { "id": "W2", "at": "nato_entry_w2" },
+        { "id": "W3", "at": "nato_entry_w3" },
+        { "id": "W4", "at": "nato_entry_w4" }
       ],
       "bases": { "at": "nato_bases", "notes": "The allied air bases in the west." },
       "missile_launch": { "at": "nato_missile_launch", "notes": "Where NATO's ships fire their cruise missiles from, beyond the western border (a war of 1986 or later)." },

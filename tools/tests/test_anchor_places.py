@@ -69,19 +69,23 @@ def run(crossings=None):
 
 def test_every_position_names_a_place_and_resolves_to_the_same_double():
     new_map, (d, n), p, plan, moved = run()
-    # 3 objects + 2 positions + 2 front points; 3 objects + 1 front point; 3 places.
-    assert moved == 14
+    # 3 objects + 2 positions + 2 line points, an entry and 2 front points; 3 objects, the same line and entry and a
+    # front point; 3 places.
+    assert moved == 20
     m, dt, nt, pl = json.loads(new_map), json.loads(d), json.loads(n), json.loads(p)
     at = {o["id"]: o["at"] for o in dt["objects"] + nt["objects"]}
     assert at == {"cap": "cap", "works": "works", "sam": "sam", "refinery": "ref", "ps": "ps_site"}
     assert [x["at"] for x in dt["objects"][2]["positions"]] == ["sam_pos1", "sam_pos2"]
     assert dt["fronts"][0]["bases"] == {"at": "nato_bases", "notes": "Far."} and nt["fronts"][0]["bases"] == {"at": "nato_bases"}
     assert dt["fronts"][0]["battery_position"] == {"at": "nato_battery_position"}
+    # A front's line and entry points too; the nation's copy of the front stands on the district's sites.
+    assert dt["fronts"][0]["line"] == [{"at": "nato_line1"}, {"at": "nato_line2"}] and nt["fronts"][0]["line"] == dt["fronts"][0]["line"]
+    assert dt["fronts"][0]["entries"] == [{"id": "W1", "at": "nato_entry_w1"}] == nt["fronts"][0]["entries"]
     # Places at an object's or a settlement's exact point share it; the rest get their own.
     assert [x["at"] for x in pl["places"]] == ["cap", "works", "hall"]
-    assert [s["id"] for s in m["sites"]] == ["nato_bases", "nato_battery_position", "works", "sam", "sam_pos1", "sam_pos2", "ps_site", "hall"]
-    # A front's line and entries stay its own coordinates (tracks F2, F3).
-    assert dt["fronts"][0]["line"][0] == {"east_km": -150, "north_km": 140} and dt["fronts"][0]["entries"][0]["east_km"] == -175
+    assert [s["id"] for s in m["sites"]] == ["nato_line1", "nato_line2", "nato_entry_w1", "nato_bases", "nato_battery_position", "works", "sam",
+                                             "sam_pos1", "sam_pos2", "ps_site", "hall"]
+    assert ap.Plan(m).at["nato_line1"] == (-150, 140) and ap.Plan(m).at["nato_entry_w1"] == (-175, 110)
     # Each site keeps the old number's text, so km * 1000.0 is the same double.
     old = {o["id"]: o for o in json.loads(DISTRICT)["objects"]}
     places = ap.Plan(m).at
@@ -98,6 +102,16 @@ def test_the_migration_runs_once():
     new_map, (d, n), p, _, _ = run()
     again = ap.migrate(new_map, [d, n], p)
     assert again[4] == 0 and again[0] == new_map and again[1] == [d, n] and again[2] == p
+
+
+def test_a_map_with_sites_gets_the_new_ones_after_its_own():
+    """Data partly migrated (F1 anchored the fronts' lines and entries after the rest): the new sites follow the map's."""
+    own = '    {"id": "old", "name": "Old", "east_km": -150, "north_km": 140}'
+    old = MAP.rstrip().rstrip("}").rstrip() + ',\n  "sites": [\n' + own + '\n  ]\n}\n'
+    new_map, (d, _), _, plan, _ = ap.migrate(old, [DISTRICT, NATION], PLACES)
+    ids = [s["id"] for s in json.loads(new_map)["sites"]]
+    assert ids[0] == "old" and "nato_line1" not in ids and json.loads(d)["fronts"][0]["line"][0] == {"at": "old"}
+    assert ids[1:] == [s["id"] for s in plan.sites] and (own + ",\n") in new_map
 
 
 def test_a_bridge_site_names_its_crossing():
