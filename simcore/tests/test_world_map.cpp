@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "simcore/aircraft.hpp"
+#include "simcore/country_map.hpp"
 #include "simcore/em/optical.hpp"
 #include "simcore/json.hpp"
 #include "simcore/scenario.hpp"
@@ -238,6 +239,9 @@ SC_TEST("map: places agree with the theatre and the chain of command's places") 
     json::Value places, theatre;
     SC_EXPECT(detail::ReadTextFile(kData + "/command/places_pannonia.json", text) && json::Parse(text, places, &perr));
     SC_EXPECT(detail::ReadTextFile(kData + "/air_war/theatre_pannonia.json", text) && json::Parse(text, theatre, &perr));
+    // Both name places of the country's map (F1): their points are there.
+    MapPlaces country;
+    SC_EXPECT(LoadMapPlaces(kData, "maps/pannonia.json", country, &perr));
     int compared = 0;
     const auto compare = [&](const std::string& id, const MapPoint& at) {
         for (const json::Value* list : {places.Find("places"), theatre.Find("objects")}) {
@@ -245,7 +249,11 @@ SC_TEST("map: places agree with the theatre and the chain of command's places") 
             for (const json::Value& p : list->items) {
                 const json::Value* pid = p.Find("id");
                 if (pid == nullptr || pid->string != id) continue;
-                const double e = p.Find("east_km")->number * 1000.0, n = p.Find("north_km")->number * 1000.0;
+                const json::Value* place = p.Find("at");
+                const MapPoint* q = place != nullptr ? country.Find(place->string) : nullptr;
+                SC_EXPECT(q != nullptr);
+                if (q == nullptr) continue;
+                const double e = q->east_m, n = q->north_m;
                 if (std::hypot(e - at.east_m, n - at.north_m) > 10.0) std::printf("    %s is %.0f m off\n", id.c_str(), std::hypot(e - at.east_m, n - at.north_m));
                 SC_EXPECT(std::hypot(e - at.east_m, n - at.north_m) <= 10.0);
                 ++compared;

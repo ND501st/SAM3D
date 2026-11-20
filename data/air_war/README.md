@@ -7,7 +7,7 @@ every block names `source` and `confidence` (`tools/check_citations.py` checks t
 
 | File | What |
 |---|---|
-| `theatre_pannonia.json` | The fictional country, its four fronts (entry points, the enemy's bases, the defender's fighter threat, where the player's battery deploys in a war on that front) and its objects (value, hardness, repair, mobility, emission, pre-war knowledge, air defence, C2 role). Positions in km east and north of `origin` |
+| `theatre_pannonia.json` | The fictional country, its four fronts (entry points, the enemy's bases, the defender's fighter threat, where the player's battery deploys in a war on that front) and its objects (value, hardness, repair, mobility, emission, pre-war knowledge, air defence, C2 role). Its points are places of the country map (`"place_map": "maps/pannonia.json"`, F1): each object, prepared position, point of a front's `line`, entry point and front's `bases`, `battery_position` and `missile_launch` names one (`"at"`), whose point is in km east and north of `origin`. A theatre without a `place_map` (the tests' inline ones) gives coordinates instead |
 | `theatre_pannonia_nation.json` | **The whole nation** (the nation on the map, N2; `docs/COUNTRY_MAP.md`): `"extends": "theatre_pannonia.json"` and adds the briefing's forces, industry and infrastructure on open ground of the country's map, 170 objects, every mobile unit with its prepared positions, and where battery 21 deploys in the wars with NATO and the Pact. Our order of battle (`data/command/oob_pannonia.json`) owns every military object. `air_war_demo` and `air_war_balance` run on it with `--theatre theatre_pannonia_nation.json` (`docs/air_war/09_BALANCE.md` §8). The Pact's and NATO's fronts carry a `force_scale` (2 and 1.5: the rebalance for a whole nation). **The game's new campaigns are fought on it** (N4, 23 Oct 2026); `theatre_pannonia.json` stays the theatre the tests and the first balance pass tuned |
 | `faction_rebels.json` | Inferior: the Rava Liberation Front's improvised air wing |
 | `faction_neutral.json` | Near peer: the Noric Republic's small air force |
@@ -91,7 +91,7 @@ deliveries `strafe` and `gentle_dive` are flown as passes.
 
 A theatre may **extend** another in this folder (`"extends"`, `LoadTheatreFile` only): it starts from the base, its fronts
 replace the base's of the same faction, `"remove"` drops base objects, and its objects are added, one with a base
-object's id replacing it where it stands; it keeps the base's `origin` and `country`. An object's `"positions"` (a
+object's id replacing it where it stands; it keeps the base's `origin` and `country`. A front's `"sectors"` (track F, `docs/fronts/02_AIR_FRONT.md` §2) cut its `line` into named runs, `from_km` and `to_km` along it from its first point, contiguous from 0, 4-8 a front of 20-60 km each named on the map's features (the last runs to the line's end); a front without them is one sector. An object's `"positions"` (a
 mobile unit with `relocate_h`, never the player's battery) are its prepared positions besides its own: it moves between
 them, never to one within 8 km of the enemy's front; without them it moves `relocate_km` in a random direction. A
 defence's `"channels"` are its fire channels, the aircraft of a passing flight it engages at once (an S-75's or S-125's

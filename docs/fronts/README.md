@@ -170,7 +170,8 @@ As tracks B and R did (`simcore/air_war/save.hpp`):
 
 | File | What |
 |---|---|
-| `01_ANCHORS.md` | F1 in brief: the map as the source of truth (built in parallel; its design is in that branch) |
+| `01_ANCHORS.md` | F1 in brief: the map as the source of truth, what the rest of the track takes from it |
+| `F1_ANCHORS_AS_BUILT.md` | F1 as built (20 Nov 2026): the map's sites, `"at"` and `"place_map"`, the loaders' refusals, identity |
 | `02_AIR_FRONT.md` | F2: sectors and the line of contact, the enemy's air front by sector, what moves it, what it changes in the planner and routes |
 | `03_GROUND_WAR.md` | F3: units and levels, the sector's combat, commanders and their decisions, each side's picture, the air war following the units, the situation reports |
 | `04_AIR_DEFENCE_STRATEGY.md` | F4: our AD commanders' sector priorities, SAM moves, fighters by sector, the regiment and the battery |

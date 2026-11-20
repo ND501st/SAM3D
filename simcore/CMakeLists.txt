@@ -106,6 +106,8 @@ add_executable(simcore_tests
   tests/test_opportunity.cpp
   tests/test_hot_phase.cpp
   tests/test_routes.cpp
+  tests/test_front_line.cpp
+  tests/test_air_front.cpp
   tests/test_flights.cpp
   tests/test_levels.cpp
   tests/test_air_radio.cpp
@@ -135,6 +137,7 @@ add_executable(simcore_tests
   tests/test_country_map.cpp
   tests/test_ground_data.cpp
   tests/test_ground_combat.cpp
+  tests/test_anchors.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp
   tests/test_fx_bridge.cpp
@@ -233,6 +236,9 @@ simcore_configure_target(air_war_balance)
 
 add_executable(air_war_bench examples/air_war_bench.cpp)
 simcore_configure_target(air_war_bench)
+# What track F's fronts cost (docs/fronts/README.md, Efficiency): the air front's measure so far (F2.2).
+add_executable(fronts_bench examples/fronts_bench.cpp)
+simcore_configure_target(fronts_bench)
 # Our fighters and our own fire: the exercise sweep against the 25% anchor (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md).
 add_executable(own_air_balance examples/own_air_balance.cpp)
 simcore_configure_target(own_air_balance)

@@ -20,6 +20,7 @@
 #include "simcore/aaa.hpp"
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
+#include "simcore/air_war/air_front_def.hpp"
 #include "simcore/air_war/c2_def.hpp"
 #include "simcore/air_war/counter_c2.hpp"
 #include "simcore/air_war/hot_phase_def.hpp"
@@ -171,6 +172,7 @@ struct FrontDef {
     Vec3 missile_launch;
     double force_scale = 1.0;  // the enemy's squadrons this many times their faction's strength on this front (a war on a
                                // whole nation is fought by a larger force than a district's)
+    std::vector<SectorDef> sectors;  // runs of the line (track F, air_front_def.hpp); none: one sector the line's length
 };
 
 struct TheatreDef {
@@ -198,6 +200,10 @@ struct TheatreDef {
     std::vector<TheatreObject> objects;  // a supply line's columns among them, after the written objects
     std::vector<SupplyLineDef> supply_lines;
     std::string country_map;  // the country's map its supply lines follow (data/maps/, simcore/country_map.hpp); "" none
+    // The map its points are places of (roadmap F1): its objects, prepared positions and fronts' lines, entry points,
+    // bases, battery positions and missile launch points name a place ("at") and stand at its point. "" none: they carry east_km and north_km
+    // (tests' inline theatres). Not country_map: that also routes the supply lines on the map's roads.
+    std::string place_map;
 
     const TheatreObject* Find(const std::string& id_) const {
         for (const TheatreObject& o : objects) {
@@ -1203,6 +1209,7 @@ struct TuningTable {
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
         for (const auto& kv : C2TuningDefaults()) m.insert(kv);        // its command in the air (roadmap B5, c2_def.hpp)
         for (const auto& kv : OpportunityTuningDefaults()) m.insert(kv);  // targets of opportunity (roadmap B6, opportunity_def.hpp)
+        for (const auto& kv : AirFrontTuningDefaults()) m.insert(kv);    // the fronts' sectors and air front (track F, air_front_def.hpp)
         return m;
         }();
         return d;
@@ -1230,12 +1237,39 @@ public:
         return true;
     }
     bool Km(const json::Value& obj, const std::string& path, Vec3& out) {
-        double e = 0.0, n = 0.0;
         if (!Keys(obj, path, {"east_km", "north_km", "notes"})) return false;
+        return KmOf(obj, path, out);
+    }
+    bool KmOf(const json::Value& obj, const std::string& path, Vec3& out) {
+        double e = 0.0, n = 0.0;
         if (obj.Find("east_km") == nullptr || obj.Find("north_km") == nullptr) return Fail(path, "needs east_km and north_km");
         if (!OptionalNumber(obj, path, "east_km", e) || !OptionalNumber(obj, path, "north_km", n)) return false;
         out = Vec3{e * 1000.0, n * 1000.0, 0.0};
         return true;
+    }
+
+    // The places of the theatre's place map (roadmap F1), read by LoadTheatreFile; they must outlive the load.
+    void UsePlaces(const MapPlaces* places) { places_ = places; }
+
+    // A placed point: on a theatre with a place map "at" a place of it (its point, to the bit), otherwise its own
+    // east_km and north_km. `own_keys`: the block is the point alone ({"at", "notes"}); false for an object, whose other
+    // keys LoadObject checks.
+    bool Where(const json::Value& obj, const std::string& path, Vec3& out, bool own_keys = true) {
+        if (anchored_) {
+            if (obj.Find("east_km") != nullptr || obj.Find("north_km") != nullptr) {
+                return Fail(path, "a theatre on a place map takes its points from the map: \"at\" a place of " + place_map_ +
+                                      ", not east_km and north_km");
+            }
+            if (own_keys && !Keys(obj, path, {"at", "notes"})) return false;
+            std::string id;
+            if (!RequireString(obj, path, "at", id)) return false;
+            const MapPoint* p = places_->Find(id);
+            if (p == nullptr) return Fail(Join(path, "at"), "no place '" + id + "' on the map " + place_map_ + " (add it to its sites)");
+            out = Vec3{p->east_m, p->north_m, 0.0};
+            return true;
+        }
+        if (obj.Find("at") != nullptr) return Fail(Join(path, "at"), "a place needs the theatre's \"place_map\" (data/maps/)");
+        return own_keys ? Km(obj, path, out) : KmOf(obj, path, out);
     }
     bool KindList(const json::Value& obj, const std::string& path, const char* key, std::vector<ObjectKind>& out) {
         const json::Value* arr = OptionalArray(obj, path, key);
@@ -1266,7 +1300,7 @@ public:
     bool LoadTheatre(const json::Value& root, TheatreDef& out, const TheatreDef* base = nullptr) {
         if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "extends", "remove", "country",
                              "origin", "ground_height_m", "start_hour", "year", "date", "dated_from_light_mode", "utc_offset_h", "fronts",
-                             "objects", "supply_lines", "country_map"})) {
+                             "objects", "supply_lines", "country_map", "place_map"})) {
             return false;
         }
         if (root.Find("extends") != nullptr && base == nullptr) {
@@ -1277,6 +1311,13 @@ public:
         if (!RequireString(root, "", "theatre_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
             return false;
+        }
+        // Its points from the place map (its own, or its base's): every one a place of it (roadmap F1).
+        if (!OptionalString(root, "", "place_map", out.place_map)) return false;
+        anchored_ = !out.place_map.empty();
+        place_map_ = out.place_map;
+        if (anchored_ && places_ == nullptr) {
+            return Fail("place_map", "its places are read from the map: load the theatre with LoadTheatreFile, or give LoadTheatreJson the map's places");
         }
         if (base != nullptr) return ExtendTheatre(root, out);
         if (const json::Value* c = root.Find("country")) {
@@ -1500,7 +1541,7 @@ public:
     bool LoadFront(const json::Value& f, const std::string& p, TheatreDef& out) {
         FrontDef fr;
         if (!Keys(f, p, {"faction", "name", "line", "entries", "bases", "friendly_fighters", "battery_position", "missile_launch",
-                         "force_scale", "notes"}) ||
+                         "force_scale", "sectors", "notes"}) ||
             !RequireString(f, p, "faction", fr.faction) || !RequireString(f, p, "name", fr.name) ||
             !Num(f, p, "friendly_fighters", fr.friendly_fighters, 0.0, 1.0) || !Num(f, p, "force_scale", fr.force_scale, 0.25, 4.0)) {
             return false;
@@ -1509,7 +1550,7 @@ public:
         if (line == nullptr || line->items.size() < 2) return message_.empty() ? Fail(Join(p, "line"), "at least two points") : false;
         for (std::size_t i = 0; i < line->items.size(); ++i) {
             Vec3 v;
-            if (!Km(line->items[i], Index(Join(p, "line"), i), v)) return false;
+            if (!Where(line->items[i], Index(Join(p, "line"), i), v)) return false;
             fr.line.push_back(v);
         }
         const json::Value* entries = OptionalArray(f, p, "entries");
@@ -1518,32 +1559,65 @@ public:
             const json::Value& e = entries->items[i];
             const std::string ep = Index(Join(p, "entries"), i);
             EntryPoint en;
-            double ekm = 0.0, nkm = 0.0;
-            if (!Keys(e, ep, {"id", "east_km", "north_km", "notes"}) || !RequireString(e, ep, "id", en.id) ||
-                !OptionalNumber(e, ep, "east_km", ekm) || !OptionalNumber(e, ep, "north_km", nkm)) {
-                return false;
+            if (!Keys(e, ep, {"id", "east_km", "north_km", "at", "notes"}) || !RequireString(e, ep, "id", en.id)) return false;
+            if (anchored_ || e.Find("at") != nullptr) {
+                if (!Where(e, ep, en.pos, false)) return false;
+            } else {
+                double ekm = 0.0, nkm = 0.0;  // a theatre of coordinates: a missing one is 0, as it always was
+                if (!OptionalNumber(e, ep, "east_km", ekm) || !OptionalNumber(e, ep, "north_km", nkm)) return false;
+                en.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
             }
-            en.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
             fr.entries.push_back(en);
         }
         const json::Value* b = f.Find("bases");
         if (b == nullptr) return Fail(Join(p, "bases"), "required");
-        if (!Km(*b, Join(p, "bases"), fr.bases)) return false;
+        if (!Where(*b, Join(p, "bases"), fr.bases)) return false;
         if (const json::Value* bp = f.Find("battery_position")) {
-            if (!Km(*bp, Join(p, "battery_position"), fr.battery_position)) return false;
+            if (!Where(*bp, Join(p, "battery_position"), fr.battery_position)) return false;
             fr.has_battery_position = true;
         }
         if (const json::Value* ml = f.Find("missile_launch")) {
-            if (!Km(*ml, Join(p, "missile_launch"), fr.missile_launch)) return false;
+            if (!Where(*ml, Join(p, "missile_launch"), fr.missile_launch)) return false;
             fr.has_missile_launch = true;
         }
+        if (!LoadSectors(f, p, fr)) return false;
         out.fronts.push_back(std::move(fr));
+        return true;
+    }
+
+    // A front's "sectors" (track F, docs/fronts/02_AIR_FRONT.md §2): [{"id", "name", "from_km", "to_km"}], in order along
+    // the line from its first point, each starting where the one before ends, the first at 0. The last may end short of
+    // the line or past it: the line of contact gives the rest of the line to the last sector (front_line.hpp).
+    bool LoadSectors(const json::Value& f, const std::string& p, FrontDef& fr) {
+        const json::Value* arr = OptionalArray(f, p, "sectors");
+        if (arr == nullptr) return message_.empty();
+        if (arr->items.empty()) return Fail(Join(p, "sectors"), "at least one, or leave the key out");
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& v = arr->items[i];
+            const std::string sp = Index(Join(p, "sectors"), i);
+            SectorDef s;
+            double from_km = -1.0, to_km = -1.0;
+            if (!Keys(v, sp, {"id", "name", "from_km", "to_km", "notes"}) || !RequireString(v, sp, "id", s.id) ||
+                !RequireString(v, sp, "name", s.name) || !Num(v, sp, "from_km", from_km, 0.0, 5000.0) || !Num(v, sp, "to_km", to_km, 0.0, 5000.0)) {
+                return false;
+            }
+            if (v.Find("from_km") == nullptr || v.Find("to_km") == nullptr) return Fail(sp, "needs from_km and to_km");
+            const double before_km = fr.sectors.empty() ? 0.0 : fr.sectors.back().to_m / 1000.0;
+            if (std::fabs(from_km - before_km) > 1e-9) return Fail(Join(sp, "from_km"), "must be where the sector before ends (" + Fmt(before_km) + ")");
+            if (to_km <= from_km) return Fail(Join(sp, "to_km"), "must be beyond from_km");
+            for (const SectorDef& o : fr.sectors) {
+                if (o.id == s.id) return Fail(Join(sp, "id"), "duplicate sector '" + s.id + "'");
+            }
+            s.from_m = from_km * 1000.0;
+            s.to_m = to_km * 1000.0;
+            fr.sectors.push_back(std::move(s));
+        }
         return true;
     }
 
     bool LoadObject(const json::Value& v, const std::string& p, TheatreObject& ob) {
         std::string kind, looks;
-        if (!Keys(v, p, {"id", "name", "kind", "east_km", "north_km", "value", "hardness", "repair_h", "relocate_h",
+        if (!Keys(v, p, {"id", "name", "kind", "east_km", "north_km", "at", "value", "hardness", "repair_h", "relocate_h",
                          "relocate_km", "positions", "mobile", "emitter", "emission", "player", "decoy", "looks_like",
                          "prior_known", "defence", "c2_source", "regiment_radar", "radius_km", "aim_points", "target_class",
                          "notes"}) ||
@@ -1552,10 +1626,8 @@ public:
             return false;
         }
         if (!ParseObjectKind(kind, ob.kind)) return Fail(Join(p, "kind"), "unknown object kind '" + kind + "'");
-        double ekm = 0.0, nkm = 0.0, rkm = 0.0, relkm = 0.0;
-        if (v.Find("east_km") == nullptr || v.Find("north_km") == nullptr) return Fail(p, "needs east_km and north_km");
-        if (!OptionalNumber(v, p, "east_km", ekm) || !OptionalNumber(v, p, "north_km", nkm) ||
-            !Num(v, p, "value", ob.value, 0.0, 1.0) || !Num(v, p, "hardness", ob.hardness, 0.0, 1.0) ||
+        double rkm = 0.0, relkm = 0.0;
+        if (!Where(v, p, ob.pos, false) || !Num(v, p, "value", ob.value, 0.0, 1.0) || !Num(v, p, "hardness", ob.hardness, 0.0, 1.0) ||
             !Num(v, p, "repair_h", ob.repair_h, 0.0, 10000.0) || !Num(v, p, "relocate_h", ob.relocate_h, 0.0, 10000.0) ||
             !Num(v, p, "relocate_km", relkm, 0.0, 100.0) || !OptionalBool(v, p, "mobile", ob.mobile) ||
             !OptionalBool(v, p, "emitter", ob.emitter) || !Num(v, p, "emission", ob.emission, 0.0, 1.0) ||
@@ -1565,7 +1637,6 @@ public:
             !Num(v, p, "radius_km", rkm, 0.0, 50.0) || !OptionalString(v, p, "notes", ob.notes)) {
             return false;
         }
-        ob.pos = Vec3{ekm * 1000.0, nkm * 1000.0, 0.0};
         ob.radius_m = rkm * 1000.0;
         ob.relocate_m = relkm * 1000.0;
         std::string tclass;
@@ -1583,7 +1654,7 @@ public:
             ob.prepared.push_back(ob.pos);
             for (std::size_t i = 0; i < pos->items.size(); ++i) {
                 Vec3 at;
-                if (!Km(pos->items[i], Index(pp, i), at)) return false;
+                if (!Where(pos->items[i], Index(pp, i), at)) return false;
                 for (const Vec3& q : ob.prepared) {
                     if (Dist2d(q, at) < 300.0) return Fail(Index(pp, i), "within 300 m of another of its positions");
                 }
@@ -2754,6 +2825,10 @@ private:
         s << x;
         return s.str();
     }
+
+    const MapPlaces* places_ = nullptr;  // the place map's places (UsePlaces), or null
+    bool anchored_ = false;              // the theatre being read has a place map: its points are places of it
+    std::string place_map_;              // its file, for messages
 };
 
 inline bool ReadFile(const std::string& path, std::string& out, std::string* error) {
@@ -2788,7 +2863,10 @@ bool LoadJsonWith(const std::string& path, Out& out, std::string* error, Fn&& fn
     return true;
 }
 
-inline bool LoadTheatreFileAt(const std::string& path, TheatreDef& out, std::string* error, int depth) {
+// `places`: the map's places to read a theatre on a place map with instead of its file's (tests: a place moved), or
+// null. `loaded`/`loaded_file`: the places read so far, so a theatre and its base on one map read it once.
+inline bool LoadTheatreFileAt(const std::string& path, TheatreDef& out, std::string* error, int depth, const MapPlaces* places,
+                              MapPlaces& loaded, std::string& loaded_file) {
     std::string text;
     if (!ReadFile(path, text, error)) return false;
     json::Value root;
@@ -2810,9 +2888,28 @@ inline bool LoadTheatreFileAt(const std::string& path, TheatreDef& out, std::str
         }
         const std::size_t slash = path.find_last_of("/\\");
         const std::string dir = slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
-        if (!LoadTheatreFileAt(dir + ext->string, base, error, depth + 1)) return false;
+        if (!LoadTheatreFileAt(dir + ext->string, base, error, depth + 1, places, loaded, loaded_file)) return false;
     }
     AirWarLoader loader;
+    // A theatre on a place map (its own "place_map", or its base's): the map's places, from the data folder above the
+    // theatre's folder (data/air_war/ -> data/), as country_map is named.
+    std::string place_map = ext != nullptr ? base.place_map : std::string();
+    if (const json::Value* pm = root.Find("place_map")) {
+        if (pm->Is(json::Type::String)) place_map = pm->string;
+    }
+    if (!place_map.empty()) {
+        if (places == nullptr && loaded_file != place_map) {
+            const std::size_t slash = path.find_last_of("/\\");
+            const std::string data_dir = (slash == std::string::npos ? std::string(".") : path.substr(0, slash)) + "/..";
+            std::string e;
+            if (!LoadMapPlaces(data_dir, place_map, loaded, &e)) {
+                if (error != nullptr) *error = path + ": place_map: " + e;
+                return false;
+            }
+            loaded_file = place_map;
+        }
+        loader.UsePlaces(places != nullptr ? places : &loaded);
+    }
     TheatreDef tmp;
     if (!loader.LoadTheatre(root, tmp, ext != nullptr ? &base : nullptr)) {
         if (error != nullptr) *error = path + ": " + loader.Message();
@@ -2824,9 +2921,12 @@ inline bool LoadTheatreFileAt(const std::string& path, TheatreDef& out, std::str
 
 }  // namespace detail
 
-// A theatre file may extend another in its folder ("extends"; AirWarLoader::LoadTheatre says how).
-inline bool LoadTheatreFile(const std::string& path, TheatreDef& out, std::string* error = nullptr) {
-    return detail::LoadTheatreFileAt(path, out, error, 0);
+// A theatre file may extend another in its folder ("extends"; AirWarLoader::LoadTheatre says how). A theatre on a place
+// map takes its points from the map its "place_map" names, or from `places` when given (tests: a place moved).
+inline bool LoadTheatreFile(const std::string& path, TheatreDef& out, std::string* error = nullptr, const MapPlaces* places = nullptr) {
+    MapPlaces loaded;
+    std::string loaded_file;
+    return detail::LoadTheatreFileAt(path, out, error, 0, places, loaded, loaded_file);
 }
 
 inline bool LoadFactionFile(const std::string& path, FactionDef& out, std::string* error = nullptr) {
@@ -2878,8 +2978,10 @@ inline bool LoadFactionJson(const std::string& text, FactionDef& out, std::strin
     });
 }
 
-inline bool LoadTheatreJson(const std::string& text, TheatreDef& out, std::string* error = nullptr) {
-    return LoadAirWarJson(text, out, error, [](detail::AirWarLoader& l, const json::Value& r, TheatreDef& o) {
+// `places`: the map's places, for a theatre on a place map (one without names none).
+inline bool LoadTheatreJson(const std::string& text, TheatreDef& out, std::string* error = nullptr, const MapPlaces* places = nullptr) {
+    return LoadAirWarJson(text, out, error, [places](detail::AirWarLoader& l, const json::Value& r, TheatreDef& o) {
+        l.UsePlaces(places);
         return l.LoadTheatre(r, o);
     });
 }
