@@ -320,3 +320,136 @@ F3.7); the air front's decision, its depths per sector, its journal entries and 
 the tuned district theatre our radar SAMs stand 94 km or more behind the Pact's line, so every sector's band there has no
 cover and never had (cover 0, mobile air defence all gone): its gates must not open on an empty baseline alone (the
 reward gate, or a minimum baseline), or the district's wars change at mode 1.
+
+## As built (F2.3; 21 November 2026)
+
+**The rules as data** (`air_front_def.hpp` `AirFrontDef`; each faction's `"air_front"` block, loaded strictly by
+`AirWarLoader::LoadAirFrontBlock`; a faction without it never moves its air front). `kind`: `advance` (NATO, the Pact),
+`surge` (the rebels), `border` (the neutral, with its `after_event`, a political event its politics must have); the gates
+`cover_at_most` and `mobile_destroyed_at_least`; `loss_line` and `loss_days`; `delay_h` [lo, hi]; `max_depth_km`;
+`min_reward`; `crisis` (`advance`, `helicopters` or `none`) and `crisis_h`; a surge's `surge_h` and `surge_rest_h`. The
+values are §3's table, SAM3D estimates cited to the cases:
+
+| Faction | Kind | Cover at most | Mobile destroyed at least | Loss line, window | Delay | Greatest depth | Crisis |
+|---|---|---|---|---|---|---|---|
+| NATO | advance | 30 % | 50 % | 2 % a sortie, 2 days | 6-24 h | 60 km | advance, 24-72 h |
+| The Pact | advance | 20 % | 50 % | 4 %, 2 days | 6-24 h | 60 km | advance, 24-72 h |
+| The rebels | surge (24-72 h, then 72 h rest) | 0 % | 100 % | 1 %, 2 days | 6-24 h | 40 km | helicopters once |
+| The neutral | border until `deeper_raids` | 20 % | 50 % | 1 %, 3 days | 12-24 h | 40 km (and its politics' 40, 60 after the event) | helicopters once |
+
+The reward gate (`min_reward`, 0.3 for every faction: about one believed troop position or column at the nation's
+values, 0.5 each at a belief of 0.6) is in the faction's block rather than `air_war.json` (§6 put it there): it is a
+per-faction value, read beside the faction's other gates. The game values in `air_war.json` `"air_front"`:
+`min_baseline` (1.0), `min_sorties` (6), `helo_lag_h` (24), `trait_shift` (0.2), `reward_reach_m` (40 km).
+
+**The decision** (`air_front.hpp` `DecideAirFront`, pure: the rules, the game values, the enemy's inputs and its chief
+in; the state and the moves out; no draw, so mode 1 keeps the war's sequence). `AirCampaign::Plan` measures
+(`MeasureAirFront`, F2.2) and then decides (`DecideAirFrontNow`) before the planner, every planning cycle (the Pact's 12
+h, the others' 24 h). The chief is the planner's post (the air operations chief), the commander's while it is empty.
+Its inputs are all the enemy's own (`AirFrontInputs`, built by `AirCampaign::AirFrontDecisionInputs`): the picture, this
+cycle's `SectorCover`s, the `SectorLossWindow`, its target weights and banned kinds, the politics' depth now and whether
+the neutral's event has fired; never the truth. Sector by sector, at most one move a cycle, in this order:
+
+1. **The politics hold it** (the depth over its cap: back to the deepest whole step allowed). The cap is the block's
+   greatest depth and the politics' `max_depth_m`, the latter measured from the border (the line of contact's offset
+   at the sector's middle taken off), 0 for the neutral until its event.
+2. **A crisis** (F3.5's ground picture; `in.crisis` is null until then, so the campaign never has one): NATO and the
+   Pact step forward at once and ignore the loss gate for `crisis_h` (a bold chief the long end); the rebels and the
+   neutral send their helicopters a step ahead of the fixed-wing front, once a war, back behind it when the crisis ends.
+3. **The surge's end** (the rebels): after `surge_h` (a bold chief the long end) the sector goes back to the border, both
+   depths, and may not surge again for `surge_rest_h`.
+4. **The pull-back**: with at least `air_front.min_sorties` low-level sorties in the window and a loss rate over the
+   line, one step back (the helicopters with it); a chief of composure 0.7 or more and stress under 0.6 waits for a
+   second cycle over the line.
+5. **The gates**: the sector **contested** (below), the cover at most the gate, the mobile air defence destroyed at
+   least the gate, the next band's believed worth at least `min_reward`, no losses over the line (unless a crisis
+   overrides them), room for a whole step, and no surge rest. The first cycle that sees them hold notes it (a "Seen"
+   entry with the delay); the step comes at the first cycle at or after the delay, if they still hold; one that sees
+   them fail forgets it. The delay is `lo + (hi - lo) x (0.5 + 0.5 (methodical - boldness))`, clamped.
+6. **The helicopters** follow the fixed-wing front a step at a time, each step after `air_front.helo_lag_h` since either
+   front last moved, with at least one low-level sortie flown in the sector over the last two days and their loss rate
+   within the line. They never pass the fixed-wing front but in the crisis's one exception. §2's "one step behind" is
+   read as behind in time: at 20 km the helicopters reach 20 km after a day of clean work, not at the next step.
+
+Traits move the gates by at most `trait_shift` (0.2) of their value, as track B's officers do: boldness raises the cover
+gate and the loss line and lowers the mobile gate, ambition lowers the reward gate.
+
+**The reward** (`SectorRewards`): what a step brings into the low-level work's reach. The enemy's entries of kinds
+troops, column, convoy, train, bridge, command post, depot and rail junction in the sector from `reward_reach_m` (40 km,
+the planner's close support depth) beyond its air front to a step further, each `Live() x value x` the faction's target
+weight, banned kinds left out; one pass over the picture a cycle. §3 says "the next band"; read literally (the band the
+cover is weighed over, 0-20 km) it finds nothing on the nation, whose front-line bands hold almost no believed targets
+(the ground war's units come with F3), and it would weigh what close support reaches from the border already. Measured
+with `fronts_bench --trace`: the Pact's five sectors held one such target within 20 km of the line (worth 0.36), and the
+best band's worth was 0.4 against the gate's 1.0 first tried; so the reach, and the gate at 0.3. The risk is still
+weighed where the aircraft fly low (the next band), the worth where the step lets them strike.
+
+**The empty baseline.** F2.2's note: on the tuned district our radar SAMs stand 94 km or more behind the Pact's line, so
+every sector's band measures cover 0 and mobile air defence all gone. A sector's gates open only once it is
+**contested**: once some band of it was believed covered by at least `air_front.min_baseline` (1.0, the sum of
+`BelievedThere`: one fire unit fully believed, or two half) of radar SAMs or mobile air defence. No cover where nothing
+was ever believed is not a hole the staff has made; a cover broken below the gate in a contested sector is observed
+destruction (at least 1 - gate of a baseline of at least one unit). Once contested a sector stays so: the band beyond a
+broken one may be empty and still be stepped into, the reward gate and the greatest depth bounding it. Tested both ways
+(`test_air_front.cpp`): the far-back picture never opens, the same with `min_baseline` 0 opens both sectors, and on the
+district the Pact's campaign at mode 1 makes no move in three days (and with both guards off it moves and still plans
+the same packages).
+
+**The campaign** keeps `AirFrontState` (per sector: both depths, when each reached it, the pending decision and its
+delay, the cycles over the loss line, contested, the surge's and crisis's times, the counts of steps) under
+`air_front.mode` 1, writes each sector's fixed-wing depth into `air_front_depth_` (the band the next measure weighs, and
+what F2.4's planner reads), and logs every move in the journal, kind `"air_front"`, by the chief, not visible to our side
+(our side learns it in F2.5): e.g. "s3: the air front moves forward to 20 km (cover 0%, mobile air defence 100%
+destroyed, worth 4.2)". Accessors: `AirFront()`, `AirFrontDepths()`, `AirFrontAt(p)`, `HeloFrontAt(p)` (0 at mode 0).
+Nothing outside the decision reads the depths yet, so at mode 1 the war's packages are those of mode 0 (fronts_bench's
+"same", the district test). `air_front.mode` stays 0 in the data until F2.4 makes the depths matter.
+
+**Save.** `SaveCampaignJson` writes `air_front_mode`; a save without it loads with `air_front.mode` 0 and replays as
+played (`test_air_front.cpp`).
+
+**How it moved** (`fronts_bench data --air-front --sectors 0 --days 10 --seeds 2 --moves warsaw_pact nato rebels
+neutral`: each faction's war on the nation at mode 1, the theatre's own sectors, seeds 7 and 8, ten days):
+
+| Faction | Steps forward, back | What moved |
+|---|---|---|
+| The Pact (5 sectors) | 1, 0 | Seed 7: the Tisava valley, its one believed fire unit there believed destroyed (cover 0, mobile air defence all gone) and the Mezovar road bridge in the reach beyond (worth 0.5): seen on day 2 at 13:00, the front to 20 km 24 h later (its planner, Colonel Belyaev, methodical 0.8 and boldness 0.5: a 17.7 h delay, so the second 12 h cycle after it), the helicopters to 20 km a day later after 8 clean low-level sorties. Seed 8: nothing. Its other contested sectors (the northern forest, the Rava reservoir) kept a believed cover of 0.4-0.75 all ten days; the Hradec and north-eastern sectors were never contested |
+| NATO (4 sectors) | 0, 0 | No contested sector's believed cover fell under its 30 % (the rollback works on the whole country first) |
+| The rebels, the neutral (4 each) | 0, 0 | Their wars on the nation are small (under a second of CPU for ten days), no sector of theirs contested and broken; the neutral's `deeper_raids` did not fire |
+
+Sensible, not twitchy: one sector of one war moved, once, a step, where the picture says the hole is, with something to
+strike beyond it; nothing pulled back because nothing advanced into fire. The tests drive the rest (pull-backs, surges,
+the border, the crisis) by hand. Whether this is too timid is F6's balance, once F2.4 makes the depths matter.
+
+**The cost.** `fronts_bench data --air-front` (seven days, seeds 7-9, each front cut into eight equal sectors, 2000
+repetitions a day on that day's picture, CPU time; run alone): `cycle_ms` is the planning cycle's whole air front work,
+the measure at the day's depths and the decision on a copy of the day's state, as the campaign runs it.
+
+| Faction | Sectors | Picture's entries | Measure, mean | Worst day | Every band moved, worst | Measure and decision, mean | Worst day | Campaign CPU s, mode 0 / 1 | Same war |
+|---|---|---|---|---|---|---|---|---|---|
+| The Pact | 8 | 204 | 0.0044 ms | 0.0050 ms | 0.0060 ms | 0.0076 ms | 0.0085 ms | 83.7 / 82.1 | yes |
+| NATO | 8 | 215 | 0.0047 ms | 0.0050 ms | 0.0060 ms | 0.0087 ms | 0.0095 ms | 54.6 / 55.2 | yes |
+
+A cycle costs under 1/100 of the 1 ms budget; the decision adds about as much as the measure (the reward's pass over the
+picture). The campaigns' totals with the mode on and off are within their noise. "Same war": the same packages (ids,
+sizes, times on target, targets) and the same journal but for the air front's own entries. In this run the Pact's eight
+equal sectors moved twice (one at the end of seed 7: its sixth sector at 20 km, helicopters with it), NATO's none.
+
+**Identity.** At `air_front.mode` 0 (the default and the data's) nothing is built, measured or decided:
+`air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` print byte for byte
+what `track-f`'s tip (717c1e6, built and run on its own data) prints, and `test_routes.cpp`'s replay fingerprint (pact,
+the district, seed 21: 107 entries, FNV 1375944258174313379, 41 packages) holds. At mode 1 the packages are the same
+(`fronts_bench`'s "same" on the nation, `test_air_front.cpp` on the district with and without the guards).
+
+**Tests.** `test_air_front.cpp` (+8, 12 in all): a hole opens one sector only, after the chief's delay, a step at a
+time, while it is worth it (a bold and a methodical chief's gates and delays); on belief, not truth, and never on a band
+nothing was ever believed to cover (the district's case, the guard off, a contested sector stepping into an empty band
+to its greatest depth); losses pull it back (the minimum sorties, a composed chief's extra cycle, a stressed one's none,
+the window before it opens again); the helicopters lag by a day of clean work and never pass; the rebels' surge and
+rest, the neutral's border until its event, the politics' cap; the crisis stub (the Pact's step and override, the
+rebels' helicopters once); every faction's block and the loader's refusals, the campaign at mode 1 on the district;
+the save key.
+
+**Left:** the planner, routes and C2 reading the depths (F2.4: `AirFrontAt`, `HeloFrontAt`, `AirFrontDepths`), and
+`air_front.mode` 1 in the data with it; our side learning it (F2.5); the crisis's input from the ground picture (F3.5:
+`AirFrontInputs::crisis`); the pull-back's "keep 16-24 km back from the belt" once the ground war gives a belt (§2); the
+gates' values against history (F6).
