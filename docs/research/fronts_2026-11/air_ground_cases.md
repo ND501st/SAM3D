@@ -384,7 +384,7 @@ low = SAM3D estimate bounded by cases.
 - Angola 1987-88 (Cuito Cuanavale, the SAAF's F1 losses) is after the war's year (already flagged in `factions_cases.md`).
 - Werrell (2005) and Entwistle (1988) were written later but are histories of period events; their numbers describe
   1966-82.
-- `fm_1_112` as found on archive.org (labelled 1981) mentions systems of the 1990s; it is not the period edition and
+- FM 1-112 as found on archive.org (labelled 1981; the copy registered as `fm_1_112_1997`) mentions systems of the 1990s; it is not the period edition and
   was not used.
 
 ## 9. Open items
