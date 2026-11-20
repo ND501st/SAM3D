@@ -388,7 +388,7 @@ private:
         ScenarioRunner* rp = &r;
         const PackageControl::MissionOf mission_of = [c](const FlightState& f) {
             const Package* p = c->PackageById(SessionPackageId(f.package));
-            return p != nullptr ? C2MissionOf(*p, c->Data()) : std::string("any");
+            return p != nullptr ? C2MissionOf(*p, c->Data(), c->FrontView()) : std::string("any");
         };
         const PackageControl::PostKind kind_of = [c](const std::string& by) {
             const C2PostState* p = c->C2().Post(by);
@@ -593,7 +593,7 @@ private:
         Vec3 mark = MoveFrame(theatre, session, best->pos);
         mark.z = 0.0;
         const C2ClearanceDef& clr = c_->Data().faction.c2.clearance;
-        const bool needs = clr.set && clr.Covers(C2MissionOf(*p, c_->Data()));
+        const bool needs = clr.set && clr.Covers(C2MissionOf(*p, c_->Data(), c_->FrontView()));
         const RaidManifest& m = l.bridge->Manifest();
         AirRadio* radio = r.AirRadio();
         for (std::size_t fi = 0; fi < m.flight_ids.size() && fi < p->flights.size(); ++fi) {

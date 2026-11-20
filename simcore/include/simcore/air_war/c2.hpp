@@ -33,6 +33,7 @@
 #include "simcore/air_war/c2_def.hpp"
 #include "simcore/air_war/comms_jamming.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/officers.hpp"
@@ -81,13 +82,19 @@ public:
     }
 };
 
-// A package's mission as the authority table names it: a strike within c2.bai_depth_m of the front is battlefield
+// Whether a place is in the battlefield interdiction area: within c2.bai_depth_m of the line of contact, and further by
+// its sector's air front (track F, F2.4; 02_AIR_FRONT.md §4). With no line given, from the front's line (the same at zero
+// offsets and with the air front off).
+inline bool InBaiArea(const Vec3& place, const AirWarData& d, const AirFrontView& af) {
+    if (af.line != nullptr && !af.line->Empty()) return af.line->AbsDistance(place) <= d.tuning.Get("c2.bai_depth_m") + af.At(place);
+    const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+    return front != nullptr && DistanceToLine(front->line, place) <= d.tuning.Get("c2.bai_depth_m");
+}
+
+// A package's mission as the authority table names it: a strike in the battlefield interdiction area is battlefield
 // interdiction ("bai"), beyond it air interdiction ("strike"); the rest by their kind.
-inline std::string C2MissionOf(const Package& p, const AirWarData& d) {
-    if (p.kind == MissionKind::Strike) {
-        const FrontDef* front = d.theatre.FrontFor(d.faction.front);
-        if (front != nullptr && DistanceToLine(front->line, p.target_pos) <= d.tuning.Get("c2.bai_depth_m")) return "bai";
-    }
+inline std::string C2MissionOf(const Package& p, const AirWarData& d, const AirFrontView& af = AirFrontView()) {
+    if (p.kind == MissionKind::Strike && InBaiArea(p.target_pos, d, af)) return "bai";
     return MissionKindName(p.kind);
 }
 
@@ -341,10 +348,12 @@ public:
         }
     }
 
-    // The data and staff it reads (again after its owner was copied or moved: the campaign binds before every use).
-    void Bind(const AirWarData& d, const AirStaff& staff) {
+    // The data and staff it reads (again after its owner was copied or moved: the campaign binds before every use), and
+    // the front as its posts measure from it: the line of contact and the air front by sector (F2.4; none: the front's line).
+    void Bind(const AirWarData& d, const AirStaff& staff, const AirFrontView& front = AirFrontView()) {
         d_ = &d;
         staff_ = &staff;
+        front_ = front;
     }
     // On: the faction has posts and the campaign runs B5's command in the air (c2.mode 1; 0 replays a save made before it).
     bool On() const { return d_ != nullptr && enabled_; }
@@ -372,8 +381,7 @@ public:
     bool FreeHunt(const Vec3& place, int phase) const {
         const C2FreeHuntDef& fh = d_->faction.c2.free_hunt;
         if (fh.from_phase < 0 || phase < fh.from_phase) return false;
-        const FrontDef* front = d_->theatre.FrontFor(d_->faction.front);
-        return front != nullptr && DistanceToLine(front->line, place) <= fh.depth_km * 1000.0;
+        return ToFront(place) <= fh.depth_km * 1000.0;
     }
 
     // ---- the alert pools (§4.4)
@@ -499,7 +507,7 @@ public:
         }
         if (best == nullptr) return false;
         const C2ClearanceDef& clr = d_->faction.c2.clearance;
-        const bool needs = LiveOn() && clr.set && clr.Covers(C2MissionOf(p, *d_));
+        const bool needs = LiveOn() && clr.set && clr.Covers(C2MissionOf(p, *d_, front_));
         if (!needs) {
             for (Flight& fl : p.flights) {
                 if (fl.aim_key == p.target_key) fl.aim_pos = best->pos;
@@ -587,7 +595,7 @@ public:
                 double sigma_m, double observed_h, const Vec3& from, Profile profile, double now_h, C2Context& c) {
         if (!On()) return false;
         const FactionC2& c2 = d_->faction.c2;
-        const std::string mission = C2MissionOf(p, *d_);
+        const std::string mission = C2MissionOf(p, *d_, front_);
         bool reports = false;
         for (const std::string& m : c2.report_missions) reports = reports || m == "any" || m == mission;
         if (!reports) return false;
@@ -797,7 +805,7 @@ public:
             if (heard < static_cast<int>(t.Get("c2.post_fix_calls") + 0.5)) continue;
             const double range = Dist2d(p.at, c.battery);
             if (range > k.df_reach_m) continue;
-            if (DistanceToLine(front->line, p.at) > k.fires_reach_m) continue;
+            if (ToFront(p.at) > k.fires_reach_m) continue;
             Rng r = Draw(0xF14E5000ull + i, static_cast<std::uint64_t>(hour + 100000));
             if (!r.Chance(t.Get("c2.post_strike_per_h"))) continue;
             const double miss = std::fabs(r.Normal(0.0, range * std::tan(k.df_bearing_rad)));
@@ -827,7 +835,7 @@ public:
             bool open = false;
             for (const Flight& fl : p.flights) open = open || (IsMain(fl) && Open(fl, now_h));
             if (!open) continue;
-            const std::string mission = C2MissionOf(p, *d_);
+            const std::string mission = C2MissionOf(p, *d_, front_);
             const int by = Authorizer("recall", mission, p.target_pos, c.phase);
             if (by < 0) continue;
             recalled_.insert(p.id);
@@ -856,6 +864,7 @@ public:
 
 private:
     const AirWarData* d_ = nullptr;
+    AirFrontView front_;  // the campaign's line of contact and air front (Bind)
     bool enabled_ = false;
     Rng root_{1};
     Jam jam_;
@@ -1408,7 +1417,7 @@ private:
         std::sort(cand.begin(), cand.end());
         for (const auto& k : cand) {
             const Package& p = (*c.packages)[static_cast<std::size_t>(k.second.first)];
-            const std::string mission = C2MissionOf(p, *d_);
+            const std::string mission = C2MissionOf(p, *d_, front_);
             if (m.what == "troops" && mission != "cas" && mission != "helo_raid") continue;  // close support goes to close support
             const C2AuthorityDef* line = nullptr;
             const int by = Authorizer("divert_airborne", mission, m.where, c.phase, &line);
@@ -1489,11 +1498,15 @@ private:
         return MissionKind::Strike;
     }
     std::string MissionName(MissionKind mk, const Vec3& place) const {
-        if (mk == MissionKind::Strike) {
-            const FrontDef* front = d_->theatre.FrontFor(d_->faction.front);
-            if (front != nullptr && DistanceToLine(front->line, place) <= d_->tuning.Get("c2.bai_depth_m")) return "bai";
-        }
+        if (mk == MissionKind::Strike && InBaiArea(place, *d_, front_)) return "bai";
         return MissionKindName(mk);
+    }
+    // A place's distance from the line of contact, either side (F2.4; unbound: from the front's line, the same at zero
+    // offsets; no front: never near it).
+    double ToFront(const Vec3& place) const {
+        if (front_.line != nullptr && !front_.line->Empty()) return front_.line->AbsDistance(place);
+        const FrontDef* front = d_->theatre.FrontFor(d_->faction.front);
+        return front != nullptr ? DistanceToLine(front->line, place) : 1e18;
     }
 
     // 3. An alert pool within authority: approved (where the faction approves within an allocation) and scrambled. The

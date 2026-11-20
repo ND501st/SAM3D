@@ -224,5 +224,33 @@ private:
     }
 };
 
+// The enemy's air front as the planner, the route planner and C2 read it (track F, F2.4; 02_AIR_FRONT.md §4): the line
+// of contact and each sector's fixed-wing and helicopter depths beyond it, as the air staff last decided them (the
+// campaign's vectors, pointed at, never copied). Off (air_front.mode 0: no depths) every depth reads 0, so each reader's
+// fixed depth stands to the bit (40 km + 0.0 is 40 km).
+struct AirFrontView {
+    const LineOfContact* line = nullptr;
+    const std::vector<double>* depth_m = nullptr;       // the fixed-wing low-level front by sector
+    const std::vector<double>* helo_depth_m = nullptr;  // the helicopters' by sector
+
+    bool On() const { return line != nullptr && !line->Empty() && depth_m != nullptr && !depth_m->empty(); }
+    // A sector's depths (0 off or out of range).
+    double DepthIn(int s) const { return On() && s >= 0 && static_cast<std::size_t>(s) < depth_m->size() ? (*depth_m)[static_cast<std::size_t>(s)] : 0.0; }
+    double HeloIn(int s) const {
+        return On() && helo_depth_m != nullptr && s >= 0 && static_cast<std::size_t>(s) < helo_depth_m->size() ? (*helo_depth_m)[static_cast<std::size_t>(s)] : 0.0;
+    }
+    // At a point: its sector's (one projection on the base line; none when off).
+    double At(const Vec3& p) const { return On() ? DepthIn(line->SectorOf(p)) : 0.0; }
+    double HeloAt(const Vec3& p) const { return On() ? HeloIn(line->SectorOf(p)) : 0.0; }
+    // Whether p is inside the fixed-wing air front: its sector's front is forward of the border and p short of it (on
+    // the enemy's side of the line of contact, or beyond it by less than the depth). Never where the sector's depth is 0.
+    bool Inside(const Vec3& p) const {
+        if (!On()) return false;
+        const FrontPlace pl = line->Place(p);
+        const double d = DepthIn(line->SectorAt(pl.along_m));
+        return d > 0.0 && pl.side * pl.distance_m - line->Offset(pl.along_m) < d;
+    }
+};
+
 }  // namespace airwar
 }  // namespace simcore

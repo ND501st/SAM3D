@@ -317,7 +317,7 @@ public:
 
     // The enemy's command in the air (roadmap B5): its posts, pools, messages and what they did.
     const AirC2& C2() const {
-        c2_.Bind(data_, staff_);  // a copied campaign's posts read its own data
+        c2_.Bind(data_, staff_, FrontView());  // a copied campaign's posts read its own data
         return c2_;
     }
     // Packages in the air now (the abstract ones, stepped in time).
@@ -548,6 +548,15 @@ public:
     // fixed-wing depth beyond the line of contact by sector (what the planner, routes and C2 read from F2.4).
     const AirFrontState& AirFront() const { return air_front_; }
     const std::vector<double>& AirFrontDepths() const { return air_front_depth_; }
+    const std::vector<double>& HeloFrontDepths() const { return air_front_helo_depth_; }
+    // Both as the planner, the route planner and C2 read them (F2.4): off at mode 0, so their fixed depths stand.
+    AirFrontView FrontView() const {
+        AirFrontView v;
+        v.line = &front_line_;
+        v.depth_m = &air_front_depth_;
+        v.helo_depth_m = &air_front_helo_depth_;
+        return v;
+    }
     // The fixed-wing and the helicopters' air front at a point: its sector's (0 and 0 at mode 0).
     double AirFrontAt(const Vec3& p) const {
         if (!air_front_on_ || air_front_.sectors.empty()) return 0.0;
@@ -758,6 +767,7 @@ private:
     std::vector<SectorCover> sector_cover_;  // as of the last plan
     SectorLossWindow sector_losses_;
     std::vector<double> air_front_depth_;  // each sector's fixed-wing air front beyond its line of contact (F2.3 moves it)
+    std::vector<double> air_front_helo_depth_;  // and its helicopters' (F2.4 reads both)
     AirFrontState air_front_;              // each sector's air front and what its chief waits on (F2.3)
     std::vector<AirFrontMove> air_front_moves_;  // the last decision's (kept so a cycle allocates nothing once sized)
     std::vector<double> air_front_reward_;
@@ -1093,6 +1103,7 @@ private:
         pc.supply = &supply_;
         pc.ground = RouteGroundPtr();
         pc.front_line = &front_line_;
+        pc.air_front = FrontView();
         // The sorties the plan holds back for on-call work (doctrine.on_call_fraction), squadron by squadron, before the
         // planner spends the rest (roadmap B5: the alert pools fly them).
         std::vector<double> held;
@@ -1114,7 +1125,7 @@ private:
             const int idx = static_cast<int>(packages_.size()) - 1;
             if (TouchesPlayer(p)) player_candidates_.insert(idx);
         }
-        c2_.Bind(data_, staff_);
+        c2_.Bind(data_, staff_, FrontView());
         const double begin = now_h_ + data_.faction.doctrine.lead_time_h;
         c2_.BuildPools(squadrons_, held, planned, begin, begin + data_.faction.doctrine.planning_cycle_h, phase_);
     }
@@ -1448,6 +1459,7 @@ private:
             pc.supply = &supply_;
             pc.ground = RouteGroundPtr();  // the route planner's ground (route.mode 1, roadmap B2)
             pc.front_line = &front_line_;
+        pc.air_front = FrontView();
             Planner planner;
             return planner.OnCall(pc, mk, e, pool.squadron, pool.aircraft, takeoff_h, out);
         };
@@ -1460,7 +1472,7 @@ private:
         c.intel = [this](const IntelReport& r) { intel_.Queue(r); };
         c.believed = [this](const std::string& key) -> const IntelEntry* { return key.empty() ? nullptr : intel_.Find(key); };
         c.log = [this](const std::string& kind, const std::string& who, const std::string& text, bool visible) { Log(kind, who, text, visible); };
-        c2_.Bind(data_, staff_);
+        c2_.Bind(data_, staff_, FrontView());
         return c;
     }
 
@@ -1859,12 +1871,14 @@ private:
         sector_cover_.clear();
         sector_losses_ = SectorLossWindow();
         air_front_depth_.clear();
+        air_front_helo_depth_.clear();
         air_front_ = AirFrontState();
         air_front_moves_.clear();
         if (!air_front_on_) return;
         cover_book_.Start(intel_, front_line_);
         sector_losses_.Reset(front_line_.SectorCount());
         air_front_depth_.assign(front_line_.SectorCount(), 0.0);  // at the border: the period's default (02_AIR_FRONT.md section 2)
+        air_front_helo_depth_.assign(front_line_.SectorCount(), 0.0);
         air_front_.Reset(front_line_.SectorCount(), now_h_);
     }
     // Each planning cycle: the believed cover over every sector's next band (what the decision reads).
@@ -1879,6 +1893,7 @@ private:
         const Officer* chief = AirFrontDecisionInputs(rules, in, who);
         DecideAirFront(data_.faction.air_front, rules, in, who, air_front_, air_front_moves_, &air_front_reward_, &air_front_scratch_);
         air_front_.Depths(air_front_depth_);
+        air_front_.HeloDepths(air_front_helo_depth_);
         const std::string title = chief != nullptr ? chief->Title() : std::string("air staff");
         for (const AirFrontMove& m : air_front_moves_) Log("air_front", title, AirFrontLine(m), false);
     }
