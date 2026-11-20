@@ -1,6 +1,6 @@
 // fronts_bench: what track F's fronts cost (docs/fronts/README.md, "Efficiency"). Not a test: a table to read.
 //
-// Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [--moves] [faction ...]
+// Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [--moves] [--trace] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
 //   --sectors equal sectors (default 8, the most the design gives a front; 0: the theatre's own). At each day's end the
@@ -11,7 +11,9 @@
 //   against the budget, 1 ms per planning cycle for a front; the campaign's whole CPU time with the mode off and on (the
 //   same seeds), which must be the same war (the same packages, and the same journal but for the air front's own
 //   entries: nothing reads the depths until F2.4); and how the air front moved (advances, pull-backs, the deepest, the
-//   sectors moved and the depths at the end, the first seed's). --moves prints each seed's air front entries.
+//   sectors moved and the depths at the end, the first seed's). --moves prints each seed's air front entries; --trace each
+//   day's end by sector: the depths, the cover and the mobile air defence against their baselines, the next band's worth
+//   and the low-level sorties and loss rate in the loss window.
 // Factions default to warsaw_pact and nato. CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on.
 #include <cstdint>
@@ -80,7 +82,7 @@ void CutSectors(AirWarData& d, int n) {
 int main(int argc, char** argv) {
     std::string data = "data", theatre = "theatre_pannonia_nation.json";
     int days = 7, seeds = 3, sectors = 8;
-    bool air_front = false, print_moves = false;
+    bool air_front = false, print_moves = false, trace = false;
     std::vector<std::string> factions;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -88,6 +90,8 @@ int main(int argc, char** argv) {
             air_front = true;
         } else if (a == "--moves") {
             print_moves = true;
+        } else if (a == "--trace") {
+            trace = true;
         } else if (a == "--days" && i + 1 < argc) {
             days = std::atoi(argv[++i]);
         } else if (a == "--seeds" && i + 1 < argc) {
@@ -180,6 +184,30 @@ int main(int argc, char** argv) {
                     DecideAirFront(on.faction.air_front, rules, in, who, st, moves, &reward, &scratch);
                 }
                 const double cycle_ms = (CpuSeconds() - m0) * 1000.0 / reps;
+                if (trace) {
+                    SectorRewards(c.Intel(), c.FrontLine(), now_depth, rules.reward_reach_m, step_m, on.faction.politics.target_weight, &c.Politics().banned, reward);
+                    if (day == 1) {  // what the enemy believes is worth flying for within 60 km of the line
+                        for (const IntelEntry& en : c.Intel().entries) {
+                            if (!IsAirFrontReward(en.kind)) continue;
+                            const FrontPlace pl = c.FrontLine().Place(en.pos);
+                            const double dep = pl.side * pl.distance_m - c.FrontLine().Offset(pl.along_m);
+                            if (dep < -5000.0 || dep > 60000.0) continue;
+                            std::printf("  %s target %-20s %-12s sector %-16s depth %5.1f km value %.2f live %.2f weight %.2f\n", faction.c_str(),
+                                        en.key.c_str(), ObjectKindName(en.kind),
+                                        c.FrontLine().Sector(static_cast<std::size_t>(c.FrontLine().SectorAt(pl.along_m))).id.c_str(), dep / 1000.0,
+                                        en.value, en.Live(), on.faction.politics.target_weight[static_cast<int>(en.kind)]);
+                        }
+                    }
+                    for (std::size_t k = 0; k < out.size(); ++k) {
+                        const SectorFront& f = c.AirFront().sectors[k];
+                        std::printf("  %s seed %u day %d %-4s depth %2.0f/%2.0f cover %.2f (sam %.1f of %.1f) mobile gone %.2f (%.1f of %.1f) worth %5.2f sorties %3d rate %.3f%s\n",
+                                    faction.c_str(), seed, day, c.FrontLine().Sector(k).id.c_str(), f.depth_m / 1000.0, f.helo_depth_m / 1000.0, out[k].cover,
+                                    out[k].sam_working, out[k].sam_baseline, out[k].mobile_destroyed, out[k].mobile_working, out[k].mobile_baseline, reward[k],
+                                    c.SectorLosses().Sorties(static_cast<int>(k), SectorLossWindow::DayOf(c.Now()), on.faction.air_front.loss_days),
+                                    c.SectorLosses().Rate(static_cast<int>(k), SectorLossWindow::DayOf(c.Now()), on.faction.air_front.loss_days),
+                                    f.contested ? " contested" : "");
+                    }
+                }
                 cycle_sum_ms += cycle_ms;
                 cycle_worst_ms = cycle_ms > cycle_worst_ms ? cycle_ms : cycle_worst_ms;
                 worst_moved_ms = moved_ms > worst_moved_ms ? moved_ms : worst_moved_ms;

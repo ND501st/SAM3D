@@ -268,10 +268,18 @@ IntelPicture TwoSectors() {
     return pic;
 }
 
+// The game values with the reward weighed over the next band itself (reach 0), so the hand cases put the targets where
+// the cover is; the campaign's reach (40 km beyond the air front) is checked on its own.
+AirFrontRules HandRules() {
+    AirFrontRules r;
+    r.reward_reach_m = 0.0;
+    return r;
+}
+
 // One planning cycle as the campaign runs it: the measure at the current depths, then the decision.
 struct Staff {
     AirFrontDef def = PeerDef();
-    AirFrontRules rules;
+    AirFrontRules rules = HandRules();
     AirFrontChief chief;
     LineOfContact line = StraightLine();
     SectorCoverBook book;
@@ -381,6 +389,32 @@ SC_TEST("air front (F2.3): a hole opens one sector only, after the chief's delay
     m.Cycle(pic, 1.0);
     SC_EXPECT(Has(m.moves, AirFrontMove::What::Seen, 0));
     SC_EXPECT_NEAR(m.moves[0].after_h, 24.0, 1e-12);
+    // With the campaign's reach a step is worth what it brings into close support's reach, 40-60 km beyond the air front:
+    // the troops at 8 km are in reach already and count for nothing; a column at 50 km does (worth 1 x 0.6 x 1.5).
+    Staff r;
+    r.rules.reward_reach_m = 40000.0;
+    r.def.min_reward = 0.5;  // the cycle reads no weights: the column is worth 0.6 to it
+    IntelPicture far_pic = TwoSectors();
+    r.Start(far_pic);
+    far_pic.entries[0].function = 0.0;
+    far_pic.entries[1].function = 0.0;
+    r.Cycle(far_pic, 0.0);
+    SC_EXPECT(r.moves.empty());
+    IntelEntry col = Target("col", ObjectKind::Column, At(30, 50), 0.6);
+    far_pic.entries.push_back(col);
+    std::vector<double> worth, at_border(2, 0.0);
+    double weight[static_cast<int>(ObjectKind::Count)];
+    for (double& w : weight) w = 1.0;
+    weight[static_cast<int>(ObjectKind::Column)] = 1.5;
+    SectorRewards(far_pic, r.line, at_border, 40000.0, 20000.0, weight, nullptr, worth);
+    SC_EXPECT(worth.size() == 2);
+    SC_EXPECT_NEAR(worth[0], 0.9, 1e-12);
+    SC_EXPECT_NEAR(worth[1], 0.0, 1e-12);
+    const std::vector<ObjectKind> banned = {ObjectKind::Column};
+    SectorRewards(far_pic, r.line, at_border, 40000.0, 20000.0, weight, &banned, worth);
+    SC_EXPECT_NEAR(worth[0], 0.0, 1e-12);
+    r.Cycle(far_pic, 12.0);
+    SC_EXPECT(Has(r.moves, AirFrontMove::What::Seen, 0));
 }
 
 SC_TEST("air front (F2.3): on belief, not truth; and never on a band nothing was ever believed to cover") {

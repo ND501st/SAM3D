@@ -267,9 +267,11 @@ private:
 
 // ------------------------------------------------------------------------------------------------ the decision (F2.3)
 
-// The believed worth of each sector's next band to low-level work (§3, the reward): our troops, columns, convoys and
-// trains, bridges, command posts, depots and rail junctions the enemy believes are in the band, each by Live() x its value
-// x the faction's weight for its kind (none for a banned kind). One pass over the picture; `out` sized here.
+// The believed worth of a step to each sector's low-level work (§3, the reward): our troops, columns, convoys and trains,
+// bridges, command posts, depots and rail junctions the enemy believes are in the band the step brings into its reach,
+// [front + reach_m, front + reach_m + band_m] beyond the line of contact (reach_m: air_front.reward_reach_m, the close
+// support's depth beyond the air front), each by Live() x its value x the faction's weight for its kind (none for a
+// banned kind). One pass over the picture; `out` sized here.
 inline bool IsAirFrontReward(ObjectKind k) {
     switch (k) {
         case ObjectKind::Troops:
@@ -283,8 +285,8 @@ inline bool IsAirFrontReward(ObjectKind k) {
         default: return false;
     }
 }
-inline void SectorRewards(const IntelPicture& pic, const LineOfContact& line, const std::vector<double>& front_depth_m, double band_m,
-                          const double* weight, const std::vector<ObjectKind>* banned, std::vector<double>& out) {
+inline void SectorRewards(const IntelPicture& pic, const LineOfContact& line, const std::vector<double>& front_depth_m, double reach_m,
+                          double band_m, const double* weight, const std::vector<ObjectKind>* banned, std::vector<double>& out) {
     const std::size_t n = line.SectorCount();
     out.assign(n, 0.0);
     for (const IntelEntry& e : pic.entries) {
@@ -294,7 +296,7 @@ inline void SectorRewards(const IntelPicture& pic, const LineOfContact& line, co
         const int s = line.SectorAt(pl.along_m);
         if (s < 0 || static_cast<std::size_t>(s) >= n) continue;
         const std::size_t si = static_cast<std::size_t>(s);
-        const double near_m = si < front_depth_m.size() ? front_depth_m[si] : 0.0;
+        const double near_m = (si < front_depth_m.size() ? front_depth_m[si] : 0.0) + reach_m;
         const double depth = pl.side * pl.distance_m - line.Offset(pl.along_m);
         if (depth < near_m || depth > near_m + band_m) continue;
         const double w = weight != nullptr ? weight[static_cast<int>(e.kind)] : 1.0;
@@ -341,6 +343,7 @@ struct AirFrontRules {
     double min_sorties = 6.0;
     double helo_lag_h = 24.0;
     double trait_shift = 0.2;
+    double reward_reach_m = 40000.0;
 };
 
 // The officer who decides (the air operations chief: the planner's post) as the decision reads him.
@@ -398,7 +401,7 @@ inline void DecideAirFront(const AirFrontDef& def, const AirFrontRules& rules, c
     std::vector<double>& depth_now = depth_scratch != nullptr ? *depth_scratch : local_depth;
     std::vector<double>& reward = reward_scratch != nullptr ? *reward_scratch : local_reward;
     st.Depths(depth_now);
-    SectorRewards(*in.picture, line, depth_now, rules.step_m, in.target_weight, in.banned, reward);
+    SectorRewards(*in.picture, line, depth_now, rules.reward_reach_m, rules.step_m, in.target_weight, in.banned, reward);
 
     const Traits& tr = chief.traits;
     const double bold = 2.0 * (Clamp01(tr.boldness) - 0.5);

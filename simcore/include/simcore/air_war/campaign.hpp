@@ -1893,6 +1893,7 @@ public:
         rules.min_sorties = tune.Get("air_front.min_sorties");
         rules.helo_lag_h = tune.Get("air_front.helo_lag_h");
         rules.trait_shift = tune.Get("air_front.trait_shift");
+        rules.reward_reach_m = tune.Get("air_front.reward_reach_m");
         const Officer* chief = staff_.HolderPtr(StaffRole::Planner);
         if (chief == nullptr) chief = staff_.HolderPtr(StaffRole::Commander);
         who = AirFrontChief();

@@ -84,6 +84,9 @@ inline std::vector<std::pair<std::string, double>> AirFrontTuningDefaults() {
         {"air_front.min_sorties", 6.0},   // low-level sorties in the loss window before its rate counts (one loss in two is not a rate)
         {"air_front.helo_lag_h", 24.0},   // the helicopters follow a step only after this long of clean fixed-wing work
         {"air_front.trait_shift", 0.2},   // the most a chief's trait moves a gate, as a share of its value
+        // A step's worth is what it brings into the low-level work's reach: the targets this far beyond the air front, a
+        // step deep (the planner's close support depth, 40 km: at front d its reach goes from d + 40 to d + 60 km).
+        {"air_front.reward_reach_m", 40000.0},
     };
 }
 
