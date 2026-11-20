@@ -373,8 +373,8 @@ side's daily rate and its loss over the hours (`1 - (1 - daily)^(h/24)`, so a qu
 advance: the class's rate x the ground x the draw, then the faction's cap (breakthrough against a defence, depth
 against a delay, withdrawal or meeting, broken against a broken enemy or none), stopped at a river line's bank.
 `CrossingHours`, `TankLossShare` and `DecisionHours` are the other tables. No state, no allocation: a call costs
-about 0.12 us of CPU (`test_ground_combat.cpp` times a million, Release, MSVC), so 240 calls (10 contested sectors an
-hour) cost about 0.03 ms a campaign day against the budget's 20 ms. The tests check FM 101-10-1's day at 3:1 (4.1 %
+0.12-0.16 us of CPU (`test_ground_combat.cpp` times a million, Release, MSVC, alone and in the full suite), so 240
+calls (10 contested sectors an hour) cost about 0.04 ms a campaign day against the budget's 20 ms. The tests check FM 101-10-1's day at 3:1 (4.1 %
 and 2.2 % on the first day, 2.2 % and 1.3 % after), the scale away from it, HERO's five classes and the stall below
 1.5, Dupuy's six factors through the ratio, forest and night, a river line that stops the advance at its bank, the
 inactive closed form and the tank and decision tables, all by hand.
