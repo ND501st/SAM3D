@@ -344,12 +344,12 @@ public:
             const Vec3& c = centres[k];
             if (std::hypot(a.x - c.x, a.y - c.y) < r || std::hypot(b.x - c.x, b.y - c.y) < r) continue;
             const double u = std::max(0.0, std::min(1.0, ((c.x - a.x) * ab.x + (c.y - a.y) * ab.y) / len2));
-            const Vec3 near{a.x + ab.x * u, a.y + ab.y * u, 0.0};
-            const double cut = r - std::hypot(near.x - c.x, near.y - c.y);
+            const Vec3 foot{a.x + ab.x * u, a.y + ab.y * u, 0.0};
+            const double cut = r - std::hypot(foot.x - c.x, foot.y - c.y);
             if (cut > worst_cut) {
                 worst_cut = cut;
                 worst = static_cast<int>(k);
-                worst_near = near;
+                worst_near = foot;
             }
         }
         if (worst < 0) return out;

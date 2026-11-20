@@ -200,13 +200,13 @@ struct Reader {
         confidence = c->string;
         return true;
     }
-    bool Pair(const json::Value& v, const std::string& path, double& lo, double& hi, double min, double max) const {
+    bool Pair(const json::Value& v, const std::string& path, double& lo, double& hi, double lowest, double highest) const {
         if (!v.Is(json::Type::Array) || v.items.size() != 2 || !v.items[0].Is(json::Type::Number) || !v.items[1].Is(json::Type::Number)) {
             return Fail(path, "expected [lo, hi]");
         }
         lo = v.items[0].number;
         hi = v.items[1].number;
-        if (lo < min || hi > max || lo > hi) return Fail(path, "lo <= hi, within the allowed span");
+        if (lo < lowest || hi > highest || lo > hi) return Fail(path, "lo <= hi, within the allowed span");
         return true;
     }
     bool Strings(const json::Value& v, const std::string& path, std::vector<std::string>& out) const {
