@@ -91,7 +91,7 @@ deliveries `strafe` and `gentle_dive` are flown as passes.
 
 A theatre may **extend** another in this folder (`"extends"`, `LoadTheatreFile` only): it starts from the base, its fronts
 replace the base's of the same faction, `"remove"` drops base objects, and its objects are added, one with a base
-object's id replacing it where it stands; it keeps the base's `origin` and `country`. An object's `"positions"` (a
+object's id replacing it where it stands; it keeps the base's `origin` and `country`. A front's `"sectors"` (track F, `docs/fronts/02_AIR_FRONT.md` §2) cut its `line` into named runs, `from_km` and `to_km` along it from its first point, contiguous from 0, 4-8 a front of 20-60 km each named on the map's features (the last runs to the line's end); a front without them is one sector. An object's `"positions"` (a
 mobile unit with `relocate_h`, never the player's battery) are its prepared positions besides its own: it moves between
 them, never to one within 8 km of the enemy's front; without them it moves `relocate_km` in a random direction. A
 defence's `"channels"` are its fire channels, the aircraft of a passing flight it engages at once (an S-75's or S-125's

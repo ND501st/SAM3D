@@ -154,6 +154,19 @@ SC_TEST("air front (F2.2): a band further in takes its baseline from the pre-war
     book.Measure(pic, moved, {20000.0, 0.0}, 20000.0, out);
     SC_EXPECT(out[0].sam_units == 2);  // s2 (25 km beyond the contact) and s3 (45 km, ring 5 km in); s1 no longer
     SC_EXPECT_NEAR(out[0].sam_baseline, 2.0, 1e-12);
+    SC_EXPECT_NEAR(out[0].cover, 1.25 / 2.0, 1e-12);
+    // Back on the first line the pre-war places are taken again: s1 and s2. Then the same line moved in place: s2 and s3.
+    book.Measure(pic, l, {20000.0, 0.0}, 20000.0, out);
+    SC_EXPECT(out[0].sam_units == 2);
+    SC_EXPECT_NEAR(out[0].cover, 1.25 / 2.0, 1e-12);
+    LineOfContact same = l;
+    book.Measure(pic, same, {20000.0, 0.0}, 20000.0, out);  // a copy unmoved: the same line
+    const unsigned v = same.Version();
+    for (std::size_t i = 0; i < same.StationCount(); ++i) same.SetStationOffset(i, 10000.0);
+    SC_EXPECT(same.Version() != v);
+    book.Measure(pic, same, {20000.0, 0.0}, 20000.0, out);
+    SC_EXPECT(out[0].sam_units == 2);
+    SC_EXPECT_NEAR(out[0].sam_there, 2.0, 1e-12);  // s2 and s3; s1 (0 km beyond the contact now) out of reach
 }
 
 SC_TEST("air front (F2.2): losses per low-level sortie by sector over the last days") {
@@ -185,36 +198,24 @@ SC_TEST("air front (F2.2): under air_front.mode 1 the campaign measures its sect
     std::string e;
     SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", d, &e));
     d.tuning.values["air_front.mode"] = 1.0;
-    // Two sectors on the Pact's front (its line about 230 km).
-    for (FrontDef& f : d.theatre.fronts) {
-        if (f.faction != "warsaw_pact") continue;
-        SectorDef a;
-        a.id = "west";
-        a.name = "West";
-        a.to_m = 110000.0;
-        SectorDef b = a;
-        b.id = "east";
-        b.name = "East";
-        b.from_m = 110000.0;
-        b.to_m = 240000.0;
-        f.sectors = {a, b};
-    }
     AirCampaign c;
     SC_EXPECT(c.Init(d, 21));
     SC_EXPECT(c.AirFrontOn() && c.CoverBook().Started());
-    SC_EXPECT(c.SectorCovers().size() == 2);
+    const int n = static_cast<int>(c.FrontLine().SectorCount());  // the Pact's front's five sectors (the theatre's data)
+    SC_EXPECT(n == 5 && c.SectorCovers().size() == c.FrontLine().SectorCount());
     for (const SectorCover& s : c.SectorCovers()) SC_EXPECT(s.cover >= 0.0 && s.cover <= 1.0 && s.sam_baseline >= s.sam_there);
     while (c.Now() < 72.0) {
         if (c.Advance(72.0)) c.SkipPlayerMission();
     }
     int sorties = 0;
-    for (int s = 0; s < 2; ++s) sorties += c.SectorLosses().Sorties(s, SectorLossWindow::DayOf(c.Now()), 4);
+    for (int s = 0; s < n; ++s) sorties += c.SectorLosses().Sorties(s, SectorLossWindow::DayOf(c.Now()), 4);
     int low = 0;
     for (const Package& p : c.Packages()) {
         if (p.resolved && p.profile == Profile::Low && SectorLossWindow::DayOf(p.tot_h) > SectorLossWindow::DayOf(c.Now()) - 4) low += p.Aircraft();
     }
-    std::printf("    low-level sorties in the window %d (packages say %d); covers %.2f %.2f\n", sorties, low, c.SectorCovers()[0].cover,
-                c.SectorCovers()[1].cover);
+    std::printf("    low-level sorties in the window %d (packages say %d); covers", sorties, low);
+    for (const SectorCover& s : c.SectorCovers()) std::printf(" %.2f", s.cover);
+    std::printf("\n");
     SC_EXPECT(sorties == low);
-    SC_EXPECT(c.SectorLossRate(0, 3) >= 0.0 && c.SectorLossRate(1, 3) <= 1.0);
+    for (int s = 0; s < n; ++s) SC_EXPECT(c.SectorLossRate(s, 3) >= 0.0 && c.SectorLossRate(s, 3) <= 1.0);
 }

@@ -231,6 +231,20 @@ signed distance is the projection's less the offset at it: exact on a straight l
 relocating unit may go) reads `AbsDistance`, and the planner's target filter reads it through
 `PlanContext::front_line` (the campaign's plan and its on-call builder; a context without one reads the base line).
 
+**The theatres' sectors.** Every theatre front has its sectors, named on the country map's features along its line (both
+theatres, the same on the nation's Pact and NATO fronts; the line's points are F1's places, read through the loaded
+`FrontDef::line`, never from the file's coordinates):
+
+| Front | Line | Sectors (km along the line from its first point) |
+|---|---|---|
+| The Pact (north-east) | 214.5 km | the Hradec Dolni approach 0-50, the northern forest 50-100, the Rava reservoir 100-140, the Tisava valley 140-180, the north-eastern crossings 180-215 |
+| NATO (west) | 180.7 km | the western uplands 0-50, the Zlatno gap 50-90, the western crossings 90-125, the upper Lenta 125-181 |
+| The rebels (south) | 150.8 km | the Hollos approach 0-45, the Ralje approach 45-80, the Rava crossing 80-110, the rebels' forest 110-151 |
+| The neutral (south-west) | 148.8 km | the Lenta valley 0-35, the border forest 35-70, the lower Lenta's marshes 70-110, the southern border 110-149 |
+
+Game values (SAM3D's cut, 30-50 km each so a sector holds the 20 km strip the gate needs); nothing reads them at
+`air_front.mode` 0.
+
 So far only these two read it. `c2.hpp`'s four reads (`C2MissionOf`'s BAI depth, `FreeHunt`, the post-fixing fires'
 reach, `MissionName`) are free functions or the C2 layer's own and reach the front through `AirWarData`; they move to the
 line of contact with F2.4, which changes that depth by the sector's air front. `resolve.hpp`, `raid_scenario.hpp` and
@@ -245,7 +259,9 @@ cover (§3's formula), the counts, the baseline, and the mobile air defence's sh
 reaches a band when its centre, placed by its distance along the line and its depth beyond the line of contact, is
 within its radius of the sector's run by the band: one placement per entry a measure, tested against every sector. A
 band's baseline is the pre-war picture's sum over it, raised when more are found there; a new band (the air front
-moved) or a moved line takes it afresh from the pre-war picture. Nothing believed there, ever: cover 0 and mobile air
+moved) or a moved line takes it afresh from the pre-war picture; the pre-war units are placed on the line once for
+every sector and kept until the line changes (`LineOfContact::Version`, unique among lines: a copy that moves gets its
+own). A measure allocates nothing once the campaign's vectors are sized. Nothing believed there, ever: cover 0 and mobile air
 defence all gone, the rebels' gate's reading (§3). The mobile air defence is the guns and the SAMs the enemy believes are
 an Osa, Kub, Strela-1 or Strela-10 (`IsMobileAirDefence`), or a SAM of no known system (an unexplained launch): for
 that the picture now keeps the system a report believed (`IntelReport::system`, `IntelEntry::system`, from the
@@ -262,8 +278,11 @@ measured or drawn. Nothing reads it: F2.3's decision will. The mode has no save 
 save replays the same either way; F2.3 adds `air_front_mode` with the behaviour.
 
 **The cost.** `fronts_bench data --air-front` (new, the first part of F3.3's bench): each faction's campaign on the
-nation with air_front.mode 1, its front cut into eight equal sectors, the measure timed at every day's end over 200
-repetitions on that day's picture, CPU time:
+nation with air_front.mode 1, its front cut into eight equal sectors (the most the design gives a front; `--sectors 0`
+takes the theatre's own), the measure timed at every day's end over 200 repetitions on that day's picture, with the
+bands kept (`mean_ms`, `worst_ms`) and with every sector's band moved each time (`moved_ms`, every baseline taken afresh:
+the worst a cycle can be once F2.3 moves the air front), CPU time (`std::clock`, which MSVC's runtime counts as the
+process's elapsed time):
 
 COST_TABLE
 
@@ -271,20 +290,22 @@ The budget is 1 ms a planning cycle for a front. The line of contact's reads cos
 projection, and `DistanceToFront` no longer looks the front up by its faction's name each call.
 
 **Identity.** `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` print
-byte for byte what they printed before F2.1 (the build before it on the data before it, against this one on this
-data), and `test_routes.cpp`'s replay fingerprint (pact, the district, seed 21: 107 entries, FNV 1375944258174313379,
+byte for byte what they printed before F2.1 (`track-f`'s tip with F1, built and run on its own data, against this
+build on this data, the sectors in it), and `test_routes.cpp`'s replay fingerprint (pact, the district, seed 21: 107 entries, FNV 1375944258174313379,
 41 packages) holds. `test_front_line.cpp` checks every theatre front's distances to the bit against `DistanceToLine` and a
 two-day war at air_front.mode 0 and 1 to the same journal; `fronts_bench` checks it for a week of each faction's war on the
 nation.
 
-**Tests.** `test_front_line.cpp` (6): distances, sides and places on a bent line by hand; sectors, the ends and the
+**Tests.** `test_front_line.cpp` (7): distances, sides and places on a bent line by hand; sectors, the ends and the
 default; offsets and their interpolation, the contact point; the identity on both theatres' fronts; the campaign's reads
-and the mode's identity; the loader's sectors and its refusals. `test_air_front.cpp` (4): the cover by hand on a small
-picture (a decoy half suspected, a unit believed destroyed, one that pulled out, one found later raising the baseline);
-a band further in, an empty band, the guns and an unknown SAM, a moved line; the loss window by hand; the campaign's
-measures and its losses counted against its packages.
+and the mode's identity; the loader's sectors and its refusals (not from 0, a gap, an overlap, a repeat, an empty run or
+list); every theatre front's sectors (4-8, 20-60 km, to the line's end). `test_air_front.cpp` (4): the cover by hand on
+a small picture (a decoy half suspected, a unit believed destroyed, one that pulled out, one found later raising the
+baseline); a band further in, an empty band, the guns and an unknown SAM, a moved line, back on the first line and a
+copy moved in place (the cached places taken again); the loss window by hand; the campaign's measures on the Pact's five
+sectors and its losses counted against its packages.
 
-**Left:** the theatres' sectors (`theatre_pannonia*.json` are F1's files while it anchors them: the sectors go in after
-its merge, 4-8 a front, 20-60 km each, named on the map); `c2.hpp`'s, `resolve.hpp`'s, `raid_scenario.hpp`'s and
-`logistics.hpp`'s reads of the base line (F2.4, F3.3, F3.7); the air front's decision, its depths per sector, its journal
-entries and the save key (F2.3); the rest of `fronts_bench` (F3.3).
+**Left:** `c2.hpp`'s, `resolve.hpp`'s, `raid_scenario.hpp`'s and `logistics.hpp`'s reads of the base line (F2.4, F3.3,
+F3.7); the air front's decision, its depths per sector, its journal entries and the save key `air_front_mode` (F2.3:
+`SectorCovers()` and `SectorLossRate` are its inputs, `air_front_depth_` the depths it will move); the rest of
+`fronts_bench` (F3.3); the map's border as the base line (the owner's open decision 1, argued in F6).

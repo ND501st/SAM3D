@@ -3,9 +3,11 @@
 // Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //   --air-front (F2.2, the only part built so far): each faction's campaign run with air_front.mode 1 for N days (default
 //   7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into --sectors equal
-//   sectors (default 8, the most the design gives a front); at each day's end the measure of every sector's cover (the
-//   air staff's per-cycle read, SectorCoverBook::Measure) is timed over 200 repetitions on that day's picture. Prints the
-//   CPU time per measure (mean and worst day) against the budget, 1 ms per planning cycle for a front, and the campaign's
+//   sectors (default 8, the most the design gives a front; 0: the theatre's own); at each day's end the measure of every
+//   sector's cover (the air staff's per-cycle read, SectorCoverBook::Measure) is timed over 200 repetitions on that day's
+//   picture, once with the bands kept (the cached baselines) and once with every band moved each time (every sector's
+//   baseline taken afresh from the pre-war picture, the worst a cycle can be once F2.3 moves the air front). Prints the CPU
+//   time per measure (mean and worst day) against the budget, 1 ms per planning cycle for a front, and the campaign's
 //   whole CPU time with the mode off and on (the same seeds), which must be the same war.
 // Factions default to warsaw_pact and nato. CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when the measure is over budget or the war differs with the mode on.
@@ -87,9 +89,10 @@ int main(int argc, char** argv) {
     if (factions.empty()) factions = {"warsaw_pact", "nato"};
     const double budget_ms = 1.0;
     int fails = 0;
-    std::printf("The air front's measure (F2.2) on %s, %d sectors a front, %d days, %d seeds; budget %.1f ms a planning cycle\n\n", theatre.c_str(),
-                sectors, days, seeds, budget_ms);
-    std::printf("%-12s %8s %10s %10s %10s %12s %12s %8s\n", "faction", "entries", "mean_ms", "worst_ms", "prewar", "cpu_off_s", "cpu_on_s", "same");
+    std::printf("The air front's measure (F2.2) on %s, %s sectors, %d days, %d seeds; budget %.1f ms a planning cycle\n\n", theatre.c_str(),
+                sectors > 0 ? (std::to_string(sectors) + " equal").c_str() : "the theatre's", days, seeds, budget_ms);
+    std::printf("%-12s %8s %8s %10s %10s %10s %10s %12s %12s %8s\n", "faction", "sectors", "entries", "mean_ms", "worst_ms", "moved_ms",
+                "prewar", "cpu_off_s", "cpu_on_s", "same");
     for (const std::string& faction : factions) {
         AirWarData d;
         std::string e;
@@ -100,7 +103,8 @@ int main(int argc, char** argv) {
         CutSectors(d, sectors);
         AirWarData on = d;
         on.tuning.values["air_front.mode"] = 1.0;
-        double sum_ms = 0.0, worst_ms = 0.0, entries = 0.0, prewar = 0.0, cpu_off = 0.0, cpu_on = 0.0;
+        double sum_ms = 0.0, worst_ms = 0.0, worst_moved_ms = 0.0, entries = 0.0, prewar = 0.0, cpu_off = 0.0, cpu_on = 0.0;
+        std::size_t sector_count = 0;
         int samples = 0;
         bool same = true;
         for (int s = 0; s < seeds; ++s) {
@@ -124,11 +128,18 @@ int main(int argc, char** argv) {
                 const double run_until = CpuSeconds();
                 SectorCoverBook book = c.CoverBook();
                 std::vector<SectorCover> out;
-                const std::vector<double> depth(c.FrontLine().SectorCount(), 0.0);
+                sector_count = c.FrontLine().SectorCount();
+                const double step_m = on.tuning.Get("air_front.step_m");
+                const std::vector<double> depth(sector_count, 0.0), deeper(sector_count, step_m);
                 const int reps = 200;
-                const double m0 = CpuSeconds();
-                for (int r = 0; r < reps; ++r) book.Measure(c.Intel(), c.FrontLine(), depth, on.tuning.Get("air_front.step_m"), out);
+                book.Measure(c.Intel(), c.FrontLine(), depth, step_m, out);  // the kept vectors sized once, as the campaign's are
+                double m0 = CpuSeconds();
+                for (int r = 0; r < reps; ++r) book.Measure(c.Intel(), c.FrontLine(), depth, step_m, out);
                 const double ms = (CpuSeconds() - m0) * 1000.0 / reps;
+                m0 = CpuSeconds();
+                for (int r = 0; r < reps; ++r) book.Measure(c.Intel(), c.FrontLine(), (r % 2) == 0 ? deeper : depth, step_m, out);
+                const double moved_ms = (CpuSeconds() - m0) * 1000.0 / reps;
+                worst_moved_ms = moved_ms > worst_moved_ms ? moved_ms : worst_moved_ms;
                 measured += CpuSeconds() - run_until;
                 sum_ms += ms;
                 worst_ms = ms > worst_ms ? ms : worst_ms;
@@ -139,11 +150,12 @@ int main(int argc, char** argv) {
             same = same && JournalHash(off) == JournalHash(c) && off.Packages().size() == c.Packages().size();
         }
         const double mean_ms = samples > 0 ? sum_ms / samples : 0.0;
-        std::printf("%-12s %8.0f %10.4f %10.4f %10.1f %12.2f %12.2f %8s\n", faction.c_str(), samples > 0 ? entries / samples : 0.0, mean_ms, worst_ms,
-                    prewar / seeds, cpu_off, cpu_on, same ? "yes" : "NO");
-        if (worst_ms > budget_ms || !same) ++fails;
+        std::printf("%-12s %8zu %8.0f %10.4f %10.4f %10.4f %10.1f %12.2f %12.2f %8s\n", faction.c_str(), sector_count,
+                    samples > 0 ? entries / samples : 0.0, mean_ms, worst_ms, worst_moved_ms, prewar / seeds, cpu_off, cpu_on, same ? "yes" : "NO");
+        if (worst_ms > budget_ms || worst_moved_ms > budget_ms || !same) ++fails;
     }
-    std::printf("\nentries: the enemy's picture at a day's end (mean); prewar: the entries the sectors' baselines keep; cpu_*: the campaigns'\n"
-                "CPU seconds, air_front.mode 0 and 1, the timing repetitions left out; same: the same journal and packages.\n");
+    std::printf("\nentries: the enemy's picture at a day's end (mean); mean_ms, worst_ms: a measure with the bands kept (mean, worst day);\n"
+                "moved_ms: one with every sector's band moved (worst day); prewar: the entries the sectors' baselines keep; cpu_*: the\n"
+                "campaigns' CPU seconds, air_front.mode 0 and 1, the timing repetitions left out; same: the same journal and packages.\n");
     return fails > 0 ? 2 : 0;
 }

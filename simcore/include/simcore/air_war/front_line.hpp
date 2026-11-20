@@ -14,6 +14,7 @@
 // the offset there, an approximation that is exact on a straight line and close on the gentle lines of a front.
 #pragma once
 
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -26,6 +27,15 @@
 
 namespace simcore {
 namespace airwar {
+
+// A version no line of contact has had before (never 0): what a cache keyed on a line's shape compares, so two lines,
+// or a line and its copy once either changes, never share one.
+inline unsigned NextLineVersion() {
+    static std::atomic<unsigned> last{0};
+    unsigned v = ++last;
+    if (v == 0) v = ++last;
+    return v;
+}
 
 // Where a point lies against a base line: its nearest point on the line and which side it is.
 struct FrontPlace {
@@ -59,7 +69,7 @@ public:
         for (std::size_t i = 0; i < n; ++i) station_along_[i] = std::fmin(static_cast<double>(i) * station_m_, length);
         offsets_.assign(n, 0.0);
         moved_ = 0;
-        ++version_;
+        version_ = NextLineVersion();
         // Our side: away from the enemy's airfields.
         our_side_ = 1.0;
         if (!Empty()) {
@@ -111,11 +121,12 @@ public:
         if (offsets_[i] != 0.0) --moved_;
         offsets_[i] = offset_m;
         if (offset_m != 0.0) ++moved_;
-        ++version_;
+        version_ = NextLineVersion();
     }
     // Whether any station has moved off the base line.
     bool Moved() const { return moved_ > 0; }
-    // Changes with every Build and every offset changed: what a cache keyed on the line's shape compares.
+    // New with every Build and every offset changed, unique among lines (NextLineVersion): what a cache keyed on the
+    // line's shape compares.
     unsigned Version() const { return version_; }
     // The offset at a distance along the line, linear between its stations; 0 everywhere while no station has moved.
     double Offset(double along_m) const {

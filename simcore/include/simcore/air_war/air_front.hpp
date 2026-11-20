@@ -98,6 +98,7 @@ public:
             prewar_.push_back(u);
         }
         state_.assign(line.SectorCount(), State());
+        placed_version_ = 0;
         started_ = true;
     }
     bool Started() const { return started_; }
@@ -109,6 +110,7 @@ public:
                  std::vector<SectorCover>& out) {
         const std::size_t n = line.SectorCount();
         if (state_.size() != n) state_.assign(n, State());
+        if (placed_version_ != line.Version()) PlacePrewar(line);
         out.resize(n);
         for (std::size_t s = 0; s < n; ++s) {
             SectorCover& c = out[s];
@@ -116,7 +118,9 @@ public:
             c.near_m = s < front_depth_m.size() ? front_depth_m[s] : 0.0;
             c.far_m = c.near_m + band_m;
             State& st = state_[s];
-            if (!st.set || st.near_m != c.near_m || st.far_m != c.far_m || st.line_version != line.Version()) Rebase(line, s, c.near_m, c.far_m, st);
+            if (!st.set || st.near_m != c.near_m || st.far_m != c.far_m || st.line_version != line.Version()) {
+                Rebase(line, s, c.near_m, c.far_m, st);
+            }
         }
         for (const IntelEntry& e : pic.entries) {
             const bool sam = e.IsSamRadar(), mobile = IsMobileAirDefence(e);
@@ -157,6 +161,8 @@ private:
         Vec3 pos;
         double radius_m = 0.0;
         double weight = 0.0;
+        double along_m = 0.0;  // its place against the line the book last measured on (PlacePrewar)
+        double depth_m = 0.0;
         bool sam = false;
         bool mobile = false;
     };
@@ -171,6 +177,17 @@ private:
     std::vector<Unit> prewar_;
     std::vector<State> state_;
     bool started_ = false;
+    unsigned placed_version_ = 0;  // the version of the line the pre-war units' places were taken on (0: none)
+
+    // The pre-war units' places against the line: taken once a line (or its offsets) and kept for every band's baseline.
+    void PlacePrewar(const LineOfContact& line) {
+        for (Unit& u : prewar_) {
+            const FrontPlace pl = line.Place(u.pos);
+            u.along_m = pl.along_m;
+            u.depth_m = pl.side * pl.distance_m - line.Offset(pl.along_m);
+        }
+        placed_version_ = line.Version();
+    }
 
     // A new band (the air front moved, or the line): its baseline is the pre-war picture's count over it.
     void Rebase(const LineOfContact& line, std::size_t s, double near_m, double far_m, State& st) const {
@@ -180,9 +197,7 @@ private:
         st.far_m = far_m;
         st.line_version = line.Version();
         for (const Unit& u : prewar_) {
-            const FrontPlace pl = line.Place(u.pos);
-            const double depth = pl.side * pl.distance_m - line.Offset(pl.along_m);
-            if (!RingReachesBand(line, s, pl.along_m, depth, u.radius_m, near_m, far_m)) continue;
+            if (!RingReachesBand(line, s, u.along_m, u.depth_m, u.radius_m, near_m, far_m)) continue;
             if (u.sam) st.sam_max += u.weight;
             if (u.mobile) st.mobile_max += u.weight;
         }

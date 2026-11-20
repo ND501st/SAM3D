@@ -64,6 +64,7 @@ python tools/air_war_view.py out/air_war/air_war_nato.json       # that campaign
 ./simcore/build/air_war_balance data 20 7                         # every adversary over 20 seeds and two battery postures (docs/air_war/09_BALANCE.md)
 ./simcore/build/air_war_balance --theatre theatre_pannonia_nation.json data 10 7   # the same on the whole nation (N4); the demo takes --theatre too
 ./simcore/build/air_war_bench data 400            # weapons, attacks and losses against history (docs/air_war/09_BALANCE.md section 9)
+./simcore/build/fronts_bench data --air-front     # track F's cost: the air front's measure by sector against its 1 ms budget (docs/fronts/README.md, Efficiency)
 ./simcore/build/air_battle_bench data [--testbed 600]  # 100 aircraft near at A2, far at A2 and A1: ms a step by part (docs/air_battle/02 section 5.4)
 ./simcore/build/air_combat_bench data [seeds]       # the live air fight in a small world: B8's beside S3's, the far fight off and on (docs/air_battle/07 section 9)
 ./simcore/build/air_battle_bench data --compare 600    # the testbed with the levels off, off again and on: where the outcomes part

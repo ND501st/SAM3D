@@ -198,7 +198,7 @@ SC_TEST("front line (F2.1): the campaign measures from its line of contact; the 
     SC_EXPECT(c.Init(d, 21));
     const FrontDef* f = d.theatre.FrontFor(d.faction.front);
     SC_EXPECT(f != nullptr);
-    SC_EXPECT(c.FrontLine().SectorCount() == 1);
+    SC_EXPECT(f != nullptr && c.FrontLine().SectorCount() == f->sectors.size() && f->sectors.size() == 5);
     int bad = 0;
     for (const TheatreObject& o : d.theatre.objects) bad += c.FrontLine().AbsDistance(o.pos) == DistanceToLine(f->line, o.pos) ? 0 : 1;
     SC_EXPECT(bad == 0);
@@ -216,24 +216,33 @@ SC_TEST("front line (F2.1): the campaign measures from its line of contact; the 
     }
     SC_EXPECT(JournalHash(a) == JournalHash(b));
     SC_EXPECT(a.Journal().size() == b.Journal().size() && a.Packages().size() == b.Packages().size());
-    SC_EXPECT(b.AirFrontOn() && b.SectorCovers().size() == 1);
+    SC_EXPECT(b.AirFrontOn() && b.SectorCovers().size() == 5);
 }
 
 SC_TEST("front line (F2.1): a theatre front's sectors load in order, contiguous from 0; a gap, an overlap or a repeat fails") {
     std::ifstream in(kData + "/air_war/theatre_pannonia.json", std::ios::binary);
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    MapPlaces places;  // the theatre's points are the country map's places (F1)
+    std::string e;
+    SC_EXPECT(LoadMapPlaces(kData, "maps/pannonia.json", places, &e));
+    // The Pact's front without its sectors, so each case below gives its own.
     const std::string key = "\"faction\": \"warsaw_pact\",";
-    SC_EXPECT(text.find(key) != std::string::npos);
+    const std::size_t at = text.find(key);
+    SC_EXPECT(at != std::string::npos);
+    const std::size_t from = text.find("\"sectors\": [", at);
+    const std::size_t to = text.find("],", from);
+    SC_EXPECT(from != std::string::npos && to != std::string::npos);
+    if (at == std::string::npos || from == std::string::npos || to == std::string::npos) return;
+    text.erase(from, to + 2 - from);
     auto with = [&](const std::string& sectors) {
         std::string t = text;
         t.replace(t.find(key), key.size(), key + " \"sectors\": " + sectors + ",");
         return t;
     };
     TheatreDef t;
-    std::string e;
     SC_EXPECT(LoadTheatreJson(with(R"([{"id": "west", "name": "West", "from_km": 0, "to_km": 60},
                                        {"id": "east", "name": "East", "from_km": 60, "to_km": 230, "notes": "to the end"}])"),
-                              t, &e));
+                              t, &e, &places));
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const FrontDef* f = t.FrontFor("warsaw_pact");
     SC_EXPECT(f != nullptr && f->sectors.size() == 2);
@@ -242,11 +251,40 @@ SC_TEST("front line (F2.1): a theatre front's sectors load in order, contiguous 
         SC_EXPECT_NEAR(f->sectors[1].from_m, 60000.0, 1e-9);
         SC_EXPECT_NEAR(f->sectors[1].to_m, 230000.0, 1e-9);
     }
-    SC_EXPECT(t.FrontFor("nato") != nullptr && t.FrontFor("nato")->sectors.empty());
+    SC_EXPECT(t.FrontFor("nato") != nullptr && t.FrontFor("nato")->sectors.size() == 4);  // the data's own
     TheatreDef bad;
-    SC_EXPECT(!LoadTheatreJson(with(R"([{"id": "a", "name": "A", "from_km": 5, "to_km": 60}])"), bad, &e));
-    SC_EXPECT(!LoadTheatreJson(with(R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 60}, {"id": "b", "name": "B", "from_km": 70, "to_km": 90}])"), bad, &e));
-    SC_EXPECT(!LoadTheatreJson(with(R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 60}, {"id": "a", "name": "B", "from_km": 60, "to_km": 90}])"), bad, &e));
-    SC_EXPECT(!LoadTheatreJson(with(R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 0}])"), bad, &e));
-    SC_EXPECT(!LoadTheatreJson(with(R"([])"), bad, &e));
+    const char* refused[] = {
+        R"([{"id": "a", "name": "A", "from_km": 5, "to_km": 60}])",                                                   // not from 0
+        R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 60}, {"id": "b", "name": "B", "from_km": 70, "to_km": 90}])",  // a gap
+        R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 60}, {"id": "b", "name": "B", "from_km": 50, "to_km": 90}])",  // an overlap
+        R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 60}, {"id": "a", "name": "B", "from_km": 60, "to_km": 90}])",  // a repeat
+        R"([{"id": "a", "name": "A", "from_km": 0, "to_km": 0}])",                                                     // empty
+        R"([])",
+    };
+    int refusals = 0;
+    for (const char* r : refused) refusals += LoadTheatreJson(with(r), bad, &e, &places) ? 0 : 1;
+    SC_EXPECT(refusals == 6);
+    SC_EXPECT(LoadTheatreJson(text, bad, &e, &places) && bad.FrontFor("warsaw_pact")->sectors.empty());  // none: one sector
+}
+
+SC_TEST("front line (F2.1): every theatre front's sectors cover its line, 4-8 of them, 20-60 km each") {
+    for (const char* theatre : {"theatre_pannonia.json", "theatre_pannonia_nation.json"}) {
+        TheatreDef t;
+        std::string e;
+        SC_EXPECT(LoadTheatreFile(kData + "/air_war/" + theatre, t, &e));
+        for (const FrontDef& f : t.fronts) {
+            LineOfContact l;
+            l.Build(f, 5000.0);
+            const std::size_t n = f.sectors.size();
+            SC_EXPECT(n >= 4 && n <= 8);
+            int bad = 0;
+            for (const SectorDef& s : f.sectors) bad += (s.to_m - s.from_m >= 20000.0 && s.to_m - s.from_m <= 60000.0 && !s.name.empty()) ? 0 : 1;
+            SC_EXPECT(bad == 0);
+            // The last ends at the line's end, to the kilometre it is written in.
+            if (n > 0) SC_EXPECT(std::fabs(f.sectors.back().to_m - l.Length()) <= 1000.0);
+            // The line's start is in the first sector, its end in the last.
+            SC_EXPECT(l.SectorOf(f.line.front()) == 0 && l.SectorOf(f.line.back()) == static_cast<int>(n) - 1);
+            if (n == 0) std::printf("    %s: %s has no sectors\n", theatre, f.faction.c_str());
+        }
+    }
 }

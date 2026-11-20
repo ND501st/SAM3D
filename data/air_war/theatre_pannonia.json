@@ -18,6 +18,12 @@
     {
       "faction": "rebels", "name": "The southern rebel front (the Rava valley)",
       "line": [ { "at": "rebels_line1" }, { "at": "rebels_line2" }, { "at": "rebels_line3" } ],
+      "sectors": [
+        {"id": "hollos", "name": "The Hollos approach", "from_km": 0, "to_km": 45},
+        {"id": "ralje", "name": "The Ralje approach", "from_km": 45, "to_km": 80},
+        {"id": "rava_crossing", "name": "The Rava crossing", "from_km": 80, "to_km": 110},
+        {"id": "rebels_forest", "name": "The rebels' forest", "from_km": 110, "to_km": 151}
+      ],
       "entries": [
         { "id": "S1", "at": "rebels_entry_s1" },
         { "id": "S2", "at": "rebels_entry_s2" },
@@ -31,6 +37,12 @@
     {
       "faction": "neutral", "name": "The south-western border with the Noric Republic",
       "line": [ { "at": "neutral_line1" }, { "at": "neutral_line2" }, { "at": "neutral_line3" } ],
+      "sectors": [
+        {"id": "upper_lenta", "name": "The Lenta valley", "from_km": 0, "to_km": 35},
+        {"id": "border_forest", "name": "The border forest", "from_km": 35, "to_km": 70},
+        {"id": "lenta_marshes", "name": "The lower Lenta's marshes", "from_km": 70, "to_km": 110},
+        {"id": "southern_border", "name": "The southern border", "from_km": 110, "to_km": 149}
+      ],
       "entries": [
         { "id": "SW1", "at": "neutral_entry_sw1" },
         { "id": "SW2", "at": "neutral_entry_sw2" },
@@ -43,6 +55,13 @@
     {
       "faction": "warsaw_pact", "name": "The north-eastern border with the Warsaw Pact",
       "line": [ { "at": "warsaw_pact_line1" }, { "at": "warsaw_pact_line2" }, { "at": "warsaw_pact_line3" } ],
+      "sectors": [
+        {"id": "hradec", "name": "The Hradec Dolni approach", "from_km": 0, "to_km": 50},
+        {"id": "northern_forest", "name": "The northern forest", "from_km": 50, "to_km": 100},
+        {"id": "rava_reservoir", "name": "The Rava reservoir", "from_km": 100, "to_km": 140},
+        {"id": "tisava", "name": "The Tisava valley", "from_km": 140, "to_km": 180},
+        {"id": "ne_crossings", "name": "The north-eastern crossings", "from_km": 180, "to_km": 215}
+      ],
       "entries": [
         { "id": "N1", "at": "warsaw_pact_entry_n1" },
         { "id": "N2", "at": "warsaw_pact_entry_n2" },
@@ -55,6 +74,12 @@
     {
       "faction": "nato", "name": "The western border with NATO",
       "line": [ { "at": "nato_line1" }, { "at": "nato_line2" }, { "at": "nato_line3" } ],
+      "sectors": [
+        {"id": "western_uplands", "name": "The western uplands", "from_km": 0, "to_km": 50},
+        {"id": "zlatno", "name": "The Zlatno gap", "from_km": 50, "to_km": 90},
+        {"id": "western_crossings", "name": "The western crossings", "from_km": 90, "to_km": 125},
+        {"id": "upper_lenta", "name": "The upper Lenta", "from_km": 125, "to_km": 181}
+      ],
       "entries": [
         { "id": "W1", "at": "nato_entry_w1" },
         { "id": "W2", "at": "nato_entry_w2" },
