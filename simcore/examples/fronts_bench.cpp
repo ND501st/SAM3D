@@ -1,6 +1,7 @@
 // fronts_bench: what track F's fronts cost (docs/fronts/README.md, "Efficiency"). Not a test: a table to read.
 //
 // Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [--moves] [--trace] [faction ...]
+//        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
 //   --sectors equal sectors (default 8, the most the design gives a front; 0: the theatre's own). At each day's end the
@@ -16,6 +17,10 @@
 //   (advances, pull-backs, the deepest, the sectors moved and the depths at the end, the first seed's). --moves prints each seed's air front entries; --trace each
 //   day's end by sector: the depths, the cover and the mobile air defence against their baselines, the next band's worth
 //   and the low-level sorties and loss rate in the loss window.
+//   --watch (F2.5): each faction's campaign at air_front.mode 1 (the theatre's own sectors unless --sectors) with our side's
+//   information pipeline pumped after every step (data/command/chain_pannonia.json, the intercept service of intercept.json):
+//   when and where the enemy's air front moved (his journal) against the signs our army's air defence staff had and when it
+//   concluded, and when the regiment's commander and battery 21's had its conclusion.
 // Factions default to warsaw_pact and nato. CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <cstdint>
@@ -26,6 +31,7 @@
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/command.hpp"
 
 using namespace simcore;
 using namespace simcore::airwar;
@@ -79,17 +85,74 @@ void CutSectors(AirWarData& d, int n) {
     }
 }
 
+// F2.5: the enemy's air front's moves against what our side concluded of them, one campaign.
+void WatchCampaign(const AirWarData& d, unsigned seed, int days, const command::ChainData& chain, const command::InterceptData& idata) {
+    AirCampaign c;
+    c.Init(d, seed);
+    command::InfoNet net;
+    net.Init(chain, seed, d.theatre.start_hour);
+    command::GiveTheatreSky(net, d.theatre);
+    command::CampaignFeed feed;
+    feed.Bind(&net);
+    feed.UseIntercept(idata);
+    const double t0 = CpuSeconds();
+    while (c.Now() < days * 24.0) {
+        if (c.Advance(days * 24.0)) c.SkipPlayerMission();
+        feed.Pump(c);
+    }
+    const double cpu = CpuSeconds() - t0;
+    const double start = d.theatre.start_hour;
+    std::printf("%s, seed %u, %d days (%.1f s CPU with the pipeline): %zu facts in the pipeline\n", d.faction.id.c_str(), seed, days, cpu,
+                net.Facts().size());
+    std::printf("  the enemy's air front (his journal):\n");
+    int moves = 0;
+    for (const JournalEntry& j : c.Journal()) {
+        if (j.kind != "air_front") continue;
+        ++moves;
+        std::printf("    %s  %s\n", command::FormatClock(j.h, start).c_str(), j.text.c_str());
+    }
+    if (moves == 0) std::printf("    no move\n");
+    const LineOfContact& line = c.FrontLine();
+    std::printf("  the signs sent to our army's air defence staff, by sector (attacks on troops, helicopters, intercepts; reached it):\n");
+    for (std::size_t s = 0; s < line.SectorCount(); ++s) {
+        int n[4] = {0, 0, 0, 0}, reached = 0;
+        for (const command::FrontSignReport& r : feed.Signs()) {
+            if (r.sector != static_cast<int>(s)) continue;
+            ++n[static_cast<int>(r.sign)];
+            reached += r.known_h >= 0.0 ? 1 : 0;
+        }
+        std::printf("    %-14s %-24s %3d %3d %3d  %3d   the enemy's depth at the end %4.0f km, ours %4.0f km\n", line.Sector(s).id.c_str(),
+                    line.Sector(s).name.c_str(), n[0], n[1], n[2], reached, s < c.AirFrontDepths().size() ? c.AirFrontDepths()[s] / 1000.0 : 0.0,
+                    feed.Watch().Believed(static_cast<int>(s)) / 1000.0);
+    }
+    std::printf("  our staff's conclusions:\n");
+    const int rgt = net.Data().PositionIndex("rgt_commander"), bty = net.Data().PositionIndex("bty21_commander");
+    for (const command::AirFrontConclusion& k : feed.Watch().Conclusions()) {
+        const int fi = net.FactIndex(k.key);
+        const command::Delivery* r = net.Known(rgt, fi);
+        const command::Delivery* b = net.Known(bty, fi);
+        std::printf("    %s  %-14s %2.0f -> %2.0f km on %d signs (the last reached the staff %s); the regiment %s, battery 21 %s\n",
+                    command::FormatClock(k.h, start).c_str(), line.Sector(static_cast<std::size_t>(k.sector)).id.c_str(), k.from_m / 1000.0,
+                    k.depth_m / 1000.0, k.signs, command::FormatClock(k.decided_h, start).c_str(),
+                    r != nullptr ? command::FormatClock(r->h, start).c_str() : "not yet", b != nullptr ? command::FormatClock(b->h, start).c_str() : "not yet");
+    }
+    if (feed.Watch().Conclusions().empty()) std::printf("    none\n");
+    std::printf("\n");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     std::string data = "data", theatre = "theatre_pannonia_nation.json";
     int days = 7, seeds = 3, sectors = 8;
-    bool air_front = false, print_moves = false, trace = false;
+    bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false;
     std::vector<std::string> factions;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--air-front") {
             air_front = true;
+        } else if (a == "--watch") {
+            watch = true;
         } else if (a == "--moves") {
             print_moves = true;
         } else if (a == "--trace") {
@@ -100,6 +163,7 @@ int main(int argc, char** argv) {
             seeds = std::atoi(argv[++i]);
         } else if (a == "--sectors" && i + 1 < argc) {
             sectors = std::atoi(argv[++i]);
+            sectors_given = true;
         } else if (a == "--theatre" && i + 1 < argc) {
             theatre = argv[++i];
         } else if (i == 1 && a.rfind("--", 0) != 0) {
@@ -108,11 +172,33 @@ int main(int argc, char** argv) {
             factions.push_back(a);
         }
     }
+    if (factions.empty()) factions = {"warsaw_pact", "nato"};
+    if (watch) {
+        command::ChainData chain;
+        command::InterceptData idata;
+        std::string e;
+        if (!command::LoadChainData(data, "command/chain_pannonia.json", chain, &e) || !command::LoadInterceptData(data, "command/intercept.json", idata, &e)) {
+            std::printf("%s\n", e.c_str());
+            return 1;
+        }
+        std::printf("Our side learns the enemy's air front (F2.5) on %s, %s sectors, %d days, %d seeds, air_front.mode 1\n\n", theatre.c_str(),
+                    sectors_given && sectors > 0 ? (std::to_string(sectors) + " equal").c_str() : "the theatre's", days, seeds);
+        for (const std::string& faction : factions) {
+            AirWarData d;
+            if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
+                std::printf("%s: %s\n", faction.c_str(), e.c_str());
+                return 1;
+            }
+            if (sectors_given) CutSectors(d, sectors);
+            d.tuning.values["air_front.mode"] = 1.0;
+            for (int s = 0; s < seeds; ++s) WatchCampaign(d, static_cast<unsigned>(7 + s), days, chain, idata);
+        }
+        return 0;
+    }
     if (!air_front) {
-        std::printf("fronts_bench: only --air-front is built (F2.2-F2.4); the ground war's parts come with F3.3\n");
+        std::printf("fronts_bench: --air-front (F2.2-F2.4) or --watch (F2.5); the ground war's parts come with F3.3\n");
         return 1;
     }
-    if (factions.empty()) factions = {"warsaw_pact", "nato"};
     const double budget_ms = 1.0;
     int fails = 0;
     std::printf("The air front's measure, decision and readers (F2.2-F2.4) on %s, %s sectors, %d days, %d seeds; budget %.1f ms a planning cycle\n\n",

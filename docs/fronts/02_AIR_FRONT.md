@@ -542,3 +542,94 @@ hunt zone and our fires read the line of contact. `test_air_front.cpp`: the F2.3
 deep-strike line (F3.7); the holding area and C2's distances off a moved line of contact (they read it already: F3.3
 moves it); `resolve.hpp`'s, `raid_scenario.hpp`'s (a played raid's depth) and `logistics.hpp`'s base-line reads (F3.3,
 F3.7); our side learning the air front (F2.5).
+
+## As built (F2.5; 21 November 2026)
+
+**Who learns it.** A new post in `data/command/chain_pannonia.json`: `army_ad_staff`, the senior officer of the operations
+section of the army's air defence staff (Major Pavel Kratochvil, under the army's chief of air defence at the army's
+headquarters; `andersen_1979` for the troop air defence staffs and the air situation they keep, the sector-by-sector
+estimate SAM3D's reading). He keeps the signs, sector by sector and day by day, and states the conclusion.
+
+**The signs** (`command/air_front_watch.hpp` `FrontSign`; sent by the feed, `CampaignFeed`, only from what our posts saw,
+heard or wrote, each a fact for the staff alone in the pipeline, `need_level` 0):
+
+| Sign | From | Fact | When it is one |
+|---|---|---|---|
+| A low-level attack on our troops by day | the division's air defence CP (`div_ad_cp_duty`), on the warning net's record (`ObservedRaid`) | `RaidSeen`, priority, `front_watch:raid:<n>` | the raid came at low level, with no helicopters, at an object of ours of kind troops, not at night, and attacked (delivered); its target more than `watch_cas_reach_m` + `watch_margin_m` (45 km) beyond the line of contact |
+| Helicopters attacking | the same | the same | the raid had helicopters and attacked; beyond `watch_helo_reach_m` + the margin (30 km) |
+| A close support request heard | the intercept centre (`intercept_centre`), on our desk's form (`Logged`, the abstract calls' write-up, radio.mode 1 or more with `UseIntercept`) | `Intercept`, routine, `front_watch:intercept:<n>` | understood, a request (the HF request net), naming a square: the square as the linguist wrote it, slips and all, beyond 45 km |
+| Our troops report an air attack | the post that reports it | `RaidSeen`, priority, `front_watch:troops:<n>` | `CampaignFeed::ReportAirAttack` (F3.8 will call it; nothing calls it yet) |
+
+The warning net's record gained what it saw of how a raid came (`ObservedRaid::low`, `helicopters`, `target_object`:
+our own object it went for). The depth is measured from our line of contact (`AirCampaign::FrontLine()`, our own front)
+to where our side saw the raid go, the sector by the same line's lookup. Night raids are left out: they are the
+enemy's harassment (70 km at the border), and low-level strikes on anything but troops go everywhere whatever his
+air front, so neither tells it.
+
+**The staff's rule** (`AirFrontWatch::Take`, pure, in the order the signs reached the staff; game values in
+`data/gameplay/air_war.json` `"air_front"`, the `watch_` keys): a sign counts in its sector's campaign day when it lies
+beyond what the staff expects, the reach (close support 40 km, helicopters 25 km, `barbeau_1985_sams` p. 24) plus its
+own estimate of the sector's air front, by more than `watch_margin_m` (5 km) and no more than `watch_band_m` (40 km, two of
+his steps: deeper is interdiction, not the close support's front; the NATO run below heard requests naming squares
+250 km deep). `watch_count` (3) such signs in a sector within `watch_days` (2: that day and the one before) and the staff
+concludes: the estimate moves by the count-th deepest sign's excess, rounded down to `watch_round_m` (5 km), the depth at
+least that many signs reached, and the window starts again. The conclusion is stated `watch_delay_h` (6 h) after the last
+sign reached it. The staff has no pull-back: a front that went back stays where it was last concluded.
+
+**The conclusion travels** as a new kind of fact, `FactKind::AirFront` (`air_front_estimate:<n>`, subject
+`air_front:<sector>`; `PaperTitle` "The army's air defence staff's estimate of the enemy's air front"): a document of
+priority from `army_ad_staff` for the division's chief of air defence's tree down to the battery commanders (`need_level`
+3): the division's air defence chief and CP, the regiment's commander and staff, battery 21's commander. Its text says
+how deep his close support and helicopters now work there and on how many signs since which day; the voice carries a
+summary and the paper follows (`document`). `CampaignFeed::AirFrontKnownBy(post, sector)` is the estimate a post holds,
+from the latest conclusion that has reached it: what the regiment's tasking (14.2) and F4's sector priorities read.
+Nothing in it reads `depth_m`, `AirFrontDepths()` or the enemy's journal.
+
+**Deterministic.** The staff takes a sign only once it has reached it and its hour is below the watermark (the earliest
+hour a package not yet resolved could still add one, as the intercept desk's), in the order of arrival: a campaign pumped
+step by step and one pumped once after its load take the same signs in the same order and state the same conclusions
+(tested). The conclusion is added with its hour and the net advanced again, so it reaches people at the same times either
+way.
+
+**Cost.** Per sign a fact and a lookup on the line; per conclusion a fact; per pump one pass over the signs not yet taken.
+Per sector a vector of the window's few signs. Nothing per step, nothing at `air_front.mode` 0.
+
+**Gating.** Only where the air war runs its air front: `air_front.mode` 1, the chain has `army_ad_staff` and the
+division's air defence chief, the front has a line. At the data's mode 0 the feed sends nothing new (tested), and the air
+war's own runs never build the feed.
+
+**When it learned, the nation at mode 1** (`fronts_bench data --watch --days 10`: the pipeline pumped after every step,
+the intercept service on):
+
+| War, sectors, seed | The enemy's air front moved (his journal) | Signs that reached our staff | Our staff concluded |
+|---|---|---|---|
+| The Pact, its 5, seed 7 | the Tisava valley to 20 km D3 13:00, its helicopters to 20 km D4 13:00 | none | nothing |
+| The Pact, its 5, seed 8 | no move | none | nothing |
+| The Pact, 8 equal, seed 7 | s6 to 20 km D6 01:00, helicopters D7 01:00, back to 0 D7 13:00 | one helicopter attack in s6 | nothing (one of the three) |
+| The Pact, 8 equal, seed 8 | s6 to 20 km D3 01:00, helicopters D4 01:00 | none | nothing |
+| NATO, its 4, seeds 7 and 8 | no move | 7 and 12 intercepted requests in the western crossings, all naming squares about 290 km deep | nothing: beyond the band (before the band, it concluded the front 250 km deep, D3 00:42 and D4 22:43) |
+
+So the staff never concluded, and rightly by its evidence: where the enemy's air front moved, his planner sent almost
+nothing deeper (F2.4's `deeper` column: one package in ten days), so the warning net saw no low-level attack on troops
+and only one helicopter attack beyond the usual reach. The moved sector is known to the enemy and not to us; the
+signs will come once F6's balance (and F3's troops near the line) makes the step worth flying. The pipeline's CPU with
+the watch on is that of the feed (24-40 s for ten days, most of it the war itself).
+
+**Identity.** At the data's `air_front.mode` 0 the watch is never built and the air war is untouched (the
+warning net's record only gained three fields nothing else reads): `air_war_balance data 20 7` and `air_war_balance
+--theatre theatre_pannonia_nation.json data 10 7` print byte for byte what `track-f`'s tip (306a637, built and run on its
+own data) prints, and `test_routes.cpp`'s replay fingerprint (107 entries, FNV 1375944258174313379, 41 packages) holds.
+
+**Tests.** `test_command.cpp` (+2, 20): the staff's rule by hand (the reach, the margin and the band; the window of two
+days; the count-th deepest sign rounded down; the estimate moving the next signs' bar; a sign not yet arrived not taken);
+the Pact's war on the district at mode 1: with the enemy's front moved to 40 km and the staff expecting nothing so deep, no
+sign and no conclusion (never from his depths); with his front never moving and a credulous rule (reach 0, one sign), a
+false conclusion from an ordinary helicopter raid, through the pipeline to the regiment's commander after its hour, who
+then holds its estimate; the same pumped once at the end; at the data's rule only on three signs or more; at mode 0
+nothing.
+
+**Left:** our troops' reports (F3.8 calls `ReportAirAttack` when the ground war's units report air attack); the played
+sessions' heard requests (`PumpHeard` makes their facts but not their signs: the records carry no square); the staff's
+pull-back (a quiet sector after a conclusion); the regiment's tasking and F4's priorities reading `AirFrontKnownBy`
+(14.2, F4.1); the thresholds' balance against the enemy's real moves (F6: on the nation the moved sectors brought almost
+no deeper raids, so the evidence is thin).

@@ -210,7 +210,13 @@
       "holder": { "name": "Laszlo Orban", "rank": "Lieutenant", "skill": "class3" },
       "means": ["in_person", "field_telephone", "radio_voice"],
       "duties": "As liaison 1, at post 2.",
-      "source": "bischoff_fufutakl; militaermuseum_fuar2", "confidence": "low" }
+      "source": "bischoff_fufutakl; militaermuseum_fuar2", "confidence": "low" },
+    { "id": "army_ad_staff", "title": "Senior officer, operations section, air defence staff, 3rd Army", "unit": "3rd Army", "kind": "staff", "level": 0,
+      "superior": "army_ad_chief", "place": "nv_army_hq",
+      "holder": { "name": "Pavel Kratochvil", "rank": "Major", "skill": "class2" },
+      "means": ["in_person", "field_telephone", "teleprinter", "despatch_rider", "city_telephone"],
+      "duties": "Keeps the air situation for the chief of air defence sector by sector: where the enemy's low-level aircraft and helicopters work, from the warning net's and the troops' reports and the intercept centre's; states it when the enemy's air front has moved (docs/fronts/02_AIR_FRONT.md section 5, F2.5).",
+      "source": "andersen_1979 (the troop air defence staffs and the air situation they keep); the sector-by-sector estimate is SAM3D's reading (docs/fronts/02_AIR_FRONT.md section 5)", "confidence": "low" }
   ],
 
   "routines": [

@@ -87,6 +87,20 @@ inline std::vector<std::pair<std::string, double>> AirFrontTuningDefaults() {
         // A step's worth is what it brings into the low-level work's reach: the targets this far beyond the air front, a
         // step deep (the planner's close support depth, 40 km: at front d its reach goes from d + 40 to d + 60 km).
         {"air_front.reward_reach_m", 40000.0},
+        // F2.5, our side learns it (command/air_front_watch.hpp; only where the mode is 1): the army's air defence staff
+        // counts, by sector and day, the signs that reached it lying deeper than the enemy's close support
+        // (watch_cas_reach_m) or helicopters (watch_helo_reach_m) are expected to work beyond the line of contact plus its
+        // own estimate of his air front, by more than watch_margin_m and no more than watch_band_m (deeper is interdiction);
+        // watch_count of them within watch_days and, watch_delay_h after the last, it states his air front reaches the
+        // count-th deepest one's excess further, in steps of watch_round_m.
+        {"air_front.watch_cas_reach_m", 40000.0},
+        {"air_front.watch_helo_reach_m", 25000.0},
+        {"air_front.watch_margin_m", 5000.0},
+        {"air_front.watch_band_m", 40000.0},
+        {"air_front.watch_count", 3.0},
+        {"air_front.watch_days", 2.0},
+        {"air_front.watch_delay_h", 6.0},
+        {"air_front.watch_round_m", 5000.0},
     };
 }
 
