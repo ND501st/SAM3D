@@ -22,6 +22,7 @@
 
 #include "simcore/air_war/abstract_radio.hpp"
 #include "simcore/air_war/campaign.hpp"
+#include "simcore/command/air_front_watch.hpp"
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
 
@@ -51,6 +52,8 @@ struct FeedRoles {
     std::string battery = "bty21_commander";          // the battery's own news and fights
     std::string announcer = "army_ad_chief";          // the war itself
     std::string political = "rgt_political_deputy";   // the press
+    std::string air_staff = "army_ad_staff";          // the signs of the enemy's air front, and its conclusions (F2.5)
+    std::string air_staff_for = "div_ad_chief";       // whose tree the conclusions are for (to the battery commanders)
     double danger_radius_m = 6000.0;                  // around a raid's target, while it is over it
     double danger_chance = 0.25;                      // a carrier on the road there then
     double wire_cut_radius_m = 1500.0;                // posts this close to where bombs fell lose their wire
@@ -69,6 +72,7 @@ public:
         battery_places_.clear();
         if (net_ != nullptr) regiment_ = net_->Data().unit_regiment;
         ResetIntercept();
+        ResetWatch();
     }
 
     // Our radio intercept service in the campaign (roadmap S6, radio.mode 1): the posts of data/command/intercept.json hear
@@ -199,6 +203,7 @@ public:
             f.precedence = 0;
             if (r.near_battery || r.played) f.witnesses = battery_people_;
             net_->AddFact(f);
+            if (ReadyWatch(c)) WatchRaid(c, r, raids_read_);
         }
         // The journal's entries our side knows.
         const auto& journal = c.Journal();
@@ -216,8 +221,37 @@ public:
         if (intercept_ && c.Data().tuning.Get("radio.mode") >= 1.0 && c.Data().faction.radio.present) {
             PumpHeard(c);
             PumpAbstract(c);
+            if (ReadyWatch(c)) WatchDesk(c);
         }
         net_->AdvanceTo(c.Now());
+        if (ReadyWatch(c) && ReviewWatch(c)) net_->AdvanceTo(c.Now());  // the staff's conclusions on their way
+    }
+
+    // ---------------------------------------------------------------- our side learns the enemy's air front (F2.5)
+
+    // The army's air defence staff's watch on the enemy's air front (command/air_front_watch.hpp): on only where the air
+    // war runs its air front (air_front.mode 1) and the chain has the staff's post; its signs and conclusions are facts.
+    bool WatchOn() const { return watch_on_; }
+    const AirFrontWatch& Watch() const { return watch_; }
+    // Every sign sent to the staff (the warning net's, the intercept centre's, the troops'), with when it reached it (-1: not
+    // yet, or not yet taken), in the order they were sent.
+    const std::vector<FrontSignReport>& Signs() const { return signs_; }
+    // Our troops report an air attack (F3.8 will call it): to the army's air defence staff as a sign, when it lies deeper
+    // than the close support's usual reach. `origin` is the post that reports it. False when the watch is off or not deep.
+    bool ReportAirAttack(const airwar::AirCampaign& c, const std::string& origin, double h, const Vec3& at, const std::string& what) {
+        if (net_ == nullptr || !ReadyWatch(c) || net_->Data().PositionIndex(origin) < 0) return false;
+        return SendSign(c, FrontSign::Troops, at, h, origin, "front_watch:troops:" + std::to_string(++troop_reports_), what);
+    }
+    // The staff's estimate of a sector's air front beyond the line of contact as a post knows it now: the latest
+    // conclusion on it that has reached that post (0: none). What our side's sector priorities and tasking read (F4).
+    double AirFrontKnownBy(int position, int sector) const {
+        if (net_ == nullptr) return 0.0;
+        const auto& cs = watch_.Conclusions();
+        for (std::size_t i = cs.size(); i-- > 0;) {
+            if (cs[i].sector != sector || cs[i].key.empty()) continue;
+            if (net_->Known(position, net_->FactIndex(cs[i].key)) != nullptr) return cs[i].depth_m;
+        }
+        return 0.0;
     }
 
     // The calls the battery's people have made on the radio by now (the player's own among them), for the enemy's
@@ -267,6 +301,170 @@ private:
     double next_summary_h_ = -1.0;
     double summary_from_h_ = 0.0;
     int summaries_ = 0;
+    // F2.5: the army's air defence staff's watch on the enemy's air front (a function of the campaign's history).
+    bool watch_ready_ = false;
+    bool watch_on_ = false;
+    int watch_staff_ = -1;
+    AirFrontWatch watch_;
+    std::vector<FrontSignReport> signs_;  // every sign sent
+    std::vector<char> taken_;             // the staff has taken signs_[i]
+    std::size_t desk_read_ = 0;
+    int troop_reports_ = 0;
+
+    void ResetWatch() {
+        watch_ready_ = watch_on_ = false;
+        watch_staff_ = -1;
+        watch_ = AirFrontWatch();
+        signs_.clear();
+        taken_.clear();
+        desk_read_ = 0;
+        troop_reports_ = 0;
+    }
+
+    // On where the air front runs (air_front.mode 1), the chain has the staff's post and the front its line; decided once.
+    bool ReadyWatch(const airwar::AirCampaign& c) {
+        if (watch_ready_) return watch_on_;
+        watch_ready_ = true;
+        watch_staff_ = net_->Data().PositionIndex(roles_.air_staff);
+        watch_on_ = c.Data().tuning.Get("air_front.mode") >= 1.0 && watch_staff_ >= 0 && net_->Data().PositionIndex(roles_.air_staff_for) >= 0 &&
+                    !c.FrontLine().Empty();
+        if (watch_on_) watch_.Init(c.FrontLine().SectorCount(), AirFrontWatchRules::From(c.Data().tuning));
+        return watch_on_;
+    }
+
+    static std::string SectorName(const airwar::AirCampaign& c, int sector) {
+        const airwar::LineOfContact& line = c.FrontLine();
+        if (sector < 0 || static_cast<std::size_t>(sector) >= line.SectorCount()) return "the front";
+        const airwar::SectorDef& s = line.Sector(static_cast<std::size_t>(sector));
+        return s.name.empty() ? s.id : s.name;
+    }
+
+    // A sign to the staff, when it lies deeper than its kind's usual reach by the margin (the reporting post judges by the
+    // usual reach; the staff weighs it against its own estimate when it arrives). Our line of contact and where our side
+    // saw it only: never the enemy's depths.
+    bool SendSign(const airwar::AirCampaign& c, FrontSign sign, const Vec3& at, double h, const std::string& origin, const std::string& key,
+                  const std::string& what) {
+        const airwar::LineOfContact& line = c.FrontLine();
+        const double depth = line.DistanceTo(at);
+        if (depth <= watch_.Reach(sign) + watch_.Rules().margin_m) return false;
+        FrontSignReport s;
+        s.sign = sign;
+        s.sector = line.SectorOf(at);
+        s.depth_m = depth;
+        s.seen_h = h;
+        s.key = key;
+        const std::string sector = SectorName(c, s.sector);
+        char buf[192];
+        std::snprintf(buf, sizeof(buf), ", %.0f km beyond the line of contact in %s: deeper than the enemy's %s usually work.", depth / 1000.0,
+                      sector.c_str(), sign == FrontSign::Helicopters ? "helicopters" : "close support aircraft");
+        Fact f;
+        f.key = key;
+        f.kind = sign == FrontSign::Intercept ? FactKind::Intercept : FactKind::RaidSeen;
+        f.h = h;
+        f.origin = origin;
+        f.subject = "front_sign:" + line.Sector(static_cast<std::size_t>(s.sector)).id;
+        f.text = FormatClock(h, c.Data().theatre.start_hour) + ": " + what + buf;
+        f.audience = roles_.air_staff;
+        f.need_level = 0;
+        f.precedence = sign == FrontSign::Intercept ? 0 : 1;  // an attack that deep goes up at once; the intercept's by its paper
+        net_->AddFact(f);
+        signs_.push_back(s);
+        taken_.push_back(0);
+        return true;
+    }
+
+    // The warning net's raid: a sign when it attacked at low level our troops by day, or with helicopters.
+    void WatchRaid(const airwar::AirCampaign& c, const airwar::ObservedRaid& r, std::size_t index) {
+        if (!r.delivered || r.target_object < 0 || static_cast<std::size_t>(r.target_object) >= c.Data().theatre.objects.size()) return;
+        const airwar::TheatreObject& o = c.Data().theatre.objects[static_cast<std::size_t>(r.target_object)];
+        FrontSign sign = FrontSign::Helicopters;
+        if (!r.helicopters) {
+            if (!r.low || o.kind != airwar::ObjectKind::Troops || r.part == airwar::DayPart::Night) return;
+            sign = FrontSign::Attack;
+        }
+        const std::string what =
+            sign == FrontSign::Helicopters ? "helicopters attacked " + r.target : std::to_string(r.aircraft) + " aircraft at low level attacked " + r.target;
+        SendSign(c, sign, r.target_pos, r.h, roles_.warning_net, "front_watch:raid:" + std::to_string(index), what);
+    }
+
+    // Our intercept desk's forms: a close support request on the enemy's request net naming a square (as the linguist wrote
+    // it, slips and all) is a sign from the intercept centre once the form is written.
+    void WatchDesk(const airwar::AirCampaign& c) {
+        const auto& log = desk_.Log();
+        for (; desk_read_ < log.size(); ++desk_read_) {
+            const Logged& l = log[desk_read_];
+            if (!l.understood || !l.has_place || l.kind != airwar::CallKind::Request) continue;
+            SendSign(c, FrontSign::Intercept, l.place, l.written_s / 3600.0, roles_.intercept, "front_watch:intercept:" + std::to_string(desk_read_),
+                     "the enemy's close support request net, heard at " + l.chain_post + ": a request for aircraft on square " + airwar::GridOf(l.place));
+        }
+    }
+
+    // The staff takes the signs that have reached it, in the order they did, up to the watermark: the earliest hour a
+    // package not yet resolved could still add a sign (so a campaign pumped step by step and one pumped once after its load
+    // take the same signs in the same order). A conclusion is a fact from the staff after its working delay. True when one
+    // was added.
+    bool ReviewWatch(const airwar::AirCampaign& c) {
+        double watermark_h = c.Now();
+        for (const airwar::Package& p : c.Packages()) {
+            if (!p.resolved) watermark_h = std::min(watermark_h, p.FirstH());
+        }
+        std::vector<std::size_t> ready;
+        for (std::size_t i = 0; i < signs_.size(); ++i) {
+            if (taken_[i] != 0) continue;
+            FrontSignReport& s = signs_[i];
+            if (s.known_h < 0.0) {
+                const Delivery* d = net_->Known(watch_staff_, net_->FactIndex(s.key));
+                if (d != nullptr) s.known_h = d->h;
+            }
+            if (s.known_h >= 0.0 && s.known_h < watermark_h) ready.push_back(i);
+        }
+        std::stable_sort(ready.begin(), ready.end(), [&](std::size_t a, std::size_t b) {
+            const FrontSignReport& x = signs_[a];
+            const FrontSignReport& y = signs_[b];
+            if (x.known_h != y.known_h) return x.known_h < y.known_h;
+            if (x.seen_h != y.seen_h) return x.seen_h < y.seen_h;
+            return x.key < y.key;
+        });
+        bool added = false;
+        for (std::size_t i : ready) {
+            taken_[i] = 1;
+            AirFrontConclusion k;
+            if (!watch_.Take(signs_[i], k)) continue;
+            AddConclusion(c, k, watch_.Conclusions().size() - 1);
+            added = true;
+        }
+        return added;
+    }
+
+    void AddConclusion(const airwar::AirCampaign& c, const AirFrontConclusion& k, std::size_t index) {
+        const std::string sector = SectorName(c, k.sector);
+        const AirFrontWatchRules& r = watch_.Rules();
+        const int first_day = static_cast<int>(std::floor((c.Data().theatre.start_hour + 24.0 * k.first_day) / 24.0)) + 1;
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+                      "The army's air defence staff: the enemy's air front has moved forward in %s. His close support aircraft now work "
+                      "to about %.0f km beyond the line of contact and his helicopters to about %.0f km, %.0f km deeper than we "
+                      "reckoned (%d attacks seen beyond the usual reach since D%d). Expect low-level attacks that deep there.",
+                      sector.c_str(), (r.cas_reach_m + k.depth_m) / 1000.0, (r.helo_reach_m + k.depth_m) / 1000.0, (k.depth_m - k.from_m) / 1000.0,
+                      k.signs, first_day);
+        char said[256];
+        std::snprintf(said, sizeof(said), "Army air defence staff: the enemy's close support works about %.0f km deeper in %s now (the paper follows).",
+                      (k.depth_m - k.from_m) / 1000.0, sector.c_str());
+        Fact f;
+        f.key = "air_front_estimate:" + std::to_string(index + 1);
+        f.kind = FactKind::AirFront;
+        f.h = k.h;
+        f.origin = roles_.air_staff;
+        f.subject = "air_front:" + c.FrontLine().Sector(static_cast<std::size_t>(k.sector)).id;
+        f.text = FormatClock(k.h, c.Data().theatre.start_hour) + ". " + buf;
+        f.summary = said;
+        f.audience = roles_.air_staff_for;
+        f.need_level = 3;  // down to the battery commanders: the low-level threat to what they cover
+        f.precedence = 1;
+        f.document = true;
+        net_->AddFact(f);
+        watch_.SetKey(index, f.key);
+    }
 
     void ResetIntercept() {
         intercept_ready_ = false;

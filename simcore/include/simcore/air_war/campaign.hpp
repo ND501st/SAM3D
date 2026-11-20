@@ -72,6 +72,11 @@ struct ObservedRaid {
     bool delivered = false;
     bool near_battery = false;  // through the battery's sector
     bool played = false;
+    // How it came, as the warning net saw it (our side's indicators of the enemy's air front, F2.5): at low level, with
+    // helicopters, and our object it went for (-1: none of ours).
+    bool low = false;
+    bool helicopters = false;
+    int target_object = -1;
 };
 
 // One thing the player did to the campaign, in order: what a save keeps (the campaign is deterministic for its seed,
@@ -2396,6 +2401,9 @@ private:
             r.delivered = o.delivered;
             r.near_battery = TouchesPlayer(p);
             r.played = p.played;
+            r.low = p.profile == Profile::Low;
+            for (const Flight& fl : p.flights) r.helicopters = r.helicopters || fl.role == FlightRole::Helicopter;
+            r.target_object = ti;
             observed_.push_back(r);
         }
         const bool first_arms = patterns_.arm_attacks == 0;

@@ -57,7 +57,9 @@ enum class FactKind {
     Rumour,
     Mail,
     Intercept,    // what our radio intercept posts heard of the enemy's air radio and read (roadmap B9, command/intercept.hpp)
-    OwnAirNotice  // a notice of our own flights, coded by the talk table at each hop (roadmap B10, command/own_air.hpp)
+    OwnAirNotice,  // a notice of our own flights, coded by the talk table at each hop (roadmap B10, command/own_air.hpp)
+    AirFront       // the army's air defence staff's conclusion on the enemy's air front in a sector (track F, F2.5,
+                   // command/air_front_watch.hpp)
 };
 
 inline const char* FactKindName(FactKind k) {
@@ -78,6 +80,7 @@ inline const char* FactKindName(FactKind k) {
         case FactKind::Mail: return "mail";
         case FactKind::Intercept: return "intercept";
         case FactKind::OwnAirNotice: return "own_air_notice";
+        case FactKind::AirFront: return "air_front";
     }
     return "?";
 }

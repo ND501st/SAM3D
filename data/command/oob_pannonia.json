@@ -20,7 +20,7 @@
 
     {"id": "ground_forces", "name": "The Ground Forces", "service": "ground_forces", "kind": "service", "parent": "general_staff" },
     {"id": "army_3", "name": "3rd Army", "service": "ground_forces", "kind": "army", "parent": "ground_forces",
-      "posts": ["army_ad_chief", "army_intel"],
+      "posts": ["army_ad_chief", "army_intel", "army_ad_staff"],
       "objects": ["army_hq", "army_cp_alt"],
       "garrison": "nv_army_hq" },
     {"id": "mrd_7", "name": "7th Motor Rifle Division", "service": "ground_forces", "kind": "division", "parent": "army_3",

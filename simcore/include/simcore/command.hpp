@@ -5,6 +5,7 @@
 #include "simcore/command/data.hpp"
 #include "simcore/command/oob.hpp"
 #include "simcore/command/info_net.hpp"
+#include "simcore/command/air_front_watch.hpp"
 #include "simcore/command/air_war_feed.hpp"
 #include "simcore/command/scenes.hpp"
 #include "simcore/command/player_inputs.hpp"

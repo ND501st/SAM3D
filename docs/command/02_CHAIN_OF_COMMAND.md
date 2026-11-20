@@ -26,6 +26,7 @@ A post's superior is never at a lower level (the loader checks it), and the chai
 | Duty officer, fighter regiment | Captain Gabor Szilagyi | Kecel air base | the sector | Our own fighters in the air (for the batteries' identification, later) |
 | Chief of air defence, 3rd Army | Colonel Milan Hrubes | The army's headquarters (the old cavalry barracks), Novo Varosd | the sector; the division's chief of air defence | The army's air defence orders |
 | Air section, army intelligence | Lt Col Viktor Ondrejka | the army's headquarters | the chief of air defence | Intercepts of the enemy's air forces; the analysts' notes on the enemy's officers |
+| Operations section, the army's air defence staff | Major Pavel Kratochvil | the army's headquarters | the chief of air defence | The air situation by sector: the signs of where the enemy's low-level aircraft and helicopters work, and the conclusion when his air front has moved (track F, F2.5; `04_PIPELINE.md` §7) |
 | Commander, 7th Motor Rifle Division | Major General Rudolf Kral | Division main CP, Dubnik forest | (the army's chief of air defence) | — |
 | Chief of staff, division | Colonel Stefan Mraz | Division main CP | the commander | The garrison commandant answers to the division through him |
 | Intelligence officer, division | Major Zoltan Kiss | Division main CP | the chief of staff; the garrison commandant | Questions the airmen our side takes prisoner |
