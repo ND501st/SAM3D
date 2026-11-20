@@ -264,7 +264,7 @@ not facts; they wait out a delay table.
 - `data/air_war/ground_<faction>.json`: the enemy's formations (order of battle format), its commanders' pool, its plan
   (objectives as places, axes, echelons, start day), its doctrine's table (ratios, breakpoints or effectiveness lines).
 - `data/campaign/ground_defence.json`: our deployment per adversary, the security zone's depth, our commanders' pool,
-  equipment filled in for `oob_pannonia.json`'s units that have none (estimates labelled).
+  equipment filled in for `oob_pannonia.json`'s units that have none (estimates labelled; as built, in `oob_pannonia.json` itself).
 - `data/gameplay/ground_war.json`: weights by type, posture factors, loss table, the `k` exponent, advance classes,
   ground and river factors, decision times, report schedule, levels' margins. Every value with its source or labelled
   a game value.
@@ -310,17 +310,20 @@ decisions an hour from the queue, routes only on orders and cached, pictures upd
 - **First person.** Our AD commanders' inputs (F4) come only from facts; a test breaks the truth after a report and
   checks the decision did not move.
 
-## As built: F3.1 and F3.2 (20 Nov 2026)
+## As built: F3.1 and F3.2 (21 Nov 2026)
 
 Nothing runs the ground war yet: no loader on the campaign's path reads these files, so every balance tool and save
-is as before (proved byte for byte at the commit). F3.3 adds `ground.mode` and the clock.
+is as before. Proved at the commit: `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` byte-identical to track F's tip before it (8f5fca4), and the replay fingerprint
+(`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) unchanged. F3.3 adds `ground.mode` and
+the clock.
 
 **The tables** (`data/gameplay/ground_war.json`, `GroundTables`, `LoadGroundTables`). Every scalar is
 `{"value", "source", "confidence"}` and every range `{"min", "max", "source", "confidence"}`; a source is an id in
 `docs/SOURCES.md` or `game_value` / `sam3d_estimate`. Weights by equipment type in T-55 equivalents
 (`mt_perventsev_balance`'s method, the 1985 weights SAM3D estimates; a type not listed weighs nothing, so support and
 air defence count only by their people at 0.01 a man); supply and cohesion floors (0.5, 0.3); Dupuy's posture factors
-(`ciano_1988_qjm`); the ground's factors on the defender and the advance (forest 1.3 and 0.6, hills, mountains,
+(`ciano_1988_qjm` fig. 24); the ground's factors on the defender and the advance (forest 1.3 and 0.6, hills, mountains,
 marsh, urban: game values); night 0.8 and poor visibility 0.9 on the attacker, a river line 1.5 on the defender;
 FM 101-10-1's eleven actions (`fm_101_10_1_1976` table 5-8) with the reference ratio 3, `k` = 0.5 and the clip
 0.25-4; its tank table 7-7 (five commitments, three days, 80 % reparable); HERO's classes (`hero_1972_oralfore`
@@ -328,24 +331,40 @@ p. IV-2, thresholds 1.5/2.5/4/6 a SAM3D mapping) and the draw's sigma 0.35; cros
 with a pontoon park; decision times by echelon (`fm_100_2_1_1984` p. 5-14); the trait's shift (0.2 of a range,
 README decision 6); cohesion, dispersal, march, report and level values for F3.3-F3.6.
 
+**Places and sectors** (F1, F2.1). Each ground file names its `"place_map"` (`maps/pannonia.json`) and its
+`"theatre"` (`air_war/theatre_pannonia_nation.json`). `LoadGroundWorld` reads the map's places (`LoadMapPlaces`) and
+the theatre on them; the loaders resolve every garrison, route point, objective (`"at"`) and deployment place
+(`"at"`) to its point (`GroundPlace`: the id and the point to the bit) and refuse a place the map lacks, naming it and
+the map, as F1's loaders do. Every axis names the sector of its faction's front it attacks in (`"sector"`; the test
+checks it is the sector its border crossing projects into, by `LineOfContact::SectorOf`); every unit of ours on the
+line holds a run of its adversary's front's sectors (`"sectors"`, each the next along the line; `from_km`/`to_km`
+derived from them). The places the ground war needed that the map lacked are ten new sites in `pannonia.json`, after
+F1's (`pact_assembly_east`, `pact_assembly_rava`, `pact_rava_gorge`, `nato_assembly_centre`, `nato_assembly_south`,
+`nato_lenta_south_border`, `neutral_assembly`, `neutral_hold_line`, `rebels_base_west`, `rebels_base_forest`); two
+are border points where no road crosses (the Rava gorge, the Lenta's south), named so rather than as `bx_` road
+crossings. A test moves the Pact's assembly area and Mezovar on the map and checks that exactly what names them moves.
+
 **The enemy** (`data/air_war/ground_<faction>.json`, `GroundForceDef`, `LoadGroundForce(data_dir, faction)`): an
 `"oob"` in `oob_pannonia.json`'s format (read by `command::detail::OobLoader`), a commanders' pool by rank and the
 named commanders, the doctrine (attack and breakthrough ratios, withdrawal only on order, the second echelon to
 success, effectiveness lines for the Pact, breakpoint ranges for NATO and the small forces, advance caps, frontages)
 and the plan. The owner's open decisions are taken as proposed (SAM3D estimates): the Pact attacks 2 h into its air
-operation on two axes (the 35th and 39th MRDs on Mezovar and the capital, the 9th TD behind them; the 57th by Rava),
-NATO after 96 h of rollback (the 2nd ACR, 1st AD and 5th Pz Div on Kisvar, the 3rd MD on Saldanj); the rebels hold a
-ragged line and raid by night where the ratio reaches 3:1 (two raids a night, 15 km deep); the neutral pushes to a
-hold line 40 km in and holds. Places are the country map's ids (settlements, landmarks, crossings `<line>@<river>`,
-F1's sites when they come); a place the map lacks is a `places_todo` entry with `anchor_todo: true` and suggested
-coordinates, for F1 to add.
+operation on two axes (the 35th and 39th MRDs down the north-eastern road on Mezovar and the capital in the Tisava
+sector, the 9th TD behind them; the 57th down the Rava gorge in the Rava reservoir sector), NATO after 96 h of
+rollback (the 2nd ACR, 1st AD and 5th Pz Div on Kisvar in the western crossings, the 3rd MD on Saldanj in the upper
+Lenta); the rebels hold a ragged line and raid by night where the ratio reaches 3:1 (two raids a night, 15 km deep);
+the neutral pushes to a hold line 40 km in (in the Lenta marshes sector) and holds. Strengths by the table: the Pact's
+army 3634 T-55 equivalents, NATO's corps 3196, the neutral's 504, the rebels' 85.
 
 **Our side** (`data/campaign/ground_defence.json`, `GroundDefenceDef`, `LoadGroundDefence`): the order of battle is
-`command/oob_pannonia.json`, unchanged on disk; `equipment_fill` gives the regiments that list none their tanks, BMPs
-or BTRs and guns in memory (estimates labelled). The doctrine (our lines, caps, the counterattack that stops at the
-border, frontages from `vr_poltikovic_1984`, the security zone) and one deployment per adversary: each unit's role
-(first echelon, second, reserve, flank screen, support), its stretch of the front line as `from_km`/`to_km` along the
-nation theatre's front (F2.1's measure) or a place for reserves.
+`command/oob_pannonia.json`. The five manoeuvre units that had no equipment there (the 71st, 72nd, 91st and 92nd
+Motor Rifle Regiments and the south-western brigade) have it now in the order of battle itself, labelled estimates in
+their notes (a tank battalion of 31 T-55, BMP-1s or BTR-60s, an artillery battalion of 18 D-30, of the order of
+`fm100_2_3`'s view of the regiment); every type has a basic model, so `test_scenery.cpp`'s check holds, and nothing on
+the campaign's path reads equipment. The 3rd Army weighs 977. The doctrine (our lines, caps, the counterattack that
+stops at the border, frontages from `vr_poltikovic_1984`, the security zone) and one deployment per adversary: each
+unit's role (first echelon, second, reserve, flank screen, support), its run of sectors on the line or, off it, its
+place.
 
 **The combat** (`ground_war/units.hpp`, `combat.hpp`): `StrengthOf`, `UnitPower` (strength x the supply and cohesion
 factor), `EffectivenessByLines`, `DrawBreakpoint` (a range drawn at `u`, moved by a trait's pull);
@@ -353,14 +372,18 @@ factor), `EffectivenessByLines`, `DrawBreakpoint` (a range drawn at `u`, moved b
 side's daily rate and its loss over the hours (`1 - (1 - daily)^(h/24)`, so a quiet sector closes in one call), and the
 advance: the class's rate x the ground x the draw, then the faction's cap (breakthrough against a defence, depth
 against a delay, withdrawal or meeting, broken against a broken enemy or none), stopped at a river line's bank.
-`CrossingHours`, `TankLossShare` and `DecisionHours` are the other tables. No state, no allocation: a call costs about
-COST_NS ns (`test_ground_combat.cpp` times a million), 240 calls (10 contested sectors an hour) about COST_DAY ms a
-campaign day, against the budget's 20 ms.
+`CrossingHours`, `TankLossShare` and `DecisionHours` are the other tables. No state, no allocation: a call costs
+about 0.12 us of CPU (`test_ground_combat.cpp` times a million, Release, MSVC), so 240 calls (10 contested sectors an
+hour) cost about 0.03 ms a campaign day against the budget's 20 ms. The tests check FM 101-10-1's day at 3:1 (4.1 %
+and 2.2 % on the first day, 2.2 % and 1.3 % after), the scale away from it, HERO's five classes and the stall below
+1.5, Dupuy's six factors through the ratio, forest and night, a river line that stops the advance at its bank, the
+inactive closed form and the tank and decision tables, all by hand.
 
-**Left** to later tasks: `ground.mode` and the runner (F3.3); the enemy's equipment types' basic models (F5.2); the
-enemy's own air defence units (not in these orders of battle; the air war's objects hold them); the tank table is a
-lookup, not yet applied by `ResolveSector` (F3.3 applies equipment losses); place lookup through F1's anchors (the
-test resolves ids against the map now); NATO's frontages and every weight are estimates for F6 to check.
+**Left** to later tasks: `ground.mode`, the clock and `GroundWar` (F3.3; nothing of it was started here); the
+commanders' quirks and the pools' use (F3.4); the enemy's equipment types' basic models (F5.2); the enemy's own air
+defence units (not in these orders of battle; the air war's objects hold them); equipment and tank losses applied by
+type (the tank table is a lookup, `ResolveSector` returns shares of strength; F3.3); the rebels' raids name no sectors
+(they raid where we are thin, F3.4 decides where); every weight and NATO's frontages are estimates for F6 to check.
 
 ## Done when
 
