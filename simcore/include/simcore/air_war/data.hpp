@@ -20,6 +20,7 @@
 #include "simcore/aaa.hpp"
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
+#include "simcore/air_war/air_front_def.hpp"
 #include "simcore/air_war/c2_def.hpp"
 #include "simcore/air_war/counter_c2.hpp"
 #include "simcore/air_war/hot_phase_def.hpp"
@@ -171,6 +172,7 @@ struct FrontDef {
     Vec3 missile_launch;
     double force_scale = 1.0;  // the enemy's squadrons this many times their faction's strength on this front (a war on a
                                // whole nation is fought by a larger force than a district's)
+    std::vector<SectorDef> sectors;  // runs of the line (track F, air_front_def.hpp); none: one sector the line's length
 };
 
 struct TheatreDef {
@@ -1203,6 +1205,7 @@ struct TuningTable {
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
         for (const auto& kv : C2TuningDefaults()) m.insert(kv);        // its command in the air (roadmap B5, c2_def.hpp)
         for (const auto& kv : OpportunityTuningDefaults()) m.insert(kv);  // targets of opportunity (roadmap B6, opportunity_def.hpp)
+        for (const auto& kv : AirFrontTuningDefaults()) m.insert(kv);    // the fronts' sectors and air front (track F, air_front_def.hpp)
         return m;
         }();
         return d;
@@ -1500,7 +1503,7 @@ public:
     bool LoadFront(const json::Value& f, const std::string& p, TheatreDef& out) {
         FrontDef fr;
         if (!Keys(f, p, {"faction", "name", "line", "entries", "bases", "friendly_fighters", "battery_position", "missile_launch",
-                         "force_scale", "notes"}) ||
+                         "force_scale", "sectors", "notes"}) ||
             !RequireString(f, p, "faction", fr.faction) || !RequireString(f, p, "name", fr.name) ||
             !Num(f, p, "friendly_fighters", fr.friendly_fighters, 0.0, 1.0) || !Num(f, p, "force_scale", fr.force_scale, 0.25, 4.0)) {
             return false;
@@ -1537,7 +1540,38 @@ public:
             if (!Km(*ml, Join(p, "missile_launch"), fr.missile_launch)) return false;
             fr.has_missile_launch = true;
         }
+        if (!LoadSectors(f, p, fr)) return false;
         out.fronts.push_back(std::move(fr));
+        return true;
+    }
+
+    // A front's "sectors" (track F, docs/fronts/02_AIR_FRONT.md §2): [{"id", "name", "from_km", "to_km"}], in order along
+    // the line from its first point, each starting where the one before ends, the first at 0. The last may end short of
+    // the line or past it: the line of contact gives the rest of the line to the last sector (front_line.hpp).
+    bool LoadSectors(const json::Value& f, const std::string& p, FrontDef& fr) {
+        const json::Value* arr = OptionalArray(f, p, "sectors");
+        if (arr == nullptr) return message_.empty();
+        if (arr->items.empty()) return Fail(Join(p, "sectors"), "at least one, or leave the key out");
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const json::Value& v = arr->items[i];
+            const std::string sp = Index(Join(p, "sectors"), i);
+            SectorDef s;
+            double from_km = -1.0, to_km = -1.0;
+            if (!Keys(v, sp, {"id", "name", "from_km", "to_km", "notes"}) || !RequireString(v, sp, "id", s.id) ||
+                !RequireString(v, sp, "name", s.name) || !Num(v, sp, "from_km", from_km, 0.0, 5000.0) || !Num(v, sp, "to_km", to_km, 0.0, 5000.0)) {
+                return false;
+            }
+            if (v.Find("from_km") == nullptr || v.Find("to_km") == nullptr) return Fail(sp, "needs from_km and to_km");
+            const double before_km = fr.sectors.empty() ? 0.0 : fr.sectors.back().to_m / 1000.0;
+            if (std::fabs(from_km - before_km) > 1e-9) return Fail(Join(sp, "from_km"), "must be where the sector before ends (" + Fmt(before_km) + ")");
+            if (to_km <= from_km) return Fail(Join(sp, "to_km"), "must be beyond from_km");
+            for (const SectorDef& o : fr.sectors) {
+                if (o.id == s.id) return Fail(Join(sp, "id"), "duplicate sector '" + s.id + "'");
+            }
+            s.from_m = from_km * 1000.0;
+            s.to_m = to_km * 1000.0;
+            fr.sectors.push_back(std::move(s));
+        }
         return true;
     }
 

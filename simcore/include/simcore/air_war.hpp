@@ -9,6 +9,8 @@
 #include "simcore/air_war/air_fight_session.hpp"
 #include "simcore/air_war/officers.hpp"
 #include "simcore/air_war/intel.hpp"
+#include "simcore/air_war/front_line.hpp"
+#include "simcore/air_war/air_front.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/opportunity.hpp"

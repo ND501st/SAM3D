@@ -211,3 +211,80 @@ reads are a projection and an interpolation per target: cheaper than today's `Di
 
 The enemy's air front moves by sector on its picture, the planner, routes and C2 read it, our staff learns of it by its
 signs, it costs under its budget, and old saves replay unchanged. Its balance is F6's.
+
+## As built (F2.1, F2.2; 20 November 2026)
+
+**F2.1, the sectors and the line of contact** (`simcore/air_war/front_line.hpp`, `air_front_def.hpp`). A theatre front
+takes `"sectors"`: `[{"id", "name", "from_km", "to_km"}]`, in order along its line from its first point, each starting
+where the one before ends (`AirWarLoader::LoadSectors`, a separate function beside `LoadFront`; a gap, an overlap, a
+repeated id or an empty list fails). The last may end short of the line or past it: the line's ends belong to the end
+sectors. A front without them is one sector, `"front"`, the line's length. `LineOfContact::Build(front, station_m)`
+keeps the base line (the theatre front's own line, the owner's decision 1 as proposed), its sectors, stations every
+`air_front.station_m` (5 km; the last at the line's end) and an offset per station, all zero. Our side is the side away
+from the front's `bases`. The lookups: `Place(p)` (the nearest point on the base line, found as `DistanceToLine` finds it,
+its distance along the line and the side), `DistanceTo(p)` (signed, positive beyond the line of contact into our
+country: the side times the distance, less the offset interpolated there), `AbsDistance(p)` (either side; with no
+station moved it is `DistanceToLine(base line, p)` itself), `SectorOf(p)`, `SectorAt(along)`, `Offset(along)`,
+`ContactPoint(station)`, `InwardNormal(along)`, and `SetStationOffset`, `Moved` and `Version` for F3.3. With offsets the
+signed distance is the projection's less the offset at it: exact on a straight line, close on a front's gentle bends.
+`AirCampaign` builds its front's line at `Init` and holds it (`FrontLine()`); `DistanceToFront` (HUMINT's reach, where a
+relocating unit may go) reads `AbsDistance`, and the planner's target filter reads it through
+`PlanContext::front_line` (the campaign's plan and its on-call builder; a context without one reads the base line).
+
+So far only these two read it. `c2.hpp`'s four reads (`C2MissionOf`'s BAI depth, `FreeHunt`, the post-fixing fires'
+reach, `MissionName`) are free functions or the C2 layer's own and reach the front through `AirWarData`; they move to the
+line of contact with F2.4, which changes that depth by the sector's air front. `resolve.hpp`, `raid_scenario.hpp` and
+`logistics.hpp` read the base line for a depth in a report or a supply line's front end: F3.3 and F3.7. All equal it at
+zero offsets.
+
+**F2.2, what the enemy weighs by sector** (`simcore/air_war/air_front.hpp`). `SectorCoverBook` keeps the enemy's picture
+at the war's start (every radar SAM fire unit and every piece of mobile air defence it believed in, by place, believed
+ring and `IntelEntry::BelievedThere`, the weight `BelievedIadsShare` gives a site), and `Measure(picture, line, front
+depths, band)` gives a `SectorCover` per sector over its band, from its air front to `air_front.step_m` (20 km) beyond: the
+cover (§3's formula), the counts, the baseline, and the mobile air defence's share destroyed or out of action. A ring
+reaches a band when its centre, placed by its distance along the line and its depth beyond the line of contact, is
+within its radius of the sector's run by the band: one placement per entry a measure, tested against every sector. A
+band's baseline is the pre-war picture's sum over it, raised when more are found there; a new band (the air front
+moved) or a moved line takes it afresh from the pre-war picture. Nothing believed there, ever: cover 0 and mobile air
+defence all gone, the rebels' gate's reading (§3). The mobile air defence is the guns and the SAMs the enemy believes are
+an Osa, Kub, Strela-1 or Strela-10 (`IsMobileAirDefence`), or a SAM of no known system (an unexplained launch): for
+that the picture now keeps the system a report believed (`IntelReport::system`, `IntelEntry::system`, from the
+object's defence in `ReportAbout`, a dummy's the battery's, an in-flight report's from the believed entry). It changes
+nothing else: `IntelEntry::mobile` is true of every SAM site, so it could not tell an Osa from an S-125.
+
+`SectorLossWindow` counts by sector and day (the hour over 24) the sorties of low-level packages (`Profile::Low`), on
+their time on target's day in their target's sector, and their aircraft lost to ground fire (not to our fighters, not to
+their own side's belt): `Rate(sector, day, days)` over the last one to three days. `AirCampaign` keeps both under
+`air_front.mode` 1 only: the pre-war picture after the prior intelligence (`StartAirFront`), a measure at every plan
+before the planner (`SectorCovers()`), and the losses in `ApplyOutcome` (the sorties once, when a raid is first
+resolved; `SectorLossRate(sector, days)`). At 0, the default and the data's until F2.3, nothing of it is built,
+measured or drawn. Nothing reads it: F2.3's decision will. The mode has no save key yet: it changes no outcome, so a
+save replays the same either way; F2.3 adds `air_front_mode` with the behaviour.
+
+**The cost.** `fronts_bench data --air-front` (new, the first part of F3.3's bench): each faction's campaign on the
+nation with air_front.mode 1, its front cut into eight equal sectors, the measure timed at every day's end over 200
+repetitions on that day's picture, CPU time:
+
+COST_TABLE
+
+The budget is 1 ms a planning cycle for a front. The line of contact's reads cost what `DistanceToLine` did: the same
+projection, and `DistanceToFront` no longer looks the front up by its faction's name each call.
+
+**Identity.** `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` print
+byte for byte what they printed before F2.1 (the build before it on the data before it, against this one on this
+data), and `test_routes.cpp`'s replay fingerprint (pact, the district, seed 21: 107 entries, FNV 1375944258174313379,
+41 packages) holds. `test_front_line.cpp` checks every theatre front's distances to the bit against `DistanceToLine` and a
+two-day war at air_front.mode 0 and 1 to the same journal; `fronts_bench` checks it for a week of each faction's war on the
+nation.
+
+**Tests.** `test_front_line.cpp` (6): distances, sides and places on a bent line by hand; sectors, the ends and the
+default; offsets and their interpolation, the contact point; the identity on both theatres' fronts; the campaign's reads
+and the mode's identity; the loader's sectors and its refusals. `test_air_front.cpp` (4): the cover by hand on a small
+picture (a decoy half suspected, a unit believed destroyed, one that pulled out, one found later raising the baseline);
+a band further in, an empty band, the guns and an unknown SAM, a moved line; the loss window by hand; the campaign's
+measures and its losses counted against its packages.
+
+**Left:** the theatres' sectors (`theatre_pannonia*.json` are F1's files while it anchors them: the sectors go in after
+its merge, 4-8 a front, 20-60 km each, named on the map); `c2.hpp`'s, `resolve.hpp`'s, `raid_scenario.hpp`'s and
+`logistics.hpp`'s reads of the base line (F2.4, F3.3, F3.7); the air front's decision, its depths per sector, its journal
+entries and the save key (F2.3); the rest of `fronts_bench` (F3.3).

@@ -33,8 +33,10 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/air_war/air_front.hpp"
 #include "simcore/air_war/c2.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/logistics.hpp"
@@ -132,6 +134,8 @@ public:
             if (error != nullptr) *error = "the faction's front is not in the theatre";
             return false;
         }
+        // The front's line of contact (track F, F2.1): its base line, sectors and stations, every offset zero.
+        front_line_.Build(*front, data_.tuning.Get("air_front.station_m"));
         truth_.clear();
         for (const TheatreObject& o : data_.theatre.objects) {
             ObjectState s;
@@ -204,6 +208,7 @@ public:
             weather_.push_back(u < c ? Weather::Clear : (u < 1.0 - p ? Weather::Cloudy : Weather::Poor));
         }
         PriorIntel();
+        StartAirFront();
         day_ = 1;
         Log("career", "staff", StaffLine(), false);
         Log("own_intel", "intelligence", "War with " + data_.faction.name + ". " + data_.faction.description, true);
@@ -528,6 +533,16 @@ public:
     const AirWarData& Data() const { return data_; }
     const AirStaff& Staff() const { return staff_; }
     const IntelPicture& Intel() const { return intel_; }
+    // The front's line of contact and its sectors (track F, front_line.hpp).
+    const LineOfContact& FrontLine() const { return front_line_; }
+    // The air front's measures (track F, F2.2; air_front.mode 1, else empty): each sector's believed cover over its next
+    // band as of the last plan, the book that keeps their baselines, and the losses to ground fire per low-level sortie in
+    // a sector over the last `days` days (1-3) to now.
+    bool AirFrontOn() const { return air_front_on_; }
+    const std::vector<SectorCover>& SectorCovers() const { return sector_cover_; }
+    const SectorCoverBook& CoverBook() const { return cover_book_; }
+    const SectorLossWindow& SectorLosses() const { return sector_losses_; }
+    double SectorLossRate(int sector, int days) const { return sector_losses_.Rate(sector, SectorLossWindow::DayOf(now_h_), days); }
     const std::vector<JournalEntry>& Journal() const { return journal_; }
     const std::vector<Package>& Packages() const { return packages_; }
     const std::vector<ObjectState>& Truth() const { return truth_; }
@@ -721,6 +736,12 @@ private:
     PoliticsState politics_;
     AirStaff staff_;
     IntelPicture intel_;
+    LineOfContact front_line_;             // the faction's front (track F, F2.1)
+    bool air_front_on_ = false;            // air_front.mode 1: the measures below kept (F2.2)
+    SectorCoverBook cover_book_;
+    std::vector<SectorCover> sector_cover_;  // as of the last plan
+    SectorLossWindow sector_losses_;
+    std::vector<double> air_front_depth_;  // each sector's air front beyond its line of contact (0 until F2.3)
     command::EnemyCorridorIntel corridor_intel_;  // what its COMINT heard of our fighters' corridors (roadmap S1)
     std::map<std::pair<int, std::string>, bool> session_heard_;  // (day, false corridor) -> heard in a played session (S6 follow-ups)
     int corridor_days_fed_ = 0;
@@ -1025,6 +1046,7 @@ private:
                 false);
         }
         FeedCorridors();
+        if (air_front_on_) MeasureAirFront();
         PlanContext pc;
         pc.data = &data_;
         pc.staff = &staff_;
@@ -1047,6 +1069,7 @@ private:
         pc.tanker_receivers = &tanker_left_;
         pc.supply = &supply_;
         pc.ground = RouteGroundPtr();
+        pc.front_line = &front_line_;
         // The sorties the plan holds back for on-call work (doctrine.on_call_fraction), squadron by squadron, before the
         // planner spends the rest (roadmap B5: the alert pools fly them).
         std::vector<double> held;
@@ -1401,6 +1424,7 @@ private:
             pc.tanker_receivers = &tanker_left_;
             pc.supply = &supply_;
             pc.ground = RouteGroundPtr();  // the route planner's ground (route.mode 1, roadmap B2)
+            pc.front_line = &front_line_;
             Planner planner;
             return planner.OnCall(pc, mk, e, pool.squadron, pool.aircraft, takeoff_h, out);
         };
@@ -1422,6 +1446,7 @@ private:
     // `observe`: our side's record of the raid (once per raid: not again for the rest of a played one).
     void ApplyOutcome(Package& p, const PackageOutcome& o, bool observe = true) {
         if (observer_) observer_(p, o);
+        if (air_front_on_) NoteSectorLosses(p, o, observe);
         const FactionDef& f = data_.faction;
         const TuningTable& tune = data_.tuning;
         p.resolved = true;
@@ -1768,6 +1793,7 @@ private:
             r.threat_radar = d->radar;
             r.threat_channels = d->channels;
             r.threat_max_target_mps = d->max_target_mps;
+            r.system = d->system;
         }
         return r;
     }
@@ -1798,9 +1824,34 @@ private:
         return name;
     }
 
-    double DistanceToFront(const Vec3& p) const {
-        const FrontDef* f = data_.theatre.FrontFor(data_.faction.front);
-        return f == nullptr ? 1e18 : DistanceToLine(f->line, p);
+    // From the line of contact, either side (F2.1: at zero offsets the front's line, to the bit).
+    double DistanceToFront(const Vec3& p) const { return front_line_.AbsDistance(p); }
+
+    // ------------------------------------------------------------------ the air front's measures (track F, F2.2)
+
+    // Under air_front.mode 1: the pre-war picture kept for the sectors' baselines, the losses by sector from now on.
+    void StartAirFront() {
+        air_front_on_ = data_.tuning.Get("air_front.mode") >= 1.0;
+        cover_book_ = SectorCoverBook();
+        sector_cover_.clear();
+        sector_losses_ = SectorLossWindow();
+        air_front_depth_.clear();
+        if (!air_front_on_) return;
+        cover_book_.Start(intel_, front_line_);
+        sector_losses_.Reset(front_line_.SectorCount());
+        air_front_depth_.assign(front_line_.SectorCount(), 0.0);  // at the border until F2.3 moves it
+    }
+    // Each planning cycle: the believed cover over every sector's next band (what F2.3's decision will read).
+    void MeasureAirFront() { cover_book_.Measure(intel_, front_line_, air_front_depth_, data_.tuning.Get("air_front.step_m"), sector_cover_); }
+    // A raid's low-level sorties (once, when it is first resolved) and its aircraft lost to ground fire, in its target's sector.
+    void NoteSectorLosses(const Package& p, const PackageOutcome& o, bool first) {
+        if (p.profile != Profile::Low) return;
+        const int sector = front_line_.SectorOf(p.target_pos);
+        const int day = SectorLossWindow::DayOf(p.tot_h);
+        if (first) sector_losses_.NoteSorties(sector, day, p.Aircraft());
+        int ground = 0;
+        for (const LossRecord& l : o.losses) ground += (l.fighter || l.own_fire) ? 0 : 1;
+        if (ground > 0) sector_losses_.NoteLosses(sector, day, ground);
     }
 
     // An ELINT fix on an emitter that radiated `seconds` (vr_1985_plss: a new source is located within seconds), or a
