@@ -2,14 +2,12 @@
   "ground_id": "neutral",
   "faction": "neutral",
   "name": "The Noric Republic's field army on the south-western border",
-  "status": "F3.1 (20 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md sections 8 and 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "status": "F3.1 (21 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md sections 8 and 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
   "source": "SAM3D estimate: a neutral's doctrine is dissuasion on its own territory (sadauer_schlup_1978 pp. 54, 88-90); in the war's fiction it makes a limited incursion to its political depth (the faction's politics max_depth_km, 40 km) and then holds. The owner's open decision 2 taken as proposed (docs/fronts/README.md)",
   "confidence": "estimate",
   "notes": "One mechanised division of three brigades and two territorial regiments to hold what it takes. No exploitation. All numbers placeholders.",
-  "places_todo": [
-    { "id": "noric_assembly", "name": "The Noric division's assembly area beyond the south-western border", "east_km": -145, "north_km": -125, "anchor_todo": true, "notes": "Behind the south-western road crossing (bx_road_sw)." },
-    { "id": "noric_hold_line", "name": "The Noric division's holding line, 40 km in", "east_km": -105, "north_km": -78, "anchor_todo": true, "notes": "Where the south-western road meets the Lenta valley road, about 40 km from the border along the road (the politics' depth)." }
-  ],
+  "place_map": "maps/pannonia.json",
+  "theatre": "air_war/theatre_pannonia_nation.json",
   "oob": {
     "oob_id": "noric_army",
     "name": "The Noric field army",
@@ -19,7 +17,7 @@
       { "id": "noric_army", "name": "The Noric army" }
     ],
     "units": [
-      { "id": "noric_division", "name": "The Mechanised Division", "service": "noric_army", "kind": "division", "garrison": "noric_assembly",
+      { "id": "noric_division", "name": "The Mechanised Division", "service": "noric_army", "kind": "division", "garrison": "neutral_assembly",
         "equipment": { "m109": 18 }, "personnel": { "officers": 300, "ncos": 700, "conscripts": 2000, "basis": "estimate: the division's own troops and its artillery battalion" } },
       { "id": "noric_bde_3", "name": "3rd Mechanised Brigade", "service": "noric_army", "kind": "brigade", "parent": "noric_division",
         "equipment": { "m60a3": 40, "sk105": 30, "saurer_4k4f": 70, "m109": 18 }, "personnel": { "officers": 170, "ncos": 500, "conscripts": 2530, "basis": "estimate" } },
@@ -27,9 +25,9 @@
         "equipment": { "m60a3": 40, "sk105": 30, "saurer_4k4f": 70, "m109": 18 }, "personnel": { "officers": 170, "ncos": 500, "conscripts": 2530, "basis": "estimate" } },
       { "id": "noric_bde_9", "name": "9th Mechanised Brigade", "service": "noric_army", "kind": "brigade", "parent": "noric_division",
         "equipment": { "m60a3": 40, "sk105": 30, "saurer_4k4f": 70, "m109": 18 }, "personnel": { "officers": 170, "ncos": 500, "conscripts": 2530, "basis": "estimate" } },
-      { "id": "noric_lwr_1", "name": "1st Territorial Regiment", "service": "noric_army", "kind": "regiment", "garrison": "noric_assembly",
+      { "id": "noric_lwr_1", "name": "1st Territorial Regiment", "service": "noric_army", "kind": "regiment", "garrison": "neutral_assembly",
         "equipment": { "mortar_82": 12, "spg9": 12 }, "personnel": { "officers": 80, "ncos": 200, "conscripts": 1720, "basis": "estimate: light infantry to hold ground" } },
-      { "id": "noric_lwr_2", "name": "2nd Territorial Regiment", "service": "noric_army", "kind": "regiment", "garrison": "noric_assembly",
+      { "id": "noric_lwr_2", "name": "2nd Territorial Regiment", "service": "noric_army", "kind": "regiment", "garrison": "neutral_assembly",
         "equipment": { "mortar_82": 12, "spg9": 12 }, "personnel": { "officers": 80, "ncos": 200, "conscripts": 1720, "basis": "estimate: light infantry to hold ground" } }
     ]
   },
@@ -83,11 +81,11 @@
     "confidence": "estimate",
     "notes": "Two brigades up the south-western road to the Lenta valley, one behind; the territorial regiments follow to hold. At 40 km it digs in and holds.",
     "objectives": [
-      { "id": "hold_line", "name": "The Lenta valley line", "place": "noric_hold_line", "by_day": 2, "notes": "Taken and held; no exploitation." }
+      { "id": "hold_line", "name": "The Lenta valley line", "at": "neutral_hold_line", "by_day": 2, "notes": "Taken and held; no exploitation." }
     ],
     "axes": [
-      { "id": "south_west_road", "name": "The south-western road", "main": true, "route": ["noric_assembly", "bx_road_sw", "noric_hold_line"],
-        "first_echelon": ["noric_division"], "second_echelon": ["noric_lwr_1", "noric_lwr_2"], "objective": "hold_line" }
+      { "id": "south_west_road", "name": "The south-western road", "main": true, "route": ["neutral_assembly", "bx_road_sw", "neutral_hold_line"],
+        "first_echelon": ["noric_division"], "second_echelon": ["noric_lwr_1", "noric_lwr_2"], "objective": "hold_line", "sector": "lenta_marshes" }
     ],
     "reserve": []
   }

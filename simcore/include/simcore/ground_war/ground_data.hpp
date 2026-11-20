@@ -3,8 +3,9 @@
 // plan (data/air_war/ground_<faction>.json), and our side's defence by adversary (data/campaign/ground_defence.json).
 //
 // Orders of battle are in command::OrderOfBattle's format, read by its loader (command/oob.hpp), so one loader reads both
-// sides. Places are the country map's ids (settlements, landmarks, river crossings; F1's sites); a place the map lacks yet
-// is listed in the file's places_todo with a suggested position, for F1 to add.
+// sides. Every point is a place of the country map the file names ("place_map", F1: settlements, landmarks and sites),
+// resolved to its point at load, and the loader refuses a place the map lacks; every stretch of the front is a run of
+// the sectors of the theatre the file names ("theatre", F2.1). No exceptions: a loader returns false with a message.
 //
 // Nothing here runs the ground war (F3.3) and no campaign reads these files yet: loading them changes nothing.
 #pragma once
@@ -22,7 +23,9 @@
 #include "simcore/crew_data.hpp"  // detail::ReadTextFile, which command/oob.hpp uses without including it
 #include "simcore/command/oob.hpp"
 #include "simcore/console_data.hpp"
+#include "simcore/country_map.hpp"
 #include "simcore/json.hpp"
+#include "simcore/vec3.hpp"
 
 namespace simcore {
 namespace groundwar {
@@ -258,13 +261,10 @@ struct GroundDoctrineDef {
     }
 };
 
-// A place the country map lacks yet, with the position suggested for it (F1 adds it as a site; docs/fronts/01_ANCHORS.md §3).
-struct PlaceTodoDef {
-    std::string id;
-    std::string name;
-    double east_km = 0.0;
-    double north_km = 0.0;
-    std::string notes;
+// A place of the country map a file names (F1) and its point, resolved at load ("" and the origin: none).
+struct GroundPlace {
+    std::string at;
+    Vec3 pos;
 };
 
 struct GroundCommanderDef {
@@ -286,7 +286,7 @@ struct GroundCommandersDef {
 struct ObjectiveDef {
     std::string id;
     std::string name;
-    std::string place;
+    GroundPlace place;
     int by_day = 0;  // the plan's day for it (whole days after the offensive's start)
     std::string notes;
 };
@@ -295,10 +295,12 @@ struct AxisDef {
     std::string id;
     std::string name;
     bool main = false;
-    std::vector<std::string> route;  // places, the start first
+    std::vector<GroundPlace> route;  // places, the start first
     std::vector<std::string> first_echelon;
     std::vector<std::string> second_echelon;
     std::string objective;  // an ObjectiveDef id
+    std::string sector;     // the sector of the faction's front (the theatre's, F2.1) it attacks in
+    int sector_index = -1;  // its index in the front's sectors
 };
 
 struct RaidsDef {
@@ -338,27 +340,27 @@ struct GroundForceDef {
     std::string ground_id;
     std::string faction;
     std::string name;
-    std::vector<PlaceTodoDef> places_todo;
+    std::string place_map;  // the country map its places are on (data/maps/)
+    std::string theatre;    // the theatre whose front of this faction its sectors are (data/air_war/)
     command::OrderOfBattle oob;
+    std::vector<GroundPlace> garrisons;  // oob.units' garrisons in their order, resolved ("" where a unit names none)
     GroundCommandersDef commanders;
     GroundDoctrineDef doctrine;
     GroundPlanDef plan;
 
-    const PlaceTodoDef* PlaceTodo(const std::string& id) const {
-        for (const PlaceTodoDef& p : places_todo) {
-            if (p.id == id) return &p;
-        }
-        return nullptr;
-    }
-    // Every place the file names, once each: the units' garrisons, the axes' routes, the objectives.
-    std::vector<std::string> NamedPlaces() const {
-        std::vector<std::string> out;
-        const auto add = [&out](const std::string& id) {
-            if (!id.empty() && std::find(out.begin(), out.end(), id) == out.end()) out.push_back(id);
+    // Every place the file names with its point, once each: the units' garrisons, the axes' routes, the objectives.
+    std::vector<GroundPlace> NamedPlaces() const {
+        std::vector<GroundPlace> out;
+        const auto add = [&out](const GroundPlace& p) {
+            if (p.at.empty()) return;
+            for (const GroundPlace& o : out) {
+                if (o.at == p.at) return;
+            }
+            out.push_back(p);
         };
-        for (const command::OobUnit& u : oob.units) add(u.garrison);
+        for (const GroundPlace& g : garrisons) add(g);
         for (const AxisDef& a : plan.axes) {
-            for (const std::string& p : a.route) add(p);
+            for (const GroundPlace& p : a.route) add(p);
         }
         for (const ObjectiveDef& o : plan.objectives) add(o.place);
         return out;
@@ -368,9 +370,12 @@ struct GroundForceDef {
 struct DeployedUnitDef {
     std::string unit;
     DeployRole role = DeployRole::FirstEchelon;
-    double from_km = 0.0;  // along the adversary's front line (FrontDef::line), as F2.1's sectors
+    std::vector<std::string> sectors;  // on the line: a run of the adversary's front's sectors, in order (F2.1)
+    int first_sector = -1;             // their indices in the front's sectors
+    int last_sector = -1;
+    double from_km = 0.0;  // the run along the front's line, from its sectors (FrontDef::sectors)
     double to_km = 0.0;
-    std::string place;  // where it stands or assembles
+    GroundPlace place;  // where it stands or assembles ("at"; required off the line)
 };
 
 struct DeploymentDef {
@@ -386,19 +391,14 @@ struct DeploymentDef {
     }
 };
 
-struct EquipmentFillDef {
-    std::string unit;
-    std::vector<std::pair<std::string, int>> equipment;
-};
-
 // Our side's defence (data/campaign/ground_defence.json): the order of battle it names, with its equipment filled.
 struct GroundDefenceDef {
     std::string defence_id;
     std::string name;
     std::string oob_file;
-    std::vector<PlaceTodoDef> places_todo;
-    std::vector<EquipmentFillDef> equipment_fill;
-    command::OrderOfBattle oob;  // oob_file's, equipment_fill applied
+    std::string place_map;  // the country map its places are on
+    std::string theatre;    // the theatre whose fronts its deployments' sectors are
+    command::OrderOfBattle oob;  // oob_file's
     GroundCommandersDef commanders;
     GroundDoctrineDef doctrine;
     std::vector<DeploymentDef> deployments;
@@ -410,6 +410,45 @@ struct GroundDefenceDef {
         return nullptr;
     }
 };
+
+// What a ground file's places and sectors resolve against: the country map's places (F1) and a theatre's fronts and
+// their sectors (F2.1), the theatre read on the same places. Loaded once for a file (LoadGroundWorld); a test may move a
+// place before it loads the theatre and the ground files, and everything anchored to the place moves.
+struct GroundWorld {
+    std::string place_map;  // data/<place_map>
+    std::string theatre;    // data/<theatre>
+    MapPlaces places;
+    airwar::TheatreDef theatre_def;
+
+    const airwar::FrontDef* FrontOf(const std::string& faction) const {
+        for (const airwar::FrontDef& f : theatre_def.fronts) {
+            if (f.faction == faction) return &f;
+        }
+        return nullptr;
+    }
+};
+
+// The world a ground file names: its place map's places (unless `places` is given) and its theatre read on them.
+inline bool LoadGroundWorld(const std::string& data_dir, const std::string& place_map, const std::string& theatre, GroundWorld& out,
+                            std::string* error = nullptr, const MapPlaces* places = nullptr) {
+    out.place_map = place_map;
+    out.theatre = theatre;
+    if (places != nullptr) {
+        out.places = *places;
+    } else if (!LoadMapPlaces(data_dir, place_map, out.places, error)) {
+        return false;
+    }
+    std::string e;
+    if (!airwar::LoadTheatreFile(data_dir + "/" + theatre, out.theatre_def, &e, &out.places)) {
+        if (error) *error = "theatre " + theatre + ": " + e;
+        return false;
+    }
+    if (out.theatre_def.place_map != place_map) {
+        if (error) *error = "theatre " + theatre + ": its places are on '" + out.theatre_def.place_map + "', not '" + place_map + "'";
+        return false;
+    }
+    return true;
+}
 
 // ------------------------------------------------------------------------------------------------------- the loader
 
@@ -467,36 +506,41 @@ public:
         return true;
     }
 
-    bool LoadForce(const json::Value& root, GroundForceDef& out) {
-        if (!Keys(root, "", {"ground_id", "faction", "name", "status", "source", "confidence", "notes", "places_todo", "oob",
+    // `world`: the places and theatre the file names (LoadGroundWorld).
+    bool LoadForce(const json::Value& root, const GroundWorld& world, GroundForceDef& out) {
+        world_ = &world;
+        if (!Keys(root, "", {"ground_id", "faction", "name", "status", "source", "confidence", "notes", "place_map", "theatre", "oob",
                              "commanders", "doctrine", "plan"}) ||
             !Provenance(root, "") || !RequireString(root, "", "ground_id", out.ground_id) ||
             !RequireString(root, "", "faction", out.faction) || !RequireString(root, "", "name", out.name) ||
-            !PlacesTodo(root, out.places_todo) || !Oob(root, out.oob) || !Commanders(root, out.oob, out.commanders) ||
-            !Doctrine(root, out.doctrine) || !Plan(root, out)) {
+            !WorldOf(root, out.place_map, out.theatre) || !Oob(root, out.oob) || !Garrisons(out) ||
+            !Commanders(root, out.oob, out.commanders) || !Doctrine(root, out.doctrine)) {
             return false;
         }
-        return true;
+        front_ = world.FrontOf(out.faction);
+        if (front_ == nullptr) return Fail("faction", "the theatre " + world.theatre + " has no front of '" + out.faction + "'");
+        return Plan(root, out);
     }
 
-    // `oob` is the order of battle the file names, already loaded.
-    bool LoadDefence(const json::Value& root, const command::OrderOfBattle& oob, GroundDefenceDef& out) {
-        if (!Keys(root, "", {"defence_id", "name", "status", "source", "confidence", "notes", "oob", "places_todo", "equipment_fill",
+    // `oob` is the order of battle the file names, already loaded; `world` the places and theatre it names.
+    bool LoadDefence(const json::Value& root, const command::OrderOfBattle& oob, const GroundWorld& world, GroundDefenceDef& out) {
+        world_ = &world;
+        if (!Keys(root, "", {"defence_id", "name", "status", "source", "confidence", "notes", "oob", "place_map", "theatre",
                              "commanders", "doctrine", "deployments"}) ||
             !Provenance(root, "") || !RequireString(root, "", "defence_id", out.defence_id) ||
             !RequireString(root, "", "name", out.name) || !RequireString(root, "", "oob", out.oob_file) ||
-            !PlacesTodo(root, out.places_todo)) {
+            !WorldOf(root, out.place_map, out.theatre)) {
             return false;
         }
         out.oob = oob;
-        if (!EquipmentFill(root, out) || !Commanders(root, out.oob, out.commanders) || !Doctrine(root, out.doctrine)) return false;
+        if (!Commanders(root, out.oob, out.commanders) || !Doctrine(root, out.doctrine)) return false;
         if (!out.doctrine.has_security_zone) return Fail("doctrine.security_zone", "required for our side");
         return Deployments(root, out);
     }
 
-    // The order of battle file named by a defence file, before it is loaded.
-    static bool OobFileOf(const json::Value& root, std::string& file) {
-        const json::Value* v = root.Find("oob");
+    // A file's key naming a file, before the file is loaded ("oob", "place_map", "theatre"); false if missing.
+    static bool FileOf(const json::Value& root, const char* key, std::string& file) {
+        const json::Value* v = root.Find(key);
         if (v == nullptr || !v->Is(json::Type::String) || v->string.empty()) return false;
         file = v->string;
         return true;
@@ -790,27 +834,41 @@ private:
 
     // ---- the force files
 
-    bool PlacesTodo(const json::Value& root, std::vector<PlaceTodoDef>& out) {
-        const json::Value* a = OptionalArray(root, "", "places_todo");
-        if (a == nullptr) return message_.empty();
-        for (std::size_t i = 0; i < a->items.size(); ++i) {
-            const std::string p = Index("places_todo", i);
-            const json::Value& r = a->items[i];
-            PlaceTodoDef d;
-            bool todo = false;
-            if (!Keys(r, p, {"id", "name", "east_km", "north_km", "anchor_todo", "notes"}) || !RequireString(r, p, "id", d.id) ||
-                !RequireString(r, p, "name", d.name) || !Num(r, p, "east_km", d.east_km, -1000.0, 1000.0) ||
-                !Num(r, p, "north_km", d.north_km, -1000.0, 1000.0) || !OptionalBool(r, p, "anchor_todo", todo) ||
-                !OptionalString(r, p, "notes", d.notes)) {
-                return false;
-            }
-            if (!todo) return Fail(Join(p, "anchor_todo"), "true: a place listed here waits for F1 to add it to the map");
-            for (const PlaceTodoDef& o : out) {
-                if (o.id == d.id) return Fail(Join(p, "id"), "'" + d.id + "' is listed twice");
-            }
-            out.push_back(std::move(d));
+    // The file's place map and theatre: required, and the ones the world was loaded from.
+    bool WorldOf(const json::Value& root, std::string& place_map, std::string& theatre) {
+        if (!RequireString(root, "", "place_map", place_map) || !RequireString(root, "", "theatre", theatre)) return false;
+        if (place_map != world_->place_map) return Fail("place_map", "'" + place_map + "', but its places were read from '" + world_->place_map + "'");
+        if (theatre != world_->theatre) return Fail("theatre", "'" + theatre + "', but the theatre read is '" + world_->theatre + "'");
+        return true;
+    }
+
+    // A place of the map by id, to its point (F1: the loader refuses a place the map lacks).
+    bool Place(const std::string& path, const std::string& id, GroundPlace& out) {
+        const MapPoint* p = world_->places.Find(id);
+        if (p == nullptr) return Fail(path, "no place '" + id + "' on the map " + world_->place_map + " (add it to its sites)");
+        out.at = id;
+        out.pos = Vec3{p->east_m, p->north_m, 0.0};
+        return true;
+    }
+
+    bool Garrisons(GroundForceDef& out) {
+        out.garrisons.assign(out.oob.units.size(), GroundPlace());
+        for (std::size_t i = 0; i < out.oob.units.size(); ++i) {
+            const std::string& g = out.oob.units[i].garrison;
+            if (!g.empty() && !Place(Join(Index("oob.units", i), "garrison"), g, out.garrisons[i])) return false;
         }
         return true;
+    }
+
+    // A sector of the front by id: its index, or a refusal.
+    bool SectorIndex(const airwar::FrontDef& front, const std::string& path, const std::string& id, int& out) {
+        for (std::size_t i = 0; i < front.sectors.size(); ++i) {
+            if (front.sectors[i].id == id) {
+                out = static_cast<int>(i);
+                return true;
+            }
+        }
+        return Fail(path, "no sector '" + id + "' on the " + front.faction + " front of " + world_->theatre);
     }
 
     bool Oob(const json::Value& root, command::OrderOfBattle& out) {
@@ -1015,9 +1073,10 @@ private:
             const std::string op = Index("plan.objectives", i);
             const json::Value& r = obs->items[i];
             ObjectiveDef o;
-            if (!Keys(r, op, {"id", "name", "place", "by_day", "notes"}) || !RequireString(r, op, "id", o.id) ||
-                !RequireString(r, op, "name", o.name) || !RequireString(r, op, "place", o.place) || !WholeNum(r, op, "by_day", o.by_day, 0, 60) ||
-                !OptionalString(r, op, "notes", o.notes)) {
+            std::string at;
+            if (!Keys(r, op, {"id", "name", "at", "by_day", "notes"}) || !RequireString(r, op, "id", o.id) ||
+                !RequireString(r, op, "name", o.name) || !RequireString(r, op, "at", at) || !Place(Join(op, "at"), at, o.place) ||
+                !WholeNum(r, op, "by_day", o.by_day, 0, 60) || !OptionalString(r, op, "notes", o.notes)) {
                 return false;
             }
             if (plan.Objective(o.id) != nullptr) return Fail(Join(op, "id"), "'" + o.id + "' is listed twice");
@@ -1039,13 +1098,19 @@ private:
             const std::string ap = Index("plan.axes", i);
             const json::Value& r = axes->items[i];
             AxisDef a;
-            if (!Keys(r, ap, {"id", "name", "main", "route", "first_echelon", "second_echelon", "objective", "notes"}) ||
+            std::vector<std::string> route;
+            if (!Keys(r, ap, {"id", "name", "main", "route", "first_echelon", "second_echelon", "objective", "sector", "notes"}) ||
                 !RequireString(r, ap, "id", a.id) || !RequireString(r, ap, "name", a.name) || !OptionalBool(r, ap, "main", a.main) ||
-                !Ids(r, ap, "route", a.route) || !Ids(r, ap, "first_echelon", a.first_echelon) || !Ids(r, ap, "second_echelon", a.second_echelon) ||
-                !RequireString(r, ap, "objective", a.objective)) {
+                !Ids(r, ap, "route", route) || !Ids(r, ap, "first_echelon", a.first_echelon) || !Ids(r, ap, "second_echelon", a.second_echelon) ||
+                !RequireString(r, ap, "objective", a.objective) || !RequireString(r, ap, "sector", a.sector) ||
+                !SectorIndex(*front_, Join(ap, "sector"), a.sector, a.sector_index)) {
                 return false;
             }
-            if (a.route.size() < 2) return Fail(Join(ap, "route"), "at least a start and an end");
+            if (route.size() < 2) return Fail(Join(ap, "route"), "at least a start and an end");
+            a.route.resize(route.size());
+            for (std::size_t k = 0; k < route.size(); ++k) {
+                if (!Place(Index(Join(ap, "route"), k), route[k], a.route[k])) return false;
+            }
             if (a.first_echelon.empty()) return Fail(Join(ap, "first_echelon"), "at least one unit");
             if (plan.Objective(a.objective) == nullptr) return Fail(Join(ap, "objective"), "unknown objective '" + a.objective + "'");
             for (const AxisDef& o : plan.axes) {
@@ -1085,34 +1150,6 @@ private:
 
     // ---- our side
 
-    bool EquipmentFill(const json::Value& root, GroundDefenceDef& out) {
-        const json::Value* a = OptionalArray(root, "", "equipment_fill");
-        if (a == nullptr) return message_.empty();
-        for (std::size_t i = 0; i < a->items.size(); ++i) {
-            const std::string p = Index("equipment_fill", i);
-            const json::Value& r = a->items[i];
-            EquipmentFillDef f;
-            if (!Keys(r, p, {"unit", "equipment", "source", "confidence", "notes"}) || !Provenance(r, p) || !RequireString(r, p, "unit", f.unit)) return false;
-            command::OobUnit* u = nullptr;
-            for (command::OobUnit& x : out.oob.units) u = x.id == f.unit ? &x : u;
-            if (u == nullptr) return Fail(Join(p, "unit"), "unknown unit '" + f.unit + "' in " + out.oob_file);
-            if (!u->equipment.empty()) return Fail(Join(p, "unit"), "'" + f.unit + "' has equipment in " + out.oob_file + ": the fill is for units with none");
-            const json::Value* eq = Object(r, p, "equipment");
-            if (eq == nullptr) return false;
-            for (std::size_t k = 0; k < eq->keys.size(); ++k) {
-                const json::Value& c = eq->items[k];
-                if (!c.Is(json::Type::Number) || c.number < 0.0 || c.number != static_cast<double>(static_cast<int>(c.number))) {
-                    return Fail(Join(Join(p, "equipment"), eq->keys[k]), "a whole number >= 0");
-                }
-                f.equipment.push_back({eq->keys[k], static_cast<int>(c.number)});
-            }
-            if (f.equipment.empty()) return Fail(Join(p, "equipment"), "at least one type");
-            u->equipment = f.equipment;
-            out.equipment_fill.push_back(std::move(f));
-        }
-        return true;
-    }
-
     bool Deployments(const json::Value& root, GroundDefenceDef& out) {
         const json::Value* a = OptionalArray(root, "", "deployments");
         if (a == nullptr || a->items.empty()) return message_.empty() ? Fail("deployments", "required, a non-empty list") : false;
@@ -1125,6 +1162,8 @@ private:
                 return false;
             }
             if (out.For(d.adversary) != nullptr) return Fail(Join(p, "adversary"), "'" + d.adversary + "' is listed twice");
+            const airwar::FrontDef* front = world_->FrontOf(d.adversary);
+            if (front == nullptr) return Fail(Join(p, "adversary"), "the theatre " + world_->theatre + " has no front of '" + d.adversary + "'");
             const json::Value* us = OptionalArray(r, p, "units");
             if (us == nullptr || us->items.empty()) return message_.empty() ? Fail(Join(p, "units"), "required, a non-empty list") : false;
             for (std::size_t k = 0; k < us->items.size(); ++k) {
@@ -1132,10 +1171,12 @@ private:
                 const json::Value& v = us->items[k];
                 DeployedUnitDef du;
                 std::string role;
-                if (!Keys(v, up, {"unit", "role", "from_km", "to_km", "place", "notes"}) || !RequireString(v, up, "unit", du.unit) ||
-                    !RequireString(v, up, "role", role) || !OptionalString(v, up, "place", du.place)) {
+                std::string at;
+                if (!Keys(v, up, {"unit", "role", "sectors", "at", "notes"}) || !RequireString(v, up, "unit", du.unit) ||
+                    !RequireString(v, up, "role", role) || !OptionalString(v, up, "at", at) || !Ids(v, up, "sectors", du.sectors)) {
                     return false;
                 }
+                if (!at.empty() && !Place(Join(up, "at"), at, du.place)) return false;
                 if (!ParseEnum(role, 5, DeployRoleName, du.role)) {
                     return Fail(Join(up, "role"), "first_echelon, second_echelon, flank_screen, reserve or support");
                 }
@@ -1147,11 +1188,20 @@ private:
                 }
                 const bool on_line = du.role == DeployRole::FirstEchelon || du.role == DeployRole::SecondEchelon || du.role == DeployRole::FlankScreen;
                 if (on_line) {
-                    if (!Num(v, up, "from_km", du.from_km, 0.0, 2000.0) || !Num(v, up, "to_km", du.to_km, 0.0, 2000.0)) return false;
-                    if (!(du.to_km > du.from_km)) return Fail(Join(up, "to_km"), "beyond from_km");
+                    // A run of the front's sectors, each the next along the line.
+                    if (du.sectors.empty()) return Fail(Join(up, "sectors"), "a unit on the line holds at least one sector");
+                    for (std::size_t s = 0; s < du.sectors.size(); ++s) {
+                        int idx = -1;
+                        if (!SectorIndex(*front, Index(Join(up, "sectors"), s), du.sectors[s], idx)) return false;
+                        if (s > 0 && idx != du.last_sector + 1) return Fail(Index(Join(up, "sectors"), s), "not the next sector along the line after '" + du.sectors[s - 1] + "'");
+                        if (s == 0) du.first_sector = idx;
+                        du.last_sector = idx;
+                    }
+                    du.from_km = front->sectors[static_cast<std::size_t>(du.first_sector)].from_m / 1000.0;
+                    du.to_km = front->sectors[static_cast<std::size_t>(du.last_sector)].to_m / 1000.0;
                 } else {
-                    if (v.Find("from_km") != nullptr || v.Find("to_km") != nullptr) return Fail(up, "a reserve or support unit holds no stretch of the line");
-                    if (du.place.empty()) return Fail(Join(up, "place"), "required for a reserve or support unit");
+                    if (!du.sectors.empty()) return Fail(Join(up, "sectors"), "a reserve or support unit holds no stretch of the line");
+                    if (du.place.at.empty()) return Fail(Join(up, "at"), "required for a reserve or support unit");
                 }
                 d.units.push_back(std::move(du));
             }
@@ -1159,6 +1209,9 @@ private:
         }
         return true;
     }
+
+    const GroundWorld* world_ = nullptr;
+    const airwar::FrontDef* front_ = nullptr;  // a force file's faction's front
 };
 
 template <typename Fn>
@@ -1196,20 +1249,51 @@ inline bool LoadGroundTables(const std::string& data_dir, GroundTables& out, std
     return LoadGroundTablesJson(text, out, error);
 }
 
-inline bool LoadGroundForceJson(const std::string& text, GroundForceDef& out, std::string* error = nullptr) {
+inline bool LoadGroundForceJson(const std::string& text, const GroundWorld& world, GroundForceDef& out, std::string* error = nullptr) {
     return detail::LoadGroundJsonWith(text, "ground forces", error,
-                                      [&out](detail::GroundLoader& l, const json::Value& root) { return l.LoadForce(root, out); });
+                                      [&](detail::GroundLoader& l, const json::Value& root) { return l.LoadForce(root, world, out); });
 }
 
-// data/air_war/ground_<faction>.json.
-inline bool LoadGroundForce(const std::string& data_dir, const std::string& faction, GroundForceDef& out, std::string* error = nullptr) {
-    const std::string file = "air_war/ground_" + faction + ".json";
-    std::string text;
+namespace detail {
+
+// A ground file's text and the world it names ("place_map", "theatre"), loaded; false with the file's message if it
+// names none (the file's own loader then says what is missing).
+inline bool ReadGroundFile(const std::string& data_dir, const std::string& file, std::string& text, GroundWorld& world, bool& named,
+                           std::string* error, const MapPlaces* places) {
+    named = false;
     if (!simcore::detail::ReadTextFile(data_dir + "/" + file, text)) {
         if (error) *error = "cannot open " + file;
         return false;
     }
-    if (!LoadGroundForceJson(text, out, error)) return false;
+    json::Value root;
+    std::string place_map;
+    std::string theatre;
+    if (!json::Parse(text, root, nullptr) || !GroundLoader::FileOf(root, "place_map", place_map) || !GroundLoader::FileOf(root, "theatre", theatre)) {
+        return true;
+    }
+    named = true;
+    std::string e;
+    if (!LoadGroundWorld(data_dir, place_map, theatre, world, &e, places)) {
+        if (error) *error = file + ": " + e;
+        return false;
+    }
+    return true;
+}
+
+}  // namespace detail
+
+// data/air_war/ground_<faction>.json, on the places and theatre it names (`places`: the map's, moved, for a test).
+inline bool LoadGroundForce(const std::string& data_dir, const std::string& faction, GroundForceDef& out, std::string* error = nullptr,
+                            const MapPlaces* places = nullptr) {
+    const std::string file = "air_war/ground_" + faction + ".json";
+    std::string text;
+    GroundWorld world;
+    bool named = false;
+    if (!detail::ReadGroundFile(data_dir, file, text, world, named, error, places)) return false;
+    if (!LoadGroundForceJson(text, world, out, error)) {
+        if (error) *error = file + ": " + *error;
+        return false;
+    }
     if (out.faction != faction) {
         if (error) *error = file + ": faction '" + out.faction + "', expected '" + faction + "'";
         return false;
@@ -1217,28 +1301,33 @@ inline bool LoadGroundForce(const std::string& data_dir, const std::string& fact
     return true;
 }
 
-// Our side's defence; `oob` is the order of battle its "oob" names (command::LoadOrderOfBattle).
-inline bool LoadGroundDefenceJson(const std::string& text, const command::OrderOfBattle& oob, GroundDefenceDef& out, std::string* error = nullptr) {
+// Our side's defence; `oob` is the order of battle its "oob" names (command::LoadOrderOfBattle), `world` the places and
+// theatre it names.
+inline bool LoadGroundDefenceJson(const std::string& text, const command::OrderOfBattle& oob, const GroundWorld& world, GroundDefenceDef& out,
+                                  std::string* error = nullptr) {
     return detail::LoadGroundJsonWith(text, "ground defence", error,
-                                      [&](detail::GroundLoader& l, const json::Value& root) { return l.LoadDefence(root, oob, out); });
+                                      [&](detail::GroundLoader& l, const json::Value& root) { return l.LoadDefence(root, oob, world, out); });
 }
 
-// data/<file> (default campaign/ground_defence.json) with the order of battle it names.
+// data/<file> (default campaign/ground_defence.json) with the order of battle, places and theatre it names.
 inline bool LoadGroundDefence(const std::string& data_dir, GroundDefenceDef& out, std::string* error = nullptr,
-                              const std::string& file = "campaign/ground_defence.json") {
+                              const std::string& file = "campaign/ground_defence.json", const MapPlaces* places = nullptr) {
     std::string text;
-    if (!simcore::detail::ReadTextFile(data_dir + "/" + file, text)) {
-        if (error) *error = "cannot open " + file;
-        return false;
-    }
+    GroundWorld world;
+    bool named = false;
+    if (!detail::ReadGroundFile(data_dir, file, text, world, named, error, places)) return false;
     json::Value root;
     std::string oob_file;
-    if (!json::Parse(text, root, nullptr) || !detail::GroundLoader::OobFileOf(root, oob_file)) {
-        return LoadGroundDefenceJson(text, command::OrderOfBattle(), out, error);  // reports the file's own fault
-    }
     command::OrderOfBattle oob;
-    if (!command::LoadOrderOfBattle(data_dir, oob_file, oob, error)) return false;
-    return LoadGroundDefenceJson(text, oob, out, error);
+    if (named && json::Parse(text, root, nullptr) && detail::GroundLoader::FileOf(root, "oob", oob_file) &&
+        !command::LoadOrderOfBattle(data_dir, oob_file, oob, error)) {
+        return false;
+    }
+    if (!LoadGroundDefenceJson(text, oob, world, out, error)) {
+        if (error) *error = file + ": " + *error;
+        return false;
+    }
+    return true;
 }
 
 }  // namespace groundwar

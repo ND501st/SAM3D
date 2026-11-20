@@ -2,15 +2,12 @@
   "ground_id": "warsaw_pact",
   "faction": "warsaw_pact",
   "name": "The Warsaw Pact's ground forces against Pannonia: a combined arms army of the front",
-  "status": "F3.1 (20 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md section 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "status": "F3.1 (21 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md section 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
   "source": "the army's make-up from fm_100_2_1_1984 pp. 4-4 to 4-7 (two to four motor rifle and one or two tank divisions); the divisions' organisation as NATO saw it (fm100_2_3, organisation only), their numbers placeholders; doctrine from fm_100_2_1_1984, reznichenko_1984, mt_kurkov_tank_army, mt_stashek_losses and mt_novoselov_replacement (docs/research/fronts_2026-11/pact_ground.md); the invasion of Pannonia is the game's fiction and its plan a SAM3D estimate",
   "confidence": "estimate",
-  "notes": "Units, names and numbers are placeholders as the factions' aircraft are. Equipment types are the strength weights' ids (data/gameplay/ground_war.json); they have no basic models yet (F5.2). Places are the country map's ids (data/maps/pannonia.json: settlements, landmarks, river crossings; F1's sites once merged); the places the map lacks are in places_todo with a suggested position, marked anchor_todo for F1.",
-  "places_todo": [
-    { "id": "pact_assembly_east", "name": "The Pact army's eastern assembly area beyond the north-eastern border", "east_km": 125, "north_km": 128, "anchor_todo": true, "notes": "Beyond the north-eastern road crossing (bx_road_ne), on the neighbour's side of the border range." },
-    { "id": "pact_assembly_rava", "name": "The Pact army's assembly area in the upper Rava valley", "east_km": 62, "north_km": 145, "anchor_todo": true, "notes": "Upstream of the Rava gorge, beyond the border." },
-    { "id": "bx_road_rava", "name": "The road crossing in the Rava gorge", "east_km": 56, "north_km": 131, "anchor_todo": true, "notes": "No road crosses the border range by the Rava today; a valley road from the dam to the border is needed for this axis (or the axis runs cross-country)." }
-  ],
+  "notes": "Units, names and numbers are placeholders as the factions' aircraft are. Equipment types are the strength weights' ids (data/gameplay/ground_war.json); they have no basic models yet (F5.2). Every place is the country map's (place_map, F1): garrisons, routes and objectives name its settlements, landmarks and sites, and the loader refuses one it lacks. Each axis names the sector of the front (the theatre's, F2.1) it attacks in.",
+  "place_map": "maps/pannonia.json",
+  "theatre": "air_war/theatre_pannonia_nation.json",
   "oob": {
     "oob_id": "pact_army",
     "name": "The combined arms army of the Northern Group of Forces",
@@ -138,16 +135,16 @@
     "confidence": "estimate",
     "notes": "The main thrust down the north-eastern road to Mezovar and the capital; and a supporting attack down the Rava gorge past the dam to Dravec. The tank division follows the main thrust as the second echelon and goes to the axis that moves.",
     "objectives": [
-      { "id": "dravec", "name": "Dravec and the dam", "place": "dravec", "by_day": 1, "notes": "The supporting attack's day objective (25-30 km)." },
-      { "id": "mezovar", "name": "Mezovar and the Tisava crossing", "place": "mezovar", "by_day": 2, "notes": "The main thrust's first divisions' objective." },
-      { "id": "capital", "name": "The capital", "place": "capital", "by_day": 4, "notes": "The army's immediate objective, about 100 km in." },
-      { "id": "kesmark", "name": "Kesmark and the Rava bridges", "place": "kesmark", "by_day": 7, "notes": "The army's subsequent objective." }
+      { "id": "dravec", "name": "Dravec and the dam", "at": "dravec", "by_day": 1, "notes": "The supporting attack's day objective (25-30 km)." },
+      { "id": "mezovar", "name": "Mezovar and the Tisava crossing", "at": "mezovar", "by_day": 2, "notes": "The main thrust's first divisions' objective." },
+      { "id": "capital", "name": "The capital", "at": "capital", "by_day": 4, "notes": "The army's immediate objective, about 100 km in." },
+      { "id": "kesmark", "name": "Kesmark and the Rava bridges", "at": "kesmark", "by_day": 7, "notes": "The army's subsequent objective." }
     ],
     "axes": [
       { "id": "main", "name": "The north-eastern road", "main": true, "route": ["pact_assembly_east", "bx_road_ne", "mezovar", "capital"],
-        "first_echelon": ["pact_mrd_35", "pact_mrd_39"], "second_echelon": ["pact_td_9"], "objective": "capital" },
-      { "id": "rava", "name": "The Rava gorge", "main": false, "route": ["pact_assembly_rava", "bx_road_rava", "rava_dam", "dravec", "capital"],
-        "first_echelon": ["pact_mrd_57"], "second_echelon": [], "objective": "dravec" }
+        "first_echelon": ["pact_mrd_35", "pact_mrd_39"], "second_echelon": ["pact_td_9"], "objective": "capital", "sector": "tisava" },
+      { "id": "rava", "name": "The Rava gorge", "main": false, "route": ["pact_assembly_rava", "pact_rava_gorge", "rava_dam", "dravec", "capital"],
+        "first_echelon": ["pact_mrd_57"], "second_echelon": [], "objective": "dravec", "sector": "rava_reservoir" }
     ],
     "reserve": []
   }

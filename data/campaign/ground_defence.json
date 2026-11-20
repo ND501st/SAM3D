@@ -1,19 +1,13 @@
 {
   "defence_id": "pannonia",
   "name": "The 3rd Army's defence of Pannonia, by adversary",
-  "status": "F3.1 (20 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md sections 3.1, 5.2 and 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "status": "F3.1 (21 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md sections 3.1, 5.2 and 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
   "source": "our doctrine from the ČSLA's 1985 regulations as previewed (vr_poltikovic_1984, vr_krizek_1985) and the Pact's texts (reznichenko_1984, mt_stashek_losses, mt_novoselov_replacement), docs/research/fronts_2026-11/our_side.md; the deployments are SAM3D estimates on the country map (data/maps/pannonia.json) for the order of battle data/command/oob_pannonia.json",
   "confidence": "estimate",
-  "notes": "One enemy at a time: each deployment says which formations face that adversary's front and where. A deployment's stretch is from_km to to_km along the front's line in the nation's theatre (data/air_war/theatre_pannonia_nation.json, FrontDef::line), the same measure as F2.1's sectors, so it stays valid when F1 anchors the line. Units not listed stay in their garrisons. equipment_fill gives equipment to oob_pannonia.json's units that have none, as labelled estimates; the order of battle file itself is not changed (its readers stay as they are until F3.3).",
+  "notes": "One enemy at a time: each deployment says which formations face that adversary's front and where. A unit on the line holds a run of the front's sectors (the theatre's, F2.1: \"sectors\", in order along the line); a reserve or support unit stands at a place. Every place is the country map's (place_map, F1). Units not listed stay in their garrisons. The regiments that had no equipment in the order of battle have it there now (F3.1, labelled estimates in their notes).",
   "oob": "command/oob_pannonia.json",
-  "places_todo": [],
-  "equipment_fill": [
-    { "unit": "mrr_71", "equipment": { "t55": 31, "bmp1": 93, "d30": 18 }, "source": "estimate (SAM3D): a Pact-pattern motor rifle regiment of 1985 on older equipment, a tank battalion, three motor rifle battalions and an artillery battalion (of the order of fm100_2_3's view of the Soviet regiment)", "confidence": "estimate" },
-    { "unit": "mrr_72", "equipment": { "t55": 31, "btr60": 93, "d30": 18 }, "source": "estimate (SAM3D): as mrr_71, on wheeled carriers", "confidence": "estimate" },
-    { "unit": "mrr_91", "equipment": { "t55": 31, "bmp1": 93, "d30": 18 }, "source": "estimate (SAM3D): as mrr_71", "confidence": "estimate" },
-    { "unit": "mrr_92", "equipment": { "t55": 31, "btr60": 93, "d30": 18 }, "source": "estimate (SAM3D): as mrr_72", "confidence": "estimate" },
-    { "unit": "sw_brigade", "equipment": { "t55": 31, "btr60": 62, "d30": 18 }, "source": "estimate (SAM3D): the south-western group's brigade, a tank battalion, two motor rifle battalions and its artillery (sw_artillery)", "confidence": "estimate" }
-  ],
+  "place_map": "maps/pannonia.json",
+  "theatre": "air_war/theatre_pannonia_nation.json",
   "commanders": {
     "pool": {
       "ranks": { "army": "Lieutenant General", "division": "Major General", "brigade": "Colonel", "regiment": "Colonel", "battalion": "Major" },
@@ -75,11 +69,11 @@
       "source": "SAM3D estimate: the 7th Division on the Rava gorge and Dravec (battery 21 covers the dam's approach, the nation's theatre's battery_position), the 9th on the north-eastern road, the south-western brigade screening Hradec, the tank brigade the army's reserve by the capital",
       "confidence": "estimate",
       "units": [
-        { "unit": "mrd_7", "role": "first_echelon", "from_km": 75, "to_km": 120, "place": "dravec" },
-        { "unit": "mrd_9", "role": "first_echelon", "from_km": 150, "to_km": 195, "place": "mezovar" },
-        { "unit": "sw_brigade", "role": "flank_screen", "from_km": 0, "to_km": 40, "place": "hradec" },
-        { "unit": "tank_brigade", "role": "reserve", "place": "capital" },
-        { "unit": "army_artillery_bde", "role": "support", "place": "capital" }
+        { "unit": "mrd_7", "role": "first_echelon", "sectors": ["rava_reservoir"], "at": "dravec" },
+        { "unit": "mrd_9", "role": "first_echelon", "sectors": ["tisava"], "at": "mezovar" },
+        { "unit": "sw_brigade", "role": "flank_screen", "sectors": ["hradec"], "at": "hradec" },
+        { "unit": "tank_brigade", "role": "reserve", "at": "capital" },
+        { "unit": "army_artillery_bde", "role": "support", "at": "capital" }
       ]
     },
     {
@@ -88,11 +82,11 @@
       "source": "SAM3D estimate: the 9th Division on the western road (its peacetime western group), the south-western brigade south of the Lenta, the 7th Division in the second echelon by Novo Varosd (battery 21 covers the hub behind, the nation's theatre's battery_position), the tank brigade the army's reserve",
       "confidence": "estimate",
       "units": [
-        { "unit": "mrd_9", "role": "first_echelon", "from_km": 75, "to_km": 120, "place": "kisvar" },
-        { "unit": "sw_brigade", "role": "first_echelon", "from_km": 125, "to_km": 165, "place": "saldanj" },
-        { "unit": "mrd_7", "role": "second_echelon", "from_km": 90, "to_km": 135, "place": "novo_varosd" },
-        { "unit": "tank_brigade", "role": "reserve", "place": "novo_varosd" },
-        { "unit": "army_artillery_bde", "role": "support", "place": "novo_varosd" }
+        { "unit": "mrd_9", "role": "first_echelon", "sectors": ["western_crossings"], "at": "kisvar" },
+        { "unit": "sw_brigade", "role": "first_echelon", "sectors": ["upper_lenta"], "at": "saldanj" },
+        { "unit": "mrd_7", "role": "second_echelon", "sectors": ["western_crossings"], "at": "novo_varosd" },
+        { "unit": "tank_brigade", "role": "reserve", "at": "novo_varosd" },
+        { "unit": "army_artillery_bde", "role": "support", "at": "novo_varosd" }
       ]
     },
     {
@@ -101,9 +95,9 @@
       "source": "SAM3D estimate: the 7th Division's southern regiments hold the line in the valley (battery 21 covers the southern group's forward troops), its tank regiment behind at Kesmark",
       "confidence": "estimate",
       "units": [
-        { "unit": "mrr_71", "role": "first_echelon", "from_km": 65, "to_km": 105, "place": "ralje" },
-        { "unit": "mrr_72", "role": "first_echelon", "from_km": 15, "to_km": 55, "place": "hollos" },
-        { "unit": "tr_73", "role": "reserve", "place": "kesmark" }
+        { "unit": "mrr_71", "role": "first_echelon", "sectors": ["rava_crossing"], "at": "ralje" },
+        { "unit": "mrr_72", "role": "first_echelon", "sectors": ["hollos"], "at": "hollos" },
+        { "unit": "tr_73", "role": "reserve", "at": "kesmark" }
       ]
     },
     {
@@ -112,10 +106,10 @@
       "source": "SAM3D estimate: the south-western brigade and the 72nd Regiment (its peacetime south-western group; battery 21 covers it) on the border, the 9th Division behind, the tank brigade the army's reserve at Saldanj",
       "confidence": "estimate",
       "units": [
-        { "unit": "sw_brigade", "role": "first_echelon", "from_km": 55, "to_km": 95, "place": "saldanj" },
-        { "unit": "mrr_72", "role": "first_echelon", "from_km": 20, "to_km": 55, "place": "saldanj" },
-        { "unit": "mrd_9", "role": "second_echelon", "from_km": 40, "to_km": 95, "place": "saldanj" },
-        { "unit": "tank_brigade", "role": "reserve", "place": "saldanj" }
+        { "unit": "sw_brigade", "role": "first_echelon", "sectors": ["lenta_marshes"], "at": "saldanj" },
+        { "unit": "mrr_72", "role": "first_echelon", "sectors": ["border_forest"], "at": "saldanj" },
+        { "unit": "mrd_9", "role": "second_echelon", "sectors": ["lenta_marshes"], "at": "saldanj" },
+        { "unit": "tank_brigade", "role": "reserve", "at": "saldanj" }
       ]
     }
   ]

@@ -1,6 +1,6 @@
 {
   "ground_war_id": "ground_war",
-  "status": "F3.1 and F3.2 (20 Nov 2026): the sector's combat tables of docs/fronts/03_GROUND_WAR.md section 4, read by simcore/ground_war/ground_data.hpp and used by the pure functions of simcore/ground_war/combat.hpp. Nothing runs the ground war yet (F3.3); no campaign reads this file.",
+  "status": "F3.1 and F3.2 (21 Nov 2026): the sector's combat tables of docs/fronts/03_GROUND_WAR.md section 4, read by simcore/ground_war/ground_data.hpp and used by the pure functions of simcore/ground_war/combat.hpp. Nothing runs the ground war yet (F3.3); no campaign reads this file.",
   "source": "the norms of docs/research/FRONTS_RESEARCH_2026-11.md section 2 (fm_101_10_1_1976, hero_1972_oralfore, ciano_1988_qjm, fm_100_2_1_1984, mt_perventsev_balance) and SAM3D game values where no source gives a number, each labelled",
   "confidence": "medium",
   "notes": "A gameplay-level model with period norms, not a simulation of fire (docs/fronts/README.md decision 4). Strength is weighted equipment plus personnel; power is strength times posture, supply and cohesion; the ratio sets each side's daily loss and the attacker's advance. Percentages are as the manuals print them; the loader turns them into fractions.",

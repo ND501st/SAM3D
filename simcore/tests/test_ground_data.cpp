@@ -1,6 +1,7 @@
 // Track F, F3.1: the ground war's data (simcore/ground_war/ground_data.hpp; docs/fronts/03_GROUND_WAR.md section 11).
-// Every file loads strictly; every value is sourced or a labelled game value; every unit, place and equipment type the
-// files name resolves; bad data is refused with a message, never an exception.
+// Every file loads strictly; every value is sourced or a labelled game value; every unit, place (F1), sector (F2.1) and
+// equipment type the files name resolves; a place moved on the map moves what names it; bad data is refused with a
+// message, never an exception.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -41,33 +42,22 @@ const GroundTables& Tables() {
     return t;
 }
 
-std::shared_ptr<const CountryMap> Country() {
-    static std::shared_ptr<const CountryMap> map;
-    if (!map) {
+// The world the ground files name: the country map's places (F1) and the nation's theatre (F2.1's sectors).
+const GroundWorld& NationWorld() {
+    static GroundWorld w;
+    static bool loaded = false;
+    if (!loaded) {
         std::string e;
-        map = LoadCountryMap(kData, "maps/pannonia.json", &e);
-        if (!map) std::printf("    %s\n", e.c_str());
+        if (!LoadGroundWorld(kData, "maps/pannonia.json", "air_war/theatre_pannonia_nation.json", w, &e)) std::printf("    %s\n", e.c_str());
+        loaded = true;
     }
-    return map;
+    return w;
 }
 
-// The country map's places: settlements, landmarks, river crossings, and F1's sites once the map has them.
-std::set<std::string> MapPlaces() {
-    std::set<std::string> out;
-    const std::shared_ptr<const CountryMap> m = Country();
-    if (!m) return out;
-    for (const CountrySettlementDef& s : m->Def().settlements) out.insert(s.id);
-    for (const CountryLandmarkDef& l : m->Def().landmarks) out.insert(l.id);
-    for (const CountryCrossing& c : m->Crossings()) out.insert(c.id);
-    json::Value root;
-    if (json::Parse(ReadAll(kData + "/maps/pannonia.json"), root)) {
-        if (const json::Value* sites = root.Find("sites")) {
-            for (const json::Value& s : sites->items) {
-                if (const json::Value* id = s.Find("id")) out.insert(id->string);
-            }
-        }
-    }
-    return out;
+// A place's point on the map, to the bit.
+bool At(const GroundPlace& g, const MapPlaces& places) {
+    const MapPoint* p = places.Find(g.at);
+    return p != nullptr && g.pos.x == p->east_m && g.pos.y == p->north_m && g.pos.z == 0.0;
 }
 
 // docs/SOURCES.md's registered ids and their tiers (as tools/check_citations.py reads them).
@@ -191,8 +181,8 @@ SC_TEST("ground data (F3.1): the tables load strictly and hold the cited norms")
 }
 
 SC_TEST("ground data (F3.1): every enemy faction's ground forces load, by their own faction, with a plan") {
-    const std::set<std::string> map_places = MapPlaces();
-    SC_EXPECT(map_places.count("capital") == 1 && map_places.count("bx_road_ne") == 1);
+    const GroundWorld& world = NationWorld();
+    SC_EXPECT(world.places.Find("capital") != nullptr && world.FrontOf("warsaw_pact") != nullptr);
     for (const char* f : kFactions) {
         GroundForceDef g;
         std::string e;
@@ -203,16 +193,28 @@ SC_TEST("ground data (F3.1): every enemy faction's ground forces load, by their 
         const std::vector<std::string> unweighted = UnweightedTypes(Tables(), g.oob);
         for (const std::string& u : unweighted) std::printf("    %s: unweighted type %s\n", f, u.c_str());
         SC_EXPECT(unweighted.empty());
-        // Every place resolves: on the map, or in the file's places_todo (and then not on the map yet: F1 adds it).
-        for (const std::string& p : g.NamedPlaces()) {
-            const bool on_map = map_places.count(p) == 1;
-            const bool todo = g.PlaceTodo(p) != nullptr;
-            if (on_map == todo) std::printf("    %s: place %s %s\n", f, p.c_str(), on_map ? "on the map and in places_todo" : "unknown");
-            SC_EXPECT(on_map != todo);
+        // Every place stands on its place of the map, to the bit (F1); every unit with a garrison has its point.
+        const std::vector<GroundPlace> named = g.NamedPlaces();
+        SC_EXPECT(!named.empty());
+        for (const GroundPlace& p : named) {
+            if (!At(p, world.places)) std::printf("    %s: place %s not at its point\n", f, p.at.c_str());
+            SC_EXPECT(At(p, world.places));
         }
-        // Every place waiting for F1 is used.
-        const std::vector<std::string> named = g.NamedPlaces();
-        for (const PlaceTodoDef& p : g.places_todo) SC_EXPECT(std::find(named.begin(), named.end(), p.id) != named.end());
+        SC_EXPECT(g.garrisons.size() == g.oob.units.size());
+        for (std::size_t i = 0; i < g.oob.units.size(); ++i) SC_EXPECT(g.garrisons[i].at == g.oob.units[i].garrison);
+        // Each axis attacks in the sector of its faction's front that its crossing of the border lies in (the route's
+        // second place projected on the front's base line, F2.1's LineOfContact).
+        const airwar::FrontDef* front = world.FrontOf(f);
+        SC_EXPECT(front != nullptr);
+        if (front != nullptr) {
+            airwar::LineOfContact line;
+            line.Build(*front, 5000.0);
+            for (const AxisDef& a : g.plan.axes) {
+                const int at = line.SectorOf(a.route[1].pos);
+                if (at != a.sector_index) std::printf("    %s: axis %s crosses in sector %d, names %s\n", f, a.id.c_str(), at, a.sector.c_str());
+                SC_EXPECT(at == a.sector_index && front->sectors[static_cast<std::size_t>(a.sector_index)].id == a.sector);
+            }
+        }
         // Each force's top unit is a commanded formation; the plan's every unit is in its order of battle (the loader's check).
         SC_EXPECT(!g.commanders.authored.empty());
         SC_EXPECT(g.commanders.pool.ranks.count("division") == 1 || g.commanders.pool.ranks.count("brigade") == 1);
@@ -259,38 +261,45 @@ SC_TEST("ground data (F3.1): the owner's open decisions as proposed: who starts,
     SC_EXPECT(ours.doctrine.counterattack_stops_at_border && ours.doctrine.withdraw_needs_order && ours.doctrine.counterattack_by_senior);
 }
 
-SC_TEST("ground data (F3.1): our defence loads with its order of battle, the equipment filled and a deployment per adversary") {
+SC_TEST("ground data (F3.1): our defence loads with its order of battle, every combat unit equipped, a deployment per adversary") {
     GroundDefenceDef d;
     std::string e;
     SC_EXPECT(LoadGroundDefence(kData, d, &e));
     if (!e.empty()) std::printf("    %s\n", e.c_str());
-    // The fill is applied to the loaded order of battle, not to the file.
+    // The regiments and the brigade that had no equipment have it in the order of battle itself (F3.1's estimates), and
+    // every manoeuvre regiment and brigade of the 3rd Army has a weighted strength.
     const command::OobUnit* mrr = d.oob.Find("mrr_71");
-    SC_EXPECT(mrr != nullptr && mrr->EquipmentCount("t55") == 31);
-    command::OrderOfBattle file_oob;
-    SC_EXPECT(command::LoadOrderOfBattle(kData, d.oob_file, file_oob));
-    SC_EXPECT(file_oob.Find("mrr_71") != nullptr && file_oob.Find("mrr_71")->equipment.empty());
+    SC_EXPECT(mrr != nullptr && mrr->EquipmentCount("t55") == 31 && mrr->EquipmentCount("bmp1") == 93);
+    for (const char* id : {"mrr_71", "mrr_72", "tr_73", "mrr_91", "mrr_92", "tr_93", "tank_brigade", "sw_brigade"}) {
+        const command::OobUnit* u = d.oob.Find(id);
+        SC_EXPECT(u != nullptr && StrengthOfUnit(Tables(), *u) > 50.0);
+    }
+    SC_EXPECT(UnweightedTypes(Tables(), d.oob).size() > 0);  // support and air defence: counted by their people only
     // ČSLA 1985: a division 30-45 km wide in defence; the security zone 20-40 km.
     const FrontageDef* div = d.doctrine.Frontage("division", "defence");
     SC_EXPECT(div != nullptr && div->width_km.lo == 30.0 && div->width_km.hi == 45.0);
     SC_EXPECT(d.doctrine.has_security_zone && d.doctrine.security_zone_depth_km.lo == 20.0 && d.doctrine.security_zone_depth_km.hi == 40.0);
-    // Every deployment's stretch lies on its adversary's front line in the nation's theatre, and its places resolve.
-    airwar::TheatreDef nation;
-    SC_EXPECT(airwar::LoadTheatreFile(kData + "/air_war/theatre_pannonia_nation.json", nation, &e));
-    const std::set<std::string> map_places = MapPlaces();
+    // Every deployment's run of sectors is its adversary's front's (F2.1), and its places stand on the map (F1).
+    const GroundWorld& world = NationWorld();
     for (const char* f : kFactions) {
         const DeploymentDef* dep = d.For(f);
         SC_EXPECT(dep != nullptr);
         if (dep == nullptr) continue;
-        const airwar::FrontDef* front = nullptr;
-        for (const airwar::FrontDef& fr : nation.fronts) front = fr.faction == f ? &fr : front;
+        const airwar::FrontDef* front = world.FrontOf(f);
         SC_EXPECT(front != nullptr);
-        const double length_km = front != nullptr ? LineLengthKm(*front) : 0.0;
+        if (front == nullptr) continue;
+        const double length_km = LineLengthKm(*front);
         SC_EXPECT(dep->security_zone_km >= d.doctrine.security_zone_depth_km.lo - 10.0);
         double strength = 0.0;
         for (const DeployedUnitDef& u : dep->units) {
-            SC_EXPECT(u.to_km <= length_km + 1e-9);
-            SC_EXPECT(u.place.empty() || map_places.count(u.place) == 1);
+            const bool on_line = !u.sectors.empty();
+            if (on_line) {
+                SC_EXPECT(front->sectors[static_cast<std::size_t>(u.first_sector)].id == u.sectors.front());
+                SC_EXPECT(u.last_sector - u.first_sector + 1 == static_cast<int>(u.sectors.size()));
+                SC_EXPECT_NEAR(u.from_km * 1000.0, front->sectors[static_cast<std::size_t>(u.first_sector)].from_m, 1e-9);
+                SC_EXPECT(u.to_km <= length_km + 1.0);  // a last sector may end just past the line (front_line.hpp)
+            }
+            SC_EXPECT(u.place.at.empty() || At(u.place, world.places));
             strength += StrengthOfTree(Tables(), d.oob, u.unit);
         }
         std::printf("    against %s: %zu formations, strength %.0f, line %.0f km\n", f, dep->units.size(), strength, length_km);
@@ -330,12 +339,13 @@ SC_TEST("ground data (F3.1): bad data is refused with a message") {
     const std::string ours = ReadAll(kData + "/campaign/ground_defence.json");
     command::OrderOfBattle oob;
     SC_EXPECT(command::LoadOrderOfBattle(kData, "command/oob_pannonia.json", oob));
+    const GroundWorld& world = NationWorld();
     // The good files load.
     {
         GroundTables t;
         GroundForceDef g;
         GroundDefenceDef d;
-        SC_EXPECT(LoadGroundTablesJson(tables, t) && LoadGroundForceJson(pact, g) && LoadGroundDefenceJson(ours, oob, d));
+        SC_EXPECT(LoadGroundTablesJson(tables, t) && LoadGroundForceJson(pact, world, g) && LoadGroundDefenceJson(ours, oob, world, d));
     }
     struct Case {
         const char* what;
@@ -354,18 +364,31 @@ SC_TEST("ground data (F3.1): bad data is refused with a message") {
         {"a unit on two axes", 1, "\"first_echelon\": [\"pact_mrd_57\"]", "\"first_echelon\": [\"pact_mrd_35\"]"},
         {"a regiment beside its division", 1, "\"second_echelon\": [\"pact_td_9\"]", "\"second_echelon\": [\"pact_mrr_35_1\"]"},
         {"an unknown objective", 1, "\"objective\": \"dravec\"", "\"objective\": \"berlin\""},
-        {"a route of one place", 1, "\"route\": [\"pact_assembly_rava\", \"bx_road_rava\", \"rava_dam\", \"dravec\", \"capital\"]", "\"route\": [\"capital\"]"},
-        {"a place to add without anchor_todo", 1, "\"north_km\": 128, \"anchor_todo\": true", "\"north_km\": 128"},
+        {"a route of one place", 1, "\"route\": [\"pact_assembly_rava\", \"pact_rava_gorge\", \"rava_dam\", \"dravec\", \"capital\"]", "\"route\": [\"capital\"]"},
+        {"a place the map lacks on a route", 1, "\"pact_rava_gorge\", \"rava_dam\"", "\"bx_road_rava\", \"rava_dam\""},
+        {"a garrison the map lacks", 1, "\"garrison\": \"pact_assembly_rava\"", "\"garrison\": \"rava_upper_valley\""},
+        {"an objective the map lacks", 1, "\"at\": \"mezovar\"", "\"at\": \"mezovaros\""},
+        {"coordinates where a place belongs", 1, "\"at\": \"mezovar\"", "\"east_km\": 90, \"north_km\": 60"},
+        {"an axis in a sector the front lacks", 1, "\"sector\": \"tisava\"", "\"sector\": \"tisza\""},
+        {"an axis with no sector", 1, ", \"sector\": \"tisava\"", ""},
+        {"a force on another place map", 1, "\"place_map\": \"maps/pannonia.json\"", "\"place_map\": \"maps/kesmark_range.json\""},
+        {"a force on another theatre", 1, "\"theatre\": \"air_war/theatre_pannonia_nation.json\"", "\"theatre\": \"air_war/theatre_pannonia.json\""},
+        {"a force without its place map", 1, "\"place_map\": \"maps/pannonia.json\",", ""},
         {"a broken order of battle", 1, "\"parent\": \"pact_td_9\"", "\"parent\": \"pact_td_99\""},
         {"effectiveness lines the wrong way round", 1, "\"value\": 0.667", "\"value\": 0.4"},
         {"caps the wrong way round", 1, "\"broken\": { \"value\": 70", "\"broken\": { \"value\": 20"},
         {"a commander for an unknown unit", 1, "\"unit\": \"pact_td_9\"", "\"unit\": \"pact_td_99\""},
         {"raids without their block", 2, "\"raids\": {", "\"raidz\": {"},
-        {"a fill for a unit that has equipment", 3, "{ \"unit\": \"sw_brigade\"", "{ \"unit\": \"tr_73\""},
         {"a deployment of an unknown unit", 3, "{ \"unit\": \"mrd_7\", \"role\": \"first_echelon\"", "{ \"unit\": \"mrd_77\", \"role\": \"first_echelon\""},
-        {"a reserve holding a stretch", 3, "{ \"unit\": \"tr_73\", \"role\": \"reserve\", \"place\": \"kesmark\" }",
-         "{ \"unit\": \"tr_73\", \"role\": \"reserve\", \"from_km\": 0, \"to_km\": 10, \"place\": \"kesmark\" }"},
-        {"a stretch the wrong way round", 3, "\"from_km\": 75, \"to_km\": 120, \"place\": \"dravec\"", "\"from_km\": 120, \"to_km\": 75, \"place\": \"dravec\""},
+        {"a reserve holding a stretch", 3, "{ \"unit\": \"tr_73\", \"role\": \"reserve\", \"at\": \"kesmark\" }",
+         "{ \"unit\": \"tr_73\", \"role\": \"reserve\", \"sectors\": [\"hollos\"], \"at\": \"kesmark\" }"},
+        {"a reserve with no place", 3, "{ \"unit\": \"tr_73\", \"role\": \"reserve\", \"at\": \"kesmark\" }", "{ \"unit\": \"tr_73\", \"role\": \"reserve\" }"},
+        {"a unit on the line with no sector", 3, "\"sectors\": [\"rava_reservoir\"], \"at\": \"dravec\"", "\"at\": \"dravec\""},
+        {"sectors out of order", 3, "\"sectors\": [\"rava_reservoir\"], \"at\": \"dravec\"", "\"sectors\": [\"rava_reservoir\", \"northern_forest\"], \"at\": \"dravec\""},
+        {"a sector of another front", 3, "\"sectors\": [\"rava_reservoir\"], \"at\": \"dravec\"", "\"sectors\": [\"zlatno\"], \"at\": \"dravec\""},
+        {"a deployment place the map lacks", 3, "\"sectors\": [\"rava_reservoir\"], \"at\": \"dravec\"", "\"sectors\": [\"rava_reservoir\"], \"at\": \"dravecz\""},
+        {"an adversary with no front", 3, "\"adversary\": \"rebels\"", "\"adversary\": \"martians\""},
+        {"the old stretch in km", 3, "\"sectors\": [\"rava_reservoir\"], \"at\": \"dravec\"", "\"from_km\": 75, \"to_km\": 120, \"at\": \"dravec\""},
         {"a unit and its parent both deployed", 3, "{ \"unit\": \"tr_73\", \"role\": \"reserve\"", "{ \"unit\": \"mrd_7\", \"role\": \"reserve\""},
         {"an unknown role", 3, "\"role\": \"flank_screen\"", "\"role\": \"flank_guard\""},
         {"not JSON", 3, "{", "["},
@@ -381,10 +404,10 @@ SC_TEST("ground data (F3.1): bad data is refused with a message") {
             ok = LoadGroundTablesJson(bad, t, &e);
         } else if (c.file == 3) {
             GroundDefenceDef d;
-            ok = LoadGroundDefenceJson(bad, oob, d, &e);
+            ok = LoadGroundDefenceJson(bad, oob, world, d, &e);
         } else {
             GroundForceDef g;
-            ok = LoadGroundForceJson(bad, g, &e);
+            ok = LoadGroundForceJson(bad, world, g, &e);
         }
         if (ok) std::printf("    not refused: %s\n", c.what);
         SC_EXPECT(!ok && !e.empty());
@@ -393,4 +416,47 @@ SC_TEST("ground data (F3.1): bad data is refused with a message") {
     GroundForceDef g;
     std::string e;
     SC_EXPECT(!LoadGroundForce(kData, "martians", g, &e) && e.find("cannot open") != std::string::npos);
+    // A place the map lacks is named in the message.
+    e.clear();
+    GroundForceDef bad;
+    SC_EXPECT(!LoadGroundForceJson(With(pact, "\"at\": \"mezovar\"", "\"at\": \"mezovaros\""), world, bad, &e));
+    SC_EXPECT(e.find("mezovaros") != std::string::npos && e.find("maps/pannonia.json") != std::string::npos);
+}
+
+SC_TEST("ground data (F3.1): a place moved on the map moves what the ground files name there, and nothing else") {
+    std::string e;
+    MapPlaces places;
+    SC_EXPECT(LoadMapPlaces(kData, "maps/pannonia.json", places, &e));
+    GroundForceDef before;
+    GroundDefenceDef ours_before;
+    SC_EXPECT(LoadGroundForce(kData, "warsaw_pact", before, &e) && LoadGroundDefence(kData, ours_before, &e));
+    // The Pact's eastern assembly area 2 km east, Mezovar 2 km south.
+    SC_EXPECT(places.Move("pact_assembly_east", 2000.0, 0.0) && places.Move("mezovar", 0.0, -2000.0));
+    GroundForceDef after;
+    GroundDefenceDef ours_after;
+    SC_EXPECT(LoadGroundForce(kData, "warsaw_pact", after, &e, &places));
+    SC_EXPECT(LoadGroundDefence(kData, ours_after, &e, "campaign/ground_defence.json", &places));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    const std::vector<GroundPlace> a = before.NamedPlaces();
+    const std::vector<GroundPlace> b = after.NamedPlaces();
+    SC_EXPECT(a.size() == b.size());
+    int moved = 0;
+    for (std::size_t i = 0; i < a.size() && i < b.size(); ++i) {
+        const double de = b[i].pos.x - a[i].pos.x;
+        const double dn = b[i].pos.y - a[i].pos.y;
+        if (a[i].at == "pact_assembly_east") {
+            SC_EXPECT(de == 2000.0 && dn == 0.0);
+            ++moved;
+        } else if (a[i].at == "mezovar") {
+            SC_EXPECT(de == 0.0 && dn == -2000.0);
+            ++moved;
+        } else {
+            SC_EXPECT(de == 0.0 && dn == 0.0);
+        }
+    }
+    SC_EXPECT(moved == 2);
+    // Our 9th Division's command post against the Pact stands at Mezovar.
+    const DeployedUnitDef* d0 = ours_before.For("warsaw_pact")->Find("mrd_9");
+    const DeployedUnitDef* d1 = ours_after.For("warsaw_pact")->Find("mrd_9");
+    SC_EXPECT(d0 != nullptr && d1 != nullptr && d1->place.pos.y - d0->place.pos.y == -2000.0 && d1->place.pos.x == d0->place.pos.x);
 }
