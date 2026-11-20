@@ -52,6 +52,15 @@ S5 keeps. A package template's
 believed working defences are below it, and a phase's `apportion_mode0` is the shares an old save keeps (NATO's first
 phase, B11). The switch is the `"hot_phase"` group of `data/gameplay/air_war.json`.
 
+Each faction file also has an `"air_front"` block (track F, F2.3; `docs/fronts/02_AIR_FRONT.md` section 3 and its As
+built (F2.3), loaded into `FactionDef::air_front` by `AirWarLoader::LoadAirFrontBlock`, read by `air_front.hpp`'s
+`DecideAirFront`): how its air staff moves its air front by sector. `kind` (`advance`, `surge` or `border` with its
+`after_event`, an event of its politics), the gates `cover_at_most` and `mobile_destroyed_at_least`, `loss_line` and
+`loss_days` (1-3), `delay_h` `[lo, hi]`, `max_depth_km`, `min_reward`, `crisis` (`advance`, `helicopters` or `none`) and
+`crisis_h`, and a surge's `surge_h` and `surge_rest_h`; `source` and `confidence` required, an unknown key or a value
+outside its range refused. Without the block the faction's air front never moves. The switch and the game values are the
+`"air_front"` group of `data/gameplay/air_war.json`.
+
 Each faction file also has an `"opportunity_rules"` block (track B, B6; `docs/air_battle/06_OPPORTUNITY.md`, loaded into
 `FactionDef::opportunity` by `opportunity_def.hpp`): what its flights may do with what they find. Each rule is
 `{"value", "source", "confidence"}` (how readily a flight on another task acts is `hot_phase.opportunity`):

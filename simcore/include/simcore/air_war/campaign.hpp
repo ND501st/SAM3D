@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <functional>
 #include <map>
 #include <memory>
@@ -543,6 +544,21 @@ public:
     const SectorCoverBook& CoverBook() const { return cover_book_; }
     const SectorLossWindow& SectorLosses() const { return sector_losses_; }
     double SectorLossRate(int sector, int days) const { return sector_losses_.Rate(sector, SectorLossWindow::DayOf(now_h_), days); }
+    // The air front itself (F2.3; air_front.mode 1, else empty): each sector's, as the air staff last decided it, and its
+    // fixed-wing depth beyond the line of contact by sector (what the planner, routes and C2 read from F2.4).
+    const AirFrontState& AirFront() const { return air_front_; }
+    const std::vector<double>& AirFrontDepths() const { return air_front_depth_; }
+    // The fixed-wing and the helicopters' air front at a point: its sector's (0 and 0 at mode 0).
+    double AirFrontAt(const Vec3& p) const {
+        if (!air_front_on_ || air_front_.sectors.empty()) return 0.0;
+        const int s = front_line_.SectorOf(p);
+        return s >= 0 && static_cast<std::size_t>(s) < air_front_.sectors.size() ? air_front_.sectors[static_cast<std::size_t>(s)].depth_m : 0.0;
+    }
+    double HeloFrontAt(const Vec3& p) const {
+        if (!air_front_on_ || air_front_.sectors.empty()) return 0.0;
+        const int s = front_line_.SectorOf(p);
+        return s >= 0 && static_cast<std::size_t>(s) < air_front_.sectors.size() ? air_front_.sectors[static_cast<std::size_t>(s)].helo_depth_m : 0.0;
+    }
     const std::vector<JournalEntry>& Journal() const { return journal_; }
     const std::vector<Package>& Packages() const { return packages_; }
     const std::vector<ObjectState>& Truth() const { return truth_; }
@@ -741,7 +757,11 @@ private:
     SectorCoverBook cover_book_;
     std::vector<SectorCover> sector_cover_;  // as of the last plan
     SectorLossWindow sector_losses_;
-    std::vector<double> air_front_depth_;  // each sector's air front beyond its line of contact (0 until F2.3)
+    std::vector<double> air_front_depth_;  // each sector's fixed-wing air front beyond its line of contact (F2.3 moves it)
+    AirFrontState air_front_;              // each sector's air front and what its chief waits on (F2.3)
+    std::vector<AirFrontMove> air_front_moves_;  // the last decision's (kept so a cycle allocates nothing once sized)
+    std::vector<double> air_front_reward_;
+    std::vector<double> air_front_scratch_;
     command::EnemyCorridorIntel corridor_intel_;  // what its COMINT heard of our fighters' corridors (roadmap S1)
     std::map<std::pair<int, std::string>, bool> session_heard_;  // (day, false corridor) -> heard in a played session (S6 follow-ups)
     int corridor_days_fed_ = 0;
@@ -1046,7 +1066,10 @@ private:
                 false);
         }
         FeedCorridors();
-        if (air_front_on_) MeasureAirFront();
+        if (air_front_on_) {
+            MeasureAirFront();
+            DecideAirFrontNow();
+        }
         PlanContext pc;
         pc.data = &data_;
         pc.staff = &staff_;
@@ -1836,13 +1859,102 @@ private:
         sector_cover_.clear();
         sector_losses_ = SectorLossWindow();
         air_front_depth_.clear();
+        air_front_ = AirFrontState();
+        air_front_moves_.clear();
         if (!air_front_on_) return;
         cover_book_.Start(intel_, front_line_);
         sector_losses_.Reset(front_line_.SectorCount());
-        air_front_depth_.assign(front_line_.SectorCount(), 0.0);  // at the border until F2.3 moves it
+        air_front_depth_.assign(front_line_.SectorCount(), 0.0);  // at the border: the period's default (02_AIR_FRONT.md section 2)
+        air_front_.Reset(front_line_.SectorCount(), now_h_);
     }
-    // Each planning cycle: the believed cover over every sector's next band (what F2.3's decision will read).
+    // Each planning cycle: the believed cover over every sector's next band (what the decision reads).
     void MeasureAirFront() { cover_book_.Measure(intel_, front_line_, air_front_depth_, data_.tuning.Get("air_front.step_m"), sector_cover_); }
+    // And the air staff's decision on it (F2.3, air_front.hpp DecideAirFront): its air operations chief (the planner's
+    // post; the commander's while it is empty) on the picture, the measure, the losses and the politics; each move in the
+    // journal; the depths written for the planner (F2.4). No draw: the war's sequence is the same as at mode 0.
+    void DecideAirFrontNow() {
+        AirFrontRules rules;
+        AirFrontInputs in;
+        AirFrontChief who;
+        const Officer* chief = AirFrontDecisionInputs(rules, in, who);
+        DecideAirFront(data_.faction.air_front, rules, in, who, air_front_, air_front_moves_, &air_front_reward_, &air_front_scratch_);
+        air_front_.Depths(air_front_depth_);
+        const std::string title = chief != nullptr ? chief->Title() : std::string("air staff");
+        for (const AirFrontMove& m : air_front_moves_) Log("air_front", title, AirFrontLine(m), false);
+    }
+
+public:
+    // What the decision reads now (fronts_bench times it on these): the game values, the enemy's own picture, the last
+    // measure, its losses and politics, and its air operations chief (returned; null: the post empty, default traits).
+    const Officer* AirFrontDecisionInputs(AirFrontRules& rules, AirFrontInputs& in, AirFrontChief& who) const {
+        const TuningTable& tune = data_.tuning;
+        rules.step_m = tune.Get("air_front.step_m");
+        rules.min_baseline = tune.Get("air_front.min_baseline");
+        rules.min_sorties = tune.Get("air_front.min_sorties");
+        rules.helo_lag_h = tune.Get("air_front.helo_lag_h");
+        rules.trait_shift = tune.Get("air_front.trait_shift");
+        rules.reward_reach_m = tune.Get("air_front.reward_reach_m");
+        const Officer* chief = staff_.HolderPtr(StaffRole::Planner);
+        if (chief == nullptr) chief = staff_.HolderPtr(StaffRole::Commander);
+        who = AirFrontChief();
+        if (chief != nullptr) {
+            who.traits = chief->def.traits;
+            who.stress = chief->stress;
+        }
+        const AirFrontDef& def = data_.faction.air_front;
+        in = AirFrontInputs();
+        in.picture = &intel_;
+        in.line = &front_line_;
+        in.cover = &sector_cover_;
+        in.losses = &sector_losses_;
+        in.target_weight = data_.faction.politics.target_weight;
+        in.banned = &politics_.banned;
+        in.politics_max_depth_m = politics_.max_depth_m;
+        in.event_fired = !def.after_event.empty() && politics_.fired_events.count(def.after_event) > 0;
+        in.crisis = nullptr;  // its own ground front's crisis: F3.5's picture (a stub until then)
+        in.now_h = now_h_;
+        return chief;
+    }
+
+private:
+    // A move as the enemy's journal tells it (its side of the debrief, tools/air_war_view.py).
+    std::string AirFrontLine(const AirFrontMove& m) const {
+        char buf[256];
+        const std::string sector = front_line_.Sector(static_cast<std::size_t>(m.sector)).name;
+        const double km = 1000.0;
+        switch (m.what) {
+            case AirFrontMove::What::Seen:
+                std::snprintf(buf, sizeof buf, "our air defence there judged broken (cover %.0f%%, mobile air defence %.0f%% destroyed, worth %.1f): the air front to move forward in %.0f h",
+                              m.cover * 100.0, m.mobile_destroyed * 100.0, m.reward, m.after_h);
+                break;
+            case AirFrontMove::What::Advance:
+                std::snprintf(buf, sizeof buf, "the air front moves forward to %.0f km (cover %.0f%%, mobile air defence %.0f%% destroyed, worth %.1f)",
+                              m.depth_to_m / km, m.cover * 100.0, m.mobile_destroyed * 100.0, m.reward);
+                break;
+            case AirFrontMove::What::PullBack:
+                std::snprintf(buf, sizeof buf, "the air front pulled back to %.0f km: %.1f%% lost a low-level sortie over %d sorties",
+                              m.depth_to_m / km, m.loss_rate * 100.0, m.sorties);
+                break;
+            case AirFrontMove::What::SurgeEnd:
+                std::snprintf(buf, sizeof buf, "the surge is over: the air front back at the border from %.0f km", m.depth_from_m / km);
+                break;
+            case AirFrontMove::What::Politics:
+                std::snprintf(buf, sizeof buf, "the air front held to %.0f km by the politics", m.depth_to_m / km);
+                break;
+            case AirFrontMove::What::Helicopters:
+                std::snprintf(buf, sizeof buf, "the helicopters follow to %.0f km after a day of clean low-level work (%d sorties, %.1f%% lost)",
+                              m.helo_to_m / km, m.sorties, m.loss_rate * 100.0);
+                break;
+            case AirFrontMove::What::HeloBack:
+                std::snprintf(buf, sizeof buf, "the crisis over: the helicopters back to %.0f km", m.helo_to_m / km);
+                break;
+            case AirFrontMove::What::Crisis:
+                std::snprintf(buf, sizeof buf, "a crisis on the ground: the air front to %.0f km, the helicopters to %.0f km, whatever the losses",
+                              m.depth_to_m / km, m.helo_to_m / km);
+                break;
+        }
+        return sector + ": " + buf;
+    }
     // A raid's low-level sorties (once, when it is first resolved) and its aircraft lost to ground fire, in its target's sector.
     void NoteSectorLosses(const Package& p, const PackageOutcome& o, bool first) {
         if (p.profile != Profile::Low) return;

@@ -38,6 +38,8 @@
 // An "opportunity_mode" of 2 was saved before a played session's strike flight owed its load to a target beyond the
 // session's circle (opportunity_session.hpp, mode 3; 06_OPPORTUNITY.md section 3.4); it replays with mode 2. The played
 // raids' outcomes are in the save, so the mode only reaches sessions played after the load.
+// A save without "air_front_mode" was made before track F's F2.3 (the enemy's air front moved by sector by its air staff,
+// docs/fronts/02_AIR_FRONT.md) and replays with air_front.mode 0, as it was played.
 #pragma once
 
 #include <cmath>
@@ -503,6 +505,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "air_fight_mode", Num(c.Data().tuning.Get("air_fight.mode")));
     Put(root, "learning_mode", Num(c.Data().tuning.Get("learning.mode")));
     Put(root, "weather_mode", Num(c.Data().tuning.Get("weather.mode")));
+    Put(root, "air_front_mode", Num(c.Data().tuning.Get("air_front.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -610,6 +613,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double weather_mode = r.Number(root, "weather_mode", 0.0);
     // And the radio and intercept of roadmap S6: a save made before it has no key, and replays as it was played.
     const double radio_mode = r.Number(root, "radio_mode", 0.0);
+    // And the enemy's air front by sector (track F, F2.3): a save made before it has no key, and replays as it was played.
+    const double air_front_mode = r.Number(root, "air_front_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -687,6 +692,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["learning.mode"] = learning_mode;
     data.tuning.values["weather.mode"] = weather_mode;
     data.tuning.values["radio.mode"] = radio_mode;
+    data.tuning.values["air_front.mode"] = air_front_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;
