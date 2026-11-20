@@ -334,6 +334,10 @@ struct AirFrontState {
         out.resize(sectors.size());
         for (std::size_t i = 0; i < sectors.size(); ++i) out[i] = sectors[i].depth_m;
     }
+    void HeloDepths(std::vector<double>& out) const {
+        out.resize(sectors.size());
+        for (std::size_t i = 0; i < sectors.size(); ++i) out[i] = sectors[i].helo_depth_m;
+    }
 };
 
 // The game values the decision reads (TuningTable's "air_front.*").

@@ -602,11 +602,13 @@ public:
             }
             const bool low = fl.profile == Profile::Low || a->helicopter;
             const bool hide = a->helicopter && std::find(cl.tags.begin(), cl.tags.end(), std::string("hide")) != cl.tags.end();
-            // The height it follows the ground at: the route planner's low legs (from its let-down, gate or first turn
-            // point; its first point is at transit height), else its first point's.
+            // The height it follows the ground at: the route planner's low legs (from its let-down, else its gate or first
+            // turn point; its first point is at transit height, and inside the enemy's air front its gate too, F2.4),
+            // else its first point's.
             double follow_agl = cl.agl.empty() ? 0.0 : cl.agl[0];
+            const int letdown = RouteIndexOf(fl.route, "letdown");
             for (const RoutePoint& rp : fl.route) {
-                if (rp.tag == "letdown" || rp.tag == "gate" || rp.tag == "turn") {
+                if (letdown >= 0 ? rp.tag == "letdown" : (rp.tag == "gate" || rp.tag == "turn")) {
                     follow_agl = rp.agl_m;
                     break;
                 }

@@ -627,7 +627,7 @@ SC_TEST("air front (F2.3): a crisis on its own ground front (F3.5's stub): a ste
     SC_EXPECT(r.Helo(0) == 0.0 && r.moves.empty());
 }
 
-SC_TEST("air front (F2.3): every faction's block loads; a bad one fails; the campaign decides at mode 1 and changes no package") {
+SC_TEST("air front (F2.3): every faction's block loads; a bad one fails; the campaign decides at mode 1; no package changes while nothing moves") {
     const char* factions[] = {"nato", "warsaw_pact", "rebels", "neutral"};
     const AirFrontKind kinds[] = {AirFrontKind::Advance, AirFrontKind::Advance, AirFrontKind::Surge, AirFrontKind::Border};
     for (int i = 0; i < 4; ++i) {
@@ -659,8 +659,8 @@ SC_TEST("air front (F2.3): every faction's block loads; a bad one fails; the cam
     SC_EXPECT(!loads("\"kind\": \"border\", \"after_event\": \"deeper_raids\", ", "\"kind\": \"advance\", \"after_event\": \"deeper_raids\", "));
     SC_EXPECT(!loads("\"cover_at_most\": 0.20", "\"cover_at_most\": 0.20, \"gate\": 1"));
     // The campaign on the tuned district at mode 1: our SAMs stand far behind the Pact's line, so no sector is ever
-    // contested and its air front stays at the border; with the guard off the sectors may move, and either way the war's
-    // packages and the journal but for the air front's own entries are those of mode 0.
+    // contested and its air front stays at the border, and the war's packages and the journal but for the air front's own
+    // entries are those of mode 0. With the guard off the sectors move, and since F2.4 the planner reads them: the war parts.
     AirWarData d;
     std::string e;
     SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", d, &e));
@@ -688,16 +688,17 @@ SC_TEST("air front (F2.3): every faction's block loads; a bad one fails; the cam
     for (double x : b.AirFrontDepths()) SC_EXPECT(x == 0.0);
     SC_EXPECT(b.AirFrontDepths().size() == 5 && b.AirFront().sectors.size() == 5);
     SC_EXPECT(!a.AirFrontOn() && a.AirFrontDepths().empty() && a.AirFront().sectors.empty());
-    for (const AirCampaign* x : {&b, &c}) {
-        SC_EXPECT(JournalHashBut(*x, "air_front") == JournalHashBut(a, "air_front"));
-        SC_EXPECT(x->Packages().size() == a.Packages().size());
-        bool same = x->Packages().size() == a.Packages().size();
+    const auto same_war = [&](const AirCampaign& x) {
+        bool same = JournalHashBut(x, "air_front") == JournalHashBut(a, "air_front") && x.Packages().size() == a.Packages().size();
         for (std::size_t i = 0; same && i < a.Packages().size(); ++i) {
-            same = x->Packages()[i].target_key == a.Packages()[i].target_key && x->Packages()[i].tot_h == a.Packages()[i].tot_h &&
-                   x->Packages()[i].Aircraft() == a.Packages()[i].Aircraft();
+            same = x.Packages()[i].target_key == a.Packages()[i].target_key && x.Packages()[i].tot_h == a.Packages()[i].tot_h &&
+                   x.Packages()[i].Aircraft() == a.Packages()[i].Aircraft();
         }
-        SC_EXPECT(same);
-    }
+        return same;
+    };
+    SC_EXPECT(same_war(b));
+    std::printf("    with the guard off the war is %s (%zu packages, %zu at mode 0)\n", same_war(c) ? "the same" : "another", c.Packages().size(),
+                a.Packages().size());
     // At mode 1 a point's air front is its sector's.
     if (!c.AirFront().sectors.empty()) {
         const Vec3 p = c.FrontLine().PointAt(c.FrontLine().Sectors()[0].to_m * 0.5);

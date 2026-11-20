@@ -1194,6 +1194,7 @@ struct TuningTable {
             {"route.egress_m", 12000.0},
             {"route.loiter_radius_m", 9000.0},
             {"route.helo_holding_m", 15000.0},
+            {"route.helo_holding_floor_m", 15000.0},  // never nearer the line, whatever the air front (F2.4)
             {"route.helo_umbrella_m", 15000.0},
             {"route.helo_beyond_umbrella", 0.5},    // the worth of a Pact helicopter target beyond the umbrella
             {"route.helo_night_agl_m", 50.0},
