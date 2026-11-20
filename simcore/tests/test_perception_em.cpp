@@ -235,3 +235,36 @@ SC_TEST("perception em: a 1985 war loads no sensor dated after 1985 or without a
     SC_EXPECT(em::LoadEmLibraryFile(kData + "/em/pact_1985.json", lib).ok);
     for (const RwrSetDisplay& set : p.rwr_sets) SC_EXPECT(lib.Esm(set.em_esm) >= 0);
 }
+
+SC_TEST("perception em (S3): a fighter's radar is an emitter: its search sweeps past, its lock is steady and the target's receiver calls it") {
+    RwrBench b("nato_alr46_class_rwr", {"em/nato_1985.json", "em/generic.json"});
+    SC_EXPECT(b.ok);
+    if (!b.ok) return;
+    em::EmLibrary radars;
+    SC_EXPECT(em::LoadEmLibraryFile(kData + "/em/fighter_radars_1985.json", radars).ok);
+    SC_EXPECT(b.link->MergeLibrary(radars));
+    const Vec3 mig{0.0, 30000.0, 3000.0};  // ours, nose toward the target from the north
+    const auto tick = [&](double seconds) {
+        for (double t = 0.0; t < seconds; t += 0.1) {
+            b.link->SyncTarget("t", true, b.target, Vec3{0.0, 0.0, 0.0}, 5.0, false);
+            b.link->SyncTarget("mig", true, mig, Vec3{0.0, -230.0, 0.0}, 3.0, true);
+            b.link->PointFighterRadars();
+            b.link->Advance(0.1);
+        }
+    };
+    tick(0.5);
+    SC_EXPECT(b.link->SetFighterRadar("mig", "sapfir_23ml", 1, ""));
+    SC_EXPECT(b.link->FighterRadarEmitter("mig") != 0);
+    tick(6.0);
+    const EmSensorLink::RwrWarning searched = b.link->WarningOf("t");
+    SC_EXPECT(b.link->SetFighterRadar("mig", "sapfir_23ml", 2, "t"));
+    tick(4.0);
+    const EmSensorLink::RwrWarning locked = b.link->WarningOf("t");
+    std::printf("    searching: lock %d; locked: lock %d by %s\n", searched.lock ? 1 : 0, locked.lock ? 1 : 0, locked.lock_by.c_str());
+    SC_EXPECT(!searched.lock);
+    SC_EXPECT(locked.lock && locked.lock_by.find("fighter") != std::string::npos);
+    SC_EXPECT(b.link->SetFighterRadar("mig", "sapfir_23ml", 0, ""));
+    tick(2.0);
+    SC_EXPECT(!b.link->WarningOf("t").lock);
+    SC_EXPECT(!b.link->SetFighterRadar("nobody", "sapfir_23ml", 1, ""));
+}

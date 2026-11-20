@@ -6,6 +6,7 @@
 #include "SimFxSubsystem.h"
 
 #include "SimFxImpl.h"
+#include "SimAirShots.h"
 #include "SimFxShots.h"
 #include "SimFxSpriteLayer.h"
 #include "SimMunitionModels.h"
@@ -220,6 +221,7 @@ void USimFxSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void USimFxSubsystem::Deinitialize()
 {
 	Shots.Reset();
+	AirShots.Reset();
 	if (Host != nullptr && IsValid(Host))
 	{
 		Host->Destroy();
@@ -276,6 +278,13 @@ void USimFxSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	{
 		Shots = MakePimpl<FSimFxShots>(&InWorld, Folder, bNight);
 		UE_LOG(LogSimFxSubsystem, Log, TEXT("Effects photographer started: %s%s"), *Folder, bNight ? TEXT(" (night)") : TEXT(""));
+	}
+	// -SimAirShots=<folder>: the air battle photographed as simcore plays it (roadmap B13).
+	FString AirFolder;
+	if (FParse::Value(FCommandLine::Get(), TEXT("-SimAirShots="), AirFolder) && !AirFolder.IsEmpty())
+	{
+		AirShots = MakePimpl<FSimAirShots>(&InWorld, AirFolder);
+		UE_LOG(LogSimFxSubsystem, Log, TEXT("Air battle photographer started: %s"), *AirFolder);
 	}
 }
 
@@ -420,6 +429,10 @@ void USimFxSubsystem::Tick(float DeltaTime)
 	if (Shots.IsValid())
 	{
 		Shots->Tick(*this, DeltaTime);
+	}
+	if (AirShots.IsValid())
+	{
+		AirShots->Tick(*this, DeltaTime);
 	}
 }
 

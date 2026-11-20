@@ -38,10 +38,14 @@
 
   "enemy_listeners": {
     "notes": "section 6 of docs/air_battle/09: where the enemy's receivers stand, so that our nets are heard by link margin and not all at once. Positions are the theatre's east and north in km; heights and sensitivities are game values (no tier 1-4 source gives a 1985 set).",
-    "warsaw_pact": [ { "id": "pact_front_intercept_1", "east_km": 28.0, "north_km": -30.0, "height_m": 30.0, "gain_db": 6.0, "sensitivity_dbw": -140.0,
-                       "notes": "A front's radio and radar intercept regiment behind its line: VHF about 40 km, HF ground wave about 80 km (fm_100_2_1_1984 p. 15-2)." } ],
-    "nato": [ { "id": "nato_ground_intercept_1", "east_km": -40.0, "north_km": -35.0, "height_m": 30.0, "gain_db": 6.0, "sensitivity_dbw": -140.0,
-                "notes": "NATO's ground intercept of Pact voice in Europe was not found in the research (comms_emcon.md section 7): a game value." } ],
+    "warsaw_pact": [ { "id": "pact_front_intercept_1", "east_km": 30.0, "north_km": 160.0, "height_m": 30.0, "gain_db": 6.0, "sensitivity_dbw": -140.0,
+                       "notes": "A front's radio and radar intercept regiment behind its line (the north-eastern border, about 20 km back): VHF about 40 km, HF ground wave about 80 km (fm_100_2_1_1984 p. 15-2). Placed behind the line in roadmap S6 (B9 had it inside our country)." },
+                     { "id": "pact_il20_orbit", "east_km": 20.0, "north_km": 200.0, "height_m": 8000.0, "gain_db": 3.0, "sensitivity_dbw": -140.0,
+                       "notes": "The Il-20M's orbit behind the line (docs/air_war/11_SUPPORT.md; fm_100_2_1_1984 p. 15-2: intercept ranges greatly extended when airborne). Place, height and set game values." } ],
+    "nato": [ { "id": "nato_ground_intercept_1", "east_km": -200.0, "north_km": 40.0, "height_m": 30.0, "gain_db": 6.0, "sensitivity_dbw": -140.0,
+                "notes": "NATO's ground intercept of Pact voice in Europe was not found in the research (comms_emcon.md section 7): a game value, behind the western border (placed there in roadmap S6)." },
+              { "id": "nato_rc135_orbit", "east_km": -240.0, "north_km": 20.0, "height_m": 9000.0, "gain_db": 3.0, "sensitivity_dbw": -140.0,
+                "notes": "The RC-135's orbit behind the line (docs/air_war/11_SUPPORT.md). Place, height and set game values." } ],
     "rebels":  [ { "id": "rebel_listener_1", "east_km": 12.0, "north_km": -4.0, "height_m": 10.0, "gain_db": 2.0, "sensitivity_dbw": -135.0,
                    "notes": "A few posts with native speakers near their home ground (comms-25): game values." } ],
     "neutral": []

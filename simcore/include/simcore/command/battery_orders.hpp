@@ -319,7 +319,7 @@ public:
                                c.mean == "messenger" ? "a runner to " + v.callsign : tr.words});
             }
         }
-        std::sort(out.begin(), out.end(), [](const OrderEvent& a, const OrderEvent& b) { return a.t < b.t; });
+        std::stable_sort(out.begin(), out.end(), [](const OrderEvent& a, const OrderEvent& b) { return a.t < b.t; });
         return out;
     }
 

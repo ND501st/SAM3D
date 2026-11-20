@@ -106,6 +106,13 @@ void ASimScenarioDirector::BeginPlay()
 		ScenarioFile = CommandLineScenario;
 		CabinFile.Reset();
 	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("-SimAirShots="), CommandLineScenario) && !CommandLineScenario.IsEmpty())
+	{
+		// The air battle's photographer (roadmap B13): its own air battle when no scenario is named.
+		ScenarioFile = TEXT("scenarios/air_battle_shots.json");
+		CabinFile.Reset();
+		UE_LOG(LogSAM3D, Log, TEXT("The air battle's photographer: %s"), *ScenarioFile);
+	}
 	else if (FParse::Value(FCommandLine::Get(), TEXT("-SimFxShots="), CommandLineScenario) ||
 		FParse::Value(FCommandLine::Get(), TEXT("-SimFxShotsNight="), CommandLineScenario))
 	{
@@ -190,7 +197,6 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 		}
 		return;
 	}
-	FindLevelSun();
 	const FString Cabin = CabinFile.IsEmpty() ? Sim->GetDefaultCabinFile() : (CabinFile == TEXT("none") ? FString() : CabinFile);
 	if (!Cabin.IsEmpty() && !Sim->LoadCabin(Cabin, Error) && GEngine != nullptr)
 	{
@@ -205,6 +211,8 @@ void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 			Sim->SetGeoreference(Geo);
 		}
 	}
+	// After the georeference moves: CesiumSunSky turns its own sun by its clock when the globe moves under it.
+	FindLevelSun();
 	// ?SimTutorial=tutorials/<file>.json (the missions menu's tutorial) or -SimTutorial=: the guide over the scenario.
 	const FString Guide = Sim->GetLaunchOption(TEXT("SimTutorial"));
 	if (!Guide.IsEmpty())
@@ -296,25 +304,69 @@ void ASimScenarioDirector::FindLevelSun()
 	{
 		return;  // the sky actor turns its own sun by the scenario's clock
 	}
-	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	// Any actor's atmosphere sun: a DirectionalLight actor's, or a component of another (OsaPractice's is CesiumSunSky's,
+	// which no ADirectionalLight iterator finds: its sun stood at Cesium's own clock and 111000 lux).
+	for (TActorIterator<AActor> It(World); It; ++It)
 	{
-		UDirectionalLightComponent* Light = It->GetComponent();
-		if (Light == nullptr || !Light->IsUsedAsAtmosphereSunLight())
+		TInlineComponentArray<UDirectionalLightComponent*> Lights(*It);
+		for (UDirectionalLightComponent* Light : Lights)
 		{
-			continue;
-		}
-		if (Light->GetMobility() != EComponentMobility::Movable)
-		{
-			UE_LOG(LogSAM3D, Warning, TEXT("Sky: the level's sun %s is not Movable: the scenario's time of day changes the simulation's light but not this level's picture (make it Movable to follow the sun)"),
-				*It->GetName());
+			if (Light == nullptr || !Light->IsUsedAsAtmosphereSunLight() || !Light->IsRegistered())
+			{
+				continue;
+			}
+			if (Light->GetMobility() != EComponentMobility::Movable)
+			{
+				Light->SetMobility(EComponentMobility::Movable);  // no static lighting in the project: nothing baked is lost
+			}
+			const float OwnLux = Light->Intensity;
+			if (LevelSunLux > 0.0f)
+			{
+				Light->SetIntensity(LevelSunLux);
+			}
+			LevelSun = Light;
+			NextLevelSunAt = 0.0f;
+			UE_LOG(LogSAM3D, Log, TEXT("Sky: the level's sun %s.%s follows the scenario's sun, at %.0f lux (the level's own %.0f)"),
+				*It->GetName(), *Light->GetName(), Light->Intensity, OwnLux);
+			UpdateLevelSun();
 			return;
 		}
-		LevelSun = Light;
-		NextLevelSunAt = 0.0f;
-		UE_LOG(LogSAM3D, Log, TEXT("Sky: the level's sun %s follows the scenario's sun"), *It->GetName());
-		UpdateLevelSun();
-		return;
 	}
+}
+
+void ASimScenarioDirector::ForgetScenarioActors()
+{
+	int32 Gone = 0;
+	for (TPair<int32, TObjectPtr<ASimEntityActor>>& It : SpawnedActors)
+	{
+		if (It.Value != nullptr)
+		{
+			It.Value->Destroy();
+			++Gone;
+		}
+	}
+	SpawnedActors.Empty();
+	for (TObjectPtr<ASimPositionWork>& Work : PositionWorks)
+	{
+		if (Work != nullptr)
+		{
+			Work->Destroy();
+		}
+	}
+	PositionWorks.Empty();
+	for (TObjectPtr<AActor>& Site : NeighbourSites)
+	{
+		if (Site != nullptr)
+		{
+			Site->Destroy();
+		}
+	}
+	NeighbourSites.Empty();
+	NeighbourSiteAt.Empty();
+	NeighbourSiteGrounded.Empty();
+	bNeighboursSpawned = false;
+	bNeighbourFallbackPlaced = false;
+	UE_LOG(LogSAM3D, Log, TEXT("A new scenario in place of the last: its %d entity actors, works and neighbour sites removed"), Gone);
 }
 
 void ASimScenarioDirector::UpdateLevelSun()
@@ -344,6 +396,15 @@ void ASimScenarioDirector::Tick(float DeltaSeconds)
 	if (Sim == nullptr)
 	{
 		return;
+	}
+	const void* RunnerNow = Sim->GetFxRunner();
+	if (RunnerNow != SeenRunner)
+	{
+		if (SeenRunner != nullptr)
+		{
+			ForgetScenarioActors();
+		}
+		SeenRunner = RunnerNow;
 	}
 	if (LevelSun.IsValid() && TimeSinceBeginPlay >= NextLevelSunAt)
 	{

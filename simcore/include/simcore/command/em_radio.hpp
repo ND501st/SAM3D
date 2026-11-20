@@ -28,14 +28,30 @@
 namespace simcore {
 namespace command {
 
-// The country's ground as the EM layer's terrain (theatre ENU, the chain's places' frame).
+// The country's ground as the EM layer's terrain (theatre ENU, the chain's places' frame), with what stands on it as
+// ITU-R P.1812 carries it (roadmap S9, simcore/clutter.hpp): a clutter class per `cell_m` cell from the country's land
+// cover (CountryMap::BakeClutter), its representative height (data/gameplay/clutter.json, LoadClutterHeights) on the
+// profile, so a forest or a town between two posts lies on their path as a ridge would. Without heights (the default),
+// the bare ground.
 class CountryGround final : public Terrain {
 public:
-    explicit CountryGround(std::shared_ptr<const CountryMap> map) : map_(std::move(map)) {}
+    explicit CountryGround(std::shared_ptr<const CountryMap> map, const ClutterHeights& heights = ClutterHeights(), double cell_m = 250.0)
+        : map_(std::move(map)), heights_(heights) {
+        if (map_ != nullptr && heights_.Tallest() > 0.0) clutter_ = map_->BakeClutter(cell_m, heights_.dense_share);
+        for (std::size_t k = 0; k < height_of_.size(); ++k) height_of_[k] = heights_.HeightOf(static_cast<ClutterClass>(k));
+    }
     double HeightAt(double east_m, double north_m) const override { return map_ != nullptr ? map_->GroundHeight(east_m, north_m) : 0.0; }
+    double ObstacleHeightAt(double east_m, double north_m) const override {
+        return clutter_.cols > 0 ? height_of_[static_cast<std::size_t>(clutter_.ClassAt(east_m, north_m))] : 0.0;
+    }
+    double ObstacleTallestM() const override { return heights_.Tallest(); }
+    const ClutterRaster& Clutter() const { return clutter_; }
 
 private:
     std::shared_ptr<const CountryMap> map_;
+    ClutterHeights heights_;
+    ClutterRaster clutter_;
+    std::array<double, static_cast<std::size_t>(ClutterClass::Count)> height_of_{};
 };
 
 // A transmitter that drowns the net in noise: a ground or airborne communications jammer, from and until campaign hours.

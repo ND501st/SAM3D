@@ -430,7 +430,7 @@ inline void AppendJsonString(std::string& out, const std::string& s) {
             case '\n': out += "\\n"; break;
             default:
                 if (static_cast<unsigned char>(ch) < 0x20) {
-                    char buf[8];
+                    char buf[64];
                     std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(static_cast<unsigned char>(ch)));
                     out += buf;
                 } else {

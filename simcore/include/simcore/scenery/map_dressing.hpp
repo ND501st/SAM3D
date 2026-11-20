@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -47,6 +48,23 @@ inline const char* CoverName(Cover c) {
     case Cover::Count: break;
     }
     return "?";
+}
+
+// Which of the ground material's detail textures a cover is drawn with (roadmap S9, Unreal's M_SimMapGround, the
+// textures of tools/map_textures.py): 0 a field's tilled soil and crop rows, 1 grass and leaf litter (woods, marsh, the
+// water's edge under the river's ribbon), 2 hard ground (towns' yards, military ground, the road's verge under its ribbon).
+inline int CoverDetail(Cover c) {
+    switch (c) {
+    case Cover::Field: return 0;
+    case Cover::Forest:
+    case Cover::Marsh:
+    case Cover::Water: return 1;
+    case Cover::Town:
+    case Cover::Military:
+    case Cover::Road: return 2;
+    case Cover::Count: break;
+    }
+    return 0;
 }
 
 using CoverColour = std::array<float, 3>;  // linear RGB
@@ -300,6 +318,7 @@ struct CoverGrid {
     }
     double CentreEast(int c) const { return west_m + cell_m * (c + 0.5); }
     double CentreNorth(int r) const { return south_m + cell_m * (r + 0.5); }
+    Cover CoverOf(int c, int r) const { return static_cast<Cover>(cover[Index(c, r)]); }
 };
 
 // The land cover over the detail areas (first, in the map's order) and the map proper.
@@ -324,11 +343,14 @@ struct CoverRaster {
     }
     // The ground's colour there (linear RGB): its cover's, a field's its crop's.
     CoverColour ColourAt(const DressingRules& r, double e, double n) const {
-        const Cover c = At(e, n);
-        if (c == Cover::Field) {
-            const int crop = CropAt(e, n);
-            if (crop >= 0 && static_cast<std::size_t>(crop) < r.crops.size()) return r.crops[static_cast<std::size_t>(crop)].colour;
-        }
+        const CoverGrid* g = GridAt(e, n);
+        if (g == nullptr) return r.cover_colours[static_cast<std::size_t>(Cover::Field)];
+        const std::size_t i = g->IndexAt(e, n);
+        return ColourOf(r, static_cast<Cover>(g->cover[i]), g->crop[i]);
+    }
+    // A cell's colour from its cover and crop (a texture of the cover drawn cell by cell: Unreal's ground material).
+    static CoverColour ColourOf(const DressingRules& r, Cover c, int crop) {
+        if (c == Cover::Field && crop >= 0 && static_cast<std::size_t>(crop) < r.crops.size()) return r.crops[static_cast<std::size_t>(crop)].colour;
         return r.cover_colours[static_cast<std::size_t>(c)];
     }
 };
@@ -385,6 +407,45 @@ inline void StampSegment(CoverGrid& g, double ae, double an, double be, double b
     }
 }
 
+// Every cell of `g` the segment a-b passes through, however little of it (roadmap S9): a line drawn so is unbroken from
+// cell to cell, sides touching, at least one cell wide, whichever way it runs across the grid.
+inline void StampCrossed(CoverGrid& g, double ae, double an, double be, double bn, Cover value) {
+    const double x0 = (ae - g.west_m) / g.cell_m, y0 = (an - g.south_m) / g.cell_m;
+    const double x1 = (be - g.west_m) / g.cell_m, y1 = (bn - g.south_m) / g.cell_m;
+    const auto mark = [&g, value](long long c, long long r) {
+        if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) return;
+        g.cover[g.Index(static_cast<int>(c), static_cast<int>(r))] = static_cast<std::uint8_t>(value);
+    };
+    long long c = static_cast<long long>(std::floor(x0)), r = static_cast<long long>(std::floor(y0));
+    const long long c_end = static_cast<long long>(std::floor(x1)), r_end = static_cast<long long>(std::floor(y1));
+    const double dx = x1 - x0, dy = y1 - y0;
+    const long long sc = dx > 0.0 ? 1 : -1, sr = dy > 0.0 ? 1 : -1;
+    const double inf = 1e300;
+    const double t_dx = dx != 0.0 ? std::fabs(1.0 / dx) : inf, t_dy = dy != 0.0 ? std::fabs(1.0 / dy) : inf;
+    double t_x = dx != 0.0 ? (dx > 0.0 ? (std::floor(x0) + 1.0 - x0) : (x0 - std::floor(x0))) * t_dx : inf;
+    double t_y = dy != 0.0 ? (dy > 0.0 ? (std::floor(y0) + 1.0 - y0) : (y0 - std::floor(y0))) * t_dy : inf;
+    mark(c, r);
+    const long long steps = std::llabs(c_end - c) + std::llabs(r_end - r);
+    for (long long k = 0; k < steps; ++k) {
+        if (std::fabs(t_x - t_y) < 1e-12) {  // through a corner: both cells beside it, so the line's cells share sides
+            mark(c + sc, r);
+            mark(c, r + sr);
+            c += sc;
+            r += sr;
+            t_x += t_dx;
+            t_y += t_dy;
+            ++k;
+        } else if (t_x < t_y) {
+            c += sc;
+            t_x += t_dx;
+        } else {
+            r += sr;
+            t_y += t_dy;
+        }
+        mark(c, r);
+    }
+}
+
 inline bool IsBuilding(MapPart p) { return p == MapPart::House || p == MapPart::Flats || p == MapPart::Farm || p == MapPart::Industrial; }
 
 inline bool IsMilitaryGround(MapPart p) {
@@ -438,9 +499,13 @@ inline CoverRaster BakeCover(const MapData& map, const DressingRules& rules) {
         for (const bool water : {false, true}) {
             for (const MapStrip& s : map.Layout().strips) {
                 if ((s.surface == MapSurface::Water) != water) continue;
+                // Every cell within half the line's width (half a cell at least) of it, and every cell its middle passes
+                // through, so a line narrower than a cell, running across the grid, is still a cell wide and unbroken.
                 const double half = std::max(0.5 * s.width_m, 0.5 * cell);
                 for (std::size_t i = 1; i < s.points.size(); ++i) {
-                    StampSegment(g, s.points[i - 1].x, s.points[i - 1].y, s.points[i].x, s.points[i].y, half, water ? Cover::Water : Cover::Road);
+                    const Cover value = water ? Cover::Water : Cover::Road;
+                    StampSegment(g, s.points[i - 1].x, s.points[i - 1].y, s.points[i].x, s.points[i].y, half, value);
+                    StampCrossed(g, s.points[i - 1].x, s.points[i - 1].y, s.points[i].x, s.points[i].y, value);
                 }
             }
         }

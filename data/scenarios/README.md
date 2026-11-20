@@ -140,7 +140,13 @@ target of ours may have `"iff_code"` (fixed; -1 its transponder off) or `"iff_ta
 code, and may miss a change). Each notice goes down the chain from `origin` to `notice_post` with each post's work, then
 on the regiment's net into the post's journal (or, without a post, as the battery commander's line); the crew keeps what
 it read from the words. Regiments need an `"air_fight"` with our controller `gci` (its fighters may then be empty): the
-duty scrambles pairs on our GCI's picture, guided on that picture.
+duty scrambles pairs on our GCI's picture, guided on that picture. Since S1: `"front": { "east_m", "north_m",
+"enemy_bearing_deg" }` is a point of the front line and the bearing across it to the enemy (each regiment puts
+`alert_pairs` on airborne alert behind it on the raid warning, and recalls a pair past its pursuit limit beyond it);
+`"enemy_allies": true` puts some of the enemy's aircraft on our Kremniy filters by the allies' own schedule (the Pact's
+false friend); without a `"plan"` the scenario's regiment's task (`"task"`) gives it. The regiments' loss and claim
+reports come down the same chain, and the Osa's interrogator code is its `iff.code` switch, set by the senior operator
+on the commander's order when the table's code changes.
 
 **The Osa and the PU-12M in one battery (a battery link, `simcore/battery_link.hpp`, docs/PU12_DEVELOPMENT.md P8).** A
 link file names two scenarios that share a battery and a sky, `{ "link_id", "name", "description", "osa", "post",

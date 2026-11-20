@@ -234,7 +234,7 @@ struct Logged {
 };
 
 inline std::string BearingText(double deg) {
-    char buf[16];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%03d", static_cast<int>(std::lround(deg)) % 360);
     return buf;
 }
@@ -265,10 +265,16 @@ public:
         for (; cursor_ < heard.size(); ++cursor_) {
             const airwar::Heard& h = heard[cursor_];
             if (h.call < 0 || static_cast<std::size_t>(h.call) >= radio.Calls().size()) continue;
-            fresh.push_back(WriteUp(radio, h, radio.Calls()[static_cast<std::size_t>(h.call)]));
+            fresh.push_back(WriteUp(radio.Def(), h, radio.Calls()[static_cast<std::size_t>(h.call)]));
             log_.push_back(fresh.back());
         }
         return fresh;
+    }
+    // Write up one call heard outside a session's radio (roadmap S6: an abstract package's call, heard in closed form by
+    // air_war/abstract_radio.hpp). `def` gives the tuning, the band and where the posts stand (its `posts`). Kept in the log.
+    Logged WriteUpCall(const AirRadioDef& def, const airwar::Heard& h, const airwar::Call& c) {
+        log_.push_back(WriteUp(def, h, c));
+        return log_.back();
     }
 
     const std::vector<Logged>& Log() const { return log_; }
@@ -280,10 +286,15 @@ public:
 
     // The air section's day summary for [from_s, to_s) of the session: what was heard, in numbers (section 5.2).
     std::string DailySummary(double from_s, double to_s, double name_at, const airwar::AirRadio& radio) const {
+        return DailySummary(from_s, to_s, name_at, radio.Def(), radio.HeardLog());
+    }
+    // The same from the posts' hearing as a list (roadmap S6: the campaign's abstract calls); `def.posts` places the posts.
+    std::string DailySummary(double from_s, double to_s, double name_at, const AirRadioDef& def, const std::vector<airwar::Heard>& heard) const {
         std::map<std::string, std::pair<int, double>> units;  // label -> calls, best continuity
         std::map<int, int> per_hour;
         int traffic = 0, read = 0, wrong = 0;
         std::set<std::string> codes, signs;
+        std::vector<std::string> named;  // the squares the read calls named, as read from the forms, with the hour
         for (const Logged& l : log_) {
             if (l.heard_s < from_s || l.heard_s >= to_s) continue;
             ++per_hour[static_cast<int>(std::floor((clock_start_s_ + l.heard_s) / 3600.0)) % 24];
@@ -297,6 +308,7 @@ public:
             u.first += 1;
             u.second = std::max(u.second, l.continuity);
             if (!l.callsign.empty()) signs.insert(l.callsign);
+            if (l.has_place && !l.codeword && named.size() < 8) named.push_back(airwar::GridOf(l.place) + " at " + Hhmm(clock_start_s_ + l.heard_s));
             if (l.codeword) codes.insert(l.text);
         }
         char buf[200];
@@ -319,8 +331,13 @@ public:
             s += buf;
         }
         if (signs.size() > units.size()) s += "  More call signs than units: the signs were changed.\n";
+        if (!named.empty()) {
+            s += "  Squares named:";
+            for (std::size_t i = 0; i < named.size(); ++i) s += (i == 0 ? " " : ", ") + named[i];
+            s += ".\n";
+        }
         for (const std::string& c : codes) s += "  " + c + "\n";
-        const std::string fixes = DfFixes(radio, from_s, to_s);
+        const std::string fixes = DfFixes(def, heard, from_s, to_s);
         if (!fixes.empty()) s += fixes;
         if (wrong > 0) s += "  (Some forms were corrected by telephone or are doubtful.)\n";
         return s;
@@ -348,13 +365,13 @@ private:
     double Of(const Cont& c) const { return 1.0 - std::exp(-c.heard_h / Tau()); }
 
     double Draw(const airwar::Call& c, const std::string& post, std::uint64_t salt) const {
-        return rng_.Uniform(em::Stream::AirRadio, static_cast<std::uint64_t>(c.id) + 1, std::hash<std::string>()(post), salt, 0xD35C);
+        return rng_.Uniform(em::Stream::AirRadio, static_cast<std::uint64_t>(c.id) + 1, airwar::RadioKeyOf(post, stable_keys_), salt, 0xD35C);
     }
     static std::string Hhmm(double s) { return airwar::ClockOf(s); }
 
-    Logged WriteUp(const airwar::AirRadio& radio, const airwar::Heard& h, const airwar::Call& c) {
-        const AirRadioDef& def = radio.Def();
+    Logged WriteUp(const AirRadioDef& def, const airwar::Heard& h, const airwar::Call& c) {
         tau_h_ = def.Tune("radio.continuity_tau_h");
+        stable_keys_ = airwar::StableRadioKeys(def);
         Logged l;
         l.call = c.id;
         l.post = h.post;
@@ -469,10 +486,9 @@ private:
         return text;
     }
 
-    std::string DfFixes(const airwar::AirRadio& radio, double from_s, double to_s) const {
-        const AirRadioDef& def = radio.Def();
+    std::string DfFixes(const AirRadioDef& def, const std::vector<airwar::Heard>& heard, double from_s, double to_s) const {
         std::map<int, std::vector<const airwar::Heard*>> by_call;
-        for (const airwar::Heard& h : radio.HeardLog()) {
+        for (const airwar::Heard& h : heard) {
             if (h.start_s >= from_s && h.start_s < to_s) by_call[h.call].push_back(&h);
         }
         int fixes = 0;
@@ -504,6 +520,7 @@ private:
     em::Random rng_{1};
     double clock_start_s_ = 0.0;
     double tau_h_ = 3.6;
+    bool stable_keys_ = true;  // the radio's draws keyed by em::StringKey (radio.mode 2), else std::hash (WriteUp sets it)
     std::size_t cursor_ = 0;
     std::vector<Logged> log_;
     std::vector<Vec3> watch_;

@@ -38,7 +38,10 @@ The waves come from `data/gameplay/test_waves.json`, made by `simcore/air_war/te
 
 - **Timing.** The first wave comes at 30 s, then one every 1.5 to 3 minutes. A wave holds off while 60 of the waves'
   aircraft are already up.
-- **Flights.** Each wave has 3 to 6 flights, and about a third of them are ours.
+- **Flights.** Each wave has 3 to 6 flights, and about a third of them are ours. Since S1 they are live in the air fight
+  (the scenario's `"air_fight"` and `"own_air"`): our CAP and interceptors fight under our GCI at the capital's P-19
+  site, the enemy's escorts fight back and its others defend themselves; ours fly on the day's Kremniy codes (their
+  pilots may miss a change), so our interrogators answer them only on the code the battery holds.
 - **Enemy types.** The types are dealt from a shuffled deck of every type of all four adversaries
   (`data/air_war/faction_*.json`), so every type comes round, whatever its year.
 - **Enemy routes.** Each comes in from its front's side and flies its role:

@@ -347,7 +347,8 @@ by ±0.15 (`factions_cases.md` §1).
 - `doctrine` is a list with one entry per faction (`nato`, `warsaw_pact`, `neutral`, `rebels`, `ours`); `strikers_answer` is
   `{jettison, press_on, abort}`.
 - Each missile and gun names its game values in `game_values` (keys of the entry that are SAM3D's, not the source's); the loader
-  refuses a name that is not a key. The `munition` key is empty until B13 gives the air-to-air shapes in `munitions.json`.
+  refuses a name that is not a key. The `munition` key names the missile's shape in `data/scenery/munitions.json` (B13, 19 Nov
+  2026: all 18, each with its dimensions, fins, colours and motor from `parsch_dusrm`, `airwar_ru` and `mis`).
 - `loads_by_year` is a list of eras, `{"from": year, "aams": [[id, count], ...], "gun": id}`: the latest era at or before the
   war's year is the fit, each missile checked against the year for the shooter's side (`AirCombatDef::LoadOutFor(type, year,
   allied)`; `allied` is true for the Pact's allies and our side). `aliases` let the order of battle's `mig21` find
@@ -660,10 +661,165 @@ a session our MiG-21 under GCI closes on an enemy jet and fires, and the scenari
   live air fight; the testbed has none either), our GCI on our picture, alert and scrambles, corridors, IFF. Until
   then our side in the session is the minimal fighter of a hand-written scenario, heard at once with no radio.
 - Fighter radars as EM emitters on aircraft (`EmSensorLink::SyncTarget`); the session uses `sensors.json`'s ranges and
-  its clutter figure, not `look_down_db`.
-- Authority lines for vectors (B5's `C2Authority`): the controllers' vectors are the session's own calls on B9's nets.
+  its clutter figure, not `look_down_db`. (S3, §9.)
+- Authority lines for vectors (B5's `C2Authority`): the controllers' vectors are the session's own calls on B9's nets. (S3, §9.)
 - The doctrine's tactics (beam, slash, one or two circles, drag) are not told apart; the live fight steers by lead
-  pursuit and the abstract one by range bands.
-- The strikers' chaff and flares and the escort's station on its strikers (B1's formation layer) in the fight.
-- `air_combat_bench` (§5.10) against Vietnam, Linebacker, the Bekaa, the Falklands and ACEVAL; the A1 far fight.
-- AAM shapes and their smoke in Unreal (B13); claims into the enemy's records and ours through the pipeline.
+  pursuit and the abstract one by range bands. (S3, §9; the circles left.)
+- The strikers' chaff and flares and the escort's station on its strikers (B1's formation layer) in the fight. (S3, §9.)
+- `air_combat_bench` (§5.10) against Vietnam, Linebacker, the Bekaa, the Falklands and ACEVAL; the A1 far fight. (S3, §9:
+  the bench and A1; the comparison with history left.)
+- Claims into the enemy's records and ours through the pipeline. (AAM shapes, their smoke and the fight drawn in Unreal: B13,
+  done 19 Nov 2026, `11_IMPLEMENTATION_PLAN.md`.)
+
+## 9. As built (S3, 19 November 2026, branch `tbr-s3`)
+
+Roadmap S3 takes B7's and B8's "Left:" on the fight itself: the radars, who may vector whom, the doctrines' attacks, the
+strikers' answer to a missile and the escort's station, and the measures. Everything is of 1985.
+
+**Two switches.** The session's fight has its own: a scenario's `"air_fight"` takes `"mode"` (1, the default: S3's fight;
+0: B8's as it was) and `"far_fight"` (-1 with the mode, 0 off, 1 on). A played session's outcome is saved with the
+campaign, so the session's changes never change an old save's replay. The abstract fight (A0) has the tuning's
+`air_fight.mode` (`data/gameplay/air_war.json`, 1), saved as `"air_fight_mode"`; a save without it replays with 0 (B8's
+A0). The raid builder writes the scenario's mode from the tuning. B8's tests run with mode 0; the replay fingerprint
+(`test_routes.cpp`) is unchanged. The shot check's scenario (`air_battle_shots.json`) keeps B8's fight (`"mode": 0`): with S3's, our pair
+slashes, survives the Eagle and drives the F-4Es off before they meet the Osa, and the chaff -SimAirShots photographs
+never comes.
+
+**Radars.**
+
+- *As emitters.* A fighter's radar is an emitter on his EM platform (`EmSensorLink::SetFighterRadar`, roadmap S3): the
+  RadarDef its `sensors.json` entry names, from `data/em/fighter_radars_1985.json`, merged into the session's library
+  when the fight starts (`AirFightDef::radar_library`). Searching, it sweeps its sector about the nose; locked, it is a
+  steady track pointed at its target each step (`PointFighterRadars`), so the target's warning receiver hears a lock by
+  its own library (`pact_fighter_fcr_x`, `nato_fighter_fcr_x`: B3's rule, a steady main beam from a fire-control
+  entry). The fight sets the state (`AirFightWorld::radar`): off for a striker, at home and in a drag, and for a fighter
+  bound to his controller until the nearest aircraft he was told of (else his vector's point) is within his radar's cued
+  range (radar silence until close, `pennington_1985`); locked on the hostile he engages within the lock range in his cone, or on the target of his radar
+  round in flight; else searching. A radar that is off sees nothing: its look is skipped.
+- *Looking down.* Each radar's `look_down_db` is read from its EM entry (`FillLookDown`). Looking down at a target
+  below him and under 3 km above the ground, his range is his range up times 10^(-(C - look_down_db)/40), the fourth
+  root of what the clutter the radar does not reject leaves of the signal; C, `fight.look_down_clutter_db`, is 48 dB, so
+  the APG-63's 40 dB gives `sensors.json`'s 50 of 80 km. The Sapfir-23ML (25 dB) keeps about a quarter, the APQ-120 and
+  the RP-21 (0 dB) about a fifteenth. A radar with its own published clutter range keeps it.
+
+**Control.** A faction's c2 authority table has a new act, `vector` (`c2_def.hpp`), and the fight reads its lines
+(`AirFightDef::vector_lines`, `MayVector`): a controller of a post kind vectors a fighter of a role only where a line
+lets it in the war's year. NATO's CRC vectors its CAP and interceptors, not its sweep or close escort (`smart_1985_tacs`);
+its E-3A any fighter from 1982 (`afmag_1984_nato`, `anderegg_2001`). The Pact's GCI vectors all of its own
+(`mt_1962_front_aviation`, `lambeth_1984`); its A-50 none (from 1989). The neutral's GCI its own (a labelled
+assumption). A faction with no line (the rebels) and our side keep B8's and B10's rule. A fighter his controller may not
+vector is never bound to him: he flies on his own radar and his picture, and never loses control.
+
+**Tactics.** Each doctrine's `tactic` (`air_combat.json`) now steers:
+
+- *Beam* (NATO): beyond `beam_turn_in_m` (15 km), unless already near the target's beam, he flies to a point abeam its
+  track on his own side, `beam_offset_m` (8 km) out and ahead by half the time to get there (`Setup`), then turns in by
+  lead pursuit (`lambeth_1984`, the Bekaa).
+- *Slash* (the Pact, ours): beyond `slash_turn_in_m` (6 km), unless already behind it, he makes for a point
+  `slash_offset_m` (3 km) behind the target (`Setup`); after his shot, once no radar round of his needs his lock, or once
+  he has passed inside `pass_m` (1.5 km), he extends straight ahead at full speed for `extend_s` (`Extend`;
+  `checo_1969_a2a`, the MiG-21's hit-and-run under GCI; `mt_turchin_coop`).
+- *Turn* (the neutral, the rebels): straight in by lead pursuit and stays in the fight.
+- *Drag* (all): on a lock or a launch on his receiver, or a launch or trail seen within 10 km, within `drag_warning_s`,
+  a pilot who cannot shoot first turns tail and runs at full speed for `drag_s` (`Drag`, radar off). A green pilot
+  always drags; a skilled one only if no hostile he knows of is inside the reach of what he carries and he has no
+  missile of his own in the air.
+- *Flown rounds.* A missile is now a point flying lead pursuit at its mean speed for as long as its maximum ranges
+  allow against a target of `missile_ref_target_mps` (250 m/s): its head-on range over its speed plus that, or its
+  range from astern over its speed less it, whichever is longer. A target that drags runs it out of energy
+  (`MissReason::Energy`, new). At its end the shot is resolved on the end geometry's beam (`ShotConditions::end_notch`:
+  a radar round ending with its target in the beam against the ground suffers the chain's `beam_notch`).
+
+**In the fight.**
+
+- *The strikers' chaff and flares.* A target who knows of a round flying at him (a launch on his receiver, a lock for a
+  radar round, a launch or trail seen) answers it once, about 4 s before it arrives (`AirFightWorld::dispense`): the
+  runner's reaction chain (`ReactionChain::AnswerAam`) dispenses flares at an infrared round and chaff at a radar one,
+  by his profile's habit against the like SAM and from what his type carries that year (`countermeasures.json`). The
+  salvo is the chain's own (its count, its event, the chaff cloud in the EM world, the fx feed). At the round's end its
+  strength goes into the shot (`countermeasure`): flares out within `flare_window_s`, `flare_decoy`; chaff within
+  `chaff_window_s`, 1 - `chaff_factor`.
+- *The escort's station.* An escort (`"escorts"`: a striker's target id, else the nearest of his side's within 40 km)
+  with no contact flies his station on the strikers' leader: `escort_back_m` behind, `escort_side_m` abeam (the side by
+  his key) and `escort_up_m` above, at a speed that closes on it (`Station`); he fights only what comes within
+  `escort_tether_m` (15 km) of his strikers. The raid builder now writes a package's sweep and CAP as `sweep` and `cap`
+  (before, as strikers).
+
+**The far fight (A1).** A fighter whose flight is beyond every reach of our ground units (the runner's near points
+without our fighters', `FarFromOurGround`) thinks at `a1_think_s` (1 s) and, a wingman whose leader is far too, fights
+on his leader's picture: no look of his own, his leader's mode, and his shots judged on his leader's geometry. A level
+never changes while a missile of his or at him is in the air. It is the fight's own notion, not B12's levels, so B12's
+level equality stays as it was.
+
+**The A1 wingman's lock (roadmap S7, 20 November 2026, branch `tbr-s7`).** Under B12's levels a wingman of a flight at
+A1 hears on his leader's receiver, and a lock is not lent, so before S7 one of our fighters locking a far wingman alone
+went unheard until the flight came back to A2. With `air_levels.json`'s mode 2 a radar whose track is on him (one of
+our fighters' radars as an EM emitter, a SAM's track radar, the engagement's or a launcher's target:
+`ScenarioRunner::LockedOn`) gives him back his own receiver at once, so he hears the lock and reacts as at A2
+(`docs/air_battle/02_FLIGHTS_AND_PILOTS.md` 5.4).
+
+**A0.** With `air_fight.mode` 1: a beam attacker's shots come from the target's beam (±30°); a slash by the side that
+fired first is one pass, after which only `a0_slash_return` (0.4) of it comes back for another round (fights between
+fighters only: strikers cannot chase); a turning doctrine on either side keeps a fight between fighters
+`a0_turn_rounds` (1) longer; a fighter shot at by a radar round from beyond sight drags it at `a0_drag` (0.6) times his
+skill; strikers that saw the shot answer it with flares or chaff if their type carries them in 1985, at the reaction
+table's strengths (`AirWarData::reactions`, loaded from `gameplay/reactions.json`).
+
+**Measures.** `air_combat_bench data [seeds]` flies four cases in a small world of its own (aircraft that turn at their
+rate, eyes to 9 km, a receiver that hears locks and launches), B8's fight beside S3's, then the far fight off and on.
+Each counts the losses, shots, drags, extensions, set-ups, dispenses, rounds out of energy and in the notch, the
+thoughts and looks and the wall time. With 50 seeds a case (19 November 2026):
+
+```
+air_combat_bench: 50 seeds a case; A is the first faction, B ours
+             A lost B lost  shots  drags extends setups  disp energy notch  thinks    far senses       ms
+nato 2 f15c (beam, E-3A) vs our 2 mig23ml (slash, GCI)
+  B8             17     81   1021      0       0      0     0      0     0  160280      0 151290    277.6
+  S3              5     51    494   1266      12   2161    33    159     0  195620      0 194664    559.9
+warsaw_pact 2 mig23ml (slash, GCI) vs our 2 mig21bis (slash, GCI)
+  B8             25     26   1268      0       0      0     0      0     0  207777      0 198718    671.1
+  S3              8     37    569   1334     551   1344     0    144     0  205613      0 204577    384.3
+neutral 2 draken_gun (turn) vs our 2 mig21bis (slash, GCI)
+  B8             32      0    440      0       0      0     0      0     0  216564      0 112793    336.8
+  S3              9      0    303     13     558   1212     0     13     0  236103      0 120100    344.6
+nato 4 tornado_ids low + 2 f15c escorts vs our 2 mig23ml
+  B8              2     49    766      0       0      0     0      0     0  435943      0 433911   1591.2
+  S3             10     59    616   1122      51    956   167     49     0  418947      0 418947   1547.2
+far: nato 4 f15c (E-3A) vs our 4 mig23ml (GCI), far from our ground units
+  S3 A2           8    158   1016   1372       4   3219    42    145     0  341984      0 341984   1292.7
+  S3 A1          10    154   1343   1167      47   2034   215    510     0  172688 172688  98460    825.3
+```
+
+S3 fights fewer, longer engagements: the drag, the set-ups and the slash's extension halve the shots, and the drags
+make between one round in twenty-five (the Drakens' targets) and one in three (the Eagles') fall short (`energy`). The
+Eagles lose 5 instead of 17 against the MiG-23s and kill 51 instead of 81: both sides drag what they cannot outshoot.
+The Pact's slash does better against our MiG-21s: 8 lost to our 37, from 25 to 26 under B8's pursuit; its MiG-23s
+shoot and extend before the MiG-21s close to their R-60s. The neutral's Drakens still never kill a MiG-21 with their
+guns, and lose under a third as many. Against the escorted Tornados the strikers dispense 167 times in 50 runs. No
+round ends in the notch: the bench's fights are over 3 km above the ground, where no radar looks down into clutter.
+Far from our ground units (A1) the fight thinks half as often and looks under a third as often, at two thirds of the
+wall time, and its outcome stays near A2's (10 and 154 lost against 8 and 158); the wingmen on their leaders' picture
+fire more rounds that fall short (510 against 145).
+
+**Keyed draws.** No new stream and no new draw in the session: S3 decides by geometry and the chain's existing draws.
+The abstract fight's new draws come from its own generator (seeded from the package's fork), only with mode 1.
+
+**Tests**, `test_air_fight.cpp` (S3): the radars' look-down from their EM entries; who may vector whom, and a NATO
+sweep under a CRC hearing no vector; a radar silent while vectored in, then searching, then locked, a striker's never;
+the three attacks told apart; a drag on a lock and its end; a striker dispensing once before the round arrives and the
+decoy read at its end; an escort on his station; the far fight's pair on its leader's picture, cheaper and still
+fighting; a round run out of energy; A0's drags, extensions and decoys only with mode 1; the save's key; the scenario's
+keys. `test_perception_em.cpp`: a fighter radar's search sweeps past a NATO receiver, its lock is called a lock, and
+off is silent.
+
+**Left.**
+
+- The bench's cases are not yet set against Vietnam, Linebacker, the Bekaa, the Falklands and ACEVAL (`air_war_bench`
+  does that for the abstract fight); the live fight's exchange is not banded.
+- One or two circles of a turning fight are not flown: the turning doctrine closes by lead pursuit and stays.
+- A fighter's radar in the EM world is seen by every receiver, but his own search is still `sensors.json`'s ranges,
+  not the radar equation through the EM world; his own warning receiver is the session's picture, not his RWR's.
+- The A1 wingman borrows his leader's picture only when both are far; a flight split across the line is two levels.
+- The escort's tether and station are game values; no period source gives NATO's close-escort geometry in 1985.
+- `look_down_clutter_db` is one figure for every ground; the sea, towns and forest are not told apart.
+- The bench's fights are all above 3 km over the ground, so no radar round ends in the notch there; a low case is left.

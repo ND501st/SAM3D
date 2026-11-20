@@ -26,6 +26,28 @@
 // (AirFightWorld::tracks: our GCI's tracks, late and with their errors, identified by its interrogator), never on the truth;
 // a fighter is added while the session runs (AddFighter: a pair scrambled by the duty's rule table), and his time in the
 // fight and without a vector counts from when he first flies in it.
+//
+// Roadmap S3 (AirFightDef::mode 1; docs/air_battle/07_AIR_TO_AIR.md section 9):
+//  - Radars: a fighter's radar radiates as its EM emitter (AirFightWorld::radar: off, searching its sector, or locked on
+//    one aircraft, which the target's warning receiver hears as a lock); a fighter under a controller who brings him in
+//    keeps it off until the controller's target is inside its cued range (the Pact's 1984 practice, pennington_1985). He
+//    sees by it only while it radiates; looking down at a target against the ground its range is cut by the clutter its
+//    look_down_db does not reject (fight.look_down_clutter_db; the APG-63's 40 dB gives dubrov_1983's 50 of 80 km).
+//  - Control: a controller vectors only the fighters an authority line of its faction lets it (AirFightDef::MayVector);
+//    one it may not vector is not bound to it.
+//  - Tactics: the doctrine's attack: a beam attack (NATO, the Bekaa) steers abeam the target's track and turns in on its
+//    beam; a slash (the Pact, ours) steers for its tail, fires and extends away for extend_s before coming again; a turn
+//    (the neutral, the rebels) is lead pursuit. A fighter warned by his receiver of a lock or a launch, or who sees a
+//    trail, drags (turns tail at full speed for drag_s) unless he can shoot first, or always if green (ACEVAL's F-5s,
+//    anderegg_2001 p. 160). A missile is a point flying at its mean speed for the flight time its zone gives
+//    (fight.missile_ref_target_mps), so a drag can run it out of energy; a semi-active round loses its launcher's lock in
+//    the beam against the ground (the notch).
+//  - In the fight: a target who knows of the shot answers it with flares (infrared) or chaff (radar) by his reaction
+//    chain's habit and load (AirFightWorld::dispense), and what is out when it arrives is the chain's countermeasure;
+//    an escort holds its station on its strikers' leader and engages only within escort_tether_m of them.
+//  - The far fight (A1, 07 section 5.6): a fighter far from our ground units (AirFightWorld::far_from_ours) thinks at a1_think_s, and
+//    a wingman there keeps his slot, takes his leader's contacts and shoots on his leader's geometry. Nothing changes
+//    level while a missile of his or at him is in the air.
 #pragma once
 
 #include <algorithm>
@@ -37,6 +59,7 @@
 #include <vector>
 
 #include "simcore/aircraft.hpp"
+#include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat.hpp"
 #include "simcore/air_war/air_fight_def.hpp"
 #include "simcore/air_war/perception.hpp"
@@ -70,11 +93,31 @@ struct AirFightWorld {
     // Our controllers' picture (B10): a controller of side "ours" with one vectors on it; without one, on the truth in his
     // range (B8's behaviour, for the enemy's E-3A and a range day's GCI).
     std::function<std::vector<AirTrack>(const std::string& controller, double t)> tracks;
+    // The presentation feed (fx/events.hpp, roadmap B13; may be empty): told each shot as the fight decides it. Nothing in
+    // the fight reads what they do, and they draw nothing from its generators.
+    //   fx_launch  a missile leaves the shooter: its def, the shooter's shot number, its resolution time;
+    //   fx_end     that shot resolved (`kill`), or its target gone before it arrived (`gone`);
+    //   fx_gun     a gun burst of `burst_s` from t, and whether it brought the target down.
+    std::function<void(int shooter, int target, const AamDef& aam, int shot, double t, double arrive_s)> fx_launch;
+    std::function<void(int shooter, int target, const AamDef& aam, int shot, double t, bool kill, bool gone)> fx_end;
+    std::function<void(int shooter, int target, const AirGunDef& gun, double t, double burst_s, bool kill)> fx_gun;
+    // Roadmap S3 (each may be empty: then nothing radiates, nobody dispenses, every fighter is near).
+    //   radar           the fighter's radar as its EM emitter: state 0 off, 1 searching, 2 locked on `locked` (a target)
+    //   dispense        the target's pilot answers a shot he knows of: flares at an infrared round, chaff at a radar one
+    //                   (by his reaction chain's habit and load); true if he did
+    //   countermeasure  the strength of what he has out at `t` against that kind of seeker (0..1, the chain's link)
+    //   leader          his flight's leader (a target), or -1 if he leads or flies alone
+    //   far_from_ours   his flight is far from all our ground units: the far fight (A1)
+    std::function<void(int target, const std::string& radar_def, int state, int locked)> radar;
+    std::function<bool(int target, bool infrared, double t)> dispense;
+    std::function<double(int target, bool infrared, double t)> countermeasure;
+    std::function<int(int target)> leader;
+    std::function<bool(int target)> far_from_ours;
 };
 
 class AirFightSession {
 public:
-    enum class Mode { Patrol, Vectored, Search, Identify, Engage, Home };
+    enum class Mode { Patrol, Vectored, Search, Identify, Engage, Home, Setup, Extend, Drag, Station };
     static const char* ModeName(Mode m) {
         switch (m) {
             case Mode::Patrol: return "patrol";
@@ -83,6 +126,10 @@ public:
             case Mode::Identify: return "identify";
             case Mode::Engage: return "engage";
             case Mode::Home: return "home";
+            case Mode::Setup: return "setup";
+            case Mode::Extend: return "extend";
+            case Mode::Drag: return "drag";
+            case Mode::Station: return "station";
         }
         return "?";
     }
@@ -113,6 +160,7 @@ public:
     bool Init(const AirFightDef& def, const std::vector<std::string>& ids, std::uint64_t seed, std::string* error = nullptr) {
         def_ = &def;
         seed_ = seed;
+        ids_ = ids;
         fighters_.clear();
         added_.clear();
         for (const AirFightFighterDef& fd : def.fighters) {
@@ -151,16 +199,23 @@ public:
         Controllers(t, w);
         Deliver(t);
         Missiles(t, w);
+        const bool s3 = def_->mode >= 1;
+        if (s3) Levels(w);
         for (std::size_t i = 0; i < fighters_.size(); ++i) {
             Fighter& f = fighters_[i];
             if (f.gone || f.start_s < 0.0 || t < f.next_think_s) continue;
-            f.next_think_s = t + fp.think_s;
+            f.next_think_s = t + (f.is_far ? fp.a1_think_s : fp.think_s);
             const Aircraft* me = w.air ? w.air(f.target) : nullptr;
             if (me == nullptr) {
                 f.gone = true;
+                if (s3) SetRadar(f, 0, -1, w);
                 continue;
             }
+            ++counts_.thinks;
+            counts_.thinks_far += f.is_far ? 1 : 0;
             Think(f, *me, t, w);
+            if (s3) Radar(f, *me, t, w);
+            f.modes_seen |= 1u << static_cast<unsigned>(f.mode);
         }
     }
 
@@ -169,6 +224,9 @@ public:
     const std::vector<ShotRecord>& Shots() const { return shots_; }
     int VectorsSent() const { return vectors_sent_; }
     int VectorsHeard() const { return vectors_heard_; }
+    // Teaball's relay (roadmap S6): our vectors its listeners overheard, and the warnings it passed to its fighters.
+    int TeaballOverheard() const { return teaball_overheard_; }
+    int TeaballWarnings() const { return teaball_warnings_; }
 
     // A fighter's state by its target id (tests, the debrief).
     Mode ModeOf(const std::string& target) const {
@@ -183,6 +241,16 @@ public:
         const Fighter* f = Find(target);
         return f != nullptr ? f->why_home : std::string();
     }
+    // Sent home by his command (S1: our fighters' pursuit limit past the front line, mt_turchin_coop p. 9): he turns for home at
+    // his next think. False if no such fighter, or he is already going home.
+    bool Recall(const std::string& target, const std::string& why) {
+        for (Fighter& f : fighters_) {
+            if (f.def->target != target || f.gone || f.mode == Mode::Home) continue;
+            f.recall = why;
+            return true;
+        }
+        return false;
+    }
     // Is this target one of our fighters, and its regiment.
     bool IsOurs(const std::string& target) const {
         const Fighter* f = Find(target);
@@ -196,6 +264,32 @@ public:
         int n = 0;
         for (const ShotRecord& s : shots_) n += s.shooter == target ? 1 : 0;
         return n;
+    }
+    // Roadmap S3. His radar's state (0 off, 1 searching, 2 locked); whom he escorts (a target id); whether he fights far.
+    int RadarStateOf(const std::string& target) const {
+        const Fighter* f = Find(target);
+        return f != nullptr ? f->radar_state : 0;
+    }
+    std::string EscortOf(const std::string& target) const {
+        const Fighter* f = Find(target);
+        return f != nullptr && f->escorted >= 0 && static_cast<std::size_t>(f->escorted) < ids_.size() ? ids_[static_cast<std::size_t>(f->escorted)]
+                                                                                                    : std::string();
+    }
+    bool FarOf(const std::string& target) const {
+        const Fighter* f = Find(target);
+        return f != nullptr && f->is_far;
+    }
+    // What the fight cost and what it did (the bench's measures): thoughts, of them at the far fight's level, looks by own
+    // sensors (a far wingman takes his leader's), drags, extensions after a pass, attacks set up, dispenses against missiles,
+    // flown missiles out of energy, radar rounds ending in the beam against the ground.
+    struct Counts {
+        int thinks = 0, thinks_far = 0, senses = 0, drags = 0, extends = 0, setups = 0, dispenses = 0, out_of_energy = 0, notched = 0;
+    };
+    const Counts& Tally() const { return counts_; }
+    // Was a fighter ever in this mode (tests): did he drag, extend, set up an attack, keep station.
+    bool EverWas(const std::string& target, Mode m) const {
+        const Fighter* f = Find(target);
+        return f != nullptr && (f->modes_seen & (1u << static_cast<unsigned>(m))) != 0;
     }
 
 private:
@@ -232,8 +326,24 @@ private:
         bool steering = false;
         bool gone = false;
         std::string why_home;
+        std::string recall;       // sent home by his command (S1)
         std::uint64_t shots = 0;
         double start_s = -1.0;    // first in the air in this battle
+        // Roadmap S3.
+        std::string tactic = "turn";  // his doctrine's attack: beam, slash, turn
+        bool vectorable = true;   // his controller may vector him (an authority line)
+        double look_down = 0.5;   // his radar's range factor looking down against the ground
+        int radar_state = 0;      // 0 off, 1 searching, 2 locked
+        int radar_locked = -1;
+        int escorted = -1;        // an escort's striker (a target), -1 none
+        bool escort_looked = false;
+        double extend_until = -1.0;
+        Vec3 extend_dir;
+        double drag_until = -1.0;
+        Vec3 drag_dir;
+        bool is_far = false;      // the far fight (A1)
+        int lead = -1;            // at the far fight: his flight's leader's fighter index (a wingman), -1 none
+        unsigned modes_seen = 0;
     };
     struct Missile {
         std::size_t shooter = 0;
@@ -246,6 +356,14 @@ private:
         double lock_lost_s = -1.0;
         std::string believed;
         bool done = false;
+        // Roadmap S3: a point flying at its mean speed for its budget; the target's knowledge and answer.
+        bool flown = false;
+        Vec3 pos;
+        double last_s = 0.0;
+        double budget_s = 0.0;
+        bool knew = false;
+        double knew_s = -1.0;
+        bool dispensed = false;
     };
     struct Vector {
         std::size_t fighter = 0;
@@ -275,8 +393,27 @@ private:
         f.radar = radars.empty() ? nullptr : radars.front();
         f.striker = fd.role == "strike";
         f.key = 0xF1600000ull + static_cast<std::uint64_t>(fighters_.size());
+        // Roadmap S3: his tactic, whether his controller may vector him, his radar's look-down.
+        f.tactic = f.doc->tactic.empty() ? std::string("turn") : f.doc->tactic;
+        if (const AirFightControllerDef* ctl = def_->Controller(fd.controller)) f.vectorable = def_->MayVector(fd.faction, ctl->kind, fd.role);
+        f.look_down = LookDownFactor(f.radar);
+        if (!fd.escorts.empty()) {
+            for (std::size_t i = 0; i < ids_.size(); ++i) {
+                if (ids_[i] == fd.escorts) f.escorted = static_cast<int>(i);
+            }
+        }
         fighters_.push_back(f);
         return true;
+    }
+    // A radar's range looking down against the ground, as a share of its range looking up: its sourced clutter figure, or
+    // what the clutter it does not reject leaves of the radar equation (the range goes as the fourth root of the signal to
+    // clutter); before S3 (or with no look-down figure) B8's half.
+    double LookDownFactor(const SensorDef* r) const {
+        if (r == nullptr) return 0.5;
+        if (r->clutter_m > 0.0 && r->by_hand_m > 0.0) return std::min(1.0, r->clutter_m / r->by_hand_m);
+        if (def_->mode < 1 || r->look_down_db < 0.0) return 0.5;
+        const double loss_db = std::max(0.0, def_->combat.fight.look_down_clutter_db - r->look_down_db);
+        return std::pow(10.0, -loss_db / 40.0);
     }
 
     const Fighter* Find(const std::string& target) const {
@@ -300,6 +437,11 @@ private:
     double U(std::uint64_t who, std::uint64_t n, std::uint64_t link) const {
         return em::Uniform01(em::DrawHash(seed_, em::Stream::AirCombat, who, n, link));
     }
+    // No word from his controller (roadmap S5): bound to one, and no vector heard within control_lost_s (or none yet).
+    bool Unwarned(const Fighter& f, double t) const {
+        if (def_->Controller(f.def->controller) == nullptr) return false;
+        return f.control_lost || f.last_vector_s < 0.0 || t - f.last_vector_s > def_->combat.fight.control_lost_s;
+    }
     double N(std::uint64_t who, std::uint64_t n, std::uint64_t link) const {
         return em::StandardNormal(em::DrawHash(seed_, em::Stream::AirCombat, who, n, link));
     }
@@ -309,10 +451,88 @@ private:
         return std::acos(std::clamp(Dot(a, b) / (la * lb), -1.0, 1.0));
     }
 
+    // ---- roadmap S3: the far fight's level and the radars as emitters.
+
+    // Far (A1): his flight is far from our ground units; never changed while a missile of his or at him is in the air. A
+    // wingman there fights on his leader's picture and geometry, if his leader is a fighter of this battle and far too.
+    void Levels(const AirFightWorld& w) {
+        const bool on = def_->FarFight() && static_cast<bool>(w.far_from_ours);
+        for (std::size_t i = 0; i < fighters_.size(); ++i) {
+            Fighter& f = fighters_[i];
+            if (f.gone) continue;
+            bool busy = false;
+            for (const Missile& m : missiles_) busy = busy || (!m.done && (m.shooter == i || m.target == f.target));
+            if (!busy) f.is_far = on && w.far_from_ours(f.target);
+        }
+        for (Fighter& f : fighters_) {
+            f.lead = -1;
+            if (!f.is_far || !w.leader) continue;
+            const int lt = w.leader(f.target);
+            if (lt < 0 || lt == f.target) continue;
+            for (std::size_t k = 0; k < fighters_.size(); ++k) {
+                const Fighter& o = fighters_[k];
+                if (o.target == lt && !o.gone && o.is_far && o.ours == f.ours && !o.striker && !f.striker) f.lead = static_cast<int>(k);
+            }
+        }
+    }
+
+    // His radar: off for a striker, at home, and while his controller brings him in from beyond the cued range (radar silence
+    // until close, pennington_1985: bound to him, silent until an aircraft he knows of, else his vector's point, is within
+    // the cued range); locked on the hostile he engages within its lock range or illuminates a missile at; else searching.
+    bool RadarOn(const Fighter& f, const Aircraft& me) const {
+        if (f.radar == nullptr || f.striker || f.mode == Mode::Home || f.mode == Mode::Drag) return false;
+        const bool bound = f.vectorable && !f.control_lost && !f.free && def_->Controller(f.def->controller) != nullptr &&
+                           (f.doc->ControllerBound() || f.doc->roe == "controller");
+        if (!bound) return true;
+        // Bound: silent until the nearest aircraft he was told of (else his vector's point) is within the cued range.
+        double nearest = 1e18;
+        for (const Contact& c : f.contacts) {
+            if (!c.friendly) nearest = std::min(nearest, (c.believed - me.position).Length());
+        }
+        if (nearest > 1e17 && f.last_vector_s >= 0.0) nearest = (f.vector_point - me.position).Length();
+        const double cued = f.radar->cued_m > 0.0 ? f.radar->cued_m : f.radar->by_hand_m;
+        return nearest <= cued;
+    }
+    void Radar(Fighter& f, const Aircraft& me, double t, const AirFightWorld& w) {
+        if (f.radar == nullptr) return;
+        int state = RadarOn(f, me) ? 1 : 0, locked = -1;
+        if (state == 1) {
+            for (const Missile& m : missiles_) {
+                if (!m.done && &fighters_[m.shooter] == &f && IsSemiActive(m.aam->guidance) && m.lock_lost_s < 0.0) {
+                    state = 2;
+                    locked = m.target;
+                }
+            }
+        }
+        if (state == 1 && f.mode == Mode::Engage) {
+            const double lock_m = f.radar->lock_m > 0.0 ? f.radar->lock_m : 0.8 * f.radar->by_hand_m;
+            double best = lock_m;
+            for (const Contact& c : f.contacts) {
+                if (!c.hostile || c.truth < 0 || t - c.t_s > def_->combat.fight.contact_hold_s) continue;
+                const Aircraft* a = w.air(c.truth);
+                if (a == nullptr || Angle(me.velocity, a->position - me.position) > def_->combat.fight.radar_az_rad) continue;
+                const double d = (a->position - me.position).Length();
+                if (d < best) {
+                    best = d;
+                    state = 2;
+                    locked = c.truth;
+                }
+            }
+        }
+        SetRadar(f, state, locked, w);
+    }
+    void SetRadar(Fighter& f, int state, int locked, const AirFightWorld& w) {
+        if (f.radar == nullptr || (state == f.radar_state && locked == f.radar_locked)) return;
+        f.radar_state = state;
+        f.radar_locked = locked;
+        if (w.radar) w.radar(f.target, f.radar->radar_def, state, locked);
+    }
+
     // ---- the controllers: each tracks what is in its range and vectors its own fighters.
 
     void Controllers(double t, const AirFightWorld& w) {
         const FightParams& fp = def_->combat.fight;
+        Relay(t, w);
         for (std::size_t ci = 0; ci < def_->controllers.size(); ++ci) {
             const AirFightControllerDef& c = def_->controllers[ci];
             // Ours vector on our picture (B10); the others on what is in their range.
@@ -321,7 +541,7 @@ private:
             bool asked = false;
             for (std::size_t i = 0; i < fighters_.size(); ++i) {
                 Fighter& f = fighters_[i];
-                if (f.gone || f.start_s < 0.0 || f.mode == Mode::Home || f.def->controller != c.id || f.striker) continue;
+                if (f.gone || f.start_s < 0.0 || f.mode == Mode::Home || f.def->controller != c.id || f.striker || !f.vectorable) continue;
                 if (t < f.next_vector_due) continue;
                 f.next_vector_due = t + fp.gci_vector_s;
                 const Aircraft* me = w.air ? w.air(f.target) : nullptr;
@@ -384,8 +604,71 @@ private:
                 }
                 if (w.event) w.event(c.id, words + (v.heard_s < 0.0 ? " (not heard)" : ""));
                 if (v.heard_s >= 0.0) vectors_.push_back(v);
+                if (c.side == "ours") Overhear(c, ci, n, *me, f.target, t);
             }
         }
+    }
+
+    // Teaball's relay (roadmap S6, docs/air_battle/09 section 6): our controller's vector, said on the air, is overheard by the
+    // enemy's relay when the two antennas are within the radio horizon of each other (4/3 earth), and passed on `delay_s`
+    // later unless the relay fails, as a warning of our fighter where he was then, with `error_m` of error.
+    struct TeaballWarning {
+        double due_s = 0.0;
+        Vec3 point;
+        Vec3 vel;
+        int truth = -1;
+        bool passed = false;
+    };
+    void Overhear(const AirFightControllerDef& c, std::size_t ci, std::uint64_t n, const Aircraft& ours, int our_target, double t) {
+        const AirFightDef::Teaball& tb = def_->teaball;
+        if (tb.relay.empty()) return;
+        const AirFightControllerDef* rc = def_->Controller(tb.relay);
+        if (rc == nullptr) return;
+        const double reach = RadioHorizonM(c.kind == "airborne_warning" ? c.pos.z : tb.our_mast_m, std::max(0.0, rc->pos.z));
+        if (std::hypot(c.pos.x - rc->pos.x, c.pos.y - rc->pos.y) > reach) return;
+        ++teaball_overheard_;
+        if (U(0x7EAB0000ull + ci, n, 1) < tb.fail) return;  // the relay's outage
+        TeaballWarning tw;
+        tw.due_s = t + tb.delay_s;
+        tw.point = ours.position + Vec3{tb.error_m * N(0x7EAB0000ull + ci, n, 2), tb.error_m * N(0x7EAB0000ull + ci, n, 3), 0.0};
+        tw.vel = ours.velocity;
+        tw.truth = our_target;
+        teaball_.push_back(tw);
+    }
+    // The warnings due now, on the relay's net to each of its own fighters it may vector (as a vector: heard by its post's
+    // link when it has one, else at once).
+    void Relay(double t, const AirFightWorld& w) {
+        if (teaball_.empty()) return;
+        const AirFightControllerDef* rc = def_->Controller(def_->teaball.relay);
+        for (TeaballWarning& tw : teaball_) {
+            if (tw.due_s > t || tw.passed || rc == nullptr) continue;
+            for (std::size_t i = 0; i < fighters_.size(); ++i) {
+                const Fighter& f = fighters_[i];
+                if (f.gone || f.ours || f.striker || f.start_s < 0.0 || f.mode == Mode::Home || f.def->controller != rc->id) continue;
+                const Aircraft* me = w.air ? w.air(f.target) : nullptr;
+                if (me == nullptr) continue;
+                const Vec3 d = tw.point - me->position;
+                const double brg = std::fmod(std::atan2(d.x, d.y) * 180.0 / chain_detail::kPi + 360.0, 360.0);
+                const std::string words = f.def->target + ", bandits, bearing " + std::to_string(static_cast<int>(std::lround(brg))) + ", " +
+                                          std::to_string(static_cast<int>(std::lround(d.Length() / 1000.0))) + " km";
+                Vector v;
+                v.fighter = i;
+                v.point = tw.point;
+                v.vel = tw.vel;
+                v.truth = tw.truth;
+                if (!rc->post.empty() && w.say && w.heard) {
+                    const int call = w.say(rc->post, f.target, words, t);
+                    v.heard_s = call >= 0 ? w.heard(call, f.target, t) : -1.0;
+                } else {
+                    v.heard_s = t;
+                }
+                ++teaball_warnings_;
+                if (w.event) w.event(rc->id, words + " (relayed)" + (v.heard_s < 0.0 ? " (not heard)" : ""));
+                if (v.heard_s >= 0.0) vectors_.push_back(v);
+            }
+            tw.passed = true;
+        }
+        teaball_.erase(std::remove_if(teaball_.begin(), teaball_.end(), [](const TeaballWarning& x) { return x.passed; }), teaball_.end());
     }
 
     void Deliver(double t) {
@@ -428,13 +711,20 @@ private:
     void Think(Fighter& f, const Aircraft& me, double t, const AirFightWorld& w) {
         const FightParams& fp = def_->combat.fight;
         if (f.mode == Mode::Home) return;
-        Sense(f, me, t, w);
+        if (!f.recall.empty()) return GoHome(f, me, t, w, f.recall);
+        const bool s3 = def_->mode >= 1;
+        if (s3 && f.lead >= 0) {
+            f.contacts = fighters_[static_cast<std::size_t>(f.lead)].contacts;  // a far wingman: his leader's picture
+        } else {
+            Sense(f, me, t, w);
+            ++counts_.senses;
+        }
         f.contacts.erase(std::remove_if(f.contacts.begin(), f.contacts.end(), [&](const Contact& c) { return t - c.t_s > fp.contact_hold_s; }),
                          f.contacts.end());
         // A striker only defends himself: he fires at a hostile he knows of close in, and flies his own route.
         // Control: a fighter bound to his controller who hears no vector for control_lost_s.
         const AirFightControllerDef* ctl = def_->Controller(f.def->controller);
-        const bool bound = ctl != nullptr && !f.striker && (f.doc->ControllerBound() || f.doc->roe == "controller");
+        const bool bound = ctl != nullptr && !f.striker && f.vectorable && (f.doc->ControllerBound() || f.doc->roe == "controller");
         if (bound && !f.control_lost && !f.free) {
             const double since = f.last_vector_s >= 0.0 ? t - f.last_vector_s : t - f.start_s;
             if (since > fp.control_lost_s) {
@@ -443,6 +733,12 @@ private:
                 if (w.event) w.event(f.def->target, "has lost his controller: " + what);
                 if (what == "abort") {
                     GoHome(f, me, t, w, "lost control");
+                    return;
+                }
+                // His faction's turn_back once control is lost (roadmap S5, 10_FACTIONS.md §7.1-7.2): a keyed draw, made only
+                // for a fighter given the value.
+                if (f.def->turn_back_lost >= 0.0 && U(f.key, 0, 0x5B5u) < f.def->turn_back_lost) {
+                    GoHome(f, me, t, w, "lost control: turns back");
                     return;
                 }
                 f.free = what == "pairs";
@@ -455,12 +751,30 @@ private:
             if (!Armed(f)) return GoHome(f, me, t, w, "winchester");
             if (in_fight >= fp.joker_s && f.mode != Mode::Engage) return GoHome(f, me, t, w, "joker");
         }
-        // The best contact: the nearest hostile, else the nearest not yet identified.
+        // An escort's strikers (S3): the one named, else the nearest of his side's, looked for once.
+        const Aircraft* charge = nullptr;
+        if (s3 && f.def->role == "escort") {
+            if (f.escorted < 0 && !f.escort_looked) {
+                f.escort_looked = true;
+                double bd = 40000.0;
+                for (const Fighter& o : fighters_) {
+                    if (o.gone || !o.striker || o.ours != f.ours) continue;
+                    const Aircraft* a = w.air(o.target);
+                    if (a != nullptr && (a->position - me.position).Length() < bd) {
+                        bd = (a->position - me.position).Length();
+                        f.escorted = o.target;
+                    }
+                }
+            }
+            if (f.escorted >= 0) charge = w.air(f.escorted);
+        }
+        // The best contact: the nearest hostile, else the nearest not yet identified (an escort's within his tether).
         const Contact* hostile = nullptr;
         const Contact* unknown = nullptr;
         double dh = 1e18, du = 1e18;
         int hostiles = 0;
         for (const Contact& c : f.contacts) {
+            if (charge != nullptr && (c.believed - charge->position).Length() > fp.escort_tether_m) continue;
             const double d = (c.believed - me.position).Length();
             if (c.hostile) {
                 ++hostiles;
@@ -483,6 +797,7 @@ private:
             if (hostile != nullptr && dh < fp.vid_m) Fire(f, me, *hostile, t, w);
             return;
         }
+        if (s3) return Decide(f, me, hostile, dh, unknown, charge, t, w);
         if (hostile != nullptr) {
             f.mode = Mode::Engage;
             Steer(f, me, Lead(me, *hostile, t), t, w);
@@ -498,6 +813,166 @@ private:
             if (f.steering && w.release) w.release(f.target);
             f.steering = false;
         }
+    }
+
+    // ---- roadmap S3: what he does with what he knows.
+    void Decide(Fighter& f, const Aircraft& me, const Contact* hostile, double dh, const Contact* unknown, const Aircraft* charge, double t,
+                const AirFightWorld& w) {
+        const FightParams& fp = def_->combat.fight;
+        // A far wingman keeps his slot and fires on his leader's geometry.
+        if (f.lead >= 0) {
+            const Fighter& L = fighters_[static_cast<std::size_t>(f.lead)];
+            f.mode = L.mode == Mode::Home ? Mode::Patrol : L.mode;
+            if (f.steering && w.release) w.release(f.target);
+            f.steering = false;
+            const Aircraft* la = w.air(L.target);
+            if (hostile != nullptr && la != nullptr) Fire(f, me, *hostile, t, w, la);
+            return;
+        }
+        // The drag: turned tail, at full speed, until it is over.
+        if (f.drag_until > t) {
+            f.mode = Mode::Drag;
+            Steer(f, me, me.position + f.drag_dir * 30000.0, t, w, FullSpeed(me));
+            return;
+        }
+        Vec3 away;
+        if (Warned(f, me, t, w, away) && ShouldDrag(f, me, hostile, dh)) {
+            f.drag_until = t + fp.drag_s;
+            f.drag_dir = away;
+            f.extend_until = -1.0;
+            f.mode = Mode::Drag;
+            ++counts_.drags;
+            if (w.event) w.event(f.def->target, "drags");
+            Steer(f, me, me.position + away * 30000.0, t, w, FullSpeed(me));
+            return;
+        }
+        // The extension after a slashing pass: straight on and away, at full speed.
+        if (f.extend_until > t) {
+            f.mode = Mode::Extend;
+            Steer(f, me, me.position + f.extend_dir * 30000.0, t, w, FullSpeed(me));
+            return;
+        }
+        if (hostile != nullptr) {
+            Attack(f, me, *hostile, dh, t, w);
+        } else if (unknown != nullptr) {
+            f.mode = Mode::Identify;  // closes to see what it is
+            Steer(f, me, Lead(me, *unknown, t), t, w);
+        } else if (f.last_vector_s >= 0.0 && t - f.last_vector_s < fp.control_lost_s && !f.free) {
+            f.mode = Mode::Vectored;
+            Steer(f, me, f.vector_point, t, w);
+        } else if (charge != nullptr) {
+            Station(f, me, *charge, t, w);
+        } else {
+            f.mode = f.free ? Mode::Search : Mode::Patrol;
+            if (f.steering && w.release) w.release(f.target);
+            f.steering = false;
+        }
+    }
+
+    static double FullSpeed(const Aircraft& me) { return me.max_speed_mps > 0.0 ? me.max_speed_mps : 0.0; }
+    static Vec3 Flat(const Vec3& v) {
+        Vec3 h{v.x, v.y, 0.0};
+        const double l = h.Length();
+        return l > 1e-6 ? h * (1.0 / l) : Vec3{0.0, 1.0, 0.0};
+    }
+
+    // Warned: a lock or a launch on his receiver, or a trail he saw, within drag_warning_s; `away` points from the threat.
+    bool Warned(const Fighter& f, const Aircraft& me, double t, const AirFightWorld& w, Vec3& away) const {
+        if (!w.picture) return false;
+        const std::vector<Sighting>* pic = w.picture(f.target);
+        if (pic == nullptr) return false;
+        const double since = t - def_->combat.fight.drag_warning_s;
+        for (const Sighting& s : *pic) {
+            if (s.time_s < since) continue;
+            if (s.by == SightBy::Rwr && (s.rwr == RwrState::Lock || s.rwr == RwrState::Launch)) {
+                away = Vec3{-std::sin(s.bearing_rad), -std::cos(s.bearing_rad), 0.0};
+                return true;
+            }
+            if ((s.kind == SightKind::Trail || s.kind == SightKind::LaunchSign) && s.range_est_m < 10000.0) {
+                away = Flat(me.position - s.believed_enu);
+                return true;
+            }
+        }
+        return false;
+    }
+    // He drags unless he can shoot first: a green pilot always; a skilled one when no hostile he knows of is inside the
+    // reach of what he carries, and he has no missile of his own in the air.
+    bool ShouldDrag(const Fighter& f, const Aircraft& me, const Contact* hostile, double dh) const {
+        if (f.skill < 0.5) return true;
+        for (const Missile& m : missiles_) {
+            if (!m.done && &fighters_[m.shooter] == &f) return false;
+        }
+        if (hostile == nullptr) return true;
+        const double alt = me.position.z;
+        double reach = f.gun != nullptr && f.gun_s > 0.0 ? f.gun->effective_m : 0.0;
+        for (const auto& m : f.aams) {
+            if (m.second > 0) reach = std::max(reach, MaxRangeM(*m.first, def_->combat.calibration.chain, chain_detail::kPi, alt));
+        }
+        return dh > reach;
+    }
+
+    // The doctrine's attack on a hostile he knows of.
+    void Attack(Fighter& f, const Aircraft& me, const Contact& c, double dh, double t, const AirFightWorld& w) {
+        const FightParams& fp = def_->combat.fight;
+        const double age = std::max(0.0, t - c.t_s);
+        const Vec3 now = c.believed + c.vel * age;
+        const bool moving = Vec3{c.vel.x, c.vel.y, 0.0}.Length() > 1.0;
+        const Vec3 track = Flat(c.vel);
+        const double on_nose = moving ? Angle(Vec3{c.vel.x, c.vel.y, 0.0}, Vec3{me.position.x - now.x, me.position.y - now.y, 0.0}) : 0.0;
+        const double aspect = chain_detail::kPi - on_nose;  // off the target's tail: 0 behind it, pi on its nose
+        const double closing = std::max(100.0, me.velocity.Length());
+        const double tti = std::min(30.0, dh / closing);
+        bool setup = false;
+        Vec3 point;
+        if (moving && f.tactic == "beam" && dh > fp.beam_turn_in_m && std::fabs(aspect - 0.5 * chain_detail::kPi) > chain_detail::kPi / 6.0) {
+            // Abeam the track on his own side, ahead by the time to get there.
+            const Vec3 right{track.y, -track.x, 0.0};
+            const double side = Dot(me.position - now, right) >= 0.0 ? 1.0 : -1.0;
+            point = now + c.vel * (0.5 * tti) + right * (side * fp.beam_offset_m);
+            setup = true;
+        } else if (moving && f.tactic == "slash" && dh > fp.slash_turn_in_m && aspect > chain_detail::kPi / 3.0) {
+            point = now + c.vel * (0.5 * tti) - track * fp.slash_offset_m;  // for its tail
+            setup = true;
+        }
+        if (setup) {
+            if (f.mode != Mode::Setup) ++counts_.setups;
+            f.mode = Mode::Setup;
+            point.z = now.z;
+            Steer(f, me, point, t, w);
+            return;
+        }
+        f.mode = Mode::Engage;
+        Steer(f, me, Lead(me, c, t), t, w);
+        const std::uint64_t before = f.shots;
+        const double next_before = f.next_shot_s;
+        Fire(f, me, c, t, w);
+        if (f.tactic != "slash") return;
+        // A slash is one pass: after his shot (once no radar round of his needs his lock) or once through, he extends.
+        bool illuminating = false;
+        for (const Missile& m : missiles_) illuminating = illuminating || (!m.done && &fighters_[m.shooter] == &f && IsSemiActive(m.aam->guidance));
+        const bool fired = f.shots != before && (f.next_shot_s != next_before || f.gun_s <= 0.0);
+        if (!illuminating && (fired || dh < fp.pass_m)) {
+            f.extend_until = t + fp.extend_s;
+            f.extend_dir = Flat(me.velocity);
+            ++counts_.extends;
+            if (w.event) w.event(f.def->target, "extends");
+        }
+    }
+
+    // An escort on his station: behind, abeam and above his strikers' leader, closing at a speed that keeps it.
+    void Station(Fighter& f, const Aircraft& me, const Aircraft& charge, double t, const AirFightWorld& w) {
+        const FightParams& fp = def_->combat.fight;
+        f.mode = Mode::Station;
+        const Vec3 fwd = Flat(charge.velocity);
+        const Vec3 right{fwd.y, -fwd.x, 0.0};
+        const double side = (f.key & 1u) != 0u ? 1.0 : -1.0;
+        const Vec3 station = charge.position - fwd * fp.escort_back_m + right * (side * fp.escort_side_m) + Vec3{0.0, 0.0, fp.escort_up_m};
+        const double v = std::max(50.0, charge.velocity.Length());
+        const double behind = Dot(station - me.position, fwd);
+        const double speed = v + std::clamp(0.05 * behind, -0.3 * v, 0.3 * v);
+        Vec3 point = station + charge.velocity * 4.0;
+        if ((point - me.position).Length() < 600.0) point = me.position + fwd * 600.0;
+        Steer(f, me, point, t, w, speed);
     }
 
     // What he sees and what his radar holds.
@@ -526,7 +1001,7 @@ private:
             }
         }
         // His radar: by hand, or cued after a vector; looking down, the clutter figure; inside the scan's sector.
-        if (f.radar != nullptr) {
+        if (f.radar != nullptr && (def_->mode < 1 || RadarOn(f, me))) {
             const bool cued = f.last_vector_s >= 0.0 && t - f.last_vector_s < fp.control_lost_s;
             const double reach = cued && f.radar->cued_m > 0.0 ? f.radar->cued_m : f.radar->by_hand_m;
             const double my_alt = w.altitude ? w.altitude(me.position) : me.position.z;
@@ -540,7 +1015,7 @@ private:
                 if (Angle(me.velocity, d) > fp.radar_az_rad) continue;
                 const double tgt_alt = w.altitude ? w.altitude(a->position) : a->position.z;
                 const bool below = tgt_alt < my_alt - 300.0 && (w.agl ? w.agl(a->position) : tgt_alt) < 3000.0;
-                double r = below ? (f.radar->clutter_m > 0.0 ? f.radar->clutter_m : 0.5 * reach) : reach;
+                double r = below ? (def_->mode >= 1 ? f.look_down * reach : f.radar->clutter_m > 0.0 ? f.radar->clutter_m : 0.5 * reach) : reach;
                 if (f.radar->rcs_m2 > 0.0) r *= std::pow(std::max(0.01, a->rcs_m2) / f.radar->rcs_m2, 0.25);
                 if (d.Length() > r) continue;
                 Contact c;
@@ -598,7 +1073,8 @@ private:
         return now + c.vel * (0.5 * tti);
     }
 
-    void Steer(Fighter& f, const Aircraft& me, const Vec3& point, double t, const AirFightWorld& w) {
+    // `speed_mps` > 0: the speed he flies it at (S3: a drag or an extension at full speed, an escort keeping station).
+    void Steer(Fighter& f, const Aircraft& me, const Vec3& point, double t, const AirFightWorld& w, double speed_mps = 0.0) {
         if (!w.steer) return;
         PilotOverride ov;
         ov.kind = PilotOverride::Kind::Break;
@@ -606,6 +1082,7 @@ private:
         ov.after = PilotOverride::After::Rejoin;
         ov.point = point;
         ov.turn_rate_rad_s = me.max_turn_rate_rad_s;
+        ov.speed_mps = speed_mps;
         ov.until_s = t + 3.0 * def_->combat.fight.think_s + 1.0;
         w.steer(f.target, ov);
         f.steering = true;
@@ -614,27 +1091,32 @@ private:
     void GoHome(Fighter& f, const Aircraft& me, double t, const AirFightWorld& w, const std::string& why) {
         f.mode = Mode::Home;
         f.why_home = why;
+        if (def_->mode >= 1) SetRadar(f, 0, -1, w);
         if (w.event) w.event(f.def->target, "turns for home (" + why + ")");
         if (!w.steer) return;
         Vec3 away = me.velocity;
         for (const Contact& c : f.contacts) {
             if (c.hostile) away = me.position - c.believed;
         }
+        if (f.def->has_home) away = f.def->home - me.position;  // S1: ours with a base fly to it
         away.z = 0.0;
         if (away.Length() < 1.0) away = Vec3{0.0, 1.0, 0.0};
         PilotOverride ov;
         ov.kind = PilotOverride::Kind::TurnAway;
         ov.end = PilotOverride::End::Point;
         ov.after = PilotOverride::After::Home;
-        ov.point = me.position + away * (30000.0 / away.Length());
+        ov.point = f.def->has_home ? Vec3{f.def->home.x, f.def->home.y, me.position.z} : me.position + away * (30000.0 / away.Length());
         ov.turn_rate_rad_s = me.max_turn_rate_rad_s;
-        ov.until_s = t + 600.0;
+        const double speed = std::max(50.0, me.velocity.Length());
+        ov.until_s = t + std::max(600.0, 1.5 * away.Length() / speed);
         w.steer(f.target, ov);
     }
 
     // The shot: his weapons in his doctrine's order, each fired when he believes the target is in its zone.
-    void Fire(Fighter& f, const Aircraft& me, const Contact& c, double t, const AirFightWorld& w) {
+    // `from` (S3, the far fight): the geometry his shot is judged on, his leader's; his round still leaves from him.
+    void Fire(Fighter& f, const Aircraft& self, const Contact& c, double t, const AirFightWorld& w, const Aircraft* from = nullptr) {
         const FightParams& fp = def_->combat.fight;
+        const Aircraft& me = from != nullptr ? *from : self;
         if (t < f.next_shot_s || c.truth < 0) return;
         const Aircraft* tg = w.air(c.truth);
         if (tg == nullptr) return;
@@ -667,6 +1149,7 @@ private:
                 gp.window_s = burst;
                 gp.target_g = std::max(1.0, tg->load_g);
                 const GunResult gr = ResolveGunPass(*f.gun, ch, gp, pl, seed_, f.key, ++f.shots);
+                if (w.fx_gun) w.fx_gun(f.target, c.truth, *f.gun, t, burst, gr.kill);
                 Record(f, c.truth, f.gun->id, t, gr.kill, gr.reason, c.what, w);
                 if (gr.kill) Down(f, c.truth, f.gun->id, t, w);
                 return;
@@ -689,9 +1172,20 @@ private:
                 ms.geo = g;
                 ms.fired_s = t;
                 ms.arrive_s = t + g.range_m / std::max(100.0, m.first->mean_mps);
+                if (def_->mode >= 1) {
+                    // Flown (S3): from him at its mean speed, for as long as its maximum ranges allow against a target
+                    // of the reference speed head-on or from astern; arrive_s is then only the feed's forecast.
+                    const double v = std::max(100.0, m.first->mean_mps), ref = fp.missile_ref_target_mps;
+                    ms.flown = true;
+                    ms.pos = self.position;
+                    ms.last_s = t;
+                    ms.budget_s = std::max(MaxRangeM(*m.first, ch, chain_detail::kPi, g.altitude_m) / (v + ref),
+                                           MaxRangeM(*m.first, ch, 0.0, g.altitude_m) / std::max(50.0, v - ref));
+                }
                 ms.shot = shot;
                 ms.believed = c.what;
                 missiles_.push_back(ms);
+                if (w.fx_launch) w.fx_launch(f.target, c.truth, *m.first, static_cast<int>(shot), t, ms.arrive_s);
                 f.next_shot_s = t + 4.0;
                 if (w.event) w.event(f.def->target, "fires " + m.first->name + " at " + c.what + " " + std::to_string(static_cast<int>(g.range_m)) + " m");
                 return;
@@ -710,14 +1204,39 @@ private:
                 const Aircraft* tg = w.air(m.target);
                 if (me == nullptr || tg == nullptr || Angle(me->velocity, tg->position - me->position) > fp.radar_az_rad) m.lock_lost_s = t;
             }
-            if (t < m.arrive_s) continue;
+            if (m.flown) {
+                if (!Fly(m, f, t, w)) continue;
+            } else if (t < m.arrive_s) {
+                continue;
+            }
             m.done = true;
             const Aircraft* tg = w.air(m.target);
-            if (tg == nullptr) continue;  // gone already
+            if (tg == nullptr) {  // gone already
+                if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, false, true);
+                continue;
+            }
             ShotConditions k;
+            if (m.flown && m.arrive_s < 0.0) {  // out of energy short of a target that ran
+                ++counts_.out_of_energy;
+                if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, false, false);
+                Record(f, m.target, m.aam->id, t, false, MissReason::Energy, m.believed, w);
+                continue;
+            }
+            if (m.flown) {
+                // At its end: the target's countermeasures against its seeker, and whether it ends in the beam against the ground.
+                if (w.countermeasure) k.countermeasures = w.countermeasure(m.target, IsInfrared(m.aam->guidance), t);
+                const Aircraft* sh = w.air(f.target);
+                const Vec3 from = sh != nullptr ? sh->position : m.pos;
+                const double tgt_alt = w.altitude ? w.altitude(tg->position) : tg->position.z;
+                const double sh_alt = w.altitude ? w.altitude(from) : from.z;
+                const bool down = tgt_alt < sh_alt - 300.0 && (w.agl ? w.agl(tg->position) : tgt_alt) < 3000.0;
+                const double aspect = tg->velocity.Length() < 1.0 ? 0.0 : chain_detail::kPi - Angle(tg->velocity, from - tg->position);
+                k.end_notch = down && std::fabs(aspect - 0.5 * chain_detail::kPi) < def_->combat.calibration.chain.beam_notch_half_rad ? 1 : 0;
+                counts_.notched += k.end_notch == 1 && IsSemiActive(m.aam->guidance) ? 1 : 0;
+            }
             // His break, if he knew of the shot: a lock or a launch on his receiver, or the trail or the shooter seen since.
-            bool knew = false;
-            if (w.picture) {
+            bool knew = m.flown && m.knew;
+            if (w.picture && !knew) {
                 if (const std::vector<Sighting>* pic = w.picture(m.target)) {
                     for (const Sighting& s : *pic) {
                         if (s.time_s < m.fired_s) continue;
@@ -732,14 +1251,63 @@ private:
                 const Fighter* tf = FighterAt(m.target);
                 const double sk = tf != nullptr ? tf->skill : 0.5;
                 k.break_timing = 0.4 + 0.5 * sk;
+                // Roadmap S5: a fighter bound to a controller who has had no word from him (his net jammed, out of reach,
+                // lost) breaks the later for it (our side's 4-10 s jammed against 2-5 s under the GCI's warning).
+                if (tf != nullptr && tf->def->unwarned_break < 1.0 && Unwarned(*tf, t)) k.break_timing *= tf->def->unwarned_break;
                 k.target_g = tg->max_load_g > 0.0 ? std::min(fp.break_g, tg->max_load_g) : fp.break_g;
             }
             if (m.lock_lost_s >= 0.0) k.lock_lost_before_impact_s = std::max(0.0, m.arrive_s - m.lock_lost_s);
             const ShotResult r = ResolveShot(*m.aam, def_->combat.calibration.chain, m.geo, k, Pilot{f.skill, 0.4, false}, seed_, f.key, m.shot);
+            if (w.fx_end) w.fx_end(f.target, m.target, *m.aam, static_cast<int>(m.shot), t, r.kill, false);
             Record(f, m.target, m.aam->id, t, r.kill, r.reason, m.believed, w);
             if (r.kill) Down(f, m.target, m.aam->id, t, w);
         }
         missiles_.erase(std::remove_if(missiles_.begin(), missiles_.end(), [](const Missile& m) { return m.done; }), missiles_.end());
+    }
+
+    // A flown round (S3): lead pursuit at its mean speed. True once it has ended: at the target (arrive_s the time), its
+    // target gone, or out of energy (arrive_s < 0). On the way the target learns of it from his picture, and answers it
+    // once, a few seconds before it arrives, with flares or chaff by his habit.
+    bool Fly(Missile& m, const Fighter& f, double t, const AirFightWorld& w) {
+        const double dt = t - m.last_s;
+        m.last_s = t;
+        const Aircraft* tg = w.air(m.target);
+        if (tg == nullptr) return true;
+        const double v = std::max(100.0, m.aam->mean_mps);
+        const Vec3 to = tg->position - m.pos;
+        const double d = to.Length();
+        const double tgo = d / v;
+        if (!m.knew && w.picture) {
+            if (const std::vector<Sighting>* pic = w.picture(m.target)) {
+                for (const Sighting& s : *pic) {
+                    if (s.time_s < m.fired_s) continue;
+                    if (s.kind == SightKind::Trail || s.kind == SightKind::LaunchSign || (s.by == SightBy::Rwr && s.rwr == RwrState::Launch) ||
+                        (s.by == SightBy::Rwr && s.rwr == RwrState::Lock && IsSemiActive(m.aam->guidance))) {
+                        m.knew = true;
+                        m.knew_s = t;
+                    }
+                }
+            }
+        }
+        if (m.knew && !m.dispensed && tgo <= 4.0 && w.dispense) {
+            m.dispensed = true;
+            if (w.dispense(m.target, IsInfrared(m.aam->guidance), t)) ++counts_.dispenses;
+        }
+        const double step = v * std::max(0.0, dt);
+        if (d <= step + 30.0) {
+            m.pos = tg->position;
+            m.arrive_s = t;
+            return true;
+        }
+        if (t - m.fired_s > m.budget_s) {
+            m.arrive_s = -1.0;
+            return true;
+        }
+        Vec3 aim = tg->position + tg->velocity * tgo - m.pos;
+        const double la = aim.Length();
+        if (la > 1e-6) m.pos = m.pos + aim * (step / la);
+        (void)f;
+        return false;
     }
 
     void Record(Fighter& f, int target, const std::string& weapon, double t, bool kill, MissReason why, const std::string& believed,
@@ -774,6 +1342,8 @@ private:
     const AirFightDef* def_ = nullptr;
     std::uint64_t seed_ = 0;
     double start_s_ = -1.0;
+    std::vector<std::string> ids_;  // the scenario's target ids by index (S3: an escort's strikers)
+    Counts counts_;
     std::vector<Fighter> fighters_;
     std::deque<AirFightFighterDef> added_;  // fighters added while it runs (their defs stay put)
     std::vector<Missile> missiles_;
@@ -785,6 +1355,9 @@ private:
     std::uint64_t sense_count_ = 0;
     int vectors_sent_ = 0;
     int vectors_heard_ = 0;
+    std::vector<TeaballWarning> teaball_;
+    int teaball_overheard_ = 0;
+    int teaball_warnings_ = 0;
 };
 
 }  // namespace airwar

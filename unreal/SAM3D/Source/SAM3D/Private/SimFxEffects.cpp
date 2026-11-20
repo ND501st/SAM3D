@@ -546,6 +546,11 @@ void FSimFxWorld::ClearAll()
 	Bombs.Reset();
 	GunRuns.Reset();
 	GunPasses.Reset();
+	for (FSimFxFlare& F : Flares)
+	{
+		ReleaseRibbon(F.Ribbon, F.Key);
+	}
+	Flares.Reset();
 	Wrecks.Clear();
 	WreckFx.Reset();
 	for (FSimFxDamageFx& D : DamageFx)
@@ -596,6 +601,7 @@ void FSimFxWorld::UpdateEffects()
 	UpdateBombs();
 	UpdateGunRuns();
 	UpdateGunPasses();
+	UpdateFlares();
 	UpdateWrecks();
 	UpdateDamaged();
 	UpdateFires();
@@ -871,8 +877,20 @@ void FSimFxWorld::OnEvent(const simcore::fx::Event& E)
 		AircraftDamaged(E);
 		break;
 	case EventKind::ChaffDrop:
+		ChaffDrop(E);
+		break;
 	case EventKind::FlareDrop:
-		break;  // roadmap B4: not drawn yet (a chaff cloud and a flare string are Left)
+		FlareDrop(E);
+		break;
+	case EventKind::AamLaunch:
+		AamLaunch(E);
+		break;
+	case EventKind::AamEnd:
+		AamEnd(E);
+		break;
+	case EventKind::AirGunBurst:
+		AirGunBurst(E);
+		break;
 	}
 }
 
@@ -1074,6 +1092,12 @@ void FSimFxWorld::Release(const simcore::fx::Event& E)
 		else
 		{
 			B.PathKind = EKind::FreeFall;
+		}
+		if (B.bInert)
+		{
+			// Thrown off unarmed (roadmap B4): no motor lit, no retarder opened, it falls (and tumbles: UpdateBombs).
+			B.PathKind = EKind::FreeFall;
+			B.Part.Reset();
 		}
 	}
 }
@@ -2426,8 +2450,12 @@ void FSimFxWorld::UpdateMissiles()
 				Speed = FMath::Clamp(Dist / Left, 0.5 * M.SpeedMps, 2.0 * M.SpeedMps);
 			}
 			Speed *= FMath::Clamp(Since / 1.5, 0.15, 1.0);  // gathering speed off the rail
+			if (M.bAam)
+			{
+				Speed = FMath::Max(Speed, M.V0.Length());  // it leaves at its shooter's speed
+			}
 			const Vec3 Dir = M.Vel.Normalized();
-			const double Turn = (Since < 0.6 ? 0.2 : 1.2) * Dt;
+			const double Turn = (M.bAam ? (Since < 0.3 ? 0.3 : Tune.AirBattle.AamTurnPerS) : (Since < 0.6 ? 0.2 : 1.2)) * Dt;
 			const Vec3 NewDir = simcore::TurnToward(Dir.LengthSquared() > 0.5 ? Dir : To.Normalized(), To.Normalized(), Turn);
 			M.Vel = NewDir * Speed;
 			M.Pos += M.Vel * Dt;
@@ -2594,7 +2622,7 @@ void FSimFxWorld::UpdateBombs()
 		const Vec3 Fwd = B.Path.Forward(Now);
 		const FVector PosU = ToU(Pos);
 		const FVector FwdU = (ToU(Pos + Fwd) - PosU).GetSafeNormal();
-		if (Mun.bMotor || Mun.Kind == TEXT("rocket") || Mun.Kind == TEXT("missile"))
+		if (!B.bInert && (Mun.bMotor || Mun.Kind == TEXT("rocket") || Mun.Kind == TEXT("missile")))
 		{
 			FSimFxMissile Temp;
 			Temp.Key = B.Key;
@@ -2613,7 +2641,10 @@ void FSimFxWorld::UpdateBombs()
 		TierAt(PosU, Mun.LengthM, &Px);
 		if (Px > Tune.Lod.MunitionPx && Mun.bHasMesh)
 		{
-			const FRotator Rot = FwdU.Rotation();
+			// A store thrown off tumbles as it falls (roadmap B13); a bomb dropped flies nose first along its path.
+			const FRotator Rot = B.bInert
+				? (FwdU.Rotation().Quaternion() * SimFxLogic::TumbleAt(B.Key, Now - B.ReleaseT, Tune.AirBattle.TumbleDegPerS).Quaternion()).Rotator()
+				: FwdU.Rotation();
 			if (UStaticMesh* Mesh = FSimMunitionModels::Mesh(Mun.Id))
 			{
 				Meshes.Add({Mesh, PosU, Rot});
@@ -2744,6 +2775,20 @@ void FSimFxWorld::UpdateGunPasses()
 		const double Mps = Mun.MuzzleMps > 0.0 ? Mun.MuzzleMps : T.DefaultMuzzleMps;
 		const double Calibre = Mun.CalibreMm > 0.0 ? Mun.CalibreMm : 23.0;
 		const double DragK = simcore::fx::kDragKTypical23mm * 23.0 / Calibre;
+		if (G.bAir && G.SiteId >= 0)
+		{
+			// A fighter's burst: its gun goes where the shooter is drawn (roadmap B13).
+			if (const FSimEntityState* Shooter = Entity(G.SiteId))
+			{
+				if (Shooter->bAlive)
+				{
+					const FVector P = EntityPos(*Shooter);
+					G.Site = ToE(P);
+					G.SiteU = P;
+					G.SiteVel = ToE(P + Shooter->Velocity) - G.Site;
+				}
+			}
+		}
 		simcore::fx::RoundParams Round;
 		Round.muzzle_mps = Mps;
 		Round.drag_k = DragK;
@@ -2799,6 +2844,10 @@ void FSimFxWorld::UpdateGunPasses()
 				R.FireT = G.NextShotT;
 				const double Side = Barrels > 1 ? (G.Barrel % Barrels - 0.5 * (Barrels - 1)) * T.BarrelSpacingM : 0.0;
 				R.Muzzle = G.Site + Across * Side;
+				if (G.bAir && G.SiteVel.LengthSquared() > 1.0)
+				{
+					R.Muzzle = R.Muzzle + G.SiteVel.Normalized() * 5.0;  // the gun in the nose, not the aircraft's middle
+				}
 				// Where the fire control measures it (the pass's errors, as corrected by the time into the pass: aaa.hpp's
 				// AimGun), led along a straight line.
 				const double Fix = FMath::Exp(-FMath::Max(G.CorrectionPerS, 0.0) * FMath::Max(G.NextShotT - G.T0, 0.0));
@@ -2849,7 +2898,7 @@ void FSimFxWorld::UpdateGunPasses()
 				const double Side = Barrels > 1 ? (B - 0.5 * (Barrels - 1)) * T.BarrelSpacingM : 0.0;
 				FSimFxSprite F;
 				F.Layer = ESimFxLayer::Glow;
-				F.Pos = G.SiteU + FVector(0.0, 0.0, 150.0) + AcrossU * Side + AimU * 150.0;
+				F.Pos = G.bAir ? G.SiteU + AimU * 400.0 : G.SiteU + FVector(0.0, 0.0, 150.0) + AcrossU * Side + AimU * 150.0;
 				F.Width = F.Length = static_cast<float>(100.0 * T.MuzzleFlashM * (G.bFlak ? 2.0 : 1.0)) * SimFxEffFlicker(Now, I * 3.0 + B * 1.37);
 				F.Tint = MuzzleColour * Brightness(T.MuzzleBrightness);
 				F.MinPx = B == 0 ? 1.5f : 0.0f;
@@ -2860,7 +2909,7 @@ void FSimFxWorld::UpdateGunPasses()
 				AddLight(G.SiteU + FVector(0.0, 0.0, 150.0), MuzzleColour, T.MuzzleLightLumens * (G.bFlak ? 2.0 : 1.0), 2500.0);
 			}
 			// Each burst's gun smoke, pale grey, drifting off the mount on the wind (LOOK 14: 2-4 m, 4-8 s).
-			if (!G.bBurstSmoked)
+			if (!G.bBurstSmoked && !G.bAir)
 			{
 				G.bBurstSmoked = true;
 				if (Seen(G.SiteU, 1000.0) && DistToCamM(G.SiteU) < Lod.MaxRangeM)
@@ -3425,4 +3474,285 @@ void FSimFxWorld::UpdateAircraft()
 			It.RemoveCurrent();
 		}
 	}
+}
+
+// ------------------------------------------------------------------ the air battle (roadmap B13)
+
+void FSimFxWorld::ChaffDrop(const simcore::fx::Event& E)
+{
+	// A salvo's cartridges burst behind the aircraft into a pale cloud of foil that blooms in a second or two, stops in the
+	// air and drifts on the wind, thinning (the picture only: what it does to a radar is the simulation's).
+	const FSimFxTuning::FAirBattle& T = Tune.AirBattle;
+	const FVector At = ToU(E.position);
+	if (!Seen(At, 100.0 * (T.ChaffBloomM + T.ChaffSpreadM)) || DistToCamM(At) > Lod.MaxRangeM)
+	{
+		return;
+	}
+	const FVector VelU = ToU(E.position + E.velocity) - At;  // cm/s
+	const FVector Back = VelU.SizeSquared() > 1.0 ? -VelU.GetSafeNormal() : FVector(-1.0, 0.0, 0.0);
+	const FVector Wind = WindAt(E.position);
+	const int32 Puffs = SimFxLogic::ChaffPuffs(E.number, T.ChaffPuffsPerCartridge, T.ChaffPuffsMax);
+	for (int32 K = 0; K < Puffs; ++K)
+	{
+		const double U = Puffs > 1 ? static_cast<double>(K) / (Puffs - 1) : 0.0;
+		FSimFxParticle P;
+		P.Layer = ESimFxLayer::Smoke;
+		P.Pos = At + Back * (100.0 * T.ChaffSpreadM * U) + RandUnit() * 300.0;
+		P.Vel = VelU * 0.25;
+		P.Wind = Wind;
+		P.Drag = static_cast<float>(T.ChaffDragPerS);
+		P.Life = static_cast<float>(T.ChaffS * RandRange(0.8, 1.2));
+		P.Size0 = 150.0f;
+		P.Size1 = static_cast<float>(100.0 * T.ChaffBloomM * RandRange(0.6, 1.2));
+		P.GrowS = static_cast<float>(T.ChaffBloomS);
+		P.Tint = T.ChaffColour;
+		P.Opacity = static_cast<float>(T.ChaffOpacity);
+		P.FadeInS = 0.1f;
+		P.FadeFrom = 0.25f;
+		P.Frame0 = static_cast<float>(FMath::RandRange(0, 15));
+		P.Spin = static_cast<float>(RandRange(-0.3, 0.3));
+		P.SpreadCmps = 30.0f;
+		Spawn(P);
+	}
+	// The foil catching the sun: brief twinkles through the cloud over most of its life (none at night). A waiting particle
+	// does not move, so each starts where the cloud has drifted to by its turn: the puffs' velocity eased toward the wind at
+	// their drag, x(t) = wind t + (v0 - wind) (1 - e^-kt) / k.
+	if (Sun.bNight)
+	{
+		return;
+	}
+	const FVector V0 = VelU * 0.25;
+	const double DragK = FMath::Max(T.ChaffDragPerS, 0.01);
+	for (int32 I = 0; I < T.ChaffGlints; ++I)
+	{
+		const double Delay = RandRange(0.0, 0.7 * T.ChaffS);
+		const double Ease = FMath::Exp(-DragK * Delay);
+		const FVector Drift = Wind * Delay + (V0 - Wind) * ((1.0 - Ease) / DragK);
+		const double Grown = FMath::Clamp(Delay / FMath::Max(T.ChaffBloomS, 0.1), 0.2, 1.0);
+		FSimFxParticle G;
+		G.Layer = ESimFxLayer::Glow;
+		G.Pos = At + Drift + Back * (100.0 * T.ChaffSpreadM * Rand01()) + RandUnit() * (100.0 * 0.5 * T.ChaffBloomM * Grown);
+		G.Vel = Wind + (V0 - Wind) * Ease;
+		G.Wind = Wind;
+		G.Drag = static_cast<float>(T.ChaffDragPerS);
+		G.Age = -static_cast<float>(Delay);
+		G.Life = static_cast<float>(RandRange(0.15, 0.5));
+		G.Size0 = G.Size1 = 25.0f;
+		G.Tint = FLinearColor::White * Brightness(T.ChaffGlintBrightness);
+		G.FadeFrom = 0.3f;
+		G.MinPx = 1.0f;
+		Spawn(G);
+	}
+}
+
+void FSimFxWorld::FlareDrop(const simcore::fx::Event& E)
+{
+	// A salvo of flares, one after another from the dispenser, each falling away burning (UpdateFlares).
+	const FSimFxTuning::FAirBattle& T = Tune.AirBattle;
+	const int32 N = FMath::Clamp(E.number, 1, FMath::Max(T.FlaresMax, 1));
+	const FVector At = ToU(E.position);
+	const FVector FwdU = (ToU(E.position + E.velocity) - At).GetSafeNormal();
+	for (int32 K = 0; K < N; ++K)
+	{
+		FSimFxFlare& F = Flares.AddDefaulted_GetRef();
+		F.BornT = E.t_s + K * T.FlareSalvoS;
+		F.BurnS = T.FlareBurnS * RandRange(0.85, 1.15);
+		F.SourceId = E.world_id;
+		F.FallbackPos = E.position + E.velocity * (K * T.FlareSalvoS);
+		F.FallbackVel = E.velocity;
+		const FVector DirU = SimFxLogic::FlareEjectDir(K, FwdU.IsNearlyZero() ? FVector::ForwardVector : FwdU);
+		F.Eject = (ToE(At + DirU * 100.0) - E.position) * T.FlareEjectMps;  // a metre along it, times the speed
+		F.Key = NextKey++;
+	}
+}
+
+void FSimFxWorld::UpdateFlares()
+{
+	const FSimFxTuning::FAirBattle& T = Tune.AirBattle;
+	for (int32 I = Flares.Num() - 1; I >= 0; --I)
+	{
+		FSimFxFlare& F = Flares[I];
+		if (!F.bLive)
+		{
+			if (Now < F.BornT)
+			{
+				continue;
+			}
+			// It leaves from where its aircraft is drawn at its own instant.
+			Vec3 Pos = F.FallbackPos, Vel = F.FallbackVel;
+			if (const FSimEntityState* S = Entity(F.SourceId))
+			{
+				if (S->bAlive)
+				{
+					const FVector P = EntityPos(*S);
+					Pos = ToE(P);
+					Vel = ToE(P + S->Velocity) - Pos;
+				}
+			}
+			F.Pos = Pos;
+			F.Vel = Vel + F.Eject;
+			F.bLive = true;
+		}
+		const double Age = Now - F.BornT;
+		const float Glow = SimFxLogic::FlareGlowAt(Age, F.BurnS);
+		if (Glow <= 0.0f || F.Pos.z <= GroundUnder(F.Pos).z + 1.0)
+		{
+			ReleaseRibbon(F.Ribbon, F.Key);
+			Flares.RemoveAtSwap(I, EAllowShrinking::No);
+			continue;
+		}
+		// Its fall: slowing from the aircraft's speed toward the wind, falling under gravity (BallisticAt over the frame).
+		const FVector PosU = ToU(F.Pos);
+		const FVector VelU = ToU(F.Pos + F.Vel) - PosU;
+		const FVector Wind = WindAt(F.Pos);
+		const double Step = FMath::Max(static_cast<double>(Dt), 0.0);
+		const FVector NextU = SimFxLogic::BallisticAt(PosU, VelU, Wind, T.FlareDragPerS, 981.0, Step);
+		const FVector NextVelU = Step > 1e-6 ? (NextU - PosU) / Step : VelU;
+		F.Pos = ToE(NextU);
+		F.Vel = ToE(NextU + NextVelU) - F.Pos;
+		// The burning point: a white-yellow glow (and at night a light on what is below).
+		FSimFxSprite S;
+		S.Layer = ESimFxLayer::Glow;
+		S.Pos = NextU;
+		S.Width = S.Length = static_cast<float>(100.0 * T.FlareSizeM) * SimFxEffFlicker(Now, static_cast<double>(F.Key));
+		S.Tint = T.FlareColour * (Brightness(T.FlareBrightness) * Glow);
+		S.MinPx = 2.0f;
+		S.KeepAlpha = Sun.bNight ? static_cast<float>(Tune.Lod.GlintKeep) : 0.0f;
+		AddSprite(S);
+		if (Sun.bNight && DistToCamM(NextU) < 8000.0)
+		{
+			AddLight(NextU, T.FlareColour, T.FlareLumens * Glow, 30000.0);
+		}
+		// Its white smoke trail, drifting.
+		if (DistToCamM(NextU) < TrailRangeM(false))
+		{
+			FSimFxRibbonStyle Style = MissileTrailStyle(T.FlareSmokeS);
+			Style.Colour = T.FlareSmokeColour;
+			TrailPoint(F.Ribbon, F.Key, F.LastTrailPos, F.bHaveTrail, NextU, static_cast<float>(100.0 * T.FlareSmokeWidthM), 0.8f * Glow,
+				T.FlareSmokePointM, Style, Wind);
+		}
+	}
+}
+
+void FSimFxWorld::AamLaunch(const simcore::fx::Event& E)
+{
+	// An air-to-air missile off its rail under the shooter as drawn, at the shooter's speed, chasing its target until its
+	// AamEnd says how it ended (UpdateMissiles' chase; DrawMissile's motor, smoke and its munitions.json shape).
+	FSimFxMissile& M = Missiles.AddDefaulted_GetRef();
+	M.Mode = FSimFxMissile::EMode::Flown;
+	M.Key = NextKey++;
+	M.Weapon = UTF8_TO_TCHAR(E.weapon.c_str());
+	M.Mun = &Munition(M.Weapon);
+	M.Source = UTF8_TO_TCHAR(E.source.c_str());
+	M.Number = E.number;
+	M.bAam = true;
+	M.LaunchT = E.t_s;
+	M.T0 = E.t_s;
+	Vec3 Pos = E.position, Vel = E.velocity;
+	if (const FSimEntityState* S = Entity(E.world_id))
+	{
+		if (S->bAlive)
+		{
+			const FVector P = EntityPos(*S);
+			Pos = ToE(P);
+			Vel = ToE(P + S->Velocity) - Pos;
+		}
+	}
+	Pos.z -= 1.0;  // under the wing
+	M.P0 = Pos;
+	M.Pos = Pos;
+	M.Aim = E.aim.LengthSquared() > 0.0 ? E.aim : Pos + Vel * 10.0;
+	M.TargetId = E.target_world_id;
+	M.TargetName = UTF8_TO_TCHAR(E.target.c_str());
+	const double Dist = (M.Aim - Pos).Length();
+	M.EndT = E.end_t_s > E.t_s + 0.2 ? E.end_t_s : E.t_s + Dist / FMath::Max(Tune.Missile.SamSpeedMps, 100.0);
+	M.SpeedMps = FMath::Max(Dist / FMath::Max(M.EndT - M.T0, 0.5), Vel.Length() + 100.0);
+	M.V0 = Vel.LengthSquared() > 1.0 ? Vel : (M.Aim - Pos).Normalized() * 250.0;
+	M.Vel = M.V0;
+	M.bWaitForEnd = true;
+	M.bShowMesh = true;
+	M.ChargeKg = M.Mun->ChargeKg > 0.0 ? M.Mun->ChargeKg : Tune.Missile.DefaultChargeKg;
+}
+
+void FSimFxWorld::AamEnd(const simcore::fx::Event& E)
+{
+	using simcore::fx::BurstEnd;
+	const FString Source = UTF8_TO_TCHAR(E.source.c_str());
+	FSimFxMissile* M = nullptr;
+	for (FSimFxMissile& Each : Missiles)
+	{
+		if (Each.bAam && !Each.bDone && Each.bWaitForEnd && Each.Number == E.number && Each.Source == Source)
+		{
+			M = &Each;
+			break;
+		}
+	}
+	const FSimFxMunition& Mun = M != nullptr && M->Mun != nullptr ? *M->Mun : Munition(UTF8_TO_TCHAR(E.weapon.c_str()));
+	const double Charge = Mun.ChargeKg > 0.0 ? Mun.ChargeKg : Tune.Missile.DefaultChargeKg;
+	if (E.end == BurstEnd::Hit)
+	{
+		// On the target: its warhead where the target is (the wreck follows on AircraftDown).
+		AddBurst(EFxBurstStyle::Warhead, E.aim, Charge, E.t_s, M != nullptr ? M->Vel : E.velocity);
+		if (M != nullptr)
+		{
+			M->bDone = true;
+			ReleaseRibbon(M->Ribbon, M->Key);
+		}
+		return;
+	}
+	if (M == nullptr)
+	{
+		return;  // a miss of a missile never drawn (the effects started after it left): nothing to fly on
+	}
+	if (E.end == BurstEnd::Early)
+	{
+		// Its target gone before it arrived: it destroys itself where it is.
+		AddBurst(EFxBurstStyle::Warhead, M->Pos, Charge, Now, M->Vel);
+		M->bDone = true;
+		ReleaseRibbon(M->Ribbon, M->Key);
+		return;
+	}
+	// Wide: past its target it flies on along its track, then destroys itself.
+	const Vec3 Dir = M->Vel.LengthSquared() > 1.0 ? M->Vel.Normalized() : (E.position - M->Pos).Normalized();
+	const double Speed = FMath::Max(M->Vel.Length(), M->SpeedMps);
+	const double FlyOnS = FMath::Max(Tune.AirBattle.AamFlyOnS, 0.5);
+	M->bWaitForEnd = false;
+	M->P0 = M->Pos;
+	M->V0 = Dir * Speed;
+	M->T0 = Now;
+	M->EndT = Now + FlyOnS;
+	M->Aim = M->Pos + Dir * (Speed * FlyOnS) - Vec3{0.0, 0.0, 0.5 * 9.81 * FlyOnS * FlyOnS};
+	M->bBurstAtEnd = true;
+	M->BurstStyle = EFxBurstStyle::Warhead;
+	M->ChargeKg = Charge;
+}
+
+void FSimFxWorld::AirGunBurst(const simcore::fx::Event& E)
+{
+	// A fighter's burst at an aircraft: a gun pass whose site is the shooter (UpdateGunPasses: tracers led at the target,
+	// a muzzle flash at the nose), one burst for the event's seconds.
+	FSimFxGunPass& G = GunPasses.AddDefaulted_GetRef();
+	G.bAir = true;
+	G.SiteId = E.world_id;
+	G.Site = E.position;
+	G.SiteU = ToU(G.Site);
+	G.SiteVel = E.velocity;
+	G.TargetId = E.target_world_id;
+	G.TargetName = UTF8_TO_TCHAR(E.target.c_str());
+	G.AimFallback = E.aim;
+	G.T0 = E.t_s;
+	G.T1 = FMath::Max(E.end_t_s, E.t_s + 0.3);
+	G.Weapon = UTF8_TO_TCHAR(E.weapon.c_str());
+	G.Mun = &Munition(G.Weapon);
+	G.bFlak = false;
+	G.SpreadMrad = Tune.AirBattle.AirGunDispersionMrad / 2.449;  // UpdateGunPasses' triangle of two draws: this sigma
+	G.Rng = SimFxEffHash(static_cast<uint32>(E.seq) * 2654435761u + 23u);
+	SimFxLogic::FGunBurst Burst;
+	Burst.StartS = G.T0;
+	Burst.EndS = G.T1;
+	G.Bursts.Add(Burst);
+	G.BurstIndex = 0;
+	G.NextShotT = G.T0;
+	G.NextBurstT = G.T0;
+	G.BurstEndT = G.T1;
 }

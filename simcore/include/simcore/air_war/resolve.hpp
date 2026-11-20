@@ -20,6 +20,7 @@
 
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/planner.hpp"
@@ -52,6 +53,11 @@ struct ResolveContext {
     // draws (0: none, as before B6) and its phase (the Pact's free hunt).
     std::uint64_t opportunity_seed = 0;
     int phase = 0;
+    // Our fighters' corridors as they are (S1, docs/air_battle/08_OUR_FIGHTERS.md section 9; theatre ENU, hours of the day):
+    // a package timed into one its staff believes in meets defences near it holding fire for ours at its hours.
+    std::vector<command::OwnAirZone> own_corridors;
+    // The enemy's losses so far today (roadmap S5: §9.3's husbanding, read under hot_phase.mode 2).
+    double losses_today = 0.0;
 };
 
 // The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
@@ -77,13 +83,19 @@ inline double PackageAirmanship(const Package& p, const AirStaff& staff) {
 
 // The package leader's nerve: the share of the package he will lose before turning back (0.25 + 0.3 x boldness, the
 // planner's and his own abort_threshold quirks). One rule for the abstract resolver and the played raid (flights.hpp's
-// package, roadmap B1), so the two turn back alike.
-inline double PackageNerve(const Package& p, const AirStaff& staff) {
+// package, roadmap B1), so the two turn back alike. Phase two (hot_phase.mode 2, roadmap S5, 10_FACTIONS.md §9.3): his
+// faction's press_on moved by him, less its husbanding as the day's losses near its tolerance (hot_phase.hpp HotNerve), and
+// the planner's quirk as before.
+inline double PackageNerve(const Package& p, const AirStaff& staff, const FactionDef* faction = nullptr, int hot_mode = 0, double losses_today = 0.0) {
     const Officer* leader = p.leader >= 0 ? &staff.officers[static_cast<std::size_t>(p.leader)] : nullptr;
-    double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
-    if (const Officer* pln = p.planner >= 0 ? &staff.officers[static_cast<std::size_t>(p.planner)] : nullptr) {
-        nerve += 0.1 * pln->Quirk("abort_threshold");
+    const Officer* pln = p.planner >= 0 ? &staff.officers[static_cast<std::size_t>(p.planner)] : nullptr;
+    if (faction != nullptr && hot_mode >= 2 && faction->hot.present) {
+        double nerve = HotNerve(*faction, FlightRole::Strike, leader, true, nullptr, losses_today);
+        if (pln != nullptr) nerve += 0.1 * pln->Quirk("abort_threshold");
+        return ClampTo(nerve, 0.05, 0.9);
     }
+    double nerve = 0.25 + 0.3 * (leader != nullptr ? leader->def.traits.boldness : 0.5);
+    if (pln != nullptr) nerve += 0.1 * pln->Quirk("abort_threshold");
     if (leader != nullptr) nerve += 0.15 * leader->Quirk("abort_threshold");
     return ClampTo(nerve, 0.05, 0.9);
 }
@@ -141,6 +153,7 @@ struct AirEvent {
 // A package in the air (roadmap B5, A0): walked leg by leg in the order of time, so it has a place at every hour and its
 // posts can act while it flies. Resolver::Begin sets it up, Resolver::StepTo walks every leg that ends by then.
 struct PackageRun {
+    std::vector<char> belt_done;  // per flight: its damaged aircraft have met their own belt (S1)
     PackageOutcome out;
     Rng rng{1};
     Rng* ext = nullptr;  // draw from this stream instead (Resolver::Resolve: the caller's)
@@ -238,6 +251,32 @@ inline bool RedirectFlight(Package& p, PackageRun& run, std::size_t fi, const Ve
     return true;
 }
 
+// A flight recalled (roadmap S2): from where it is now straight back to the end of its route, its load kept (aborted: it
+// releases nothing). False if it is done or has released already.
+inline bool RecallFlight(Package& p, PackageRun& run, std::size_t fi, double now_h, double speed_mps) {
+    if (fi >= p.flights.size() || fi >= run.next_leg.size() || run.FlightDone(p, fi) || speed_mps <= 0.0) return false;
+    Flight& fl = p.flights[fi];
+    if (fl.released || fl.aborted) return false;
+    const std::size_t si = run.next_leg[fi];
+    const RoutePoint& r0 = fl.route[si];
+    if (now_h < r0.t_h) now_h = r0.t_h;
+    RoutePoint here;
+    here.pos = PackageRun::PlaceOf(fl, now_h);
+    here.pos.z = r0.pos.z;
+    here.agl_m = r0.agl_m;
+    here.t_h = now_h;
+    here.tag = "recall";
+    RoutePoint home = fl.route.back();
+    home.t_h = now_h + Dist2d(here.pos, home.pos) / speed_mps / 3600.0;
+    std::vector<RoutePoint> route(fl.route.begin(), fl.route.begin() + static_cast<std::ptrdiff_t>(si + 1));
+    route.push_back(here);
+    route.push_back(home);
+    fl.route = route;
+    fl.release_index = -1;
+    fl.aborted = true;
+    return true;
+}
+
 class Resolver {
 public:
     // The whole package at once, drawing from `c.rng` (the bench's and the tests' way; the campaign steps it in time).
@@ -249,7 +288,7 @@ public:
         run.ext = c.rng;
         if (by_flight) {
             for (std::size_t i = 0; i < run.order.size(); ++i) run.order[i] = i;
-            std::sort(run.order.begin(), run.order.end(), [&](std::size_t a, std::size_t b) {
+            std::stable_sort(run.order.begin(), run.order.end(), [&](std::size_t a, std::size_t b) {
                 return TargetTime(p.flights[a]) < TargetTime(p.flights[b]);
             });
             c_ = &c;
@@ -276,7 +315,8 @@ public:
         run.jam = p.Has(FlightRole::Jammer);
         run.supp_base = PackageSuppression(p, *c.staff, d.tuning);
         run.airmanship = PackageAirmanship(p, *c.staff);
-        run.nerve = PackageNerve(p, *c.staff);  // the share of the package he will lose before turning back
+        // The share of the package he will lose before turning back (phase two under hot_phase.mode 2, roadmap S5).
+        run.nerve = PackageNerve(p, *c.staff, &d.faction, static_cast<int>(d.tuning.Get("hot_phase.mode")), c.losses_today);
         run.package_size = std::max(1, p.Aircraft());
         run.suppressed.assign(d.theatre.objects.size(), 0.0);
         run.engaged.assign(d.theatre.objects.size(), false);
@@ -366,7 +406,52 @@ private:
 
     // The flight is done with its route (shot down, turned back, home): reconnaissance without a release point
     // photographs what was along it.
+    // A defence near our fighters' corridor, at its hours, holds fire for ours (S1, mt_1973_nvn pp. 13-14): the share it keeps.
+    double OwnCorridorHold(const Package& p, const Vec3& at, double when_h) const {
+        const AirWarData& d = *c_->data;
+        if (!d.has_own_air || d.tuning.Get("own_air.mode") < 1.0) return 1.0;
+        double hod = std::fmod(d.theatre.start_hour + when_h, 24.0);
+        if (hod < 0.0) hod += 24.0;
+        for (const command::OwnAirZone& z : c_->own_corridors) {
+            if (z.id != p.own_corridor || hod < z.from_h || hod > z.to_h || z.DistanceM(at) > d.own_air.learning.near_m) continue;
+            return 1.0 - d.own_air.learning.hold_fire;
+        }
+        return 1.0;
+    }
+    // Its damaged aircraft come home over its own ground air defence (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): off
+    // its way home (NATO's minimum risk route, the Pact's return corridor) and with its IFF answer failed (Mode 4; Kremniy or
+    // Parol), each by a chance, and then its own belt may shoot one down; written in its records as lost to its own fire, in
+    // the faction's own words (OwnAdDef). Draws from a fork of the package's stream keyed on kOwnAirKey + 0x900 (none taken).
+    void OwnBelt(Package& p, std::size_t fi) {
+        const AirWarData& d = *c_->data;
+        const OwnAdDef& a = d.faction.own_ad;
+        if (!a.present || d.tuning.Get("own_air.mode") < 1.0 || fi >= p.flights.size()) return;
+        PackageRun& run = *run_;
+        if (run.belt_done.size() < p.flights.size()) run.belt_done.resize(p.flights.size(), 0);
+        if (run.belt_done[fi] != 0) return;
+        run.belt_done[fi] = 1;
+        Flight& fl = p.flights[fi];
+        const int damaged = std::min(fl.damaged, fl.count - fl.lost);
+        if (damaged <= 0 || fl.route.empty() || fl.role == FlightRole::Missile) return;
+        Rng belt = R().Fork(command::kOwnAirKey + 0x900ull + (static_cast<std::uint64_t>(p.id) << 8) + static_cast<std::uint64_t>(fi));
+        for (int k = 0; k < damaged; ++k) {
+            const bool off = belt.Chance(a.off_mrr_damaged);
+            const bool mode4 = belt.Chance(a.mode4_failed_damaged);
+            if (!(off && mode4) || !belt.Chance(a.belt_kill)) continue;
+            LossRecord lr;
+            lr.flight = static_cast<int>(fi);
+            lr.by = a.belt;
+            lr.where = fl.route.back().pos;
+            lr.own_fire = true;
+            run.out.losses.push_back(lr);
+            ++fl.lost;
+            Event(AirEvent::Kind::Loss, fl.route.back().t_h, fi, a.belt, lr.where, fl.count - fl.lost);
+            run.out.notes.push_back(fl.callsign + ": a damaged aircraft lost to its own " + a.belt + " coming home " + a.route + ", " + a.iff);
+        }
+    }
+
     void Finish(Package& p, std::size_t fi) {
+        OwnBelt(p, fi);
         Flight& fl = p.flights[fi];
         run_->next_leg[fi] = fl.route.empty() ? 0 : fl.route.size() - 1;
         const AircraftType* a = c_->data->faction.Aircraft(fl.aircraft);
@@ -531,6 +616,7 @@ private:
                 double supp = radar && !emcon ? std::max(run.supp_base, run.suppressed[oj]) : 0.0;
                 if (radar && !emcon && run.routed) supp = std::max(supp, run.corridor_supp[oj]);
                 if (st.function < 1.0) env *= st.function;
+                if (!p.own_corridor.empty() && p.own_corridor_found) env *= OwnCorridorHold(p, st.pos, when_h);
                 const double k = PassKillChance(def.defence.lethality, chord, def.defence.radius_m, fl.profile, a->helicopter,
                                                 def.defence.low_cover, def.defence.medium_cover, radar, supp,
                                                 run.jam && radar ? tune.Get("attrition.jamming") : 0.0, env,

@@ -218,6 +218,7 @@ struct FSimFxMissile
 	FVector LastTrailPos = FVector::ZeroVector;
 	bool bHaveTrail = false;
 	bool bLowSmoke = false;    // HARM and its like: a faint trail
+	bool bAam = false;         // an air-to-air missile (AamLaunch): leaves at its shooter's speed, ends on its AamEnd
 	bool bShowMesh = false;    // flown here: its mesh from the munition pool
 	float HelixPhase = 0.0f;   // a MANPADS's corkscrew: where its turn starts (LOOK 9.2)
 	FVector HelixAxisPos = FVector::ZeroVector;  // its axis where the last helix point was laid
@@ -269,6 +270,23 @@ struct FSimFxGunRun
 	bool bDone = false;
 };
 
+/** A decoy flare (FlareDrop, roadmap B4): a bright point falling from the aircraft, burning, with its smoke. */
+struct FSimFxFlare
+{
+	simcore::Vec3 Pos, Vel;    // ENU m, m/s
+	double BornT = 0.0;        // ejected then (a salvo's flares one after another)
+	double BurnS = 4.5;
+	int32 SourceId = -1;       // the aircraft it leaves (its drawn place at BornT; the event's state if not drawn)
+	simcore::Vec3 FallbackPos, FallbackVel;
+	simcore::Vec3 Eject;       // its throw out of the dispenser (m/s)
+	bool bLive = false;
+	uint64 Key = 0;
+	int32 Ribbon = -1;
+	FVector LastTrailPos = FVector::ZeroVector;
+	bool bHaveTrail = false;
+	bool bDone = false;
+};
+
 /** One round of a gun pass in flight. */
 struct FSimFxRound
 {
@@ -313,6 +331,10 @@ struct FSimFxGunPass
 	simcore::Vec3 LeadError;
 	double CorrectionPerS = 0.0;
 	double SpreadMrad = 0.0;   // a round's scatter (0: the tuning's)
+	// A fighter's burst at an aircraft (AirGunBurst, roadmap B13): the site is the shooter, moving; no gun smoke.
+	bool bAir = false;
+	int32 SiteId = -1;
+	simcore::Vec3 SiteVel;
 };
 
 /** A damaged aircraft flying on (AircraftDamaged): its smoke trail and its fire, until it is down or gone. */
@@ -464,6 +486,7 @@ public:
 	TArray<FSimFxBomb> Bombs;
 	TArray<FSimFxGunRun> GunRuns;
 	TArray<FSimFxGunPass> GunPasses;
+	TArray<FSimFxFlare> Flares;
 	FSimFxWrecks Wrecks;
 	TArray<FSimFxWreckFx> WreckFx;
 	TArray<FSimFxDamageFx> DamageFx;
@@ -560,6 +583,7 @@ public:
 	void UpdateBombs();
 	void UpdateGunRuns();
 	void UpdateGunPasses();
+	void UpdateFlares();
 	void UpdateWrecks();
 	void UpdateDamaged();
 	void UpdateFires();
@@ -581,5 +605,12 @@ public:
 	void FlakShell(const simcore::fx::Event& E);
 	void AircraftDamaged(const simcore::fx::Event& E);
 	void AircraftDown(const simcore::fx::Event& E);
+	/** The air battle (roadmap B13): a chaff salvo's cloud, a salvo of flares, an air-to-air missile's launch and end, a
+	 *  fighter's gun burst. */
+	void ChaffDrop(const simcore::fx::Event& E);
+	void FlareDrop(const simcore::fx::Event& E);
+	void AamLaunch(const simcore::fx::Event& E);
+	void AamEnd(const simcore::fx::Event& E);
+	void AirGunBurst(const simcore::fx::Event& E);
 	const TArray<FVector>& NozzlesOf(const FString& Model);
 };

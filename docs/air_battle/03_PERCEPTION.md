@@ -582,6 +582,37 @@ the visible events the runner records, the neighbours' and the PU-12M's radars r
 - A silent camouflaged battery on a 450 kt pass at 150 m: found in 17 % of 500 passes (P_max 0.25 scaled to 0.175); once it
   fires, its sign or trail is found in 71 %.
 
+### 5.10 As built (S7, 20 November 2026, branch `tbr-s7`)
+
+Roadmap S7 takes three of B3's leftovers. A session's perception is not saved with the campaign (a played outcome is),
+so none of this moves an old save's replay.
+
+- **The rear blind arc by type.** `perception.json`'s `"blind_by_type"` gives a type's half-cone behind the tail that
+  its pilot cannot see into (`LookoutData::rear_half_deg_by_type`, 0-90 degrees); the runner sets it on each pilot
+  (`ObserverIn::rear_half_deg`) and `Blind` uses it in place of the data's one value (25 degrees). Bubble canopies 10
+  (F-15C, F-16A), the A-10A 20, the Draken, Saab 105, Galeb and Utva 30-35, the MiG-23 and Su-25 40, the MiG-27 and
+  Su-17M3 45, the MiG-25 50. All are estimates from the canopies' shapes, not a source's numbers.
+- **TISEO and the targeting pods (1985 fits only).** `sensors.json`'s `optical_aid` entries carry `field_deg`,
+  `ground_recognise_m` and `night` beside `vid_m`. TISEO (the F-4E's, from 1979) gains a 5-degree field; Pave Spike
+  (F-4E, 1974, `nmusaf_pave_spike`) and Pave Tack (F-111F, 1982, `nmusaf_pave_tack`, `ausaviation_1984_pave_tack`) move
+  out of the slots into the data, each with a 30-degree field and a ground recognition range (8 and 10 km; Pave Tack
+  works at night). `PerceptionData::AidsOf(type, year)` gives an aircraft's aids by the war's year; the runner sets
+  them on the observer. An aircraft is recognised also when within the aid's `vid_m` and its field about the nose; a
+  ground object is recognised also within the pod's range and field, by night only with a night pod. The pods do not
+  yet widen ground acquisition, only recognition, so by night (when only a flash is found) a night pod adds nothing
+  yet, and in daylight a pod matters for what is found beyond the eye's 3 km (a column on the march is found within
+  about 3.2 km at low level: 2 runs in 40 recognised beyond 3 km with a pod, none without). TISEO matters little in
+  the air with the data's eye: a fighter is recognised at 5.5 km and seen from the side, cued, to about 5 km, so the
+  eye recognises most of what it sees; TISEO's 8 km tells when the eye's recognition is shorter (a smaller type, a
+  poorer eye). Pave Penny, Eagle Eye and the AGM-65 as a finder stay slots: no
+  period source with a date was read.
+- **The weather by month.** `NotClearShare(day_of_year)` (`air_war/types.hpp`): the share of days not clear, 0.85 in
+  winter (December to February) and 0.5 in summer (June to August), straight between (`crawford_1977_rand`'s
+  Central European winter and summer; the months between are interpolated, a game value). With the tuning's
+  `weather.mode` 1 and a dated theatre, the campaign's daily draw uses the same number as before against that share,
+  and splits the not-clear days into poor and marginal in the theatre's own proportion. Saved as `"weather_mode"`; a
+  save without it replays with 0 (the theatre's fixed shares).
+
 ## 6. Numbers for data
 
 Into `data/gameplay/perception.json` unless named; each value with `source` and `confidence`.
@@ -643,7 +674,7 @@ Into `data/gameplay/perception.json` unless named; each value with `source` and 
 
 ## 8. Left open
 
-- **Sensor in-service dates**: Pave Spike, Pave Tack, Pave Penny, the AGM-65A as a finder, radar ground mapping on the
+- **Sensor in-service dates** (S7 entered Pave Spike and Pave Tack): Pave Penny, the AGM-65A as a finder, radar ground mapping on the
   F-111, Tornado and F-4E, Kaira-23, Klen-PS, the Mi-24's sights, AN/PVS-5 and ANVIS (`perception.md` §7). Their slots exist;
   they enter the data only with a period or official source.
 - **The SPO-15's date and fit**: its in-service year, its library and whether it gave a launch indication; its tie to

@@ -317,7 +317,7 @@ SC_TEST("crew talk: the radial menu holds every line a seat can say, at most 8 s
             // What the commander says on the air himself, as ScenarioRunner::PlayerRadioReports offers it.
             std::vector<std::string> radio;
             if (seat.station == o.crew.commander) {
-                for (const char* id : {"report_ready", "readback", "report_arm_attack", "request_tzm", "request_fuel"}) {
+                for (const char* id : {"report_ready", "readback", "report_arm_attack", "request_tzm", "request_fuel", "report_violator"}) {
                     const CalloutDef* c = o.crew.FindCallout(id);
                     if (c != nullptr && c->from == seat.station) radio.push_back(id);
                 }
