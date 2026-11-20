@@ -453,3 +453,92 @@ the save key.
 `air_front.mode` 1 in the data with it; our side learning it (F2.5); the crisis's input from the ground picture (F3.5:
 `AirFrontInputs::crisis`); the pull-back's "keep 16-24 km back from the belt" once the ground war gives a belt (§2); the
 gates' values against history (F6).
+
+## As built (F2.4; 21 November 2026)
+
+**What reads it** (`front_line.hpp` `AirFrontView`): the line of contact and each sector's fixed-wing and helicopter
+depths, pointers to the campaign's own vectors (`AirCampaign::FrontView()`, the helicopters' now kept beside the
+fixed-wing ones, `HeloFrontDepths()`), handed to the planner (`PlanContext::air_front`), the route planner
+(`RouteRequest::air_front`) and C2 (`AirC2::Bind`, `C2MissionOf`'s third argument). Off at `air_front.mode` 0: the
+vectors are empty, every depth reads 0, and each reader keeps its fixed depth to the bit (40 km + 0.0 is 40 km). A
+sector's depth is looked up by the target's projection on the base line, once per candidate and only for the kinds that
+read it.
+
+| §4's row | As built |
+|---|---|
+| Close support within 40 km | within 40 km + the target's sector's `depth_m` (`Planner::Candidates`, the `MissionKind` switch) |
+| Helicopter raids within 25 km | within 25 km + the sector's `helo_depth_m`: the helicopters' own front, a day behind (F2.3) |
+| Harassment within 70 km | within 70 km + the sector's `depth_m` |
+| BAI within `c2.bai_depth_m`, nominations waiting | within it + the sector's `depth_m`: `NominationWaits`' new `air_front_m`, and C2's mission label (`InBaiArea`, read by `C2MissionOf` and `AirC2::MissionName`) |
+| The let-down where the route crosses the line | `RoutePlanner::LetDownAtAirFront`: where the gate is inside its sector's air front, a low fixed-wing flight crosses the line of contact at its transit height (the entry, the checkpoint, the gate and the turns inside at transit height and cruise), lets down where its way in leaves the air front (the first leg ending past it; the crossing found by halving the leg, 24 times) and climbs where its way home comes back inside it; a target inside the air front: the let-down a leg short of the IP (`letdown_m` at most), the climb as far past the egress. The way in and home are planned as before: only the heights change, so the corridor, the turns and the length are those of mode 0 |
+| Helicopters' holding areas `route.helo_holding_m` behind the line | `route.helo_holding_m` behind the gate's sector's helicopter front, never nearer the line than the new `route.helo_holding_floor_m` (15 km, §3's artillery range, a SAM3D estimate) |
+| The Pact's helicopters within `route.helo_umbrella_m` of an entry point | within it of the entry point plus the target's sector's air front (`BeyondHeloUmbrella`) |
+| The politics' `max_depth_m` from the line | from the border: the base line once the line of contact has moved (F3.3), the same distance until then |
+
+Escorts and other flights following a route (`FollowRoute`) fly high from the entry to the let-down and from the
+climb on, wherever those now are; a played raid's flights follow the ground from the let-down (`raid_scenario.hpp`), so a
+gate crossed high is not taken for the low leg. All four identical to before on a route whose let-down is short of the
+gate.
+
+**C2 and the line of contact.** `c2.hpp`'s four reads of the base line now read the line of contact (`AirC2::ToFront`, the
+bound view's `AbsDistance`; with none bound, the base line, as before): the BAI area (with the air front), the free hunt
+zone and our fires' reach on a fixed post (the line of contact only: neither is low-level work the air front carries).
+The same distances to the bit while no station has moved. The campaign binds its view wherever it binds the posts (its
+plan, its C2 context, `C2()`), and the package injector passes it to `C2MissionOf`.
+
+**Not moved**: the free hunt zone, high-level strikes, SEAD and DEAD (weighed by their routes' believed threats, B2), the
+neutral's and the politics' depth from the border.
+
+**At data values the holding area does not move**: `route.helo_holding_m` and the floor are both 15 km, so the holding
+area stays 15 km behind the line whatever the helicopters' front (`test_routes.cpp` moves it with a 30 km holding
+distance). The floor is there for F6's balance, should the holding distance grow.
+
+**Mode 1, the nation** (`air_war_balance --theatre theatre_pannonia_nation.json --set air_front.mode=1 data 10 7`
+against the same at mode 0; ten seeds, two battery postures, the theatre's own sectors): the rebels', the neutral's and
+NATO's wars print byte for byte as at mode 0 (no sector of theirs moved, F2.3). The Pact's change from day 3, where its
+front first steps forward:
+
+| The Pact | Packages | Sorties | Lost | Lost a sortie | Air battle, theirs for ours | On-call latency |
+|---|---|---|---|---|---|---|
+| Careless battery, mode 0 / 1 | 156.4 / 157.0 | 925.9 / 929.1 | 33.6 / 34.0 | 3.63 / 3.66 % | 1.66 / 1.61 | 29.1 / 29.2 min |
+| Careful battery, mode 0 / 1 | 163.3 / 162.8 | 945.0 / 943.0 | 31.0 / 29.4 | 3.28 / 3.12 % | 1.44 / 1.34 | 27.9 / 27.8 min |
+
+The mission mix is unchanged to the per cent; the targets shift by a few tenths of a package (depots, guns and SAM sites
+a little more, troops and convoys a little less), losses to the guns rise and to our fighters fall slightly, and every
+band still passes. Nothing broken: a step of 20 km in one sector at a time moves a handful of packages. Whether the mode
+goes on, and with which gates, is F6's balance.
+
+**The cost and the moves** (`fronts_bench data --air-front --days 10 --seeds 2 warsaw_pact nato rebels neutral`: eight
+equal sectors, seeds 7-8, run alone): `deeper` counts the mode-1 packages flying close support, helicopter raids or
+harassment past their kind's fixed depth.
+
+| Faction | Steps forward, back | Packages mode 0 / 1 | Deeper | Campaign CPU s, mode 0 / 1 | Cycle, mean |
+|---|---|---|---|---|---|
+| The Pact | 2, 1 | 452 / 451 | 1 | 79.7 / 78.8 | 0.0087 ms |
+| NATO | 0, 0 | 441 / 441 | 0 | 54.1 / 55.1 | 0.0097 ms |
+| The rebels | 0, 0 | 28 / 28 | 0 | 0.98 / 0.98 | 0.0066 ms |
+| The neutral | 0, 0 | 29 / 29 | 0 | 0.30 / 0.30 | 0.0069 ms |
+
+The readers cost nothing measurable: a sector lookup (the target's projection on the base line, about a dozen stations)
+per close support, helicopter or harassment candidate, and a few bisection steps per route whose gate is inside the air
+front; no allocation (the view holds pointers to the campaign's vectors). The campaigns' CPU with the mode on and off
+is within its noise (`std::clock` is wall time on MSVC).
+
+**Identity.** At `air_front.mode` 0 every depth reads 0.0 and each reader computes what it did: `air_war_balance data
+20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` print byte for byte what `track-f`'s tip
+(d016c8a, built and run on its own data) prints, and `test_routes.cpp`'s replay fingerprint (107 entries, FNV
+1375944258174313379, 41 packages) holds. At mode 1 the war now parts once a sector moves: F2.3's campaign test keeps
+"the same packages" only for the run where nothing moves, and prints the other.
+
+**Tests.** `test_air_war.cpp` (+1, 28): close support, helicopter raids and harassment reach their fixed depth plus the
+sector's, in that sector only; BAI's nominations wait to the deeper line; the Pact's helicopter umbrella from the entry
+plus the air front. `test_routes.cpp` (+1, 27): at depth 0, at 0.0 and in another sector the route is the same point
+for point; at 20 km a low flight crosses high, lets down where its way in leaves the air front (within 5 m) and climbs
+where its way home re-enters it; a target inside the air front; the helicopters' holding area behind their own front
+and never nearer than the floor. `test_c2.cpp` (+1, 13): the BAI label reaches the deeper line in its sector, the free
+hunt zone and our fires read the line of contact. `test_air_front.cpp`: the F2.3 campaign test as above.
+
+**Left:** `air_front.mode` 1 in the data (F6, with the gates' values); the FSCL as the BAI area's inner edge and the
+deep-strike line (F3.7); the holding area and C2's distances off a moved line of contact (they read it already: F3.3
+moves it); `resolve.hpp`'s, `raid_scenario.hpp`'s (a played raid's depth) and `logistics.hpp`'s base-line reads (F3.3,
+F3.7); our side learning the air front (F2.5).

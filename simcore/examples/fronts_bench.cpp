@@ -109,13 +109,13 @@ int main(int argc, char** argv) {
         }
     }
     if (!air_front) {
-        std::printf("fronts_bench: only --air-front is built (F2.2-F2.3); the ground war's parts come with F3.3\n");
+        std::printf("fronts_bench: only --air-front is built (F2.2-F2.4); the ground war's parts come with F3.3\n");
         return 1;
     }
     if (factions.empty()) factions = {"warsaw_pact", "nato"};
     const double budget_ms = 1.0;
     int fails = 0;
-    std::printf("The air front's measure and decision (F2.2-F2.3) on %s, %s sectors, %d days, %d seeds; budget %.1f ms a planning cycle\n\n",
+    std::printf("The air front's measure, decision and readers (F2.2-F2.4) on %s, %s sectors, %d days, %d seeds; budget %.1f ms a planning cycle\n\n",
                 theatre.c_str(), sectors > 0 ? (std::to_string(sectors) + " equal").c_str() : "the theatre's", days, seeds, budget_ms);
     std::printf("%-12s %7s %7s %9s %9s %9s %9s %9s %7s %9s %9s %5s %6s %6s %6s %5s %5s %5s %5s  %s\n", "faction", "sectors", "entries", "mean_ms",
                 "worst_ms", "moved_ms", "cycle_ms", "cyc_worst", "prewar", "cpu_off_s", "cpu_on_s", "same", "pk_off", "pk_on", "deeper", "adv",
