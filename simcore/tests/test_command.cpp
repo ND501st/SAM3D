@@ -520,9 +520,9 @@ SC_TEST("command: the enemy's radio intercept hears the calls the battery made (
     // Two days; the battery commander (the player) passes every piece of news to his vehicle commanders by radio, or
     // keeps it to himself.
     auto run = [&](bool talk, airwar::AirCampaign& c) {
-        c.Init(aw, 4u);
+        c.Init(aw, 5u);  // seed 5: the war's course since roadmap S7 (seed 4's two days give the battery's net nothing to say)
         InfoNet net;
-        net.Init(d, 4u, aw.theatre.start_hour);
+        net.Init(d, 5u, aw.theatre.start_hour);
         CampaignFeed feed;
         feed.Bind(&net);
         feed.Pump(c);
@@ -552,7 +552,7 @@ SC_TEST("command: the enemy's radio intercept hears the calls the battery made (
     SC_EXPECT(silent.ComintHeard() == 0 && chatty.ComintHeard() > 0);
     // Without the pipeline the posture's radio discipline still stands for the traffic (headless runs, the balance).
     airwar::AirCampaign guessed;
-    guessed.Init(aw, 4u);
+    guessed.Init(aw, 5u);
     while (guessed.Now() < 48.0) {
         if (guessed.Advance(48.0)) guessed.SkipPlayerMission();
     }

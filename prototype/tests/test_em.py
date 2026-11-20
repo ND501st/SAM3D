@@ -212,3 +212,21 @@ def test_ground_law_matches_cpp():
         assert em.ground_acquire_p(pmax, 3750.0, 10000.0) == pytest.approx(0.8 * pmax)
         assert em.ground_acquire_p(pmax, 7600.0, 10000.0) == 0.0
         assert em.ground_acquire_p(pmax, 1000.0, 10000.0) == pytest.approx(pmax)
+
+
+def test_smooth_spherical_earth_matches_cpp():
+    # ITU-R P.526-16 section 3: the same hand values as test_em_models.cpp
+    assert em.spherical_distance_term_db(1.0) == pytest.approx(-5.6488, abs=1e-9)
+    assert em.spherical_distance_term_db(2.0) == pytest.approx(11.0 + 10.0 * math.log10(2.0) - 35.2, abs=1e-9)
+    assert em.spherical_height_gain_db(3.0, 1.0, 0.01) == pytest.approx(14.8662, abs=1e-3)
+    assert em.spherical_height_gain_db(1.0, 1.0, 0.01) == pytest.approx(0.8279, abs=1e-3)
+    assert em.spherical_height_gain_db(1e-4, 1.0, 0.02) == pytest.approx(2.0 + 20.0 * math.log10(0.02), abs=1e-9)
+    assert em.surface_admittance_k(100.0, 8500.0, False) == pytest.approx(0.0010157, abs=2e-6)
+    assert em.surface_admittance_k(100.0, 8500.0, True) == pytest.approx(0.015236, abs=2e-5)
+    assert em.spherical_first_term_db(500e3, 3.0, 8000.0, 50e6, 8500e3) == pytest.approx(-73.976, abs=0.005)
+    assert em.spherical_earth_loss_db(10e3, 100.0, 100.0, 100e6, 8500e3) == 0.0
+    d_los = math.sqrt(2.0 * 8500e3) * (math.sqrt(3.0) + math.sqrt(8000.0))
+    inside = em.spherical_earth_loss_db(d_los - 1.0, 3.0, 8000.0, 50e6, 8500e3)
+    past = em.spherical_earth_loss_db(d_los + 1.0, 3.0, 8000.0, 50e6, 8500e3)
+    assert inside == pytest.approx(past, abs=0.05)
+    assert em.spherical_earth_loss_db(500e3, 3.0, 8000.0, 5e6, 8500e3) == 0.0

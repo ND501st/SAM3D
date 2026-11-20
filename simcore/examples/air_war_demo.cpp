@@ -1,6 +1,9 @@
 // air_war_demo: the enemy air command's war, end to end (docs/air_war/).
 //
-// Usage: air_war_demo [--theatre file] [faction] [days] [data_dir] [out_dir] [seed] [map]
+// Usage: air_war_demo [--theatre file] [--build-only] [faction] [days] [data_dir] [out_dir] [seed] [map]
+//   --build-only: write each raid through the battery's sector without playing it (the campaign resolves it abstractly,
+//   as the balance pass does) and print a line on it: how the menu's sample raids are chosen (roadmap S8,
+//   data/scenarios/air_war_*.json, docs/LIGHT.md).
 //   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json; theatre_pannonia_nation.json is the
 //   whole nation); faction: rebels, neutral, warsaw_pact or nato (default nato); days (default 3); data_dir (default
 //   data); out_dir (default out/air_war); seed (default 1); map: the raids on a map's ground (e.g.
@@ -19,6 +22,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -49,10 +53,13 @@ std::string Escape(const std::string& s) {
 int main(int argc, char** argv) {
     std::string theatre = "theatre_pannonia.json";
     std::vector<std::string> args;
+    bool build_only = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--theatre" && i + 1 < argc) {
             theatre = argv[++i];
+        } else if (a == "--build-only") {
+            build_only = true;
         } else {
             args.push_back(a);
         }
@@ -118,6 +125,25 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "generated scenario %s does not load: %s\n", path.c_str(), error.c_str());
             ++failed;
             campaign.SkipPlayerMission();
+            continue;
+        }
+        if (build_only) {
+            std::map<std::string, int> types;
+            int arms = 0, drones = 0;
+            for (const RaidAircraft& a : rs.manifest.aircraft) {
+                ++types[a.aircraft];
+                arms += a.arms;
+                drones += a.drone ? 1 : 0;
+            }
+            std::string mix;
+            for (const auto& t : types) mix += (mix.empty() ? "" : ", ") + std::to_string(t.second) + " " + t.first;
+            const SunLight l = LightAt(def.clock, 0.0, def.light_values);
+            std::printf("  >> %s: %s %s '%s' on %s from %s at %s (%s, the sun %.1f deg, the moon %.0f %%), %.0f s; %s; %d ARMs, %d drones\n",
+                        rs.manifest.scenario_id.c_str(), DayPartName(p->part), MissionKindName(p->kind), p->name.c_str(),
+                        p->target_label.c_str(), p->corridor.c_str(), FormatLocalHour(def.clock.start_local_h).c_str(), LightPhaseName(l.phase),
+                        l.sun_elevation_deg, 100.0 * l.moon_illuminated, def.time_limit_s, mix.c_str(), arms, drones);
+            campaign.SkipPlayerMission();
+            ++played;
             continue;
         }
         ScenarioRunner runner(std::move(def), std::move(console));

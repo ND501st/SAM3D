@@ -288,6 +288,45 @@ namespace SimFxLogic
 		return FMath::Clamp(FMath::CeilToInt32(DtS / SliceS - 1e-9), 1, FMath::Max(MaxSlices, 1));
 	}
 
+	int32 ChaffPuffs(int32 Cartridges, int32 PerCartridge, int32 Max)
+	{
+		return FMath::Clamp(FMath::Max(Cartridges, 1) * FMath::Max(PerCartridge, 1), 1, FMath::Max(Max, 1));
+	}
+
+	FVector FlareEjectDir(int32 Index, const FVector& Fwd)
+	{
+		FVector Track = FVector(Fwd.X, Fwd.Y, 0.0);
+		Track = Track.SizeSquared() > 1e-6 ? Track.GetSafeNormal() : FVector::ForwardVector;
+		const FVector Right = FVector::CrossProduct(FVector::UpVector, Track).GetSafeNormal();
+		const double Side = (Index % 2 == 0) ? 1.0 : -1.0;
+		return (FVector(0.0, 0.0, -1.0) + Right * (0.6 * Side) - Track * 0.2).GetSafeNormal();
+	}
+
+	float FlareGlowAt(double Age, double BurnS)
+	{
+		if (Age < 0.0 || BurnS <= 0.0 || Age >= BurnS)
+		{
+			return 0.0f;
+		}
+		const double Fade = FMath::Max(0.2 * BurnS, 0.3);
+		const double Up = FMath::Clamp(Age / 0.1, 0.0, 1.0);
+		const double Down = FMath::Clamp((BurnS - Age) / Fade, 0.0, 1.0);
+		return static_cast<float>(FMath::Min(Up, Down));
+	}
+
+	FRotator TumbleAt(uint64 Key, double Age, double MaxDegPerS)
+	{
+		// Two keyed draws in 0.35..1 of the fastest rate, each with its own sign.
+		const uint32 H1 = static_cast<uint32>(Key * 2654435761ull) ^ 0x9E3779B9u;
+		const uint32 H2 = (H1 * 1664525u + 1013904223u) ^ (H1 >> 13);
+		const double U1 = (H1 % 10007u) / 10007.0;
+		const double U2 = (H2 % 10009u) / 10009.0;
+		const double Pitch = MaxDegPerS * (0.35 + 0.65 * U1) * ((H1 & 1u) ? 1.0 : -1.0);
+		const double Roll = MaxDegPerS * (0.35 + 0.65 * U2) * ((H2 & 2u) ? 1.0 : -1.0);
+		const double T = FMath::Max(Age, 0.0);
+		return FRotator(Pitch * T, 15.0 * FMath::Sin(1.3 * T + 6.0 * U1), Roll * T);
+	}
+
 	double TrailRangeM(const FSimFxLod& Lod, double RangeScale, double MarginM)
 	{
 		return FMath::Min(Lod.MaxRangeM * FMath::Max(RangeScale, 0.0), Lod.VisibilityM) + FMath::Max(MarginM, 0.0);

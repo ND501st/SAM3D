@@ -333,3 +333,28 @@ SC_TEST("battery mission (14.3): in the battery commander's seat the plan's orde
     for (int i = 0; i < 20 * 3; ++i) r.Step(0.05);
     SC_EXPECT(said("Боевой приказ") && owes("order_battery_march"));
 }
+
+SC_TEST("battery mission S1: the task's plan of cooperation with our fighters is in the order and on the commander's working map") {
+    campaign::BatteryTask t = BridgesTask();
+    SC_EXPECT(t.own_air.present && t.own_air.zones.size() == 2);
+    const std::string paper = campaign::TaskDocument(t, 60.0, Clock19, Same);
+    SC_EXPECT(paper.find("our fighters' corridor 2 at 2000-6000 m") != std::string::npos);
+    SC_EXPECT(paper.find("our fighters' duty zone 1") != std::string::npos);
+    campaign::PlanSequence seq;
+    std::string error;
+    SC_EXPECT(campaign::LoadPlanSequence(kData, "campaign/battery_plan.json", seq, &error));
+    BatteryTactics tactics;
+    const campaign::BatteryPlan p = campaign::PlanBatteryTask(t, seq, tactics, Inputs(1200.0));
+    SC_EXPECT(p.map.Find("main", "bty21_bridges") != nullptr && p.map.Find("covered", "kesmark_bridges") != nullptr);
+    const campaign::MapMark* corridor = p.map.Find("corridor", "2");
+    const campaign::MapMark* duty = p.map.Find("duty_zone", "1");
+    SC_EXPECT(corridor != nullptr && duty != nullptr);
+    if (corridor == nullptr || duty == nullptr) return;
+    // The main position at (9.6, -7.0) km: the corridor along north 4 km, 5 km wide each side, is 6 km off; the duty
+    // zone's edge 15 km round (30, 25) km is |(20.4, 32.0)| - 15 km off.
+    SC_EXPECT_NEAR(corridor->from_main_m, 6000.0, 1.0);
+    SC_EXPECT_NEAR(duty->from_main_m, std::hypot(20400.0, 32000.0) - 15000.0, 1.0);
+    SC_EXPECT(corridor->from_h == 6.0 && corridor->to_h == 20.0 && corridor->floor_m == 2000.0 && corridor->ceiling_m == 6000.0);
+    const std::string text = campaign::PlanText(p, Clock19);
+    SC_EXPECT(text.find("On the working map:") != std::string::npos && text.find("our fighters' corridor 2 at 2000-6000 m, 0600-2000, 6.0 km from the main position") != std::string::npos);
+}

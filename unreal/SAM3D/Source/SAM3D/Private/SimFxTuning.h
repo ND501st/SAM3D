@@ -123,14 +123,14 @@ struct FSimFxTuning
 		double LaunchCloudS = 20.0;
 		FLinearColor LaunchCloudColour = FLinearColor(0.80f, 0.79f, 0.77f);
 		double LaunchCloudOpacity = 0.85;
-		double PlumeBoostLengthM = 7.0;
-		double PlumeBoostWidthM = 1.4;
-		double PlumeSustainLengthM = 3.5;
-		double PlumeSustainWidthM = 0.8;
-		double PlumeBrightness = 35.0;
+		double PlumeBoostLengthM = 3.0;
+		double PlumeBoostWidthM = 0.6;
+		double PlumeSustainLengthM = 1.6;
+		double PlumeSustainWidthM = 0.4;
+		double PlumeBrightness = 20.0;
 		FLinearColor PlumeColour = FLinearColor(1.0f, 0.7f, 0.4f);
-		double GlowBoostM = 5.0;
-		double GlowSustainM = 2.5;
+		double GlowBoostM = 1.4;
+		double GlowSustainM = 0.8;
 		double TrailPointM = 20.0;
 		double TrailWidthDenseM = 2.5;
 		double TrailWidthReducedM = 1.5;
@@ -228,6 +228,40 @@ struct FSimFxTuning
 		int32 SmokePuffs = 2;
 		double BarrelSpacingM = 0.5;  // the barrels' muzzles side by side: a flash at each (LOOK 14)
 	} Guns;
+
+	// The air battle drawn (roadmap B13): a pilot's chaff and flares, a jettisoned store's tumble, a fighter's gun burst and
+	// an air-to-air missile's end.
+	struct FAirBattle
+	{
+		int32 ChaffPuffsPerCartridge = 2;    // the cloud's puffs for each cartridge of a salvo (at most ChaffPuffsMax)
+		int32 ChaffPuffsMax = 24;
+		double ChaffBloomM = 25.0;           // a cartridge's cloud grown to this across
+		double ChaffBloomS = 1.5;            // in this long
+		double ChaffS = 12.0;                // and drifting this long before it is too thin to see
+		double ChaffSpreadM = 30.0;          // a salvo's cartridges strung out this far behind the aircraft
+		double ChaffDragPerS = 3.0;          // the foil stops in the air in a fraction of a second, then rides the wind
+		double ChaffOpacity = 0.12;          // each puff faint: the cloud a haze, not a cumulus
+		FLinearColor ChaffColour = FLinearColor(0.70f, 0.72f, 0.76f);
+		int32 ChaffGlints = 60;              // foil catching the light, twinkling over most of the cloud's life
+		double ChaffGlintBrightness = 6.0;
+		double FlareBurnS = 4.5;             // a flare's burn
+		double FlareEjectMps = 30.0;         // thrown out of the dispenser, down and to the side
+		double FlareDragPerS = 0.6;          // slowing from the aircraft's speed in the air
+		double FlareSizeM = 2.5;             // its glow's size
+		double FlareBrightness = 200.0;
+		FLinearColor FlareColour = FLinearColor(1.0f, 0.86f, 0.62f);
+		double FlareLumens = 3.0e7;          // its light at night
+		double FlareSalvoS = 0.25;           // the flares of a salvo this far apart
+		int32 FlaresMax = 12;
+		double FlareSmokeWidthM = 1.2;       // its white smoke trail
+		double FlareSmokeS = 25.0;
+		double FlareSmokePointM = 8.0;
+		FLinearColor FlareSmokeColour = FLinearColor(0.80f, 0.80f, 0.78f);
+		double TumbleDegPerS = 120.0;        // a jettisoned store's tumble at its fastest
+		double AamFlyOnS = 4.0;              // a missile that missed flies on this long past its target, then bursts
+		double AamTurnPerS = 2.5;            // how hard a missile drawn here turns onto its target (rad/s)
+		double AirGunDispersionMrad = 6.0;   // a fighter's burst's scatter
+	} AirBattle;
 
 	struct FWreck
 	{

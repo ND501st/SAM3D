@@ -97,6 +97,10 @@ struct Package {
     double gate_h = -1.0;
     double gate_window_s = 0.0;
     bool corridor_suppression = false;
+    // Timed into our fighters' corridor its staff believes in (S1, docs/air_battle/08_OUR_FIGHTERS.md section 9): the
+    // corridor's id, and whether the belief found the real one (its defences then hold fire for ours at its hours).
+    std::string own_corridor;
+    bool own_corridor_found = false;
     std::vector<std::string> rationale;
     bool resolved = false;
     bool played = false;        // flown as the player's mission
@@ -157,6 +161,7 @@ struct LossRecord {
     bool officer = false;  // a staff officer was in it
     bool captured = false; // the crew came down alive in the player's country
     bool fighter = false;  // shot down by our fighters (roadmap B8, air_fight.hpp): `by` is the regiment
+    bool own_fire = false; // shot down by its own side's ground air defence coming home (S1): `by` is its belt
 };
 
 // An order a played package's flight was given from outside it (roadmap B1, flights.hpp): retasked, diverted, held.
@@ -177,12 +182,28 @@ struct HeardRecord {
     std::string text;        // what the post wrote
     bool understood = false;
     std::string fact;        // the key of the fact made of it in our side's pipeline ("" none)
+    // Roadmap S6: what the campaign's pipeline needs to make the same facts on a load (command/air_war_feed.hpp). A save
+    // made before S6 has none of them: the hour is then the package's time over target.
+    std::string chain_post;  // the post in data/command/intercept.json it is ("" : `post`)
+    double h = -1.0;         // the campaign hour it was heard (< 0: not known)
+    double written_h = -1.0; // the campaign hour the form was done (< 0: when heard)
+    double bearing_deg = 0.0;
+    int precedence = 1;
+    bool names_battery = false;  // the written square is the battery's
 };
 
 struct PackageOutcome {
     int package_id = 0;
     std::vector<LossRecord> losses;
     int damaged = 0;
+    // A played session's damaged aircraft that got away (roadmap S4): its flight and whether heavily damaged (else
+    // moderately). The campaign repairs each by its level (damage.mode 1); the rest of `damaged` (the abstract resolver's)
+    // go to a flight drawn as before.
+    struct DamagedRecord {
+        int flight = -1;
+        bool heavy = false;
+    };
+    std::vector<DamagedRecord> damaged_list;
     std::vector<std::pair<std::string, double>> damage;   // truth object id -> working share removed
     std::vector<std::string> destroyed;                   // truth object ids wrecked by it
     std::vector<std::string> decoys_hit;
@@ -221,6 +242,14 @@ struct PackageOutcome {
     bool delivered = false;
     double collateral = 0.0;
     std::vector<std::string> notes;
+    // Each flight that left a played session, where it was last seen (the theatre's frame) and when (roadmap S7: the
+    // rest of the raid flies on from there under route.mode 2; empty before, and the rest flew the plan).
+    struct FlownRecord {
+        int flight = -1;
+        Vec3 at;
+        double t_h = 0.0;
+    };
+    std::vector<FlownRecord> flown;
     std::vector<int> released_flights;  // flights that released their weapons (a played mission)
     std::vector<int> aborted_flights;   // flights that broke away before their release point (a played mission)
     // Under fire (roadmap B4, reaction_chain.hpp): flights that threw their stores off before their release point, and
@@ -312,6 +341,10 @@ struct SquadronState {
     int lost = 0;
     std::vector<double> damaged_until;  // campaign hour each damaged aircraft returns
     double sorties_left = 0.0;          // this cycle
+    // Combat sorties its pilots flew and came back from (roadmap S5, 10_FACTIONS.md §8.3: a pilot's experience is his
+    // sorties survived; hot_phase.hpp HotPilotOf reads them per pilot). Rebuilt by the replay; read only under
+    // hot_phase.mode 2.
+    int combat_sorties = 0;
 
     int Damaged(double now_h) const {
         int n = 0;

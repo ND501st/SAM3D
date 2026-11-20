@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "simcore/air_war/c2_def.hpp"
+#include "simcore/air_war/comms_jamming.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/intel.hpp"
@@ -173,6 +174,25 @@ struct C2PostState {
     int officer = -1;
     bool alive = true;
     int queued = 0;  // messages waiting on it
+    // Struck (roadmap S2): when, and when it works again (< 0: not in this war); how often it has been.
+    double destroyed_h = -1.0;
+    double back_h = -1.0;
+    int struck = 0;
+};
+
+// A post's order to a flight of a package a session is flying (roadmap S2): the session gives it to the flight at `at_h`,
+// by the post's radio, and the flight takes it only if its leader hears the call. `flight` -1: every flight of the package.
+struct C2SessionOrder {
+    int id = 0;
+    int package_id = -1;
+    int flight = -1;
+    std::string kind;       // "divert", "hunt" (a warning to a hunter: his own leave takes him there), "recall"
+    std::string by;         // the post's id ("leader" for a hunt)
+    std::string speaker;    // the post that says it
+    Vec3 where;             // theatre ENU (divert, hunt)
+    std::string object_id;  // the object it is about ("" a place only)
+    double at_h = 0.0;
+    double observed_h = 0.0;
 };
 
 // A FAC's own sighting of our troops, with its time (§4.3: close support aimed where the FAC believes them).
@@ -226,6 +246,16 @@ struct C2Stats {
     // having the new task, each on-call package's from the sighting to its time over the place.
     std::vector<double> divert_min;
     std::vector<double> on_call_min;
+    // Roadmap S2.
+    int recalls = 0;             // packages recalled (their target believed destroyed since they took off)
+    int session_orders = 0;      // orders sent into a session's flights
+    int posts_struck = 0;        // posts destroyed (our fires, or struck by the session)
+    int posts_back = 0;          // posts working again
+    int to_alternate = 0;        // messages to a struck post taken by its alternate
+    int lost_with_post = 0;      // messages to a struck post nobody took
+    int jammed_by_us = 0;        // hops our jamming reached (some of their tries jammed out)
+    int clearance_holds = 0;     // close support flights held for a clearance that did not come through
+    int clearance_aborts = 0;    // ... and sent home
 };
 
 // What the campaign gives the posts each step.
@@ -239,6 +269,7 @@ struct C2Context {
         PackageRun* run = nullptr;
     };
     std::vector<Air> airborne;
+    std::vector<int> live;  // packages a session is flying now (indices into packages): the posts know their plan only
     int phase = 0;
     Vec3 battery;  // our battery: where our listeners are
     // The planner's on-call builder (Planner::OnCall): a package from the pool, its first aircraft up at takeoff_h.
@@ -270,11 +301,14 @@ public:
         retasks_.clear();
         reports_.clear();
         reported_.clear();
+        session_orders_.clear();
+        recalled_.clear();
         stats_ = C2Stats();
         carry_.clear();
         next_message_ = 1;
         next_pool_ = 1;
         next_decision_ = 0;
+        next_order_ = 1;
         const FactionC2& c2 = d.faction.c2;
         enabled_ = c2.present && d.tuning.Get("c2.mode") >= 1.0;
         if (!enabled_) return;
@@ -464,8 +498,12 @@ public:
             if (best == nullptr || s.observed_h > best->observed_h) best = &s;
         }
         if (best == nullptr) return false;
-        for (Flight& fl : p.flights) {
-            if (fl.aim_key == p.target_key) fl.aim_pos = best->pos;
+        const C2ClearanceDef& clr = d_->faction.c2.clearance;
+        const bool needs = LiveOn() && clr.set && clr.Covers(C2MissionOf(p, *d_));
+        if (!needs) {
+            for (Flight& fl : p.flights) {
+                if (fl.aim_key == p.target_key) fl.aim_pos = best->pos;
+            }
         }
         C2Message m;
         m.kind = C2Kind::Brief;
@@ -480,9 +518,37 @@ public:
         m.observed_h = best->observed_h;
         m.text = "the FAC's brief: the target and where he saw it";
         m.post = -1;
-        ++stats_.briefs;
-        Send(m, "order", now_h, Duty(best->post), c, true);
-        return true;
+        if (!needs) {
+            ++stats_.briefs;
+            Send(m, "order", now_h, Duty(best->post), c, true);
+            return true;
+        }
+        // Roadmap S2: the brief is the clearance and the mark. It gets through, or by the faction's rule the flights attack
+        // on the plan's aim, go home, or hold asking again and then go home (a FAC whose post is out cannot brief at all).
+        const bool fac_up = posts_[static_cast<std::size_t>(best->post)].alive;
+        bool got = fac_up && Send(m, "order", now_h, Duty(best->post), c, true);
+        if (!got && clr.on_jammed == "hold_then_abort") {
+            ++stats_.clearance_holds;
+            Rng r = Draw(0xC1EA0000ull + static_cast<std::uint64_t>(p.id), 7);
+            got = fac_up && Send(m, "order", now_h + r.Uniform(clr.hold_s.lo, clr.hold_s.hi) / 3600.0, Duty(best->post), c, true);
+        }
+        if (got) {
+            ++stats_.briefs;
+            for (Flight& fl : p.flights) {
+                if (fl.aim_key == p.target_key) fl.aim_pos = best->pos;
+            }
+            return true;
+        }
+        if (clr.on_jammed != "attack") {
+            int n = 0;
+            for (Flight& fl : p.flights) {
+                if (fl.aim_key != p.target_key || !IsMain(fl)) continue;
+                fl.aborted = true;
+                ++n;
+            }
+            if (n > 0) ++stats_.clearance_aborts;
+        }
+        return false;
     }
 
     // What an airborne package's aircraft saw since the last step (the resolver's events): a launch or a column, reported
@@ -580,6 +646,24 @@ public:
             C2Message m = messages_[static_cast<std::size_t>(k)];
             messages_.erase(messages_.begin() + k);
             if (m.post >= 0) posts_[static_cast<std::size_t>(m.post)].queued = std::max(0, posts_[static_cast<std::size_t>(m.post)].queued - 1);
+            // The post it was for is out (roadmap S2): its alternate takes it after the takeover, by the faction's rule, or
+            // nobody does.
+            if (m.post >= 0 && !posts_[static_cast<std::size_t>(m.post)].alive) {
+                const int alt = Alternate(m.post);
+                if (alt < 0) {
+                    ++stats_.lost_with_post;
+                    continue;
+                }
+                const C2Band& tk = d_->faction.c2.post_loss.takeover_s;
+                Rng r = Draw(0x7A4E0000ull + static_cast<std::uint64_t>(m.id), 6);
+                m.post = alt;
+                m.to = posts_[static_cast<std::size_t>(alt)].id;
+                m.arrive_h += (tk.Set() ? r.Uniform(tk.lo, tk.hi) : 0.0) / 3600.0;
+                ++posts_[static_cast<std::size_t>(alt)].queued;
+                messages_.push_back(m);
+                ++stats_.to_alternate;
+                continue;
+            }
             Handle(m, c);
         }
     }
@@ -594,6 +678,173 @@ public:
         out = it->second;
         retasks_.erase(it);
         return out;
+    }
+
+    // ---- roadmap S2: the command live in the session (docs/air_battle/05_C2_AND_RETASKING.md section 9)
+
+    // S2's command on (c2.live_mode 1; 0 replays a save made before it).
+    bool LiveOn() const { return On() && d_->tuning.Get("c2.live_mode") >= 1.0; }
+    // The orders for the flights of packages a session is flying, decided so far; taken once.
+    std::vector<C2SessionOrder> TakeSessionOrders() {
+        std::vector<C2SessionOrder> out;
+        out.swap(session_orders_);
+        return out;
+    }
+    bool OrdersWaiting() const { return !session_orders_.empty(); }
+
+    // What our side does with a post (data/command/counter_c2.json's thirds, drawn once per post id): "destroy", "jam" or
+    // "listen"; "" when our side has no plan against the enemy's command (no counter_c2, or live_mode 0).
+    std::string Marked(const C2PostState& p) const {
+        if (!LiveOn() || !d_->counter_c2.present) return std::string();
+        const CounterC2Def& k = d_->counter_c2;
+        Rng r = Draw(0xC0C20000ull, Fnv(p.id));
+        const double u = r.Uniform();
+        if (u < k.destroy) return "destroy";
+        if (u < k.destroy + k.jam) return "jam";
+        return "listen";
+    }
+    // Our air-net jammers in the war's year and where they stand (theatre ENU): behind our line, at its point nearest our
+    // battery, `behind_m` away from the enemy's bases.
+    std::vector<std::pair<const CounterC2Jammer*, Vec3>> OurJammers(const Vec3& battery) const {
+        std::vector<std::pair<const CounterC2Jammer*, Vec3>> out;
+        if (!LiveOn() || !d_->counter_c2.present) return out;
+        const FrontDef* front = d_->theatre.FrontFor(d_->faction.front);
+        if (front == nullptr || front->line.empty()) return out;
+        const Vec3 on = NearestOnLine(front->line, battery);
+        Vec3 away = on - front->bases;
+        away.z = 0.0;
+        const double len = std::sqrt(away.x * away.x + away.y * away.y);
+        for (const CounterC2Jammer& j : d_->counter_c2.jammers) {
+            if (j.from_year > d_->theatre.year) continue;
+            Vec3 at = len > 1.0 ? on + away * (j.behind_m / len) : on;
+            at.z = 0.0;
+            out.push_back({&j, at});
+        }
+        return out;
+    }
+    // The share of a hop's tries our jamming takes out: a hop to or from a post marked for jamming, on a net our jammers'
+    // band covers, judged at its receiver by FM 34-40-7's rule (comms_jamming.hpp: J/S from the powers and the distances,
+    // captured from comms_jam.capture_k, words lost from comms_jam.weak_js). A flight is taken to be near the place the
+    // message names (a post knows where it sent it, not where it is).
+    double OurJamShare(const C2Message& m, const Vec3& battery) const {
+        if (!LiveOn() || !d_->counter_c2.present) return 0.0;
+        const int sender = PostIndex(m.from);
+        const int receiver = m.post >= 0 ? m.post : PostIndex(m.to);
+        const bool marked = (sender >= 0 && Marked(posts_[static_cast<std::size_t>(sender)]) == "jam") ||
+                            (receiver >= 0 && Marked(posts_[static_cast<std::size_t>(receiver)]) == "jam");
+        if (!marked) return 0.0;
+        const Vec3 tx = sender >= 0 ? posts_[static_cast<std::size_t>(sender)].at : m.where;
+        const Vec3 rx = receiver >= 0 ? posts_[static_cast<std::size_t>(receiver)].at : m.where;
+        const double freq = NetFreqHz(m.net);
+        const TuningTable& t = d_->tuning;
+        const double own_m = std::max(1000.0, Dist2d(tx, rx));
+        double js = 0.0;
+        for (const auto& j : OurJammers(battery)) {
+            if (freq > 0.0 && !j.first->Covers(freq)) continue;
+            js = std::max(js, JammingToSignal(j.first->power_w, d_->counter_c2.enemy_set_w, std::max(1000.0, Dist2d(j.second, rx)), own_m,
+                                              t.Get("comms_jam.terrain_n")));
+        }
+        if (js >= t.Get("comms_jam.capture_k")) return t.Get("c2.jam_strong_share");
+        if (js >= t.Get("comms_jam.weak_js")) return t.Get("c2.jam_weak_share");
+        return 0.0;
+    }
+
+    // A post struck (our fires, or a strike the session flew): out now, its duty officer with it; it works again after its
+    // kind's reconstitution (the faction's post_loss), with a stand-in at the desk. False: no such post, or out already.
+    bool StrikePost(const std::string& id, double now_h, const std::string& by, C2Context& c) {
+        if (!On()) return false;
+        const int i = PostIndex(id);
+        if (i < 0 || !posts_[static_cast<std::size_t>(i)].alive) return false;
+        C2PostState& p = posts_[static_cast<std::size_t>(i)];
+        p.alive = false;
+        p.destroyed_h = now_h;
+        p.officer = -1;
+        ++p.struck;
+        p.back_h = -1.0;
+        const auto it = d_->faction.c2.post_loss.reconstitute_h.find(p.kind);
+        if (it != d_->faction.c2.post_loss.reconstitute_h.end() && it->second.Set()) {
+            Rng r = Draw(0x9057B000ull + static_cast<std::uint64_t>(i), static_cast<std::uint64_t>(p.struck));
+            p.back_h = now_h + r.Uniform(it->second.lo, it->second.hi);
+        }
+        ++stats_.posts_struck;
+        if (c.log) {
+            c.log("decision", p.id,
+                  "The post " + p.id + " is out (" + by + ")" +
+                      (p.back_h >= 0.0 ? "; it will be set up again in " + std::to_string(static_cast<int>(p.back_h - now_h + 0.5)) + " h."
+                                       : "; it will not be set up again in this war."),
+                  false);
+        }
+        return true;
+    }
+
+    // Our fires on the posts marked for destruction, each hour: a post our listeners have heard often enough
+    // (c2.post_fix_calls) is fixed by direction finding from our battery's area (within df_reach of it), with the bearing's
+    // error at that range; if the post lies within our fires' reach past the line, they are laid on the fix with
+    // c2.post_strike_per_h an hour, and hit it when the fix is within c2.post_footprint_m. What our side knows: the fix and
+    // that the fires went in, never whether the post is out.
+    void OurFires(double now_h, C2Context& c) {
+        if (!LiveOn() || !d_->counter_c2.present) return;
+        const CounterC2Def& k = d_->counter_c2;
+        const TuningTable& t = d_->tuning;
+        const FrontDef* front = d_->theatre.FrontFor(d_->faction.front);
+        if (front == nullptr) return;
+        const long long hour = static_cast<long long>(std::floor(now_h + 1e-9));
+        for (std::size_t i = 0; i < posts_.size(); ++i) {
+            const C2PostState& p = posts_[i];
+            if (!p.alive || Marked(p) != "destroy") continue;
+            int heard = 0;
+            for (const C2Message& m : log_) heard += (m.heard && m.from == p.id) ? 1 : 0;
+            if (heard < static_cast<int>(t.Get("c2.post_fix_calls") + 0.5)) continue;
+            const double range = Dist2d(p.at, c.battery);
+            if (range > k.df_reach_m) continue;
+            if (DistanceToLine(front->line, p.at) > k.fires_reach_m) continue;
+            Rng r = Draw(0xF14E5000ull + i, static_cast<std::uint64_t>(hour + 100000));
+            if (!r.Chance(t.Get("c2.post_strike_per_h"))) continue;
+            const double miss = std::fabs(r.Normal(0.0, range * std::tan(k.df_bearing_rad)));
+            if (c.log) {
+                c.log("own_intel", "radio intercept", "Our fires went in on an enemy air control post fixed by its calls, " + FromBattery(p.at, c.battery) + ".",
+                      true);
+            }
+            if (miss <= t.Get("c2.post_footprint_m")) StrikePost(p.id, now_h, "our fires", c);
+        }
+    }
+
+    // A package recalled (05 section 4.2's recall; schoeck_1987_ai_retasking: the target destroyed is a reason to retask):
+    // a strike or a DEAD in the air whose target its intelligence now believes destroyed, by a claim it learned since the
+    // package took off (not a double tap, planned on a claim already in), is recalled by a post with the recall authority
+    // before its release. Cruise missiles cannot be.
+    void Recalls(double now_h, C2Context& c) {
+        if (!LiveOn() || !c.believed) return;
+        std::vector<int> cand;
+        for (const C2Context::Air& a : c.airborne) cand.push_back(a.package);
+        for (int i : c.live) cand.push_back(i);
+        for (int idx : cand) {
+            const Package& p = (*c.packages)[static_cast<std::size_t>(idx)];
+            if (recalled_.count(p.id) > 0 || p.Missiles() > 0) continue;
+            if (p.kind != MissionKind::Strike && p.kind != MissionKind::Dead) continue;
+            const IntelEntry* e = c.believed(p.target_key);
+            if (e == nullptr || e->claimed_destroyed_h < p.FirstH() || e->Live() >= d_->tuning.Get("c2.recall_live")) continue;
+            bool open = false;
+            for (const Flight& fl : p.flights) open = open || (IsMain(fl) && Open(fl, now_h));
+            if (!open) continue;
+            const std::string mission = C2MissionOf(p, *d_);
+            const int by = Authorizer("recall", mission, p.target_pos, c.phase);
+            if (by < 0) continue;
+            recalled_.insert(p.id);
+            C2Message m;
+            m.kind = C2Kind::Recall;
+            m.from = posts_[static_cast<std::size_t>(by)].id;
+            m.to = p.name;
+            m.package_id = p.id;
+            m.flight = -1;
+            m.mission = mission;
+            m.where = p.target_pos;
+            m.object_id = p.target_object;
+            m.observed_h = e->claimed_destroyed_h;
+            m.post = -1;
+            m.text = "recall: the target is believed destroyed";
+            Send(m, "order", now_h, Duty(by), c);
+        }
     }
 
     // The post kind's role.
@@ -620,10 +871,58 @@ private:
     std::map<int, std::vector<C2Message>> reports_;
     std::map<int, std::vector<RetaskRecord>> retasks_;
     std::map<std::string, double> carry_;  // per pool kind: the held-back sorties short of a flight, to the next cycle
+    std::vector<C2SessionOrder> session_orders_;  // for a session's flights, not yet taken (roadmap S2)
+    std::set<int> recalled_;                       // packages recalled already
     C2Stats stats_;
     int next_message_ = 1;
     int next_pool_ = 1;
     int next_decision_ = 0;
+    int next_order_ = 1;
+
+    static std::uint64_t Fnv(const std::string& s) {
+        std::uint64_t h = 1469598103934665603ull;
+        for (const char ch : s) {
+            h ^= static_cast<std::uint64_t>(static_cast<unsigned char>(ch));
+            h *= 1099511628211ull;
+        }
+        return h;
+    }
+    // A net's band as the posts' sets work it (0: not known, every band).
+    static double NetFreqHz(const std::string& net) {
+        if (net.find("uhf") != std::string::npos) return 300e6;
+        if (net.find("vhf") != std::string::npos || net.find("r832") != std::string::npos) return 130e6;
+        return 0.0;
+    }
+    static bool IsMain(const Flight& fl) { return fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter; }
+    // A flight of a package whose plan a post knows: still with its load and short of its release at `now_h`, by the plan.
+    static bool Open(const Flight& fl, double now_h) {
+        if (fl.released || fl.aborted || fl.count - fl.lost <= 0 || fl.route.empty() || now_h >= fl.route.back().t_h) return false;
+        if (fl.release_index >= 0 && fl.release_index < static_cast<int>(fl.route.size()) &&
+            now_h >= fl.route[static_cast<std::size_t>(fl.release_index)].t_h)
+            return false;
+        return true;
+    }
+    bool IsLive(const C2Context& c, int package_id) const {
+        for (int i : c.live) {
+            if ((*c.packages)[static_cast<std::size_t>(i)].id == package_id) return true;
+        }
+        return false;
+    }
+    void ToSession(const C2Message& m, const std::string& kind, const std::string& by, double now) {
+        C2SessionOrder o;
+        o.id = next_order_++;
+        o.package_id = m.package_id;
+        o.flight = m.flight;
+        o.kind = kind;
+        o.by = by;
+        o.speaker = m.from;
+        o.where = m.where;
+        o.object_id = m.object_id;
+        o.at_h = now;
+        o.observed_h = m.observed_h;
+        session_orders_.push_back(o);
+        ++stats_.session_orders;
+    }
 
     Rng Draw(std::uint64_t a, std::uint64_t b) const { return root_.Fork(a * 0x100000001B3ull + b * 0x9E3779B97F4A7C15ull + 0xC2u); }
 
@@ -757,7 +1056,8 @@ private:
 
     // Send a message by `hop` (its time drawn, a jammed try said again after c2.retry_s, lost after c2.max_retries; heard
     // by our listeners near our battery). `from_at`: where the sender is.
-    void Send(C2Message m, const std::string& hop, double now_h, const airwar::Officer* o, C2Context& c, bool record_only = false,
+    // True: it got through (not lost to jamming).
+    bool Send(C2Message m, const std::string& hop, double now_h, const airwar::Officer* o, C2Context& c, bool record_only = false,
               const Vec3* from_at = nullptr) {
         const TuningTable& tune = d_->tuning;
         m.id = next_message_++;
@@ -769,8 +1069,10 @@ private:
         Rng r = Draw(0xC2000000ull + static_cast<std::uint64_t>(m.id), 1);
         double s = HopS(hop, r, o, m.post >= 0 ? posts_[static_cast<std::size_t>(m.post)].queued : 0);
         const std::string call = C2CallKind(m.kind);
-        if (!call.empty() && jam_) {
-            const double share = Clamp01(jam_(m));
+        if (!call.empty() && (jam_ || LiveOn())) {
+            // The tests' hook, else our own jamming of the posts marked for it (roadmap S2).
+            const double share = Clamp01(jam_ ? jam_(m) : OurJamShare(m, c.battery));
+            if (share > 0.0 && !jam_) ++stats_.jammed_by_us;
             const int max_tries = std::max(1, static_cast<int>(tune.Get("c2.max_retries") + 0.5));
             int tries = 1;
             while (share > 0.0 && r.Chance(share)) {
@@ -810,11 +1112,12 @@ private:
         if (m.package_id >= 0) calls_[m.package_id].push_back(m);
         if (m.lost) {
             ++stats_.lost;
-            return;
+            return false;
         }
-        if (record_only) return;
+        if (record_only) return true;
         if (m.post >= 0) ++posts_[static_cast<std::size_t>(m.post)].queued;
         messages_.push_back(m);
+        return true;
     }
     // A timer, not a transmission (silence as consent): due at `due_h`.
     void Timer(C2Message m, double now_h, double due_h) {
@@ -839,6 +1142,29 @@ private:
             if (p.id == package_id) return {&p, a.run};
         }
         return {nullptr, nullptr};
+    }
+
+    static const Package* Pkg(const C2Context& c, int package_id) {
+        for (const Package& p : *c.packages) {
+            if (p.id == package_id) return &p;
+        }
+        return nullptr;
+    }
+    // A struck post's alternate (the faction's post_loss "alternate"): the nearest live post of its kind (-1: none).
+    int Alternate(int post) const {
+        if (d_->faction.c2.post_loss.takeover != "alternate") return -1;
+        const C2PostState& dead = posts_[static_cast<std::size_t>(post)];
+        int best = -1;
+        double bd = 1e18;
+        for (std::size_t i = 0; i < posts_.size(); ++i) {
+            const C2PostState& p = posts_[i];
+            if (static_cast<int>(i) == post || !p.alive || p.kind != dead.kind) continue;
+            const double dist = Dist2d(p.at, dead.at);
+            if (dist >= bd) continue;
+            bd = dist;
+            best = static_cast<int>(i);
+        }
+        return best;
     }
 
     void Handle(const C2Message& m, C2Context& c) {
@@ -884,6 +1210,12 @@ private:
         }
         if (m.kind == C2Kind::Divert) {
             auto pr = Airborne(c, m.package_id);
+            if (pr.first == nullptr && LiveOn() && IsLive(c, m.package_id)) {  // a session flies it: the order goes there (S2)
+                ToSession(m, "divert", m.from, now);
+                ++stats_.diverts;
+                stats_.divert_min.push_back((now - m.observed_h) * 60.0);
+                return;
+            }
             if (pr.first == nullptr || m.flight < 0 || m.flight >= static_cast<int>(pr.first->flights.size())) return;
             Flight& fl = pr.first->flights[static_cast<std::size_t>(m.flight)];
             const AircraftType* a = d_->faction.Aircraft(fl.aircraft);
@@ -902,6 +1234,10 @@ private:
         }
         if (m.kind == C2Kind::Warning) {  // a hunter told: the leader's own leave takes him there
             auto pr = Airborne(c, m.package_id);
+            if (pr.first == nullptr && LiveOn() && IsLive(c, m.package_id)) {
+                ToSession(m, "hunt", "leader", now);
+                return;
+            }
             if (pr.first == nullptr || m.flight < 0 || m.flight >= static_cast<int>(pr.first->flights.size())) return;
             Flight& fl = pr.first->flights[static_cast<std::size_t>(m.flight)];
             const AircraftType* a = d_->faction.Aircraft(fl.aircraft);
@@ -917,6 +1253,34 @@ private:
         }
         if (m.kind == C2Kind::Scramble) {
             Scrambled(m, c, now);
+            return;
+        }
+        if (m.kind == C2Kind::Recall) {  // roadmap S2: the package's main flights turn for home with their loads
+            auto pr = Airborne(c, m.package_id);
+            if (pr.first == nullptr) {
+                if (LiveOn() && IsLive(c, m.package_id)) {
+                    ToSession(m, "recall", m.from, now);
+                    ++stats_.recalls;
+                }
+                return;
+            }
+            int n = 0;
+            for (std::size_t fi = 0; fi < pr.first->flights.size(); ++fi) {
+                Flight& fl = pr.first->flights[fi];
+                const AircraftType* a = d_->faction.Aircraft(fl.aircraft);
+                if (!IsMain(fl) || a == nullptr || fl.count - fl.lost <= 0) continue;
+                if (fl.release_index >= 0 && static_cast<int>(pr.second->next_leg[fi]) >= fl.release_index) continue;
+                if (!RecallFlight(*pr.first, *pr.second, fi, now, a->cruise_mps)) continue;
+                pr.second->out.aborted_flights.push_back(static_cast<int>(fi));
+                RetaskRecord rr;
+                rr.flight = static_cast<int>(fi);
+                rr.kind = "recall";
+                rr.by = m.from;
+                rr.t_s = now * 3600.0;
+                retasks_[m.package_id].push_back(rr);
+                ++n;
+            }
+            if (n > 0) ++stats_.recalls;
             return;
         }
     }
@@ -978,6 +1342,20 @@ private:
                 best_f = static_cast<int>(fi);
             }
         }
+        if (LiveOn()) {  // a session's hunters, where their plan has them (S2)
+            for (int li : c.live) {
+                const Package& p = (*c.packages)[static_cast<std::size_t>(li)];
+                for (std::size_t fi = 0; fi < p.flights.size(); ++fi) {
+                    const Flight& fl = p.flights[fi];
+                    if (fl.role != FlightRole::Hunter || fl.arms <= 0 || !Open(fl, now)) continue;
+                    const double dist = Dist2d(PackageRun::PlaceOf(fl, now), m.where);
+                    if (dist > reach || dist >= bd) continue;
+                    bd = dist;
+                    best_p = p.id;
+                    best_f = static_cast<int>(fi);
+                }
+            }
+        }
         if (best_p < 0) return false;
         const int by = AnyLine("warn", "hunter") ? (C2Authority::May(d_->faction.c2, posts_[static_cast<std::size_t>(m.post)].kind, "warn", "hunter",
                                                                       WhereFor(posts_[static_cast<std::size_t>(m.post)], m.where, c.phase), d_->theatre.year)
@@ -985,11 +1363,12 @@ private:
                                                          : Authorizer("warn", "hunter", m.where, c.phase))
                                                   : -1;
         if (by < 0) return false;
-        auto pr = Airborne(c, best_p);
+        const Package* hp = Pkg(c, best_p);
+        if (hp == nullptr) return false;
         C2Message w = m;
         w.kind = C2Kind::Warning;
         w.from = posts_[static_cast<std::size_t>(by)].id;
-        w.to = pr.first->flights[static_cast<std::size_t>(best_f)].callsign;
+        w.to = hp->flights[static_cast<std::size_t>(best_f)].callsign;
         w.package_id = best_p;
         w.flight = best_f;
         w.post = -1;
@@ -1013,6 +1392,17 @@ private:
                 if (fl.release_index >= 0 && static_cast<int>(a.run->next_leg[fi]) >= fl.release_index) continue;
                 const double dist = Dist2d(PackageRun::PlaceOf(fl, now), m.where);
                 if (dist <= reach) cand.push_back({dist, {a.package, static_cast<int>(fi)}});
+            }
+        }
+        if (LiveOn()) {  // a session's flights, where their plan has them (S2)
+            for (int li : c.live) {
+                const Package& p = (*c.packages)[static_cast<std::size_t>(li)];
+                for (std::size_t fi = 0; fi < p.flights.size(); ++fi) {
+                    const Flight& fl = p.flights[fi];
+                    if (!IsMain(fl) || !Open(fl, now)) continue;
+                    const double dist = Dist2d(PackageRun::PlaceOf(fl, now), m.where);
+                    if (dist <= reach) cand.push_back({dist, {li, static_cast<int>(fi)}});
+                }
             }
         }
         std::sort(cand.begin(), cand.end());
@@ -1072,12 +1462,12 @@ private:
     }
 
     void SendDivert(const C2Message& m, double now, C2Context& c, const std::string& why) {
-        auto pr = Airborne(c, m.package_id);
-        if (pr.first == nullptr) return;
+        const Package* pk = Pkg(c, m.package_id);  // in the air, or flown by a session (S2)
+        if (pk == nullptr || (Airborne(c, m.package_id).first == nullptr && !IsLive(c, m.package_id))) return;
         C2Message d = m;
         d.kind = C2Kind::Divert;
         d.from = m.post >= 0 ? posts_[static_cast<std::size_t>(m.post)].id : m.from;
-        d.to = pr.first->flights[static_cast<std::size_t>(m.flight)].callsign;
+        d.to = pk->flights[static_cast<std::size_t>(m.flight)].callsign;
         const int by = m.post;
         d.post = -1;
         d.text = why.empty() ? "divert to the reported place" : "divert to the reported place (" + why + ")";
@@ -1251,6 +1641,12 @@ private:
 
     // The pools' shifts: a new shift drawn when one ends inside the cycle; the pool stands down at the cycle's end.
     void Refresh(double t_h) {
+        for (C2PostState& p : posts_) {  // a struck post set up again (roadmap S2)
+            if (p.alive || p.back_h < 0.0 || t_h < p.back_h) continue;
+            p.alive = true;
+            p.back_h = -1.0;
+            ++stats_.posts_back;
+        }
         for (AlertPool& p : pools_) {
             if (p.stood_down || t_h < p.until_h) continue;
             const C2AlertDef* al = nullptr;

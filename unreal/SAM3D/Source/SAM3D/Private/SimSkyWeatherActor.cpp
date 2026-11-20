@@ -204,8 +204,9 @@ void ASimSkyWeatherActor::UpdateSun()
 	simcore::SkyClock Clock;
 	if (Sim != nullptr && Sim->GetSkyClock(Clock))
 	{
-		// The scenario's own sun (roadmap R7): the one the simulation's light is read from.
-		SetSunDirection(Clock.SunAtSession(Sim->GetSimTimeSeconds()));
+		// The scenario's own sun (roadmap R7): the one the simulation's light is read from; on a network client the
+		// server's clock at the server's time (roadmap S8).
+		SetSunDirection(Clock.SunAtSession(Sim->GetSkyTimeSeconds()));
 		return;
 	}
 	const simcore::World* W = Sim != nullptr ? Sim->GetSimWorld() : nullptr;

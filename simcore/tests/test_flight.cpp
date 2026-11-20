@@ -193,9 +193,10 @@ SC_TEST("flight: a climb costs speed") {
         StepAircraft(level, 0.05);
     }
     const double v0 = a.airspeed_mps, g0 = a.path_angle_rad;
+    const double accel = AccelMps2(a), top = TopSpeedMps(a);  // at its height (roadmap S4: the thrust's lapse)
     StepAircraft(a, 0.05);
-    const double r = v0 / 400.0;  // the path angle of the step: the one it climbs at after it
-    const double want = 0.05 * (6.0 * (1.0 - r * r) - kStandardGravity * std::sin(a.path_angle_rad));
+    const double r = v0 / top;  // the path angle of the step: the one it climbs at after it
+    const double want = 0.05 * (accel * (1.0 - r * r) - kStandardGravity * std::sin(a.path_angle_rad));
     std::printf("    after 10 s: %.1f m/s at %.1f deg (level: %.1f m/s); a step's dv %.5f, by hand %.5f\n", v0, RadToDeg(g0),
                 level.airspeed_mps, a.airspeed_mps - v0, want);
     SC_EXPECT(g0 > DegToRad(20.0));
@@ -248,10 +249,19 @@ SC_TEST("flight: a helicopter leans its nose down to fly forward, level in the h
     StepAircraft(h, 0.1);
     SC_EXPECT(!HasEnergyModel(h));  // a helicopter flies its told speed
     SC_EXPECT_NEAR(RadToDeg(h.pitch_rad), -10.0, 1e-9);  // at its top speed: the lean at the top
+    // Slowing, he flares at kHeliDecelMps2 (roadmap S4): the nose comes up by the deceleration's share of g.
     h.speed_mps = 40.0;
+    StepAircraft(h, 0.1);
+    SC_EXPECT_NEAR(h.airspeed_mps, 80.0 - 0.3, 1e-9);
+    const double r0 = h.airspeed_mps / 80.0;
+    SC_EXPECT_NEAR(h.pitch_rad, -std::atan(r0 * r0 * std::tan(DegToRad(10.0)) - flight::kHeliDecelMps2 / kStandardGravity), 1e-9);
+    for (int i = 0; i < 140; ++i) StepAircraft(h, 0.1);  // 40 m/s down at 3 m/s2: 13.3 s
+    SC_EXPECT_NEAR(h.airspeed_mps, 40.0, 1e-9);
     StepAircraft(h, 0.1);
     SC_EXPECT_NEAR(RadToDeg(h.pitch_rad), -RadToDeg(std::atan(0.25 * std::tan(DegToRad(10.0)))), 1e-9);  // -2.52 deg
     h.speed_mps = 0.0;
+    for (int i = 0; i < 140; ++i) StepAircraft(h, 0.1);
+    SC_EXPECT_NEAR(h.airspeed_mps, 0.0, 1e-12);
     StepAircraft(h, 0.1);
     SC_EXPECT_NEAR(h.pitch_rad, 0.0, 1e-12);
     SC_EXPECT_NEAR(h.bank_rad, 0.0, 1e-12);
@@ -264,6 +274,7 @@ SC_TEST("flight: a helicopter leans its nose down to fly forward, level in the h
     SC_EXPECT_NEAR(h.bank_rad, 0.0, 1e-12);
     // Forward again and turning hard: no more than the 60 deg its 2 g allow.
     h.speed_mps = 60.0;
+    h.airspeed_mps = 60.0;  // at speed already (the ramp up is roadmap S4's test below)
     h.waypoints = {{0.0, -50000.0, 100.0}};
     h.next_waypoint = 0;
     double most = 0.0;
@@ -362,4 +373,95 @@ SC_TEST("flight: the testbed's waves fly by bank-to-turn: they bank, pull and ro
     SC_EXPECT(most_roll_rate < DegToRad(241.0)); // within the types' roll rates (the F-16A's 240 deg/s the most)
     SC_EXPECT(helicopters_leaning > 0);
     SC_EXPECT(slowest < 0.99);                   // a turn or a climb has cost one of them speed
+}
+
+// ---------------------------------------------------------------------------------------------- roadmap S4
+
+SC_TEST("flight (S4): top speed and acceleration by altitude, the thrust's lapse with the air's density") {
+    // ISA at 6,000 m: rho/rho0 = 0.6601/1.2250 = 0.5389 (anderson_flight, appendix A). With thrust as sigma^0.7: the
+    // acceleration 0.5389^0.7 = 0.649 of sea level's; drag as sigma v^2 against it: the top speed 0.5389^-0.15 = 1.097 times.
+    SC_EXPECT_NEAR(DensityRatioAt(0.0), 1.0, 1e-12);
+    SC_EXPECT_NEAR(DensityRatioAt(6000.0), 0.5389, 0.0015);
+    Aircraft a;
+    a.max_speed_mps = 400.0;
+    a.accel_mps2 = 8.0;
+    a.position = {0.0, 0.0, 0.0};
+    SC_EXPECT_NEAR(TopSpeedMps(a), 400.0, 1e-12);
+    SC_EXPECT_NEAR(AccelMps2(a), 8.0, 1e-12);
+    a.position.z = 6000.0;
+    SC_EXPECT_NEAR(AccelMps2(a) / 8.0, 0.649, 0.002);
+    SC_EXPECT_NEAR(TopSpeedMps(a) / 400.0, 1.097, 0.002);
+    // The frame's own altitude counts: 5,000 m over a frame 1,000 m up is 6,000 m of air.
+    Aircraft b = a;
+    b.position.z = 5000.0;
+    b.frame_alt_m = 1000.0;
+    SC_EXPECT_NEAR(AccelMps2(b), AccelMps2(a), 1e-12);
+    // In level flight at full throttle from 200 m/s: dv/dt = A (1 - (v / v_top)^2), 6.0 m/s2 at sea level, 4.11 at 6,000 m.
+    for (double z : {0.0, 6000.0}) {
+        Aircraft c = Turner(200.0, 15.0, 8.0, 180.0);
+        c.position = {0.0, 0.0, z};
+        c.speed_mps = 600.0;  // asked more than he has: full throttle
+        c.airspeed_mps = 200.0;
+        c.max_speed_mps = 400.0;
+        c.accel_mps2 = 8.0;
+        c.waypoints = {{0.0, 200000.0, z}};
+        const double want = AccelMps2(c) * (1.0 - std::pow(200.0 / TopSpeedMps(c), 2.0));
+        StepAircraft(c, 0.01);
+        std::printf("    at %.0f m: %.2f m/s2 (hand %.2f)\n", z, (c.airspeed_mps - 200.0) / 0.01, z == 0.0 ? 6.0 : 4.11);
+        SC_EXPECT_NEAR((c.airspeed_mps - 200.0) / 0.01, want, 1e-6);
+        SC_EXPECT_NEAR(want, z == 0.0 ? 6.0 : 4.11, 0.02);
+    }
+}
+
+SC_TEST("flight (S4): a helicopter gains speed at its acceleration and stops in its flare's distance") {
+    Aircraft h;
+    h.type = "Air+Rotorcraft";
+    h.position = {0.0, 0.0, 50.0};
+    h.velocity = {0.0, 0.0, 0.0};
+    h.speed_mps = 60.0;  // told 60 m/s from the hover
+    h.airspeed_mps = 0.0;
+    h.max_turn_rate_rad_s = DegToRad(30.0);
+    h.max_load_g = 2.0;
+    h.roll_rate_rad_s = DegToRad(60.0);
+    h.max_speed_mps = 80.0;
+    h.waypoints = {{0.0, 50000.0, 50.0}};
+    for (int i = 0; i < 100; ++i) StepAircraft(h, 0.1);  // 10 s at 2 m/s2
+    SC_EXPECT_NEAR(h.airspeed_mps, 10.0 * flight::kHeliAccelMps2, 1e-9);
+    for (int i = 0; i < 200; ++i) StepAircraft(h, 0.1);
+    SC_EXPECT_NEAR(h.airspeed_mps, 60.0, 1e-9);
+    // Its stop: v^2 / 2a, 600 m from 60 m/s at 3 m/s2 (1,067 m from 80).
+    SC_EXPECT_NEAR(HeliStopDistanceM(60.0), 600.0, 1e-9);
+    SC_EXPECT_NEAR(HeliStopDistanceM(80.0), 6400.0 / 6.0, 1e-9);
+    const double y0 = h.position.y;
+    h.speed_mps = 0.0;
+    while (h.airspeed_mps > 0.0) StepAircraft(h, 0.01);
+    SC_EXPECT_NEAR(h.position.y - y0, 600.0, 2.0);
+    // A type's own acceleration is used when it gives one.
+    h.accel_mps2 = 4.0;
+    SC_EXPECT_NEAR(HeliAccelMps2(h), 4.0, 1e-12);
+    SC_EXPECT(!HasEnergyModel(h));
+}
+
+SC_TEST("flight (S4): a path angle asked by the pilot's height layer is flown, pulled onto within the g limit") {
+    // Terrain-following asks a climb as a path angle: he pulls onto it (one second's lag, kPathTauS) and climbs on it,
+    // and the energy model pays for the climb (g sin gamma).
+    Aircraft a = Turner(250.0, 15.0, 6.0, 180.0);
+    a.max_speed_mps = 400.0;
+    a.accel_mps2 = 8.0;
+    a.speed_mps = 250.0;
+    a.position = {0.0, 0.0, 200.0};
+    a.waypoints = {{0.0, 200000.0, 200.0}};
+    a.height_held = true;  // the height layer has the height...
+    a.path_asked = true;   // ...and asks it as a path angle
+    a.asked_path_angle_rad = DegToRad(10.0);
+    for (int i = 0; i < 200; ++i) StepAircraft(a, 0.05);  // 10 s
+    SC_EXPECT_NEAR(RadToDeg(a.path_angle_rad), 10.0, 0.05);
+    SC_EXPECT(a.position.z > 200.0 + 250.0 * 10.0 * std::sin(DegToRad(10.0)) * 0.7);
+    SC_EXPECT_NEAR(a.velocity.z / a.airspeed_mps, std::sin(a.path_angle_rad), 1e-9);
+    SC_EXPECT(a.load_g < 6.0 + 1e-9);
+    // Held without the ask: level, the old way (the layer sets the height itself).
+    Aircraft b = a;
+    b.path_asked = false;
+    StepAircraft(b, 0.05);
+    SC_EXPECT_NEAR(b.velocity.z, 0.0, 1e-12);
 }

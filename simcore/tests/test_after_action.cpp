@@ -96,6 +96,14 @@ SC_TEST("after action (P9): the combat report from the records: raids by time, f
     const CombatReport taken = CompileReport("Battery 21", 0.0, 600.0, {Air(60.0, "0012 — кратко")}, {}, back, v);
     SC_EXPECT(taken.destroyed == 0 && taken.missiles == 1 && taken.Target(12) != nullptr && taken.Target(12)->places.empty() &&
               taken.Target(12)->type == -1);
+    // Roadmap S4: taken back as a hit (seen burning on the TV, flying on): no kill, one hit, and the report says so.
+    const std::vector<LogEntry> hit = {{200.0, "21", "launch", 12}, {215.0, "21", "destroyed", 12}, {260.0, "21", "hit", 12}};
+    const CombatReport burning = CompileReport("Battery 21", 0.0, 600.0, {Air(60.0, "0012 — кратко")}, {}, hit, v);
+    const std::string bt = ReportText(burning, Clock);
+    std::printf("    %s\n", bt.c_str());
+    SC_EXPECT(burning.destroyed == 0 && burning.damaged == 1 && burning.missiles == 1);
+    SC_EXPECT(bt.find("Targets hit and flying on: 1 (0012 by 21)") != std::string::npos);
+    SC_EXPECT(taken.damaged == 0 && ReportText(taken, Clock).find("hit and flying on") == std::string::npos);
 }
 
 SC_TEST("after action (P9): the regiment checks the records against the radar company's log; the mark; the trust") {

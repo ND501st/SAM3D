@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "simcore/air_war/air_radio.hpp"
 #include "simcore/air_war/save.hpp"
 #include "simcore/campaign/mission_session.hpp"
+#include "simcore/command/air_war_feed.hpp"
 #include "simcore/command/intercept.hpp"
 #include "simcore/em/data.hpp"
 #include "simcore/flights.hpp"
@@ -543,6 +545,12 @@ SC_TEST("air radio B9: the same seed gives the same log, and a package outcome's
         h.text = l.text;
         h.understood = l.understood;
         h.fact = l.fast ? "intercept:" + std::to_string(l.call) + ":" + l.post : "";
+        h.chain_post = l.chain_post;  // roadmap S6: what a load rebuilds the facts from
+        h.h = 10.0 + l.heard_s / 3600.0;
+        h.written_h = 10.0 + l.written_s / 3600.0;
+        h.bearing_deg = l.bearing_deg;
+        h.precedence = l.precedence;
+        h.names_battery = l.names_battery;
         o.heard.push_back(h);
     }
     const json::Value v = airwar::save_detail::OutcomeJson(o);
@@ -554,6 +562,9 @@ SC_TEST("air radio B9: the same seed gives the same log, and a package outcome's
     SC_EXPECT(o2.heard.size() == o.heard.size() && !o2.heard.empty());
     for (std::size_t i = 0; i < o.heard.size() && i < o2.heard.size(); ++i) {
         SC_EXPECT(o2.heard[i].text == o.heard[i].text && o2.heard[i].fact == o.heard[i].fact && o2.heard[i].understood == o.heard[i].understood);
+        SC_EXPECT(o2.heard[i].chain_post == o.heard[i].chain_post && std::fabs(o2.heard[i].h - o.heard[i].h) < 1e-9 &&
+                  std::fabs(o2.heard[i].written_h - o.heard[i].written_h) < 1e-9 && std::fabs(o2.heard[i].bearing_deg - o.heard[i].bearing_deg) < 1e-9 &&
+                  o2.heard[i].precedence == o.heard[i].precedence && o2.heard[i].names_battery == o.heard[i].names_battery);
     }
 }
 
@@ -570,11 +581,20 @@ SC_TEST("air radio B9: the enemy's placed listeners hear our nets by link margin
     set.sensitivity_dbw = -131.0;
     set.required_snr_db = 12.0;
     command::EmRadio radio(set, nullptr, 50e6);
-    SC_EXPECT(command::PlaceEnemyListeners(radio, data, "warsaw_pact") == 1);
-    // The listener of the data stands at 28 km east, 30 km south of the theatre's origin.
-    const command::RadioPath near_p = radio.Hop(0, 1, Vec3{27000.0, -30000.0, 0.0}, Vec3{22000.0, -30000.0, 0.0}, 1.0);
-    const command::RadioPath far_p = radio.Hop(0, 1, Vec3{-90000.0, 60000.0, 0.0}, Vec3{-95000.0, 60000.0, 0.0}, 1.0);
+    // Roadmap S6: the Pact's front intercept post behind its line (30 km east, 160 km north of the theatre's origin) and an
+    // Il-20 on its orbit (20 km east, 200 km north, 8,000 m).
+    SC_EXPECT(command::PlaceEnemyListeners(radio, data, "warsaw_pact") == 2);
+    const command::RadioPath near_p = radio.Hop(0, 1, Vec3{30000.0, 155000.0, 0.0}, Vec3{25000.0, 155000.0, 0.0}, 1.0);
+    // The Il-20 at 8,000 m sees a 3 m whip out to its radio horizon, about 376 km over the 4/3 earth: 350 km off, still short
+    // of it, it hears the net (an airborne post "extends intercept" over the whole country: FM 100-2-1). 460 km off, some 85 km
+    // past the horizon, the smooth earth's diffraction (ITU-R P.526-16 section 3) loses tens of dB more and nothing is heard.
+    // (Until the S6 follow-ups the EM layer had only one knife edge over the bulge, about 24 dB at 670 km, and this point had
+    // to be put 1,200 km off.)
+    const command::RadioPath edge_p = radio.Hop(0, 1, Vec3{20000.0, -150000.0, 0.0}, Vec3{15000.0, -150000.0, 0.0}, 1.0);
+    const command::RadioPath far_p = radio.Hop(0, 1, Vec3{20000.0, -260000.0, 0.0}, Vec3{15000.0, -260000.0, 0.0}, 1.0);
+    std::printf("    the Il-20 hears a whip 350 km off %.2f, 460 km off %.3f\n", edge_p.heard, far_p.heard);
     SC_EXPECT(near_p.heard > 0.9);
+    SC_EXPECT(edge_p.heard > 0.9);
     SC_EXPECT(far_p.heard < 0.05);
     command::EmRadio none(set, nullptr, 50e6);  // none placed: the abstract service hears everything (P3)
     SC_EXPECT(none.Hop(0, 1, Vec3{-90000.0, 60000.0, 0.0}, Vec3{-95000.0, 60000.0, 0.0}, 1.0).heard == 1.0);
@@ -726,4 +746,476 @@ SC_TEST("air radio B9: the radio and the intercept cost a fraction of a millisec
     std::printf("    100 aircraft, 5 posts, %d calls in %d steps: %.3f ms a step (mean)\n", said, steps, ms);
     SC_EXPECT(said > 10);
     SC_EXPECT(ms < 5.0);  // a loaded machine is allowed far more than the 0.1 ms the design expects
+}
+
+// ------------------------------------------------------------------------------------------------ roadmap S6
+
+namespace {
+
+airwar::RoutePoint Point(double east_km, double north_km, double agl_m, double t_h, const char* tag) {
+    airwar::RoutePoint r;
+    r.pos = Vec3{east_km * 1000.0, north_km * 1000.0, 0.0};
+    r.agl_m = agl_m;
+    r.t_h = t_h;
+    r.tag = tag;
+    return r;
+}
+
+airwar::Flight S6Flight(const std::string& cs, airwar::FlightRole role) {
+    airwar::Flight f;
+    f.callsign = cs;
+    f.role = role;
+    f.squadron = cs + " squadron";
+    f.aircraft = "f4e";
+    f.count = 4;
+    f.route = {Point(-200, 0, 1000, 1.0, "entry"), Point(-120, 0, 300, 1.2, "gate"), Point(-30, 0, 100, 1.4, "ip"),
+               Point(0, 0, 100, 1.45, "target"), Point(20, 10, 300, 1.5, "egress"), Point(-200, 20, 3000, 1.9, "exit")};
+    f.release_index = 3;
+    f.aim_pos = Vec3{0.0, 0.0, 0.0};
+    return f;
+}
+
+command::ChainData S6Chain() {
+    command::ChainData d;
+    std::string e;
+    if (!command::LoadChainData(kData, "command/chain_pannonia.json", d, &e)) std::printf("    %s\n", e.c_str());
+    return d;
+}
+
+command::InterceptData S6Intercept() {
+    command::InterceptData d;
+    std::string e;
+    if (!command::LoadInterceptData(kData, "command/intercept.json", d, &e)) std::printf("    %s\n", e.c_str());
+    return d;
+}
+
+bool Starts(const std::string& s, const char* p) { return s.compare(0, std::char_traits<char>::length(p), p) == 0; }
+
+// The facts our feed made of the enemy's calls: key, hour and text.
+std::vector<std::string> InterceptFactsOf(const command::InfoNet& net) {
+    std::vector<std::string> out;
+    for (const command::Fact& f : net.Facts()) {
+        if (!Starts(f.key, "intercept")) continue;
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%.6f", f.h);
+        out.push_back(f.key + "|" + buf + "|" + f.text);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+}  // namespace
+
+SC_TEST("air radio S6: an abstract package's calls keep the session's rules: a comm-out strike silent before its attack and its codeword after; threat calls always; the escort checks in") {
+    airwar::FactionRadio fr;
+    fr.present = true;
+    fr.discipline = 1.0;  // every strike flight comm-out
+    fr.language = "en";
+    airwar::AirStaff staff;
+    AirRadioDef td;
+    airwar::Package p;
+    p.id = 5;
+    p.target_pos = Vec3{0.0, 0.0, 0.0};
+    p.flights = {S6Flight("Hawk", airwar::FlightRole::Strike), S6Flight("Eagle", airwar::FlightRole::Escort)};
+    p.flights[0].released = true;
+    p.flights[0].lost = 1;
+    const std::vector<airwar::AbstractCall> calls = airwar::AbstractPackageCalls(p, fr, staff, td, 7);
+    int strike_before = 0, threat = 0, codeword = 0, escort_check_in = 0;
+    std::set<int> ids;
+    for (const airwar::AbstractCall& a : calls) {
+        ids.insert(a.call.id);
+        SC_EXPECT(a.package_id == 5 && a.call.id / 256 == 5 && !a.call.by_signal);
+        if (a.call.flight == "Hawk") {
+            if (a.call.start_s < 1.45 * 3600.0) ++strike_before;
+            threat += a.call.kind == airwar::CallKind::ThreatCall ? 1 : 0;
+            codeword += a.call.kind == airwar::CallKind::Codeword ? 1 : 0;
+        } else {
+            escort_check_in += a.call.kind == airwar::CallKind::CheckIn ? 1 : 0;
+        }
+    }
+    SC_EXPECT(ids.size() == calls.size());
+    SC_EXPECT(strike_before == 0 && threat == 1 && codeword == 1 && escort_check_in == 1);
+    // A loose faction's strike talks on the way and names its target at the IP.
+    fr.discipline = 0.2;
+    bool named = false;
+    for (const airwar::AbstractCall& a : airwar::AbstractPackageCalls(p, fr, staff, td, 7)) named = named || (a.call.flight == "Hawk" && a.call.has_where);
+    SC_EXPECT(named);
+    // A deception package's decoys talk as a strike would with the faction's demonstration share (section 8).
+    airwar::Package dp;
+    dp.id = 6;
+    dp.kind = airwar::MissionKind::Deception;
+    dp.target_pos = Vec3{5000.0, 5000.0, 0.0};
+    dp.flights = {S6Flight("Ghost", airwar::FlightRole::Decoy)};
+    fr.discipline = 1.0;
+    const auto demonstrating = [&](double share) {
+        fr.demonstration = share;
+        int n = 0;
+        for (const airwar::AbstractCall& a : airwar::AbstractPackageCalls(dp, fr, staff, td, 7)) n += a.call.has_where ? 1 : 0;
+        return n;
+    };
+    SC_EXPECT(demonstrating(1.0) == 1 && demonstrating(0.0) == 0);
+    int share = 0;
+    fr.demonstration = 0.5;
+    for (int id = 1; id <= 400; ++id) {
+        dp.id = id;
+        share += airwar::Demonstrates(dp, 0, fr, staff, td, 7) ? 1 : 0;
+    }
+    std::printf("    a demonstration share of 0.5 over 400 decoy flights: %d talk as strikes\n", share);
+    SC_EXPECT(share > 150 && share < 250);
+}
+
+SC_TEST("air radio S6: our posts hear an abstract call by the radio horizon: a low flight far off not, an E-3A's at 300 km yes, an HF request only on the HF set") {
+    AirRadioDef td;
+    td.tune["radio.abstract_hear"] = 1.0;
+    airwar::ListeningPost vhf, hf;
+    vhf.id = "intercept_post_1";
+    vhf.chain_post = "intercept_post_1";
+    hf = vhf;
+    hf.id = "intercept_post_1_hf";
+    hf.hf = true;
+    const auto heard = [&](const airwar::ListeningPost& post, double north_km, double height_m, bool on_hf) {
+        airwar::AbstractCall a;
+        a.call.id = 1;
+        a.from = Vec3{0.0, north_km * 1000.0, 0.0};
+        a.height_m = height_m;
+        a.hf = on_hf;
+        airwar::Heard h;
+        return airwar::HearAbstract(a, post, td, 3, h);
+    };
+    SC_EXPECT(heard(vhf, 120.0, 1000.0, false));   // the horizon from 1,000 m to our 30 m mast: about 153 km
+    SC_EXPECT(!heard(vhf, 80.0, 50.0, false));     // ... from 50 m about 52 km
+    SC_EXPECT(heard(vhf, 300.0, 9000.0, false));   // an E-3A's orbit: about 413 km
+    SC_EXPECT(!heard(vhf, 430.0, 9000.0, false));  // past the reach of any air set
+    SC_EXPECT(heard(hf, 500.0, 15.0, true) && !heard(vhf, 50.0, 15.0, true) && !heard(hf, 20.0, 1000.0, false));
+    // The bearing has the DF's error, about 3.5 degrees.
+    double sum2 = 0.0;
+    for (int id = 1; id <= 500; ++id) {
+        airwar::AbstractCall a;
+        a.call.id = id;
+        a.from = Vec3{0.0, 100000.0, 0.0};
+        a.height_m = 3000.0;
+        airwar::Heard h;
+        if (airwar::HearAbstract(a, vhf, td, 3, h)) sum2 += h.bearing_rad * h.bearing_rad;
+    }
+    const double sigma_deg = std::sqrt(sum2 / 500.0) * 180.0 / 3.14159265358979323846;
+    std::printf("    the bearings' spread: %.2f deg\n", sigma_deg);
+    SC_EXPECT(sigma_deg > 2.5 && sigma_deg < 4.5);
+}
+
+SC_TEST("air radio S6: a campaign's abstract raids reach the air section's day summary through the pipeline, the same pumped step by step or once after a load; none at radio.mode 0") {
+    airwar::AirWarData aw;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", aw, &e));
+    const command::ChainData chain = S6Chain();
+    const command::InterceptData idata = S6Intercept();
+    const unsigned seed = 3u;
+    airwar::AirCampaign c;
+    c.Init(aw, seed);
+    command::InfoNet net;
+    SC_EXPECT(net.Init(chain, seed, aw.theatre.start_hour));
+    command::CampaignFeed feed;
+    feed.Bind(&net);
+    feed.UseIntercept(idata);
+    while (c.Now() < 60.0) {
+        if (c.Advance(60.0)) c.SkipPlayerMission();
+        feed.Pump(c);
+    }
+    int summaries = 0;
+    for (const command::Fact& f : net.Facts()) {
+        if (f.kind != command::FactKind::Intsum) continue;
+        ++summaries;
+        SC_EXPECT(f.origin == "army_intel" && f.document && Starts(f.key, "intercept_intsum_campaign:"));
+    }
+    std::printf("    two and a half days against NATO: %zu abstract calls, %zu heard by our posts, %zu written up, %d day summaries\n", feed.AbstractCalls().size(),
+                feed.AbstractHeard().size(), feed.AbstractDesk().Log().size(), summaries);
+    SC_EXPECT(!feed.AbstractCalls().empty() && !feed.AbstractDesk().Log().empty() && summaries >= 1);
+    // The canary (the first-person rule): every fact made of the enemy's calls is held by a person of the chain, and the
+    // player's character has it only from someone who told him.
+    for (const command::Fact& f : net.Facts()) {
+        if (!Starts(f.key, "intercept")) continue;
+        SC_EXPECT(chain.FindPosition(f.origin) != nullptr);
+    }
+    for (const command::Delivery& k : net.KnownBy(net.Player())) {
+        const command::Fact& f = net.Facts()[static_cast<std::size_t>(k.fact)];
+        if (Starts(f.key, "intercept")) SC_EXPECT(k.from >= 0 && k.h >= f.h - 1e-9);
+    }
+    // Loaded from its save, pumped once: the same facts, at the same hours, in the same words.
+    airwar::AirCampaign loaded;
+    SC_EXPECT(airwar::LoadCampaignJson(airwar::SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_nato.json"), kData, loaded, &e));
+    command::InfoNet net2;
+    SC_EXPECT(net2.Init(chain, seed, aw.theatre.start_hour));
+    command::CampaignFeed feed2;
+    feed2.Bind(&net2);
+    feed2.UseIntercept(idata);
+    feed2.Pump(loaded);
+    const std::vector<std::string> a = InterceptFactsOf(net), b = InterceptFactsOf(net2);
+    SC_EXPECT(a == b && !a.empty());
+    SC_EXPECT(feed2.AbstractDesk().Log().size() == feed.AbstractDesk().Log().size());
+    for (std::size_t i = 0; i < feed.AbstractDesk().Log().size() && i < feed2.AbstractDesk().Log().size(); ++i) {
+        SC_EXPECT(feed.AbstractDesk().Log()[i].text == feed2.AbstractDesk().Log()[i].text);
+    }
+    // At radio.mode 0 (a save made before S6) the service is silent.
+    airwar::AirWarData old = aw;
+    old.tuning.values["radio.mode"] = 0.0;
+    airwar::AirCampaign c0;
+    c0.Init(old, seed);
+    command::InfoNet net0;
+    SC_EXPECT(net0.Init(chain, seed, aw.theatre.start_hour));
+    command::CampaignFeed feed0;
+    feed0.Bind(&net0);
+    feed0.UseIntercept(idata);
+    while (c0.Now() < 30.0) {
+        if (c0.Advance(30.0)) c0.SkipPlayerMission();
+        feed0.Pump(c0);
+    }
+    SC_EXPECT(feed0.AbstractCalls().empty());
+    for (const command::Fact& f : net0.Facts()) SC_EXPECT(f.kind != command::FactKind::Intsum);
+}
+
+SC_TEST("air radio S6: what our posts logged in a played session is rebuilt as the same facts from the save; a save made before S6 has none of it") {
+    airwar::AirWarData aw;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", aw, &e));
+    const command::ChainData chain = S6Chain();
+    const command::InterceptData idata = S6Intercept();
+    for (unsigned seed = 1u; seed <= 6u; ++seed) {
+        airwar::AirCampaign c;
+        c.Init(aw, seed);
+        while (c.Now() < 72.0 && c.PlayerMission() == nullptr) c.Advance(72.0);
+        const airwar::Package* pm = c.PlayerMission();
+        if (pm == nullptr) continue;
+        const int pid = pm->id;
+        const double tot = pm->tot_h;
+        airwar::PackageOutcome o;
+        o.package_id = pid;
+        airwar::HeardRecord divert;  // a divert naming a square, on the fast road
+        divert.post = "intercept_post_1";
+        divert.chain_post = "intercept_post_1";
+        divert.kind = "divert";
+        divert.text = "Hawk 1, new target KA 4417";
+        divert.understood = true;
+        divert.fact = "intercept:77:intercept_post_1";
+        divert.h = tot - 0.2;
+        divert.written_h = tot - 0.18;
+        divert.bearing_deg = 123.0;
+        divert.precedence = 2;
+        o.heard.push_back(divert);
+        airwar::HeardRecord report = divert;  // a report naming the battery's square
+        report.kind = "report";
+        report.text = "Hawk 1, SAM site at KA 4417";
+        report.fact = "intercept:78:intercept_post_1";
+        report.names_battery = true;
+        o.heard.push_back(report);
+        airwar::HeardRecord traffic = divert;  // not read: no fact
+        traffic.kind = "traffic";
+        traffic.understood = false;
+        traffic.fact.clear();
+        o.heard.push_back(traffic);
+        c.CompletePlayerMission(o, tot + 0.5);
+        command::InfoNet net;
+        SC_EXPECT(net.Init(chain, seed, aw.theatre.start_hour));
+        command::CampaignFeed feed;
+        feed.Bind(&net);
+        feed.UseIntercept(idata);
+        feed.Pump(c);
+        const std::string key = "intercept_played:" + std::to_string(pid) + ":77";
+        const int fi = net.FactIndex(key);
+        SC_EXPECT(fi >= 0);
+        if (fi >= 0) {
+            const command::Fact& f = net.Facts()[static_cast<std::size_t>(fi)];
+            SC_EXPECT(f.kind == command::FactKind::Intercept && f.text.find("KA 4417") != std::string::npos && f.h > divert.written_h);
+        }
+        SC_EXPECT(net.FactIndex("intercept_played_knows:" + std::to_string(pid) + ":78") >= 0);
+        int played = 0;
+        for (const command::Fact& f : net.Facts()) played += Starts(f.key, "intercept_played") ? 1 : 0;
+        SC_EXPECT(played == 3);  // the divert, the report on the fast road, the report's estimate; nothing of the traffic
+        // The save, loaded: the same facts.
+        const std::string text = airwar::SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json");
+        airwar::AirCampaign loaded;
+        SC_EXPECT(airwar::LoadCampaignJson(text, kData, loaded, &e));
+        command::InfoNet net2;
+        SC_EXPECT(net2.Init(chain, seed, aw.theatre.start_hour));
+        command::CampaignFeed feed2;
+        feed2.Bind(&net2);
+        feed2.UseIntercept(idata);
+        feed2.Pump(loaded);
+        SC_EXPECT(InterceptFactsOf(net2) == InterceptFactsOf(net));
+        // Made before S6: no "radio_mode" in the save, so none of it.
+        std::string old = text;
+        const std::size_t at = old.find("\"radio_mode\"");
+        SC_EXPECT(at != std::string::npos);
+        if (at != std::string::npos) old.erase(at, old.find(',', at) - at + 1);
+        airwar::AirCampaign before;
+        SC_EXPECT(airwar::LoadCampaignJson(old, kData, before, &e));
+        SC_EXPECT(before.Data().tuning.Get("radio.mode") == 0.0);
+        command::InfoNet net0;
+        SC_EXPECT(net0.Init(chain, seed, aw.theatre.start_hour));
+        command::CampaignFeed feed0;
+        feed0.Bind(&net0);
+        feed0.UseIntercept(idata);
+        feed0.Pump(before);
+        for (const command::Fact& f : net0.Facts()) SC_EXPECT(!Starts(f.key, "intercept_played") && !Starts(f.key, "intercept_intsum_campaign"));
+        std::printf("    seed %u: package %d's three records made %d facts; the loaded save the same\n", seed, pid, played);
+        return;
+    }
+    SC_EXPECT(false);  // no seed gave a player mission in three days
+}
+
+SC_TEST("air radio S6: the enemy's listeners go on the campaign's radio from radio.mode 1; before it none, and the enemy hears everything") {
+    airwar::AirWarData aw;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", aw, &e));
+    const command::InterceptData idata = S6Intercept();
+    em::RadioDef set;
+    set.id = "t";
+    set.freq_min_hz = 30e6;
+    set.freq_max_hz = 76e6;
+    set.power_w = 20.0;
+    set.antenna_height_m = 3.0;
+    set.sensitivity_dbw = -131.0;
+    set.required_snr_db = 12.0;
+    airwar::AirCampaign c;
+    c.Init(aw, 1u);
+    command::EmRadio radio(set, nullptr, 50e6);
+    SC_EXPECT(command::PlaceCampaignListeners(radio, idata, c) == 2);
+    aw.tuning.values["radio.mode"] = 0.0;
+    airwar::AirCampaign c0;
+    c0.Init(aw, 1u);
+    command::EmRadio none(set, nullptr, 50e6);
+    SC_EXPECT(command::PlaceCampaignListeners(none, idata, c0) == 0);
+    SC_EXPECT(none.Hop(0, 1, Vec3{20000.0, -1000000.0, 0.0}, Vec3{15000.0, -1000000.0, 0.0}, 1.0).heard == 1.0);
+    const double near_heard = radio.Hop(0, 1, Vec3{30000.0, 155000.0, 0.0}, Vec3{25000.0, 155000.0, 0.0}, 1.0).heard;
+    // 460 km from the Il-20, past its 376 km radio horizon (the B9 listeners' test says why this distance)
+    const double far_heard = radio.Hop(0, 1, Vec3{20000.0, -260000.0, 0.0}, Vec3{15000.0, -260000.0, 0.0}, 1.0).heard;
+    std::printf("    the Pact's listeners hear a call by their post %.2f, 460 km off %.3f\n", near_heard, far_heard);
+    SC_EXPECT(near_heard > 0.9 && far_heard < 0.05);
+}
+
+SC_TEST("air radio S6 follow-ups: our dummy transmitter talks on our fighters' net in its corridor's hours; the enemy's listeners hear it by the horizon, ours log nothing") {
+    AirRadioDef def = Def();
+    def.our_radio = "pact_air_r832m";
+    def.our_freq_hz = 124e6;
+    AirRadioPostDef dummy;
+    dummy.id = "dummy_1";
+    dummy.kind = "our_dummy";
+    dummy.at = Vec3{0.0, 0.0, 0.0};
+    dummy.mast_m = 10.0;
+    dummy.corridor = "c1 B";
+    dummy.from_s = 60.0;
+    dummy.until_s = 600.0;
+    dummy.period_s = 60.0;
+    def.posts.push_back(dummy);
+    // An Il-20 200 km off at 8,000 m (inside the 381 km horizon to a 10 m mast); a ground post 100 km off on a 30 m mast
+    // (past the 36 km horizon between the two masts); our own intercept post beside the transmitter.
+    AirRadioPostDef il20 = Listener("il20", 0.0, 200000.0, "");
+    il20.kind = "enemy_intercept";
+    il20.mast_m = 8000.0;
+    def.posts.push_back(il20);
+    AirRadioPostDef ground = Listener("ground", 0.0, 100000.0, "");
+    ground.kind = "enemy_intercept";
+    def.posts.push_back(ground);
+    def.posts.push_back(Listener("p1", 5000.0, 0.0));
+    Air a(def);
+    a.Run(900.0);
+    int heard = 0;
+    for (const airwar::EnemyHeard& h : a.radio.EnemyHeardLog()) {
+        SC_EXPECT(h.post == "il20");
+        SC_EXPECT(h.dummy == "dummy_1" && h.corridor == "c1 B" && h.call == -1);
+        // a call due by 600 s goes out with the next step and the net's turn (the last at 600.5 s)
+        SC_EXPECT(h.start_s >= 60.0 - 1e-6 && h.start_s <= 600.0 + 2.0);
+        ++heard;
+    }
+    std::printf("    the Il-20 heard the dummy %d times between 60 and 600 s; the ground post past the horizon none\n", heard);
+    SC_EXPECT(heard >= 8 && heard <= 10);  // every hearing's post is checked above: the ground post's would have failed it
+    SC_EXPECT(a.radio.EnemyHeardDummy("dummy_1"));
+    SC_EXPECT(!a.radio.EnemyHeardDummy("p1"));
+    SC_EXPECT(a.radio.HeardLog().empty());  // our own intercept post: not its business
+}
+
+SC_TEST("air radio S6 follow-ups: from radio.mode 2 the session and the campaign key names alike, the same on every compiler") {
+    // FNV-1a's step by hand ("a" = 0x61), then SplitMix64's finaliser: no std::hash anywhere. The basis is the one every FNV
+    // key in simcore has used since the air war began (1469598103934665603: the standard's 14695981039346656037 with its last
+    // digit dropped); any odd basis spreads as well, and changing it would move every saved campaign's draws.
+    SC_EXPECT(em::StringKey("") == em::Mix64(1469598103934665603ull));
+    SC_EXPECT(em::StringKey("a") == em::Mix64((1469598103934665603ull ^ 0x61ull) * 1099511628211ull));
+    SC_EXPECT(airwar::AbstractKeyOf("sq_1") == em::StringKey("sq_1"));
+    SC_EXPECT(airwar::RadioKeyOf("sq_1", true) == em::StringKey("sq_1"));
+    // A squadron's codeword and fit, and a flight's call sign on a later day, are one function in both levels.
+    const airwar::SquadronFit f = airwar::SquadronRadioFit("sq_1", 0.5, 0.5, 7u);
+    const airwar::SquadronFit g = airwar::SquadronRadioFit("sq_1", 0.5, 0.5, 7u);
+    SC_EXPECT(!f.codeword.empty() && f.codeword == g.codeword && f.have_quick == g.have_quick && f.secure_voice == g.secure_voice);
+    SC_EXPECT(airwar::CallsignAt("Ford 1", 30.0, 24.0, 7u, true) == airwar::CallsignAt("Ford 1", 30.0, 24.0, 7u, true));
+    SC_EXPECT(airwar::CallsignAt("Ford 1", 30.0, 24.0, 7u, true) != "Ford 1");
+    AirRadioDef def = Def();
+    SC_EXPECT(airwar::StableRadioKeys(def));  // the data's radio.mode is 2
+    def.tune["radio.mode"] = 1.0;
+    SC_EXPECT(!airwar::StableRadioKeys(def));  // a save from before keeps std::hash's keys and replays as played
+}
+
+SC_TEST("air radio S6: the canary: an enemy call reaches the battery only as our intercept post's report through the pipeline, never on any other output") {
+    campaign::MissionSessionDef md;
+    md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
+    md.faction = "warsaw_pact";
+    md.seed = 1;
+    md.day = 1;
+    campaign::MissionSession s;
+    std::string e;
+    SC_EXPECT(s.Start(md, kData, &e));
+    if (s.Campaign() == nullptr) {
+        std::printf("    %s\n", e.c_str());
+        return;
+    }
+    airwar::AirRadio* radio = s.Runner().AirRadio();
+    SC_EXPECT(radio != nullptr && s.InterceptOn());
+    if (radio == nullptr || !s.InterceptOn()) return;
+    const Vec3 at = s.Runner().UnitPosition();
+    FlightState f;
+    f.id = "canary";
+    f.callsign = "CANARY 7";
+    FlightSlot slot;
+    slot.target = -1;
+    slot.number = 1;
+    f.slots.push_back(slot);
+    radio->AddFlight(98, f, FlightRadioInfo(), {Enu(at.x + 30000.0, at.y, 3000.0)});
+    const int call = radio->SayAs("canary", airwar::CallKind::Divert, "CANARY 7, new target " + airwar::GridOf(at), s.Runner().Time(), true, at);
+    SC_EXPECT(call >= 0);
+    const double said_s = s.Runner().Time();
+    while (s.Runner().Time() < said_s + 1800.0) s.Step(0.5);
+    bool logged = false;
+    for (const command::Logged& l : s.Desk().Log()) logged = logged || l.call == call;
+    if (!logged) {
+        std::printf("    no post heard the canary: geometry\n");
+        return;
+    }
+    const auto has = [](const std::string& t) { return t.find("CANARY") != std::string::npos; };
+    int by_pipeline = 0, elsewhere = 0;
+    // The battery's nets: only the regiment's telling of the intercept post's report.
+    for (const ScenarioRunner::RadioMessage& m : s.Runner().RadioLog()) {
+        if (!has(m.text)) continue;
+        if (m.from == "Regiment" && m.text.find("radio intercept") != std::string::npos) ++by_pipeline;
+        else ++elsewhere;
+    }
+    // The radiotelephonist's journal: written as heard from the regiment.
+    for (const RadioJournalEntry& j : s.Runner().Journal().Written()) {
+        if (!has(j.said)) continue;
+        if (Starts(j.said, "Regiment to the battery")) ++by_pipeline;
+        else ++elsewhere;
+    }
+    // Papers and spoken deliveries: only the air section's summary.
+    for (const DeliveryDef& d : s.Runner().Deliveries()) {
+        if (!has(d.words) && !has(d.paper_text)) continue;
+        if (Starts(d.id, "intercept_intsum")) ++by_pipeline;
+        else ++elsewhere;
+    }
+    // Nothing anywhere else the player's character could see or hear.
+    for (const campaign::LogEntry& l : s.Runner().CommanderLog()) elsewhere += has(l.callsign) || has(l.kind) ? 1 : 0;
+    for (const campaign::SaidReport& r : s.Runner().RadarLog()) elsewhere += has(r.text) ? 1 : 0;
+    for (const ScenarioRunner::CrewCall& c : s.Runner().CrewCalls()) elsewhere += has(c.target) ? 1 : 0;
+    for (const ScenarioRunner::GroupHeard& g : s.Runner().GroupsHeard()) elsewhere += has(g.code) ? 1 : 0;
+    for (const ScenarioRunner::MadeReport& r : s.Runner().ReportsMade()) elsewhere += has(r.callout) ? 1 : 0;
+    for (const ScenarioRunner::GivenOrder& o : s.Runner().OrdersGiven()) elsewhere += has(o.order) ? 1 : 0;
+    for (const campaign::MissionSession::Told& t : s.InterceptTold()) SC_EXPECT(!has(t.text) || t.text.find("radio intercept") != std::string::npos);
+    std::printf("    the canary call: %d outputs by the pipeline, %d elsewhere\n", by_pipeline, elsewhere);
+    SC_EXPECT(elsewhere == 0);
+    SC_EXPECT(by_pipeline > 0);
 }

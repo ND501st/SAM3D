@@ -548,6 +548,33 @@
     }
   ],
   "waves": "gameplay/test_waves.json",
+  "own_air": {
+    "war": true,
+    "gci": {
+      "east_m": 3600,
+      "north_m": -6500,
+      "mast_m": 25
+    },
+    "source": "docs/air_battle/08_OUR_FIGHTERS.md (roadmap S1)",
+    "confidence": "estimate",
+    "notes": "The waves' flights of ours fly on the day's codes (their pilots set the table's, and may miss a change); the battery holds the day's table. Our GCI at the capital's P-19 site is a game value."
+  },
+  "air_fight": {
+    "year": 1985,
+    "controllers": [
+      {
+        "id": "our_gci",
+        "side": "ours",
+        "kind": "radar_control",
+        "east_m": 3600,
+        "north_m": -6500,
+        "range_m": 220000
+      }
+    ],
+    "source": "docs/air_battle/07_AIR_TO_AIR.md, 08_OUR_FIGHTERS.md (roadmap S1)",
+    "confidence": "estimate",
+    "notes": "The waves' aircraft join the fight as they come (runner WaveFightersIn): our CAP and interceptors under our GCI, the enemy's escorts fighting back, its others defending themselves. Game values."
+  },
   "targets": [],
   "triggers": [
     {

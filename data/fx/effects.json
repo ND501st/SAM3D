@@ -150,14 +150,14 @@
     "launch_cloud_s": 20,
     "launch_cloud_colour": [0.80, 0.79, 0.77],
     "launch_cloud_opacity": 0.85,
-    "plume_boost_length_m": 7,
-    "plume_boost_width_m": 1.4,
-    "plume_sustain_length_m": 3.5,
-    "plume_sustain_width_m": 0.8,
-    "plume_brightness": 35,
+    "plume_boost_length_m": 3,
+    "plume_boost_width_m": 0.6,
+    "plume_sustain_length_m": 1.6,
+    "plume_sustain_width_m": 0.4,
+    "plume_brightness": 20,
     "plume_colour": [1.00, 0.70, 0.40],
-    "glow_boost_m": 5,
-    "glow_sustain_m": 2.5,
+    "glow_boost_m": 1.4,
+    "glow_sustain_m": 0.8,
     "trail_point_m": 20,
     "trail_width_dense_m": 2.5,
     "trail_width_reduced_m": 1.5,
@@ -195,6 +195,10 @@
     "default_charge_kg": 15,
     "burst_at_missile_m": 300,
     "origins": {
+      "plume_boost_length_m": "sam3d game value (the B13 look pass, 19 Nov 2026): a solid motor's flame by day is bright but small and short, about 3 m behind a 9M33 (scaled by the body's diameter, so 1.9 m behind a 127 mm AAM); at 7 m, 1.4 m wide, with a 5 m glow at brightness 35 the motor drew as a lamp four missile lengths across",
+      "plume_sustain_length_m": "sam3d game value: the sustainer's flame about half the boost's, 1.6 m by 0.4 m",
+      "plume_brightness": "sam3d game value: 20, white-yellow at its core by day without a bloom halo bigger than the flame; the glow at half of it",
+      "glow_boost_m": "sam3d game value: the glow at the nozzle no wider than about half the flame (1.4 m boost, 0.8 m sustain), the point the eye follows at range (its pixel floor keeps it seen)",
       "trail_opacity_dense": "LOOK.md 9.2-9.3: 0.8 near the missile",
       "trail_spread_mps": "LOOK.md 9.1, 9.3: low trails on a convective day widen 1-3 m/s; 1.5 m/s is the first critic's R3",
       "trail_colour": "LOOK.md 9.2-9.3: the 9M33's trail white-grey #E8E6E0 (sRGB) in linear RGB",
@@ -298,6 +302,15 @@
       "smoke_puffs": "sam3d game value: puffs a burst",
       "barrel_spacing_m": "sam3d game value: the mount's barrels about 0.5 m apart, a flash at each (LOOK.md 14)"
     }
+  },
+  "air_battle": {
+    "source": "sam3d game value (roadmap B13: the air battle drawn): sizes, times, counts and colours by eye; no source read for a flare's burn or a chaff cloud's bloom; the chaff a faint grey-silver haze of puffs at 0.09 each with 160 glints of foil twinkling through 70 % of its life, about six lit at once (at 0.35 and 12 glints in the first 2 s it drew as a white cumulus; at 0.12 and 60 a soft cloud with two glints: the B13 look pass, 19 Nov 2026)",
+    "chaff_puffs_per_cartridge": 2, "chaff_puffs_max": 24, "chaff_bloom_m": 25, "chaff_bloom_s": 1.5, "chaff_s": 12,
+    "chaff_spread_m": 30, "chaff_drag_per_s": 3, "chaff_opacity": 0.09, "chaff_colour": [0.70, 0.72, 0.76], "chaff_glints": 160, "chaff_glint_brightness": 10,
+    "flare_burn_s": 4.5, "flare_eject_mps": 30, "flare_drag_per_s": 0.6, "flare_size_m": 2.5, "flare_brightness": 200,
+    "flare_colour": [1.0, 0.86, 0.62], "flare_lumens": 30000000, "flare_salvo_s": 0.25, "flares_max": 12,
+    "flare_smoke_width_m": 1.2, "flare_smoke_s": 25, "flare_smoke_point_m": 8, "flare_smoke_colour": [0.80, 0.80, 0.78],
+    "tumble_deg_per_s": 120, "aam_fly_on_s": 4, "aam_turn_per_s": 2.5, "air_gun_dispersion_mrad": 6
   },
   "wreck": {
     "source": "sam3d game value",

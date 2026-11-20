@@ -25,6 +25,14 @@ AirWarData LoadWar(const std::string& faction, const std::string& theatre = "the
     return d;
 }
 
+// The tuned theatre undated, its parts of the day the buckets (light.mode 0, roadmap S8): the tests written on them
+// before the theatre had a date, whose seeds and hours were picked on the buckets' dusk and dawn.
+AirWarData Buckets(AirWarData d) {
+    d.tuning.values["light.mode"] = 0.0;
+    ApplyLightMode(d);
+    return d;
+}
+
 const std::vector<std::string> kMissions = {"strike", "bai", "cas", "dead", "hunter", "recce", "armed_recce", "helo_raid", "fighters"};
 
 // Every (post kind, act, mission, where) the faction's 1985 table allows.
@@ -112,6 +120,7 @@ Package OneFlight(const AirWarData& d, MissionKind kind) {
 }  // namespace
 
 SC_TEST("c2 (B5): the 1985 table: no NATO divert of a deep strike, the E-3A only warns, the neutral warns, scrambles fighters and recalls, the rebels nothing") {
+    // (Roadmap S3: a controller vectoring fighters in the air fight is its own act, `vector`, read only by the fight.)
     for (const char* f : {"nato", "warsaw_pact", "neutral", "rebels"}) {
         const AirWarData d = LoadWar(f);
         SC_EXPECT(d.faction.c2.present);
@@ -121,9 +130,10 @@ SC_TEST("c2 (B5): the 1985 table: no NATO divert of a deep strike, the E-3A only
             SC_EXPECT(!Has(allowed, k + " divert_airborne strike") || std::string(f) == "warsaw_pact");
         }
         for (const std::string& a : allowed) {
-            if (a.rfind("airborne_warning ", 0) == 0) SC_EXPECT(a.find(" warn ") != std::string::npos || a == "airborne_warning scramble fighters");
+            if (a.rfind("airborne_warning ", 0) == 0) SC_EXPECT(a.find(" warn ") != std::string::npos || a == "airborne_warning scramble fighters" || a == "airborne_warning vector fighters");
             if (std::string(f) == "neutral") {
-                SC_EXPECT(a.find(" warn ") != std::string::npos || a.find(" recall ") != std::string::npos || a.find(" scramble fighters") != std::string::npos);
+                SC_EXPECT(a.find(" warn ") != std::string::npos || a.find(" recall ") != std::string::npos || a.find(" scramble fighters") != std::string::npos ||
+                          a.find(" vector fighters") != std::string::npos);
             }
         }
         if (std::string(f) == "rebels") SC_EXPECT(allowed.empty() && d.faction.c2.posts.empty());
@@ -337,7 +347,7 @@ SC_TEST("c2 (B5): a mobile target reported longer ago than max_report_age_h is n
 
 SC_TEST("c2 (B5): over days of war the alert pools fly on call, no more than the held-back share; unused pools stand down; the Pact's opening share is small") {
     for (const char* f : {"warsaw_pact", "nato"}) {
-        const AirWarData d = LoadWar(f);
+        const AirWarData d = Buckets(LoadWar(f));
         double on_call = 0.0, sorties = 0.0, stood_down = 0.0;
         double pools_phase0 = 0.0, plans_phase0 = 0.0, pools_later = 0.0, plans_later = 0.0;
         for (unsigned seed = 1; seed <= 3; ++seed) {
@@ -378,7 +388,7 @@ SC_TEST("c2 (B5): over days of war the alert pools fly on call, no more than the
 }
 
 SC_TEST("c2 (B5): a Pact launch report within a division's allocation brings an on-call package from readiness 1, approved, then up in 3-5 min") {
-    const AirWarData d = LoadWar("warsaw_pact");
+    const AirWarData d = Buckets(LoadWar("warsaw_pact"));
     AirCampaign c;
     SC_EXPECT(c.Init(d, 1));
     // Into the front's offensive (phase 2), when the readiness pools are full size.

@@ -355,6 +355,23 @@ namespace SimFxLogic
 	 *  the slices grow: a long stall is caught up in bounded work). */
 	int32 SubSteps(double DtS, double SliceS, int32 MaxSlices);
 
+	// ---- the air battle (roadmap B13)
+
+	/** A chaff salvo's cloud: PerCartridge puffs for each of its Cartridges (at least one), at most Max. */
+	int32 ChaffPuffs(int32 Cartridges, int32 PerCartridge, int32 Max);
+
+	/** A salvo's Index-th flare thrown out of the dispenser (unit, Unreal axes): down and to the side, alternating sides,
+	 *  a little back along the aircraft's track Fwd. */
+	FVector FlareEjectDir(int32 Index, const FVector& Fwd);
+
+	/** A flare's glow at Age seconds of a BurnS burn (0..1): lit within a tenth of a second, steady, dying over its last
+	 *  fifth (at least 0.3 s); 0 before it is lit and once burnt out. */
+	float FlareGlowAt(double Age, double BurnS);
+
+	/** A jettisoned store's tumble Age seconds after it left (added to its flight path's rotation): each store its own
+	 *  pitch and roll rates up to MaxDegPerS, from its Key, the yaw a slow wobble. */
+	FRotator TumbleAt(uint64 Key, double Age, double MaxDegPerS);
+
 	/** How far a trail is laid and drawn (m): out to RangeScale times the effects' range (a contrail 2, the far line in clear
 	 *  air) but never past the weather's visibility, plus MarginM (docs/fx/README.md 4.1: nothing past the visual range;
 	 *  the fix-up review of 1 Nov: trails 80 km out in 5 km visibility held the ribbon pool). */

@@ -11,7 +11,8 @@
 //     resolves farther than the wide one.
 // The threshold is not a new number: it is the one that puts a target at the tuning's TV range (tv_max_range_m, a game
 // value) in the reference visibility, so a clear day plays as before; haze shortens it. The camera's lines are an
-// estimate (a 625-line camera's 575 visible lines). At night the camera sees nothing.
+// estimate (a 625-line camera's 575 visible lines). At night the camera sees nothing; through the twilight the
+// threshold rises as the light fails (roadmap S8, light.hpp TvThresholdFactor: Rose's square root of the light).
 #pragma once
 
 #include <cmath>
@@ -33,6 +34,7 @@ struct OpticalSensorDef {
 struct OpticalConditions {
     double visibility_m = kReferenceVisibilityM;  // meteorological visibility
     bool daylight = true;
+    double threshold_factor = 1.0;  // the contrast threshold times this: 1 in full light, more in the twilight (S8)
 };
 
 struct OpticalLook {
@@ -84,6 +86,10 @@ inline OpticalLook Look(const OpticalSensorDef& d, double threshold, const Optic
     l.lines = LinesAcross(d, size_m, range_m, fov_height_rad);
     if (l.contrast < threshold) {
         l.why_not = cloud_transmission < 0.5 ? "in cloud" : (c.visibility_m < kReferenceVisibilityM ? "lost in the haze" : "beyond TV range");
+        return l;
+    }
+    if (c.threshold_factor > 1.0 && l.contrast < threshold * c.threshold_factor) {
+        l.why_not = "too dark for the TV";
         return l;
     }
     if (l.lines < d.detect_lines) {

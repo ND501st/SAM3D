@@ -86,6 +86,81 @@ def knife_edge_loss_db(v: float) -> float:
     return 6.9 + 20.0 * math.log10(math.sqrt(t * t + 1.0) + t)
 
 
+# --- the smooth spherical earth: ITU-R P.526-16 section 3 (simcore em/propagation.hpp SphericalEarthLossDb) ---------
+
+SPHERICAL_EARTH_MIN_FREQ_HZ = 10e6  # section 3: below 10 MHz only LFMF-SmoothEarth (P.368)
+GROUND_PERMITTIVITY = 15.0          # Fig. 2's medium land
+GROUND_CONDUCTIVITY_SM = 1e-3
+
+
+def surface_admittance_k(freq_mhz: float, ae_km: float, vertical: bool = True,
+                         permittivity: float = GROUND_PERMITTIVITY, conductivity: float = GROUND_CONDUCTIVITY_SM) -> float:
+    """Eqs. (11a), (12a)."""
+    x = 18000.0 * conductivity / freq_mhz
+    kh = 0.36 * (ae_km * freq_mhz) ** (-1.0 / 3.0) * ((permittivity - 1.0) ** 2 + x * x) ** -0.25
+    return kh * math.sqrt(permittivity ** 2 + x * x) if vertical else kh
+
+
+def spherical_beta(k: float) -> float:
+    """Eq. (16)."""
+    k2 = k * k
+    return (1.0 + 1.6 * k2 + 0.67 * k2 * k2) / (1.0 + 4.5 * k2 + 1.53 * k2 * k2)
+
+
+def spherical_distance_term_db(x: float) -> float:
+    """F(X), eqs. (17a), (17b)."""
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.6:
+        return 11.0 + 10.0 * math.log10(x) - 17.6 * x
+    return -20.0 * math.log10(x) - 5.6488 * x ** 1.425
+
+
+def spherical_height_gain_db(y: float, beta: float, k: float) -> float:
+    """G(Y), eqs. (18), (18a), (18b), floored at 2 + 20 log10 K."""
+    b = beta * y
+    if b > 2.0:
+        g = 17.6 * math.sqrt(b - 1.1) - 5.0 * math.log10(b - 1.1) - 8.0
+    else:
+        g = 20.0 * math.log10(max(b + 0.1 * b ** 3, 1e-30))
+    return max(g, 2.0 + 20.0 * math.log10(max(k, 1e-30)))
+
+
+def spherical_first_term_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float, ae_m: float) -> float:
+    """20 log10(E/E0), eq. (13), with X and Y from eqs. (14a), (15a)."""
+    f, ae, d = freq_hz * 1e-6, ae_m * 1e-3, d_m * 1e-3
+    k = surface_admittance_k(f, ae)
+    beta = spherical_beta(k)
+    x = 2.188 * beta * f ** (1.0 / 3.0) * ae ** (-2.0 / 3.0) * d
+    ky = 9.575e-3 * beta * f ** (2.0 / 3.0) * ae ** (-1.0 / 3.0)
+    return spherical_distance_term_db(x) + spherical_height_gain_db(ky * h1_m, beta, k) + spherical_height_gain_db(ky * h2_m, beta, k)
+
+
+def spherical_earth_loss_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float, ae_m: float) -> float:
+    """Section 3.2, eqs. (21)-(25): the smooth earth's diffraction loss for any distance (dB, >= 0)."""
+    if freq_hz < SPHERICAL_EARTH_MIN_FREQ_HZ or d_m < 1.0 or ae_m <= 0.0:
+        return 0.0
+    h1, h2 = max(h1_m, 0.0), max(h2_m, 0.0)
+    d_los = math.sqrt(2.0 * ae_m) * (math.sqrt(h1) + math.sqrt(h2))
+    if d_m >= d_los:
+        return max(-spherical_first_term_db(d_m, h1, h2, freq_hz, ae_m), 0.0)
+    c = (h1 - h2) / (h1 + h2)
+    m = d_m * d_m / (4.0 * ae_m * (h1 + h2))
+    arg = min(max(1.5 * c * math.sqrt(3.0 * m / (m + 1.0) ** 3), -1.0), 1.0)
+    b = 2.0 * math.sqrt((m + 1.0) / (3.0 * m)) * math.cos(math.pi / 3.0 + math.acos(arg) / 3.0)
+    d1 = 0.5 * d_m * (1.0 + b)
+    d2 = d_m - d1
+    h = ((h1 - d1 * d1 / (2.0 * ae_m)) * d2 + (h2 - d2 * d2 / (2.0 * ae_m)) * d1) / d_m
+    h_req = 0.552 * math.sqrt(max(d1 * d2, 0.0) * wavelength(freq_hz) / d_m)
+    if h > h_req:
+        return 0.0
+    aem = 0.5 * (d_m / (math.sqrt(h1) + math.sqrt(h2))) ** 2
+    ah = -spherical_first_term_db(d_m, h1, h2, freq_hz, aem)
+    if ah < 0.0:
+        return 0.0
+    return (1.0 - h / h_req) * ah if h_req > 0.0 else ah
+
+
 _GAS = [(0.1e9, 0.0040), (1.0e9, 0.0055), (3.0e9, 0.0075), (6.0e9, 0.0090), (10.0e9, 0.0130), (15.0e9, 0.0280),
         (20.0e9, 0.0900), (22.2e9, 0.1800), (25.0e9, 0.1400), (30.0e9, 0.1100), (35.0e9, 0.1200), (40.0e9, 0.1500)]
 

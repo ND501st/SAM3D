@@ -1,0 +1,27 @@
+{
+  "scenario_id": "air_battle_flares",
+  "name": "The air battle photographed: flares (B13 check)",
+  "description": "The air battle check's second scenario (roadmap B13, -SimAirShots): one NATO flight at a time comes in low over a cold Osa, where a Strela-2 team shoots at it on the pass; its pilots, seeing the launch, fire flares by their reactions. The check plays it after air_battle_shots.json, whose own battle gives no IR SAM's launch.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Placeholder numbers for a picture, not a battle. The waves are data/gameplay/air_battle_shots_waves.json; the seed chosen so that an early flight is one that carries flares in 1985 (gameplay/reactions.json and air_war/countermeasures.json), so the flares come in the first minutes. The Strela-2 team's figures are the theatre's (test_waves.hpp WavePassKillChance). The Osa is cold: it does not fire.",
+  "seed": 7,
+  "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
+  "terrain": { "type": "flat", "height_m": 110 },
+  "damage": "gameplay/damage.json",
+  "own_unit": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json",
+                "position": { "east_m": 0, "north_m": 0, "up_m": 3 }, "heading_deg": 35, "inputs": { "vehicle_stopped": true } },
+  "crew": [ { "name": "Commander", "role": "commander" }, { "name": "Deputy commander", "role": "deputy_commander" },
+            { "name": "Senior operator", "role": "senior_operator" }, { "name": "Operator", "role": "operator" },
+            { "name": "Driver", "role": "driver" } ],
+  "neighbours": [
+    { "id": "strela2_north", "name": "Strela-2 team north of the battery", "system": "manpads",
+      "position": { "east_m": 300, "north_m": 1500, "up_m": 0 }, "radius_km": 4 },
+    { "id": "strela2_south", "name": "Strela-2 team south of the battery", "system": "manpads",
+      "position": { "east_m": -300, "north_m": -1500, "up_m": 0 }, "radius_km": 4 }
+  ],
+  "waves": "gameplay/air_battle_shots_waves.json",
+  "targets": [],
+  "triggers": [],
+  "end": { "time_limit_s": 600, "when_targets_gone": false }
+}

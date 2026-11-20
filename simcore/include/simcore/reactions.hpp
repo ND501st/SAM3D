@@ -353,12 +353,29 @@ struct ReactionPilotDef {
     double press_on_shift = 0.0;
     double jettison_shift = 0.0;
     std::vector<ProgrammeZone> zones;  // the Pact's programme: the zones briefed
+    // His faction's hot-phase values as his flight reads them (roadmap S5, 10_FACTIONS.md §7.1; air_war/hot_phase.hpp,
+    // moved by his officer and his squadron's pilots), handed over with the flight. Absent (`hot` false): none of it is
+    // read, and he reacts as before S5.
+    struct Hot {
+        bool on = false;
+        double initiative = 0.0;      // his leader acts on his own on a cue the plan does not cover (goes round a site)
+        double plan_adherence = 1.0;  // the share of a disruption the plan absorbs; the time a detour cost made up
+        double turn_back = 0.0;       // he turns back when he knows he is spotted (of what the plan does not absorb)
+        bool may_route = true;        // his leader may change the route himself (§7.3 leader_may: route, everything)
+        bool may_turn_back = true;    // ... and turn back on his own call (abort, break_off, everything)
+        bool may_programme = true;    // ... and fly the preset counter-SAM programme (programme)
+        double delay_lo_s = -1.0;     // his faction's trained band, cue to manoeuvre, moved (< 0: none)
+        double delay_hi_s = -1.0;
+        double improvised_extra_s = 0.0;  // what a manoeuvre off the programme adds
+        double husbanding_shift = 0.0;    // press-on fallen with the day's losses (<= 0), beside the officer's
+    } hot;
 };
 
 // ------------------------------------------------------------------------------------------------ the pure functions
 
-// A keyed draw, 0..1: the aircraft's key, the cue's serial, what it decides.
-enum class ReactionDraw : std::uint64_t { NoReaction = 1, Delay, Dispense, Jettison, TanksOnly, Choice, Bearing, Flare, Row, Programme };
+// A keyed draw, 0..1: the aircraft's key, the cue's serial, what it decides. Initiative and TurnBack are roadmap S5's,
+// drawn only for a pilot with "hot" values.
+enum class ReactionDraw : std::uint64_t { NoReaction = 1, Delay, Dispense, Jettison, TanksOnly, Choice, Bearing, Flare, Row, Programme, Initiative, TurnBack };
 inline double ReactionU(std::uint64_t seed, std::uint64_t aircraft, std::uint64_t serial, ReactionDraw what) {
     return em::Uniform01(em::DrawHash(seed, em::Stream::Reaction, aircraft, serial, static_cast<std::uint64_t>(what)));
 }
@@ -398,10 +415,27 @@ struct NoticeContext {
     bool two_seat = false;
     double stress = 0.0;     // 0..1
     bool programmed = false; // a cue his flight's programme covers: flown at once, the veteran's delay whatever his skill
+    // His faction's (roadmap S5, hot_phase.hpp ReactionDelayS): its trained pilot's band over the tables' trained tier, and
+    // what a manoeuvre off the programme adds. 1 and 0 without "hot" values.
+    double faction_scale = 1.0;
+    double improvised_extra_s = 0.0;
 };
+
+// A faction's trained band (10_FACTIONS.md §7.2, moved by the officer and the pilot's experience) as a factor on the
+// tables' delay: its middle over the trained tier's middle. 1 without a band or a trained tier.
+inline double FactionDelayScale(const ReactionTable& t, double lo_s, double hi_s) {
+    if (lo_s < 0.0 || hi_s < lo_s) return 1.0;
+    for (const ReactionTier& r : t.tiers) {
+        if (r.id != "trained") continue;
+        const double mid = 0.5 * (r.delay_min_s + r.delay_max_s);
+        return mid > 0.0 ? 0.5 * (lo_s + hi_s) / mid : 1.0;
+    }
+    return 1.0;
+}
 
 // Seconds from the cue to the manoeuvre (04_REACTIONS.md 4): the skill's range drawn by `u`, then the source's, the
 // workload's, the second seat's and the stress's factors. A programmed cue: the most skilled tier's range, no factor.
+// Roadmap S5: the faction's scale on the skill's range, and an improvised manoeuvre's extra (not on damage or an order).
 inline double NoticeDelayS(const ReactionTable& t, double skill, const NoticeContext& c, double u) {
     if (c.programmed && !t.tiers.empty()) {
         const ReactionTier& v = t.tiers.back();
@@ -409,6 +443,8 @@ inline double NoticeDelayS(const ReactionTable& t, double skill, const NoticeCon
     }
     const ReactionTier tier = TierAt(t, skill);
     double d = tier.delay_min_s + (tier.delay_max_s - tier.delay_min_s) * u;
+    if (c.faction_scale != 1.0) d *= c.faction_scale;
+    if (c.improvised_extra_s > 0.0 && c.source != CueSource::Damage && c.source != CueSource::Order) d += c.improvised_extra_s;
     switch (c.source) {
         case CueSource::Rwr: d *= t.rwr_factor; break;
         case CueSource::Radio: d *= t.radio_factor; break;
@@ -457,6 +493,14 @@ struct FlightDecision {
 };
 // A row moved by the flight's officer (10_FACTIONS.md §7.1: the officer's shift of press_on and jettison_readiness moves the
 // situation's shares by the same amount; what he takes from abort goes to press on).
+// The chance a flight that knows it is spotted (its leader's receiver shows him searched for, before anyone fires) turns
+// back (roadmap S5, 10_FACTIONS.md §7.1): the plan absorbs plan_adherence of the disruption; of the rest, turn_back. 0
+// when its leader may not turn back on his own call (the Pact's: ground control decides), or without "hot" values.
+inline double SpottedTurnBackChance(const ReactionPilotDef::Hot& h) {
+    if (!h.on || !h.may_turn_back) return 0.0;
+    return std::clamp(h.turn_back, 0.0, 1.0) * (1.0 - std::clamp(h.plan_adherence, 0.0, 1.0));
+}
+
 inline ReactionRow ShiftedRow(const ReactionRow& r, double press_on_shift, double jettison_shift) {
     ReactionRow out = r;
     if (press_on_shift == 0.0 && jettison_shift == 0.0) return out;

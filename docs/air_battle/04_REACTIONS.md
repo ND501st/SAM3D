@@ -241,7 +241,8 @@ follow-ons, never in a silent beam point.
 seen at 15 km and finished before the missile closed gains little, and a hard pull in the last seconds gains most
 (`checo_1967_tactics` p. 31; `mt_1984_babich`). The battery's other launchers and the testbed's neighbours take the same
 factor from the target's state. The window's length is a game value; the calibrated kill totals (roadmap 6.7,
-`docs/air_war/09_BALANCE.md` §9) are re-checked and re-tuned (§12).
+`docs/air_war/09_BALANCE.md` §9) are re-checked and re-tuned (§12). Since S4 the window is on in the Osa's tuning
+(8 s, `data/gameplay/osa_ak.json`).
 
 ## 7. Countermeasures by type and year
 
@@ -628,10 +629,24 @@ testbed's trace is byte-identical. What would save more changes outcomes, so it 
 defensive rate at the threat rate (2 Hz) would save about 7 s, and the EM layer's ESM period at 0.4 s instead of 0.2 s
 about 25 s, both in this hour. Culling chaff early would save under 1.5 s.
 
-**Shortcuts.** A hand-written `"evade"` still flies its old code (`CueTarget`), not a scripted profile: the 15 files play
-as before and `test_threats.cpp` is unchanged. The late-window factor (`manoeuvre_window_s`) exists but is 0 (the whole
-flight, as before) until roadmap 6.7's totals are re-tuned with it. The enemy's pilots' reports of what they believed
-(`InFlightReport`) and our crews' records of a jettison or chaff are not written yet.
+**Shortcuts.** The enemy's pilots' reports of what they believed (`InFlightReport`) are not written yet.
+
+**S4 (19 November 2026, branch `tbr-s4`).** A hand-written `"evade"` is a scripted profile (§12.3): at spawn the
+runner registers one row on the chain (`ReactionChain::RegisterScripted`) with its cue; a new sighting in the pilot's
+picture is matched against it (`SightedScripted`: a launch on his receiver or seen by eye, the place he believes the
+trail began; or a lock on his receiver) and flown at once by the pilot's own `Evade` (`CueTarget`), with no delay,
+countermeasure, jettison or call; the instructor's Evade order is a cue of source `order` on the row. A scripted pilot
+is not `On()`. `Counts::scripted` counts its cues. The 15 files play as before (`test_threats.cpp` unchanged).
+Our crews' records (`CrewCalls`, the commander's report): a load seen thrown off on the TV ("jettisoned", the deputy
+commander's «По ТОВ: цель сбросила груз!») and chaff seen dropped on the search scope ("chaff", the senior operator's
+«Цель ставит пассивные помехи!»), each once a target through `NpcDoes`, only when the crew saw it. A damaged aircraft
+that turns for home may take a wingman as escort (`docs/DAMAGE.md` §1).
+The late window (§6) is on: `manoeuvre_window_s` 8 s in `data/gameplay/osa_ak.json`. Played over 14 scenarios with
+the window at 8 s and at 0 (the whole flight, as before), 2 of 18 shots moved, each a break finished before the missile
+closed (`osa_jamming_em` 0.25 → 0.41, one of `osa_angola_night`'s four shots 0.71 → 0.84); the summed chance rose
+5.94 → 6.17 and no hit changed. `manoeuvre_penalty_per_deg_s` (0.04) stays: the rise is the design's intent (a break
+flown too early gains little) and inside the calibrated totals' spread (`docs/air_war/09_BALANCE.md` §18).
+`crew_balance` is unchanged (its targets do not manoeuvre).
 
 ## Left open
 
@@ -648,7 +663,8 @@ flight, as before) until roadmap 6.7's totals are re-tuned with it. The enemy's 
 - **The period's own tactics manuals** (TACM 3-1, *USAF Fighter Weapons Review* of the 1980s) and the clean copy of
   «Зарубежное военное обозрение» 1982 No 2 (Kirillov, Dmitriev): not reached.
 - **The SVE's volume and year** for «противоракетный манёвр» (believed vol. 6, 1978) and the `babich_1988` imprint.
-- **Escorting a damaged aircraft home**, and how often a flight lost a wingman to it: no source read.
+- **Escorting a damaged aircraft home**, and how often a flight lost a wingman to it: no source read. S4 sends one
+  with it `escort_share` (0.5, a game value) of the time.
 - **Drop tank shapes and masses per type** for `munitions.json`, to source as the munitions are.
 - **The Argentine side's own account of its reactions** (Moro, *La guerra inaudita*, 1985) and the RAF Historical
   Society's Falklands journal: not read.

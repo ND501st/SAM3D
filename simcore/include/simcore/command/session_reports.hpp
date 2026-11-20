@@ -41,6 +41,12 @@ inline bool CommanderReport(const InfoNet& net, const std::vector<ScenarioRunner
             text += " " + at + " " + target + " destroyed;";
         } else if (c.kind == "missed") {
             text += " " + at + " " + target + " missed;";
+        } else if (c.kind == "hit") {  // roadmap S4: what the crew saw, as it saw it
+            text += " " + at + " " + target + " hit, flying on burning;";
+        } else if (c.kind == "chaff") {
+            text += " " + at + " " + target + " dropping chaff;";
+        } else if (c.kind == "jettisoned") {
+            text += " " + at + " " + target + " seen throwing off its load;";
         } else {
             text += " " + at + " " + target + ": the result not seen;";
         }
