@@ -143,11 +143,38 @@ OBJECT_COLOURS = {
 }
 
 
+def map_places(map_path):
+    """A country map's places by id (roadmap F1): its settlements, landmarks and sites, as (east_km, north_km)."""
+    m = json.loads(Path(map_path).read_text(encoding="utf-8"))
+    return {p["id"]: (p["east_km"], p["north_km"]) for key in ("settlements", "landmarks", "sites") for p in m.get(key, [])}
+
+
+def place_points(t, places):
+    """Gives every point of a theatre on a place map its east_km and north_km from the place it names ("at"): its
+    objects, their prepared positions, its fronts' bases, battery positions and missile launch points."""
+    def put(d):
+        if isinstance(d, dict) and "at" in d and "east_km" not in d:
+            if d["at"] not in places:
+                raise ValueError(f"no place '{d['at']}' on the theatre's place map")
+            d["east_km"], d["north_km"] = places[d["at"]]
+    for o in t.get("objects", []):
+        put(o)
+        for p in o.get("positions", []):
+            put(p)
+    for f in t.get("fronts", []):
+        for key in ("bases", "battery_position", "missile_launch"):
+            put(f.get(key))
+    return t
+
+
 def load_theatre(path, depth=0):
     """A theatre file, following "extends" as simcore's LoadTheatreFile does: the base's objects in their places, one
-    with the same id replaced, "remove" dropped, the new ones after them; a front replaces the base's of its faction."""
+    with the same id replaced, "remove" dropped, the new ones after them; a front replaces the base's of its faction.
+    A theatre on a place map ("place_map", relative to the data folder above the theatre's) takes its points from it."""
     path = Path(path)
     t = json.loads(path.read_text(encoding="utf-8"))
+    if t.get("place_map"):
+        place_points(t, map_places(path.parent.parent / t["place_map"]))
     if "extends" not in t:
         return t
     if depth >= 4:

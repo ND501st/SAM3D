@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "simcore/console_data.hpp"
+#include "simcore/country_map.hpp"
 #include "simcore/json.hpp"
 #include "simcore/vec3.hpp"
 
@@ -272,8 +273,17 @@ namespace detail {
 
 class CommandLoader : public simcore::detail::ConsoleLoader {
 public:
+    // The places of the file's place map (roadmap F1), read by LoadChainData; they must outlive the load.
+    void UsePlaces(const MapPlaces* places) { places_ = places; }
+
     bool LoadPlaces(const json::Value& root, std::vector<Place>& out) {
-        if (!Keys(root, "", {"places_id", "display_name", "status", "theatre", "source", "confidence", "notes", "places"})) return false;
+        if (!Keys(root, "", {"places_id", "display_name", "status", "theatre", "place_map", "source", "confidence", "notes", "places"})) return false;
+        // On a place map every place stands "at" a place of it (roadmap F1); without one, at its own east_km and north_km.
+        std::string place_map;
+        if (!OptionalString(root, "", "place_map", place_map)) return false;
+        if (!place_map.empty() && places_ == nullptr) {
+            return Fail("place_map", "its places are read from the map: load it with LoadChainData, or give LoadChainJson the map's places");
+        }
         const json::Value* arr = OptionalArray(root, "", "places");
         if (arr == nullptr || arr->items.empty()) return message_.empty() ? Fail("places", "required, a non-empty list") : false;
         for (std::size_t i = 0; i < arr->items.size(); ++i) {
@@ -282,16 +292,29 @@ public:
             Place pl;
             std::string kind;
             double e = 0.0, n = 0.0;
-            if (!Keys(v, p, {"id", "name", "kind", "east_km", "north_km", "settlement", "theatre_object", "notes"}) ||
+            if (!Keys(v, p, {"id", "name", "kind", "east_km", "north_km", "at", "settlement", "theatre_object", "notes"}) ||
                 !RequireString(v, p, "id", pl.id) || !RequireString(v, p, "name", pl.name) || !RequireString(v, p, "kind", kind) ||
                 !OptionalString(v, p, "settlement", pl.settlement) || !OptionalString(v, p, "theatre_object", pl.theatre_object) ||
                 !OptionalString(v, p, "notes", pl.notes)) {
                 return false;
             }
             if (!ParsePlaceKind(kind, pl.kind)) return Fail(Join(p, "kind"), "unknown place kind");
-            if (v.Find("east_km") == nullptr || v.Find("north_km") == nullptr) return Fail(p, "needs east_km and north_km");
-            if (!OptionalNumber(v, p, "east_km", e) || !OptionalNumber(v, p, "north_km", n)) return false;
-            pl.pos = Vec3{e * 1000.0, n * 1000.0, 0.0};
+            if (!place_map.empty()) {
+                if (v.Find("east_km") != nullptr || v.Find("north_km") != nullptr) {
+                    return Fail(p, "a places file on a place map takes its points from the map: \"at\" a place of " + place_map +
+                                       ", not east_km and north_km");
+                }
+                std::string at;
+                if (!RequireString(v, p, "at", at)) return false;
+                const MapPoint* q = places_->Find(at);
+                if (q == nullptr) return Fail(Join(p, "at"), "no place '" + at + "' on the map " + place_map + " (add it to its sites)");
+                pl.pos = Vec3{q->east_m, q->north_m, 0.0};
+            } else {
+                if (v.Find("at") != nullptr) return Fail(Join(p, "at"), "a place needs the file's \"place_map\" (data/maps/)");
+                if (v.Find("east_km") == nullptr || v.Find("north_km") == nullptr) return Fail(p, "needs east_km and north_km");
+                if (!OptionalNumber(v, p, "east_km", e) || !OptionalNumber(v, p, "north_km", n)) return false;
+                pl.pos = Vec3{e * 1000.0, n * 1000.0, 0.0};
+            }
             for (const Place& q : out) {
                 if (q.id == pl.id) return Fail(Join(p, "id"), "duplicate place");
             }
@@ -530,6 +553,8 @@ private:
         }
         return true;
     }
+
+    const MapPlaces* places_ = nullptr;  // the places file's place map's places (UsePlaces), or null
 };
 
 inline bool ReadText(const std::string& path, std::string& out, std::string* error) {
@@ -546,9 +571,41 @@ inline bool ReadText(const std::string& path, std::string& out, std::string* err
 
 }  // namespace detail
 
-// Load a chain from its three texts (tests).
+namespace detail {
+
+// A chain from its three files, parsed. `map_places`: the places file's place map's places, or null.
+inline bool LoadChainParsed(const json::Value& chain, const json::Value& places, const json::Value& means, ChainData& out, std::string* error,
+                            const MapPlaces* map_places) {
+    auto fail = [&](const std::string& what, const std::string& msg) {
+        if (error != nullptr) *error = what + ": " + msg;
+        return false;
+    };
+    ChainData d;
+    std::string places_file, means_file;
+    {
+        CommandLoader l;
+        if (!l.LoadChain(chain, d, places_file, means_file)) return fail("chain", l.Message());
+    }
+    {
+        CommandLoader l;
+        l.UsePlaces(map_places);
+        if (!l.LoadPlaces(places, d.places)) return fail("places", l.Message());
+    }
+    {
+        CommandLoader l;
+        if (!l.LoadMeans(means, d.means, d.relay)) return fail("means", l.Message());
+    }
+    CommandLoader l;
+    if (!l.Check(d)) return fail("chain", l.Message());
+    out = std::move(d);
+    return true;
+}
+
+}  // namespace detail
+
+// Load a chain from its three texts (tests). `map_places`: the map's places, for a places file on a place map.
 inline bool LoadChainJson(const std::string& chain_text, const std::string& places_text, const std::string& means_text, ChainData& out,
-                          std::string* error = nullptr) {
+                          std::string* error = nullptr, const MapPlaces* map_places = nullptr) {
     auto fail = [&](const std::string& what, const std::string& msg) {
         if (error != nullptr) *error = what + ": " + msg;
         return false;
@@ -558,28 +615,14 @@ inline bool LoadChainJson(const std::string& chain_text, const std::string& plac
     if (!json::Parse(chain_text, chain, &perr)) return fail("chain", perr);
     if (!json::Parse(places_text, places, &perr)) return fail("places", perr);
     if (!json::Parse(means_text, means, &perr)) return fail("means", perr);
-    ChainData d;
-    std::string places_file, means_file;
-    {
-        detail::CommandLoader l;
-        if (!l.LoadChain(chain, d, places_file, means_file)) return fail("chain", l.Message());
-    }
-    {
-        detail::CommandLoader l;
-        if (!l.LoadPlaces(places, d.places)) return fail("places", l.Message());
-    }
-    {
-        detail::CommandLoader l;
-        if (!l.LoadMeans(means, d.means, d.relay)) return fail("means", l.Message());
-    }
-    detail::CommandLoader l;
-    if (!l.Check(d)) return fail("chain", l.Message());
-    out = std::move(d);
-    return true;
+    return detail::LoadChainParsed(chain, places, means, out, error, map_places);
 }
 
-// Load a chain file and the places and means files it names (paths relative to the data directory).
-inline bool LoadChainData(const std::string& data_dir, const std::string& chain_file, ChainData& out, std::string* error = nullptr) {
+// Load a chain file and the places and means files it names (paths relative to the data directory). A places file on a
+// place map (its "place_map", relative to the data directory) takes its points from that map's places, or from
+// `map_places` when given (tests: a place moved).
+inline bool LoadChainData(const std::string& data_dir, const std::string& chain_file, ChainData& out, std::string* error = nullptr,
+                          const MapPlaces* map_places = nullptr) {
     const std::string base = data_dir.empty() ? std::string() : data_dir + "/";
     std::string chain_text, places_text, means_text;
     if (!detail::ReadText(base + chain_file, chain_text, error)) return false;
@@ -596,8 +639,24 @@ inline bool LoadChainData(const std::string& data_dir, const std::string& chain_
         return false;
     }
     if (!detail::ReadText(base + pf->string, places_text, error) || !detail::ReadText(base + mf->string, means_text, error)) return false;
+    json::Value places, means;
     std::string e;
-    if (!LoadChainJson(chain_text, places_text, means_text, out, &e)) {
+    if (!json::Parse(places_text, places, &perr) || !json::Parse(means_text, means, &perr)) {
+        if (error != nullptr) *error = chain_file + ": " + perr;
+        return false;
+    }
+    MapPlaces loaded;
+    if (map_places == nullptr) {
+        const json::Value* pm = places.Find("place_map");
+        if (pm != nullptr && pm->Is(json::Type::String) && !pm->string.empty()) {
+            if (!LoadMapPlaces(data_dir.empty() ? std::string(".") : data_dir, pm->string, loaded, &e)) {
+                if (error != nullptr) *error = pf->string + ": place_map: " + e;
+                return false;
+            }
+            map_places = &loaded;
+        }
+    }
+    if (!detail::LoadChainParsed(chain, places, means, out, &e, map_places)) {
         if (error != nullptr) *error = chain_file + ": " + e;
         return false;
     }
