@@ -479,7 +479,9 @@ SC_TEST("air war: the theatre refuses an unknown air defence system; the new sys
     bad.replace(at, 15, "\"system\": \"sa99\"");
     airwar::TheatreDef t;
     std::string e;
-    SC_EXPECT(!airwar::LoadTheatreJson(bad, t, &e));
+    MapPlaces places;  // the theatre's points are places of the country map (F1)
+    SC_EXPECT(LoadMapPlaces(kData, "maps/pannonia.json", places, &e));
+    SC_EXPECT(!airwar::LoadTheatreJson(bad, t, &e, &places));
     SC_EXPECT(e.find("unknown air defence system") != std::string::npos);
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("strela1")->label) == "SA-9 platoon");
     SC_EXPECT(std::string(airwar::FindAirDefenceSystem("s75m2")->label) == "SA-2 site");
@@ -702,6 +704,9 @@ SC_TEST("the nation's theatre: a whole nation's war is fought by a larger force 
         std::string bad = text;
         bad.insert(at, "\"force_scale\": 9, ");
         airwar::detail::AirWarLoader loader;
+        MapPlaces places;  // the theatre's points are places of the country map (F1)
+        SC_EXPECT(LoadMapPlaces(kData, "maps/pannonia.json", places, &e));
+        loader.UsePlaces(&places);
         json::Value root;
         SC_EXPECT(json::Parse(bad, root, &e));
         SC_EXPECT(!loader.LoadTheatre(root, t));

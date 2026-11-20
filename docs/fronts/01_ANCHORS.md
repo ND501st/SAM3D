@@ -1,10 +1,11 @@
 # 1. Anchors: the map as the source of truth (F1)
 
 The project owner's first point (19 November 2026): every placed object takes its place from the map by id, so that
-shifting a factory by 2 km on the map moves everything anchored to it. F1 is being built in parallel in the worktree
-`SAM3D-wt/f-f1` (branch `tf-f1`). Its design is in that branch's survey commit (`23f2e4e`, "WIP F1 (paused): anchors
-survey only") and will be written up as built in `docs/fronts/F1_ANCHORS_AS_BUILT.md`. This file only says what F1
-gives the rest of track F and what the rest of the track assumes of it. It does not redesign it.
+shifting a factory by 2 km on the map moves everything anchored to it. **F1 is built (20 Nov 2026): see
+[`F1_ANCHORS_AS_BUILT.md`](F1_ANCHORS_AS_BUILT.md)**, the reference for the data format, the loaders and what is left.
+This file says what F1 gives the rest of track F and what the rest of the track assumes of it, as designed before it
+was built; where the two differ, the as-built file holds (river crossings are not places: a bridge has its own site
+naming its crossing).
 
 ## 1. What F1 does, in brief
 
