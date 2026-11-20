@@ -299,7 +299,8 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
         // A package whose loads went at its planned aim: one whose flight spent them on what it found on the way (a
         // dive-bombing pass at a target of opportunity, roadmap S4) delivered nothing even run to its end, so the
         // shortened run's "delivered" below would test nothing. Since S5's hot phase (the quirks' weights, so the
-        // officers and their raids) seed 3's first NATO package, Falcon 70, is such a one.
+        // officers and their raids) seed 3's first NATO package was such a one: Falcon 70, an armed reconnaissance (its
+        // load is for what it finds, 06_OPPORTUNITY.md section 3.4), not a strike; a strike keeps its load for its target.
         if (!first.ok || first.releases.empty() || !first.played.outcome.delivered) continue;
         last_release_s = last_impact_s = -1.0;
         for (const fx::Event& ev : first.releases) {
