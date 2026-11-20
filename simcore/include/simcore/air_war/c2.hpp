@@ -1631,6 +1631,7 @@ private:
                 r.threat_radar = b->threat_radar;
                 r.threat_channels = b->threat_channels;
                 r.threat_max_target_mps = b->threat_max_target_mps;
+                r.system = b->system;
             }
         }
         if (r.label.empty()) r.label = m.what == "column" ? "a column on the road" : "a SAM launch";

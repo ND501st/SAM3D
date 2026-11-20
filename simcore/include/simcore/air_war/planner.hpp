@@ -31,6 +31,7 @@
 
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/officers.hpp"
@@ -66,6 +67,9 @@ struct PlanContext {
     // The map's features and ground for the route planner (route.mode 1, route_planner.hpp; null: the planner builds its
     // own from the data).
     const RouteGround* ground = nullptr;
+    // The front's line of contact (track F, front_line.hpp): what the target filter's depths are measured from (null: the
+    // front's base line; the same at zero offsets).
+    const LineOfContact* front_line = nullptr;
 
     // The defender's fighter threat over the front, less what an AWACS on station takes away (warning, vectoring): only
     // an AWACS that controls fighters in the war's year (roadmap B8: the Pact's A-50 not before 1989).
@@ -703,7 +707,7 @@ private:
             if (e.Live() < 0.15 && mk != MissionKind::Recce && mk != MissionKind::Bda && mk != MissionKind::ArmedRecce) continue;
             // A column on the move is found by searching its road, not struck where it was seen.
             if (IsColumn(e.kind) && mk != MissionKind::ArmedRecce) continue;
-            const double to_front = DistanceToLine(front_->line, e.pos);
+            const double to_front = c_->front_line != nullptr ? c_->front_line->AbsDistance(e.pos) : DistanceToLine(front_->line, e.pos);
             const bool ad = IsAirDefence(e.kind) || e.kind == ObjectKind::EwRadar;
             switch (mk) {
                 case MissionKind::Strike:

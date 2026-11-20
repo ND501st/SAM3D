@@ -49,6 +49,7 @@ struct IntelEntry {
     bool threat_radar = true;
     int threat_channels = 0;    // aircraft it engages at once (DefenceDef::channels; 0: all in reach)
     double threat_max_target_mps = 0.0;  // the fastest target it can engage (0: any)
+    std::string system;         // the air defence system it is believed to be (AirDefenceSystems' id; "": not known)
     // Its record with the enemy.
     int strikes = 0;
     double last_struck_h = -1e9;
@@ -61,6 +62,9 @@ struct IntelEntry {
     // A radar SAM site: what a rollback hunts and counts. Guns, radar-laid or not, are flown round or over and left to the
     // strike's escort.
     bool IsSamRadar() const { return kind == ObjectKind::SamSite && threat_radar; }
+    // How much it counts among what the enemy believes is there: believed there and real, whether working or not (the
+    // weight BelievedIadsShare gives each site; track F's cover over a sector's band, air_front.hpp).
+    double BelievedThere() const { return Clamp01(exists) * (1.0 - 0.7 * suspected_decoy); }
     // How much it is worth acting on now: believed there, believed working.
     double Live() const { return Clamp01(exists) * Clamp01(function) * (1.0 - 0.7 * suspected_decoy); }
 };
@@ -89,6 +93,7 @@ struct IntelReport {
     bool threat_radar = true;
     int threat_channels = 0;
     double threat_max_target_mps = 0.0;
+    std::string system;         // the air defence system it is believed to be (AirDefenceSystems' id; "": not known)
     std::string label;
     std::string note;
     double move_mps = 0.0;      // how fast it moves (a supply column): the picture spreads with it
@@ -230,6 +235,7 @@ private:
             n.threat_radar = r.threat_radar;
             n.threat_channels = r.threat_channels;
             n.threat_max_target_mps = r.threat_max_target_mps;
+            n.system = r.system;
             n.losses_credited = r.losses;
             if (r.claim_destroyed) {
                 n.function = 0.0;
@@ -280,6 +286,7 @@ private:
             e->threat_channels = r.threat_channels;
             e->threat_max_target_mps = r.threat_max_target_mps;
             e->emitter = r.threat_radar;
+            if (!r.system.empty()) e->system = r.system;
         }
         e->losses_credited += r.losses;
         if (r.decoy_spotted) e->suspected_decoy = Clamp01(e->suspected_decoy + 0.6);
