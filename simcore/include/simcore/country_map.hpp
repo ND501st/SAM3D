@@ -55,6 +55,17 @@ inline const std::vector<std::string>& CountryLandmarkKinds() {
     return kinds;
 }
 
+// A named point of the map the theatre and our chain of command stand at (roadmap F1, docs/fronts/F1_ANCHORS_AS_BUILT.md):
+// a target, a prepared position, a front's air bases, a post. The map is the only source of truth for where things are:
+// a theatre or places file names a place by id ("at") and takes its point from here, so moving a site moves everything
+// anchored to it with no other edit. Game layout, not system data.
+struct CountrySiteDef {
+    std::string id;
+    std::string name;
+    MapPoint at;
+    std::string crossing;  // a bridge's: the crossing of the map's networks it stands on ("" none; tests/test_anchors.cpp)
+};
+
 // A stretch of the country's border and who is across it.
 struct CountryBorderDef {
     std::string id;
@@ -77,6 +88,7 @@ struct CountryDef {
     std::vector<MapPoint> outline;  // the country's border, closed
     std::vector<CountryBorderDef> borders;
     std::vector<CountryLandmarkDef> landmarks;
+    std::vector<CountrySiteDef> sites;  // F1: settlements, landmarks and sites are one namespace of places
     std::string district;  // a district map lying inside it that must share its ground ("maps/kesmark_range.json")
 };
 
@@ -611,6 +623,40 @@ private:
     std::array<std::unordered_map<long long, std::vector<int>>, static_cast<std::size_t>(CountryNet::Count)> node_index_;
 };
 
+// ---------------------------------------------------------------------------------------------- places
+
+// Every named point of a country map by id (roadmap F1): its settlements' centres, its landmarks and its sites, one
+// namespace. Built once when a file on a place map is loaded (LoadMapPlaces); the loaders resolve each id to its point
+// there and keep the point, so nothing looks a place up by name while the war runs.
+class MapPlaces {
+public:
+    bool Add(const std::string& id, const MapPoint& at) { return at_.emplace(id, at).second; }
+    const MapPoint* Find(const std::string& id) const {
+        const auto it = at_.find(id);
+        return it == at_.end() ? nullptr : &it->second;
+    }
+    // Moves a place: everything anchored to it moves when its files are loaded with these places (tests/test_anchors.cpp).
+    bool Move(const std::string& id, double de_m, double dn_m) {
+        const auto it = at_.find(id);
+        if (it == at_.end()) return false;
+        it->second.east_m += de_m;
+        it->second.north_m += dn_m;
+        return true;
+    }
+    std::size_t Size() const { return at_.size(); }
+
+private:
+    std::unordered_map<std::string, MapPoint> at_;
+};
+
+inline MapPlaces PlacesOf(const CountryDef& d) {
+    MapPlaces p;
+    for (const CountrySettlementDef& s : d.settlements) p.Add(s.id, s.centre);
+    for (const CountryLandmarkDef& l : d.landmarks) p.Add(l.id, l.at);
+    for (const CountrySiteDef& s : d.sites) p.Add(s.id, s.at);
+    return p;
+}
+
 // ---------------------------------------------------------------------------------------------- loading
 
 namespace detail {
@@ -621,7 +667,7 @@ public:
         std::string kind;
         if (!Keys(root, "", {"map_id", "kind", "name", "description", "status", "source", "confidence", "notes", "origin", "seed",
                              "extent_km", "grid_km", "district", "terrain", "outline", "borders", "regions", "rivers", "roads",
-                             "railways", "pipelines", "settlements", "forests", "marshes", "lakes", "landmarks"}) ||
+                             "railways", "pipelines", "settlements", "forests", "marshes", "lakes", "landmarks", "sites"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "kind", kind) ||
             !RequireString(root, "", "name", out.name) || !OptionalString(root, "", "description", out.description) ||
             !OptionalString(root, "", "district", out.district) || !Provenance(root, "")) {
@@ -665,7 +711,25 @@ public:
             !LoadPolygons(root, "regions", out.regions)) {
             return false;
         }
-        return LoadOutline(root, out) && LoadBorders(root, out) && LoadSettlementsOf(root, out) && LoadLandmarks(root, out);
+        return LoadOutline(root, out) && LoadBorders(root, out) && LoadPlaceLists(root, out);
+    }
+
+    // The map's places only (settlements, landmarks, sites): what a file on a place map needs, without the ground.
+    bool LoadPlaceLists(const json::Value& root, CountryDef& out) {
+        if (!LoadSettlementsOf(root, out) || !LoadLandmarks(root, out) || !LoadSites(root, out)) return false;
+        MapPlaces seen;
+        for (const CountrySettlementDef& s : out.settlements) seen.Add(s.id, s.centre);
+        const auto once = [&](const char* list, std::size_t i, const std::string& id, const MapPoint& at) {
+            return seen.Add(id, at) ||
+                   Fail(Join(Index(list, i), "id"), "'" + id + "' is already a place of this map (settlements, landmarks and sites share one namespace)");
+        };
+        for (std::size_t i = 0; i < out.landmarks.size(); ++i) {
+            if (!once("landmarks", i, out.landmarks[i].id, out.landmarks[i].at)) return false;
+        }
+        for (std::size_t i = 0; i < out.sites.size(); ++i) {
+            if (!once("sites", i, out.sites[i].id, out.sites[i].at)) return false;
+        }
+        return true;
     }
 
 private:
@@ -741,6 +805,22 @@ private:
         }
         return true;
     }
+
+    bool LoadSites(const json::Value& root, CountryDef& out) {
+        const json::Value* list = OptionalArray(root, "", "sites");
+        if (list == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < list->items.size(); ++i) {
+            const std::string p = Index("sites", i);
+            const json::Value& v = list->items[i];
+            CountrySiteDef s;
+            if (!Keys(v, p, {"id", "name", "east_km", "north_km", "crossing", "notes"}) || !RequireString(v, p, "id", s.id) ||
+                !OptionalString(v, p, "name", s.name) || !Centre(v, p, s.at) || !OptionalString(v, p, "crossing", s.crossing)) {
+                return false;
+            }
+            out.sites.push_back(std::move(s));
+        }
+        return true;
+    }
 };
 
 }  // namespace detail
@@ -770,6 +850,34 @@ inline std::shared_ptr<const CountryMap> LoadCountryMap(const std::string& data_
     CountryDef def;
     if (!LoadCountryDefJson(text, def, error)) return nullptr;
     return CountryMap::Build(std::move(def));
+}
+
+// The places of data/<file> (roadmap F1): its settlements, landmarks and sites by id, read without baking its ground.
+inline bool LoadMapPlaces(const std::string& data_dir, const std::string& file, MapPlaces& out, std::string* error = nullptr) {
+    std::string text;
+    if (!detail::ReadTextFile(data_dir + "/" + file, text)) {
+        if (error) *error = "cannot open " + file;
+        return false;
+    }
+    json::Value root;
+    std::string parse_error;
+    if (!json::Parse(text, root, &parse_error)) {
+        if (error) *error = file + ": " + parse_error;
+        return false;
+    }
+    const json::Value* kind = root.Find("kind");
+    if (kind == nullptr || !kind->Is(json::Type::String) || kind->string != "country") {
+        if (error) *error = file + ": kind: a place map is a country map (\"kind\": \"country\")";
+        return false;
+    }
+    detail::CountryLoader loader;
+    CountryDef def;
+    if (!loader.LoadPlaceLists(root, def)) {
+        if (error) *error = file + ": " + loader.Message();
+        return false;
+    }
+    out = PlacesOf(def);
+    return true;
 }
 
 }  // namespace simcore

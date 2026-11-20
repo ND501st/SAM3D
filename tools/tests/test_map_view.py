@@ -67,6 +67,36 @@ def test_a_theatre_that_extends_another_is_drawn_whole(tmp_path):
     assert map_view.OBJECT_COLOURS["refinery"] in svg and "prepared position" in svg
 
 
+def test_a_theatre_on_a_place_map_takes_its_points_from_the_map(tmp_path):
+    (tmp_path / "maps").mkdir()
+    (tmp_path / "air_war").mkdir()
+    country = {"settlements": [{"id": "cap", "east_km": 1, "north_km": 1}], "landmarks": [{"id": "ref", "east_km": 5, "north_km": 2}],
+               "sites": [{"id": "s1", "east_km": 3.5, "north_km": -2}, {"id": "s1_pos1", "east_km": 4, "north_km": -2},
+                         {"id": "nato_bases", "east_km": -50, "north_km": 0}, {"id": "nato_line1", "east_km": -40, "north_km": 10},
+                         {"id": "nato_line2", "east_km": -40, "north_km": -10}, {"id": "nato_entry_w1", "east_km": -30, "north_km": 0}]}
+    (tmp_path / "maps" / "c.json").write_text(json.dumps(country), encoding="utf-8")
+    base = {"place_map": "maps/c.json",
+            "objects": [{"id": "s1", "kind": "sam_site", "at": "s1", "positions": [{"at": "s1_pos1"}]}, {"id": "r", "kind": "refinery", "at": "ref"}],
+            "fronts": [{"faction": "nato", "line": [{"at": "nato_line1"}, {"at": "nato_line2"}], "entries": [{"id": "W1", "at": "nato_entry_w1"}],
+                        "bases": {"at": "nato_bases"}}]}
+    child = {"extends": "base.json", "place_map": "maps/c.json", "objects": [{"id": "c", "kind": "city", "at": "cap"}]}
+    (tmp_path / "air_war" / "base.json").write_text(json.dumps(base), encoding="utf-8")
+    (tmp_path / "air_war" / "child.json").write_text(json.dumps(child), encoding="utf-8")
+    t = map_view.load_theatre(tmp_path / "air_war" / "child.json")
+    at = {o["id"]: (o["east_km"], o["north_km"]) for o in t["objects"]}
+    assert at == {"s1": (3.5, -2), "r": (5, 2), "c": (1, 1)}
+    assert t["objects"][0]["positions"][0]["east_km"] == 4 and t["fronts"][0]["bases"]["east_km"] == -50
+    assert t["fronts"][0]["line"][1]["north_km"] == -10 and t["fronts"][0]["entries"][0]["east_km"] == -30
+    assert map_view.OBJECT_COLOURS["city"] in map_view.country_svg(COUNTRY, t)
+    base["objects"][1]["at"] = "nowhere"
+    (tmp_path / "air_war" / "base.json").write_text(json.dumps(base), encoding="utf-8")
+    try:
+        map_view.load_theatre(tmp_path / "air_war" / "base.json")
+        assert False, "a place the map lacks"
+    except ValueError as e:
+        assert "nowhere" in str(e)
+
+
 def test_main_writes_a_page_and_a_picture(tmp_path):
     dump = tmp_path / "d.json"
     dump.write_text(json.dumps(DUMP), encoding="utf-8")
