@@ -86,7 +86,7 @@ inline std::string MilsText(double azimuth_deg) {
     while (a < 0.0) a += 360.0;
     while (a >= 360.0) a -= 360.0;
     int mils = static_cast<int>(a * 6000.0 / 360.0 + 0.5) % 6000;
-    char out[16];
+    char out[64];
     std::snprintf(out, sizeof(out), "%02d-%02d", mils / 100, mils % 100);
     return out;
 }

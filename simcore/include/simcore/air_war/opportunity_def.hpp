@@ -69,7 +69,7 @@ struct GunPassDef {
 // file's notes give a source).
 inline std::vector<std::pair<std::string, double>> OpportunityTuningDefaults() {
     return {
-        {"opportunity.mode", 1.0},                 // 1: roadmap B6's chain and flown passes; 0: before it (a save made before B6)
+        {"opportunity.mode", 1.0},                 // 1: roadmap B6's chain and flown passes; 0: before it (a save made before B6); 2 S4's bombs; 3 owed beyond the circle
         {"opportunity.tick_s", 1.0},               // a flight leader runs his chain this often (1-5 Hz), staggered by a fixed key
         {"opportunity.merge_m", 600.0},            // two sightings of a flight this near are the same thing
         {"opportunity.min_confidence", 0.25},      // a sighting less sure than this is not acted on yet
@@ -103,6 +103,7 @@ inline std::vector<std::pair<std::string, double>> OpportunityTuningDefaults() {
         {"opportunity.a0_find_scale", 1.0},        // the abstract level's find chance per mover passed, times the type's ease
         {"opportunity.a0_column_hit", 0.12},       // the share of a column's function one attacking aircraft removes in a pass
         {"opportunity.a0_column_guns", 0.02},      // a column's own air defence brings an attacker down
+        {"opportunity.bomb_dive_deg", 30.0},       // a dive-bombing pass on what he found (roadmap S4, opportunity.mode 2)
     };
 }
 

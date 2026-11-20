@@ -102,6 +102,7 @@ add_executable(simcore_tests
   tests/test_air_war.cpp
   tests/test_packages_live.cpp
   tests/test_c2.cpp
+  tests/test_c2_live.cpp
   tests/test_opportunity.cpp
   tests/test_hot_phase.cpp
   tests/test_routes.cpp
@@ -114,6 +115,7 @@ add_executable(simcore_tests
   tests/test_dynamic_campaign.cpp
   tests/test_ground.cpp
   tests/test_map_obstacles.cpp
+  tests/test_map_leftovers.cpp
   tests/test_damage.cpp
   tests/test_mission_session.cpp
   tests/test_outcomes.cpp
@@ -229,6 +231,9 @@ simcore_configure_target(air_war_balance)
 
 add_executable(air_war_bench examples/air_war_bench.cpp)
 simcore_configure_target(air_war_bench)
+# Our fighters and our own fire: the exercise sweep against the 25% anchor (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md).
+add_executable(own_air_balance examples/own_air_balance.cpp)
+simcore_configure_target(own_air_balance)
 # What the air battle costs a step, and what the levels of detail save (roadmap B12, docs/air_battle/02 5.4).
 add_executable(air_battle_bench examples/air_battle_bench.cpp)
 simcore_configure_target(air_battle_bench)
@@ -237,6 +242,9 @@ add_executable(perception_bench examples/perception_bench.cpp)
 simcore_configure_target(perception_bench)
 add_executable(aaa_bench examples/aaa_bench.cpp)
 simcore_configure_target(aaa_bench)
+# The live air fight, B8's beside roadmap S3's, and the far fight on and off (docs/air_battle/07_AIR_TO_AIR.md section 9).
+add_executable(air_combat_bench examples/air_combat_bench.cpp)
+simcore_configure_target(air_combat_bench)
 
 # The enemy air command (docs/air_war/): a campaign against one adversary, its raids through the battery's sector played
 # as generated scenarios by the NPC crew; prints the enemy staff's journal. Also run as a test on two days of the Pact,

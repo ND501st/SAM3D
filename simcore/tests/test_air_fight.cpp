@@ -5,6 +5,7 @@
 // test checks the ordering and a wide band, not one engagement's numbers.
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -19,6 +20,7 @@
 #include "simcore/air_war/air_fight_session.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
+#include "simcore/scenery/munitions.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -370,10 +372,12 @@ struct HandWorld {
     }
 };
 
-AirFightDef Def() {
+// B8's fight (mode 0) unless asked for roadmap S3's (mode 1).
+AirFightDef Def(int mode = 0) {
     AirFightDef d;
     d.present = true;
     d.year = 1985;
+    d.mode = mode;
     std::string e;
     if (!LoadAirCombatFile(kData + "/air_war/air_combat.json", d.combat, &e)) std::printf("    %s\n", e.c_str());
     if (!LoadSensorsFile(kData + "/air_war/sensors.json", d.sensors, &e)) std::printf("    %s\n", e.c_str());
@@ -402,6 +406,15 @@ struct Duel {
     double first_shot_m = -1.0;
     double recognised_at_m = -1.0;
     bool shot_before_vid = false;
+    // The presentation hooks (roadmap B13), when `fx`: each launch, end and burst as the fight told them.
+    bool fx = false;
+    struct FxShot {
+        int shooter = -1, target = -1, shot = 0;
+        std::string weapon;
+        double t = 0.0, until = 0.0;
+        bool kill = false, gone = false;
+    };
+    std::vector<FxShot> launches, ends, bursts;
 
     explicit Duel(bool e3a, std::uint64_t seed = 11) {
         w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});         // 0: the F-15
@@ -439,9 +452,19 @@ struct Duel {
                 if (sg.recognised && recognised_at_m < 0.0) recognised_at_m = range;
                 w.pictures[0].push_back(sg);
             }
-            const std::size_t before = s.Shots().size();
-            s.Step(t, w.World());
-            (void)before;
+            AirFightWorld aw = w.World();
+            if (fx) {
+                aw.fx_launch = [this](int shooter, int target, const AamDef& aam, int shot, double at, double arrive_s) {
+                    launches.push_back({shooter, target, shot, aam.munition, at, arrive_s, false, false});
+                };
+                aw.fx_end = [this](int shooter, int target, const AamDef& aam, int shot, double at, bool kill, bool gone_before) {
+                    ends.push_back({shooter, target, shot, aam.munition, at, at, kill, gone_before});
+                };
+                aw.fx_gun = [this](int shooter, int target, const AirGunDef& gun, double at, double burst_s, bool kill) {
+                    bursts.push_back({shooter, target, 0, gun.id, at, at + burst_s, kill, false});
+                };
+            }
+            s.Step(t, aw);
             for (const std::string& ev : w.events) {
                 if (first_shot_m < 0.0 && ev.rfind("eagle: fires", 0) == 0) {
                     first_shot_m = range;
@@ -520,6 +543,79 @@ SC_TEST("air fight B8 live: a Pact pilot whose GCI is not heard loses control: t
     }
 }
 
+SC_TEST("air fight S5 live: a skilled pilot who lost his GCI turns back by his faction's turn_back; without the value, on as before") {
+    for (const double turn_back : {-1.0, 0.0, 1.0}) {
+        AirFightDef def = Def();
+        HandWorld w;
+        w.heard_at = [](int) { return -1.0; };  // every vector jammed out
+        w.Add(Vec3{0.0, 0.0, 5000.0}, Vec3{0.0, 230.0, 0.0});
+        w.Add(Vec3{0.0, 140000.0, 5000.0}, Vec3{0.0, -200.0, 0.0});
+        AirFightFighterDef me = Fighter("flogger", "mig23ml_wp", "warsaw_pact", "sweep", "gci", 0.8);
+        me.turn_back_lost = turn_back;
+        def.fighters.push_back(me);
+        def.fighters.push_back(Fighter("red", "mig21mf", "ours", "strike"));
+        AirFightControllerDef c;
+        c.id = "gci";
+        c.side = "enemy";
+        c.kind = "radar_control";
+        c.pos = Vec3{0.0, -60000.0, 0.0};
+        c.range_m = 300000.0;
+        c.post = "gci";
+        def.controllers.push_back(c);
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"flogger", "red"}, 3, &e));
+        for (double t = 0.25; t <= 90.0; t += 0.25) {
+            w.Move(0.25);
+            s.Step(t, w.World());
+        }
+        SC_EXPECT(s.ControlLost("flogger"));
+        if (turn_back >= 1.0) {
+            SC_EXPECT(s.ModeOf("flogger") == AirFightSession::Mode::Home && s.WhyHome("flogger") == "lost control: turns back");
+        } else {
+            SC_EXPECT(s.ModeOf("flogger") != AirFightSession::Mode::Home);
+        }
+    }
+}
+
+SC_TEST("air fight S5: a fight's hot_mode and a fighter's turn_back_lost and unwarned_break load; bad ones are refused") {
+    const std::string text = ReadFile(kData + "/scenarios/osa_practice.json");
+    const std::size_t a = text.find("\"targets\"");
+    const std::size_t b = text.find("\"triggers\"");
+    SC_EXPECT(a != std::string::npos && b != std::string::npos && b > a);
+    if (a == std::string::npos || b == std::string::npos) return;
+    const auto with = [&](const std::string& fighter) {
+        const std::string targets = R"j("targets": [
+    { "id": "red11", "name": "Our MiG-21MF (placeholder)", "type": "Air+FixedWing", "class": "fighter", "iff": "friend",
+      "start": { "east_m": 0, "north_m": 40000, "up_m": 5000 }, "waypoints": [ { "east_m": 0, "north_m": 140000, "up_m": 5000 } ],
+      "speed_mps": 230, "rcs_m2": 3 },
+    { "id": "t1", "name": "An enemy strike jet (placeholder)", "type": "Air+FixedWing", "class": "fighter",
+      "start": { "east_m": 3000, "north_m": 110000, "up_m": 4000 }, "waypoints": [ { "east_m": 3000, "north_m": 20000, "up_m": 4000 } ],
+      "speed_mps": 220, "rcs_m2": 6 } ],
+  "air_fight": { "year": 1985, "hot_mode": 2, "source": "sam3d", "confidence": "estimate",
+    "fighters": [ { "target": "red11", "type": "mig21mf", "faction": "ours", "role": "cap", "regiment": "fighter_rgt_1", "controller": "gci", )j" +
+                                    fighter + R"j( } ],
+    "controllers": [ { "id": "gci", "side": "ours", "kind": "radar_control", "east_m": 0, "north_m": 0, "range_m": 200000 } ] },
+  )j";
+        return text.substr(0, a) + targets + text.substr(b);
+    };
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(with(R"("turn_back_lost": 0.6, "unwarned_break": 0.5)"), kData, def, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(def.air_fight.hot_mode == 2 && def.air_fight.fighters.size() == 1);
+    if (def.air_fight.fighters.size() == 1) {
+        SC_EXPECT_NEAR(def.air_fight.fighters[0].turn_back_lost, 0.6, 1e-12);
+        SC_EXPECT_NEAR(def.air_fight.fighters[0].unwarned_break, 0.5, 1e-12);
+    }
+    for (const char* bad : {R"("turn_back_lost": 1.5)", R"("unwarned_break": 1.5)", R"("unwarned_break": -0.1)"}) {
+        ScenarioDef d2;
+        ConsoleData c2;
+        SC_EXPECT(!LoadScenario(with(bad), kData, d2, c2, &e));
+    }
+}
+
 SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an enemy jet and fires; a kill names the regiment") {
     std::string text = ReadFile(kData + "/scenarios/osa_practice.json");
     const std::size_t a = text.find("\"targets\"");
@@ -564,6 +660,43 @@ SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an 
     for (const AirFightSession::Kill& k : af->Kills()) {
         if (k.shooter == "red11") SC_EXPECT(k.by == "fighter_rgt_1" && !r.TargetAlive(k.target));
     }
+    // The shots in the presentation feed (roadmap B13): each launch from the shooter's place toward its target, with a shape
+    // the munitions library draws; each end matched to its launch, a hit where the target is and before its wreck.
+    {
+        std::vector<fx::Event> launches, ends, bursts;
+        std::vector<fx::Event> downs;
+        std::size_t early = 0;
+        for (const fx::Event& ev : r.Fx().Since(0)) {
+            if (ev.kind == fx::EventKind::AamLaunch) launches.push_back(ev);
+            if (ev.kind == fx::EventKind::AamEnd) ends.push_back(ev);
+            if (ev.kind == fx::EventKind::AamEnd && ev.end == fx::BurstEnd::Early) ++early;
+            if (ev.kind == fx::EventKind::AirGunBurst) bursts.push_back(ev);
+            if (ev.kind == fx::EventKind::AircraftDown) downs.push_back(ev);
+        }
+        std::printf("    feed: %zu launches, %zu ends, %zu bursts\n", launches.size(), ends.size(), bursts.size());
+        SC_EXPECT(static_cast<int>(launches.size() + bursts.size()) >= af->ShotsBy("red11"));
+        SC_EXPECT(ends.size() - early + bursts.size() == af->Shots().size());
+        scenery::MunitionLibrary lib;
+        SC_EXPECT(lib.Load(kData + "/scenery/munitions.json"));
+        for (const fx::Event& l : launches) {
+            const scenery::MunitionSpec* m = lib.Resolve(l.weapon);
+            SC_EXPECT(m != nullptr && m->kind == "missile" && m->HasMesh() && m->has_motor);
+            SC_EXPECT(!l.source.empty() && !l.target.empty() && l.world_id >= 0 && l.target_world_id >= 0 && l.world_id != l.target_world_id);
+            SC_EXPECT(l.end_t_s > l.t_s && (l.aim - l.position).Length() > 100.0);
+        }
+        for (const fx::Event& en : ends) {
+            int matched = 0;
+            for (const fx::Event& l : launches) matched += l.source == en.source && l.number == en.number && l.seq < en.seq ? 1 : 0;
+            SC_EXPECT(matched == 1);
+            if (en.end == fx::BurstEnd::Hit) {
+                SC_EXPECT(en.position.Length() > 0.0 && (en.aim - en.position).Length() < 1e-9);
+                bool wreck_after = false;  // the burst before the wreck it makes
+                for (const fx::Event& d : downs) wreck_after = wreck_after || (d.world_id == en.target_world_id && d.seq > en.seq);
+                SC_EXPECT(wreck_after);
+            }
+        }
+        for (const fx::Event& gb : bursts) SC_EXPECT(lib.Resolve(gb.weapon) != nullptr && lib.Resolve(gb.weapon)->kind == "gun" && gb.end_t_s > gb.t_s);
+    }
     // The loader refuses a fighter with no target, an unknown doctrine and a controller that is not there.
     const auto refuse = [&](const std::string& from, const std::string& to, const std::string& expect) {
         std::string t2 = text;
@@ -580,4 +713,731 @@ SC_TEST("air fight B8 live: in a session our fighter under its GCI closes on an 
     SC_EXPECT(refuse(R"("target": "t1")", R"("target": "nobody")", "no target"));
     SC_EXPECT(refuse(R"("faction": "warsaw_pact")", R"("faction": "martians")", "no doctrine"));
     SC_EXPECT(refuse(R"("controller": "gci")", R"("controller": "elsewhere")", "no controller"));
+}
+
+SC_TEST("air fight B13: the presentation hooks are told every launch, end and burst, and change nothing in the fight") {
+    for (const bool e3a : {false, true}) {
+        Duel plain(e3a, 7), shown(e3a, 7);
+        shown.fx = true;
+        plain.Run(240.0);
+        shown.Run(240.0);
+        // The same fight with the hooks as without.
+        SC_EXPECT(plain.s.Shots().size() == shown.s.Shots().size() && plain.s.Kills().size() == shown.s.Kills().size());
+        for (std::size_t i = 0; i < std::min(plain.s.Shots().size(), shown.s.Shots().size()); ++i) {
+            SC_EXPECT(plain.s.Shots()[i].weapon == shown.s.Shots()[i].weapon && plain.s.Shots()[i].kill == shown.s.Shots()[i].kill &&
+                      plain.s.Shots()[i].t_s == shown.s.Shots()[i].t_s);
+        }
+        // Every resolved shot is a missile's end or a gun's burst, in the same order and with the same outcome.
+        std::size_t missiles = 0, guns = 0;
+        std::vector<Duel::FxShot> resolved;  // the ends of missiles that met their target (a gone target's are not shots)
+        for (const Duel::FxShot& en : shown.ends) {
+            if (!en.gone) resolved.push_back(en);
+        }
+        for (const AirFightSession::ShotRecord& r : shown.s.Shots()) {
+            const bool gun = shown.def.combat.Gun(r.weapon) != nullptr;
+            if (gun) {
+                SC_EXPECT(guns < shown.bursts.size() && shown.bursts[guns].kill == r.kill && shown.bursts[guns].t == r.t_s &&
+                          shown.bursts[guns].until > r.t_s);
+                ++guns;
+            } else {
+                SC_EXPECT(missiles < resolved.size() && resolved[missiles].kill == r.kill && resolved[missiles].t == r.t_s);
+                ++missiles;
+            }
+        }
+        SC_EXPECT(guns == shown.bursts.size());
+        // Each end follows its launch (the same shooter and shot), whose time it was told then; every launch names its shape.
+        for (const Duel::FxShot& en : shown.ends) {
+            bool found = false;
+            for (const Duel::FxShot& l : shown.launches) {
+                if (l.shooter == en.shooter && l.shot == en.shot && l.target == en.target) {
+                    found = true;
+                    SC_EXPECT(l.t < en.t && en.t >= l.until - 1e-9 && en.t - l.until < 0.26);  // resolved on the first step past its arrival
+                }
+            }
+            SC_EXPECT(found);
+        }
+        for (const Duel::FxShot& l : shown.launches) SC_EXPECT(!l.weapon.empty());
+        std::printf("    %s: %zu launches, %zu ends, %zu bursts\n", e3a ? "under an E-3A" : "alone", shown.launches.size(), shown.ends.size(),
+                    shown.bursts.size());
+        SC_EXPECT(!shown.launches.empty() && shown.ends.size() <= shown.launches.size());
+        SC_EXPECT(missiles + guns == shown.s.Shots().size());
+    }
+}
+
+SC_TEST("air fight B13: the air battle shot check's scenario does in the first minutes what -SimAirShots photographs") {
+    // scenarios/air_battle_shots.json (unreal/README.md, -SimAirShots): our pair and an F-15C fire missiles, the F-4Es
+    // under the Osa's fire turn, dispense chaff and jettison, our fighters in the air: each at least once in the first
+    // seven minutes. Flares (an IR SAM's launch seen: a neighbour fires only in a session with waves) and guns (a fight
+    // closed to gun range) are photographed when they come and logged as not seen when they do not.
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const bool ok = LoadScenario(ReadFile(kData + "/scenarios/air_battle_shots.json"), kData, def, console, &e);
+    if (!ok) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(ok && def.air_fight.present);
+    if (!ok) return;
+    ScenarioRunner r(std::move(def), std::move(console));
+    double banked_s = -1.0;
+    bool ours_up = false;
+    std::map<std::string, int> n;
+    std::map<std::string, double> first;
+    std::uint64_t cursor = 0;
+    while (r.Time() < 420.0 && !r.Finished()) {
+        r.Step(0.1);
+        for (const Aircraft& a : r.GetWorld().AircraftList()) {
+            if (!a.alive) continue;
+            if (banked_s < 0.0 && std::fabs(a.bank_rad) >= DegToRad(30.0)) banked_s = r.Time();
+        }
+        ours_up = ours_up || r.TargetAlive("red11");
+        for (const fx::Event& ev : r.Fx().Since(cursor)) {
+            std::string k = fx::ToString(ev.kind);
+            if (ev.kind == fx::EventKind::WeaponRelease) k = ev.delivery == "jettison" ? "jettison" : "release";
+            if (ev.kind == fx::EventKind::AamEnd && ev.end == fx::BurstEnd::Early) k = "aam_end_early";
+            if (n[k]++ == 0) first[k] = ev.t_s;
+        }
+        cursor = r.Fx().Last();
+    }
+    std::printf("    %.0f s (%s); banked at %.0f s;", r.Time(), r.Finished() ? r.EndReason().c_str() : "running", banked_s);
+    for (const auto& kv : n) std::printf(" %s %d (%.0f s)", kv.first.c_str(), kv.second, first[kv.first]);
+    std::printf("\n");
+    SC_EXPECT(ours_up && banked_s >= 0.0);
+    for (const char* k : {"chaff_drop", "jettison", "aam_launch", "aam_end"}) {
+        if (n[k] == 0) std::printf("    none: %s\n", k);
+        SC_EXPECT(n[k] > 0);
+    }
+}
+
+SC_TEST("air fight B13: the shot check's second scenario gives flares in its first three minutes, by the reaction chain") {
+    // scenarios/air_battle_flares.json (-SimAirShots plays it after air_battle_shots.json): NATO's waves low over a Strela-2
+    // team. A pilot who sees its launch fires flares by his reactions (gameplay/reactions.json sam_ir: flares); each salvo
+    // is the chain's own (its count), at an aircraft of the waves, near the battery where the check's camera goes.
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    const bool ok = LoadScenario(ReadFile(kData + "/scenarios/air_battle_flares.json"), kData, def, console, &e);
+    if (!ok) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(ok && def.waves != nullptr && !def.neighbours.empty());
+    if (!ok) return;
+    ScenarioRunner r(std::move(def), std::move(console));
+    int launches = 0, flares = 0;
+    double first_s = -1.0, first_range_m = 0.0;
+    std::uint64_t cursor = 0;
+    while (r.Time() < 180.0 && !r.Finished()) {
+        r.Step(0.1);
+        for (const fx::Event& ev : r.Fx().Since(cursor)) {
+            if (ev.kind == fx::EventKind::SamLaunch) ++launches;
+            if (ev.kind != fx::EventKind::FlareDrop) continue;
+            SC_EXPECT(ev.number > 0 && ev.world_id >= 0);
+            if (flares++ == 0) {
+                first_s = ev.t_s;
+                first_range_m = std::hypot(ev.position.x, ev.position.y);
+            }
+        }
+        cursor = r.Fx().Last();
+    }
+    std::printf("    %d IR SAM launches, %d flare salvos (the chain's %d), the first at %.0f s, %.1f km from the battery\n", launches,
+                flares, r.Reactions().Totals().flares, first_s, first_range_m / 1000.0);
+    SC_EXPECT(launches > 0);
+    SC_EXPECT(flares > 0 && first_s > 0.0 && first_s < 180.0);
+    SC_EXPECT(flares == r.Reactions().Totals().flares);
+    SC_EXPECT(first_range_m < 8000.0);
+}
+
+// ------------------------------------------------------------------------------------------------ roadmap S3
+
+namespace {
+
+// S3's def: the fight's data, each radar's look-down from its EM entry, the factions' vector lines.
+AirFightDef S3Def() {
+    AirFightDef d = Def(1);
+    std::string e;
+    if (!FillLookDown(d.sensors, kData, &e)) std::printf("    %s\n", e.c_str());
+    for (const char* f : {"nato", "warsaw_pact", "neutral"}) VectorLinesFromJson(ReadFile(kData + "/air_war/faction_" + f + ".json"), d.vector_lines[f]);
+    return d;
+}
+
+// A world for S3: aircraft that turn at 12 deg/s toward the point they are steered at and fly the speed asked; eyes to
+// 9 km (the type within 5 km); a receiver that hears a radar of the other side locked on him, and a launch while a radar
+// round flies at him; launches seen within 10 km.
+struct S3World {
+    std::vector<Aircraft> air;
+    std::vector<std::vector<Sighting>> pictures;
+    std::vector<bool> gone;
+    std::vector<int> locked_by;
+    struct RadarCall {
+        int target = -1, state = 0, locked = -1;
+    };
+    std::vector<RadarCall> radar_calls;
+    struct Launch {
+        int shooter = -1, target = -1;
+        bool radar = false, done = false;
+    };
+    std::vector<Launch> launches;
+    std::vector<std::string> events;
+    std::function<bool(int)> far_from_ours = [](int) { return false; };
+    std::function<int(int)> leader = [](int) { return -1; };
+    std::function<bool(int, bool, double)> dispense;
+    std::function<double(int, bool, double)> countermeasure;
+
+    int Add(const Vec3& at, const Vec3& vel) {
+        Aircraft a;
+        a.position = at;
+        a.velocity = vel;
+        a.speed_mps = vel.Length();
+        a.max_turn_rate_rad_s = DegToRad(12.0);
+        a.max_speed_mps = 1.5 * vel.Length();
+        a.rcs_m2 = 5.0;
+        a.max_load_g = 7.0;
+        air.push_back(a);
+        pictures.emplace_back();
+        gone.push_back(false);
+        locked_by.push_back(-1);
+        return static_cast<int>(air.size()) - 1;
+    }
+    AirFightWorld World() {
+        AirFightWorld w;
+        w.air = [this](int t) -> const Aircraft* {
+            return t >= 0 && static_cast<std::size_t>(t) < air.size() && !gone[static_cast<std::size_t>(t)] ? &air[static_cast<std::size_t>(t)] : nullptr;
+        };
+        w.picture = [this](int t) -> const std::vector<Sighting>* { return &pictures[static_cast<std::size_t>(t)]; };
+        w.altitude = [](const Vec3& p) { return p.z; };
+        w.agl = [](const Vec3& p) { return p.z; };
+        w.steer = [this](int t, const PilotOverride& ov) {
+            Aircraft& a = air[static_cast<std::size_t>(t)];
+            a.waypoints = {ov.point};  // where he is steered (read by Move)
+            if (ov.speed_mps > 0.0) a.speed_mps = ov.speed_mps;
+        };
+        w.release = [](int) {};
+        w.destroy = [this](int t, const std::string&) {
+            gone[static_cast<std::size_t>(t)] = true;
+            return true;
+        };
+        w.event = [this](const std::string& who, const std::string& what) { events.push_back(who + ": " + what); };
+        w.say = [](const std::string&, int, const std::string&, double) { return 7; };
+        w.heard = [](int, int, double t) { return t; };
+        w.radar = [this](int t, const std::string&, int state, int locked) {
+            radar_calls.push_back({t, state, locked});
+            for (int& by : locked_by) {
+                if (by == t) by = -1;
+            }
+            if (state == 2 && locked >= 0) locked_by[static_cast<std::size_t>(locked)] = t;
+        };
+        w.fx_launch = [this](int shooter, int target, const AamDef& aam, int, double, double) {
+            launches.push_back({shooter, target, IsSemiActive(aam.guidance), false});
+        };
+        w.fx_end = [this](int shooter, int target, const AamDef&, int, double, bool, bool) {
+            for (Launch& l : launches) {
+                if (l.shooter == shooter && l.target == target) l.done = true;
+            }
+        };
+        w.leader = [this](int t) { return leader(t); };
+        w.far_from_ours = [this](int t) { return far_from_ours(t); };
+        if (dispense) w.dispense = [this](int t, bool ir, double at) { return dispense(t, ir, at); };
+        if (countermeasure) w.countermeasure = [this](int t, bool ir, double at) { return countermeasure(t, ir, at); };
+        return w;
+    }
+    void Move(double dt) {
+        for (Aircraft& a : air) {
+            const Vec3 h{a.velocity.x, a.velocity.y, 0.0};
+            double hd = std::atan2(h.x, h.y);
+            if (!a.waypoints.empty()) {
+                const Vec3 d = a.waypoints.front() - a.position;
+                const double turn = std::remainder(std::atan2(d.x, d.y) - hd, kTwoPi);
+                const double step = a.max_turn_rate_rad_s * dt;
+                hd += std::max(-step, std::min(step, turn));
+            }
+            const double v = h.Length() + std::max(-10.0 * dt, std::min(10.0 * dt, a.speed_mps - h.Length()));
+            a.velocity = Vec3{v * std::sin(hd), v * std::cos(hd), 0.0};
+            a.position += a.velocity * dt;
+        }
+    }
+    void See(double t) {
+        for (std::size_t i = 0; i < air.size(); ++i) {
+            std::vector<Sighting>& pic = pictures[i];
+            pic.erase(std::remove_if(pic.begin(), pic.end(), [&](const Sighting& s) { return s.kind != SightKind::LaunchSign || t - s.time_s > 5.0; }),
+                      pic.end());
+            for (std::size_t j = 0; j < air.size(); ++j) {
+                if (j == i || gone[j]) continue;
+                const double r = (air[j].position - air[i].position).Length();
+                if (r >= 9000.0) continue;
+                Sighting s;
+                s.kind = SightKind::Aircraft;
+                s.believed_enu = air[j].position;
+                s.range_est_m = r;
+                s.time_s = t;
+                s.recognised = r < 5000.0;
+                s.what = s.recognised ? "type" : "aircraft";
+                pic.push_back(s);
+            }
+            const int by = locked_by[i];
+            if (by >= 0 && !gone[static_cast<std::size_t>(by)]) {
+                Sighting s;
+                s.kind = SightKind::Emitter;
+                s.by = SightBy::Rwr;
+                s.rwr = RwrState::Lock;
+                for (const Launch& l : launches) {
+                    if (!l.done && l.radar && l.shooter == by && l.target == static_cast<int>(i)) s.rwr = RwrState::Launch;
+                }
+                const Vec3 d = air[static_cast<std::size_t>(by)].position - air[i].position;
+                s.bearing_rad = std::atan2(d.x, d.y);
+                s.time_s = t;
+                pic.push_back(s);
+            }
+        }
+    }
+    // The fight from `t` to `until_s`, seeing and moving each 0.25 s; `each` after every step.
+    void Run(AirFightSession& s, double& t, double until_s, const std::function<void()>& each = nullptr) {
+        while (t < until_s) {
+            t += 0.25;
+            Move(0.25);
+            See(t);
+            s.Step(t, World());
+            if (each) each();
+        }
+    }
+};
+
+AirFightControllerDef Ctl(const std::string& id, const std::string& side, const std::string& kind, const Vec3& at) {
+    AirFightControllerDef c;
+    c.id = id;
+    c.side = side;
+    c.kind = kind;
+    c.pos = at;
+    c.range_m = 400000.0;
+    return c;
+}
+
+}  // namespace
+
+SC_TEST("air fight S3: each radar's look-down is its EM entry's; a radar's range looking down follows it") {
+    const AirFightDef d = S3Def();
+    const auto radar = [&](const std::string& type) -> const SensorDef* {
+        const std::vector<const SensorDef*> v = d.sensors.Of(type, SensorKind::Radar, 1985, false);
+        return v.empty() ? nullptr : v.front();
+    };
+    const SensorDef* apg63 = radar("f15c");
+    const SensorDef* apq120 = radar("f4e");
+    SC_EXPECT(apg63 != nullptr && apq120 != nullptr);
+    if (apg63 == nullptr || apq120 == nullptr) return;
+    std::printf("    look-down: APG-63 class %.0f dB, APQ-120 class %.0f dB\n", apg63->look_down_db, apq120->look_down_db);
+    SC_EXPECT_NEAR(apg63->look_down_db, 40.0, 1e-9);
+    SC_EXPECT_NEAR(apq120->look_down_db, 0.0, 1e-9);
+    // 48 dB of clutter less the APG-63's 40 dB: 10^(-8/40) of 80 km, sensors.json's 50 km.
+    SC_EXPECT_NEAR(80.0 * std::pow(10.0, -(d.combat.fight.look_down_clutter_db - 40.0) / 40.0), 50.0, 1.0);
+}
+
+SC_TEST("air fight S3: who may vector whom: NATO's CRC its CAP but no sweep, its E-3A any fighter; the Pact's GCI all of its own") {
+    AirFightDef d = S3Def();
+    SC_EXPECT(!d.MayVector("nato", "radar_control", "sweep") && !d.MayVector("nato", "radar_control", "escort"));
+    SC_EXPECT(d.MayVector("nato", "radar_control", "cap") && d.MayVector("nato", "airborne_warning", "escort"));
+    SC_EXPECT(d.MayVector("warsaw_pact", "radar_control", "escort") && !d.MayVector("warsaw_pact", "airborne_warning", "sweep"));
+    SC_EXPECT(d.MayVector("ours", "radar_control", "intercept"));  // ours keep B10's assignment
+    d.year = 1981;
+    SC_EXPECT(!d.MayVector("nato", "airborne_warning", "sweep"));  // the E-3A's line from 1982
+    d.mode = 0;
+    SC_EXPECT(d.MayVector("nato", "radar_control", "sweep"));  // B8: every assigned fighter
+    // In the fight: a NATO sweep given to a ground controller hears no vector; under the E-3A he does.
+    for (const bool e3a : {false, true}) {
+        AirFightDef def = S3Def();
+        S3World w;
+        w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});
+        w.Add(Vec3{0.0, 90000.0, 5000.0}, Vec3{0.0, -230.0, 0.0});
+        def.controllers.push_back(Ctl("c", "enemy", e3a ? "airborne_warning" : "radar_control", Vec3{-100000.0, 0.0, e3a ? 9000.0 : 0.0}));
+        def.fighters.push_back(Fighter("eagle", "f15c", "nato", "sweep", "c"));
+        def.fighters.push_back(Fighter("red", "mig21bis", "ours", "strike"));
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"eagle", "red"}, 3, &e));
+        double t = 0.0;
+        w.Run(s, t, 60.0);
+        std::printf("    %s: vectors sent %d\n", e3a ? "E-3A" : "CRC", s.VectorsSent());
+        SC_EXPECT(e3a ? s.VectorsSent() > 0 : s.VectorsSent() == 0);
+    }
+}
+
+SC_TEST("air fight S3: a fighter's radar radiates: off while his GCI brings him in from afar, searching, then locked on the one he engages") {
+    AirFightDef def = S3Def();
+    S3World w;
+    w.Add(Vec3{0.0, 0.0, 5000.0}, Vec3{0.0, 230.0, 0.0});        // the Pact's MiG-23ML
+    w.Add(Vec3{0.0, 110000.0, 5000.0}, Vec3{0.0, -220.0, 0.0});  // ours, a striker that flies on
+    def.controllers.push_back(Ctl("gci", "enemy", "radar_control", Vec3{0.0, -60000.0, 0.0}));
+    def.fighters.push_back(Fighter("flogger", "mig23ml_wp", "warsaw_pact", "sweep", "gci"));
+    def.fighters.push_back(Fighter("red", "su24", "ours", "strike"));
+    AirFightSession s;
+    std::string e;
+    SC_EXPECT(s.Init(def, {"flogger", "red"}, 4, &e));
+    double t = 0.0;
+    double on_at_m = -1.0, lock_at_m = -1.0;
+    bool striker_radiated = false;
+    w.Run(s, t, 240.0, [&]() {
+        const double range = (w.air[1].position - w.air[0].position).Length();
+        for (const S3World::RadarCall& r : w.radar_calls) {
+            if (r.target == 1 && r.state > 0) striker_radiated = true;
+            if (r.target != 0) continue;
+            if (r.state >= 1 && on_at_m < 0.0) on_at_m = range;
+            if (r.state == 2 && r.locked == 1 && lock_at_m < 0.0) lock_at_m = range;
+        }
+        w.radar_calls.clear();
+    });
+    std::printf("    the MiG-23's radar on at %.0f m, %d vectors heard, locked at %.0f m\n", on_at_m, s.VectorsHeard(), lock_at_m);
+    // Silent from 110 km until the one he was told of is within the Sapfir-23ML's cued 82.5 km (sensors.json).
+    SC_EXPECT(on_at_m > 0.0 && on_at_m < 86000.0);
+    SC_EXPECT(s.VectorsHeard() > 0);
+    SC_EXPECT(lock_at_m > 0.0 && lock_at_m <= on_at_m);
+    SC_EXPECT(!striker_radiated);
+}
+
+SC_TEST("air fight S3: the attacks told apart: NATO sets up on the beam, the Pact slashes and extends, a turning doctrine goes straight in") {
+    struct Want {
+        const char* type;
+        const char* faction;
+        const char* ctl;
+        bool setup;
+    };
+    for (const Want& k : {Want{"f15c", "nato", "airborne_warning", true}, Want{"mig23ml_wp", "warsaw_pact", "radar_control", true},
+                          Want{"draken_gun", "neutral", "", false}}) {
+        AirFightDef def = S3Def();
+        S3World w;
+        w.Add(Vec3{0.0, 0.0, 5000.0}, Vec3{0.0, 240.0, 0.0});
+        w.Add(Vec3{2000.0, 70000.0, 5000.0}, Vec3{0.0, -220.0, 0.0});
+        const std::string kind = k.ctl;
+        if (!kind.empty()) def.controllers.push_back(Ctl("c", "enemy", kind, Vec3{-150000.0, 0.0, kind == "airborne_warning" ? 9000.0 : 0.0}));
+        def.fighters.push_back(Fighter("a", k.type, k.faction, "sweep", kind.empty() ? "" : "c", 0.9));
+        def.fighters.push_back(Fighter("red", "su24", "ours", "strike"));
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"a", "red"}, 6, &e));
+        double t = 0.0;
+        w.Run(s, t, 300.0);
+        const bool setup = s.EverWas("a", AirFightSession::Mode::Setup);
+        const bool extend = s.EverWas("a", AirFightSession::Mode::Extend);
+        std::printf("    %s: set up %d, engaged %d, extended %d, shots %d\n", k.faction, setup ? 1 : 0, s.EverWas("a", AirFightSession::Mode::Engage) ? 1 : 0,
+                    extend ? 1 : 0, s.ShotsBy("a"));
+        SC_EXPECT(setup == k.setup);
+        SC_EXPECT(extend == (std::string(k.faction) == "warsaw_pact"));
+    }
+}
+
+SC_TEST("air fight S3: warned of a lock he cannot answer, a fighter drags at full speed; the drag ends and he comes back") {
+    AirFightDef def = S3Def();
+    S3World w;
+    w.Add(Vec3{0.0, 0.0, 5000.0}, Vec3{0.0, 230.0, 0.0});
+    w.Add(Vec3{0.0, 60000.0, 5000.0}, Vec3{0.0, -10.0, 0.0});  // the radar that locks him, far beyond his weapons
+    def.fighters.push_back(Fighter("red", "mig21bis", "ours", "intercept", "", 0.8));
+    def.fighters.push_back(Fighter("x", "f4e", "nato", "strike"));
+    AirFightSession s;
+    std::string e;
+    SC_EXPECT(s.Init(def, {"red", "x"}, 2, &e));
+    double t = 0.0;
+    w.locked_by[0] = 1;  // the F-4's radar holds him
+    w.Run(s, t, 5.0);
+    SC_EXPECT(s.ModeOf("red") == AirFightSession::Mode::Drag && s.Tally().drags == 1);
+    w.locked_by[0] = -1;
+    w.Run(s, t, 40.0);
+    std::printf("    drags %d, speed %.0f m/s, then %s\n", s.Tally().drags, w.air[0].speed_mps, AirFightSession::ModeName(s.ModeOf("red")));
+    SC_EXPECT(s.ModeOf("red") != AirFightSession::Mode::Drag && s.Tally().drags == 1);
+    SC_EXPECT(w.air[0].speed_mps > 300.0);  // he ran at full speed
+}
+
+SC_TEST("air fight S3: a striker who knows of the missile dispenses once before it arrives, and the decoy goes into the shot") {
+    int dispensed = 0, asked = 0, asked_cm = 0, fired = 0;
+    for (std::uint64_t seed = 1; seed <= 6; ++seed) {
+        AirFightDef def = S3Def();
+        S3World w;
+        w.Add(Vec3{0.0, 0.0, 5000.0}, Vec3{0.0, 240.0, 0.0});       // ours, under its GCI
+        w.Add(Vec3{0.0, 50000.0, 4000.0}, Vec3{0.0, -230.0, 0.0});  // a Tornado striking, with flares and chaff
+        def.controllers.push_back(Ctl("gci", "ours", "radar_control", Vec3{0.0, -20000.0, 0.0}));
+        def.fighters.push_back(Fighter("red", "mig23ml", "ours", "intercept", "gci", 0.8));
+        def.fighters.push_back(Fighter("t", "tornado_ids", "nato", "strike"));
+        w.dispense = [&](int target, bool, double) {
+            ++asked;
+            dispensed += target == 1 ? 1 : 0;
+            return true;
+        };
+        w.countermeasure = [&](int, bool, double) {
+            ++asked_cm;
+            return 1.0;
+        };
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"red", "t"}, seed, &e));
+        double t = 0.0;
+        w.Run(s, t, 240.0);
+        fired += static_cast<int>(w.launches.size());
+        SC_EXPECT(s.Tally().dispenses <= static_cast<int>(w.launches.size()));
+    }
+    std::printf("    %d rounds fired, the striker asked to dispense %d times, the decoy's strength read %d times\n", fired, asked, asked_cm);
+    SC_EXPECT(fired > 0 && dispensed > 0 && dispensed <= fired && asked == dispensed);
+    SC_EXPECT(asked_cm > 0);
+}
+
+SC_TEST("air fight S3: an escort with nothing to fight keeps his station behind, beside and above his strikers' leader") {
+    AirFightDef def = S3Def();
+    S3World w;
+    w.Add(Vec3{0.0, 0.0, 1000.0}, Vec3{0.0, 220.0, 0.0});           // the strikers' leader
+    w.Add(Vec3{-6000.0, -8000.0, 1000.0}, Vec3{0.0, 220.0, 0.0});   // his escort, out of place
+    w.air[1].max_speed_mps = 400.0;
+    def.fighters.push_back(Fighter("lead", "tornado_ids", "nato", "strike"));
+    AirFightFighterDef esc = Fighter("cover", "f15c", "nato", "escort");
+    esc.escorts = "lead";
+    def.fighters.push_back(esc);
+    AirFightSession s;
+    std::string e;
+    SC_EXPECT(s.Init(def, {"lead", "cover"}, 1, &e));
+    double t = 0.0;
+    w.Run(s, t, 240.0);
+    const FightParams& fp = def.combat.fight;
+    const Vec3 rel = w.air[1].position - w.air[0].position;  // north is forward, east his right
+    std::printf("    escort of %s, mode %s, %.0f m behind, %.0f m to the side\n", s.EscortOf("cover").c_str(), AirFightSession::ModeName(s.ModeOf("cover")),
+                -rel.y, std::fabs(rel.x));
+    SC_EXPECT(s.EscortOf("cover") == "lead" && s.ModeOf("cover") == AirFightSession::Mode::Station);
+    SC_EXPECT(std::fabs(-rel.y - fp.escort_back_m) < 1500.0 && std::fabs(std::fabs(rel.x) - fp.escort_side_m) < 1500.0);
+}
+
+SC_TEST("air fight S3: far from our ground units a pair fights on its leader's picture, thinking at A1; the fight goes on") {
+    int thinks[2] = {0, 0}, senses[2] = {0, 0}, far_thinks[2] = {0, 0}, shots[2] = {0, 0};
+    for (int far_fight = 0; far_fight <= 1; ++far_fight) {
+        AirFightDef def = S3Def();
+        def.far_fight = far_fight;
+        S3World w;
+        w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});
+        w.Add(Vec3{1500.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});
+        w.Add(Vec3{0.0, 80000.0, 5000.0}, Vec3{0.0, -240.0, 0.0});
+        w.Add(Vec3{1500.0, 80000.0, 5000.0}, Vec3{0.0, -240.0, 0.0});
+        w.far_from_ours = [](int) { return true; };
+        w.leader = [](int t) { return t % 2 == 1 ? t - 1 : -1; };
+        def.controllers.push_back(Ctl("e3a", "enemy", "airborne_warning", Vec3{-150000.0, 0.0, 9000.0}));
+        def.controllers.push_back(Ctl("gci", "ours", "radar_control", Vec3{0.0, 120000.0, 0.0}));
+        def.fighters.push_back(Fighter("e1", "f15c", "nato", "sweep", "e3a"));
+        def.fighters.push_back(Fighter("e2", "f15c", "nato", "sweep", "e3a"));
+        def.fighters.push_back(Fighter("r1", "mig23ml", "ours", "intercept", "gci"));
+        def.fighters.push_back(Fighter("r2", "mig23ml", "ours", "intercept", "gci"));
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"e1", "e2", "r1", "r2"}, 9, &e));
+        double t = 0.0;
+        w.Run(s, t, 300.0);
+        thinks[far_fight] = s.Tally().thinks;
+        far_thinks[far_fight] = s.Tally().thinks_far;
+        senses[far_fight] = s.Tally().senses;
+        shots[far_fight] = static_cast<int>(s.Shots().size());
+    }
+    std::printf("    near: %d thoughts, %d looks, %d shots; far: %d thoughts (%d at A1), %d looks, %d shots\n", thinks[0], senses[0], shots[0], thinks[1],
+                far_thinks[1], senses[1], shots[1]);
+    SC_EXPECT(far_thinks[0] == 0 && far_thinks[1] > 0);
+    SC_EXPECT(thinks[1] < thinks[0] && senses[1] < senses[0]);
+    SC_EXPECT(shots[1] > 0);
+}
+
+SC_TEST("air fight S3: a missile fired at the edge of its reach falls short of a target that turns and runs") {
+    int energy = 0, fired = 0;
+    // The Eagle goes straight in (a turning doctrine: no beam set-up, which would bring him to 15 km before he fires), so
+    // he fires near the AIM-7's head-on reach; at the launch his target turns tail and outruns it.
+    for (std::uint64_t seed = 1; seed <= 4; ++seed) {
+        AirFightDef def = S3Def();
+        for (AirDoctrineDef& d : def.combat.doctrines) {
+            if (d.faction == "nato") d.tactic = "turn";
+        }
+        S3World w;
+        w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});
+        w.Add(Vec3{0.0, 70000.0, 6000.0}, Vec3{0.0, -250.0, 0.0});
+        def.controllers.push_back(Ctl("e3a", "enemy", "airborne_warning", Vec3{-150000.0, 0.0, 9000.0}));
+        def.fighters.push_back(Fighter("eagle", "f15c", "nato", "sweep", "e3a"));
+        def.fighters.push_back(Fighter("red", "su24", "ours", "strike"));
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"eagle", "red"}, seed, &e));
+        double t = 0.0;
+        bool ran = false;
+        w.Run(s, t, 200.0, [&]() {
+            if (ran || w.launches.empty()) return;
+            ran = true;  // at the first launch the target turns tail and runs at 330 m/s
+            std::printf("    seed %d: fired at %.0f m, t %.0f s\n", static_cast<int>(seed), (w.air[1].position - w.air[0].position).Length(), t);
+            w.air[1].velocity = Vec3{0.0, 330.0, 0.0};
+            w.air[1].speed_mps = 330.0;
+            w.air[1].waypoints = {w.air[1].position + Vec3{0.0, 500000.0, 0.0}};
+        });
+        fired += static_cast<int>(w.launches.size());
+        for (const AirFightSession::ShotRecord& r : s.Shots()) {
+            energy += r.reason == MissReason::Energy ? 1 : 0;
+            std::printf("      %s at %.0f s: %s\n", r.weapon.c_str(), r.t_s, MissReasonName(r.reason));
+        }
+    }
+    std::printf("    %d rounds, %d out of energy\n", fired, energy);
+    SC_EXPECT(fired > 0 && energy > 0);
+}
+
+SC_TEST("air fight S3 (A0): the drag, the slash's extension and the strikers' decoys come only with air_fight.mode 1") {
+    for (const char* faction : {"nato", "warsaw_pact"}) {
+        const AirWarData d1 = LoadWar(faction);
+        AirWarData d0 = d1;
+        d0.tuning.values["air_fight.mode"] = 0.0;
+        SC_EXPECT_NEAR(d1.tuning.Get("air_fight.mode"), 1.0, 1e-12);
+        const bool nato = std::string(faction) == "nato";
+        Package p;
+        p.flights = {MakeFlight(FlightRole::Strike, nato ? "tornado_ids" : "su24", 4, Profile::Medium),
+                     MakeFlight(FlightRole::Sweep, nato ? "f15c" : "mig23ml_wp", 2, Profile::Medium)};
+        int drag[2] = {0, 0}, ext[2] = {0, 0}, disp[2] = {0, 0};
+        for (int mode = 0; mode <= 1; ++mode) {
+            const AbstractAirFight fight(mode == 0 ? d0 : d1);
+            for (std::uint64_t k = 1; k <= 3000; ++k) {
+                const AbstractFightResult r = fight.Resolve(p, {4, 2}, Day(1.0, nato ? 1.0 : 0.0), k * 7919u);
+                drag[mode] += r.dragged;
+                ext[mode] += r.extended;
+                disp[mode] += r.dispensed;
+            }
+        }
+        std::printf("    %s: mode 0 drags %d extends %d decoys %d; mode 1 drags %d extends %d decoys %d\n", faction, drag[0], ext[0], disp[0], drag[1],
+                    ext[1], disp[1]);
+        SC_EXPECT(drag[0] == 0 && ext[0] == 0 && disp[0] == 0);
+        SC_EXPECT(ext[1] > 0);  // ours slash
+        if (nato) SC_EXPECT(drag[1] > 0 && disp[1] > 0);  // F-15s drag our radar rounds; the Tornados carry flares and chaff
+    }
+}
+
+SC_TEST("air fight S3: a save keeps the air fight's mode; a save made before S3 replays B8's abstract fight") {
+    AirCampaign c;
+    std::string e;
+    SC_EXPECT(c.Init(LoadWar("nato"), 7, &e));
+    const std::string saved = SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_nato.json");
+    SC_EXPECT(saved.find("\"air_fight_mode\"") != std::string::npos);
+    AirCampaign back;
+    SC_EXPECT(LoadCampaignJson(saved, kData, back, &e));
+    SC_EXPECT_NEAR(back.Data().tuning.Get("air_fight.mode"), 1.0, 1e-12);
+    AirCampaign old;
+    SC_EXPECT(LoadCampaignJson(ReadFile(kData + "/../simcore/tests/fixtures/air_war_save_v1.json"), kData, old, &e));
+    SC_EXPECT_NEAR(old.Data().tuning.Get("air_fight.mode"), 0.0, 1e-12);
+}
+
+SC_TEST("air fight S3: the scenario's air_fight takes its mode and the far fight, loads the radars and vector lines; bad ones are refused") {
+    // The shot check's scenario keeps B8's fight ("mode": 0, what -SimAirShots photographs); without the key, S3's.
+    std::string text = ReadFile(kData + "/scenarios/air_battle_shots.json");
+    {
+        ScenarioDef as_is;
+        ConsoleData c0;
+        std::string e0;
+        SC_EXPECT(LoadScenario(text, kData, as_is, c0, &e0) && as_is.air_fight.mode == 0);
+        const std::size_t mk = text.find("\"mode\": 0,");
+        SC_EXPECT(mk != std::string::npos);
+        if (mk != std::string::npos) text.erase(mk, 10);
+    }
+    const std::size_t at = text.find("\"air_fight\"");
+    SC_EXPECT(at != std::string::npos);
+    if (at == std::string::npos) return;
+    const std::size_t brace = text.find('{', at);
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(text, kData, def, console, &e));
+    SC_EXPECT(def.air_fight.mode == 1 && def.air_fight.FarFight());
+    SC_EXPECT(def.air_fight.radar_library.radars.size() >= 5);
+    std::string zero = text;
+    zero.insert(brace + 1, " \"mode\": 0, \"far_fight\": 1,");
+    ScenarioDef d0;
+    SC_EXPECT(LoadScenario(zero, kData, d0, console, &e));
+    SC_EXPECT(d0.air_fight.mode == 0 && d0.air_fight.FarFight());
+    std::string bad = text;
+    bad.insert(brace + 1, " \"mode\": 2,");
+    ScenarioDef d2;
+    SC_EXPECT(!LoadScenario(bad, kData, d2, console, &e));
+    SC_EXPECT(e.find("mode") != std::string::npos);
+}
+
+SC_TEST("air fight S6 (A0): Teaball's relay takes the surprise from our fighters' pass where the faction has one; off in the data, and not at radio.mode 0") {
+    AirWarData d = LoadWar("nato");
+    SC_EXPECT(!d.faction.radio.teaball.on);  // no Teaball-type service in Europe by 1985 was found: the owner's choice
+    Package p;
+    p.flights = {MakeFlight(FlightRole::Strike, "f4e", 4, Profile::Medium)};
+    const auto warned = [&](const AirWarData& data) {
+        const AbstractAirFight fight(data);
+        int n = 0;
+        for (std::uint64_t k = 1; k <= 1500; ++k) {
+            const AbstractFightResult r = fight.Resolve(p, {4}, Day(1.0), k * 7919u);
+            for (const std::string& note : r.notes) n += note.find("listeners' relay") != std::string::npos ? 1 : 0;
+        }
+        return n;
+    };
+    const int off = warned(d);
+    d.faction.radio.teaball.on = true;
+    const int on = warned(d);
+    d.faction.radio.teaball.fail = 1.0;
+    const int failing = warned(d);
+    d.faction.radio.teaball.fail = 0.15;
+    d.tuning.values["radio.mode"] = 0.0;
+    const int before = warned(d);
+    std::printf("    warned of our pass by the relay: off %d, on %d, always failing %d, before S6 %d (of 1500 fights)\n", off, on, failing, before);
+    SC_EXPECT(off == 0 && on > 0 && failing == 0 && before == 0);
+}
+
+SC_TEST("air fight S6 live: Teaball's relay overhears our GCI's vectors within the horizon and warns its fighters a minute later; beyond it, nothing") {
+    for (const double relay_east : {-150000.0, -600000.0}) {
+        AirFightDef def = Def();
+        HandWorld w;
+        w.Add(Vec3{0.0, 0.0, 6000.0}, Vec3{0.0, 250.0, 0.0});          // 0: the F-15
+        w.Add(Vec3{0.0, 120000.0, 5000.0}, Vec3{0.0, -230.0, 0.0});    // 1: our MiG
+        def.fighters.push_back(Fighter("eagle", "f15c", "nato", "sweep", "e3a"));
+        def.fighters.push_back(Fighter("red", "mig21mf", "ours", "intercept", "gci"));
+        AirFightControllerDef e3a;
+        e3a.id = "e3a";
+        e3a.side = "enemy";
+        e3a.kind = "airborne_warning";
+        e3a.pos = Vec3{relay_east, 0.0, 9000.0};
+        e3a.range_m = 1000000.0;
+        def.controllers.push_back(e3a);
+        AirFightControllerDef gci;
+        gci.id = "gci";
+        gci.side = "ours";
+        gci.kind = "radar_control";
+        gci.pos = Vec3{0.0, 160000.0, 0.0};
+        gci.range_m = 300000.0;
+        def.controllers.push_back(gci);
+        def.teaball.relay = "e3a";
+        def.teaball.fail = 0.0;  // the outage's draw is the abstract test's; here every overheard vector is passed on
+        AirFightSession s;
+        std::string e;
+        SC_EXPECT(s.Init(def, {"eagle", "red"}, 5, &e));
+        double first_warning = -1.0, first_vector = -1.0;
+        for (double t = 0.25; t <= 150.0; t += 0.25) {
+            w.Move(0.25);
+            s.Step(t, w.World());
+            for (const std::string& ev : w.events) {
+                if (first_vector < 0.0 && ev.rfind("gci: ", 0) == 0) first_vector = t;
+                if (first_warning < 0.0 && ev.find("(relayed)") != std::string::npos) first_warning = t;
+            }
+            w.events.clear();
+            if (w.gone[0] || w.gone[1]) break;
+        }
+        std::printf("    relay %.0f km off: our vectors %d, overheard %d, warnings %d (first vector %.0f s, first warning %.0f s)\n", -relay_east / 1000.0,
+                    s.VectorsSent(), s.TeaballOverheard(), s.TeaballWarnings(), first_vector, first_warning);
+        SC_EXPECT(s.VectorsSent() > 0);
+        if (relay_east > -200000.0) {
+            SC_EXPECT(s.TeaballOverheard() > 0 && s.TeaballWarnings() > 0);
+            SC_EXPECT(first_warning >= first_vector + def.teaball.delay_s - 1e-6);
+        } else {
+            SC_EXPECT(s.TeaballOverheard() == 0 && s.TeaballWarnings() == 0);
+        }
+    }
+}
+
+SC_TEST("air fight S6: the scenario's air_fight takes Teaball's relay, an enemy controller; a bad one is refused") {
+    const std::string base = ReadFile(kData + "/scenarios/air_battle_shots.json");
+    const auto with = [&](const std::string& relay) {
+        std::string text = base;
+        const std::size_t at = text.find("\"air_fight\"");
+        const std::size_t ctl = text.find("\"controllers\"", at);
+        const std::size_t open = text.find('[', ctl);
+        text.insert(open + 1, " { \"id\": \"e3a\", \"side\": \"enemy\", \"kind\": \"airborne_warning\", \"east_m\": -150000, \"north_m\": 0, \"alt_m\": 9000 },");
+        const std::size_t brace = text.find('{', at);
+        text.insert(brace + 1, " \"teaball\": { \"relay\": \"" + relay + "\", \"delay_s\": 45, \"fail\": 0.1, \"source\": \"test\", \"confidence\": \"estimate\" },");
+        return text;
+    };
+    ScenarioDef d;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenario(with("e3a"), kData, d, console, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(d.air_fight.teaball.relay == "e3a" && d.air_fight.teaball.delay_s == 45.0 && d.air_fight.teaball.fail == 0.1);
+    ScenarioDef d2;
+    SC_EXPECT(!LoadScenario(with("gci"), kData, d2, console, &e));  // our own GCI cannot be the enemy's relay
+    SC_EXPECT(e.find("relay") != std::string::npos);
 }

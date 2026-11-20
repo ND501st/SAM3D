@@ -221,6 +221,22 @@
       "confidence": "estimate"
     }
   },
+  "blind_by_type": {
+    "f16a": { "value": 10, "source": "game value (estimate: a bubble canopy, the seat high in it; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "f15c": { "value": 10, "source": "game value (estimate: a bubble canopy, the seat high in it; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "a10a": { "value": 20, "source": "game value (estimate: a bubble canopy over an armoured headrest; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "draken_gun": { "value": 35, "source": "game value (estimate: a framed canopy faired into the spine; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "saab105": { "value": 30, "source": "game value (estimate: a wide canopy faired into the spine; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "galeb": { "value": 30, "source": "game value (estimate: a framed canopy faired into the spine; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "utva75": { "value": 30, "source": "game value (estimate: a cabin with a glazed rear; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "mig23ml_wp": { "value": 40, "source": "game value (estimate: a canopy faired flush into the spine, a mirror and no periscope counted; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "mig23mld": { "value": 40, "source": "game value (estimate: a canopy faired flush into the spine, a mirror and no periscope counted; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "mig27": { "value": 45, "source": "game value (estimate: a canopy faired flush into the spine and an armoured seat; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "su17m3": { "value": 45, "source": "game value (estimate: a canopy faired flush into the spine; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "su25": { "value": 40, "source": "game value (estimate: a canopy faired into the spine over an armoured headrest; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "mig25rb": { "value": 50, "source": "game value (estimate: a narrow canopy faired flush into the spine; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" },
+    "mig25bm": { "value": 50, "source": "game value (estimate: a narrow canopy faired flush into the spine; docs/air_battle/03_PERCEPTION.md As built S7)", "confidence": "estimate" }
+  },
   "ground": {
     "pmax_large_high": {
       "value": 1.0,

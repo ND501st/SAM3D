@@ -9,8 +9,13 @@
 //     and max_speed_mps) the airspeed changes (docs/air_battle/02_FLIGHTS_AND_PILOTS.md §3.1):
 //         dv/dt = A (throttle - (v / v_max)^2) - K (n^2 - 1) - g sin(gamma)
 //     with K set so the type's sustained turn holds its speed at the corner speed; the pilot's throttle holds the speed
-//     he is told (speed_mps) while it can, so a climb or a turn harder than the sustained one costs speed. A helicopter
-//     leans its nose down to fly forward and hangs level in the hover; it flies its told speed (no energy model yet).
+//     he is told (speed_mps) while it can, so a climb or a turn harder than the sustained one costs speed. A and v_max
+//     are the type's at sea level; higher up (roadmap S4) the thrust falls with the air's density, A(h) = A sigma^m, and
+//     with the drag (rho v^2) the top true airspeed rises, v_max(h) = v_max sigma^-((1 - m) / 2) (sigma the ISA density
+//     ratio, m = flight::kThrustLapse). A helicopter leans its nose down to fly forward and hangs level in the hover; its
+//     speed changes at its acceleration and its flare's deceleration (roadmap S4), so a stop is planned ahead.
+//     A pilot holding his height over the ground (TargetPilot's terrain following, a dive, a pass) asks the step for a
+//     path angle (path_asked, roadmap S4): it pulls onto it within the g limit and the climb, and the climb costs speed.
 //   * The old way (none of those given: the hand-made scenarios): constant airspeed, the velocity turned toward the
 //     waypoint at the turn rate in 3D. Its attitude is read off the path it flew (the bank for the turn rate it flew,
 //     rolled into at a shown rate), for the drawing only: nothing it does depends on it.
@@ -23,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/atmosphere.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -81,6 +87,10 @@ struct Aircraft {
     bool attitude_set = false;    // the heading and path angle were taken from its velocity on its first step
     // Its height is set by a pilot after each step (TargetPilot, target_behaviour.hpp): the step flies the horizontal.
     bool height_held = false;
+    // A bank-to-turn aircraft whose pilot holds his height asks for a path angle instead (roadmap S4): the step flies it.
+    bool path_asked = false;
+    double asked_path_angle_rad = 0.0;
+    double frame_alt_m = 0.0;  // the altitude over sea level of its frame's origin (z = 0): its height for the air's density
     AircraftDemand demand;  // the command layer's (flights.hpp); inactive: its waypoints
 };
 
@@ -99,12 +109,37 @@ constexpr double kHoverMps = 2.0;      // slower than this a helicopter turns on
 constexpr double kShownRollRateRadS = DegToRad(90.0);  // the old way's bank is rolled into at this, for the drawing
 constexpr double kMaxShownBankRad = DegToRad(80.0);
 constexpr double kHoldSpeedFraction = 0.85;  // below this share of the speed told he turns and climbs no harder than sustained
+// The thrust's fall with the air's density, sigma^m (roadmap S4): a game value between the turbojet's thrust about in
+// proportion to the density (m = 1, anderson_flight) and a turbofan's slower fall; it also sets how the top speed rises.
+constexpr double kThrustLapse = 0.7;
+constexpr double kHeliAccelMps2 = 2.0;  // a helicopter's acceleration when its type gives none (game value)
+constexpr double kHeliDecelMps2 = 3.0;  // its flare's deceleration (game value): a stop from 80 m/s takes about 1 km
 }  // namespace flight
 
 inline bool IsRotorcraft(const Aircraft& a) { return a.type.find("Rotorcraft") != std::string::npos; }
 inline bool HasEnergyModel(const Aircraft& a) {
     return a.accel_mps2 > 0.0 && a.max_speed_mps > 0.0 && !IsRotorcraft(a);
 }
+// The ISA density at `alt_m` over that at sea level.
+inline double DensityRatioAt(double alt_m) {
+    static const double kSeaLevelRho = StandardAtmosphere(0.0).density_kg_m3;
+    if (alt_m == 0.0) return 1.0;
+    return StandardAtmosphere(alt_m).density_kg_m3 / kSeaLevelRho;
+}
+inline double DensityRatioOf(const Aircraft& a) { return DensityRatioAt(a.position.z + a.frame_alt_m); }
+// The energy model's top speed and acceleration at its height (roadmap S4): its type's are at sea level.
+inline double TopSpeedMps(const Aircraft& a) {
+    const double s = DensityRatioOf(a);
+    return s == 1.0 ? a.max_speed_mps : a.max_speed_mps * std::pow(s, -0.5 * (1.0 - flight::kThrustLapse));
+}
+inline double AccelMps2(const Aircraft& a) {
+    const double s = DensityRatioOf(a);
+    return s == 1.0 ? a.accel_mps2 : a.accel_mps2 * std::pow(s, flight::kThrustLapse);
+}
+// A helicopter's speed toward the one it is told: up at its acceleration, down at its flare's.
+inline double HeliAccelMps2(const Aircraft& a) { return a.accel_mps2 > 0.0 ? a.accel_mps2 : flight::kHeliAccelMps2; }
+// How far a helicopter at `speed_mps` flies before it can hover: v^2 / (2 decel).
+inline double HeliStopDistanceM(double speed_mps) { return speed_mps * speed_mps / (2.0 * flight::kHeliDecelMps2); }
 inline bool FliesByBank(const Aircraft& a) { return a.roll_rate_rad_s > 0.0 || a.max_load_g > 1.0 || HasEnergyModel(a); }
 inline double AirspeedOf(const Aircraft& a) { return a.airspeed_mps >= 0.0 ? a.airspeed_mps : a.speed_mps; }
 
@@ -141,17 +176,17 @@ inline double TurnDragK(const Aircraft& a) {
     const double r = v_ref / a.max_speed_mps;
     return a.accel_mps2 * (1.0 - r * r) / (x * x);
 }
-// The speed he means to keep in a turn or a climb: the speed he is told, or 90 % of his top speed.
+// The speed he means to keep in a turn or a climb: the speed he is told, or 90 % of his top speed (at his height).
 inline double KeepSpeedMps(const Aircraft& a) {
-    return HasEnergyModel(a) ? std::min(a.speed_mps, 0.9 * a.max_speed_mps) : 0.0;
+    return HasEnergyModel(a) ? std::min(a.speed_mps, 0.9 * TopSpeedMps(a)) : 0.0;
 }
 // The speed a pilot won't bleed below: a share of the speed he keeps.
 inline double HoldSpeedMps(const Aircraft& a) { return flight::kHoldSpeedFraction * KeepSpeedMps(a); }
-// The excess thrust at airspeed v on full throttle, A (1 - (v / v_max)^2), as an acceleration.
+// The excess thrust at airspeed v on full throttle, A (1 - (v / v_max)^2), as an acceleration, at his height.
 inline double ExcessThrustMps2(const Aircraft& a, double airspeed_mps) {
     if (!HasEnergyModel(a)) return 0.0;
-    const double r = airspeed_mps / a.max_speed_mps;
-    return a.accel_mps2 * (1.0 - r * r);
+    const double r = airspeed_mps / TopSpeedMps(a);
+    return AccelMps2(a) * (1.0 - r * r);
 }
 // The highest turn rate at airspeed v: the type's instantaneous rate, under its g limit when it has one. Slowed in a
 // turn, the pilot eases it: from the full rate at the speed he keeps down to the sustained turn at the speed he holds,
@@ -246,11 +281,12 @@ inline void StepByBank(Aircraft& a, double dt, const Vec3& wind_mps) {
         Vec3 air = windy ? a.velocity - wind_mps : a.velocity;
         if (air.HorizontalLength() < 1e-6 && a.next_waypoint < a.waypoints.size()) air = a.waypoints[a.next_waypoint] - a.position;
         a.heading_rad = air.HorizontalLength() > 1e-9 ? AzimuthOf(air) : 0.0;
-        a.path_angle_rad = a.height_held || air.LengthSquared() <= 0.0 ? 0.0 : ElevationOf(air);
+        a.path_angle_rad = a.height_held || a.path_asked || air.LengthSquared() <= 0.0 ? 0.0 : ElevationOf(air);
         a.bank_rad = 0.0;
         a.attitude_set = true;
     }
     double v = a.airspeed_mps;
+    const bool held = a.height_held && !a.path_asked;  // the pilot sets the height after the step (the old way of holding it)
 
     // Where the pilot steers: the demand's point, or the next waypoint (one he can't turn onto passed for the one
     // after), else straight on.
@@ -288,12 +324,13 @@ inline void StepByBank(Aircraft& a, double dt, const Vec3& wind_mps) {
             }
             if (want.HorizontalLength() > 1e-9) want_heading = AzimuthOf(want);
         }
-        if (!a.height_held) want_gamma = std::atan2(to_wp.z, h);
+        if (!held && !a.path_asked) want_gamma = std::atan2(to_wp.z, h);
     }
-    if (!a.height_held && a.max_climb_mps > 0.0 && v > a.max_climb_mps) {
+    if (a.path_asked) want_gamma = a.asked_path_angle_rad;  // the pilot's height layer asks it (roadmap S4)
+    if (!held && a.max_climb_mps > 0.0 && v > a.max_climb_mps) {
         want_gamma = std::min(want_gamma, std::asin(a.max_climb_mps / v));
     }
-    if (!a.height_held && v < HoldSpeedMps(a)) {  // slow: he climbs only on the thrust the turn leaves
+    if (!held && v < HoldSpeedMps(a)) {  // slow: he climbs only on the thrust the turn leaves
         const double spare = ExcessThrustMps2(a, v) - TurnDragK(a) * std::max(0.0, a.load_g * a.load_g - 1.0);
         want_gamma = std::min(want_gamma, std::asin(Clamp(spare / g, 0.0, 1.0)));
     }
@@ -322,7 +359,7 @@ inline void StepByBank(Aircraft& a, double dt, const Vec3& wind_mps) {
 
     // The path angle: pulled toward the one wanted within the same rate (a pilot holding the height sets it himself).
     double gamma_rate = 0.0;
-    if (!a.height_held) {
+    if (!held) {
         const double gerr = want_gamma - a.path_angle_rad;
         gamma_rate = Clamp(gerr / kPathTauS, -w_lim, w_lim);
         if (std::fabs(gamma_rate * dt) > std::fabs(gerr)) gamma_rate = dt > 0.0 ? gerr / dt : 0.0;
@@ -335,20 +372,26 @@ inline void StepByBank(Aircraft& a, double dt, const Vec3& wind_mps) {
     // The speed: the energy model, or the speed told straight.
     double dvdt = 0.0;
     if (HasEnergyModel(a)) {
-        const double accel = a.accel_mps2, r = v / a.max_speed_mps;
+        const double accel = AccelMps2(a), r = v / TopSpeedMps(a);
         const double turn = TurnDragK(a) * std::max(0.0, a.load_g * a.load_g - 1.0);
         const double climb = g * sg;
         const double th = r * r + (turn + climb) / accel + (a.speed_mps - v) / (kSpeedTauS * accel);
         a.throttle = Clamp(th, kMinThrottle, 1.0);
         dvdt = accel * (a.throttle - r * r) - turn - climb;
         v = std::max(0.0, v + dvdt * dt);
+    } else if (IsRotorcraft(a)) {  // a helicopter: up at its acceleration, down at its flare's (roadmap S4)
+        const double want = std::max(0.0, a.speed_mps);
+        const double nv = Approach(v, want, (want > v ? HeliAccelMps2(a) : flight::kHeliDecelMps2) * dt);
+        dvdt = dt > 0.0 ? (nv - v) / dt : 0.0;
+        v = nv;
+        a.throttle = 0.0;
     } else {
         v = a.speed_mps;
         a.throttle = 0.0;
     }
     a.airspeed_mps = v;
 
-    const Vec3 air = Vec3{std::sin(a.heading_rad) * cg, std::cos(a.heading_rad) * cg, a.height_held ? 0.0 : sg} * v;
+    const Vec3 air = Vec3{std::sin(a.heading_rad) * cg, std::cos(a.heading_rad) * cg, held ? 0.0 : sg} * v;
     a.velocity = air + (windy ? wind_mps : Vec3{});
     a.position += a.velocity * dt;
     SetPitch(a, v, dvdt);

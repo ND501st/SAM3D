@@ -211,7 +211,7 @@ inline std::string FormatClock(double h, double start_hour) {
         mm -= 60;
         hh += 1;
     }
-    char buf[32];
+    char buf[96];
     std::snprintf(buf, sizeof(buf), "D%d %02d:%02d", day, hh % 24, mm);
     return buf;
 }
@@ -538,7 +538,7 @@ public:
             const Delivery& d = s.deliveries[static_cast<std::size_t>(di)];
             if (d.h <= now_h_ + 1e-9 && HolderHas(position, d, now_h_)) out.push_back(d);
         }
-        std::sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
+        std::stable_sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
         return out;
     }
     std::vector<Delivery> KnownBy(const std::string& position) const { return KnownBy(data_.PositionIndex(position)); }
@@ -562,7 +562,7 @@ public:
             const Delivery* d = KnewIn(s, Player(), now_h_);
             if (d != nullptr) out.push_back(*d);
         }
-        std::sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
+        std::stable_sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
         return out;
     }
 
@@ -598,7 +598,7 @@ public:
             const Delivery& d = copy.deliveries[static_cast<std::size_t>(di)];
             if (d.h >= from_h - 1e-9 && d.h <= to_h + 1e-9) out.push_back(d);
         }
-        std::sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
+        std::stable_sort(out.begin(), out.end(), [](const Delivery& a, const Delivery& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
         return out;
     }
     // The times a routine starts from `from_h` to `to_h` (campaign hours).
@@ -682,7 +682,7 @@ public:
                 if (s >= h) out.push_back({s, &r});
             }
         }
-        std::sort(out.begin(), out.end(), [](const std::pair<double, const Routine*>& a, const std::pair<double, const Routine*>& b) {
+        std::stable_sort(out.begin(), out.end(), [](const std::pair<double, const Routine*>& a, const std::pair<double, const Routine*>& b) {
             return a.first < b.first || (a.first == b.first && a.second->id < b.second->id);
         });
         return out;
@@ -696,7 +696,7 @@ public:
                 if (c.h <= now_h_ + 1e-9) out.push_back(c);
             }
         }
-        std::sort(out.begin(), out.end(), [](const RadioCall& a, const RadioCall& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
+        std::stable_sort(out.begin(), out.end(), [](const RadioCall& a, const RadioCall& b) { return a.h < b.h || (a.h == b.h && a.fact < b.fact); });
         return out;
     }
 

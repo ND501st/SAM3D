@@ -374,6 +374,18 @@ inline double DayPartHour(DayPart d) {
 
 enum class Weather { Clear, Cloudy, Poor };
 
+// The share of the days that are not clear on a day of the year (1-365) in Central Europe (roadmap S7, weather.mode 1):
+// crawford_1977_rand, a ceiling below 5,000 ft or visibility below 5 nmi about 85 % of the time in winter and 50 % in
+// summer; held from December to February and from June to August, the months between a straight line (a game value).
+inline double NotClearShare(int day_of_year) {
+    const double winter = 0.85, summer = 0.5;
+    const int d = ((day_of_year - 1) % 365 + 365) % 365 + 1;
+    if (d <= 59 || d >= 335) return winter;            // December, January, February
+    if (d >= 152 && d <= 243) return summer;           // June, July, August
+    if (d < 152) return winter + (summer - winter) * static_cast<double>(d - 59) / (152.0 - 59.0);   // spring
+    return summer + (winter - summer) * static_cast<double>(d - 243) / (335.0 - 243.0);               // autumn
+}
+
 inline const char* WeatherName(Weather w) {
     switch (w) {
         case Weather::Clear: return "clear";
@@ -503,7 +515,7 @@ inline std::string FormatHour(double campaign_h, double start_hour) {
     if (h < 0.0) h += 24.0;
     const int hh = static_cast<int>(std::floor(h));
     const int mm = static_cast<int>(std::floor((h - hh) * 60.0 + 1e-6));
-    char buf[32];
+    char buf[96];
     std::snprintf(buf, sizeof(buf), "D%d %02d:%02d", day, hh, mm);
     return buf;
 }

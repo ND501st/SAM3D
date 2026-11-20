@@ -443,7 +443,7 @@ are written only when present.
 
 **Shortcuts.** Passes are flown level at the pilot's held height: the dive is only in the open-fire range and the
 effect. Opportunistic attacks use guns and rockets only, never bombs, in a session. Fuel is estimated from the time
-flown. No FAC designation reaches the session's chain yet. The tendency stays in `opportunity_rules` until B11's
+flown. The FAC's designation reaches the session's chain since S2. The tendency stays in `opportunity_rules` until B11's
 `hot_phase`. The claim has day and night factors, no `claim_factor` per class. The test waves gate on the open-fire
 range but fly no passes. A contact's chain draws are fixed per contact.
 
@@ -460,10 +460,73 @@ rebels attack least, for want of aircraft with guns or rockets near our lines, n
 strike with SEAD past a known radar was judged over four seeds; such strikes are 3 in 100, and the finds moved seeds 1-4
 to none, so it is now judged over sixteen.
 
-**Left:** the FAC's `designate` into the session chain (B5's left item); a jammed net stopping a strike;
-`TestWaves::Releases` through `AttackPass`; bombs dropped on targets of opportunity in a session; the dive flown
-in the pass; A1 (the coarse flown level); a check that a silent battery is found less often than one on the march;
-the 24 h `mission_demo` counts per faction (§ Done when 3) as a test; `AimOnCall` (already legacy only).
+**S2 (19 November 2026, branch `tbr-s2`; `05_C2_AND_RETASKING.md` §9).** The FAC's `designate` reaches the session's
+chain: when a close support flight (or the Pact's helicopter raid) of a raid in the session comes within
+`c2.fac_contact_m` (25 km) of the FAC who last saw its target, the FAC calls the mark on his net (`LivePackages`,
+`AirRadio::SayFrom`). If the flight's leader hears it, `OpportunityRun::Designate` marks the place for that flight, its
+radius three times the sighting's sigma and at least 500 m, and a contact the leader sees there has `designated` set:
+NATO's close support, which otherwise strikes only what the controller designates, may attack it. A jammed net stops a
+strike: unheard (our jammer on the FAC's net, out of range, the FAC's post out), the faction's `clearance` rule decides;
+NATO's close support holds (`Hold` by its leader, `hold_s` 5-15 min) and asks again, then goes home with its load; the
+Pact's attacks on its plan. The abstract campaign does the same at the brief (`AirC2::Brief`). `Played` counts the
+marks, the unheard marks, the holds and the aborts. Off with `c2.live_mode` 0.
+
+**S4 (19 November 2026, branch `tbr-s4`).** The dive is flown: through a pass's setup and run the override carries the
+weapon's dive and open-fire range (`PilotOverride::dive_rad`, `open_fire_m`, `pass_aim`), and the pilot's height layer
+(`TargetPilot::SetPass`) holds the roll-in height, (open-fire slant x cos(dive) + 1 km) x tan(dive) over the aim's
+ground, then dives on the line to the aim, never under 30 m; at the recovery he climbs back to his own height. The A-10's
+GAU-8 pass is flown in its 3.3 degree dive. Bombs on what is found: with `opportunity.mode` 2 a fixed-wing aircraft
+carrying bombs that fall (`bomb`, `retarded_bomb`, `cluster`) and not owed to its target (or on a hunting mission) may
+dive-bomb a contact the chain lets it attack, one pass with its whole load, in a `opportunity.bomb_dive_deg` (30) dive
+released at `delivery.dive_release_m` over the ground; the bridge lands the load with the dive delivery's CEP and its
+flight (`MissionBridge::BombsFired`), and the blast's chances are keyed draws of the stream (`OppDraw`). A save
+without the key replays with mode 1 (no bombs). The testbed's guns and rockets from fixed-wing aircraft are fired from
+passes (`TestWaves::Releases` with a `PassControl`): begun 6 km out, flown on the override layer, released at the open-fire
+gate, the load's scatter a keyed draw; a pass the layer will not take (breaking under fire) is tried again next step,
+one that never lines up goes off without firing. A deployed, silent battery (`osa_battery_silent`) is found on 17 in
+100 passes straight over it at 150 m where the same battery on the march (`column_moving`) is found on 50 (`test_perception.cpp`; § Done when 4).
+`AimOnCall` now returns at once unless the campaign is legacy (`c2.mode` 0, a save from before B5): close support is
+aimed by the FAC's brief on his believed sighting (§ Done when 7).
+
+**A load owed beyond the session (20 November 2026, branch `tbr-oppload`).** A bisect found a NATO package, Falcon 70
+(two Tornado IDS), spending both loads in a dive on a "battery" about four minutes short of its aim, the bombs landing
+on empty ground. Its chain, read from the session: it was not a strike but an **armed reconnaissance** (`ArmedRecce`; the
+template's A-10, F-16 and F-4E were not free, and the planner's fallback took the next type fit for the strike role); a
+ground sighting the leader took for a battery (the `misidentify_day` draw, nothing really within `find_m` of where he
+believed it); *authorised* by NATO's `armed_recce` rule ("to find and attack targets of opportunity",
+`fm_101_5_1_1980`); *able* because on armed reconnaissance the load is for what is found (§3.4, the primary's priority
+does not apply); *worth* it for a battery; *act* at the hunting share. That is the doctrine: an armed reconnaissance's
+aim point is where its search begins, not a fragged target, so nothing was changed for it. The S5 quirk weights only
+changed which officers planned which packages, so which package came first at that seed.
+
+Reading the same chain for a strike found a real gap. "Owed to its target" was read from `RaidAircraft::has_release`,
+which is true only when the release point lies inside the session's circle (`scenario.clip_m`). A strike flight passing
+the battery on its way to a target beyond the circle therefore had its load counted free: authorised by its faction
+(the rebels attack what they find; NATO hits back at what fires on it) it could dive-bomb a find with the load fragged to
+its target, against §3.4 ("before the release on its primary a flight on a planned strike keeps its weapons for the
+primary") and the period rules behind it: a strike on another task reports and hits back only at what fires on it
+(`checo_roe_1973` ch. V, `checo_roe_1966`), the Pact's planned strike follows its plan (`fm_100_2_1_1984` p. 12-4), and
+deep strike and interdiction loads are chosen for the primary and not retasked before it (`schoeck_1987_ai_retasking`).
+The abstract level already read it right (`Resolver::FindOpportunity`: due while the route has a release). With
+`opportunity.mode` 3 the manifest carries `RaidAircraft::primary` (its flight's route has a release, in the session or
+beyond it) and the session's `Owed` reads it: such a load is owed until released, so the chain stops at *able* ("his
+stores are for the target") unless the gun is aboard, its planned rockets are not spent on the way, and the time on
+target's `slot_slack_s` applies. A save with `opportunity_mode` 2 replays with mode 2; the played raids' outcomes are in
+the save, so nothing replayed moves, and the abstract campaigns (`air_war_balance`, the replay fingerprint) do not move.
+Test: `test_opportunity.cpp` "a strike flight whose target lies beyond the session keeps its bombs for it" (a rebel
+Galeb pair 1.2 km off our battery, its target beyond the circle: mode 3 reports it at *able* and releases nothing;
+mode 2 passes *able* to the leader's draw).
+
+**Left:** A1 (the coarse flown level). The 24 h `mission_demo` counts per faction (§ Done when 3) as a test: the
+measured order is not the one written there (B6's own balance: NATO's attacks on unbriefed targets outnumber the
+Pact's and the rebels attack least, for want of aircraft with guns near our lines), so the order is to be decided
+before it is tested, and a 24 h session per faction is too slow for the suite. A bomb pass's own re-attack (one pass
+with the whole load). Dive-bombing by the testbed's waves (their bombs still fall at their range). The planner's
+fallback type for a mission whose template's types are not free (any type fit for the role: a Tornado IDS flying NATO's
+armed reconnaissance, though §4 gives its crews an ease of 0.1-0.15 and the template names other types; no source
+checked for a 1985 Tornado squadron on that task): to be decided with the owner (a template's types as a hard list
+would move every campaign). A dive-bombing pass is flown at `bomb_dive_deg` whatever the falling load, retarded and
+cluster bombs included.
 
 ## Done when
 

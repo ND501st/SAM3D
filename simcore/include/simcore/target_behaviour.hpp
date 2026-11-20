@@ -12,6 +12,11 @@
 //     and right of the course) for evade_s, and then back to its flight's slot or its route. A hiding helicopter drops
 //     behind its cover. The pilot does not steer the aircraft himself: the evasion is a PilotOverride the command
 //     layer flies and ends (flights.hpp, roadmap B1); the pilot keeps the height layer (the dive's height until it ends).
+//   * An attack pass flown in its dive (roadmap S4, air_war/attack_pass.hpp): up to the roll-in height, down the line to
+//     the aim at the weapon's dive angle, out at the recovery (SetPass).
+// A fixed-wing aircraft flown by bank-to-turn (aircraft.hpp) asks its step for the path angle the height layer wants
+// (roadmap S4): it pulls onto it within its g and climb, and the climb costs it speed; the layer only keeps it off the
+// ground after the step. A helicopter, and an aircraft flown the old way, has its height set after the step.
 // Terrain masking is not a behaviour of its own: a target flying low behind a ridge is out of every sensor's line of
 // sight (the gameplay model's and the EM layer's).
 //
@@ -84,9 +89,23 @@ public:
     TargetPilot() = default;
     TargetPilot(TargetBehaviourDef behaviour, EvadeDef evade) : b_(std::move(behaviour)), e_(evade) {}
 
-    bool ControlsHeight() const { return b_.kind != TargetBehaviourDef::Kind::None || diving_; }
+    bool ControlsHeight() const { return b_.kind != TargetBehaviourDef::Kind::None || diving_ || pass_; }
+    // The height layer asks the step for a path angle (roadmap S4): a fixed-wing aircraft flown by bank-to-turn.
+    static bool AsksPath(const Aircraft& a) { return FliesByBank(a) && !IsRotorcraft(a); }
+    // An attack pass in its dive (PilotOverride's dive, roadmap S4): from now his height is the pass's until EndPass.
+    void SetPass(const Vec3& aim, double dive_rad, double open_fire_m) {
+        pass_ = dive_rad > 0.0;
+        pass_aim_ = aim;
+        pass_dive_rad_ = dive_rad;
+        pass_open_fire_m_ = open_fire_m;
+    }
+    void EndPass() { pass_ = false; }
+    bool InPass() const { return pass_; }
     // A weapon flies into the ground on purpose: no ground floor (GroundFloor) for it.
     void SetWeapon(bool weapon) { weapon_ = weapon; }
+    // The look-ahead over the ground scanned only every `s` seconds (roadmap S7: a wingman at A1, air_levels.hpp), over the
+    // look-ahead and the time to the next scan, the highest held between; 0: every step.
+    void SetHeightScanEvery(double s) { scan_every_s_ = s; }
     bool Evading() const { return evading_; }
     // The height above the ground it holds from now on (the instructor's order: a terrain-following pilot).
     void SetAgl(double agl_m) {
@@ -104,9 +123,15 @@ public:
     // only (AfterStep then sets the height and the vertical speed).
     void BeforeStep(Aircraft& a) const {
         a.height_held = ControlsHeight();  // a bank-to-turn aircraft then flies the horizontal only (aircraft.hpp)
+        a.path_asked = a.height_held && AsksPath(a);  // ... or the path angle asked (roadmap S4)
         if (!a.height_held) return;
         for (Vec3& w : a.waypoints) w.z = a.position.z;
         if (a.demand.active) a.demand.point.z = a.position.z;
+        if (a.path_asked) {
+            const double v = std::max(1.0, AirspeedOf(a));
+            a.asked_path_angle_rad = std::asin(std::max(-0.9, std::min(0.9, ask_vz_mps_ / v)));
+            return;
+        }
         a.velocity.z = 0.0;
     }
 
@@ -149,12 +174,14 @@ public:
         }
         evading_ = true;
         diving_ = dive;
+        pass_ = false;  // a break under fire ends a pass
         if (dive) e_.dive_agl_m = dive_agl_m;
         return false;
     }
     // The command layer ended his manoeuvre: he is no longer evading, holds his own height again, and evades only once
     // (as before roadmap B1; the instructor may order it again).
     void OverrideEnded() {
+        pass_ = false;  // a pass's override ended (its recovery, or broken off)
         if (!evading_) return;
         evading_ = false;
         diving_ = false;
@@ -170,6 +197,14 @@ public:
     // The height above the ground the pilot is holding now.
     double WantedAglM(const Aircraft& a) const {
         if (diving_) return e_.dive_agl_m;
+        if (pass_) {
+            // The line to the aim at the dive angle, capped at the roll-in height (kRollInLeadM before the open-fire point),
+            // and never under the pass's floor (game values).
+            const double tn = std::tan(pass_dive_rad_);
+            const double d = std::hypot(a.position.x - pass_aim_.x, a.position.y - pass_aim_.y);
+            const double roll_in = (pass_open_fire_m_ * std::cos(pass_dive_rad_) + kRollInLeadM) * tn;
+            return std::max(kPassFloorM, std::min(d * tn, roll_in));
+        }
         if (b_.kind == TargetBehaviourDef::Kind::PopUp) return phase_ == Phase::Exposed ? b_.popup_agl_m : b_.hide_agl_m;
         if (b_.waypoint_agl_m.empty()) return b_.agl_m;
         // The height of the waypoint it is flying to (past the last one: the last one's).
@@ -185,8 +220,17 @@ private:
         if (b_.kind != TargetBehaviourDef::Kind::PopUp) return std::string();
         switch (phase_) {
             case Phase::Transit:
-                if (a.next_waypoint < 1) return std::string();
-                cruise_mps_ = a.speed_mps;
+                if (a.next_waypoint < 1) {
+                    // A helicopter flown with its energy (roadmap S4) plans its stop at the hide: slow enough to hover there.
+                    if (FliesByBank(a) && IsRotorcraft(a) && !a.waypoints.empty()) {
+                        if (cruise_mps_ <= 0.0) cruise_mps_ = a.speed_mps;
+                        const double d = std::hypot(a.position.x - a.waypoints[0].x, a.position.y - a.waypoints[0].y);
+                        const double stop = std::sqrt(2.0 * flight::kHeliDecelMps2 * std::max(0.0, d - 0.5 * a.waypoint_capture_radius_m));
+                        a.speed_mps = std::min(cruise_mps_, std::max(flight::kHoverMps, stop));
+                    }
+                    return std::string();
+                }
+                if (cruise_mps_ <= 0.0) cruise_mps_ = a.speed_mps;
                 a.speed_mps = 0.0;
                 phase_ = Phase::Hidden;
                 until_s_ = t + b_.first_hold_s;
@@ -312,8 +356,13 @@ private:
         const double here = terrain.HeightAt(a.position.x, a.position.y);
         double ground = here + terrain.ObstacleHeightAt(a.position.x, a.position.y);
         const double vh = std::hypot(a.velocity.x, a.velocity.y);
-        if (vh > 1.0 && b_.lookahead_s > 0.0) {
-            const double reach = vh * b_.lookahead_s;
+        // At a lower rate (roadmap S7): the last scan's highest point holds until the next scan is due; it covered this far.
+        const bool held = scan_every_s_ > 0.0 && scan_age_s_ + dt < scan_every_s_ && scan_ground_ > -1e17;
+        if (held) {
+            scan_age_s_ += dt;
+            ground = std::max(ground, scan_ground_);
+        } else if (vh > 1.0 && b_.lookahead_s > 0.0) {
+            const double reach = vh * (b_.lookahead_s + std::max(0.0, scan_every_s_));
             const int samples = 2 + static_cast<int>(reach / 100.0);
             for (int i = 1; i <= samples; ++i) {
                 const double f = reach * i / samples / vh;
@@ -331,10 +380,13 @@ private:
                                    return true;
                                });
             }
+            scan_ground_ = ground;
+            scan_age_s_ = 0.0;
         }
         const double alt = frame.AltitudeOf(a.position);
         const double want = ground + WantedAglM(a);
-        const double rate = diving_ && b_.max_climb_mps < 50.0 ? 50.0 : b_.max_climb_mps;  // a dive is steeper
+        double rate = (diving_ || pass_) && b_.max_climb_mps < 50.0 ? 50.0 : b_.max_climb_mps;  // a dive is steeper
+        if (pass_) rate = std::max(rate, AirspeedOf(a) * std::sin(pass_dive_rad_) + 10.0);  // down the pass's line
         // The vertical speed changes no faster than a pull-up allows, and eases off in time to level at the height
         // wanted (a sudden climb would read as a hard manoeuvre in the outcome).
         const double gap = want - alt;
@@ -342,6 +394,13 @@ private:
         const double up = gap > 0.0 && a.max_climb_mps > 0.0 ? std::min(rate, a.max_climb_mps) : rate;
         double vz_want = std::min({up, std::sqrt(2.0 * kVerticalAccelMps2 * std::fabs(gap)), std::fabs(gap) / kLevelOffS});
         if (gap < 0.0) vz_want = -vz_want;
+        if (a.path_asked) {
+            // The step flew the path angle asked (roadmap S4): only never into the ground here, and the next ask.
+            if (alt < here + a.bottom_m + kFloorClearM) a.position.z += here + a.bottom_m + kFloorClearM - alt;
+            vz_mps_ = a.velocity.z;
+            ask_vz_mps_ = vz_want;
+            return;
+        }
         const double dv = kVerticalAccelMps2 * dt;
         vz_mps_ += std::max(-dv, std::min(dv, vz_want - vz_mps_));
         double dz = vz_mps_ * dt;
@@ -354,6 +413,8 @@ private:
     }
     static constexpr double kVerticalAccelMps2 = 15.0;  // about 1.5 g beyond level flight: a game value
     static constexpr double kLevelOffS = 1.0;
+    static constexpr double kRollInLeadM = 1000.0;  // a pass's roll-in this far before its open-fire point (game value)
+    static constexpr double kPassFloorM = 30.0;     // the lowest a pass's dive takes him over the ground (game value)
 
     TargetBehaviourDef b_;
     EvadeDef e_;
@@ -364,7 +425,15 @@ private:
     bool evading_ = false;
     bool diving_ = false;
     double vz_mps_ = 0.0;  // the vertical speed the pilot holds (the world moves the aircraft in the horizontal)
+    double ask_vz_mps_ = 0.0;  // the vertical speed he asks of the next step as a path angle (roadmap S4)
+    bool pass_ = false;       // an attack pass in its dive (SetPass)
+    Vec3 pass_aim_;
+    double pass_dive_rad_ = 0.0;
+    double pass_open_fire_m_ = 0.0;
     bool weapon_ = false;     // a weapon's "pilot": no ground floor
+    double scan_every_s_ = 0.0;   // the look-ahead's scan at a lower rate (SetHeightScanEvery); 0: every step
+    double scan_age_s_ = 0.0;     // since the last scan
+    double scan_ground_ = -1e18;  // its highest point (-1e18: none yet)
     bool pulled_up_ = false;  // under the ground floor last step
 };
 

@@ -16,6 +16,8 @@
 #include "simcore/simcore.hpp"
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_radio.hpp"
+#include "simcore/air_war/abstract_radio.hpp"
+#include "simcore/command/air_war_feed.hpp"
 #include "simcore/command/intercept.hpp"
 #include "simcore/em/comms_intercept.hpp"
 

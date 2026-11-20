@@ -81,7 +81,7 @@ public:
         for (const Slot& s : slots_) {
             if (s.place == place) out.push_back(s);
         }
-        std::sort(out.begin(), out.end(), [](const Slot& a, const Slot& b) { return a.from_s < b.from_s; });
+        std::stable_sort(out.begin(), out.end(), [](const Slot& a, const Slot& b) { return a.from_s < b.from_s; });
         return out;
     }
     const std::vector<SlotChange>& Changes() const { return changes_; }

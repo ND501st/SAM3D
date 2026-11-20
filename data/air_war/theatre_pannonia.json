@@ -4,12 +4,15 @@
   "description": "A fictional country on the middle Danube plain, Soviet-equipped and non-aligned, with something of Czechoslovakia, Hungary, Romania and Yugoslavia in it. Four borders, four possible wars: a rebel front in the south, a small neutral neighbour in the south-west, the Warsaw Pact in the north-east and NATO in the west.",
   "source": "sam3d",
   "confidence": "estimate",
-  "notes": "Fictional. Place names are invented. Positions are km east and north of the origin (the plain near the existing scenarios' origin). Values, hardness, repair times and defences are game values for the enemy air command (docs/air_war/). A defence's max_target_mps is the fastest target it can engage: the Osa-AK's 500 m/s is voenizdat_osa_1991 p15, the others are estimates. repair_h: field repair of the whole; a wrecked object is out that long and comes back at repair.restored_function (data/gameplay/air_war.json). The SAM sites are in their wartime posture: radars quiet until cued, moves between prepared positions (balance pass, docs/air_war/09_BALANCE.md). The player's battery is the Osa-AK battery 21 defending the Kesmark bridges.",
+  "notes": "Fictional. Place names are invented. Positions are km east and north of the origin (the plain near the existing scenarios' origin). Values, hardness, repair times and defences are game values for the enemy air command (docs/air_war/). A defence's max_target_mps is the fastest target it can engage: the Osa-AK's 500 m/s is voenizdat_osa_1991 p15, the others are estimates. repair_h: field repair of the whole; a wrecked object is out that long and comes back at repair.restored_function (data/gameplay/air_war.json). The SAM sites are in their wartime posture: radars quiet until cued, moves between prepared positions (balance pass, docs/air_war/09_BALANCE.md). The player's battery is the Osa-AK battery 21 defending the Kesmark bridges. Dated 15 October 1985, UTC+1 (roadmap S8, the war's date, as the nation's theatre): its parts of the day are the sun's at its origin; a campaign saved before S8 replays it undated, by the fixed buckets the first balance pass was tuned on (\"dated_from_light_mode\", air_war.json's light.mode).",
   "country": { "name": "Pannonian Socialist Federal Republic", "short": "PSFR", "notes": "The player's country. Rename freely." },
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "ground_height_m": 110,
   "start_hour": 4.0,
   "year": 1985,
+  "date": "1985-10-15",
+  "dated_from_light_mode": 1,
+  "utc_offset_h": 1,
   "fronts": [
     {
       "faction": "rebels", "name": "The southern rebel front (the Rava valley)",

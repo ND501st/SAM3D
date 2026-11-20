@@ -17,6 +17,13 @@
 //    E-3A), else at the range a pilot identifies a fighter by eye.
 //
 // The planner's expectation of it (ExpectedMainLoss) is the same model in closed form.
+//
+// Roadmap S3 (tuning air_fight.mode 1; 0 replays a save made before it): the doctrines' attacks told apart. A beam attack's
+// shots are taken from the target's beam; a slash, by the side that fired first, is one pass, and after it only
+// a0_slash_return of the slashers come back for another; a turning doctrine on either side keeps the fight going
+// a0_turn_rounds more rounds. A fighter shot at with a radar round from beyond sight drags (turns tail and runs it out of
+// energy) at a0_drag of his skill. Strikers that see the shot answer it with flares or chaff if their type carries them in
+// the war's year (data/air_war/countermeasures.json), as strong as gameplay/reactions.json's flare_decoy and chaff_factor.
 #pragma once
 
 #include <algorithm>
@@ -68,6 +75,9 @@ struct AbstractFightResult {
     std::vector<int> aborted;            // strike flights that turned for home
     int attacked = 0;                    // strike flights shot at or that saw the attack (each drew its answer)
     int jettison_drawn = 0;              // of them, those that drew a jettison, aborted or not (the balance tool's count)
+    int dragged = 0;                     // S3: radar rounds from beyond sight a fighter dragged
+    int extended = 0;                    // S3: slashers who extended after their pass and did not come back
+    int dispensed = 0;                   // S3: shots at strikers answered with flares or chaff
     std::vector<std::string> notes;
 };
 
@@ -176,6 +186,13 @@ public:
         // often as its warning is heard (balance.mode 1, roadmap B14; Teaball's warning turned 0.47:1 in May 1972 into
         // 3.8:1 by October, checo_1978_linebacker). Before B14 our first pass from the rear came as often under an E-3A.
         if (surprise && s.awacs > 0.0 && d_->tuning.Get("balance.mode") >= 1.0 && r.Chance(s.awacs * f_->a0_seen_awacs)) surprise = false;
+        // Teaball's relay (roadmap S6, docs/air_battle/09 section 6): where the faction has one, its listeners overhear our
+        // GCI's vectors and warn the package about a minute later, unless the relay fails; the surprise is gone. Off in the
+        // data (no Teaball-type service in Europe by 1985 was found); its own draw, so the fight's stream is unchanged.
+        if (surprise && !jammed && TeaballWarns(seed)) {
+            surprise = false;
+            out.notes.push_back("the package was warned of our fighters by its listeners' relay");
+        }
         const bool ours_cleared = ours_->roe == "cleared_bvr" || (ours_->roe == "controller" && !jammed);
         std::uint64_t shooter_key = 0;
         // Their fighters: a sweep first, then a CAP, then the close escort.
@@ -314,7 +331,18 @@ public:
     }
 
     static bool IsMain(FlightRole r) { return r == FlightRole::Strike || r == FlightRole::Dead || r == FlightRole::Helicopter; }
+    // Roadmap S3's fight (tuning air_fight.mode 1).
+    bool S3() const { return d_->tuning.Get("air_fight.mode") >= 1.0; }
     static bool IsFighterCover(FlightRole r) { return r == FlightRole::Escort || r == FlightRole::Sweep || r == FlightRole::Cap; }
+
+    // Whether the faction's Teaball-type relay warns a package of our fighters (radio.mode 1 and the faction's relay on):
+    // keyed on the fight's seed, its own stream.
+    bool TeaballWarns(std::uint64_t seed) const {
+        const FactionRadio::Teaball& tb = d_->faction.radio.teaball;
+        if (!tb.on || d_->tuning.Get("radio.mode") < 1.0) return false;
+        Rng tr(seed ^ 0x7EAB0A1100000001ull);
+        return tr.Chance(1.0 - tb.fail);
+    }
 
 private:
     struct Fighter {
@@ -355,8 +383,10 @@ private:
     }
 
     // One shooter's shot this round, or none: his weapons in his doctrine's order at the round's range.
+    // `target_skill`: the target's doctrine's (S3: a fighter's drag).
     bool TakeShot(Fighter& s, const Fighter& t, const AirDoctrineDef& doc, int round, bool cleared, bool rear, bool vs_strikers, std::uint64_t seed,
-                  std::uint64_t shooter, Rng& r, bool& kill) const {
+                  std::uint64_t shooter, Rng& r, bool& kill, double target_skill, AbstractFightResult& out) const {
+        const bool s3 = S3();
         const ChainParams& c = ac_->calibration.chain;
         Pilot pl;
         pl.skill = doc.skill;
@@ -387,6 +417,8 @@ private:
                     g.aspect_rad = pi - r.Uniform() * pi / 4.0;
                 } else if (rear) {
                     g.aspect_rad = r.Chance(0.75) ? r.Uniform() * pi / 2.0 : pi / 2.0 + r.Uniform() * pi / 2.0;
+                } else if (s3 && doc.tactic == "beam") {
+                    g.aspect_rad = pi / 2.0 + (r.Uniform() - 0.5) * pi / 3.0;  // set up on the target's beam
                 } else {
                     g.aspect_rad = r.Uniform() * pi;
                 }
@@ -395,13 +427,31 @@ private:
                 g.launch_g = bvr ? 1.5 : std::min(7.0, 1.0 - std::log(std::max(1e-9, r.Uniform())));
                 g.look_down = vs_strikers && t.low;
                 ShotConditions k;
+                bool saw = false;
                 if (!t.striker || r.Chance(0.5)) {  // a fighter sees the shot and breaks; a striker half the time
+                    saw = true;
                     k.break_timing = r.Uniform(0.4, 1.0);
                     k.target_g = t.striker ? std::min(f_->break_g, 5.0) : f_->break_g;
                 }
                 const ShotGeometry believed = Believe(g, c, pl, m.first->guidance, seed, shooter, shot);
                 if (!PilotFires(*m.first, c, believed)) continue;
                 --m.second;
+                // S3: a fighter drags a radar round from beyond sight; a striker that saw the shot dispenses.
+                if (s3 && bvr && !t.striker && r.Chance(std::clamp(f_->a0_drag * target_skill, 0.0, 1.0))) {
+                    ++out.dragged;
+                    kill = false;
+                    return true;
+                }
+                if (s3 && saw && t.striker) {
+                    const Loadout lo = d_->reactions.LoadoutOf(t.type, d_->theatre.year);
+                    if (IsInfrared(m.first->guidance) && lo.flares > 0) {
+                        k.countermeasures = d_->reactions.flare_decoy;
+                        ++out.dispensed;
+                    } else if (IsSemiActive(m.first->guidance) && lo.chaff > 0) {
+                        k.countermeasures = 1.0 - d_->reactions.chaff_factor;
+                        ++out.dispensed;
+                    }
+                }
                 kill = ResolveShot(*m.first, c, g, k, pl, seed, shooter, shot).kill;
                 return true;
             }
@@ -415,7 +465,12 @@ private:
     void Fight(std::vector<Fighter>& ours, std::vector<Fighter>& them, bool ours_cleared, bool them_cleared, int initiative, bool vs_strikers,
                std::uint64_t seed, std::uint64_t& shooter_key, Rng& r, AbstractFightResult& out) const {
         const AirDoctrineDef* td = theirs_;
-        const int rounds = std::max(1, static_cast<int>(std::lround(f_->a0_rounds)));
+        int rounds = std::max(1, static_cast<int>(std::lround(f_->a0_rounds)));
+        const bool s3 = S3();
+        // S3: a turning doctrine on either side keeps a fight between fighters going.
+        if (s3 && !vs_strikers && td != nullptr && (ours_->tactic == "turn" || td->tactic == "turn")) {
+            rounds += std::max(0, static_cast<int>(std::lround(f_->a0_turn_rounds)));
+        }
         for (int round = 1; round <= rounds; ++round) {
             if (Count(ours) == 0 || Count(them) == 0) break;
             const auto volley = [&](std::vector<Fighter>& a, std::vector<Fighter>& b, const AirDoctrineDef& doc, bool cleared, bool rear, bool strikers_fire,
@@ -431,7 +486,10 @@ private:
                     const std::size_t j = live[static_cast<std::size_t>(r.Index(static_cast<int>(live.size())))];
                     bool kill = false;
                     const std::uint64_t key = 0xB8000000ull + (++shooter_key);
-                    if (!TakeShot(a[i], b[j], doc, round, cleared, rear, b_strikers, seed, key, r, kill)) continue;
+                    const AirDoctrineDef* bdoc = &doc == ours_ ? td : ours_;
+                    if (!TakeShot(a[i], b[j], doc, round, cleared, rear, b_strikers, seed, key, r, kill, bdoc != nullptr ? bdoc->skill : 0.5, out)) {
+                        continue;
+                    }
                     ++out.shots;
                     b[j].shot_at = true;
                     if (kill) hits.push_back({i, j});
@@ -465,6 +523,19 @@ private:
                 apply(them, ours, h2);
             }
             if (!AnyWeapon(ours)) break;
+            // S3: a slash is one pass. After the first round the side that fired first, if its doctrine slashes, extends
+            // away; only a0_slash_return of it comes back (the rest leave the fight, not shot down).
+            if (s3 && round == 1 && !vs_strikers && initiative != 0 && td != nullptr) {
+                std::vector<Fighter>& side = initiative > 0 ? ours : them;
+                const AirDoctrineDef& sd = initiative > 0 ? *ours_ : *td;
+                if (sd.tactic == "slash") {
+                    for (Fighter& x : side) {
+                        if (!x.alive || r.Chance(f_->a0_slash_return)) continue;
+                        x.alive = false;
+                        ++out.extended;
+                    }
+                }
+            }
         }
     }
 

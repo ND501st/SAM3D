@@ -33,6 +33,7 @@
 #include <vector>
 
 #include "simcore/air_war/campaign.hpp"
+#include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/flights.hpp"
@@ -94,7 +95,7 @@ inline void Escape(std::ostringstream& s, const std::string& t) {
             case '\r': s << "\\r"; break;
             default:
                 if (static_cast<unsigned char>(c) < 0x20) {
-                    char b[8];
+                    char b[64];
                     std::snprintf(b, sizeof(b), "\\u%04x", static_cast<unsigned>(static_cast<unsigned char>(c)));
                     s << b;
                 } else {
@@ -214,8 +215,10 @@ struct ScenarioFormat {
     bool damage_states = true;
     // Our fighters (roadmap B10, command/own_air.hpp): the theatre's airfields as our fighter regiments' bases, their duty
     // scrambling pairs on our GCI's picture as the raid comes in, the day's identification codes and the notices of the
-    // pairs down the chain. Off (the default): no fighters of ours in a played raid, as before B10.
-    bool our_fighters = false;
+    // pairs down the chain; the package's aircraft in the air fight with them, our GCI on our radio, the front line for the
+    // airborne alert and the pursuit limit, the Pact's allies on our filters (S1). On by default from S1 (a campaign's
+    // own_air.mode 1; a save made before S1 plays its raids without them).
+    bool our_fighters = true;
 };
 
 
@@ -228,7 +231,10 @@ struct RaidAircraft {
     std::string aircraft;
     bool helicopter = false;
     bool drone = false;
-    bool has_release = false;
+    bool has_release = false;  // it releases its load in the session (its release point inside the scenario's circle)
+    // Its load is fragged to a target: its flight's route has a release, in the session or beyond the scenario's circle
+    // (opportunity_session.hpp: owed to that target until released, opportunity.mode 3; 06_OPPORTUNITY.md section 3.4).
+    bool primary = false;
     Vec3 release_enu;  // where it releases its weapons (scenario ENU)
     Vec3 aim_enu;      // where they are aimed
     int arms = 0;
@@ -250,6 +256,10 @@ struct RaidAircraft {
     int weapons = 0;
     Delivery delivery = Delivery::Count;
     std::string arm_weapon;          // the EM library's ARM it carries (AircraftType::ArmEm): the feed's name for it
+    // Its flight's hot phase in the air fight (roadmap S5, hot_phase.mode 2; < 0: the doctrine's): its air combat skill
+    // moved by its officer and its pilots' sorties and currency, and its turn back once its controller is lost.
+    double hot_skill = -1.0;
+    double hot_turn_back_lost = -1.0;
 };
 
 // One of our other air defences whose reach overlaps the scenario. As the raid's aircraft pass through its zone it takes
@@ -323,14 +333,23 @@ public:
         Put(r, "unit", Str(fl.squadron));
         Put(r, "role", Str(FlightRoleName(fl.role)));
         Put(r, "discipline_adjust", Num(std::round((RadioDiscipline(faction, 0.0, chatter, leak, td) - faction) * 1000.0) / 1000.0));
+        if (StableRadioKeys(td)) {
+            // Roadmap S6's follow-ups (radio.mode 2): the squadron's fit and codeword as the campaign's abstract calls draw
+            // them (SquadronRadioFit), so a squadron says the same word in a session and in the campaign.
+            const SquadronFit fit = SquadronRadioFit(fl.squadron, f.radio.have_quick_share, f.radio.secure_voice_share, static_cast<std::uint64_t>(c.Seed()));
+            if (f.radio.present && fit.have_quick) Put(r, "have_quick", Bool(true));
+            if (f.radio.present && fit.secure_voice) Put(r, "secure_voice", Bool(true));
+            Put(r, "codeword", Str(fit.codeword));
+            return r;
+        }
+        // Before radio.mode 2 (a save made before replays as played): std::hash and the session's own seed.
         const std::size_t sq = std::hash<std::string>()(fl.squadron);
         const em::Random rng(c.Seed() ^ 0x5EC0DEull);
         if (f.radio.present) {
             if (rng.Uniform(em::Stream::AirRadio, sq, 31) < f.radio.have_quick_share) Put(r, "have_quick", Bool(true));
             if (rng.Uniform(em::Stream::AirRadio, sq, 32) < f.radio.secure_voice_share) Put(r, "secure_voice", Bool(true));
         }
-        static const char* words[] = {"SUPERFUSE", "LONGBOW", "REDWING", "SLEDGE", "TIDEWATER"};
-        Put(r, "codeword", Str(words[sq % 5]));
+        Put(r, "codeword", Str(kSquadronCodewords[sq % 5]));
         return r;
     }
     // The scenario's "air_radio" block from the faction's radio block, the planner's habits and the tuning table.
@@ -486,7 +505,13 @@ public:
             };
             std::vector<Vec3> pts;
             const Vec3 aim_moved = moved_by(fl.aim_key);  // a run at the battery or a dummy follows it to where it stands
-            for (const RoutePoint& r : fl.route) pts.push_back(to_scen(r.pos + aim_moved));
+            // Its navigation error between fixes (roadmap S7, route.mode 2): the faction's drift, the same for the flight.
+            std::vector<Vec3> drift(fl.route.size());
+            if (tune.Get("route.mode") >= 2.0) {
+                drift = NavigationDrift(fl.route, f.doctrine.routing.nav_drift_share, tune.Get("route.nav_fix_m"),
+                                        static_cast<std::uint64_t>(p.id) * 1315423911ull + fi);
+            }
+            for (std::size_t ri = 0; ri < fl.route.size(); ++ri) pts.push_back(to_scen(fl.route[ri].pos + aim_moved + drift[ri]));
             bool inside_prev = Vec3{pts[0].x, pts[0].y, 0.0}.HorizontalLength() < clip;
             if (inside_prev) {
                 cl.pts.push_back(pts[0]);
@@ -630,6 +655,39 @@ public:
                 const double dt = (cl.t_h[i] - cl.t_h[i - 1]) * 3600.0;
                 if (dt > 1.0 && len > 1.0) leg_mps[i] = ClampTo(len / dt, 20.0, top_mps);
             }
+            // Its officer: the one flying in it, or his squadron's leader at half weight (the habits he trains; roadmap B11).
+            const Officer* lead_o = nullptr;
+            bool flies = true;
+            if (fl.officer >= 0 && static_cast<std::size_t>(fl.officer) < c.Staff().officers.size()) {
+                lead_o = &c.Staff().officers[static_cast<std::size_t>(fl.officer)];
+            } else {
+                const int sl = c.Staff().LeaderOf(fl.squadron);
+                if (sl >= 0) lead_o = &c.Staff().officers[static_cast<std::size_t>(sl)];
+                flies = false;
+            }
+            // Roadmap S5 (hot_phase.mode 2, 10_FACTIONS.md §7-8): the flight's values as its leader reads them, its faction's
+            // for its role moved by its officer and its squadron's pilots (their combat sorties and currency), and whether
+            // its self-screening jammers wait until they are needed (emission_discipline, a keyed draw per flight).
+            const bool hot5 = f.hot.present && tune.Get("hot_phase.mode") >= 2.0 && !a->missile && !a->drone;
+            HotPilot pilot5;
+            HotWho who5;
+            bool quiet_jam = false;
+            if (hot5) {
+                int sq_sorties = 0, sq_total = 0;
+                for (const SquadronState& s : c.Squadrons()) {
+                    if (s.id != fl.squadron) continue;
+                    sq_sorties = s.combat_sorties;
+                    sq_total = s.total;
+                }
+                pilot5 = HotPilotOf(f, sq_sorties, sq_total, tune.Get("hot_phase.currency_reference_h"), tune.Get("hot_phase.sortie_h"));
+                who5.leader = lead_o;
+                who5.leader_flies = flies;
+                who5.pilot = &pilot5;
+                const double u = em::Uniform01(em::DrawHash(static_cast<std::uint64_t>(c.Seed()), em::Stream::Opportunity, static_cast<std::uint64_t>(p.id),
+                                                             0xE315u, static_cast<std::uint64_t>(cl.flight)));
+                quiet_jam = fl.role != FlightRole::Jammer && u < HotPhase(f, HotParam::EmissionDiscipline, fl.role, f.pool, who5);
+            }
+            const auto r3 = [](double x) { return std::round(x * 1000.0) / 1000.0; };
             for (int k = 0; k < alive; ++k) {
                 // Its place in the formation of each leg's phase, in that leg's frame: where its own plan runs. Only the
                 // start is set back by the slot's depth: a turn point or a release point is the leader's, passed by a man
@@ -726,20 +784,36 @@ public:
                     if (!briefed_zones.items.empty()) Put(rx, "zones", briefed_zones);
                     // His officer's shifts of the faction's press-on and jettison readiness, read once at the hand-over
                     // (roadmap B11, hot_phase.hpp): the one flying in it, or his squadron's leader at half weight.
-                    const Officer* lead_o = nullptr;
-                    bool flies = true;
-                    if (fl.officer >= 0 && static_cast<std::size_t>(fl.officer) < c.Staff().officers.size()) {
-                        lead_o = &c.Staff().officers[static_cast<std::size_t>(fl.officer)];
-                    } else {
-                        const int sl = c.Staff().LeaderOf(fl.squadron);
-                        if (sl >= 0) lead_o = &c.Staff().officers[static_cast<std::size_t>(sl)];
-                        flies = false;
-                    }
                     if (f.hot.present && lead_o != nullptr) {
-                        const double po = std::round(HotOfficerShift(f, HotParam::PressOn, fl.role, lead_o, flies) * 1000.0) / 1000.0;
-                        const double jt = std::round(HotOfficerShift(f, HotParam::Jettison, fl.role, lead_o, flies) * 1000.0) / 1000.0;
+                        const double po = r3(HotOfficerShift(f, HotParam::PressOn, fl.role, lead_o, flies));
+                        const double jt = r3(HotOfficerShift(f, HotParam::Jettison, fl.role, lead_o, flies));
                         if (po != 0.0) Put(rx, "press_on_shift", Num(po));
                         if (jt != 0.0) Put(rx, "jettison_shift", Num(jt));
+                    }
+                    // Roadmap S5 (hot_phase.mode 2): the rest of the flight's values, read by the chain (reaction_chain.hpp):
+                    // its leader's initiative and plan adherence round a site, his turn back when he knows the raid is
+                    // seen, what he may change himself, his pilots' reaction delay and the day's losses on its press-on.
+                    if (hot5) {
+                        json::Value hj = Obj();
+                        Put(hj, "initiative", Num(r3(HotPhase(f, HotParam::Initiative, fl.role, f.pool, who5))));
+                        Put(hj, "plan_adherence", Num(r3(HotPhase(f, HotParam::PlanAdherence, fl.role, f.pool, who5))));
+                        Put(hj, "turn_back", Num(r3(HotPhase(f, HotParam::TurnBack, fl.role, f.pool, who5))));
+                        if (f.hot.authority.set) {
+                            json::Value lm = Arr();
+                            for (const std::string& act : f.hot.authority.leader_may) Push(lm, Str(act));
+                            Put(hj, "leader_may", lm);
+                        }
+                        if (f.hot.reaction_delay.set) {
+                            const HotDelay dl = ReactionDelayS(f, f.pool, who5, false);
+                            json::Value ds = Arr();
+                            Push(ds, Num(r3(dl.lo_s)));
+                            Push(ds, Num(r3(dl.hi_s)));
+                            Put(hj, "delay_s", ds);
+                            if (f.hot.reaction_delay.improvised_extra_s > 0.0) Put(hj, "improvised_extra_s", Num(r3(f.hot.reaction_delay.improvised_extra_s)));
+                        }
+                        const double hb = r3(HusbandingShift(f, fl.role, c.Politics().losses_today));
+                        if (hb != 0.0) Put(hj, "husbanding_shift", Num(hb));
+                        Put(rx, "hot", hj);
                     }
                     Put(t, "reactions", rx);
                 } else if (!a->drone && !a->missile) {
@@ -787,6 +861,8 @@ public:
                     Put(j, "jammer", Str(jam));
                     Put(j, "target", Str(tid));
                     Put(j, "on_at_s", Num(std::round(appear_s)));
+                    // A disciplined flight's self-screening jammer waits for a lock on it (roadmap S5, emission_discipline).
+                    if (quiet_jam && a->standoff_jammer_em.empty()) Put(j, "until_painted", Bool(true));
                     Push(jammers, j);
                     for (const std::string& lib : f.em_libraries) {
                         if (std::find(libraries.begin(), libraries.end(), lib) == libraries.end()) libraries.push_back(lib);
@@ -800,9 +876,10 @@ public:
                 ra.aircraft = a->id;
                 ra.helicopter = a->helicopter;
                 ra.drone = a->drone;
-                ra.has_release = cl.release && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
-                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
-                                                fl.role == FlightRole::Missile);
+                ra.primary = fl.release_index >= 0 && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
+                                                       fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
+                                                       fl.role == FlightRole::Missile);
+                ra.has_release = cl.release && ra.primary;
                 ra.release_enu = cl.release_pt;
                 if (cl.release_i >= 0) {
                     const Vec3 sh = shift_at(static_cast<std::size_t>(cl.release_i), false);
@@ -825,6 +902,12 @@ public:
                 ra.weapons = fl.weapons;
                 ra.delivery = fl.delivery;
                 ra.arm_weapon = arm_em;
+                if (hot5) {
+                    ra.hot_skill = HotPhase(f, HotParam::AirCombat, fl.role, f.pool, who5);
+                    HotWho lost = who5;
+                    lost.control_lost = true;
+                    ra.hot_turn_back_lost = HotPhase(f, HotParam::TurnBack, fl.role, f.pool, lost);
+                }
                 m.aircraft.push_back(ra);
                 ++n_targets;
                 end_s = std::max(end_s, (cl.t_h.back() - m.start_h) * 3600.0);
@@ -850,7 +933,7 @@ public:
         Put(root, "origin", og);
         // The raid's clock (roadmap R7): on a dated theatre, the local time at its second 0 and the theatre's date, so the
         // scenario's light is the sun's there and then (light.hpp), as the planner's part was by the sun. An undated theatre
-        // (the tuned theatre_pannonia.json) planned by the fixed buckets: its raid keeps the legacy light keys
+        // (the tuned theatre_pannonia.json replayed from a save made before roadmap S8) planned by the fixed buckets: its raid keeps the legacy light keys
         // (battery.night, environment.daylight) from the planner's part and no clock, so it plays in the light it was planned in.
         const bool dated = th.day_of_year > 0;
         if (dated) {
@@ -859,7 +942,7 @@ public:
             Put(root, "clock_start", Str(FormatLocalHour(std::floor(local * 60.0) / 60.0)));
             int month = 1, day = 1;
             if (DateOfDay(th.year, TheatreSky(th).DayOfYearAt(m.start_h * 3600.0), month, day)) {
-                char date[16];
+                char date[96];
                 std::snprintf(date, sizeof(date), "%04d-%02d-%02d", th.year, month, day);
                 Put(root, "date", Str(date));
             }
@@ -1100,7 +1183,9 @@ public:
             if (!cmd.empty()) Put(pk, "commander", Str(cmd));
             Put(pk, "size", Num(std::max(1, p.Aircraft())));
             Put(pk, "lost_before", Num(lost_before));
-            Put(pk, "turn_back_share", Num(std::round(PackageNerve(p, c.Staff()) * 1000.0) / 1000.0));
+            // From hot_phase.mode 2, §9.3's nerve: its leader's press-on and the day's losses on the faction's husbanding.
+            const int hot_mode = static_cast<int>(tune.Get("hot_phase.mode"));
+            Put(pk, "turn_back_share", Num(std::round(PackageNerve(p, c.Staff(), &f, hot_mode, c.Politics().losses_today) * 1000.0) / 1000.0));
             json::Value pks = Arr();
             Push(pks, pk);
             Put(root, "packages", pks);
@@ -1149,7 +1234,7 @@ public:
         // 1985 regiments, MiG-21MF), its function the share it launches; one GCI at the battery's sector command post's
         // radar, 40 km behind the battery from the raid (a game value, docs/air_battle/08 section 4).
         json::Value own_air_regs = Arr();
-        if (fmt.our_fighters) {
+        if (fmt.our_fighters && tune.Get("own_air.mode") >= 1.0) {
             for (std::size_t oi = 0; oi < th.objects.size(); ++oi) {
                 const TheatreObject& ob = th.objects[oi];
                 const ObjectState& os = c.Truth()[oi];
@@ -1185,9 +1270,58 @@ public:
             Put(ctl, "east_m", Num(std::round(gci.x)));
             Put(ctl, "north_m", Num(std::round(gci.y)));
             Put(ctl, "range_m", Num(220000.0));
+            // Our GCI's vectors on our radio (S1): with the enemy's radio in the session, our side's set and our GCI's post.
+            for (std::size_t ki = 0; ki < root.keys.size() && ki < root.items.size(); ++ki) {
+                if (root.keys[ki] != "air_radio") continue;
+                json::Value& ar = root.items[ki];
+                Put(ar, "our_radio", Str("pact_air_r832m"));
+                Put(ar, "our_freq_mhz", Num(124.0));
+                for (std::size_t kj = 0; kj < ar.keys.size() && kj < ar.items.size(); ++kj) {
+                    if (ar.keys[kj] != "posts") continue;
+                    json::Value post = Obj();
+                    Put(post, "id", Str("our_gci_post"));
+                    Put(post, "name", Str("our sector's GCI"));
+                    Put(post, "kind", Str("our_gci"));
+                    Put(post, "east_m", Num(std::round(gci.x)));
+                    Put(post, "north_m", Num(std::round(gci.y)));
+                    Put(post, "mast_m", Num(25.0));
+                    Push(ar.items[kj], post);
+                    Put(ctl, "post", Str("our_gci_post"));
+                }
+            }
             json::Value ctls = Arr();
             Push(ctls, ctl);
             Put(af, "controllers", ctls);
+            // The package's aircraft in the fight (S1): its escorts fight our pairs, the rest only defend themselves; our pairs
+            // engage only aircraft the fight has. A type without a fit is unarmed (air_combat.json's "unarmed").
+            const AirCombatDef& ac = d.air_combat;
+            const bool s3 = d.tuning.Get("air_fight.mode") >= 1.0;
+            Put(af, "mode", Num(s3 ? 1.0 : 0.0));
+            if (ac.Doctrine(f.id) != nullptr) {
+                json::Value fighters = Arr();
+                for (const RaidAircraft& ra : m.aircraft) {
+                    if (ra.missile || ra.drone || ra.role == FlightRole::Decoy || ra.role == FlightRole::Missile) continue;
+                    std::string type = ra.aircraft;
+                    if (ac.Fit(type) == nullptr) type = ra.helicopter ? "helicopters" : "unarmed";
+                    if (ac.Fit(type) == nullptr) continue;
+                    json::Value fv = Obj();
+                    Put(fv, "target", Str(ra.target_id));
+                    Put(fv, "type", Str(type));
+                    Put(fv, "faction", Str(f.id));
+                    // S3 (air_fight.mode 1): its sweep and CAP fight as fighters too; before, as strikers.
+                    const char* role = ra.role == FlightRole::Escort ? "escort" : "strike";
+                    if (s3 && ra.role == FlightRole::Sweep) role = "sweep";
+                    if (s3 && ra.role == FlightRole::Cap) role = "cap";
+                    Put(fv, "role", Str(role));
+                    // Its flight's air combat skill and turn back on a lost controller (roadmap S5, hot_phase.mode 2).
+                    if (ra.hot_skill >= 0.0) Put(fv, "skill", Num(std::round(ra.hot_skill * 1000.0) / 1000.0));
+                    if (ra.hot_turn_back_lost >= 0.0) Put(fv, "turn_back_lost", Num(std::round(ra.hot_turn_back_lost * 1000.0) / 1000.0));
+                    Push(fighters, fv);
+                }
+                if (!fighters.items.empty()) Put(af, "fighters", fighters);
+            }
+            // The air war's hot-phase mode (roadmap S5): from 2 our scrambled pairs read our side's hot phase.
+            if (tune.Get("hot_phase.mode") >= 2.0) Put(af, "hot_mode", Num(std::floor(tune.Get("hot_phase.mode"))));
             Put(af, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md section 4 (our GCI; a game value for its place)"));
             Put(af, "confidence", Str("low"));
             Put(root, "air_fight", af);
@@ -1199,6 +1333,30 @@ public:
             Put(g, "north_m", Num(std::round(gci.y)));
             Put(oa, "gci", g);
             Put(oa, "raid_warning_s", Num(std::round(warn_after_s)));
+            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it).
+            if (const FrontDef* front = th.FrontFor(f.front)) {
+                if (!front->line.empty()) {
+                    Vec3 best = front->line.front();
+                    for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {
+                        const Vec3 p0 = front->line[k], p1 = front->line[k + 1];
+                        const Vec3 dl = p1 - p0;
+                        const double l2 = dl.x * dl.x + dl.y * dl.y;
+                        double u = l2 > 1e-9 ? ((bst.pos.x - p0.x) * dl.x + (bst.pos.y - p0.y) * dl.y) / l2 : 0.0;
+                        u = std::max(0.0, std::min(1.0, u));
+                        const Vec3 q = p0 + dl * u;
+                        if (Dist2d(q, bst.pos) < Dist2d(best, bst.pos)) best = q;
+                    }
+                    const Vec3 fs = to_scen(best);
+                    if (fs.HorizontalLength() > 1.0) {
+                        json::Value fr = Obj();
+                        Put(fr, "east_m", Num(std::round(fs.x)));
+                        Put(fr, "north_m", Num(std::round(fs.y)));
+                        Put(fr, "enemy_bearing_deg", Num(std::round(RadToDeg(std::atan2(fs.x, fs.y)) * 10.0) / 10.0));
+                        Put(oa, "front", fr);
+                    }
+                }
+            }
+            if (f.id == "warsaw_pact") Put(oa, "enemy_allies", Bool(true));  // the Pact's allies on our Kremniy (S1)
             Put(oa, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md (roadmap B10)"));
             Put(oa, "confidence", Str("low"));
             Put(root, "own_air", oa);

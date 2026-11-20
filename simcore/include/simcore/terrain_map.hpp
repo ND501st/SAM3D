@@ -38,6 +38,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/clutter.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/geo.hpp"
@@ -123,13 +124,10 @@ struct MapDetailDef {
     bool Contains(double e, double n) const { return std::fabs(e - centre.east_m) <= half_m && std::fabs(n - centre.north_m) <= half_m; }
 };
 
-// Representative clutter heights for the far ground's towns the map does not lay out (ITU-R P.1812, data/gameplay/
-// clutter.json, read by LoadMap): dense urban within `dense_share` of a town's radius, suburban beyond. 0: none.
-struct MapClutterDef {
-    double dense_urban_m = 0.0;
-    double suburban_m = 0.0;
-    double dense_share = 0.45;
-};
+// Representative clutter heights for the far ground's towns the map does not lay out (ITU-R P.1812 section 3.2 Table 2,
+// simcore/clutter.hpp; data/gameplay/clutter.json, read by LoadMap): dense urban within `dense_share` of a town's radius,
+// suburban beyond (TownClutterClass). 0: none.
+using MapClutterDef = ClutterHeights;
 
 struct MapSiteDef {
     std::string id;
@@ -528,6 +526,8 @@ private:
 
 // How deep a river's bed is cut below the ground around it.
 constexpr double kRiverBedDepthM = 2.0;
+// The bed reaches this far beyond the water's edge, shallowing to nothing (a game value).
+constexpr double kRiverBedBankM = 15.0;
 
 // The ground as a map file's terrain shapes it, before any site is levelled: the relief, the hills, the river valleys
 // and beds. One function for every map, so a district (the Kesmark range) and the country it lies in (simcore/
@@ -569,7 +569,7 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
         if (dist < d.valley_half_width_m && d.valley_depth_m > 0.0) {
             h -= d.valley_depth_m * 0.5 * (1.0 + std::cos(kPi * dist / d.valley_half_width_m));
         }
-        const double bed = 0.5 * r.width_m + 15.0;
+        const double bed = 0.5 * r.width_m + kRiverBedBankM;
         if (dist < bed) h -= kRiverBedDepthM * noise::Smooth(1.0 - dist / bed);
     }
     // Under a lake the ground lies below its level, deepening from the shore over a kilometre.
@@ -626,6 +626,17 @@ public:
         std::vector<MapLineDef> roads, railways, rivers;
     };
     const DetailLines& ImportedLines() const { return detail_lines_; }
+    // Whether the map lays the country's lines at (east, north) as its own (roadmap S9): in the map proper, in a detail
+    // area, or in the kilometre round a detail area beyond the map proper that the country's lines are imported into
+    // (ImportDetailLines). A drawing of the country's own lines leaves these places out, so no line is drawn twice.
+    bool LaysCountryLinesAt(double e, double n) const {
+        if (def_.InCore(e, n) || def_.InDetail(e, n)) return true;
+        for (const MapDetailDef& a : def_.detail) {
+            double w = 0.0, s = 0.0, ea = 0.0, nn = 0.0;
+            if (ImportBox(a, w, s, ea, nn) && e >= w && e <= ea && n >= s && n <= nn) return true;
+        }
+        return false;
+    }
     // The levelled sites (a centre, a radius, the height levelled to): what the ground is flattened for.
     struct Flat {
         double e, n, r, h;
@@ -1035,6 +1046,7 @@ private:
     }
     static constexpr double kWalkEps = 1e-9;              // of a segment: a cut met on a cell's edge is told in both cells
     static constexpr double kLooseCellM = 50.0;           // beyond the map proper and the detail areas
+    static constexpr double kPitWaterClearM = 25.0;       // a gun pit no nearer the water (a game value)
     static constexpr double kBlockM = 500.0;              // the coarse bound's blocks
     static constexpr double kFineBoundAreaM2 = 250000.0;  // a segment whose bounds are no larger is bounded by the finer cells
 
@@ -1044,7 +1056,7 @@ private:
         for (const ClutterTown& t : clutter_towns_) {
             if (std::fabs(e - t.e) >= t.r || std::fabs(n - t.n) >= t.r) continue;
             const double d = std::hypot(e - t.e, n - t.n);
-            if (d < t.r) return d < t.dense_r ? def_.clutter.dense_urban_m : def_.clutter.suburban_m;
+            if (d < t.r) return def_.clutter.HeightOf(TownClutterClass(t.village ? "village" : "town", d, t.r, def_.clutter.dense_share));
         }
         return 0.0;
     }
@@ -1072,9 +1084,22 @@ private:
         return SiteClearance(s);
     }
 
+    // How far (east, north) is from the nearest river's bed (NaturalGround's: half its width and 15 m), the map's own and
+    // its far ground's; negative inside it.
+    double FromRiverBed(double e, double n) const {
+        double best = 1e300;
+        for (const std::vector<MapLineDef>* list : {&def_.rivers, def_.far_ground ? &def_.far_ground->rivers : nullptr}) {
+            if (list == nullptr) continue;
+            for (const MapLineDef& r : *list) best = std::min(best, mapgeo::DistToLine(r.points, e, n) - (0.5 * r.width_m + kRiverBedBankM));
+        }
+        return best;
+    }
+
     void Bake() {
+        // A site's levelled ground stops short of a river's bed (roadmap S9: the guns on the Rava's bank): its radius no
+        // more than its centre's distance from the bed, none for a site standing in it, so the bed is never filled.
         for (const MapSiteDef& s : def_.sites) {
-            const double r = SiteFlatRadius(s);
+            const double r = std::min(SiteFlatRadius(s), FromRiverBed(s.centre.east_m, s.centre.north_m));
             if (r > 0.0) flats_.push_back({s.centre.east_m, s.centre.north_m, r, Natural(s.centre.east_m, s.centre.north_m)});
         }
         const auto fill = [this](MapGrid& g, double west, double south, double east, double north, double spacing) {
@@ -1151,13 +1176,22 @@ private:
 
     // The country's roads, railways and rivers through each detail area beyond the map proper (an area inside it has
     // the district's own lines), clipped to the area and a kilometre round it.
+    // The box a detail area's imported lines are clipped to (the area and a kilometre round it); false for an area whose
+    // box reaches the map proper (the map proper's own lines serve it) or when there is no far ground to import from.
+    bool ImportBox(const MapDetailDef& a, double& w, double& s, double& e, double& n) const {
+        constexpr double kMarginM = 1000.0;
+        w = a.centre.east_m - a.half_m - kMarginM;
+        e = a.centre.east_m + a.half_m + kMarginM;
+        s = a.centre.north_m - a.half_m - kMarginM;
+        n = a.centre.north_m + a.half_m + kMarginM;
+        return def_.far_ground && !(w < def_.east_m && e > def_.west_m && s < def_.north_m && n > def_.south_m);
+    }
+
     void ImportDetailLines() {
         if (!def_.far_ground) return;
-        constexpr double kMarginM = 1000.0;
         for (const MapDetailDef& a : def_.detail) {
-            const double w = a.centre.east_m - a.half_m - kMarginM, e = a.centre.east_m + a.half_m + kMarginM;
-            const double s = a.centre.north_m - a.half_m - kMarginM, n = a.centre.north_m + a.half_m + kMarginM;
-            if (w < def_.east_m && e > def_.west_m && s < def_.north_m && n > def_.south_m) continue;  // the map proper's
+            double w = 0.0, s = 0.0, e = 0.0, n = 0.0;
+            if (!ImportBox(a, w, s, e, n)) continue;
             const auto clip = [&](const std::vector<MapLineDef>& from, std::vector<MapLineDef>& to) {
                 for (const MapLineDef& line : from) {
                     std::vector<std::vector<MapPoint>> runs;
@@ -1234,8 +1268,7 @@ private:
             for (const MapSettlementDef& s : def_.settlements) laid = laid || s.id == t.id;
             for (const MapSettlementDef& s : def_.detail_settlements) laid = laid || s.id == t.id;
             if (laid) continue;
-            const bool dense = t.kind != "village";
-            clutter_towns_.push_back({t.centre.east_m, t.centre.north_m, t.radius_m, dense ? def_.clutter.dense_share * t.radius_m : 0.0});
+            clutter_towns_.push_back({t.centre.east_m, t.centre.north_m, t.radius_m, t.kind == "village"});
         }
     }
 
@@ -1464,10 +1497,32 @@ private:
             Revetment(a.east_m, a.north_m, h, 11.0, 6.0, 2.2);
             Revetment(b.east_m, b.north_m, h, 11.0, 6.0, 2.2);
         } else if (s.kind == "gun_site") {
+            // The pits on a ring 55 m out; one that would stand within 25 m of the water (a site on a river's bank, roadmap
+            // S9) goes round the ring, then nearer in or further out, to the first place clear of the water and of the
+            // pits already dug (none where every place is wet).
             const int count = s.count > 0 ? s.count : 4;
+            std::vector<MapPoint> dug;
+            const auto free_at = [&](double pe, double pn) {
+                if (water_.Near(pe, pn, kPitWaterClearM)) return false;
+                for (const MapPoint& d : dug) {
+                    if (std::hypot(pe - d.east_m, pn - d.north_m) < 20.0) return false;
+                }
+                return true;
+            };
             for (int i = 0; i < count; ++i) {
                 const double a = kTwoPi * i / count + 0.3;
-                GunPit(e + 55.0 * std::sin(a), n + 55.0 * std::cos(a), 9.0, 1.3);
+                bool placed = false;
+                for (const double ring : {55.0, 35.0, 75.0}) {
+                    for (int k = 0; k < 36 && !placed; ++k) {
+                        const double ak = a + kTwoPi * (k % 2 == 0 ? k / 2 : -(k + 1) / 2) / 36.0;
+                        const double pe = e + ring * std::sin(ak), pn = n + ring * std::cos(ak);
+                        if (!free_at(pe, pn)) continue;
+                        GunPit(pe, pn, 9.0, 1.3);
+                        dug.push_back({pe, pn});
+                        placed = true;
+                    }
+                    if (placed) break;
+                }
             }
         } else if (s.kind == "fuel_depot") {
             const int count = s.count > 0 ? s.count : 6;
@@ -1879,7 +1934,7 @@ private:
         blocks_ = FootCells();
         blocks_.cell_m = kBlockM;
         tallest_top_m_ = Terrain::kNoObstacleTop;
-        tallest_m_ = std::max({0.0, def_.clutter.dense_urban_m, def_.clutter.suburban_m});
+        tallest_m_ = std::max(0.0, def_.clutter.Tallest());
         for (const Foot& f : feet_) {
             double low = GroundHeight(f.e, f.n);
             for (const double se : {-1.0, 1.0}) {
@@ -1973,7 +2028,8 @@ private:
     double tallest_top_m_ = Terrain::kNoObstacleTop;
     double tallest_m_ = 0.0;
     struct ClutterTown {
-        double e, n, r, dense_r;
+        double e, n, r;
+        bool village;
     };
     std::vector<ClutterTown> clutter_towns_;
 };
@@ -2723,24 +2779,7 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
     MapDef def;
     if (!LoadMapDefJson(text, def, error)) return nullptr;
     // The representative clutter heights of the far ground's towns (data/gameplay/clutter.json; none without it).
-    std::string clutter_text;
-    if (detail::ReadTextFile(data_dir + "/gameplay/clutter.json", clutter_text)) {
-        json::Value root;
-        std::string parse_error;
-        if (!json::Parse(clutter_text, root, &parse_error)) {
-            if (error) *error = "gameplay/clutter.json: " + parse_error;
-            return nullptr;
-        }
-        const json::Value* values = root.Find("values");
-        const auto value = [values](const char* key, double& out) {
-            const json::Value* v = values != nullptr ? values->Find(key) : nullptr;
-            const json::Value* n = v != nullptr ? v->Find("value") : nullptr;
-            if (n != nullptr && n->Is(json::Type::Number)) out = n->number;
-        };
-        value("dense_urban_m", def.clutter.dense_urban_m);
-        value("suburban_m", def.clutter.suburban_m);
-        value("dense_share", def.clutter.dense_share);
-    }
+    if (!LoadClutterHeights(data_dir, def.clutter, error)) return nullptr;
     if (!def.far_ground_file.empty()) {
         // A district: its far ground is its country's (the same frame, so one ground meets the other at the map's edge).
         std::string far_text;

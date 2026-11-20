@@ -367,11 +367,11 @@ Where it differs from 3.1-3.4:
   climb capped at `climb_mps`. Terrain following (`TargetPilot::HoldHeight`) still sets the height after the step, as
   before; the step then flies the horizontal at v cos(gamma), and the energy model takes -g sin(gamma) from the
   vertical speed flown. The type's `climb_mps` caps the height layer's climbs. So a terrain-following climb costs
-  speed, but its rate is not yet asked of the aircraft as a path angle.
+  speed; since S4 a bank-to-turn jet's is asked as a path angle (below).
 - **Pitch.** The path angle and an angle of attack of 3 deg at 1 g, times n and (the speed told / the airspeed)^2,
   at most 15 deg. A helicopter's pitch is its lean, -atan((v / v_max)^2 tan 10 deg + (dv/dt) / g).
-- **Helicopters** have no energy model yet: they fly their told speed, as before. A pop-up helicopter stops at its
-  hide on the spot; with an energy model it would slide several hundred metres past it until the pilot plans his stop. Their bank limit
+- **Helicopters** have no energy model of a jet's kind: since S4 they gain and lose speed at a rate (below), and a
+  pop-up helicopter plans its stop at its hide. Their bank limit
   is acos(1 / max_load_g); in the hover (under 2 m/s) they turn on the spot at `max_turn_deg_s`, level.
 - **Type data.** The new values are in each aircraft's `"flight"` object, with their own `source` and `confidence`
   (the type's own source is about its role and numbers, not its flight). All are game values, `estimate`. The
@@ -382,9 +382,24 @@ Where it differs from 3.1-3.4:
 - **Not reused.** `fx::WreckFall::Accel`'s banked lift was not needed: the coordinated turn is the two lines of 3.1.
 - **Drawn.** Unreal takes yaw and pitch from the nose (`heading_rad`, `pitch_rad`) and the roll from `bank_rad`, for
   every aircraft but a weapon (`USimWorldSubsystem::BuildEntityList`). Tacview gets the same attitude.
-- **Left.** Damage (R1's moderate and heavy) does not lower the g limit or the acceleration yet. Helicopters' energy.
-  The terrain-following climb as a path angle. The flight model at altitude (v_max is one number per type, the top
-  speed at the heights it flies).
+- **Roadmap S4** (19 Nov 2026):
+  - *At altitude.* A type's `accel_mps2` and `max_mps` are at sea level; at height h the thrust falls as sigma^0.7
+    (sigma the ISA density ratio, `DensityRatioAt`; the turbojet's lapse, `anderson_flight`) and the drag as sigma v^2,
+    so the acceleration is A sigma^0.7 and the top speed v_max sigma^-0.15 (`AccelMps2`, `TopSpeedMps`): at 6,000 m
+    0.649 and 1.097 of sea level's. The height is the frame's altitude plus z (`Aircraft::frame_alt_m`, set at spawn).
+    The exponent 0.7 is a game value inside the textbook's range.
+  - *The climb as a path angle.* The pilot's height layer asks a bank-to-turn jet's climb or descent as a path angle
+    (`Aircraft::path_asked`, `asked_path_angle_rad` = asin(vz / v), at most 0.9): the step pulls onto it within the g
+    limit and one second's lag and flies it, and the energy model pays g sin(gamma). The ground floor still pushes him
+    up. A helicopter keeps the old way (its height set after the step).
+  - *Helicopters' energy.* A helicopter gains speed at its type's `accel_mps2` or 2 m/s2 and loses it in a flare of
+    3 m/s2 (`kHeliAccelMps2`, `kHeliDecelMps2`, game values; the lean takes the flare's dv/dt, nose up). A pop-up
+    helicopter plans its stop: on its way to the hide its speed is held to sqrt(2 a d), so it hovers at the hide
+    instead of sliding past it (`HeliStopDistanceM`, 1,067 m from 80 m/s).
+  - *Damage.* Moderate and heavy damage lower the g limit, the turn rates, the acceleration and the top speed
+    (`docs/DAMAGE.md` §1).
+- **Left.** The lapse's exponent per engine (the turbofans' smaller), the afterburner, and the drag's own Mach rise.
+  A helicopter's climb as a path angle. Fuel burnt and the weight it takes off.
 
 ## 4. Pilots as people
 
@@ -618,6 +633,30 @@ and off, line for line, and `ground_check data 3600` lists nothing with them on.
 whose flights go far and come back near give the same places at every step, the same launches and the same debrief
 but for a wingman's warning-receiver line, which may come at another moment (see Tests).
 
+**Mode 2 (roadmap S7, 20 Nov 2026, branch `tbr-s7`).** `air_levels.json` ships with `mode` 2: the levels as above and
+four more of B12's leftovers. Mode 1 is B12's levels unchanged, and B12's tests run with it.
+
+- *The height layer at a lower rate.* A wingman of a flight at A1 who follows the ground scans it ahead only every
+  `a1_height_scan_s` (0.5 s; `TargetPilot::SetHeightScanEvery`): the scan reaches over his look-ahead and that half
+  second, and its highest point holds until the next. He never holds lower than a scan at every step would have him
+  (a test over a ridge); he may hold a little higher. A flight at A2 and every leader scan at every step.
+- *The receivers' cost near the battery.* `receiver_bound` 1 sets the EM world's `esm_sidelobe_bound`: before a
+  receiver walks the path from a beam (the terrain profile and the two rays), the beam as it points now over the best
+  ground there is (the two rays in phase, F at most 2, -6.02 dB on free space) is compared with the receiver's
+  sensitivity, and a beam that cannot reach it is skipped. It is a bound, so what a receiver hears does not change, but
+  the paths not walked are not refreshed in the path cache, so a later walk may use a profile cached at another moment:
+  not bit-exact (a test: within two steps in 400 for every jet).
+- *The A1 wingman's lock.* A radar locked on a wingman whose flight is at A1 (the engagement's track, a battery or
+  neighbour launcher's target, an EM track radar's target: `ScenarioRunner::LockedOn`) gives him back his own
+  receiver at once, so the lock is heard on his own set; B12 left it missed until the flight came back to A2.
+- *A fixed stagger serial.* A flight's moment in the second is `StaggerDueEven` by a serial given in the order the
+  flights first flew (the golden ratio's sequence), so no two of ten flights fall in one 0.05 s step; by the hash of the
+  id two could. The serial is the session's, not saved.
+
+The out-and-back session of `test_levels.cpp` at mode 2 flies every aircraft where it flew with the levels off, to a
+micrometre, with the same launches and debrief (but a wingman's warning-receiver line); the testbed's numbers are in
+`docs/air_war/09_BALANCE.md` section 22.
+
 **A0** is not built here: the time-stepped resolver is B5's (`05_C2_AND_RETASKING.md` §4.6), and making the resolver
 place packages each step changes every campaign's outcome; it stays with B5.
 
@@ -751,4 +790,5 @@ PU-12M's P-19 reaches 160 km and would keep a whole battery mission at A2; set i
 - The A0 resolver made time-stepped (`05_C2_AND_RETASKING.md` §4.6, with `01_ROUTES.md`'s routes): its cost on the
   nation's theatre is not yet measured.
 - B12's A1 (§5.4): a wingman hears on his leader's receiver, so an emitter at the edge of hearing comes to him a
-  little earlier or later, and a lock on him alone is missed until his flight is back at A2.
+  little earlier or later (a lock on him alone gives him his own receiver back since S7's mode 2). The receivers'
+  bound is not bit-exact through the path cache.
