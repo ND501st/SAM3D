@@ -705,3 +705,71 @@ SC_TEST("c2 (B5): a seed replays exactly with the posts on, and a save with a ta
     for (std::size_t i = 0; i < l.Journal().size() && i < c.Journal().size(); ++i) SC_EXPECT(l.Journal()[i].text == c.Journal()[i].text);
     SC_EXPECT(l.C2().Log().size() == c.C2().Log().size());
 }
+
+SC_TEST("c2 (F2.4): the BAI area reaches a sector's air front further; at 0, and with no line, the base line's 30 km; free hunt does not move") {
+    const AirWarData nato = LoadWar("nato");
+    const FrontDef* front = nato.theatre.FrontFor(nato.faction.front);
+    SC_EXPECT(front != nullptr);
+    if (front == nullptr) return;
+    LineOfContact line;
+    line.Build(*front, nato.tuning.Get("air_front.station_m"));
+    SC_EXPECT(line.SectorCount() >= 2);
+    if (line.SectorCount() < 2) return;
+    const double bai = nato.tuning.Get("c2.bai_depth_m");
+    const double a0 = 0.5 * (line.Sector(0).from_m + line.Sector(0).to_m), a1 = 0.5 * (line.Sector(1).from_m + line.Sector(1).to_m);
+    const auto at = [&](double along, double beyond) { return line.PointAt(along) + line.InwardNormal(along) * beyond; };
+    Package p;
+    p.kind = MissionKind::Strike;
+    const std::vector<double> none, zero(line.SectorCount(), 0.0);
+    std::vector<double> deep(line.SectorCount(), 0.0);
+    deep[0] = 20000.0;
+    AirFrontView off, flat, fwd;
+    off.line = &line;
+    off.depth_m = &none;
+    flat = off;
+    flat.depth_m = &zero;
+    fwd = off;
+    fwd.depth_m = &deep;
+    // 10 km either side of the BAI area's edge, in both sectors: the same with no view, the view off and every sector at 0.
+    for (double along : {a0, a1}) {
+        for (double beyond : {bai - 10000.0, bai + 10000.0, bai + 25000.0}) {
+            p.target_pos = at(along, beyond);
+            const std::string plain = C2MissionOf(p, nato);
+            SC_EXPECT(plain == (DistanceToLine(front->line, p.target_pos) <= bai ? "bai" : "strike"));
+            SC_EXPECT(C2MissionOf(p, nato, off) == plain && C2MissionOf(p, nato, flat) == plain);
+        }
+    }
+    // The first sector's air front at 20 km: 40 km in is battlefield interdiction there, air interdiction in the next.
+    p.target_pos = at(a0, bai + 10000.0);
+    SC_EXPECT(C2MissionOf(p, nato, fwd) == "bai");
+    p.target_pos = at(a0, bai + 25000.0);
+    SC_EXPECT(C2MissionOf(p, nato, fwd) == "strike");
+    p.target_pos = at(a1, bai + 10000.0);
+    SC_EXPECT(C2MissionOf(p, nato, fwd) == "strike");
+    // Close support stays close support whatever the depth.
+    p.kind = MissionKind::Cas;
+    SC_EXPECT(C2MissionOf(p, nato, fwd) == "cas");
+    // The posts: the Pact's free hunt zone is measured from the line of contact, not moved by the air front.
+    Bench b(LoadWar("warsaw_pact"));
+    const FrontDef* pf = b.d.theatre.FrontFor(b.d.faction.front);
+    SC_EXPECT(pf != nullptr);
+    if (pf == nullptr) return;
+    LineOfContact pl;
+    pl.Build(*pf, b.d.tuning.Get("air_front.station_m"));
+    std::vector<double> pdeep(pl.SectorCount(), 20000.0);
+    AirFrontView pv;
+    pv.line = &pl;
+    pv.depth_m = &pdeep;
+    pv.helo_depth_m = &pdeep;
+    const double hunt_m = b.d.faction.c2.free_hunt.depth_km * 1000.0;
+    SC_EXPECT(hunt_m > 0.0);
+    const double pa = 0.5 * (pl.Sector(0).from_m + pl.Sector(0).to_m);
+    for (double beyond : {hunt_m - 5000.0, hunt_m + 5000.0}) {
+        const Vec3 place = pl.PointAt(pa) + pl.InwardNormal(pa) * beyond;
+        b.c2.Bind(b.d, b.staff);
+        const bool plain = b.c2.FreeHunt(place, 1);
+        b.c2.Bind(b.d, b.staff, pv);
+        SC_EXPECT(b.c2.FreeHunt(place, 1) == plain);
+        SC_EXPECT(plain == (beyond < hunt_m));
+    }
+}

@@ -945,3 +945,160 @@ SC_TEST("learning (S7): the weather by month: a winter war is mostly not clear; 
     SC_EXPECT_NEAR(old.Data().tuning.Get("learning.mode"), 0.0, 1e-12);
     SC_EXPECT_NEAR(old.Data().tuning.Get("weather.mode"), 0.0, 1e-12);
 }
+
+// ---------------------------------------------------------------- track F, F2.4: the routes read the air front
+
+namespace {
+
+// A straight front along north -75 km, the enemy's bases to the south, cut into two sectors at 150 km along it.
+LineOfContact StraightFront() {
+    FrontDef f;
+    f.name = "test front";
+    f.line = {Vec3{-100000.0, -75000.0, 0.0}, Vec3{100000.0, -75000.0, 0.0}};
+    f.bases = Vec3{0.0, -160000.0, 0.0};
+    SectorDef a, b;
+    a.id = "a";
+    a.from_m = 0.0;
+    a.to_m = 150000.0;
+    b.id = "b";
+    b.from_m = 150000.0;
+    b.to_m = 200000.0;
+    f.sectors = {a, b};
+    LineOfContact l;
+    l.Build(f, 5000.0);
+    return l;
+}
+
+bool SamePoints(const std::vector<RoutePoint>& x, const std::vector<RoutePoint>& y) {
+    if (x.size() != y.size()) return false;
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        if (x[i].tag != y[i].tag || x[i].pos.x != y[i].pos.x || x[i].pos.y != y[i].pos.y || x[i].agl_m != y[i].agl_m || x[i].leg_mps != y[i].leg_mps) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+SC_TEST("routes (F2.4): inside its sector's air front a low flight crosses high, lets down where it leaves it and climbs coming back") {
+    TuningTable tune;
+    RouteGround g;
+    g.BuildFrom(RidgeCountry(), tune);
+    const AircraftType a = TestJet();
+    RouteRules rules;
+    rules.crossing = "checkpoint_gate";
+    rules.letdown_m = 40000.0;
+    const RoutePlanner planner(g, tune, rules);
+    const LineOfContact line = StraightFront();
+    EntryPoint g1{"G1", Vec3{-6000.0, -75000.0, 0.0}}, g2{"G2", Vec3{30000.0, -75000.0, 0.0}};
+    RouteRequest rq;
+    rq.bases = Vec3{6000.0, -160000.0, 0.0};
+    rq.gate_in = &g1;
+    rq.exits = {&g1, &g2};
+    rq.target = Vec3{6000.0, 60000.0, 0.0};
+    rq.type = &a;
+    rq.delivery = Delivery::PopUp;
+    const PlannedRoute base = planner.Plan(rq, {}, nullptr);
+    SC_EXPECT(base.ok);
+    // The view off (mode 0), on with every sector at 0, and on with only the other sector forward: the route as built.
+    const std::vector<double> none, zero = {0.0, 0.0}, other = {0.0, 20000.0}, here = {20000.0, 0.0};
+    rq.air_front.line = &line;
+    const std::vector<double>* views[] = {&none, &zero, &other};
+    for (const std::vector<double>* v : views) {
+        rq.air_front.depth_m = v;
+        rq.air_front.helo_depth_m = v;
+        const PlannedRoute pr = planner.Plan(rq, {}, nullptr);
+        SC_EXPECT(SamePoints(pr.points, base.points) && pr.exposure_s == base.exposure_s && pr.length_m == base.length_m);
+    }
+    // The gates' sector forward by 20 km.
+    rq.air_front.depth_m = &here;
+    rq.air_front.helo_depth_m = &zero;
+    const PlannedRoute pr = planner.Plan(rq, {}, nullptr);
+    SC_EXPECT(pr.ok);
+    std::string all;
+    for (const RoutePoint& p : pr.points) all += p.tag + " ";
+    std::printf("    %s\n", all.c_str());
+    const std::vector<RoutePoint>& r = pr.points;
+    const int gi = RouteIndexOf(r, "gate"), ld = RouteIndexOf(r, "letdown"), ip = RouteIndexOf(r, "ip"), cl = RouteIndexOf(r, "climb");
+    int go = -1;
+    for (std::size_t i = 0; i < r.size(); ++i) {
+        if (r[i].tag == "gate") go = static_cast<int>(i);
+    }
+    SC_EXPECT(r.size() > 3);
+    if (r.size() <= 3) return;
+    SC_EXPECT(r.front().tag == "entry" && r[1].tag == "checkpoint" && gi == 2);  // no let-down short of the gate
+    SC_EXPECT(ld > gi && ld < ip);
+    SC_EXPECT(cl > RouteIndexOf(r, "egress") && cl < go && r.back().tag == "exit" && r[r.size() - 2].tag == "gate");
+    if (ld < 0 || cl < 0 || ip < 0) return;
+    // Where it lets down and climbs: on the air front, 20 km beyond the line of contact.
+    SC_EXPECT_NEAR(line.DistanceTo(r[static_cast<std::size_t>(ld)].pos), 20000.0, 5.0);
+    SC_EXPECT_NEAR(line.DistanceTo(r[static_cast<std::size_t>(cl)].pos), 20000.0, 5.0);
+    for (int i = 0; i < ld; ++i) {
+        SC_EXPECT(r[static_cast<std::size_t>(i)].agl_m >= a.medium_alt_m && r[static_cast<std::size_t>(i)].leg_mps == a.cruise_mps);
+    }
+    for (int i = ld; i < cl; ++i) {
+        const std::string& t = r[static_cast<std::size_t>(i)].tag;
+        if (t == "pull_up" || t == "apex" || t == "target") continue;  // the attack's own heights
+        SC_EXPECT(r[static_cast<std::size_t>(i)].agl_m == 60.0);
+    }
+    for (std::size_t i = static_cast<std::size_t>(cl); i < r.size(); ++i) SC_EXPECT(r[i].agl_m >= a.medium_alt_m);
+    // The same way: the let-down and the climb lie on the legs of the route as built, which is no longer than it was.
+    SC_EXPECT(pr.length_m <= base.length_m + 1.0);
+    SC_EXPECT(pr.turns == base.turns && pr.home == base.home);
+    // A target inside the air front: the let-down a leg short of the IP, the climb as far past the egress.
+    std::vector<double> deep = {150000.0, 0.0};
+    rq.air_front.depth_m = &deep;
+    const PlannedRoute in = planner.Plan(rq, {}, nullptr);
+    SC_EXPECT(in.ok);
+    const int ld2 = RouteIndexOf(in.points, "letdown"), ip2 = RouteIndexOf(in.points, "ip"), eg2 = RouteIndexOf(in.points, "egress"),
+              cl2 = RouteIndexOf(in.points, "climb");
+    std::string all2;
+    for (const RoutePoint& p : in.points) all2 += p.tag + " ";
+    std::printf("    %s\n", all2.c_str());
+    SC_EXPECT(ld2 == ip2 - 1 && cl2 == eg2 + 1);
+    if (ld2 < 0 || ip2 < 0) return;
+    SC_EXPECT(Dist2d(in.points[static_cast<std::size_t>(ld2)].pos, in.points[static_cast<std::size_t>(ip2)].pos) <= rules.letdown_m + 1.0);
+    // A helicopter is untouched by the fixed-wing front; it holds behind its own (route.helo_holding_m behind it, never
+    // nearer the line than route.helo_holding_floor_m).
+    AircraftType h;
+    h.id = "test_helo";
+    h.helicopter = true;
+    h.low_agl_m = 15.0;
+    h.medium_alt_m = 1000.0;
+    h.cruise_mps = 60.0;
+    h.attack_mps = 60.0;
+    TuningTable tune2 = tune;
+    tune2.values["route.helo_holding_m"] = 30000.0;
+    const RoutePlanner hp(g, tune2, rules);
+    EntryPoint gh{"GH", Vec3{-30000.0, -75000.0, 0.0}};  // the B2 helicopter test's way in, on this front
+    RouteRequest hq;
+    hq.bases = Vec3{-30000.0, -160000.0, 0.0};
+    hq.gate_in = &gh;
+    hq.target = Vec3{-9000.0, -35000.0, 0.0};
+    hq.type = &h;
+    hq.ip_dist_m = 6000.0;
+    hq.helicopter_hide = true;
+    hq.delivery = Delivery::HoverFire;
+    hq.air_front.line = &line;
+    const auto holding = [&](double helo_front_m) {
+        const std::vector<double> fw = {helo_front_m, 0.0}, hf = {helo_front_m, 0.0};
+        hq.air_front.depth_m = &fw;
+        hq.air_front.helo_depth_m = &hf;
+        const PlannedRoute p = hp.Plan(hq, {}, nullptr);
+        SC_EXPECT(p.ok && p.points.front().tag == "entry" && RouteIndexOf(p.points, "letdown") < 0);
+        return p.ok ? Dist2d(p.points.front().pos, gh.pos) : -1.0;
+    };
+    SC_EXPECT_NEAR(holding(0.0), 30000.0, 1.0);
+    SC_EXPECT_NEAR(holding(10000.0), 20000.0, 1.0);
+    SC_EXPECT_NEAR(holding(20000.0), tune.Get("route.helo_holding_floor_m"), 1.0);
+    SC_EXPECT_NEAR(holding(40000.0), tune.Get("route.helo_holding_floor_m"), 1.0);
+    // With the data's values (15 km behind, the floor 15 km) the holding area stays where it was.
+    const RoutePlanner hp0(g, tune, rules);
+    const std::vector<double> hf = {20000.0, 0.0};
+    hq.air_front.depth_m = &hf;
+    hq.air_front.helo_depth_m = &hf;
+    const PlannedRoute p0 = hp0.Plan(hq, {}, nullptr);
+    SC_EXPECT(p0.ok);
+    if (p0.ok) SC_EXPECT_NEAR(Dist2d(p0.points.front().pos, gh.pos), tune.Get("route.helo_holding_m"), 1.0);
+}

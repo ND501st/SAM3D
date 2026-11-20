@@ -301,6 +301,12 @@ inline bool NominationWaits(const AirWarData& d, const IntelEntry& e, double to_
     return now_h < e.first_h + c2.nomination_h;
 }
 
+// Whether a helicopter target lies beyond the Pact's umbrella (its own air defence's cover): further than `umbrella_m`
+// from the entry point, less its sector's fixed-wing air front, which carries the cover forward (track F, F2.4; 0 off).
+inline bool BeyondHeloUmbrella(const Vec3& target, const Vec3& entry, const AirFrontView& af, double umbrella_m) {
+    return Dist2d(target, entry) - af.At(target) > umbrella_m;
+}
+
 class Planner {
 public:
     std::vector<Package> Plan(PlanContext& c) {
@@ -429,6 +435,15 @@ public:
                                       FormatHour(c.now_h + f.doctrine.lead_time_h + cycle, d.theatre.start_hour) + ".");
         pln->packages_planned += static_cast<int>(out_.size());
         return out_;
+    }
+
+    // What the target filter admits for a mission kind now, before any worth is weighed: the kind's depths from the line
+    // of contact (and its sector's air front, F2.4), the politics' and the no-strike zones (for tests and tools).
+    std::vector<const IntelEntry*> CandidatesFor(PlanContext& c, MissionKind mk) {
+        c_ = &c;
+        front_ = c.data->theatre.FrontFor(c.data->faction.front);
+        if (front_ == nullptr) return {};
+        return Candidates(mk);
     }
 
     // An on-call package from an alert pool (roadmap B5, docs/air_battle/05_C2_AND_RETASKING.md §4.4): the main flights
@@ -1557,7 +1572,7 @@ private:
                 // sector's air front (F2.4: within it of the air front, not of the entry point; 0 off).
                 double umbrella = 1.0;
                 if (routed && rules_.helo_umbrella && mk == MissionKind::HeloRaid &&
-                    Dist2d(e->pos, front_->entries[ei].pos) - c_->air_front.At(e->pos) > tune.Get("route.helo_umbrella_m")) {
+                    BeyondHeloUmbrella(e->pos, front_->entries[ei].pos, c_->air_front, tune.Get("route.helo_umbrella_m"))) {
                     umbrella = tune.Get("route.helo_beyond_umbrella");
                 }
                 const double ev = v * live * p_loc * p_deliver * effect * umbrella;

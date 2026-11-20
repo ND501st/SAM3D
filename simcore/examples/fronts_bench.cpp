@@ -9,13 +9,15 @@
 //   from the pre-war picture, the worst a cycle can be), and the measure with the decision on it (DecideAirFront on a copy
 //   of the day's state: the cycle as the campaign runs it, F2.3). Prints the CPU time per cycle (mean and worst day)
 //   against the budget, 1 ms per planning cycle for a front; the campaign's whole CPU time with the mode off and on (the
-//   same seeds), which must be the same war (the same packages, and the same journal but for the air front's own
-//   entries: nothing reads the depths until F2.4); and how the air front moved (advances, pull-backs, the deepest, the
-//   sectors moved and the depths at the end, the first seed's). --moves prints each seed's air front entries; --trace each
+//   same seeds), which must be the same war while the air front never moved (the same packages, and the same journal but
+//   for the air front's own entries; once it moves the planner, routes and C2 read it, F2.4, and the war parts); the
+//   packages planned off and on, and of those on, the low-level ones flown past their kind's fixed depth (close support
+//   40 km, helicopter raids 25, harassment 70: only an air front takes them there); and how the air front moved
+//   (advances, pull-backs, the deepest, the sectors moved and the depths at the end, the first seed's). --moves prints each seed's air front entries; --trace each
 //   day's end by sector: the depths, the cover and the mobile air defence against their baselines, the next band's worth
 //   and the low-level sorties and loss rate in the loss window.
 // Factions default to warsaw_pact and nato. CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
-// the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on.
+// the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -115,9 +117,9 @@ int main(int argc, char** argv) {
     int fails = 0;
     std::printf("The air front's measure and decision (F2.2-F2.3) on %s, %s sectors, %d days, %d seeds; budget %.1f ms a planning cycle\n\n",
                 theatre.c_str(), sectors > 0 ? (std::to_string(sectors) + " equal").c_str() : "the theatre's", days, seeds, budget_ms);
-    std::printf("%-12s %7s %7s %9s %9s %9s %9s %9s %7s %9s %9s %5s %5s %5s %5s %5s  %s\n", "faction", "sectors", "entries", "mean_ms",
-                "worst_ms", "moved_ms", "cycle_ms", "cyc_worst", "prewar", "cpu_off_s", "cpu_on_s", "same", "adv", "back", "deep", "moved",
-                "depths at the end, km (first seed)");
+    std::printf("%-12s %7s %7s %9s %9s %9s %9s %9s %7s %9s %9s %5s %6s %6s %6s %5s %5s %5s %5s  %s\n", "faction", "sectors", "entries", "mean_ms",
+                "worst_ms", "moved_ms", "cycle_ms", "cyc_worst", "prewar", "cpu_off_s", "cpu_on_s", "same", "pk_off", "pk_on", "deeper", "adv",
+                "back", "deep", "moved", "depths at the end, km (first seed)");
     for (const std::string& faction : factions) {
         AirWarData d;
         std::string e;
@@ -131,7 +133,7 @@ int main(int argc, char** argv) {
         double sum_ms = 0.0, worst_ms = 0.0, worst_moved_ms = 0.0, cycle_sum_ms = 0.0, cycle_worst_ms = 0.0, entries = 0.0, prewar = 0.0,
                cpu_off = 0.0, cpu_on = 0.0, deepest_km = 0.0;
         std::size_t sector_count = 0;
-        int samples = 0, advances = 0, pullbacks = 0, moved_sectors = 0;
+        int samples = 0, advances = 0, pullbacks = 0, moved_sectors = 0, packages_off = 0, packages_on = 0, past_fixed = 0;
         bool same = true;
         std::string depths_end;
         for (int s = 0; s < seeds; ++s) {
@@ -219,6 +221,12 @@ int main(int argc, char** argv) {
             }
             cpu_on += CpuSeconds() - t0 - measured;
             same = same && JournalHash(off) == JournalHash(c) && PackageHash(off) == PackageHash(c) && off.Packages().size() == c.Packages().size();
+            packages_off += static_cast<int>(off.Packages().size());
+            packages_on += static_cast<int>(c.Packages().size());
+            for (const Package& p : c.Packages()) {  // low-level work past its fixed depth: only the air front takes it there
+                const double fixed_m = p.kind == MissionKind::Cas ? 40000.0 : p.kind == MissionKind::HeloRaid ? 25000.0 : p.kind == MissionKind::Harassment ? 70000.0 : -1.0;
+                if (fixed_m > 0.0 && c.FrontLine().AbsDistance(p.target_pos) > fixed_m + 1.0) ++past_fixed;
+            }
             for (const SectorFront& f : c.AirFront().sectors) {
                 advances += f.advances;
                 pullbacks += f.pullbacks;
@@ -243,16 +251,19 @@ int main(int argc, char** argv) {
         }
         const double mean_ms = samples > 0 ? sum_ms / samples : 0.0;
         const double cycle_mean_ms = samples > 0 ? cycle_sum_ms / samples : 0.0;
-        std::printf("%-12s %7zu %7.0f %9.4f %9.4f %9.4f %9.4f %9.4f %7.1f %9.2f %9.2f %5s %5d %5d %5.0f %5d  %s\n", faction.c_str(), sector_count,
-                    samples > 0 ? entries / samples : 0.0, mean_ms, worst_ms, worst_moved_ms, cycle_mean_ms, cycle_worst_ms, prewar / seeds, cpu_off,
-                    cpu_on, same ? "yes" : "NO", advances, pullbacks, deepest_km, moved_sectors, depths_end.c_str());
-        if (worst_ms > budget_ms || worst_moved_ms > budget_ms || cycle_worst_ms > budget_ms || !same) ++fails;
+        std::printf("%-12s %7zu %7.0f %9.4f %9.4f %9.4f %9.4f %9.4f %7.1f %9.2f %9.2f %5s %6d %6d %6d %5d %5d %5.0f %5d  %s\n", faction.c_str(),
+                    sector_count, samples > 0 ? entries / samples : 0.0, mean_ms, worst_ms, worst_moved_ms, cycle_mean_ms, cycle_worst_ms, prewar / seeds,
+                    cpu_off, cpu_on, same ? "yes" : "no", packages_off, packages_on, past_fixed, advances, pullbacks, deepest_km, moved_sectors,
+                    depths_end.c_str());
+        if (worst_ms > budget_ms || worst_moved_ms > budget_ms || cycle_worst_ms > budget_ms || (!same && advances == 0)) ++fails;
     }
     std::printf("\nentries: the enemy's picture at a day's end (mean); mean_ms, worst_ms: a measure with the bands kept (mean, worst day);\n"
                 "moved_ms: one with every sector's band moved (worst day); cycle_ms, cyc_worst: the measure and the decision on it, the\n"
                 "planning cycle's air front work (mean, worst day); prewar: the entries the sectors' baselines keep; cpu_*: the campaigns'\n"
                 "CPU seconds, air_front.mode 0 and 1, the timing repetitions left out; same: the same packages and journal (the air front's\n"
-                "entries aside); adv, back: the air front's steps forward and back over every seed and sector; deep: the deepest at the end;\n"
+                "entries aside; once it moves the planner, routes and C2 read it, F2.4); pk_off, pk_on: the packages planned, mode 0 and 1;\n"
+                "deeper: those of mode 1 flying close support, helicopter raids or harassment past the kind's fixed depth (40, 25, 70 km);\n"
+                "adv, back: the air front's steps forward and back over every seed and sector; deep: the deepest at the end;\n"
                 "moved: sectors that moved at all (over the seeds); depths: each sector's fixed-wing/helicopter front at the end.\n");
     return fails > 0 ? 2 : 0;
 }
