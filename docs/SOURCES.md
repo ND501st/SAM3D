@@ -407,7 +407,7 @@ Weather presets are SAM3D estimates chosen inside these ranges.
 | Geodesy | NIMA TR8350.2 (WGS-84) |
 | Detection statistics, measurement accuracy | M. A. Richards, *Fundamentals of Radar Signal Processing*; D. K. Barton, *Radar System Analysis and Modeling* |
 | Low-angle propagation, multipath | L. V. Blake, *Radar Range-Performance Analysis*; J. D. Parsons, *The Mobile Radio Propagation Channel* (plane earth) |
-| Diffraction, gases, rain | ITU-R P.526 (eq. 31, knife edge), P.676, P.838 |
+| Diffraction, gases, rain | ITU-R P.526-16 (11/2025): eq. 31 (knife edge), section 3 (smooth spherical earth: eqs. 11a-18b, 21-25), section 4.5.2 (eqs. 58-66, the smooth surface under a terrain path); P.676, P.838 |
 | Electronic warfare | D. Adamy, *EW 101*, *EW 102*; D. C. Schleher, *Electronic Warfare in the Information Age*; R. G. Wiley, *ELINT* |
 | Emitter location | R. G. Stansfield, J. IEE 94 IIIA (1947); W. H. Foy, IEEE TAES 12 (1976); D. J. Torrieri, IEEE TAES 20 (1984); R. A. Poisel, *Electronic Warfare Target Location Methods* |
 | Tracking and fusion | S. Blackman, R. Popoli, *Design and Analysis of Modern Tracking Systems*; Y. Bar-Shalom et al., *Estimation with Applications to Tracking and Navigation*; S. Julier, J. Uhlmann, ACC 1997 (covariance intersection); W. Niehsen, FUSION 2002 |

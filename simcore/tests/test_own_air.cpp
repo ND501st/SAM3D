@@ -861,6 +861,45 @@ SC_TEST("own air S6: our dummy traffic in false corridors is heard and believed 
     }
 }
 
+SC_TEST("own air S6 follow-ups: a played session's word on a false corridor decides whether the enemy heard it that day (radio.mode 2), with no chance drawn; not at mode 1") {
+    const auto heard_of = [](const airwar::AirCampaign& c, const std::string& id) {
+        for (const BelievedCorridor& b : c.CorridorIntel().Heard()) {
+            if (b.id == id) return b.heard;
+        }
+        return 0;
+    };
+    for (const double mode : {2.0, 1.0}) {
+        airwar::AirWarData d = War("warsaw_pact", 1.0);
+        d.tuning.values["radio.mode"] = mode;
+        airwar::AirCampaign yes, no, plain;
+        yes.Init(d, 3u);
+        no.Init(d, 3u);
+        plain.Init(d, 3u);
+        const std::vector<OwnAirZone> day0 = yes.FalseCorridorsOn(0);
+        SC_EXPECT(!day0.empty());
+        for (const OwnAirZone& z : day0) {
+            yes.SessionHeardCorridor(0, z.id, true);
+            no.SessionHeardCorridor(0, z.id, false);
+        }
+        Run(yes, 3.0);  // days 0 and 1 fed at the planning cycles after them; day 1's use left to the chance in all three
+        Run(no, 3.0);
+        Run(plain, 3.0);
+        // The same count of uses either way: the chance's later draws stay keyed as they were.
+        SC_EXPECT(plain.CorridorIntel().Uses() > 0);
+        SC_EXPECT(yes.CorridorIntel().Uses() == no.CorridorIntel().Uses() && yes.CorridorIntel().Uses() == plain.CorridorIntel().Uses());
+        for (const OwnAirZone& z : day0) {
+            std::printf("    radio.mode %.0f: %s heard %d times when the session heard it on day 1, %d when it did not, %d by the chance (%d uses)\n", mode,
+                        z.id.c_str(), heard_of(yes, z.id), heard_of(no, z.id), heard_of(plain, z.id), static_cast<int>(plain.CorridorIntel().Uses()));
+            if (mode >= 2.0) {
+                SC_EXPECT(heard_of(yes, z.id) == heard_of(no, z.id) + 1);  // the later days' chance drawn alike
+                SC_EXPECT(heard_of(yes, z.id) >= heard_of(plain, z.id) && heard_of(no, z.id) <= heard_of(plain, z.id));
+            } else {  // before mode 2 the session's word is not read: the chance decides as in a save made then
+                SC_EXPECT(heard_of(yes, z.id) == heard_of(plain, z.id) && heard_of(no, z.id) == heard_of(plain, z.id));
+            }
+        }
+    }
+}
+
 SC_TEST("own air S1: NATO's and the Pact's damaged aircraft coming home may fall to their own belts; the rebels' and the neutral's never do, and not before S1") {
     // The data: NATO's belt and the Pact's, each in its own words; NATO's words the defaults; no belt for the other two.
     const airwar::AirWarData nato = War("nato", 1.0);

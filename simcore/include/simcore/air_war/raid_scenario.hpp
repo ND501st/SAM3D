@@ -330,14 +330,23 @@ public:
         Put(r, "unit", Str(fl.squadron));
         Put(r, "role", Str(FlightRoleName(fl.role)));
         Put(r, "discipline_adjust", Num(std::round((RadioDiscipline(faction, 0.0, chatter, leak, td) - faction) * 1000.0) / 1000.0));
+        if (StableRadioKeys(td)) {
+            // Roadmap S6's follow-ups (radio.mode 2): the squadron's fit and codeword as the campaign's abstract calls draw
+            // them (SquadronRadioFit), so a squadron says the same word in a session and in the campaign.
+            const SquadronFit fit = SquadronRadioFit(fl.squadron, f.radio.have_quick_share, f.radio.secure_voice_share, static_cast<std::uint64_t>(c.Seed()));
+            if (f.radio.present && fit.have_quick) Put(r, "have_quick", Bool(true));
+            if (f.radio.present && fit.secure_voice) Put(r, "secure_voice", Bool(true));
+            Put(r, "codeword", Str(fit.codeword));
+            return r;
+        }
+        // Before radio.mode 2 (a save made before replays as played): std::hash and the session's own seed.
         const std::size_t sq = std::hash<std::string>()(fl.squadron);
         const em::Random rng(c.Seed() ^ 0x5EC0DEull);
         if (f.radio.present) {
             if (rng.Uniform(em::Stream::AirRadio, sq, 31) < f.radio.have_quick_share) Put(r, "have_quick", Bool(true));
             if (rng.Uniform(em::Stream::AirRadio, sq, 32) < f.radio.secure_voice_share) Put(r, "secure_voice", Bool(true));
         }
-        static const char* words[] = {"SUPERFUSE", "LONGBOW", "REDWING", "SLEDGE", "TIDEWATER"};
-        Put(r, "codeword", Str(words[sq % 5]));
+        Put(r, "codeword", Str(kSquadronCodewords[sq % 5]));
         return r;
     }
     // The scenario's "air_radio" block from the faction's radio block, the planner's habits and the tuning table.

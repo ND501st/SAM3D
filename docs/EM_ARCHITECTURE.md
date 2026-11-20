@@ -125,7 +125,9 @@ one-way loss = FSPL(R, f)  +  J(v_max)  +  gases(R, h1, h2, f)  −  20 log10 F
   spacing, at most 600 samples); records line of sight, minimum clearance and the worst
   `h·√(1/d₁+1/d₂)`. That last number is frequency-independent: `v = it · √(2/λ)`, so one profile
   serves radar, ESM, jammer and radio at any band.
-* **Diffraction**: ITU-R P.526 eq. (31), single dominant edge.
+* **Diffraction**: ITU-R P.526 eq. (31) knife edges, the dominant one and Deygout's two sub-edges
+  (`TerrainEdgesLossDb`); from 10 MHz to 1 GHz the smooth spherical earth's loss is added beyond and near
+  the horizon (`DiffractionLossDb`, §36). Radar calibration anchors use the edges alone.
 * **Gases**: ITU-R P.676 sea-level table, thinned with altitude.
 * **Ground reflection**: ≥ 1 GHz: spherical-Earth two-ray with effective heights, effective
   reflection `ρ₀·exp(−8(π σh sinψ/λ)²)`, antenna-pattern weighting of the reflected ray (radar).
@@ -369,7 +371,9 @@ Co-operative crews share one node.
 
 ## 22. Known limitations
 
-* Single dominant knife edge (no Deygout multi-edge); no buildings, forest canopy or land-use clutter.
+* Knife edges by Deygout (three at most) and the smooth earth below 1 GHz (§36); no buildings, forest canopy or
+  land-use clutter on the radio path. Above 1 GHz past the horizon the two rays and the edges lose less than P.526's
+  smooth earth (§36).
 * Two-ray multipath uses a smooth-earth reflection point; real terrain reflections are not traced.
 * Search-radar elevation measurement is the beam centre; no height-finding radars yet.
 * Tracker is GNN (no JPDA/MHT); no manoeuvre-adaptive filter.
@@ -775,3 +779,48 @@ senior operator it is hit in 4 of 4. Against the Shrike class the drill makes ev
 (HARM class: 271 m). A dummy position's decoy that radiates while the radar is silent takes the first HARM in 4 of 4.
 The burst rhythm alone (no drill) does not save the vehicle: the last burst before the impact gives the HARM its lock
 back.
+
+## 36. Smooth-earth diffraction (roadmap S6's follow-ups, 20 November 2026)
+
+Until now a path past the radio horizon lost only the knife edge over the earth's bulge at its worst point, about 24-27 dB
+for a 3 m whip and an aircraft at 8,000 m 670 km apart at 50 MHz: an airborne listener heard far past its horizon. From
+10 MHz to 1 GHz `DiffractionLossDb` (`propagation.hpp`) now adds ITU-R P.526-16's (11/2025) smooth spherical earth, joined
+with the terrain's knife edges by the recommendation's own rule:
+
+* **The first term of the residue series** (section 3.1.1): the surface admittance K for Fig. 2's medium land (relative
+  permittivity 15, conductivity 0.001 S/m) and vertical polarisation (eqs. 11a, 12a), beta (eq. 16), X and Y (eqs. 14a,
+  15a), the distance term F(X) (eqs. 17a, 17b) and the height gains G(Y) (eqs. 18, 18a, 18b) with their floor
+  2 + 20 log K: 20 log E/E0 = F(X) + G(Y1) + G(Y2) (eq. 13). `SphericalFirstTermDb`.
+* **Any distance** (section 3.2): past the marginal line of sight (eq. 21) the first term; short of it the clearance h
+  of the curved path (eqs. 22-22e) against h_req = 0.552 sqrt(d1 d2 lambda / d) (eq. 23), the notional radius for which
+  the path grazes (eq. 24) and A = (1 - h / h_req) A_h (eq. 25); nothing when the clearance exceeds 0.552 of the first Fresnel zone's radius.
+  `SphericalEarthLossDb`. Below 10 MHz section 3 sends the user to P.368: none here.
+* **With terrain** (section 4.5.2): `AnalysePath` fits the least-squares smooth surface to the profile without the
+  bulge (eqs. 58-60), lowers it so no ground stands above it seen from either end (eqs. 61-62), clamps it to the ends'
+  ground (eq. 63) and gives the antennas' heights over it (eq. 64, `smooth_h1_m`, `smooth_h2_m`) and the smooth path's
+  worst knife-edge geometry (`smooth_v_geometry`). The total is L = L_edges + max(L_sph - L_bs, 0) (eq. 66), this layer's
+  Deygout edges (`TerrainEdgesLossDb`) in the place of Bullington's: the spherical earth counts only for what it loses
+  beyond one knife edge over the smooth path, so the bulge is never counted twice.
+
+Not changed: above 1 GHz the two rays over the sphere already take the curve within the horizon, and adding P.526 there
+would count the ground twice; past the horizon they lose less than P.526 (10 GHz, 5 m to 50 m: 19 dB against 15 dB at the
+horizon, 35 dB against 56 dB 22 km past it), which is left. Radar calibration anchors (`AnchorLook`) take the edges alone,
+so no radar's calibration moved.
+
+Tests (`test_em_models.cpp`): F, G, K and beta against hand calculations and Fig. 2; the first term at 500 km (50 MHz,
+3 m to 8,000 m, k = 4/3) 73.976 dB by hand; no step at the marginal line of sight (33.00 dB either side), growth past
+it, zero well inside; flat ground's smooth surface is the ground; a plateau; two ridges by eq. 66; microwaves unchanged.
+The prototype mirrors the functions (`prototype/samproto/em.py`, `test_em.py`).
+
+What moved: em_demo's 11 checks all pass and its timeline is unchanged; only the C2 radio links' margins fell (the battery
+CP to SAM-2, 19 to 16 dB; the others 10 to 6 dB and 6 to 2 dB), all still up. em_bench's result checksum is unchanged
+(eee3c1357697d113); its tick costs about 7 % more (`em_bench data 500 60 24`, the same machine back to back: 15.8 to
+16.9 ms, radars 4.17 to 4.55, ESM 10.7 to 11.4), the smooth surface's fit in every new profile. To keep it there the smooth
+path's edge is found by golden section on its one peak rather than sample by sample, the obstruction's slopes are worked
+only where the line is obstructed, and the clearance geometry of section 3.2 is kept with the profile, so a path clear of
+h_req at a band does no more work. In sessions the VHF nets past their horizon lose more and stay out of range where the
+bulge's one edge had let them through; inside the horizon nothing changes unless the first Fresnel zone grazes the earth:
+our intercept post's two calls in the B9 table test lose 1.4 and 4.7 dB of their 31 and 40 dB margins, and the
+information net's test listener 90 km off on a 15 m mast (past its 23 km horizon to a whip) hears a call with chance 0.00
+where the bulge's edge gave it 0.11. The crew's voice nets, the R-111 and R-407 sets, the battery link and the comms tests
+print the same numbers as before.

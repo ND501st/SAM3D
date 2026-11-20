@@ -365,12 +365,13 @@ private:
     double Of(const Cont& c) const { return 1.0 - std::exp(-c.heard_h / Tau()); }
 
     double Draw(const airwar::Call& c, const std::string& post, std::uint64_t salt) const {
-        return rng_.Uniform(em::Stream::AirRadio, static_cast<std::uint64_t>(c.id) + 1, std::hash<std::string>()(post), salt, 0xD35C);
+        return rng_.Uniform(em::Stream::AirRadio, static_cast<std::uint64_t>(c.id) + 1, airwar::RadioKeyOf(post, stable_keys_), salt, 0xD35C);
     }
     static std::string Hhmm(double s) { return airwar::ClockOf(s); }
 
     Logged WriteUp(const AirRadioDef& def, const airwar::Heard& h, const airwar::Call& c) {
         tau_h_ = def.Tune("radio.continuity_tau_h");
+        stable_keys_ = airwar::StableRadioKeys(def);
         Logged l;
         l.call = c.id;
         l.post = h.post;
@@ -519,6 +520,7 @@ private:
     em::Random rng_{1};
     double clock_start_s_ = 0.0;
     double tau_h_ = 3.6;
+    bool stable_keys_ = true;  // the radio's draws keyed by em::StringKey (radio.mode 2), else std::hash (WriteUp sets it)
     std::size_t cursor_ = 0;
     std::vector<Logged> log_;
     std::vector<Vec3> watch_;

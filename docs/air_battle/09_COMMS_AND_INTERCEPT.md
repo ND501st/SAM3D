@@ -653,14 +653,107 @@ scenario block. `test_own_air.cpp` (S6): the dummy corridors heard and believed,
   battery in an abstract raid does not reach the battery in minutes.
 - **A1.** A flight flown coarsely in a session is still one node per aircraft.
 - **Teaball in a generated raid.** The raid builder places no enemy controller (B5, B8's Left), so the relay works only in a
-  hand-written fight; NATO's relay stays off until a source or the owner says otherwise.
+  hand-written fight; NATO's relay stays off until a source or the owner says otherwise. Decided to stay off (S6's
+  follow-ups, below).
 - **Our dummy traffic in a session.** The false corridors are traffic in the campaign's learning only; no dummy transmitter is
-  placed on our GCI's net in a session (`EmWorld::AddDummyTraffic` is not called from the battery's scenario).
+  placed on our GCI's net in a session (`EmWorld::AddDummyTraffic` is not called from the battery's scenario). Closed in
+  S6's follow-ups (below).
 - **The codeword's word.** The session draws a squadron's codeword with `std::hash`, the campaign with a stable hash: the same
-  squadron can have different words in the two, so a habit learned in one is not the other's.
+  squadron can have different words in the two, so a habit learned in one is not the other's. Closed in S6's follow-ups
+  (below).
 - **The listeners under attack.** The enemy's listeners are fixed; none is struck, moved or put on a schedule (`from_h`,
   `until_h`).
 - **The airborne listener's reach.** `EmRadio` takes the loss past the horizon as one knife edge over the earth's bulge, which
   loses too little (about 24 dB at 670 km): the Il-20 at 8,000 m hears a 3 m whip far past its 375 km horizon, and an RC-135
   likewise. Smooth-earth diffraction (ITU-R P.526) in the EM layer would bound it; until then the airborne listeners hear
-  most of the country, as the enemy did with none placed before S6.
+  most of the country, as the enemy did with none placed before S6. Closed in S6's follow-ups (below).
+
+## As built (S6 follow-ups, 20 November 2026, branch `tbr-s6b`)
+
+Three of S6's Left closed and one decided, under `radio.mode` 2 (the data's value from now; a save made at 0 or 1 replays at its
+own mode, as played).
+
+**Beyond the horizon (the airborne listener's reach).** The EM layer's paths from 10 MHz to 1 GHz (our radios, the enemy's
+listeners, the air nets, VHF radars) now take ITU-R P.526-16's smooth spherical earth (section 3) on top of the terrain's knife
+edges, as the recommendation's general method joins the two (section 4.5.2): `em::DiffractionLossDb`, in
+`simcore/em/propagation.hpp`. The clauses:
+- section 3.1.1, the first term of the residue series: the surface admittance K (eqs. 11a, 12a; Fig. 2's medium land,
+  permittivity 15 and conductivity 0.001 S/m; vertical polarisation), beta (eq. 16), the distance term F(X) (eqs. 14a, 17a,
+  17b) and the height gains G(Y) (eqs. 15a, 18, 18a, 18b, with the floor 2 + 20 log K), 20 log E/E0 = F(X) + G(Y1) + G(Y2)
+  (eq. 13);
+- section 3.2, any distance: the marginal line of sight d_los (eq. 21), past it the first term; short of it the path's
+  clearance h (eqs. 22-22e) against the required h_req = 0.552 sqrt(d1 d2 lambda / d) (eq. 23), the notional radius a_em
+  for which the path is grazing (eq. 24) and A = (1 - h / h_req) A_h (eq. 25), zero when h exceeds h_req;
+- section 4.5.2: the least-squares smooth surface under the profile (eqs. 58-60, without the earth's bulge), corrected so no
+  ground stands above it from either end (eqs. 61-62), clamped to the ends' ground (eq. 63), the antennas' heights over it
+  (eq. 64), and the total L = L_ba + max(L_sph - L_bs, 0) (eq. 66), with this layer's Deygout edges in the place of
+  Bullington's: the edges, plus whatever the smooth earth loses beyond a single knife edge over the smooth path.
+Above 1 GHz the two rays over the sphere already take the curve and the edges are kept alone (adding P.526 inside the horizon
+would count the ground twice); past the horizon that loses less than P.526 at microwaves (10 GHz, 5 m to 50 m, 60 km: 35 dB
+against 56 dB), which is left. Radar calibration anchors (`AnchorLook`) keep the edges alone, so every radar calibration stands.
+
+What it does: a 3 m whip and an Il-20 at 8,000 m, 670 km apart at 50 MHz: the bulge's one knife edge lost 24 dB, the smooth
+earth 131 dB. The listeners' tests' far point is back at a real distance: 460 km from the Il-20, 85 km past its 376 km
+horizon, heard with a chance under 0.05, while 350 km off, inside the horizon, it hears the whip (over 0.9). S6 had put the
+point 1,200 km off only because the knife edge let the Il-20 hear far past its horizon; an airborne listener at 8,000 m does
+cover most of the country from its orbit behind the front (FM 100-2-1's airborne intercept), and now no more than that.
+
+What else moved (before and after on this branch): em_demo's 11 checks pass with the same timeline; its
+C2 links' margins fell 3-4 dB (19 to 16, 10 to 6, 6 to 2), all still up. em_bench's checksum is unchanged and its tick
+about 7 % dearer. In this file's B9 table test our post's two heard calls lose 1.4 and 4.7 dB of margin (the first
+Fresnel zone grazing the earth near the horizon); the information net's test listener 90 km off on a 15 m mast, far past
+its horizon to a whip, hears a call with chance 0.00 where the bulge's edge gave 0.11. The crew's voice nets, the R-111
+and R-407 sets, the battery link and the comms tests print the same numbers as before. In a session, the battery's VHF
+nets reach no farther than the radio horizon plus some tens of km, and the enemy's airborne listeners stop at theirs.
+
+**The codeword's word.** From `radio.mode` 2 the session and the campaign key every name with one stable hash
+(`em::StringKey`, FNV-1a and SplitMix64's finaliser, as `AbstractKeyOf`): a squadron's codeword and its fit
+(`airwar::SquadronRadioFit`, the one function the raid builder and the abstract calls both use), a flight's call sign after a
+rotation (`CallsignAt`), the comm-out and unit keys of a flight, a call's key, and the intercept desk's draws. A save made
+before keeps `std::hash` (`RadioKeyOf`'s fallback) and replays as played. The rest of simcore's `std::hash` uses are lookups in
+unordered maps (the battery's fire, the EM links, equipment, the panel, the runner) that feed no choice; the officers' and the
+route planner's keys were FNV already.
+
+**Our dummy traffic in a session.** A mission session at `radio.mode` 2 (`campaign::MissionSession`) places, for each false
+corridor the campaign's rule gives on the days it meets (`AirCampaign::FalseCorridorsOn`, the same `command::FalseCorridors`
+the daily feed uses), a dummy transmitter (`air_radio` post kind `our_dummy`) at the corridor's middle on a
+`radio.our_dummy_mast_m` mast, calling empty calls as long as a GCI's vector every `radio.our_dummy_period_s` on our fighters'
+net (the R-832M at 124 MHz) through the corridor's hours (`EmWorld::AddDummyTraffic`), and the enemy's listeners of
+`data/command/intercept.json` where the data puts them (kind `enemy_intercept`, the VHF/UHF intercept receiver). The listeners
+hear the dummy, our GCI and our flights by link margin and the line of sight (`AirRadio::EnemyHeardLog`); our own intercept
+posts ignore them. When a listener has heard a dummy's call, or its hours end with none heard, the session tells the campaign
+(`AirCampaign::SessionHeardCorridor`), whose daily feed then counts that day's use as heard or not with no chance drawn
+(`EnemyCorridorIntel::UseHeard`, which still counts the use, so later draws stay keyed as they were). A scenario can place both
+kinds itself (`air_radio.posts`' `our_dummy` with `corridor`, `from_s`, `until_s`, `period_s`; `enemy_intercept` with `esm`),
+loaded strictly. The word is not saved: a session in a loaded campaign does not replay it.
+
+**Teaball for NATO stays off** (decided 20 November 2026; the owner left it to us). No source for a Teaball-type warning service
+in Europe by 1985 was found (section 6); a relay that did exist in 1972 over North Vietnam is not evidence that one ran over
+Central Europe thirteen years later, and the war is fought as of 1985 (`docs/air_war/`). NATO's `radio.teaball` block stays
+written and off, and a test keeps it so. Two things stay left: **Teaball in a generated raid**, because the raid builder places no
+enemy controller in a session (B5's and B8's Left: the relay needs a controller to pass the warning on its own net, and adding
+one changes every generated raid's fight), and **our strikes on the enemy's listeners**, because the campaign has no target kind
+for an intercept post or an Il-20's orbit and no ledger for what striking one would cost or gain (the battery's war keeps the
+strategy layer thin: `docs/campaign/`); the listeners stay fixed for the war.
+
+**Tests.** `test_em_models.cpp`: the smooth earth's terms against hand calculations (F, G, K, beta; the first term at 500 km
+to 0.005 dB), any distance (no step at the horizon, rising past it, zero well inside, none below 10 MHz), and the joining with
+the edges (flat ground: the surface is the ground; a plateau; two ridges by eq. 66; microwaves unchanged); the Deygout test now
+checks the edges by `TerrainEdgesLossDb`. `prototype/tests/test_em.py` mirrors the hand values. `test_air_radio.cpp`: the
+listeners' near, horizon and far points in the B9 and S6 tests; the dummy transmitter in a session (heard by the Il-20 within
+its hours only, not by a ground post past the horizon, not logged by our post); the stable keys. `test_own_air.cpp`: a session's
+word decides the day's use at mode 2, the uses counted alike, and is ignored at mode 1.
+
+**Balance.** `docs/air_war/09_BALANCE.md` section 24: `air_war_balance` at mode 1 and mode 2 gives identical
+outputs on the district and the nation; every band PASS.
+
+**Left.**
+- **The fast road for abstract calls** (as S6 left it).
+- **A1.** A flight flown coarsely in a session is still one node per aircraft.
+- **Teaball in a generated raid** and **our strikes on the enemy's listeners**: see above.
+- **The raid builder's scenarios.** A generated raid's scenario carries no dummy transmitter or enemy listener of its own; only
+  a mission session places them.
+- **The real corridors' hearing.** A session's listeners hear our GCI and flights too, but the campaign's learning of the real
+  corridors still draws its chance; only the false corridors take the session's word.
+- **Microwaves past the horizon.** Above 1 GHz the two rays and the edges stand in for P.526's smooth earth and lose less
+  past the horizon.

@@ -1498,3 +1498,25 @@ analogues (Teaball is off, and the bench's fights set their own controllers).
 
 **Left:** with Teaball turned on for NATO (the owner's choice), the abstract fight's surprise falls with chance 1 - `fail`
 whenever our GCI is not jammed; that run, and its exchange band, are not measured.
+
+## 24. S6 follow-ups (roadmap S6, 20 November 2026)
+
+S6's follow-ups (`docs/air_battle/09_COMMS_AND_INTERCEPT.md`, "As built (S6 follow-ups)") make new campaigns play
+`radio.mode` 2: one stable hash for the session's and the campaign's names, a mission session's dummy transmitters and enemy
+listeners, and the session's word on a false corridor fed back into the enemy's corridor learning. The EM layer's paths
+from 10 MHz to 1 GHz also take ITU-R P.526-16's smooth spherical earth (`docs/EM_ARCHITECTURE.md` section 36). None of it
+reaches `air_war_balance`'s outcomes:
+- **The stable keys** pick call signs, codewords, the comm-out and unit keys of the calls and the intercept desk's slips:
+  what our posts hear and write, which the bench does not run.
+- **The session's word** on a false corridor comes only from a played mission session; the bench plays none, so each
+  day's dummy use is drawn by the chance as at mode 1.
+- **The smooth earth** is in the EM layer's paths (sessions, the campaign screen's information net); the campaign's own
+  hearing of abstract calls is section 4.2's closed-form horizon, unchanged.
+
+The benches were run on the same build at `--set radio.mode=1` and at the new default, the same seeds.
+`air_war_balance data 20 7` (the district): the two outputs are identical line for line, every band PASS (20 of 20).
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation): identical too, every band PASS (20 of 20).
+
+No value was changed and no band loosened. `air_battle_bench` and `air_war_bench` were not re-run. The testbed's sessions
+do carry the air radio at UHF, whose calls past the radio horizon now lose more (the calls inside it, between aircraft
+at height, almost never graze the earth): a call heard past the horizon before may not be now. Measuring that is left.
