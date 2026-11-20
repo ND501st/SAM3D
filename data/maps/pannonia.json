@@ -470,6 +470,16 @@
     {"id": "nato_entry_w1", "name": "The western border with NATO: entry point W1", "east_km": -175, "north_km": 110},
     {"id": "nato_entry_w2", "name": "The western border with NATO: entry point W2", "east_km": -180, "north_km": 55},
     {"id": "nato_entry_w3", "name": "The western border with NATO: entry point W3", "east_km": -185, "north_km": 5},
-    {"id": "nato_entry_w4", "name": "The western border with NATO: entry point W4", "east_km": -185, "north_km": -35}
+    {"id": "nato_entry_w4", "name": "The western border with NATO: entry point W4", "east_km": -185, "north_km": -35},
+    {"id": "pact_assembly_east", "name": "The Warsaw Pact's ground war: the army's eastern assembly area beyond the north-eastern border", "east_km": 125, "north_km": 128},
+    {"id": "pact_assembly_rava", "name": "The Warsaw Pact's ground war: the assembly area in the upper Rava valley beyond the border", "east_km": 62, "north_km": 145},
+    {"id": "pact_rava_gorge", "name": "The Warsaw Pact's ground war: where the Rava gorge crosses the border (no road)", "east_km": 56, "north_km": 131},
+    {"id": "nato_assembly_centre", "name": "NATO's ground war: the corps' main assembly area beyond the western border", "east_km": -195, "north_km": 45},
+    {"id": "nato_assembly_south", "name": "NATO's ground war: the corps' southern assembly area beyond the western border", "east_km": -195, "north_km": -10},
+    {"id": "nato_lenta_south_border", "name": "NATO's ground war: the western border south of the Lenta (no road crosses)", "east_km": -170, "north_km": 8},
+    {"id": "neutral_assembly", "name": "The Noric Republic's ground war: the division's assembly area beyond the south-western border", "east_km": -145, "north_km": -125},
+    {"id": "neutral_hold_line", "name": "The Noric Republic's ground war: the holding line, 40 km in by the south-western road", "east_km": -105, "north_km": -78},
+    {"id": "rebels_base_west", "name": "The rebels' ground war: the Front's western base in the southern valley", "east_km": -40, "north_km": -115},
+    {"id": "rebels_base_forest", "name": "The rebels' ground war: the Front's base in the southern forest", "east_km": 40, "north_km": -110}
   ]
 }
