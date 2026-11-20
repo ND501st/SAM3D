@@ -279,12 +279,20 @@ save replays the same either way; F2.3 adds `air_front_mode` with the behaviour.
 
 **The cost.** `fronts_bench data --air-front` (new, the first part of F3.3's bench): each faction's campaign on the
 nation with air_front.mode 1, its front cut into eight equal sectors (the most the design gives a front; `--sectors 0`
-takes the theatre's own), the measure timed at every day's end over 200 repetitions on that day's picture, with the
+takes the theatre's own), the measure timed at every day's end over 2000 repetitions on that day's picture, with the
 bands kept (`mean_ms`, `worst_ms`) and with every sector's band moved each time (`moved_ms`, every baseline taken afresh:
 the worst a cycle can be once F2.3 moves the air front), CPU time (`std::clock`, which MSVC's runtime counts as the
 process's elapsed time):
 
-COST_TABLE
+| Faction | Sectors | Picture's entries | Measure, mean | Worst day | Every band moved, worst | Pre-war units kept | Campaign CPU s, mode 0 / 1 | Same war |
+|---|---|---|---|---|---|---|---|---|
+| The Pact | 8 | 204 | 0.0050 ms | 0.0060 ms | 0.0090 ms | 39 | 94.2 / 95.5 | yes |
+| NATO | 8 | 215 | 0.0053 ms | 0.0075 ms | 0.0080 ms | 39 | 61.9 / 62.3 | yes |
+
+Seven days, seeds 7-9, 2000 repetitions a day (`std::clock` ticks in milliseconds), run beside two balance runs and the
+test suite: the campaigns' totals move by a percent or two with that load (the measure itself is some microseconds a
+plan). On the theatre's own sectors (`--sectors 0`, one seed) the Pact's five and NATO's four cost 0.004 and 0.003 ms.
+So a cycle's measure is about 1/100 of the budget; F2.3's decision on top reads its results, a sector at a time.
 
 The budget is 1 ms a planning cycle for a front. The line of contact's reads cost what `DistanceToLine` did: the same
 projection, and `DistanceToFront` no longer looks the front up by its faction's name each call.
@@ -308,4 +316,7 @@ sectors and its losses counted against its packages.
 **Left:** `c2.hpp`'s, `resolve.hpp`'s, `raid_scenario.hpp`'s and `logistics.hpp`'s reads of the base line (F2.4, F3.3,
 F3.7); the air front's decision, its depths per sector, its journal entries and the save key `air_front_mode` (F2.3:
 `SectorCovers()` and `SectorLossRate` are its inputs, `air_front_depth_` the depths it will move); the rest of
-`fronts_bench` (F3.3); the map's border as the base line (the owner's open decision 1, argued in F6).
+`fronts_bench` (F3.3); the map's border as the base line (the owner's open decision 1, argued in F6). A note for F2.3: on
+the tuned district theatre our radar SAMs stand 94 km or more behind the Pact's line, so every sector's band there has no
+cover and never had (cover 0, mobile air defence all gone): its gates must not open on an empty baseline alone (the
+reward gate, or a minimum baseline), or the district's wars change at mode 1.

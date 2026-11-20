@@ -4,7 +4,7 @@
 //   --air-front (F2.2, the only part built so far): each faction's campaign run with air_front.mode 1 for N days (default
 //   7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into --sectors equal
 //   sectors (default 8, the most the design gives a front; 0: the theatre's own); at each day's end the measure of every
-//   sector's cover (the air staff's per-cycle read, SectorCoverBook::Measure) is timed over 200 repetitions on that day's
+//   sector's cover (the air staff's per-cycle read, SectorCoverBook::Measure) is timed over 2000 repetitions on that day's
 //   picture, once with the bands kept (the cached baselines) and once with every band moved each time (every sector's
 //   baseline taken afresh from the pre-war picture, the worst a cycle can be once F2.3 moves the air front). Prints the CPU
 //   time per measure (mean and worst day) against the budget, 1 ms per planning cycle for a front, and the campaign's
@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
                 sector_count = c.FrontLine().SectorCount();
                 const double step_m = on.tuning.Get("air_front.step_m");
                 const std::vector<double> depth(sector_count, 0.0), deeper(sector_count, step_m);
-                const int reps = 200;
+                const int reps = 2000;  // std::clock ticks in ms: 2000 measures of some microseconds each
                 book.Measure(c.Intel(), c.FrontLine(), depth, step_m, out);  // the kept vectors sized once, as the campaign's are
                 double m0 = CpuSeconds();
                 for (int r = 0; r < reps; ++r) book.Measure(c.Intel(), c.FrontLine(), depth, step_m, out);
