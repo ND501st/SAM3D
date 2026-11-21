@@ -514,6 +514,173 @@ decisions and intelligence; the Pact's seed 7 the same 232 packages for 7 % more
   do not yet come off the formations' strength (F3.7).
 - F6: `ground.mode` 1 in the data, and every weight, frontage and the tank mapping checked against history.
 
+## As built: F3.4 (21 Nov 2026)
+
+The minimal rule is gone: commanders decide the ground war (`ground_war/commanders.hpp`, the rules as pure functions;
+`ground_war.hpp`, their clock and what their orders do). Still only at `ground.mode` 1 on the nation; at 0 nothing is
+built.
+
+**Who.** One commander per formation at U0 and one per headquarters between the formations and the side's top: the
+lowest unit of its order of battle over all of a side's formations (the Pact's combined arms army, NATO's allied corps,
+the rebels' military command, our 3rd Army; against the rebels our 7th Division, whose regiments are the formations). With no unit over them
+(the neutral's division and its two territorial regiments), the first formation of the plan's main axis is the top. Each
+answers to the nearest commander above him. A commander written in the ground files (`"authored"`, by unit: Gromov,
+Hayes, Eder, Radic, Kral) is used as written; the rest are drawn from the side's pool (`OfficerPoolDef`: a name, a background, an
+age, the eight traits each normal about the pool's mean, a fork of the war's root keyed by the side and his index), with
+the pool's rank for his unit's kind. No quirks yet. His echelon (division for an army, corps, division or group;
+regiment for a brigade or regiment) gives his FM 100-2-1 reaction and planning times.
+
+**Traits move thresholds** by at most `trait_shift` (0.2) of each range (`ShiftedThreshold`), each a pull 2t-1:
+boldness lowers the attack ratio (the doctrine's in 2-4: the Pact's 3, NATO's from its file) and the counterattack ratio
+(1.5-2.5); rigidity asks to withdraw later (the ineffective line, never below it, a flexible man up towards the degraded
+line), tolerates a longer stall before stopping an axis (12-36 h about `stall_halt_h`) and holds a security line longer
+(1-2 h); composure holds longer without an order (3-9 h) and moves a breakpoint up (NATO, the small forces);
+methodical takes the long end of his reaction and planning times. New `ground_war.json` block `"commanders"`, every
+value a labelled game value or estimate (`moving_km_per_day` 2.8 after `hero_1972_oralfore`).
+
+**When** (no polling). A decision is an event in the queue (`Decide`, the commander and his decision's number: a later
+wake that comes sooner supersedes it). Each side's top decides from the offensive's start at his reaction time while
+his war is active (an axis attacking or counterattacked, an echelon marching or uncommitted): that is his decision
+cycle. Everyone else decides only on an event: his unit under its degraded or ask line or past a breakpoint (seen after
+the hour it fought, then his reaction time), a request or report from below (his reaction time), an axis halted, a
+penetration reaching our main defensive zone, a unit re-formed, the time he could hold without an answer run out (or,
+after it, his unit in contact again). Orders take effect as events too: an echelon's or a relief's arrival (his planning
+time plus the march: the straight distance x 1.3 at the day's road speed, 20-30 km/h; F3.6 asks the roads), a security
+line given up, a unit re-formed (withdrawn: 1-2 days; dispersed: 1-3), a raid's night and its dawn.
+
+**The commanders' picture** is a stand-in: `GroundWar::SeenPower`, `SeenFraction`, `SeenDepth` and `SeenPace` are the
+only reads a commander makes of the war, and until F3.5's picture they return the truth as of the hour he decides (no
+delay, no error), for his own side and the enemy's alike. F3.5 replaces these four.
+
+**The enemy's top** (the Pact's army, NATO's corps, the neutral's division): commits its echelons (the plan's second
+echelon, its reserve and units re-formed) once the plan's `second_echelon_after_h` (24 h) has passed since the
+offensive's start or an axis's attackers are worn (one under its degraded line, stopped at its breakpoint or gone):
+the Pact to success (`EchelonTarget`: its planned axis if it moves at 2.8 km a day or more, else another that moves
+faster), NATO and the neutral to their own axis while it is open, failing both the open axis where its weight brings the
+ratio to his attack ratio; held back otherwise (journaled once). It stops an axis that has not advanced for his stall
+time with no echelon coming and no crossing under way, and resumes one our counterattack has stopped once the ratio
+there is back at his attack ratio. It permits its units' requests (its doctrine withdraws and re-forms the ineffective).
+
+**A unit's commander** (`DecideUnit`, the Pact and ours on lines, NATO and the small forces on breakpoints): under 2/3
+he reports (the Pact's senior then has a worn axis); under his ask line he asks his senior and never withdraws on his
+own (unless he is the top); with no answer, once he has held in contact as long as his composure allows, his unit
+breaks and disperses. NATO's division stops its attack at its attack breakpoint (drawn per formation, 15-35 % losses,
+moved by its commander's composure) and holds, asking nobody; past its defence breakpoint it withdraws on its own
+decision. The rebels' groups disperse rather than retreat. A unit whose cohesion falls under 0.3 breaks at once.
+
+**Our side.** The security zone (where our doctrine has one: 30 km against the Pact and NATO, 20 against the neutral,
+10 against the rebels) is held line by line, every 7 km from the forward edge: the attack stops at the line the
+covering force holds; when it reaches it, the division's commander (the regiment's senior for a regiment) orders the
+covering force back after 1-2 h (his rigidity), journaled; then to the next. The main defensive zone holds (no
+withdrawal without an order). A request to withdraw goes to the army commander: permitted behind the next when another
+of ours holds the same ground (a defender beside it, or the sector's second echelon engaged in depth), else a relief
+from the free formations (the reserve, or one re-formed) marched in (the asking unit holds until it comes, then
+withdraws as a unit and the relief takes its sectors), else refused (journaled once; the unit disperses if no order
+comes while it is in contact). The army commander counterattacks the deepest penetration of the main defensive zone with
+no counterattack on it when his force there (the reserve, the re-formed and that sector's second echelon) is at least his
+counterattack ratio over the penetration's attackers: it marches in and attacks; the axis's attackers defend in a
+meeting engagement (in hasty defence if the axis had halted), or NATO's covering force (the plan's new
+`"covering_force"`, `nato_acr_2`) alone in delay while it stands, the rest behind it out of the fight; the line goes
+back, never past the border; it ends there, when it has not gained ground for his reaction time's low end or when its
+force is spent, and its force holds the axis.
+
+**Retreat** (§5.4). As a unit: ordered (the senior's permission, a relief) or NATO's own decision: out of the line at
+once with its strength, at the reserve's rest rate, re-formed after 1-2 days (`reform_days`). Dispersed: no order while
+in contact under the line, its cohesion gone, or a rebel group: 20 % of what is left lost as stragglers (their tanks not
+reparable), out of the line, its remnants re-formed after 1-3 days. Re-formed, a unit's establishment is what it has
+(it is a smaller unit, cohesion whole), the enemy's an echelon for its top, ours free for the army commander. Cohesion
+now moves: it falls by twice the hour's strength losses and is regained at 0.2 a day, in contact too (the data's
+text says so now), so a steady grind wears it slowly and only heavy losses in hours break a unit. Of our tanks lost by
+table 7-7, the reparable 80 % go to repair and a quarter of those in repair come back each day's end
+(`repair_return_per_day`).
+
+**The rebels** (§8). One raid axis per line group (straight in from its camp's place on the line, as wide as the
+group's attack frontage, the plan's 15 km deep). At each night's start their commander raids where a group's power over
+the share of our defenders' frontage its width meets reaches his ratio (3, moved by his boldness), the best first, up
+to the plan's two a night; where nobody holds, at once. At dawn the raids end and the line goes back to the border:
+raided, not held. The neutral's incursion is the plan's limited axis to its political depth (18 km), then held.
+
+**The journal** (kind `"ground"`, hidden): every decision, with who decided (rank and name) and about whom: echelons
+committed (and switched) or held, axes stopped and resumed, attacks stopped at a breakpoint, reports, requests,
+permissions, refusals, reliefs, withdrawals as a unit and dispersals, units re-formed, our counterattacks ordered,
+going in and ending, the covering force ordered back a line, raids and their dawn.
+
+**Tools.** `fronts_bench data --ground --log` prints the first seed's decisions as they happen; the axes' line ends with
+the decisions made.
+
+**Mode 1 on the nation** (`air_war_balance --cpu --theatre theatre_pannonia_nation.json --set ground.mode=1 data 3 10`,
+the line's mean depth by sector at the day's end, km; 3 seeds, the same for both battery postures; F3.3's in brackets):
+
+| Faction | Sector | Day 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8-10 | What decided it |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Warsaw Pact | tisava | 23.1 (34.7) | 42.4 (45.9) | 45.9 (55.3) | 56.6 (60.9) | 60.9 | 60.9 | 60.9 | 60.9 | our covering force back a line at a time (7 km, 1-2 h each) slows the first day by a third; the 9th Tank Division committed on the main axis about 25 h in (to success: its own axis moves); the capital's depth on day 5, a day later |
+| | ne_crossings | 17.8 (26.7) | 32.6 (35.4) | 35.3 (42.5) | 43.5 (46.8) | 46.8 | 46.8 | 46.8 | 46.8 | the main axis's taper |
+| | rava_reservoir | 9.4 (13.9) | 20.0 | 20.0 | 20.0 | 20.0 | 20.0 | 20.0 | 20.0 | Dravec on day 2, the covering lines first |
+| NATO | upper_lenta | 0 | 0 | 0 | 0 | 13.2 (22.9) | 40.2 (55.4) | 69.7 (74.9) | 74.9 | from 96 h; the security zone's lines, then the brigade reports under 2/3 on day 7; Saldanj a day later |
+| | western_crossings | 0 | 0 | 0 | 0 | 20.8 (30.0) | 32.4 (34.1) | 36.1 (37.2) | 37.2-38.6 (37.6-38.9) | slows against our second echelon; the corps commander stops it on day 16, 41 km in (the first seed, 30 days) |
+| | zlatno | 0 | 0 | 0 | 0 | 3.3 (4.8) | 5.2 (5.5) | 5.8 (5.9) | 5.9-6.2 | the main axis's taper |
+| Neutral | border_forest, lenta_marshes | 7.0, 6.1 (12.5, 10.9) | 17.9, 15.6 | | | | | | 17.9, 15.6 | the covering lines; both territorial regiments committed on day 2 (its own axis); the hold line (18 km) on day 2, held |
+| Rebels | rebels_forest | 1.8 (0) | 1.8 | 1.8 | 1.8 | 1.8 | 1.8 | 1.8 | 1.8 | a raid out at midnight every night, 2-3 km in where nobody of ours holds, back to the border by dawn |
+| | hollos | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0-0.2 | the same, one seed's on day 10 |
+
+Nothing near a runaway: the fastest day anywhere is 23.1 km (the Pact's first). No counterattack goes in on the nation:
+against the Pact our army has a tank brigade against a three-division axis, against NATO a division and a brigade
+against three divisions, both under 1.5:1, so the army commander does not order one (the hand case shows it does go in
+at 2.9:1, pushes the line back to the border and NATO's covering force screens). The neutral and the rebels never bring
+a unit under its line; the Pact's and NATO's units on the nation lose too slowly to ask within ten days (the south-western
+brigade's report on day 7 is the only line crossed), so no withdrawal, dispersal or relief happens there in ten days:
+the hand cases exercise them.
+
+**Cost** (`fronts_bench data --ground --gate`, MSVC Release, the tool alone on the machine; ms a campaign day, 30 days x
+5 seeds; the decisions this run made, the first seed's):
+
+| Faction | Mean | Worst day | Combat | Decisions | Movement | Line | Decisions made (30 days) |
+|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 0.0096 | 0.085 | 0.0057 | 0.0021 | 0.0002 | 0.0010 | 62 |
+| NATO | 0.0200 | 0.076 | 0.0151 | 0.0027 | 0.0004 | 0.0013 | 156 |
+| Neutral | 0.0046 | 0.043 | 0.0019 | 0.0013 | 0.0001 | 0.0007 | 20 |
+| Rebels | 0.0575 | 0.079 | 0.0272 | 0.0275 | 0.0005 | 0.0020 | 35 |
+
+against 20 ms (mean) and 60 ms (worst): still three orders of magnitude under; F3.3's were 0.002-0.019 ms. The rebels'
+cost is their raids (a night's two axes resolved hourly, the night's decision scanning its groups). In the campaign (10
+days, seed 7) the ground war's own time is 0.001-0.002 % of the campaign's CPU (the neutral's 1.9 % and the rebels'
+0.16 % of campaigns that plan 4 and 13 packages); `--gate` passes.
+
+The whole campaign at mode 1 against 0 (`air_war_balance --cpu`, 3 seeds x 10 days x 2 postures, std::clock): the
+Pact 260.7 s against 261.7 (0.996), NATO 172.4 against 166.7 (1.034), the rebels 3.02 against 2.94 (1.027), the
+neutral 2.41 against 1.45 (1.66); all four 438.5 s against 432.8 (1.013). As in F3.3, the difference is the war
+differing once the line moves (the planner, routes and C2 read it), not the ground war's own time.
+
+**Identity.** At `ground.mode` 0 nothing is built: `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (81d8e2d, built the same
+way); the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds.
+
+**Tests** (`test_ground_commanders.cpp`): the thresholds' shifts by hand (at most 0.2 of each range, the right way);
+commanders drawn keyed; `DecideUnit` by hand (report, ask, never withdraw without an order, hold, disperse in contact,
+withdraw on an order or as the top; NATO's stop and break; the rebels' dispersal); `EchelonTarget` and `AnswerRequest`
+by hand; then hand wars on a straight line: a division under its line asks, is refused (nobody behind, nobody free),
+never leaves the line until it disperses after holding, and re-forms smaller in 1-3 days; with a reserve, a relief is
+sent, the division holds until it comes and withdraws as a unit; the Pact's second echelon switched to the axis that
+moves, NATO's to its own; NATO's divisions stop at their breakpoints without asking and the axis halts; our
+counterattack at the army commander's ratio, back to the border at most, NATO's covering force taking it; the same war
+resolved in either order gives the same orders; the rebels raid only where nobody holds, only by night, never past 15
+km, back by day; every faction's war on the nation for 12 days: bounded, ours never withdraw on their own, the queue
+never past its reserved capacity. F3.3's order-free test now compares strengths too (both axes reach their goal once a
+broken defender is withdrawn).
+
+**Left:**
+- F3.5: each side's picture behind `SeenPower`, `SeenFraction`, `SeenDepth` and `SeenPace` (the commanders read the
+  truth now); F2.3's crisis reads it.
+- F3.6: the march on the roads (an echelon's, a relief's and a counterattack's march is the straight line x 1.3 at the
+  day's road speed); U1's regiments and their commanders; the counterattack into the flank (it goes in on the axis).
+- F3.7: strikes off strength and cohesion (`cohesion.air_attack_loss` is not read yet), supply below 1.
+- F3.8: the decisions into our posts' reports (the journal's `"ground"` entries are the truth).
+- Quirks for the ground commanders; restoring control after a command post is lost (`restore_control_h`), the
+  prepared positions' count and NATO's defence ratio (`defend_ratio`) are not read; the covering force's own share of
+  a NATO division (30-50 %) is the plan's unit, not a share.
+- F6: whether the counterattack threshold against a whole axis's attackers is right (no counterattack happens on the
+  nation), the security lines' pace against history, and every value here.
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its

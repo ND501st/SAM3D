@@ -125,6 +125,7 @@
       { "id": "south", "name": "South of the Lenta", "main": false, "route": ["nato_assembly_south", "nato_lenta_south_border", "saldanj"],
         "first_echelon": ["nato_md_3"], "second_echelon": [], "objective": "saldanj", "sector": "upper_lenta" }
     ],
-    "reserve": []
+    "reserve": [],
+    "covering_force": ["nato_acr_2"]
   }
 }
