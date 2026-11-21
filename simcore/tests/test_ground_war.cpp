@@ -376,7 +376,8 @@ SC_TEST("ground war (F3.3): order-free: two axes sharing a defender, resolved ei
     GroundWar c;
     SC_EXPECT(c.Build(d, c_line, theatre, nullptr, 12));
     c.Step(24.0 * 8, env, c_line);
-    SC_EXPECT(c.Axes()[0].depth_m != a.Axes()[0].depth_m);
+    // (Both axes may reach their goal either way since F3.4's commanders withdraw a broken defender: the strengths differ.)
+    SC_EXPECT(c.Axes()[0].depth_m != a.Axes()[0].depth_m || c.Formations()[0].unit.strength != a.Formations()[0].unit.strength);
 }
 
 SC_TEST("ground war (F3.3): ground.mode 0, and the district theatre at mode 1, leave the campaign as it was") {

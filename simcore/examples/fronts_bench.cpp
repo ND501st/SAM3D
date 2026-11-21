@@ -1,7 +1,7 @@
 // fronts_bench: what track F's fronts cost (docs/fronts/README.md, "Efficiency"). Not a test: a table to read.
 //
 // Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [--moves] [--trace] [faction ...]
-//        fronts_bench [data_dir] --ground [--days N] [--seeds N] [--campaign-days N] [--campaign-seeds N] [--gate] [faction ...]
+//        fronts_bench [data_dir] --ground [--days N] [--seeds N] [--campaign-days N] [--campaign-seeds N] [--gate] [--log] [faction ...]
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
@@ -28,7 +28,8 @@
 //   20 ms and 60 ms; then --campaign-days (default 10, 0: none) of whole campaigns over --campaign-seeds (default 1) at
 //   ground.mode 0 and 1: their CPU, the ground war's own time and its share of the campaign (budget 5%: 1.05x), and the
 //   line's depth by sector at each day's end (a day's move of 300 km or more is a runaway). Factions default to all
-//   four. --gate exits 2 over any budget.
+//   four. --gate exits 2 over any budget. --log (F3.4): the first seed's commanders' decisions as they happen; the axes'
+//   line ends with the decisions made.
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <cstdint>
@@ -47,6 +48,8 @@ using namespace simcore;
 using namespace simcore::airwar;
 
 namespace {
+
+bool g_ground_log = false;  // --ground --log: the first seed's ground log (the commanders' decisions), as it happens
 
 void Mix(std::uint64_t& h, std::uint64_t v) {
     h ^= v;
@@ -159,6 +162,20 @@ struct GroundLine {
     int days = 0;
 };
 
+// The ground war's log as it stands: one line an entry (the order's name, who decided, about whom, where, its value).
+void PrintGroundLog(const groundwar::GroundWar& g) {
+    static const char* const kNotes[] = {"axis_starts", "river_reached", "river_crossed", "axis_halted", "day_line", "order"};
+    for (const groundwar::GroundLogEntry& l : g.Log()) {
+        if (l.what == groundwar::GroundNote::DayLine) continue;
+        const char* what = l.what == groundwar::GroundNote::Order ? groundwar::GroundOrderName(l.order) : kNotes[static_cast<int>(l.what)];
+        const std::string who = l.cmdr >= 0 ? g.Commanders()[static_cast<std::size_t>(l.cmdr)].Title() : std::string("-");
+        const std::string unit = l.formation >= 0 ? g.Formations()[static_cast<std::size_t>(l.formation)].unit.id : std::string("-");
+        const std::string axis = l.axis >= 0 ? g.Axes()[static_cast<std::size_t>(l.axis)].id : std::string("-");
+        std::printf("    d%d %02dh %-22s %-28s %-16s %-22s %8.2f %s\n", static_cast<int>(l.h / 24.0) + 1, static_cast<int>(l.h) % 24, what, who.c_str(),
+                    unit.c_str(), axis.c_str(), l.value, l.what == groundwar::GroundNote::AxisHalted ? groundwar::HaltReasonName(l.reason) : "");
+    }
+}
+
 // The ground war alone, as the campaign builds it, stepped hour by hour for `days` days with the campaign's weather and
 // its objects at the start (bridges standing): the per-day cost by part, steady_clock in the war's own profile.
 bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, std::string& axes_end) {
@@ -186,8 +203,11 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
     env.weather = &weather;
     env.truth = &c.Truth();
     g.SetProfiling(true);
+    const bool print_log = g_ground_log && axes_end.empty();
+    if (print_log) std::printf("  %s, seed %u:\n", d.faction.id.c_str(), seed);
     for (int h = 1; h <= days * 24; ++h) {
         g.Step(static_cast<double>(h), env, line);
+        if (print_log) PrintGroundLog(g);
         g.ClearLog();
     }
     const groundwar::GroundProfile& p = g.Profile();
@@ -205,6 +225,9 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
             axes_end += buf;
         }
         if (axes_end.empty()) axes_end = "no axes: the line holds";
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "; %llu decisions", static_cast<unsigned long long>(p.decisions));
+        axes_end += buf;
     }
     return true;
 }
@@ -350,6 +373,8 @@ int main(int argc, char** argv) {
             ground = true;
         } else if (a == "--gate") {
             gate = true;
+        } else if (a == "--log") {
+            g_ground_log = true;
         } else if (a == "--campaign-days" && i + 1 < argc) {
             campaign_days = std::atoi(argv[++i]);
         } else if (a == "--campaign-seeds" && i + 1 < argc) {

@@ -206,6 +206,17 @@ struct GroundTables {
     double bridge_reach_km = 5.0;
     double river_line_km = 3.0;
 
+    // The commanders (F3.4, commanders.hpp): the ranges their traits move thresholds in, and the clock of their orders.
+    ValueRange attack_ratio_range{2.0, 4.0};
+    ValueRange counterattack_ratio{1.5, 2.5};
+    ValueRange stall_h{12.0, 36.0};
+    ValueRange hold_without_order_h{3.0, 9.0};
+    double moving_km_per_day = 2.8;
+    double pace_window_h = 24.0;
+    ValueRange reform_days{1.0, 2.0};
+    double repair_return_per_day = 0.25;
+    double march_road_factor = 1.3;
+
     bool IsTank(const std::string& type) const { return std::binary_search(tank_types.begin(), tank_types.end(), type); }
 
     // A type's weight (0 for a type not in the table: support and air defence do not count); `known` says if listed.
@@ -333,6 +344,7 @@ struct GroundPlanDef {
     std::vector<ObjectiveDef> objectives;
     std::vector<AxisDef> axes;
     std::vector<std::string> reserve;
+    std::vector<std::string> covering_force;  // first-echelon units that screen the line when the defender counterattacks (NATO's)
     bool has_raids = false;
     RaidsDef raids;
 
@@ -474,7 +486,7 @@ public:
     bool LoadTables(const json::Value& root, GroundTables& out) {
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
-                             "cohesion", "dispersal", "march", "reports", "levels", "clock"}) ||
+                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -520,7 +532,7 @@ public:
             if (!Sourced(*po, "posture", PostureName(static_cast<Posture>(i)), out.posture[i], 0.1, 5.0)) return false;
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
-            !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out)) {
+            !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out)) {
             return false;
         }
         return true;
@@ -852,6 +864,25 @@ private:
                Sourced(*lv, "levels", "down_after_h", out.levels_down_after_h, 0.0, 72.0);
     }
 
+    // The commanders' ranges and clock (F3.4).
+    bool LoadCommanders(const json::Value& root, GroundTables& out) {
+        const json::Value* c = Object(root, "", "commanders");
+        const std::string p = "commanders";
+        if (c == nullptr ||
+            !Keys(*c, p, {"attack_ratio_range", "counterattack_ratio", "stall_h", "hold_without_order_h", "moving_km_per_day", "pace_window_h",
+                          "reform_days", "repair_return_per_day", "march_road_factor", "notes"}) ||
+            !RangeOf(*c, p, "attack_ratio_range", out.attack_ratio_range, 1.0, 20.0) ||
+            !RangeOf(*c, p, "counterattack_ratio", out.counterattack_ratio, 0.5, 20.0) || !RangeOf(*c, p, "stall_h", out.stall_h, 1.0, 240.0) ||
+            !RangeOf(*c, p, "hold_without_order_h", out.hold_without_order_h, 0.0, 72.0) ||
+            !Sourced(*c, p, "moving_km_per_day", out.moving_km_per_day, 0.0, 100.0) ||
+            !Sourced(*c, p, "pace_window_h", out.pace_window_h, 1.0, 240.0) || !RangeOf(*c, p, "reform_days", out.reform_days, 0.0, 30.0) ||
+            !Sourced(*c, p, "repair_return_per_day", out.repair_return_per_day, 0.0, 1.0) ||
+            !Sourced(*c, p, "march_road_factor", out.march_road_factor, 1.0, 3.0)) {
+            return false;
+        }
+        return true;
+    }
+
     // The clock and the line at U0 (F3.3).
     bool LoadClock(const json::Value& root, GroundTables& out) {
         const json::Value* c = Object(root, "", "clock");
@@ -1100,7 +1131,8 @@ private:
         GroundPlanDef& plan = out.plan;
         std::string kind;
         if (pl == nullptr ||
-            !Keys(*pl, p, {"kind", "start_after_h", "max_depth_km", "source", "confidence", "notes", "objectives", "axes", "reserve", "raids"}) ||
+            !Keys(*pl, p, {"kind", "start_after_h", "max_depth_km", "source", "confidence", "notes", "objectives", "axes", "reserve", "raids",
+                           "covering_force"}) ||
             !Provenance(*pl, p) || !RequireString(*pl, p, "kind", kind) || !Sourced(*pl, p, "start_after_h", plan.start_after_h, 0.0, 24.0 * 60.0) ||
             !Ids(*pl, p, "reserve", plan.reserve)) {
             return false;
@@ -1170,6 +1202,12 @@ private:
             if (!unit_once(Index("plan.reserve", k), plan.reserve[k])) return false;
         }
         if (plan.kind != PlanKind::Raids && plan.axes.empty()) return Fail("plan.axes", "an offensive or an incursion needs an axis");
+        if (pl->Find("covering_force") != nullptr && !Ids(*pl, p, "covering_force", plan.covering_force)) return false;
+        for (std::size_t k = 0; k < plan.covering_force.size(); ++k) {
+            bool first = false;
+            for (const AxisDef& a : plan.axes) first = first || std::find(a.first_echelon.begin(), a.first_echelon.end(), plan.covering_force[k]) != a.first_echelon.end();
+            if (!first) return Fail(Index("plan.covering_force", k), "'" + plan.covering_force[k] + "' is not in an axis's first echelon");
+        }
         if (const json::Value* rd = pl->Find("raids")) {
             const std::string rp = "plan.raids";
             RaidsDef& raids = plan.raids;

@@ -1878,7 +1878,7 @@ private:
     // From the line of contact, either side (F2.1: at zero offsets the front's line, to the bit).
     double DistanceToFront(const Vec3& p) const { return front_line_.AbsDistance(p); }
 
-    // ------------------------------------------------------------------ the ground war (track F, F3.3)
+    // ------------------------------------------------------------------ the ground war (track F, F3.3-F3.4)
 
     // Under ground.mode 1, on a theatre with a country map and a faction with ground files: both sides at U0 on the line
     // of contact (groundwar::GroundWar). At 0, or without the map or the files, nothing is built and no draw is made.
@@ -1921,6 +1921,7 @@ private:
         const groundwar::GroundWarData& gd = ground_war_.Data();
         const std::vector<groundwar::Formation>& forms = ground_war_.Formations();
         const std::vector<groundwar::Axis>& axes = ground_war_.Axes();
+        const std::vector<groundwar::GroundCommander>& cmdrs = ground_war_.Commanders();
         const std::vector<groundwar::GroundLogEntry>& log = ground_war_.Log();
         const auto axis_name = [&axes](int a) {
             return a >= 0 && static_cast<std::size_t>(a) < axes.size() ? axes[static_cast<std::size_t>(a)].name : std::string("?");
@@ -1932,7 +1933,21 @@ private:
         const auto form_name = [&forms](int f) {
             return f >= 0 && static_cast<std::size_t>(f) < forms.size() ? forms[static_cast<std::size_t>(f)].name : std::string("?");
         };
-        char buf[192];
+        const auto cmdr_name = [&cmdrs](int c) {
+            return c >= 0 && static_cast<std::size_t>(c) < cmdrs.size() ? cmdrs[static_cast<std::size_t>(c)].Title() : std::string("?");
+        };
+        const auto halt_text = [](groundwar::HaltReason r) {
+            switch (r) {
+                case groundwar::HaltReason::None: return "halted";
+                case groundwar::HaltReason::Objective: return "its objective reached";
+                case groundwar::HaltReason::Spent: return "its attackers spent";
+                case groundwar::HaltReason::Stalled: return "stalled, with no echelon coming, stopped by its senior";
+                case groundwar::HaltReason::Breakpoint: return "its attackers stopped at their breakpoints";
+                case groundwar::HaltReason::Counterattacked: return "held where our counterattack stopped it";
+            }
+            return "halted";
+        };
+        char buf[256];
         for (std::size_t k = 0; k < log.size(); ++k) {
             const groundwar::GroundLogEntry& g = log[k];
             std::string text;
@@ -1945,10 +1960,6 @@ private:
                     text = "The ground offensive opens on " + axis_name(g.axis) + " in " + sector_name(g.sector) + ": " + names + buf;
                     break;
                 }
-                case groundwar::GroundNote::SecondEchelon:
-                    std::snprintf(buf, sizeof buf, ") is committed on %s, %.0f km in.", axis_name(g.axis).c_str(), g.value / 1000.0);
-                    text = "The second echelon (" + form_name(g.formation) + buf;
-                    break;
                 case groundwar::GroundNote::RiverReached:
                     std::snprintf(buf, sizeof buf, ": the attack reaches a river %.0f km in; the bridge there is %s.", g.value / 1000.0,
                                   g.intact ? "standing" : "down");
@@ -1958,17 +1969,8 @@ private:
                     std::snprintf(buf, sizeof buf, ": across the river %.0f km in.", g.value / 1000.0);
                     text = axis_name(g.axis) + buf;
                     break;
-                case groundwar::GroundNote::Spent:
-                    if (g.formation >= 0 && forms[static_cast<std::size_t>(g.formation)].unit.side == groundwar::Side::Ours) who = gd.ours.name;
-                    std::snprintf(buf, sizeof buf, " is spent at %.0f%% of its strength on %s and leaves the fight.", 100.0 * g.value,
-                                  axis_name(g.axis).c_str());
-                    text = form_name(g.formation) + buf;
-                    break;
                 case groundwar::GroundNote::AxisHalted:
-                    std::snprintf(buf, sizeof buf, " halts %.0f km in: %s.", g.value / 1000.0,
-                                  g.reason == groundwar::HaltReason::Objective ? "its objective reached"
-                                  : g.reason == groundwar::HaltReason::Spent  ? "its attackers spent"
-                                                                              : "stalled, with no echelon left");
+                    std::snprintf(buf, sizeof buf, " halts %.0f km in: %s.", g.value / 1000.0, halt_text(g.reason));
                     text = axis_name(g.axis) + buf;
                     break;
                 case groundwar::GroundNote::DayLine: {
@@ -1982,6 +1984,103 @@ private:
                     text += ".";
                     k = j - 1;
                     who = "the ground war";
+                    break;
+                }
+                case groundwar::GroundNote::Order: {
+                    // A commander's decision (F3.4): who decided, about whom, where.
+                    if (g.cmdr >= 0 && static_cast<std::size_t>(g.cmdr) < cmdrs.size() &&
+                        cmdrs[static_cast<std::size_t>(g.cmdr)].side == groundwar::Side::Ours) {
+                        who = gd.ours.name;
+                    }
+                    const std::string by = cmdr_name(g.cmdr);
+                    const std::string unit = form_name(g.formation);
+                    const std::string axis = axis_name(g.axis);
+                    switch (g.order) {
+                        case groundwar::GroundOrder::EchelonCommitted:
+                            std::snprintf(buf, sizeof buf, " (due in %.0f h)%s.", g.value,
+                                          g.other >= 0 && g.other != g.axis ? ", switched from its planned axis to the one that moves" : "");
+                            text = by + " commits " + unit + " on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::EchelonHeld:
+                            text = by + " holds " + unit + " back: no axis moves.";
+                            break;
+                        case groundwar::GroundOrder::AxisStopped:
+                            std::snprintf(buf, sizeof buf, " %.0f km in: it has stalled and no echelon is coming.", g.value / 1000.0);
+                            text = by + " stops " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::AttackResumed:
+                            std::snprintf(buf, sizeof buf, " from %.0f km in.", g.value / 1000.0);
+                            text = by + " resumes the attack on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::AttackStopped:
+                            std::snprintf(buf, sizeof buf, " stops attacking at %.0f%% of its strength (past its breakpoint) and holds.", 100.0 * g.value);
+                            text = unit + buf;
+                            break;
+                        case groundwar::GroundOrder::Reported:
+                            std::snprintf(buf, sizeof buf, " reports his unit at %.0f%% of its strength.", 100.0 * g.value);
+                            text = by + " (" + unit + ")" + buf;
+                            break;
+                        case groundwar::GroundOrder::WithdrawAsked:
+                            std::snprintf(buf, sizeof buf, " asks to withdraw his unit at %.0f%% of its strength.", 100.0 * g.value);
+                            text = by + " (" + unit + ")" + buf;
+                            break;
+                        case groundwar::GroundOrder::WithdrawOrdered:
+                            std::snprintf(buf, sizeof buf, " to withdraw at %.0f%% and re-form%s.", 100.0 * g.value, g.other >= 0 ? " behind the next" : "");
+                            text = by + " orders " + unit + buf;
+                            break;
+                        case groundwar::GroundOrder::WithdrawDecided:
+                            std::snprintf(buf, sizeof buf, " withdraws at %.0f%% of its strength on its commander's own decision.", 100.0 * g.value);
+                            text = unit + buf;
+                            break;
+                        case groundwar::GroundOrder::WithdrawRefused:
+                            std::snprintf(buf, sizeof buf, " to hold at %.0f%%: nobody behind it, nobody to relieve it.", 100.0 * g.value);
+                            text = by + " orders " + unit + buf;
+                            break;
+                        case groundwar::GroundOrder::Dispersed:
+                            text = unit + (g.value >= 1.5   ? " breaks contact and disperses, as its kind does."
+                                           : g.value >= 0.5 ? " breaks and disperses: its cohesion is gone."
+                                                            : " breaks and disperses: no order to withdraw came.");
+                            break;
+                        case groundwar::GroundOrder::Reformed:
+                            std::snprintf(buf, sizeof buf, " has re-formed behind the line at %.0f%% of its old strength.", 100.0 * g.value);
+                            text = unit + buf;
+                            break;
+                        case groundwar::GroundOrder::ReliefOrdered:
+                            std::snprintf(buf, sizeof buf, " (due in %.0f h).", g.value);
+                            text = by + " sends " + unit + " to relieve " + form_name(g.other) + " on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::Relieved:
+                            text = unit + " is relieved by " + form_name(g.other) + " on " + axis + " and withdraws.";
+                            break;
+                        case groundwar::GroundOrder::CounterattackOrdered:
+                            std::snprintf(buf, sizeof buf, " (his force %.1f times the penetration's).", g.value);
+                            text = by + " orders a counterattack on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::CounterattackStarts:
+                            std::snprintf(buf, sizeof buf, " %.0f km in.", g.value / 1000.0);
+                            text = "Our counterattack goes in on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::CounterattackEnds:
+                            std::snprintf(buf, sizeof buf, " ends with the line %.0f km in.", g.value / 1000.0);
+                            text = "Our counterattack on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::CoveringBack:
+                            std::snprintf(buf, sizeof buf, " back to the line %.0f km in.", g.value / 1000.0);
+                            text = by + " orders the covering force on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::RaidStarts:
+                            if (g.value > 0.0) {
+                                std::snprintf(buf, sizeof buf, " tonight (%.1f to 1 where it goes in).", g.value);
+                            } else {
+                                std::snprintf(buf, sizeof buf, " tonight, where nobody of ours holds.");
+                            }
+                            text = by + " sends " + unit + " raiding on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::RaidEnds:
+                            std::snprintf(buf, sizeof buf, " ends at dawn, %.0f km in; it goes back to its line.", g.value / 1000.0);
+                            text = "The raid on " + axis + buf;
+                            break;
+                    }
                     break;
                 }
             }
