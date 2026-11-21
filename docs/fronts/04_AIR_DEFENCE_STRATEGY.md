@@ -168,3 +168,105 @@ campaign day (README). Unit moves are a route each, cached.
 Our AD commanders set sector priorities from the reports they hold, SAM units and fighters follow by the period's
 norms, the regiment and the battery follow by order, the enemy learns of it only by its intelligence, and old saves
 replay unchanged.
+
+## As built: F4.1 (22 Nov 2026)
+
+Our air defence commanders keep a priority per sector and give it as orders through the pipeline (section 2,
+`simcore/campaign/ad_strategy.hpp`: `AdStrategy`, a member of `CampaignFeed`, so whoever pumps the campaign gets it; rules
+and commanders in `data/campaign/ad_strategy.json`, every value with its source, the game values labelled). Only at
+`ad_strategy.mode` 1 (`data/gameplay/air_war.json`, default 0; the save keeps it as `ad_strategy_mode`, an old save loads
+at 0), on a front with a line (F2.1) and a chain that has the commanders' posts; at 0 nothing is loaded, read or added.
+F4.1 only decides and orders: nothing moves on the orders yet.
+
+**The commanders** (the data's `commanders`). The national sector's commander, Colonel Ferenc Halasz, at its command post
+(`sector_cp_duty`), for the national PVO's objects, a cycle of 6-12 h (`mt_lavrinovich_mdex` p. 9), methodical and rigid
+(0.7, 0.65), his orders to the fighter regiment's duty officer and the army's chief of air defence; the 3rd Army's chief of
+air defence (`army_ad_chief`, the chain's holder, Colonel Milan Hrubes), for the troop air defence, a cycle of 2-4 h (his
+division commanders', `fm_100_2_1_1984` p. 5-14), his orders to the division's chief of air defence, the SAM regiment's
+commander and the national sector's post. Traits move a threshold by at most `trait_shift` (0.2) of its range, as the
+ground war's commanders: the cycle (a methodical man's longer: 9.5 h and 3.0 h with these), the offence's depth (10-20 km
+of air front beyond the line; bold lower), confirmations (a methodical man, 0.6 or more, waits for a second report; a
+rigid one, 0.6 or more, one more before he leaves the pre-war plan).
+
+**What he decides on** (first person, the written record). Only what reached his post by the hour he decides
+(`InfoNet::Known` with its hour at or before his), never the ground war's or the air campaign's state:
+- the axes our units reported (F3.8): the army's summaries' latest depth and pace of each axis, the enemy in contact as
+  the units believed him, our counterattack on it, and any unit's report that passed through his post;
+- our commanders' counterattack orders (`sitorder:`);
+- the army's air defence staff's estimates of the enemy's air front (F2.5's `FactKind::AirFront`);
+- our SAM sites' wrecks reported (`OwnDamage` facts), out of his count for the site's repair time;
+beside his own side's plan: where the theatre's national objects and SAM fire units stand (the order of battle he holds),
+each placed in a sector by the front's line; the line he believes is the base line less the reported depth.
+
+**The rule table** (`RulePriorities`, pure). Defend where the main thrust is (the most enemy in contact he holds, the deeper
+axis on a tie; held at the line or not), where national objects worth 0.7 or more lie within 30 km of the line as reported
+(`mt_kurkov_tank_army` p. 9: a day's advance after a breakthrough), or where our troops counterattack; take the offence
+where the staff's estimate of the air front, under 48 h old, lies past his offence depth and our cover there is thin
+(under 2 fire units, a pair that can leapfrog); economy elsewhere. **The pre-war plan** is the same table at hour 0 on what
+he holds before the war (the objects within reach of the border). **One change a decision** (`DecideChange`): on his cycle
+(the campaign's hour on his rhythm, never every step), only if a report reached his post since his last decision, at most
+one sector, ranked defend, the offence, economy, then the enemy's strength, then the objects, then the sector's index;
+the change needs his confirmations on successive reviews asking the same. `PriorityShares` gives the air defence's shares
+by priority (defended sectors 60 % together, `andersen_1979` p. 40; the rest by weights 2 and 1), for F4.3.
+
+**The order.** Each change is an entry in his records (`Decisions()`: the hour, the sector, from, to, why, the facts it
+rested on with the hour each reached him) and an order (`ad_order:<commander>:<n>`, `FactKind::Order`, a document,
+priority, subject `ad_priority:<sector>`, `Fact::to` the data's addressees) from his post `order_work_h` after his decision
+(1 h the sector's, 0.5 h the chief's), its text what the priority means there and why. The pipeline carries it with its
+delays; `PriorityKnownBy(commander, post, sector)` gives the priority a post holds by his orders that reached it (what
+F4.4's tasking is to read).
+
+**Cost.** Decided only on the cycle and when a new fact reached the post; each source (summaries, reports, orders,
+estimates, wrecks) read from a cursor, with a short list per commander of what has not reached his post yet (the scans
+F3.8 left to F4 as `LatestKnownBy`, now incremental). Deterministic: a decision hour is taken only below the watermark
+(the earliest hour an unresolved package could still add a fact), so a campaign pumped every step and one pumped once
+after its load make the same decisions and orders (tested).
+
+**Mode 1 on the nation** (`fronts_bench data --ad --log --days 10 --seeds 3 warsaw_pact nato`: `ground.mode`,
+`air_front.mode` and `ad_strategy.mode` 1, each campaign twice, the commanders on and off):
+
+| Faction | Reviews | Changes | By sector | Delay, newest fact at his post to the order at the regiment (or the fighters) | Of it, to his decision | From the fact's own hour | Basis not held by his post |
+|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 124 | 0 | the pre-war plan held: rava_reservoir and tisava defend, hradec, northern_forest and ne_crossings economy | - | - | - | 0 |
+| NATO | 123 | 6 | western_crossings economy to defend, by the chief and then the sector, in each seed | 3.50 h | 2.40 h | 3.76 h | 0 |
+
+Priorities over time, NATO: the army's chief took western_crossings to defend on D2 22:34, D4 23:12 and D5 11:22 (seeds 9,
+8, 7: the enemy in contact there 2.7-3.6 of full strength, held at the line), the order at the SAM regiment's commander an
+hour later (D5 09:10 the newest report, 11:22 his decision, 12:23 the order at the regiment); the sector's commander,
+methodical and on a longer cycle, a day later (D3 22:22, D5 21:46, D6 16:43; the order at the fighter regiment's duty
+officer about 1.2 h after). Every other sector stayed economy: upper_lenta's axis is 75 km deep at 26-27 km a day but
+against 1.0-1.1 of the enemy's strength and no national object in reach, so the main thrust stayed western_crossings.
+The Pact's pre-war plan already defended its two sectors with the thrusts (tisava 61 km deep against 2.8-3.4, three
+objects in reach; rava_reservoir 20 km against 0.8-1.3, two objects), so its 124 reviews changed nothing in 10 days. No
+estimate of the air front reached either post in these campaigns (the offence path is the tests'). Every fact a decision
+rested on was held by the deciding post by its hour (0 not). The air war's journal is the same with the commanders on and
+off in every seed (they order; nothing reads the orders yet).
+
+**Cost** (`fronts_bench data --ad`, MSVC Release, std::clock): the pipeline's pump a campaign day with the commanders and
+without, the Pact 13.367 ms against 13.300 (0.067 ms for them), NATO 11.733 against 11.500 (0.233 ms), against the 5 ms
+budget. At mode 0 the pump returns at once on the mode: the gates (`fronts_bench data --ground --gate`, `--ground --gate --player-sector battery`, `--feed --gate`) pass as before (the ground war 0.016-0.067 ms a campaign day by faction; the neutral's campaign under std::clock's resolution, 0.06 ms a day against the absolute 20).
+
+**Identity.** At `ad_strategy.mode` 0 nothing is loaded or added: `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (9c3b0ba, built the same way); at mode 1 the air war's journal is the same with the commanders on and off (the bench, every seed, and the test); the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds.
+
+**Tests** (`test_ad_strategy.cpp`, 6): the data loads and the mode is 0 in it; the rule table and its tie-break by hand,
+the offence's depth by trait (13, 15 and 17 km bold, plain and timid), the cycle and the shares; one change a decision,
+the methodical man's second report, the rigid man's pre-war plan, a different ask restarting the count; on the nation
+(the Pact, seed 7, 36 h) decisions only on the cycle and one an hour at most, every basis fact held by the post by its
+hour, the order's fields, the order at the SAM regiment's commander and never at the battery (which is to hear of it by the regiment's tasking, F4.4),
+`PriorityKnownBy`, and the same decisions and deliveries pumped once; with the reports off no decision while the truth
+moves, and mode 0 adds no fact and leaves the journal identical, the save keeping the mode and an old save loading at 0;
+on the district with a credulous staff, the army's chief takes the offence on an estimate of the air front that had
+reached him (66.9 h).
+
+**Left:**
+- The national sector's post does not receive the air defence staff's estimates (their audience is the division's chief
+  of air defence's tree); only the army's chief can take the offence on them until the chain sends them up.
+- Nothing moves on the orders: national SAM units and radars on orders by the norms (F4.2; the national units have no
+  posts in the chain, so the sector's orders go to the fighter regiment and the army's chief), fighters by sector from
+  `PriorityShares` (F4.3), the regiment's tasking on `PriorityKnownBy` (F4.4).
+- The commanders' orders are not in each other's picture: the army's chief does not read the sector's orders, nor the
+  sector his, beyond what each decides himself.
+- The believed line is the base line less the reported depth by axis (F3.8's left: the line by station is not a fact).
+- Wrecks reported are out of the count for the site's repair time, not until a report that it is back.
+- Unreal needs no call: the data loads from the campaign's data directory when the mode is 1.
+- The thresholds, the traits and the rhythm are first values; balance is F6.

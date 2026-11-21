@@ -4,9 +4,11 @@
 // the battery's records, the regiment's check of them and its trust in each unit (P9, campaign/report.hpp); the regiment's
 // task and the battery commander's plan for it (14.1, 14.3, campaign/battery_task.hpp, battery_plan.hpp); the battery's
 // mission as one session with the enemy's air war beside it (15.2, campaign/mission_session.hpp); the regiment's tasking
-// by its rules on what reached it (14.2, campaign/regiment.hpp).
+// by its rules on what reached it (14.2, campaign/regiment.hpp); our air defence commanders' sector priorities on what
+// reached their posts, sent as orders through the pipeline (track F, F4.1, campaign/ad_strategy.hpp).
 #pragma once
 
+#include "simcore/campaign/ad_strategy.hpp"
 #include "simcore/campaign/battery_area.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_task.hpp"

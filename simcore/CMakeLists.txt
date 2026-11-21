@@ -143,6 +143,7 @@ add_executable(simcore_tests
   tests/test_ground_air.cpp
   tests/test_ground_levels.cpp
   tests/test_ground_feed.cpp
+  tests/test_ad_strategy.cpp
   tests/test_anchors.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp
