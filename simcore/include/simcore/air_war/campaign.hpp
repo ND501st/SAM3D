@@ -1906,6 +1906,8 @@ private:
         env.weather = &weather_;
         env.truth = &truth_;
         env.intel = &intel_;  // the enemy's air sightings of our troops, for its picture of our side (F3.5)
+        // The player's battery's sector: U1 there and either side (F3.6).
+        if (player_ >= 0) env.player_sector = front_line_.SectorOf(truth_[static_cast<std::size_t>(player_)].pos);
         ground_war_.Step(t1, env, front_line_);
         if (ground_war_.Log().empty()) return;
         if (!ground_war_.Profiling()) {
@@ -1924,6 +1926,10 @@ private:
         const std::vector<groundwar::Axis>& axes = ground_war_.Axes();
         const std::vector<groundwar::GroundCommander>& cmdrs = ground_war_.Commanders();
         const std::vector<groundwar::GroundLogEntry>& log = ground_war_.Log();
+        const std::vector<groundwar::Regiment>& regs = ground_war_.Regiments();
+        const auto reg_name = [&regs](int r) {
+            return r >= 0 && static_cast<std::size_t>(r) < regs.size() ? regs[static_cast<std::size_t>(r)].name : std::string("?");
+        };
         const auto axis_name = [&axes](int a) {
             return a >= 0 && static_cast<std::size_t>(a) < axes.size() ? axes[static_cast<std::size_t>(a)].name : std::string("?");
         };
@@ -2080,6 +2086,27 @@ private:
                         case groundwar::GroundOrder::RaidEnds:
                             std::snprintf(buf, sizeof buf, " ends at dawn, %.0f km in; it goes back to its line.", g.value / 1000.0);
                             text = "The raid on " + axis + buf;
+                            break;
+                        case groundwar::GroundOrder::LevelUp:
+                            text = unit + " is followed regiment by regiment (near the battery's sector, " + sector_name(static_cast<int>(g.value)) + ").";
+                            break;
+                        case groundwar::GroundOrder::LevelDown:
+                            text = unit + " is followed as a whole again (away from the battery's sector).";
+                            break;
+                        case groundwar::GroundOrder::RegimentReported:
+                            std::snprintf(buf, sizeof buf, " reports at %.0f%% of its strength.", 100.0 * g.value);
+                            text = reg_name(g.regiment) + " (" + unit + ")" + buf;
+                            break;
+                        case groundwar::GroundOrder::RegimentAsked:
+                            std::snprintf(buf, sizeof buf, " asks to be relieved at %.0f%% of its strength.", 100.0 * g.value);
+                            text = reg_name(g.regiment) + " (" + unit + ")" + buf;
+                            break;
+                        case groundwar::GroundOrder::RegimentReliefOrdered:
+                            std::snprintf(buf, sizeof buf, " (due in %.0f h on the roads).", g.value);
+                            text = by + " sends " + reg_name(g.other_regiment) + " to relieve " + reg_name(g.regiment) + buf;
+                            break;
+                        case groundwar::GroundOrder::RegimentRelieved:
+                            text = reg_name(g.regiment) + " (" + unit + ") is relieved by " + reg_name(g.other_regiment) + " and goes back to recover.";
                             break;
                     }
                     break;

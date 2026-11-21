@@ -1,7 +1,8 @@
 // fronts_bench: what track F's fronts cost (docs/fronts/README.md, "Efficiency"). Not a test: a table to read.
 //
 // Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [--moves] [--trace] [faction ...]
-//        fronts_bench [data_dir] --ground [--days N] [--seeds N] [--campaign-days N] [--campaign-seeds N] [--gate] [--log] [faction ...]
+//        fronts_bench [data_dir] --ground [--days N] [--seeds N] [--campaign-days N] [--campaign-seeds N] [--player-sector id|battery]
+//                     [--gate] [--log] [faction ...]
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
@@ -29,9 +30,14 @@
 //   ground.mode 0 and 1: their CPU, the ground war's own time and its share of the campaign (budget 5%: 1.05x), and the
 //   line's depth by sector at each day's end (a day's move of 300 km or more is a runaway). Factions default to all
 //   four. --gate exits 2 over any budget. --log (F3.4): the first seed's commanders' decisions as they happen; the axes'
-//   line ends with the decisions made.
+//   line ends with the decisions made. --player-sector (F3.6): the ground war alone run again with the same seeds and U1
+//   centred on that sector (an id, or "battery": the player's battery's sector, as the campaign has it): U1's extra cost a
+//   campaign day by part (mean and the worst day) against 15 ms and 45 ms, the levels' changes, the regiments' decisions,
+//   the route service's asks, searches, cache hits and fall-backs, and the marches' hours on the roads against F3.4's
+//   straight line x 1.3; --gate covers it.
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -160,6 +166,11 @@ struct GroundLine {
     double worst_ms = 0.0;  // the worst day
     double part_ms[groundwar::GroundProfile::kParts] = {};  // by part, a day's mean
     int days = 0;
+    std::vector<double> day_ms;  // every seed's days in order (F3.6: U1's extra day by day)
+    // F3.6: the levels, the regiments, the route service and the marches.
+    std::uint64_t level_changes = 0, regiment_decisions = 0, asks = 0, finds = 0, hits = 0, fallbacks = 0, marches = 0;
+    double route_ms = 0.0, march_h = 0.0, straight_h = 0.0;
+    std::size_t regiments = 0;
 };
 
 // The ground war's log as it stands: one line an entry (the order's name, who decided, about whom, where, its value).
@@ -178,7 +189,7 @@ void PrintGroundLog(const groundwar::GroundWar& g) {
 
 // The ground war alone, as the campaign builds it, stepped hour by hour for `days` days with the campaign's weather and
 // its objects at the start (bridges standing): the per-day cost by part, steady_clock in the war's own profile.
-bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, std::string& axes_end) {
+bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, std::string& axes_end, const std::string& player = "") {
     auto gd = std::make_shared<groundwar::GroundWarData>();
     std::string e;
     if (!groundwar::LoadGroundWarData(d.data_dir, d.faction.id, *gd, &e)) {
@@ -203,6 +214,19 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
     env.weather = &weather;
     env.truth = &c.Truth();
     env.intel = &c.Intel();  // the enemy's pre-war picture of our troops (F3.5's air sightings)
+    // U1's centre (F3.6): a sector by id, or the player's battery's as the campaign placed it.
+    if (player == "battery" && d.theatre.PlayerBattery() != nullptr) {
+        const int pb = d.theatre.IndexOf(d.theatre.PlayerBattery()->id);
+        if (pb >= 0) env.player_sector = line.SectorOf(c.Truth()[static_cast<std::size_t>(pb)].pos);
+    } else if (!player.empty()) {
+        for (std::size_t k = 0; k < line.SectorCount(); ++k) {
+            if (line.Sector(k).id == player) env.player_sector = static_cast<int>(k);
+        }
+    }
+    if (!player.empty() && env.player_sector < 0) {
+        std::printf("%s: no sector %s on its front\n", d.faction.id.c_str(), player.c_str());
+        return false;
+    }
     g.SetProfiling(true);
     const bool print_log = g_ground_log && axes_end.empty();
     if (print_log) std::printf("  %s, seed %u:\n", d.faction.id.c_str(), seed);
@@ -212,12 +236,25 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
         g.ClearLog();
     }
     const groundwar::GroundProfile& p = g.Profile();
-    for (std::size_t k = 0; k < p.day_ms.size() && static_cast<int>(k) < days; ++k) {
-        acc.mean_ms += p.day_ms[k];
-        if (p.day_ms[k] > acc.worst_ms) acc.worst_ms = p.day_ms[k];
+    for (int k = 0; k < days; ++k) {
+        const double ms = static_cast<std::size_t>(k) < p.day_ms.size() ? p.day_ms[static_cast<std::size_t>(k)] : 0.0;
+        acc.mean_ms += ms;
+        if (ms > acc.worst_ms) acc.worst_ms = ms;
+        acc.day_ms.push_back(ms);
         ++acc.days;
     }
     for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) acc.part_ms[k] += p.Ms(k);
+    acc.level_changes += p.level_changes;
+    acc.regiment_decisions += p.regiment_decisions;
+    acc.asks += g.RouteStats().asks;
+    acc.finds += g.RouteStats().finds;
+    acc.hits += g.RouteStats().hits;
+    acc.fallbacks += p.route_fallbacks;
+    acc.marches += p.marches;
+    acc.route_ms += static_cast<double>(p.route_ns) * 1e-6;
+    acc.march_h += p.march_h;
+    acc.straight_h += p.march_straight_h;
+    acc.regiments = g.Regiments().size();
     if (axes_end.empty()) {
         for (const groundwar::Axis& x : g.Axes()) {
             char buf[160];
@@ -226,7 +263,7 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
             axes_end += buf;
         }
         if (axes_end.empty()) axes_end = "no axes: the line holds";
-        char buf[64];
+        char buf[96];
         std::snprintf(buf, sizeof buf, "; %llu decisions", static_cast<unsigned long long>(p.decisions));
         axes_end += buf;
     }
@@ -234,8 +271,52 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
 }
 
 // --ground: the ground war's cost against docs/fronts/README.md's budget lines, and its line in the campaign.
+// --player-sector (F3.6): U1's extra cost, the same seeds with U1 centred on the sector against U0 everywhere.
+int PlayerSectorLines(const std::vector<AirWarData>& loaded, const std::vector<GroundLine>& at_u0, const std::string& player, int days, int seeds) {
+    const double mean_budget_ms = 15.0, worst_budget_ms = 45.0;
+    int fails = 0;
+    std::printf("\nU1 in the player's sector (F3.6): centred on %s, the same %d days x %d seeds; U1's extra a campaign day against U0 everywhere,\n"
+                "budget %.0f ms (mean), %.0f ms (the worst day)\n\n",
+                player.c_str(), days, seeds, mean_budget_ms, worst_budget_ms);
+    std::printf("%-12s %8s %8s", "faction", "extra_ms", "worst_x");
+    for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) std::printf(" %10s", groundwar::GroundProfile::Name(k));
+    std::printf(" %5s %6s %6s %6s %6s %6s %6s %8s %8s %8s\n", "regs", "levels", "rdecis", "asks", "finds", "hits", "fallbk", "route_ms", "march_h", "x1.3_h");
+    for (std::size_t f = 0; f < loaded.size(); ++f) {
+        const AirWarData& d = loaded[f];
+        GroundLine u1;
+        std::string axes_end;
+        for (int s = 0; s < seeds; ++s) {
+            if (!GroundAlone(d, static_cast<unsigned>(7 + s), days, u1, axes_end, player)) return -1;
+        }
+        const GroundLine& u0 = at_u0[f];
+        const double n = u1.days > 0 ? static_cast<double>(u1.days) : 1.0;
+        const double extra = (u1.mean_ms - u0.mean_ms) / n;
+        double worst = 0.0;
+        for (std::size_t k = 0; k < u1.day_ms.size() && k < u0.day_ms.size(); ++k) worst = std::max(worst, u1.day_ms[k] - u0.day_ms[k]);
+        std::printf("%-12s %8.4f %8.4f", d.faction.id.c_str(), extra, worst);
+        for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) std::printf(" %10.5f", (u1.part_ms[k] - u0.part_ms[k]) / n);
+        std::printf(" %5zu %6llu %6llu %6llu %6llu %6llu %6llu %8.3f %8.1f %8.1f\n", u1.regiments, static_cast<unsigned long long>(u1.level_changes),
+                    static_cast<unsigned long long>(u1.regiment_decisions), static_cast<unsigned long long>(u1.asks),
+                    static_cast<unsigned long long>(u1.finds), static_cast<unsigned long long>(u1.hits),
+                    static_cast<unsigned long long>(u1.fallbacks), u1.route_ms, u1.march_h, u1.straight_h);
+        std::printf("    at U0: %llu marches, %.1f h on the roads against %.1f h at x1.3 (%llu fall-backs), %llu route asks (%llu searched, %llu cached), %.3f ms\n",
+                    static_cast<unsigned long long>(u0.marches), u0.march_h, u0.straight_h, static_cast<unsigned long long>(u0.fallbacks),
+                    static_cast<unsigned long long>(u0.asks), static_cast<unsigned long long>(u0.finds), static_cast<unsigned long long>(u0.hits),
+                    u0.route_ms);
+        std::printf("    U1's axes at the end (seed 7): %s\n", axes_end.c_str());
+        if (extra > mean_budget_ms || worst >= worst_budget_ms) {
+            std::printf("  OVER BUDGET\n");
+            ++fails;
+        }
+    }
+    std::printf("  (ms by part: U1's minus U0's; regs: the regiments built; levels: ups and downs; rdecis: the regiments' commanders' decisions;\n"
+                "   asks/finds/hits: the route service asked, searched, from the cache; fallbk: marches on F3.4's straight line x 1.3;\n"
+                "   march_h: the marches' hours as timed, x1.3_h: the same marches at F3.4's rule; all over every seed)\n");
+    return fails;
+}
+
 int GroundMain(const std::string& data, const std::string& theatre, int days, int seeds, int campaign_days, int campaign_seeds, bool gate,
-               std::vector<std::string> factions) {
+               std::vector<std::string> factions, const std::string& player) {
     const double mean_budget_ms = 20.0, worst_budget_ms = 60.0, campaign_budget = 1.05;
     if (factions.empty()) factions = {"warsaw_pact", "nato", "neutral", "rebels"};
     int fails = 0;
@@ -245,6 +326,7 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
     for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) std::printf(" %10s", groundwar::GroundProfile::Name(k));
     std::printf("  %s\n", "axes at the end (the first seed)");
     std::vector<AirWarData> loaded;
+    std::vector<GroundLine> at_u0;
     for (const std::string& faction : factions) {
         AirWarData d;
         std::string e;
@@ -271,8 +353,15 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
             ++fails;
         }
         loaded.push_back(d);
+        at_u0.push_back(g);
     }
-    std::printf("  (ms a campaign day by part; \"picture\" is each side's picture's reports (F3.5), \"reports\" the journal's, in the campaign only)\n");
+    std::printf("  (ms a campaign day by part; \"picture\" is each side's picture's reports (F3.5), \"reports\" the journal's, in the campaign only;\n"
+                "   \"levels\" U1's (F3.6), none without a player's sector)\n");
+    if (!player.empty()) {
+        const int f = PlayerSectorLines(loaded, at_u0, player, days, seeds);
+        if (f < 0) return 1;
+        fails += f;
+    }
     if (campaign_days > 0) {
         std::printf("\nIn the campaign: %d days x %d seeds, ground.mode 0 against 1 (std::clock CPU); budget %.2fx the campaign at 0\n\n",
                     campaign_days, campaign_seeds, campaign_budget);
@@ -283,6 +372,7 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
             off.tuning.values["ground.mode"] = 0.0;
             double cpu_off = 0.0, cpu_on = 0.0, ground_ms = 0.0, reports_ms = 0.0, worst_ms = 0.0;
             std::size_t packages_off = 0, packages_on = 0;
+            GroundLine marches;  // F3.6: the levels and the marches in the campaign (the player's battery's sector as it stands)
             std::vector<std::vector<double>> by_day;  // [sector][day] km, the first seed
             for (int s = 0; s < campaign_seeds; ++s) {
                 const unsigned seed = static_cast<unsigned>(7 + s);
@@ -316,12 +406,27 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
                     for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) ground_ms += p.Ms(k);
                     reports_ms += p.Ms(groundwar::GroundProfile::Reports);
                     for (double v : p.day_ms) worst_ms = v > worst_ms ? v : worst_ms;
+                    marches.level_changes += p.level_changes;
+                    marches.regiment_decisions += p.regiment_decisions;
+                    marches.marches += p.marches;
+                    marches.fallbacks += p.route_fallbacks;
+                    marches.march_h += p.march_h;
+                    marches.straight_h += p.march_straight_h;
+                    marches.asks += b.Ground()->RouteStats().asks;
+                    marches.finds += b.Ground()->RouteStats().finds;
+                    marches.hits += b.Ground()->RouteStats().hits;
                 }
             }
             const double ratio = cpu_off > 0.0 ? cpu_on / cpu_off : 0.0;
             const double share = cpu_off > 0.0 ? ground_ms / (1000.0 * cpu_off) : 0.0;
             std::printf("%-12s %9.2f %9.2f %7.3f %9.2f %9.3f %9.4f %6.3f%% %7zu %7zu\n", on.faction.id.c_str(), cpu_off, cpu_on, ratio, ground_ms,
                         reports_ms, worst_ms, 100.0 * share, packages_off, packages_on);
+            std::printf("    F3.6: %llu level changes, %llu regiment decisions; %llu marches, %.1f h as timed against %.1f h at x1.3 (%llu on x1.3: no way on the roads),"
+                        " %llu route asks (%llu searched, %llu cached)\n",
+                        static_cast<unsigned long long>(marches.level_changes), static_cast<unsigned long long>(marches.regiment_decisions),
+                        static_cast<unsigned long long>(marches.marches), marches.march_h, marches.straight_h,
+                        static_cast<unsigned long long>(marches.fallbacks), static_cast<unsigned long long>(marches.asks),
+                        static_cast<unsigned long long>(marches.finds), static_cast<unsigned long long>(marches.hits));
             const LineOfContact* line = nullptr;
             AirCampaign names;  // the sectors' ids
             names.Init(on, 7);
@@ -361,7 +466,7 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string data = "data", theatre = "theatre_pannonia_nation.json";
+    std::string data = "data", theatre = "theatre_pannonia_nation.json", player;
     int days = 7, seeds = 3, sectors = 8, campaign_days = 10, campaign_seeds = 1;
     bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false, ground = false, gate = false,
          days_given = false, seeds_given = false;
@@ -376,6 +481,8 @@ int main(int argc, char** argv) {
             gate = true;
         } else if (a == "--log") {
             g_ground_log = true;
+        } else if (a == "--player-sector" && i + 1 < argc) {
+            player = argv[++i];
         } else if (a == "--campaign-days" && i + 1 < argc) {
             campaign_days = std::atoi(argv[++i]);
         } else if (a == "--campaign-seeds" && i + 1 < argc) {
@@ -403,7 +510,7 @@ int main(int argc, char** argv) {
             factions.push_back(a);
         }
     }
-    if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions);
+    if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions, player);
     if (factions.empty()) factions = {"warsaw_pact", "nato"};
     if (watch) {
         command::ChainData chain;

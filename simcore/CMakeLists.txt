@@ -140,6 +140,7 @@ add_executable(simcore_tests
   tests/test_ground_war.cpp
   tests/test_ground_commanders.cpp
   tests/test_ground_picture.cpp
+  tests/test_ground_levels.cpp
   tests/test_anchors.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp

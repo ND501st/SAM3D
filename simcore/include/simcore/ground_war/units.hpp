@@ -110,6 +110,51 @@ struct GroundUnit {
     double Fraction() const { return establishment > 0.0 ? strength / establishment : 0.0; }
 };
 
+// The level a formation is stepped at (docs/fronts/03_GROUND_WAR.md section 3.3; F3.6): U0, the formation as the actor
+// with its regiments a list of strengths inside it; U1, in the player's sector and its neighbours, its regiments actors
+// with their own stations, posture, cohesion, commander and reports. U2 (movers in a session) is F5.2's.
+enum class UnitLevel : std::uint8_t { U0, U1 };
+
+inline const char* UnitLevelName(UnitLevel l) {
+    switch (l) {
+        case UnitLevel::U0: return "U0";
+        case UnitLevel::U1: return "U1";
+    }
+    return "?";
+}
+
+// A formation's regiment, brigade or battalion (its order of battle's child with weighted equipment), an actor at U1
+// (F3.6). Its strength is its share of its formation's: `part` of the formation's strength now (the parts sum to 1) and
+// `est_part` of its establishment, so the formation's strength is always the sum of its regiments' and a level change
+// keeps it to the bit. At U0 the parts stand still (the formation's losses come off every regiment in proportion); at U1
+// the formation's losses are shared out by where each regiment stands (ground_war.hpp).
+struct Regiment {
+    std::string id;
+    std::string name;
+    std::string kind;
+    int formation = -1;   // its formation (GroundWar::Formations())
+    int cmdr = -1;        // its commander (GroundWar::RegimentCommanders())
+    double est_part = 0.0;
+    double part = 0.0;
+    double cohesion = 1.0;
+    bool support = false;  // no tanks (the artillery): fights with the formation from behind, never in an echelon of its own
+    bool first = false;    // in its formation's first echelon
+    double from_m = 0.0;   // the stations it holds along the line (first echelon; the second echelon behind the same run)
+    double to_m = 0.0;
+    Posture posture = Posture::HastyDefence;
+    UnitState state = UnitState::Reserve;
+    std::string anchor;    // the map's anchor it stands at (the route service asks between anchors), "" none
+    Vec3 pos;
+    // Its commander's dealings over its strength.
+    std::uint8_t crossed = 0;  // the lines it has crossed (GroundWar's bits)
+    bool reported = false;
+    bool asked = false;        // asked its formation's commander to be relieved
+    double asked_h = -1.0;
+    int relief_for = -1;       // marching to relieve this regiment of its formation
+    int relieved_by = -1;      // the regiment marching to relieve it
+    int rotations = 0;
+};
+
 // One GroundUnit per unit of the order of battle, in its order, at full strength.
 inline std::vector<GroundUnit> UnitsOf(const GroundTables& t, const command::OrderOfBattle& oob, Side side) {
     std::vector<GroundUnit> out;

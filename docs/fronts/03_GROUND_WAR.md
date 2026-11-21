@@ -806,6 +806,142 @@ reserve. F3.4's hand cases decide on the truth (`picture.truth`), its nation war
 - F6: whether any decision on the nation should turn on the picture (none does in 30 days), the spreads and delays
   against history.
 
+## As built: F3.6 (21 Nov 2026)
+
+U1 in the player's sector and the march on the roads (`ground_war.hpp`, `units.hpp`'s `Regiment` and `UnitLevel`,
+`nav/routes.hpp`'s `RouteCache` and `Overlay::version`). Still only at `ground.mode` 1 on the nation; at 0 nothing is built.
+
+**The regiments** (`GroundWar::Regiments()`, built once at `Build`). A formation's children in its order of battle of a
+regiment's, brigade's or battalion's kind that are not formations themselves and hold weighted equipment, each with its
+tree's strength as its share of the formation's (`part`, summing to 1; the formation's own troops go with them in
+proportion). Support is a regiment with no tanks (the artillery). A formation needs two tank-holding regiments to have
+any: the Pact's divisions have five (three motor rifle, a tank and an artillery regiment), NATO's four (three brigades
+and the artillery), the neutral's three brigades, our divisions four or five; our brigades and the rebels' groups none,
+so they stay U0 everywhere. The first echelon is as many as the frontage takes at the regiment's (ours: the run of
+sectors over the defence frontage's widest; the enemy's: the breakthrough's width over the attack frontage), at least
+one, one kept back. Each regiment has a commander drawn from its side's pool, keyed by the regiment (a regiment's
+reaction time, 1-3 h, FM 100-2-1), his senior the formation's commander.
+
+**Up and down** (`levels` in `ground_war.json`: `down_after_h` 6, `neighbours` 1). A formation is needed when it holds
+a sector, attacks or marches on an axis, or is an echelon planned for an axis, within one sector of the player's
+battery's (`GroundEnv::player_sector`: the campaign sets it every hour from the battery's position; -1 none). It goes up
+at once (the regiments take its cohesion, their stations and postures; their shares are as they were) and down 6 h after
+its need ended (its strength, posture and place untouched; the regiments stand still at U0 until it comes up again).
+Both are journaled (`level_up`, `level_down`).
+
+**The same war at a finer grain.** The formation's holdings stay the truth, so its strength and power are exactly what
+U0 gives: U1 only shares out the hour's loss among its regiments, axis by axis in proportion to what each cost it, by
+where each stands. In the security zone only the covering regiment (the first echelon's that the axis meets, else the
+nearest) takes it; in the main zone and attacking, the regiment the axis meets `hit_weight` (2), the rest of the first
+echelon 1, the second echelon and support `support_weight` (0.5: fire reaches them, the assault does not), a regiment on
+the march to a relief 1. Each regiment's cohesion falls with its own loss and comes back at the daily rate; the
+formation's is their mean by strength. So U1 parts from U0 only where a regiment's own line wakes its commanders sooner,
+where one regiment's cohesion is held at 1 while another's falls, and through the draws those decisions consume.
+
+**A regiment's decisions** (on its own count, its share of its establishment's times the formation's fraction, by its
+side's lines or breakpoints and its commander's traits). Crossing a line, it decides after his reaction time: under the
+degraded line (or past the attack breakpoint) he reports (`regiment_reported`); under the ask line (or past the defence
+breakpoint), in the first echelon with no relief coming, he asks to be relieved (`regiment_asked`). Each goes into his
+side's picture as his formation's report (F3.5's `ReportAtOnce`), and the ask wakes his formation's commander, who (in
+`Decide`, at U1 only) relieves each regiment that asked with the freshest of his second echelon, at least 0.05 of its
+establishment stronger (`regiment_relief_ordered`, the march's hours as its value). It marches on the roads within the
+sector between the two regiments' anchors (each the nearest town, landmark or theatre object to its place); on arrival
+they change stations, places and anchors and the relieved goes back to recover (`regiment_relieved`). Re-forming sets
+the regiments' establishment to what they have.
+
+**The march** (section 7). Every march the ground war times is now asked of the route service: an echelon committed or
+switched (the enemy's), a division's relief and a counterattack (ours), a regiment's relief. A formation carries its
+anchor (its deployment's or garrison's place; once arrived on an axis, the axis's anchor); an axis carries its route's
+places as anchors by depth. The march is the straight line from the formation's place to its anchor, the road from its
+anchor to the axis's anchor on its side of the fight (ours: the shallowest at or beyond the axis's depth; the enemy's:
+the deepest at or short of it), and the straight line from there to the fight, the two ends at F3.4's rule. The road
+part (`RoadHours`): `RouteCache::Get` keyed by the two anchors, the column's mobility and the overlay's version (a search
+only on a new key; 128 entries, the oldest dropped; never in the hour), its road legs at the column's speed by day
+(`road_day_kmh`'s middle, 25 km/h) or by night (17.5) as the march starts, its ways off the road at the cross-country
+speed (10), and a halt of 25 min every 2.5 h of driving. The overlay is the theatre's bridges joined to the road
+crossings they stand on (within 100 m, as the mission's session joins them), cut while the air war has their function
+under 0.5, rebuilt (its version moved) only when one changes and only on an order. Where the bridges down leave no way
+round, the road as it was plus `crossing_cut_h` (12 h) for each cut river on it. Where there is no anchor, no road net
+(the hand tests: no country map) or an end more than 6 km from the map's roads, the whole march is F3.4's straight line
+x 1.3 at the day's speed, counted as a fall-back.
+
+**What the roads changed.** On the nation almost nothing yet, for a reason worth knowing: the map's roads end at our
+border, and every enemy echelon and the neutral's march from an assembly area 20-60 km beyond it (no road within 6 km),
+so all of them (5 in the Pact's 30 days x 5 seeds, 10 in the neutral's) fall back to x 1.3; and our side orders no
+division's relief or counterattack on the nation in these wars (F3.4). In the campaigns: the Pact's one echelon and the neutral's two (seed 7, 10 days) fall back the same way, and NATO marches none (`fronts_bench --ground`'s campaign lines). Where the
+roads are asked they lengthen marches: dravec to mezovar is 4.3 h on the roads by day against F3.4's 2.7 h (the road
+runs 97 km round for 52 km straight), 6.4 h by night, and 16.3 h with mezovar's road bridge down (no way round: the road
+and the river crossed at the cut's 12 h). A regiment's relief inside a sector is 1-3 h.
+
+**Mode 1 on the nation** (`air_war_balance --cpu --theatre theatre_pannonia_nation.json --set ground.mode=1 data 3 10`,
+3 seeds; F3.5's in brackets where they differ): the rebels (rebels_forest 1.8 nightly, hollos 0.2 on day 10) and the
+neutral (border_forest 7.0 then 17.9, lenta_marshes 15.6) are F3.5's to the decimal, and so is the Pact's first battery
+posture (tisava 23.1, 42.4, 45.9, 56.6, 60.9; ne_crossings to 46.8; rava 20). In the Pact's second posture tisava runs
+46.6 and 58.1 on days 3-4 (45.9, 56.6) and ne_crossings 35.8 and 44.7 (35.3, 43.5), both reaching F3.5's 60.9 and 46.8
+on day 5. NATO's upper_lenta is F3.5's (0 four days, then 13.2, 40.2, 69.7, 74.9); western_crossings goes 37.3, 38.0,
+38.7, 39.3 on days 7-10 (36.1, 37.2, 37.9, 38.6) and zlatno 6.0-6.3 (5.8-6.2), in both postures. NATO's change is
+U1's: its divisions and ours in the battery's sector go up on day 1 and their regiments report (23 regiment decisions
+over 30 days x 5 seeds alone), the reports waking the division commanders sooner; alone, NATO's main axis stalls at
+41-51 km instead of 38-42 for seed 7. The Pact's is a day's difference that closes by day 5 (its marches all fall
+back, so it is U1's or the campaign's own divergence once the line moves). Packages and losses move by about one a
+campaign (the loss rate 1.87 % against 1.78 %, inside 1-3.5 %).
+
+**U1 against U0** (`test_ground_levels.cpp`, 20 seeds, 10 days, every faction's own war on the nation, U1 centred on
+the battery's sector against U0 everywhere). The band: U1's mean within 10 % of U0's, or 3 km of summed axis depth and
+0.02 of a side's loss share where they are small. Chosen because the day's draw spreads an axis's day by sigma 0.35,
+about 8 % on a 20-seed mean, and U1 is built to conserve the losses, so a real departure would land far outside it;
+every faction is inside 1 %:
+
+| Faction | Battery's sector | Axis depth U0 / U1 (km, summed) | Our loss U0 / U1 | Enemy's loss U0 / U1 | Ups | Regiment decisions | Reliefs |
+|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 1 | 80.84 / 80.84 | 0.0823 / 0.0823 | 0.0828 / 0.0827 | 43 | 0 | 0 |
+| NATO | 2 | 113.10 / 114.01 | 0.1228 / 0.1227 | 0.0992 / 0.0997 | 100 | 20 | 0 |
+| Neutral | 1 | 17.93 / 17.93 | 0.0080 / 0.0080 | 0.0602 / 0.0602 | 40 | 0 | 0 |
+| Rebels | 2 | 4.47 / 4.47 | 0.0012 / 0.0012 | 0.0350 / 0.0350 | 0 | 0 | 0 |
+
+The hand war shows the rest: a division of three tank regiments and an artillery regiment holding the east sector at
+U1, the axis meeting its first regiment, which falls to 0.83 while the other first-echelon regiment is at 0.92 and the
+second echelon at 0.95; it asks at 14 h (0.88), the division commander sends the second-echelon regiment at 18 h (a
+2.0 h march), the two change places at 21 h; out of the player's area from 22 h, the division goes down at 28 h with
+its strength, posture and place, its regiments' shares unchanged at U0, and comes up again at once with them. The
+formation's strength is the sum of its regiments' to 4e-16 every hour.
+
+**Cost** (`fronts_bench data --ground --gate --player-sector battery`, MSVC Release, the tool alone, 30 days x 5 seeds;
+ms a campaign day; U1's extra is U1 centred on the battery's sector minus U0 everywhere):
+
+| Faction | U0 mean | U1 extra (mean) | U1 extra (worst day) | Levels part | Regiments | Level changes | Route asks / searches / hits / fall-backs | Route ms (all seeds) |
+|---|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 0.0217 | 0.0014 | 0.036 | 0.0015 | 30 | 10 | 5 / 5 / 0 / 5 | 0.058 |
+| NATO | 0.0313 | 0.0065 | 0.057 | 0.0018 | 22 | 25 | 1 / 1 / 0 / 0 | 0.011 |
+| Neutral | 0.0137 | 0.0006 | 0.041 | 0.0007 | 8 | 10 | 10 / 5 / 5 / 10 | 0.047 |
+| Rebels | 0.0656 | -0.0002 | 0.021 | 0 | 0 | 0 | 0 | 0 |
+
+Against 15 ms and 45 ms: four orders of magnitude under. A route search is about 0.01 ms on the nation's graph; the
+levels' part is the hourly need check over the formations with regiments. In the campaign (10 days, seed 7) the ground
+war's own time is 0.002 % (the Pact), 0.003 % (NATO), 0.19 % (the rebels) and 3.8 % (the neutral's campaign of 4 packages) of each campaign's CPU; the whole campaign at mode 1 against 0 is 1.051 for the Pact, 0.829 for NATO (187 packages against 221), 1.005 for the rebels and 0.857 for the neutral (0.01 s either way) (the
+war that differs once the line moves, as in F3.3-F3.5); `--gate` passes.
+
+**Identity.** At `ground.mode` 0 nothing is built: `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (6c227db, built the same
+way); the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds.
+
+**Tests** (`test_ground_levels.cpp`): the hand war above (shares, echelons, the commander's senior, up at once, the sum
+every hour, the regiment the axis meets losing more, the ask, the relief by the second echelon and the change of
+places, down 6 h after with nothing changed, up again with the same shares, the queue within its reserve); the route
+service on the nation (one search for a pair of anchors and a cache hit, slower by night on the same route, a bridge
+down in the truth moving the overlay's version and searching again, the march longer, the bridge back up the first
+route's hours); U1 against U0 over 20 seeds (the table).
+
+**Left:**
+- The regiments' own pictures (a regiment's reports at its echelon's times, the formation's picture by regiment) and a
+  regiment's believed place; our counterattack into the flank by regiments (F3.4's counterattack is still the
+  formation's); the line drawn by regiment rather than by the formation's run.
+- The enemy's roads beyond our border (the country's map has none): its echelons stay on F3.4's rule. Believed
+  overlays (a unit planning on the bridges it believes down, track G's rule) and a column's exposure on the road
+  (`SupplyColumnMovers`) for the air war to read.
+- U2 (movers in a session, drawn in Unreal) is F5.2's.
+- F6: whether the hit and support weights and the relief margin match history (a regiment's losses in the main blow).
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its
