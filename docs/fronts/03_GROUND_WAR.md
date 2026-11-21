@@ -796,7 +796,7 @@ reserve. F3.4's hand cases decide on the truth (`picture.truth`), its nation war
 
 **Left:**
 - F3.6: the march on the roads; U1's regiments and their pictures (a regiment's own reports at its echelon's times).
-- F3.7: the theatre's troops objects tied to the formations (the air sighting's sector and distance match is a
+- F3.7 (done: As built: F3.7): the theatre's troops objects tied to the formations (the air sighting's sector and distance match is a
   stand-in); strikes off strength reported in the pictures; supply below 1 believed.
 - F3.8: our side's picture into the pipeline as situation reports (`FactKind::Situation`): the believed line by station
   and the units' believed places are ready for it; the army's staff as posts, its intelligence summary as a fact.
@@ -941,6 +941,137 @@ route's hours); U1 against U0 over 20 seeds (the table).
   (`SupplyColumnMovers`) for the air war to read.
 - U2 (movers in a session, drawn in Unreal) is F5.2's.
 - F6: whether the hit and support weights and the relief margin match history (a regiment's losses in the main blow).
+
+## As built: F3.7 (21 Nov 2026)
+
+The air war follows the ground war's units (section 6). Only at `ground.mode` 1 on a theatre with a country map; at 0
+nothing is tied, drawn or counted.
+
+**The ties** (`GroundWar::Ties()`, `TroopsTie`, built at `Build`). Each of the theatre's `Troops` objects (not a decoy)
+whose owner in our order of battle (`OwnerOfObject`) is or sits under one of our formations is tied to it, and to the
+regiment it sits under where the formation has regiments (F3.6). On the nation 11-12 a faction (the border guards'
+battalion has no formation). An object's share of its unit is one over the objects tied to the same regiment (or
+formation); its base the regiment's part of the formation's establishment at the war's start (or the formation's).
+- **Working share**: the unit's strength now (its rest rate in closed form) over that base, in [0, 1]
+  (`TroopsFunction`); set after the ground war's step whenever its units took a loss or a gain
+  (`GroundWar::StrengthVersion`), else once a day for the rest rate (`AirCampaign::TroopsSync`), a wreck at 0. The air
+  war's repair skips a tied object, and the supply lines' decay out of stocks is put back (the unit's supply carries
+  it): its unit's strength is its state.
+- **Place**: its home until its formation marches to an axis (`Formation::arrived`, set on a counterattack's or relief's
+  arrival) or leaves the line (spent), then the formation's place with the objects about it as at home; never nearer the
+  line of contact than its unit keeps (its home's depth, up to 12 km in the line and in reserve, 3 km on an axis,
+  `troops.reform_depth_km` (25, a game value) out of the line), pushed straight back along the line's normal. Asked only
+  when the line's version or the ground war's `PlacesVersion` (any order that moves a formation) changes; the object's
+  own relocations (`Relocate`, its prepared positions moved with its unit) are kept round it.
+
+**Strikes** (`AirCampaign::TroopsStruck`, `GroundWar::AirStrike`). Every drop of a tied object's working share since
+the last hour is the enemy's, whatever made it (the abstract resolution, a played raid applied between hours, an armed
+reconnaissance). It comes off the unit: damage x the object's share x its base, never more than the regiment has, off
+every holding and the men in proportion (a regiment's: off that regiment alone, the others keeping theirs);
+`cohesion.air_attack_loss` (0.1) off the struck regiment's cohesion (the formation's by that regiment's part at U0); a
+line crossed wakes the commander, cohesion under the break line in contact disperses the formation. Journalled hidden
+(`air_attack`: who lost how much of its strength on which object). A rise of a tied object's share in the supply lines'
+step is a march column's strength brought (`Reinforce`, up to the establishment at the start).
+
+**Supply.** A line ending at troops that moved ends where they are (`SupplyNetwork::MoveEnd`: its last stretch on local
+roads redrawn, routed again from the network once they are `logistics.snap_m` from where it was routed to; its columns
+keep their share of the way); a line whose depot is overrun carries nothing. Each tied formation's supply is the mean by
+weight of its objects' stocks against `troops.full_supply_days` (1, a game value) of the air war's consumption, set
+before the hour's combat (`TroopsSupply`); the combat's power reads it (`UnitPower`). Formations with no tied object
+keep 1.
+
+**Overrun and the relocation rule.** When the line's version changes: our mobile objects within 8 km of the line of
+contact (not the player's battery, its dummies, the columns or the tied troops) move back at once to the nearest of their
+prepared positions 8 km behind it, else straight back to 8 km and their relocation distance (`Escape`); then our objects
+whose homes are on our side and now stand behind the enemy's line (not cities, the battery, its dummies, the columns or
+the tied troops) are overrun (`ObjectState::overrun`): no function, no missiles, no repair, no relocation, out of the
+enemy's picture and no report of them merged (`IntelPicture::Exclude`), so out of both sides' targets; ours again,
+wrecked, once the line is back past them. The relocation rule's 8 km is signed from the line of contact
+(`BehindFront`: a place on the enemy's side is never far enough). Measured from the line of contact too: the
+helicopters' holding area (the gate's offset off its distance behind their front), logistics' armed reconnaissance
+patrol point, and a played raid's air-fight front point.
+
+**NATO's FSCL** (`ground_nato.json`'s doctrine `"fscl"`: 20-30 km in defence, `fm_101_5_1_1980` p. 1-49, `ota_1987_fofa`
+pp. 78-79, `fm_6_20_1977` p. D-5; the terrain line's reach 30 km, an estimate). Per sector: the band's middle (25 km)
+beyond the sector's deepest station; where an axis attacks, on the first river its route crosses beyond the day's
+objective (its depth and a day at its breakthrough cap, short of its objective) within the reach, else the band's middle
+beyond it; the deeper of the two. Drawn at the start, at each day's end, on a halt and a resumption. C2's battlefield
+interdiction area reaches the FSCL in place of `c2.bai_depth_m` (`AirFrontView::BaiDepth`: the sector's FSCL less the
+line's offset there, read by `InBaiArea` and `NominationWaits`). The other factions draw none.
+
+**The air's sightings** (F3.5's stand-in replaced): the enemy's air sees a formation when its `IntelPicture` holds a live
+entry, observed within `air_fresh_h`, for one of the theatre objects tied to it (`air_depth_km` and `air_reach_km` gone).
+
+**Mode 1 on the nation** (`air_war_balance --cpu --theatre theatre_pannonia_nation.json --set ground.mode=1 data 3 10`;
+F3.6's in brackets where they differ). The rebels and the neutral are F3.6's to the decimal (rebels_forest 1.8 nightly,
+hollos 0.2 on day 10; border_forest 7.0 then 17.9, lenta_marshes 15.6). The Pact's careless posture is F3.6's but for
+tisava's day 4 (56.5, 56.6); careful: tisava 46.4, 56.9 on days 3-4 (46.6, 58.1), ne_crossings 35.7, 43.8 (35.8, 44.7),
+both F3.6's 60.9 and 46.8 from day 5, rava 20. NATO: upper_lenta F3.6's (0 four days, then 13.2, 40.2, 69.7, 74.9);
+western_crossings 33.6, 38.7, 39.8, 41.3, 44.2 on days 6-10 (32.4, 37.3, 38.0, 38.7, 39.3) and 45.5 careful; zlatno 7.1-7.3
+on day 10 (6.3): our troops struck from the air give ground.
+
+| Faction (posture) | Strikes on troops | Strength lost (of establishments) | Reinforcements | Overrun | Escapes | Troop moves | Lines routed again | CAS / BAI / AI | BAI / AI at the fixed depth | Packages (F3.6) | Loss rate (F3.6) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Rebels (careless) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 / 0 / 2.7 | 0 / 2.7 | 13.3 (10.7) | 20.3 % (17.8) |
+| Neutral (careless) | 0 | 0 | 5.0 | 0 | 8.0 | 32 (28 km) | 0 | 0 / 1.0 / 0 | 1.0 / 0 | 18.0 (20.0) | 5.7 % (4.2) |
+| Warsaw Pact (careless) | 1.3 | 0.215 | 3.0 | 3.0 | 0 | 0 | 0 | 0.3 / 10.7 / 39.3 | 10.7 / 39.3 | 216.0 (213.3) | 4.2 % (3.7) |
+| Warsaw Pact (careful) | 0.7 | 0.076 | 3.7 | 3.0 | 0 | 0 | 0 | 0.3 / 11.0 / 39.3 | 11.0 / 39.3 | 215.3 (215.3) | 3.6 % (3.8) |
+| NATO (careless) | 3.0 | 0.304 | 0.7 | 0.3 | 17.3 | 38.7 (42 km) | 2.0 | 2.7 / 3.0 / 46.0 | 0 / 49.0 | 161.7 (180.7) | 2.4 % (1.8) |
+| NATO (careful) | 2.3 | 0.379 | 0.7 | 0.7 | 16.3 | 38.7 (42 km) | 2.0 | 1.7 / 7.0 / 47.3 | 0 / 54.3 | 170.7 (176.7) | 2.3 % (1.9) |
+
+A campaign's means over 3 seeds. The Pact's 3 overrun objects are all still held at the end (nothing is retaken: no
+counterattack gets back past them); NATO's FSCL moves 3-7 strikes a campaign from air interdiction to BAI (at the fixed
+30 km depth none of its strikes is BAI). The neutral's escapes are our mobile objects near its two shallow
+penetrations; NATO's troop moves are our divisions marched to its axes. The few strikes on troops cost a lot: a struck object's whole regiment's share
+goes with a destroyed object (0.1-0.16 of a division a strike), which is the air war's damage model on a troops area
+taken at its word; F6's to calibrate. Two of the balance's bands are just missed at mode 1 with 3 seeds, both on a few
+aircraft (the rebels' careless 20.3 % against 0-20 %, 4 aircraft of 20 sorties; the neutral's careful 8.2 % against
+0-8 %, 2 of 24); `ground.mode` stays 0 in the data.
+
+**Cost** (`fronts_bench data --ground --gate` and `--player-sector battery --gate`, MSVC Release, the tool alone;
+both pass). The ground war alone is F3.6's (it does nothing new without the campaign). In the campaign (10 days, seed 7),
+F3.7's parts in ms a campaign day, counted in the ground war's time and its share:
+
+| Faction | Strikes | Supply | Sync | Overrun | Labels | F3.7 | The ground war in all | Share of the campaign |
+|---|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 0.0028 | 0.0134 | 0.0088 | 0.0329 | 0.0032 | 0.061 | 0.139 | 0.004 % |
+| NATO | 0.0024 | 0.0112 | 0.0261 | 0.0490 | 0.0028 | 0.091 | 0.181 | 0.007 % |
+| Neutral | 0.0010 | 0.0072 | 0.0091 | 0.0075 | 0 | 0.025 | 0.052 | (under the clock) |
+| Rebels | 0.0010 | 0.0065 | 0.0043 | 0.0500 | 0.0001 | 0.062 | 0.142 | 0.37 % |
+
+Nothing hourly that an event can do: the shares are set on a loss or gain (else daily), the places and supply ends on the
+line's or an order's version, overrun and escapes on the line's version with each object's projection on the base line
+kept until it moves (a step of the line is an offset's lookup an object), the FSCL on its version, the labels when a
+package is planned; hourly only the strikes' check and the supply's (twelve objects). The neutral's campaign (4 packages
+in 10 days) takes 0.00-0.01 s at mode 0, under `std::clock`'s resolution for a share (F3.6 measured 3.8 %, this run
+0.00 s or 8.7 % on the same work): `fronts_bench` now holds a campaign under 0.1 s of CPU to the absolute 20 ms a day
+instead (0.052 ms). The whole campaign at mode 1 against 0 (`air_war_balance --cpu`, 3 seeds x 10 days, both postures,
+the tool alone): 393.6 s against 385.0 s, 1.022 (the Pact 1.010, NATO 1.033, the rebels 1.15 and the neutral 1.77 on 2-3 s
+and 1-2 s: another war once the line moves, as in F3.3-F3.6).
+
+**Identity.** At `ground.mode` 0 nothing is built: `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (6d9298d, built the same
+way); the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds.
+
+**Tests** (`test_ground_air.cpp`, 9): a tie by its owner, whole and at home; a strike of 0.3 coming off the unit
+(damage x share x base, the cohesion's 0.1, journalled, never more than it has); a column's strength back up to the
+establishment; tied troops keeping their unit's depth behind the moved line; the FSCL by hand (25 km in defence, a day's
+objective and the band in attack, the readers' depth less the line's offset, none without the doctrine's block); an
+overrun object out of the picture and its reports until ours again; the nation's Pact war (every tied object's share its
+unit's, every supply line ending where its troops are, every overrun object without function, behind the line and out of
+the picture; the labels as the fixed depth gives them without an FSCL); NATO's FSCL per sector in C2's view; mode 0
+nothing tied, overrun, labelled or drawn. `test_ground_picture.cpp`'s air sighting now by the tie.
+
+**Left:**
+- F6: the damage a strike on a troops object takes off its unit (a destroyed object is its regiment's share, 0.1-0.16 of
+  a division: too much for a package against a regiment's area), `cohesion.air_attack_loss`, `troops.full_supply_days`
+  and the reform depth against history; the FSCL's terrain reach.
+- Escapes and returning overrun objects move at once and straight; on the roads with the route service, and our units
+  leaving objects before the line reaches them on an order, are F4's (F4.2's overrun in time and late).
+- The deep-strike line beyond the FSCL (the corps' area of interest) and the FSCL told to the enemy's own C2 posts as an
+  order with its delay; the other factions' coordination lines.
+- A column's exposure on the road (`SupplyColumnMovers`) for the air war to read (F3.6's).
+- F3.8: strikes off strength in the pictures' reports (now only in the truth and the journal), supply below 1 believed.
 
 ## Done when
 

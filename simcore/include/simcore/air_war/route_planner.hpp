@@ -1270,11 +1270,16 @@ private:
     // A helicopter's holding area behind a gate (track F, F2.4; 02_AIR_FRONT.md §3-4): route.helo_holding_m behind its
     // sector's helicopter front, never nearer the line than route.helo_holding_floor_m (our artillery's reach). With the
     // helicopters' front at 0 (air_front.mode 0) route.helo_holding_m, as before.
+    // Measured from the line of contact (track F, F3.7): where the ground war has moved it past the gate, that much less
+    // behind the gate (never ahead of it); at zero offsets the same to the bit.
     double HoldingBehind(const RouteRequest& rq, const Vec3& gate) const {
         const double hold = tune_.Get("route.helo_holding_m");
         const double front = rq.air_front.HeloAt(gate);
-        if (front <= 0.0) return hold;
-        return std::max(std::min(hold, tune_.Get("route.helo_holding_floor_m")), hold - front);
+        const double from_line = front <= 0.0 ? hold : std::max(std::min(hold, tune_.Get("route.helo_holding_floor_m")), hold - front);
+        const LineOfContact* line = rq.air_front.line;
+        if (line == nullptr || !line->Moved()) return from_line;
+        const double moved = line->Offset(line->Place(gate).along_m);
+        return moved > 0.0 ? std::max(0.0, from_line - moved) : from_line;
     }
 
     // The let-down and the climb at the air front (track F, F2.4; 02_AIR_FRONT.md §4). Where the gate is inside its

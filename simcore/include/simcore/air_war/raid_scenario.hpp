@@ -1340,8 +1340,21 @@ public:
             Put(g, "north_m", Num(std::round(gci.y)));
             Put(oa, "gci", g);
             Put(oa, "raid_warning_s", Num(std::round(warn_after_s)));
-            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it).
-            if (const FrontDef* front = th.FrontFor(f.front)) {
+            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it): the line
+            // of contact once the ground war has moved it (track F, F3.7: the point of the line of contact over the battery's
+            // projection on the base line), else the front's line as before.
+            const LineOfContact& contact = c.FrontLine();
+            if (contact.Moved()) {
+                const FrontPlace pl = contact.Place(bst.pos);
+                const Vec3 fs = to_scen(contact.PointAt(pl.along_m) + contact.InwardNormal(pl.along_m) * contact.Offset(pl.along_m));
+                if (fs.HorizontalLength() > 1.0) {
+                    json::Value fr = Obj();
+                    Put(fr, "east_m", Num(std::round(fs.x)));
+                    Put(fr, "north_m", Num(std::round(fs.y)));
+                    Put(fr, "enemy_bearing_deg", Num(std::round(RadToDeg(std::atan2(fs.x, fs.y)) * 10.0) / 10.0));
+                    Put(oa, "front", fr);
+                }
+            } else if (const FrontDef* front = th.FrontFor(f.front)) {
                 if (!front->line.empty()) {
                     Vec3 best = front->line.front();
                     for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {

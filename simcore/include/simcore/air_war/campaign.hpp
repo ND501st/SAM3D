@@ -125,6 +125,43 @@ struct RaidPatterns {
     int arm_attacks = 0;  // our radars hit, or made to go silent, by anti-radiation missiles (their sites report it)
 };
 
+// What the air war did with the ground war's units (track F, F3.7; docs/fronts/03_GROUND_WAR.md section 6), counted only
+// with the ground war on: the enemy's strikes on our tied troops objects and what they took off their units, march
+// columns' strength brought, our objects overrun and taken back, our mobile objects moved back from the line at once, tied
+// troops moved with their units and the supply lines routed again to them, and the packages by C2's label (close support,
+// battlefield interdiction, air interdiction) with the FSCL and as c2.bai_depth_m would have labelled the same strikes.
+struct GroundAirStats {
+    int troop_strikes = 0;
+    double strength_lost = 0.0;    // summed, each as a share of its formation's establishment at the war's start
+    int reinforced = 0;
+    double strength_brought = 0.0; // the same measure
+    int overrun = 0;
+    int retaken = 0;
+    int escapes = 0;
+    int troop_moves = 0;           // a tied object moved with its unit (by more than a metre: a step of the line or an order)
+    double troops_moved_km = 0.0;  // their moves summed
+    int supply_reroutes = 0;
+    int cas = 0;
+    int bai = 0;
+    int ai = 0;
+    int bai_fixed = 0;
+    int ai_fixed = 0;
+    // The parts' cost (steady_clock, ms) while the ground war is profiled (AirCampaign::ProfileGround): the strikes found and
+    // taken off the units, the supply lines' rises and the units' supply, the troops' shares, places and supply ends, the
+    // overrun and escapes on a moved line, the packages' labels.
+    enum Part { Strikes, Supply, Sync, Overrun, Labels, kParts };
+    double ms[kParts] = {};
+    double Ms() const {
+        double s = 0.0;
+        for (double v : ms) s += v;
+        return s;
+    }
+    static const char* PartName(int k) {
+        static const char* const kNames[] = {"strikes", "supply", "sync", "overrun", "labels"};
+        return k >= 0 && k < kParts ? kNames[k] : "?";
+    }
+};
+
 class AirCampaign {
 public:
     bool Init(const AirWarData& data, unsigned seed, std::string* error = nullptr) {
@@ -414,7 +451,7 @@ public:
             if (why != nullptr) *why = "too far for one move (" + std::to_string(static_cast<int>(max_m / 1000.0)) + " km at most)";
             return false;
         }
-        if (DistanceToFront(to) < 8000.0) {
+        if (BehindFront(to) < 8000.0) {
             if (why != nullptr) *why = "too close to the front";
             return false;
         }
@@ -567,8 +604,11 @@ public:
         v.line = &front_line_;
         v.depth_m = &air_front_depth_;
         v.helo_depth_m = &air_front_helo_depth_;
+        v.fscl_m = &fscl_m_;  // NATO's FSCL with the ground war (F3.7); empty otherwise
         return v;
     }
+    // The air war and the ground war's units (F3.7; zero without the ground war).
+    const GroundAirStats& GroundAir() const { return ground_air_; }
     // The fixed-wing and the helicopters' air front at a point: its sector's (0 and 0 at mode 0).
     double AirFrontAt(const Vec3& p) const {
         if (!air_front_on_ || air_front_.sectors.empty()) return 0.0;
@@ -776,6 +816,24 @@ private:
     LineOfContact front_line_;             // the faction's front (track F, F2.1)
     bool ground_on_ = false;               // ground.mode 1 on a theatre with a country map (F3.3)
     groundwar::GroundWar ground_war_;      // its formations at U0, stepped with the hour, moving front_line_'s stations
+    // The air war following the ground units (F3.7), only with ground_on_.
+    std::vector<double> tie_fn_;           // by tie: the working share last set from its unit (a drop since: a strike)
+    std::vector<double> tie_before_;       // by tie: the working share before the supply lines' step (a rise: a march column)
+    std::vector<Vec3> tie_place_;          // by tie: its unit's place last applied (its own moves round it are kept)
+    unsigned tie_line_version_ = 0;
+    std::uint64_t tie_places_version_ = 0;
+    std::uint64_t tie_strength_version_ = 0;
+    double tie_sync_h_ = 0.0;
+    unsigned overrun_line_version_ = 0;
+    std::vector<char> home_ours_;          // by object: its home on our side of the base line (what the enemy can overrun)
+    std::vector<FrontPlace> place_;        // by object: its projection on the base line at place_at_ (BehindLine)
+    std::vector<Vec3> place_at_;
+    std::vector<char> placed_;
+    std::vector<double> fscl_m_;           // NATO's FSCL by sector, beyond the base line (empty: none)
+    std::uint64_t fscl_version_ = 0;
+    std::vector<double> supply_sum_;       // by formation: scratch for its stocks
+    std::vector<double> supply_weight_;
+    GroundAirStats ground_air_;
     bool air_front_on_ = false;            // air_front.mode 1: the measures below kept (F2.2)
     SectorCoverBook cover_book_;
     std::vector<SectorCover> sector_cover_;  // as of the last plan
@@ -984,17 +1042,24 @@ private:
             now_h_ = t0;  // the hour's own processes as before the air was stepped
         }
         const double dt = t1 - t0;
+        if (ground_on_) TroopsStruck();  // the hour's strikes on our tied troops off their units (F3.7)
         intel_.Decay(dt, data_.tuning);
         Repair(dt);
         Relocate();
         {
             // Our supply lines (logistics.hpp): what our side's people on them would report goes in the journal.
             std::vector<std::string> events;
+            if (ground_on_) TroopsBefore();
             supply_.Step(data_, truth_, dt, TheatrePartAt(data_.theatre, data_.theatre.start_hour + t0) != DayPart::Day, &events);
+            if (ground_on_) TroopsBrought();
             for (const std::string& ev : events) Log("logistics", "our side", ev, false);
         }
         Deliver();
-        if (ground_on_) StepGround(t1);  // after the hour's air results, before the next plan reads the line (F3.3)
+        if (ground_on_) {
+            TroopsSupply();  // the stocks as the units' supply, for the hour's combat (F3.7)
+            StepGround(t1);  // after the hour's air results, before the next plan reads the line (F3.3)
+            TroopsSync();    // the tied troops from their units; overrun, escapes and the FSCL on the line moved (F3.7)
+        }
         now_h_ = t1;
         if (marching_ && now_h_ + 1e-9 >= march_until_h_) {  // the march's end: at the new position
             marching_ = false;
@@ -1137,6 +1202,7 @@ private:
         for (Package& p : plan) {
             ExploitCorridor(p);
             planned += p.Aircraft();
+            if (ground_on_) CountLabel(p);
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
             if (TouchesPlayer(p)) player_candidates_.insert(idx);
@@ -1480,6 +1546,7 @@ private:
             return planner.OnCall(pc, mk, e, pool.squadron, pool.aircraft, takeoff_h, out);
         };
         c.launch = [this](Package& p) {
+            if (ground_on_) CountLabel(p);
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
             if (TouchesPlayer(p)) player_candidates_.insert(idx);
@@ -1877,6 +1944,9 @@ private:
 
     // From the line of contact, either side (F2.1: at zero offsets the front's line, to the bit).
     double DistanceToFront(const Vec3& p) const { return front_line_.AbsDistance(p); }
+    // How far behind the line of contact on our side (the relocation rule's, F3.7): with the ground war on, signed (a place
+    // on the enemy's side of it is never far enough); off, DistanceToFront as before.
+    double BehindFront(const Vec3& p) const { return ground_on_ ? front_line_.DistanceTo(p) : DistanceToFront(p); }
 
     // ------------------------------------------------------------------ the ground war (track F, F3.3-F3.4)
 
@@ -1885,6 +1955,13 @@ private:
     bool StartGroundWar(std::string* error) {
         ground_on_ = false;
         ground_war_ = groundwar::GroundWar();
+        tie_fn_.clear();
+        tie_before_.clear();
+        tie_place_.clear();
+        home_ours_.clear();
+        fscl_m_.clear();
+        fscl_version_ = 0;
+        ground_air_ = GroundAirStats();
         if (data_.tuning.Get("ground.mode") < 1.0 || data_.country == nullptr || data_.data_dir.empty()) return true;
         if (!groundwar::HasGroundData(data_.data_dir, data_.faction.id)) return true;  // its front stays the border (03 section 8)
         auto gd = std::make_shared<groundwar::GroundWarData>();
@@ -1895,7 +1972,250 @@ private:
             return false;
         }
         ground_on_ = true;
+        // The air war follows the units (F3.7): the tied troops at their homes and whole, what the enemy can overrun (ours
+        // at home), NATO's FSCL as first drawn.
+        const std::vector<groundwar::TroopsTie>& ties = ground_war_.Ties();
+        tie_fn_.assign(ties.size(), 1.0);
+        tie_before_.assign(ties.size(), 1.0);
+        for (std::size_t k = 0; k < ties.size(); ++k) {
+            tie_place_.push_back(ties[k].home);
+            truth_[static_cast<std::size_t>(ties[k].object)].function = tie_fn_[k] = ground_war_.TroopsFunction(k, 0.0);
+        }
+        tie_line_version_ = overrun_line_version_ = front_line_.Version();
+        tie_places_version_ = ground_war_.PlacesVersion();
+        tie_strength_version_ = ground_war_.StrengthVersion();
+        tie_sync_h_ = 0.0;
+        home_ours_.assign(truth_.size(), 0);
+        place_.assign(truth_.size(), FrontPlace());
+        place_at_.assign(truth_.size(), Vec3{});
+        placed_.assign(truth_.size(), 0);
+        for (std::size_t i = 0; i < truth_.size(); ++i) home_ours_[i] = front_line_.Place(truth_[i].pos).side > 0.0 ? 1 : 0;
+        fscl_m_ = ground_war_.Fscl();
+        fscl_version_ = ground_war_.FsclVersion();
         return true;
+    }
+
+    // ---- the air war follows the units (track F, F3.7; docs/fronts/03_GROUND_WAR.md section 6)
+
+    // The enemy's strikes since the last hour on our tied troops: every drop of a tied object's working share below what
+    // its unit last set is the enemy's (the abstract resolution's, a played raid's, an armed reconnaissance's), and comes
+    // off its unit (GroundWar::AirStrike).
+    using GaClock = std::chrono::steady_clock;
+    GaClock::time_point GaStart() const { return ground_war_.Profiling() ? GaClock::now() : GaClock::time_point(); }
+    void GaLap(GroundAirStats::Part part, const GaClock::time_point& t0) {
+        if (ground_war_.Profiling()) ground_air_.ms[part] += std::chrono::duration<double, std::milli>(GaClock::now() - t0).count();
+    }
+    void TroopsStruck() {
+        const GaClock::time_point t0 = GaStart();
+        const std::vector<groundwar::TroopsTie>& ties = ground_war_.Ties();
+        const double h = ground_war_.Now();
+        for (std::size_t k = 0; k < ties.size(); ++k) {
+            const double damage = tie_fn_[k] - truth_[static_cast<std::size_t>(ties[k].object)].function;
+            if (!(damage > 1e-12)) continue;
+            const double lost = ground_war_.AirStrike(k, damage, h);
+            const double est = ground_war_.Formations()[static_cast<std::size_t>(ties[k].formation)].base_establishment;
+            ++ground_air_.troop_strikes;
+            if (est > 0.0) ground_air_.strength_lost += lost / est;
+        }
+        GaLap(GroundAirStats::Strikes, t0);
+    }
+    // Around the supply lines' step: a tied object's working share risen is a march column's strength brought to its unit
+    // (GroundWar::Reinforce); fallen, the lines' own stocks rule, which the unit's supply carries instead (TroopsSupply).
+    void TroopsBefore() {
+        const GaClock::time_point t0 = GaStart();
+        const std::vector<groundwar::TroopsTie>& ties = ground_war_.Ties();
+        for (std::size_t k = 0; k < ties.size(); ++k) tie_before_[k] = truth_[static_cast<std::size_t>(ties[k].object)].function;
+        GaLap(GroundAirStats::Supply, t0);
+    }
+    void TroopsBrought() {
+        const GaClock::time_point t0 = GaStart();
+        const std::vector<groundwar::TroopsTie>& ties = ground_war_.Ties();
+        const double h = ground_war_.Now();
+        for (std::size_t k = 0; k < ties.size(); ++k) {
+            double& fn = truth_[static_cast<std::size_t>(ties[k].object)].function;
+            const double rise = fn - tie_before_[k];
+            if (!(rise > 1e-12)) {
+                fn = tie_before_[k];  // the lines' decay out of stocks: the unit's supply carries it, not its strength
+                continue;
+            }
+            const double added = ground_war_.Reinforce(k, rise, h);
+            const double est = ground_war_.Formations()[static_cast<std::size_t>(ties[k].formation)].base_establishment;
+            ++ground_air_.reinforced;
+            if (est > 0.0) ground_air_.strength_brought += added / est;
+        }
+        GaLap(GroundAirStats::Supply, t0);
+    }
+    // Each tied formation's supply from its objects' stocks: troops.full_supply_days of the air war's consumption or more is
+    // full, below in proportion; a formation's is the mean of its objects' by their share of it (objects no line feeds keep
+    // their stocks whole). Formations with no tied object keep theirs.
+    void TroopsSupply() {
+        const std::vector<groundwar::TroopsTie>& ties = ground_war_.Ties();
+        if (ties.empty()) return;
+        const GaClock::time_point t0 = GaStart();
+        const std::size_t nf = ground_war_.Formations().size();
+        supply_sum_.assign(nf, 0.0);
+        supply_weight_.assign(nf, 0.0);
+        const double full = data_.tuning.Get("logistics.consumption_per_day") * ground_war_.Data().tables.troops.full_supply_days;
+        for (const groundwar::TroopsTie& t : ties) {
+            const double stock = truth_[static_cast<std::size_t>(t.object)].supply;
+            const double w = t.share * t.unit_base;
+            const std::size_t f = static_cast<std::size_t>(t.formation);
+            supply_sum_[f] += w * (full > 0.0 ? std::min(1.0, stock / full) : 1.0);
+            supply_weight_[f] += w;
+        }
+        for (std::size_t f = 0; f < nf; ++f) {
+            if (supply_weight_[f] > 0.0) ground_war_.SetSupply(f, supply_sum_[f] / supply_weight_[f]);
+        }
+        GaLap(GroundAirStats::Supply, t0);
+    }
+    // After the ground war's hour: the tied troops' working shares from their units; their places when the line or an order
+    // moved them (their own moves round their place kept), and the supply lines' ends with them; where the line has moved,
+    // our mobile objects back from it and our objects behind it overrun; NATO's FSCL as last drawn.
+    void TroopsSync() {
+        GaClock::time_point t0 = GaStart();
+        const std::vector<groundwar::TroopsTie>& ties = ground_war_.Ties();
+        const double h = ground_war_.Now();
+        // On a loss or gain the ground war's units took, else once a day (their rest rate between).
+        if (ground_war_.StrengthVersion() != tie_strength_version_ || h - tie_sync_h_ >= 24.0) {
+            tie_strength_version_ = ground_war_.StrengthVersion();
+            tie_sync_h_ = h;
+            for (std::size_t k = 0; k < ties.size(); ++k) {
+                ObjectState& st = truth_[static_cast<std::size_t>(ties[k].object)];
+                st.function = tie_fn_[k] = ground_war_.TroopsFunction(k, h);
+                if (st.function > 0.0) {
+                    st.wrecked_h = -1.0;
+                } else if (st.wrecked_h < 0.0) {
+                    st.wrecked_h = now_h_;
+                }
+            }
+        }
+        if (front_line_.Version() != tie_line_version_ || ground_war_.PlacesVersion() != tie_places_version_) {
+            tie_line_version_ = front_line_.Version();
+            tie_places_version_ = ground_war_.PlacesVersion();
+            for (std::size_t k = 0; k < ties.size(); ++k) {
+                const Vec3 p = ground_war_.TroopsPlace(k, front_line_);
+                const Vec3 d = p - tie_place_[k];
+                const double moved = d.HorizontalLength();
+                if (moved <= 1.0) continue;
+                ObjectState& st = truth_[static_cast<std::size_t>(ties[k].object)];
+                st.pos += Vec3{d.x, d.y, 0.0};
+                tie_place_[k] = p;
+                ++ground_air_.troop_moves;
+                ground_air_.troops_moved_km += moved / 1000.0;
+                ground_air_.supply_reroutes += supply_.MoveEnd(data_, ties[k].object, st.pos, truth_);
+            }
+        }
+        if (ground_war_.FsclVersion() != fscl_version_) {
+            fscl_version_ = ground_war_.FsclVersion();
+            fscl_m_ = ground_war_.Fscl();
+        }
+        GaLap(GroundAirStats::Sync, t0);
+        if (front_line_.Version() != overrun_line_version_) {
+            t0 = GaStart();
+            overrun_line_version_ = front_line_.Version();
+            Escape();
+            Overrun();
+            GaLap(GroundAirStats::Overrun, t0);
+        }
+    }
+    bool IsDummy(std::size_t i) const { return std::find(dummies_.begin(), dummies_.end(), static_cast<int>(i)) != dummies_.end(); }
+    // How far object i stands behind the line of contact (FrontLine::DistanceTo to the bit), its projection on the base
+    // line kept until it moves: a step of the line costs an offset's lookup an object.
+    double BehindLine(std::size_t i) {
+        const Vec3& p = truth_[i].pos;
+        if (place_at_[i].x != p.x || place_at_[i].y != p.y || !placed_[i]) {
+            place_[i] = front_line_.Place(p);
+            place_at_[i] = p;
+            placed_[i] = 1;
+        }
+        const FrontPlace& pl = place_[i];
+        return pl.side * pl.distance_m - front_line_.Offset(pl.along_m);
+    }
+    // The relocation rule on the line of contact: our mobile objects (not the player's battery, its dummies, the supply
+    // columns or the tied troops) it has come within 8 km of move back at once, to the nearest of their prepared positions
+    // 8 km or more behind it, else straight back along the line's normal to 8 km and their relocation distance behind it.
+    void Escape() {
+        for (std::size_t i = 0; i < truth_.size(); ++i) {
+            const TheatreObject& o = data_.theatre.objects[i];
+            ObjectState& st = truth_[i];
+            if (!o.mobile || home_ours_[i] == 0 || static_cast<int>(i) == player_ || IsDummy(i) || o.supply_line >= 0 ||
+                ground_war_.TieOf(i) >= 0 || st.overrun || st.function <= 0.0) {
+                continue;
+            }
+            const double behind = BehindLine(i);
+            if (behind >= 8000.0) continue;
+            double best = 1e18;
+            const Vec3* to = nullptr;
+            for (const Vec3& q : o.prepared) {
+                const double dq = Dist2d(q, st.pos);
+                if (dq < best && front_line_.DistanceTo(q) >= 8000.0) {
+                    best = dq;
+                    to = &q;
+                }
+            }
+            if (to != nullptr) {
+                st.pos = *to;
+            } else {
+                const FrontPlace pl = front_line_.Place(st.pos);
+                st.pos += front_line_.InwardNormal(pl.along_m) * (8000.0 + std::max(0.0, o.relocate_m) - behind);
+            }
+            st.last_moved_h = now_h_;
+            ++ground_air_.escapes;
+            Log("ground", "the ground war", o.name + " moves back from the line of contact.", false);
+        }
+    }
+    // Our objects behind the enemy's line of contact (their homes ours; not cities, the player's battery, its dummies, the
+    // supply columns or the tied troops, which move with their units) are overrun: the enemy holds them, out of its targets
+    // (IntelPicture::Exclude) and ours (no function, no missiles, no repair). Ours again once the line is back past them,
+    // wrecked, to be mended as a wreck is.
+    void Overrun() {
+        for (std::size_t i = 0; i < truth_.size(); ++i) {
+            const TheatreObject& o = data_.theatre.objects[i];
+            ObjectState& st = truth_[i];
+            if (home_ours_[i] == 0 || o.kind == ObjectKind::City || static_cast<int>(i) == player_ || IsDummy(i) || o.supply_line >= 0 ||
+                ground_war_.TieOf(i) >= 0) {
+                continue;
+            }
+            const bool behind = BehindLine(i) < 0.0;
+            if (behind == st.overrun) continue;
+            st.overrun = behind;
+            if (behind) {
+                st.function = 0.0;
+                if (st.missiles > 0) st.missiles = 0;
+                st.wrecked_h = now_h_;
+                intel_.Exclude(o.id);
+                ++ground_air_.overrun;
+                Log("ground", "the ground war", o.name + " is overrun: the enemy holds it.", false);
+            } else {
+                st.wrecked_h = now_h_;
+                intel_.Include(o.id);
+                ++ground_air_.retaken;
+                Log("ground", "the ground war", o.name + " is ours again, wrecked.", false);
+            }
+        }
+    }
+    // A package as C2's authority table names its mission (CAS, BAI, AI), with the FSCL and by c2.bai_depth_m.
+    void CountLabel(const Package& p) {
+        if (p.kind == MissionKind::Cas) {
+            ++ground_air_.cas;
+            return;
+        }
+        if (p.kind != MissionKind::Strike) return;
+        const GaClock::time_point t0 = GaStart();
+        const AirFrontView v = FrontView();
+        if (InBaiArea(p.target_pos, data_, v)) {
+            ++ground_air_.bai;
+        } else {
+            ++ground_air_.ai;
+        }
+        AirFrontView fixed = v;
+        fixed.fscl_m = nullptr;
+        if (InBaiArea(p.target_pos, data_, fixed)) {
+            ++ground_air_.bai_fixed;
+        } else {
+            ++ground_air_.ai_fixed;
+        }
+        GaLap(GroundAirStats::Labels, t0);
     }
 
     // Its hours up to t1, the line of contact moved; what happened into the journal (the truth, hidden: our side learns
@@ -1991,6 +2311,16 @@ private:
                     text += ".";
                     k = j - 1;
                     who = "the ground war";
+                    break;
+                }
+                case groundwar::GroundNote::AirAttack: {
+                    // The enemy's strike on a tied troops object, off its unit (F3.7).
+                    who = gd.ours.name;
+                    const std::string obj = g.other >= 0 && static_cast<std::size_t>(g.other) < data_.theatre.objects.size()
+                                                ? data_.theatre.objects[static_cast<std::size_t>(g.other)].name
+                                                : std::string("?");
+                    std::snprintf(buf, sizeof buf, " loses %.1f%% of its strength to the enemy's air attack on ", 100.0 * g.value);
+                    text = form_name(g.formation) + (g.regiment >= 0 ? " (" + reg_name(g.regiment) + ")" : std::string()) + buf + obj + ".";
                     break;
                 }
                 case groundwar::GroundNote::Order: {
@@ -2750,6 +3080,7 @@ private:
             const TheatreObject& o = data_.theatre.objects[i];
             ObjectState& st = truth_[i];
             if (o.kind == ObjectKind::Troops && st.supply < needs_supply) continue;  // out of stocks, nothing is mended
+            if (st.overrun || (ground_on_ && ground_war_.TieOf(i) >= 0)) continue;  // the enemy's; or its unit's strength (F3.7)
             if (st.function < 1.0 && o.repair_h > 0.0) {
                 if (st.function <= 0.0 && st.wrecked_h >= 0.0) {
                     if (now_h_ + dt >= st.wrecked_h + o.repair_h) st.function = restored;
@@ -2770,17 +3101,23 @@ private:
             ObjectState& st = truth_[i];
             const bool player = static_cast<int>(i) == player_;
             if (player && marching_) continue;
+            if (st.overrun) continue;  // the enemy's (F3.7)
             const double every = player ? posture_.relocate_every_h : o.relocate_h;
             if (every <= 0.0 || now_h_ - st.last_moved_h < every || st.function <= 0.0) continue;
+            // A tied troops object's prepared positions go with its unit (F3.7): about where its unit has put it as about its
+            // home; its new place is where the supply lines to it end.
+            const int tie = ground_on_ ? ground_war_.TieOf(i) : -1;
             if (!player && !o.prepared.empty()) {
                 // To another of its prepared positions, none of them within 8 km of the enemy's front.
                 std::vector<Vec3> options;
-                for (const Vec3& q : o.prepared) {
-                    if (Dist2d(q, st.pos) > 1.0 && DistanceToFront(q) >= 8000.0) options.push_back(q);
+                for (const Vec3& q0 : o.prepared) {
+                    const Vec3 q = tie >= 0 ? q0 + (tie_place_[static_cast<std::size_t>(tie)] - ground_war_.Ties()[static_cast<std::size_t>(tie)].home) : q0;
+                    if (Dist2d(q, st.pos) > 1.0 && BehindFront(q) >= 8000.0) options.push_back(q);
                 }
                 if (!options.empty()) {
                     st.pos = options[static_cast<std::size_t>(rng_.Index(static_cast<int>(options.size())))];
                     st.last_moved_h = now_h_;
+                    if (tie >= 0) ground_air_.supply_reroutes += supply_.MoveEnd(data_, static_cast<int>(i), st.pos, truth_);
                 }
                 continue;
             }
@@ -2788,12 +3125,13 @@ private:
             for (int tries = 0; tries < 6; ++tries) {
                 const double a = rng_.Uniform(0.0, 6.283185307179586);
                 const Vec3 to = st.pos + Vec3{std::cos(a) * dist, std::sin(a) * dist, 0.0};
-                if (DistanceToFront(to) < 8000.0) continue;
+                if (BehindFront(to) < 8000.0) continue;
                 if (player) {
                     MoveBattery(to);
                 } else {
                     st.pos = to;
                     st.last_moved_h = now_h_;
+                    if (tie >= 0) ground_air_.supply_reroutes += supply_.MoveEnd(data_, static_cast<int>(i), st.pos, truth_);
                 }
                 break;
             }

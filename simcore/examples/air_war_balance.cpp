@@ -66,6 +66,8 @@ struct DayStats {
 struct RunStats {
     std::vector<DayStats> days;
     std::map<std::string, std::vector<double>> ground_km;  // --cpu: the line's depth by sector at each day's end, summed
+    GroundAirStats ground_air;  // --cpu with the ground war: the air war and its units (F3.7), summed over the runs
+    double overrun_end = 0.0;   // our objects overrun at the campaign's end, summed
     double kinds[static_cast<int>(MissionKind::Count)] = {};
     double staff_changes = 0.0;
     double false_claims = 0.0;
@@ -233,6 +235,26 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
                 v[static_cast<std::size_t>(d)] += groundwar::GroundWar::SectorDepth(c.FrontLine(), k) / 1000.0;
             }
         }
+    }
+    if (g_cpu && c.Ground() != nullptr) {
+        const GroundAirStats& g = c.GroundAir();
+        GroundAirStats& a = acc.ground_air;
+        a.troop_strikes += g.troop_strikes;
+        a.strength_lost += g.strength_lost;
+        a.reinforced += g.reinforced;
+        a.strength_brought += g.strength_brought;
+        a.overrun += g.overrun;
+        a.retaken += g.retaken;
+        a.escapes += g.escapes;
+        a.troop_moves += g.troop_moves;
+        a.troops_moved_km += g.troops_moved_km;
+        a.supply_reroutes += g.supply_reroutes;
+        a.cas += g.cas;
+        a.bai += g.bai;
+        a.ai += g.ai;
+        a.bai_fixed += g.bai_fixed;
+        a.ai_fixed += g.ai_fixed;
+        for (const ObjectState& st : c.Truth()) acc.overrun_end += st.overrun ? 1.0 : 0.0;
     }
     for (const Package& p : c.Packages()) {
         if (!p.resolved && !p.played) continue;  // planned beyond the last day
@@ -549,6 +571,17 @@ int main(int argc, char** argv) {
             if (g_cpu) {
                 std::printf("CPU: %.2f s for %d campaigns of %d days (%.1f ms a campaign day), ground.mode %.0f\n", cpu_s, seeds, days,
                             1000.0 * cpu_s / (seeds * std::max(1, days)), data.tuning.Get("ground.mode"));
+                if (data.tuning.Get("ground.mode") >= 1.0 && !r.ground_km.empty()) {
+                    const GroundAirStats& g = r.ground_air;
+                    const double n = static_cast<double>(seeds);
+                    std::printf("  F3.7 a campaign: %.1f strikes on troops (%.3f of their formations' establishments), %.1f march columns' "
+                                "reinforcements (%.3f); %.1f overrun (%.1f at the end), %.1f retaken, %.1f escapes; %.1f troop moves (%.0f km), %.1f "
+                                "supply lines routed again\n",
+                                g.troop_strikes / n, g.strength_lost / n, g.reinforced / n, g.strength_brought / n, g.overrun / n, r.overrun_end / n,
+                                g.retaken / n, g.escapes / n, g.troop_moves / n, g.troops_moved_km / n, g.supply_reroutes / n);
+                    std::printf("  F3.7 labels a campaign: cas %.1f, bai %.1f, ai %.1f (by c2.bai_depth_m bai %.1f, ai %.1f)\n", g.cas / n, g.bai / n,
+                                g.ai / n, g.bai_fixed / n, g.ai_fixed / n);
+                }
                 for (const auto& kv : r.ground_km) {
                     bool moved = false;
                     for (double v : kv.second) moved = moved || v > 0.0;

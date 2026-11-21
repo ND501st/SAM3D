@@ -4,6 +4,7 @@
 // where its picture has troops and by ground reconnaissance at the line, ours see the enemy by contact and the army's
 // intelligence; a commander acts on a stale picture, and the truth changed after a report does not move his decision;
 // the enemy's picture says where its ground front collapses, the air front's crisis input, only while the ground war runs.
+// F3.7: the air's sightings are of the theatre's troops objects tied to a formation, not of a place near it.
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -249,20 +250,38 @@ SC_TEST("ground picture (F3.5): reports arrive with their delay, the belief hold
                 PictureSourceName(ours.units[div].source), w.g.Now() - ours.units[div].observed_h, w.g.Formations()[div].unit.Fraction());
 }
 
-SC_TEST("ground picture (F3.5): the enemy sees ours from the air where its picture has troops, by ground reconnaissance elsewhere") {
+// The theatre's troops objects tied to our formations (F3.7): east_troops the division's, td_troops the reserve's;
+// stray_troops no unit's.
+TheatreObject TroopsObject(const std::string& id, double e_km, double n_km) {
+    TheatreObject o;
+    o.id = id;
+    o.name = id;
+    o.kind = ObjectKind::Troops;
+    o.pos = Km(e_km, n_km);
+    return o;
+}
+
+SC_TEST("ground picture (F3.5, F3.7): the enemy sees ours from the air where its picture holds their troops, by ground reconnaissance elsewhere") {
     Fixture w;
-    SC_EXPECT(w.Build(War(), 7));
+    w.theatre.objects = {TroopsObject("east_troops", 55, 10), TroopsObject("td_troops", 75, 40), TroopsObject("stray_troops", 80, 45)};
+    std::shared_ptr<GroundWarData> d = War();
+    for (command::OobUnit& u : d->ours.oob.units) {
+        if (u.id == "blue_div") u.objects = {"east_troops"};
+        if (u.id == "blue_td") u.objects = {"td_troops"};
+    }
+    SC_EXPECT(w.Build(d, 7));
+    SC_EXPECT(w.g.Ties().size() == 2u);
     IntelPicture intel;
     IntelEntry tr;
     tr.key = tr.object_id = "east_troops";
     tr.kind = ObjectKind::Troops;
-    tr.pos = Km(55, 10);  // 10 km behind the line in the east, 36 km from the reserve
+    tr.pos = Km(55, 10);  // the division's troops, 10 km behind the line in the east
     tr.observed_h = 0.0;
     intel.entries.push_back(tr);
-    IntelEntry deep = tr;
-    deep.key = deep.object_id = "deep_troops";
-    deep.pos = Km(25, 70);  // 70 km behind the west: too deep for the west's holder, nowhere near the reserve
-    intel.entries.push_back(deep);
+    IntelEntry stray = tr;
+    stray.key = stray.object_id = "stray_troops";
+    stray.pos = Km(80, 45);  // troops 5 km from the reserve's place, but none of its own: not a sighting of it (F3.7)
+    intel.entries.push_back(stray);
     w.env.intel = &intel;
     w.To(6);
     const GroundPicture& theirs = w.g.Picture(Side::Enemy);
@@ -270,8 +289,8 @@ SC_TEST("ground picture (F3.5): the enemy sees ours from the air where its pictu
     SC_EXPECT(theirs.units[east].source == PictureSource::Air);
     SC_EXPECT(theirs.units[west].source == PictureSource::GroundRecon);
     SC_EXPECT(theirs.units[td].source == PictureSource::Prior);  // the reserve: not seen yet
-    // A sighting near the reserve: the next report sees it too; one too old is not a sighting.
-    intel.entries[1].pos = Km(80, 45);
+    // A sighting of the reserve's own troops: the next report sees it too; one too old is not a sighting.
+    intel.entries[1].key = intel.entries[1].object_id = "td_troops";
     intel.entries[1].observed_h = 10.0;
     intel.entries[0].observed_h = -100.0;  // the east's sighting now stale
     w.To(18);

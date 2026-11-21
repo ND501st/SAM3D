@@ -100,6 +100,11 @@
       "depth": { "value": 50, "source": "fm_100_5_1982 p. 8-7: corps and division operations may cover 50-80 km daily (its low end short of an exploitation)", "confidence": "medium" },
       "broken": { "value": 80, "source": "fm_100_5_1982 p. 8-7: 50-80 km daily in an exploitation", "confidence": "medium" }
     },
+    "fscl": {
+      "notes": "The corps' fire support coordination line (F3.7, docs/fronts/03_GROUND_WAR.md section 6): drawn per sector on a terrain line, close air support short of it, air interdiction beyond. The sources disagree on its depth (FM 6-20: as close to the forward troops as the situation allows; OTA on FOFA: about 30 km); the defence's band is the research's reading (docs/research/fronts_2026-11/nato_ground.md ctl-02 to ctl-04). In attack it is the next terrain line beyond the day's objective (the day's objective: the axis's depth and a day at its breakthrough cap, short of its objective); the model's terrain lines are the rivers its route crosses, looked for within terrain_reach_km beyond, else the defence's middle beyond the day's objective. C2's mission label reads it in place of c2.bai_depth_m.",
+      "defence_km": { "min": 20, "max": 30, "source": "fm_101_5_1_1980 p. 1-49 (set by corps on terrain seen from the air); ota_1987_fofa pp. 78-79 (about 30 km in FOFA planning); fm_6_20_1977 p. D-5 (as close as the situation allows): 20-30 km beyond the FLOT in defence, the middle used", "confidence": "medium" },
+      "terrain_reach_km": { "value": 30, "source": "estimate (SAM3D): the next terrain line beyond the day's objective is looked for this far (fm_6_20_1977 ch. 4: in a fluid attack the FSCL is kept well forward)", "confidence": "estimate" }
+    },
     "frontages_km": [
       { "echelon": "division", "posture": "defence", "width_min": 25, "width_max": 40, "source": "estimate (SAM3D) bounded by fm_100_5_1976 p. 5-3 (6-8 battalions on one fifth of a division's front); no period manual gives NATO's own", "confidence": "estimate" },
       { "echelon": "brigade", "posture": "defence", "width_min": 8, "width_max": 15, "source": "estimate (SAM3D) bounded by fm_100_5_1976 p. 5-3", "confidence": "estimate" },

@@ -232,12 +232,24 @@ struct AirFrontView {
     const LineOfContact* line = nullptr;
     const std::vector<double>* depth_m = nullptr;       // the fixed-wing low-level front by sector
     const std::vector<double>* helo_depth_m = nullptr;  // the helicopters' by sector
+    const std::vector<double>* fscl_m = nullptr;        // NATO's FSCL by sector, beyond the base line (track F, F3.7; empty: none)
 
     bool On() const { return line != nullptr && !line->Empty() && depth_m != nullptr && !depth_m->empty(); }
     // A sector's depths (0 off or out of range).
     double DepthIn(int s) const { return On() && s >= 0 && static_cast<std::size_t>(s) < depth_m->size() ? (*depth_m)[static_cast<std::size_t>(s)] : 0.0; }
     double HeloIn(int s) const {
         return On() && helo_depth_m != nullptr && s >= 0 && static_cast<std::size_t>(s) < helo_depth_m->size() ? (*helo_depth_m)[static_cast<std::size_t>(s)] : 0.0;
+    }
+    // The battlefield interdiction area's depth beyond the line of contact at a point (track F, F3.7): where the enemy's
+    // corps draws an FSCL, as far as it is beyond the line of contact there (its sector's line less the offset there, never
+    // below 0); else `fixed` (c2.bai_depth_m), to the bit.
+    double BaiDepth(const Vec3& p, double fixed) const {
+        if (fscl_m == nullptr || fscl_m->empty() || line == nullptr || line->Empty()) return fixed;
+        const FrontPlace pl = line->Place(p);
+        const int s = line->SectorAt(pl.along_m);
+        if (s < 0 || static_cast<std::size_t>(s) >= fscl_m->size()) return fixed;
+        const double d = (*fscl_m)[static_cast<std::size_t>(s)] - line->Offset(pl.along_m);
+        return d > 0.0 ? d : 0.0;
     }
     // At a point: its sector's (one projection on the base line; none when off).
     double At(const Vec3& p) const { return On() ? DepthIn(line->SectorOf(p)) : 0.0; }

@@ -27,8 +27,10 @@
 //   hour by hour for N days (default 30) over N seeds (default 5) with each campaign's weather: a campaign day's cost by
 //   part (combat, decisions, movement, line, picture: each side's picture's reports, F3.5; reports are the campaign's), the mean and the worst day against
 //   20 ms and 60 ms; then --campaign-days (default 10, 0: none) of whole campaigns over --campaign-seeds (default 1) at
-//   ground.mode 0 and 1: their CPU, the ground war's own time and its share of the campaign (budget 5%: 1.05x), and the
-//   line's depth by sector at each day's end (a day's move of 300 km or more is a runaway). Factions default to all
+//   ground.mode 0 and 1: their CPU, the ground war's own time and its share of the campaign (budget 5%: 1.05x; a campaign
+//   under 0.1 s of CPU at mode 0 is under std::clock's resolution for a share, so there the ground war's own ms a
+//   campaign day is held to the 20 ms budget instead: F3.7), and the line's depth by sector at each day's end (a day's move
+//   of 300 km or more is a runaway). Factions default to all
 //   four. --gate exits 2 over any budget. --log (F3.4): the first seed's commanders' decisions as they happen; the axes'
 //   line ends with the decisions made. --player-sector (F3.6): the ground war alone run again with the same seeds and U1
 //   centred on that sector (an id, or "battery": the player's battery's sector, as the campaign has it): U1's extra cost a
@@ -175,7 +177,7 @@ struct GroundLine {
 
 // The ground war's log as it stands: one line an entry (the order's name, who decided, about whom, where, its value).
 void PrintGroundLog(const groundwar::GroundWar& g) {
-    static const char* const kNotes[] = {"axis_starts", "river_reached", "river_crossed", "axis_halted", "day_line", "order"};
+    static const char* const kNotes[] = {"axis_starts", "river_reached", "river_crossed", "axis_halted", "day_line", "order", "air_attack"};
     for (const groundwar::GroundLogEntry& l : g.Log()) {
         if (l.what == groundwar::GroundNote::DayLine) continue;
         const char* what = l.what == groundwar::GroundNote::Order ? groundwar::GroundOrderName(l.order) : kNotes[static_cast<int>(l.what)];
@@ -373,6 +375,7 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
             double cpu_off = 0.0, cpu_on = 0.0, ground_ms = 0.0, reports_ms = 0.0, worst_ms = 0.0;
             std::size_t packages_off = 0, packages_on = 0;
             GroundLine marches;  // F3.6: the levels and the marches in the campaign (the player's battery's sector as it stands)
+            GroundAirStats ga;   // F3.7: the air war and the units, summed over the seeds
             std::vector<std::vector<double>> by_day;  // [sector][day] km, the first seed
             for (int s = 0; s < campaign_seeds; ++s) {
                 const unsigned seed = static_cast<unsigned>(7 + s);
@@ -415,6 +418,22 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
                     marches.asks += b.Ground()->RouteStats().asks;
                     marches.finds += b.Ground()->RouteStats().finds;
                     marches.hits += b.Ground()->RouteStats().hits;
+                    const GroundAirStats& g = b.GroundAir();
+                    ga.troop_strikes += g.troop_strikes;
+                    ga.strength_lost += g.strength_lost;
+                    ga.reinforced += g.reinforced;
+                    ga.overrun += g.overrun;
+                    ga.retaken += g.retaken;
+                    ga.escapes += g.escapes;
+                    ga.troop_moves += g.troop_moves;
+                    ga.supply_reroutes += g.supply_reroutes;
+                    ga.cas += g.cas;
+                    ga.bai += g.bai;
+                    ga.ai += g.ai;
+                    ga.bai_fixed += g.bai_fixed;
+                    ga.ai_fixed += g.ai_fixed;
+                    for (int k = 0; k < GroundAirStats::kParts; ++k) ga.ms[k] += g.ms[k];
+                    ground_ms += g.Ms();  // the air war's part of the ground war (F3.7) is the ground war's cost too
                 }
             }
             const double ratio = cpu_off > 0.0 ? cpu_on / cpu_off : 0.0;
@@ -427,6 +446,16 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
                         static_cast<unsigned long long>(marches.marches), marches.march_h, marches.straight_h,
                         static_cast<unsigned long long>(marches.fallbacks), static_cast<unsigned long long>(marches.asks),
                         static_cast<unsigned long long>(marches.finds), static_cast<unsigned long long>(marches.hits));
+            {
+                const double n = static_cast<double>(campaign_seeds), dn = static_cast<double>(campaign_seeds * campaign_days);
+                std::printf("    F3.7 a campaign: %.1f strikes on troops (%.3f of establishments), %.1f reinforcements, %.1f overrun, %.1f retaken, %.1f "
+                            "escapes, %.1f troop moves, %.1f supply lines routed again; labels cas %.1f bai %.1f ai %.1f (fixed depth bai %.1f ai %.1f)\n",
+                            ga.troop_strikes / n, ga.strength_lost / n, ga.reinforced / n, ga.overrun / n, ga.retaken / n, ga.escapes / n,
+                            ga.troop_moves / n, ga.supply_reroutes / n, ga.cas / n, ga.bai / n, ga.ai / n, ga.bai_fixed / n, ga.ai_fixed / n);
+                std::printf("    F3.7 ms a campaign day:");
+                for (int k = 0; k < GroundAirStats::kParts; ++k) std::printf(" %s %.5f", GroundAirStats::PartName(k), ga.ms[k] / dn);
+                std::printf(" (in ground_ms)\n");
+            }
             const LineOfContact* line = nullptr;
             AirCampaign names;  // the sectors' ids
             names.Init(on, 7);
@@ -450,7 +479,18 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
             }
             // The ground war's own time is the budget's line; the whole ratio also carries the war's divergence once the
             // line has moved (the planner, routes and C2 read it: another war, F2.4), so it is printed beside it.
-            if (share > campaign_budget - 1.0) {
+            // A campaign of a few packages (the neutral's: 4 in 10 days) takes a few ms at mode 0, which std::clock cannot
+            // measure for a share (0.00-0.01 s); there the ground war's own time a day is held to the absolute budget (F3.7).
+            const double day_ms = ground_ms / static_cast<double>(campaign_seeds * campaign_days);
+            if (cpu_off < 0.1 * campaign_seeds) {
+                if (day_ms > mean_budget_ms) {
+                    std::printf("  OVER BUDGET: the ground war takes %.3f ms a campaign day\n", day_ms);
+                    ++fails;
+                } else {
+                    std::printf("    (a campaign under std::clock's resolution: %.4f ms a campaign day against %.0f ms, not the share)\n", day_ms,
+                                mean_budget_ms);
+                }
+            } else if (share > campaign_budget - 1.0) {
                 std::printf("  OVER BUDGET: the ground war is %.2f%% of the campaign\n", 100.0 * share);
                 ++fails;
             }

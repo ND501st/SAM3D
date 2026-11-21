@@ -59,6 +59,16 @@
 // overlay's version (bridges down in the air war cut the crossings they stand on); the time is the route's at the
 // column's speed by day or night with its halts. Where an anchor, the road net or a way is missing: F3.4's straight line
 // x the road factor at the day's speed.
+//
+// The air war follows the units (F3.7, docs/fronts/03_GROUND_WAR.md section 6): every theatre troops object whose owner in
+// our order of battle is one of our formations or under it is tied to that formation (to its regiment where it has one
+// over the object's owner). The campaign reads a tied object's working share from its unit's strength over the unit's
+// establishment at the war's start (TroopsFunction), its place from its unit's (TroopsPlace: its home, moved with an order's
+// march, never nearer the line of contact than its unit keeps), and hands back the enemy's strikes on it (AirStrike: the
+// damage times the object's share of its unit off the unit's strength, cohesion.air_attack_loss off its cohesion), the
+// strength a march column brings it (Reinforce) and its stocks as the unit's supply (SetSupply). The enemy's air picture of
+// our formations is its picture's entries for their tied objects. NATO's corps draws its fire support coordination line by
+// sector (Fscl) at the war's start, each day's end and when an axis starts, halts or resumes.
 #pragma once
 
 #include <algorithm>
@@ -192,6 +202,7 @@ struct Formation {
     // between anchors (F3.6). "" none.
     std::string anchor;
     Vec3 anchor_pos;
+    bool arrived = false;    // ours: marched to an axis on an order (a counterattack, a relief); its place is `pos` (F3.7)
 
     double Tanks() const {
         double n = 0.0;
@@ -341,8 +352,10 @@ inline const char* GroundOrderName(GroundOrder o) {
     return "?";
 }
 
-// What the ground war says happened, for the campaign's journal (never read by the simulation).
-enum class GroundNote : std::uint8_t { AxisStarts, RiverReached, RiverCrossed, AxisHalted, DayLine, Order };
+// What the ground war says happened, for the campaign's journal (never read by the simulation). AirAttack (F3.7): the
+// enemy's strike on a tied troops object came off its unit (formation, regiment; other: the theatre object; value: the
+// strength lost as a share of the formation's establishment at the war's start).
+enum class GroundNote : std::uint8_t { AxisStarts, RiverReached, RiverCrossed, AxisHalted, DayLine, Order, AirAttack };
 struct GroundLogEntry {
     double h = 0.0;
     GroundNote what = GroundNote::AxisStarts;
@@ -367,6 +380,7 @@ struct GroundProfile {
     std::uint64_t decisions = 0;  // commanders' decisions made
     std::uint64_t regiment_decisions = 0;  // U1's regiments' commanders' (F3.6)
     std::uint64_t level_changes = 0;       // up or down
+    std::uint64_t air_strikes = 0;         // the enemy's strikes on tied troops objects taken off their units (F3.7)
     std::uint64_t route_ns = 0;            // asking the route service (inside the decisions' part), when profiling
     std::uint64_t route_fallbacks = 0;     // marches on F3.4's straight line x road factor (no anchor, no road net, no way)
     std::uint64_t marches = 0;             // marches timed
@@ -387,6 +401,20 @@ struct GroundEnv {
     const std::vector<airwar::ObjectState>* truth = nullptr;  // parallel to theatre->objects
     const airwar::IntelPicture* intel = nullptr;  // the enemy's picture of our side (its troops entries: its air's sightings); null none
     int player_sector = -1;  // the line's sector the player's battery is in (F3.6: U1 there and either side); -1 none, all at U0
+};
+
+// A theatre troops object tied to one of our formations (F3.7, docs/fronts/03_GROUND_WAR.md section 6): its owner in our
+// order of battle (OwnerOfObject) is the formation or under it; `regiment` is the formation's regiment over the owner, if it
+// has one (a regiment's area), else the object stands for the formation itself.
+struct TroopsTie {
+    int object = -1;            // the theatre object (TheatreDef::objects)
+    int formation = -1;         // GroundWar::Formations()
+    int regiment = -1;          // GroundWar::Regiments(), -1: the formation's own
+    double share = 1.0;         // the object's share of that unit: 1 / the objects tied to the same unit
+    double unit_base = 0.0;     // that unit's strength at the war's start (its share of the formation's establishment)
+    Vec3 home;                  // the object's theatre place (F1's anchor)
+    double home_depth_m = 0.0;  // how far behind the base line its home is
+    Vec3 centre;                // the mean home of its formation's tied objects (a march moves them about it)
 };
 
 // ------------------------------------------------------------------------------------------------------- the ground war
@@ -554,6 +582,8 @@ public:
         // U1's regiments and their commanders (F3.6); the roads, their anchors and the bridges on them.
         BuildRegiments(line);
         BuildRoads(theatre, country);
+        // The theatre's troops objects tied to our formations (F3.7).
+        TieTroops(theatre, line);
         // Capacities: no list grows past these in the hour.
         const std::size_t nf = forms_.size();
         for (Axis& x : axes_) {
@@ -582,6 +612,8 @@ public:
         Push(NextMidnight(0.0), EventKind::DayEnd);
         // Each side's picture (F3.5): its own units as reported, the other's as known in peacetime; then the reports.
         BuildPictures(line);
+        // NATO's fire support coordination line, in defence everywhere until its offensive starts (F3.7).
+        DrawFscl(line);
         built_ = true;
         return true;
     }
@@ -712,6 +744,144 @@ public:
         ApplyLoss(forms_[i], share, -1.0);
     }
 
+    // ---- the air war's troops objects (F3.7, docs/fronts/03_GROUND_WAR.md section 6)
+
+    // The theatre's troops objects tied to our formations, and the tie of a theatre object (-1 none).
+    const std::vector<TroopsTie>& Ties() const { return ties_; }
+    int TieOf(std::size_t object) const { return object < tie_of_.size() ? tie_of_[object] : -1; }
+    // Moved on every order that moves a formation's place (a march to an axis, a withdrawal, a dispersal, re-forming): the
+    // campaign asks the tied objects' places again when it or the line's version changes.
+    std::uint64_t PlacesVersion() const { return places_version_; }
+    // Moved on every loss or gain a formation's holdings take (the hour's combat, a strike, a column, the rest rate
+    // settled): the campaign sets the tied objects' shares again when it changes (and once a day for the rest rate).
+    std::uint64_t StrengthVersion() const { return strength_version_; }
+
+    // A tied object's working share at hour h: its unit's strength (its rest rate applied in closed form) over the unit's
+    // strength at the war's start, in [0, 1].
+    double TroopsFunction(std::size_t k, double h) const {
+        const TroopsTie& t = ties_[k];
+        if (!(t.unit_base > 0.0)) return 0.0;
+        const std::size_t fi = static_cast<std::size_t>(t.formation);
+        double s = StrengthAt(fi, h);
+        if (t.regiment >= 0) s *= regs_[static_cast<std::size_t>(t.regiment)].part;
+        return std::min(1.0, std::max(0.0, s / t.unit_base));
+    }
+
+    // Where a tied object stands: its home, or (its formation marched to an axis on an order) the place it arrived at with
+    // the formation's objects about it as at home; never nearer the line of contact than its unit keeps: in the line or in
+    // reserve its home's depth up to a regiment's depth in defence (12 km), marched to an axis a battalion's (3 km), out of
+    // the line (withdrawn, dispersed, re-forming) troops.reform_depth_km. Pushed straight back along the line's normal.
+    Vec3 TroopsPlace(std::size_t k, const airwar::LineOfContact& line) const {
+        const TroopsTie& t = ties_[k];
+        const Formation& f = forms_[static_cast<std::size_t>(t.formation)];
+        if (!line.Moved() && !f.arrived && !f.spent) return t.home;
+        Vec3 p = f.arrived ? f.pos + (t.home - t.centre) : t.home;
+        double need = std::min(std::max(t.home_depth_m, 0.0), kSecondEchelonDepthM);
+        if (f.arrived) need = kFirstEchelonDepthM;
+        if (f.spent) need = 1000.0 * data_->tables.troops.reform_depth_km;
+        if (line.Empty()) return p;
+        const airwar::FrontPlace pl = line.Place(p);
+        const double depth = pl.side * pl.distance_m - line.Offset(pl.along_m);
+        if (depth < need) p = p + line.InwardNormal(pl.along_m) * (need - depth);
+        return p;
+    }
+
+    // The enemy's strike on tied object k at hour h took `damage` of its working share: its unit loses the damage times the
+    // object's share times the unit's strength at the war's start (never more than it has), off every holding in
+    // proportion (a regiment's: off that regiment alone, the others keeping theirs), and cohesion.air_attack_loss of its
+    // cohesion (the formation's by that regiment's part at U0); a line crossed wakes its commander, cohesion gone in contact
+    // breaks it. Returns the strength lost (T-55 equivalents).
+    double AirStrike(std::size_t k, double damage, double h) {
+        const TroopsTie& t = ties_[k];
+        const std::size_t fi = static_cast<std::size_t>(t.formation);
+        Formation& f = forms_[fi];
+        if (!(damage > 0.0) || !(f.unit.strength > 0.0)) return 0.0;
+        Settle(fi, h);
+        const double before = f.unit.strength;
+        const double have = t.regiment >= 0 ? regs_[static_cast<std::size_t>(t.regiment)].part * before : before;
+        const double lost = std::min(have, damage * t.share * t.unit_base);
+        if (!(lost > 0.0)) return 0.0;
+        ApplyLoss(f, lost / before, -1.0);
+        const GroundTables& tb = data_->tables;
+        double hit = 1.0;  // the formation's share the attack fell on
+        if (t.regiment >= 0) {
+            const double after = f.unit.strength;
+            for (int j = 0; j < f.regiment_count; ++j) {
+                const std::size_t r = static_cast<std::size_t>(f.first_regiment + j);
+                Regiment& g = regs_[r];
+                const bool struck = static_cast<int>(r) == t.regiment;
+                const double had = g.part * before;
+                if (struck) {
+                    hit = g.part;
+                    g.cohesion = std::max(0.0, g.cohesion - tb.cohesion_air_attack_loss);
+                }
+                g.part = after > 0.0 ? std::max(0.0, had - (struck ? lost : 0.0)) / after : g.est_part;
+            }
+            if (f.level == UnitLevel::U1) {
+                double coh = 0.0;
+                for (int j = 0; j < f.regiment_count; ++j) {
+                    const Regiment& g = regs_[static_cast<std::size_t>(f.first_regiment + j)];
+                    coh += g.part * g.cohesion;
+                }
+                f.unit.cohesion = std::min(1.0, std::max(0.0, coh));
+            }
+        }
+        if (f.level == UnitLevel::U0 || t.regiment < 0) f.unit.cohesion = std::max(0.0, f.unit.cohesion - tb.cohesion_air_attack_loss * hit);
+        ++profile_.air_strikes;
+        Note(h, GroundNote::AirAttack, -1, static_cast<int>(fi), -1, f.base_establishment > 0.0 ? lost / f.base_establishment : 0.0);
+        log_.back().regiment = t.regiment;
+        log_.back().other = t.object;
+        if (!f.spent) {
+            if (f.unit.cohesion < tb.cohesion_break_below && f.contact_from_h >= 0.0) {
+                Disperse(fi, h, f.cmdr, 1.0);
+            } else {
+                const std::uint8_t now = Crossings(fi);
+                if ((now & ~f.crossed) != 0) WakeAfterReaction(f.cmdr, h, 0xA1A0000ull + fi);
+                f.crossed = static_cast<std::uint8_t>(f.crossed | now);
+                if (f.level == UnitLevel::U1) RegimentsAfterHour(fi, h);
+            }
+        }
+        return lost;
+    }
+
+    // A march column of the air war's supply lines brought tied object k `gain` of its working share (tanks and men moving
+    // up): its unit gains that times the object's share times the unit's strength at the war's start, up to the formation's
+    // establishment at the war's start. Returns the strength brought.
+    double Reinforce(std::size_t k, double gain, double h) {
+        const TroopsTie& t = ties_[k];
+        const std::size_t fi = static_cast<std::size_t>(t.formation);
+        Formation& f = forms_[fi];
+        if (!(gain > 0.0) || !(f.unit.strength > 0.0)) return 0.0;
+        Settle(fi, h);
+        const double before = f.unit.strength;
+        const double add = std::min(gain * t.share * t.unit_base, std::max(0.0, f.base_establishment - before));
+        if (!(add > 0.0)) return 0.0;
+        const double scale = 1.0 + add / before;
+        ++strength_version_;
+        for (Holding& g : f.holdings) g.count *= scale;
+        f.personnel *= scale;
+        f.unit.strength = Strength(f);
+        f.unit.establishment = std::max(f.unit.establishment, f.unit.strength);
+        if (t.regiment >= 0) {
+            const double after = f.unit.strength;
+            for (int j = 0; j < f.regiment_count; ++j) {
+                const std::size_t r = static_cast<std::size_t>(f.first_regiment + j);
+                Regiment& g = regs_[r];
+                g.part = (g.part * before + (static_cast<int>(r) == t.regiment ? after - before : 0.0)) / after;
+            }
+        }
+        return add;
+    }
+
+    // A formation's supply (0-1) from its tied objects' stocks (the campaign's: F3.7); the combat reads it in its power.
+    void SetSupply(std::size_t i, double supply) { forms_[i].unit.supply = std::min(1.0, std::max(0.0, supply)); }
+
+    // NATO's fire support coordination line by the line's sector (F3.7): its depth beyond the base line as the corps last
+    // drew it (the readers take off the line of contact's offset there); empty when the enemy draws none. FsclVersion moves
+    // with every drawing.
+    const std::vector<double>& Fscl() const { return fscl_m_; }
+    std::uint64_t FsclVersion() const { return fscl_version_; }
+
 private:
     enum class EventKind : std::uint8_t {
         Start, Crossed, DayEnd, Decide, LineBack, Arrive, Reformed, RaidNight, RaidEnd,
@@ -788,6 +958,14 @@ private:
     };
     std::vector<JoinedBridge> bridges_;
     int player_sector_ = -1;
+    // The air war's troops objects (F3.7).
+    std::vector<TroopsTie> ties_;
+    std::vector<int> tie_of_;              // by theatre object: its tie, -1 none
+    std::uint64_t places_version_ = 0;
+    std::uint64_t strength_version_ = 0;
+    std::vector<double> fscl_m_;           // NATO's FSCL by sector, beyond the base line (empty: none drawn)
+    std::uint64_t fscl_version_ = 0;
+    bool fscl_dirty_ = false;
     const GroundEnv* env_ = nullptr;       // the hour's, while Step runs
     bool built_ = false;
     bool profiling_ = false;
@@ -1211,6 +1389,80 @@ private:
         if (an == nullptr) return;
         f.anchor = an->id;
         f.anchor_pos = an->pos;
+    }
+
+    // ---- the air war's troops objects (F3.7)
+
+    // Each theatre troops object whose owner in our order of battle is one of our formations or under it (the nearest such
+    // formation over it), to the formation's regiment over the owner where it has one; the shares and the centres after.
+    void TieTroops(const airwar::TheatreDef& theatre, const airwar::LineOfContact& line) {
+        ties_.clear();
+        tie_of_.assign(theatre.objects.size(), -1);
+        const command::OrderOfBattle& oob = data_->ours.oob;
+        for (std::size_t i = 0; i < theatre.objects.size(); ++i) {
+            const airwar::TheatreObject& o = theatre.objects[i];
+            if (o.kind != airwar::ObjectKind::Troops || o.decoy) continue;
+            const command::OobUnit* owner = oob.OwnerOfObject(o.id);
+            if (owner == nullptr) continue;
+            int fi = -1;
+            for (const command::OobUnit* u = owner; u != nullptr && fi < 0; u = u->parent.empty() ? nullptr : oob.Find(u->parent)) {
+                fi = FindFormation(u->id, Side::Ours);
+            }
+            if (fi < 0) continue;
+            const Formation& f = forms_[static_cast<std::size_t>(fi)];
+            TroopsTie t;
+            t.object = static_cast<int>(i);
+            t.formation = fi;
+            for (int k = 0; k < f.regiment_count && t.regiment < 0; ++k) {
+                if (oob.Under(owner->id, regs_[static_cast<std::size_t>(f.first_regiment + k)].id)) t.regiment = f.first_regiment + k;
+            }
+            t.home = o.pos;
+            if (!line.Empty()) {
+                const airwar::FrontPlace pl = line.Place(o.pos);
+                t.home_depth_m = pl.side * pl.distance_m;
+            }
+            tie_of_[i] = static_cast<int>(ties_.size());
+            ties_.push_back(t);
+        }
+        for (TroopsTie& t : ties_) {
+            int same = 0, mine = 0;
+            Vec3 c;
+            for (const TroopsTie& u : ties_) {
+                if (u.formation != t.formation) continue;
+                ++mine;
+                c += u.home;
+                if (u.regiment == t.regiment) ++same;
+            }
+            t.share = 1.0 / static_cast<double>(std::max(1, same));
+            t.centre = c * (1.0 / static_cast<double>(std::max(1, mine)));
+            const Formation& f = forms_[static_cast<std::size_t>(t.formation)];
+            t.unit_base = t.regiment >= 0 ? regs_[static_cast<std::size_t>(t.regiment)].est_part * f.base_establishment : f.base_establishment;
+        }
+    }
+
+    // NATO's corps draws its FSCL by sector (fm_101_5_1_1980 p. 1-49; fm_6_20_1977 p. D-5; ota_1987_fofa pp. 78-79): in
+    // defence the doctrine's band's middle beyond the line of contact (the sector's deepest station); where its attack goes
+    // on, on the next terrain line beyond the day's objective (the axis's depth and a day at its breakthrough cap, short of
+    // its objective): the first river its route crosses within fscl_terrain_reach_km beyond it, else the band's middle
+    // beyond it. Kept as depths beyond the base line.
+    void DrawFscl(const airwar::LineOfContact& line) {
+        fscl_dirty_ = false;
+        const GroundDoctrineDef& d = data_->enemy.doctrine;
+        if (!d.has_fscl) return;
+        const double band = 1000.0 * d.fscl_defence_km.Mid();
+        fscl_m_.assign(line.SectorCount(), 0.0);
+        for (std::size_t s = 0; s < line.SectorCount(); ++s) fscl_m_[s] = SectorDepth(line, s) + band;
+        for (const Axis& x : axes_) {
+            if (x.raid || x.status != AxisStatus::Attacking || x.sector < 0) continue;
+            const double day = std::min(x.objective_m, x.depth_m + 1000.0 * d.caps.breakthrough_km_per_day);
+            double at = day + band;
+            for (const RiverOnAxis& r : x.rivers) {
+                if (r.depth_m > day && r.depth_m <= day + 1000.0 * d.fscl_terrain_reach_km) at = std::min(at, r.depth_m);
+            }
+            double& v = fscl_m_[static_cast<std::size_t>(x.sector)];
+            v = std::max(v, at);
+        }
+        ++fscl_version_;
     }
 
     // ---- U1's level: up at once when needed, down after the margin (03 section 3.3)
@@ -1852,6 +2104,7 @@ private:
     // 7-7). Tanks lost go to repair by the table's reparable share unless `repairable` is false (stragglers' left behind).
     void ApplyLoss(Formation& f, double share, double tank_share, bool repairable = true) {
         const double s = std::min(1.0, std::max(0.0, share));
+        if (s > 0.0 || tank_share > 0.0) ++strength_version_;
         for (Holding& h : f.holdings) {
             const double ts = h.tank && tank_share >= 0.0 ? std::min(1.0, tank_share) : s;
             const double lost = h.count * ts;
@@ -1946,6 +2199,8 @@ private:
             moved_[a] = 0;
             DrawLine(a, line);
         }
+        // NATO's FSCL, redrawn on the corps' order: the offensive's start, an axis halted or resumed, the day's end (F3.7).
+        if (fscl_dirty_) DrawFscl(line);
         Lap(GroundProfile::Line);
         if (profiling_) {
             ++profile_.hours;
@@ -1975,6 +2230,7 @@ private:
                     }
                 }
                 offensive_h_ = h0;
+                fscl_dirty_ = true;
                 for (std::size_t a = 0; a < axes_.size(); ++a) {
                     Axis& x = axes_[a];
                     if (x.raid) continue;
@@ -2012,6 +2268,7 @@ private:
                     if (dep > 0.0) Note(h0, GroundNote::DayLine, -1, -1, static_cast<int>(s), dep);
                 }
                 ReturnRepaired(h0);
+                fscl_dirty_ = true;
                 Push(NextMidnight(h0), EventKind::DayEnd);
                 break;
             }
@@ -2446,6 +2703,7 @@ private:
         Axis& x = axes_[a];
         x.status = AxisStatus::Halted;
         x.halted = why;
+        fscl_dirty_ = true;
         // The sector goes quiet: its attackers hold where they are, in contact.
         for (int fi : x.first) Hold(static_cast<std::size_t>(fi), h1);
         for (int fi : x.defenders) {
@@ -2757,6 +3015,7 @@ private:
         x.status = AxisStatus::Attacking;
         x.halted = HaltReason::None;
         x.last_advance_h = h;
+        fscl_dirty_ = true;
         for (int fi : x.first) {
             if (Attacks(forms_[static_cast<std::size_t>(fi)])) StartAttack(static_cast<std::size_t>(fi), h);
         }
@@ -2894,6 +3153,8 @@ private:
                 --x.counter_incoming;
                 if (f.spent || f.task != Task::Counter) break;
                 f.pos = AxisPoint(x, line);
+                f.arrived = f.unit.side == Side::Ours;
+                ++places_version_;
                 MoveAnchor(f, static_cast<std::size_t>(a));
                 if (x.status != AxisStatus::Attacking && x.status != AxisStatus::Halted && x.status != AxisStatus::Counterattacked) {
                     f.task = Task::None;
@@ -2920,6 +3181,8 @@ private:
                 f.relief_for = -1;
                 if (f.spent) break;
                 f.pos = AxisPoint(x, line);
+                f.arrived = f.unit.side == Side::Ours;
+                ++places_version_;
                 MoveAnchor(f, static_cast<std::size_t>(a));
                 f.unit.state = UnitState::InLine;
                 f.unit.posture = Posture::PreparedDefence;
@@ -2976,6 +3239,7 @@ private:
         f.task = Task::None;
         f.relief_for = -1;
         ++f.withdrawals;
+        ++places_version_;
         ReportAtOnce(i, h, on);
         LeaveLists(static_cast<int>(i));
         const double days = data_->tables.reform_days.At(root_.Fork(0x2EF0000000ull + i * 64 + static_cast<std::size_t>(f.withdrawals)).Uniform());
@@ -2998,6 +3262,7 @@ private:
         f.task = Task::None;
         f.relief_for = -1;
         ++f.dispersals;
+        ++places_version_;
         ReportAtOnce(i, h, on);
         LeaveLists(static_cast<int>(i));
         const double days = data_->tables.reassemble_days.At(root_.Fork(0xD15E000000ull + i * 64 + static_cast<std::size_t>(f.dispersals)).Uniform());
@@ -3009,6 +3274,7 @@ private:
         Formation& f = forms_[i];
         if (!f.spent) return;
         f.spent = false;
+        ++places_version_;
         f.settled_h = h;
         f.unit.state = UnitState::Reserve;
         f.unit.posture = Posture::HastyDefence;
@@ -3328,22 +3594,16 @@ private:
         return false;
     }
 
-    // The enemy's air has seen one of ours lately: a troops entry of its picture (not a ghost) observed within
-    // air_fresh_h, behind the line in a sector it holds (within air_depth_km) or, off the line, within air_reach_km of
-    // it. A stand-in until F3.7 ties the theatre's troops objects to the formations.
-    bool AirSees(std::size_t i, double h, const GroundEnv& env, const airwar::LineOfContact& line) const {
-        if (env.intel == nullptr) return false;
+    // The enemy's air has seen one of ours lately: its picture holds an entry (not a ghost) for one of the theatre's troops
+    // objects tied to the formation (F3.7), observed within air_fresh_h.
+    bool AirSees(std::size_t i, double h, const GroundEnv& env) const {
+        if (env.intel == nullptr || env.theatre == nullptr) return false;
         const PictureTables& pt = data_->tables.picture;
-        const Formation& f = forms_[i];
-        if (f.spent) return false;
-        for (const airwar::IntelEntry& e : env.intel->entries) {
-            if (e.ghost || e.kind != airwar::ObjectKind::Troops || h - e.observed_h > pt.air_fresh_h) continue;
-            if (f.first_sector >= 0) {
-                const airwar::FrontPlace pl = line.Place(e.pos);
-                if (pl.side > 0.0 && pl.distance_m <= pt.air_depth_km * 1000.0 && f.InSector(line.SectorOf(e.pos))) return true;
-            } else if (airwar::Dist2d(e.pos, f.pos) <= pt.air_reach_km * 1000.0) {
-                return true;
-            }
+        if (forms_[i].spent) return false;
+        for (const TroopsTie& t : ties_) {
+            if (t.formation != static_cast<int>(i)) continue;
+            const airwar::IntelEntry* e = env.intel->Find(env.theatre->objects[static_cast<std::size_t>(t.object)].id);
+            if (e != nullptr && !e->ghost && h - e->observed_h <= pt.air_fresh_h) return true;
         }
         return false;
     }
@@ -3359,7 +3619,7 @@ private:
                 src = PictureSource::Own;
             } else if (by == Side::Ours) {
                 if (EnemyAtLine(i)) src = PictureSource::Contact;
-            } else if (AirSees(i, h, env, line)) {
+            } else if (AirSees(i, h, env)) {
                 src = PictureSource::Air;
             } else if (OursAtLine(i)) {
                 src = PictureSource::GroundRecon;

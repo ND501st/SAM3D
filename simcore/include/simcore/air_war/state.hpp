@@ -374,6 +374,9 @@ struct ObjectState {
     int leg = 0;
     double along_m = 0.0;
     double wait_h = 0.0;
+    // Behind the enemy's line of contact: the enemy holds it (track F, F3.7; only with the ground war on). Out of the air
+    // war's targets and ours: no function, no repair, until our side takes it back.
+    bool overrun = false;
 };
 
 // How the player's battery behaves between and during fights: the commander's choices the enemy reacts to.
