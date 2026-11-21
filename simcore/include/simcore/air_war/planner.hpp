@@ -293,11 +293,13 @@ inline Weaponeering Weaponeer(const AirWarData& d, const AircraftType& a, Target
 // flown no sooner than the faction's nomination_h after the enemy learned of it (gallant_knight_1983: 48 h for NATO's BAI;
 // roadmap S2, c2.live_mode 1). What it knew before the war is on the plan already. `to_front_m`: the target's distance
 // from the line of contact; `air_front_m`: its sector's air front, which carries the interdiction area forward with it
-// (track F, F2.4; 0 at air_front.mode 0).
-inline bool NominationWaits(const AirWarData& d, const IntelEntry& e, double to_front_m, double now_h, double air_front_m = 0.0) {
+// (track F, F2.4; 0 at air_front.mode 0). `bai_depth_m`: the area's depth there where the enemy's corps draws an FSCL
+// (F3.7, AirFrontView::BaiDepth), < 0 c2.bai_depth_m.
+inline bool NominationWaits(const AirWarData& d, const IntelEntry& e, double to_front_m, double now_h, double air_front_m = 0.0,
+                            double bai_depth_m = -1.0) {
     const FactionC2& c2 = d.faction.c2;
     if (!c2.present || c2.nomination_h <= 0.0 || d.tuning.Get("c2.mode") < 1.0 || d.tuning.Get("c2.live_mode") < 1.0) return false;
-    if (to_front_m > d.tuning.Get("c2.bai_depth_m") + air_front_m || e.first_h <= 0.0) return false;
+    if (to_front_m > (bai_depth_m >= 0.0 ? bai_depth_m : d.tuning.Get("c2.bai_depth_m")) + air_front_m || e.first_h <= 0.0) return false;
     return now_h < e.first_h + c2.nomination_h;
 }
 
@@ -749,7 +751,7 @@ private:
             switch (mk) {
                 case MissionKind::Strike:
                     if (ad || e.kind == ObjectKind::Troops || e.kind == ObjectKind::City) continue;
-                    if (NominationWaits(*c_->data, e, to_front, now, front_m)) continue;
+                    if (NominationWaits(*c_->data, e, to_front, now, front_m, c_->air_front.BaiDepth(e.pos, -1.0))) continue;
                     break;
                 case MissionKind::Dead:
                     if (!ad || e.sigma_m > 4000.0) continue;
@@ -1516,7 +1518,7 @@ private:
             if (mk == MissionKind::ArmedRecce) {
                 if (line < 0 || used_lines.count(line) > 0) continue;
                 patrol = *seen;
-                patrol.pos = c_->supply->PatrolPoint(static_cast<std::size_t>(line), front_->line);
+                patrol.pos = c_->supply->PatrolPoint(static_cast<std::size_t>(line), front_->line, c_->front_line);
                 patrol.sigma_m = 0.0;
                 e = &patrol;
             }

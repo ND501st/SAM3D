@@ -182,11 +182,14 @@
     "army_intel_delay_h": { "value": 6, "source": "game value: the summary's collation and travel to the army's command post", "confidence": "estimate" },
     "army_intel_sigma": { "value": 0.4, "source": "game value: the spread of the army intelligence's estimate of formations it does not touch", "confidence": "estimate" },
     "air_sigma": { "value": 0.2, "source": "game value: the spread of the enemy's estimate of our troops it has photographed (its air reconnaissance, the air war's IntelPicture)", "confidence": "estimate" },
-    "air_fresh_h": { "value": 24, "source": "game value: a troops entry of the enemy's picture observed within this counts as a sighting of our units there", "confidence": "estimate" },
-    "air_depth_km": { "value": 40, "source": "game value: a troops entry within this behind the line in a sector is a sighting of our units holding that sector (until F3.7 ties the troops objects to the formations)", "confidence": "estimate" },
-    "air_reach_km": { "value": 30, "source": "game value: a troops entry within this of one of our formations off the line (a reserve) is a sighting of it", "confidence": "estimate" },
+    "air_fresh_h": { "value": 24, "source": "game value: an entry of the enemy's picture for one of the theatre's troops objects tied to a formation (F3.7: the object's owner in our order of battle is the formation or under it) observed within this counts as a sighting of that formation", "confidence": "estimate" },
     "ground_recon_delay_h": { "value": 3, "source": "game value: the enemy's ground reconnaissance at the line (patrols, observation posts) reports to its senior staff in about 3 h", "confidence": "estimate" },
     "ground_recon_sigma": { "value": 0.35, "source": "game value: the spread of the enemy's estimate of our units at the line that its air has not seen", "confidence": "estimate" },
     "crisis_below": { "value": 0.5, "source": "docs/fronts/02_AIR_FRONT.md section 3 (the crisis): a formation of the enemy's own below half strength in its ground picture lets its air chief ignore the loss gate in that sector", "confidence": "estimate" }
+  },
+  "troops": {
+    "notes": "The air war follows the ground units (track F, F3.7; simcore/ground_war/ground_war.hpp's troops ties, docs/fronts/03_GROUND_WAR.md section 6 and 'As built: F3.7'). Each theatre troops object whose owner in our order of battle is a formation of the ground war or under it is tied to it (to its regiment where it has one): its working share is that unit's strength over its establishment at the war's start, the enemy's strikes on it come off that unit's strength (the damage times the object's share of the unit) and its cohesion (cohesion.air_attack_loss an attack), it stands behind the line of contact with its unit, and its stocks are the unit's supply.",
+    "reform_depth_km": { "value": 25, "source": "game value: a unit withdrawn, dispersed or re-forming stands this far behind the line of contact (behind a division's second echelon, vr_poltikovic_1984 p. 96's 12 km a regiment's depth in defence)", "confidence": "estimate" },
+    "full_supply_days": { "value": 1, "source": "game value: a formation with a day's stocks or more (the air war's logistics.consumption_per_day) fights at full supply; below, its supply in proportion (power by ground.supply_floor), so a cut line is felt within its three days of stocks", "confidence": "estimate" }
   }
 }

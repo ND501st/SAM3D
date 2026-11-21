@@ -147,7 +147,11 @@ are not gated by the air front, only by the threat their routes weigh (B2).
 **NATO's FSCL** (`fm_101_5_1_1980` p. 1-49; `fm_6_20_1977` p. D-5; `ota_1987_fofa` pp. 78-79): close air support short of
 it with detailed integration, battlefield interdiction either side, air interdiction beyond. With the ground war (F3.7)
 the FSCL is drawn 20-30 km beyond the line of contact in defence, the next terrain line beyond the day's objective in
-attack. Its only effect in F2 is the mission label C2 reads; the BAI depth above stands in until then.
+attack. Its only effect in F2 is the mission label C2 reads; the BAI depth above stands in until then. As built (F3.7,
+`03_GROUND_WAR.md`, As built: F3.7): NATO's corps draws it by sector (`GroundWar::Fscl`, the doctrine's `"fscl"` in
+`ground_nato.json`), and the BAI area's depth beyond the line of contact is the FSCL's there in place of `c2.bai_depth_m`
+(`AirFrontView::BaiDepth`, read by `InBaiArea` and `NominationWaits`); the other factions draw none and keep the fixed
+depth.
 
 **J-SEAD by depth** (`davis_1987_31_initiatives` p. 31): the Army's guns suppress to the limit of observed fire, the
 Air Force beyond. Not modelled until the ground war has artillery: the planner's SEAD stays the air force's.
@@ -250,7 +254,8 @@ So far only these two read it. `c2.hpp`'s four reads (`C2MissionOf`'s BAI depth,
 reach, `MissionName`) are free functions or the C2 layer's own and reach the front through `AirWarData`; they move to the
 line of contact with F2.4, which changes that depth by the sector's air front. `resolve.hpp`, `raid_scenario.hpp` and
 `logistics.hpp` read the base line for a depth in a report or a supply line's front end: F3.3 and F3.7. All equal it at
-zero offsets.
+zero offsets. (Done: `resolve.hpp`'s with F3.3; `raid_scenario.hpp`'s air-fight front point and `logistics.hpp`'s patrol
+point read the line of contact with F3.7.)
 
 **F2.2, what the enemy weighs by sector** (`simcore/air_war/air_front.hpp`). `SectorCoverBook` keeps the enemy's picture
 at the war's start (every radar SAM fire unit and every piece of mobile air defence it believed in, by place, believed
@@ -540,10 +545,11 @@ where its way home re-enters it; a target inside the air front; the helicopters'
 and never nearer than the floor. `test_c2.cpp` (+1, 13): the BAI label reaches the deeper line in its sector, the free
 hunt zone and our fires read the line of contact. `test_air_front.cpp`: the F2.3 campaign test as above.
 
-**Left:** `air_front.mode` 1 in the data (F6, with the gates' values); the FSCL as the BAI area's inner edge and the
-deep-strike line (F3.7); the holding area and C2's distances off a moved line of contact (they read it already: F3.3
-moves it); `resolve.hpp`'s, `raid_scenario.hpp`'s (a played raid's depth) and `logistics.hpp`'s base-line reads (F3.3,
-F3.7); our side learning the air front (F2.5).
+**Left:** `air_front.mode` 1 in the data (F6, with the gates' values); the deep-strike line beyond the FSCL (the corps'
+area of interest; F3.7 made the FSCL the BAI area's depth, not yet a separate inner edge); our side learning the air
+front (F2.5). Done since: the FSCL (F3.7); the holding area measured from the moved line of contact (F3.7: the gate's
+offset taken off its distance behind the helicopter front); `resolve.hpp`'s (F3.3), `raid_scenario.hpp`'s and
+`logistics.hpp`'s (F3.7) base-line reads.
 
 ## As built (F2.5; 21 November 2026)
 

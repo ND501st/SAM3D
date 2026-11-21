@@ -119,6 +119,16 @@ public:
 
     void Queue(IntelReport r) { pending.push_back(std::move(r)); }
 
+    // An object of ours the enemy's ground forces now hold (track F, F3.7): out of its picture, and no report of it merged
+    // while it holds it. Include: our side has taken it back (reports of it count again).
+    void Exclude(const std::string& object_id) {
+        if (std::find(held_.begin(), held_.end(), object_id) == held_.end()) held_.push_back(object_id);
+        entries.erase(std::remove_if(entries.begin(), entries.end(), [&object_id](const IntelEntry& e) { return !e.ghost && e.key == object_id; }),
+                      entries.end());
+    }
+    void Include(const std::string& object_id) { held_.erase(std::remove(held_.begin(), held_.end(), object_id), held_.end()); }
+    bool Held(const std::string& object_id) const { return !held_.empty() && std::find(held_.begin(), held_.end(), object_id) != held_.end(); }
+
     // Merge every report that has arrived by `now_h`. Returns the reports merged (for the journal).
     std::vector<IntelReport> Deliver(double now_h, double analyst_skill) {
         std::vector<IntelReport> arrived;
@@ -187,6 +197,7 @@ public:
     }
 
     int ghosts_made = 0;
+    std::vector<std::string> held_;  // our objects its ground forces hold (F3.7)
     // Entries the pilots had claimed destroyed and that a later report shows working ("the truth comes out").
     std::vector<std::string> resurrected;
     // Entries truly destroyed that a later report shows working again: repaired, faster than the enemy assumed.
@@ -196,6 +207,7 @@ private:
     double delivering_h_ = 0.0;  // the hour of the delivery being merged
 
     void Merge(const IntelReport& r, double analyst_skill) {
+        if (!r.ghost && Held(r.object_id)) return;  // its own troops hold it (F3.7)
         IntelEntry* e = nullptr;
         if (!r.ghost) {
             e = Find(r.object_id);

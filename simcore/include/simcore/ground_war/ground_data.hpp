@@ -147,12 +147,18 @@ struct PictureTables {
     double army_intel_delay_h = 6.0;
     double army_intel_sigma = 0.4;
     double air_sigma = 0.2;          // the enemy's air reconnaissance of our troops (its IntelPicture's Troops entries)
-    double air_fresh_h = 24.0;       // an entry observed within this counts
-    double air_depth_km = 40.0;      // within this behind the line in a sector, it sees our units holding that sector
-    double air_reach_km = 30.0;      // within this of one of ours off the line (a reserve), it sees it
+    double air_fresh_h = 24.0;       // an entry of a troops object tied to the formation (F3.7) observed within this counts
     double ground_recon_delay_h = 3.0;  // the enemy's ground reconnaissance at the line
     double ground_recon_sigma = 0.35;
     double crisis_below = 0.5;       // a formation of the enemy's own believed below this: its front collapsing (02 section 3)
+};
+
+// The air war's troops objects and our units (F3.7, ground_war.hpp's ties; docs/fronts/03_GROUND_WAR.md section 6): where a
+// unit out of the line re-forms and how its stocks become the supply its combat reads (ground_war.json's "troops" block,
+// game values; without the block these defaults).
+struct TroopsTables {
+    double reform_depth_km = 25.0;   // a unit withdrawn, dispersed or re-forming stands this far behind the line of contact
+    double full_supply_days = 1.0;   // a formation with this many days of stocks (the air war's consumption) fights at full supply
 };
 
 struct GroundTables {
@@ -216,6 +222,9 @@ struct GroundTables {
     int levels_neighbours = 1;            // U1 (F3.6): the player's sector and this many either side
     double levels_hit_weight = 2.0;       // a regiment the axis hits takes this many times its share of the formation's losses
     double levels_support_weight = 0.5;   // a support regiment (no tanks: artillery) this many times its share
+
+    // The air war's troops objects (F3.7).
+    TroopsTables troops;
 
     // The clock and the line at U0 (F3.3, ground_war.hpp).
     std::vector<std::string> tank_types;  // the weights' types marked "tank" (FM 101-10-1 table 7-7's), sorted
@@ -305,6 +314,13 @@ struct GroundDoctrineDef {
     ValueRange division_prepared_positions;
     ValueRange regiment_prepared_positions;
     ValueRange restore_control_h;
+    // NATO's fire support coordination line (F3.7, fm_101_5_1_1980 p. 1-49, fm_6_20_1977 p. D-5, ota_1987_fofa pp. 78-79):
+    // drawn per sector this far beyond the line of contact in defence; in attack on the next terrain line (a river on the
+    // axis) beyond the day's objective, looked for this far beyond it. Absent: the faction draws none (C2 keeps
+    // c2.bai_depth_m).
+    bool has_fscl = false;
+    ValueRange fscl_defence_km;
+    double fscl_terrain_reach_km = 30.0;
 
     const FrontageDef* Frontage(const std::string& echelon, const std::string& posture) const {
         for (const FrontageDef& f : frontages) {
@@ -513,7 +529,7 @@ public:
     bool LoadTables(const json::Value& root, GroundTables& out) {
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
-                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture"}) ||
+                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture", "troops"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -560,10 +576,21 @@ public:
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
             !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out) ||
-            !LoadPicture(root, out)) {
+            !LoadPicture(root, out) || !LoadTroops(root, out)) {
             return false;
         }
         return true;
+    }
+
+    // The air war's troops objects and our units (F3.7): optional, the defaults without it.
+    bool LoadTroops(const json::Value& root, GroundTables& out) {
+        const json::Value* c = root.Find("troops");
+        if (c == nullptr) return true;
+        const std::string p = "troops";
+        if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
+        return Keys(*c, p, {"reform_depth_km", "full_supply_days", "notes"}) &&
+               Sourced(*c, p, "reform_depth_km", out.troops.reform_depth_km, 0.0, 200.0) &&
+               Sourced(*c, p, "full_supply_days", out.troops.full_supply_days, 0.01, 30.0);
     }
 
     // `world`: the places and theatre the file names (LoadGroundWorld).
@@ -922,14 +949,13 @@ private:
         PictureTables& t = out.picture;
         if (c == nullptr ||
             !Keys(*c, p, {"report_first_h", "own_delay_h", "own_sigma", "contact_sigma", "prior_sigma", "army_intel_per_day", "army_intel_delay_h",
-                          "army_intel_sigma", "air_sigma", "air_fresh_h", "air_depth_km", "air_reach_km", "ground_recon_delay_h",
+                          "army_intel_sigma", "air_sigma", "air_fresh_h", "ground_recon_delay_h",
                           "ground_recon_sigma", "crisis_below", "notes"}) ||
             !Sourced(*c, p, "report_first_h", t.report_first_h, 0.0, 23.99) || !Sourced(*c, p, "own_delay_h", t.own_delay_h, 0.0, 24.0) ||
             !Sourced(*c, p, "own_sigma", t.own_sigma, 0.0, 2.0) || !Sourced(*c, p, "contact_sigma", t.contact_sigma, 0.0, 2.0) ||
             !Sourced(*c, p, "prior_sigma", t.prior_sigma, 0.0, 2.0) || !WholeSourced(*c, p, "army_intel_per_day", t.army_intel_per_day, 1, 24) ||
             !Sourced(*c, p, "army_intel_delay_h", t.army_intel_delay_h, 0.0, 48.0) || !Sourced(*c, p, "army_intel_sigma", t.army_intel_sigma, 0.0, 2.0) ||
             !Sourced(*c, p, "air_sigma", t.air_sigma, 0.0, 2.0) || !Sourced(*c, p, "air_fresh_h", t.air_fresh_h, 0.0, 240.0) ||
-            !Sourced(*c, p, "air_depth_km", t.air_depth_km, 0.0, 300.0) || !Sourced(*c, p, "air_reach_km", t.air_reach_km, 0.0, 300.0) ||
             !Sourced(*c, p, "ground_recon_delay_h", t.ground_recon_delay_h, 0.0, 48.0) ||
             !Sourced(*c, p, "ground_recon_sigma", t.ground_recon_sigma, 0.0, 2.0) || !Sourced(*c, p, "crisis_below", t.crisis_below, 0.0, 1.0)) {
             return false;
@@ -1077,7 +1103,7 @@ private:
                           "counterattack_by_senior", "second_echelon_to_success", "disperse_rather_than_retreat",
                           "counterattack_stops_at_border", "echelons_against_deep_defence", "reserve_share", "covering_force_share",
                           "effectiveness", "advance_caps_km_per_day", "frontages_km", "security_zone", "prepared_positions",
-                          "restore_control_h"}) ||
+                          "restore_control_h", "fscl"}) ||
             !Provenance(*d, p) || !Sourced(*d, p, "attack_ratio", out.attack_ratio, 1.0, 20.0) ||
             !RangeOf(*d, p, "breakthrough_ratio", out.breakthrough_ratio, 1.0, 20.0) || !Flag(*d, p, "withdraw_needs_order", out.withdraw_needs_order) ||
             !Flag(*d, p, "counterattack_by_senior", out.counterattack_by_senior) ||
@@ -1091,6 +1117,15 @@ private:
         if (d->Find("reserve_share") != nullptr && !Sourced(*d, p, "reserve_share", out.reserve_share, 0.0, 0.5)) return false;
         if (d->Find("covering_force_share") != nullptr && !RangeOf(*d, p, "covering_force_share", out.covering_force_share, 0.0, 1.0)) return false;
         if (!Effectiveness(*d, out.effectiveness) || !Caps(*d, out.caps) || !Frontages(*d, out.frontages)) return false;
+        if (const json::Value* fs = d->Find("fscl")) {
+            const std::string fp = Join(p, "fscl");
+            if (!fs->Is(json::Type::Object) || !Keys(*fs, fp, {"defence_km", "terrain_reach_km", "notes"}) ||
+                !RangeOf(*fs, fp, "defence_km", out.fscl_defence_km, 0.0, 200.0) ||
+                !Sourced(*fs, fp, "terrain_reach_km", out.fscl_terrain_reach_km, 0.0, 200.0)) {
+                return message_.empty() ? Fail(fp, "expected an object") : false;
+            }
+            out.has_fscl = true;
+        }
         if (const json::Value* sz = d->Find("security_zone")) {
             const std::string sp = Join(p, "security_zone");
             if (!sz->Is(json::Type::Object) || !Keys(*sz, sp, {"depth_km", "line_spacing_km", "delay_per_line_h", "notes"}) ||

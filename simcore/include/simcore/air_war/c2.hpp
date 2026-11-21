@@ -83,10 +83,11 @@ public:
 };
 
 // Whether a place is in the battlefield interdiction area: within c2.bai_depth_m of the line of contact, and further by
-// its sector's air front (track F, F2.4; 02_AIR_FRONT.md §4). With no line given, from the front's line (the same at zero
-// offsets and with the air front off).
+// its sector's air front (track F, F2.4; 02_AIR_FRONT.md §4); where the enemy's corps draws an FSCL (NATO's, with the ground
+// war, F3.7), within it in place of c2.bai_depth_m: close support short of it, interdiction beyond. With no line given,
+// from the front's line (the same at zero offsets and with the air front off).
 inline bool InBaiArea(const Vec3& place, const AirWarData& d, const AirFrontView& af) {
-    if (af.line != nullptr && !af.line->Empty()) return af.line->AbsDistance(place) <= d.tuning.Get("c2.bai_depth_m") + af.At(place);
+    if (af.line != nullptr && !af.line->Empty()) return af.line->AbsDistance(place) <= af.BaiDepth(place, d.tuning.Get("c2.bai_depth_m")) + af.At(place);
     const FrontDef* front = d.theatre.FrontFor(d.faction.front);
     return front != nullptr && DistanceToLine(front->line, place) <= d.tuning.Get("c2.bai_depth_m");
 }
