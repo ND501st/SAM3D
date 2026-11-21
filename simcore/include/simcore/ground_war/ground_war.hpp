@@ -203,6 +203,10 @@ struct Formation {
     std::string anchor;
     Vec3 anchor_pos;
     bool arrived = false;    // ours: marched to an axis on an order (a counterattack, a relief); its place is `pos` (F3.7)
+    // Ours: the enemy's air attacks on it since its staff's last return, counted for the next (F3.8): how many and the share
+    // of its establishment they cost (the truth; the return carries the staff's count).
+    int air_hits = 0;
+    double air_lost = 0.0;
 
     double Tanks() const {
         double n = 0.0;
@@ -415,6 +419,82 @@ struct TroopsTie {
     Vec3 home;                  // the object's theatre place (F1's anchor)
     double home_depth_m = 0.0;  // how far behind the base line its home is
     Vec3 centre;                // the mean home of its formation's tied objects (a march moves them about it)
+};
+
+// Our side's reports and orders as its staffs compiled them (F3.8, docs/fronts/03_GROUND_WAR.md section 10), for
+// command/ground_feed.hpp to put into the information pipeline. Each is what the reporting unit believed when it
+// compiled it (the picture's own errors: Observe), never the truth. Logged only where our reports are made (twice a day,
+// and at once on an event), kept for the whole war and read by index; nothing in the simulation reads them.
+enum class SitCause : std::uint8_t { Scheduled, Reported, Asked, AttackStopped, Withdrawn, Dispersed, Reformed, AxisNews };
+
+// An axis as a unit reported it: the depth and pace (no error, a unit knows where it stands and where the enemy faces it),
+// whether our counterattack is on it, and the enemy it believes it faces (the contact report's error).
+struct SitAxis {
+    int axis = -1;
+    int sector = -1;
+    double depth_m = 0.0;
+    double pace_km_day = 0.0;
+    bool counterattacked = false;
+    int enemy_n = 0;               // the enemy's formations in contact on it, not out of the fight
+    double enemy_fraction = 0.0;   // their mean believed strength fraction
+};
+
+// A unit's report: its own return (own: believed strength fraction and supply, posture, out of the fight, the air attacks it
+// counted since its last return and the share of its strength it believes they cost) and the axes it reports
+// (SitAxes()[axes_first, axes_first + axes_count)). An axis's news at once alone has own false.
+struct SitReport {
+    double h = 0.0;  // compiled (the hour its staff finished it, before the pipeline carries it)
+    int formation = -1;
+    SitCause cause = SitCause::Scheduled;
+    bool own = true;
+    double fraction = 0.0;
+    double supply = 1.0;
+    int sector = -1;
+    Posture posture = Posture::HastyDefence;
+    bool out = false;
+    int strikes = 0;
+    double struck = 0.0;
+    std::uint32_t axes_first = 0;
+    std::uint16_t axes_count = 0;
+};
+
+// An order our commander gave one of our units (a withdrawal permitted, a relief sent, a counterattack ordered): `issuer`
+// the commander (GroundWar::Commanders()), `formation` the unit it is to, `other` the unit relieved (a relief's), `value` the
+// order's own (a counterattack's ratio as he believed it).
+struct SitOrder {
+    double h = 0.0;
+    GroundOrder order = GroundOrder::WithdrawOrdered;
+    int issuer = -1;
+    int formation = -1;
+    int axis = -1;
+    int other = -1;
+    double value = 0.0;
+};
+
+// The enemy's strike on one of our tied troops objects as the unit it hit saw it: its staff's count of the share of its
+// strength lost (`lost`, the unit's own factor on the truth). The object is the theatre's, `at` where the unit stood then.
+struct SitAir {
+    double h = 0.0;
+    int formation = -1;
+    int regiment = -1;
+    int object = -1;
+    double lost = 0.0;
+    Vec3 at;
+};
+
+// The army's intelligence summary of the enemy's formations our units do not touch (IntelDue): each as the army's
+// intelligence believes it (its error), reaching the army's staff `h` (the compile hour and the summary's collation).
+struct SitIntelLine {
+    int formation = -1;
+    int sector = -1;
+    double fraction = 0.0;
+    bool out = false;
+};
+struct SitIntel {
+    double h = 0.0;
+    double compiled_h = 0.0;
+    std::uint32_t lines_first = 0;
+    std::uint16_t lines_count = 0;
 };
 
 // ------------------------------------------------------------------------------------------------------- the ground war
@@ -734,6 +814,14 @@ public:
 
     // A side's picture (F3.5): what its staffs believe, by formation and axis, the line by station.
     const GroundPicture& Picture(Side by) const { return pictures_[PictureIndex(by)]; }
+
+    // ---- our side's reports and orders as compiled (F3.8; the logs only grow, read them by index)
+    const std::vector<SitReport>& SitReports() const { return sit_reports_; }
+    const std::vector<SitAxis>& SitAxes() const { return sit_axes_; }
+    const std::vector<SitOrder>& SitOrders() const { return sit_orders_; }
+    const std::vector<SitAir>& SitAirs() const { return sit_air_; }
+    const std::vector<SitIntel>& SitIntels() const { return sit_intel_; }
+    const std::vector<SitIntelLine>& SitIntelLines() const { return sit_intel_lines_; }
     // The sectors where the enemy's own ground front is collapsing in its picture (a formation of its own believed under
     // picture.crisis_below, or our counterattack on an axis there): the air front's crisis input (air_front.hpp), by the
     // line's sector index.
@@ -791,7 +879,8 @@ public:
     // proportion (a regiment's: off that regiment alone, the others keeping theirs), and cohesion.air_attack_loss of its
     // cohesion (the formation's by that regiment's part at U0); a line crossed wakes its commander, cohesion gone in contact
     // breaks it. Returns the strength lost (T-55 equivalents).
-    double AirStrike(std::size_t k, double damage, double h) {
+    // `at`: where the object stands (the campaign's), for our unit's report of it; the tie's home without.
+    double AirStrike(std::size_t k, double damage, double h, const Vec3* at = nullptr) {
         const TroopsTie& t = ties_[k];
         const std::size_t fi = static_cast<std::size_t>(t.formation);
         Formation& f = forms_[fi];
@@ -802,6 +891,7 @@ public:
         const double lost = std::min(have, damage * t.share * t.unit_base);
         if (!(lost > 0.0)) return 0.0;
         ApplyLoss(f, lost / before, -1.0);
+        SitStruck(fi, t, lost, h, at != nullptr ? *at : t.home);
         const GroundTables& tb = data_->tables;
         double hit = 1.0;  // the formation's share the attack fell on
         if (t.regiment >= 0) {
@@ -934,6 +1024,12 @@ private:
     std::vector<AxisChoice> choices_;
     std::vector<GroundLogEntry> log_;
     GroundPicture pictures_[2];  // ours, the enemy's (F3.5)
+    std::vector<SitReport> sit_reports_;  // our side's reports and orders as compiled (F3.8)
+    std::vector<SitAxis> sit_axes_;
+    std::vector<SitOrder> sit_orders_;
+    std::vector<SitAir> sit_air_;
+    std::vector<SitIntel> sit_intel_;
+    std::vector<SitIntelLine> sit_intel_lines_;
     bool crisis_dirty_ = false;
     airwar::Rng root_;
     double now_h_ = 0.0;
@@ -1692,12 +1788,12 @@ private:
             r.asked = true;
             r.asked_h = h;
             RegimentOrder(h, GroundOrder::RegimentAsked, f.cmdr, fi, on, static_cast<int>(k), -1, frac);
-            ReportAtOnce(fi, h, on);
+            ReportAtOnce(fi, h, on, SitCause::Asked);
             WakeAfterReaction(f.cmdr, h, 0x5E62000000ull + k);
         } else if (report && !r.reported) {
             r.reported = true;
             RegimentOrder(h, GroundOrder::RegimentReported, f.cmdr, fi, on, static_cast<int>(k), -1, frac);
-            ReportAtOnce(fi, h, on);
+            ReportAtOnce(fi, h, on, SitCause::Reported);
         }
     }
 
@@ -2770,14 +2866,14 @@ private:
             case UnitAct::Report:
                 f.reported = true;
                 Order(h, GroundOrder::Reported, c, static_cast<int>(i), f.axis, s.fraction);
-                ReportAtOnce(i, h, AxisOfFormation(i));
+                ReportAtOnce(i, h, AxisOfFormation(i), SitCause::Reported);
                 WakeAfterReaction(g.senior, h, 0x8000ull + i);
                 break;
             case UnitAct::Ask:
                 f.asked = true;
                 f.asked_h = h;
                 Order(h, GroundOrder::WithdrawAsked, c, static_cast<int>(i), AxisOfFormation(i), s.fraction);
-                ReportAtOnce(i, h, AxisOfFormation(i));
+                ReportAtOnce(i, h, AxisOfFormation(i), SitCause::Asked);
                 WakeAfterReaction(g.senior, h, 0x9000ull + i);
                 break;
             case UnitAct::Withdraw:
@@ -2791,7 +2887,7 @@ private:
                 f.attack_stopped = true;
                 Hold(i, h);
                 Order(h, GroundOrder::AttackStopped, c, static_cast<int>(i), f.axis, s.fraction);
-                ReportAtOnce(i, h, f.axis);
+                ReportAtOnce(i, h, f.axis, SitCause::AttackStopped);
                 WakeAfterReaction(g.senior, h, 0xA000ull + i);
                 break;
         }
@@ -2825,6 +2921,7 @@ private:
             switch (AnswerRequest(behind >= 0, relief >= 0, !ours)) {
                 case RequestAnswer::Permit:
                     Order(h, GroundOrder::WithdrawOrdered, c, static_cast<int>(i), AxisOfFormation(i), SeenFraction(f.unit.side, i), behind);
+                    if (ours) SitOrderTo(h, GroundOrder::WithdrawOrdered, c, static_cast<int>(i), AxisOfFormation(i), SeenFraction(f.unit.side, i), behind);
                     Withdraw(i, h);
                     break;
                 case RequestAnswer::Relieve: {
@@ -2838,6 +2935,7 @@ private:
                     const double at = h + PlanningOf(c, 0xB000ull + i) + (a >= 0 ? MarchHours(r, static_cast<std::size_t>(a), line, h) : 0.0);
                     Push(at, EventKind::Arrive, a, relief, 0, Task::Relief);
                     Order(h, GroundOrder::ReliefOrdered, c, relief, a, at - h, static_cast<int>(i));
+                    SitOrderTo(h, GroundOrder::ReliefOrdered, c, relief, a, at - h, static_cast<int>(i));
                     break;
                 }
                 case RequestAnswer::Refuse:
@@ -3065,6 +3163,7 @@ private:
                     f.unit.state = UnitState::March;
                     ++x.counter_incoming;
                     Push(h + plan_h + MarchHours(f, a, line, h), EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
+                    SitOrderTo(h, GroundOrder::CounterattackOrdered, c, static_cast<int>(i), best, ratio, -1);
                 }
                 Order(h, GroundOrder::CounterattackOrdered, c, -1, best, ratio);
             }
@@ -3240,7 +3339,7 @@ private:
         f.relief_for = -1;
         ++f.withdrawals;
         ++places_version_;
-        ReportAtOnce(i, h, on);
+        ReportAtOnce(i, h, on, SitCause::Withdrawn);
         LeaveLists(static_cast<int>(i));
         const double days = data_->tables.reform_days.At(root_.Fork(0x2EF0000000ull + i * 64 + static_cast<std::size_t>(f.withdrawals)).Uniform());
         Push(h + 24.0 * days, EventKind::Reformed, -1, static_cast<int>(i));
@@ -3263,7 +3362,7 @@ private:
         f.relief_for = -1;
         ++f.dispersals;
         ++places_version_;
-        ReportAtOnce(i, h, on);
+        ReportAtOnce(i, h, on, SitCause::Dispersed);
         LeaveLists(static_cast<int>(i));
         const double days = data_->tables.reassemble_days.At(root_.Fork(0xD15E000000ull + i * 64 + static_cast<std::size_t>(f.dispersals)).Uniform());
         Push(h + 24.0 * days, EventKind::Reformed, -1, static_cast<int>(i));
@@ -3294,7 +3393,7 @@ private:
         f.zone = -1;
         f.commitment = -1;
         Order(h, GroundOrder::Reformed, f.cmdr, static_cast<int>(i), -1, f.base_establishment > 0.0 ? f.unit.strength / f.base_establishment : 0.0);
-        ReportAtOnce(i, h, -1);
+        ReportAtOnce(i, h, -1, SitCause::Reformed);
         if (f.unit.side == Side::Enemy) {
             if (f.raid_axis >= 0) return;  // a rebel group back on its line
             f.axis = -1;
@@ -3509,6 +3608,145 @@ private:
         return b;
     }
 
+    // ---- our reports as compiled (F3.8): logged where the picture's are made; the picture itself is untouched.
+
+    bool SitOn() const { return !data_->tables.picture.truth; }
+
+    // The unit that reports an axis: the first of ours defending on it, else counterattacking, else the sector's second
+    // echelon (-1 none: nobody of ours is there to report it).
+    int ReporterOf(const Axis& x) const {
+        for (int fi : x.defenders) {
+            if (!forms_[static_cast<std::size_t>(fi)].spent) return fi;
+        }
+        for (int fi : x.counter) {
+            if (!forms_[static_cast<std::size_t>(fi)].spent) return fi;
+        }
+        for (int fi : x.depth_defenders) {
+            if (!forms_[static_cast<std::size_t>(fi)].spent) return fi;
+        }
+        return -1;
+    }
+
+    SitAxis SitAxisOf(std::size_t a, double h) const {
+        const Axis& x = axes_[a];
+        SitAxis s;
+        s.axis = static_cast<int>(a);
+        s.sector = x.sector;
+        s.depth_m = x.depth_m;
+        s.pace_km_day = x.pace_km_day;
+        s.counterattacked = x.status == AxisStatus::Counterattacked;
+        double sum = 0.0;
+        for (int fi : x.first) {
+            if (forms_[static_cast<std::size_t>(fi)].spent) continue;
+            sum += Observe(static_cast<std::size_t>(fi), Side::Ours, PictureSource::Contact, h).fraction;
+            ++s.enemy_n;
+        }
+        s.enemy_fraction = s.enemy_n > 0 ? sum / static_cast<double>(s.enemy_n) : 0.0;
+        return s;
+    }
+
+    // The unit's own return as its staff compiled it at h: what it believes of itself, and the air attacks it counted since
+    // its last return (taken off the tally).
+    SitReport SitReturnOf(std::size_t i, double h, SitCause why) {
+        Formation& f = forms_[i];
+        const UnitBelief b = Observe(i, Side::Ours, PictureSource::Own, h);
+        SitReport r;
+        r.h = h;
+        r.formation = static_cast<int>(i);
+        r.cause = why;
+        r.own = true;
+        r.fraction = b.fraction;
+        r.supply = std::min(1.0, std::max(0.0, f.unit.supply * b.factor));
+        r.sector = b.sector;
+        r.posture = b.posture;
+        r.out = b.out;
+        r.strikes = f.air_hits;
+        r.struck = f.air_lost * b.factor;
+        f.air_hits = 0;
+        f.air_lost = 0.0;
+        r.axes_first = static_cast<std::uint32_t>(sit_axes_.size());
+        return r;
+    }
+
+    // Scheduled: every unit of ours returns, with the axes it reports (those the picture's batch reports too).
+    void SitBatch(double h) {
+        if (!SitOn()) return;
+        const GroundPicture& p = pictures_[0];
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            if (forms_[i].unit.side != Side::Ours) continue;
+            SitReport r = SitReturnOf(i, h, SitCause::Scheduled);
+            for (std::size_t a = 0; a < axes_.size(); ++a) {
+                const Axis& x = axes_[a];
+                const AxisBelief& b = p.axes[a];
+                if (x.status == AxisStatus::Waiting && x.depth_m == 0.0 && b.depth_m == 0.0 && b.pace_km_day == 0.0 && !b.counterattacked) continue;
+                if (ReporterOf(x) != static_cast<int>(i)) continue;
+                sit_axes_.push_back(SitAxisOf(a, h));
+                r.axes_count = static_cast<std::uint16_t>(r.axes_count + 1);
+            }
+            sit_reports_.push_back(r);
+        }
+    }
+
+    // At once: a unit's return, with the axis it fights on.
+    void SitAtOnce(std::size_t i, double h, int axis, SitCause why) {
+        if (!SitOn()) return;
+        SitReport r = SitReturnOf(i, h, why);
+        if (axis >= 0) {
+            sit_axes_.push_back(SitAxisOf(static_cast<std::size_t>(axis), h));
+            r.axes_count = 1;
+        }
+        sit_reports_.push_back(r);
+    }
+
+    // At once: an axis's news (a breakthrough, a halt, our counterattack's start or end) from the unit on it.
+    void SitAxisNews(std::size_t a, double h) {
+        if (!SitOn()) return;
+        const int who = ReporterOf(axes_[a]);
+        if (who < 0) return;
+        SitReport r;
+        r.h = h;
+        r.formation = who;
+        r.cause = SitCause::AxisNews;
+        r.own = false;
+        r.sector = axes_[a].sector;
+        r.axes_first = static_cast<std::uint32_t>(sit_axes_.size());
+        r.axes_count = 1;
+        sit_axes_.push_back(SitAxisOf(a, h));
+        sit_reports_.push_back(r);
+    }
+
+    // An order of ours, logged where it is given.
+    void SitOrderTo(double h, GroundOrder o, int issuer, int formation, int axis, double value, int other) {
+        if (!SitOn() || formation < 0) return;
+        SitOrder s;
+        s.h = h;
+        s.order = o;
+        s.issuer = issuer;
+        s.formation = formation;
+        s.axis = axis;
+        s.other = other;
+        s.value = value;
+        sit_orders_.push_back(s);
+    }
+
+    // The enemy's strike on one of our tied objects took `lost` off its unit: the unit counts it for its next return and the
+    // staff that was hit knows it at once.
+    void SitStruck(std::size_t fi, const TroopsTie& t, double lost, double h, const Vec3& at) {
+        if (!SitOn()) return;
+        Formation& f = forms_[fi];
+        const double share = f.base_establishment > 0.0 ? lost / f.base_establishment : 0.0;
+        ++f.air_hits;
+        f.air_lost += share;
+        SitAir s;
+        s.h = h;
+        s.formation = static_cast<int>(fi);
+        s.regiment = t.regiment;
+        s.object = t.object;
+        s.at = at;
+        s.lost = share * BeliefFactor(root_, Side::Ours, PictureSource::Own, SectorOfFormation(fi), h, data_->tables.picture.own_sigma);
+        sit_air_.push_back(s);
+    }
+
     void PushUnitReport(Side by, std::size_t i, const UnitBelief& b, double at) {
         Event e;
         e.h = at;
@@ -3543,16 +3781,18 @@ private:
     // An axis's news reported at once (a breakthrough, a halt, our counterattack): into `by`'s picture after the delay.
     void AxisAtOnce(Side by, std::size_t a, double h) {
         if (data_->tables.picture.truth) return;
+        if (by == Side::Ours) SitAxisNews(a, h);
         PushAxisReport(by, a, h, h + data_->tables.picture.own_delay_h);
     }
 
     // A unit's report on an event (it reports, asks, stops, withdraws, breaks, re-forms): its own state into its side's
     // picture, with the enemy facing it on `axis` (contact for ours, the ground reconnaissance for the enemy's) and that
     // axis's depth.
-    void ReportAtOnce(std::size_t i, double h, int axis) {
+    void ReportAtOnce(std::size_t i, double h, int axis, SitCause why) {
         const PictureTables& pt = data_->tables.picture;
         if (pt.truth) return;
         const Side by = forms_[i].unit.side;
+        if (by == Side::Ours) SitAtOnce(i, h, axis, why);
         PushUnitReport(by, i, Observe(i, by, PictureSource::Own, h), h + pt.own_delay_h);
         if (axis < 0) return;
         const Axis& x = axes_[static_cast<std::size_t>(axis)];
@@ -3613,6 +3853,7 @@ private:
     void ReportsDue(Side by, double h, const GroundEnv& env, const airwar::LineOfContact& line) {
         const PictureTables& pt = data_->tables.picture;
         const std::size_t k = PictureIndex(by);
+        if (by == Side::Ours) SitBatch(h);
         for (std::size_t i = 0; i < forms_.size(); ++i) {
             PictureSource src = PictureSource::None;
             if (forms_[i].unit.side == by) {
@@ -3647,10 +3888,25 @@ private:
     // Our army's intelligence summary of the enemy's formations our units do not touch (its echelons and reserve).
     void IntelDue(double h) {
         const PictureTables& pt = data_->tables.picture;
+        SitIntel summary;
+        summary.compiled_h = h;
+        summary.h = h + pt.army_intel_delay_h;
+        summary.lines_first = static_cast<std::uint32_t>(sit_intel_lines_.size());
         for (std::size_t i = 0; i < forms_.size(); ++i) {
             if (forms_[i].unit.side != Side::Enemy || EnemyAtLine(i)) continue;
-            PushUnitReport(Side::Ours, i, Observe(i, Side::Ours, PictureSource::ArmyIntel, h), h + pt.army_intel_delay_h);
+            const UnitBelief b = Observe(i, Side::Ours, PictureSource::ArmyIntel, h);
+            PushUnitReport(Side::Ours, i, b, h + pt.army_intel_delay_h);
+            if (SitOn()) {
+                SitIntelLine l;
+                l.formation = static_cast<int>(i);
+                l.sector = b.sector;
+                l.fraction = b.fraction;
+                l.out = b.out;
+                sit_intel_lines_.push_back(l);
+                summary.lines_count = static_cast<std::uint16_t>(summary.lines_count + 1);
+            }
         }
+        if (summary.lines_count > 0) sit_intel_.push_back(summary);
         Push(h + 24.0 / static_cast<double>(std::max(1, pt.army_intel_per_day)), EventKind::IntelDue);
     }
 

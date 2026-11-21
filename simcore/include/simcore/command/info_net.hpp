@@ -58,8 +58,9 @@ enum class FactKind {
     Mail,
     Intercept,    // what our radio intercept posts heard of the enemy's air radio and read (roadmap B9, command/intercept.hpp)
     OwnAirNotice,  // a notice of our own flights, coded by the talk table at each hop (roadmap B10, command/own_air.hpp)
-    AirFront       // the army's air defence staff's conclusion on the enemy's air front in a sector (track F, F2.5,
+    AirFront,      // the army's air defence staff's conclusion on the enemy's air front in a sector (track F, F2.5,
                    // command/air_front_watch.hpp)
+    Situation      // our units' situation reports, and the army's summary of them (track F, F3.8, command/ground_feed.hpp)
 };
 
 inline const char* FactKindName(FactKind k) {
@@ -81,6 +82,7 @@ inline const char* FactKindName(FactKind k) {
         case FactKind::Intercept: return "intercept";
         case FactKind::OwnAirNotice: return "own_air_notice";
         case FactKind::AirFront: return "air_front";
+        case FactKind::Situation: return "situation";
     }
     return "?";
 }
@@ -96,6 +98,8 @@ struct Fact {
     std::string subject;                 // what it is about (a raid's index, an object, an officer)
     std::string audience;                // the tree it is for ("" everyone)
     int need_level = 3;                  // down to this level
+    std::vector<std::string> to;         // when not empty: for these posts alone (a report's addressees: audience and
+                                         // need_level are not read); the others along its way only pass it on
     int precedence = 0;                  // 0 routine, 1 priority, 2 air raid
     bool document = false;               // a paper: its full text goes by hand (or teleprinter)
     bool broadcast = false;              // the state radio's next bulletin, to everyone it is for
@@ -1245,6 +1249,7 @@ private:
 
     bool Wants(const Fact& f, std::size_t i) const {
         const Position& p = data_.positions[i];
+        if (!f.to.empty()) return std::find(f.to.begin(), f.to.end(), p.id) != f.to.end();
         if (p.level > f.need_level) return false;
         return f.audience.empty() || data_.InSubtree(p.id, f.audience);
     }

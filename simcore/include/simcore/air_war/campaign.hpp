@@ -2012,7 +2012,7 @@ private:
         for (std::size_t k = 0; k < ties.size(); ++k) {
             const double damage = tie_fn_[k] - truth_[static_cast<std::size_t>(ties[k].object)].function;
             if (!(damage > 1e-12)) continue;
-            const double lost = ground_war_.AirStrike(k, damage, h);
+            const double lost = ground_war_.AirStrike(k, damage, h, &truth_[static_cast<std::size_t>(ties[k].object)].pos);
             const double est = ground_war_.Formations()[static_cast<std::size_t>(ties[k].formation)].base_establishment;
             ++ground_air_.troop_strikes;
             if (est > 0.0) ground_air_.strength_lost += lost / est;
