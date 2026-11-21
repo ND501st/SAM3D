@@ -44,6 +44,21 @@
 // units from their reports (late by the reporting delay), the other side's with an age and an error, updated only when a
 // report arrives (events in the queue). A formation's own commander knows his own unit's state (OwnFraction). The enemy's
 // picture also says where its own ground front is collapsing (EnemyCrisis: the air front's crisis, air_front.hpp).
+//
+// Levels and the march (F3.6, docs/fronts/03_GROUND_WAR.md sections 3.3 and 7): in the player's battery's sector and
+// the sectors either side (GroundEnv::player_sector) a formation goes up to U1 at once, its regiments (or brigades,
+// battalions where the order of battle has them) actors with their own stations, posture, cohesion and commander (a
+// regiment's reaction time, 1-3 h); it goes down to U0 6 h after it is out of need, keeping its strength, posture and
+// place. Its strength and power stay the sum of its regiments' (each holds a share of the formation's), so U1 is the same
+// war at a finer grain: the formation's losses are shared out by where each regiment stands (the one the axis meets
+// takes more, the covering regiment takes the security zone's), each regiment's cohesion follows its own losses, a
+// regiment under its lines reports and asks, and its formation's commander relieves it with a fresher regiment of his
+// second echelon, which marches on the roads within the sector. Marches (an echelon committed, a relief, a
+// counterattack, a regiment's relief) ask the route service between anchors (the formation's place, the axis's route's
+// place near the fight; a regiment's nearest town or landmark) once per order, cached by the two anchors and the
+// overlay's version (bridges down in the air war cut the crossings they stand on); the time is the route's at the
+// column's speed by day or night with its halts. Where an anchor, the road net or a way is missing: F3.4's straight line
+// x the road factor at the day's speed.
 #pragma once
 
 #include <algorithm>
@@ -68,6 +83,8 @@
 #include "simcore/ground_war/ground_data.hpp"
 #include "simcore/ground_war/picture.hpp"
 #include "simcore/ground_war/units.hpp"
+#include "simcore/nav/anchors.hpp"
+#include "simcore/nav/routes.hpp"
 
 namespace simcore {
 namespace groundwar {
@@ -165,6 +182,16 @@ struct Formation {
     double tanks_reparable = 0.0;  // of those lost, the table's reparable share
     double tanks_returned = 0.0;   // of those, back from repair
     double contact_from_h = -1.0;  // ours: when it was first engaged (its days in contact)
+    // Levels (F3.6): its level, since when it has been out of need at U1, its regiments (contiguous in Regiments()).
+    UnitLevel level = UnitLevel::U0;
+    double out_of_need_h = -1.0;
+    int first_regiment = -1;
+    int regiment_count = 0;
+    int ups = 0;
+    // The map's anchor it stands at (its deployment's or garrison's place, then the axis's it marched to): routes are asked
+    // between anchors (F3.6). "" none.
+    std::string anchor;
+    Vec3 anchor_pos;
 
     double Tanks() const {
         double n = 0.0;
@@ -198,6 +225,13 @@ inline const char* HaltReasonName(HaltReason r) {
     }
     return "?";
 }
+
+// A place of an axis's route (its plan's), an anchor the route service is asked to (F3.6), and its depth.
+struct AxisAnchor {
+    std::string id;
+    Vec3 pos;
+    double depth_m = 0.0;
+};
 
 struct Axis {
     std::string id;
@@ -239,6 +273,7 @@ struct Axis {
     double draw = 1.0;
     double last_ratio = 0.0;
     Opposition last_opposition = Opposition::Stalled;
+    std::vector<AxisAnchor> anchors;  // its route's places, by depth (F3.6)
 };
 
 // The commanders' decisions as the log records them (F3.4).
@@ -263,8 +298,16 @@ enum class GroundOrder : std::uint8_t {
     CoveringBack,          // the division orders the covering force back to the next line (value: its depth)
     RaidStarts,
     RaidEnds,              // value: how deep it got
+    // Levels (F3.6): formation up to U1 or down to U0 (value: the player's sector); its regiments' own dealings (regiment,
+    // other_regiment: GroundWar::Regiments()).
+    LevelUp,
+    LevelDown,
+    RegimentReported,      // a regiment under its degraded line (or past its attack breakpoint) (value: its fraction)
+    RegimentAsked,         // a regiment under its ask line (or past its defence breakpoint) asks to be relieved
+    RegimentReliefOrdered, // the formation's commander sends other_regiment to relieve regiment (value: the march's hours)
+    RegimentRelieved,      // regiment relieved by other_regiment: they change places
 };
-constexpr std::size_t kGroundOrderCount = 20;
+constexpr std::size_t kGroundOrderCount = 26;
 
 inline const char* GroundOrderName(GroundOrder o) {
     switch (o) {
@@ -288,6 +331,12 @@ inline const char* GroundOrderName(GroundOrder o) {
         case GroundOrder::CoveringBack: return "covering_back";
         case GroundOrder::RaidStarts: return "raid_starts";
         case GroundOrder::RaidEnds: return "raid_ends";
+        case GroundOrder::LevelUp: return "level_up";
+        case GroundOrder::LevelDown: return "level_down";
+        case GroundOrder::RegimentReported: return "regiment_reported";
+        case GroundOrder::RegimentAsked: return "regiment_asked";
+        case GroundOrder::RegimentReliefOrdered: return "regiment_relief_ordered";
+        case GroundOrder::RegimentRelieved: return "regiment_relieved";
     }
     return "?";
 }
@@ -306,17 +355,26 @@ struct GroundLogEntry {
     GroundOrder order = GroundOrder::EchelonCommitted;  // Order: which
     int cmdr = -1;        // Order: the commander who decided
     int other = -1;       // Order: another formation (a relief's) or axis (an echelon's planned one)
+    int regiment = -1;        // Order: a regiment's (F3.6, GroundWar::Regiments())
+    int other_regiment = -1;  // Order: the regiment relieving it, or relieved
 };
 
 // Where the hour goes, by part (docs/fronts/README.md's budget lines), when profiling: steady_clock, summed.
 struct GroundProfile {
-    enum Part : int { Combat, Decisions, Movement, Line, Picture, Reports, kParts };
+    enum Part : int { Combat, Decisions, Movement, Line, Picture, Reports, Levels, kParts };
     std::uint64_t ns[kParts] = {};
     std::uint64_t hours = 0;
     std::uint64_t decisions = 0;  // commanders' decisions made
+    std::uint64_t regiment_decisions = 0;  // U1's regiments' commanders' (F3.6)
+    std::uint64_t level_changes = 0;       // up or down
+    std::uint64_t route_ns = 0;            // asking the route service (inside the decisions' part), when profiling
+    std::uint64_t route_fallbacks = 0;     // marches on F3.4's straight line x road factor (no anchor, no road net, no way)
+    std::uint64_t marches = 0;             // marches timed
+    double march_h = 0.0;                  // their hours, summed
+    double march_straight_h = 0.0;         // and F3.4's straight line x road factor's for the same marches
     std::vector<double> day_ms;  // the whole step's ms by campaign day (0 the war's first)
     static const char* Name(int p) {
-        static const char* const kNames[kParts] = {"combat", "decisions", "movement", "line", "picture", "reports"};
+        static const char* const kNames[kParts] = {"combat", "decisions", "movement", "line", "picture", "reports", "levels"};
         return p >= 0 && p < kParts ? kNames[p] : "?";
     }
     double Ms(int p) const { return static_cast<double>(ns[p]) * 1e-6; }
@@ -328,6 +386,7 @@ struct GroundEnv {
     const std::vector<airwar::Weather>* weather = nullptr;     // by campaign day from 1 (the campaign's weather_)
     const std::vector<airwar::ObjectState>* truth = nullptr;  // parallel to theatre->objects
     const airwar::IntelPicture* intel = nullptr;  // the enemy's picture of our side (its troops entries: its air's sightings); null none
+    int player_sector = -1;  // the line's sector the player's battery is in (F3.6: U1 there and either side); -1 none, all at U0
 };
 
 // ------------------------------------------------------------------------------------------------------- the ground war
@@ -367,6 +426,10 @@ public:
             f.role = u.role;
             f.free = u.role == DeployRole::Reserve;
             f.pos = u.place.pos;
+            if (!u.place.at.empty()) {
+                f.anchor = u.place.at;
+                f.anchor_pos = u.place.pos;
+            }
             if (!u.sectors.empty()) {
                 f.first_sector = line.SectorIndex(u.sectors.front());
                 f.last_sector = line.SectorIndex(u.sectors.back());
@@ -386,6 +449,10 @@ public:
             if (forms_[i].unit.side == Side::Enemy) {
                 const GroundPlace* g = GarrisonOf(forms_[i].unit.id);
                 if (g != nullptr) forms_[i].pos = g->pos;
+                if (g != nullptr && !g->at.empty()) {
+                    forms_[i].anchor = g->at;
+                    forms_[i].anchor_pos = g->pos;
+                }
             }
         }
         // The commanders: one per formation and per headquarters between them and the side's top.
@@ -449,6 +516,16 @@ public:
                 }
             }
             SampleAxis(x, def, line, theatre, country);
+            // Its route's places as anchors for the marches to it (F3.6), by depth.
+            for (const GroundPlace& rp : def.route) {
+                if (rp.at.empty()) continue;
+                const airwar::FrontPlace pl = line.Place(rp.pos);
+                AxisAnchor an;
+                an.id = rp.at;
+                an.pos = rp.pos;
+                an.depth_m = pl.side * pl.distance_m;
+                x.anchors.push_back(an);
+            }
             // The security zone's lines (our doctrine's spacing), from the forward edge to the main defensive zone.
             const GroundDoctrineDef& od = d.ours.doctrine;
             const double spacing_m = 1000.0 * od.security_line_spacing_km.Mid();
@@ -474,6 +551,9 @@ public:
             if (f.first_sector < 0) continue;
             AddRaidAxis(i, *g, line, theatre, country);
         }
+        // U1's regiments and their commanders (F3.6); the roads, their anchors and the bridges on them.
+        BuildRegiments(line);
+        BuildRoads(theatre, country);
         // Capacities: no list grows past these in the hour.
         const std::size_t nf = forms_.size();
         for (Axis& x : axes_) {
@@ -493,7 +573,9 @@ public:
         moved_.assign(axes_.size(), 0);
         choices_.assign(axes_.size(), AxisChoice());
         log_.reserve(512);
-        queue_.reserve(64 + 8 * (nf + cmdrs_.size() + axes_.size()) + 6 * nf + 4 * axes_.size());
+        queue_.reserve(64 + 8 * (nf + cmdrs_.size() + axes_.size()) + 6 * nf + 4 * axes_.size() + 4 * regs_.size());
+        rweight_.assign(regs_.size(), 0.0);
+        rshare_.assign(regs_.size(), 0.0);
         // The plan's start; the days' ends.
         const double start = std::max(0.0, plan.start_after_h);
         Push(start, EventKind::Start);
@@ -509,10 +591,13 @@ public:
     // Steps whole hours up to t1 (an hour's events at its start, then its combat), moving `line`'s stations.
     void Step(double t1, const GroundEnv& env, airwar::LineOfContact& line) {
         if (!built_) return;
+        env_ = &env;
+        player_sector_ = env.player_sector;
         while (now_h_ + 1.0 <= t1 + 1e-9) {
             Hour(now_h_, env, line);
             now_h_ += 1.0;
         }
+        env_ = nullptr;
     }
 
     // ---- reading it
@@ -593,6 +678,28 @@ public:
     // A formation's strength fraction as its own commander knows it (his staff's count: his reaction time is its delay).
     double OwnFraction(std::size_t i) const { return forms_[i].unit.Fraction(); }
 
+    // U1 (F3.6): every formation's regiments (a formation's are Formations()[i].first_regiment on, regiment_count of them),
+    // their commanders, a regiment's strength now and its fraction of its establishment, and the sector U1 is centred on.
+    const std::vector<Regiment>& Regiments() const { return regs_; }
+    const std::vector<GroundCommander>& RegimentCommanders() const { return rcmdrs_; }
+    double RegimentStrength(std::size_t r) const { return regs_[r].part * forms_[static_cast<std::size_t>(regs_[r].formation)].unit.strength; }
+    double RegimentFraction(std::size_t r) const {
+        const Regiment& g = regs_[r];
+        return g.est_part > 0.0 ? g.part / g.est_part * forms_[static_cast<std::size_t>(g.formation)].unit.Fraction() : 0.0;
+    }
+    int PlayerSector() const { return player_sector_; }
+    // The route service's use (F3.6): the cache's asks, searches and hits, and the road net (null without a country map).
+    const nav::RouteCache::Stats& RouteStats() const { return routes_.GetStats(); }
+    const nav::RoadGraph* Roads() const { return roads_.get(); }
+    const nav::Overlay& RoadOverlay() const { return overlay_; }
+    // A test's: a march's hours between two anchors on the roads now (-1: no way; F3.4's rule is not applied).
+    double TestRoadHours(const std::string& from_id, const Vec3& from, const std::string& to_id, const Vec3& to, double h, const GroundEnv& env) {
+        env_ = &env;
+        const double r = RoadHours(from_id, from, to_id, to, h);
+        env_ = nullptr;
+        return r;
+    }
+
     // A side's picture (F3.5): what its staffs believe, by formation and axis, the line by station.
     const GroundPicture& Picture(Side by) const { return pictures_[PictureIndex(by)]; }
     // The sectors where the enemy's own ground front is collapsing in its picture (a formation of its own believed under
@@ -608,7 +715,8 @@ public:
 private:
     enum class EventKind : std::uint8_t {
         Start, Crossed, DayEnd, Decide, LineBack, Arrive, Reformed, RaidNight, RaidEnd,
-        ReportsDue, IntelDue, UnitReport, AxisReport, LineReport  // the pictures' (F3.5)
+        ReportsDue, IntelDue, UnitReport, AxisReport, LineReport,  // the pictures' (F3.5)
+        RegimentDecide, RegimentArrive                             // U1's regiments' (F3.6)
     };
     static bool IsPictureEvent(EventKind k) {
         return k == EventKind::ReportsDue || k == EventKind::IntelDue || k == EventKind::UnitReport || k == EventKind::AxisReport ||
@@ -662,6 +770,25 @@ private:
     double start_hour_ = 0.0;
     double security_zone_m_ = 0.0;
     double offensive_h_ = -1.0;  // when the plan's offensive started
+    // U1 and the march (F3.6).
+    std::vector<Regiment> regs_;
+    std::vector<GroundCommander> rcmdrs_;  // one per regiment, its index the regiment's
+    std::vector<double> rweight_;          // by regiment: scratch for an axis's shares (sized at Build)
+    std::vector<double> rshare_;           // by regiment: scratch for the hour's shares
+    std::shared_ptr<const nav::RoadGraph> roads_;  // the country's roads (null without a country map)
+    nav::Anchors anchors_;                 // the country's towns and landmarks and the theatre's objects: a regiment's nearest
+    nav::Mobility column_;                 // a column on the march: every road at the day's speed, the ground across country
+    nav::Overlay overlay_;                 // the crossings whose bridges the air war has down
+    nav::Overlay open_;                    // none down: the road as it was, where the cut leave no way round (version 0)
+    nav::RouteCache routes_;
+    struct JoinedBridge {
+        std::size_t object = 0;  // the theatre's bridge
+        std::string crossing;    // the road crossing it stands on
+        bool down = false;
+    };
+    std::vector<JoinedBridge> bridges_;
+    int player_sector_ = -1;
+    const GroundEnv* env_ = nullptr;       // the hour's, while Step runs
     bool built_ = false;
     bool profiling_ = false;
     bool reverse_ = false;
@@ -905,6 +1032,597 @@ private:
         axes_.push_back(std::move(x));
     }
 
+    // ---- U1's regiments (F3.6), built once
+
+    // Each formation's regiments: its order of battle's children of a regiment's, brigade's or battalion's kind that are
+    // not formations themselves and hold weighted equipment, each with its tree's strength as its share of theirs (the
+    // formation's own troops, its headquarters and divisional units, go with them in proportion). A formation with fewer
+    // than two that hold tanks stays an actor at U0 whatever its sector (our regiments against the rebels are their own).
+    // The first echelon: as many as its frontage takes at the regiment's (ours by its defence's, the enemy's by the
+    // breakthrough's at the regiment's attack frontage), at least one, one kept back; in the order of battle's order. A
+    // commander for each, drawn from his side's pool keyed by the regiment.
+    void BuildRegiments(const airwar::LineOfContact& line) {
+        const GroundTables& t = data_->tables;
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            Formation& f = forms_[i];
+            const command::OrderOfBattle& oob = OobOf(f.unit.side);
+            const std::size_t first = regs_.size();
+            double total = 0.0;
+            int manoeuvre = 0;
+            for (const command::OobUnit& u : oob.units) {
+                if (u.parent != f.unit.id || IsActor(u.id, f.unit.side, i)) continue;
+                if (u.kind != "regiment" && u.kind != "brigade" && u.kind != "battalion") continue;
+                double str = 0.0;
+                bool tanks = false;
+                for (const command::OobUnit& v : oob.units) {
+                    if (!oob.Under(v.id, u.id)) continue;
+                    str += StrengthOfUnit(t, v);
+                    for (const std::pair<std::string, int>& e : v.equipment) tanks = tanks || (e.second > 0 && t.IsTank(e.first));
+                }
+                if (!(str > 0.0)) continue;
+                Regiment r;
+                r.id = u.id;
+                r.name = u.name.empty() ? u.id : u.name;
+                r.kind = u.kind;
+                r.formation = static_cast<int>(i);
+                r.support = !tanks;
+                r.est_part = str;
+                regs_.push_back(std::move(r));
+                total += str;
+                manoeuvre += tanks ? 1 : 0;
+            }
+            if (manoeuvre < 2 || !(total > 0.0)) {
+                regs_.resize(first);
+                continue;
+            }
+            f.first_regiment = static_cast<int>(first);
+            f.regiment_count = static_cast<int>(regs_.size() - first);
+            const int up = FirstEchelonCount(f, regs_[first].kind, manoeuvre, line);
+            int placed = 0;
+            for (std::size_t k = first; k < regs_.size(); ++k) {
+                Regiment& r = regs_[k];
+                r.est_part /= total;
+                r.part = r.est_part;
+                if (!r.support) r.first = placed++ < up;
+                r.state = r.first || r.support ? UnitState::InLine : UnitState::Reserve;
+                const GroundCommandersDef& defs = f.unit.side == Side::Ours ? data_->ours.commanders : data_->enemy.commanders;
+                airwar::Rng rng = root_.Fork(0x5E6C000000ull + k);
+                GroundCommander c = DrawCommander(defs.pool, r.kind, rng);
+                c.id = r.id + "_cdr";
+                c.unit = r.id;
+                c.side = f.unit.side;
+                c.formation = -1;
+                c.senior = f.cmdr;
+                r.cmdr = static_cast<int>(rcmdrs_.size());
+                rcmdrs_.push_back(std::move(c));
+            }
+        }
+    }
+
+    int FirstEchelonCount(const Formation& f, const std::string& kind, int manoeuvre, const airwar::LineOfContact& line) const {
+        const GroundDoctrineDef& d = Doctrine(f.unit.side);
+        double width_km = data_->tables.breakthrough_width_km.Mid();
+        const FrontageDef* fr = d.Frontage(kind, "attack");
+        double per_km = fr != nullptr ? fr->width_km.Mid() : 0.0;
+        if (f.unit.side == Side::Ours && f.first_sector >= 0) {
+            width_km = (line.Sector(static_cast<std::size_t>(f.last_sector)).to_m - line.Sector(static_cast<std::size_t>(f.first_sector)).from_m) / 1000.0;
+            fr = d.Frontage(kind, "defence");
+            per_km = fr != nullptr ? fr->width_km.hi : 0.0;
+        }
+        int k = per_km > 0.0 ? static_cast<int>(std::ceil(width_km / per_km - 1e-9)) : (manoeuvre + 1) / 2;
+        return std::max(1, std::min(k, manoeuvre - 1));
+    }
+
+    // The country's roads as the route service's graph, the anchors a regiment may stand at, a column's mobility, and the
+    // theatre's bridges joined to the road crossings they stand on (within 100 m, as the mission's session joins them).
+    void BuildRoads(const airwar::TheatreDef& theatre, const CountryMap* country) {
+        const GroundTables& t = data_->tables;
+        column_.id = "ground_war_column";
+        column_.name = "a column on the march (the ground war's)";
+        const double road_mps = t.road_day_kmh.Mid() / 3.6;
+        column_.road_mps = {road_mps, road_mps, road_mps};
+        column_.cross_country_mps = t.cross_country_kmh.Mid() / 3.6;
+        column_.night_factor = t.road_day_kmh.Mid() > 0.0 ? std::min(1.0, t.road_night_kmh.Mid() / t.road_day_kmh.Mid()) : 1.0;
+        if (country == nullptr) return;
+        roads_ = std::make_shared<const nav::RoadGraph>(nav::RoadGraph::ForCountry(country->Def()));
+        anchors_.AddCountry(country->Def());
+        anchors_.AddTheatre(theatre);
+        for (std::size_t o = 0; o < theatre.objects.size(); ++o) {
+            if (theatre.objects[o].kind != airwar::ObjectKind::Bridge) continue;
+            double d = 0.0;
+            const nav::NavCrossing* c = roads_->NearestCrossing({theatre.objects[o].pos.x, theatre.objects[o].pos.y}, &d);
+            if (c == nullptr || d > kBridgeOnCrossingM) continue;
+            JoinedBridge b;
+            b.object = o;
+            b.crossing = c->id;
+            bridges_.push_back(b);
+        }
+    }
+
+    static constexpr double kBridgeOnCrossingM = 100.0;  // sam3d: a theatre bridge on the road crossing this near (mission_session.hpp's)
+    static constexpr double kBridgeStanding = 0.5;       // a bridge carries traffic at this function or more (Advance's crossing)
+    static constexpr double kFresherBy = 0.05;           // sam3d: a relief at least this much stronger (of its establishment) than the relieved
+    static constexpr double kNoRoadNearM = 6000.0;       // sam3d: an anchor farther than this from the map's roads has none (2 x a route's link)
+    static constexpr double kFirstEchelonDepthM = 3000.0;   // a first-echelon battalion's depth, up to 3 km (vr_poltikovic_1984 p. 96)
+    static constexpr double kSecondEchelonDepthM = 12000.0; // a regiment's depth in defence, up to 12 km (vr_poltikovic_1984 p. 96)
+
+    // The anchor nearest a point (a regiment's place), "" with none (no country map).
+    const nav::Anchor* NearestAnchor(const Vec3& p) const {
+        const nav::Anchor* best = nullptr;
+        double best_d = 1e300;
+        for (const nav::Anchor& a : anchors_.All()) {
+            if (a.kind == "position") continue;
+            const double d = std::hypot(a.at.east_m - p.x, a.at.north_m - p.y);
+            if (d < best_d) {
+                best_d = d;
+                best = &a;
+            }
+        }
+        return best;
+    }
+
+    // A formation's regiments' stations along the line, their places and anchors: ours on its sectors' run, the enemy's on
+    // its axis's breakthrough frontage; the first echelon's split equally, the second echelon and support behind the
+    // whole run. A formation with no run (a reserve, an echelon not yet committed) keeps what its regiments had.
+    void AssignStations(std::size_t fi, const airwar::LineOfContact& line) {
+        const Formation& f = forms_[fi];
+        if (f.regiment_count == 0) return;
+        double from = 0.0, to = 0.0, depth = 0.0;
+        double sign = 1.0;  // into our country
+        if (f.unit.side == Side::Ours && f.first_sector >= 0) {
+            from = line.Sector(static_cast<std::size_t>(f.first_sector)).from_m;
+            to = line.Sector(static_cast<std::size_t>(f.last_sector)).to_m;
+        } else {
+            const int a = f.unit.side == Side::Enemy ? f.axis : f.task_axis;
+            if (a < 0) return;
+            const Axis& x = axes_[static_cast<std::size_t>(a)];
+            from = x.along_m - x.half_width_m;
+            to = x.along_m + x.half_width_m;
+            depth = x.depth_m;
+            if (f.unit.side == Side::Enemy) sign = -1.0;
+        }
+        int up = 0;
+        for (int k = 0; k < f.regiment_count; ++k) up += regs_[static_cast<std::size_t>(f.first_regiment + k)].first ? 1 : 0;
+        const double w = up > 0 ? (to - from) / up : (to - from);
+        int slot = 0;
+        for (int k = 0; k < f.regiment_count; ++k) {
+            Regiment& r = regs_[static_cast<std::size_t>(f.first_regiment + k)];
+            if (r.relief_for >= 0) continue;  // on the march: it takes its new place when it arrives
+            if (r.first) {
+                r.from_m = from + w * slot;
+                r.to_m = r.from_m + w;
+                ++slot;
+            } else {
+                r.from_m = from;
+                r.to_m = to;
+            }
+            const double mid = 0.5 * (r.from_m + r.to_m);
+            const double base = f.unit.side == Side::Ours ? std::max(depth, line.Offset(mid)) : depth;
+            const double back = r.first ? kFirstEchelonDepthM : kSecondEchelonDepthM;
+            r.pos = line.PointAt(mid) + line.InwardNormal(mid) * (base + sign * back);
+            const nav::Anchor* an = NearestAnchor(r.pos);
+            r.anchor = an != nullptr ? an->id : std::string();
+        }
+    }
+
+    // A formation arrived on an axis stands at the anchor of its route on its side of the fight (if it has one).
+    void MoveAnchor(Formation& f, std::size_t a) {
+        const AxisAnchor* an = AxisAnchorFor(a, f.unit.side);
+        if (an == nullptr) return;
+        f.anchor = an->id;
+        f.anchor_pos = an->pos;
+    }
+
+    // ---- U1's level: up at once when needed, down after the margin (03 section 3.3)
+
+    // In the player's sector or one either side: holding a sector there, attacking or marching on an axis there, or an
+    // echelon planned for one.
+    bool InPlayerArea(std::size_t i) const {
+        if (player_sector_ < 0) return false;
+        const Formation& f = forms_[i];
+        if (f.spent || f.regiment_count == 0) return false;
+        const int n = data_->tables.levels_neighbours;
+        const auto near_ps = [this, n](int s) { return s >= 0 && std::abs(s - player_sector_) <= n; };
+        if (f.first_sector >= 0) {
+            for (int s = f.first_sector; s <= f.last_sector; ++s) {
+                if (near_ps(s)) return true;
+            }
+        }
+        for (int a : {f.axis, f.task_axis, f.raid_axis, f.second ? f.plan_axis : -1}) {
+            if (a >= 0 && near_ps(axes_[static_cast<std::size_t>(a)].sector)) return true;
+        }
+        return false;
+    }
+
+    void Levels(double h, const airwar::LineOfContact& line) {
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            Formation& f = forms_[i];
+            if (f.regiment_count == 0) continue;
+            if (InPlayerArea(i)) {
+                f.out_of_need_h = -1.0;
+                if (f.level == UnitLevel::U0) GoUp(i, h, line);
+            } else if (f.level == UnitLevel::U1) {
+                if (f.out_of_need_h < 0.0) f.out_of_need_h = h;
+                if (h - f.out_of_need_h >= data_->tables.levels_down_after_h - 1e-9) GoDown(i, h);
+            }
+        }
+    }
+
+    // Up: its regiments take the formation's cohesion (U0 kept one for all), their stations, places and postures; their
+    // shares of its strength are as they were (they stood still at U0).
+    void GoUp(std::size_t i, double h, const airwar::LineOfContact& line) {
+        Settle(i, h);
+        Formation& f = forms_[i];
+        f.level = UnitLevel::U1;
+        ++f.ups;
+        ++profile_.level_changes;
+        for (int k = 0; k < f.regiment_count; ++k) regs_[static_cast<std::size_t>(f.first_regiment + k)].cohesion = f.unit.cohesion;
+        AssignStations(i, line);
+        RegimentPostures(i);
+        Order(h, GroundOrder::LevelUp, f.cmdr, static_cast<int>(i), AxisOfFormation(i), static_cast<double>(player_sector_));
+    }
+
+    // Down: the formation keeps its strength (the regiments' sum), its cohesion (their mean by strength), its posture and
+    // place; its regiments keep their shares, stations and places, standing still until it comes up again.
+    void GoDown(std::size_t i, double h) {
+        Settle(i, h);
+        Formation& f = forms_[i];
+        f.level = UnitLevel::U0;
+        f.out_of_need_h = -1.0;
+        ++profile_.level_changes;
+        Order(h, GroundOrder::LevelDown, f.cmdr, static_cast<int>(i), AxisOfFormation(i), static_cast<double>(player_sector_));
+    }
+
+    // Its regiments' postures and states from the formation's: the first echelon and support as the formation, the second
+    // echelon behind in hasty defence (or withdrawing with it), a regiment marching to a relief on the march.
+    void RegimentPostures(std::size_t i) {
+        const Formation& f = forms_[i];
+        for (int k = 0; k < f.regiment_count; ++k) {
+            Regiment& r = regs_[static_cast<std::size_t>(f.first_regiment + k)];
+            if (r.relief_for >= 0) {
+                r.state = UnitState::March;
+                continue;
+            }
+            const bool behind = !r.first && !r.support;
+            r.posture = behind && f.unit.posture != Posture::Withdrawal ? Posture::HastyDefence : f.unit.posture;
+            r.state = f.spent ? f.unit.state : (behind ? UnitState::Reserve : UnitState::InLine);
+        }
+    }
+
+    // ---- U1's share of the formation's losses
+
+    // Whether a regiment's stations meet the axis's breakthrough frontage (one with none, or the enemy's first echelon on
+    // its own axis, meets it).
+    bool Meets(const Regiment& r, const Formation& f, const Axis& x) const {
+        if (!r.first) return false;
+        if (f.unit.side == Side::Enemy || r.to_m <= r.from_m) return true;
+        return r.from_m < x.along_m + x.half_width_m && r.to_m > x.along_m - x.half_width_m;
+    }
+
+    // A regiment's weight in the share of an axis's losses: the one the axis meets hit_weight, the rest of the first
+    // echelon 1, support (the artillery) and the second echelon support_weight (out of contact: fire reaches it), one on
+    // the march to a relief 1; in the security zone (`zone` 1) only the covering regiment, the one the axis meets.
+    double Multiplier(const Regiment& r, const Formation& f, const Axis& x, std::uint8_t zone) const {
+        const GroundTables& t = data_->tables;
+        if (r.relief_for >= 0) return zone == 1 ? 0.0 : 1.0;
+        if (r.support || !r.first) return zone == 1 ? 0.0 : t.levels_support_weight;
+        const bool meets = Meets(r, f, x);
+        if (zone == 1) return meets ? 1.0 : 0.0;
+        return meets ? t.levels_hit_weight : 1.0;
+    }
+
+    // The hour's loss of a formation at U1 (from `before` to `after`) shared out among its regiments, axis by axis in
+    // proportion to what each axis cost it; each regiment's cohesion falls with its own loss and is regained at the daily
+    // rate; the formation's cohesion is their mean by strength. Its strength is untouched: the shares sum to 1.
+    void ShareOut(std::size_t i, double before, double after) {
+        const GroundTables& t = data_->tables;
+        Formation& f = forms_[i];
+        const std::size_t na = axes_.size();
+        const std::size_t r0 = static_cast<std::size_t>(f.first_regiment);
+        const std::size_t n = static_cast<std::size_t>(f.regiment_count);
+        double* q = rshare_.data() + r0;
+        double* u = rweight_.data() + r0;
+        std::fill(q, q + n, 0.0);
+        double csum = 0.0;
+        for (std::size_t a = 0; a < na; ++a) {
+            const std::uint8_t z = engaged_[i * na + a];
+            if (z == 0) continue;
+            const double c = z == 3 ? results_[a].attacker_loss : results_[a].defender_loss * part_[i * na + a];
+            if (!(c > 0.0)) continue;
+            const Axis& x = axes_[a];
+            double usum = 0.0;
+            for (std::size_t k = 0; k < n; ++k) {
+                const Regiment& r = regs_[r0 + k];
+                u[k] = r.part * Multiplier(r, f, x, z);
+                usum += u[k];
+            }
+            if (!(usum > 0.0)) {
+                // No regiment meets it in the security zone: the first echelon's nearest to the axis covers it.
+                std::size_t best = n;
+                double best_d = 1e300;
+                for (std::size_t k = 0; k < n; ++k) {
+                    const Regiment& r = regs_[r0 + k];
+                    u[k] = 0.0;
+                    if (!r.first) continue;
+                    const double d = std::fabs(0.5 * (r.from_m + r.to_m) - x.along_m);
+                    if (d < best_d) {
+                        best_d = d;
+                        best = k;
+                    }
+                }
+                for (std::size_t k = 0; k < n; ++k) u[k] = best < n ? (k == best ? regs_[r0 + k].part : 0.0) : regs_[r0 + k].part;
+                usum = 0.0;
+                for (std::size_t k = 0; k < n; ++k) usum += u[k];
+                if (!(usum > 0.0)) continue;
+            }
+            for (std::size_t k = 0; k < n; ++k) q[k] += c * u[k] / usum;
+            csum += c;
+        }
+        const double lost = std::max(0.0, before - after);
+        double total = 0.0;
+        for (std::size_t k = 0; k < n; ++k) {
+            Regiment& r = regs_[r0 + k];
+            const double had = r.part * before;
+            const double share = csum > 0.0 ? q[k] / csum : r.part;
+            const double left = std::max(0.0, had - share * lost);
+            const double lf = had > 0.0 ? 1.0 - left / had : 0.0;
+            r.cohesion = std::min(1.0, std::max(0.0, r.cohesion + t.cohesion_recovery_per_day / 24.0 - t.cohesion_loss_per_strength_loss * lf));
+            u[k] = left;  // its strength now (scratch)
+            total += left;
+        }
+        double coh = 0.0;
+        for (std::size_t k = 0; k < n; ++k) {
+            Regiment& r = regs_[r0 + k];
+            r.part = total > 0.0 ? u[k] / total : r.est_part;
+            coh += r.part * r.cohesion;
+        }
+        f.unit.cohesion = std::min(1.0, std::max(0.0, coh));
+    }
+
+    // The lines and breakpoints a regiment is under now (by its own count: its share of its formation's).
+    std::uint8_t RegimentCrossings(std::size_t k) const {
+        const Regiment& r = regs_[k];
+        const Formation& f = forms_[static_cast<std::size_t>(r.formation)];
+        const EffectivenessDef& e = Doctrine(f.unit.side).effectiveness;
+        const double frac = RegimentFraction(k);
+        std::uint8_t c = 0;
+        if (e.kind == EffectivenessKind::Lines) {
+            const double ask = AskWithdrawLineOf(data_->tables, e, rcmdrs_[static_cast<std::size_t>(r.cmdr)].traits);
+            if (frac < e.degraded_below) c = static_cast<std::uint8_t>(c | kCrossDegraded);
+            if (frac < ask) c = static_cast<std::uint8_t>(c | kCrossAsk);
+        } else {
+            if (1.0 - frac >= f.attack_stop) c = static_cast<std::uint8_t>(c | kCrossAttackStop);
+            if (1.0 - frac >= f.defence_break) c = static_cast<std::uint8_t>(c | kCrossDefenceBreak);
+        }
+        return c;
+    }
+
+    // A keyed draw for a regiment's commander (order-free, apart from the formations' commanders' keys).
+    double RegimentDraw(std::size_t k, std::uint64_t salt) const {
+        const std::uint64_t key = 0x5E61500000000000ull ^ (static_cast<std::uint64_t>(k + 1) << 32) ^
+                                  (static_cast<std::uint64_t>(rcmdrs_[static_cast<std::size_t>(regs_[k].cmdr)].decisions) << 8) ^ salt;
+        return root_.Fork(key).Uniform();
+    }
+    double RegimentReaction(std::size_t k, std::uint64_t salt) const {
+        const GroundCommander& g = rcmdrs_[static_cast<std::size_t>(regs_[k].cmdr)];
+        return DecideHoursOf(data_->tables, g.echelon, false, g.traits, RegimentDraw(k, salt));
+    }
+
+    // After a U1 formation's hour of fighting: a regiment that crossed a line decides after its reaction time.
+    void RegimentsAfterHour(std::size_t i, double h1) {
+        const Formation& f = forms_[i];
+        for (int j = 0; j < f.regiment_count; ++j) {
+            const std::size_t k = static_cast<std::size_t>(f.first_regiment + j);
+            Regiment& r = regs_[k];
+            if (r.support) continue;
+            const std::uint8_t now = RegimentCrossings(k);
+            if ((now & ~r.crossed) != 0) Push(h1 + RegimentReaction(k, 0x5000ull + now), EventKind::RegimentDecide, -1, static_cast<int>(k));
+            r.crossed = static_cast<std::uint8_t>(r.crossed | now);
+        }
+    }
+
+    // A regiment's commander on his unit (the doctrine's lines or breakpoints, as the formation's): under the ask line (or
+    // past the defence breakpoint), in the first echelon with no relief coming, he asks his formation's commander to relieve
+    // him; under the degraded line (or past the attack breakpoint) he reports. Each goes into his side's picture as his
+    // formation's report (F3.5), and the ask wakes his commander.
+    void RegimentDecide(std::size_t k, double h) {
+        Regiment& r = regs_[k];
+        const std::size_t fi = static_cast<std::size_t>(r.formation);
+        const Formation& f = forms_[fi];
+        if (f.spent || f.level != UnitLevel::U1 || r.support) return;
+        ++rcmdrs_[static_cast<std::size_t>(r.cmdr)].decisions;
+        ++profile_.regiment_decisions;
+        const bool ask = (r.crossed & (kCrossAsk | kCrossDefenceBreak)) != 0;
+        const bool report = (r.crossed & (kCrossDegraded | kCrossAttackStop)) != 0;
+        const double frac = RegimentFraction(k);
+        const int on = AxisOfFormation(fi);
+        if (ask && !r.asked && r.first && r.relieved_by < 0) {
+            r.asked = true;
+            r.asked_h = h;
+            RegimentOrder(h, GroundOrder::RegimentAsked, f.cmdr, fi, on, static_cast<int>(k), -1, frac);
+            ReportAtOnce(fi, h, on);
+            WakeAfterReaction(f.cmdr, h, 0x5E62000000ull + k);
+        } else if (report && !r.reported) {
+            r.reported = true;
+            RegimentOrder(h, GroundOrder::RegimentReported, f.cmdr, fi, on, static_cast<int>(k), -1, frac);
+            ReportAtOnce(fi, h, on);
+        }
+    }
+
+    // A formation's commander at U1: each regiment of his first echelon that asked is relieved by the freshest of his
+    // second echelon (kFresherBy stronger at least, by his own count), which marches to it on the roads within the sector;
+    // with none fresher it holds.
+    void Rotate(int c, double h, const airwar::LineOfContact& line) {
+        const int formation = cmdrs_[static_cast<std::size_t>(c)].formation;
+        if (formation < 0) return;
+        const std::size_t fi = static_cast<std::size_t>(formation);
+        const Formation& f = forms_[fi];
+        if (f.spent || f.level != UnitLevel::U1) return;
+        bool placed = false;
+        for (int j = 0; j < f.regiment_count; ++j) {
+            const std::size_t a = static_cast<std::size_t>(f.first_regiment + j);
+            if (!regs_[a].asked || !regs_[a].first || regs_[a].relieved_by >= 0) continue;
+            int best = -1;
+            double best_frac = RegimentFraction(a) + kFresherBy;
+            for (int m = 0; m < f.regiment_count; ++m) {
+                const std::size_t b = static_cast<std::size_t>(f.first_regiment + m);
+                const Regiment& rb = regs_[b];
+                if (rb.support || rb.first || rb.relief_for >= 0 || rb.relieved_by >= 0) continue;
+                const double fr = RegimentFraction(b);
+                if (fr > best_frac) {
+                    best_frac = fr;
+                    best = static_cast<int>(b);
+                }
+            }
+            if (best < 0) continue;
+            if (!placed) {
+                AssignStations(fi, line);  // where they stand now
+                placed = true;
+            }
+            Regiment& ra = regs_[a];
+            Regiment& rb = regs_[static_cast<std::size_t>(best)];
+            const double march = RegimentReaction(static_cast<std::size_t>(best), 0x5E63ull) + MarchBetween(rb.anchor, rb.pos, ra.anchor, ra.pos, h);
+            rb.relief_for = static_cast<int>(a);
+            rb.state = UnitState::March;
+            ra.relieved_by = best;
+            Push(h + march, EventKind::RegimentArrive, static_cast<int>(a), best);
+            RegimentOrder(h, GroundOrder::RegimentReliefOrdered, c, fi, AxisOfFormation(fi), static_cast<int>(a), best, march);
+        }
+    }
+
+    // A regiment's relief arrives: the two change places, the relieved goes back to the second echelon to recover.
+    void RegimentArrive(std::size_t b, std::size_t a, double h) {
+        Regiment& rb = regs_[b];
+        Regiment& ra = regs_[a];
+        rb.relief_for = -1;
+        ra.relieved_by = -1;
+        const std::size_t fi = static_cast<std::size_t>(rb.formation);
+        const Formation& f = forms_[fi];
+        if (f.spent) {
+            RegimentPostures(fi);
+            return;
+        }
+        std::swap(rb.from_m, ra.from_m);
+        std::swap(rb.to_m, ra.to_m);
+        std::swap(rb.anchor, ra.anchor);
+        std::swap(rb.pos, ra.pos);
+        rb.first = true;
+        ra.first = false;
+        ra.asked = false;
+        ra.crossed = static_cast<std::uint8_t>(ra.crossed & ~(kCrossAsk | kCrossDefenceBreak));
+        ++ra.rotations;
+        RegimentPostures(fi);
+        RegimentOrder(h, GroundOrder::RegimentRelieved, f.cmdr, fi, AxisOfFormation(fi), static_cast<int>(a), static_cast<int>(b), 0.0);
+    }
+
+    void RegimentOrder(double h, GroundOrder o, int cmdr, std::size_t formation, int axis, int regiment, int other_regiment, double value) {
+        Order(h, o, cmdr, static_cast<int>(formation), axis, value);
+        log_.back().regiment = regiment;
+        log_.back().other_regiment = other_regiment;
+    }
+
+    // ---- the march on the roads (03 section 7)
+
+    // F3.4's rule: the straight line x the road factor at the day's road speed.
+    double StraightHours(const Vec3& a, const Vec3& b) const {
+        const GroundTables& t = data_->tables;
+        const double kmh = t.road_day_kmh.Mid();
+        if (!(kmh > 0.0)) return 0.0;
+        return airwar::Dist2d(a, b) / 1000.0 * t.march_road_factor / kmh;
+    }
+
+    // The crossings whose bridges are down in the air war now (a function under kBridgeStanding): the overlay rebuilt, its
+    // version moved, only when one has changed (asked on an order, never in the hour).
+    void RefreshOverlay() {
+        if (env_ == nullptr || env_->truth == nullptr) return;
+        const std::vector<airwar::ObjectState>& truth = *env_->truth;
+        bool changed = false;
+        for (JoinedBridge& b : bridges_) {
+            const bool down = b.object < truth.size() && truth[b.object].function < kBridgeStanding;
+            changed = changed || down != b.down;
+            b.down = down;
+        }
+        if (!changed) return;
+        overlay_.Clear();
+        for (const JoinedBridge& b : bridges_) {
+            if (b.down) overlay_.Cut("ground_war:" + b.crossing, b.crossing, -1e18);
+        }
+    }
+
+    // A march's hours on the roads between two anchors, from hour h: the route service asked (cached by the anchors and
+    // the overlay's version), its roads at the column's speed by day or by night (as the march starts), its ways off the
+    // road at the cross-country speed, and its halts (halt_h every halt_every_h). Where bridges down leave no way round,
+    // the road as it was and the crossing of each cut river as an attack's (crossing_cut_h). -1: no road net, no anchor,
+    // no way, or an end with no road within kNoRoadNearM (the map's roads end at our border: the enemy's has none drawn).
+    double RoadHours(const std::string& from_id, const Vec3& from, const std::string& to_id, const Vec3& to, double h) {
+        if (!roads_ || from_id.empty() || to_id.empty()) return -1.0;
+        if (from_id == to_id) return 0.0;
+        const GroundTables& t = data_->tables;
+        Clock::time_point c0;
+        if (profiling_) c0 = Clock::now();
+        RefreshOverlay();
+        const nav::Route* r = &routes_.Get(*roads_, from_id, {from.x, from.y}, to_id, {to.x, to.y}, column_, overlay_);
+        double cut_h = 0.0;
+        if (!r->found && !overlay_.entries.empty()) {
+            r = &routes_.Get(*roads_, from_id, {from.x, from.y}, to_id, {to.x, to.y}, column_, open_);
+            for (const std::string& c : r->crossings) cut_h += overlay_.Down(c, 0.0) != nullptr ? CrossingHours(t, false, false) : 0.0;
+        }
+        if (profiling_) profile_.route_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - c0).count());
+        // An end with no road near (the map has no roads there: beyond our border, the enemy's own country) is no way.
+        if (!r->found || r->max_link_m > kNoRoadNearM) return -1.0;
+        const bool night = env_ != nullptr && env_->theatre != nullptr && NightAt(*env_, h);
+        const double kmh = night ? t.road_night_kmh.Mid() : t.road_day_kmh.Mid();
+        if (!(kmh > 0.0)) return -1.0;
+        double road_km = 0.0, cross_km = 0.0;
+        for (const nav::RouteLeg& l : r->legs) {
+            if (l.kind == "road") {
+                road_km += l.length_m / 1000.0;
+            } else {
+                cross_km += l.length_m / 1000.0;
+            }
+        }
+        const double cc = t.cross_country_kmh.Mid();
+        const double drive = road_km / kmh + (cc > 0.0 ? cross_km / cc : 0.0);
+        const double every = t.halt_every_h.Mid();
+        const double halts = every > 0.0 ? std::floor(drive / every) * t.halt_h.Mid() : 0.0;
+        return drive + halts + cut_h;
+    }
+
+    // A march between two places, each with its anchor: on the roads between the anchors where there is a way, else F3.4's
+    // straight line.
+    double MarchBetween(const std::string& from_id, const Vec3& from, const std::string& to_id, const Vec3& to, double h) {
+        const double road = RoadHours(from_id, from, to_id, to, h);
+        const double straight = StraightHours(from, to);
+        ++profile_.marches;
+        profile_.march_straight_h += straight;
+        if (road < 0.0) {
+            ++profile_.route_fallbacks;
+            profile_.march_h += straight;
+            return straight;
+        }
+        profile_.march_h += road;
+        return road;
+    }
+
+    // The anchor of an axis's route a march goes to: the place of its route on the marcher's side of the fight nearest it
+    // (ours: the shallowest at or beyond the axis's depth; the enemy's: the deepest at or short of it), null with none.
+    const AxisAnchor* AxisAnchorFor(std::size_t a, Side side) const {
+        const Axis& x = axes_[a];
+        const AxisAnchor* best = nullptr;
+        for (const AxisAnchor& k : x.anchors) {
+            if (side == Side::Ours) {
+                if (k.depth_m >= x.depth_m - 1.0 && (best == nullptr || k.depth_m < best->depth_m)) best = &k;
+            } else if (k.depth_m <= x.depth_m + 1.0 && (best == nullptr || k.depth_m > best->depth_m)) {
+                best = &k;
+            }
+        }
+        if (best != nullptr || x.anchors.empty()) return best;
+        for (const AxisAnchor& k : x.anchors) {
+            if (best == nullptr || (side == Side::Ours ? k.depth_m > best->depth_m : k.depth_m < best->depth_m)) best = &k;
+        }
+        return best;
+    }
+
     // ---- the axis's ground, sampled once
 
     static bool SegmentsCross(double ax, double ay, double bx, double by, double cx, double cy, double dx, double dy, double* t_ab) {
@@ -1110,7 +1828,18 @@ private:
         Formation& f = forms_[i];
         if (!f.spent && h > f.settled_h) {
             ApplyLoss(f, LossOverHours(DailyLoss(data_->tables, f.rest, 1), h - f.settled_h), -1.0);
-            f.unit.cohesion = std::min(1.0, f.unit.cohesion + data_->tables.cohesion_recovery_per_day * (h - f.settled_h) / 24.0);
+            const double regained = data_->tables.cohesion_recovery_per_day * (h - f.settled_h) / 24.0;
+            if (f.level == UnitLevel::U1) {
+                double coh = 0.0;
+                for (int k = 0; k < f.regiment_count; ++k) {
+                    Regiment& r = regs_[static_cast<std::size_t>(f.first_regiment + k)];
+                    r.cohesion = std::min(1.0, r.cohesion + regained);
+                    coh += r.part * r.cohesion;
+                }
+                f.unit.cohesion = std::min(1.0, std::max(0.0, coh));
+            } else {
+                f.unit.cohesion = std::min(1.0, f.unit.cohesion + regained);
+            }
         }
         f.settled_h = std::max(f.settled_h, h);
     }
@@ -1167,6 +1896,11 @@ private:
             Lap(GroundProfile::Picture);
         }
         Lap(GroundProfile::Decisions);
+        // The levels (F3.6): up at once in the player's area, down after the margin out of it.
+        if (!regs_.empty()) {
+            Levels(h0, line);
+            Lap(GroundProfile::Levels);
+        }
         // Phase 1: every axis's sides read from the hour's start.
         const std::size_t na = axes_.size();
         bool any = false;
@@ -1296,6 +2030,12 @@ private:
                 break;
             case EventKind::Reformed:
                 Reform(static_cast<std::size_t>(e.who), h0);
+                break;
+            case EventKind::RegimentDecide:
+                RegimentDecide(static_cast<std::size_t>(e.who), h0);
+                break;
+            case EventKind::RegimentArrive:
+                RegimentArrive(static_cast<std::size_t>(e.who), static_cast<std::size_t>(e.axis), h0);
                 break;
             case EventKind::RaidNight:
                 RaidNight(e.who, h0, env);
@@ -1560,6 +2300,7 @@ private:
         // it slowly, heavy losses in hours break it (03 section 5.4).
         const GroundTables& t = data_->tables;
         f.unit.cohesion = std::min(1.0, std::max(0.0, f.unit.cohesion + t.cohesion_recovery_per_day / 24.0 - t.cohesion_loss_per_strength_loss * lost));
+        if (f.level == UnitLevel::U1) ShareOut(i, before, f.unit.strength);  // its regiments' shares and cohesion (F3.6)
         f.settled_h = h0 + 1.0;
     }
 
@@ -1646,6 +2387,7 @@ private:
             const std::uint8_t now = Crossings(i);
             if ((now & ~f.crossed) != 0) WakeAfterReaction(f.cmdr, h1, 0x5000ull + i);
             f.crossed = static_cast<std::uint8_t>(f.crossed | now);
+            if (f.level == UnitLevel::U1) RegimentsAfterHour(i, h1);
             // Asked, no answer, held as long as he can: in contact again, he decides at once.
             if (f.asked && f.cmdr >= 0 && RelievedBy(i) < 0 && h1 - f.asked_h >= HoldWithoutOrderHoursOf(t, cmdrs_[static_cast<std::size_t>(f.cmdr)].traits) - 1e-9) Wake(f.cmdr, h1);
         }
@@ -1725,6 +2467,7 @@ private:
         ++g.decisions;
         ++profile_.decisions;
         if (g.formation >= 0) UnitDecision(c, h);
+        if (g.formation >= 0) Rotate(c, h, line);  // U1: his regiments' reliefs (F3.6)
         if (g.side == Side::Enemy) {
             AnswerRequests(c, h, line);
             if (g.top) EnemyTop(c, h, line);
@@ -1834,7 +2577,7 @@ private:
                     r.task_axis = a;
                     r.relief_for = static_cast<int>(i);
                     r.unit.state = UnitState::March;
-                    const double at = h + PlanningOf(c, 0xB000ull + i) + (a >= 0 ? MarchHours(r, static_cast<std::size_t>(a), line) : 0.0);
+                    const double at = h + PlanningOf(c, 0xB000ull + i) + (a >= 0 ? MarchHours(r, static_cast<std::size_t>(a), line, h) : 0.0);
                     Push(at, EventKind::Arrive, a, relief, 0, Task::Relief);
                     Order(h, GroundOrder::ReliefOrdered, c, relief, a, at - h, static_cast<int>(i));
                     break;
@@ -1888,12 +2631,24 @@ private:
         return line.PointAt(x.along_m) + line.InwardNormal(x.along_m) * x.depth_m;
     }
 
-    // A march's hours at U0: the straight line's length by the road factor at the column's day speed (F3.6 asks the roads).
-    double MarchHours(const Formation& f, std::size_t a, const airwar::LineOfContact& line) const {
-        const GroundTables& t = data_->tables;
-        const double kmh = t.road_day_kmh.Mid();
-        if (!(kmh > 0.0)) return 0.0;
-        return airwar::Dist2d(f.pos, AxisPoint(axes_[a], line)) / 1000.0 * t.march_road_factor / kmh;
+    // A march's hours to an axis from hour h (F3.6, 03 section 7): from the formation's place to its anchor, on the roads
+    // to the anchor of the axis's route on its side of the fight, and from there to the fight, the two ends at F3.4's
+    // straight line x the road factor; the whole march at F3.4's rule where either anchor or a way on the roads is missing.
+    double MarchHours(const Formation& f, std::size_t a, const airwar::LineOfContact& line, double h) {
+        const Vec3 to = AxisPoint(axes_[a], line);
+        const AxisAnchor* b = AxisAnchorFor(a, f.unit.side);
+        const double straight = StraightHours(f.pos, to);
+        ++profile_.marches;
+        profile_.march_straight_h += straight;
+        const double road = b != nullptr ? RoadHours(f.anchor, f.anchor_pos, b->id, b->pos, h) : -1.0;
+        if (road < 0.0) {
+            ++profile_.route_fallbacks;
+            profile_.march_h += straight;
+            return straight;
+        }
+        const double hours = StraightHours(f.pos, f.anchor_pos) + road + StraightHours(b->pos, to);
+        profile_.march_h += hours;
+        return hours;
     }
 
     // Sum of the power of an axis's attackers (and an echelon to come) over its defenders', by `by`'s picture.
@@ -1952,7 +2707,7 @@ private:
             f.second = false;
             f.unit.state = UnitState::March;
             ++axes_[static_cast<std::size_t>(target)].incoming;
-            const double at = h + PlanningOf(c, 0xC000ull + i) + MarchHours(f, static_cast<std::size_t>(target), line);
+            const double at = h + PlanningOf(c, 0xC000ull + i) + MarchHours(f, static_cast<std::size_t>(target), line, h);
             Push(at, EventKind::Arrive, target, static_cast<int>(i), 0, Task::Echelon);
             Order(h, GroundOrder::EchelonCommitted, c, static_cast<int>(i), target, at - h, f.plan_axis);
         }
@@ -2050,7 +2805,7 @@ private:
                     f.task_axis = best;
                     f.unit.state = UnitState::March;
                     ++x.counter_incoming;
-                    Push(h + plan_h + MarchHours(f, a, line), EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
+                    Push(h + plan_h + MarchHours(f, a, line, h), EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
                 }
                 Order(h, GroundOrder::CounterattackOrdered, c, -1, best, ratio);
             }
@@ -2122,6 +2877,7 @@ private:
                 if (f.spent) break;
                 f.axis = a;
                 f.pos = AxisPoint(x, line);
+                MoveAnchor(f, static_cast<std::size_t>(a));
                 if (std::find(x.first.begin(), x.first.end(), static_cast<int>(i)) == x.first.end()) x.first.push_back(static_cast<int>(i));
                 if (x.status == AxisStatus::Halted && x.halted != HaltReason::Objective) {
                     Resume(static_cast<std::size_t>(a), h);
@@ -2138,6 +2894,7 @@ private:
                 --x.counter_incoming;
                 if (f.spent || f.task != Task::Counter) break;
                 f.pos = AxisPoint(x, line);
+                MoveAnchor(f, static_cast<std::size_t>(a));
                 if (x.status != AxisStatus::Attacking && x.status != AxisStatus::Halted && x.status != AxisStatus::Counterattacked) {
                     f.task = Task::None;
                     f.free = true;
@@ -2163,6 +2920,7 @@ private:
                 f.relief_for = -1;
                 if (f.spent) break;
                 f.pos = AxisPoint(x, line);
+                MoveAnchor(f, static_cast<std::size_t>(a));
                 f.unit.state = UnitState::InLine;
                 f.unit.posture = Posture::PreparedDefence;
                 Settle(i, h);
@@ -2256,6 +3014,14 @@ private:
         f.unit.posture = Posture::HastyDefence;
         f.unit.establishment = std::min(f.base_establishment, std::max(f.unit.strength, 1e-9));
         f.unit.cohesion = 1.0;
+        for (int k = 0; k < f.regiment_count; ++k) {
+            Regiment& r = regs_[static_cast<std::size_t>(f.first_regiment + k)];
+            r.est_part = r.part;
+            r.cohesion = 1.0;
+            r.crossed = 0;
+            r.reported = r.asked = false;
+            r.asked_h = -1.0;
+        }
         f.crossed = 0;
         f.reported = f.asked = f.refused = f.attack_stopped = f.held_noted = false;
         f.asked_h = -1.0;

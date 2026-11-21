@@ -213,6 +213,9 @@ struct GroundTables {
     // Reports and levels.
     int division_reports_per_day = 2;
     double levels_down_after_h = 6.0;
+    int levels_neighbours = 1;            // U1 (F3.6): the player's sector and this many either side
+    double levels_hit_weight = 2.0;       // a regiment the axis hits takes this many times its share of the formation's losses
+    double levels_support_weight = 0.5;   // a support regiment (no tanks: artillery) this many times its share
 
     // The clock and the line at U0 (F3.3, ground_war.hpp).
     std::vector<std::string> tank_types;  // the weights' types marked "tank" (FM 101-10-1 table 7-7's), sorted
@@ -885,8 +888,12 @@ private:
         const json::Value* r = Object(root, "", "reports");
         const json::Value* lv = Object(root, "", "levels");
         return r != nullptr && lv != nullptr && Keys(*r, "reports", {"division_per_day", "notes"}) &&
-               WholeSourced(*r, "reports", "division_per_day", out.division_reports_per_day, 1, 24) && Keys(*lv, "levels", {"down_after_h", "notes"}) &&
-               Sourced(*lv, "levels", "down_after_h", out.levels_down_after_h, 0.0, 72.0);
+               WholeSourced(*r, "reports", "division_per_day", out.division_reports_per_day, 1, 24) &&
+               Keys(*lv, "levels", {"down_after_h", "neighbours", "hit_weight", "support_weight", "notes"}) &&
+               Sourced(*lv, "levels", "down_after_h", out.levels_down_after_h, 0.0, 72.0) &&
+               WholeSourced(*lv, "levels", "neighbours", out.levels_neighbours, 0, 8) &&
+               Sourced(*lv, "levels", "hit_weight", out.levels_hit_weight, 1.0, 10.0) &&
+               Sourced(*lv, "levels", "support_weight", out.levels_support_weight, 0.0, 1.0);
     }
 
     // The commanders' ranges and clock (F3.4).
