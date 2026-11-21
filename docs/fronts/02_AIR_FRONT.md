@@ -566,7 +566,7 @@ heard or wrote, each a fact for the staff alone in the pipeline, `need_level` 0)
 | A low-level attack on our troops by day | the division's air defence CP (`div_ad_cp_duty`), on the warning net's record (`ObservedRaid`) | `RaidSeen`, priority, `front_watch:raid:<n>` | the raid came at low level, with no helicopters, at an object of ours of kind troops, not at night, and attacked (delivered); its target more than `watch_cas_reach_m` + `watch_margin_m` (45 km) beyond the line of contact |
 | Helicopters attacking | the same | the same | the raid had helicopters and attacked; beyond `watch_helo_reach_m` + the margin (30 km) |
 | A close support request heard | the intercept centre (`intercept_centre`), on our desk's form (`Logged`, the abstract calls' write-up, radio.mode 1 or more with `UseIntercept`) | `Intercept`, routine, `front_watch:intercept:<n>` | understood, a request (the HF request net), naming a square: the square as the linguist wrote it, slips and all, beyond 45 km |
-| Our troops report an air attack | the post that reports it | `RaidSeen`, priority, `front_watch:troops:<n>` | `CampaignFeed::ReportAirAttack` (F3.8 will call it; nothing calls it yet) |
+| Our troops report an air attack | the post that reports it | `RaidSeen`, priority, `front_watch:troops:<n>` | `CampaignFeed::ReportAirAttack` (F3.8's `GroundFeed` calls it for every strike on our troops a unit counts, `04_PIPELINE.md` §8) |
 
 The warning net's record gained what it saw of how a raid came (`ObservedRaid::low`, `helicopters`, `target_object`:
 our own object it went for). The depth is measured from our line of contact (`AirCampaign::FrontLine()`, our own front)
@@ -636,7 +636,7 @@ false conclusion from an ordinary helicopter raid, through the pipeline to the r
 then holds its estimate; the same pumped once at the end; at the data's rule only on three signs or more; at mode 0
 nothing.
 
-**Left:** our troops' reports (F3.8 calls `ReportAirAttack` when the ground war's units report air attack); the played
+**Left:** our troops' reports (done, F3.8: `GroundFeed` calls `ReportAirAttack` for each strike on our troops a unit counts); the played
 sessions' heard requests (`PumpHeard` makes their facts but not their signs: the records carry no square); the staff's
 pull-back (a quiet sector after a conclusion); the regiment's tasking and F4's priorities reading `AirFrontKnownBy`
 (14.2, F4.1); the thresholds' balance against the enemy's real moves (F6: on the nation the moved sectors brought almost

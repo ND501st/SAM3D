@@ -23,6 +23,7 @@
 #include "simcore/air_war/abstract_radio.hpp"
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/command/air_front_watch.hpp"
+#include "simcore/command/ground_feed.hpp"
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
 
@@ -73,7 +74,13 @@ public:
         if (net_ != nullptr) regiment_ = net_->Data().unit_regiment;
         ResetIntercept();
         ResetWatch();
+        ground_.Bind(net_);
     }
+
+    // Our units' reports on the ground war (F3.8, command/ground_feed.hpp): on only where the ground war runs
+    // (ground.mode 1) and the chain has the posts. Other posts or hours than the data's: call after Bind, before the first Pump.
+    void UseGroundRoles(const GroundFeedRoles& roles) { ground_.Bind(net_, roles); }
+    const GroundFeed& Ground() const { return ground_; }
 
     // Our radio intercept service in the campaign (roadmap S6, radio.mode 1): the posts of data/command/intercept.json hear
     // the abstract packages' calls (air_war/abstract_radio.hpp) and the desk writes them up for the air section's day summary;
@@ -223,8 +230,14 @@ public:
             PumpAbstract(c);
             if (ReadyWatch(c)) WatchDesk(c);
         }
+        // Our units' reports and orders on the ground war, and their strikes from the air into the watch (F3.8).
+        if (c.Ground() != nullptr) {
+            ground_.Feed(c, [&](const std::string& origin, double h, const Vec3& at, const std::string& what) { return ReportAirAttack(c, origin, h, at, what); });
+        }
         net_->AdvanceTo(c.Now());
-        if (ReadyWatch(c) && ReviewWatch(c)) net_->AdvanceTo(c.Now());  // the staff's conclusions on their way
+        bool more = ReadyWatch(c) && ReviewWatch(c);  // the staff's conclusions on their way
+        more = ground_.Summarise(c) || more;          // the army's summary of the reports that reached it
+        if (more) net_->AdvanceTo(c.Now());
     }
 
     // ---------------------------------------------------------------- our side learns the enemy's air front (F2.5)
@@ -310,6 +323,7 @@ private:
     std::vector<char> taken_;             // the staff has taken signs_[i]
     std::size_t desk_read_ = 0;
     int troop_reports_ = 0;
+    GroundFeed ground_;  // F3.8
 
     void ResetWatch() {
         watch_ready_ = watch_on_ = false;

@@ -81,6 +81,12 @@
     { "id": "intercept_hill_1", "name": "Forward intercept and DF post 1 (the high ground east of Kesmark)", "kind": "military_post", "at": "intercept_hill_1",
       "notes": "A hill nearest the front on the east flank; with the division's air defence liaison. Game placement." },
     { "id": "intercept_hill_2", "name": "Forward intercept and DF post 2 (the high ground south-west of the battery)", "kind": "military_post", "at": "intercept_hill_2",
-      "notes": "A hill nearest the front on the south-west flank. Game placement." }
+      "notes": "A hill nearest the front on the south-west flank. Game placement." },
+    { "id": "div9_hq", "name": "9th Motor Rifle Division staff (Mezovar)", "kind": "military_post", "at": "mezovar",
+      "notes": "Where the ground war's deployment against the Pact puts the 9th Division (data/campaign/ground_defence.json); fixed, it does not follow the unit. Game placement (F3.8)." },
+    { "id": "swbde_cp", "name": "South-western brigade staff (Hradec Dolni)", "kind": "military_post", "at": "hradec",
+      "notes": "Where the deployment puts the brigade; fixed. Game placement (F3.8)." },
+    { "id": "tankbde_cp", "name": "Tank brigade staff (the capital)", "kind": "military_post", "at": "capital",
+      "notes": "Where the deployment puts the army's reserve; fixed. Game placement (F3.8)." }
   ]
 }

@@ -798,8 +798,8 @@ reserve. F3.4's hand cases decide on the truth (`picture.truth`), its nation war
 - F3.6: the march on the roads; U1's regiments and their pictures (a regiment's own reports at its echelon's times).
 - F3.7 (done: As built: F3.7): the theatre's troops objects tied to the formations (the air sighting's sector and distance match is a
   stand-in); strikes off strength reported in the pictures; supply below 1 believed.
-- F3.8: our side's picture into the pipeline as situation reports (`FactKind::Situation`): the believed line by station
-  and the units' believed places are ready for it; the army's staff as posts, its intelligence summary as a fact.
+- F3.8 (done: As built: F3.8): our units' reports into the pipeline as situation reports (`FactKind::Situation`), the army's
+  staff as a post, its intelligence summary as a fact; the believed line by station is not a fact (F3.8's Left).
 - Believed places finer than the sector (a unit's believed position and its spread) and believed postures read by
   anyone; the enemy's own reports' delays by faction (one table for all four now); the reconnaissance's spread falling
   with the time in contact; a commander's own traits weighing his picture (a sceptical one discounting a report).
@@ -1071,7 +1071,137 @@ nothing tied, overrun, labelled or drawn. `test_ground_picture.cpp`'s air sighti
 - The deep-strike line beyond the FSCL (the corps' area of interest) and the FSCL told to the enemy's own C2 posts as an
   order with its delay; the other factions' coordination lines.
 - A column's exposure on the road (`SupplyColumnMovers`) for the air war to read (F3.6's).
-- F3.8: strikes off strength in the pictures' reports (now only in the truth and the journal), supply below 1 believed.
+- F3.8 (done: As built: F3.8): strikes off strength and supply below 1 in the units' reports as the unit believes them.
+
+## As built: F3.8 (22 Nov 2026)
+
+Our units' reports and orders are facts in the pipeline (section 10, `command/ground_feed.hpp`: `GroundFeed`, a member of
+`CampaignFeed`, so whoever pumps the campaign gets it). Only at `ground.mode` 1 on a theatre
+with a country map and a chain that has the posts; at 0 nothing is logged, added or read.
+
+**What the ground war logs** (`GroundWar::SitReports()`, `SitAxes()`, `SitOrders()`, `SitAirs()`, `SitIntels()`; new types
+beside `TroopsTie`). Where the picture's reports are compiled (F3.5) our side's are also written down, once, for the whole
+war, read by index, never read by the simulation:
+- *a unit's report* (`SitReport`): its own return as its staff counted it (`Observe`'s believed strength fraction and its
+  factor, so the picture's error to the bit; supplies, `unit.supply` times the same factor; posture, in or out of the
+  fight, the sector), the air attacks on it since its last return (a count, and the share of its establishment they cost,
+  times the same factor: *believed strikes*, F3.7's left) and the axes it reports (`SitAxis`: depth and pace, whether our
+  counterattack is on it, the enemy's formations in contact on it and their believed strength by the contact report's
+  error). Scheduled (06:00 and 18:00 local, `reports.division_per_day`), or at once with its cause (reports, asks,
+  attack stopped, withdrawn, dispersed, re-formed: `SitCause`, `ReportAtOnce`'s new argument), or an axis's news at once
+  from the unit on it (a breakthrough, a halt, our counterattack's start or end: `AxisAtOnce`). An axis is reported by the
+  first of ours defending on it (else counterattacking, else the second echelon);
+- *an order* (`SitOrder`): our commander's withdrawal permitted, relief sent and counterattack ordered (one to each unit
+  sent), by whom, to whom, about what. The units' own internal orders (a division's covering force, its regiments'
+  reliefs, echelons committed) are not facts, as section 10 says;
+- *a strike* (`SitAir`): the enemy's strike on one of our tied troops objects (`AirStrike`), as the unit counted it;
+- *the army's intelligence summary* (`SitIntel`): the enemy's formations our units do not touch, as `army_intel` believes
+  them (its error), reaching the army's staff `picture.army_intel_delay_h` after it was compiled.
+A report is compiled where the picture's already is (two events a day a side, and the at-once ones): nothing per hour.
+
+**The posts** (`data/command/chain_pannonia.json`, `places_pannonia.json`; the new ones sourced as game values, as
+`army_ad_staff` was). `army_ops`, the 3rd Army's operations duty officer at its headquarters, receives the formations'
+reports and sends the army's orders (links to the chief of air defence, the national sector and the 7th Division's
+commander); `div9_staff_duty`, `swbde_staff_duty` and `tankbde_staff_duty`, the duty officers of the 9th Division, the
+south-western brigade and the tank brigade, at places on the map where the Pact deployment puts them (Mezovar, Hradec
+Dolni, the capital: fixed, they do not follow their units), linked to `army_ops`. The 7th Division reports by its chief of
+staff, and a unit with no post of its own (the army's artillery and engineer brigades, the rebels' regiments, which are the
+7th Division's) by the nearest above it that has one, else by the army's operations section itself (no carrier needed, it
+holds the report at once). These are all the chain gains: the army, the national sector, the SAM regiment, the division
+and the battery commander were there. `Fact::to` (info_net.hpp) names a fact's addressees when they are not a tree: a
+post it names wants it, the posts on its way pass it on and so hold it.
+
+**The facts** (`FactKind::Situation`, new; `scenes.hpp`'s paper title "Situation report", `player_inputs.hpp`'s parser):
+- *`sitrep:<n>`, a unit's report*: from its duty officer, priority (a combat report goes by the wire if it is whole, else the
+  radio, else a despatch rider), subject `situation:<unit>`, the scheduled ones documents, for `army_ops` and, for the
+  7th Division and what is under it, the regiment's chief of staff and the battery commander: the regiment's word to the
+  battery is the pipeline's own way down;
+- *`sitsummary:<n>`, the army's summary*: from `army_ops` at 09:00 and 21:00 local (three hours after the returns), a
+  document for `sector_cp_duty` and `army_ad_chief`, made of the latest return of each unit that had reached the
+  operations section by then (`Known` at that hour, never more), and the latest depth and pace of each axis it was given;
+  made when its hour is settled, like F2.5's conclusions (the earliest an unresolved package could still change what
+  reached it), so a campaign pumped every step and one pumped once after a load make the same summaries;
+- *`sitorder:<n>`, an order* (`FactKind::Order`, document, priority): from the commander's staff (the army's operations
+  section for the army commander, the unit's own for a division's), for the unit it is to, the chief of air defence and, for
+  the regiment's division, the regiment and the battery;
+- *`ground_intsum:<n>`, the army's intelligence summary* (`Intsum`): from `army_intel`, for the operations section, the chief
+  of air defence and the sector;
+- *strikes*: each is told to `CampaignFeed::ReportAirAttack` (F2.5's left) from the post of the unit that counted it, at the
+  place the unit stood: a sign to the air defence staff's watch where it lies deeper than the enemy's close support
+  usually works, otherwise nothing; the count is in the unit's next return too.
+`GroundFeed::Reports()`, `Orders()`, `Summaries()` hold what each says in numbers beside the fact; `LatestKnownBy(post,
+unit)` and `LatestAxisKnownBy(post, axis)` give what a post holds (what F4's commanders and the regiment's tasking are to
+read), `PostOf`, `WithRegiment`, `AirReports`, `AirSigns`, `IntelSummaries` the rest.
+
+**Delays are the pipeline's.** A unit's report is a fact from the hour it was compiled; it reaches each post as the means
+of each hop carry it (the wire, the radio, a rider), not by the picture's `own_delay_h` (that stays the staff's collation
+in the picture, which F3.5's commanders still read). Two clocks, one source: the facts and the picture carry the same
+believed numbers (tested to the bit).
+
+**First person.** The feed reads the ground war's logs of what our units compiled, never its state. The battery commander,
+the player's default post, holds the 7th Division's reports, orders and the regiment's word as they reach him; no panel
+reads them (F5.1's situation board is the posts' own records).
+
+**Mode 1 on the nation** (`fronts_bench data --feed warsaw_pact nato`: 3 seeds x 10 days with `air_front.mode` 1 so the
+air defence staff's watch runs, each campaign twice, with the reports and without them). Per post, the first seed: the
+7th Division's chief of staff sent 20 reports and the army's operations section had each after 0.29 h on average, the 9th
+Division's duty officer 21 (0.23 h), the south-western brigade's 20 (0.25 h), the tank brigade's 20 (0.23 h), and the army's
+own brigades' 20 (held at once). All three seeds:
+
+| Faction | Reports (a day) | To the army | Mean delay | The regiment's staff, of its division's | The battery commander | Summaries, to the sector | Orders | Intelligence summaries | Strikes on our troops counted, told the watch, signs |
+|---|---|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 303 (10) | 303 | 0.20 h | 60 of 60, 0.58 h | 60, 0.46 h | 60, 60 at 0.33 h | 0 | 6 | 2, 2, 0 |
+| NATO | 317 (11) | 317 | 0.20 h | 60 of 60, 0.59 h | 60, 0.46 h | 60, 60 at 0.33 h | 1 (a relief) | 0 | 7, 7, 2 |
+
+Every report reached the army's staff, a few minutes to half an hour after its compile hour (the wire where it is whole;
+the army's own brigades' none); the regiment's chief of staff and the battery commander hold the 7th Division's, the
+battery commander a little ahead of the staff (the pipeline's shortest way to him does not pass the regiment's chief of
+staff, and every post on a way holds what passes through it). The sector's post
+and the chief of air defence hold the summaries and no unit's report. **Against F3.7:** the strikes on troops now reach
+the watch as the unit counted them (NATO's 7 strikes in 30 campaign days gave 2 signs under the watch's reach, none before
+the reports), and the watch's conclusions are the same in 3 of 3 seeds for both: the signs are too few (3 within a few days
+in a sector) to move a conclusion. With the reach at 0 the nation's NATO seed 8 gives 4 signs of 4 strikes in 10 days (the
+test), so the path from a struck unit to the watch is live; nothing in the data's rule asks for more.
+
+**Cost** (`fronts_bench data --feed`, MSVC Release, std::clock, the tool alone). The pipeline's pump a campaign day (the net's pass over its facts at each campaign step, which is
+the pipeline's own cost before F3.8): the Pact 14.87 ms with the reports, 14.13 without, so 0.73 ms for them (1464 facts
+against 1095 in three 10-day campaigns: the reports, the summaries and the orders are about 12 facts a day); NATO 12.50
+against 11.57, 0.93 ms (1255 against 875). Against the 20 ms budget; `--gate` passes. The reports' own work (adding the
+facts, the summary's pass over the reports) is inside that; nothing is read each step but the logs' lengths, and the
+summaries are made twice a day. In the ground war the logs are written where the picture's reports are compiled (two
+events a day a side and the at-once ones): `fronts_bench data --ground --gate` and `--player-sector battery --gate` pass, the
+mean a campaign day 0.026 ms for the Pact, 0.036 NATO, 0.016 the neutral, 0.066 the rebels (F3.7's 0.020, 0.031, 0.012,
+0.068; the worst day 0.13 ms; the picture's part 0.012, 0.012, 0.008 and 0.007 against 0.006-0.008: about 0.004 ms a day
+for the logs, written inside the picture's own events).
+
+**Identity.** At `ground.mode` 0 nothing is built or logged: `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (ad4a14f, built the same
+way); at mode 1 (`air_war_balance --theatre theatre_pannonia_nation.json --set ground.mode=1 data 3 10`) the output is
+byte-identical to the same tip's too (the logs change nothing the war reads); the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages)
+holds. The gates pass: `fronts_bench data --ground --gate`, `--ground --gate --player-sector battery` and `--feed --gate` exit 0.
+
+**Tests** (`test_ground_feed.cpp`, 5): our reports reach the army's staff with the pipeline's delays, from the posts that
+compiled them (the army's own brigades hold theirs at once); a return is the picture's believed strength to the bit, an
+error and all; the sector's post, the regiment and the battery hold none of the other units' reports; what has not arrived
+is on its way; each summary made at its hour of the latest returns that had reached the staff by then; the same pumped once
+after a load; a chain without the army's post, or ground.mode 0, adds nothing; NATO's order reaches the unit it is to
+and the chief of air defence; each strike counted is told to the watch and a sign where deep. `test_command.cpp` and the
+ground tests as before.
+
+**Left:**
+- The believed line by station (the picture's `line_m`) is not a fact; the returns carry depth and pace by axis and the
+  army's summary the latest of each. F5.1's board draws them.
+- The enemy's own reports in his pipeline (his orders and returns, F4 for our side only): the enemy's picture is his
+  staff's belief and does not go through a pipeline.
+- Unit staffs' places are fixed where the Pact deployment puts them (NATO's 9th Division is at Kisvar); they do not
+  follow their units (`MovePlace` could, hour by hour). A commander lost is not modelled in the ground war, so no report
+  of it.
+- Units' internal orders, the regiments' own returns at U1 (the formation's return carries them), the regiment's separate
+  word to the battery (the pipeline's way down serves), and the SAM regiment's reports to its division.
+- F4: the regiment's tasking and our air defence commanders read `LatestKnownBy` (a scan of the reports: cache by post
+  when they are asked every step), F4.2's units moving on orders as `Order`s the same way.
+- F6: the spreads and delays, the summaries' and returns' hours, whether a division's report to a SAM regiment should be
+  routine or priority.
 
 ## Done when
 
