@@ -105,6 +105,11 @@ inline std::vector<std::pair<std::string, double>> AirFrontTuningDefaults() {
         // fight at U0 with the campaign's hour and move the line of contact's stations; 0 nothing of it built (the front
         // stays its base line), and a save without the key ground_mode replays at 0.
         {"ground.mode", 0.0},
+        // Our air defence commanders' sector priorities (track F, F4.1; simcore/campaign/ad_strategy.hpp): 1 the national
+        // sector's commander and the army's chief of air defence decide each sector's priority on the reports that reached
+        // their posts and send it as orders through our pipeline (data/campaign/ad_strategy.json); 0 nothing of it built,
+        // decided or sent, and a save without the key ad_strategy_mode replays at 0.
+        {"ad_strategy.mode", 0.0},
     };
 }
 

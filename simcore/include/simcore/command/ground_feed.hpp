@@ -95,6 +95,10 @@ struct ArmySummary {
     int fact = -1;
     double h = 0.0;
     std::vector<int> reports;  // indices into GroundFeed::Reports()
+    // The axes it gives: each axis's latest depth and pace in the reports that had reached the army's staff, with the hour
+    // that report was compiled (what F4's commanders read of it, campaign/ad_strategy.hpp).
+    std::vector<groundwar::SitAxis> axes;
+    std::vector<double> axes_h;
 };
 
 class GroundFeed {
@@ -497,6 +501,8 @@ private:
             std::snprintf(buf, sizeof(buf), " the %s axis %.0f km in at %.0f km a day%s;", g.Axes()[static_cast<std::size_t>(kv.first)].name.c_str(),
                           kv.second.second->depth_m / 1000.0, kv.second.second->pace_km_day, kv.second.second->counterattacked ? ", our counterattack on it" : "");
             text += buf;
+            sum.axes.push_back(*kv.second.second);
+            sum.axes_h.push_back(kv.second.first);
         }
         text.back() = '.';
         Fact f;

@@ -22,6 +22,7 @@
 
 #include "simcore/air_war/abstract_radio.hpp"
 #include "simcore/air_war/campaign.hpp"
+#include "simcore/campaign/ad_strategy.hpp"
 #include "simcore/command/air_front_watch.hpp"
 #include "simcore/command/ground_feed.hpp"
 #include "simcore/command/info_net.hpp"
@@ -75,12 +76,19 @@ public:
         ResetIntercept();
         ResetWatch();
         ground_.Bind(net_);
+        ad_.Bind(net_);
     }
 
     // Our units' reports on the ground war (F3.8, command/ground_feed.hpp): on only where the ground war runs
     // (ground.mode 1) and the chain has the posts. Other posts or hours than the data's: call after Bind, before the first Pump.
     void UseGroundRoles(const GroundFeedRoles& roles) { ground_.Bind(net_, roles); }
     const GroundFeed& Ground() const { return ground_; }
+
+    // Our air defence commanders' sector priorities (F4.1, campaign/ad_strategy.hpp): on only at ad_strategy.mode 1, where
+    // the front has a line and the chain has their posts; they decide on what reached their posts and their orders are
+    // facts. Other commanders or rules than data/campaign/ad_strategy.json's: call after Bind, before the first Pump.
+    void UseAdStrategy(const campaign::AdStrategyData& data) { ad_.Use(data); }
+    const campaign::AdStrategy& Ad() const { return ad_; }
 
     // Our radio intercept service in the campaign (roadmap S6, radio.mode 1): the posts of data/command/intercept.json hear
     // the abstract packages' calls (air_war/abstract_radio.hpp) and the desk writes them up for the air section's day summary;
@@ -238,6 +246,7 @@ public:
         bool more = ReadyWatch(c) && ReviewWatch(c);  // the staff's conclusions on their way
         more = ground_.Summarise(c) || more;          // the army's summary of the reports that reached it
         if (more) net_->AdvanceTo(c.Now());
+        if (ad_.Pump(c, ground_, watch_)) net_->AdvanceTo(c.Now());  // our air defence commanders' orders on their way (F4.1)
     }
 
     // ---------------------------------------------------------------- our side learns the enemy's air front (F2.5)
@@ -324,6 +333,7 @@ private:
     std::size_t desk_read_ = 0;
     int troop_reports_ = 0;
     GroundFeed ground_;  // F3.8
+    campaign::AdStrategy ad_;  // F4.1
 
     void ResetWatch() {
         watch_ready_ = watch_on_ = false;

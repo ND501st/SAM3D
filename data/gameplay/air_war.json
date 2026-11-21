@@ -179,6 +179,11 @@
     "source": "game value: the switch of track F's F3.3 (docs/fronts/README.md decision 10, Save compatibility)",
     "notes": "The ground war (simcore/ground_war/ground_war.hpp; docs/fronts/03_GROUND_WAR.md, track F). mode: 1 on a theatre with a country map the enemy's and our ground units (data/air_war/ground_<faction>.json, data/campaign/ground_defence.json) fight at U0, stepped with the campaign's hour by data/gameplay/ground_war.json's tables, and their line of contact moves the front's stations (air_front.station_m): the air war's distances to the front, the air front's bands and its readers follow it; 0 nothing of it built or drawn (the front stays its base line), and a save without its key ground_mode replays at 0. 0 here: switching it on is the fronts' balance (F6)."
   },
+  "ad_strategy": {
+    "mode": 0,
+    "source": "game value: the switch of track F's F4.1 (docs/fronts/README.md decision 10, Save compatibility)",
+    "notes": "Our air defence commanders' sector priorities (simcore/campaign/ad_strategy.hpp; docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2, track F). mode: 1 where the front has a line and our chain has the commanders' posts, the national sector's commander and the army's chief of air defence (data/campaign/ad_strategy.json) review each sector's priority (defend, the offence, economy) on their decision rhythm, on the reports that have reached their posts through our pipeline (the army's summaries and our units' reports, our commanders' orders, the air defence staff's estimates of the enemy's air front, the wrecks reported), and send each change as an order through the pipeline to the posts below, the SAM regiment's commander among them; it moves nothing yet (F4.2-F4.4 follow it). 0 nothing of it loaded, decided or sent, and a save without its key ad_strategy_mode replays at 0. 0 here: switching it on is the fronts' balance (F6)."
+  },
   "light": {
     "mode": 1,
     "source": "game value: the switch of roadmap S8 (docs/LIGHT.md section 5)",

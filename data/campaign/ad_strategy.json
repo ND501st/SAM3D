@@ -1,0 +1,55 @@
+{
+  "strategy_id": "pannonia_ad_strategy_first_form",
+  "name": "Our air defence commanders' sector priorities",
+  "status": "F4.1 (22 Nov 2026): the commanders decide and order; nothing moves on their orders yet (F4.2 the SAM units and radars, F4.3 the fighters by sector, F4.4 the regiment and the battery). Read only at data/gameplay/air_war.json ad_strategy.mode 1 (simcore/campaign/ad_strategy.hpp).",
+  "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2, from docs/research/fronts_2026-11/our_side.md: the national PVO's object and object-zonal defence by importance (vr_lhotsky_1985 p. 38), its cover of our troops on home ground (vr_popelka_1983 p. 53), the main thrust's share (andersen_1979 p. 40)",
+  "confidence": "estimate",
+  "notes": "Each commander holds a priority per sector of the front (the theatre's sectors, F2.1): defend, take the offence, or economy. The pre-war plan is the rule table on what he holds before the war (the national objects within the enemy's reach of the border). Then, on his rhythm, when a report has reached his post since his last decision, he reads the table again on what his post holds and changes at most one sector, which goes as an order through our pipeline to the posts named in 'to'. A written priority table between national objects and our troops was not found (our_side.md open item 3): the table keeps the national objects and gives the troops the main thrust. Thresholds a commander's traits move are moved by at most trait_shift of their range (docs/fronts/README.md decision 6).",
+  "rules": {
+    "trait_shift": { "value": 0.2, "source": "game value: a commander's traits move a threshold by at most this share of its range, as the ground war's commanders (data/gameplay/ground_war.json trait_shift; docs/fronts/README.md decision 6)", "confidence": "estimate" },
+    "object_value": { "value": 0.7, "source": "game value: a national object of high importance is a theatre object of these kinds worth this much or more; the PVO defends its objects by importance (vr_lhotsky_1985 p. 38), the threshold SAM3D's", "confidence": "estimate" },
+    "object_reach_m": { "value": 30000, "source": "SAM3D estimate: an object within a day's advance of a breakthrough (30 km, mt_kurkov_tank_army p. 9) of the line as our reports put it is within the enemy's reach", "confidence": "estimate" },
+    "offence_depth_m": { "min": 10000, "max": 20000, "source": "game value: the air defence staff's estimate of the enemy's air front this far beyond the line of contact (its step, air_front.step_m 20 km, and its rounding, 5 km) is a front moved enough to ambush; a bold commander acts on the lower end", "confidence": "estimate" },
+    "offence_fresh_h": { "value": 48, "source": "game value: an estimate of the air front older than the staff's window (air_front.watch_days, two days) no longer moves him to the offence", "confidence": "estimate" },
+    "thin_cover_units": { "value": 2, "source": "game value: fewer SAM fire units than this in a sector is thin cover, below a pair that can leapfrog with one firing (fm_100_2_1_1984 p. 11-9; andersen_1979 p. 45)", "confidence": "estimate" },
+    "main_share": { "value": 0.6, "source": "andersen_1979 p. 40: the 1st Baltic Front gave 60 % of its air defence to the army making the main thrust (1944), cited in the 1979 text; the defended sectors' share together", "confidence": "medium" },
+    "offence_weight": { "value": 2, "source": "game value: the rest of the air defence shared between the offence's sectors and economy's in these weights", "confidence": "estimate" },
+    "economy_weight": { "value": 1, "source": "game value: as offence_weight", "confidence": "estimate" },
+    "methodical_above": { "value": 0.6, "source": "game value: a commander this methodical or more waits for a second report before he changes a sector (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2)", "confidence": "estimate" },
+    "rigid_above": { "value": 0.6, "source": "game value: a commander this rigid or more holds the pre-war plan one decision longer (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2)", "confidence": "estimate" },
+    "stale_h": { "value": 72, "source": "game value: a report compiled this long ago that has not reached his post is no longer waited for (newer ones supersede it); a bound on the work, not a rule of his", "confidence": "estimate" },
+    "national_kinds": {
+      "value": ["airfield", "power_plant", "substation", "dam", "refinery", "pipeline_station", "factory", "government", "broadcast", "exchange", "bridge", "rail_junction", "port", "city"],
+      "source": "SAM3D estimate: the theatre's object kinds the national PVO defends as objects (object and object-zonal defence of the country's objects, vr_lhotsky_1985 p. 38); the troops, their headquarters and depots are the troop air defence's",
+      "confidence": "estimate"
+    }
+  },
+  "commanders": [
+    {
+      "id": "sector_commander",
+      "post": "sector_cp_duty",
+      "name": "Ferenc Halasz",
+      "rank": "Colonel",
+      "role": "national",
+      "bio": "Commands the central national air defence sector from its command post; his decisions go out from there by its duty officer. A PVO officer of the old school: object by object, by the plan.",
+      "to": ["fighter_rgt_duty", "army_ad_chief"],
+      "rhythm_h": { "min": 6, "max": 12, "source": "mt_lavrinovich_mdex p. 9: the district exercise's stages of 6-8 h (the first massed strike) and 10-12 h (the regrouping), the national sector's decisions by stage", "confidence": "medium" },
+      "order_work_h": { "value": 1.0, "source": "game value: from his decision to the order sent by the command post's duty officer", "confidence": "estimate" },
+      "traits": { "boldness": 0.4, "methodical": 0.7, "creativity": 0.4, "rigidity": 0.65, "ambition": 0.5, "skepticism": 0.55, "vindictiveness": 0.3, "composure": 0.7 },
+      "source": "game value: the national sector's commander (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2: the national PVO's objects, S-75 and S-125 class units, radars and fighters); his orders to the fighter regiment's duty officer and the army's chief of air defence (vr_krupicka_1984 pp. 62-64: the sharing of the sky and the fighters by the PVOS formation's commander)",
+      "confidence": "estimate"
+    },
+    {
+      "id": "army_ad_chief",
+      "post": "army_ad_chief",
+      "role": "troops",
+      "bio": "The 3rd Army's chief of air defence (data/command/chain_pannonia.json army_ad_chief): the divisions' SAM regiments and the army's own, the troops first and the army's main effort first.",
+      "to": ["div_ad_chief", "rgt_commander", "sector_cp_duty"],
+      "rhythm_h": { "min": 2, "max": 4, "source": "fm_100_2_1_1984 p. 5-14: a division's reaction time, 2-4 h, his division commanders' rhythm (data/gameplay/ground_war.json decision_times_h)", "confidence": "medium" },
+      "order_work_h": { "value": 0.5, "source": "game value: a priority given by the chief's word and sent by his staff, shorter than a division's whole planning time (fm_100_2_1_1984 p. 5-14, 1-3 h)", "confidence": "estimate" },
+      "traits": { "boldness": 0.55, "methodical": 0.55, "creativity": 0.5, "rigidity": 0.45, "ambition": 0.55, "skepticism": 0.5, "vindictiveness": 0.35, "composure": 0.65 },
+      "source": "game value: the army's chief of air defence (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2: the army's troop air defence, the troops first); his orders to the division's chief of air defence and the SAM regiment's commander (voenizdat_osa_1991 p. 238: the regiment moves its batteries) and to the national sector's post",
+      "confidence": "estimate"
+    }
+  ]
+}

@@ -43,6 +43,9 @@
 // A save without "ground_mode" was made before track F's F3.3 (the ground war at U0 moving the line of contact,
 // docs/fronts/03_GROUND_WAR.md) and replays with ground.mode 0, as it was played. The ground war has no player action:
 // a load rebuilds it by the replay.
+// A save without "ad_strategy_mode" was made before track F's F4.1 (our air defence commanders' sector priorities,
+// docs/fronts/04_AIR_DEFENCE_STRATEGY.md) and replays with ad_strategy.mode 0, as it was played: the priorities are our
+// side's pipeline's, rebuilt from the campaign's history on a load.
 #pragma once
 
 #include <cmath>
@@ -510,6 +513,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
     Put(root, "weather_mode", Num(c.Data().tuning.Get("weather.mode")));
     Put(root, "air_front_mode", Num(c.Data().tuning.Get("air_front.mode")));
     Put(root, "ground_mode", Num(c.Data().tuning.Get("ground.mode")));
+    Put(root, "ad_strategy_mode", Num(c.Data().tuning.Get("ad_strategy.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -621,6 +625,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     const double air_front_mode = r.Number(root, "air_front_mode", 0.0);
     // And the ground war (track F, F3.3): a save made before it has no key, and replays as it was played.
     const double ground_mode = r.Number(root, "ground_mode", 0.0);
+    // And our air defence commanders' sector priorities (track F, F4.1): a save made before them has no key.
+    const double ad_strategy_mode = r.Number(root, "ad_strategy_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -700,6 +706,7 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     data.tuning.values["radio.mode"] = radio_mode;
     data.tuning.values["air_front.mode"] = air_front_mode;
     data.tuning.values["ground.mode"] = ground_mode;
+    data.tuning.values["ad_strategy.mode"] = ad_strategy_mode;
     AirCampaign c;
 
     if (!c.Init(data, seed, error)) return false;

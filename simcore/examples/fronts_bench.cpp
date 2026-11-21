@@ -5,6 +5,7 @@
 //                     [--gate] [--log] [faction ...]
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //        fronts_bench [data_dir] --feed [--days N] [--seeds N] [--theatre file] [--gate] [faction ...]
+//        fronts_bench [data_dir] --ad [--days N] [--seeds N] [--theatre file] [--gate] [--log] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
 //   --sectors equal sectors (default 8, the most the design gives a front; 0: the theatre's own). At each day's end the
@@ -44,9 +45,19 @@
 //   to the national sector, the orders, the intelligence summaries, the enemy's air strikes on our troops as our units counted
 //   them told to the air defence staff's watch and what the watch made of them (against the run without the reports), and the
 //   pipeline's CPU a campaign day with the reports against without (budget 20 ms). Defaults 10 days, 3 seeds, all four factions.
+//   --ad (F4.1): each faction's campaign at ground.mode 1, air_front.mode 1 and ad_strategy.mode 1 with our side's pipeline
+//   pumped after every step, and again at ad_strategy.mode 0 (the same seeds): our air defence commanders' reviews and
+//   changes by sector, each sector's priority over time (the first seed's changes as they were ordered; --log: every
+//   seed's), how long from the newest fact a change rested on reaching the commander's post to his order reaching the SAM
+//   regiment's commander (the army's chief's) or the fighter regiment (the national sector's), every fact a change rested
+//   on checked held by his post by the decision's hour (a change on a fact that had not reached it is counted and fails
+//   the gate), the air war the same with the commanders on and off (they move nothing yet), and the commanders' CPU a
+//   campaign day (the pump's with them against without; budget 5 ms, 04 section 10). Defaults 10 days, 3 seeds,
+//   warsaw_pact and nato.
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -696,13 +707,171 @@ int FeedMain(const std::string& data, const std::string& theatre, int days, int 
     return 0;
 }
 
+// ------------------------------------------------------------------ our air defence commanders' sector priorities (F4.1)
+
+struct AdStats {
+    double pump_s = 0.0;
+    int days = 0;
+    int reviews = 0, changes = 0, unheld = 0, journal_differs = 0;
+    std::map<std::string, std::map<std::string, int>> by_sector;  // commander -> "sector to" -> changes
+    int to_target = 0;
+    double target_delay = 0.0, prompt_delay = 0.0, origin_delay = 0.0;
+};
+
+void AdCampaign(const AirWarData& d, unsigned seed, int days, const command::ChainData& chain, bool log, AdStats& out, std::uint64_t* journal) {
+    AirCampaign c;
+    c.Init(d, seed);
+    command::InfoNet net;
+    net.Init(chain, seed, d.theatre.start_hour);
+    command::GiveTheatreSky(net, d.theatre);
+    command::CampaignFeed feed;
+    feed.Bind(&net);
+    double pump = 0.0;
+    while (c.Now() < days * 24.0) {
+        if (c.Advance(days * 24.0)) c.SkipPlayerMission();
+        const double p0 = CpuSeconds();
+        feed.Pump(c);
+        pump += CpuSeconds() - p0;
+    }
+    out.pump_s += pump;
+    out.days += days;
+    if (journal != nullptr) *journal = JournalHash(c);
+    const campaign::AdStrategy& ad = feed.Ad();
+    if (!ad.On()) {
+        if (!ad.Error().empty()) std::printf("  %s\n", ad.Error().c_str());
+        return;
+    }
+    const double start = d.theatre.start_hour;
+    const command::ChainData& cd = net.Data();
+    const LineOfContact& line = c.FrontLine();
+    for (std::size_t k = 0; k < ad.Commanders(); ++k) out.reviews += ad.Reviews(static_cast<int>(k));
+    if (log) {
+        for (std::size_t k = 0; k < ad.Commanders(); ++k) {
+            std::string plan;
+            for (std::size_t s = 0; s < line.SectorCount(); ++s) {
+                plan += std::string(s == 0 ? "" : ", ") + line.Sector(s).id + " " + campaign::SectorPriorityName(ad.PreWar(static_cast<int>(k))[s]);
+            }
+            std::printf("    %s (every %.1f h): the pre-war plan %s\n", ad.Def(static_cast<int>(k)).id.c_str(), ad.CycleH(static_cast<int>(k)), plan.c_str());
+        }
+    }
+    for (const campaign::AdDecision& dec : ad.Decisions()) {
+        ++out.changes;
+        const campaign::AdCommanderDef& def = ad.Def(dec.commander);
+        const int post = cd.PositionIndex(def.post);
+        out.by_sector[def.id][line.Sector(static_cast<std::size_t>(dec.sector)).id + " " + campaign::SectorPriorityName(dec.to)] += 1;
+        // Every fact it rested on had reached his post by the decision's hour.
+        double newest = -1.0, newest_origin = -1.0;
+        for (std::size_t i = 0; i < dec.basis.size(); ++i) {
+            const command::Delivery* got = net.Known(post, dec.basis[i]);
+            if (got == nullptr || got->h > dec.h + 1e-9 || std::fabs(got->h - dec.basis_h[i]) > 1e-9) ++out.unheld;
+            if (dec.basis_h[i] > newest) {
+                newest = dec.basis_h[i];
+                newest_origin = net.Facts()[static_cast<std::size_t>(dec.basis[i])].h;
+            }
+        }
+        const std::string target = def.role == campaign::AdRole::Troops ? "rgt_commander" : "fighter_rgt_duty";
+        const command::Delivery* at = net.Known(cd.PositionIndex(target), dec.fact);
+        if (at != nullptr && newest >= 0.0) {
+            ++out.to_target;
+            out.target_delay += at->h - newest;
+            out.prompt_delay += dec.h - newest;
+            out.origin_delay += at->h - newest_origin;
+        }
+        if (log) {
+            std::printf("    %s  %-17s %-10s %-8s -> %-8s (on %zu facts, the newest at his post %s; the order at %s %s): %s\n",
+                        command::FormatClock(dec.h, start).c_str(), def.id.c_str(), line.Sector(static_cast<std::size_t>(dec.sector)).id.c_str(),
+                        campaign::SectorPriorityName(dec.from), campaign::SectorPriorityName(dec.to), dec.basis.size(),
+                        newest >= 0.0 ? command::FormatClock(newest, start).c_str() : "-", target.c_str(),
+                        at != nullptr ? command::FormatClock(at->h, start).c_str() : "not yet", dec.why.c_str());
+        }
+    }
+    if (log) {
+        for (std::size_t k = 0; k < ad.Commanders(); ++k) {
+            std::string now;
+            for (std::size_t s = 0; s < line.SectorCount(); ++s) {
+                now += std::string(s == 0 ? "" : ", ") + line.Sector(s).id + " " + campaign::SectorPriorityName(ad.Priorities(static_cast<int>(k))[s]);
+            }
+            std::printf("    %s at the end (%d reviews): %s\n", ad.Def(static_cast<int>(k)).id.c_str(), ad.Reviews(static_cast<int>(k)), now.c_str());
+            const campaign::AdPicture held = ad.Held(static_cast<int>(k), c.Now());
+            for (std::size_t s = 0; s < held.sectors.size(); ++s) {
+                const campaign::AdSectorPicture& sp = held.sectors[s];
+                std::printf("      %-16s thrust %5.1f km at %4.1f km a day, enemy %4.2f%s, objects in reach %d, fire units %d, air front %.0f km\n",
+                            line.Sector(s).id.c_str(), sp.thrust_m / 1000.0, sp.pace_km_day, sp.enemy, sp.counterattack ? ", our counterattack" : "",
+                            sp.objects_in_reach, sp.fire_units, sp.air_front_m / 1000.0);
+            }
+        }
+    }
+}
+
+// --ad: our air defence commanders on the nation, with the ground war and the air front on.
+int AdMain(const std::string& data, const std::string& theatre, int days, int seeds, bool gate, const std::vector<std::string>& factions) {
+    command::ChainData chain;
+    std::string e;
+    if (!command::LoadChainData(data, "command/chain_pannonia.json", chain, &e)) {
+        std::printf("%s\n", e.c_str());
+        return 1;
+    }
+    const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato"} : factions;
+    const double budget_ms = 5.0;
+    int fails = 0;
+    std::printf("Our air defence commanders' sector priorities (F4.1) on %s, ground.mode 1, air_front.mode 1, ad_strategy.mode 1, %d days x %d seeds; "
+                "budget %.0f ms a campaign day\n\n",
+                theatre.c_str(), days, seeds, budget_ms);
+    for (const std::string& faction : list) {
+        AirWarData d;
+        if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
+            std::printf("%s: %s\n", faction.c_str(), e.c_str());
+            return 1;
+        }
+        d.tuning.values["ground.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = 1.0;
+        AirWarData d0 = d;
+        d.tuning.values["ad_strategy.mode"] = 1.0;
+        d0.tuning.values["ad_strategy.mode"] = 0.0;
+        AdStats on, off;
+        std::printf("%s\n", faction.c_str());
+        for (int s = 0; s < seeds; ++s) {
+            const unsigned seed = static_cast<unsigned>(7 + s);
+            std::uint64_t j1 = 0, j0 = 0;
+            const bool log = g_ground_log || s == 0;
+            if (log) std::printf("  seed %u:\n", seed);
+            AdCampaign(d, seed, days, chain, log, on, &j1);
+            AdCampaign(d0, seed, days, chain, false, off, &j0);
+            on.journal_differs += j1 != j0 ? 1 : 0;
+        }
+        auto mean = [](double sum, int n) { return n > 0 ? sum / n : 0.0; };
+        std::printf("  %d reviews, %d changes (%.1f a campaign); every fact a change rested on held by the post by its hour: %s (%d not)\n", on.reviews,
+                    on.changes, seeds > 0 ? static_cast<double>(on.changes) / seeds : 0.0, on.unheld == 0 ? "yes" : "NO", on.unheld);
+        for (const auto& kv : on.by_sector) {
+            std::string row;
+            for (const auto& x : kv.second) row += "  " + x.first + " x" + std::to_string(x.second);
+            std::printf("  %-17s%s\n", kv.first.c_str(), row.c_str());
+        }
+        std::printf("  from the newest fact at his post to the order at the regiment (or the fighters): %.2f h (of it to his decision hour %.2f h); from that "
+                    "fact's own hour %.2f h; %d orders arrived\n",
+                    mean(on.target_delay, on.to_target), mean(on.prompt_delay, on.to_target), mean(on.origin_delay, on.to_target), on.to_target);
+        std::printf("  the air war with the commanders on and off: %s\n", on.journal_differs == 0 ? "the same journal in every seed" : "DIFFERS");
+        const double day_on = on.days > 0 ? 1000.0 * on.pump_s / on.days : 0.0, day_off = off.days > 0 ? 1000.0 * off.pump_s / off.days : 0.0;
+        const double extra = day_on - day_off;
+        const bool over = extra > budget_ms;
+        std::printf("  the pipeline's pump a campaign day: %.3f ms with the commanders, %.3f ms without: %.3f ms for them%s\n\n", day_on, day_off, extra,
+                    over ? "  OVER BUDGET" : "");
+        fails += (over ? 1 : 0) + (on.unheld > 0 ? 1 : 0) + (on.journal_differs > 0 ? 1 : 0);
+    }
+    if (gate && fails > 0) {
+        std::printf("%d over budget or failed\n", fails);
+        return 2;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     std::string data = "data", theatre = "theatre_pannonia_nation.json", player;
     int days = 7, seeds = 3, sectors = 8, campaign_days = 10, campaign_seeds = 1;
     bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false, ground = false, gate = false,
-         days_given = false, seeds_given = false, feed = false;
+         days_given = false, seeds_given = false, feed = false, ad = false;
     std::vector<std::string> factions;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -724,6 +893,8 @@ int main(int argc, char** argv) {
             watch = true;
         } else if (a == "--feed") {
             feed = true;
+        } else if (a == "--ad") {
+            ad = true;
         } else if (a == "--moves") {
             print_moves = true;
         } else if (a == "--trace") {
@@ -745,6 +916,7 @@ int main(int argc, char** argv) {
             factions.push_back(a);
         }
     }
+    if (ad) return AdMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (feed) return FeedMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions, player);
     if (factions.empty()) factions = {"warsaw_pact", "nato"};
@@ -771,7 +943,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (!air_front) {
-        std::printf("fronts_bench: --air-front (F2.2-F2.4), --watch (F2.5), --ground (F3.3) or --feed (F3.8)\n");
+        std::printf("fronts_bench: --air-front (F2.2-F2.4), --watch (F2.5), --ground (F3.3), --feed (F3.8) or --ad (F4.1)\n");
         return 1;
     }
     const double budget_ms = 1.0;
