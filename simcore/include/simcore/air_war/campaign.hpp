@@ -22,6 +22,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -46,6 +47,7 @@
 #include "simcore/air_war/resolve.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
+#include "simcore/ground_war/ground_war.hpp"
 
 namespace simcore {
 namespace airwar {
@@ -215,6 +217,7 @@ public:
         }
         PriorIntel();
         StartAirFront();
+        if (!StartGroundWar(error)) return false;
         day_ = 1;
         Log("career", "staff", StaffLine(), false);
         Log("own_intel", "intelligence", "War with " + data_.faction.name + ". " + data_.faction.description, true);
@@ -539,8 +542,12 @@ public:
     const AirWarData& Data() const { return data_; }
     const AirStaff& Staff() const { return staff_; }
     const IntelPicture& Intel() const { return intel_; }
-    // The front's line of contact and its sectors (track F, front_line.hpp).
+    // The front's line of contact and its sectors (track F, front_line.hpp); the ground war moves it (F3.3).
     const LineOfContact& FrontLine() const { return front_line_; }
+    // The ground war (track F, F3.3; ground.mode 1 on a theatre with a country map, else null).
+    const groundwar::GroundWar* Ground() const { return ground_on_ ? &ground_war_ : nullptr; }
+    // fronts_bench's: time the ground war's parts (steady_clock; nothing in the war reads it).
+    void ProfileGround(bool on) { ground_war_.SetProfiling(on); }
     // The air front's measures (track F, F2.2; air_front.mode 1, else empty): each sector's believed cover over its next
     // band as of the last plan, the book that keeps their baselines, and the losses to ground fire per low-level sortie in
     // a sector over the last `days` days (1-3) to now.
@@ -767,6 +774,8 @@ private:
     AirStaff staff_;
     IntelPicture intel_;
     LineOfContact front_line_;             // the faction's front (track F, F2.1)
+    bool ground_on_ = false;               // ground.mode 1 on a theatre with a country map (F3.3)
+    groundwar::GroundWar ground_war_;      // its formations at U0, stepped with the hour, moving front_line_'s stations
     bool air_front_on_ = false;            // air_front.mode 1: the measures below kept (F2.2)
     SectorCoverBook cover_book_;
     std::vector<SectorCover> sector_cover_;  // as of the last plan
@@ -852,6 +861,7 @@ private:
         rc.phase = phase_;
         rc.own_corridors = OwnCorridors();
         rc.losses_today = politics_.losses_today;
+        rc.front_line = &front_line_;
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -984,6 +994,7 @@ private:
             for (const std::string& ev : events) Log("logistics", "our side", ev, false);
         }
         Deliver();
+        if (ground_on_) StepGround(t1);  // after the hour's air results, before the next plan reads the line (F3.3)
         now_h_ = t1;
         if (marching_ && now_h_ + 1e-9 >= march_until_h_) {  // the march's end: at the new position
             marching_ = false;
@@ -1866,6 +1877,118 @@ private:
 
     // From the line of contact, either side (F2.1: at zero offsets the front's line, to the bit).
     double DistanceToFront(const Vec3& p) const { return front_line_.AbsDistance(p); }
+
+    // ------------------------------------------------------------------ the ground war (track F, F3.3)
+
+    // Under ground.mode 1, on a theatre with a country map and a faction with ground files: both sides at U0 on the line
+    // of contact (groundwar::GroundWar). At 0, or without the map or the files, nothing is built and no draw is made.
+    bool StartGroundWar(std::string* error) {
+        ground_on_ = false;
+        ground_war_ = groundwar::GroundWar();
+        if (data_.tuning.Get("ground.mode") < 1.0 || data_.country == nullptr || data_.data_dir.empty()) return true;
+        if (!groundwar::HasGroundData(data_.data_dir, data_.faction.id)) return true;  // its front stays the border (03 section 8)
+        auto gd = std::make_shared<groundwar::GroundWarData>();
+        std::string e;
+        if (!groundwar::LoadGroundWarData(data_.data_dir, data_.faction.id, *gd, &e) ||
+            !ground_war_.Build(gd, front_line_, data_.theatre, data_.country.get(), seed_, &e)) {
+            if (error != nullptr) *error = e;
+            return false;
+        }
+        ground_on_ = true;
+        return true;
+    }
+
+    // Its hours up to t1, the line of contact moved; what happened into the journal (the truth, hidden: our side learns
+    // it from its units' reports, F3.8).
+    void StepGround(double t1) {
+        groundwar::GroundEnv env;
+        env.theatre = &data_.theatre;
+        env.weather = &weather_;
+        env.truth = &truth_;
+        ground_war_.Step(t1, env, front_line_);
+        if (ground_war_.Log().empty()) return;
+        if (!ground_war_.Profiling()) {
+            JournalGround();
+            return;
+        }
+        const auto r0 = std::chrono::steady_clock::now();
+        JournalGround();
+        ground_war_.AddReportsNs(
+            static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - r0).count()), t1 - 1.0);
+    }
+
+    void JournalGround() {
+        const groundwar::GroundWarData& gd = ground_war_.Data();
+        const std::vector<groundwar::Formation>& forms = ground_war_.Formations();
+        const std::vector<groundwar::Axis>& axes = ground_war_.Axes();
+        const std::vector<groundwar::GroundLogEntry>& log = ground_war_.Log();
+        const auto axis_name = [&axes](int a) {
+            return a >= 0 && static_cast<std::size_t>(a) < axes.size() ? axes[static_cast<std::size_t>(a)].name : std::string("?");
+        };
+        const auto sector_name = [this](int s) {
+            return s >= 0 && static_cast<std::size_t>(s) < front_line_.SectorCount() ? front_line_.Sector(static_cast<std::size_t>(s)).name
+                                                                                     : std::string("?");
+        };
+        const auto form_name = [&forms](int f) {
+            return f >= 0 && static_cast<std::size_t>(f) < forms.size() ? forms[static_cast<std::size_t>(f)].name : std::string("?");
+        };
+        char buf[192];
+        for (std::size_t k = 0; k < log.size(); ++k) {
+            const groundwar::GroundLogEntry& g = log[k];
+            std::string text;
+            std::string who = gd.enemy.name;
+            switch (g.what) {
+                case groundwar::GroundNote::AxisStarts: {
+                    std::string names;
+                    for (int fi : axes[static_cast<std::size_t>(g.axis)].first) names += (names.empty() ? "" : ", ") + form_name(fi);
+                    std::snprintf(buf, sizeof buf, " attack (the objective %.0f km in).", g.value / 1000.0);
+                    text = "The ground offensive opens on " + axis_name(g.axis) + " in " + sector_name(g.sector) + ": " + names + buf;
+                    break;
+                }
+                case groundwar::GroundNote::SecondEchelon:
+                    std::snprintf(buf, sizeof buf, ") is committed on %s, %.0f km in.", axis_name(g.axis).c_str(), g.value / 1000.0);
+                    text = "The second echelon (" + form_name(g.formation) + buf;
+                    break;
+                case groundwar::GroundNote::RiverReached:
+                    std::snprintf(buf, sizeof buf, ": the attack reaches a river %.0f km in; the bridge there is %s.", g.value / 1000.0,
+                                  g.intact ? "standing" : "down");
+                    text = axis_name(g.axis) + buf;
+                    break;
+                case groundwar::GroundNote::RiverCrossed:
+                    std::snprintf(buf, sizeof buf, ": across the river %.0f km in.", g.value / 1000.0);
+                    text = axis_name(g.axis) + buf;
+                    break;
+                case groundwar::GroundNote::Spent:
+                    if (g.formation >= 0 && forms[static_cast<std::size_t>(g.formation)].unit.side == groundwar::Side::Ours) who = gd.ours.name;
+                    std::snprintf(buf, sizeof buf, " is spent at %.0f%% of its strength on %s and leaves the fight.", 100.0 * g.value,
+                                  axis_name(g.axis).c_str());
+                    text = form_name(g.formation) + buf;
+                    break;
+                case groundwar::GroundNote::AxisHalted:
+                    std::snprintf(buf, sizeof buf, " halts %.0f km in: %s.", g.value / 1000.0,
+                                  g.reason == groundwar::HaltReason::Objective ? "its objective reached"
+                                  : g.reason == groundwar::HaltReason::Spent  ? "its attackers spent"
+                                                                              : "stalled, with no echelon left");
+                    text = axis_name(g.axis) + buf;
+                    break;
+                case groundwar::GroundNote::DayLine: {
+                    // One entry for the day's end: every sector the line has moved in.
+                    text = "The line of contact at the day's end:";
+                    std::size_t j = k;
+                    for (; j < log.size() && log[j].what == groundwar::GroundNote::DayLine && log[j].h == g.h; ++j) {
+                        std::snprintf(buf, sizeof buf, "%s %s %.1f km", j == k ? "" : ",", sector_name(log[j].sector).c_str(), log[j].value / 1000.0);
+                        text += buf;
+                    }
+                    text += ".";
+                    k = j - 1;
+                    who = "the ground war";
+                    break;
+                }
+            }
+            journal_.push_back({g.h, "ground", who, text, false});
+        }
+        ground_war_.ClearLog();
+    }
 
     // ------------------------------------------------------------------ the air front's measures (track F, F2.2)
 

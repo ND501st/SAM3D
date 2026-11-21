@@ -101,6 +101,10 @@ inline std::vector<std::pair<std::string, double>> AirFrontTuningDefaults() {
         {"air_front.watch_days", 2.0},
         {"air_front.watch_delay_h", 6.0},
         {"air_front.watch_round_m", 5000.0},
+        // The ground war (track F, F3.3; simcore/ground_war/ground_war.hpp): 1 on a theatre with a country map its units
+        // fight at U0 with the campaign's hour and move the line of contact's stations; 0 nothing of it built (the front
+        // stays its base line), and a save without the key ground_mode replays at 0.
+        {"ground.mode", 0.0},
     };
 }
 

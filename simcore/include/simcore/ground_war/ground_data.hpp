@@ -193,6 +193,21 @@ struct GroundTables {
     int division_reports_per_day = 2;
     double levels_down_after_h = 6.0;
 
+    // The clock and the line at U0 (F3.3, ground_war.hpp).
+    std::vector<std::string> tank_types;  // the weights' types marked "tank" (FM 101-10-1 table 7-7's), sorted
+    ValueRange breakthrough_width_km;
+    ValueRange taper_km;
+    double security_zone_share = 0.25;
+    double second_echelon_after_h = 24.0;
+    double stall_halt_h = 24.0;
+    double terrain_step_km = 1.0;
+    double hills_above_m = 150.0;
+    double mountains_above_m = 300.0;
+    double bridge_reach_km = 5.0;
+    double river_line_km = 3.0;
+
+    bool IsTank(const std::string& type) const { return std::binary_search(tank_types.begin(), tank_types.end(), type); }
+
     // A type's weight (0 for a type not in the table: support and air defence do not count); `known` says if listed.
     double WeightOf(const std::string& type, bool* known = nullptr) const {
         const auto it = std::lower_bound(weights.begin(), weights.end(), type,
@@ -459,7 +474,7 @@ public:
     bool LoadTables(const json::Value& root, GroundTables& out) {
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
-                             "cohesion", "dispersal", "march", "reports", "levels"}) ||
+                             "cohesion", "dispersal", "march", "reports", "levels", "clock"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -474,9 +489,13 @@ public:
             const std::string p = Index("strength.weights", i);
             std::string type;
             double weight = 0.0;
-            if (!Keys(w->items[i], p, {"type", "weight", "source", "confidence", "notes"}) || !Provenance(w->items[i], p) ||
+            if (!Keys(w->items[i], p, {"type", "tank", "weight", "source", "confidence", "notes"}) || !Provenance(w->items[i], p) ||
                 !RequireString(w->items[i], p, "type", type) || !Num(w->items[i], p, "weight", weight, 0.0, 10.0)) {
                 return false;
+            }
+            if (const json::Value* tank = w->items[i].Find("tank")) {  // a tank: table 7-7's losses (F3.3)
+                if (!tank->Is(json::Type::Bool)) return Fail(Join(p, "tank"), "true or false");
+                if (tank->boolean) out.tank_types.push_back(type);
             }
             for (const auto& e : out.weights) {
                 if (e.first == type) return Fail(Join(p, "type"), "'" + type + "' is listed twice");
@@ -485,6 +504,7 @@ public:
         }
         std::stable_sort(out.weights.begin(), out.weights.end(),
                          [](const std::pair<std::string, double>& a, const std::pair<std::string, double>& b) { return a.first < b.first; });
+        std::stable_sort(out.tank_types.begin(), out.tank_types.end());
 
         const json::Value* pw = Object(root, "", "power");
         if (pw == nullptr || !Keys(*pw, "power", {"supply_floor", "cohesion_floor", "notes"}) ||
@@ -500,7 +520,7 @@ public:
             if (!Sourced(*po, "posture", PostureName(static_cast<Posture>(i)), out.posture[i], 0.1, 5.0)) return false;
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
-            !LoadDecisionTimes(root, out) || !LoadRest(root, out)) {
+            !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out)) {
             return false;
         }
         return true;
@@ -830,6 +850,27 @@ private:
         return r != nullptr && lv != nullptr && Keys(*r, "reports", {"division_per_day", "notes"}) &&
                WholeSourced(*r, "reports", "division_per_day", out.division_reports_per_day, 1, 24) && Keys(*lv, "levels", {"down_after_h", "notes"}) &&
                Sourced(*lv, "levels", "down_after_h", out.levels_down_after_h, 0.0, 72.0);
+    }
+
+    // The clock and the line at U0 (F3.3).
+    bool LoadClock(const json::Value& root, GroundTables& out) {
+        const json::Value* c = Object(root, "", "clock");
+        if (c == nullptr ||
+            !Keys(*c, "clock", {"breakthrough_width_km", "taper_km", "security_zone_share", "second_echelon_after_h", "stall_halt_h",
+                                "terrain_step_km", "hills_above_m", "mountains_above_m", "bridge_reach_km", "river_line_km", "notes"}) ||
+            !RangeOf(*c, "clock", "breakthrough_width_km", out.breakthrough_width_km, 0.5, 50.0) ||
+            !RangeOf(*c, "clock", "taper_km", out.taper_km, 0.0, 50.0) ||
+            !Sourced(*c, "clock", "security_zone_share", out.security_zone_share, 0.0, 1.0) ||
+            !Sourced(*c, "clock", "second_echelon_after_h", out.second_echelon_after_h, 0.0, 240.0) ||
+            !Sourced(*c, "clock", "stall_halt_h", out.stall_halt_h, 1.0, 240.0) ||
+            !Sourced(*c, "clock", "terrain_step_km", out.terrain_step_km, 0.1, 10.0) ||
+            !Sourced(*c, "clock", "hills_above_m", out.hills_above_m, 0.0, 3000.0) ||
+            !Sourced(*c, "clock", "mountains_above_m", out.mountains_above_m, 0.0, 5000.0) ||
+            !Sourced(*c, "clock", "bridge_reach_km", out.bridge_reach_km, 0.0, 50.0) || !Sourced(*c, "clock", "river_line_km", out.river_line_km, 0.0, 50.0)) {
+            return false;
+        }
+        if (out.mountains_above_m < out.hills_above_m) return Fail("clock.mountains_above_m", "at least hills_above_m");
+        return true;
     }
 
     // ---- the force files

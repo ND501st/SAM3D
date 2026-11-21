@@ -1,6 +1,7 @@
 // fronts_bench: what track F's fronts cost (docs/fronts/README.md, "Efficiency"). Not a test: a table to read.
 //
 // Usage: fronts_bench [data_dir] --air-front [--days N] [--seeds N] [--sectors N] [--theatre file] [--moves] [--trace] [faction ...]
+//        fronts_bench [data_dir] --ground [--days N] [--seeds N] [--campaign-days N] [--campaign-seeds N] [--gate] [faction ...]
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
@@ -21,17 +22,26 @@
 //   information pipeline pumped after every step (data/command/chain_pannonia.json, the intercept service of intercept.json):
 //   when and where the enemy's air front moved (his journal) against the signs our army's air defence staff had and when it
 //   concluded, and when the regiment's commander and battery 21's had its conclusion.
-// Factions default to warsaw_pact and nato. CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
+//   --ground (F3.3): the ground war at U0 alone, built as the campaign builds it on the nation (ground.mode 1), stepped
+//   hour by hour for N days (default 30) over N seeds (default 5) with each campaign's weather: a campaign day's cost by
+//   part (combat, decisions, movement, line; picture and reports are the campaign's), the mean and the worst day against
+//   20 ms and 60 ms; then --campaign-days (default 10, 0: none) of whole campaigns over --campaign-seeds (default 1) at
+//   ground.mode 0 and 1: their CPU, the ground war's own time and its share of the campaign (budget 5%: 1.05x), and the
+//   line's depth by sector at each day's end (a day's move of 300 km or more is a runaway). Factions default to all
+//   four. --gate exits 2 over any budget.
+// Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "simcore/air_war.hpp"
 #include "simcore/command.hpp"
+#include "simcore/ground_war.hpp"
 
 using namespace simcore;
 using namespace simcore::airwar;
@@ -140,17 +150,210 @@ void WatchCampaign(const AirWarData& d, unsigned seed, int days, const command::
     std::printf("\n");
 }
 
+// ------------------------------------------------------------------ the ground war (F3.3)
+
+struct GroundLine {
+    double mean_ms = 0.0;   // a campaign day, over every day of every seed
+    double worst_ms = 0.0;  // the worst day
+    double part_ms[groundwar::GroundProfile::kParts] = {};  // by part, a day's mean
+    int days = 0;
+};
+
+// The ground war alone, as the campaign builds it, stepped hour by hour for `days` days with the campaign's weather and
+// its objects at the start (bridges standing): the per-day cost by part, steady_clock in the war's own profile.
+bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, std::string& axes_end) {
+    auto gd = std::make_shared<groundwar::GroundWarData>();
+    std::string e;
+    if (!groundwar::LoadGroundWarData(d.data_dir, d.faction.id, *gd, &e)) {
+        std::printf("%s\n", e.c_str());
+        return false;
+    }
+    const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+    if (front == nullptr || d.country == nullptr) return false;
+    AirCampaign c;  // for its weather and its objects
+    if (!c.Init(d, seed, &e)) return false;
+    std::vector<airwar::Weather> weather;
+    for (int day = 1; day <= days + 1; ++day) weather.push_back(c.WeatherOn(day));
+    LineOfContact line;
+    line.Build(*front, d.tuning.Get("air_front.station_m"));
+    groundwar::GroundWar g;
+    if (!g.Build(gd, line, d.theatre, d.country.get(), seed, &e)) {
+        std::printf("%s\n", e.c_str());
+        return false;
+    }
+    groundwar::GroundEnv env;
+    env.theatre = &d.theatre;
+    env.weather = &weather;
+    env.truth = &c.Truth();
+    g.SetProfiling(true);
+    for (int h = 1; h <= days * 24; ++h) {
+        g.Step(static_cast<double>(h), env, line);
+        g.ClearLog();
+    }
+    const groundwar::GroundProfile& p = g.Profile();
+    for (std::size_t k = 0; k < p.day_ms.size() && static_cast<int>(k) < days; ++k) {
+        acc.mean_ms += p.day_ms[k];
+        if (p.day_ms[k] > acc.worst_ms) acc.worst_ms = p.day_ms[k];
+        ++acc.days;
+    }
+    for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) acc.part_ms[k] += p.Ms(k);
+    if (axes_end.empty()) {
+        for (const groundwar::Axis& x : g.Axes()) {
+            char buf[160];
+            std::snprintf(buf, sizeof buf, "%s%s %.0f km %s", axes_end.empty() ? "" : ", ", x.id.c_str(), x.depth_m / 1000.0,
+                          x.status == groundwar::AxisStatus::Halted ? groundwar::HaltReasonName(x.halted) : "on");
+            axes_end += buf;
+        }
+        if (axes_end.empty()) axes_end = "no axes: the line holds";
+    }
+    return true;
+}
+
+// --ground: the ground war's cost against docs/fronts/README.md's budget lines, and its line in the campaign.
+int GroundMain(const std::string& data, const std::string& theatre, int days, int seeds, int campaign_days, int campaign_seeds, bool gate,
+               std::vector<std::string> factions) {
+    const double mean_budget_ms = 20.0, worst_budget_ms = 60.0, campaign_budget = 1.05;
+    if (factions.empty()) factions = {"warsaw_pact", "nato", "neutral", "rebels"};
+    int fails = 0;
+    std::printf("The ground war at U0 (F3.3) on %s: alone %d days x %d seeds; budget %.0f ms a campaign day (mean), %.0f ms the worst day\n\n",
+                theatre.c_str(), days, seeds, mean_budget_ms, worst_budget_ms);
+    std::printf("%-12s %8s %8s", "faction", "mean_ms", "worst_ms");
+    for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) std::printf(" %10s", groundwar::GroundProfile::Name(k));
+    std::printf("  %s\n", "axes at the end (the first seed)");
+    std::vector<AirWarData> loaded;
+    for (const std::string& faction : factions) {
+        AirWarData d;
+        std::string e;
+        if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
+            std::printf("%s: %s\n", faction.c_str(), e.c_str());
+            return 1;
+        }
+        if (!groundwar::HasGroundData(data, faction) || d.country == nullptr) {
+            std::printf("%-12s no ground war (no ground file or no country map): its front holds\n", faction.c_str());
+            continue;
+        }
+        d.tuning.values["ground.mode"] = 1.0;
+        GroundLine g;
+        std::string axes_end;
+        for (int s = 0; s < seeds; ++s) {
+            if (!GroundAlone(d, static_cast<unsigned>(7 + s), days, g, axes_end)) return 1;
+        }
+        const double mean = g.days > 0 ? g.mean_ms / g.days : 0.0;
+        std::printf("%-12s %8.4f %8.4f", faction.c_str(), mean, g.worst_ms);
+        for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) std::printf(" %10.5f", g.days > 0 ? g.part_ms[k] / g.days : 0.0);
+        std::printf("  %s\n", axes_end.c_str());
+        if (mean > mean_budget_ms || g.worst_ms >= worst_budget_ms) {
+            std::printf("  OVER BUDGET\n");
+            ++fails;
+        }
+        loaded.push_back(d);
+    }
+    std::printf("  (ms a campaign day by part; \"picture\" is F3.8's and \"reports\" the journal's, both in the campaign only)\n");
+    if (campaign_days > 0) {
+        std::printf("\nIn the campaign: %d days x %d seeds, ground.mode 0 against 1 (std::clock CPU); budget %.2fx the campaign at 0\n\n",
+                    campaign_days, campaign_seeds, campaign_budget);
+        std::printf("%-12s %9s %9s %7s %9s %9s %9s %7s %7s %7s\n", "faction", "cpu_off_s", "cpu_on_s", "ratio", "ground_ms", "reports", "worst_ms",
+                    "share", "pk_off", "pk_on");
+        for (const AirWarData& on : loaded) {
+            AirWarData off = on;
+            off.tuning.values["ground.mode"] = 0.0;
+            double cpu_off = 0.0, cpu_on = 0.0, ground_ms = 0.0, reports_ms = 0.0, worst_ms = 0.0;
+            std::size_t packages_off = 0, packages_on = 0;
+            std::vector<std::vector<double>> by_day;  // [sector][day] km, the first seed
+            for (int s = 0; s < campaign_seeds; ++s) {
+                const unsigned seed = static_cast<unsigned>(7 + s);
+                AirCampaign a;
+                a.Init(off, seed);
+                double t0 = CpuSeconds();
+                while (a.Now() < campaign_days * 24.0) {
+                    if (a.Advance(campaign_days * 24.0)) a.SkipPlayerMission();
+                }
+                cpu_off += CpuSeconds() - t0;
+                packages_off += a.Packages().size();
+                AirCampaign b;
+                b.Init(on, seed);
+                b.ProfileGround(true);
+                if (s == 0) by_day.assign(b.FrontLine().SectorCount(), std::vector<double>(static_cast<std::size_t>(campaign_days), 0.0));
+                t0 = CpuSeconds();
+                for (int day = 1; day <= campaign_days; ++day) {
+                    while (b.Now() < day * 24.0) {
+                        if (b.Advance(day * 24.0)) b.SkipPlayerMission();
+                    }
+                    if (s == 0) {
+                        for (std::size_t k = 0; k < b.FrontLine().SectorCount(); ++k) {
+                            by_day[k][static_cast<std::size_t>(day - 1)] = groundwar::GroundWar::SectorDepth(b.FrontLine(), k) / 1000.0;
+                        }
+                    }
+                }
+                cpu_on += CpuSeconds() - t0;
+                packages_on += b.Packages().size();
+                if (b.Ground() != nullptr) {
+                    const groundwar::GroundProfile& p = b.Ground()->Profile();
+                    for (int k = 0; k < groundwar::GroundProfile::kParts; ++k) ground_ms += p.Ms(k);
+                    reports_ms += p.Ms(groundwar::GroundProfile::Reports);
+                    for (double v : p.day_ms) worst_ms = v > worst_ms ? v : worst_ms;
+                }
+            }
+            const double ratio = cpu_off > 0.0 ? cpu_on / cpu_off : 0.0;
+            const double share = cpu_off > 0.0 ? ground_ms / (1000.0 * cpu_off) : 0.0;
+            std::printf("%-12s %9.2f %9.2f %7.3f %9.2f %9.3f %9.4f %6.3f%% %7zu %7zu\n", on.faction.id.c_str(), cpu_off, cpu_on, ratio, ground_ms,
+                        reports_ms, worst_ms, 100.0 * share, packages_off, packages_on);
+            const LineOfContact* line = nullptr;
+            AirCampaign names;  // the sectors' ids
+            names.Init(on, 7);
+            line = &names.FrontLine();
+            for (std::size_t k = 0; k < by_day.size(); ++k) {
+                bool moved = false;
+                for (double v : by_day[k]) moved = moved || v > 0.0;
+                if (!moved) continue;
+                std::printf("    line in %-20s km by day (seed 7):", line->Sector(k).id.c_str());
+                double last = 0.0, fastest = 0.0;
+                for (double v : by_day[k]) {
+                    std::printf(" %5.1f", v);
+                    fastest = v - last > fastest ? v - last : fastest;
+                    last = v;
+                }
+                std::printf("   fastest day %.1f km\n", fastest);
+                if (fastest >= 300.0) {
+                    std::printf("    RUNAWAY: %.0f km in a day\n", fastest);
+                    ++fails;
+                }
+            }
+            // The ground war's own time is the budget's line; the whole ratio also carries the war's divergence once the
+            // line has moved (the planner, routes and C2 read it: another war, F2.4), so it is printed beside it.
+            if (share > campaign_budget - 1.0) {
+                std::printf("  OVER BUDGET: the ground war is %.2f%% of the campaign\n", 100.0 * share);
+                ++fails;
+            }
+        }
+    }
+    if (gate && fails > 0) {
+        std::printf("\n%d over budget\n", fails);
+        return 2;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     std::string data = "data", theatre = "theatre_pannonia_nation.json";
-    int days = 7, seeds = 3, sectors = 8;
-    bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false;
+    int days = 7, seeds = 3, sectors = 8, campaign_days = 10, campaign_seeds = 1;
+    bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false, ground = false, gate = false,
+         days_given = false, seeds_given = false;
     std::vector<std::string> factions;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--air-front") {
             air_front = true;
+        } else if (a == "--ground") {
+            ground = true;
+        } else if (a == "--gate") {
+            gate = true;
+        } else if (a == "--campaign-days" && i + 1 < argc) {
+            campaign_days = std::atoi(argv[++i]);
+        } else if (a == "--campaign-seeds" && i + 1 < argc) {
+            campaign_seeds = std::atoi(argv[++i]);
         } else if (a == "--watch") {
             watch = true;
         } else if (a == "--moves") {
@@ -159,8 +362,10 @@ int main(int argc, char** argv) {
             trace = true;
         } else if (a == "--days" && i + 1 < argc) {
             days = std::atoi(argv[++i]);
+            days_given = true;
         } else if (a == "--seeds" && i + 1 < argc) {
             seeds = std::atoi(argv[++i]);
+            seeds_given = true;
         } else if (a == "--sectors" && i + 1 < argc) {
             sectors = std::atoi(argv[++i]);
             sectors_given = true;
@@ -172,6 +377,7 @@ int main(int argc, char** argv) {
             factions.push_back(a);
         }
     }
+    if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions);
     if (factions.empty()) factions = {"warsaw_pact", "nato"};
     if (watch) {
         command::ChainData chain;
@@ -196,7 +402,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (!air_front) {
-        std::printf("fronts_bench: --air-front (F2.2-F2.4) or --watch (F2.5); the ground war's parts come with F3.3\n");
+        std::printf("fronts_bench: --air-front (F2.2-F2.4), --watch (F2.5) or --ground (F3.3)\n");
         return 1;
     }
     const double budget_ms = 1.0;

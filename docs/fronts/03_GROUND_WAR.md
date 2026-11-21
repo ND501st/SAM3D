@@ -385,6 +385,135 @@ defence units (not in these orders of battle; the air war's objects hold them); 
 type (the tank table is a lookup, `ResolveSector` returns shares of strength; F3.3); the rebels' raids name no sectors
 (they raid where we are thin, F3.4 decides where); every weight and NATO's frontages are estimates for F6 to check.
 
+## As built: F3.3 (21 Nov 2026)
+
+The ground war runs. `AirCampaign` holds a `groundwar::GroundWar` (`ground_war/ground_war.hpp`) when `ground.mode`
+is 1 (`data/gameplay/air_war.json`'s new `"ground"` block, 0 in the data), the theatre has a country map (only
+`theatre_pannonia_nation.json`) and the faction has a ground file; it is built at `Init` from `AirWarData::data_dir`
+(the files are loaded at each `Init`, about 13 ms; `Build` under 0.5 ms) and stepped in `StepTo` after the hour's air results and
+`Deliver`, before the next plan reads the line. At 0, on the district theatre or with no file nothing is built and no
+draw is made. A save writes `ground_mode`; one without it replays at 0 (`save.hpp`).
+
+**The step** (§3.3's U0 only). Each formation is the actor of its order of battle's tree (a division, brigade or
+regiment the plan or our deployment names) with its equipment summed by type over the tree, stopping at another actor's,
+and its people; its strength is F3.2's weighted sum. Three kinds of work:
+- *the event queue*: a binary heap on a vector sized at `Build`, keyed by (hour, sequence): the plan's start, a second
+  echelon's commitment, a river crossed, the day's end. A quiet hour costs a look at its top.
+- *stepped*: each hour, only the axes attacking are resolved, one `ResolveSector` each, in two phases (every axis's
+  sides read from the hour's start, then every formation's losses applied in a fixed order, its axes' summed in
+  theirs), so the order the axes are resolved in changes nothing (`SetReverseOrder` proves it). The attacker's power is
+  its committed echelons' `UnitPower`; the defender's is ours in the sector's first echelon and flank screens, shared
+  between two axes when it holds both sectors, at `clock.security_zone_share` (0.25) while the enemy is in the
+  security zone (posture Delay, covering) and whole, with the sector's second echelon, once he reaches the main
+  defensive zone (Prepared defence). The ground is the defender's terrain cell at the axis's depth, sampled once along
+  its route at `Build` (the map's land cover, then the height above the map's base: hills over 150 m, mountains over
+  300 m); the night from the theatre's sun, the poor weather from the campaign's day; a river line within 3 km ahead.
+- *closed form*: everything out of the fight takes its rest rate (FM 101-10-1's "reserve" before contact, "inactive"
+  in contact) over the hours since it was last touched, when it is next touched (`LossOverHours`); `StrengthAt` reads
+  it without changing anything.
+No allocation in the hour once built (the log's capacity reserved, cleared by the campaign each hour; only the profile's
+day list grows, when profiling).
+
+**Losses by type.** A formation's loss share comes off every holding and its people in proportion; ours in contact
+lose tanks by FM 101-10-1 table 7-7 instead (the commitment from the zone and the ratio: in the security zone light,
+moderate or heavy delay below 2.5, 2.5-4, 4 and over; in the main zone moderate or heavy defence below and above 4, a
+SAM3D mapping), its day counted from the commitment, 80 % of them reparable (tallied; F3.4 or later returns them).
+The tanks are the weights marked `"tank": true` in `ground_war.json`.
+
+**Movement and rivers.** The axis advances the hour's `advance_km` (the class's rate x ground x the sector's day's
+draw, the faction's cap) up to its objective's depth (or the plan's political depth). A river crossing the route (the
+map's rivers against the route's legs) stops it at the bank; the bridge there is the air war's nearest bridge object
+within 5 km (standing while its function is 0.5 or more) or, with none, a road crossing on the map; the crossing takes
+`CrossingHours` (2 h standing, 12 h down), an event in the queue.
+
+**The line.** The axis's depth is drawn on the stations it reaches: the depth over the breakthrough's half width (8 km
+wide, the middle of `fm_100_2_1_1984`'s 6-10), tapering linearly over 12.5 km each side; each station takes the deepest
+of the axes there, never negative (`LineOfContact::SetStationOffset`). So `DistanceToFront`, F2.2's cover bands,
+F2.3's decision and F2.4's readers (the planner's depths, the routes, C2's BAI area) follow the line; the resolver's
+opportunity depth and the played raid's depth now read it too (`resolve.hpp`, `raid_scenario.hpp`, the same to the bit
+at zero offsets).
+
+**Who attacks until F3.4** (the minimal rule; §5's commanders replace it). Each axis of the enemy's plan goes in with
+its first echelon at the plan's `start_after_h`; its second echelon is committed `clock.second_echelon_after_h` (24 h)
+later if the axis has moved (to success), at once if the first is spent, and held back otherwise; an axis halts at its
+objective or the political depth, when its attackers are spent, or after `clock.stall_halt_h` (24 h) without advancing
+with no echelon left. A formation is spent below its doctrine's ineffective line (the Pact's and ours) or past its
+breakpoint drawn per formation (NATO's and the small forces') and leaves the fight to re-form. Our side holds: no
+withdrawal, no counterattack, no reserves moved. The rebels' raids are F3.4's: their line stays the border.
+
+**Draws.** The sector's day's draw is a lognormal of mean 1 and sigma 0.35, a fork of the war's root keyed by (sector,
+day); a formation's breakpoint by its index. The root is the campaign's seed's own, so the air war's draws are as they
+were.
+
+**The journal** (kind `"ground"`, hidden: the truth, which our side learns from its units' reports, F3.8): the
+offensive's start on each axis, the second echelon, a river reached and crossed, a formation spent, an axis halted,
+and at each day's end the line's depth in every sector it has moved in.
+
+**Tools.** `fronts_bench data --ground [--days 30] [--seeds 5] [--campaign-days 10] [--campaign-seeds 1] [--gate]`:
+the ground war alone as the campaign builds it, a campaign day's cost by part (combat, decisions, movement, line;
+picture and reports are the campaign's), then whole campaigns at modes 0 and 1 with the ground war's own time, its
+share and the line by sector and day; `--gate` exits 2 over any budget. `air_war_balance --cpu` prints each posture's
+CPU and, at `ground.mode` 1, the line's depth by sector at each day's end; without it the output is unchanged.
+
+**Identity.** At `ground.mode` 0 nothing is built: `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (4ae43b3, built the same way), and the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds. The district theatre at mode 1 builds nothing (no country map) and is the same war (`test_ground_war.cpp`).
+
+**Mode 1 on the nation** (`air_war_balance --cpu --theatre theatre_pannonia_nation.json --set ground.mode=1 data 3 10`,
+the line's mean depth by sector at the day's end, km; 3 seeds, the same for both battery postures):
+
+| Faction | Sector | Day 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8-10 | The axes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Warsaw Pact | tisava | 34.7 | 45.9 | 55.3 | 60.9 | 60.9 | 60.9 | 60.9 | 60.9 | the main axis at the capital's depth (61 km) on day 4, halted at its objective |
+| | ne_crossings | 26.7 | 35.4 | 42.5 | 46.8 | 46.8 | 46.8 | 46.8 | 46.8 | the main axis's taper (it crosses near the sectors' boundary) |
+| | rava_reservoir | 13.9 | 20.0 | 20.0 | 20.0 | 20.0 | 20.0 | 20.0 | 20.0 | the Rava axis at Dravec (20 km) on day 2 |
+| NATO | upper_lenta | 0 | 0 | 0 | 0 | 22.9 | 55.4 | 74.9 | 74.9 | from 96 h; the south axis at Saldanj (75 km) on day 7 |
+| | western_crossings | 0 | 0 | 0 | 0 | 30.0 | 34.1 | 37.2 | 37.6-38.9 | the main axis slows against our second echelon, stalls about 47 km in (the first seed alone, 30 days) |
+| | zlatno | 0 | 0 | 0 | 0 | 4.8 | 5.5 | 5.9 | 6.0-6.2 | the main axis's taper |
+| Neutral | border_forest, lenta_marshes | 12.5, 10.9 | 17.9, 15.6 | | | | | | 17.9, 15.6 | the incursion at its hold line (18 km) on day 2, from hour 0 |
+| Rebels | none | | | | | | | | | no axes: the line holds (the raids are F3.4's) |
+
+The fastest day anywhere is 34.7 km (the Pact's first, under its 50 km/day depth cap); nothing near a runaway.
+Every axis ends at its objective or stalls within ten days; F3.4's commanders, our counterattacks and F6's checks
+against history decide whether that is right (the Pact at the capital's depth on day 4 is fast).
+
+**Cost** (`fronts_bench data --ground --gate`, MSVC Release, Ryzen 5 3600, the tool alone on the machine):
+
+| Faction | Mean ms a day | Worst day ms | Combat | Decisions | Movement | Line |
+|---|---|---|---|---|---|---|
+| Warsaw Pact | 0.0084 | 0.082 | 0.0052 | 0.0015 | 0.0001 | 0.0010 |
+| NATO | 0.0186 | 0.071 | 0.0148 | 0.0017 | 0.0003 | 0.0012 |
+| Neutral | 0.0038 | 0.035 | 0.0014 | 0.0010 | 0.00004 | 0.0007 |
+| Rebels | 0.0022 | 0.0026 | 0 | 0.0010 | 0 | 0.0006 |
+
+against 20 ms (mean over 30 days x 5 seeds) and 60 ms (the worst day): three orders of magnitude under. Picture is
+F3.8's (0); reports, the journal's lines in the campaign, add 0.04-0.10 ms over ten days. In the campaign (10 days,
+seed 7) the ground war's own time is 0.001-0.005 % of the campaign's CPU (the neutral's 1.7 % of a campaign that
+plans 4 packages) and `fronts_bench --gate` passes.
+
+The whole campaign at mode 1 against 0 (`air_war_balance --cpu`, 3 seeds x 10 days x 2 postures, std::clock): the
+Pact 261.8 s against 261.0 (1.003), NATO 170.5 against 165.9 (1.028), the rebels 3.03 against 2.94 (1.031), the
+neutral 2.51 against 1.45 (1.73); all four 437.9 s against 431.3 (1.015). The ground war's own time is none of that
+difference: the war differs once the line has moved (the neutral's first seed plans 28 packages against 24, with more
+decisions and intelligence; the Pact's seed 7 the same 232 packages for 7 % more CPU in `fronts_bench`). So
+`fronts_bench --gate` gates the ground war's own share (5 %), and the whole ratio is printed beside it; the neutral's
+1.73 is 0.12 s a campaign of a war that is otherwise idle. `AbsDistance` on a moved line costs 0.04 us against
+0.03 at zero offsets.
+
+**Left:**
+- F3.4: the commanders and their rule tables in place of the rule above (decision times, the second echelon sent to
+  the axis that moves rather than held, our withdrawal on order, counterattacks to the border, reserves, the rebels'
+  raids and their sectors, re-forming the spent, the reparable tanks returned).
+- F3.5: each side's picture; F2.3's crisis reads it.
+- F3.6: U1 in the player's sector and its neighbours; the march (our second echelon and reserves still appear in
+  place, without a road move).
+- F3.7: the `Troops` objects and supply lines' ends following the units, overrun objects, the FSCL; the armed
+  reconnaissance's patrol point (`logistics.hpp`) and the played raid's front point nearest the battery
+  (`raid_scenario.hpp`'s air fight block) still read the front's base line; the holding areas measured from the moved
+  line (F2.4's left).
+- F3.8: our units' situation reports from the war into the pipeline (the journal's `"ground"` entries are the truth).
+- Supply and cohesion stay 1 (F3.4's cohesion, F3.7's supply); pontoon parks are not modelled; the air war's strikes
+  do not yet come off the formations' strength (F3.7).
+- F6: `ground.mode` 1 in the data, and every weight, frontage and the tank mapping checked against history.
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its

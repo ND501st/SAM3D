@@ -3077,6 +3077,9 @@ struct AirWarData {
     bool has_own_air = false;
     LightValues light_file;  // data/gameplay/light.json (roadmap S8; absent: the code's defaults)
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
+    // The data folder it was loaded from (LoadAirWarData; "" for data built in code): where the ground war (track F,
+    // F3.3) finds its files when ground.mode is on.
+    std::string data_dir;
 
     const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
     // An object as a target: its kind's profile, or its own.
@@ -3110,6 +3113,7 @@ inline void ApplyLightMode(AirWarData& d) {
 inline bool LoadAirWarData(const std::string& data_dir, const std::string& theatre_file, const std::string& faction_file,
                            AirWarData& out, std::string* error = nullptr) {
     AirWarData d;
+    d.data_dir = data_dir;
     if (!LoadTheatreFile(data_dir + "/" + theatre_file, d.theatre, error)) return false;
     if (!LoadFactionFile(data_dir + "/" + faction_file, d.faction, error)) return false;
     if (!LoadQuirksFile(data_dir + "/air_war/traits.json", d.quirks, error)) return false;

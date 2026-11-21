@@ -8,16 +8,16 @@
     "unit": "T-55 equivalents: a T-55 is 1 (SAM3D's unit of weighted strength)",
     "personnel_per_man": { "value": 0.01, "source": "estimate (SAM3D): a hundred men count as one T-55, so a 1985 division's people are about a sixth of its weighted strength; mt_perventsev_balance counts personnel within its coefficients", "confidence": "estimate" },
     "weights": [
-      { "type": "t55", "weight": 1.0, "source": "estimate (SAM3D): the unit of strength; weights by mt_perventsev_balance's method (one coefficient per type of weapon from its effect in a meeting engagement), recomputed for 1985's types by judgement, not their 1968 numbers", "confidence": "estimate" },
-      { "type": "t62", "weight": 1.1, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
-      { "type": "t64", "weight": 1.6, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 125 mm gun, composite armour", "confidence": "estimate" },
-      { "type": "t72", "weight": 1.6, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 125 mm gun, composite armour", "confidence": "estimate" },
-      { "type": "t80", "weight": 1.8, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
-      { "type": "m60a3", "weight": 1.5, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 105 mm gun, thermal sight", "confidence": "estimate" },
-      { "type": "m1", "weight": 2.0, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
-      { "type": "leopard1", "weight": 1.3, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
-      { "type": "leopard2", "weight": 2.0, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
-      { "type": "sk105", "weight": 0.9, "source": "estimate (SAM3D): a light tank destroyer, 105 mm gun, thin armour", "confidence": "estimate" },
+      { "type": "t55", "tank": true, "weight": 1.0, "source": "estimate (SAM3D): the unit of strength; weights by mt_perventsev_balance's method (one coefficient per type of weapon from its effect in a meeting engagement), recomputed for 1985's types by judgement, not their 1968 numbers", "confidence": "estimate" },
+      { "type": "t62", "tank": true, "weight": 1.1, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "t64", "tank": true, "weight": 1.6, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 125 mm gun, composite armour", "confidence": "estimate" },
+      { "type": "t72", "tank": true, "weight": 1.6, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 125 mm gun, composite armour", "confidence": "estimate" },
+      { "type": "t80", "tank": true, "weight": 1.8, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "m60a3", "tank": true, "weight": 1.5, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; 105 mm gun, thermal sight", "confidence": "estimate" },
+      { "type": "m1", "tank": true, "weight": 2.0, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "leopard1", "tank": true, "weight": 1.3, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "leopard2", "tank": true, "weight": 2.0, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
+      { "type": "sk105", "tank": true, "weight": 0.9, "source": "estimate (SAM3D): a light tank destroyer, 105 mm gun, thin armour", "confidence": "estimate" },
       { "type": "bmp1", "weight": 0.55, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types; with its squad and ATGM", "confidence": "estimate" },
       { "type": "bmp2", "weight": 0.7, "source": "estimate (SAM3D): mt_perventsev_balance's method, 1985 types", "confidence": "estimate" },
       { "type": "btr60", "weight": 0.3, "source": "estimate (SAM3D): mt_perventsev_balance's method; an armoured carrier with its squad", "confidence": "estimate" },
@@ -141,5 +141,18 @@
   },
   "levels": {
     "down_after_h": { "value": 6, "source": "game value: a formation goes down a level 6 h after it is out of need (docs/fronts/03_GROUND_WAR.md section 3.3, track B's margins)", "confidence": "estimate" }
+  },
+  "clock": {
+    "notes": "The ground war's clock and line at U0 (track F, F3.3; simcore/ground_war/ground_war.hpp, docs/fronts/03_GROUND_WAR.md 'As built: F3.3'). Who attacks until F3.4's commanders decide: each axis of the enemy's plan with its first echelon from the plan's start, its second echelon after second_echelon_after_h if the axis has advanced, to its objective (or the plan's political depth); an axis halts there, when its attackers are spent, or when it has not advanced for stall_halt_h with no echelon left. Our side holds: the first echelon and flank screens in their sectors, the covering share of them in the security zone, the second echelon once the enemy reaches the main defensive zone.",
+    "breakthrough_width_km": { "min": 6, "max": 10, "source": "fm_100_2_1_1984 pp. 5-18 to 5-21: a breakthrough sector 6-10 km wide; the line is pushed in over the range's middle", "confidence": "medium" },
+    "taper_km": { "min": 10, "max": 15, "source": "estimate (SAM3D): the penetration's shoulders taper back to the line over 10-15 km each side (docs/fronts/03_GROUND_WAR.md section 2); the middle is used", "confidence": "estimate" },
+    "security_zone_share": { "value": 0.25, "source": "estimate (SAM3D) after vr_poltikovic_1984 p. 96: a reinforced battalion of each first-echelon regiment delays in the security zone, about a quarter of a division's strength", "confidence": "estimate" },
+    "second_echelon_after_h": { "value": 24, "source": "estimate (SAM3D) after fm_100_2_1_1984 p. 2-11: the second echelon is committed to success, here a day into the offensive if its axis has advanced (F3.4's commanders replace the rule)", "confidence": "estimate" },
+    "stall_halt_h": { "value": 24, "source": "game value: an axis that has not advanced for a day with no echelon left to commit goes over to the defence (fm_100_2_1_1984 p. 2-11's stalled axis; F3.4's commanders replace the rule)", "confidence": "estimate" },
+    "terrain_step_km": { "value": 1, "source": "game value: an axis's ground and rivers sampled this often along its route, once when the war is built", "confidence": "estimate" },
+    "hills_above_m": { "value": 150, "source": "game value: ground this high above the map's plain is hills for the combat table", "confidence": "estimate" },
+    "mountains_above_m": { "value": 300, "source": "game value: and this high mountains (the border ranges, docs/COUNTRY_MAP.md)", "confidence": "estimate" },
+    "bridge_reach_km": { "value": 5, "source": "game value: the air war's bridge object within this of where an axis's route crosses a river is that crossing's bridge", "confidence": "estimate" },
+    "river_line_km": { "value": 3, "source": "game value: the defender holds a river line (data's river_line_defender) while the attacker is within this of its bank", "confidence": "estimate" }
   }
 }
