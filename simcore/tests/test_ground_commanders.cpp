@@ -87,12 +87,14 @@ FrontDef StraightFront() {
     return f;
 }
 
-// The bare data: the tables (no draw), both doctrines on the test lines, the enemy's caps; no formations yet.
+// The bare data: the tables (no draw, the commanders on the truth), both doctrines on the test lines, the enemy's caps; no
+// formations yet.
 std::shared_ptr<GroundWarData> Bare() {
     auto d = std::make_shared<GroundWarData>();
     d->faction = "test";
     d->tables = Tables();
     d->tables.draw_sigma = 0.0;
+    d->tables.picture.truth = true;  // the rules on the truth: each side's picture (F3.5) is test_ground_picture.cpp's
     d->enemy.faction = "test";
     d->enemy.name = "the red army";
     d->enemy.doctrine.effectiveness = TestLines();

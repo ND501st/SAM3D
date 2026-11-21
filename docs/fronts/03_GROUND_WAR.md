@@ -550,7 +550,7 @@ line given up, a unit re-formed (withdrawn: 1-2 days; dispersed: 1-3), a raid's 
 
 **The commanders' picture** is a stand-in: `GroundWar::SeenPower`, `SeenFraction`, `SeenDepth` and `SeenPace` are the
 only reads a commander makes of the war, and until F3.5's picture they return the truth as of the hour he decides (no
-delay, no error), for his own side and the enemy's alike. F3.5 replaces these four.
+delay, no error), for his own side and the enemy's alike. F3.5 replaces these four (done: "As built: F3.5").
 
 **The enemy's top** (the Pact's army, NATO's corps, the neutral's division): commits its echelons (the plan's second
 echelon, its reserve and units re-formed) once the plan's `second_echelon_after_h` (24 h) has passed since the
@@ -680,6 +680,131 @@ broken defender is withdrawn).
   a NATO division (30-50 %) is the plan's unit, not a share.
 - F6: whether the counterattack threshold against a whole axis's attackers is right (no counterattack happens on the
   nation), the security lines' pace against history, and every value here.
+
+## As built: F3.5 (21 Nov 2026)
+
+Each side decides on its picture (`ground_war/picture.hpp`; `GroundWar`'s `Picture(side)`). Still only at `ground.mode`
+1 on the nation; at 0 nothing is built.
+
+**What a picture holds** (`GroundPicture`, one a side, sized at `Build`): a `UnitBelief` per formation of both sides
+(believed strength fraction and power, the hour the report was compiled, so its age, the factor drawn, so its error,
+the sector it was seen in, its posture, its source, whether it was out of the fight), an `AxisBelief` per axis (depth,
+pace, our counterattack on it), the line's offsets by station, and for the enemy's picture the sectors where its own
+ground front is collapsing. A few numbers per formation and axis and a line a side.
+
+**Where it comes from** (`data/gameplay/ground_war.json`'s new `"picture"` block, every value a labelled game value or
+estimate; the report period is `reports.division_per_day`'s):
+- *its own units*: scheduled returns twice a day, compiled at 06:00 and 18:00 local, and a unit's report at once when it
+  reports, asks, stops its attack, withdraws, disperses or re-forms; each reaches the staff `own_delay_h` (2 h) after it
+  was compiled, at a 5 % spread. Its own side knows at once which of its units are out of the fight (it ordered them out
+  or was told), so `SeenPower` gives 0 for them.
+- *ours of the enemy*: the formations our units touch (an axis's attackers, a rebel group on its line) by our units'
+  contact reports, riding with them (scheduled and at once, 25 %); the rest (echelons, reserve) by the army's
+  intelligence summary (`army_intel`), once a day at 06:00, 6 h late, 40 %.
+- *the enemy's of ours*: where its `IntelPicture` holds a troops entry (not a ghost) observed within 24 h behind the line
+  in a sector one of ours holds (within 40 km) or within 30 km of one of ours off the line, its air reconnaissance (20 %);
+  else, for ours at the line (holding a sector, or fighting on an axis), its ground reconnaissance (35 %); both 3 h late.
+  The match by sector and distance is a stand-in until F3.7 ties the theatre's troops objects to the formations. The
+  campaign lends the ground war its `intel_` (`GroundEnv::intel`); without it (the hand tests) there are no air sightings.
+- *the prior*: at `Build`, its own units as they stand and the other side's at a 30 % spread (peacetime intelligence).
+- *the axes and the line*: every scheduled report carries each axis's depth and pace and the line by station (one batch
+  in flight a side: the loader refuses a delay as long as the period); at once on a breakthrough into our main zone
+  (ours), a halt or a resumption (the enemy's), our counterattack's start and end (both). Depths carry no error (a unit
+  knows where it stands and where the enemy faces it), only the delay.
+
+**A believed strength** is the truth when the report was compiled (`StrengthAt` at that hour) times a lognormal factor
+of mean 1 and the source's spread, drawn by `BeliefFactor` as a fork of the war's own root keyed by (side, source,
+sector, report hour): the same for every formation of that sector in that report, and the same whatever is drawn or
+resolved first (`SetReverseOrder` gives the same pictures).
+
+**When** (no polling). Every report is an event in the war's (hour, sequence) queue: `ReportsDue` (a side's batch) and
+`IntelDue` compile and queue `UnitReport`, `AxisReport` and `LineReport` events at their arrival hours; a report merges
+only if it is no older than what the staff holds. A quiet hour costs nothing more; nothing is allocated in the hour (the
+queue's reserve grew by six events a formation and four an axis; the nation's 12-day wars stay inside it).
+
+**What reads it.** The four accessors read the deciding commander's side's picture: `SeenPower` (the enemy's echelon
+commitment and its axis ratio, our counterattack's ratio, the rebels' raid ratio), `SeenFraction` (the strength a
+senior's answer journals), `SeenDepth` (our army commander's deepest penetration), `SeenPace` (the Pact's echelon to
+success). A formation's own commander reads his own unit's count (`OwnFraction`: the lines and breakpoints it crosses,
+his `DecideUnit`), as he did: his reaction time is his staff's count. Who stands on which axis and whether an axis
+attacks stay known to both sides. Tests switch the picture off with `tables.picture.truth` (F3.4's hand cases keep
+deciding on the truth; never in the file).
+
+**The air front's crisis.** `GroundWar::EnemyCrisis()` is, by the line's sector, 1 where the enemy's picture holds a
+formation of its own on an axis (or its raid line) there believed under `crisis_below` (0.5), or our counterattack on an
+axis there, recomputed only when a report reaches the enemy's picture. `AirCampaign::AirFrontDecisionInputs` passes it as
+`AirFrontInputs::crisis` while the ground war runs (`ground.mode` 1, a theatre with a country map and the faction's
+ground file); otherwise it stays null and nothing changes. The campaign's `env.intel` is set every hour; at mode 0 the
+ground war is not stepped.
+
+**First person.** Our side's picture is our army staff's belief, never the player's: nothing reads it outside the ground
+war. F3.8 turns our side's reports into situation reports in the pipeline.
+
+**Tools.** `fronts_bench --ground` times the picture's own part (the reports' events and the crisis) and lends the
+ground war the campaign's pre-war `IntelPicture`.
+
+**Mode 1 on the nation** (`air_war_balance --cpu --theatre theatre_pannonia_nation.json --set ground.mode=1 data 3 10`):
+the line's depth by sector at each day's end is F3.4's to the decimal in every sector of every faction (tisava 23.1,
+42.4, 45.9, 56.6, 60.9...; upper_lenta 13.2, 40.2, 69.7, 74.9 from day 5; border_forest 7.0 then 17.9; rebels_forest
+1.8; hollos 0.2 on day 10), and the whole output but the CPU lines is byte-identical to F3.4's tip (d765717) at mode 1.
+`fronts_bench --ground --log` over 30 days (the first seed) makes the same decisions at the same hours for all four
+factions; the only lines that differ are the rebels' raids on rlf_bde_1 (days 13, 19, 26), decided on a believed ratio
+(9.8, 7.4, 4.1 to 1 against the truth's 6.3, 5.0, 4.9) that clears the commander's 3 to 1 either way. Why nothing moves:
+on the nation every decision sits far from the picture's errors. The Pact's and the neutral's echelons go to their own
+axes, which move at many times 2.8 km a day whatever the report's age; NATO's stall stop reads the axis's own last
+advance; our army never counterattacks (its force against a whole axis's attackers is under 1.5 to 1, and a 25 % error
+does not lift it to the commander's 1.5-2.5); the rebels raid where nobody holds or at ratios well over 3. No crisis
+fires: no formation of the enemy's falls under half in ten days (F3.4: the south-western brigade's report on day 7 is the
+only line crossed, and it is ours) and we never counterattack. The hand cases show the picture deciding: our army
+commander orders the counterattack at 13 h on 2.89:1 from a reserve report compiled at 0 h, and gives the same order on
+the same ratio when the reserve has lost half its strength after that report reached him (a reserve of 1620 believed,
+809 true); with the loss before the report was compiled he does not counterattack.
+
+**Cost** (`fronts_bench data --ground --gate`, MSVC Release, the tool alone; ms a campaign day, 30 days x 5 seeds; F3.4's
+mean in brackets):
+
+| Faction | Mean | Worst day | Combat | Decisions | Movement | Line | Picture |
+|---|---|---|---|---|---|---|---|
+| Warsaw Pact | 0.0203 (0.0096) | 0.093 | 0.0062 | 0.0044 | 0.0002 | 0.0009 | 0.0081 |
+| NATO | 0.0313 (0.0200) | 0.091 | 0.0159 | 0.0052 | 0.0004 | 0.0013 | 0.0081 |
+| Neutral | 0.0123 (0.0046) | 0.050 | 0.0018 | 0.0030 | 0.0001 | 0.0007 | 0.0061 |
+| Rebels | 0.0678 (0.0575) | 0.122 | 0.0280 | 0.0306 | 0.0006 | 0.0019 | 0.0065 |
+
+The picture is 0.006-0.008 ms a campaign day (about a hundred report events a day for the nation), and the decisions'
+part grew by 0.002-0.003 ms (the at-once reports compiled where a unit decides, and the profiler's own laps around the
+report events); still three orders of magnitude under 20 ms and 60 ms. In the campaign (10 days, seed 7) the ground war's
+own time is 0.002-0.003 % of the Pact's and NATO's CPU (3.9 % and 0.18 % of the neutral's and the rebels' campaigns of 4
+and 13 packages); `--gate` passes.
+
+The whole campaign at mode 1 against 0 (`air_war_balance --cpu`, 3 seeds x 10 days x 2 postures, std::clock, the two
+modes run side by side): the Pact 267.3 s against 269.3 (0.992), NATO 177.3 against 172.6 (1.028), the rebels 3.07
+against 2.98 (1.030), the neutral 2.45 against 1.49 (1.64); all four 450.1 s against 446.4 (1.008). As in F3.3 and F3.4
+the difference is the war that differs once the line moves, not the ground war's time.
+
+**Identity.** At `ground.mode` 0 nothing is built: `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical (`cmp`) to track F's tip before it (d765717, built the same
+way); the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds.
+
+**Tests** (`test_ground_picture.cpp`): the factor's mean and spread over 4000 draws and its key; a hand war's reports
+arriving at their delay, the belief holding between them and equal to the truth when compiled times its factor, two
+attackers of one sector's report sharing a factor, the second echelon the army intelligence's; the enemy's air
+sightings where its `IntelPicture` has troops (in a sector held, near a reserve; a stale one is none) and its ground
+reconnaissance elsewhere; a commander acting on a stale picture (the counterattack above); the enemy's crisis from a
+division under half only once its report arrives, and from our counterattack its delay after it starts; the air front's
+input null at mode 0 and the enemy's crisis at mode 1; the same war and pictures either way round; the queue within its
+reserve. F3.4's hand cases decide on the truth (`picture.truth`), its nation war on the picture.
+
+**Left:**
+- F3.6: the march on the roads; U1's regiments and their pictures (a regiment's own reports at its echelon's times).
+- F3.7: the theatre's troops objects tied to the formations (the air sighting's sector and distance match is a
+  stand-in); strikes off strength reported in the pictures; supply below 1 believed.
+- F3.8: our side's picture into the pipeline as situation reports (`FactKind::Situation`): the believed line by station
+  and the units' believed places are ready for it; the army's staff as posts, its intelligence summary as a fact.
+- Believed places finer than the sector (a unit's believed position and its spread) and believed postures read by
+  anyone; the enemy's own reports' delays by faction (one table for all four now); the reconnaissance's spread falling
+  with the time in contact; a commander's own traits weighing his picture (a sceptical one discounting a report).
+- F6: whether any decision on the nation should turn on the picture (none does in 30 days), the spreads and delays
+  against history.
 
 ## Done when
 

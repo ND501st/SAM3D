@@ -24,7 +24,7 @@
 //   concluded, and when the regiment's commander and battery 21's had its conclusion.
 //   --ground (F3.3): the ground war at U0 alone, built as the campaign builds it on the nation (ground.mode 1), stepped
 //   hour by hour for N days (default 30) over N seeds (default 5) with each campaign's weather: a campaign day's cost by
-//   part (combat, decisions, movement, line; picture and reports are the campaign's), the mean and the worst day against
+//   part (combat, decisions, movement, line, picture: each side's picture's reports, F3.5; reports are the campaign's), the mean and the worst day against
 //   20 ms and 60 ms; then --campaign-days (default 10, 0: none) of whole campaigns over --campaign-seeds (default 1) at
 //   ground.mode 0 and 1: their CPU, the ground war's own time and its share of the campaign (budget 5%: 1.05x), and the
 //   line's depth by sector at each day's end (a day's move of 300 km or more is a runaway). Factions default to all
@@ -202,6 +202,7 @@ bool GroundAlone(const AirWarData& d, unsigned seed, int days, GroundLine& acc, 
     env.theatre = &d.theatre;
     env.weather = &weather;
     env.truth = &c.Truth();
+    env.intel = &c.Intel();  // the enemy's pre-war picture of our troops (F3.5's air sightings)
     g.SetProfiling(true);
     const bool print_log = g_ground_log && axes_end.empty();
     if (print_log) std::printf("  %s, seed %u:\n", d.faction.id.c_str(), seed);
@@ -271,7 +272,7 @@ int GroundMain(const std::string& data, const std::string& theatre, int days, in
         }
         loaded.push_back(d);
     }
-    std::printf("  (ms a campaign day by part; \"picture\" is F3.8's and \"reports\" the journal's, both in the campaign only)\n");
+    std::printf("  (ms a campaign day by part; \"picture\" is each side's picture's reports (F3.5), \"reports\" the journal's, in the campaign only)\n");
     if (campaign_days > 0) {
         std::printf("\nIn the campaign: %d days x %d seeds, ground.mode 0 against 1 (std::clock CPU); budget %.2fx the campaign at 0\n\n",
                     campaign_days, campaign_seeds, campaign_budget);

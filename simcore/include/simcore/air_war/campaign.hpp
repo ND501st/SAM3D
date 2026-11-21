@@ -1905,6 +1905,7 @@ private:
         env.theatre = &data_.theatre;
         env.weather = &weather_;
         env.truth = &truth_;
+        env.intel = &intel_;  // the enemy's air sightings of our troops, for its picture of our side (F3.5)
         ground_war_.Step(t1, env, front_line_);
         if (ground_war_.Log().empty()) return;
         if (!ground_war_.Profiling()) {
@@ -2153,7 +2154,8 @@ public:
         in.banned = &politics_.banned;
         in.politics_max_depth_m = politics_.max_depth_m;
         in.event_fired = !def.after_event.empty() && politics_.fired_events.count(def.after_event) > 0;
-        in.crisis = nullptr;  // its own ground front's crisis: F3.5's picture (a stub until then)
+        // Its own ground front collapsing, by sector, in its own ground picture (F3.5): only while the ground war runs.
+        in.crisis = ground_on_ ? &ground_war_.EnemyCrisis() : nullptr;
         in.now_h = now_h_;
         return chief;
     }
