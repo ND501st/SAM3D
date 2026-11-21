@@ -1045,7 +1045,12 @@ public:
         m.night = p.part == DayPart::Night;
         m.poor_weather = c.WeatherNow() == Weather::Poor;
         m.mission = p.kind;
-        if (const FrontDef* front = th.FrontFor(f.front)) m.depth_km = DistanceToLine(front->line, bst.pos) / 1000.0;
+        // From the line of contact (the ground war moves it, F3.3; at zero offsets the front's line to the bit).
+        if (!c.FrontLine().Empty()) {
+            m.depth_km = c.FrontLine().AbsDistance(bst.pos) / 1000.0;
+        } else if (const FrontDef* front = th.FrontFor(f.front)) {
+            m.depth_km = DistanceToLine(front->line, bst.pos) / 1000.0;
+        }
         m.free_hunt = c.C2().FreeHunt(bst.pos, c.Phase());
         for (const Flight& fl : p.flights) {
             OppLeader ld;

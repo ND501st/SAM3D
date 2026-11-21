@@ -20,6 +20,7 @@
 
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/opportunity.hpp"
@@ -58,6 +59,8 @@ struct ResolveContext {
     std::vector<command::OwnAirZone> own_corridors;
     // The enemy's losses so far today (roadmap S5: §9.3's husbanding, read under hot_phase.mode 2).
     double losses_today = 0.0;
+    // The front's line of contact (track F, F3.3: the ground war moves it; null: the theatre front's base line, as before).
+    const LineOfContact* front_line = nullptr;
 };
 
 // The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
@@ -740,7 +743,9 @@ private:
             s.watched_s = 60.0;
             s.range_m = 1e5;  // the abstract level: room for a pass
             s.moving = true;
-            s.depth_km = front != nullptr ? DistanceToLine(front->line, st.pos) / 1000.0 : 0.0;
+            // Behind our side's line of contact (its base line to the bit while nothing has moved it, F2.1).
+            s.depth_km = c.front_line != nullptr && !c.front_line->Empty() ? c.front_line->AbsDistance(st.pos) / 1000.0
+                                                 : (front != nullptr ? DistanceToLine(front->line, st.pos) / 1000.0 : 0.0);
             const C2FreeHuntDef& fh = d.faction.c2.free_hunt;
             s.free_hunt_zone = fh.from_phase >= 0 && c.phase >= fh.from_phase && s.depth_km <= fh.depth_km;
             s.night = p.part == DayPart::Night;

@@ -66,7 +66,7 @@ of whole campaigns for every adversary and two battery postures; it must not get
 
 | Part | Budget | Measured by |
 |---|---|---|
-| The ground war, whole nation, all at U0, one faction's war | **20 ms CPU per campaign day** (mean over 30 days and 5 seeds), the worst day under 60 ms | `fronts_bench data --days 30 --seeds 5` (new, F3.3), per part: combat, decisions, movement, line, picture, reports |
+| The ground war, whole nation, all at U0, one faction's war | **20 ms CPU per campaign day** (mean over 30 days and 5 seeds), the worst day under 60 ms | `fronts_bench data --ground` (F3.3; 30 days and 5 seeds by default, `--gate` exits 2 over), per part: combat, decisions, movement, line, picture, reports |
 | The player's sector at U1 on top | 15 ms more per campaign day | `fronts_bench --player-sector` |
 | The air front (F2) | 1 ms per planning cycle for a front | `fronts_bench --air-front`; the planner's own cycle as before |
 | Our AD strategy (F4) | 5 ms per campaign day | `fronts_bench --ad` |

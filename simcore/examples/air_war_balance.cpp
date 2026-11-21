@@ -1,6 +1,6 @@
 // air_war_balance: the enemy air command over many seeds, for the balance pass (roadmap A12, docs/air_war/09_BALANCE.md).
 //
-// Usage: air_war_balance [--theatre file] [--set tuning.key=value ...] [--debug] [data_dir] [seeds] [days] [faction ...]
+// Usage: air_war_balance [--theatre file] [--set tuning.key=value ...] [--debug] [--cpu] [data_dir] [seeds] [days] [faction ...]
 //   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json, the one the balance pass tuned;
 //   theatre_pannonia_nation.json is the whole nation); --set: try a tuning value (a calibration sweep); data_dir
 //   (default data); seeds (default 10); days (default 6); factions (default all four: rebels, neutral, warsaw_pact, nato).
@@ -22,10 +22,14 @@
 // kind and by object) and on which missions, beside the losses the planners expected; the strikers' answers when our
 // fighters reached them; the on-call and divert latencies; and each measure that data/air_war/balance_bands.json gives a
 // band for this theatre, faction and posture, checked against it (--debug writes each loss to stderr).
+// --cpu (track F, F3.3): after each posture, the CPU its campaigns took (std::clock) and, under ground.mode 1 on the
+// nation (--set ground.mode=1), the line of contact's depth by sector at each day's end, the mean over the seeds; without
+// it the output is as before, byte for byte.
 // Exits 1 if the data fail to load, 2 if a measure is out of its band.
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <map>
 #include <string>
 #include <utility>
@@ -39,6 +43,7 @@ using namespace simcore::airwar;
 namespace {
 
 bool g_debug = false;  // --debug: each loss to stderr
+bool g_cpu = false;    // --cpu: the CPU a posture's campaigns took, and the ground war's line
 // The bands (roadmap B14, data/air_war/balance_bands.json) and what Print checks them for.
 BalanceBands g_bands;
 std::string g_theatre, g_faction;
@@ -60,6 +65,7 @@ struct DayStats {
 
 struct RunStats {
     std::vector<DayStats> days;
+    std::map<std::string, std::vector<double>> ground_km;  // --cpu: the line's depth by sector at each day's end, summed
     double kinds[static_cast<int>(MissionKind::Count)] = {};
     double staff_changes = 0.0;
     double false_claims = 0.0;
@@ -220,6 +226,13 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         s.wrecked += Wrecked(c);
         s.battery += c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].function;
         s.knowledge += c.EnemyKnowledgeOfBattery();
+        if (g_cpu && c.Ground() != nullptr) {
+            for (std::size_t k = 0; k < c.FrontLine().SectorCount(); ++k) {
+                std::vector<double>& v = acc.ground_km[c.FrontLine().Sector(k).id];
+                if (v.size() < static_cast<std::size_t>(days)) v.resize(static_cast<std::size_t>(days), 0.0);
+                v[static_cast<std::size_t>(d)] += groundwar::GroundWar::SectorDepth(c.FrontLine(), k) / 1000.0;
+            }
+        }
     }
     for (const Package& p : c.Packages()) {
         if (!p.resolved && !p.played) continue;  // planned beyond the last day
@@ -484,6 +497,8 @@ int main(int argc, char** argv) {
         const std::string a = argv[i];
         if (a == "--debug") {
             g_debug = true;
+        } else if (a == "--cpu") {
+            g_cpu = true;
         } else if (a == "--theatre" && i + 1 < argc) {
             theatre = argv[++i];
         } else if (a == "--set" && i + 1 < argc) {
@@ -524,11 +539,25 @@ int main(int argc, char** argv) {
         ApplyLightMode(data);  // --set light.mode=0: the tuned theatre undated, as before roadmap S8
         for (int careful = 0; careful < 2; ++careful) {
             RunStats r;
+            const std::clock_t c0 = std::clock();
             for (int s = 1; s <= seeds; ++s) {
                 if (!Run(data, static_cast<unsigned>(s), days, careful != 0, r)) return 1;
             }
+            const double cpu_s = static_cast<double>(std::clock() - c0) / CLOCKS_PER_SEC;
             g_faction = faction;
             Print(data.faction.name, careful != 0 ? "careful" : "careless", r, seeds);
+            if (g_cpu) {
+                std::printf("CPU: %.2f s for %d campaigns of %d days (%.1f ms a campaign day), ground.mode %.0f\n", cpu_s, seeds, days,
+                            1000.0 * cpu_s / (seeds * std::max(1, days)), data.tuning.Get("ground.mode"));
+                for (const auto& kv : r.ground_km) {
+                    bool moved = false;
+                    for (double v : kv.second) moved = moved || v > 0.0;
+                    if (!moved) continue;
+                    std::printf("  line in %-22s km by day:", kv.first.c_str());
+                    for (double v : kv.second) std::printf(" %5.1f", v / seeds);
+                    std::printf("\n");
+                }
+            }
         }
     }
     if (g_fails > 0) std::printf("\n%d measure(s) out of band.\n", g_fails);
