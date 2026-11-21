@@ -108,8 +108,9 @@ border.
 flown in the sector) is above the faction's line, the front goes back one step at the next cycle. A chief with high
 composure waits a cycle longer; one under stress (`Officer::stress`) pulls back at once.
 
-**Crisis.** Where the enemy's own ground front in the sector is collapsing (its ground picture, F3.5: a formation
-below half strength or a breakthrough by our counterattack), the chief may ignore the loss gate there for 1-3 days and
+**Crisis.** Where the enemy's own ground front in the sector is collapsing (its ground picture, F3.5: a formation of
+its own on an axis there believed below half strength, or our counterattack on an axis there, both as its units' reports
+reached its staff), the chief may ignore the loss gate there for 1-3 days and
 advance by a step, as the IAF did on the Golan in 1973 (`entwistle_1988`). Only for the Pact and NATO; the rebels and
 the neutral break the helicopter rule only, once, in a crisis.
 
@@ -353,7 +354,8 @@ the neutral's event has fired; never the truth. Sector by sector, at most one mo
 1. **The politics hold it** (the depth over its cap: back to the deepest whole step allowed). The cap is the block's
    greatest depth and the politics' `max_depth_m`, the latter measured from the border (the line of contact's offset
    at the sector's middle taken off), 0 for the neutral until its event.
-2. **A crisis** (F3.5's ground picture; `in.crisis` is null until then, so the campaign never has one): NATO and the
+2. **A crisis** (F3.5's ground picture: `in.crisis` is the enemy picture's `GroundWar::EnemyCrisis()` while the ground
+   war runs, `ground.mode` 1 on a theatre with a ground file, and null otherwise, so at mode 0 nothing changes): NATO and the
    Pact step forward at once and ignore the loss gate for `crisis_h` (a bold chief the long end); the rebels and the
    neutral send their helicopters a step ahead of the fixed-wing front, once a war, back behind it when the crisis ends.
 3. **The surge's end** (the rebels): after `surge_h` (a bold chief the long end) the sector goes back to the border, both
@@ -451,7 +453,7 @@ the save key.
 
 **Left:** the planner, routes and C2 reading the depths (F2.4: `AirFrontAt`, `HeloFrontAt`, `AirFrontDepths`), and
 `air_front.mode` 1 in the data with it; our side learning it (F2.5); the crisis's input from the ground picture (F3.5:
-`AirFrontInputs::crisis`); the pull-back's "keep 16-24 km back from the belt" once the ground war gives a belt (§2); the
+`AirFrontInputs::crisis`; done, `03_GROUND_WAR.md` "As built: F3.5"); the pull-back's "keep 16-24 km back from the belt" once the ground war gives a belt (§2); the
 gates' values against history (F6).
 
 ## As built (F2.4; 21 November 2026)

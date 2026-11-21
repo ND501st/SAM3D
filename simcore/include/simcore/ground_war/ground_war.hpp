@@ -39,8 +39,11 @@
 // with no order while in contact, cohesion gone, or the rebels); re-forms smaller behind. The rebels raid by night where
 // we are thin. Every decision goes into the log (the campaign's journal, kind "ground", hidden).
 //
-// The commanders' picture (TODO F3.5, picture.hpp): until each side's picture exists, every read a commander makes of
-// the war goes through the Seen* accessors below, which give the truth as of the hour he decides (no delay, no error).
+// The commanders' picture (F3.5, picture.hpp, docs/fronts/03_GROUND_WAR.md section 9): every read a commander makes of
+// the war's strengths, depths and paces goes through the Seen* accessors below, which read his side's picture: its own
+// units from their reports (late by the reporting delay), the other side's with an age and an error, updated only when a
+// report arrives (events in the queue). A formation's own commander knows his own unit's state (OwnFraction). The enemy's
+// picture also says where its own ground front is collapsing (EnemyCrisis: the air front's crisis, air_front.hpp).
 #pragma once
 
 #include <algorithm>
@@ -56,12 +59,14 @@
 
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/front_line.hpp"
+#include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
 #include "simcore/country_map.hpp"
 #include "simcore/ground_war/combat.hpp"
 #include "simcore/ground_war/commanders.hpp"
 #include "simcore/ground_war/ground_data.hpp"
+#include "simcore/ground_war/picture.hpp"
 #include "simcore/ground_war/units.hpp"
 
 namespace simcore {
@@ -322,6 +327,7 @@ struct GroundEnv {
     const airwar::TheatreDef* theatre = nullptr;
     const std::vector<airwar::Weather>* weather = nullptr;     // by campaign day from 1 (the campaign's weather_)
     const std::vector<airwar::ObjectState>* truth = nullptr;  // parallel to theatre->objects
+    const airwar::IntelPicture* intel = nullptr;  // the enemy's picture of our side (its troops entries: its air's sightings); null none
 };
 
 // ------------------------------------------------------------------------------------------------------- the ground war
@@ -487,11 +493,13 @@ public:
         moved_.assign(axes_.size(), 0);
         choices_.assign(axes_.size(), AxisChoice());
         log_.reserve(512);
-        queue_.reserve(64 + 8 * (nf + cmdrs_.size() + axes_.size()));
+        queue_.reserve(64 + 8 * (nf + cmdrs_.size() + axes_.size()) + 6 * nf + 4 * axes_.size());
         // The plan's start; the days' ends.
         const double start = std::max(0.0, plan.start_after_h);
         Push(start, EventKind::Start);
         Push(NextMidnight(0.0), EventKind::DayEnd);
+        // Each side's picture (F3.5): its own units as reported, the other's as known in peacetime; then the reports.
+        BuildPictures(line);
         built_ = true;
         return true;
     }
@@ -552,34 +560,60 @@ public:
     std::size_t QueueSize() const { return queue_.size(); }
     std::size_t QueueCapacity() const { return queue_.capacity(); }
 
-    // ---- the commanders' picture (TODO F3.5: each side's picture, picture.hpp, replaces these four)
+    // ---- the commanders' picture (F3.5, picture.hpp)
     //
-    // Every read a commander makes of the war goes through these: until F3.5 they are the truth as of the hour he
-    // decides, with no reporting delay and no error, for his own side's units and for the enemy's alike.
+    // Every read a commander makes of the war's strengths, depths and paces goes through these four: his side's picture,
+    // as its reports left it (a test's tables.picture.truth: the truth now, F3.4's hand cases). Who is on which axis and
+    // whether an axis attacks are known to both sides (their orders and the contact say so); how strong, how deep and
+    // how fast are believed.
 
-    // A formation's power (strength x supply and cohesion) as `by`'s side believes it.
+    // A formation's power (strength x supply and cohesion) as `by`'s side believes it. Its own side knows at once which of
+    // its units are out of the fight (it ordered them out, or was told).
     double SeenPower(Side by, std::size_t i) const {
-        (void)by;
         const Formation& f = forms_[i];
-        return f.spent ? 0.0 : UnitPower(data_->tables, f.unit.strength, f.unit.supply, f.unit.cohesion);
+        if (data_->tables.picture.truth) return f.spent ? 0.0 : UnitPower(data_->tables, f.unit.strength, f.unit.supply, f.unit.cohesion);
+        const UnitBelief& b = pictures_[PictureIndex(by)].units[i];
+        if (f.unit.side == by) return f.spent ? 0.0 : b.power;
+        return b.out ? 0.0 : b.power;
     }
     // A formation's strength fraction as `by`'s side believes it.
     double SeenFraction(Side by, std::size_t i) const {
-        (void)by;
-        return forms_[i].unit.Fraction();
+        if (data_->tables.picture.truth) return forms_[i].unit.Fraction();
+        return pictures_[PictureIndex(by)].units[i].fraction;
     }
     // An axis's depth and pace as `by`'s side believes them.
     double SeenDepth(Side by, std::size_t a) const {
-        (void)by;
-        return axes_[a].depth_m;
+        if (data_->tables.picture.truth) return axes_[a].depth_m;
+        return pictures_[PictureIndex(by)].axes[a].depth_m;
     }
     double SeenPace(Side by, std::size_t a) const {
-        (void)by;
-        return axes_[a].pace_km_day;
+        if (data_->tables.picture.truth) return axes_[a].pace_km_day;
+        return pictures_[PictureIndex(by)].axes[a].pace_km_day;
+    }
+    // A formation's strength fraction as its own commander knows it (his staff's count: his reaction time is its delay).
+    double OwnFraction(std::size_t i) const { return forms_[i].unit.Fraction(); }
+
+    // A side's picture (F3.5): what its staffs believe, by formation and axis, the line by station.
+    const GroundPicture& Picture(Side by) const { return pictures_[PictureIndex(by)]; }
+    // The sectors where the enemy's own ground front is collapsing in its picture (a formation of its own believed under
+    // picture.crisis_below, or our counterattack on an axis there): the air front's crisis input (air_front.hpp), by the
+    // line's sector index.
+    const std::vector<char>& EnemyCrisis() const { return pictures_[1].crisis; }
+    // A test's: takes a share off a formation's strength now (the truth moves; a picture moves only when a report comes).
+    void TestLoss(std::size_t i, double share) {
+        Settle(i, now_h_);
+        ApplyLoss(forms_[i], share, -1.0);
     }
 
 private:
-    enum class EventKind : std::uint8_t { Start, Crossed, DayEnd, Decide, LineBack, Arrive, Reformed, RaidNight, RaidEnd };
+    enum class EventKind : std::uint8_t {
+        Start, Crossed, DayEnd, Decide, LineBack, Arrive, Reformed, RaidNight, RaidEnd,
+        ReportsDue, IntelDue, UnitReport, AxisReport, LineReport  // the pictures' (F3.5)
+    };
+    static bool IsPictureEvent(EventKind k) {
+        return k == EventKind::ReportsDue || k == EventKind::IntelDue || k == EventKind::UnitReport || k == EventKind::AxisReport ||
+               k == EventKind::LineReport;
+    }
     struct Event {
         double h = 0.0;
         std::uint32_t seq = 0;
@@ -588,6 +622,16 @@ private:
         int who = -1;            // a commander (Decide, LineBack, RaidNight) or a formation (Arrive, Reformed)
         std::uint32_t gen = 0;   // Decide: the commander's decision it is (older ones are stale)
         Task task = Task::None;  // Arrive: what for
+        // A report (F3.5): who = the formation (UnitReport) or the picture's side (AxisReport, LineReport, ReportsDue);
+        // axis = the picture's side (UnitReport) or the axis (AxisReport); what it says, compiled at obs_h.
+        double obs_h = 0.0;
+        double v0 = 0.0;   // UnitReport: the believed fraction; AxisReport: the depth
+        double v1 = 0.0;   // UnitReport: the believed power; AxisReport: the pace
+        double factor = 1.0;
+        int sector = -1;
+        std::uint8_t src = 0;      // a PictureSource
+        std::uint8_t posture = 0;  // UnitReport: a Posture
+        std::uint8_t flag = 0;     // UnitReport: out of the fight; AxisReport: counterattacked
     };
     struct Later {
         bool operator()(const Event& a, const Event& b) const { return a.h != b.h ? a.h > b.h : a.seq > b.seq; }
@@ -611,6 +655,8 @@ private:
     std::vector<std::uint8_t> moved_;
     std::vector<AxisChoice> choices_;
     std::vector<GroundLogEntry> log_;
+    GroundPicture pictures_[2];  // ours, the enemy's (F3.5)
+    bool crisis_dirty_ = false;
     airwar::Rng root_;
     double now_h_ = 0.0;
     double start_hour_ = 0.0;
@@ -1110,7 +1156,15 @@ private:
             std::pop_heap(queue_.begin(), queue_.end(), Later());
             const Event e = queue_.back();
             queue_.pop_back();
+            const bool report = IsPictureEvent(e.kind);
+            if (report) Lap(GroundProfile::Decisions);
             Handle(e, h0, env, line);
+            if (report) Lap(GroundProfile::Picture);
+        }
+        if (crisis_dirty_) {
+            Lap(GroundProfile::Decisions);
+            UpdateCrisis();
+            Lap(GroundProfile::Picture);
         }
         Lap(GroundProfile::Decisions);
         // Phase 1: every axis's sides read from the hour's start.
@@ -1249,6 +1303,43 @@ private:
             case EventKind::RaidEnd:
                 RaidEnd(h0, env);
                 break;
+            case EventKind::ReportsDue:
+                ReportsDue(e.who == 0 ? Side::Ours : Side::Enemy, h0, env, line);
+                break;
+            case EventKind::IntelDue:
+                IntelDue(h0);
+                break;
+            case EventKind::UnitReport: {
+                UnitBelief b;
+                b.fraction = e.v0;
+                b.power = e.v1;
+                b.observed_h = e.obs_h;
+                b.factor = e.factor;
+                b.sector = e.sector;
+                b.posture = static_cast<Posture>(e.posture);
+                b.source = static_cast<PictureSource>(e.src);
+                b.out = e.flag != 0;
+                if (pictures_[e.axis].Merge(static_cast<std::size_t>(e.who), b) && e.axis == 1) crisis_dirty_ = true;
+                break;
+            }
+            case EventKind::AxisReport: {
+                AxisBelief b;
+                b.depth_m = e.v0;
+                b.pace_km_day = e.v1;
+                b.observed_h = e.obs_h;
+                b.counterattacked = e.flag != 0;
+                if (pictures_[e.who].MergeAxis(static_cast<std::size_t>(e.axis), b) && e.who == 1) crisis_dirty_ = true;
+                break;
+            }
+            case EventKind::LineReport: {
+                GroundPicture& p = pictures_[e.who];
+                if (p.pending_line_h >= 0.0 && std::fabs(p.pending_line_h - e.obs_h) < 1e-6) {
+                    std::copy(p.pending_line_m.begin(), p.pending_line_m.end(), p.line_m.begin());
+                    p.line_observed_h = p.pending_line_h;
+                    p.pending_line_h = -1.0;
+                }
+                break;
+            }
         }
     }
 
@@ -1563,6 +1654,7 @@ private:
             if (x.status == AxisStatus::Attacking) {
                 if (!x.raid && !x.through_zone && x.depth_m >= security_zone_m_) {
                     x.through_zone = true;  // the penetration reaches the main defensive zone: our army hears of it
+                    AxisAtOnce(Side::Ours, a, h1);
                     WakeAfterReaction(top_[0], h1, 0x6000ull + a);
                 }
                 bool attackers = false, stopped = false;
@@ -1591,11 +1683,11 @@ private:
         }
     }
 
-    // The lines and breakpoints a formation is under now (by its side's own picture of itself).
+    // The lines and breakpoints a formation is under now (by its own commander's count).
     std::uint8_t Crossings(std::size_t i) const {
         const Formation& f = forms_[i];
         const EffectivenessDef& e = Doctrine(f.unit.side).effectiveness;
-        const double frac = SeenFraction(f.unit.side, i);
+        const double frac = OwnFraction(i);  // its own commander's count
         std::uint8_t c = 0;
         if (e.kind == EffectivenessKind::Lines) {
             const double ask = f.cmdr >= 0 ? AskWithdrawLineOf(data_->tables, e, cmdrs_[static_cast<std::size_t>(f.cmdr)].traits) : e.ineffective_below;
@@ -1622,6 +1714,7 @@ private:
             if (!f.spent && f.contact_from_h >= 0.0) SetRest(static_cast<std::size_t>(fi), LossAction::Inactive, h1);
         }
         Note(h1, GroundNote::AxisHalted, static_cast<int>(a), -1, x.sector, x.depth_m, why);
+        AxisAtOnce(Side::Enemy, a, h1);
         WakeAfterReaction(top_[1], h1, 0x7000ull + a);  // the senior hears of it: his echelons may go elsewhere
     }
 
@@ -1651,7 +1744,7 @@ private:
         const GroundDoctrineDef& d = Doctrine(f.unit.side);
         UnitSituation s;
         s.lines = d.effectiveness.kind == EffectivenessKind::Lines;
-        s.fraction = SeenFraction(f.unit.side, i);
+        s.fraction = OwnFraction(i);  // he knows his own unit
         s.ask_line = AskWithdrawLineOf(t, d.effectiveness, g.traits);
         s.degraded_line = d.effectiveness.degraded_below;
         s.attack_stop = f.attack_stop;
@@ -1676,12 +1769,14 @@ private:
             case UnitAct::Report:
                 f.reported = true;
                 Order(h, GroundOrder::Reported, c, static_cast<int>(i), f.axis, s.fraction);
+                ReportAtOnce(i, h, AxisOfFormation(i));
                 WakeAfterReaction(g.senior, h, 0x8000ull + i);
                 break;
             case UnitAct::Ask:
                 f.asked = true;
                 f.asked_h = h;
                 Order(h, GroundOrder::WithdrawAsked, c, static_cast<int>(i), AxisOfFormation(i), s.fraction);
+                ReportAtOnce(i, h, AxisOfFormation(i));
                 WakeAfterReaction(g.senior, h, 0x9000ull + i);
                 break;
             case UnitAct::Withdraw:
@@ -1695,6 +1790,7 @@ private:
                 f.attack_stopped = true;
                 Hold(i, h);
                 Order(h, GroundOrder::AttackStopped, c, static_cast<int>(i), f.axis, s.fraction);
+                ReportAtOnce(i, h, f.axis);
                 WakeAfterReaction(g.senior, h, 0xA000ull + i);
                 break;
         }
@@ -1912,6 +2008,7 @@ private:
         for (int fi : x.defenders) {
             if (!forms_[static_cast<std::size_t>(fi)].spent) Settle(static_cast<std::size_t>(fi), h);
         }
+        AxisAtOnce(Side::Enemy, a, h);
     }
 
     // Our army commander: counterattacks into a penetration of the main defensive zone, and stops one that no longer gains.
@@ -2001,6 +2098,8 @@ private:
         x.halted = attackers ? HaltReason::Counterattacked : HaltReason::Spent;
         for (int fi : x.first) Hold(static_cast<std::size_t>(fi), h);
         Order(h, GroundOrder::CounterattackEnds, top_[0], -1, static_cast<int>(a), x.depth_m);
+        AxisAtOnce(Side::Ours, a, h);
+        AxisAtOnce(Side::Enemy, a, h);
         WakeAfterReaction(top_[1], h, 0x7100ull + a);
     }
 
@@ -2053,6 +2152,8 @@ private:
                     x.status = AxisStatus::Counterattacked;
                     x.counter_start_h = x.counter_advance_h = h;
                     Order(h, GroundOrder::CounterattackStarts, top_[0], static_cast<int>(i), a, x.depth_m);
+                    AxisAtOnce(Side::Ours, static_cast<std::size_t>(a), h);
+                    AxisAtOnce(Side::Enemy, static_cast<std::size_t>(a), h);
                     WakeAfterReaction(top_[1], h, 0x7200ull + static_cast<std::uint64_t>(a));
                 }
                 break;
@@ -2108,6 +2209,7 @@ private:
     void Withdraw(std::size_t i, double h) {
         Formation& f = forms_[i];
         if (f.spent) return;
+        const int on = AxisOfFormation(i);
         Settle(i, h);
         f.spent = true;
         f.unit.state = UnitState::Reforming;
@@ -2116,6 +2218,7 @@ private:
         f.task = Task::None;
         f.relief_for = -1;
         ++f.withdrawals;
+        ReportAtOnce(i, h, on);
         LeaveLists(static_cast<int>(i));
         const double days = data_->tables.reform_days.At(root_.Fork(0x2EF0000000ull + i * 64 + static_cast<std::size_t>(f.withdrawals)).Uniform());
         Push(h + 24.0 * days, EventKind::Reformed, -1, static_cast<int>(i));
@@ -2128,6 +2231,7 @@ private:
         if (f.spent) return;
         Settle(i, h);
         Order(h, GroundOrder::Dispersed, cmdr, static_cast<int>(i), AxisOfFormation(i), why);
+        const int on = AxisOfFormation(i);
         ApplyLoss(f, data_->tables.straggler_loss, -1.0, false);
         f.spent = true;
         f.unit.state = UnitState::Dispersed;
@@ -2136,6 +2240,7 @@ private:
         f.task = Task::None;
         f.relief_for = -1;
         ++f.dispersals;
+        ReportAtOnce(i, h, on);
         LeaveLists(static_cast<int>(i));
         const double days = data_->tables.reassemble_days.At(root_.Fork(0xD15E000000ull + i * 64 + static_cast<std::size_t>(f.dispersals)).Uniform());
         Push(h + 24.0 * days, EventKind::Reformed, -1, static_cast<int>(i));
@@ -2157,6 +2262,7 @@ private:
         f.zone = -1;
         f.commitment = -1;
         Order(h, GroundOrder::Reformed, f.cmdr, static_cast<int>(i), -1, f.base_establishment > 0.0 ? f.unit.strength / f.base_establishment : 0.0);
+        ReportAtOnce(i, h, -1);
         if (f.unit.side == Side::Enemy) {
             if (f.raid_axis >= 0) return;  // a rebel group back on its line
             f.axis = -1;
@@ -2299,6 +2405,250 @@ private:
         x.pace_km_day = 0.0;
         moved_[a] = 1;
     }
+
+    // ---- each side's picture (F3.5, picture.hpp)
+
+    static std::size_t PictureIndex(Side s) { return s == Side::Ours ? 0u : 1u; }
+
+    void PushEvent(Event e) {
+        e.seq = seq_++;
+        queue_.push_back(e);
+        std::push_heap(queue_.begin(), queue_.end(), Later());
+    }
+
+    // Sized for the war; its first beliefs (its own units as they stand, the other side's as peacetime intelligence
+    // estimated them, the line at the border); its scheduled reports queued. With the tables' truth switch (tests) no
+    // report is ever queued: the commanders read the truth.
+    void BuildPictures(const airwar::LineOfContact& line) {
+        const PictureTables& pt = data_->tables.picture;
+        for (std::size_t k = 0; k < 2; ++k) {
+            const Side by = k == 0 ? Side::Ours : Side::Enemy;
+            GroundPicture& p = pictures_[k];
+            p.Size(by, forms_.size(), axes_.size(), line.StationCount(), line.SectorCount());
+            for (std::size_t i = 0; i < forms_.size(); ++i) {
+                p.units[i] = Observe(i, by, forms_[i].unit.side == by ? PictureSource::Own : PictureSource::Prior, 0.0);
+            }
+            for (std::size_t s = 0; s < line.StationCount(); ++s) p.line_m[s] = line.StationOffset(s);
+        }
+        if (pt.truth) return;
+        const double first = NextReportHour(0.0, ReportPeriodHours());
+        Push(first, EventKind::ReportsDue, -1, 0);
+        Push(first, EventKind::ReportsDue, -1, 1);
+        Push(NextReportHour(0.0, 24.0 / static_cast<double>(std::max(1, pt.army_intel_per_day))), EventKind::IntelDue);
+    }
+
+    double ReportPeriodHours() const { return 24.0 / static_cast<double>(std::max(1, data_->tables.division_reports_per_day)); }
+
+    // The first scheduled report's hour at or after `h`: the local report_first_h, then every `period`.
+    double NextReportHour(double h, double period) const {
+        const double first = data_->tables.picture.report_first_h;
+        const double abs_h = start_hour_ + h;
+        const double k = std::ceil((abs_h - first) / period - 1e-9);
+        return first + k * period - start_hour_;
+    }
+
+    // The sector a formation is seen in: its axis's, the sector it holds or its task's (-1 behind the line).
+    int SectorOfFormation(std::size_t i) const {
+        const Formation& f = forms_[i];
+        if (f.unit.side == Side::Enemy) {
+            if (f.axis >= 0) return axes_[static_cast<std::size_t>(f.axis)].sector;
+            if (f.raid_axis >= 0) return axes_[static_cast<std::size_t>(f.raid_axis)].sector;
+            return f.first_sector;
+        }
+        if (f.first_sector >= 0) return f.first_sector;
+        if (f.task_axis >= 0) return axes_[static_cast<std::size_t>(f.task_axis)].sector;
+        return -1;
+    }
+
+    // A report of formation `i` compiled at `h` by `by`'s source: the truth then times the source's factor.
+    UnitBelief Observe(std::size_t i, Side by, PictureSource src, double h) const {
+        const Formation& f = forms_[i];
+        const GroundTables& t = data_->tables;
+        UnitBelief b;
+        b.sector = SectorOfFormation(i);
+        b.factor = BeliefFactor(root_, by, src, b.sector, h, SourceSigma(t.picture, src));
+        const double s = h > f.settled_h ? StrengthAt(i, h) : f.unit.strength;
+        b.fraction = (f.unit.establishment > 0.0 ? s / f.unit.establishment : 0.0) * b.factor;
+        b.power = f.spent ? 0.0 : UnitPower(t, s, f.unit.supply, f.unit.cohesion) * b.factor;
+        b.observed_h = h;
+        b.posture = f.unit.posture;
+        b.source = src;
+        b.out = f.spent;
+        return b;
+    }
+
+    void PushUnitReport(Side by, std::size_t i, const UnitBelief& b, double at) {
+        Event e;
+        e.h = at;
+        e.kind = EventKind::UnitReport;
+        e.who = static_cast<int>(i);
+        e.axis = static_cast<int>(PictureIndex(by));
+        e.obs_h = b.observed_h;
+        e.v0 = b.fraction;
+        e.v1 = b.power;
+        e.factor = b.factor;
+        e.sector = b.sector;
+        e.src = static_cast<std::uint8_t>(b.source);
+        e.posture = static_cast<std::uint8_t>(b.posture);
+        e.flag = b.out ? 1 : 0;
+        PushEvent(e);
+    }
+
+    void PushAxisReport(Side by, std::size_t a, double obs_h, double at) {
+        const Axis& x = axes_[a];
+        Event e;
+        e.h = at;
+        e.kind = EventKind::AxisReport;
+        e.who = static_cast<int>(PictureIndex(by));
+        e.axis = static_cast<int>(a);
+        e.obs_h = obs_h;
+        e.v0 = x.depth_m;
+        e.v1 = x.pace_km_day;
+        e.flag = x.status == AxisStatus::Counterattacked ? 1 : 0;
+        PushEvent(e);
+    }
+
+    // An axis's news reported at once (a breakthrough, a halt, our counterattack): into `by`'s picture after the delay.
+    void AxisAtOnce(Side by, std::size_t a, double h) {
+        if (data_->tables.picture.truth) return;
+        PushAxisReport(by, a, h, h + data_->tables.picture.own_delay_h);
+    }
+
+    // A unit's report on an event (it reports, asks, stops, withdraws, breaks, re-forms): its own state into its side's
+    // picture, with the enemy facing it on `axis` (contact for ours, the ground reconnaissance for the enemy's) and that
+    // axis's depth.
+    void ReportAtOnce(std::size_t i, double h, int axis) {
+        const PictureTables& pt = data_->tables.picture;
+        if (pt.truth) return;
+        const Side by = forms_[i].unit.side;
+        PushUnitReport(by, i, Observe(i, by, PictureSource::Own, h), h + pt.own_delay_h);
+        if (axis < 0) return;
+        const Axis& x = axes_[static_cast<std::size_t>(axis)];
+        const PictureSource src = by == Side::Ours ? PictureSource::Contact : PictureSource::GroundRecon;
+        const double at = h + SourceDelayHours(pt, src);
+        if (by == Side::Ours) {
+            for (int fi : x.first) PushUnitReport(by, static_cast<std::size_t>(fi), Observe(static_cast<std::size_t>(fi), by, src, h), at);
+        } else {
+            for (int fi : x.defenders) PushUnitReport(by, static_cast<std::size_t>(fi), Observe(static_cast<std::size_t>(fi), by, src, h), at);
+            if (DepthEngaged(x)) {
+                for (int fi : x.depth_defenders) PushUnitReport(by, static_cast<std::size_t>(fi), Observe(static_cast<std::size_t>(fi), by, src, h), at);
+            }
+            for (int fi : x.counter) PushUnitReport(by, static_cast<std::size_t>(fi), Observe(static_cast<std::size_t>(fi), by, src, h), at);
+        }
+        PushAxisReport(by, static_cast<std::size_t>(axis), h, h + pt.own_delay_h);
+    }
+
+    // The enemy's formations our units touch: on an axis's attack, or holding the line (a rebel group on its line).
+    bool EnemyAtLine(std::size_t i) const {
+        const Formation& f = forms_[i];
+        if (f.unit.side != Side::Enemy || f.spent) return false;
+        if (f.raid_axis >= 0 || f.first_sector >= 0) return true;
+        if (f.axis < 0) return false;
+        const Axis& x = axes_[static_cast<std::size_t>(f.axis)];
+        return std::find(x.first.begin(), x.first.end(), static_cast<int>(i)) != x.first.end();
+    }
+
+    // Ours the enemy's ground reconnaissance sees at the line: holding a sector, or fighting on an axis.
+    bool OursAtLine(std::size_t i) const {
+        const Formation& f = forms_[i];
+        if (f.unit.side != Side::Ours || f.spent) return false;
+        if (f.first_sector >= 0 && (f.role == DeployRole::FirstEchelon || f.role == DeployRole::FlankScreen)) return true;
+        const int fi = static_cast<int>(i);
+        for (const Axis& x : axes_) {
+            if (std::find(x.defenders.begin(), x.defenders.end(), fi) != x.defenders.end()) return true;
+            if (std::find(x.counter.begin(), x.counter.end(), fi) != x.counter.end()) return true;
+            if (DepthEngaged(x) && std::find(x.depth_defenders.begin(), x.depth_defenders.end(), fi) != x.depth_defenders.end()) return true;
+        }
+        return false;
+    }
+
+    // The enemy's air has seen one of ours lately: a troops entry of its picture (not a ghost) observed within
+    // air_fresh_h, behind the line in a sector it holds (within air_depth_km) or, off the line, within air_reach_km of
+    // it. A stand-in until F3.7 ties the theatre's troops objects to the formations.
+    bool AirSees(std::size_t i, double h, const GroundEnv& env, const airwar::LineOfContact& line) const {
+        if (env.intel == nullptr) return false;
+        const PictureTables& pt = data_->tables.picture;
+        const Formation& f = forms_[i];
+        if (f.spent) return false;
+        for (const airwar::IntelEntry& e : env.intel->entries) {
+            if (e.ghost || e.kind != airwar::ObjectKind::Troops || h - e.observed_h > pt.air_fresh_h) continue;
+            if (f.first_sector >= 0) {
+                const airwar::FrontPlace pl = line.Place(e.pos);
+                if (pl.side > 0.0 && pl.distance_m <= pt.air_depth_km * 1000.0 && f.InSector(line.SectorOf(e.pos))) return true;
+            } else if (airwar::Dist2d(e.pos, f.pos) <= pt.air_reach_km * 1000.0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // A side's scheduled reports, compiled now: its own units' returns, the other side's units it sees (ours: those in
+    // contact; the enemy's: those its air has seen, else those at the line), every axis's depth and pace, the line.
+    void ReportsDue(Side by, double h, const GroundEnv& env, const airwar::LineOfContact& line) {
+        const PictureTables& pt = data_->tables.picture;
+        const std::size_t k = PictureIndex(by);
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            PictureSource src = PictureSource::None;
+            if (forms_[i].unit.side == by) {
+                src = PictureSource::Own;
+            } else if (by == Side::Ours) {
+                if (EnemyAtLine(i)) src = PictureSource::Contact;
+            } else if (AirSees(i, h, env, line)) {
+                src = PictureSource::Air;
+            } else if (OursAtLine(i)) {
+                src = PictureSource::GroundRecon;
+            }
+            if (src != PictureSource::None) PushUnitReport(by, i, Observe(i, by, src, h), h + SourceDelayHours(pt, src));
+        }
+        GroundPicture& p = pictures_[k];
+        for (std::size_t a = 0; a < axes_.size(); ++a) {
+            const Axis& x = axes_[a];
+            const AxisBelief& b = p.axes[a];
+            if (x.status == AxisStatus::Waiting && x.depth_m == 0.0 && b.depth_m == 0.0 && b.pace_km_day == 0.0 && !b.counterattacked) continue;
+            PushAxisReport(by, a, h, h + pt.own_delay_h);
+        }
+        for (std::size_t s = 0; s < p.pending_line_m.size() && s < line.StationCount(); ++s) p.pending_line_m[s] = line.StationOffset(s);
+        p.pending_line_h = h;
+        Event e;
+        e.h = h + pt.own_delay_h;
+        e.kind = EventKind::LineReport;
+        e.who = static_cast<int>(k);
+        e.obs_h = h;
+        PushEvent(e);
+        Push(h + ReportPeriodHours(), EventKind::ReportsDue, -1, static_cast<int>(k));
+    }
+
+    // Our army's intelligence summary of the enemy's formations our units do not touch (its echelons and reserve).
+    void IntelDue(double h) {
+        const PictureTables& pt = data_->tables.picture;
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            if (forms_[i].unit.side != Side::Enemy || EnemyAtLine(i)) continue;
+            PushUnitReport(Side::Ours, i, Observe(i, Side::Ours, PictureSource::ArmyIntel, h), h + pt.army_intel_delay_h);
+        }
+        Push(h + 24.0 / static_cast<double>(std::max(1, pt.army_intel_per_day)), EventKind::IntelDue);
+    }
+
+    // Where the enemy's own ground front is collapsing in its picture: a formation of its own on an axis (or its raid
+    // line) believed under crisis_below, or our counterattack on an axis there.
+    void UpdateCrisis() {
+        crisis_dirty_ = false;
+        GroundPicture& p = pictures_[1];
+        std::fill(p.crisis.begin(), p.crisis.end(), static_cast<char>(0));
+        const double below = data_->tables.picture.crisis_below;
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            const Formation& f = forms_[i];
+            if (f.unit.side != Side::Enemy) continue;
+            const int on = f.axis >= 0 ? f.axis : f.raid_axis;
+            if (on < 0) continue;
+            const int s = axes_[static_cast<std::size_t>(on)].sector;
+            if (s >= 0 && static_cast<std::size_t>(s) < p.crisis.size() && p.units[i].fraction < below) p.crisis[static_cast<std::size_t>(s)] = 1;
+        }
+        for (std::size_t a = 0; a < axes_.size(); ++a) {
+            const int s = axes_[a].sector;
+            if (p.axes[a].counterattacked && s >= 0 && static_cast<std::size_t>(s) < p.crisis.size()) p.crisis[static_cast<std::size_t>(s)] = 1;
+        }
+    }
+
 
     // ---- the line
 

@@ -134,6 +134,27 @@ struct LossRow {
     double nonbattle = 0.0;     // every day
 };
 
+// Each side's picture of the ground war (F3.5, picture.hpp; docs/fronts/03_GROUND_WAR.md section 9): the reports' delays
+// and the spreads of the believed strengths by source (ground_war.json's "picture" block, game values).
+struct PictureTables {
+    bool truth = false;              // a test's switch, never in the file: the commanders read the truth (F3.4's hand cases)
+    double report_first_h = 6.0;     // the local hour of the day's first scheduled report (then every 24 / division_per_day)
+    double own_delay_h = 2.0;        // a unit's report to its side's staff (its own strength, the enemy in contact)
+    double own_sigma = 0.05;         // the spread of a unit's own strength return
+    double contact_sigma = 0.25;     // of its estimate of the enemy in contact
+    double prior_sigma = 0.3;        // of the other side's strengths known at the war's start (peacetime intelligence)
+    int army_intel_per_day = 1;      // our army's intelligence summaries of the enemy not in contact a day
+    double army_intel_delay_h = 6.0;
+    double army_intel_sigma = 0.4;
+    double air_sigma = 0.2;          // the enemy's air reconnaissance of our troops (its IntelPicture's Troops entries)
+    double air_fresh_h = 24.0;       // an entry observed within this counts
+    double air_depth_km = 40.0;      // within this behind the line in a sector, it sees our units holding that sector
+    double air_reach_km = 30.0;      // within this of one of ours off the line (a reserve), it sees it
+    double ground_recon_delay_h = 3.0;  // the enemy's ground reconnaissance at the line
+    double ground_recon_sigma = 0.35;
+    double crisis_below = 0.5;       // a formation of the enemy's own believed below this: its front collapsing (02 section 3)
+};
+
 struct GroundTables {
     // Strength: weighted equipment plus personnel, in T-55 equivalents.
     double personnel_per_man = 0.0;
@@ -216,6 +237,9 @@ struct GroundTables {
     ValueRange reform_days{1.0, 2.0};
     double repair_return_per_day = 0.25;
     double march_road_factor = 1.3;
+
+    // Each side's picture (F3.5).
+    PictureTables picture;
 
     bool IsTank(const std::string& type) const { return std::binary_search(tank_types.begin(), tank_types.end(), type); }
 
@@ -486,7 +510,7 @@ public:
     bool LoadTables(const json::Value& root, GroundTables& out) {
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
-                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders"}) ||
+                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -532,7 +556,8 @@ public:
             if (!Sourced(*po, "posture", PostureName(static_cast<Posture>(i)), out.posture[i], 0.1, 5.0)) return false;
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
-            !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out)) {
+            !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out) ||
+            !LoadPicture(root, out)) {
             return false;
         }
         return true;
@@ -879,6 +904,32 @@ private:
             !Sourced(*c, p, "repair_return_per_day", out.repair_return_per_day, 0.0, 1.0) ||
             !Sourced(*c, p, "march_road_factor", out.march_road_factor, 1.0, 3.0)) {
             return false;
+        }
+        return true;
+    }
+
+    // Each side's picture (F3.5): the reports' delays and the spreads by source.
+    bool LoadPicture(const json::Value& root, GroundTables& out) {
+        const json::Value* c = Object(root, "", "picture");
+        const std::string p = "picture";
+        PictureTables& t = out.picture;
+        if (c == nullptr ||
+            !Keys(*c, p, {"report_first_h", "own_delay_h", "own_sigma", "contact_sigma", "prior_sigma", "army_intel_per_day", "army_intel_delay_h",
+                          "army_intel_sigma", "air_sigma", "air_fresh_h", "air_depth_km", "air_reach_km", "ground_recon_delay_h",
+                          "ground_recon_sigma", "crisis_below", "notes"}) ||
+            !Sourced(*c, p, "report_first_h", t.report_first_h, 0.0, 23.99) || !Sourced(*c, p, "own_delay_h", t.own_delay_h, 0.0, 24.0) ||
+            !Sourced(*c, p, "own_sigma", t.own_sigma, 0.0, 2.0) || !Sourced(*c, p, "contact_sigma", t.contact_sigma, 0.0, 2.0) ||
+            !Sourced(*c, p, "prior_sigma", t.prior_sigma, 0.0, 2.0) || !WholeSourced(*c, p, "army_intel_per_day", t.army_intel_per_day, 1, 24) ||
+            !Sourced(*c, p, "army_intel_delay_h", t.army_intel_delay_h, 0.0, 48.0) || !Sourced(*c, p, "army_intel_sigma", t.army_intel_sigma, 0.0, 2.0) ||
+            !Sourced(*c, p, "air_sigma", t.air_sigma, 0.0, 2.0) || !Sourced(*c, p, "air_fresh_h", t.air_fresh_h, 0.0, 240.0) ||
+            !Sourced(*c, p, "air_depth_km", t.air_depth_km, 0.0, 300.0) || !Sourced(*c, p, "air_reach_km", t.air_reach_km, 0.0, 300.0) ||
+            !Sourced(*c, p, "ground_recon_delay_h", t.ground_recon_delay_h, 0.0, 48.0) ||
+            !Sourced(*c, p, "ground_recon_sigma", t.ground_recon_sigma, 0.0, 2.0) || !Sourced(*c, p, "crisis_below", t.crisis_below, 0.0, 1.0)) {
+            return false;
+        }
+        // One scheduled batch of the line in flight at a time (GroundWar keeps one pending line a side).
+        if (t.own_delay_h >= 24.0 / static_cast<double>(out.division_reports_per_day)) {
+            return Fail("picture.own_delay_h", "under the reports' period (24 / reports.division_per_day)");
         }
         return true;
     }
