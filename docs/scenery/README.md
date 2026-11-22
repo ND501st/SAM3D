@@ -156,7 +156,12 @@ its confidence), says where the meshes go. Presentation only: nothing in the sim
 * `BakeCover`: the land cover of the map proper and each detail area as 25 m cells: farmland in parcels (250-700 m
   along the furrows, 80-250 m across, the furrows turning from one 3 km square to the next) each with its crop by
   share, then the levelled sites (military ground), woods, marsh, buildings with a 15 m garden, military works, roads
-  and railways (at least a cell wide) and water. `CoverRaster::ColourAt` gives the ground's colour.
+  and railways and water. A road, railway or river is at least one 25 m cell wide and unbroken: besides its band, every
+  cell its centreline crosses is stamped (`dressing_detail::StampCrossed`, a supercover walk, both side cells at an
+  exact corner), so a narrow track on the skew is a 4-connected line of cells, not a dotted one (S9,
+  `test_map_leftovers.cpp`). `CoverRaster::ColourAt` gives the ground's colour, `CoverDetail` the ground material's
+  detail kind (0 a field, 1 grass and litter in woods, marsh and by water, 2 hard ground in towns, military ground and
+  roads).
 * `PlaceTrees`: a wood's block inside a detail area planted whole (a tree every 7 m each way, jittered), elsewhere in
   the map proper two rows along each side open to the fields (8 m apart) and a mass inside; the far ground's woods
   masses only. Kinds by share (oak, pine, black locust, poplar; poplars within 60 m of a river). Each tree's base is
@@ -176,6 +181,44 @@ roads with 1.5 m shoulders and rivers with 6 m banks; everything on the sim's gr
 (`MapFrameLink::GroundPoint`). `-SimMapShots` adds a tree close up, a Kesmark street, a bridge's pier and the
 capital from 150 m. The ground tiles are R5's, unchanged, so `SAM3D.Map.GroundAgrees` and `DrawnGroundAt` still
 judge what is drawn.
+
+### The ground's and the ribbons' materials (S9)
+
+Textures made here, not fetched: `tools/map_textures.py` draws them from seeded spectral noise (numpy), so they are
+the project's own (`Own`, nothing for the register) and a rerun gives the same files (`art/map/textures/`,
+`tools/tests/test_map_textures.py`: every channel about 0.5 so it leaves the colour it multiplies as it is on the
+average, tileable, deterministic). Each channel is a brightness the material multiplies the land cover's own colour by,
+so the dressing's colours (`map_dressing.json`) stay what they are and the texture only adds grain:
+
+* `T_MapGroundDetail` (512 square, tiles both ways): R a field's clods and the crop's rows (0.25 m apart), G grass and
+  leaf litter, B hard ground's gravel on packed earth, A soft blotches for the macro variation.
+* `T_MapGroundNormal`: a soil-and-grass relief.
+* `T_MapRibbon` (1024 along, one tile 10 m, by 128 across, the ribbons' UVs): R asphalt (aggregate, patches,
+  hairline cracks, broken edges), G a dirt track's two ruts, B a railway's ballast, sleepers every 0.6 m and the rails'
+  heads, A water's ripples along the flow.
+
+`tools/ue_make_map_materials.py` (run in the editor, or headless:
+`UnrealEditor-Cmd.exe SAM3D.uproject -run=pythonscript -script=tools/ue_make_map_materials.py -unattended`) imports
+them into `/Game/SAM3D/Map/Textures` (linear, as data) and builds two materials:
+
+* `M_SimMapGround`: the colour from the land cover, either the vertices' (UV0 is east and north in km) or, with
+  `UseCover` 1, a texture of the cover grid itself (`CoverTex`, one texel a 25 m cell, placed by `CoverRect`), times
+  the detail texture's channel for the detail kind (the vertex colour's or the cover texture's alpha), sampled every
+  `DetailTileM` (4 m) and again at 3.7 times that to break the repeat, faded to plain colour from 300 m to 2.3 km
+  (`DetailFadeStartCm`, `DetailFadeLengthCm`), times the macro blotches every `MacroTileM` (900 m); the normal map at
+  `NormalStrength`. Every value a game value.
+* `M_SimMapRibbon`: `Colour` times the ribbon texture's `Channel` (a mask: one of R, G, B, A), `UScale`, `Roughness`.
+
+The script also gives `M_SimMapVertexColor` (the procedural trees, masses and buildings, `FSimMapAssets`) the instanced
+static mesh usage it lacked: without it the game drew them in the engine's default material.
+
+`ASimMapActor` gives each ground tile `GroundMaterialFor` its level's cover grid (the map proper's and each detail
+area's: a transient texture of the cells' colours, tinted browner up the hills as the vertices are, and their detail
+kind in alpha), the far ground the vertices' colours with the detail kind from the country's land cover (a town hard
+ground, forest and marsh grass); the map's strips, shoulders and banks and the country's ribbons and lakes
+`RibbonMaterial` with their surface's channel (roads asphalt, tracks, shoulders, banks and pipelines dirt, railways the
+railway's, water the ripples at roughness 0.1). Without the materials (a machine that has not run the script) every
+part falls back to the flat and vertex colours it had before.
 
 The haze near the ground is drawn as an exponential height fog on `ASimSkyWeatherActor`: of Koschmieder's extinction
 for the day's visibility (the atmosphere's aerosol, R7's sky), `HeightFogShare` (0.3, a game value) is the fog's and

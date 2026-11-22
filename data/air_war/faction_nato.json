@@ -31,7 +31,12 @@
     "have_quick_share": 0.0,
     "secure_voice_share": 0.0,
     "gci_channels_per_post": 3,
-    "source": "fh_radios (AM in 225-400 MHz); nsa_purple_dragon_1993 pp. 68-69 and nalty_1977 (code words and call signs changed daily); rafhs_j20_1999 (Red Flag packages with no radio calls required); lawrence_1982; afmag_1983_usafe (the ATO went between ATOCs by data)",
+    "demonstration": 0.5,
+    "teaball": { "on": false, "delay_s": 60.0, "fail": 0.15, "error_m": 3000.0,
+                 "source": "boyne_2008_teaball (Teaball, 1972: intercepts of MiG pilots and their controllers relayed by a KC-135A, Luzon, to the F-4 patrols as heading, speed and vector, with unexpected outages); checo_1978_linebacker p. 52 (a plot once a minute, 19 MiGs for 5 losses)",
+                 "confidence": "low",
+                 "notes": "Off: a Teaball-type warning service for NATO's aircrews in Europe by 1985 was not found (docs/research/air_battle_2026-11/comms_emcon.md comms-06, section 7); turning it on is the owner's design choice. delay_s the plot's minute; fail and error_m game values." },
+    "source": "fh_radios (AM in 225-400 MHz); nsa_purple_dragon_1993 pp. 68-69 and nalty_1977 (code words and call signs changed daily); rafhs_j20_1999 (Red Flag packages with no radio calls required); lawrence_1982; afmag_1983_usafe (the ATO went between ATOCs by data); nazarenko_1984 (demonstration: in the Vintex-75 exercise NATO's feint landing used its air and artillery radio nets above all, as the Pact read it)",
     "confidence": "low",
     "notes": "The radio discipline (the share of routine calls a strike flight keeps off the air, 0.8 for NATO's comm-out packages, factions_cases section 1) is the hot phase's since roadmap B11 (hot_phase.radio_discipline); the other values are SAM3D estimates ordered by the sources: opsec medium-high. HAVE QUICK I reached the F-15, F-16, A-10, F-111 and F-4 in Europe at a date not found, and whether KY-58 secure voice was in fighters by 1985 is not found: both shares stay 0."
   },
@@ -101,7 +106,11 @@
       { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "rippe_1985_airland (tactical control of the offensive aircraft)", "confidence": "medium" },
       { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "smart_1985_tacs", "confidence": "high" },
       { "post": "radar_control", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "smart_1985_tacs ch. 3 (with TACC concurrence)", "confidence": "medium" },
-      { "post": "airborne_warning", "act": "warn", "missions": ["any"], "where": "any", "source": "afmag_1984_nato; rippe_1985_airland; no strike retasking by the E-3A in a period source", "confidence": "medium" }
+      { "post": "airborne_warning", "act": "warn", "missions": ["any"], "where": "any", "source": "afmag_1984_nato; rippe_1985_airland; no strike retasking by the E-3A in a period source", "confidence": "medium" },
+      { "post": "radar_control", "act": "vector", "missions": ["cap", "intercept"], "where": "any", "source": "smart_1985_tacs (the CRC's control of the air defence's fighters)", "confidence": "medium",
+        "notes": "Roadmap S3: the air fight reads it. A sweep and a close escort fly on their own radar and the E-3A's broadcast picture; no period source has a ground controller vector them over the other side." },
+      { "post": "airborne_warning", "act": "vector", "missions": ["fighters"], "where": "any", "from_year": 1982, "source": "afmag_1984_nato (the E-3A's control of NATO fighters); anderegg_2001 (the AWACS's calls to the fighters)", "confidence": "medium",
+        "notes": "Roadmap S3: the air fight reads it." }
     ],
     "timing": {
       "report": { "relay_s": [30, 120], "decide_s": [60, 300], "encode_s": [10, 30],
@@ -119,7 +128,31 @@
     "hunter_leave": "any",
     "silence_consent_s": 300,
     "max_report_age_h": 6,
-    "nomination_h": 48
+    "nomination_h": 48,
+    "post_loss": {
+      "takeover": "alternate",
+      "takeover_s": [600, 1800],
+      "reconstitute_h": {"tasking": [12, 24], "support_centre": [6, 12], "radar_control": [12, 24], "fac": [2, 6]},
+      "source": "smart_1985_tacs (a FACP took 12 h to mobilise and a TSQ-91 CRC up to 24 h to set up: the radar control's and the tasking centre's times); the alternate's takeover, the support centre's and the FAC's times SAM3D estimates",
+      "confidence": "low",
+      "notes": "Roadmap S2 (docs/air_battle/05_C2_AND_RETASKING.md section 9): a destroyed post's traffic goes to the nearest live post of its kind after takeover_s; it works again after its kind's reconstitution, with a stand-in at its desk."
+    },
+    "clearance": {
+      "missions": ["cas"],
+      "on_jammed": "hold_then_abort",
+      "hold_s": [300, 900],
+      "source": "tradoc_jaat_1983 (close air support attacks on the controller's clearance and mark); the hold before going home a SAM3D estimate",
+      "confidence": "low",
+      "notes": "Roadmap S2: a close support flight whose FAC's clearance does not reach it (the net jammed, the FAC gone) holds at its contact point asking again, then goes home with its load."
+    }
+  },
+  "own_ad": {
+    "off_mrr_damaged": 0.3,
+    "mode4_failed_damaged": 0.2,
+    "belt_kill": 0.3,
+    "belt": "Hawk and Nike belt",
+    "source": "fm44_1_2_1984 p. 9-1 (weapons free: fire at anything not positively friendly) and fm_100_42_1976 ch. 4 (returning aircraft on minimum risk routes at set times, Mode 4 by code book), as docs/air_battle/08_OUR_FIGHTERS.md section 10 reads them; cbo_1986_amraam ch. 2 n. 5 (Mark XII's operational problems); no fratricide rate was found: the three chances, a damaged aircraft off its route, its Mode 4 failed and the belt's kill of one with both, are game values",
+    "confidence": "estimate"
   },
   "hot_phase": {
     "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
@@ -146,10 +179,11 @@
     ],
     "retask_air": {"delay_s": [180, 600], "never": 1.0, "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.4): by a FAC or the ASOC for close support and the ATOC for BAI (hoak_1987_retasking; rippe_1985_airland); interdiction and deep strike never (schoeck_1987_ai_retasking)", "confidence": "low"},
     "authority": {"beyond_task": ["armed_recce"], "retask_by": ["fac", "support_centre", "tasking"], "retask_kinds": ["cas", "bai"], "recall_only": false, "leader_may": ["route", "attack_mode", "direction", "release_height", "alternate", "abort"], "source": "fm_101_5_1_1980 (armed reconnaissance beyond the FSCL or in a free fire area); checo_roe_1973 (hitting back at guns that fire); fm_100_42_1976 and rafhs_j20_1999 (the leader's choices within his frag); hoak_1987_retasking; rippe_1985_airland; schoeck_1987_ai_retasking", "confidence": "medium", "notes": "the c2 block's authority table and these gates must agree (checked on load); the fired-on and beyond-the-FSCL cases are the opportunity rules'"},
-    "on_control_lost": {"green": "continue", "skilled": "continue", "source": "pennington_1985 (initiative to the flight leader); anderegg_2001 (engaged and free); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"}
+    "on_control_lost": {"green": "continue", "skilled": "continue", "source": "pennington_1985 (initiative to the flight leader); anderegg_2001 (engaged and free); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"},
+    "pilots": {"hours_per_year": 207, "start_sorties": 0, "source": "gao_1986_flying_hours (TAC 16.3-18.3 hours a month, 1980-85); hansard_1981_nato_hours (NATO's guide, 15 a month); start_sorties a game value (docs/air_battle/10_FACTIONS.md section 8.3: Red Flag is training, not combat sorties)", "confidence": "medium"}
   },
   "doctrine": {
-    "routing": { "crossing": "gate", "cas_free": true, "gate_window_s": 300, "gate_separation_s": 120, "letdown_m": 60000, "max_turn_points": 6, "variants": ["covered", "other_flank", "direct"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0, "return": "other_gate", "blast_lead_s": 180, "blast_exposure_s": 20, "corridor_suppression": true, "deviation": "leader", "deviation_lateral_m": 10000, "deviation_tot_slip_s": 60, "source": "fm_100_42_1976 (minimum risk routes and gates, CAS free of them, home through the gates); jsead_1982 ch. 4 (the corps suppresses along the route at its time); rafhs_j20_1999 (corridors and precise timings; the leader's freedom); crawford_1977_rand (exposure held to 20 s); hines_1981 and mt_1984_babich (a group ahead to blast a corridor); the numbers game values", "confidence": "medium", "notes": "docs/air_battle/01_ROUTES.md sections 1.2, 1.4-1.6, 6.7, 9. gate_separation_s a game value on Red Flag's 60-70 aircraft in 20-30 min." },
+    "routing": { "crossing": "gate", "cas_free": true, "gate_window_s": 300, "gate_separation_s": 120, "letdown_m": 60000, "max_turn_points": 6, "variants": ["covered", "other_flank", "direct"], "w_exp": 12, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0, "return": "other_gate", "blast_lead_s": 180, "blast_exposure_s": 20, "corridor_suppression": true, "deviation": "leader", "deviation_lateral_m": 10000, "deviation_tot_slip_s": 60, "navigation": { "drift_share": 0.005, "source": "game value (estimate: an inertial set with a radar or TACAN update between fixes; no period figure found, docs/air_battle/01_ROUTES.md As built S7)", "confidence": "estimate" }, "source": "fm_100_42_1976 (minimum risk routes and gates, CAS free of them, home through the gates); jsead_1982 ch. 4 (the corps suppresses along the route at its time); rafhs_j20_1999 (corridors and precise timings; the leader's freedom); crawford_1977_rand (exposure held to 20 s); hines_1981 and mt_1984_babich (a group ahead to blast a corridor); the numbers game values", "confidence": "medium", "notes": "docs/air_battle/01_ROUTES.md sections 1.2, 1.4-1.6, 6.7, 9. gate_separation_s a game value on Red Flag's 60-70 aircraft in 20-30 min." },
     "planning_cycle_h": 24, "lead_time_h": 12, "on_call_fraction": 0.1, "centralisation": 0.6, "simultaneous_bias": 0.6,
     "sortie_rate_per_day": 2.0, "serviceability": 0.8, "max_packages_per_cycle": 20, "delivery_risk": 0.4,
     "source": "usaf_ato_doctrine (a 24-hour order planned ahead: planning_cycle_h, lead_time_h); jp3_01_4_1995 (a theatre-wide suppression campaign first, then localized suppression for each operation); the rest game values",

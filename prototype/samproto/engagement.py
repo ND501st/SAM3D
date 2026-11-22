@@ -28,6 +28,23 @@ HOVER_MPS = 2.0
 SHOWN_ROLL_RATE_RAD_S = math.radians(90.0)
 MAX_SHOWN_BANK_RAD = math.radians(80.0)
 HOLD_SPEED_FRACTION = 0.85  # below this share of the speed told he turns and climbs no harder than sustained
+# Roadmap S4: the thrust's fall with the air's density (sigma^m), a helicopter's acceleration and its flare's.
+THRUST_LAPSE = 0.7
+HELI_ACCEL_MPS2 = 2.0
+HELI_DECEL_MPS2 = 3.0
+_SEA_LEVEL_RHO = standard_atmosphere(0.0).density_kg_m3
+
+
+def density_ratio_at(alt_m: float) -> float:
+    """The ISA density at alt_m over that at sea level."""
+    if alt_m == 0.0:
+        return 1.0
+    return standard_atmosphere(alt_m).density_kg_m3 / _SEA_LEVEL_RHO
+
+
+def heli_stop_distance_m(speed_mps: float) -> float:
+    """How far a helicopter at speed_mps flies before it can hover."""
+    return speed_mps * speed_mps / (2.0 * HELI_DECEL_MPS2)
 
 
 def coordinated_turn_rate(v: float, bank: float) -> float:
@@ -116,6 +133,10 @@ class Aircraft:
     throttle: float = 0.0
     attitude_set: bool = False
     height_held: bool = False
+    # Roadmap S4: a pilot holding his height asks the step for a path angle; the frame origin's altitude for the density.
+    path_asked: bool = False
+    asked_path_angle_rad: float = 0.0
+    frame_alt_m: float = 0.0
     demand: AircraftDemand = field(default_factory=AircraftDemand)
 
     @property
@@ -131,11 +152,26 @@ class Aircraft:
     def airspeed(self) -> float:
         return self.airspeed_mps if self.airspeed_mps >= 0.0 else self.speed_mps
 
+    def density_ratio(self) -> float:
+        return density_ratio_at(self.position.z + self.frame_alt_m)
+
+    def top_speed_mps(self) -> float:
+        """The energy model's top speed at its height (its type's is at sea level)."""
+        s = self.density_ratio()
+        return self.max_speed_mps if s == 1.0 else self.max_speed_mps * s ** (-0.5 * (1.0 - THRUST_LAPSE))
+
+    def accel_at_height_mps2(self) -> float:
+        s = self.density_ratio()
+        return self.accel_mps2 if s == 1.0 else self.accel_mps2 * s ** THRUST_LAPSE
+
+    def heli_accel_mps2(self) -> float:
+        return self.accel_mps2 if self.accel_mps2 > 0.0 else HELI_ACCEL_MPS2
+
     def keep_speed_mps(self) -> float:
         """The speed he means to keep in a turn or a climb."""
         if not self.has_energy_model():
             return 0.0
-        return min(self.speed_mps, 0.9 * self.max_speed_mps)
+        return min(self.speed_mps, 0.9 * self.top_speed_mps())
 
     def hold_speed_mps(self) -> float:
         """The speed he won't bleed below."""
@@ -144,8 +180,8 @@ class Aircraft:
     def excess_thrust_mps2(self, v: float) -> float:
         if not self.has_energy_model():
             return 0.0
-        r = v / self.max_speed_mps
-        return self.accel_mps2 * (1.0 - r * r)
+        r = v / self.top_speed_mps()
+        return self.accel_at_height_mps2() * (1.0 - r * r)
 
     def turn_rate_limit(self, v: float) -> float:
         w = self.max_turn_rate_rad_s
@@ -231,10 +267,11 @@ class Aircraft:
             if air.horizontal_length() < 1e-6 and self.next_wp < len(self.waypoints):
                 air = self.waypoints[self.next_wp] - self.position
             self.heading_rad = azimuth_of(air) if air.horizontal_length() > 1e-9 else 0.0
-            self.path_angle_rad = 0.0 if self.height_held or air.length_sq() <= 0.0 else elevation_of(air)
+            self.path_angle_rad = 0.0 if self.height_held or self.path_asked or air.length_sq() <= 0.0 else elevation_of(air)
             self.bank_rad = 0.0
             self.attitude_set = True
         v = self.airspeed_mps
+        held = self.height_held and not self.path_asked
         want_heading, want_gamma = self.heading_rad, self.path_angle_rad
         steer = None
         nose = Vec3(math.sin(self.heading_rad), math.cos(self.heading_rad), 0.0)
@@ -265,11 +302,13 @@ class Aircraft:
                         want = (want * (gw + math.sqrt(disc)) - wind_h) / vh
                 if want.horizontal_length() > 1e-9:
                     want_heading = azimuth_of(want)
-            if not self.height_held:
+            if not held and not self.path_asked:
                 want_gamma = math.atan2(to_wp.z, h)
-        if not self.height_held and self.max_climb_mps > 0.0 and v > self.max_climb_mps:
+        if self.path_asked:
+            want_gamma = self.asked_path_angle_rad
+        if not held and self.max_climb_mps > 0.0 and v > self.max_climb_mps:
             want_gamma = min(want_gamma, math.asin(self.max_climb_mps / v))
-        if not self.height_held and v < self.hold_speed_mps():  # slow: he climbs only on the thrust the turn leaves
+        if not held and v < self.hold_speed_mps():  # slow: he climbs only on the thrust the turn leaves
             spare = self.excess_thrust_mps2(v) - self.turn_drag_k() * max(0.0, self.load_g * self.load_g - 1.0)
             want_gamma = min(want_gamma, math.asin(clamp(spare / G0, 0.0, 1.0)))
 
@@ -295,7 +334,7 @@ class Aircraft:
         self.heading_rad = math.fmod(self.heading_rad + omega * dt + 2 * math.pi, 2 * math.pi)
 
         gamma_rate = 0.0
-        if not self.height_held:
+        if not held:
             gerr = want_gamma - self.path_angle_rad
             gamma_rate = clamp(gerr / PATH_TAU_S, -w_lim, w_lim)
             if abs(gamma_rate * dt) > abs(gerr):
@@ -307,18 +346,24 @@ class Aircraft:
 
         dvdt = 0.0
         if self.has_energy_model():
-            accel, r = self.accel_mps2, v / self.max_speed_mps
+            accel, r = self.accel_at_height_mps2(), v / self.top_speed_mps()
             turn = self.turn_drag_k() * max(0.0, self.load_g * self.load_g - 1.0)
             climb = G0 * sg
             th = r * r + (turn + climb) / accel + (self.speed_mps - v) / (SPEED_TAU_S * accel)
             self.throttle = clamp(th, MIN_THROTTLE, 1.0)
             dvdt = accel * (self.throttle - r * r) - turn - climb
             v = max(0.0, v + dvdt * dt)
+        elif self.rotorcraft:  # a helicopter: up at its acceleration, down at its flare's (roadmap S4)
+            want = max(0.0, self.speed_mps)
+            nv = _approach(v, want, (self.heli_accel_mps2() if want > v else HELI_DECEL_MPS2) * dt)
+            dvdt = (nv - v) / dt if dt > 0.0 else 0.0
+            v = nv
+            self.throttle = 0.0
         else:
             v = self.speed_mps
             self.throttle = 0.0
         self.airspeed_mps = v
-        air = Vec3(math.sin(self.heading_rad) * cg, math.cos(self.heading_rad) * cg, 0.0 if self.height_held else sg) * v
+        air = Vec3(math.sin(self.heading_rad) * cg, math.cos(self.heading_rad) * cg, 0.0 if held else sg) * v
         self.velocity = air + wind if windy else air
         self.position = self.position + self.velocity * dt
         self._set_pitch(v, dvdt)

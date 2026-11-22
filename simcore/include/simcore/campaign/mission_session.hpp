@@ -51,6 +51,11 @@ struct MissionSessionDef {
     int day = 1;                                        // the war's day the mission's clock falls on
     std::string tasking;                                // the regiment's tasking rules ("campaign/tasking.json"); "" none
     double hours = 0.0;                                 // the session's length from its start (0: the scenario's own end)
+    // The war's light mode (air_war.json's light.mode, roadmap S8). 0 by default: the tuned theatre undated, its parts
+    // of the day the buckets, because the bridges mission (19:00, a package on the march) and its tests were built on
+    // the buckets' dusk (18-21); by the sun that dusk is 16:13-17:25 and its package comes before the session starts.
+    // -1: the war data's own (1, the theatre dated). docs/LIGHT.md section 7.
+    int light_mode = 0;
 };
 
 class MissionSession {
@@ -82,6 +87,10 @@ public:
         if (clock_start_s < 0.0) return fail(d.scenario + ": no \"clock_start\" to put the air war's day on");
         airwar::AirWarData war;
         if (!airwar::LoadAirWarData(data_dir, d.theatre, "air_war/faction_" + d.faction + ".json", war, &e)) return fail(e);
+        if (d.light_mode >= 0) {
+            war.tuning.values["light.mode"] = static_cast<double>(d.light_mode);
+            airwar::ApplyLightMode(war);
+        }
         campaign_ = std::make_unique<airwar::AirCampaign>();
         if (!campaign_->Init(war, d.seed)) return fail("the air war does not start");
         // The battery stands where the mission has it from the war's first hour, so the enemy's intelligence has
@@ -107,6 +116,7 @@ public:
         if (live_) live_->Step(*runner_);
         CarryTheMove();
         PumpIntercept();
+        TellDummyHeard();
         KeepOutcomes(dt);
         if (campaign_) FollowOurPosts(false);
         if (campaign_) FollowOurBridges(false);
@@ -243,6 +253,7 @@ private:
                 def.posts.push_back(d);
             }
         }
+        PlaceDummyTraffic(war, def);
         if (!runner_->EnableAirRadio(def, &e)) {
             Note("no intercept service: " + e);
             return;
@@ -265,6 +276,13 @@ private:
                 h.text = l.text;
                 h.understood = l.understood;
                 if (l.fast) h.fact = "intercept:" + std::to_string(l.call) + ":" + l.post;
+                // Roadmap S6: what the campaign's feed needs to make the same facts on a load (command/air_war_feed.hpp).
+                h.chain_post = l.chain_post;
+                h.h = live_->HourOf(l.heard_s);
+                h.written_h = live_->HourOf(l.written_s);
+                h.bearing_deg = l.bearing_deg;
+                h.precedence = l.precedence;
+                h.names_battery = l.names_battery;
                 out.push_back(h);
             }
             return out;
@@ -317,6 +335,65 @@ private:
         }
     }
     static constexpr double kInterceptMastM = 30.0;  // sam3d: the posts' antennas (docs/air_battle/09 section 4.2)
+    static constexpr const char* kOurAirRadio = "pact_air_r832m";  // our side's air set and first net, as raid_scenario.hpp's
+    static constexpr double kOurAirFreqHz = 124e6;
+
+    // Our dummy traffic in the session (roadmap S6's follow-ups, radio.mode 2): each false corridor the campaign's rule gives
+    // for the session's days (AirCampaign::FalseCorridorsOn) gets a dummy transmitter at its middle, calling on our fighters'
+    // net through the corridor's hours; the enemy's listeners of data/command/intercept.json stand in the session's EM world
+    // where the data puts them, and hear it, our GCI and our flights by link margin (em/comms_intercept.hpp).
+    void PlaceDummyTraffic(const airwar::AirWarData& war, AirRadioDef& def) {
+        if (!campaign_ || war.tuning.Get("radio.mode") < 2.0) return;
+        const auto it = idata_.listeners.find(war.faction.id);
+        if (it == idata_.listeners.end() || it->second.empty()) return;  // nobody of theirs to hear it
+        for (const command::ListenerData& l : it->second) {
+            AirRadioPostDef d;
+            d.id = l.id;
+            d.name = l.id;
+            d.kind = "enemy_intercept";
+            d.at = FromTheatre(Vec3{l.east_km * 1000.0, l.north_km * 1000.0, 0.0});
+            d.mast_m = l.height_m;  // an airborne listener: its orbit's height
+            d.esm = "air_intercept_vhf_uhf";
+            def.posts.push_back(d);
+        }
+        const double start_hour = campaign_->Data().theatre.start_hour;
+        const int first = static_cast<int>(std::floor(h0_ / 24.0));
+        for (int day = std::max(0, first - 1); day <= first + 2; ++day) {  // the days a session of up to two days meets
+            for (const command::OwnAirZone& z : campaign_->FalseCorridorsOn(day)) {
+                if (z.path.size() < 2) continue;
+                const double from_s = (day * 24.0 + z.from_h - start_hour - h0_) * 3600.0;
+                const double until_s = (day * 24.0 + z.to_h - start_hour - h0_) * 3600.0;
+                if (until_s <= 0.0) continue;
+                AirRadioPostDef d;
+                d.id = "our_dummy_" + std::to_string(day + 1) + "_" + std::to_string(dummies_.size() + 1);
+                d.name = "dummy transmitter, " + z.id;
+                d.kind = "our_dummy";
+                d.at = FromTheatre((z.path.front() + z.path.back()) * 0.5);
+                d.mast_m = war.tuning.Get("radio.our_dummy_mast_m");
+                d.radio = kOurAirRadio;
+                d.freq_hz = kOurAirFreqHz;
+                d.corridor = z.id;
+                d.from_s = std::max(0.0, from_s);
+                d.until_s = until_s;
+                def.posts.push_back(d);
+                dummies_.push_back(Dummy{d.id, z.id, day, until_s, false});
+            }
+        }
+    }
+    // The enemy's word on each false corridor's use to the campaign's corridor learning: heard as soon as a listener heard a
+    // dummy call, not heard once the corridor's hours are over without one.
+    void TellDummyHeard() {
+        const airwar::AirRadio* ar = runner_->AirRadio();
+        if (!campaign_ || ar == nullptr) return;
+        for (Dummy& d : dummies_) {
+            if (d.told) continue;
+            const bool heard = ar->EnemyHeardDummy(d.post);
+            if (!heard && runner_->Time() < d.until_s) continue;
+            campaign_->SessionHeardCorridor(d.day, d.corridor, heard);
+            d.told = true;
+            Note(std::string("our dummy traffic in ") + d.corridor + (heard ? ": heard by the enemy" : ": not heard by the enemy"));
+        }
+    }
 
     // The battery at the position its task names (the task's march over, or in its area from the start): the
     // campaign's battery is there from then (between packages), and the regiment's estimates count from then.
@@ -537,6 +614,14 @@ private:
     command::InterceptDesk desk_;
     command::InterceptBridge ibridge_;
     bool intercept_on_ = false;
+    struct Dummy {
+        std::string post;      // its transmitter in the session's air radio
+        std::string corridor;  // the false corridor
+        int day = 0;           // the campaign day of its use
+        double until_s = 0.0;  // the session time its hours end
+        bool told = false;     // the campaign has the enemy's word on it
+    };
+    std::vector<Dummy> dummies_;  // our dummy transmitters (roadmap S6's follow-ups)
     std::vector<Told> told_;
     std::set<std::string> told_calls_;  // the calls the fast road has told already
     double next_watch_s_ = 0.0;

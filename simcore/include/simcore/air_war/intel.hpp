@@ -53,6 +53,7 @@ struct IntelEntry {
     int strikes = 0;
     double last_struck_h = -1e9;
     double claimed_destroyed_h = -1.0;  // pilots claimed it destroyed then
+    double first_h = -1e9;              // when the enemy first learned of it (its delivery; the prior picture's at the war's start)
     bool claim_was_false = false;       // (truth, for the story) it was not destroyed when they claimed it
     double losses_credited = 0.0;       // aircraft the enemy believes it shot down
 
@@ -130,6 +131,7 @@ public:
         // order of the picture's entries, which the planner walks: GCC's campaigns took their own course.
         std::stable_sort(arrived.begin(), arrived.end(),
                   [](const IntelReport& a, const IntelReport& b) { return a.arrive_h < b.arrive_h; });
+        delivering_h_ = now_h;
         for (const IntelReport& r : arrived) Merge(r, analyst_skill);
         return arrived;
     }
@@ -189,6 +191,8 @@ public:
     std::vector<std::string> repaired;
 
 private:
+    double delivering_h_ = 0.0;  // the hour of the delivery being merged
+
     void Merge(const IntelReport& r, double analyst_skill) {
         IntelEntry* e = nullptr;
         if (!r.ghost) {
@@ -216,6 +220,7 @@ private:
             n.sigma_m = r.sigma_m;
             n.exists = r.exists;
             n.function = r.function >= 0.0 ? r.function : 1.0;
+            n.first_h = delivering_h_;
             n.observed_h = r.observed_h;
             n.source = r.source;
             n.mobile = r.kind == ObjectKind::SamSite || r.kind == ObjectKind::Troops || IsColumn(r.kind) || r.ghost;

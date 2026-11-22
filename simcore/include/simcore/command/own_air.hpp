@@ -114,6 +114,33 @@ struct EnemyLearningDef {
     double sigma_m = 8000.0;
     double use_creativity = 0.55;    // a planner this creative times a raid to its window
     double use_age_h = 72.0;         // on a belief no older than this
+    // S1: the campaign's use of a belief (air_war/campaign.hpp, resolve.hpp).
+    double shift_h = 2.0;            // the planner moves a raid's time over target at most this far into a believed window
+    double hold_fire = 0.5;          // a defence near a corridor in its window loses this share of its fire (it holds for ours)
+    double near_m = 15000.0;         // a defence this near a corridor's path holds for it
+    double margin_m = 10000.0;       // a belief this far off the corridor (beyond its half width) still finds it
+    double hours_per_day = 6.0;      // a corridor's hours of use a day in the campaign (from 6 h; our flights by day)
+};
+
+// The fighter regiments' reports of their losses and claims (S1, section 8): the pair's leader calls a loss or a kill he saw
+// to the GCI at once, the regiment's duty officer has it a little later and sends it down the chain like a notice; a loss
+// nobody saw is reported missing once the aircraft's fuel would be out. Game values (own_air.json "reports").
+struct ReportsDef {
+    double seen_s = 120.0;
+    double missing_min_s = 1800.0;
+    double missing_max_s = 3600.0;
+    double claim_s = 300.0;
+    double hop_work_s = 30.0;
+    int precedence = 1;
+    double match_s = 600.0;          // the regiment's check: a loss this near a launch in time
+    double match_m = 10000.0;        // and in place meets it
+};
+
+// The allied false friend (S1, section 7): in a war with the Pact, its allies' aircraft fly the same Kremniy over the same
+// war filters on their own schedule; one answers our interrogator when both hold the same filter. An inference, flagged.
+struct FalseFriendDef {
+    bool on = true;
+    double allied_share = 0.5;       // the Pact's aircraft that are its allies' (on Kremniy), not Soviet (on Parol)
 };
 
 struct OwnAirDef {
@@ -123,6 +150,10 @@ struct OwnAirDef {
     double alert_high_min_m = 10000.0, alert_high_max_m = 12000.0;
     double alert_inside_min_km = 50.0, alert_inside_max_km = 60.0;
     double pursuit_min_km = 25.0, pursuit_max_km = 30.0;
+    int alert_pairs = 1;             // pairs a regiment puts on airborne alert on a raid warning (S1)
+    double alert_orbit_s = 2400.0;   // how long a pair holds its zone before it goes home unvectored
+    ReportsDef reports;
+    FalseFriendDef false_friend;
     GciDef gci;
     NoticeDef notice;
     IffChangeDef iff_change;
@@ -232,7 +263,8 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
     if (!ReadFile(path, root, error)) return false;
     std::string e;
     if (Unknown(root, "", {"own_air_id", "status", "source", "confidence", "notes", "readiness", "readiness_source", "duty", "airborne_alert",
-                           "pursuit_limit_km", "gci", "notice", "iff_change", "cooperation", "enemy_learning", "hot_phase"}, &e)) {
+                           "pursuit_limit_km", "gci", "notice", "iff_change", "cooperation", "enemy_learning", "hot_phase", "reports",
+                           "false_friend"}, &e)) {
         return fail(e);
     }
     out = OwnAirDef();
@@ -273,11 +305,16 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
         u.night_to_h = Num(*d, "night_to_h", u.night_to_h);
     }
     if (const json::Value* a = root.Find("airborne_alert")) {
-        if (Unknown(*a, "airborne_alert", {"low_m", "high_m", "centre_inside_km", "source", "confidence", "notes"}, &e)) return fail(e);
+        if (Unknown(*a, "airborne_alert", {"low_m", "high_m", "centre_inside_km", "pairs", "orbit_s", "source", "confidence", "notes", "game_values"}, &e)) {
+            return fail(e);
+        }
         if (!Pair(*a, "low_m", out.alert_low_min_m, out.alert_low_max_m) || !Pair(*a, "high_m", out.alert_high_min_m, out.alert_high_max_m) ||
             !Pair(*a, "centre_inside_km", out.alert_inside_min_km, out.alert_inside_max_km)) {
             return fail("airborne_alert: [min, max] pairs");
         }
+        out.alert_pairs = static_cast<int>(Num(*a, "pairs", out.alert_pairs));
+        out.alert_orbit_s = Num(*a, "orbit_s", out.alert_orbit_s);
+        if (out.alert_pairs < 0 || out.alert_orbit_s <= 0.0) return fail("airborne_alert: pairs >= 0 and orbit_s > 0");
     }
     if (!Pair(root, "pursuit_limit_km", out.pursuit_min_km, out.pursuit_max_km)) return fail("pursuit_limit_km: {\"value\": [min, max]}");
     if (const json::Value* g = root.Find("gci")) {
@@ -328,8 +365,8 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
         d.near_target_m = Num(*c, "near_target_m", d.near_target_m);
     }
     if (const json::Value* l = root.Find("enemy_learning")) {
-        if (Unknown(*l, "enemy_learning", {"heard_per_use", "break_talk_table", "learn_after", "sigma_m", "use_creativity", "use_age_h", "source",
-                                           "confidence", "notes"}, &e)) {
+        if (Unknown(*l, "enemy_learning", {"heard_per_use", "break_talk_table", "learn_after", "sigma_m", "use_creativity", "use_age_h", "shift_h",
+                                           "hold_fire", "near_m", "margin_m", "hours_per_day", "source", "confidence", "notes"}, &e)) {
             return fail(e);
         }
         EnemyLearningDef& d = out.learning;
@@ -339,6 +376,32 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
         d.sigma_m = Num(*l, "sigma_m", d.sigma_m);
         d.use_creativity = Num(*l, "use_creativity", d.use_creativity);
         d.use_age_h = Num(*l, "use_age_h", d.use_age_h);
+        d.shift_h = Num(*l, "shift_h", d.shift_h);
+        d.hold_fire = Num(*l, "hold_fire", d.hold_fire);
+        d.near_m = Num(*l, "near_m", d.near_m);
+        d.margin_m = Num(*l, "margin_m", d.margin_m);
+        d.hours_per_day = Num(*l, "hours_per_day", d.hours_per_day);
+        if (d.hold_fire < 0.0 || d.hold_fire > 1.0 || d.shift_h < 0.0) return fail("enemy_learning: hold_fire in [0, 1], shift_h >= 0");
+    }
+    if (const json::Value* r = root.Find("reports")) {
+        if (Unknown(*r, "reports", {"seen_s", "missing_s", "claim_s", "hop_work_s", "precedence", "match_s", "match_m", "source", "confidence", "notes"}, &e)) {
+            return fail(e);
+        }
+        ReportsDef& d = out.reports;
+        d.seen_s = Num(*r, "seen_s", d.seen_s);
+        if (r->Find("missing_s") != nullptr && !Pair(*r, "missing_s", d.missing_min_s, d.missing_max_s)) return fail("reports.missing_s: [min, max]");
+        d.claim_s = Num(*r, "claim_s", d.claim_s);
+        d.hop_work_s = Num(*r, "hop_work_s", d.hop_work_s);
+        d.precedence = static_cast<int>(Num(*r, "precedence", d.precedence));
+        d.match_s = Num(*r, "match_s", d.match_s);
+        d.match_m = Num(*r, "match_m", d.match_m);
+        if (d.seen_s < 0.0 || d.missing_max_s < d.missing_min_s || d.claim_s < 0.0) return fail("reports: delays >= 0, missing_s [min, max]");
+    }
+    if (const json::Value* f = root.Find("false_friend")) {
+        if (Unknown(*f, "false_friend", {"on", "allied_share", "source", "confidence", "notes"}, &e)) return fail(e);
+        if (const json::Value* on = f->Find("on")) out.false_friend.on = on->Is(json::Type::Bool) && on->boolean;
+        out.false_friend.allied_share = Num(*f, "allied_share", out.false_friend.allied_share);
+        if (out.false_friend.allied_share < 0.0 || out.false_friend.allied_share > 1.0) return fail("false_friend.allied_share: in [0, 1]");
     }
     if (out.Readiness(1) == nullptr || out.Readiness(2) == nullptr) return fail("readiness: states 1 and 2 are needed");
     return true;
@@ -524,6 +587,29 @@ struct OwnAirZone {
         return DistanceM(p) <= half_width_m + slack_m;
     }
 };
+
+// Our dummy traffic's false corridors on a day (roadmap S6, docs/air_battle/09 section 8): `count` a day, the k-th from the
+// real corridor (day + k) in turn of `real`, turned `turn_rad` about its airfield (its first point), one way on even turns and
+// the other on odd ones, named "<real id> B" as the enemy would label a second corridor from the same field. A real one whose
+// airfield is not working (`working(z)` false) or that has no way out gives none that turn. The campaign's daily feed
+// (AirCampaign::FeedDummyCorridors) and a session's dummy transmitters (campaign/mission_session.hpp) take the same corridors.
+template <class Working>
+inline std::vector<OwnAirZone> FalseCorridors(const std::vector<OwnAirZone>& real, int day, int count, double turn_rad, Working working) {
+    std::vector<OwnAirZone> out;
+    if (real.empty()) return out;
+    for (int k = 0; k < count; ++k) {
+        const OwnAirZone& r = real[static_cast<std::size_t>(day + k) % real.size()];
+        if (r.path.size() < 2 || !working(r)) continue;
+        const double a = ((day + k) % 2 == 0 ? 1.0 : -1.0) * turn_rad;
+        const Vec3 o = r.path.front(), e = r.path.back();
+        const double dx = e.x - o.x, dy = e.y - o.y;
+        OwnAirZone z = r;
+        z.id = r.id + " B";
+        z.path = {o, Vec3{o.x + dx * std::cos(a) + dy * std::sin(a), o.y - dx * std::sin(a) + dy * std::cos(a), 0.0}};
+        out.push_back(z);
+    }
+    return out;
+}
 
 enum class CooperationMethod { ByZones, OneZone };
 
@@ -887,6 +973,38 @@ public:
         const std::uint64_t n = ++uses_;
         const double p = std::min(1.0, def_.heard_per_use + def_.break_talk_table * (1.0 - def_.heard_per_use));
         if (em::Uniform01(em::DrawHash(seed_, em::Stream::AirCombat, kOwnAirKey + 0x500ull, n, 1)) >= p) return false;
+        Record(z, h, n);
+        return true;
+    }
+    // One use whose hearing a session's EM world decided (roadmap S6's follow-ups: its listeners heard the use's traffic by
+    // link margin, or did not): counted as a use like Use, with no draw of the chance. True when heard.
+    bool UseHeard(const OwnAirZone& z, double h, bool heard) {
+        const std::uint64_t n = ++uses_;
+        if (!heard) return false;
+        Record(z, h, n);
+        return true;
+    }
+    // A save's state (S1): what it heard so far and how many uses it has counted (the draws are keyed on the count).
+    const std::vector<BelievedCorridor>& Heard() const { return heard_; }
+    std::uint64_t Uses() const { return uses_; }
+    void Restore(const std::vector<BelievedCorridor>& heard, std::uint64_t uses) {
+        heard_ = heard;
+        uses_ = uses;
+    }
+    // The corridors it believes at hour h: heard often enough, recently enough.
+    std::vector<BelievedCorridor> Believed(double h) const {
+        std::vector<BelievedCorridor> out;
+        for (const BelievedCorridor& c : heard_) {
+            if (c.heard >= def_.learn_after && h - c.last_h <= def_.use_age_h) out.push_back(c);
+        }
+        return out;
+    }
+    // Does a planner of this creativity send a raid by a believed corridor? (Only a creative one: use_creativity.)
+    bool Exploits(double creativity, double h) const { return creativity >= def_.use_creativity && !Believed(h).empty(); }
+
+private:
+    // A use heard: the corridor believed where it was heard (placed within sigma_m on its first hearing), its hours widened.
+    void Record(const OwnAirZone& z, double h, std::uint64_t n) {
         BelievedCorridor* b = nullptr;
         for (BelievedCorridor& c : heard_) {
             if (c.id == z.id) b = &c;
@@ -903,27 +1021,129 @@ public:
             b->from_h = std::fmod(z.from_h, 24.0);
             b->to_h = std::fmod(z.to_h, 24.0);
         }
+        else {  // heard again: the hours it was used in widen to take this use in (hours of day, no wrap past midnight)
+            b->from_h = std::min(b->from_h, std::fmod(z.from_h, 24.0));
+            b->to_h = std::max(b->to_h, std::fmod(z.to_h, 24.0));
+        }
         ++b->heard;
         b->last_h = h;
-        return true;
     }
-    // The corridors it believes at hour h: heard often enough, recently enough.
-    std::vector<BelievedCorridor> Believed(double h) const {
-        std::vector<BelievedCorridor> out;
-        for (const BelievedCorridor& c : heard_) {
-            if (c.heard >= def_.learn_after && h - c.last_h <= def_.use_age_h) out.push_back(c);
-        }
-        return out;
-    }
-    // Does a planner of this creativity send a raid by a believed corridor? (Only a creative one: use_creativity.)
-    bool Exploits(double creativity, double h) const { return creativity >= def_.use_creativity && !Believed(h).empty(); }
 
-private:
     EnemyLearningDef def_;
     std::uint64_t seed_ = 0;
     std::vector<BelievedCorridor> heard_;
     std::uint64_t uses_ = 0;
 };
+
+// ------------------------------------------------------------------------------------------------ the regiments' reports
+
+// A fighter regiment's report of a loss or a kill (S1, section 8): as its pilots and controllers believe it, never the truth
+// beyond what they saw (a loss to our own missile is "by a missile from below" when the wingman saw it, else "cause unknown").
+enum class OwnAirReportKind { Loss, Claim };
+struct OwnAirReport {
+    OwnAirReportKind kind = OwnAirReportKind::Loss;
+    std::string regiment;
+    std::string flight;
+    std::string type = "MiG-21";   // ours for a loss; the enemy's as claimed for a claim
+    int count = 1;
+    double clock_h = 0.0;          // when it happened (local clock hours)
+    Vec3 where;                    // ENU (the session's)
+    std::string cause;             // a loss: "in air combat", "by a missile from below", "cause unknown"
+};
+
+// The report as the regiment says it to the battery on its net: talk-table words (a sam3d placeholder group 403, as group 402
+// is the notice), the PVO grid square, the clock time.
+inline std::string OwnAirReportWords(const OwnAirReport& r, const LocalFrame& frame) {
+    std::string s = "403. Fighter regiment " + r.regiment + ": ";
+    if (r.kind == OwnAirReportKind::Loss) s += "loss, " + std::to_string(r.count) + " " + r.type;
+    else s += "claim, " + std::to_string(r.count) + " " + r.type + " destroyed";
+    s += ", flight " + r.flight + ", square " + SquareOf(frame, r.where) + ", at " + ClockWords(r.clock_h);
+    if (r.kind == OwnAirReportKind::Loss) s += ", " + (r.cause.empty() ? std::string("cause unknown") : r.cause);
+    return s + ".";
+}
+
+// The same read back from what was written (the regiment's check reads the journal's line, slips and all).
+inline bool ReadOwnAirReport(const std::string& text, const LocalFrame& frame, const Vec3& near_to, double clock_h, OwnAirReport& out) {
+    using namespace own_air_detail;
+    out = OwnAirReport();
+    std::size_t at = text.find("403. Fighter regiment ");
+    if (at == std::string::npos) return false;
+    at += 22;
+    const std::size_t colon = text.find(": ", at);
+    if (colon == std::string::npos) return false;
+    out.regiment = text.substr(at, colon - at);
+    std::size_t p = colon + 2;
+    if (text.compare(p, 6, "loss, ") == 0) {
+        out.kind = OwnAirReportKind::Loss;
+        p += 6;
+    } else if (text.compare(p, 7, "claim, ") == 0) {
+        out.kind = OwnAirReportKind::Claim;
+        p += 7;
+    } else {
+        return false;
+    }
+    if (!IntAt(text, p, out.count)) return false;
+    const std::size_t sp = text.find(' ', p);
+    const std::size_t fl = text.find(", flight ", p);
+    if (sp == std::string::npos || fl == std::string::npos || fl < sp) return false;
+    out.type = text.substr(sp + 1, fl - sp - 1);
+    const std::string destroyed = " destroyed";
+    if (out.kind == OwnAirReportKind::Claim && out.type.size() > destroyed.size() &&
+        out.type.compare(out.type.size() - destroyed.size(), destroyed.size(), destroyed) == 0) {
+        out.type.resize(out.type.size() - destroyed.size());
+    }
+    const std::size_t sq = text.find(", square ", fl);
+    if (sq == std::string::npos) return false;
+    out.flight = text.substr(fl + 9, sq - fl - 9);
+    const std::size_t sq_end = text.find(',', sq + 9);
+    if (sq_end == std::string::npos) return false;
+    if (!ReadSquare(frame, text.substr(sq + 9, sq_end - sq - 9), near_to, out.where)) return false;
+    const std::size_t clk = text.find(", at ", sq_end);
+    if (clk == std::string::npos || !ClockAt(text, clk + 5, clock_h, out.clock_h)) return false;
+    if (out.kind == OwnAirReportKind::Loss) {
+        const std::size_t c = text.find(", ", clk + 5);
+        if (c != std::string::npos) {
+            out.cause = text.substr(c + 2);
+            if (!out.cause.empty() && out.cause.back() == '.') out.cause.pop_back();
+        }
+    }
+    return true;
+}
+
+// ------------------------------------------------------------------------------------------------ in the air
+
+// Our fighters' line beyond the front (S1, section 3; mt_turchin_coop p. 9): a flight breaks off 25-30 km past the front line,
+// each regiment's within the window by a keyed draw (kOwnAirKey + 0x700).
+inline double PursuitLimitM(const OwnAirDef& d, std::uint64_t seed, std::uint64_t regiment_key) {
+    const double u = em::Uniform01(em::DrawHash(seed, em::Stream::AirCombat, kOwnAirKey + 0x700ull, regiment_key, 1));
+    return 1000.0 * (d.pursuit_min_km + (d.pursuit_max_km - d.pursuit_min_km) * u);
+}
+
+// An airborne-alert zone (section 3; mt_turchin_coop pp. 6-7): its centre so far inside our territory from the front line,
+// its height in the low or the high band, each by a keyed draw (kOwnAirKey + 0xA00). `front` is a point of the front line and
+// `to_enemy` the unit horizontal direction across it toward the enemy.
+struct AlertZone {
+    Vec3 centre;
+    double alt_m = 2000.0;
+    bool low = true;
+};
+inline AlertZone AlertZoneOf(const OwnAirDef& d, const Vec3& front, const Vec3& to_enemy, bool low, std::uint64_t seed, std::uint64_t regiment_key) {
+    const double u1 = em::Uniform01(em::DrawHash(seed, em::Stream::AirCombat, kOwnAirKey + 0xA00ull, regiment_key, 1));
+    const double u2 = em::Uniform01(em::DrawHash(seed, em::Stream::AirCombat, kOwnAirKey + 0xA00ull, regiment_key, 2));
+    AlertZone z;
+    z.low = low;
+    const double inside_m = 1000.0 * (d.alert_inside_min_km + (d.alert_inside_max_km - d.alert_inside_min_km) * u1);
+    z.centre = Vec3{front.x - to_enemy.x * inside_m, front.y - to_enemy.y * inside_m, 0.0};
+    z.alt_m = low ? d.alert_low_min_m + (d.alert_low_max_m - d.alert_low_min_m) * u2 : d.alert_high_min_m + (d.alert_high_max_m - d.alert_high_min_m) * u2;
+    return z;
+}
+
+// The allied false friend (section 7): is this enemy aircraft one of the Pact's allies' (on Kremniy), by a keyed draw
+// (kOwnAirKey + 0x600), and the allies' own schedule of the war filters (another day's draw, kOwnAirKey + 0x610).
+inline bool AlliedAircraft(const FalseFriendDef& d, std::uint64_t seed, std::uint64_t aircraft_key) {
+    if (!d.on) return false;
+    return em::Uniform01(em::DrawHash(seed, em::Stream::AirCombat, kOwnAirKey + 0x600ull, aircraft_key, 1)) < d.allied_share;
+}
 
 // ------------------------------------------------------------------------------------------------ the trace
 
@@ -1027,6 +1247,7 @@ struct Scramble {
     Vec3 toward;               // where the group was on the picture
     Vec3 base;
     std::string why;
+    bool alert = false;        // up to an airborne-alert zone (S1), not against a group
 };
 
 // The fighter regiments' duty and scrambles by the rule table (section 3), on our sector's picture.
@@ -1100,25 +1321,27 @@ public:
             if (best == nullptr) continue;
             answered_.push_back(lead.id);
             for (int k = 0; k < def_->duty.pairs_per_group && free_channels > 0 && best->r1 + best->r2 > 0; ++k) {
-                Scramble s;
-                s.regiment = best->def.id;
-                s.number = ++best->launched;
-                s.readiness = best->r1 > 0 ? 1 : 2;
-                (s.readiness == 1 ? best->r1 : best->r2) -= 1;
-                s.ordered_s = t;
-                const ReadinessDef* rd = def_->Readiness(s.readiness);
-                const double u = em::Uniform01(em::DrawHash(seed_, em::Stream::AirCombat, kOwnAirKey + 0x300ull, Key(best->def.id),
-                                                            static_cast<std::uint64_t>(s.number)));
-                double take = rd != nullptr ? rd->takeoff_min_s + (rd->takeoff_max_s - rd->takeoff_min_s) * u : 300.0;
-                take /= std::max(0.25, std::clamp(best->def.function, 0.0, 1.0));  // a struck base launches later
-                s.airborne_s = t + take;
+                Scramble s = Take(*best, t, lead.pos, "a raid group on the sector's picture coming at " + best->def.id + "'s area, a guidance channel free");
                 s.against = lead.id;
-                s.toward = lead.pos;
-                s.base = best->def.base_pos;
-                s.why = "a raid group on the sector's picture coming at " + best->def.id + "'s area, a guidance channel free";
                 orders_.push_back(s);
                 out.push_back(s);
                 --free_channels;
+            }
+        }
+        return out;
+    }
+    // Airborne alert on a raid warning (S1, mt_turchin_coop pp. 6-7): `pairs` of each regiment's ready pairs up to a zone
+    // (`zone_of` gives the regiment's zone centre); each a scramble with alert set, against no group.
+    std::vector<Scramble> Alert(double t, int pairs, const std::function<Vec3(const FighterRegimentDef&)>& zone_of) {
+        std::vector<Scramble> out;
+        if (def_ == nullptr || alerted_) return out;
+        alerted_ = true;
+        for (Reg& r : regs_) {
+            for (int k = 0; k < pairs && r.r1 + r.r2 > 0; ++k) {
+                Scramble s = Take(r, t, zone_of(r.def), "a raid warning: a pair up to " + r.def.id + "'s airborne-alert zone");
+                s.alert = true;
+                orders_.push_back(s);
+                out.push_back(s);
             }
         }
         return out;
@@ -1151,6 +1374,24 @@ private:
         int r2 = 0;
         int launched = 0;
     };
+    // A pair taken from the regiment's readiness 1, else 2, airborne by its state's window (a keyed draw, kOwnAirKey + 0x300).
+    Scramble Take(Reg& r, double t, const Vec3& toward, const std::string& why) {
+        Scramble s;
+        s.regiment = r.def.id;
+        s.number = ++r.launched;
+        s.readiness = r.r1 > 0 ? 1 : 2;
+        (s.readiness == 1 ? r.r1 : r.r2) -= 1;
+        s.ordered_s = t;
+        const ReadinessDef* rd = def_->Readiness(s.readiness);
+        const double u = em::Uniform01(em::DrawHash(seed_, em::Stream::AirCombat, kOwnAirKey + 0x300ull, Key(r.def.id), static_cast<std::uint64_t>(s.number)));
+        double take = rd != nullptr ? rd->takeoff_min_s + (rd->takeoff_max_s - rd->takeoff_min_s) * u : 300.0;
+        take /= std::max(0.25, std::clamp(r.def.function, 0.0, 1.0));  // a struck base launches later
+        s.airborne_s = t + take;
+        s.toward = toward;
+        s.base = r.def.base_pos;
+        s.why = why;
+        return s;
+    }
     bool Night(double t) const {
         double h = std::fmod((clock_start_s_ + t) / 3600.0, 24.0);
         if (h < 0.0) h += 24.0;
@@ -1166,6 +1407,7 @@ private:
     std::vector<std::string> answered_;
     bool warned_ = false;
     double warned_s_ = -1.0;
+    bool alerted_ = false;
 };
 
 }  // namespace command

@@ -28,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/command/own_air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
 #include "simcore/json.hpp"
@@ -126,7 +127,8 @@ struct BoardRecord {
 struct LogEntry {
     double time_s = 0.0;
     std::string callsign;
-    std::string kind;  // "launch", "destroyed", "missed", "not destroyed" (a kill taken back)
+    std::string kind;  // "launch", "destroyed", "missed", "not destroyed" (a kill taken back), "hit" (a kill taken back as hit,
+                       // seen burning and flying on: roadmap S4)
     int number = 0;    // the target's board number as reported (0: not said)
 };
 // A report the radar company said on the air-picture net, as its own log has it.
@@ -222,6 +224,7 @@ struct CombatReport {
     std::vector<LogEntry> claims;       // the launchers' reports
     int missiles = 0;                   // launches reported
     int destroyed = 0;                  // kills reported and not taken back
+    int damaged = 0;                    // ...taken back as hit, flying on (roadmap S4)
     int unreadable = 0;                 // air-picture lines of the journal that don't read as a report
 
     const ReportTarget* Target(int number) const {
@@ -320,6 +323,10 @@ inline CombatReport CompileReport(const std::string& unit, double from_s, double
         if (e.kind == "launch") ++r.missiles;
         if (e.kind == "destroyed") ++r.destroyed;
         if (e.kind == "not destroyed") --r.destroyed;
+        if (e.kind == "hit") {  // reported destroyed, then hit and flying on (roadmap S4)
+            --r.destroyed;
+            ++r.damaged;
+        }
     }
     r.destroyed = std::max(0, r.destroyed);
     return r;
@@ -370,6 +377,13 @@ inline std::string ReportText(const CombatReport& r, const std::function<std::st
         if (e.kind == "destroyed") kills += (kills.empty() ? " (" : ", ") + (e.number > 0 ? BoardNumber(e.number) : std::string("a target")) + " by " + e.callsign;
     }
     s += kills.empty() ? "." : kills + ").";
+    if (r.damaged > 0) {  // roadmap S4: hit and seen flying on
+        std::string hits;
+        for (const LogEntry& e : r.claims) {
+            if (e.kind == "hit") hits += (hits.empty() ? " (" : ", ") + (e.number > 0 ? BoardNumber(e.number) : std::string("a target")) + " by " + e.callsign;
+        }
+        s += " Targets hit and flying on: " + std::to_string(r.damaged) + hits + ").";
+    }
     if (r.unreadable > 0) s += " Lines of the journal that do not read: " + std::to_string(r.unreadable) + ".";
     return s;
 }
@@ -486,6 +500,130 @@ inline const char* GradeWord(int grade) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------- our aviation in the records
+
+// Each launch in the commander's log set against the notices of our flights and the fighter regiments' loss reports the
+// journal holds (S1, docs/air_battle/08_OUR_FIGHTERS.md section 8): where the board had the target at the launch, whether a
+// notice written before it covered that place, height and hour, and whether a loss reported later meets it in time and
+// square. All from the records as written: a notice the radiotelephonist wrote with a slip covers what the slip says.
+struct OwnAirLaunchFinding {
+    int number = 0;
+    double launch_s = 0.0;
+    std::string callsign;
+    bool placed = false;           // the board had the target's mark
+    Vec3 where;
+    int height_hm = -1;
+    bool inside_notice = false;    // a notice written before the launch covered it
+    double notice_written_s = -1.0;
+    std::string notice_flight;
+    bool loss_met = false;         // a loss report meets it
+    double loss_written_s = -1.0;
+    std::string loss_flight;
+    std::string why;
+};
+struct OwnAirCheck {
+    int notices = 0;               // notices in the journal
+    int losses = 0;                // loss reports in the journal
+    int claims = 0;                // claim reports in the journal
+    std::vector<OwnAirLaunchFinding> launches;
+    int Met() const {
+        int n = 0;
+        for (const OwnAirLaunchFinding& f : launches) n += f.loss_met ? 1 : 0;
+        return n;
+    }
+    // Launches a loss report meets with a notice of the flight in the journal before them: the battery fired against its own
+    // record.
+    int AgainstRecord() const {
+        int n = 0;
+        for (const OwnAirLaunchFinding& f : launches) n += f.loss_met && f.inside_notice ? 1 : 0;
+        return n;
+    }
+};
+
+inline OwnAirCheck CheckOwnAir(const std::vector<JournalLine>& journal, const std::vector<BoardRecord>& board, const std::vector<LogEntry>& log,
+                               const LocalFrame& frame, const Vec3& near_to, double clock0_h, const command::ReportsDef& rd,
+                               double slack_m = 0.0, double slack_h = 0.0) {
+    OwnAirCheck c;
+    struct Written {
+        double s;
+        command::OwnFlightNotice n;
+    };
+    struct Loss {
+        double s;
+        command::OwnAirReport r;
+    };
+    std::vector<Written> notices;
+    std::vector<Loss> losses;
+    for (const JournalLine& l : journal) {
+        const double h = clock0_h + l.heard_s / 3600.0;
+        const std::size_t at = l.text.find("402. Notice");
+        command::OwnFlightNotice n;
+        if (at != std::string::npos && command::ReadNotice(l.text.substr(at), frame, near_to, h, n)) {
+            notices.push_back({l.heard_s, n});
+            continue;
+        }
+        command::OwnAirReport r;
+        if (command::ReadOwnAirReport(l.text, frame, near_to, h, r)) {
+            if (r.kind == command::OwnAirReportKind::Loss) losses.push_back({l.heard_s, r});
+            else ++c.claims;
+        }
+    }
+    c.notices = static_cast<int>(notices.size());
+    c.losses = static_cast<int>(losses.size());
+    for (const LogEntry& e : log) {
+        if (e.kind != "launch") continue;
+        OwnAirLaunchFinding f;
+        f.number = e.number;
+        f.launch_s = e.time_s;
+        f.callsign = e.callsign;
+        const BoardRecord* best = nullptr;
+        for (const BoardRecord& m : board) {
+            if (e.number <= 0 || m.number != e.number || m.time_s > e.time_s + 60.0) continue;
+            if (best == nullptr || std::fabs(m.time_s - e.time_s) < std::fabs(best->time_s - e.time_s)) best = &m;
+        }
+        const double h = clock0_h + e.time_s / 3600.0;
+        if (best != nullptr) {
+            f.placed = true;
+            f.where = best->position;
+            f.height_hm = best->height_hm;
+            for (const Written& w : notices) {
+                if (w.s > e.time_s || f.inside_notice) continue;
+                if (w.n.AsZone().Holds(f.where, 100.0 * std::max(0, f.height_hm), h, slack_m, slack_h)) {
+                    f.inside_notice = true;
+                    f.notice_written_s = w.s;
+                    f.notice_flight = w.n.flight;
+                }
+            }
+            for (const Loss& l : losses) {
+                if (f.loss_met || std::fabs(l.r.clock_h - h) * 3600.0 > rd.match_s) continue;
+                if (std::hypot(l.r.where.x - f.where.x, l.r.where.y - f.where.y) > rd.match_m) continue;
+                f.loss_met = true;
+                f.loss_written_s = l.s;
+                f.loss_flight = l.r.flight;
+            }
+        }
+        if (!f.placed) f.why = "no board mark under its number: not checked";
+        else if (f.loss_met && f.inside_notice) f.why = "a loss of " + f.loss_flight + " meets it, and the notice of " + f.notice_flight + " was in the journal before it";
+        else if (f.loss_met) f.why = "a loss of " + f.loss_flight + " meets it; no notice in the journal covered it at the launch";
+        else if (f.inside_notice) f.why = "inside the notice of " + f.notice_flight + "; no loss reported";
+        else f.why = "no notice covered it and no loss meets it";
+        c.launches.push_back(f);
+    }
+    return c;
+}
+
+inline std::string OwnAirCheckText(const OwnAirCheck& c, const std::function<std::string(double)>& clock) {
+    std::string s = "Our aviation in the records: " + std::to_string(c.notices) + (c.notices == 1 ? " notice" : " notices") + ", " +
+                    std::to_string(c.losses) + (c.losses == 1 ? " loss" : " losses") + " and " + std::to_string(c.claims) +
+                    (c.claims == 1 ? " claim" : " claims") + " reported.";
+    for (const OwnAirLaunchFinding& f : c.launches) {
+        if (!f.loss_met && !f.inside_notice) continue;
+        s += " The launch at " + clock(f.launch_s) + (f.number > 0 ? " at " + BoardNumber(f.number) : std::string()) + " by " + f.callsign + ": " + f.why + ".";
+    }
+    if (c.AgainstRecord() > 0) s += " The battery fired on our own against its own journal.";
+    return s;
+}
+
 // The regiment's belief in each unit's reports: the share of its records' entries that have checked out, over every check,
 // starting from a prior (a unit not yet checked is believed at prior_agreed / prior_checked).
 class ReportTrust {
@@ -495,6 +633,17 @@ public:
         Unit& u = units_[unit];
         u.checked += c.Checked();
         u.agreed += c.as_said;
+        ++u.checks;
+    }
+    // A launch a loss of ours meets (S1): checked; it agrees only when the journal held no notice of the flight before it (the
+    // record says why the battery fired). A launch inside a notice it had is a debit.
+    void Checked(const std::string& unit, const OwnAirCheck& c) {
+        Unit& u = units_[unit];
+        for (const OwnAirLaunchFinding& f : c.launches) {
+            if (!f.loss_met) continue;
+            u.checked += 1;
+            u.agreed += f.inside_notice ? 0 : 1;
+        }
         ++u.checks;
     }
     double Of(const std::string& unit) const {

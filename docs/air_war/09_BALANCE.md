@@ -645,8 +645,8 @@ night twelve hours, not seven), the Pact offers the battery one or two raids a w
 on day 3 against 38-42 %, and the bridges are cut a little less (Pact 93 and 71 line-hours a week against 102 and 75;
 NATO 114 and 111 against 113 and 127). `air_war_bench data 400` builds its benches on the tuned theatre's values, undated, and runs as before.
 
-**No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11
-were read on its buckets).
+**No rebalance is needed.** The nation's theatre stays dated; the tuned theatre stays undated (the tests and §3-§11 were read on
+its buckets) until S8 (§18).
 
 
 ## 13. Command in the air and the time-stepped resolver (track B, B5, 17 November 2026)
@@ -1139,3 +1139,384 @@ Nothing runs per step.
 - Diverts too rare in the campaigns to read their latency there (item 3); the `divert_min` band waits for them.
 - The exchange bands are wide: the abstract fight is calibrated to 1967-72 rates and flown with 1985 missiles.
 - B13 (Unreal) is the owner's; the hot phase's look will need its own pass once it is drawn.
+
+## 18. Attack passes, reactions and damage: before and after (roadmap S4, 19 November 2026)
+
+S4 (`docs/air_battle/06_OPPORTUNITY.md` §10, `04_REACTIONS.md` §6 and §13, `02_FLIGHTS_AND_PILOTS.md` §3,
+`docs/DAMAGE.md`) changes what a session flies (passes in their dive, the climb as a path angle, top speed and
+acceleration by altitude, damaged aircraft cut and escorted) and one thing in the campaign: a damaged aircraft comes back
+into service by its level (`damage.mode` 1 in `data/gameplay/air_war.json`, saved with the campaign; a save without the
+key replays with 0, as before). Targets of opportunity may now be dive-bombed in a session (`opportunity.mode` 2; a save
+with 1 replays without the bombs). The benches were run on the branch's base and on S4, the same seeds.
+
+`air_war_balance data 20 7` (the district), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|
+| Rebels, careless | 20.6 -> 20.6 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Rebels, careful | 22.0 -> 22.0 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Neutral, careless | 39.9 -> 39.9 | 3.1% -> 3.1% | 0% -> 0% | - |
+| Neutral, careful | 35.6 -> 35.6 | 3.8% -> 3.8% | 0% -> 0% | - |
+| Warsaw Pact, careless | 568.5 -> 567.8 | 1.9% -> 1.8% | 70% -> 70% | 1.53 -> 1.54 |
+| Warsaw Pact, careful | 562.0 -> 560.5 | 2.1% -> 2.1% | 15% -> 15% | 1.77 -> 1.75 |
+| NATO, careless | 539.0 -> 538.1 | 1.7% -> 1.7% | 90% -> 90% | 0.73 -> 0.70 |
+| NATO, careful | 536.4 -> 536.2 | 1.5% -> 1.5% | 20% -> 20% | 0.71 -> 0.70 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 16.9% -> 16.9% | 0% -> 0% | - |
+| Rebels, careful | 14.4 -> 14.4 | 13.9% -> 13.9% | 0% -> 0% | - |
+| Neutral, careless | 25.0 -> 25.0 | 4.8% -> 4.8% | 0% -> 0% | - |
+| Neutral, careful | 20.3 -> 20.3 | 6.4% -> 6.4% | 0% -> 0% | - |
+| Warsaw Pact, careless | 975.4 -> 971.9 | 4.2% -> 4.3% | 70% -> 70% | 1.56 -> 1.51 |
+| Warsaw Pact, careful | 964.0 -> 964.2 | 3.6% -> 3.6% | 10% -> 10% | 1.96 -> 2.02 |
+| NATO, careless | 761.3 -> 762.5 | 2.0% -> 2.1% | 20% -> 20% | 0.49 -> 0.57 |
+| NATO, careful | 760.9 -> 759.0 | 2.1% -> 2.3% | 10% -> 10% | 0.36 -> 0.49 |
+
+What moved, and why:
+
+- **The rebels and the neutral did not move**: they have few damaged aircraft, and those few came back as before.
+- **The Pact and NATO moved by a few sorties and a tenth of a point of loss.** A heavily damaged aircraft is now out
+  three times its faction's `damaged_return_h` (`damage.heavy_repair_factor`), a moderately damaged one as before, so
+  a few fewer sorties are flown later in the week; the abstract resolver draws a damaged aircraft heavy at
+  `damage.heavy_share` (0.3) by a keyed draw. The aircraft that would have flown change which fights happen after them,
+  which moves the exchange of the air battle (NATO's on the nation 0.36-0.49 → 0.49-0.57, inside its band of 0.25-1.2;
+  the Pact's 1.51-2.02, inside its band of 0.8-2.5). The battery's fate did not change in any run.
+
+The other benches:
+
+- `air_war_bench data 400`: the same rows, before and after.
+- `crew_balance data 10`: the same before and after, and the same again with the late window off (its targets do not
+  manoeuvre).
+- `air_battle_bench data --compare 600`: identical (the testbed off against off, off against on, the same launches and
+  level changes).
+- `ground_check data 3600`: PASS, 0 of 15 scenarios with anything off the ground, before and after (the passes' dives
+  keep `kPassFloorM`, 30 m, and the ground floor).
+- `helper_coverage`: 19 gaps before and after, the same ones; only `dynamic_campaign_test`'s rows moved (its waves'
+  aircraft fly passes, cut limits and escorts now, so the session's targets differ), its page regenerated.
+
+**After merging track-br** (S1, our fighters in full, and the stable sorts) the two theatres were run again: every band
+PASS. The moves from S4's numbers above come with S1 (our pairs in the played raids, its own changes to
+the air battle) meeting S4: on the district the Pact's exchange 1.54-1.75 → 1.61-1.71 and NATO's
+0.70 → 0.67-0.69, the careful NATO run's battery wrecked in 25% of runs (20%); on the nation the careless Pact run's
+battery wrecked in 90% (70%), its exchange 1.51-2.02 → 1.60-2.10, NATO's 0.49-0.57 → 0.51-0.57. Losses a sortie
+moved by at most 0.2 points.
+
+**The late window (`manoeuvre_window_s`).** S4 turns it on in the Osa's tuning at 8 s (`data/gameplay/osa_ak.json`). The
+14 scenarios with targets that may break (the range days and battles, `osa_decoys`, `osa_low_level_em`,
+`osa_soj_strike`, `osa_jamming_em`, `kesmark_range_test` and the six `air_war_*` samples) were played by `scenario_demo`
+with the window at 8 s and at 0 (the whole flight, as before):
+
+| Scenario | Shots | Hits | Summed chance, window 0 → 8 s |
+|---|---|---|---|
+| `osa_jamming_em` | 1 | 1 | 0.25 → 0.41 (a 10 deg/s break finished before the missile closed) |
+| `osa_angola_night` | 4 | 2 | 2.07 → 2.14 (one shot's break 7 → 4 deg/s in the window) |
+| the other twelve | 13 | 5 | 3.62 → 3.62 |
+| all | 18 | 8 | 5.94 → 6.17 |
+
+No hit changed. `manoeuvre_penalty_per_deg_s` stays 0.04: the rise is the window's intent (a break flown on the launch
+and over long before the missile arrives gains little, `checo_1967_tactics` p. 31) and is a few per cent of the summed
+chance, inside the calibrated totals' spread (§9, roadmap 6.7).
+
+**Left:** the abstract resolver's damaged aircraft fly no escorts and leak no fuel (only a session's do); the share of
+damaged aircraft escorted home (`escort_share` 0.5) has no source.
+
+## 19. The tuned theatre by the sun (roadmap S8, 19 November 2026)
+
+S8 gave `theatre_pannonia.json`, the theatre the tests and §3-§11 were tuned on, the war's date: 15 October 1985, UTC+1,
+the same parts of the day as the nation's (§12's table). Its date is read only under the air war's save mode
+`light.mode` 1 (`data/gameplay/air_war.json`, `docs/LIGHT.md` §5); under mode 0 the theatre is undated and its parts
+of the day are the buckets, as before. A campaign saved before S8 carries no `"light_mode"` and replays with mode 0,
+so `test_routes.cpp`'s fingerprint (journal 107, FNV 1375944258174313379, 41 packages) holds. Under mode 1 every
+theatre's light thresholds are `light.json`'s rather than the code's own; the values are equal today.
+
+`air_war_balance --set light.mode=0 data 20 7` against `air_war_balance data 20 7` (mode 1, the default):
+
+| Adversary, battery | Sorties a week | Loss % | Defences working D3, D7 | Battery raids a week |
+|---|---|---|---|---|
+| Rebels, careless | 20.6 → 20.2 | 2.7% → 1.7% | 100%, 100% | 1.6 → 1.6 |
+| Rebels, careful | 22.0 → 21.3 | 2.7% → 2.3% | 100%, 100% | 0.8 → 0.9 |
+| Neutral, careless | 39.8 → 41.2 | 3.1% → 2.8% | 100%, 100% | 8.8 → 8.2 |
+| Neutral, careful | 35.9 → 38.0 | 3.8% → 2.2% | 100%, 100% | 3.8 → 3.6 |
+| Warsaw Pact, careless | 567.6 → 558.2 | 1.9% → 2.0% | 35%, 75% → 29%, 78% | 8.2 → 7.2 |
+| Warsaw Pact, careful | 562.0 → 558.0 | 2.0% → 1.8% | 42%, 83% → 41%, 82% | 9.0 → 9.8 |
+| NATO, careless | 537.0 → 537.0 | 1.7% → 1.3% | 43%, 56% → 40%, 55% | 5.8 → 6.5 |
+| NATO, careful | 536.4 → 535.9 | 1.5% → 1.3% | 44%, 60% → 48%, 60% | 7.7 → 8.1 |
+
+Every band row passes under both modes. The shapes hold, and the shifts are of the size §12 found on the nation:
+within twenty seeds' noise for the light air arms (a few tenths of an aircraft a week), a few points of the defences
+on day 3 for the two large air forces, and a raid a week more or less at the battery. The losses fall a little almost
+everywhere: the dusk and night by the sun begin some three hours earlier than the buckets' (16:13 and 17:25 against
+18:00 and 21:00); the likely reason is that more of the raids planned for the dark now fly in it, not measured.
+
+**No rebalance is needed.** The seven sample raids of the missions menu were regenerated from the dated theatre
+(`docs/LIGHT.md` §5; the command in each file's notes).
+
+## 20. The air fight in detail: before and after (roadmap S3, 19 November 2026)
+
+S3 (`docs/air_battle/07_AIR_TO_AIR.md` §9) changes the live fight (fighter radars as emitters with their look-down,
+authority lines for vectors, the beam, slash, turn and drag, flown rounds that run out of energy, the strikers' chaff
+and flares, the escort's station, the far fight) behind the scenario's `air_fight` `"mode"` (1; a played session's
+outcome is saved, so no replay moves), and the abstract fight (A0) behind the tuning's `air_fight.mode` (1 in
+`data/gameplay/air_war.json`, saved as `"air_fight_mode"`; a save without it replays B8's A0 with 0). In A0: beam shots
+from the beam, the slash's one pass and its share back (`a0_slash_return` 0.4), a turning doctrine's extra round
+(`a0_turn_rounds` 1), a radar round from beyond sight dragged at `a0_drag` (0.6) times the skill, and strikers that saw
+the shot answering with flares or chaff by `gameplay/reactions.json`. The raid builder writes the package's sweep and
+CAP as `sweep` and `cap` (before, as strikers). The benches were run on the branch's base and on S3, the same seeds; the
+replay fingerprint (`test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) is unchanged.
+
+`air_war_balance data 20 7` (the district), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost | Exchange (band) |
+|---|---|---|---|---|---|
+| Rebels, careless | 20.6 -> 20.6 | 2.7% -> 2.7% | 0% -> 0% | 0.1/0.0 -> 0.1/0.0 | - |
+| Rebels, careful | 22.0 -> 22.0 | 2.7% -> 2.7% | 0% -> 0% | 0.2/0.0 -> 0.2/0.0 | - |
+| Neutral, careless | 39.8 -> 39.8 | 3.1% -> 3.1% | 0% -> 0% | 0.3/0.1 -> 0.3/0.1 | - |
+| Neutral, careful | 35.9 -> 35.9 | 3.8% -> 3.8% | 0% -> 0% | 0.5/0.1 -> 0.5/0.1 | - |
+| Warsaw Pact, careless | 567.6 -> 568.5 | 1.9% -> 1.7% | 70% -> 65% | 4.3/2.7 -> 3.7/2.7 | 1.59 -> 1.37 |
+| Warsaw Pact, careful | 562.0 -> 567.5 | 2.0% -> 1.8% | 15% -> 15% | 5.3/3.0 -> 3.9/3.2 | 1.74 -> 1.20 |
+| NATO, careless | 538.9 -> 536.5 | 1.7% -> 1.5% | 90% -> 100% | 4.0/5.5 -> 3.1/5.2 | 0.73 -> 0.60 |
+| NATO, careful | 536.4 -> 538.1 | 1.5% -> 1.5% | 25% -> 25% | 3.4/4.9 -> 3.4/4.8 | 0.69 -> 0.69 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost | Exchange (band) |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 16.9% -> 16.9% | 0% -> 0% | 0.1/0.0 -> 0.1/0.0 | - |
+| Rebels, careful | 14.4 -> 14.4 | 13.9% -> 13.9% | 0% -> 0% | 0.2/0.0 -> 0.2/0.0 | - |
+| Neutral, careless | 25.0 -> 25.0 | 4.8% -> 4.8% | 0% -> 0% | 0.3/0.0 -> 0.3/0.0 | - |
+| Neutral, careful | 20.3 -> 20.3 | 6.4% -> 6.4% | 0% -> 0% | 0.6/0.0 -> 0.6/0.0 | - |
+| Warsaw Pact, careless | 978.2 -> 982.6 | 4.0% -> 3.6% | 90% -> 80% | 9.4/5.9 -> 7.7/5.4 | 1.59 -> 1.43 |
+| Warsaw Pact, careful | 964.1 -> 956.8 | 3.5% -> 3.6% | 10% -> 0% | 8.9/4.4 -> 8.0/4.0 | 2.02 -> 2.00 |
+| NATO, careless | 771.4 -> 763.8 | 2.0% -> 2.3% | 20% -> 10% | 3.4/7.2 -> 4.6/8.2 | 0.47 -> 0.56 |
+| NATO, careful | 761.4 -> 749.3 | 2.1% -> 2.2% | 10% -> 10% | 2.6/7.2 -> 3.5/8.3 | 0.36 -> 0.42 |
+
+The rebels and the neutral neighbour do not move: their raids meet few of our fighters and their doctrines turn (no
+slash, no beam). Against the Pact the exchange falls (district 1.59-1.74 -> 1.20-1.37, nation 1.59-2.02 -> 1.43-2.00):
+its MiG-23MLs slash and extend instead of staying in a fight that our MiG-21s' R-60s and guns win, and drag our R-23Rs
+from beyond sight; its losses fall (district 4.3-5.3 -> 3.7-3.9 a campaign) while ours hold. Against NATO on the
+nation both sides lose more (theirs 2.6-3.4 -> 3.5-4.6, ours 7.2 -> 8.2-8.3) and the exchange rises (0.36-0.47 ->
+0.42-0.56); on the district it stays (0.69) or falls (the careless run's 0.73 -> 0.60). A0's beam shots, drags and the
+strikers' decoys move both sides' losses; how much each part gives was not isolated. All stay inside
+their bands (0.80-2.50 against the Pact, 0.25-1.20 against NATO). Losses a sortie moved by at most 0.4 points; the
+careless NATO run's battery is wrecked in all 20 district runs (90% before), the careless Pact run's in 65% (70%).
+
+`air_combat_bench data 50` (new, `simcore/examples/air_combat_bench.cpp`) flies the live fight's cases in a small world
+of its own, B8's beside S3's and the far fight off and on; its table and reading are in `07_AIR_TO_AIR.md` §9.
+
+**Left:** the live fight's exchange is not banded (`air_combat_bench` counts, it does not judge); the bands above are
+the abstract fight's.
+
+## 21. The faction values read (roadmap S5, 20 November 2026)
+
+S5 (`docs/air_battle/10_FACTIONS.md` §13) makes new campaigns play `hot_phase.mode` 2. Most of what it adds is read in
+a played session: the leader's initiative and route gate, plan adherence, the spotted turn-back, the pilots' delays,
+the held jammers, the air fight's turn-back. Three things reach the campaign layer:
+- **§9.3's nerve** in the abstract resolver: `0.1 + 0.5 × press_on`, less `husbanding` × the day's losses over
+  tolerance, plus the planner's quirk. The leader's own `abort_threshold` acts only through his press-on shift (±0.05 of
+  the nerve), no longer adding its separate ±0.15.
+- **§8.5's tier weights** for `chatterbox` and `silent_runner`, which change the generated officers.
+- **The squadrons' combat sorties**, counted always but read only by the raid builder.
+
+The benches were run on the same build with the old mode (`--set hot_phase.mode=1`) and the new default, the same seeds.
+
+`air_war_balance data 20 7` (the district), mode 1 → mode 2, every band PASS in both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 20.6 -> 20.6 | 0.6 -> 0.6 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Rebels, careful | 22.0 -> 22.0 | 0.6 -> 0.6 | 2.7% -> 2.7% | 0% -> 0% | - |
+| Neutral, careless | 39.8 -> 39.8 | 1.2 -> 1.2 | 3.1% -> 3.1% | 0% -> 0% | - |
+| Neutral, careful | 35.9 -> 35.9 | 1.4 -> 1.4 | 3.8% -> 3.8% | 0% -> 0% | - |
+| Warsaw Pact, careless | 567.0 -> 568.0 | 10.2 -> 10.2 | 1.8% -> 1.8% | 70% -> 70% | 1.61 -> 1.63 |
+| Warsaw Pact, careful | 560.5 -> 560.5 | 11.4 -> 11.4 | 2.0% -> 2.0% | 15% -> 15% | 1.71 -> 1.71 |
+| NATO, careless | 535.6 -> 535.3 | 8.7 -> 8.7 | 1.6% -> 1.6% | 90% -> 85% | 0.67 -> 0.68 |
+| NATO, careful | 536.2 -> 535.8 | 8.1 -> 8.2 | 1.5% -> 1.5% | 25% -> 25% | 0.69 -> 0.67 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), mode 1 → mode 2, every band PASS in
+both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 2.4 -> 2.4 | 16.9% -> 16.9% | 0% -> 0% | - |
+| Rebels, careful | 14.4 -> 14.4 | 2.0 -> 2.0 | 13.9% -> 13.9% | 0% -> 0% | - |
+| Neutral, careless | 25.0 -> 25.0 | 1.2 -> 1.2 | 4.8% -> 4.8% | 0% -> 0% | - |
+| Neutral, careful | 20.3 -> 20.3 | 1.3 -> 1.3 | 6.4% -> 6.4% | 0% -> 0% | - |
+| Warsaw Pact, careless | 976.5 -> 971.8 | 39.9 -> 38.9 | 4.1% -> 4.0% | 90% -> 80% | 1.60 -> 1.61 |
+| Warsaw Pact, careful | 964.3 -> 965.8 | 34.3 -> 34.2 | 3.6% -> 3.5% | 10% -> 10% | 2.10 -> 2.05 |
+| NATO, careless | 772.6 -> 772.2 | 16.3 -> 16.3 | 2.1% -> 2.1% | 20% -> 20% | 0.57 -> 0.58 |
+| NATO, careful | 753.8 -> 753.8 | 17.7 -> 17.7 | 2.3% -> 2.3% | 10% -> 10% | 0.51 -> 0.51 |
+
+What moved, and why:
+
+- **The rebels and the neutral did not move in their losses or sorties.** Two things have to meet for §9.3's lower
+  nerve to act: a loss before the release, and a loss share between the old nerve (about 0.4) and the new one. The
+  neutral's new nerve is 0.3 fresh and falls with the day's losses. But each campaign loses about one aircraft a week, so
+  the two never meet: a pair losing one aircraft has lost 0.5 and turns back under either nerve, and a four losing one
+  (0.25) goes on under both unless that day's losses have already lowered the new one. The neutral's district runs differ only in its knowledge of the battery on day 5 (0.35 →
+  0.36) and the reports sent to intelligence (3.5 → 3.4). Those are the radio's: §8.5's weights change which generated
+  officers are chatterboxes or silent runners, and our intercept hears their flights' calls.
+- **The Pact and NATO moved by a few sorties and a tenth of a point of loss**, the size of the seeds' spread. An average
+  leader of either keeps the old 0.4, so what changes is the spread over leaders:
+  - A bold leader no longer gains up to +0.15 from his own `abort_threshold` quirk, only his press-on shift.
+  - The generated officers differ where §8.5's weights changed a draw.
+  - These move which packages turn back and so which fights follow. On the nation, the careless Pact run's battery was
+    wrecked in 80% of runs (90%); the band is 50-100% on the district, and the nation has no band for this run.
+- **The suspects the review named are not at work.** The neutral's and rebels' week-1 losses are unchanged. The dropped
+  0.15 quirk term moved no band. No value was changed and no band loosened.
+
+`air_battle_bench` and `air_war_bench` were not re-run: S5 changes nothing in the testbed's waves (they carry no `"hot"`
+values) or in the bench's analogues (they set their own flights).
+
+**Left:** the neutral's nerve has not yet been seen to act. Seeing it needs a played raid, or a bench of larger neutral
+packages under losses before release. Played raids now carry the spotted turn-back and the initiative gate, which the
+abstract resolver does not model (§13 of `10_FACTIONS.md`).
+
+## 22. Routes, perception, cost and learning: before and after (roadmap S7, 20 November 2026)
+
+S7 (`docs/air_battle/01_ROUTES.md` "As built (S7)", `03_PERCEPTION.md` 5.10, `02_FLIGHTS_AND_PILOTS.md` 5.4) changes the
+campaign behind three switches in `data/gameplay/air_war.json`, each saved with the campaign: `route.mode` 2 (a gate with
+no feature joined to its nearest features, our believed airfields in a leg's cost, the coarser lattice without a map,
+navigation drift in the raids built, the routes as flown fed back; a save made before S7 wrote 1), `learning.mode` 1 (a
+loss nobody can explain becomes a suspected defence; the rebels' sympathisers find our mobile batteries) and
+`weather.mode` 1 (the share of days not clear by the month of a dated theatre). A save without `learning_mode` or
+`weather_mode` reads 0. The replay fingerprint (`test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages)
+is unchanged. "Before" is the branch with `--set route.mode=1 --set learning.mode=0 --set weather.mode=0`, "after" the
+data as shipped, the same seeds; the two ran side by side on a shared machine.
+
+`air_war_balance data 20 7` (the district), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost |
+|---|---|---|---|---|
+| Rebels, careless | 20.2 -> 19.0 | 1.7% -> 2.9% | 0% -> 0% | 0.1/0.0 -> 0.0/0.0 |
+| Rebels, careful | 21.3 -> 20.5 | 2.3% -> 2.2% | 0% -> 0% | 0.2/0.0 -> 0.1/0.0 |
+| Neutral, careless | 41.2 -> 40.6 | 2.8% -> 2.7% | 0% -> 0% | 0.2/0.1 -> 0.3/0.1 |
+| Neutral, careful | 38.0 -> 36.8 | 2.2% -> 2.0% | 0% -> 0% | 0.2/0.1 -> 0.2/0.1 |
+| Warsaw Pact, careless | 562.0 -> 533.8 | 1.8% -> 1.7% | 65% -> 60% | 4.2/2.9 -> 3.8/2.4 |
+| Warsaw Pact, careful | 558.7 -> 537.2 | 1.9% -> 1.9% | 0% -> 20% | 3.9/2.6 -> 3.5/2.5 |
+| NATO, careless | 537.4 -> 516.3 | 1.3% -> 1.4% | 95% -> 95% | 2.6/4.5 -> 2.9/4.8 |
+| NATO, careful | 539.6 -> 519.3 | 1.3% -> 1.3% | 15% -> 5% | 3.0/5.3 -> 2.6/4.6 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), every band PASS before and after:
+
+| Run | Sorties | Loss % | Battery wrecked | Air battle: theirs / ours lost |
+|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 12.8 | 16.9% -> 13.3% | 0% -> 0% | 0.1/0.0 -> 0.0/0.0 |
+| Rebels, careful | 14.4 -> 12.5 | 13.9% -> 17.6% | 0% -> 0% | 0.2/0.0 -> 0.2/0.0 |
+| Neutral, careless | 25.0 -> 22.2 | 4.8% -> 6.3% | 0% -> 0% | 0.3/0.0 -> 0.2/0.0 |
+| Neutral, careful | 20.3 -> 17.3 | 6.4% -> 5.8% | 0% -> 0% | 0.6/0.0 -> 0.4/0.0 |
+| Warsaw Pact, careless | 982.6 -> 921.9 | 3.6% -> 3.5% | 80% -> 30% | 7.7/5.4 -> 8.7/5.9 |
+| Warsaw Pact, careful | 956.8 -> 934.4 | 3.6% -> 3.3% | 0% -> 0% | 8.0/4.0 -> 8.2/5.8 |
+| NATO, careless | 763.8 -> 735.8 | 2.3% -> 1.9% | 10% -> 20% | 4.6/8.2 -> 3.4/8.8 |
+| NATO, careful | 749.3 -> 717.3 | 2.2% -> 2.0% | 10% -> 0% | 3.5/8.3 -> 3.8/8.7 |
+
+**Sorties fall 2-15 %** on both theatres and for every faction: the tuned theatres are dated 15 October, when the
+month's share of days not clear (about 0.67, interpolated between `crawford_1977_rand`'s summer and winter) is above the
+theatre's fixed half, so more days are cloudy or poor and fewer packages fly. With `weather.mode` 0 alone the Pact's
+sorties on the nation are back at 986 and 1,008 (careless, careful).
+
+**The Pact's careless battery on the nation** is wrecked in 30 % of runs (80 % before). Each switch off alone, over the
+same ten seeds: `route.mode` 1, 70 %; `weather.mode` 0, 60 %; `learning.mode` 0, 30 %. The routes give most of it: the
+Pact's routes now cost the legs near our believed airfields and join gates that had no feature, so fewer of its
+packages come the short way past the battery; the autumn weather gives the rest. Ten seeds move a share like this by
+10-15 points, so it is a direction, not a measure. The careful battery is not wrecked either way. Elsewhere the wrecked
+shares move within that noise (the district's careful Pact run 0 % -> 20 %, NATO careful 15 % -> 5 %).
+
+**The rebels on the nation** stay out of the period's "few per cent" (13-18 %), as since B2 (`01_ROUTES.md` Left open);
+their sympathisers report our mobile batteries (five reports in three days in `test_routes.cpp`). Raids through the
+battery's sector a campaign: on the district 1.6 -> 1.9 careless and 0.9 -> 0.9 careful, on the nation 7.3 -> 6.1 and
+2.2 -> 3.1: the careful battery, the one the other sources find least, is found more on the nation. Losses a
+sortie elsewhere move by less than 0.6 points.
+
+**Cost.** The district's run took 27.6 min with S7 and 28.0 min without, the nation's 68.6 and 68.7 min, each pair side
+by side on a machine shared with other builds: the coarser lattice and fewer IP headings without a map pay for the new
+fighter term and the joined gates, but the district's run is no cheaper than before.
+
+`air_battle_bench data --compare 600` (the testbed, `air_levels.json` mode 2 against the levels off): identical, two
+level changes, launches 2 and 2. The levels' mode 2 moves nothing a test or the bench can see; the receivers' bound is
+not bit-exact through the path cache (`02_FLIGHTS_AND_PILOTS.md` 5.4) but changed no line here.
+
+**Left:** the rebels' losses on the nation; the share of wrecked batteries needs more seeds than ten to say how much each
+switch moves it.
+
+## 23. Radio and intercept (roadmap S6, 20 November 2026)
+
+S6 (`docs/air_battle/09_COMMS_AND_INTERCEPT.md`, "As built (S6)") makes new campaigns play `radio.mode` 1; a save without
+`"radio_mode"` replays at 0. Most of what it adds changes no outcome in `air_war_balance`:
+- **The abstract level's calls** are heard by our intercept posts and written into the air section's day summary by
+  `CampaignFeed`, which the bench does not run (the facts reach the chain of command's people, not the enemy's plans).
+- **The listeners** go on the campaign's `EmRadio` (the campaign screen's information net), which the bench does not run.
+- **Teaball's relay** is off in NATO's data (no source for Europe by 1985), so the abstract fight's surprise is unchanged.
+- **The enemy's radio demonstration** changes only which calls a deception or decoy flight says, which our posts hear.
+
+One thing reaches the campaign layer: **our dummy traffic** (`radio.our_dummy_corridors` 1 a day, turned
+`radio.our_dummy_turn_deg` 40 degrees off a working airfield's real corridor), which the enemy's corridor learning of S1
+hears and may believe. A raid timed into a false corridor gets no held fire from our side.
+
+The benches were run on the same build with the old mode (`--set radio.mode=0`) and the new default, the same seeds.
+
+`air_war_balance data 20 7` (the district), mode 0 → mode 1, every band PASS in both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 20.2 -> 20.2 | 0.3 -> 0.3 | 1.7% -> 1.7% | 0% -> 0% | - |
+| Rebels, careful | 21.3 -> 21.3 | 0.5 -> 0.5 | 2.3% -> 2.3% | 0% -> 0% | - |
+| Neutral, careless | 41.2 -> 41.2 | 1.1 -> 1.1 | 2.8% -> 2.7% | 0% -> 0% | - |
+| Neutral, careful | 38.0 -> 38.0 | 0.8 -> 0.8 | 2.2% -> 2.2% | 0% -> 0% | - |
+| Warsaw Pact, careless | 562.5 -> 562.5 | 9.8 -> 9.8 | 1.7% -> 1.7% | 65% -> 65% | 1.46 -> 1.46 |
+| Warsaw Pact, careful | 559.4 -> 559.4 | 10.6 -> 10.6 | 1.9% -> 1.9% | 0% -> 0% | 1.43 -> 1.43 |
+| NATO, careless | 537.3 -> 536.9 | 7.0 -> 7.2 | 1.3% -> 1.3% | 95% -> 95% | 0.61 -> 0.62 |
+| NATO, careful | 539.6 -> 539.6 | 7.1 -> 7.1 | 1.3% -> 1.3% | 15% -> 15% | 0.56 -> 0.56 |
+
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation), mode 0 → mode 1, every band PASS in
+both:
+
+| Run | Sorties | Lost | Loss % | Battery wrecked | Exchange (air battle) |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.2 -> 14.2 | 2.4 -> 2.4 | 16.9% -> 16.9% | 0% -> 0% | - |
+| Rebels, careful | 14.4 -> 14.4 | 2.0 -> 2.0 | 13.9% -> 13.9% | 0% -> 0% | - |
+| Neutral, careless | 25.0 -> 25.0 | 1.2 -> 1.2 | 4.8% -> 4.8% | 0% -> 0% | - |
+| Neutral, careful | 20.3 -> 20.3 | 1.3 -> 1.3 | 6.4% -> 6.4% | 0% -> 0% | - |
+| Warsaw Pact, careless | 987.7 -> 987.7 | 35.4 -> 35.4 | 3.6% -> 3.6% | 80% -> 80% | 1.32 -> 1.32 |
+| Warsaw Pact, careful | 952.7 -> 952.7 | 34.9 -> 34.9 | 3.7% -> 3.7% | 10% -> 10% | 2.14 -> 2.14 |
+| NATO, careless | 763.3 -> 763.3 | 17.3 -> 17.3 | 2.3% -> 2.3% | 10% -> 10% | 0.55 -> 0.55 |
+| NATO, careful | 749.3 -> 749.3 | 16.4 -> 16.4 | 2.2% -> 2.2% | 10% -> 10% | 0.42 -> 0.42 |
+
+What moved, and why:
+
+- **Only the neutral's and NATO's runs moved, by a tenth at most.** The false corridor is heard about once in a few days
+  (`test_own_air.cpp`'s S6 test: 5-6 times over three seeds' eight days), and only a raid planned on a corridor the
+  enemy has come to believe is affected. On the district, NATO's careless run lost 7.2 aircraft a campaign (7.0) and the
+  neutral's careless run's loss rate fell a tenth of a point; on the nation the runs differ only in the false claims found
+  out and the alert pools. The Pact's and the rebels' runs did not move.
+- **No value was changed and no band loosened.**
+
+`air_battle_bench` and `air_war_bench` were not re-run: S6 changes nothing in the testbed's waves or the bench's
+analogues (Teaball is off, and the bench's fights set their own controllers).
+
+**Left:** with Teaball turned on for NATO (the owner's choice), the abstract fight's surprise falls with chance 1 - `fail`
+whenever our GCI is not jammed; that run, and its exchange band, are not measured.
+
+## 24. S6 follow-ups (roadmap S6, 20 November 2026)
+
+S6's follow-ups (`docs/air_battle/09_COMMS_AND_INTERCEPT.md`, "As built (S6 follow-ups)") make new campaigns play
+`radio.mode` 2: one stable hash for the session's and the campaign's names, a mission session's dummy transmitters and enemy
+listeners, and the session's word on a false corridor fed back into the enemy's corridor learning. The EM layer's paths
+from 10 MHz to 1 GHz also take ITU-R P.526-16's smooth spherical earth (`docs/EM_ARCHITECTURE.md` section 36). None of it
+reaches `air_war_balance`'s outcomes:
+- **The stable keys** pick call signs, codewords, the comm-out and unit keys of the calls and the intercept desk's slips:
+  what our posts hear and write, which the bench does not run.
+- **The session's word** on a false corridor comes only from a played mission session; the bench plays none, so each
+  day's dummy use is drawn by the chance as at mode 1.
+- **The smooth earth** is in the EM layer's paths (sessions, the campaign screen's information net); the campaign's own
+  hearing of abstract calls is section 4.2's closed-form horizon, unchanged.
+
+The benches were run on the same build at `--set radio.mode=1` and at the new default, the same seeds.
+`air_war_balance data 20 7` (the district): the two outputs are identical line for line, every band PASS (20 of 20).
+`air_war_balance --theatre theatre_pannonia_nation.json data 10 7` (the nation): identical too, every band PASS (20 of 20).
+
+No value was changed and no band loosened. `air_battle_bench` and `air_war_bench` were not re-run. The testbed's sessions
+do carry the air radio at UHF, whose calls past the radio horizon now lose more (the calls inside it, between aircraft
+at height, almost never graze the earth): a call heard past the horizon before may not be now. Measuring that is left.

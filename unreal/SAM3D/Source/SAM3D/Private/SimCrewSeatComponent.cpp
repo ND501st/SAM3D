@@ -178,6 +178,16 @@ void USimCrewSeatComponent::ClientReceiveConsole_Implementation(const TArray<uin
 	}
 }
 
+void USimCrewSeatComponent::ClientReceiveSky_Implementation(double StartLocalHours, int32 DayOfYear, int32 Year, double ServerSimSeconds)
+{
+	USimWorldSubsystem* S = Sim();
+	if (S == nullptr || GetWorld()->GetNetMode() != NM_Client)
+	{
+		return;  // the server's own sky is the simulation's
+	}
+	S->ApplyServerSky(StartLocalHours, DayOfYear, Year, ServerSimSeconds);
+}
+
 void USimCrewSeatComponent::ClientActionResult_Implementation(const FString& ControlId, bool bMoved, const FString& Why)
 {
 	OnActionResult.Broadcast(ControlId, bMoved, Why);

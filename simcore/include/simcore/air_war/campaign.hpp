@@ -83,7 +83,9 @@ struct Transmission {
 struct CampaignAction {
     // Take: a session took the raid waiting (the campaign goes on while it is flown there); Report: a played package's
     // pilot's report that reached the enemy's posts while the session ran (roadmap B5 §4.7).
-    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report };
+    // PostAttack: an enemy air control post struck from outside the campaign's own processes (a session's strike, a call
+    // for fire: roadmap S2), `what` the post's id, `by` who struck it.
+    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report, PostAttack };
     Kind kind = Kind::Advance;
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
@@ -98,6 +100,7 @@ struct CampaignAction {
     Vec3 from;               // Report: where he was
     double sigma_m = 0.0;    // Report
     double observed_h = 0.0; // Report: when he saw it (the place is `to`)
+    std::string by;          // PostAttack
 };
 
 // The evidence our analysts gather from the raids they see.
@@ -121,6 +124,8 @@ public:
         seed_ = seed;
         actions_.clear();
         rng_ = Rng(static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 1234567u);
+        corridor_intel_.Init(data_.own_air.learning, static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 0xB10ull);
+        corridor_days_fed_ = 0;
         now_h_ = 0.0;
         const FrontDef* front = data_.theatre.FrontFor(data_.faction.front);
         if (front == nullptr) {
@@ -177,6 +182,7 @@ public:
         // from forks of a root fixed here, never from the campaign's stream.
         airborne_.clear();
         live_.clear();
+        on_call_.clear();
         last_fac_hour_ = -1000000;
         c2_root_ = Rng(static_cast<std::uint64_t>(seed) * 0xD6E8FEB86659FD93ull + 0xB5B5B5ull);
         Rng post_rng = rng_.Fork(23);
@@ -184,9 +190,18 @@ public:
         weather_.clear();
         const double clear = data_.tuning.Get("weather.clear_share");
         const double poor = data_.tuning.Get("weather.poor_share");
+        // By month (roadmap S7, weather.mode 1, a dated theatre): the same draw a day, the shares the month's.
+        const bool by_month = data_.tuning.Get("weather.mode") >= 1.0 && data_.theatre.day_of_year > 0;
+        const double poor_part = (1.0 - clear) > 0.0 ? poor / (1.0 - clear) : 0.0;
         for (int day = 0; day < 120; ++day) {
             const double u = rng_.Uniform();
-            weather_.push_back(u < clear ? Weather::Clear : (u < 1.0 - poor ? Weather::Cloudy : Weather::Poor));
+            double c = clear, p = poor;
+            if (by_month) {
+                const double not_clear = NotClearShare((data_.theatre.day_of_year - 1 + day) % 365 + 1);
+                c = 1.0 - not_clear;
+                p = poor_part * not_clear;
+            }
+            weather_.push_back(u < c ? Weather::Clear : (u < 1.0 - p ? Weather::Cloudy : Weather::Poor));
         }
         PriorIntel();
         day_ = 1;
@@ -281,6 +296,19 @@ public:
         ApplyReport(a);
     }
 
+    // An enemy air control post struck from outside the campaign's own processes (a session's strike on it, a call for
+    // fire: roadmap S2): out now, back after its kind's reconstitution. Recorded. False: no such post, or out already.
+    bool StrikePost(const std::string& post_id, const std::string& by) {
+        CampaignAction& a = Record(CampaignAction::Kind::PostAttack);
+        a.what = post_id;
+        a.by = by;
+        C2Context cx = C2Ctx();
+        return c2_.StrikePost(post_id, now_h_, by, cx);
+    }
+    // The posts' orders for the flights of packages a session is flying (roadmap S2), decided since the last call. Not
+    // recorded: the campaign decides them again on a replay, and the session's flights' records keep what they did.
+    std::vector<C2SessionOrder> TakeSessionOrders() { return c2_.TakeSessionOrders(); }
+
     // The enemy's command in the air (roadmap B5): its posts, pools, messages and what they did.
     const AirC2& C2() const {
         c2_.Bind(data_, staff_);  // a copied campaign's posts read its own data
@@ -321,6 +349,12 @@ private:
                                                 " shot down in the battery's sector.", true);
         }
         ApplyOutcome(p, outcome);
+        // The routes as flown (roadmap S7, route.mode 2): each flight that left the session goes on from where it was.
+        if (data_.tuning.Get("route.mode") >= 2.0) {
+            for (const PackageOutcome::FlownRecord& f : outcome.flown) {
+                if (f.flight >= 0 && f.flight < static_cast<int>(p.flights.size())) FlownInto(p.flights[static_cast<std::size_t>(f.flight)], f.at, f.t_h);
+            }
+        }
         // The rest of the raid, without the player's battery: every part of every route but what the scenario flew
         // (inside its circle while it ran, where the other defences took their chances: mission_bridge.hpp).
         ResolveContext rc = Context();
@@ -414,6 +448,8 @@ public:
     int CallsOnAir() const { return static_cast<int>(noted_.size()); }
     // Radio intercept reports about the battery the enemy has had (the dummy traffic's ghosts not counted).
     int ComintHeard() const { return comint_heard_; }
+    // The sympathisers' reports of our mobile air defence (roadmap S7), for the balance tool and the tests.
+    int SympathiserReports() const { return sympathiser_reports_; }
 
     // The player's actions so far, in order (save.hpp), and the seed the campaign started from.
     const std::vector<CampaignAction>& Actions() const { return actions_; }
@@ -438,6 +474,7 @@ public:
                 case CampaignAction::Kind::Report:
                     NoteReport(a.package_id, a.flight, a.what, a.to, a.sigma_m, a.observed_h, a.from);
                     break;
+                case CampaignAction::Kind::PostAttack: StrikePost(a.what, a.by); break;
                 case CampaignAction::Kind::Complete:
                     if (a.package_id >= 0) {
                         if (!LiveMission(a.package_id)) {
@@ -684,6 +721,9 @@ private:
     PoliticsState politics_;
     AirStaff staff_;
     IntelPicture intel_;
+    command::EnemyCorridorIntel corridor_intel_;  // what its COMINT heard of our fighters' corridors (roadmap S1)
+    std::map<std::pair<int, std::string>, bool> session_heard_;  // (day, false corridor) -> heard in a played session (S6 follow-ups)
+    int corridor_days_fed_ = 0;
     std::vector<Package> packages_;
     std::vector<JournalEntry> journal_;
     std::vector<Weather> weather_;
@@ -707,6 +747,7 @@ private:
     std::set<std::string> noted_;
     std::vector<Transmission> on_air_;  // noted, not yet heard
     int comint_heard_ = 0;
+    int sympathiser_reports_ = 0;
     // In the air (roadmap B5): the packages flying now, each walked in time; the raids a session took (package id ->
     // the hour it took them); the command posts; the root every in-the-air and C2 draw is forked from.
     struct Airborne {
@@ -716,6 +757,7 @@ private:
     };
     std::vector<Airborne> airborne_;
     std::map<int, double> live_;
+    std::set<int> on_call_;  // packages the posts launched from their alert pools (roadmap B5)
     mutable AirC2 c2_;
     Rng c2_root_{1};
     int last_fac_hour_ = -1000000;
@@ -752,6 +794,8 @@ private:
         rc.ground = RouteGroundPtr();
         rc.opportunity_seed = static_cast<std::uint64_t>(seed_) * 0x9E3779B97F4A7C15ull + 0xB6A0ull;  // roadmap B6's keyed draws
         rc.phase = phase_;
+        rc.own_corridors = OwnCorridors();
+        rc.losses_today = politics_.losses_today;
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -836,6 +880,7 @@ private:
                 last_fac_hour_ = hour;
                 C2Context cx = C2Ctx();
                 c2_.Hourly(t0, cx);
+                c2_.OurFires(t0, cx);  // our fires on the posts our listeners fixed (roadmap S2)
             }
             // The packages: each takes off at its first aircraft's hour and flies in time; while any is in the air (or about to
             // be) or a message is on its way, the step is cut to c2.step_h (roadmap B5's A0).
@@ -849,7 +894,7 @@ private:
                         Package& p = packages_[i];
                         if (p.resolved || p.played || Flying(static_cast<int>(i))) continue;
                         if (p.FirstH() >= ts) continue;
-                        if (player_candidates_.count(static_cast<int>(i)) > 0 && Pacing()) {
+                        if (player_candidates_.count(static_cast<int>(i)) > 0 && (Pacing() || OnCallLive(p))) {
                             pending_ = static_cast<int>(i);
                             player_candidates_.erase(static_cast<int>(i));
                             ++player_missions_today_;
@@ -889,6 +934,12 @@ private:
             MoveBattery(march_to_);
         }
         return false;
+    }
+
+    // An on-call package the posts launched while a session is flying a raid: it enters that session too, whatever the
+    // pacing (roadmap S2, c2.live_mode 1).
+    bool OnCallLive(const Package& p) const {
+        return !live_.empty() && on_call_.count(p.id) > 0 && data_.tuning.Get("c2.live_mode") >= 1.0;
     }
 
     bool Pacing() const {
@@ -973,6 +1024,7 @@ private:
                     (by_iads ? "the air defences are believed broken" : "the plan's day has come") + ").",
                 false);
         }
+        FeedCorridors();
         PlanContext pc;
         pc.data = &data_;
         pc.staff = &staff_;
@@ -1010,6 +1062,7 @@ private:
         std::vector<Package> plan = planner.Plan(pc);
         int planned = 0;
         for (Package& p : plan) {
+            ExploitCorridor(p);
             planned += p.Aircraft();
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
@@ -1018,6 +1071,152 @@ private:
         c2_.Bind(data_, staff_);
         const double begin = now_h_ + data_.faction.doctrine.lead_time_h;
         c2_.BuildPools(squadrons_, held, planned, begin, begin + data_.faction.doctrine.planning_cycle_h, phase_);
+    }
+
+    // ------------------------------------------------------------------ our fighters' corridors (roadmap S1)
+
+    bool OwnAirOn() const { return data_.has_own_air && data_.tuning.Get("own_air.mode") >= 1.0; }
+public:
+    // Our fighters' corridors as they are (docs/air_battle/08_OUR_FIGHTERS.md section 9): one from each of our airfields to the
+    // nearest point of the front, at the task file's heights (2,000-6,000 m) and by day from 06:00 for hours_per_day, theatre
+    // ENU and hours of the day. None without our aviation's rules or before S1.
+    std::vector<command::OwnAirZone> OwnCorridors() const {
+        std::vector<command::OwnAirZone> out;
+        const FrontDef* front = data_.theatre.FrontFor(data_.faction.front);
+        if (!OwnAirOn() || front == nullptr || front->line.empty()) return out;
+        for (std::size_t i = 0; i < data_.theatre.objects.size(); ++i) {
+            const TheatreObject& o = data_.theatre.objects[i];
+            if (o.kind != ObjectKind::Airfield) continue;
+            command::OwnAirZone z;
+            z.id = "corridor " + o.id;
+            const Vec3 a = truth_.size() > i ? truth_[i].pos : o.pos;
+            Vec3 best = front->line.front();
+            for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {
+                const Vec3 p0 = front->line[k], p1 = front->line[k + 1];
+                const Vec3 d = p1 - p0;
+                const double l2 = d.x * d.x + d.y * d.y;
+                double u = l2 > 1e-9 ? ((a.x - p0.x) * d.x + (a.y - p0.y) * d.y) / l2 : 0.0;
+                u = std::max(0.0, std::min(1.0, u));
+                const Vec3 q = p0 + d * u;
+                if (Dist2d(q, a) < Dist2d(best, a)) best = q;
+            }
+            if (front->line.size() == 1) best = front->line.front();
+            z.path = {Vec3{a.x, a.y, 0.0}, Vec3{best.x, best.y, 0.0}};
+            z.half_width_m = data_.own_air.notice.corridor_half_width_m;
+            z.floor_m = 2000.0;
+            z.ceiling_m = 6000.0;
+            z.from_h = 6.0;
+            z.to_h = 6.0 + data_.own_air.learning.hours_per_day;
+            out.push_back(z);
+        }
+        return out;
+    }
+    // What the enemy has heard of them.
+    const command::EnemyCorridorIntel& CorridorIntel() const { return corridor_intel_; }
+    // Our dummy traffic's false corridors on campaign day `day` (0: the first; FeedDummyCorridors' rule), none before
+    // radio.mode 1 or without our aviation. A use's hours are each corridor's from_h and to_h on that day (clock hours).
+    std::vector<command::OwnAirZone> FalseCorridorsOn(int day) const {
+        if (!OwnAirOn() || data_.tuning.Get("radio.mode") < 1.0) return {};
+        return FalseCorridorsOf(OwnCorridors(), day);
+    }
+    // A played session's word on a false corridor's use that day (roadmap S6's follow-ups, radio.mode 2): whether the enemy's
+    // listeners in its EM world heard the dummy transmitter's traffic. The daily feed then counts it as heard or not, with no
+    // chance drawn. Not saved: a session that played in a saved campaign hands back no such word (a save replays as played).
+    void SessionHeardCorridor(int day, const std::string& corridor_id, bool heard) {
+        bool& h = session_heard_[{day, corridor_id}];
+        h = h || heard;
+    }
+
+private:
+    // Each day gone by, each corridor from a working airfield used once (by day): the enemy's COMINT on our GCI's and the
+    // notices' traffic may hear it (EnemyCorridorIntel's keyed draws, kOwnAirKey + 0x500).
+    void FeedCorridors() {
+        if (!OwnAirOn()) return;
+        const int day = static_cast<int>(std::floor(now_h_ / 24.0));
+        const std::vector<command::OwnAirZone> zs = OwnCorridors();
+        for (; corridor_days_fed_ < day; ++corridor_days_fed_) {
+            for (const command::OwnAirZone& z : zs) {
+                const int i = data_.theatre.IndexOf(z.id.substr(9));
+                if (i < 0 || truth_[static_cast<std::size_t>(i)].function <= 0.05) continue;
+                const double h = corridor_days_fed_ * 24.0 + z.from_h - data_.theatre.start_hour;
+                if (corridor_intel_.Use(z, h)) {
+                    Log("intel", "COMINT", "our fighters' traffic in " + z.id + " heard (" + std::to_string(corridor_days_fed_ + 1) + ". day)", false);
+                }
+            }
+            FeedDummyCorridors(zs);
+        }
+    }
+    // Our dummy traffic (roadmap S6, docs/air_battle/09 section 8; radio.mode 1): each day radio.our_dummy_corridors false
+    // corridors, a working airfield's real one turned radio.our_dummy_turn_deg about the airfield (the side alternating by
+    // day), are talked on by our GCI and notices at the real one's hours, so the enemy's COMINT can learn a corridor where
+    // our fighters never fly (vr_1985_plss: dummy transmitters and imitated traffic; nazarenko_1984: radio disinformation and
+    // imitation). A raid timed into one gets no held fire. The enemy's journal names it as it heard it.
+    // From radio.mode 2 a played session's EM world may have decided whether the enemy's listeners heard a false corridor's
+    // traffic that day (SessionHeardCorridor): that use is counted as heard or not without the chance.
+    void FeedDummyCorridors(const std::vector<command::OwnAirZone>& zs) {
+        if (data_.tuning.Get("radio.mode") < 1.0 || zs.empty()) return;
+        const bool sessions = data_.tuning.Get("radio.mode") >= 2.0;
+        for (const command::OwnAirZone& z : FalseCorridorsOf(zs, corridor_days_fed_)) {
+            const double h = corridor_days_fed_ * 24.0 + z.from_h - data_.theatre.start_hour;
+            const auto told = session_heard_.find({corridor_days_fed_, z.id});
+            const bool heard = sessions && told != session_heard_.end() ? corridor_intel_.UseHeard(z, h, told->second) : corridor_intel_.Use(z, h);
+            if (heard) {
+                Log("intel", "COMINT", "our fighters' traffic in " + z.id + " heard (" + std::to_string(corridor_days_fed_ + 1) + ". day)", false);
+            }
+        }
+    }
+    // The day's false corridors (command::FalseCorridors' rule) from the real ones, a real one's airfield working.
+    std::vector<command::OwnAirZone> FalseCorridorsOf(const std::vector<command::OwnAirZone>& zs, int day) const {
+        const int n = static_cast<int>(std::floor(data_.tuning.Get("radio.our_dummy_corridors") + 1e-9));
+        const double turn = data_.tuning.Get("radio.our_dummy_turn_deg") * 3.14159265358979323846 / 180.0;
+        return command::FalseCorridors(zs, day, n, turn, [this](const command::OwnAirZone& real) {
+            const int i = data_.theatre.IndexOf(real.id.substr(9));
+            return i >= 0 && truth_[static_cast<std::size_t>(i)].function > 0.05;
+        });
+    }
+    // A creative planner with a fresh belief of our corridor near the package's target times it into the corridor's hours,
+    // when that is at most shift_h later (mt_umnov_1968 pp. 10-11, the Syrian landing case; Mitronin's warning, mitronin_1976
+    // p. 7). Whether the belief found the real corridor decides whether our defences then hold fire (resolve.hpp).
+    void ExploitCorridor(Package& p) {
+        if (!OwnAirOn() || p.planner < 0 || static_cast<std::size_t>(p.planner) >= staff_.officers.size()) return;
+        const command::EnemyLearningDef& L = data_.own_air.learning;
+        const double creativity = staff_.officers[static_cast<std::size_t>(p.planner)].def.traits.creativity;
+        if (!corridor_intel_.Exploits(creativity, now_h_)) return;
+        const command::BelievedCorridor* use = nullptr;
+        std::vector<command::BelievedCorridor> believed = corridor_intel_.Believed(now_h_);
+        command::OwnAirZone bz;
+        for (const command::BelievedCorridor& b : believed) {
+            command::OwnAirZone z;
+            z.path = b.path;
+            if (z.DistanceM(p.target_pos) > 2.0 * L.near_m + L.margin_m) continue;
+            use = &b;
+            bz = z;
+            break;
+        }
+        if (use == nullptr) return;
+        double hod = std::fmod(data_.theatre.start_hour + p.tot_h, 24.0);
+        if (hod < 0.0) hod += 24.0;
+        double delta = 0.0;
+        if (hod < use->from_h || hod > use->to_h) {
+            double ahead = use->from_h + 0.25 - hod;
+            if (ahead < 0.0) ahead += 24.0;
+            if (ahead > L.shift_h) return;
+            delta = ahead;
+        }
+        p.tot_h += delta;
+        if (p.gate_h >= 0.0) p.gate_h += delta;
+        for (Flight& fl : p.flights) {
+            for (RoutePoint& r : fl.route) r.t_h += delta;
+        }
+        p.own_corridor = use->id;
+        for (const command::OwnAirZone& z : OwnCorridors()) {
+            if (z.id != use->id || use->path.empty()) continue;
+            p.own_corridor_found = z.DistanceM(use->path.front()) <= z.half_width_m + L.margin_m;
+        }
+        const std::string why = "timed into our fighters' " + use->id + " (believed, heard " + std::to_string(use->heard) + " times): their defences hold fire then" +
+                                (delta > 0.0 ? ", " + std::to_string(static_cast<int>(std::lround(delta * 60.0))) + " min later than planned" : std::string());
+        p.rationale.push_back(why);
+        Log("decision", staff_.officers[static_cast<std::size_t>(p.planner)].Title(), p.name + ": " + why, false);
     }
 
     // Does the raid come through the player's battery's sector (or at it)?
@@ -1050,7 +1249,10 @@ private:
     // Before roadmap B5 (c2.mode 0, a save of version 1 replayed to the bit): the package resolved whole at its first hour
     // from the campaign's stream, close support aimed where our troops really were (the FAC's sighting came with B5).
     bool Legacy() const { return data_.tuning.Get("c2.mode") < 1.0; }
+    // Legacy only (roadmap S4 made it explicit): with c2.mode 1 the FAC's brief (c2.hpp AirC2::Brief) aims close support
+    // at his believed sighting; this truth-read aim is kept so a save from before B5 replays to the bit.
     void AimOnCall(Package& p) {
+        if (!Legacy()) return;
         if (p.kind != MissionKind::Cas && p.kind != MissionKind::HeloRaid) return;
         const int i = p.target_object.empty() ? -1 : data_.theatre.IndexOf(p.target_object);
         if (i < 0 || data_.theatre.objects[static_cast<std::size_t>(i)].kind != ObjectKind::Troops) return;
@@ -1113,6 +1315,7 @@ private:
         C2Context cx = C2Ctx();
         for (Airborne& a : airborne_) c2_.OnEvents(packages_[static_cast<std::size_t>(a.package)], a.run, ts, cx);
         c2_.StepTo(ts, cx);
+        c2_.Recalls(ts, cx);  // a package whose target is believed destroyed since it took off (roadmap S2)
         for (std::size_t k = 0; k < airborne_.size();) {
             Package& p = packages_[static_cast<std::size_t>(airborne_[k].package)];
             if (!airborne_[k].run.Done(p)) {
@@ -1170,6 +1373,11 @@ private:
         c.staff = &staff_;
         c.packages = &packages_;
         for (Airborne& a : airborne_) c.airborne.push_back({a.package, &a.run});
+        for (const auto& lv : live_) {  // the raids a session flies: the posts know their plan (roadmap S2)
+            for (std::size_t i = 0; i < packages_.size(); ++i) {
+                if (packages_[i].id == lv.first) c.live.push_back(static_cast<int>(i));
+            }
+        }
         c.phase = phase_;
         c.battery = truth_[static_cast<std::size_t>(player_)].pos;
         c.on_call = [this](MissionKind mk, const IntelEntry& e, const AlertPool& pool, double takeoff_h, Package& out) {
@@ -1200,6 +1408,7 @@ private:
             packages_.push_back(p);
             const int idx = static_cast<int>(packages_.size()) - 1;
             if (TouchesPlayer(p)) player_candidates_.insert(idx);
+            on_call_.insert(p.id);
         };
         c.intel = [this](const IntelReport& r) { intel_.Queue(r); };
         c.believed = [this](const std::string& key) -> const IntelEntry* { return key.empty() ? nullptr : intel_.Find(key); };
@@ -1254,11 +1463,38 @@ private:
             }
             ++lost;
         }
+        // The combat sorties its pilots came back from (roadmap S5, 10_FACTIONS.md §8.3): each flight's aircraft less its
+        // losses. Counted always; read only under hot_phase.mode 2 (HotPilotOf), so an older mode's replay is unmoved.
+        for (std::size_t fi = 0; fi < p.flights.size(); ++fi) {
+            const Flight& fl = p.flights[fi];
+            const AircraftType* a = f.Aircraft(fl.aircraft);
+            if (a != nullptr && (a->drone || a->missile)) continue;
+            int down = 0;
+            for (const LossRecord& l : o.losses) down += l.flight == static_cast<int>(fi) ? 1 : 0;
+            for (SquadronState& s : squadrons_) {
+                if (s.id == fl.squadron) s.combat_sorties += std::max(0, fl.count - down);
+            }
+        }
+        // The damaged back in service after their repair (damage.mode 1, roadmap S4: by its level, a heavy one
+        // damage.heavy_repair_factor times as long; a played session's on their own flights, the rest drawn as before and
+        // heavy by a keyed draw of damage.heavy_share); damage.mode 0 as before S4.
+        const bool by_level = data_.tuning.Get("damage.mode") >= 1.0;
         for (int k = 0; k < o.damaged; ++k) {
             if (p.flights.empty()) break;
-            const Flight& fl = p.flights[static_cast<std::size_t>(rng_.Index(static_cast<int>(p.flights.size())))];
+            const bool listed = by_level && static_cast<std::size_t>(k) < o.damaged_list.size() && o.damaged_list[static_cast<std::size_t>(k)].flight >= 0 &&
+                                o.damaged_list[static_cast<std::size_t>(k)].flight < static_cast<int>(p.flights.size());
+            const std::size_t fi = listed ? static_cast<std::size_t>(o.damaged_list[static_cast<std::size_t>(k)].flight)
+                                          : static_cast<std::size_t>(rng_.Index(static_cast<int>(p.flights.size())));
+            const Flight& fl = p.flights[fi];
+            double repair_h = f.logistics.damaged_return_h;
+            if (by_level) {
+                const bool heavy = listed ? o.damaged_list[static_cast<std::size_t>(k)].heavy
+                                          : em::Uniform01(em::DrawHash(seed_, em::Stream::Opportunity, static_cast<std::uint64_t>(p.id), 0xDA5u,
+                                                                       static_cast<std::uint64_t>(k))) < data_.tuning.Get("damage.heavy_share");
+                if (heavy) repair_h *= data_.tuning.Get("damage.heavy_repair_factor");
+            }
             for (SquadronState& s : squadrons_) {
-                if (s.id == fl.squadron) s.damaged_until.push_back(now_h_ + f.logistics.damaged_return_h);
+                if (s.id == fl.squadron) s.damaged_until.push_back(now_h_ + repair_h);
             }
         }
         politics_.losses_today += lost;
@@ -1457,6 +1693,34 @@ private:
             r.label = "unidentified air defence";
             intel_.Queue(r);
         }
+        // Losses nobody can explain (roadmap S7, learning.mode 1): the defence fired but nobody came home to say so, or
+        // nobody knows who shot. The staff suspects an air defence where the flight was last heard of: a ghost report
+        // about the place, never about the true killer, its error drawn from a fork keyed by the package and the loss.
+        if (tune.Get("learning.mode") >= 1.0) {
+            for (std::size_t li = 0; li < o.losses.size(); ++li) {
+                const LossRecord& l = o.losses[li];
+                if (l.fighter || l.own_fire) continue;  // our fighters or its own guns: not a defence of ours on the ground
+                const bool unseen = l.by.empty() || (fired.count(l.by) > 0 && survivors <= 0);
+                if (!unseen) continue;
+                Rng g = rng_.Fork(0x5E7A1EA2000ull + static_cast<std::uint64_t>(p.id) * 64ull + li);
+                const double sigma = tune.Get("learning.unexplained_sigma_m");
+                IntelReport r;
+                r.arrive_h = pirep_h;
+                r.observed_h = t;
+                r.source = IntelSource::PilotReport;
+                r.ghost = true;
+                r.kind = ObjectKind::SamSite;
+                r.pos = l.where + Vec3{g.Normal(0.0, sigma), g.Normal(0.0, sigma), 0.0};
+                r.sigma_m = sigma;
+                r.exists = tune.Get("learning.unexplained_exists");
+                r.losses = 1.0;
+                r.threat_radius_m = tune.Get("learning.unexplained_radius_m");
+                r.threat_lethality = tune.Get("learning.unexplained_lethality");
+                r.label = "suspected air defence (a loss nobody saw)";
+                r.note = "inferred from a flight lost without a report";
+                intel_.Queue(r);
+            }
+        }
         // What radiated while the raid was up: ELINT fixes.
         if (in.elint) {
             for (const auto& em : o.emissions) Elint(em.first, em.second, t);
@@ -1645,6 +1909,48 @@ private:
                     r.label = Label(i) + " (agent)";
                 }
                 intel_.Queue(r);
+            }
+        }
+        // Sympathisers who watch our troops (roadmap S7, learning.mode 1): word of our mobile air defence, more often where
+        // it stands by a town than out in the country, less under its nets. Every draw from a fork keyed by the hour.
+        if (in.humint_air_defence_per_day > 0.0 && tune.Get("learning.mode") >= 1.0) {
+            Rng g = rng_.Fork(0x5E7A1EA3000ull + static_cast<std::uint64_t>(std::max(0.0, std::floor(t0 * 60.0 + 1e-6))));
+            if (g.Chance(std::min(1.0, in.humint_air_defence_per_day * dt / 24.0))) {
+                std::vector<int> pool;
+                std::vector<double> weights;
+                for (std::size_t i = 0; i < data_.theatre.objects.size(); ++i) {
+                    const TheatreObject& o = data_.theatre.objects[i];
+                    const bool player = static_cast<int>(i) == player_;
+                    if (o.kind != ObjectKind::SamSite || o.decoy || (!o.mobile && !player) || truth_[i].function <= 0.05) continue;
+                    if (DistanceToFront(truth_[i].pos) > in.humint_reach_m) continue;
+                    bool town = false;
+                    for (std::size_t k = 0; k < data_.theatre.objects.size(); ++k) {
+                        if (data_.theatre.objects[k].kind == ObjectKind::City && Dist2d(truth_[k].pos, truth_[i].pos) <= tune.Get("learning.watch_m")) town = true;
+                    }
+                    double wt = town ? 1.0 : tune.Get("learning.countryside_share");
+                    if (player && posture_.nets) wt *= 0.5;
+                    pool.push_back(static_cast<int>(i));
+                    weights.push_back(wt);
+                }
+                double wmax = 0.0;
+                for (double wt : weights) wmax = std::max(wmax, wt);
+                if (!pool.empty() && wmax > 0.0) {
+                    const std::size_t k = static_cast<std::size_t>(g.Weighted(weights));
+                    const int i = pool[k];
+                    if (g.Chance(weights[k] / wmax)) {
+                        IntelReport r = ReportAbout(i, IntelSource::Humint, t0, t0 + in.humint_delay_h, in.humint_sigma_m);
+                        r.exists = 0.6;
+                        r.note = "sympathisers saw it";
+                        if (g.Chance(in.humint_false)) {
+                            r.object_id.clear();
+                            r.ghost = true;
+                            r.pos += Vec3{g.Normal(0.0, 8000.0), g.Normal(0.0, 8000.0), 0.0};
+                            r.label = Label(i) + " (sympathisers)";
+                        }
+                        intel_.Queue(r);
+                        ++sympathiser_reports_;
+                    }
+                }
             }
         }
         // Radars that radiate in their routine (the player's battery by its posture).

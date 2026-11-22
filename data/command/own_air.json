@@ -28,7 +28,7 @@
     "opportunity": {"value": 0.2, "range": [0.1, 0.35], "source": "mt_turchin_coop (our own SAMs the worst problem: a fighter keeps to his zone); fm_100_2_1_1984 p. 12-6; SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "independent search only"},
     "turn_back": {"value": 0.2, "by_role": {"cap": 0.6, "escort": 0.6, "sweep": 0.6}, "when_control_lost": true, "range": [0.1, 0.6], "source": "lambeth_1984 (Skinner; Syria 1982: confused pilots headed straight back); SAM3D estimate (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate", "notes": "0.6 once GCI is lost"},
     "husbanding": {"value": 0.0, "range": [0.0, 0.1], "source": "game value (docs/air_battle/10_FACTIONS.md section 6 and 7.2 (Our side))", "confidence": "estimate"},
-    "reaction_delay_s": {"value": [2, 5], "improvised_extra_s": 0, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (trained 2-5 s under the GCI's warning)", "confidence": "estimate", "notes": "4-10 s with the nets jammed (10_FACTIONS.md section 7.2) is not modelled yet: the jamming state does not reach the flight (roadmap B11 Left)"},
+    "reaction_delay_s": {"value": [2, 5], "improvised_extra_s": 0, "jammed_s": [4, 10], "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (trained 2-5 s under the GCI's warning; green 4-10 s, ours with the nets jammed: 10_FACTIONS.md section 7.2)", "confidence": "estimate", "notes": "jammed_s: a pair with no word from its controller (its net jammed, or out of reach) breaks the later for it in the air fight (roadmap S5, air_war/air_fight_session.hpp)"},
     "on_control_lost": {"green": "abort", "skilled": "pairs", "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); pennington_1985; the same as data/air_war/air_combat.json's doctrine 'ours' (tests/test_hot_phase.cpp)", "confidence": "estimate"}
   },
 
@@ -51,7 +51,9 @@
     "low_m": [1500, 2000],
     "high_m": [10000, 12000],
     "centre_inside_km": [50, 60],
-    "source": "mt_turchin_coop pp. 6-7 (fighters on airborne alert at 1,500-2,000 m against low targets and 10-12 km against high ones, the zones' centre 50-60 km inside our territory)",
+    "pairs": 1,
+    "orbit_s": 2400,
+    "source": "mt_turchin_coop pp. 6-7 (fighters on airborne alert at 1,500-2,000 m against low targets and 10-12 km against high ones, the zones' centre 50-60 km inside our territory); a pair per regiment put up on a raid warning and its 40 min in the zone before it goes home unvectored are game values (S1)",
     "confidence": "medium"
   },
 
@@ -110,7 +112,31 @@
     "sigma_m": 8000,
     "use_creativity": 0.55,
     "use_age_h": 72,
-    "source": "game values (docs/air_battle/08_OUR_FIGHTERS.md section 9: the enemy's COMINT hears our GCI and notices, talk-table groups broken by a chance, a belief of a corridor after it is heard so often; mitronin_1976 p. 7 warns the enemy may find and use corridors; that a 1985 enemy planned on them is not documented, so its use is gated by the planner's creativity and the belief's age)",
+    "shift_h": 2.0,
+    "hold_fire": 0.5,
+    "near_m": 15000,
+    "margin_m": 10000,
+    "hours_per_day": 6,
+    "source": "game values (docs/air_battle/08_OUR_FIGHTERS.md section 9: the enemy's COMINT hears our GCI and notices, talk-table groups broken by a chance, a belief of a corridor after it is heard so often; mitronin_1976 p. 7 warns the enemy may find and use corridors; that a 1985 enemy planned on them is not documented, so its use is gated by the planner's creativity and the belief's age). S1's campaign values are game values too: the planner moves a raid's time over target at most 2 h into a believed window; a defence within 15 km of a corridor in its hours loses half its fire, holding for ours, as the guns did in North Vietnam on 14 July 1966 (mt_1973_nvn pp. 13-14) and Syria in June 1967 (mt_umnov_1968 pp. 10-11), the share not given there; a belief within 10 km beyond the corridor's half width finds it; a corridor is used six hours a day",
+    "confidence": "estimate"
+  },
+
+  "reports": {
+    "seen_s": 120,
+    "missing_s": [1800, 3600],
+    "claim_s": 300,
+    "hop_work_s": 30,
+    "precedence": 1,
+    "match_s": 600,
+    "match_m": 10000,
+    "source": "game values (docs/air_battle/08_OUR_FIGHTERS.md section 8: the fighter regiment reports its loss through fighter_rgt_duty with the time, square and cause as its pilots and controllers believe it; a loss the wingman saw is called at once and reaches the duty officer in two minutes, one nobody saw is missing when its fuel would be out, 30-60 min; a claim is made on the radio and confirmed in five; the report coded like a notice, at the same precedence; the regiment's check meets a loss with a launch within ten minutes and ten kilometres)",
+    "confidence": "estimate"
+  },
+
+  "false_friend": {
+    "on": true,
+    "allied_share": 0.5,
+    "source": "docs/air_battle/08_OUR_FIGHTERS.md sections 2.10 and 7: the Pact's allies fly the same Kremniy-2M over the same four war filters on their own schedule (soviet_iff, the 12-filter hardware), so an allied aircraft answers our interrogator when both schedules hold the same filter; an inference, on by default in a war with the Pact; that half the Pact's aircraft over us are its allies' is a game value",
     "confidence": "estimate"
   }
 }

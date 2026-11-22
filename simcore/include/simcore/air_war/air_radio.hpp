@@ -160,6 +160,19 @@ struct Heard {
     bool line_of_sight = false;
 };
 
+// One of our side's transmissions an enemy listener heard (roadmap S6's follow-ups): our GCI's or our flights' call, or an
+// empty call of our dummy transmitter in a false corridor. What the enemy's COMINT makes of it is the campaign's corridor
+// learning (command::EnemyCorridorIntel); the session keeps only that it was heard, where and when.
+struct EnemyHeard {
+    std::string post;       // the enemy's listening post
+    int call = -1;          // the call in the log (-1: a dummy transmitter's empty call)
+    std::string dummy;      // the dummy transmitter's post ("" a real call)
+    std::string corridor;   // the false corridor it talks in ("" a real call)
+    double start_s = 0.0;
+    double end_s = 0.0;
+    double margin_db = 0.0;
+};
+
 // ------------------------------------------------------------------------------------------------ discipline
 
 // A flight's radio discipline: the faction's, moved by the people in it (the officer's quirks, the pilots' nerve) and by
@@ -201,14 +214,41 @@ inline OpsecAlert DrawOpsecAlert(double opsec, std::uint64_t seed, std::uint64_t
     return a;
 }
 
+// A string's key for the radio's draws (roadmap S6's follow-ups): from radio.mode 2 em::StringKey, the same on every compiler
+// and standard library, so a replay on MSVC, GCC and Clang draws alike; before it std::hash, which differs between them (a
+// save made before keeps it and replays as played on the compiler it was played on).
+inline bool StableRadioKeys(const AirRadioDef& d) { return d.Tune("radio.mode") >= 2.0; }
+inline std::uint64_t RadioKeyOf(const std::string& s, bool stable) {
+    return stable ? em::StringKey(s) : static_cast<std::uint64_t>(std::hash<std::string>()(s));
+}
+
+// A squadron's radio fit and the codeword its strikes say after the attack: the same in a session and in the campaign's
+// abstract calls (roadmap S6's follow-ups: the session drew them on std::hash and another seed, so a squadron's word in one
+// was not the other's, and a habit our analysts learned in one did not carry).
+inline const char* const kSquadronCodewords[] = {"SUPERFUSE", "LONGBOW", "REDWING", "SLEDGE", "TIDEWATER"};
+struct SquadronFit {
+    bool have_quick = false;
+    bool secure_voice = false;
+    std::string codeword;
+};
+inline SquadronFit SquadronRadioFit(const std::string& squadron, double have_quick_share, double secure_voice_share, std::uint64_t seed) {
+    const em::Random rng(seed ^ 0xAB57AC70ull);
+    const std::uint64_t sq = em::StringKey(squadron);
+    SquadronFit f;
+    f.have_quick = rng.Uniform(em::Stream::AirRadio, sq, 31) < have_quick_share;
+    f.secure_voice = rng.Uniform(em::Stream::AirRadio, sq, 32) < secure_voice_share;
+    f.codeword = kSquadronCodewords[sq % 5];
+    return f;
+}
+
 // The call sign in force for a unit at hour h: the base with the rotation's number ("Hawk 21" -> "Hawk 21" then "Hawk 38").
-// The rotation interval is the staff's (a careless planner doubles it).
-inline std::string CallsignAt(const std::string& base, double hour, double rotation_h, std::uint64_t seed) {
+// The rotation interval is the staff's (a careless planner doubles it). `stable`: StableRadioKeys.
+inline std::string CallsignAt(const std::string& base, double hour, double rotation_h, std::uint64_t seed, bool stable) {
     if (rotation_h <= 0.0) return base;
     const long long epoch = static_cast<long long>(std::floor(hour / rotation_h));
     if (epoch == 0) return base;
     const em::Random rng(seed ^ 0xCA11517Bull);
-    const int n = 10 + static_cast<int>(rng.Uniform(em::Stream::AirRadio, std::hash<std::string>()(base), static_cast<std::uint64_t>(epoch)) * 89.0);
+    const int n = 10 + static_cast<int>(rng.Uniform(em::Stream::AirRadio, RadioKeyOf(base, stable), static_cast<std::uint64_t>(epoch)) * 89.0);
     char buf[64];
     std::snprintf(buf, sizeof(buf), " %d", n);
     return base + buf;
@@ -268,7 +308,7 @@ public:
         e.discipline = std::clamp(def_.discipline + info.discipline_adjust, 0.0, 1.0);
         const bool strike_like = info.role == "strike" || info.role == "dead" || info.role == "recce";
         e.comm_out = info.comm_out ||
-                     (strike_like && rng_.Uniform(em::Stream::AirRadio, std::hash<std::string>()(f.id), 11) < e.discipline && def_.discipline >= 0.5);
+                     (strike_like && rng_.Uniform(em::Stream::AirRadio, RadioKeyOf(f.id, StableRadioKeys(def_)), 11) < e.discipline && def_.discipline >= 0.5);
         const int index = static_cast<int>(entries_.size());
         std::vector<int> nodes;
         for (std::size_t k = 0; k < f.slots.size(); ++k) {
@@ -287,7 +327,7 @@ public:
         }
         const double freq = (ours ? def_.our_freq_hz : def_.freq_hz) + def_.channel_hz * static_cast<double>(index % 200);
         e.net = world_->AddNet("flight " + f.id, ours ? def_.our_radio : def_.air_radio, freq, nodes);
-        e.unit_key = std::hash<std::string>()(e.unit);
+        e.unit_key = RadioKeyOf(e.unit, StableRadioKeys(def_));
         entries_.push_back(std::move(e));
     }
 
@@ -465,10 +505,60 @@ public:
         return Transmit(sp, e != nullptr ? *e : dummy, t);
     }
 
+    // ---- the campaign's posts in a session (roadmap S2)
+
+    // A post of the enemy's command the session did not have (the campaign's posts, when a raid enters a battery's
+    // session): it speaks from then on. False, with why, if the library lacks its set; true and nothing done if it is here.
+    bool AddSpeakerPost(const AirRadioPostDef& p, std::string* error = nullptr) {
+        if (!On()) return false;
+        if (FindPost(p.id) != nullptr) return true;
+        return AddPost(p, error);
+    }
+    bool HasPost(const std::string& id) const { return FindPost(id) != nullptr; }
+    // The frequency of a post's net (0: no such speaking post).
+    double PostFreqHz(const std::string& id) const {
+        const Post* p = FindPost(id);
+        if (p == nullptr || !On()) return 0.0;
+        const em::NetState* n = world_->Scene().FindNet(p->net);
+        return n != nullptr ? n->freq_hz : 0.0;
+    }
+    // One of our spot jammers on a post's net (our side's jamming of the enemy's command, data/command/counter_c2.json):
+    // `jammer` from the library, standing at `at` (session ENU) on a mast, tuned to the post's net and turned toward the
+    // post. Every call on that net is judged against it by the link budget (em::EvaluateLink's J/N). The jammer's id, or 0.
+    int JamPostNet(const std::string& post_id, const std::string& jammer, const Vec3& at, double mast_m = 10.0) {
+        if (!On()) return 0;
+        const Post* p = FindPost(post_id);
+        if (p == nullptr || p->node == 0) return 0;
+        em::EmScene& s = world_->Scene();
+        const em::NetState* net = s.FindNet(p->net);
+        if (net == nullptr || s.lib.Jammer(jammer) < 0) return 0;
+        const int platform = world_->AddGroundPlatform("our jammer on " + post_id, em::Side::Blue, at.x, at.y, mast_m);
+        const int id = world_->AddJammer(platform, jammer, true);
+        for (const em::JammerState& j : s.jammers) {
+            if (j.id != id) continue;
+            if (em::EmitterState* e = s.FindEmitter(j.emitter_id)) {
+                e->freq_hz = net->freq_hz;
+                e->radiating = true;
+                const em::Platform* pp = s.FindPlatform(p->platform);
+                if (pp != nullptr) e->pointing_az_rad = em::AzimuthFromTo(Vec3{at.x, at.y, 0.0}, Vec3{pp->position.x, pp->position.y, 0.0});
+            }
+        }
+        return id;
+    }
+
     // ---- what the world holds
 
     const std::vector<Call>& Calls() const { return log_; }
     const std::vector<Heard>& HeardLog() const { return heard_; }
+    // What the enemy's listeners heard of our side (roadmap S6's follow-ups), in order of hearing.
+    const std::vector<EnemyHeard>& EnemyHeardLog() const { return enemy_heard_; }
+    // Did an enemy listener hear any call of this dummy transmitter?
+    bool EnemyHeardDummy(const std::string& post_id) const {
+        for (const EnemyHeard& h : enemy_heard_) {
+            if (h.dummy == post_id) return true;
+        }
+        return false;
+    }
     const em::EmWorld& World() const { return *world_; }
     em::EmWorld& World() { return *world_; }
     bool CommOut(const std::string& flight) const {
@@ -516,7 +606,7 @@ public:
     }
     // The call sign in force at session time t for a base (the rotation interval is the faction's).
     std::string CallsignFor(const std::string& base, double t_s) const {
-        return CallsignAt(base, (clock_start_s_ + t_s) / 3600.0, def_.callsign_rotation_h, seed_);
+        return CallsignAt(base, (clock_start_s_ + t_s) / 3600.0, def_.callsign_rotation_h, seed_, StableRadioKeys(def_));
     }
 
 private:
@@ -533,7 +623,7 @@ private:
         std::string id;
         std::string callsign;
         std::string unit;
-        std::size_t unit_key = 0;
+        std::uint64_t unit_key = 0;
         FlightRadioInfo info;
         double discipline = 0.5;
         bool comm_out = false;
@@ -558,9 +648,10 @@ private:
         em::EmScene& s = world_->Scene();
         Post po;
         po.def = p;
-        const bool listens = p.kind == "intercept";
-        const bool ours = p.kind == "our_gci";  // our GCI post speaking to our flights (roadmap B10)
-        const em::Side side = listens || ours ? em::Side::Blue : em::Side::Red;
+        const bool listens = p.kind == "intercept" || p.kind == "enemy_intercept";
+        const bool dummy = p.kind == "our_dummy";  // our dummy transmitter in a false corridor (roadmap S6's follow-ups)
+        const bool ours = p.kind == "our_gci" || dummy;  // our GCI post speaking to our flights (roadmap B10)
+        const em::Side side = p.kind == "intercept" || ours ? em::Side::Blue : em::Side::Red;
         po.platform = world_->AddGroundPlatform(p.name.empty() ? p.id : p.name, side, p.at.x, p.at.y, p.mast_m);
         if (listens) {
             po.esm = world_->AddEsm(po.platform, p.esm);
@@ -576,6 +667,12 @@ private:
                 return false;
             }
             po.net = world_->AddNet("post " + p.id, radio, p.freq_hz > 0.0 ? p.freq_hz : (ours ? def_.our_freq_hz : def_.freq_hz), {po.node});
+            // Empty calls on our fighters' net, as long as a GCI's vector, from and until its false corridor's hours: the
+            // traffic of a corridor where none of ours flies (vr_1985_plss: dummy transmitters and imitated traffic).
+            if (dummy) {
+                const double period = p.period_s > 0.0 ? p.period_s : def_.Tune("radio.our_dummy_period_s");
+                world_->AddDummyTraffic(po.node, po.net, period, def_.Tune("radio.call_vector_s"), std::max(0.0, p.from_s), p.until_s);
+            }
         }
         posts_.push_back(std::move(po));
         return true;
@@ -657,8 +754,7 @@ private:
         em::NetState* net = s.FindNet(sp.net);
         const em::NodeState* from = s.FindNode(sp.node);
         if (net == nullptr || from == nullptr || !from->alive) return kNoModel;
-        const double hash = static_cast<double>(std::hash<std::string>()(sp.speaker) % 1000003);
-        const std::uint64_t key = static_cast<std::uint64_t>(hash);
+        const std::uint64_t key = RadioKeyOf(sp.speaker, StableRadioKeys(def_)) % 1000003u;
         const bool threat = sp.kind == CallKind::ThreatCall;
         // A flight flying silent keeps its routine calls off the air; what breaks its silence is said.
         const bool routine = sp.kind == CallKind::CheckIn || sp.kind == CallKind::Report || sp.kind == CallKind::Admin || sp.kind == CallKind::Request;
@@ -750,10 +846,31 @@ private:
     }
 
     void Collect(const em::CommsHeard& h) {
-        if (h.payload < 0 || static_cast<std::size_t>(h.payload) >= log_.size()) return;
-        if (log_[static_cast<std::size_t>(h.payload)].ours) return;  // our own GCI and pilots: not the intercept's business
+        const Post* dummy = nullptr;  // our dummy transmitter's empty call (payload -1)
         for (const Post& p : posts_) {
-            if (p.esm != h.esm) continue;
+            if (p.def.kind == "our_dummy" && p.node == h.from_node) dummy = &p;
+        }
+        const bool logged = h.payload >= 0 && static_cast<std::size_t>(h.payload) < log_.size();
+        if (!logged && dummy == nullptr) return;
+        const bool ours = dummy != nullptr || log_[static_cast<std::size_t>(h.payload)].ours;
+        for (const Post& p : posts_) {
+            if (p.esm == 0 || p.esm != h.esm) continue;
+            if (p.def.kind == "enemy_intercept") {  // the enemy's listener: our side's calls only
+                if (!ours) continue;
+                EnemyHeard r;
+                r.post = p.def.id;
+                r.call = logged ? h.payload : -1;
+                if (dummy != nullptr) {
+                    r.dummy = dummy->def.id;
+                    r.corridor = dummy->def.corridor;
+                }
+                r.start_s = h.start_s;
+                r.end_s = h.end_s;
+                r.margin_db = h.margin_db;
+                enemy_heard_.push_back(r);
+                continue;
+            }
+            if (ours) continue;  // our own GCI, pilots and dummy: not our intercept's business
             Heard r;
             r.call = h.payload;
             r.post = p.def.id;
@@ -814,6 +931,7 @@ private:
     std::vector<Post> posts_;
     std::vector<Call> log_;
     std::vector<Heard> heard_;
+    std::vector<EnemyHeard> enemy_heard_;
     std::vector<std::string> retired_;
 };
 

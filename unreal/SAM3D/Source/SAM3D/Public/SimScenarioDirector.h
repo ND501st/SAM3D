@@ -131,6 +131,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Battery")
 	FVector GroundScale = FVector(9.0, 3.0, 3.0);
 
+	/**
+	 * A level without the sky actor (OsaPractice, its CesiumSunSky): its sun's intensity in lux, set once the scenario
+	 * starts. The project's light scale is ASimSkyWeatherActor's 10-lux sun: auto exposure runs without the extended
+	 * luminance range (it cannot darken past a few cd/m2), and the effects' brightness is tuned to it (effects.json
+	 * sun_reference_lux). Cesium's physical 111000-lux sun burnt every outside view white. 0 keeps the level's own.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "0"))
+	float LevelSunLux = 10.0f;
+
 private:
 	UFUNCTION()
 	void HandleSimEvent(const FSimEvent& Event);
@@ -156,12 +165,18 @@ private:
 	 *  that has found none is put as far from the scenario's ground as the others were. */
 	void GroundNeighbourSites(bool bFirstMinuteOver);
 	void ShowStatus(const USimWorldSubsystem* Sim) const;
-	/** A level without the sky actor (OsaPractice): its own atmosphere sun turned by the scenario's sun once a second when
-	 *  it is Movable (roadmap R7); never a second sun spawned. A fixed sun is logged and left. */
+	/** A level without the sky actor (OsaPractice): its own atmosphere sun (a DirectionalLight actor's, or a component of
+	 *  another actor such as CesiumSunSky's) turned by the scenario's sun once a second (roadmap R7) and set to
+	 *  LevelSunLux; never a second sun spawned. A sun that is not Movable is made Movable (the project has no static
+	 *  lighting). */
 	void FindLevelSun();
 	void UpdateLevelSun();
 	TWeakObjectPtr<class UDirectionalLightComponent> LevelSun;
 	float NextLevelSunAt = 0.0f;
+	/** A scenario loaded in place of the one running (the air battle check's second, an automation test's): its entities
+	 *  reuse the old one's ids, so the old one's actors, works and neighbour sites go and are spawned again for it. */
+	void ForgetScenarioActors();
+	const void* SeenRunner = nullptr;
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<ASimEntityActor>> SpawnedActors;

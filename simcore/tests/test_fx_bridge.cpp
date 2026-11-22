@@ -1035,12 +1035,12 @@ SC_TEST("fx (bridge): each attack the planner flies lets its bombs go where thei
                 SC_EXPECT(ratio > 1.0 && ratio < 1.5 && st.path_deg > 10.0);  // in the climb
             } else if (at.delivery == Delivery::PopUp) {
                 // Past the top of its climb (its path at or below the horizontal, nearer the aim than the apex), never in
-                // the climb to it (that is a toss). The runner's terrain-following climb tops out near the release point
-                // (about 1140 m up, 2 km short), not at the planner's apex, and goes on almost level, so from there the
-                // throw already reaches past the aim and it lets go at once: the aim half the throw (docs/fx/README.md 7).
+                // the climb to it (that is a toss). The climb is flown as a path angle (roadmap S4): he tops out early and
+                // dives toward the release height, and holds on while the aim is beyond his throw, so he lets go where
+                // the throw meets it (about 700 m up, a 7-8 degree dive: docs/fx/README.md 7).
                 const double apex_m = 0.5 * (t.Get("delivery.popup_pull_m") + t.Get("delivery.release_popup_m"));
                 SC_EXPECT(st.path_deg <= 0.0 && along < apex_m);
-                SC_EXPECT(ratio > 0.4 && ratio <= 1.0);
+                SC_EXPECT(ratio > 0.9 && ratio <= 1.0);
             } else {
                 SC_EXPECT(ratio > 0.8 && ratio < 1.35);
             }

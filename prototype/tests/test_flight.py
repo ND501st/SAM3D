@@ -8,8 +8,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from samproto import AcmiWriter, Aircraft, GeoPoint, LocalFrame, Vec3, World  # noqa: E402
-from samproto.engagement import (coordinated_turn_rate, corner_speed_mps, load_factor_of_bank,  # noqa: E402
-                                 turn_radius_m)
+from samproto.engagement import (HELI_ACCEL_MPS2, HELI_DECEL_MPS2, coordinated_turn_rate, corner_speed_mps,  # noqa: E402
+                                 density_ratio_at, heli_stop_distance_m, load_factor_of_bank, turn_radius_m)
 from samproto.vec import G0, azimuth_of  # noqa: E402
 
 
@@ -132,9 +132,10 @@ def test_climb_costs_speed():
         a.step(0.05)
         level.step(0.05)
     v0, g0 = a.airspeed_mps, a.path_angle_rad
+    accel, top = a.accel_at_height_mps2(), a.top_speed_mps()  # at its height (roadmap S4: the thrust's lapse)
     a.step(0.05)
-    r = v0 / 400.0
-    want = 0.05 * (6.0 * (1.0 - r * r) - G0 * math.sin(a.path_angle_rad))
+    r = v0 / top
+    want = 0.05 * (accel * (1.0 - r * r) - G0 * math.sin(a.path_angle_rad))
     assert g0 > math.radians(20.0)
     assert a.throttle == pytest.approx(1.0, abs=1e-12)
     assert a.airspeed_mps - v0 == pytest.approx(want, abs=1e-9)
@@ -172,10 +173,21 @@ def test_helicopter_leans_nose_down_level_in_hover():
     h.step(0.1)
     assert not h.has_energy_model()
     assert math.degrees(h.pitch_rad) == pytest.approx(-10.0, abs=1e-9)
+    # Slowing, he flares at HELI_DECEL_MPS2 (roadmap S4): the nose comes up by the deceleration's share of g.
     h.speed_mps = 40.0
+    h.step(0.1)
+    assert h.airspeed_mps == pytest.approx(80.0 - 0.3, abs=1e-9)
+    r0 = h.airspeed_mps / 80.0
+    assert h.pitch_rad == pytest.approx(-math.atan(r0 * r0 * math.tan(math.radians(10.0)) - HELI_DECEL_MPS2 / G0), abs=1e-9)
+    for _ in range(140):
+        h.step(0.1)
+    assert h.airspeed_mps == pytest.approx(40.0, abs=1e-9)
     h.step(0.1)
     assert math.degrees(h.pitch_rad) == pytest.approx(-math.degrees(math.atan(0.25 * math.tan(math.radians(10.0)))), abs=1e-9)
     h.speed_mps = 0.0
+    for _ in range(140):
+        h.step(0.1)
+    assert h.airspeed_mps == pytest.approx(0.0, abs=1e-12)
     h.step(0.1)
     assert h.pitch_rad == pytest.approx(0.0, abs=1e-12)
     assert h.bank_rad == pytest.approx(0.0, abs=1e-12)
@@ -184,6 +196,7 @@ def test_helicopter_leans_nose_down_level_in_hover():
     h.step(0.1)
     assert math.degrees(wrap(h.heading_rad - before)) == pytest.approx(3.0, abs=1e-9)
     h.speed_mps = 60.0
+    h.airspeed_mps = 60.0  # at speed already (the ramp up is roadmap S4's test below)
     h.waypoints, h.next_wp = [Vec3(0, -50000, 100)], 0
     most = 0.0
     for _ in range(50):
@@ -234,3 +247,70 @@ def test_old_way_shows_a_bank():
     acmi = AcmiWriter(w.frame)
     acmi.write_world(w)
     assert "|64.9|" in acmi.text()
+
+
+
+# ---------------------------------------------------------------------------------------------- roadmap S4
+
+def test_s4_top_speed_and_accel_by_altitude():
+    # ISA at 6,000 m: 0.5389 of sea level's density; thrust as sigma^0.7: 0.649 of the acceleration, 1.097 the top speed.
+    assert density_ratio_at(0.0) == pytest.approx(1.0, abs=1e-12)
+    assert density_ratio_at(6000.0) == pytest.approx(0.5389, abs=0.0015)
+    a = Aircraft("a", Vec3(0, 0, 0), max_speed_mps=400.0, accel_mps2=8.0)
+    assert a.top_speed_mps() == pytest.approx(400.0, abs=1e-12)
+    assert a.accel_at_height_mps2() == pytest.approx(8.0, abs=1e-12)
+    a.position = Vec3(0, 0, 6000.0)
+    assert a.accel_at_height_mps2() / 8.0 == pytest.approx(0.649, abs=0.002)
+    assert a.top_speed_mps() / 400.0 == pytest.approx(1.097, abs=0.002)
+    b = Aircraft("b", Vec3(0, 0, 5000.0), max_speed_mps=400.0, accel_mps2=8.0, frame_alt_m=1000.0)
+    assert b.accel_at_height_mps2() == pytest.approx(a.accel_at_height_mps2(), abs=1e-12)
+    for z, hand in ((0.0, 6.0), (6000.0, 4.11)):
+        c = turner(200.0, 15.0, 8.0, 180.0)
+        c.position = Vec3(0, 0, z)
+        c.speed_mps = 600.0
+        c.airspeed_mps = 200.0
+        c.max_speed_mps = 400.0
+        c.accel_mps2 = 8.0
+        c.waypoints = [Vec3(0, 200000, z)]
+        want = c.accel_at_height_mps2() * (1.0 - (200.0 / c.top_speed_mps()) ** 2)
+        c.step(0.01)
+        assert (c.airspeed_mps - 200.0) / 0.01 == pytest.approx(want, abs=1e-6)
+        assert want == pytest.approx(hand, abs=0.02)
+
+
+def test_s4_helicopter_accelerates_and_stops_in_its_flare():
+    h = Aircraft("h", Vec3(0, 0, 50), speed_mps=60.0, velocity=Vec3(0, 0, 0), waypoints=[Vec3(0, 50000, 50)],
+                 max_turn_rate_rad_s=math.radians(30.0), type="Air+Rotorcraft", max_load_g=2.0,
+                 roll_rate_rad_s=math.radians(60.0), max_speed_mps=80.0)
+    h.airspeed_mps = 0.0
+    for _ in range(100):
+        h.step(0.1)
+    assert h.airspeed_mps == pytest.approx(10.0 * HELI_ACCEL_MPS2, abs=1e-9)
+    for _ in range(200):
+        h.step(0.1)
+    assert h.airspeed_mps == pytest.approx(60.0, abs=1e-9)
+    assert heli_stop_distance_m(60.0) == pytest.approx(600.0, abs=1e-9)
+    y0 = h.position.y
+    h.speed_mps = 0.0
+    while h.airspeed_mps > 0.0:
+        h.step(0.01)
+    assert h.position.y - y0 == pytest.approx(600.0, abs=2.0)
+    h.accel_mps2 = 4.0
+    assert h.heli_accel_mps2() == pytest.approx(4.0)
+    assert not h.has_energy_model()
+
+
+def test_s4_asked_path_angle_is_flown():
+    a = turner(250.0, 15.0, 6.0, 180.0)
+    a.max_speed_mps, a.accel_mps2, a.speed_mps = 400.0, 8.0, 250.0
+    a.position = Vec3(0, 0, 200.0)
+    a.waypoints = [Vec3(0, 200000, 200.0)]
+    a.height_held = True
+    a.path_asked = True
+    a.asked_path_angle_rad = math.radians(10.0)
+    for _ in range(200):
+        a.step(0.05)
+    assert math.degrees(a.path_angle_rad) == pytest.approx(10.0, abs=0.05)
+    assert a.position.z > 200.0 + 250.0 * 10.0 * math.sin(math.radians(10.0)) * 0.7
+    assert a.velocity.z / a.airspeed_mps == pytest.approx(math.sin(a.path_angle_rad), abs=1e-9)
+    assert a.load_g < 6.0 + 1e-9

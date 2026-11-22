@@ -13,6 +13,10 @@
 //
 // The gates (§7.3) are lists, not numbers: `BeyondTaskOffered`, `FreeHuntOffered` take no officer, so no bold or creative
 // leader opens one. The latencies (§7.4): `RetaskAirS`, `AlertTakeoffS`.
+//
+// Roadmap S5 (hot_phase.mode 2): `HotPilotOf` (a squadron's pilots' sorties and currency), `HotNerve` (§9.3's nerve, the
+// abstract resolver's and the played package's), `HusbandingShift`, `LeaderMayRoute`, `LeaderMayTurnBack`; the raid
+// builder writes the values into each played aircraft's "reactions" "hot" (reactions.hpp, reaction_chain.hpp).
 #pragma once
 
 #include <algorithm>
@@ -199,6 +203,48 @@ inline bool FreeHuntOffered(const FactionDef& f, MissionKind mission, int phase,
     const HotAuthorityDef& a = f.hot.authority;
     return BeyondTaskOffered(f, mission) && a.free_hunt_from_phase >= 0 && phase >= a.free_hunt_from_phase && in_zone;
 }
+
+// ---- Roadmap S5: the values read by played flights and by the abstract nerve (hot_phase.mode 2).
+
+// A flight's pilots as the hot phase reads them (§8.3): the faction's veterans' sorties plus their squadron's combat
+// sorties survived per pilot; their currency, the faction's peacetime hours plus the war's in the last year, over the
+// reference (data/gameplay/air_war.json hot_phase.currency_reference_h), capped at 1.2. Without a pilots block: current,
+// no sorties.
+inline HotPilot HotPilotOf(const FactionDef& f, int squadron_sorties, int squadron_pilots, double reference_h, double sortie_h) {
+    HotPilot p;
+    const HotPilotsDef& d = f.hot.pilots;
+    const double per = static_cast<double>(std::max(0, squadron_sorties)) / std::max(1, squadron_pilots);
+    p.combat_sorties = static_cast<int>(std::lround((d.set ? d.start_sorties : 0.0) + per));
+    if (d.set && reference_h > 0.0) p.currency = std::min(1.2, (d.hours_per_year + per * std::max(0.0, sortie_h)) / reference_h);
+    return p;
+}
+
+// The package's nerve in phase two (§9.3): the share of the package its leader will lose before he turns back,
+// 0.1 + 0.5 x his press_on (the faction's for his flight's role, moved by him and his pilots) less the faction's
+// husbanding times the day's losses over its tolerance (capped at 1). An average NATO or Pact leader keeps the old 0.4;
+// the neutral's is lower, and lower still as its day's losses near what it can bear.
+inline double HotNerve(const FactionDef& f, FlightRole role, const Officer* leader, bool leader_flies, const HotPilot* pilot, double losses_today) {
+    HotWho w;
+    w.leader = leader;
+    w.leader_flies = leader_flies;
+    w.pilot = pilot;
+    const double press_on = HotPhase(f, HotParam::PressOn, role, f.pool, w);
+    const double tolerance = std::max(0.3, f.politics.loss_tolerance_per_day);
+    const double over = std::min(1.0, std::max(0.0, losses_today) / tolerance);
+    return 0.1 + 0.5 * press_on - HotPhase(f, HotParam::Husbanding, role, f.pool, w) * over;
+}
+
+// How much a played flight's press-on falls as the day's losses near the faction's tolerance (§7.1 husbanding; <= 0):
+// moved onto its reaction rows beside the officer's shift.
+inline double HusbandingShift(const FactionDef& f, FlightRole role, double losses_today) {
+    const double tolerance = std::max(0.3, f.politics.loss_tolerance_per_day);
+    return -Clamp01(f.hot.Value(HotParam::Husbanding).For(role, false)) * std::min(1.0, std::max(0.0, losses_today) / tolerance);
+}
+
+// The leader's acts as a played flight reads them (§7.3's third column): may he change his route himself (go round a
+// site he sees), turn back on his own call (abort, break off)?
+inline bool LeaderMayRoute(const HotAuthorityDef& a) { return a.LeaderMay("route") || a.LeaderMay("everything"); }
+inline bool LeaderMayTurnBack(const HotAuthorityDef& a) { return a.LeaderMay("abort") || a.LeaderMay("break_off") || a.LeaderMay("everything"); }
 
 // The officer's hot-phase shifts in words, for the debrief's reveal (§10: AirCampaign::EnemyMind): those of at least
 // 0.02, as a flight he leads would feel them.

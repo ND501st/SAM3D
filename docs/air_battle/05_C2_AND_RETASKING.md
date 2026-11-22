@@ -591,16 +591,107 @@ raid is taken; a seed replayed, and a save with take, report and complete loaded
 **Differences from the design.**
 - §7's "over the reported place 17-30 min after the report" is tested as 10-45 min: the place is 10 km from the ПУА
   and the pool's base may be nearer or farther than the design's example.
-- `nomination_h` is loaded but does not gate the planner yet.
+- `nomination_h` is loaded but does not gate the planner yet (S2: it does).
 - The rest of a package taken into a session resolves atomically at `Complete`; diverts of a played flight are not given
-  in the session yet (the authority rule is in place, the posts do not yet send the order into the session).
+  in the session yet (the authority rule is in place, the posts do not yet send the order into the session; S2: they
+  do).
 - While any raid is live in a session, the player's battery is left out of the abstract fights.
-- Our side does not jam the enemy's nets in the abstract campaign (the hook exists for the tests).
-- An on-call package a post launches while a raid is in the session is not injected into it.
+- Our side does not jam the enemy's nets in the abstract campaign (the hook exists for the tests; S2: it does).
+- An on-call package a post launches while a raid is in the session is not injected into it (S2: it is).
 - `PackageControl`'s `WhereOf` uses the leader's position for the whole flight.
 
+**S2: command live in the session (19 November 2026, branch `tbr-s2`).** A switch, `c2.live_mode` in
+`data/gameplay/air_war.json` (1 by default; the save writes `c2_live_mode`, and a save without it loads with 0 and
+replays as it was), turns on the rest of §4 that B5 left. `tests/test_c2_live.cpp`.
+- *Orders into a session (§4.5).* A raid a session flies is known to the posts by its plan (`C2Context::live`): a hunter
+  is warned, or a flight diverted, where the plan has it at the hour of the decision, while its main flight is short of
+  its release (`Open`). The decision is not applied to the campaign's copy; it becomes a `C2SessionOrder` (`divert`,
+  `hunt` or `recall`, by the post's id, at its hour) that `LivePackages` takes and gives in the session at that time:
+  a divert as the bridge's `Reroute` and a recall as `ReturnHome`, both said by the post on its net
+  (`FlightOrder::by_radio`); a hunt as the Weasel leader's own turn after the post's threat call. A post's order by
+  radio is the flight's only if its leader hears the call (`Flights::Order`: unheard, it is recorded with `heard`
+  false and the flight flies on); the bridge's retasks skip unheard orders. The campaign's posts are added to the
+  session's radio as speakers (`AirRadio::AddSpeakerPost`, each kind on its own channel of the faction's band; masts
+  9 km for the E-3A, 3 m for a FAC, 15 m otherwise, game values).
+- *Recalls (§4.2).* A strike or DEAD in the air whose target the enemy's intelligence now believes destroyed (its live
+  share under `c2.recall_live` 0.3) by a claim that came in after the package took off (`IntelEntry::claimed_destroyed_h`
+  past `FirstH`; a double tap planned on an old claim is not recalled) is recalled once by a post with the `recall`
+  authority (the ATOC, the air army's post, the neutral's national post) before its release
+  (schoeck_1987_ai_retasking: a target destroyed is a reason to retask). In the abstract the main flights turn home with
+  their load (`RecallFlight`, a `recall` retask); in a session it is the `recall` order. Cruise missiles are not
+  recalled.
+- *On-call packages live (§4.4).* An on-call package a post launches from its alert pool while a raid is in the session
+  and that touches the battery enters that session whatever the pacing (`AirCampaign::OnCallLive`): a pool scrambled on
+  a pilot's report of the battery's launch comes to the battery.
+- *Posts struck (§4.1).* `AirCampaign::StrikePost(post, by)` (a recorded action, `post_attack` in the save) and our
+  fires (below) put a post out: its duty officer with it, its traffic, by the faction's `post_loss`, going to the nearest
+  live post of its kind after `takeover_s` (NATO: `alternate`, 10-30 min, an estimate; smart_1985_tacs for the CRC's
+  and FACP's times) or lost (the Pact: `none`; fm_100_2_1_1984 p. 12-4, centralised control with no alternate below the
+  air army). A post is set up again after its kind's `reconstitute_h` (NATO's tasking centre and CRC 12-24 h, the ASOC
+  6-12 h, a FAC 2-6 h; the Pact's ПУА 6-12 h), with a stand-in at the desk.
+- *Nomination (§2.1).* A strike target within `c2.bai_depth_m` of the line that the enemy learned during the war
+  (`IntelEntry::first_h`, the hour of its first delivery; the prior picture is on the plan already) is not planned
+  until `nomination_h` after (NATO's 48 h, gallant_knight_1983; the Pact and the neutral have none). On-call packages
+  are not held: they are the immediate requests the cycle leaves out (`NominationWaits` in `planner.hpp`).
+- *Our side against the enemy's command (§5).* `data/command/counter_c2.json` (loaded with the air war,
+  `air_war/counter_c2.hpp`): each post is marked once, by a keyed draw on its id, to be destroyed, jammed or listened
+  to, a third each (miller_1980_tacs_jamming: the Soviet plan for NATO's TACS, turned round as our side's 1985 practice).
+  Our VHF and UHF air-net jammer (from 1984; 100-400 MHz, 1 kW, 10 km behind the line at its point nearest the battery,
+  estimates; the library's `our_air_net_jammer` in `data/em/air_radios_1985.json`) takes a share of a hop to or from a
+  post marked for jamming by FM 34-40-7's rule (`OurJamShare`: J/S from the powers and distances, the enemy's set 10 W,
+  terrain n; captured at `comms_jam.capture_k` gives `c2.jam_strong_share` 0.9, words lost at `weak_js` gives
+  `c2.jam_weak_share` 0.35). A post marked for destruction that our listeners have heard `c2.post_fix_calls` (3) times is
+  fixed by direction finding from the battery's area (3.5 degrees, to 40 km: fm_100_2_1_1984 p. 15-2, NATO's view of our
+  VHF DF) and, within our fires' 60 km past the line (estimate), fired on at `c2.post_strike_per_h` (0.04) an hour; it is
+  out if the fix lies within `c2.post_footprint_m` (600 m) of it. Our side's journal records that the fires went in on a
+  post fixed by its calls, never whether it is out. In a session the jam-marked posts' nets have our jammer on them as
+  an EM jammer (`AirRadio::JamPostNet`, tuned to the net and turned toward the post), so the calls are judged by the
+  link budget.
+- *Clearance (§2.1, 06 §6).* A close support package (the Pact's helicopter raids too) is briefed by its FAC only if the
+  brief gets through: the brief is the clearance and the mark. Jammed out, or the FAC's post out, the faction's
+  `clearance` rule decides: NATO's CAS holds asking again (`hold_s` 5-15 min) and then goes home with its load
+  (tradoc_jaat_1983; the hold an estimate), the Pact's attacks on its plan's aim. In a session the FAC calls the mark
+  when the flight is within `c2.fac_contact_m` (25 km) of him; heard, it is a designation (below); unheard, the same rule.
+- *The FAC's mark (06 §6).* A heard mark designates a place for the flight (`OpportunityRun::Designate`, its radius
+  three times the sighting's sigma, at least 500 m): a contact there is `designated` in the opportunity chain, so
+  NATO's close support may attack it ("designated by the controller").
+- Every new draw is keyed on an existing stream (`AirC2::Draw` with keys 0xC0C2, 0x9057B, 0xF14E5, 0x7A4E, 0xC1EA,
+  the injector's `OppDraw` with 0xFAC0): no new stream, and with `c2.live_mode` 0 nothing moves.
+- *Tests.* `tests/test_c2_live.cpp`, 13 cases: the counter-C2 file, its jammer in the library and the thirds over 1,320
+  posts; a divert of a session's raid as a session order at its hour and place (12 of 12 roots), none past the release;
+  recalls in the abstract and in a session (NATO, the Pact, the neutral), none for a double tap or a working target; a
+  struck post's traffic to NATO's alternate within `takeover_s` or lost (the Pact), its return within its kind's band;
+  our fires only after `post_fix_calls` heard calls, missing with a 1 m footprint and never beyond `df_reach`; our
+  jamming's share near and far from the jammer and never on a listened post; `NominationWaits` and four NATO wars;
+  the brief jammed out (NATO held and sent home, the Pact on its plan, the old behaviour at `live_mode` 0); the FAC's
+  mark designating; a post's order by radio heard 12 of 12 in clear air and 0 of 12 with our jammer 2 km from the
+  flight; the save's `post_attack` and an old save's `live_mode` 0; on-call packages launched beside the battery while
+  a raid is live coming to the session (5 of 5, none at `live_mode` 0); and a raid in a session with the posts on its
+  radio and our jammer on the marked posts' nets.
+- *Balance* (`air_war_balance`, 20 seeds on the tuned theatre and 10 on the nation; every band passes before and after).
+  The rebels have no posts and do not move. Our jamming takes 0.5-1.1 hops a campaign from the neutral (its reports to
+  intelligence 8.7 to 8.0), 9-10 from the Pact and 5.5-6.5 from NATO on the theatre (38-44 and 10-11 on the nation);
+  among the hops it takes are the requests, approvals and scrambles of the alert pools, so the on-call packages fall (the Pact 96 and 75
+  to 73 and 55 over 20 seeds, NATO 84 and 74 to 57 and 41; on the nation the Pact 107 and 72 to 63 and 42, NATO 49 and
+  52 to 32 and 42) and with them the packages a campaign (the Pact 97.7 and 94.2 to 96.8 and 93.0, NATO 99.5 and 99.7
+  to 98.0 and 97.9; the nation's Pact 169 and 167 to 164 and 163). The on-call latency stays in its band (21.7-24.3 min
+  on the theatre). NATO's close support loses briefs to the clearance (FAC briefs 4.6 and 4.3 to 2.8 and 2.5; 0.5-0.6
+  held and 0.3-0.5 sent home a campaign; its share of the mix 5 and 4 % to 3 %). Losses a sortie move within the
+  seeds' noise (the Pact 1.8 and 2.0 % to 1.9 and 2.1 %, NATO 1.6 and 1.5 % to 1.7 and 1.5 %; the nation 4.1/3.6 %
+  to 4.2/3.6 % and 1.9/2.2 % to 2.0/2.1 %). NATO's careful battery is wrecked in 4 of 20 runs instead of 2 (band
+  0-40 %): two seeds whose raids fell differently once the on-call traffic changed. Three parts barely act in the abstract campaign, and that is
+  the finding: no recall (claims mostly come in after the packages have landed), our fires went in once in the nation's
+  20 Pact campaigns and never on the theatre (our listeners hear 0-2 calls a campaign within 40 km of the
+  battery, short of the three a fix needs), and the nomination cycle found one target learned in the war inside the
+  30 km BAI area in four NATO wars of five days (the planner's strikes that near the line are on air defences and
+  troops, which it leaves out). `air_war_bench`, `crew_balance` and `helper_coverage` do not move; `ground_check data 3600`
+  lists nothing under the ground.
+
 **Left.** B6: targets of opportunity on the posts' authority (the FAC's `designate` is in the table, the opportunity
-chain is not). B8: the fighters' scrambles and GCI vectors as air combat (the pools stand fighters but the abstract
-fight is still the flat roll), the E-3A's fighter control. Posts under attack and destroyed; the posts' orders sent
-into a session's flights; on-call packages injected live; our jamming of the enemy's nets in the campaign; the open
-items of §8.
+chain is not; S2 put it in). B8: the fighters' scrambles and GCI vectors as air combat (the pools stand fighters but the abstract
+fight is still the flat roll), the E-3A's fighter control. The open items of §8. After S2: the hold before a NATO
+close support package goes home is not flown in the abstract (its brief is tried again after the hold, at once); a
+post set up again has a stand-in, not a new officer from the pool; a recall reads the claim's observed time, not its
+delivery; a session's jammers stand only on the posts there when its first package entered; the enemy does not move a
+post that has been fixed; a session's own strike on a post goes through `StrikePost` only when the caller says so (no
+session flow calls it yet).
