@@ -4559,7 +4559,10 @@ public:
         return 0;
     }
     std::vector<command::OwnFlightNotice> CrewNotices() const { return own_air_ ? own_air_->crew_known : std::vector<command::OwnFlightNotice>(); }
-    std::vector<command::NoticeTrace> NoticeTraces() const { return own_air_ ? own_air_->traces : std::vector<command::NoticeTrace>(); }
+    const std::vector<command::NoticeTrace>& NoticeTraces() const {
+        static const std::vector<command::NoticeTrace> kNone;
+        return own_air_ ? own_air_->traces : kNone;
+    }
     std::vector<command::Scramble> OwnScrambles() const { return own_air_ ? own_air_->scrambles : std::vector<command::Scramble>(); }
     std::vector<command::FriendlyFireFinding> FriendlyFire() const { return own_air_ ? own_air_->findings : std::vector<command::FriendlyFireFinding>(); }
     const command::IffSchedule* IffCodes() const { return own_air_ ? &own_air_->schedule : nullptr; }

@@ -310,13 +310,23 @@ private:
         double height_m;   // above the ground if low, else above the ground under the centre
     };
 
+    // The engine's raw output made a number by hand: the standard fixes mt19937's sequence but not how a distribution
+    // uses it, so libc++, libstdc++ and MSVC's std::uniform_*_distribution give different waves for one seed.
+    double Unit() { return static_cast<double>(rng_()) / 4294967296.0; }  // [0, 1)
     double Uniform(double lo, double hi) {
         if (!(hi > lo)) return lo;
-        return std::uniform_real_distribution<double>(lo, hi)(rng_);
+        return lo + (hi - lo) * Unit();
     }
     int UniformInt(int lo, int hi) {
         if (hi <= lo) return lo;
-        return std::uniform_int_distribution<int>(lo, hi)(rng_);
+        const long long span = static_cast<long long>(hi) - static_cast<long long>(lo) + 1;
+        const long long k = static_cast<long long>(Unit() * static_cast<double>(span));
+        return static_cast<int>(static_cast<long long>(lo) + (k < span ? k : span - 1));
+    }
+    // The library's shuffle is no better: how it draws its swaps is its own (Fisher-Yates on UniformInt here).
+    template <typename T>
+    void Shuffle(std::vector<T>& v) {
+        for (std::size_t i = v.size(); i > 1; --i) std::swap(v[i - 1], v[static_cast<std::size_t>(UniformInt(0, static_cast<int>(i) - 1))]);
     }
     template <typename T>
     const T& Pick(const std::vector<T>& v) {
@@ -508,7 +518,7 @@ private:
             for (std::size_t f = 0; f < def_->factions.size(); ++f) {
                 for (std::size_t a = 0; a < def_->factions[f].aircraft.size(); ++a) deck_.push_back({f, a});
             }
-            std::shuffle(deck_.begin(), deck_.end(), rng_);
+            Shuffle(deck_);
         }
         if (deck_.empty()) return;
         const std::pair<std::size_t, std::size_t> card = deck_.back();
@@ -741,7 +751,7 @@ private:
     void FriendlyFlight(double at_s, const WaveScene& s, Wave& w) {
         if (fdeck_.empty()) {
             for (std::size_t i = 0; i < def_->friendly.size(); ++i) fdeck_.push_back(i);
-            std::shuffle(fdeck_.begin(), fdeck_.end(), rng_);
+            Shuffle(fdeck_);
         }
         const WaveFriendlyType& a = def_->friendly[fdeck_.back()];
         fdeck_.pop_back();
