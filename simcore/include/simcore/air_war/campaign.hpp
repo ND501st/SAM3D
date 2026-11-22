@@ -47,7 +47,9 @@
 #include "simcore/air_war/resolve.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
+#include "simcore/air_war/unit_moves.hpp"
 #include "simcore/ground_war/ground_war.hpp"
+#include "simcore/nav/routes.hpp"
 
 namespace simcore {
 namespace airwar {
@@ -95,7 +97,10 @@ struct CampaignAction {
     // pilot's report that reached the enemy's posts while the session ran (roadmap B5 §4.7).
     // PostAttack: an enemy air control post struck from outside the campaign's own processes (a session's strike, a call
     // for fire: roadmap S2), `what` the post's id, `by` who struck it.
-    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report, PostAttack };
+    // UnitMove: one of our units began a move on an order its commander heard (track F, F4.2; unit_moves.hpp): `what` the
+    // unit, `by` the order's key, `to` where to, `until_h` the hour it began, `observed_h` when he heard it; `in_step` the
+    // order source's, taken at a whole hour inside a step (a load puts it back at that hour), else the caller's (MoveUnit).
+    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report, PostAttack, UnitMove };
     Kind kind = Kind::Advance;
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
@@ -110,7 +115,8 @@ struct CampaignAction {
     Vec3 from;               // Report: where he was
     double sigma_m = 0.0;    // Report
     double observed_h = 0.0; // Report: when he saw it (the place is `to`)
-    std::string by;          // PostAttack
+    std::string by;          // PostAttack; UnitMove: the order's key
+    bool in_step = false;    // UnitMove
 };
 
 // The evidence our analysts gather from the raids they see.
@@ -254,6 +260,7 @@ public:
         }
         PriorIntel();
         StartAirFront();
+        if (!StartUnitMoves(error)) return false;
         if (!StartGroundWar(error)) return false;
         day_ = 1;
         Log("career", "staff", StaffLine(), false);
@@ -508,10 +515,24 @@ public:
 
     // Rebuild a campaign from its actions (after Init with the same data and seed). False if they don't fit it.
     bool Replay(const std::vector<CampaignAction>& actions, std::string* error = nullptr) {
+        // Our units' moves on the orders heard inside a step go back at their hours (F4.2), whatever the order source now.
+        for (const CampaignAction& a : actions) {
+            if (a.kind != CampaignAction::Kind::UnitMove || !a.in_step) continue;
+            Recorded r;
+            r.h = a.until_h;
+            r.order.key = a.by;
+            r.order.unit = a.what;
+            r.order.to = a.to;
+            r.order.heard_h = a.observed_h;
+            inbox_.push_back(r);
+        }
         for (std::size_t i = 0; i < actions.size(); ++i) {
             const CampaignAction& a = actions[i];
             posture_ = a.posture;
             switch (a.kind) {
+                case CampaignAction::Kind::UnitMove:
+                    if (!a.in_step) MoveUnit(a.what, a.to, a.by, a.observed_h);
+                    break;
                 case CampaignAction::Kind::Advance: Advance(a.until_h); break;
                 case CampaignAction::Kind::Relocate: RelocateBattery(a.to, a.march_h); break;
                 case CampaignAction::Kind::Transmit: NoteTransmissions(a.calls); break;
@@ -609,6 +630,45 @@ public:
     }
     // The air war and the ground war's units (F3.7; zero without the ground war).
     const GroundAirStats& GroundAir() const { return ground_air_; }
+
+    // ------------------------------------------------------------------ our units' moves on orders (track F, F4.2)
+
+    // On under ad_strategy.mode 1 where the front has a line: the national SAM units, the army's Kub and the radar
+    // companies (the classes of data/campaign/ad_strategy.json "moves") move only on orders, by their class's norms, on the
+    // roads; off the air while they move; lost with the ground if the line overruns them before they get away.
+    bool UnitMovesOn() const { return moves_on_; }
+    const UnitMoveRules& MoveRules() const { return move_rules_; }
+    // The class object i moves by on orders (-1: none, or off).
+    int MoveClassOf(std::size_t i) const { return moves_on_ && i < move_class_.size() ? move_class_[i] : -1; }
+    // Who tells the campaign the orders its units heard (command::CampaignFeed::OrderSource()): asked at whole hours inside
+    // the steps, from now on. A copy of the campaign keeps it: give the copy its own, or none. Not saved: the moves it gave
+    // are, and a load puts them back at their hours with or without a source.
+    void SetOrderSource(UnitOrderSource source) {
+        order_source_ = std::move(source);
+        next_source_h_ = now_h_;
+    }
+    // A move begun now on an order heard at heard_h (-1: now): by its class's norms, on the roads. Recorded. False when it
+    // does not move on orders (or the mode is off), is wrecked, overrun or on a move already, or the key was used.
+    bool MoveUnit(const std::string& id, const Vec3& to, const std::string& key = "", double heard_h = -1.0) {
+        UnitOrder o;
+        o.unit = id;
+        o.to = to;
+        o.heard_h = heard_h < 0.0 ? now_h_ : heard_h;
+        o.key = key.empty() ? "move:" + id + "@" + std::to_string(static_cast<long long>(std::llround(now_h_ * 100.0))) : key;
+        return MoveUnitNow(o, false);
+    }
+    // Other rules than data/campaign/ad_strategy.json's "moves" (tests, balance): only where the moves are on, after Init and
+    // before the first step. Not saved: a load reads the data's.
+    bool UseMoveRules(const UnitMoveRules& rules) {
+        if (!moves_on_ || now_h_ > 0.0 || !moves_.empty() || rules.classes.empty()) return false;
+        move_rules_ = rules;
+        ApplyMoveRules();
+        return true;
+    }
+    // Every move begun, in order, as it went (the stages, the hours, the march on the roads).
+    const std::vector<UnitMove>& UnitMoves() const { return moves_; }
+    // Units that move on orders the enemy's line overran before they got away (lost with the ground).
+    int UnitsOverrun() const { return units_overrun_; }
     // The fixed-wing and the helicopters' air front at a point: its sector's (0 and 0 at mode 0).
     double AirFrontAt(const Vec3& p) const {
         if (!air_front_on_ || air_front_.sectors.empty()) return 0.0;
@@ -1065,6 +1125,7 @@ private:
             marching_ = false;
             MoveBattery(march_to_);
         }
+        if (moves_on_) StepUnitMoves();  // our units' moves on orders: their stages, and the orders heard (F4.2)
         return false;
     }
 
@@ -1995,6 +2056,250 @@ private:
         return true;
     }
 
+    // ---- our units' moves on orders (track F, F4.2; unit_moves.hpp, docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 3)
+
+    // At ad_strategy.mode 1 on a front with a line: the classes and which objects move by them. At 0 nothing is loaded.
+    bool StartUnitMoves(std::string* error) {
+        moves_on_ = false;
+        move_rules_ = UnitMoveRules();
+        move_class_.clear();
+        move_anchor_.clear();
+        move_mobility_.clear();
+        moves_.clear();
+        active_moves_.clear();
+        move_keys_.clear();
+        inbox_.clear();
+        inbox_next_ = 0;
+        next_source_h_ = 0.0;
+        next_move_event_h_ = 1e18;
+        units_overrun_ = 0;
+        move_routes_ = nav::RouteCache(64);
+        move_roads_.reset();
+        if (data_.tuning.Get("ad_strategy.mode") < 1.0 || front_line_.Empty() || data_.data_dir.empty()) return true;
+        std::string e;
+        if (!LoadUnitMoveRules(data_.data_dir, "campaign/ad_strategy.json", move_rules_, &e)) {
+            if (error != nullptr) *error = e;
+            return false;
+        }
+        moves_on_ = true;
+        ApplyMoveRules();
+        return true;
+    }
+
+    // The classes each object moves by, and the classes' mobility for the route service.
+    void ApplyMoveRules() {
+        const std::size_t n = data_.theatre.objects.size();
+        move_class_.assign(n, -1);
+        move_anchor_.assign(n, Vec3{});
+        move_mobility_.clear();
+        for (std::size_t i = 0; i < n; ++i) {
+            move_class_[i] = move_rules_.ClassOf(data_.theatre.objects[i]);
+            move_anchor_[i] = data_.theatre.objects[i].pos;
+        }
+        for (const MoveClassDef& c : move_rules_.classes) {
+            nav::Mobility m;
+            m.id = "ad_move:" + c.id;
+            m.name = c.name;
+            const double v = c.road_kmh / 3.6;
+            m.road_mps = {v, v, v};
+            m.cross_country_mps = c.cross_kmh / 3.6;
+            m.night_factor = std::min(1.0, c.night_kmh / c.road_kmh);
+            move_mobility_.push_back(m);
+        }
+    }
+
+    static std::string PointKey(const Vec3& p) {
+        return "p" + std::to_string(static_cast<long long>(std::llround(p.x))) + ":" + std::to_string(static_cast<long long>(std::llround(p.y)));
+    }
+
+    // The march's hours from `from` to `to` leaving at depart_h: the route service on the country's roads (cached by the
+    // ends, the class and the bridges down: the ground war's roads and overlay when it runs, else the country's roads),
+    // its roads at the class's speed by day or by night as the march starts; a way off them up to no_road_near_m at the
+    // cross-country speed, a longer one on the local roads the country's map does not draw (x road_factor at the road
+    // speed); no way on the roads, or one longer than detour_max straight lines: the straight line x road_factor.
+    double MarchHours(int cls, const Vec3& from, const Vec3& to, double depart_h, UnitMove& m) {
+        const MoveClassDef& c = move_rules_.classes[static_cast<std::size_t>(cls)];
+        const bool night = TheatrePartAt(data_.theatre, data_.theatre.start_hour + depart_h) != DayPart::Day;
+        const double kmh = night ? c.night_kmh : c.road_kmh;
+        const nav::RoadGraph* roads = nullptr;
+        const nav::Overlay* overlay = &move_open_;
+        if (ground_on_ && ground_war_.Roads() != nullptr) {
+            overlay = &ground_war_.RoadOverlayNow();
+            roads = ground_war_.Roads();
+        } else if (data_.country != nullptr) {
+            if (!move_roads_) move_roads_ = std::make_shared<const nav::RoadGraph>(nav::RoadGraph::ForCountry(data_.country->Def()));
+            roads = move_roads_.get();
+        }
+        if (roads != nullptr) {
+            const nav::Route& r = move_routes_.Get(*roads, PointKey(from), {from.x, from.y}, PointKey(to), {to.x, to.y},
+                                                   move_mobility_[static_cast<std::size_t>(cls)], *overlay);
+            if (r.found && r.length_m <= move_rules_.detour_max * Dist2d(from, to)) {
+                double road_km = 0.0, cross_km = 0.0;
+                for (const nav::RouteLeg& l : r.legs) {
+                    if (l.kind == "road") {
+                        road_km += l.length_m / 1000.0;
+                    } else if (l.length_m <= move_rules_.no_road_near_m) {
+                        cross_km += l.length_m / 1000.0;
+                    } else {
+                        road_km += l.length_m * move_rules_.road_factor / 1000.0;
+                    }
+                }
+                m.road_km = road_km;
+                m.cross_km = cross_km;
+                m.on_roads = true;
+                return road_km / kmh + cross_km / c.cross_kmh;
+            }
+        }
+        m.road_km = Dist2d(from, to) / 1000.0 * move_rules_.road_factor;
+        m.cross_km = 0.0;
+        m.on_roads = false;
+        return m.road_km / kmh;
+    }
+
+    // A move begun now on an order its unit heard (in_step: the order source's, at a whole hour of a step).
+    bool MoveUnitNow(const UnitOrder& o, bool in_step) {
+        if (!moves_on_ || o.key.empty() || move_keys_.count(o.key) > 0) return false;
+        const int idx = data_.theatre.IndexOf(o.unit);
+        if (idx < 0) return false;
+        const std::size_t i = static_cast<std::size_t>(idx);
+        const int cls = move_class_[i];
+        ObjectState& st = truth_[i];
+        if (cls < 0 || st.overrun || st.function <= 0.05 || st.march != 0) return false;
+        move_keys_.insert(o.key);
+        CampaignAction& a = Record(CampaignAction::Kind::UnitMove);
+        a.what = o.unit;
+        a.by = o.key;
+        a.to = o.to;
+        a.until_h = now_h_;
+        a.observed_h = o.heard_h;
+        a.in_step = in_step;
+        const MoveClassDef& c = move_rules_.classes[static_cast<std::size_t>(cls)];
+        UnitMove m;
+        m.key = o.key;
+        m.object = idx;
+        m.cls = cls;
+        m.from = st.pos;
+        m.to = o.to;
+        m.heard_h = o.heard_h;
+        m.start_h = now_h_;
+        m.depart_h = now_h_ + c.pack_h;
+        m.arrive_h = m.depart_h + MarchHours(cls, m.from, m.to, m.depart_h, m);
+        m.ready_h = m.arrive_h + c.setup_h + c.checks_h;
+        st.march = 1;
+        moves_.push_back(m);
+        active_moves_.push_back(static_cast<int>(moves_.size()) - 1);
+        next_move_event_h_ = std::min(next_move_event_h_, m.depart_h);
+        const TheatreObject& ob = data_.theatre.objects[i];
+        char buf[192];
+        std::snprintf(buf, sizeof(buf), " packs up for a move on orders: %.0f km %s, on the road at %s, ready at %s.",
+                      m.road_km + m.cross_km, m.on_roads ? "by the roads" : "across the country", FormatHour(m.depart_h, data_.theatre.start_hour).c_str(),
+                      FormatHour(m.ready_h, data_.theatre.start_hour).c_str());
+        Log("ad_move", ob.id, ob.name + buf, false);
+        return true;
+    }
+
+    // The moves' stages due by now: packed (on the road, at no place), arrived (setting up at the new place), ready (on the
+    // air again). A unit wrecked while it packs or sets up stops where it is.
+    void AdvanceMoves() {
+        next_move_event_h_ = 1e18;
+        std::size_t keep = 0;
+        for (std::size_t k = 0; k < active_moves_.size(); ++k) {
+            UnitMove& m = moves_[static_cast<std::size_t>(active_moves_[k])];
+            const std::size_t i = static_cast<std::size_t>(m.object);
+            ObjectState& st = truth_[i];
+            const TheatreObject& o = data_.theatre.objects[i];
+            if (m.stage != 1 && st.function <= 0.05) {
+                m.stage = -2;
+                m.end_h = now_h_;
+                st.march = 0;
+                Log("ad_move", o.id, o.name + " was wrecked on its move.", false);
+                continue;
+            }
+            if (m.stage == 0 && now_h_ + 1e-9 >= m.depart_h) {
+                m.stage = 1;
+                st.march = 2;
+            }
+            if (m.stage == 1 && now_h_ + 1e-9 >= m.arrive_h) {
+                m.stage = 2;
+                st.march = 1;
+                st.pos = m.to;
+                move_anchor_[i] = m.to;
+            }
+            if (m.stage == 2 && now_h_ + 1e-9 >= m.ready_h) {
+                m.stage = 3;
+                m.end_h = m.ready_h;
+                st.march = 0;
+                st.last_moved_h = now_h_;
+                Log("ad_move", o.id, o.name + " is ready at its new position.", false);
+                continue;
+            }
+            next_move_event_h_ = std::min(next_move_event_h_, m.stage == 0 ? m.depart_h : m.stage == 1 ? m.arrive_h : m.ready_h);
+            active_moves_[keep++] = active_moves_[k];
+        }
+        active_moves_.resize(keep);
+    }
+
+    // At the end of each step: the moves' stages due; at a whole hour, a load's moves of the hour and the order source's.
+    void StepUnitMoves() {
+        if (now_h_ + 1e-9 >= next_move_event_h_) AdvanceMoves();
+        if (std::fabs(now_h_ - std::round(now_h_)) > 1e-9) return;
+        bool began = false;
+        for (; inbox_next_ < inbox_.size() && inbox_[inbox_next_].h <= now_h_ + 1e-9; ++inbox_next_) began = MoveUnitNow(inbox_[inbox_next_].order, true) || began;
+        if (order_source_ && now_h_ + 1e-9 >= next_source_h_) {
+            std::vector<UnitOrder> heard;
+            double next = now_h_ + 1.0;
+            order_source_(*this, heard, &next);
+            next_source_h_ = std::max(next, now_h_ + 1.0);
+            for (const UnitOrder& o : heard) began = MoveUnitNow(o, true) || began;
+        }
+        if (began && now_h_ + 1e-9 >= next_move_event_h_) AdvanceMoves();
+    }
+
+    // The line overran a unit that moves on orders (Overrun): lost with the ground, its move (packing, or setting up where
+    // it went) ended.
+    void UnitOverrun(std::size_t i) {
+        ++units_overrun_;
+        for (std::size_t k = 0; k < active_moves_.size(); ++k) {
+            UnitMove& m = moves_[static_cast<std::size_t>(active_moves_[k])];
+            if (static_cast<std::size_t>(m.object) != i) continue;
+            m.stage = -1;
+            m.end_h = now_h_;
+            active_moves_.erase(active_moves_.begin() + static_cast<std::ptrdiff_t>(k));
+            break;
+        }
+        truth_[i].march = 0;
+    }
+
+    // The line has passed where a unit stood after it left (not overrun itself then): it got away.
+    void MovesEscaped() {
+        for (UnitMove& m : moves_) {
+            if (m.escaped || m.stage < 1 || truth_[static_cast<std::size_t>(m.object)].overrun) continue;
+            if (front_line_.DistanceTo(m.from) < 0.0) m.escaped = true;
+        }
+    }
+
+    struct Recorded {
+        double h = 0.0;
+        UnitOrder order;
+    };
+    bool moves_on_ = false;
+    UnitMoveRules move_rules_;
+    std::vector<int> move_class_;               // by object: its class (-1 none)
+    std::vector<Vec3> move_anchor_;             // by object: what its prepared positions are about (home, then its last order's place)
+    std::vector<nav::Mobility> move_mobility_;  // by class: for the route service
+    std::vector<UnitMove> moves_;
+    std::vector<int> active_moves_;             // moves_ not ended
+    std::set<std::string> move_keys_;           // the orders' keys taken
+    std::vector<Recorded> inbox_;               // a load's moves heard inside a step, at their hours
+    std::size_t inbox_next_ = 0;
+    UnitOrderSource order_source_;
+    double next_source_h_ = 0.0;
+    double next_move_event_h_ = 1e18;
+    int units_overrun_ = 0;
+    nav::RouteCache move_routes_{64};
+    std::shared_ptr<const nav::RoadGraph> move_roads_;  // without the ground war's: the country's, built on the first move
+    nav::Overlay move_open_;                    // no bridges down (without the ground war's overlay)
+
     // ---- the air war follows the units (track F, F3.7; docs/fronts/03_GROUND_WAR.md section 6)
 
     // The enemy's strikes since the last hour on our tied troops: every drop of a tied object's working share below what
@@ -2115,6 +2420,7 @@ private:
             overrun_line_version_ = front_line_.Version();
             Escape();
             Overrun();
+            if (moves_on_) MovesEscaped();
             GaLap(GroundAirStats::Overrun, t0);
         }
     }
@@ -2142,6 +2448,7 @@ private:
                 ground_war_.TieOf(i) >= 0 || st.overrun || st.function <= 0.0) {
                 continue;
             }
+            if (moves_on_ && move_class_[i] >= 0) continue;  // it moves on its commander's order, or is lost with the ground (F4.2)
             const double behind = BehindLine(i);
             if (behind >= 8000.0) continue;
             double best = 1e18;
@@ -2176,9 +2483,11 @@ private:
                 ground_war_.TieOf(i) >= 0) {
                 continue;
             }
+            if (st.march == 2) continue;  // on the road: not there (F4.2)
             const bool behind = BehindLine(i) < 0.0;
             if (behind == st.overrun) continue;
             st.overrun = behind;
+            if (behind && moves_on_ && move_class_[i] >= 0) UnitOverrun(i);  // lost with the ground: no order, or too late (F4.2)
             if (behind) {
                 st.function = 0.0;
                 if (st.missiles > 0) st.missiles = 0;
@@ -2721,7 +3030,7 @@ private:
         if (in.elint) {
             for (std::size_t i = 0; i < data_.theatre.objects.size(); ++i) {
                 const TheatreObject& o = data_.theatre.objects[i];
-                if (!o.emitter || truth_[i].function <= 0.05 || o.decoy) continue;
+                if (!o.emitter || truth_[i].function <= 0.05 || o.decoy || truth_[i].march != 0) continue;  // packed or on the road: silent (F4.2)
                 const double share = static_cast<int>(i) == player_ ? posture_.emission : o.emission;
                 if (share <= 0.0) continue;
                 // Bursts: a share of the hour, in a few pieces; the collector catches some.
@@ -3102,8 +3411,15 @@ private:
             const bool player = static_cast<int>(i) == player_;
             if (player && marching_) continue;
             if (st.overrun) continue;  // the enemy's (F3.7)
+            // A unit that moves on orders (F4.2): not while it is on a move; its own hops about where its last order put it,
+            // inside the sector it stands in and as far from the line as its orders would keep it.
+            const int cls = moves_on_ ? move_class_[i] : -1;
+            if (cls >= 0 && st.march != 0) continue;
             const double every = player ? posture_.relocate_every_h : o.relocate_h;
             if (every <= 0.0 || now_h_ - st.last_moved_h < every || st.function <= 0.0) continue;
+            const int sector_now = cls >= 0 ? front_line_.SectorOf(st.pos) : -1;
+            const double keep_m = cls >= 0 ? std::max(8000.0, move_rules_.classes[static_cast<std::size_t>(cls)].withdraw_within_m) : 8000.0;
+            const Vec3 shift = cls >= 0 ? move_anchor_[i] - o.pos : Vec3{};
             // A tied troops object's prepared positions go with its unit (F3.7): about where its unit has put it as about its
             // home; its new place is where the supply lines to it end.
             const int tie = ground_on_ ? ground_war_.TieOf(i) : -1;
@@ -3111,8 +3427,8 @@ private:
                 // To another of its prepared positions, none of them within 8 km of the enemy's front.
                 std::vector<Vec3> options;
                 for (const Vec3& q0 : o.prepared) {
-                    const Vec3 q = tie >= 0 ? q0 + (tie_place_[static_cast<std::size_t>(tie)] - ground_war_.Ties()[static_cast<std::size_t>(tie)].home) : q0;
-                    if (Dist2d(q, st.pos) > 1.0 && BehindFront(q) >= 8000.0) options.push_back(q);
+                    const Vec3 q = tie >= 0 ? q0 + (tie_place_[static_cast<std::size_t>(tie)] - ground_war_.Ties()[static_cast<std::size_t>(tie)].home) : q0 + shift;
+                    if (Dist2d(q, st.pos) > 1.0 && BehindFront(q) >= keep_m && (cls < 0 || front_line_.SectorOf(q) == sector_now)) options.push_back(q);
                 }
                 if (!options.empty()) {
                     st.pos = options[static_cast<std::size_t>(rng_.Index(static_cast<int>(options.size())))];
@@ -3125,7 +3441,8 @@ private:
             for (int tries = 0; tries < 6; ++tries) {
                 const double a = rng_.Uniform(0.0, 6.283185307179586);
                 const Vec3 to = st.pos + Vec3{std::cos(a) * dist, std::sin(a) * dist, 0.0};
-                if (BehindFront(to) < 8000.0) continue;
+                if (BehindFront(to) < keep_m) continue;
+                if (cls >= 0 && front_line_.SectorOf(to) != sector_now) continue;
                 if (player) {
                     MoveBattery(to);
                 } else {

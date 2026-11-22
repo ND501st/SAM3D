@@ -89,6 +89,16 @@ public:
     // facts. Other commanders or rules than data/campaign/ad_strategy.json's: call after Bind, before the first Pump.
     void UseAdStrategy(const campaign::AdStrategyData& data) { ad_.Use(data); }
     const campaign::AdStrategy& Ad() const { return ad_; }
+    // Our units' moves on the commanders' orders (F4.2): what the campaign asks at whole hours inside its steps
+    // (AirCampaign::SetOrderSource(feed.OrderSource())). It pumps the feed to the campaign's hour and gives the orders the
+    // units' posts have heard by then; nothing else reaches the campaign. The feed must outlive the campaign's use of it:
+    // clear the campaign's source (SetOrderSource(nullptr)) before the feed goes.
+    airwar::UnitOrderSource OrderSource() {
+        return [this](const airwar::AirCampaign& c, std::vector<airwar::UnitOrder>& out, double* next_h) {
+            Pump(c);
+            ad_.Heard(c, out, next_h);
+        };
+    }
 
     // Our radio intercept service in the campaign (roadmap S6, radio.mode 1): the posts of data/command/intercept.json hear
     // the abstract packages' calls (air_war/abstract_radio.hpp) and the desk writes them up for the air section's day summary;

@@ -377,6 +377,9 @@ struct ObjectState {
     // Behind the enemy's line of contact: the enemy holds it (track F, F3.7; only with the ground war on). Out of the air
     // war's targets and ours: no function, no repair, until our side takes it back.
     bool overrun = false;
+    // On a move on orders (track F, F4.2; unit_moves.hpp): 1 packing, or setting up and checking at its new place (off the
+    // air, still there); 2 on the road (off the air, at no place: `pos` is the place it left until it arrives). 0 otherwise.
+    int march = 0;
 };
 
 // How the player's battery behaves between and during fights: the commander's choices the enemy reacts to.
