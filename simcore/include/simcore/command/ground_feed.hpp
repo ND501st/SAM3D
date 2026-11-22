@@ -87,6 +87,7 @@ struct OrderRecord {
     std::string unit;
     int axis = -1;
     double h = 0.0;
+    int other = -1;  // the formation a relief relieves, a withdrawal goes behind (-1 none)
 };
 
 // The army's summary: which reports it was made from (each had reached the army's staff by `h`).
@@ -420,6 +421,7 @@ private:
         rec.unit = g.Formations()[static_cast<std::size_t>(o.formation)].unit.id;
         rec.axis = o.axis;
         rec.h = o.h;
+        rec.other = o.other;
         rec.fact = net_->AddFact(f);
         orders_.push_back(std::move(rec));
     }

@@ -32,11 +32,11 @@
       "rank": "Colonel",
       "role": "national",
       "bio": "Commands the central national air defence sector from its command post; his decisions go out from there by its duty officer. A PVO officer of the old school: object by object, by the plan.",
-      "to": ["fighter_rgt_duty", "army_ad_chief"],
+      "to": ["fighter_rgt_duty", "army_ad_chief", "rgt_commander"],
       "rhythm_h": { "min": 6, "max": 12, "source": "mt_lavrinovich_mdex p. 9: the district exercise's stages of 6-8 h (the first massed strike) and 10-12 h (the regrouping), the national sector's decisions by stage", "confidence": "medium" },
       "order_work_h": { "value": 1.0, "source": "game value: from his decision to the order sent by the command post's duty officer", "confidence": "estimate" },
       "traits": { "boldness": 0.4, "methodical": 0.7, "creativity": 0.4, "rigidity": 0.65, "ambition": 0.5, "skepticism": 0.55, "vindictiveness": 0.3, "composure": 0.7 },
-      "source": "game value: the national sector's commander (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2: the national PVO's objects, S-75 and S-125 class units, radars and fighters); his orders to the fighter regiment's duty officer and the army's chief of air defence (vr_krupicka_1984 pp. 62-64: the sharing of the sky and the fighters by the PVOS formation's commander)",
+      "source": "game value: the national sector's commander (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2: the national PVO's objects, S-75 and S-125 class units, radars and fighters); his orders to the fighter regiment's duty officer, the army's chief of air defence and the SAM regiment's commander (vr_krupicka_1984 pp. 62-64: the sharing of the sky and the fighters by the PVOS formation's commander; the SAM troops in a sector are told how it is shared there, F4.4)",
       "confidence": "estimate"
     },
     {

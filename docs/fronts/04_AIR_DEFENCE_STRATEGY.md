@@ -460,10 +460,92 @@ later change on an order his post held and within the hour of its arrival (decid
 - Our fighter regiments' alert pools (B8's `FighterDuty`, the live fight in a session) do not take their duty from the
   sectors yet; only the abstract fight, the planner and the route planner read the cover.
 - The battery's plan of cooperation is not told its sector's sharing (`TellSharing` is not called in a session: with F4.4's
-  tasking on the battery net), and the abstract SAM fire is not held above the split in one-zone sectors.
+  tasking on the battery net; done in F4.4), and the abstract SAM fire is not held above the split in one-zone sectors.
 - `min_sector_deg` (60°) is data only: the sectors are the front's, not checked against it.
 - The pre-war plan held from the war's start (`prewar_held`) is a decision to confirm (F4.2's units wait for their
   commander's first decision). Before the source's first ask (the war's first whole hour) the cover is the front's number.
 - The enemy's belief (half way on each debrief in the sector) and the cap are game values; balance is F6.
 - Unreal: the same `SetOrderSource` call as F4.2's; without it the duty stays the front's number (a loaded campaign's duty
   replays all the same).
+
+## As built: F4.4 (22 Nov 2026)
+
+The regiment follows the fronts and the battery follows the regiment (section 4), in a mission session only, and only
+where the ground war and our air defence commanders run (`ground.mode` and `ad_strategy.mode` 1, `MissionSessionDef::fronts`,
+`mission_demo --fronts` with a theatre that has a country map). Otherwise the session has no pipeline and the regiment's
+tasking is exactly 14.2's.
+
+**What reaches the regiment** (first person; `campaign/regiment.hpp`'s `RegimentWatch`). The session keeps the campaign's
+pipeline (an `InfoNet` on `chain_pannonia.json`, the `CampaignFeed` bound to it and given to the campaign as its order
+source, as F4.2's units have it), pumped every 5 min of campaign time (`kFrontsEveryS`, a game value). The watch reads
+only facts that reached the regiment's commander (`rgt_commander`) or its staff (the ground feed's regiment role,
+`rgt_chief_of_staff`) by `InfoNet::Known`, never the truth or the commanders' decisions:
+- the covered division's withdrawal: a withdrawal order for a formation the regiment covers (`GroundFeed::WithRegiment`),
+  a relief order whose relieved formation (`OrderRecord::other`, new) is one, or its report that it has withdrawn; each
+  once, the same formation's within 24 h one withdrawal;
+- its sector: the division's latest report's, else the battery's position's (`LineOfContact::SectorOf`);
+- the sector's priority by the army's chief of air defence (`AdStrategy::PriorityKnownBy` at the commander's post: his
+  pre-war plan until an order reached it);
+- the sky's sharing there by the national sector commander's priority (`SharingKnownBy`, F4.3's table). His orders now go
+  to the SAM regiment's commander too (`ad_strategy.json`'s `to`), as the fighter regiment's: `vr_krupicka_1984` pp.
+  62-64, the SAM troops and the fighters each told the method.
+
+Each fact is checked on its own until it reaches a post (or for 72 h); the tasking reads the watch's cached picture
+once a minute, so a new fact costs one look and nothing is evaluated per step. What reached the regiment before the
+session counts as acted on before it (`RegimentTasking::Since`); the sharing is told when it differs from the plan the
+battery holds.
+
+**The rules** (`data/campaign/tasking.json`, four new rows, each with `work_s`, the staff's work from the fact reaching
+the regiment to the order; sources and estimates in the file):
+
+| Rule | When | The task |
+|---|---|---|
+| `withdraw_with_division` | the covered division withdraws (urgent, 15 min) | `march_back`: to the nearest of its prepared positions in depth (`bty21_depth_south`, `bty21_depth_east`, new places on the country map) at least 6 km further behind the front's line than its main position (the regiment's map: the front's base line), ready in 2 h; an object's cover becomes a relocation, troops' cover stays theirs |
+| `sector_raised_to_defend` | the sector's priority to defend (urgent, 15 min) | `posture`: the task held at readiness no. 1, ready in 30 min (or by the ready-by it holds while still moving) |
+| `sector_to_economy` | the sector's priority to economy (at the evening briefing) | `posture`: readiness no. 2 |
+| `tell_sharing` | the sky's sharing differs from the plan held (urgent, 10 min) | no task: the regiment says it on the R-111 net (`ScenarioRunner::RegimentTellsSharing`); heard at the post, the task's plan of cooperation is `TellSharing`'s |
+
+Every task goes through 14.2's path: `GiveTask` on the regiment's net, the battery commander's plan from where the
+battery stands, the march on the roads. A trigger and its task must pair (the loader checks).
+
+**On the nation** (`mission_demo --war <faction> <seed> <day> --hours 24 --theatre theatre_pannonia_nation.json --fronts`,
+the bridges mission from 19:00):
+
+| Run (24 h from 19:00) | What reached the regiment in the session | The regiment's tasks and why | Fact at the regiment to the order heard at the battery |
+|---|---|---|---|
+| NATO, seed 1, day 3 | the army's chief of air defence's order: western_crossings to defend (his hour 22:52, at the regiment 23:49) | at the start, the sky's sharing: one zone (the national sector commander's pre-war plan for an economy sector, against the task's by zones); at 00:05 readiness no. 1 throughout (`sector_raised_to_defend`), given 5 min after 14.2's move to the reserve position, so held to that move's ready-by (01:00), reported ready 00:59 | sharing: told 19:00, heard 19:03; defend: 15.2 min (15 min of the staff's work, the order heard at once) |
+| NATO, seed 1, day 4 | the national sector commander's order: western_crossings to defend (his hour 02:48, at the regiment 04:28) | at the start one zone as above; at 04:39 the sky shared by zones again | 13.4 min (10.4 to the order, 3 on the net) |
+| Warsaw Pact, seed 1, day 3 | nothing of the fronts (one report of the division) | none: the pre-war plan (rava_reservoir to defend, by zones) is the task's | - |
+
+The battery marched on the regiment's tasks in all three (the bridges, then 14.2's move to the reserve); no withdrawal
+march, none being ordered (below).
+
+**Withdrawals.** No natural run withdrew the 7th Motor Rifle Division: over 21 days, seeds 1-3, the Pact's ground war
+gave no orders at all to our formations and NATO's one relief elsewhere; the division is never worn enough to ask. The
+march back is shown in the tests with the withdrawal put into the regiment's picture by hand: the order heard on the net
+at once, the battery planned from the bridges and marched 11 km south to `bty21_depth_south`, ready in about 115 min of its
+2 h.
+
+**Cost.** The watch reads cursors over the feed's new orders, reports and decisions and checks only the facts still on their way (none waiting at the end of each run); the tasking reads its cached picture once a minute. A 24 h session on the nation took 103 s with the fronts and 110 s without (NATO, seed 1, day 3, the same machine under other load): the pipeline is lost in the session's noise. Without `--fronts` the session builds no pipeline.
+
+**Identity.** At the fronts' modes 0 `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json
+data 10 7` are byte-identical to track F's tip before it (a8e1176, built the same way), and so is `mission_demo --war
+warsaw_pact 1 1`; the replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages)
+holds; the gates pass (`fronts_bench data --ground --gate`, `--ground --gate --player-sector battery`, `--feed --gate`).
+
+**Tests** (`test_regiment.cpp`, 5 new): the rules load and each trigger takes its own task; the march back by hand (the
+nearest far enough, from the north and from the west, one name when withdrawn again, troops' cover kept, none far enough,
+an unplaced main); the posture's readiness and words, not stacked; `Decide` once per fact after the staff's work, `Since`,
+the briefing for economy, the sharing told only when it differs; a session in which the withdrawal gives the march, heard
+on the net, the battery at the new position by its ready-by, then the sharing told and the post's plan one zone.
+
+**Left:**
+- The divisions do not withdraw in the wars as tuned (above): the trigger is tested by hand only. A counterattack, a
+  relief by the covered division and the security zone's withdrawal (section 4's other triggers) are not read.
+- One line of prepared positions in depth for battery 21, two places; the regiment's other batteries do not follow.
+- A posture changes the readiness held and its words (no emission regime is changed by the rows as written); the
+  priority `offence` (an ambush) has no rule.
+- The sharing told changes the plan of cooperation; the abstract SAM fire is still not held above the split (F4.3's).
+- The national sector commander's orders now also go to the SAM regiment's commander (`ad_strategy.json`): a decision to
+  confirm; it adds deliveries at mode 1 only.
+- Unreal: the session's pipeline is simcore's; a campaign screen without `--fronts` keeps 14.2's tasking.
