@@ -111,6 +111,7 @@ struct FlightOrder {
     double until_s = -1.0;           // Hold, Orbit, Evade: until then (< 0: until told otherwise), then the route again
     std::string by;                  // "leader", "package", "pilot", "instructor", a ground node's id
     double at_s = 0.0;               // when it was given
+    bool by_radio = false;           // a post's order said on its net: taken only if the leader hears the call (roadmap S2)
 };
 
 // A pilot's own manoeuvre: he flies for `point` at his hard turn rate until its end, then back to his flight's slot or
@@ -132,6 +133,11 @@ struct PilotOverride {
     double sign = 1.0;
     double period_s = 4.0;
     double flip_s = 0.0;
+    // An attack pass flown in its dive (roadmap S4, attack_pass.hpp): the pilot's height layer climbs to the roll-in and
+    // dives at dive_rad along the line to pass_aim, opening fire open_fire_m out (TargetPilot::SetPass). 0: level.
+    double dive_rad = 0.0;
+    double open_fire_m = 0.0;
+    Vec3 pass_aim;
 };
 inline const char* ToString(PilotOverride::Kind k) {
     switch (k) {
@@ -194,6 +200,7 @@ struct OrderRecord {
     bool has_aim = false;
     Vec3 aim;
     int target = -1;
+    bool heard = true;  // false: said by radio and not heard by the leader (roadmap S2), so not taken
 };
 
 struct FlightSlot {
@@ -358,9 +365,18 @@ public:
         FlightState& f = flights_[static_cast<std::size_t>(fi)];
         if (!May(f, o)) return false;
         o.at_s = t;
+        const int call = radio_ != nullptr ? radio_->Say(fi, f, o, t) : FlightRadio::kNoModel;
+        // A post's order by radio is the flight's only if its leader hears the call (roadmap S2): unheard (jammed out, out of
+        // range, dropped), it is recorded as said and the flight flies on as it was.
+        if (o.by_radio && call != FlightRadio::kNoModel) {
+            const double at = f.leader_slot >= 0 ? radio_->Reaches(call, fi, f.leader_slot, t, 0.0) : -1.0;
+            if (at < 0.0) {
+                Record(f, o, -1, false);
+                return true;
+            }
+        }
         Record(f, o, -1);
         f.order = o;
-        const int call = radio_ != nullptr ? radio_->Say(fi, f, o, t) : FlightRadio::kNoModel;
         for (std::size_t k = 0; k < f.slots.size(); ++k) {
             FlightSlot& s = f.slots[k];
             if (!s.alive || s.gone || s.detached) continue;
@@ -584,8 +600,9 @@ private:
         if (target < 0 || static_cast<std::size_t>(target) >= of_target_.size()) return {-1, -1};
         return of_target_[static_cast<std::size_t>(target)];
     }
-    static void Record(FlightState& f, const FlightOrder& o, int target) {
+    static void Record(FlightState& f, const FlightOrder& o, int target, bool heard = true) {
         OrderRecord r;
+        r.heard = heard;
         r.t_s = o.at_s;
         r.kind = o.kind;
         r.by = o.by;

@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "simcore/air_war/air_combat.hpp"
 #include "simcore/air_war/test_waves.hpp"
 #include "simcore/ground_check.hpp"
 #include "simcore/scenario.hpp"
@@ -111,6 +112,53 @@ SC_TEST("dynamic campaign: the waves bring every adversary's aircraft type round
     SC_EXPECT(friends > 0 && friends < aircraft && weapons > 0);
 }
 
+SC_TEST("dynamic campaign S1: the waves' flights are live in the air fight; ours fly on the day's codes, our fighters with a fit") {
+    const std::shared_ptr<const WavesDef> def = LoadWaves();
+    AirCombatDef ac;
+    std::string e;
+    SC_EXPECT(LoadAirCombatFile(kData + "/air_war/air_combat.json", ac, &e));
+    FlatTerrain ground(100.0);
+    const LocalFrame frame(GeoPoint::FromDegrees(47.42, 20.18, 100.0));
+    WaveScene scene;
+    scene.frame = &frame;
+    scene.terrain = &ground;
+    scene.defences = {Vec3{1000.0, 500.0, 0.0}};
+    int ours_fighting = 0, enemy_fighting = 0, escorts = 0;
+    for (unsigned seed = 1; seed <= 4; ++seed) {
+        TestWaves waves(def, seed);
+        double t = def->first_wave_s;
+        for (int i = 0; i < 25; ++i) {
+            const Wave w = waves.Next(t, scene);
+            std::map<std::string, const ScenarioTarget*> by_id;
+            for (const ScenarioTarget& a : w.aircraft) by_id[a.id] = &a;
+            std::set<std::string> in_fight;
+            for (const WaveFighter& f : w.fight) {
+                const auto it = by_id.find(f.target);
+                SC_EXPECT(it != by_id.end() && in_fight.insert(f.target).second);
+                if (it == by_id.end()) continue;
+                const ScenarioTarget& a = *it->second;
+                SC_EXPECT(!a.weapon && !a.decoy);           // no missile, drone decoy or salvo fights
+                SC_EXPECT(a.friendly == (f.faction == "ours"));
+                if (a.friendly) {
+                    ++ours_fighting;
+                    SC_EXPECT(f.role == "cap" || f.role == "intercept");
+                    SC_EXPECT(ac.Fit(f.type) != nullptr);   // our fighters are armed (test_waves.json's "fit")
+                } else {
+                    ++enemy_fighting;
+                    escorts += f.role == "escort" ? 1 : 0;
+                    SC_EXPECT(f.role == "escort" || f.role == "strike");
+                }
+            }
+            for (const ScenarioTarget& a : w.aircraft) {
+                if (a.friendly) SC_EXPECT(a.iff_table);    // our pilots on the day's table, as the own_air codes have them
+            }
+            t = waves.NextWaveS();
+        }
+    }
+    std::printf("    in the fight: %d of ours, %d of the enemy's (%d escorts)\n", ours_fighting, enemy_fighting, escorts);
+    SC_EXPECT(ours_fighting > 0 && enemy_fighting > 0);
+}
+
 SC_TEST("dynamic campaign: a strike aircraft at its release range lets its load go, timed to land on its aim") {
     const std::shared_ptr<const WavesDef> def = LoadWaves();
     FlatTerrain ground(100.0);
@@ -166,6 +214,62 @@ SC_TEST("dynamic campaign: a strike aircraft at its release range lets its load 
         deliveries.insert(r.delivery);
     }
     SC_EXPECT(deliveries.size() >= 2);
+}
+
+SC_TEST("dynamic campaign (S4): a fixed-wing aircraft's guns and rockets go from a pass flown on the override layer") {
+    const std::shared_ptr<const WavesDef> def = LoadWaves();
+    FlatTerrain ground(100.0);
+    const LocalFrame frame(GeoPoint::FromDegrees(47.42, 20.18, 100.0));
+    WaveScene scene;
+    scene.frame = &frame;
+    scene.terrain = &ground;
+    scene.defences = {Vec3{1000.0, 500.0, 0.0}};
+    TestWaves waves(def, 3);
+    std::vector<ScenarioTarget> all;
+    double t = def->first_wave_s;
+    for (int i = 0; i < 40; ++i) {
+        Wave w = waves.Next(t, scene);
+        for (ScenarioTarget& a : w.aircraft) all.push_back(a);
+        t = waves.NextWaveS();
+    }
+    // The override layer as the runner's: it takes every pass, and a pass is on until it is ended.
+    std::map<std::string, int> taken, ended;
+    TestWaves::PassControl pc;
+    pc.fly = [&](const std::string& id, const PilotOverride& ov) {
+        SC_EXPECT(ov.kind == PilotOverride::Kind::Attack);
+        ++taken[id];
+        return true;
+    };
+    pc.flying = [&](const std::string& id) { return ended[id] < taken[id]; };
+    pc.end = [&](const std::string& id) { ++ended[id]; };
+    // Each carrier flown level at 150 m straight at each of its waypoints in turn from 7 km out, at 200 m/s.
+    std::vector<WaveRelease> loads;
+    double now = t + 1.0;
+    for (int k = 0; k < 4; ++k) {
+        for (double s_m = 7000.0; s_m > -1000.0; s_m -= 200.0) {
+            const auto at = [&](const std::string& id, Vec3& p, Vec3& v) {
+                for (const ScenarioTarget& a : all) {
+                    if (a.id != id) continue;
+                    const Vec3& wp = a.waypoints[std::min(a.waypoints.size() - 1, static_cast<std::size_t>(k))];
+                    p = Vec3{wp.x - s_m, wp.y, 250.0};
+                    v = Vec3{200.0, 0.0, 0.0};
+                    return true;
+                }
+                return false;
+            };
+            for (WaveRelease& r : waves.Releases(now, scene, at, &pc)) loads.push_back(r);
+            now += 1.0;
+        }
+    }
+    std::printf("    %d loads, %d of them from passes\n", waves.Drops(), waves.PassDrops());
+    SC_EXPECT(waves.PassDrops() > 0 && waves.PassDrops() < waves.Drops());
+    // Each pass's release is a gun or rockets let go inside its weapon's open-fire range, and its pass was ended.
+    for (const WaveRelease& r : loads) {
+        const WeaponDef* wd = def->weapons.Find(r.weapon);
+        if (wd == nullptr || !wd->pass.present || taken[r.carrier] == 0) continue;
+        SC_EXPECT(ended[r.carrier] >= 1);
+        SC_EXPECT(r.delivery == DeliveryName(Delivery::Strafe) || r.delivery == DeliveryName(Delivery::GentleDive));
+    }
 }
 
 SC_TEST("dynamic campaign: a defence's chance to bring an aircraft down on its pass is the raids' own, on its cover") {
@@ -280,6 +384,23 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
     SC_EXPECT(flak == r.DefenceShellBursts() && raised > 0 && damaged > 0);
     SC_EXPECT(damaged <= r.DefenceDamaged("moderate") + r.DefenceDamaged("heavy"));
     SC_EXPECT(r.DefenceKills() > 0);
+    // Roadmap S4: the guns and rockets of the fixed-wing waves are fired from passes flown on the override layer; a
+    // damaged aircraft still flying has its g limit and thrust cut by its level (damage.json), and some go home escorted.
+    int cut = 0, wrong = 0;
+    for (const ScenarioTarget& t : r.Def().targets) {
+        const AircraftDamage* dm = r.TargetDamage(t.id);
+        if (dm == nullptr || (dm->level != DamageLevel::Moderate && dm->level != DamageLevel::Heavy) || !r.TargetAlive(t.id)) continue;
+        const Aircraft* a = r.GetWorld().FindAircraft(r.TargetWorldId(t.id));
+        if (a == nullptr || t.accel_mps2 <= 0.0) continue;
+        ++cut;
+        if (a->accel_mps2 >= t.accel_mps2 - 1e-9 || (t.max_load_g > 1.5 && a->max_load_g >= t.max_load_g - 1e-9)) ++wrong;
+    }
+    std::printf("    S4: %d of %d releases from passes; %d damaged flying on with their limits cut (%d not), %d escorts sent home\n",
+                w->PassDrops(), w->Drops(), cut, wrong, r.DamagedEscorts());
+    // Most fixed-wing guns and rockets in this half hour are jettisoned under fire before 6 km; the passes' own
+    // releases are tested on their own (the next test).
+    SC_EXPECT(w->PassDrops() <= w->Drops());
+    SC_EXPECT(wrong == 0);
     SC_EXPECT(r.WavesAirborne() <= r.Def().waves->max_airborne + 40);  // a wave may come on top of a nearly full sky
     // The world holds what flies, not everything that has flown.
     SC_EXPECT(r.GetWorld().AircraftList().size() < r.Def().targets.size());
@@ -289,6 +410,10 @@ SC_TEST("dynamic campaign: the session keeps the waves coming, their loads strik
         enemy_seen = enemy_seen || (!t.friendly && !t.weapon);
     }
     SC_EXPECT(friend_seen && enemy_seen);
+    // S1: the waves' flights joined the air fight under our GCI (the scenario's "air_fight" and "own_air").
+    const AirFightSession* af = r.AirFight();
+    SC_EXPECT(af != nullptr && af->FighterCount() > 0);
+    if (af != nullptr) std::printf("    the air fight: %zu fighters, %zu kills, %d vectors sent\n", af->FighterCount(), af->Kills().size(), af->VectorsSent());
     const std::string d = r.Debrief();
     SC_EXPECT(d.find("wave 1") != std::string::npos && d.find("impact") != std::string::npos && d.find("destroyed by") != std::string::npos);
 }
@@ -354,4 +479,39 @@ SC_TEST("dynamic campaign: nothing is under the ground, and no aircraft flies in
     SC_EXPECT(checks >= 100);
     SC_EXPECT(listed == 0u);
     SC_EXPECT(r.TerrainStrikes() == 0);
+}
+
+SC_TEST("dynamic campaign (S7): a low strike's way to its IP goes round our rings and their margin; a ring round its ends is flown through") {
+    // Placeholder rings: two 10 km rings across the way from (0, -60 km) to (0, 0), a third round the IP.
+    const std::vector<Vec3> centres = {{2000.0, -40000.0, 0.0}, {-3000.0, -20000.0, 0.0}, {0.0, 1000.0, 0.0}};
+    const std::vector<double> rings = {10000.0, 10000.0, 10000.0};
+    const double margin = 3000.0;
+    const Vec3 a{0.0, -60000.0, 0.0}, b{0.0, 0.0, 0.0};
+    const std::vector<Vec3> turns = TestWaves::AroundRings(a, b, centres, rings, margin);
+    std::vector<Vec3> way = {a};
+    for (const Vec3& p : turns) way.push_back(p);
+    way.push_back(b);
+    // The least distance of the way's legs from each of the first two rings' centres, sampled every 100 m.
+    double least[2] = {1e18, 1e18};
+    for (std::size_t i = 0; i + 1 < way.size(); ++i) {
+        const Vec3 d = way[i + 1] - way[i];
+        const int n = 1 + static_cast<int>(std::hypot(d.x, d.y) / 100.0);
+        for (int k = 0; k <= n; ++k) {
+            const Vec3 p = way[i] + d * (static_cast<double>(k) / n);
+            for (int c = 0; c < 2; ++c) least[c] = std::min(least[c], std::hypot(p.x - centres[static_cast<std::size_t>(c)].x, p.y - centres[static_cast<std::size_t>(c)].y));
+        }
+    }
+    std::printf("    %zu turn points; the way's least distance from the two rings' centres %.1f and %.1f km\n", turns.size(), least[0] / 1000.0,
+                least[1] / 1000.0);
+    SC_EXPECT(!turns.empty() && turns.size() <= 3);
+    SC_EXPECT(least[0] >= rings[0] && least[1] >= rings[1]);  // outside each ring (the margin is the planner's own slack)
+    // The same every time (no draws), and nothing to go round with no rings.
+    const std::vector<Vec3> again = TestWaves::AroundRings(a, b, centres, rings, margin);
+    SC_EXPECT(again.size() == turns.size());
+    for (std::size_t i = 0; i < again.size() && i < turns.size(); ++i) SC_EXPECT((again[i] - turns[i]).Length() < 1e-9);
+    SC_EXPECT(TestWaves::AroundRings(a, b, {}, {}, margin).empty());
+    SC_EXPECT(TestWaves::AroundRings(a, b, {centres[2]}, {rings[2]}, margin).empty());  // the IP's own ring
+    // The data's rings and margin load.
+    const std::shared_ptr<const WavesDef> w = LoadWaves();
+    SC_EXPECT(w != nullptr && w->route_own_ring_m > 0.0 && w->route_margin_m > 0.0);
 }

@@ -17,17 +17,21 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/aaa.hpp"
 #include "simcore/air_radio_def.hpp"
 #include "simcore/air_war/air_combat_types.hpp"
 #include "simcore/air_war/c2_def.hpp"
+#include "simcore/air_war/counter_c2.hpp"
 #include "simcore/air_war/hot_phase_def.hpp"
 #include "simcore/air_war/opportunity_def.hpp"
 #include "simcore/air_war/types.hpp"
+#include "simcore/command/own_air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/country_map.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/light.hpp"
+#include "simcore/reactions.hpp"
 #include "simcore/vec3.hpp"
 
 namespace simcore {
@@ -181,8 +185,15 @@ struct TheatreDef {
     int year = 1985;            // the war's year: only what is in service by then flies (AircraftType::in_service_year)
     // "date": the war's first day (roadmap R7, docs/LIGHT.md). With one, the parts of the day are the sun's at the
     // theatre's origin (DayPartBySun); without (0), the fixed buckets (DayPartAt) the first balance pass was tuned on.
+    // day_of_year is the one in force: the file's (date_day_of_year) unless the campaign's light.mode is below the
+    // theatre's "dated_from_light_mode" (roadmap S8: the tuned theatre dated, a save made before it replays undated).
     int day_of_year = 0;
     double utc_offset_h = 1.0;
+    int date_day_of_year = 0;
+    int dated_from_light_mode = 0;
+    // The light's thresholds the theatre's parts of the day are read by (roadmap S8): data/gameplay/light.json's under
+    // light.mode 1, the code's defaults (equal today) under 0.
+    LightValues light;
     std::vector<FrontDef> fronts;
     std::vector<TheatreObject> objects;  // a supply line's columns among them, after the written objects
     std::vector<SupplyLineDef> supply_lines;
@@ -224,11 +235,13 @@ inline SkyClock TheatreSky(const TheatreDef& t) {
     c.day_of_year = t.day_of_year > 0 ? t.day_of_year : 288;
     c.utc_offset_h = t.utc_offset_h;
     c.start_local_h = t.start_hour;
+    c.year = t.year;
     return c;
 }
 
-// The part of the day by the sun at an absolute local hour (start_hour + campaign hour): light.hpp's phases.
-inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const LightValues& v = LightValues()) {
+// The part of the day by the sun at an absolute local hour (start_hour + campaign hour): light.hpp's phases, by the
+// theatre's light values (light.json's, roadmap S8) unless others are given.
+inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const LightValues& v) {
     switch (LightAt(TheatreSky(t), (abs_local_h - t.start_hour) * 3600.0, v).phase) {
         case LightPhase::Day: return DayPart::Day;
         case LightPhase::Dawn: return DayPart::Dawn;
@@ -237,6 +250,7 @@ inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h, const Light
     }
     return DayPart::Day;
 }
+inline DayPart DayPartBySun(const TheatreDef& t, double abs_local_h) { return DayPartBySun(t, abs_local_h, t.light); }
 
 // The local hour a planner aims at for a part on the campaign's day `day` (0 the first): the middle of the part by the
 // sun, sunrise for the dawn and sunset for the dusk (the sun on the horizon, between low_sun and twilight), noon for the
@@ -502,6 +516,9 @@ struct RouteRules {
     std::string deviation = "leader";   // who may leave the route (§9): leader, ground_control, eye, any
     double deviation_lateral_m = 0.0;
     double deviation_tot_slip_s = 0.0;
+    // Navigation error (roadmap S7, route.mode 2): between fixes a crew drifts this share of the distance flown since its
+    // last (an INS's or a Doppler's drift, dead reckoning's); a turn point or IP on a feature is a fix.
+    double nav_drift_share = 0.0;
     std::string source;
     std::string confidence;
     std::string notes;
@@ -549,6 +566,7 @@ struct IntelDef {
     double humint_sigma_m = 4000.0;
     double humint_false = 0.2;                 // share of agents' reports that are wrong or planted
     double humint_reach_m = 60000.0;           // how far behind the line the agents see (rebels: everywhere)
+    double humint_air_defence_per_day = 0.0;   // sympathisers' word of our mobile air defence a day (roadmap S7, learning.mode 1)
     double prior_mobile_sigma_m = 8000.0;      // pre-war knowledge of mobile units
     double bda_overclaim = 0.5;                // mean inflation of pilots' claims
     double pirep_delay_h = 1.0;
@@ -753,9 +771,40 @@ struct FactionRadio {
     double discipline_gci_fighters = 0.0;
     std::string source;
     std::string confidence;
+    // Roadmap S6 (docs/air_battle/09 section 8): radio demonstration, the share of a deception package's flights that talk as a
+    // strike would, naming their target, so our analysts read a raid where there is none (nazarenko_1984: radio
+    // disinformation, imitation and demonstration in the Pact's doctrine; NATO's air nets in the Vintex-75 feint).
+    double demonstration = 0.0;
+    // Teaball's relay (section 6): our GCI's vectors overheard by its listeners and relayed as warnings of our fighters to its
+    // own (boyne_2008_teaball, checo_1978_linebacker: 1972). Off unless the faction's file turns it on: a Teaball for
+    // Europe by 1985 was not found, so it is the owner's design choice, not a documented practice.
+    struct Teaball {
+        bool on = false;
+        double delay_s = 60.0;   // from our call to the warning on its net (checo_1978_linebacker p. 52: a plot a minute)
+        double fail = 0.15;      // the relay's outages (boyne_2008_teaball: "unexpected outages"; the share a game value)
+        double error_m = 3000.0; // the warned position's error (a game value)
+        std::string source;
+        std::string confidence;
+    } teaball;
+};
+
+// Its own ground air defence as its returning aircraft meet it (S1, docs/air_battle/08_OUR_FIGHTERS.md section 10): a damaged
+// aircraft comes home off its minimum risk route, or with its Mode 4 failed, by a chance each; with both, its own belt may
+// shoot it down (fm44_1_2_1984, fm_100_42_1976: weapons free against anything not positively friendly). Game values.
+// The faction's own words for the two failures go into its records' note: NATO's (the defaults) are its minimum risk route
+// and Mode 4; the Pact's are its return corridor and its Kremniy or Parol answer (mitronin_1976 p. 7, soviet_iff).
+struct OwnAdDef {
+    bool present = false;
+    double off_mrr_damaged = 0.3;      // off its way home: NATO's minimum risk route, the Pact's return corridor
+    double mode4_failed_damaged = 0.2; // its IFF answer failed: NATO's Mode 4, the Pact's Kremniy or Parol
+    double belt_kill = 0.3;
+    std::string belt = "own belt";
+    std::string route = "off its minimum risk route";
+    std::string iff = "Mode 4 failed";
 };
 
 struct FactionDef {
+    OwnAdDef own_ad;
     std::string id;
     std::string name;
     std::string short_name;
@@ -819,6 +868,9 @@ struct QuirkDef {
     double tier_weight[4] = {1.0, 1.0, 1.0, 1.0};
     // The weights a campaign saved before roadmap B11 drew with (hot_phase.mode 0; 10_FACTIONS.md §9.1), where they differ.
     double tier_weight_mode0[4] = {-1.0, -1.0, -1.0, -1.0};
+    // The weights a campaign saved before roadmap S5 drew with (hot_phase.mode 0 and 1; 10_FACTIONS.md §8.5's weights for
+    // the chatterbox and the silent runner came in S5), where they differ. Mode 0 reads tier_weight_mode0 first.
+    double tier_weight_mode1[4] = {-1.0, -1.0, -1.0, -1.0};
     // A habit of the hot phase only (10_FACTIONS.md §8.5): drawn apart from the officer's other quirks, from a stream keyed
     // on him (officers.hpp), so adding one moves no other draw.
     bool hot_draw = false;
@@ -826,7 +878,9 @@ struct QuirkDef {
 
     double TierWeight(Tier t, int hot_mode) const {
         const int i = static_cast<int>(t);
-        return hot_mode < 1 && tier_weight_mode0[i] >= 0.0 ? tier_weight_mode0[i] : tier_weight[i];
+        if (hot_mode < 1 && tier_weight_mode0[i] >= 0.0) return tier_weight_mode0[i];
+        if (hot_mode < 2 && tier_weight_mode1[i] >= 0.0) return tier_weight_mode1[i];
+        return tier_weight[i];
     }
 
     double Effect(const std::string& key) const {
@@ -1013,6 +1067,16 @@ struct TuningTable {
             {"intel.launch_sighting_m", 20000.0},
             {"intel.recce_corridor_m", 12000.0},
             {"intel.suspect_after_loss", 0.5},
+            // learning (roadmap S7, docs/air_war/09_BALANCE.md section 22): 1 the losses nobody saw explained as a suspected
+            // defence where the flight was last heard of, and the sympathisers' reports of our mobile air defence; 0 before
+            // it (a save made before S7)
+            {"learning.mode", 1.0},
+            {"learning.unexplained_sigma_m", 8000.0},   // a lost flight's last known place: where it last reported
+            {"learning.unexplained_exists", 0.4},       // how much a loss nobody saw makes the staff believe a defence is there
+            {"learning.unexplained_radius_m", 10000.0}, // the believed reach of a defence nobody saw (a short-range SAM's)
+            {"learning.unexplained_lethality", 0.15},
+            {"learning.watch_m", 15000.0},              // sympathisers see what stands this near a town or village
+            {"learning.countryside_share", 0.3},        // and out in the country, this share as often
             {"repair.restored_function", 0.5},
             {"attrition.target_guns_troops", 0.04},
             {"attrition.target_guns_site", 0.015},
@@ -1035,6 +1099,9 @@ struct TuningTable {
             // weather (a day's weather, drawn at the start)
             {"weather.clear_share", 0.5},
             {"weather.poor_share", 0.15},
+            // roadmap S7 (03_PERCEPTION.md 2.7): 1 the clear share by the month of a dated theatre (crawford_1977_rand: not
+            // clear about 85 % of winter days, 50 % of summer's); 0 the same shares every month (a save made before S7)
+            {"weather.mode", 1.0},
             // pacing (which raids the player plays)
             {"pacing.min_gap_h", 3.0},
             {"pacing.max_per_day", 3.0},
@@ -1058,14 +1125,35 @@ struct TuningTable {
             {"own_intel.warning_s", 300.0},
             {"own_intel.leak_warning_s", 900.0},
             // routes as flown (route_planner.hpp, docs/air_battle/01_ROUTES.md): game values
-            {"route.mode", 1.0},                    // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner
+            // 0 the old shapes (MainRoute; a save made before B2), 1 the route planner, 2 roadmap S7's (the gate's fallback,
+            // the believed fighters in a leg's cost, the coarser lattice without a map, navigation error in a played raid,
+            // the routes as flown back from a session)
+            {"route.mode", 2.0},
+            {"route.fallback_grid2_m", 25000.0},    // the lattice of a theatre without a map (route.mode 2)
+            {"route.run_in_headings_nomap", 4.0},   // run-in headings there (route.mode 2)
+            {"route.fighter_reach_m", 40000.0},     // our interceptors' believed reach about a believed air base
+            {"route.fighter_weight", 0.15},         // a second in it, as a share of a believed lethal second in a site's sight
+            {"route.fighter_low_share", 0.3},       // for a low flight or a helicopter (the period's radars looked down poorly)
+            {"route.nav_fix_m", 3000.0},            // a crew sees its fix within this and turns over it: the error's cap
             // the hot phase (hot_phase.hpp, docs/air_battle/10_FACTIONS.md): 1 roadmap B11's planning (NATO's medium altitude
-            // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11)
-            {"hot_phase.mode", 1.0},
+            // only below the defences' line, the phases' new shares, the quirk weights), 0 before it (a save made before B11);
+            // 2 roadmap S5's (the faction values read by played flights, the nerve on press_on and husbanding, section 8.5's
+            // weights, the pilots' sorties and currency)
+            {"hot_phase.mode", 2.0},
+            // a pilot's currency (10_FACTIONS.md §8.3): his hours in the last year over the reference (NATO's guide, 15 h a
+            // month: hansard_1981_nato_hours), a combat sortie's hours (a game value)
+            {"hot_phase.currency_reference_h", 180.0},
+            {"hot_phase.sortie_h", 1.5},
             // the balance pass (roadmap B14, docs/air_war/09_BALANCE.md section 17): 1 its changes (an airborne flight's
             // divert waits for the faction's retask delay, the strikers' abort a share of the attacked flights, no surprise
             // under an E-3A that sees our fighters, its factor a0_awacs_meet), 0 before it (a save made before B14)
             {"balance.mode", 1.0},
+            // our fighters (roadmap S1, docs/air_battle/08_OUR_FIGHTERS.md): 1 our pairs in the played raids, the enemy's
+            // learning of our corridors and its use of them, its own belt on its damaged aircraft; 0 before (a save made before S1)
+            {"own_air.mode", 1.0},
+            // the light (roadmap S8, docs/LIGHT.md): 1 the tuned theatre dated (its parts of the day by the sun) and the
+            // theatre's light values light.json's; 0 before it (a save made before S8: the buckets, the code's light)
+            {"light.mode", 1.0},
             {"route.start_before_gate_m", 80000.0}, // the route starts this far behind its gate (at most at the bases)
             {"route.bend_deg", 30.0},               // a river vertex turning more is a bend, a turn point
             {"route.fallback_grid_m", 15000.0},     // the lattice of a theatre without a map
@@ -1104,6 +1192,13 @@ struct TuningTable {
             {"route.helo_hide_agl_m", 5.0},
             {"route.helo_popup_agl_m", 25.0},
             {"route.hide_penalty_s", 600.0},        // a battle position seen, or not seeing its target
+            // A damaged aircraft back in service (roadmap S4, campaign.hpp): 1 by its level; 0 as before S4.
+            {"damage.mode", 0.0},
+            {"damage.heavy_share", 0.3},
+            // the air fight in detail (roadmap S3, air_fight.hpp): 1 the doctrines' attacks told apart, the drag and the
+            // strikers' flares and chaff in the abstract fight; 0 before it (a save made before S3)
+            {"air_fight.mode", 0.0},
+            {"damage.heavy_repair_factor", 3.0},
         };
         for (const auto& kv : AirRadioTuningDefaults()) m.insert(kv);  // the enemy's radio (roadmap B9, air_radio_def.hpp)
         for (const auto& kv : C2TuningDefaults()) m.insert(kv);        // its command in the air (roadmap B5, c2_def.hpp)
@@ -1170,8 +1265,8 @@ public:
     // added, one with a base object's id replacing it where it stands.
     bool LoadTheatre(const json::Value& root, TheatreDef& out, const TheatreDef* base = nullptr) {
         if (!Keys(root, "", {"theatre_id", "name", "description", "source", "confidence", "notes", "extends", "remove", "country",
-                             "origin", "ground_height_m", "start_hour", "year", "date", "utc_offset_h", "fronts", "objects", "supply_lines",
-                             "country_map"})) {
+                             "origin", "ground_height_m", "start_hour", "year", "date", "dated_from_light_mode", "utc_offset_h", "fronts",
+                             "objects", "supply_lines", "country_map"})) {
             return false;
         }
         if (root.Find("extends") != nullptr && base == nullptr) {
@@ -1221,15 +1316,20 @@ public:
         return OptionalString(root, "", "country_map", out.country_map) && LoadSupplyLines(root, out) && MakeColumns(out);
     }
 
-    // "date": "1985-10-15" (its year the war's "year"), "utc_offset_h": the theatre's clock ahead of UTC (R7).
+    // "date": "1985-10-15" (its year the war's "year"), "utc_offset_h": the theatre's clock ahead of UTC (R7);
+    // "dated_from_light_mode": the least light.mode its date is read under (roadmap S8; 0, the default, always).
     bool LoadDate(const json::Value& root, TheatreDef& out) {
         std::string date;
         if (!OptionalString(root, "", "date", date)) return false;
         if (!date.empty()) {
             int y = 0;
-            if (!ParseIsoDate(date, y, out.day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
+            if (!ParseIsoDate(date, y, out.date_day_of_year)) return Fail("date", "a date that exists, \"YYYY-MM-DD\"");
             if (y != out.year) return Fail("date", "its year must be the war's \"year\"");
+            out.dated_from_light_mode = 0;  // a date of its own: its own rule, not its base's
         }
+        if (!Int(root, "", "dated_from_light_mode", out.dated_from_light_mode, 0, 1)) return false;
+        if (root.Find("dated_from_light_mode") != nullptr && date.empty()) return Fail("dated_from_light_mode", "only with a \"date\"");
+        out.day_of_year = out.date_day_of_year;
         return Num(root, "", "utc_offset_h", out.utc_offset_h, -12.0, 14.0);
     }
 
@@ -1511,7 +1611,7 @@ public:
         if (!Keys(root, "", {"faction_id", "name", "short_name", "tier", "description", "front", "source", "confidence",
                              "notes", "em_libraries", "callsigns", "doctrine", "intelligence", "logistics", "politics",
                              "aircraft", "squadrons", "officer_pool", "officers", "comms_jamming", "flights", "radio", "c2",
-                             "opportunity_rules", "hot_phase"}) ||
+                             "opportunity_rules", "hot_phase", "own_ad"}) ||
             !RequireString(root, "", "faction_id", out.id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "short_name", out.short_name) || !RequireString(root, "", "tier", tier) ||
             !OptionalString(root, "", "description", out.description) || !RequireString(root, "", "front", out.front) ||
@@ -1521,6 +1621,20 @@ public:
         }
         if (out.callsigns.empty()) out.callsigns.push_back("Flight");
         if (!ParseTier(tier, out.tier)) return Fail("tier", "inferior, near_peer, peer or superior");
+        if (const json::Value* oa = root.Find("own_ad")) {  // S1: its own belt as its damaged aircraft come home
+            OwnAdDef& a = out.own_ad;
+            if (!Keys(*oa, "own_ad", {"off_mrr_damaged", "mode4_failed_damaged", "belt_kill", "belt", "route", "iff", "source", "confidence", "notes"}) ||
+                !OptionalNumber(*oa, "own_ad", "off_mrr_damaged", a.off_mrr_damaged) ||
+                !OptionalNumber(*oa, "own_ad", "mode4_failed_damaged", a.mode4_failed_damaged) ||
+                !OptionalNumber(*oa, "own_ad", "belt_kill", a.belt_kill) || !OptionalString(*oa, "own_ad", "belt", a.belt) ||
+                !OptionalString(*oa, "own_ad", "route", a.route) || !OptionalString(*oa, "own_ad", "iff", a.iff) || !Provenance(*oa, "own_ad")) {
+                return false;
+            }
+            for (double v : {a.off_mrr_damaged, a.mode4_failed_damaged, a.belt_kill}) {
+                if (v < 0.0 || v > 1.0) return Fail("own_ad", "chances between 0 and 1");
+            }
+            a.present = true;
+        }
         if (out.short_name.empty()) out.short_name = out.name;
         if (!LoadAircraft(root, out) || !LoadSquadrons(root, out) || !LoadDoctrine(root, out) || !LoadIntel(root, out) ||
             !LoadLogistics(root, out) || !LoadPolitics(root, out) || !LoadPool(root, out) || !LoadOfficers(root, out) ||
@@ -1600,14 +1714,26 @@ public:
         if (!r->Is(json::Type::Object)) return Fail(p, "expected an object");
         FactionRadio& b = out.radio;
         if (!Keys(*r, p, {"air_radio", "ground_radio", "band_mhz", "modulation", "language", "callsign_rotation_h", "opsec", "have_quick_share",
-                          "secure_voice_share", "gci_channels_per_post", "source", "confidence", "notes"}) ||
+                          "secure_voice_share", "gci_channels_per_post", "demonstration", "teaball", "source", "confidence", "notes"}) ||
             !Provenance(*r, p) || !RequireString(*r, p, "source", b.source) || !RequireString(*r, p, "confidence", b.confidence) ||
             !RequireString(*r, p, "air_radio", b.air_radio) || !OptionalString(*r, p, "ground_radio", b.ground_radio) ||
             !OptionalString(*r, p, "modulation", b.modulation) || !RequireString(*r, p, "language", b.language) ||
             !Num(*r, p, "band_mhz", b.band_mhz, 3.0, 1000.0) || !Num(*r, p, "callsign_rotation_h", b.callsign_rotation_h, 0.0, 720.0) ||
             !Num(*r, p, "opsec", b.opsec, 0.0, 1.0) || !Num(*r, p, "have_quick_share", b.have_quick_share, 0.0, 1.0) ||
-            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0)) {
+            !Num(*r, p, "secure_voice_share", b.secure_voice_share, 0.0, 1.0) || !Num(*r, p, "gci_channels_per_post", b.gci_channels_per_post, 0.0, 20.0) ||
+            !Num(*r, p, "demonstration", b.demonstration, 0.0, 1.0)) {
             return false;
+        }
+        // Teaball's relay (roadmap S6): its own source; off unless "on".
+        if (const json::Value* t = r->Find("teaball")) {
+            const std::string tp = Join(p, "teaball");
+            FactionRadio::Teaball& tb = b.teaball;
+            if (!t->Is(json::Type::Object)) return Fail(tp, "expected an object");
+            if (!Keys(*t, tp, {"on", "delay_s", "fail", "error_m", "source", "confidence", "notes"}) || !Provenance(*t, tp) ||
+                !RequireString(*t, tp, "source", tb.source) || !RequireString(*t, tp, "confidence", tb.confidence) || !OptionalBool(*t, tp, "on", tb.on) ||
+                !Num(*t, tp, "delay_s", tb.delay_s, 0.0, 3600.0) || !Num(*t, tp, "fail", tb.fail, 0.0, 1.0) || !Num(*t, tp, "error_m", tb.error_m, 0.0, 50000.0)) {
+                return false;
+            }
         }
         b.present = true;
         return true;
@@ -1630,7 +1756,8 @@ public:
     }
     static bool C2Mission(const std::string& m) {
         MissionKind k;
-        return m == "any" || m == "bai" || m == "fighters" || ParseMissionKind(m, k);
+        // "fighters", or (a vector line, roadmap S3) a fighter's role in the air fight.
+        return m == "any" || m == "bai" || m == "fighters" || m == "escort" || m == "sweep" || m == "cap" || m == "intercept" || ParseMissionKind(m, k);
     }
     bool LoadC2Block(const json::Value& root, FactionDef& out) {
         const json::Value* c = root.Find("c2");
@@ -1639,7 +1766,7 @@ public:
         if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
         FactionC2& b = out.c2;
         if (!Keys(*c, p, {"posts", "authority", "timing", "report_missions", "hunter_leave", "silence_consent_s",
-                          "max_report_age_h", "nomination_h", "debrief_s", "source", "confidence", "notes"}) ||
+                          "max_report_age_h", "nomination_h", "debrief_s", "post_loss", "clearance", "source", "confidence", "notes"}) ||
             !Provenance(*c, p) || !RequireString(*c, p, "source", b.source) || !RequireString(*c, p, "confidence", b.confidence) ||
             !OptionalString(*c, p, "notes", b.notes) || !StringList(*c, p, "report_missions", b.report_missions) ||
             !OptionalString(*c, p, "hunter_leave", b.hunter_leave) || !Num(*c, p, "silence_consent_s", b.silence_consent_s, 0.0, 3600.0) ||
@@ -1710,6 +1837,45 @@ public:
                 }
                 b.timing[t->keys[k]] = h;
             }
+        }
+        if (const json::Value* pl = c->Find("post_loss")) {  // a post destroyed (roadmap S2)
+            const std::string lp = Join(p, "post_loss");
+            C2PostLossDef& l = b.post_loss;
+            if (!Keys(*pl, lp, {"takeover", "takeover_s", "reconstitute_h", "source", "confidence", "notes"}) || !Provenance(*pl, lp) ||
+                !RequireString(*pl, lp, "source", l.source) || !RequireString(*pl, lp, "confidence", l.confidence) ||
+                !OptionalString(*pl, lp, "takeover", l.takeover) || !Band(*pl, lp, "takeover_s", l.takeover_s, 0.0, 86400.0) ||
+                !OptionalString(*pl, lp, "notes", l.notes)) {
+                return false;
+            }
+            if (!OneOf(l.takeover, {"alternate", "none"})) return Fail(Join(lp, "takeover"), "alternate or none");
+            if (const json::Value* rh = pl->Find("reconstitute_h")) {
+                const std::string rp = Join(lp, "reconstitute_h");
+                if (!rh->Is(json::Type::Object)) return Fail(rp, "expected an object of post kinds");
+                for (std::size_t k = 0; k < rh->keys.size() && k < rh->items.size(); ++k) {
+                    if (!OneOf(rh->keys[k], C2PostKinds())) return Fail(Join(rp, rh->keys[k]), "not a post kind");
+                    C2Band band;
+                    if (!Band(*rh, rp, rh->keys[k].c_str(), band, 0.0, 2000.0)) return false;
+                    l.reconstitute_h[rh->keys[k]] = band;
+                }
+            }
+            l.set = true;
+        }
+        if (const json::Value* cl = c->Find("clearance")) {  // a strike's clearance on a jammed net (roadmap S2)
+            const std::string cp = Join(p, "clearance");
+            C2ClearanceDef& k = b.clearance;
+            if (!Keys(*cl, cp, {"missions", "on_jammed", "hold_s", "source", "confidence", "notes"}) || !Provenance(*cl, cp) ||
+                !RequireString(*cl, cp, "source", k.source) || !RequireString(*cl, cp, "confidence", k.confidence) ||
+                !StringList(*cl, cp, "missions", k.missions) || !OptionalString(*cl, cp, "on_jammed", k.on_jammed) ||
+                !Band(*cl, cp, "hold_s", k.hold_s, 0.0, 7200.0) || !OptionalString(*cl, cp, "notes", k.notes)) {
+                return false;
+            }
+            if (!OneOf(k.on_jammed, {"attack", "abort", "hold_then_abort"})) return Fail(Join(cp, "on_jammed"), "attack, abort or hold_then_abort");
+            if (k.missions.empty()) return Fail(Join(cp, "missions"), "required, a list of missions");
+            for (std::size_t m = 0; m < k.missions.size(); ++m) {
+                if (!C2Mission(k.missions[m])) return Fail(Index(Join(cp, "missions"), m), "not a mission");
+            }
+            if (k.on_jammed == "hold_then_abort" && !k.hold_s.Set()) return Fail(Join(cp, "hold_s"), "required for hold_then_abort");
+            k.set = true;
         }
         if (!message_.empty()) return false;  // a list that is not a list
         b.present = true;
@@ -1918,7 +2084,7 @@ public:
         if (!Keys(*v, rp, {"crossing", "cas_free", "gate_window_s", "gate_separation_s", "letdown_m", "max_turn_points", "variants",
                            "w_exp", "w_cont", "w_low", "lines_bonus", "return", "blast_lead_s", "blast_exposure_s", "zone_escapes",
                            "helo_umbrella", "corridor_suppression", "deviation", "deviation_lateral_m", "deviation_tot_slip_s",
-                           "source", "confidence", "notes"}) ||
+                           "navigation", "source", "confidence", "notes"}) ||
             !Provenance(*v, rp) || !RequireString(*v, rp, "crossing", r.crossing) || !OptionalBool(*v, rp, "cas_free", r.cas_free) ||
             !Num(*v, rp, "gate_window_s", r.gate_window_s, 0.0, 3600.0) || !Num(*v, rp, "gate_separation_s", r.gate_separation_s, 0.0, 3600.0) ||
             !Num(*v, rp, "letdown_m", r.letdown_m, 0.0, 300000.0) || !Int(*v, rp, "max_turn_points", r.max_turn_points, 0, 12) ||
@@ -1933,6 +2099,15 @@ public:
             !OptionalString(*v, rp, "source", r.source) || !OptionalString(*v, rp, "confidence", r.confidence) ||
             !OptionalString(*v, rp, "notes", r.notes)) {
             return false;
+        }
+        // "navigation" (roadmap S7): the drift between fixes as a share of the distance flown since the last.
+        if (const json::Value* nv = v->Find("navigation")) {
+            const std::string np = Join(rp, "navigation");
+            if (!nv->Is(json::Type::Object)) return Fail(np, "an object");
+            if (!Keys(*nv, np, {"drift_share", "source", "confidence", "notes"}) || !Provenance(*nv, np) ||
+                !Num(*nv, np, "drift_share", r.nav_drift_share, 0.0, 0.2)) {
+                return false;
+            }
         }
         if (r.crossing != "gate" && r.crossing != "checkpoint_gate" && r.crossing != "entry" && r.crossing != "none") {
             return Fail(Join(rp, "crossing"), "gate, checkpoint_gate, entry or none");
@@ -2199,7 +2374,7 @@ public:
         if (!Keys(*d, p, {"satellite", "satellite_pass_hours", "satellite_latency_h", "satellite_detect", "recce_latency_h",
                           "elint", "elint_reach_km", "elint_delay_h", "elint_best_m", "elint_k_m", "comint",
                           "comint_sigma_m", "comint_delay_h", "humint_per_day", "humint_delay_h", "humint_sigma_m",
-                          "humint_false", "humint_reach_km", "prior_mobile_sigma_m", "bda_overclaim", "pirep_delay_h",
+                          "humint_false", "humint_reach_km", "humint_air_defence_per_day", "prior_mobile_sigma_m", "bda_overclaim", "pirep_delay_h",
                           "analyst_skill", "source", "confidence", "notes"}) ||
             !Provenance(*d, p) || !OptionalBool(*d, p, "satellite", in.satellite) ||
             !Num(*d, p, "satellite_latency_h", in.satellite_latency_h, 0.0, 200.0) ||
@@ -2216,6 +2391,7 @@ public:
             !Num(*d, p, "humint_sigma_m", in.humint_sigma_m, 10.0, 100000.0) ||
             !Num(*d, p, "humint_false", in.humint_false, 0.0, 1.0) ||
             !Num(*d, p, "humint_reach_km", humint_reach_km, 0.0, 1000.0) ||
+            !Num(*d, p, "humint_air_defence_per_day", in.humint_air_defence_per_day, 0.0, 50.0) ||
             !Num(*d, p, "prior_mobile_sigma_m", in.prior_mobile_sigma_m, 10.0, 100000.0) ||
             !Num(*d, p, "bda_overclaim", in.bda_overclaim, 0.0, 5.0) || !Num(*d, p, "pirep_delay_h", in.pirep_delay_h, 0.0, 48.0) ||
             !Num(*d, p, "analyst_skill", in.analyst_skill, 0.0, 1.0)) {
@@ -2421,7 +2597,7 @@ public:
             QuirkDef qd;
             std::vector<std::string> roles;
             if (!Keys(q, p, {"id", "name", "description", "signature", "intel_hint", "weakness", "effects", "tier_weight",
-                             "tier_weight_mode0", "hot_draw", "roles", "source", "notes"}) ||
+                             "tier_weight_mode0", "tier_weight_mode1", "hot_draw", "roles", "source", "notes"}) ||
                 !RequireString(q, p, "id", qd.id) || !RequireString(q, p, "name", qd.name) ||
                 !RequireString(q, p, "description", qd.description) || !RequireString(q, p, "signature", qd.signature) ||
                 !RequireString(q, p, "intel_hint", qd.intel_hint) || !OptionalBool(q, p, "weakness", qd.weakness) ||
@@ -2443,27 +2619,24 @@ public:
                 if (!e->items[k].Is(json::Type::Number)) return Fail(Join(Join(p, "effects"), e->keys[k]), "expected a number");
                 qd.effects[e->keys[k]] = e->items[k].number;
             }
-            if (const json::Value* tw = q.Find("tier_weight")) {
-                if (!tw->Is(json::Type::Object)) return Fail(Join(p, "tier_weight"), "expected {tier: weight}");
+            // The weights now, and those of the older modes where they differ (tier_weight_mode0, tier_weight_mode1).
+            const auto weights = [&](const char* key, double* into) {
+                const json::Value* tw = q.Find(key);
+                if (tw == nullptr) return true;
+                if (!tw->Is(json::Type::Object)) return Fail(Join(p, key), "expected {tier: weight}");
                 for (std::size_t k = 0; k < tw->keys.size(); ++k) {
                     Tier t;
-                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, "tier_weight"), tw->keys[k]), "unknown tier");
+                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, key), tw->keys[k]), "unknown tier");
                     if (!tw->items[k].Is(json::Type::Number) || tw->items[k].number < 0.0) {
-                        return Fail(Join(Join(p, "tier_weight"), tw->keys[k]), "a weight >= 0");
+                        return Fail(Join(Join(p, key), tw->keys[k]), "a weight >= 0");
                     }
-                    qd.tier_weight[static_cast<int>(t)] = tw->items[k].number;
+                    into[static_cast<int>(t)] = tw->items[k].number;
                 }
-            }
-            if (const json::Value* tw = q.Find("tier_weight_mode0")) {
-                if (!tw->Is(json::Type::Object)) return Fail(Join(p, "tier_weight_mode0"), "expected {tier: weight}");
-                for (std::size_t k = 0; k < tw->keys.size(); ++k) {
-                    Tier t;
-                    if (!ParseTier(tw->keys[k], t)) return Fail(Join(Join(p, "tier_weight_mode0"), tw->keys[k]), "unknown tier");
-                    if (!tw->items[k].Is(json::Type::Number) || tw->items[k].number < 0.0) {
-                        return Fail(Join(Join(p, "tier_weight_mode0"), tw->keys[k]), "a weight >= 0");
-                    }
-                    qd.tier_weight_mode0[static_cast<int>(t)] = tw->items[k].number;
-                }
+                return true;
+            };
+            if (!weights("tier_weight", qd.tier_weight) || !weights("tier_weight_mode0", qd.tier_weight_mode0) ||
+                !weights("tier_weight_mode1", qd.tier_weight_mode1)) {
+                return false;
             }
             for (const QuirkDef& other : out) {
                 if (other.id == qd.id) return Fail(p, "duplicate quirk '" + qd.id + "'");
@@ -2721,6 +2894,12 @@ struct AirWarData {
     WeaponsDef weapons;  // empty: every type strikes by its strike_power (the model before the weapons)
     AirCombatDef air_combat;  // the air-to-air missiles, guns and fits, the chain's numbers (data/air_war/air_combat.json, track B7)
     SensorsDef sensors;       // the airborne sensors by type and year (data/air_war/sensors.json)
+    ReactionTable reactions;  // the pilots' reactions and the countermeasure fits (S3: the strikers' flares and chaff at A0; empty: none)
+    CounterC2Def counter_c2;  // our side against the enemy's command in the air (data/command/counter_c2.json, roadmap S2)
+    AaaTable aaa;             // how the guns fire by range (data/gameplay/aaa.json): a played raid's guns shown (roadmap S4)
+    command::OwnAirDef own_air;  // our fighters' rules (data/command/own_air.json, roadmap S1; absent: none of it)
+    bool has_own_air = false;
+    LightValues light_file;  // data/gameplay/light.json (roadmap S8; absent: the code's defaults)
     std::shared_ptr<const CountryMap> country;  // the theatre's country_map, when it names one: its supply lines' roads
 
     const WeaponDef* Weapon(const std::string& id) const { return weapons.Find(id); }
@@ -2740,6 +2919,17 @@ struct AirWarData {
     }
 };
 
+// The light's save mode (roadmap S8, air_war.json's "light"): under light.mode 1 the theatre's date is read whatever
+// its dated_from_light_mode and its parts of the day by light.json's values; under 0 (a save made before S8) a theatre
+// dated only from mode 1 (the tuned theatre_pannonia.json) is undated, the buckets as tuned, and the light the code's
+// defaults. Called by LoadAirWarData and LoadCampaignJson after the tuning is set; call it again after changing it.
+inline void ApplyLightMode(AirWarData& d) {
+    const double mode = d.tuning.Get("light.mode");
+    TheatreDef& t = d.theatre;
+    t.day_of_year = t.date_day_of_year > 0 && mode >= static_cast<double>(t.dated_from_light_mode) ? t.date_day_of_year : 0;
+    t.light = mode >= 1.0 ? d.light_file : LightValues();
+}
+
 // data_dir: the repo's data folder. faction_file and theatre_file relative to it ("air_war/faction_nato.json").
 inline bool LoadAirWarData(const std::string& data_dir, const std::string& theatre_file, const std::string& faction_file,
                            AirWarData& out, std::string* error = nullptr) {
@@ -2748,9 +2938,27 @@ inline bool LoadAirWarData(const std::string& data_dir, const std::string& theat
     if (!LoadFactionFile(data_dir + "/" + faction_file, d.faction, error)) return false;
     if (!LoadQuirksFile(data_dir + "/air_war/traits.json", d.quirks, error)) return false;
     if (!LoadTuningFile(data_dir + "/gameplay/air_war.json", d.tuning, error)) return false;
+    if (std::ifstream(data_dir + "/gameplay/light.json").good() && !LoadLightValues(data_dir, "gameplay/light.json", d.light_file, error)) {
+        return false;  // there but wrong; a data folder without it keeps the code's
+    }
+    ApplyLightMode(d);
     if (!LoadWeaponsFile(data_dir + "/air_war/weapons.json", d.weapons, error)) return false;
     if (!LoadAirCombatFile(data_dir + "/air_war/air_combat.json", d.air_combat, error)) return false;
     if (!LoadSensorsFile(data_dir + "/air_war/sensors.json", d.sensors, error)) return false;
+    if (!FillLookDown(d.sensors, data_dir, error)) return false;
+    // The strikers' flares and chaff in the abstract fight (roadmap S3): the reaction table, where the data has it.
+    if (std::ifstream(data_dir + "/gameplay/reactions.json").good() && !LoadReactionTable(data_dir, d.reactions, error)) return false;
+    if (!LoadCounterC2File(data_dir + "/command/counter_c2.json", d.counter_c2, error)) return false;
+    if (!LoadAaaFile(data_dir, "gameplay/aaa.json", d.aaa, error)) return false;
+    {
+        const std::string own = data_dir + "/command/own_air.json";
+        std::ifstream probe(own);
+        if (probe) {
+            probe.close();
+            if (!command::LoadOwnAirFile(own, d.own_air, error)) return false;
+            d.has_own_air = true;
+        }
+    }
     if (!d.theatre.country_map.empty()) {
         d.country = LoadCountryMap(data_dir, d.theatre.country_map, error);
         if (d.country == nullptr) {

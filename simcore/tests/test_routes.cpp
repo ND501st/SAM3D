@@ -585,7 +585,7 @@ SC_TEST("routes (B2): a save made before B2 replays to the bit with the old shap
     AirCampaign back;
     SC_EXPECT(LoadCampaignJson(saved, kData, back, &e));
     SC_EXPECT(JournalFnv(back) == JournalFnv(n));
-    SC_EXPECT_NEAR(back.Data().tuning.Get("route.mode"), 1.0, 1e-12);
+    SC_EXPECT_NEAR(back.Data().tuning.Get("route.mode"), 2.0, 1e-12);  // roadmap S7's mode since S7
 }
 
 SC_TEST("routes (B2): the fighters meet a package on the leg from its IP, found by its tag, whatever comes before") {
@@ -604,4 +604,344 @@ SC_TEST("routes (B2): a tactic is remembered by its corridor and way home") {
     const std::string k = TacticKey("N2", "N2 via settlement:kovar", "N3", Profile::Low, DayPart::Night, MissionKind::Strike);
     SC_EXPECT(k.find("N2 via settlement:kovar") != std::string::npos && k.find("|N3|") != std::string::npos);
     SC_EXPECT(k != TacticKey("N2", "N2 direct", "N3", Profile::Low, DayPart::Night, MissionKind::Strike));
+}
+
+// ------------------------------------------------------------------------------------------------ roadmap S7
+
+namespace {
+
+// The packages' corridors in order, and how many follow one of the same corridor (the planner's same way in).
+int SameCorridorRuns(const std::vector<Package>& ps, int* routed = nullptr) {
+    int same = 0, n = 0;
+    std::string last;
+    for (const Package& p : ps) {
+        if (p.corridor.empty()) continue;
+        ++n;
+        if (p.corridor == last) ++same;
+        last = p.corridor;
+    }
+    if (routed != nullptr) *routed = n;
+    return same;
+}
+
+AirWarData WithPlannerQuirk(AirWarData d, const std::string& effect) {
+    QuirkDef q;
+    q.id = "test_" + effect;
+    q.name = q.id;
+    q.effects[effect] = 3.0;
+    d.quirks.push_back(q);
+    for (OfficerDef& o : d.faction.officers) {
+        if (o.role == StaffRole::Planner) o.quirks = {q.id};
+    }
+    return d;
+}
+
+}  // namespace
+
+SC_TEST("routes (S7): a gate with no feature within a leg is joined to its nearest features; mode 1 leaves it unplanned") {
+    // The ridge country's villages run from 60 km south to 60 km north; the gate stands 35 km south of the last, legs at
+    // most 25 km: no edge reaches it.
+    TuningTable tune;
+    tune.values["route.max_leg_m"] = 25000.0;
+    RouteGround g;
+    g.BuildFrom(RidgeCountry(), tune);
+    const AircraftType a = TestJet();
+    RouteRules rules;
+    EntryPoint gate{"G1", Vec3{6000.0, -95000.0, 0.0}};
+    RouteRequest rq;
+    rq.bases = Vec3{6000.0, -160000.0, 0.0};
+    rq.gate_in = &gate;
+    rq.exits = {&gate};
+    rq.target = Vec3{6000.0, 40000.0, 0.0};
+    rq.type = &a;
+    tune.values["route.mode"] = 1.0;
+    const RoutePlanner old_planner(g, tune, rules);
+    const PlannedRoute before = old_planner.Plan(rq, {}, nullptr);
+    tune.values["route.mode"] = 2.0;
+    const RoutePlanner planner(g, tune, rules);
+    const PlannedRoute now = planner.Plan(rq, {}, nullptr);
+    std::printf("    mode 1 %s, mode 2 %s (%zu points, first turn %s)\n", before.ok ? "planned" : "unplanned", now.ok ? "planned" : "unplanned",
+                now.points.size(), now.turns.empty() ? "-" : now.turns.front().c_str());
+    SC_EXPECT(!before.ok || before.turns.empty());
+    SC_EXPECT(now.ok);
+    SC_EXPECT(!now.turns.empty());
+}
+
+SC_TEST("routes (S7): our believed air bases cost a leg; a low flight minds them less; no zone, escape or exposure") {
+    TuningTable tune;
+    std::vector<IntelEntry> pic(3);
+    pic[0].key = "af_b";
+    pic[0].kind = ObjectKind::Airfield;
+    pic[0].pos = Vec3{0.0, 20000.0, 0.0};
+    pic[0].sigma_m = 4000.0;
+    pic[1] = pic[0];
+    pic[1].key = "af_a";
+    pic[1].exists = 0.1;  // hardly believed: no ring
+    pic[2] = pic[0];
+    pic[2].key = "sam";
+    pic[2].kind = ObjectKind::SamSite;
+    const AircraftType a = TestJet();
+    const std::vector<RouteThreat> high = BelievedFighterThreats(pic, 0.6, a, Profile::Medium, tune);
+    const std::vector<RouteThreat> low = BelievedFighterThreats(pic, 0.6, a, Profile::Low, tune);
+    SC_EXPECT(high.size() == 1 && low.size() == 1);
+    if (high.size() != 1 || low.size() != 1) return;
+    SC_EXPECT(high[0].fighter && high[0].key == "fighter:af_b" && !high[0].masked);
+    SC_EXPECT_NEAR(high[0].ring_m, tune.Get("route.fighter_reach_m") + 2000.0, 1e-9);
+    SC_EXPECT_NEAR(high[0].weight, tune.Get("route.fighter_weight") * 0.6, 1e-12);
+    SC_EXPECT_NEAR(low[0].weight, high[0].weight * tune.Get("route.fighter_low_share"), 1e-12);
+    SC_EXPECT(BelievedFighterThreats(pic, 0.0, a, Profile::Medium, tune).empty());
+    // A route past the base costs more with it than without; it is never an exposure to the believed SAMs.
+    RouteGround g;
+    g.BuildFrom(RidgeCountry(), tune);
+    RouteRules rules;
+    const RoutePlanner planner(g, tune, rules);
+    EntryPoint gate{"G1", Vec3{6000.0, -75000.0, 0.0}};
+    RouteRequest rq;
+    rq.bases = Vec3{6000.0, -160000.0, 0.0};
+    rq.gate_in = &gate;
+    rq.exits = {&gate};
+    rq.target = Vec3{6000.0, 60000.0, 0.0};
+    rq.type = &a;
+    rq.profile = Profile::Medium;
+    const PlannedRoute clear = planner.Plan(rq, {}, nullptr);
+    const PlannedRoute minded = planner.Plan(rq, high, nullptr);
+    std::printf("    cost %.0f clear, %.0f past the believed base; exposure %.1f s\n", clear.cost, minded.cost, minded.exposure_s);
+    SC_EXPECT(clear.ok && minded.ok);
+    SC_EXPECT(minded.cost > clear.cost);
+    SC_EXPECT_NEAR(minded.exposure_s, 0.0, 1e-9);
+}
+
+SC_TEST("routes (S7): without a map the lattice is coarser and fewer run-in headings are tried") {
+    TuningTable tune;
+    SC_EXPECT(tune.Get("route.mode") >= 2.0);
+    SC_EXPECT(tune.Get("route.fallback_grid2_m") > tune.Get("route.fallback_grid_m"));
+    SC_EXPECT(tune.Get("route.run_in_headings_nomap") < tune.Get("route.run_in_headings"));
+    // A theatre without a map plans on its objects and the lattice: the same in both modes, fewer features in mode 2.
+    AirWarData d1 = LoadOn("theatre_pannonia.json", "nato");
+    d1.country = nullptr;
+    AirWarData d2 = d1;
+    d1.tuning.values["route.mode"] = 1.0;
+    d2.tuning.values["route.mode"] = 2.0;
+    RouteGround g1, g2;
+    g1.Build(d1);
+    g2.Build(d2);
+    std::printf("    features without a map: %zu in mode 1, %zu in mode 2\n", g1.Features().size(), g2.Features().size());
+    SC_EXPECT(!g2.HasGround());
+    SC_EXPECT(g2.Features().size() < g1.Features().size());
+}
+
+SC_TEST("routes (S7): a flight drifts between its fixes, never more than the cap, the same every time; a fix ends it") {
+    std::vector<RoutePoint> r(6);
+    for (std::size_t i = 0; i < r.size(); ++i) r[i].pos = Vec3{0.0, 20000.0 * static_cast<double>(i), 0.0};
+    r[2].feature = "settlement:x";  // a fix
+    r[4].tag = "ip";
+    const std::vector<Vec3> a = NavigationDrift(r, 0.01, 3000.0, 77);
+    const std::vector<Vec3> b = NavigationDrift(r, 0.01, 3000.0, 77);
+    const std::vector<Vec3> c = NavigationDrift(r, 0.01, 3000.0, 78);
+    const std::vector<Vec3> off = NavigationDrift(r, 0.0, 3000.0, 77);
+    SC_EXPECT(a.size() == r.size());
+    const auto len = [](const Vec3& v) { return std::hypot(v.x, v.y); };
+    SC_EXPECT_NEAR(len(a[0]), 0.0, 1e-12);
+    SC_EXPECT_NEAR(len(a[1]), 200.0, 1e-9);   // 1 % of 20 km
+    SC_EXPECT_NEAR(len(a[2]), 0.0, 1e-12);    // over its feature
+    SC_EXPECT_NEAR(len(a[3]), 200.0, 1e-9);
+    SC_EXPECT_NEAR(len(a[4]), 0.0, 1e-12);    // the IP, found by eye
+    SC_EXPECT_NEAR(len(a[5]), 200.0, 1e-9);
+    const std::vector<Vec3> capped = NavigationDrift(r, 0.2, 3000.0, 77);
+    SC_EXPECT_NEAR(len(capped[1]), 3000.0, 1e-9);
+    for (std::size_t i = 0; i < r.size(); ++i) {
+        SC_EXPECT(a[i].x == b[i].x && a[i].y == b[i].y);
+        SC_EXPECT(len(off[i]) == 0.0);
+    }
+    SC_EXPECT(std::fabs(a[1].x - c[1].x) + std::fabs(a[1].y - c[1].y) > 1e-6);
+    // The factions' drift loads with its source.
+    for (const char* f : {"nato", "warsaw_pact", "neutral", "rebels"}) {
+        const AirWarData d = LoadOn("theatre_pannonia.json", f);
+        std::printf("    %s drifts %.3f of the way between fixes\n", f, d.faction.doctrine.routing.nav_drift_share);
+        SC_EXPECT(d.faction.doctrine.routing.nav_drift_share > 0.0 && d.faction.doctrine.routing.nav_drift_share < 0.05);
+    }
+}
+
+SC_TEST("routes (S7): the route as flown: the place it left the session goes in, the rest moves on in time, indices follow") {
+    Flight fl;
+    fl.route.resize(4);
+    for (std::size_t i = 0; i < 4; ++i) {
+        fl.route[i].pos = Vec3{0.0, 36000.0 * static_cast<double>(i), 0.0};
+        fl.route[i].t_h = 10.0 + 0.05 * static_cast<double>(i);  // 200 m/s
+        fl.route[i].leg_mps = 200.0;
+    }
+    fl.route[2].tag = "target";
+    fl.release_index = 2;
+    ZoneEscape z;
+    z.first = 2;
+    z.last = 3;
+    z.rejoin = 3;
+    fl.escapes.push_back(z);
+    // Seen last 10 km east of the line, half way along its second leg, a minute late.
+    const double t = 10.075 + 60.0 / 3600.0;
+    SC_EXPECT(FlownInto(fl, Vec3{10000.0, 54000.0, 0.0}, t));
+    SC_EXPECT(fl.route.size() == 5 && fl.route[2].tag == "flown");
+    SC_EXPECT_NEAR(fl.route[2].t_h, t, 1e-12);
+    const double to_next = std::hypot(10000.0, 72000.0 - 54000.0) / 200.0 / 3600.0;
+    SC_EXPECT_NEAR(fl.route[3].t_h, t + to_next, 1e-12);
+    SC_EXPECT_NEAR(fl.route[4].t_h - fl.route[3].t_h, 0.05, 1e-12);  // the legs after it keep their own times
+    SC_EXPECT(fl.release_index == 3 && fl.route[3].tag == "target");
+    SC_EXPECT(fl.escapes[0].first == 3 && fl.escapes[0].last == 4 && fl.escapes[0].rejoin == 4);
+    SC_EXPECT_NEAR(fl.route[0].t_h, 10.0, 1e-12);  // before it, as planned
+    // After its last point: nothing to change.
+    SC_EXPECT(!FlownInto(fl, Vec3{}, 99.0));
+}
+
+SC_TEST("routes (S7): the Pact's helicopters beyond their umbrella are not sent once the umbrella's worth is nothing") {
+    AirWarData d = LoadOn("theatre_pannonia.json", "warsaw_pact");
+    const double umbrella = d.tuning.Get("route.helo_umbrella_m");
+    const auto beyond = [&](const std::vector<Package>& ps, int* helos) {
+        int n = 0;
+        *helos = 0;
+        for (const Package& p : ps) {
+            if (p.kind != MissionKind::HeloRaid) continue;
+            ++*helos;
+            for (const FrontDef& f : d.theatre.fronts) {
+                for (const EntryPoint& e : f.entries) {
+                    if (e.id == p.entry && Dist2d(e.pos, p.target_pos) > umbrella + 2000.0) ++n;
+                }
+            }
+        }
+        return n;
+    };
+    AirWarData none = d;
+    none.tuning.values["route.helo_beyond_umbrella"] = 0.0;
+    AirWarData open_sky = d;
+    open_sky.tuning.values["route.helo_beyond_umbrella"] = 1.0;
+    int h0 = 0, h1 = 0;
+    const int b0 = beyond(PlanDays(none, 5, 3.0), &h0);
+    const int b1 = beyond(PlanDays(open_sky, 5, 3.0), &h1);
+    std::printf("    helicopter raids beyond the umbrella: %d of %d with it worth nothing, %d of %d with it free\n", b0, h0, b1, h1);
+    SC_EXPECT(b0 == 0);
+    SC_EXPECT(b1 >= b0);
+}
+
+SC_TEST("routes (S7): a planner who varies his axis comes the same way in less often than one who repeats it") {
+    const AirWarData d = LoadOn("theatre_pannonia.json", "nato");
+    int n_vary = 0, n_repeat = 0, same_vary = 0, same_repeat = 0;
+    for (unsigned seed : {3u, 9u}) {
+        int n = 0;
+        same_vary += SameCorridorRuns(PlanDays(WithPlannerQuirk(d, "axis_vary"), seed, 3.0), &n);
+        n_vary += n;
+        same_repeat += SameCorridorRuns(PlanDays(WithPlannerQuirk(d, "axis_repeat"), seed, 3.0), &n);
+        n_repeat += n;
+    }
+    std::printf("    the same way in as the last: %d of %d varying, %d of %d repeating\n", same_vary, n_vary, same_repeat, n_repeat);
+    SC_EXPECT(n_vary > 5 && n_repeat > 5);
+    SC_EXPECT(static_cast<double>(same_vary) / std::max(1, n_vary) < static_cast<double>(same_repeat) / std::max(1, n_repeat));
+}
+
+// ------------------------------------------------------------------------------------------------ learning (S7)
+
+SC_TEST("learning (S7): a flight lost with nobody home to tell makes the staff suspect a defence where it was lost") {
+    for (double mode : {0.0, 1.0}) {
+        AirWarData d = LoadOn("theatre_pannonia.json", "warsaw_pact");
+        d.tuning.values["learning.mode"] = mode;
+        AirCampaign c;
+        c.Init(d, 4);
+        int played = 0;
+        Vec3 lost_at;
+        while (played == 0 && c.Now() < 96.0) {
+            if (!c.Advance(96.0)) continue;
+            const Package* p = c.PlayerMission();
+            PackageOutcome o;
+            o.package_id = p->id;
+            o.played = true;
+            const std::string own = d.theatre.objects[static_cast<std::size_t>(c.PlayerIndex())].id;
+            lost_at = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos + Vec3{3000.0, 2000.0, 0.0};
+            for (std::size_t fi = 0; fi < p->flights.size(); ++fi) {
+                for (int k = 0; k < p->flights[fi].count; ++k) {
+                    LossRecord l;
+                    l.flight = static_cast<int>(fi);
+                    l.by = own;
+                    l.where = lost_at;
+                    o.losses.push_back(l);
+                }
+            }
+            o.fired.push_back(own);  // it fired, but nobody came home to say so
+            c.CompletePlayerMission(o, c.Now() + 0.2);
+            ++played;
+        }
+        SC_EXPECT(played == 1);
+        const double until = c.Now() + 12.0;
+        while (c.Now() < until) {
+            if (c.Advance(until)) c.SkipPlayerMission();
+        }
+        int suspected = 0;
+        double nearest = 1e18;
+        for (const IntelEntry& e : c.Intel().entries) {
+            if (!e.ghost || e.label.find("a loss nobody saw") == std::string::npos) continue;
+            ++suspected;
+            nearest = std::min(nearest, Dist2d(e.pos, lost_at));
+            SC_EXPECT(e.IsThreat());
+        }
+        std::printf("    learning.mode %.0f: %d suspected defences, the nearest %.1f km from the loss\n", mode, suspected,
+                    suspected > 0 ? nearest / 1000.0 : -1.0);
+        if (mode < 1.0) SC_EXPECT(suspected == 0);
+        else SC_EXPECT(suspected > 0 && nearest < 4.0 * d.tuning.Get("learning.unexplained_sigma_m"));
+    }
+}
+
+SC_TEST("learning (S7): the rebels' sympathisers bring word of our mobile batteries; not before S7, and not other factions") {
+    int with = 0, without = 0, nato = 0;
+    for (double mode : {0.0, 1.0}) {
+        AirWarData d = LoadOn("theatre_pannonia.json", "rebels");
+        d.tuning.values["learning.mode"] = mode;
+        AirCampaign c;
+        PlanDays(d, 6, 3.0, &c);
+        (mode > 0.0 ? with : without) = c.SympathiserReports();
+    }
+    {
+        AirCampaign c;
+        PlanDays(LoadOn("theatre_pannonia.json", "nato"), 6, 3.0, &c);
+        nato = c.SympathiserReports();
+    }
+    std::printf("    sympathisers' reports in three days: %d with S7, %d before it, %d for NATO\n", with, without, nato);
+    SC_EXPECT(with > 0 && without == 0 && nato == 0);
+}
+
+SC_TEST("learning (S7): the weather by month: a winter war is mostly not clear; the same day's draw, a save's mode kept") {
+    SC_EXPECT_NEAR(NotClearShare(15), 0.85, 1e-12);
+    SC_EXPECT_NEAR(NotClearShare(200), 0.5, 1e-12);
+    SC_EXPECT(NotClearShare(100) < 0.85 && NotClearShare(100) > 0.5);
+    SC_EXPECT(NotClearShare(300) < 0.85 && NotClearShare(300) > 0.5);
+    SC_EXPECT_NEAR(NotClearShare(15 + 365), NotClearShare(15), 1e-12);
+    int clear[2] = {0, 0};
+    for (int m = 0; m < 2; ++m) {
+        AirWarData d = LoadOn("theatre_pannonia.json", "nato");
+        d.theatre.day_of_year = 15;  // a war from the middle of January
+        d.tuning.values["weather.mode"] = m;
+        AirCampaign c;
+        c.Init(d, 12);
+        for (int day = 0; day < 90; ++day) clear[m] += c.WeatherOn(day + 1) == airwar::Weather::Clear ? 1 : 0;
+    }
+    std::printf("    clear days of 90 from mid-January: %d by the year's share, %d by the month's\n", clear[0], clear[1]);
+    SC_EXPECT(clear[1] < clear[0]);
+    SC_EXPECT(clear[1] <= 30);
+    // A save keeps the modes; one made before S7 has neither and loads with both 0, the routes' mode as saved.
+    const AirWarData d = LoadOn("theatre_pannonia.json", "rebels");
+    AirCampaign n;
+    PlanDays(d, 21, 1.0, &n);
+    std::string saved = SaveCampaignJson(n, "air_war/theatre_pannonia.json", "air_war/faction_rebels.json");
+    SC_EXPECT(saved.find("\"learning_mode\"") != std::string::npos && saved.find("\"weather_mode\"") != std::string::npos);
+    AirCampaign back;
+    std::string e;
+    SC_EXPECT(LoadCampaignJson(saved, kData, back, &e));
+    SC_EXPECT(JournalFnv(back) == JournalFnv(n));
+    SC_EXPECT_NEAR(back.Data().tuning.Get("learning.mode"), 1.0, 1e-12);
+    SC_EXPECT_NEAR(back.Data().tuning.Get("route.mode"), 2.0, 1e-12);
+    for (const char* key : {"\"learning_mode\"", "\"weather_mode\""}) {
+        const std::size_t at = saved.find(key);
+        const std::size_t end = saved.find(',', at);
+        if (at != std::string::npos && end != std::string::npos) saved.erase(at, end - at + 1);
+    }
+    AirCampaign old;
+    SC_EXPECT(LoadCampaignJson(saved, kData, old, &e));
+    SC_EXPECT_NEAR(old.Data().tuning.Get("learning.mode"), 0.0, 1e-12);
+    SC_EXPECT_NEAR(old.Data().tuning.Get("weather.mode"), 0.0, 1e-12);
 }

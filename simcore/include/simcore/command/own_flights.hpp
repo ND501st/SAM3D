@@ -195,11 +195,13 @@ inline OwnFlightNotice NoticeOf(const OwnPairPlan& p, int number, double clock_s
 // NoticeDef::hop_work_s), to the post that tells the battery (the regiment's command post, which says it on the battery's
 // net). Hours are the chain's (session hours from the clock start: start_hour is the clock hour at 0). The trace holds each
 // post and the hour it had the notice; at_battery_h and written_h are the runner's to fill.
-inline NoticeTrace RunNotice(const ChainData& chain, const OwnFlightNotice& n, const std::string& text, const std::string& origin,
-                             const std::string& to_post, double sent_h, const NoticeDef& d, unsigned seed, double start_hour,
-                             double horizon_h = 6.0) {
+// Any of our aviation's facts down the chain the same way (S1): a notice (FactKind::OwnAirNotice), a fighter regiment's loss
+// (FactKind::OwnDamage) or its claim (FactKind::RaidResult), each with its key, subject, precedence and each hop's work.
+inline NoticeTrace RunOwnAirFact(const ChainData& chain, FactKind kind, const std::string& key, const std::string& subject, const std::string& text,
+                                 const std::string& origin, const std::string& to_post, double sent_h, int precedence, double hop_work_s,
+                                 unsigned seed, double start_hour, double horizon_h = 6.0) {
     NoticeTrace tr;
-    tr.flight = n.flight;
+    tr.flight = subject;
     tr.sent_h = sent_h;
     InfoNet net;
     if (!net.Init(chain, seed, start_hour)) return tr;
@@ -207,15 +209,15 @@ inline NoticeTrace RunNotice(const ChainData& chain, const OwnFlightNotice& n, c
     const int from = chain.PositionIndex(origin);
     if (to < 0 || from < 0) return tr;
     Fact f;
-    f.key = "own_air_notice:" + std::to_string(n.number) + ":" + std::to_string(n.amendment);
-    f.kind = FactKind::OwnAirNotice;
+    f.key = key;
+    f.kind = kind;
     f.h = sent_h;
     f.origin = origin;
     f.text = text;
-    f.subject = n.flight;
+    f.subject = subject;
     f.need_level = chain.positions[static_cast<std::size_t>(to)].level;
-    f.precedence = d.precedence;
-    f.hop_work_s = d.hop_work_s;
+    f.precedence = precedence;
+    f.hop_work_s = hop_work_s;
     const int fact = net.AddFact(f);
     std::vector<NoticeHop> back;
     Delivery dl;
@@ -228,6 +230,20 @@ inline NoticeTrace RunNotice(const ChainData& chain, const OwnFlightNotice& n, c
     if (at != from) return tr;
     tr.hops.assign(back.rbegin(), back.rend());
     return tr;
+}
+inline NoticeTrace RunNotice(const ChainData& chain, const OwnFlightNotice& n, const std::string& text, const std::string& origin,
+                             const std::string& to_post, double sent_h, const NoticeDef& d, unsigned seed, double start_hour,
+                             double horizon_h = 6.0) {
+    return RunOwnAirFact(chain, FactKind::OwnAirNotice, "own_air_notice:" + std::to_string(n.number) + ":" + std::to_string(n.amendment), n.flight,
+                         text, origin, to_post, sent_h, d.precedence, d.hop_work_s, seed, start_hour, horizon_h);
+}
+// A regiment's loss or claim report down the chain (S1).
+inline NoticeTrace RunOwnAirReport(const ChainData& chain, const OwnAirReport& r, int number, const std::string& text, const std::string& origin,
+                                   const std::string& to_post, double sent_h, const ReportsDef& d, unsigned seed, double start_hour,
+                                   double horizon_h = 6.0) {
+    const bool loss = r.kind == OwnAirReportKind::Loss;
+    return RunOwnAirFact(chain, loss ? FactKind::OwnDamage : FactKind::RaidResult, std::string(loss ? "own_air_loss:" : "own_air_claim:") + std::to_string(number),
+                         r.flight, text, origin, to_post, sent_h, d.precedence, d.hop_work_s, seed, start_hour, horizon_h);
 }
 // When the post that tells the battery had it (session hours; -1e18: never within the horizon).
 inline double NoticeAtPostH(const NoticeTrace& t) { return t.hops.empty() ? -1e18 : t.hops.back().h; }
@@ -266,6 +282,12 @@ struct OwnAirScenarioDef {
     Vec3 gci_radar;
     double gci_mast_m = 25.0;
     double raid_warning_s = -1.0;
+    // S1: the front line the airborne-alert zones stand behind and the pursuit limit is measured from (a point of it and the
+    // direction across it to the enemy), and whether the enemy's allies fly our Kremniy (a war with the Pact: the false friend).
+    bool has_front = false;
+    Vec3 front;
+    Vec3 to_enemy{0.0, 1.0, 0.0};
+    bool enemy_allies = false;
     // Loaded.
     OwnAirDef def;
     IffCodesDef codes;

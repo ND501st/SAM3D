@@ -56,6 +56,7 @@ struct ShotConditions {
     double break_timing = 0.0;            // 0: no break; 1: a break at the right moment (the last seconds)
     double countermeasures = 0.0;         // 0..1: flares in the seeker's cone (infrared), chaff or jamming (semi-active)
     double lock_lost_before_impact_s = 0.0;  // a semi-active round: the launcher's lock lost this long before impact (0: held)
+    int end_notch = -1;  // roadmap S3, a flown round: 1 the target in the beam against the ground at its end, 0 not; -1 the launch's geometry
 };
 
 enum class MissReason {
@@ -73,9 +74,10 @@ enum class MissReason {
     Countermeasure,// flares, chaff or jamming
     Break,         // the target's break
     LockLost,      // the launcher lost its lock, beyond the missile's own flight
-    Fuze           // it guided and did not kill (the fuze, the warhead, a late break's miss)
+    Fuze,          // it guided and did not kill (the fuze, the warhead, a late break's miss)
+    Energy         // it ran out of energy before it reached a target that turned away (roadmap S3: flown missiles only)
 };
-constexpr int kMissReasonCount = 15;
+constexpr int kMissReasonCount = 16;
 
 inline const char* MissReasonName(MissReason r) {
     switch (r) {
@@ -94,6 +96,7 @@ inline const char* MissReasonName(MissReason r) {
         case MissReason::Break: return "break";
         case MissReason::LockLost: return "lock_lost";
         case MissReason::Fuze: return "fuze";
+        case MissReason::Energy: return "energy";
     }
     return "?";
 }
@@ -291,9 +294,10 @@ inline ShotLinks ShotOdds(const AamDef& a, const ChainParams& c, const ShotGeome
     }
     // The ground behind the target; a radar round is weaker still in the beam against it.
     double f_clutter = 1.0;
-    if (g.look_down) {
+    if (g.look_down || k.end_notch == 1) {
         f_clutter = a.clutter_below;
-        if (IsSemiActive(a.guidance) && std::fabs(g.aspect_rad - kPi / 2.0) < c.beam_notch_half_rad) f_clutter *= c.beam_notch;
+        const bool beam = k.end_notch >= 0 ? k.end_notch == 1 : std::fabs(g.aspect_rad - kPi / 2.0) < c.beam_notch_half_rad;
+        if (IsSemiActive(a.guidance) && beam) f_clutter *= c.beam_notch;
     }
     const double f_cm = 1.0 - Clamp(k.countermeasures, 0.0, 1.0) * (1.0 - a.flare_rejection);
     const double eff = BreakEffectiveness(a, k);

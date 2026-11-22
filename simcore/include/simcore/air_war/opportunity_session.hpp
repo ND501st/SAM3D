@@ -11,7 +11,14 @@
 //     attack or a gun run is flown as passes (attack_pass.hpp) by the leader and each wingman with something to fire,
 //     in trail; after them the leader may come round again (Reattack).
 // It also flies the planned gun and rocket attacks of fixed-wing aircraft as passes (BeginPlanned) in place of the
-// release at a waypoint. What a pass did is the bridge's to decide (it holds the truth): Step hands back each pass that
+// release at a waypoint. With opportunity.mode 2 (roadmap S4) a fixed-wing aircraft with bombs not owed to its target (its
+// own mission an armed reconnaissance or close support, or a load with no planned release) may dive-bomb what it found.
+// With mode 3 a load is owed to its flight's target wherever that lies, inside the session or beyond its circle
+// (RaidAircraft::primary; 06_OPPORTUNITY.md section 3.4: a planned strike keeps its weapons for its primary); under mode 2
+// a release beyond the circle left the load free. The dive-bombing is
+// one pass in a dive of opportunity.bomb_dive_deg, released at the slant that puts it at delivery.dive_release_m over the
+// ground (the MiG-27's dive delivery, mig27_book); the bridge throws the load and lands it where it falls.
+// What a pass did is the bridge's to decide (it holds the truth): Step hands back each pass that
 // opened fire, and the bridge answers with what was really hit (NoteResult); the pilots' claims are drawn from that.
 // Every draw is keyed (opportunity.hpp's OppDraw: the bridge's seed, the flight, the contact, the step).
 #pragma once
@@ -45,6 +52,7 @@ public:
         bool under_fire = false;
         bool moving = false;       // he believed it moving
         bool first_planned = false;  // the first planned pass of this aircraft: its load's release
+        bool bombs = false;          // a dive-bombing pass (roadmap S4): its load falls, the bridge lands it
     };
     // An in-flight report for the injector (the posts, NoteReport) and the debrief.
     struct Report {
@@ -56,11 +64,22 @@ public:
         double t_s = 0.0;
     };
 
+    // A controller's mark (roadmap S2): the FAC's designate, heard by the flight's leader on the air.
+    struct Designation {
+        std::size_t flight = 0;
+        Vec3 where;           // session ENU, on the ground
+        double radius_m = 0.0;
+        std::string by;
+        double t_s = 0.0;
+    };
+
     void Init(const RaidManifest& m, const AirWarData& d, unsigned seed) {
+        designations_.clear();
         m_ = &m;
         d_ = &d;
         seed_ = static_cast<std::uint64_t>(seed) * 0x9E3779B97F4A7C15ull + 0xB6ull;
         on_ = d.tuning.Get("opportunity.mode") >= 1.0 && !m.leaders.empty();
+        owed_beyond_ = d.tuning.Get("opportunity.mode") >= 3.0;
         flights_.assign(m.flight_ids.size(), FlightRun{});
         ac_.assign(m.aircraft.size(), AircraftRun{});
         for (std::size_t i = 0; i < m.aircraft.size(); ++i) {
@@ -89,6 +108,13 @@ public:
                     }
                 }
             }
+            // Bombs that fall (roadmap S4, opportunity.mode 2): one dive-bombing pass with its whole load.
+            if (d.tuning.Get("opportunity.mode") >= 2.0 && w != nullptr && IsFallingBomb(*w) && !a.helicopter && !a.missile &&
+                a.role != FlightRole::Recce && a.weapons > 0) {
+                ar.bombs = true;
+                ar.bomb_weapon = a.weapon;
+                ar.bomb_passes = 1;
+            }
         }
         for (std::size_t fi = 0; fi < flights_.size(); ++fi) {
             flights_[fi].next_s = OppDraw(seed_, fi, 0, 0, 0) * d.tuning.Get("opportunity.tick_s");
@@ -96,6 +122,31 @@ public:
     }
 
     bool On() const { return on_; }
+    // His own mission is to hunt (opportunity.hpp AbleToAttack's): his load is for what he finds.
+    static bool OwnHunt(MissionKind k) { return k == MissionKind::ArmedRecce || k == MissionKind::Cas || k == MissionKind::HeloRaid; }
+    // A load that falls from a dive: a bomb, a retarded bomb, a cluster bomb (not a guided or a runway weapon).
+    static bool IsFallingBomb(const WeaponDef& w) { return w.kind == "bomb" || w.kind == "retarded_bomb" || w.kind == "cluster"; }
+    // The dive-bombing pass (roadmap S4): its dive and the slant it releases at.
+    static GunPassDef BombPass(const TuningTable& tune) {
+        GunPassDef p;
+        p.present = true;
+        p.dive_deg = tune.Get("opportunity.bomb_dive_deg");
+        p.open_fire_m = tune.Get("delivery.dive_release_m") / std::max(0.1, std::sin(DegToRad(p.dive_deg)));
+        p.rounds = 0;
+        return p;
+    }
+    // A contact of `flight`'s within `radius_m` of `where` is designated for its chain (opportunity.hpp MayAttack: "designated
+    // by the controller").
+    void Designate(std::size_t flight, const Vec3& where, double radius_m, const std::string& by, double t_s) {
+        designations_.push_back({flight, where, radius_m, by, t_s});
+    }
+    bool Designated(std::size_t flight, const Vec3& at) const {
+        for (const Designation& d : designations_) {
+            if (d.flight == flight && Dist2d(d.where, at) <= d.radius_m) return true;
+        }
+        return false;
+    }
+    const std::vector<Designation>& Designations() const { return designations_; }
     // A fixed-wing aircraft whose planned load is a gun or rockets: its attack is flown as passes.
     bool PlannedPass(std::size_t i) const { return on_ && i < ac_.size() && ac_[i].planned_pass; }
     bool PlannedBegun(std::size_t i) const { return i < ac_.size() && ac_[i].planned_begun; }
@@ -199,9 +250,20 @@ private:
         bool believed_hit = false;
         bool recce = false;       // a recce pass: no fire
         int passes_planned = 0;
+        bool bombs = false;       // a load of bombs that fall (roadmap S4)
+        std::string bomb_weapon;
+        int bomb_passes = 0;      // 1 while the load is on
+        bool pass_bombs = false;  // the pass flown now is a dive-bombing one
     };
 
     std::uint64_t Flight(std::size_t aircraft) const { return static_cast<std::uint64_t>(std::max(0, m_->aircraft[aircraft].flight)); }
+    // Its load is fragged to its flight's target: one it releases in the session, or (mode 3) one beyond the circle.
+    bool Fragged(std::size_t i) const {
+        const RaidAircraft& a = m_->aircraft[i];
+        return a.has_release || (owed_beyond_ && a.primary);
+    }
+    // ... and not yet released: owed to that target (06 section 3.4), not to what he finds on the way.
+    bool Owed(std::size_t i) const { return Fragged(i) && i < released_.size() && !released_[i]; }
 
     // The leader's chain on his flight's picture.
     void Chain(ScenarioRunner& r, std::size_t fi) {
@@ -318,26 +380,28 @@ private:
         s.range_m = Dist2d(lpos, c.pos);
         s.moving = c.moving;
         s.fired_on = c.fired_on;
+        s.designated = Designated(fi, c.pos);
         s.depth_km = m.depth_km;
         s.free_hunt_zone = m.free_hunt;
         s.night = m.night;
-        bool due = false, gun = false, rockets = false;
+        bool due = false, gun = false, rockets = false, bombs = false;
         double release_m = 0.0;
         for (std::size_t i : members) {
             const RaidAircraft& a = m.aircraft[i];
             if (!r.TargetAlive(a.target_id)) continue;
             const AircraftRun& ar = ac_[i];
-            const bool owed = a.has_release && i < released_.size() && !released_[i];  // its load is for the target still
+            const bool owed = Owed(i);  // its load is for the target still
             due = due || owed;
             if (ar.left > 0 && ar.gun && (!ar.planned_pass || !owed)) gun = true;
             if (ar.left > 0 && ar.rockets && !owed) rockets = true;
+            if (ar.bombs && ar.bomb_passes > 0 && !(i < released_.size() && released_[i])) bombs = true;  // still on (S4)
             if (ar.left > 0) release_m = std::max(release_m, ar.pass.open_fire_m);
             if (const AircraftDamage* dm = r.TargetDamage(a.target_id)) s.damaged = s.damaged || (i == static_cast<std::size_t>(ref) && dm->level != DamageLevel::None);
         }
         s.primary_due = due;
         s.has_gun = gun;
         s.has_rockets = rockets;
-        s.has_bombs = false;  // a first form: bombs only on the planned target (the planned release)
+        s.has_bombs = bombs;  // roadmap S4: the chain weighs them against his target (AbleToAttack)
         const double span = std::max(600.0, m.end_s - la.appear_s);
         s.fuel_share = 1.0 - 0.6 * Clamp01((r.Time() - la.appear_s) / span);
         s.slot_slack_s = (due || la.role == FlightRole::Escort) ? tune.Get("opportunity.slot_slack_s") : 1e9;
@@ -403,10 +467,17 @@ private:
         for (std::size_t i : members) {
             AircraftRun& ar = ac_[i];
             if (!r.TargetAlive(m.aircraft[i].target_id) || ar.flying) continue;
-            if (!recce && (ar.left <= 0 || (!ar.gun && !ar.rockets))) continue;
-            if (!recce && ar.planned_pass && !ar.planned_begun && m.aircraft[i].has_release && ar.rockets) continue;  // rockets owed to the target
+            // His bombs (roadmap S4): if his gun and rockets have nothing for it, or the leader said attack, and the chain let
+            // them go on it (not owed to the target, or his own mission is to hunt).
+            const bool owed = Owed(i);
+            const bool bombs_free = ar.bombs && ar.bomb_passes > 0 && s.has_bombs && (!owed || !s.primary_due || OwnHunt(s.mission)) &&
+                                    !(i < released_.size() && released_[i]);
+            const bool use_bombs = !recce && bombs_free && (dec.act == OppAct::Attack || ar.left <= 0 || (!ar.gun && !ar.rockets));
+            if (!recce && !use_bombs && (ar.left <= 0 || (!ar.gun && !ar.rockets))) continue;
+            if (!recce && !use_bombs && ar.planned_pass && !ar.planned_begun && Fragged(i) && ar.rockets) continue;  // rockets owed to the target
             const double delay = place * d_->tuning.Get("opportunity.trail_m") / std::max(50.0, s.speed_mps);
             const double off = c.passes > 0 ? DegToRad(d_->tuning.Get("opportunity.reattack_heading_deg")) : 0.0;
+            ar.pass_bombs = use_bombs;
             StartPass(r, i, static_cast<int>(k), c.pos, off, delay);
             ar.recce = recce;
             ++place;
@@ -426,7 +497,9 @@ private:
         const Vec3 pos = r.TargetPosition(a.target_id);
         const Vec3 vel = r.TargetVelocity(a.target_id);
         const double run_in = heading_off != 0.0 ? tune.Get("opportunity.reattack_separation_m") : tune.Get("opportunity.run_in_m");
-        ar.ap.Begin(pos, vel, aim, ar.pass, run_in, tune.Get("opportunity.recover_m"), heading_off, r.Time(), delay_s);
+        if (contact < 0) ar.pass_bombs = false;  // a planned pass is his gun's or rockets'
+        ar.ap.Begin(pos, vel, aim, ar.pass_bombs ? BombPass(tune) : ar.pass, run_in, tune.Get("opportunity.recover_m"), heading_off, r.Time(),
+                    delay_s);
         ar.flying = true;
         ar.overriding = false;
         ar.contact = contact;
@@ -501,7 +574,7 @@ private:
         }
         if (c.record >= 0) records_[static_cast<std::size_t>(c.record)].act = OppActName(OppAct::Reattack);
         OppDecision dec;
-        dec.act = s.has_gun && !s.has_rockets ? OppAct::GunRun : OppAct::Attack;
+        dec.act = s.has_gun && !s.has_rockets && !s.has_bombs ? OppAct::GunRun : OppAct::Attack;
         dec.stopped = OppStep::Act;
         dec.why = "comes round again";
         Decide(r, fi, members, k, dec, s);
@@ -533,15 +606,22 @@ private:
         const Vec3 pos = r.TargetPosition(a.target_id);
         const Vec3 vel = r.TargetVelocity(a.target_id);
         const Vec3 aim_ground = r.GroundEnu(ar.aim.x, ar.aim.y);
-        const bool fire = ar.ap.Step(pos, vel, aim_ground, reached, t) && !ar.recce && ar.left > 0;
+        const bool fire = ar.ap.Step(pos, vel, aim_ground, reached, t) && !ar.recce && (ar.pass_bombs ? ar.bomb_passes > 0 : ar.left > 0);
         if (fire) {
-            --ar.left;
             Fire f;
+            if (ar.pass_bombs) {
+                --ar.bomb_passes;
+                f.bombs = true;
+                f.weapon = ar.bomb_weapon;
+                f.pass = BombPass(d_->tuning);
+            } else {
+                --ar.left;
+                f.weapon = ar.weapon;
+                f.pass = ar.pass;
+            }
             f.aircraft = i;
             f.contact = ar.contact;
             f.aim = aim_ground;
-            f.weapon = ar.weapon;
-            f.pass = ar.pass;
             f.moving = ar.contact >= 0 && contacts_[static_cast<std::size_t>(ar.contact)].moving;
             f.first_planned = ar.contact < 0 && !PlannedFired(i);
             if (f.first_planned) planned_fired_.push_back(i);
@@ -584,6 +664,7 @@ private:
     const AirWarData* d_ = nullptr;
     std::uint64_t seed_ = 0;
     bool on_ = false;
+    bool owed_beyond_ = false;  // opportunity.mode 3: a load fragged to a target beyond the circle is owed too
     std::vector<FlightRun> flights_;
     std::vector<AircraftRun> ac_;
     std::vector<Contact> contacts_;
@@ -593,6 +674,7 @@ private:
     std::vector<std::size_t> planned_fired_;
     int planned_claims_ = 0;
     int passes_ = 0;
+    std::vector<Designation> designations_;
 };
 
 }  // namespace airwar

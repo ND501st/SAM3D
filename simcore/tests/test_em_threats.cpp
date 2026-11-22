@@ -142,8 +142,8 @@ SC_TEST("em threats: with search bursts the transmitter radiates a fraction of t
 }
 
 SC_TEST("crew talk in a massed raid: each number read back once, one \"Ответа нет!\" an interrogation, the crew told of near targets; after the ARM the fight goes on") {
-    // The Pact's massed strike (18 aircraft at dusk, self-screening jammers, an ARM at the vehicle): the game's
-    // "Warsaw Pact 1", played by the NPC crew.
+    // The Pact's massed strike (21 aircraft at dusk, self-screening jammers), played by the NPC crew; the ARM at the
+    // vehicle from the Pact's DEAD raid (its strike packages carry none since the samples were regenerated, S8).
     auto r = Runner(ReadFile(kData + "/scenarios/air_war_pact_massed_strike.json"));
     SC_EXPECT(r != nullptr);
     if (r == nullptr) return;
@@ -169,9 +169,15 @@ SC_TEST("crew talk in a massed raid: each number read back once, one \"Отве�
     SC_EXPECT(count("Не могу: cancelled!") == 0 && count("Не могу: superseded!") == 0);
     SC_EXPECT(count("Не могу: soc.hv!") == 0);  // the burst's unspoken "transmitter on", refused with the search stopped
     // The ARM came, radiation went off, and the crew took targets again after it.
-    const std::size_t arm = d.find("radiation off against the ARM");
+    auto dead = Runner(ReadFile(kData + "/scenarios/air_war_pact_dead.json"));
+    SC_EXPECT(dead != nullptr);
+    if (dead == nullptr) return;
+    while (!dead->Finished() && dead->Time() < 1100.0) dead->Step(0.1);
+    const std::string dd = dead->Debrief();
+    std::printf("    the DEAD raid: ARM %s\n", Has(dd, "Пуск ПРР") ? "yes" : "no");
+    const std::size_t arm = dd.find("radiation off against the ARM");
     SC_EXPECT(arm != std::string::npos);
-    if (arm != std::string::npos) SC_EXPECT(d.find("started    ready_capture", arm) != std::string::npos);
+    if (arm != std::string::npos) SC_EXPECT(dd.find("started    ready_capture", arm) != std::string::npos);
     (void)said;
 }
 

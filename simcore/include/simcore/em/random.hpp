@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <string>
 
 #include "simcore/vec3.hpp"
 
@@ -102,6 +103,13 @@ private:
 // Ids are ints in the sim; widen them for hashing without sign surprises.
 inline std::uint64_t Key(int v) { return static_cast<std::uint64_t>(static_cast<std::uint32_t>(v)); }
 inline std::uint64_t Key(long long v) { return static_cast<std::uint64_t>(v); }
+// A string's key for the draws, the same on every compiler and standard library (FNV-1a, then mixed). Never std::hash for
+// a draw: it differs between MSVC's, libstdc++'s and libc++'s, and replays must agree across the three (CI builds them all).
+inline std::uint64_t StringKey(const std::string& s) {
+    std::uint64_t h = 1469598103934665603ull;
+    for (char ch : s) h = (h ^ static_cast<unsigned char>(ch)) * 1099511628211ull;
+    return Mix64(h);
+}
 
 }  // namespace em
 }  // namespace simcore

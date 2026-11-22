@@ -29,6 +29,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <string>
 #include <utility>
@@ -50,6 +51,9 @@ struct EmJammerDef {
     Vec3 position;          // stand-off position (ENU)
     double on_at_s = 0.0;
     double off_at_s = -1.0;  // < 0: stays on
+    // Emission discipline (roadmap S5, 10_FACTIONS.md §7.1): a self-screening jammer held off until its carrier's warning
+    // receiver shows it locked on or fired at (the runner tells the link: Painted), then on from its time.
+    bool until_painted = false;
 };
 
 // A scripted chaff drop: a cloud at the target's position at a time.
@@ -367,6 +371,11 @@ public:
         }
         return false;
     }
+    // Its warning receiver showed it locked on or fired at (roadmap S5): a jammer held for that comes on from its time.
+    void Painted(const std::string& target_id) {
+        if (!target_id.empty()) painted_.insert(target_id);
+    }
+    bool WasPainted(const std::string& target_id) const { return painted_.count(target_id) != 0; }
     // Is its jammer radiating now (by the scenario's times or the instructor's switch)?
     bool TargetJamming(const std::string& target_id) const {
         for (std::size_t i = 0; i < effects_.jammers.size(); ++i) {
@@ -380,8 +389,9 @@ public:
 
     // A target as it is now. Added on first sight; once not alive it stops echoing.
     // `iff_code`: the code its transponder is set to now (roadmap B10; 0 the default the interrogator asks on).
+    // `transponder`: an enemy with our IFF system that answers on its code (S1: the false friend); its side stays the enemy's.
     void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly,
-                    int iff_code = 0) {
+                    int iff_code = 0, bool transponder = false) {
 
         int pid = PlatformOf(id);
         if (pid == 0) {
@@ -391,7 +401,7 @@ public:
             p.side = friendly ? em::Side::Red : em::Side::Blue;
             p.kind = em::PlatformKind::FixedWing;
             p.rcs = em::RcsModel{rcs_m2, rcs_m2, rcs_m2};  // one number in the scenario file: the same from every aspect
-            p.iff_reply = friendly;
+            p.iff_reply = friendly || transponder;
             p.position = position;
             p.velocity = velocity;
             pid = world_.AddPlatform(p);
@@ -789,6 +799,17 @@ public:
             es->intercepts.clear();
         }
     }
+    // The receivers' bound on a beam that cannot reach them (roadmap S7, em/esm_system.hpp RunEsmSite).
+    void SetEsmSidelobeBound(bool on) { world_.Scene().esm_sidelobe_bound = on; }
+    // A tracking emitter in the air holds this target (roadmap S7: a wingman at A1 locked up alone is lent no receiver).
+    bool TrackedBy(const std::string& target_id) const {
+        const auto it = platform_of_.find(target_id);
+        if (it == platform_of_.end() || it->second == 0) return false;
+        for (const em::EmitterState& e : world_.Scene().emitters) {
+            if (e.InAir() && e.track_target_platform == it->second) return true;
+        }
+        return false;
+    }
     bool RwrOn(const std::string& target_id) const {
         const Rwr* r = RwrOf(target_id);
         if (r == nullptr || r->esm == 0) return false;
@@ -828,6 +849,55 @@ public:
     }
     // A pilot's own chaff (roadmap B4, reaction_chain.hpp): a cloud where the target is now, drifting on the wind. False
     // if the target is not in the EM world.
+    // ---- A fighter's radar as an emitter on its platform (roadmap S3, the air fight's): its library's RadarDef
+    // `radar_def` (merged in with MergeLibrary), `state` 0 off, 1 searching its sector about the nose, 2 locked on
+    // `locked_id` (a steady track pointed at it each step by PointFighterRadars: the target's warning receiver hears a lock).
+    bool SetFighterRadar(const std::string& id, const std::string& radar_def, int state, const std::string& locked_id) {
+        if (!Ok()) return false;
+        const int pid = PlatformOf(id);
+        if (pid == 0) return false;
+        auto it = fighter_radars_.find(id);
+        if (it == fighter_radars_.end()) {
+            if (state == 0) return true;
+            const int ri = world_.Scene().lib.Radar(radar_def);
+            if (ri < 0) return false;
+            const int eid = world_.AddEmitter(pid, world_.Scene().lib.radars[static_cast<std::size_t>(ri)].emitter);
+            if (eid == 0) return false;
+            it = fighter_radars_.emplace(id, FighterRadar{eid, 0}).first;
+        }
+        em::EmitterState* e = world_.Scene().FindEmitter(it->second.emitter);
+        if (e == nullptr) return false;
+        const bool was = e->InAir();
+        e->radiating = state >= 1;
+        e->dummy_load = false;
+        e->def.scan = state == 2 ? em::ScanKind::Tracking : em::ScanKind::Sector;
+        it->second.locked = state == 2 ? PlatformOf(locked_id) : 0;
+        e->track_target_platform = it->second.locked;
+        if (e->InAir() && !was) e->on_since_s = world_.Time();
+        PointFighterRadars();
+        return true;
+    }
+    // Each locked fighter radar pointed at its target now (called every step).
+    void PointFighterRadars() {
+        if (!Ok()) return;
+        for (const auto& kv : fighter_radars_) {
+            if (kv.second.locked == 0) continue;
+            em::EmitterState* e = world_.Scene().FindEmitter(kv.second.emitter);
+            const em::Platform* me = world_.Scene().FindPlatform(PlatformOf(kv.first));
+            const em::Platform* at = world_.Scene().FindPlatform(kv.second.locked);
+            if (e == nullptr || me == nullptr || at == nullptr || !e->radiating) continue;
+            const Vec3 d = at->position - me->position;
+            if (d.LengthSquared() < 1.0) continue;
+            e->pointing_az_rad = AzimuthOf(d);
+            e->pointing_el_rad = ElevationOf(d);
+        }
+    }
+    // A fighter radar's emitter (0: none made): tests.
+    int FighterRadarEmitter(const std::string& id) const {
+        const auto it = fighter_radars_.find(id);
+        return it == fighter_radars_.end() ? 0 : it->second.emitter;
+    }
+
     bool DropChaff(const std::string& target_id, double rcs_m2, double lifetime_s) {
         const int pid = PlatformOf(target_id);
         const em::Platform* p = pid != 0 ? world_.Scene().FindPlatform(pid) : nullptr;
@@ -1169,6 +1239,7 @@ private:
             em::JammerState* js = world_.Scene().FindJammer(jammer_ids_[i]);
             if (js == nullptr) continue;
             bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            if (j.until_painted && painted_.count(j.target_id) == 0) on = false;  // S5: held until it is needed
             const auto sw = j.target_id.empty() ? jam_switch_.end() : jam_switch_.find(j.target_id);
             if (sw != jam_switch_.end()) on = sw->second;  // the instructor's switch
             if (on != js->on) {
@@ -1361,6 +1432,7 @@ private:
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
     std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
     std::map<std::string, bool> jam_switch_;             // target id -> the instructor's jammer switch
+    std::set<std::string> painted_;                      // targets whose receivers showed a lock or a launch (S5)
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {
@@ -1372,6 +1444,11 @@ private:
     std::vector<Rwr> rwrs_;
     std::unordered_map<std::string, std::size_t> rwr_of_;   // a target's receiver (index into rwrs_)
     std::unordered_map<std::string, int> platform_of_;      // a target's EM platform (targets_ as a map)
+    struct FighterRadar {
+        int emitter = 0;
+        int locked = 0;  // the platform it tracks (0: searching or off)
+    };
+    std::map<std::string, FighterRadar> fighter_radars_;    // roadmap S3: the air fight's radars by target id
     Rwr* RwrOf(const std::string& target_id) {
         const auto it = rwr_of_.find(target_id);
         return it == rwr_of_.end() ? nullptr : &rwrs_[it->second];

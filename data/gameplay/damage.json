@@ -27,7 +27,16 @@
     "missile_near_burst": { "value": 0.5, "source": "game value: a missile that missed bursting near enough to strike", "confidence": "estimate" },
     "missile_near_min_m": { "value": 15, "source": "game value", "confidence": "estimate" },
     "missile_near_max_m": { "value": 60, "source": "game value", "confidence": "estimate" },
-    "missile_fragments_per_kg": { "value": 50, "source": "estimate: a fragmentation warhead's lethal fragments per kg of its charge", "confidence": "estimate" }
+    "missile_fragments_per_kg": { "value": 50, "source": "estimate: a fragmentation warhead's lethal fragments per kg of its charge", "confidence": "estimate" },
+    "moderate_g_factor": { "value": 0.8, "source": "game value (roadmap S4): a moderately damaged aircraft is flown more gently, its g limit 80% of its type's (docs/DAMAGE.md section on what damage leaves)", "confidence": "estimate" },
+    "heavy_g_factor": { "value": 0.5, "source": "game value (roadmap S4): a heavily damaged aircraft is nursed home, half its type's g limit", "confidence": "estimate" },
+    "moderate_thrust_factor": { "value": 0.9, "source": "game value (roadmap S4): moderate damage costs a tenth of the engine's thrust and the drag of holes and lost panels", "confidence": "estimate" },
+    "heavy_thrust_factor": { "value": 0.6, "source": "game value (roadmap S4): heavy damage (an engine hit, a fire) costs about 40% of the thrust", "confidence": "estimate" },
+    "moderate_fuel_leak": { "value": 0.15, "source": "game value (roadmap S4): a moderate hit that holes the fuel system", "confidence": "estimate" },
+    "heavy_fuel_leak": { "value": 0.35, "source": "game value (roadmap S4): a heavy hit that holes the fuel system", "confidence": "estimate" },
+    "fuel_leak_min_s": { "value": 300, "source": "game value (roadmap S4): a holed aircraft's fuel left, 5 to 20 minutes, about the A and B kills of affdl_tr_77_115 (down 5-50 and over 50 nm after the hit)", "confidence": "estimate" },
+    "fuel_leak_max_s": { "value": 1200, "source": "game value (roadmap S4)", "confidence": "estimate" },
+    "escort_share": { "value": 0.5, "source": "game value (roadmap S4): a wingman sent home with a damaged aircraft half the time (a buddy escort was the practice where the flight could spare one: docs/DAMAGE.md)", "confidence": "estimate" }
   },
   "round_hits": [
     { "calibre_mm": { "value": 23, "source": "derived: data/scenery/munitions.json shell_23_zsu234", "confidence": "high" },

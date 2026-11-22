@@ -84,7 +84,40 @@ struct DamageTable {
     double missile_near_min_m = 15.0;
     double missile_near_max_m = 60.0;
     double missile_fragments_per_kg = 50.0;  // a missile warhead's lethal fragments per kg of its charge
+    // What the damage leaves him able to do (roadmap S4; optional keys, 1 and 0 when absent: as before): his g limit and
+    // his engine's thrust times these at moderate and heavy damage (DamagedLimits); a moderate or heavy hit holes his
+    // fuel this share of the time, and then he has fuel_leak_min_s..max_s left (it crashes then if still flying in the
+    // session); a damaged aircraft turning for home has a wingman sent with it as escort escort_share of the time.
+    double moderate_g_factor = 1.0;
+    double heavy_g_factor = 1.0;
+    double moderate_thrust_factor = 1.0;
+    double heavy_thrust_factor = 1.0;
+    double moderate_fuel_leak = 0.0;
+    double heavy_fuel_leak = 0.0;
+    double fuel_leak_min_s = 300.0;
+    double fuel_leak_max_s = 1200.0;
+    double escort_share = 0.0;
 };
+
+// The limits a damaged aircraft flies by (roadmap S4): its g limit and thrust (and with the thrust its top speed, the drag
+// rising with the square of the speed) at its level, from its type's undamaged ones.
+struct DamagedLimitsOut {
+    double g = 1.0;       // times the g limit (and the turn rates)
+    double thrust = 1.0;  // times the acceleration
+    double top = 1.0;     // times the top speed: sqrt(thrust)
+};
+inline DamagedLimitsOut DamagedLimits(const DamageTable& t, DamageLevel level) {
+    DamagedLimitsOut o;
+    if (level == DamageLevel::Moderate) {
+        o.g = t.moderate_g_factor;
+        o.thrust = t.moderate_thrust_factor;
+    } else if (level == DamageLevel::Heavy) {
+        o.g = t.heavy_g_factor;
+        o.thrust = t.heavy_thrust_factor;
+    }
+    o.top = std::sqrt(std::max(0.0, o.thrust));
+    return o;
+}
 
 // One burst's or hits' strikes on an aircraft.
 struct DamageDraw {
@@ -107,6 +140,7 @@ struct AircraftDamage {
     bool jettison = false;   // it has thrown off its tanks and its load
     bool abort = false;      // it has abandoned its mission and turns for home
     double crash_at_s = -1.0;  // heavily damaged and going down then (-1: not)
+    bool fuel_leak = false;  // its tanks holed (roadmap S4): it falls at crash_at_s if still flying
     std::string by;          // who did the damage that counts most (the last that raised its level)
 };
 
@@ -348,7 +382,9 @@ public:
                                              "blast_heavy_m", "area_per_size2", "lights_per_moderate", "moderates_per_heavy",
                                              "critical_destroys", "heavy_crash", "crash_min_s", "crash_max_s", "heavy_fire", "heavy_jettison",
                                              "moderate_smoke", "moderate_jettison", "moderate_abort", "missile_heavy_share",
-                                             "missile_near_burst", "missile_near_min_m", "missile_near_max_m", "missile_fragments_per_kg"};
+                                             "missile_near_burst", "missile_near_min_m", "missile_near_max_m", "missile_fragments_per_kg",
+                                             "moderate_g_factor", "heavy_g_factor", "moderate_thrust_factor", "heavy_thrust_factor",
+                                             "moderate_fuel_leak", "heavy_fuel_leak", "fuel_leak_min_s", "fuel_leak_max_s", "escort_share"};
         for (const std::string& k : v->keys) {
             bool known = false;
             for (const char* n : kNames) known = known || k == n;
@@ -382,6 +418,21 @@ public:
                                                        std::make_pair("missile_near_burst", out.missile_near_burst)}) {
             if (c.second > 1.0) return Fail(Join("values", c.first), "a chance (with fragment_serious, at most 1)");
         }
+        // Roadmap S4's, each optional (a table without them flies its damaged aircraft as before).
+        for (const std::pair<const char*, double*> o :
+             {std::make_pair("moderate_g_factor", &out.moderate_g_factor), std::make_pair("heavy_g_factor", &out.heavy_g_factor),
+              std::make_pair("moderate_thrust_factor", &out.moderate_thrust_factor), std::make_pair("heavy_thrust_factor", &out.heavy_thrust_factor),
+              std::make_pair("moderate_fuel_leak", &out.moderate_fuel_leak), std::make_pair("heavy_fuel_leak", &out.heavy_fuel_leak),
+              std::make_pair("escort_share", &out.escort_share)}) {
+            if (v->Find(o.first) == nullptr) continue;
+            if (!Values(*v, "values", {{o.first, o.second}})) return false;
+            if (*o.second > 1.0) return Fail(Join("values", o.first), "a share (at most 1)");
+        }
+        for (const std::pair<const char*, double*> o : {std::make_pair("fuel_leak_min_s", &out.fuel_leak_min_s), std::make_pair("fuel_leak_max_s", &out.fuel_leak_max_s)}) {
+            if (v->Find(o.first) != nullptr && !Values(*v, "values", {{o.first, o.second}}, true)) return false;
+        }
+        if (out.fuel_leak_max_s < out.fuel_leak_min_s) return Fail("values.fuel_leak_max_s", "at least fuel_leak_min_s");
+        if (out.heavy_g_factor <= 0.0 || out.moderate_g_factor <= 0.0) return Fail("values", "a g factor > 0");
         if (lights != std::floor(lights) || moderates != std::floor(moderates)) return Fail("values", "lights_per_moderate and moderates_per_heavy are counts");
         out.lights_per_moderate = static_cast<int>(lights);
         out.moderates_per_heavy = static_cast<int>(moderates);

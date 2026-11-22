@@ -43,7 +43,11 @@ keys, each `{"value", "range", "source", "confidence"}` with `by_role` and `when
 on-call sorties, take-off times, shifts, an airborne pool, a `phase_scale`), `retask_air` (`delay_s`, `never`),
 `authority` (`beyond_task`, `free_hunt_from_phase` and `free_hunt_depth_km`, `retask_by` and `retask_kinds`, which must
 agree with the `"c2"` block's authority table, `recall_only`, `leader_may`) and `on_control_lost` (must equal the
-doctrine's). The loader refuses an unknown key, a missing source and a value outside its range. A package template's
+doctrine's), and `pilots` (roadmap S5, section 13 there: `hours_per_year` a pilot flies in peace and `start_sorties`
+he has when the war starts, with source and confidence; they make his currency and experience). The loader refuses an
+unknown key, a missing source and a value outside its range. Since S5 (`hot_phase.mode` 2) a played flight reads every
+key (10_FACTIONS.md section 13 says how). A quirk's `tier_weight_mode1` in `traits.json` is the weight a save made before
+S5 keeps. A package template's
 `medium_below_iads` (NATO's strike, close support and armed reconnaissance: 0.45) offers medium altitude only once the
 believed working defences are below it, and a phase's `apportion_mode0` is the shares an old save keeps (NATO's first
 phase, B11). The switch is the `"hot_phase"` group of `data/gameplay/air_war.json`.

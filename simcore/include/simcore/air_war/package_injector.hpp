@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -176,6 +177,13 @@ inline InjectedPackage InjectPackage(ScenarioRunner& r, const RaidScenario& rs, 
 // enemy's posts as their in-flight reports (AirCampaign::NoteReport), said on the flight's net where the session has the
 // enemy's radio; and the session's flights take orders from those posts only by the faction's authority table
 // (package_control.hpp).
+//
+// Roadmap S2 (c2.live_mode 1): the campaign's posts speak in the session (their nets on the enemy's radio, our jammers on
+// the nets of the posts our side jams); their decisions on a raid the session flies (divert, retarget, recall, a hunter
+// warned) reach its flights as calls on the air at the hour they were decided, taken only if the leader hears them; an
+// on-call package the posts launch meanwhile enters the session too; and a close support flight near its FAC asks for
+// the mark: heard, its contacts there are designated for its opportunity chain; not heard (jammed, the FAC gone), it
+// attacks on its plan, holds and goes home, or goes home, by its faction's clearance rule.
 class LivePackages {
 public:
     struct Played {
@@ -189,6 +197,24 @@ public:
         int reports = 0;                   // its pilots' sightings sent to the posts
         std::vector<int> release_flights;  // its flights whose release point was in the session (indices into its flights)
         PackageOutcome outcome;            // as handed back to the campaign (once out)
+        // Roadmap S2.
+        int orders = 0;                    // the posts' orders said to its flights
+        int orders_unheard = 0;            // ... and not heard by the leader
+        int marks = 0;                     // its FAC's marks heard
+        int marks_unheard = 0;             // its FAC's calls not heard
+        int holds = 0;                     // flights held for the clearance
+        int aborts = 0;                    // flights gone home without it
+    };
+    // A post's order as the session gave it (roadmap S2).
+    struct OrderNote {
+        int order = 0;
+        int package_id = -1;
+        std::string flight;
+        std::string kind;
+        std::string by;
+        double t_s = 0.0;
+        bool heard = false;
+        std::string why;
     };
 
     // `h_at_zero`: the campaign's hour at the session's t = 0.
@@ -204,6 +230,10 @@ public:
             } else {
                 ++k;
             }
+        }
+        Orders(r);
+        for (Live& l : live_) {
+            if (!l.landing) FacMarks(r, l);
         }
         if (r.Time() < next_s_ - 1e-9) return;
         next_s_ = r.Time() + every_s_;
@@ -228,7 +258,9 @@ public:
             JamTheBatteryNet(r, *c_->PlayerMission());
             c_->TakePlayerMission();  // flown here; the campaign goes on
             Authority(r);
+            PostsOnAir(r);
             Live l;
+            l.package_id = id;
             l.bridge = std::make_unique<MissionBridge>(inj.manifest, c_->Data(), r.Def().seed ^ static_cast<unsigned>(id));
             l.played = played_.size();
             Played pl;
@@ -268,12 +300,22 @@ public:
         o.reported_targets = static_cast<int>(rep.targets.size());
     }
     const std::vector<Played>& PlayedPackages() const { return played_; }
+    const std::vector<OrderNote>& OrdersGiven() const { return order_notes_; }  // the posts' orders said in the session (S2)
     const std::vector<std::string>& Notes() const { return notes_; }  // packages that could not come in, gear left out
     double HourOf(double t_s) const { return h0_ + t_s / 3600.0; }
 
 private:
+    // A close support flight's FAC call (roadmap S2).
+    struct FacCall {
+        bool done = false;
+        bool holding = false;
+        double next_s = 0.0;
+        double hold_until_s = 0.0;
+    };
     struct Live {
         std::unique_ptr<MissionBridge> bridge;
+        int package_id = -1;
+        std::map<std::size_t, FacCall> fac;  // by flight
         bool landing = false;      // the package is over; its loads still falling land before it is handed back
         std::size_t played = 0;    // index into played_
         std::size_t sighted = 0;   // its bridge's sightings already sent
@@ -398,6 +440,221 @@ private:
         }
     }
 
+    // ---- roadmap S2
+
+    // The flight's leader heard call `call` (no radio in the session, or a call not modelled: he did).
+    static bool Hears(ScenarioRunner& r, int call, const std::string& flight) {
+        AirRadio* radio = r.AirRadio();
+        if (radio == nullptr || call == FlightRadio::kNoModel) return true;
+        const FlightState* f = r.Flight(flight);
+        const int fi = r.AllFlights().Index(flight);
+        if (f == nullptr || fi < 0 || f->leader_slot < 0) return false;
+        return radio->Reaches(call, fi, f->leader_slot, r.Time(), 0.0) >= 0.0;
+    }
+    Live* LiveOf(int package_id) {
+        for (Live& l : live_) {
+            if (l.package_id == package_id && !l.landing) return &l;
+        }
+        return nullptr;
+    }
+
+    // The campaign's posts on the session's enemy radio, each on a net of its own above the flights' (once, as the first
+    // raid comes in); and our jammers on the nets of the posts our side marked for jamming, where our side's jammers stand.
+    void PostsOnAir(ScenarioRunner& r) {
+        if (posts_on_air_) return;
+        AirRadio* radio = r.AirRadio();
+        if (radio == nullptr || !c_->C2().LiveOn()) return;
+        posts_on_air_ = true;
+        const LocalFrame session(r.Def().origin), theatre(c_->Data().theatre.origin);
+        const AirRadioDef& def = radio->Def();
+        int k = 0;
+        for (const C2PostState& p : c_->C2().Posts()) {
+            ++k;
+            if (p.kind == "squadron") continue;
+            AirRadioPostDef pd;
+            pd.id = p.id;
+            pd.name = p.id;
+            pd.kind = p.kind == "fac" ? "fac" : p.kind == "airborne_warning" ? "awacs" : p.kind == "radar_control" ? "crc" : "gci";
+            pd.at = MoveFrame(theatre, session, p.at);
+            pd.at.z = 0.0;
+            // Its antenna: an airborne post on its orbit, a FAC's set at his post, a ground post's mast (game values).
+            pd.mast_m = p.kind == "airborne_warning" ? 9000.0 : p.kind == "fac" ? 3.0 : 15.0;
+            pd.freq_hz = def.freq_hz + def.channel_hz * (200.0 + k);
+            std::string e;
+            if (!radio->AddSpeakerPost(pd, &e)) notes_.push_back("post " + p.id + " is not on the air: " + e);
+        }
+        const Vec3 battery = c_->BatteryTrack().empty() ? Vec3() : c_->BatteryTrack().back().second;
+        const auto jammers = c_->C2().OurJammers(battery);
+        for (const C2PostState& p : c_->C2().Posts()) {
+            if (c_->C2().Marked(p) != "jam" || !radio->HasPost(p.id)) continue;
+            const double f = radio->PostFreqHz(p.id);
+            for (const auto& j : jammers) {
+                if (j.first->em_jammer.empty() || !j.first->Covers(f)) continue;
+                Vec3 at = MoveFrame(theatre, session, j.second);
+                at.z = 0.0;
+                if (radio->JamPostNet(p.id, j.first->em_jammer, at) != 0) {
+                    notes_.push_back("our " + j.first->name + " on the net of " + p.id);
+                } else {
+                    notes_.push_back("our " + j.first->name + " is not in the radio's library: " + p.id + "'s net not jammed");
+                }
+            }
+        }
+    }
+
+    // The posts' orders on a raid the session flies, each said at the hour it was decided (AirC2's session orders).
+    void Orders(ScenarioRunner& r) {
+        for (const C2SessionOrder& o : c_->TakeSessionOrders()) orders_.push_back(o);
+        for (std::size_t k = 0; k < orders_.size();) {
+            if ((orders_[k].at_h - h0_) * 3600.0 > r.Time() + 1e-9) {
+                ++k;
+                continue;
+            }
+            Give(r, orders_[k]);
+            orders_.erase(orders_.begin() + static_cast<std::ptrdiff_t>(k));
+        }
+    }
+    void Give(ScenarioRunner& r, const C2SessionOrder& o) {
+        Live* l = LiveOf(o.package_id);
+        if (l == nullptr) return;  // over in the session already
+        const RaidManifest& m = l->bridge->Manifest();
+        Played& pl = played_[l->played];
+        AirRadio* radio = r.AirRadio();
+        const LocalFrame session(r.Def().origin), theatre(c_->Data().theatre.origin);
+        Vec3 at = MoveFrame(theatre, session, o.where);
+        at.z = 0.0;
+        for (std::size_t fi = 0; fi < m.flight_ids.size(); ++fi) {
+            if (o.flight >= 0 && static_cast<int>(fi) != o.flight) continue;
+            const std::string& id = m.flight_ids[fi];
+            if (id.empty() || r.Flight(id) == nullptr) continue;
+            OrderNote n;
+            n.order = o.id;
+            n.package_id = o.package_id;
+            n.flight = id;
+            n.kind = o.kind;
+            n.t_s = r.Time();
+            std::string why;
+            if (o.kind == "hunt") {
+                // A hunter warned: the post's threat call, and if his leader hears it, his own leave takes him there.
+                n.by = "leader";
+                const int call = radio != nullptr ? radio->SayFrom(o.speaker, CallKind::ThreatCall, id, "SAM launch reported there", r.Time(), true, at)
+                                                  : FlightRadio::kNoModel;
+                n.heard = Hears(r, call, id);
+                if (n.heard) {
+                    RouteLeg leg;
+                    leg.to = at;
+                    leg.tag = "target";
+                    n.heard = l->bridge->Reroute(r, id, {leg}, at, "leader", &why);
+                }
+            } else {
+                n.by = o.by;
+                const bool by_radio = radio != nullptr && radio->HasPost(o.by);
+                if (o.kind == "recall") {
+                    FlightOrder fo;
+                    fo.kind = OrderKind::ReturnHome;
+                    fo.by = o.by;
+                    fo.by_radio = by_radio;
+                    n.heard = r.OrderFlight(id, fo, &why);
+                    if (n.heard) {
+                        const FlightState* fs = r.Flight(id);
+                        n.heard = fs != nullptr && !fs->orders.empty() && fs->orders.back().heard;
+                    }
+                } else {  // divert or retarget: a new route to the place, its weapons for it
+                    RouteLeg leg;
+                    leg.to = at;
+                    leg.tag = "target";
+                    n.heard = l->bridge->Reroute(r, id, {leg}, at, o.by, &why, by_radio);
+                }
+            }
+            n.why = why;
+            ++pl.orders;
+            if (!n.heard) ++pl.orders_unheard;
+            order_notes_.push_back(n);
+        }
+    }
+
+    // A close support flight near its FAC asks for the mark (05 section 4.3; tradoc_jaat_1983): the FAC's latest sighting
+    // of the target, said on his net. Heard: the flight's contacts there are designated. Not heard (jammed out, the FAC
+    // gone): by the faction's clearance rule, it attacks on its plan, holds asking again and then goes home, or goes home.
+    void FacMarks(ScenarioRunner& r, Live& l) {
+        if (!c_->C2().LiveOn()) return;
+        Played& pl = played_[l.played];
+        const Package* p = c_->PackageById(pl.package_id);
+        if (p == nullptr || (p->kind != MissionKind::Cas && p->kind != MissionKind::HeloRaid) || p->target_object.empty()) return;
+        const double now_h = HourOf(r.Time());
+        const FacSighting* best = nullptr;
+        for (const FacSighting& s : c_->C2().Sightings()) {
+            if (s.object_id != p->target_object || s.observed_h > now_h) continue;
+            if (best == nullptr || s.observed_h > best->observed_h) best = &s;
+        }
+        if (best == nullptr) return;  // no FAC has them: the plan's aim
+        const C2PostState& fac = c_->C2().Posts()[static_cast<std::size_t>(best->post)];
+        const LocalFrame session(r.Def().origin), theatre(c_->Data().theatre.origin);
+        const Vec3 fac_at = MoveFrame(theatre, session, fac.at);
+        Vec3 mark = MoveFrame(theatre, session, best->pos);
+        mark.z = 0.0;
+        const C2ClearanceDef& clr = c_->Data().faction.c2.clearance;
+        const bool needs = clr.set && clr.Covers(C2MissionOf(*p, c_->Data()));
+        const RaidManifest& m = l.bridge->Manifest();
+        AirRadio* radio = r.AirRadio();
+        for (std::size_t fi = 0; fi < m.flight_ids.size() && fi < p->flights.size(); ++fi) {
+            const Flight& fl = p->flights[fi];
+            if (fl.aim_key != p->target_key || (fl.role != FlightRole::Strike && fl.role != FlightRole::Helicopter)) continue;
+            const std::string& id = m.flight_ids[fi];
+            const FlightState* f = id.empty() ? nullptr : r.Flight(id);
+            const FlightSlot* lead = f != nullptr ? f->Leader() : nullptr;
+            if (lead == nullptr || lead->target < 0 || static_cast<std::size_t>(lead->target) >= r.Def().targets.size()) continue;
+            FacCall& st = l.fac[fi];
+            if (st.done || r.Time() < st.next_s) continue;
+            const Vec3 at = r.TargetPosition(r.Def().targets[static_cast<std::size_t>(lead->target)].id);
+            if (Dist2d(at, fac_at) > c_->Data().tuning.Get("c2.fac_contact_m")) continue;
+            const int call = fac.alive && radio != nullptr && radio->HasPost(fac.id)
+                                 ? radio->SayFrom(fac.id, CallKind::Divert, id, "cleared hot, the target where I see it", r.Time(), true, mark)
+                                 : (fac.alive ? FlightRadio::kNoModel : FlightRadio::kDropped);
+            const bool heard = call != FlightRadio::kDropped && Hears(r, call, id);
+            if (heard) {
+                l.bridge->Designate(fi, mark, std::max(500.0, 3.0 * best->sigma_m), fac.id, r.Time());
+                ++pl.marks;
+                st.done = true;
+                if (st.holding) {  // back to his route for the attack
+                    FlightOrder fo;
+                    fo.kind = OrderKind::FollowRoute;
+                    fo.by = "leader";
+                    r.OrderFlight(id, fo);
+                }
+                continue;
+            }
+            ++pl.marks_unheard;
+            st.next_s = r.Time() + 60.0;  // asks again in a minute
+            if (!needs || clr.on_jammed == "attack") {
+                st.done = true;
+                continue;
+            }
+            if (clr.on_jammed == "hold_then_abort" && !st.holding) {
+                st.holding = true;
+                const double u = OppDraw(r.Def().seed, fi, 0xFAC00000ull + static_cast<std::uint64_t>(pl.package_id), 0xC1EAull, 1);
+                st.hold_until_s = r.Time() + clr.hold_s.lo + (clr.hold_s.hi - clr.hold_s.lo) * u;
+                FlightOrder fo;
+                fo.kind = OrderKind::Hold;
+                fo.by = "leader";
+                fo.until_s = st.hold_until_s + 90.0;  // past the last ask
+                r.OrderFlight(id, fo);
+                ++pl.holds;
+                continue;
+            }
+            if (clr.on_jammed == "abort" || r.Time() >= st.hold_until_s) {
+                FlightOrder fo;
+                fo.kind = OrderKind::ReturnHome;
+                fo.by = "leader";
+                r.OrderFlight(id, fo);
+                ++pl.aborts;
+                st.done = true;
+            }
+        }
+    }
+
+    bool posts_on_air_ = false;
+    std::vector<C2SessionOrder> orders_;  // decided, not yet said
+    std::vector<OrderNote> order_notes_;
     HeardSource heard_source_;
     AirCampaign* c_;
     std::string data_dir_;

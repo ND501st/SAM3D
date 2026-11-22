@@ -358,7 +358,7 @@ inline OppDecision RunChain(const OpportunityRulesDef& rules, const OppSituation
     d.stopped = OppStep::Act;
     d.share = ActShare(rules, s, l, tune);
     if (OppDraw(seed, flight, contact, 3, 0) < d.share) {
-        d.act = s.has_gun && !s.has_rockets ? OppAct::GunRun : OppAct::Attack;
+        d.act = s.has_gun && !s.has_rockets && !s.has_bombs ? OppAct::GunRun : OppAct::Attack;  // bombs: an attack (S4)
         d.why = rule;
         return d;
     }

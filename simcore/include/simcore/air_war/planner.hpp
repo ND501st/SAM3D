@@ -281,6 +281,17 @@ inline Weaponeering Weaponeer(const AirWarData& d, const AircraftType& a, Target
     return best;
 }
 
+// A target in the battlefield interdiction area learned during the war waits for the corps' nomination cycle: it is
+// flown no sooner than the faction's nomination_h after the enemy learned of it (gallant_knight_1983: 48 h for NATO's BAI;
+// roadmap S2, c2.live_mode 1). What it knew before the war is on the plan already. `to_front_m`: the target's distance
+// from the front line.
+inline bool NominationWaits(const AirWarData& d, const IntelEntry& e, double to_front_m, double now_h) {
+    const FactionC2& c2 = d.faction.c2;
+    if (!c2.present || c2.nomination_h <= 0.0 || d.tuning.Get("c2.mode") < 1.0 || d.tuning.Get("c2.live_mode") < 1.0) return false;
+    if (to_front_m > d.tuning.Get("c2.bai_depth_m") || e.first_h <= 0.0) return false;
+    return now_h < e.first_h + c2.nomination_h;
+}
+
 class Planner {
 public:
     std::vector<Package> Plan(PlanContext& c) {
@@ -518,7 +529,13 @@ private:
         const std::string k = a.id + "|" + std::to_string(static_cast<int>(prof));
         const auto it = route_threats_.find(k);
         if (it != route_threats_.end()) return it->second;
-        return route_threats_[k] = BelievedRouteThreats(c_->intel->Threats(), a, prof, GroundC().HasGround(), Tune());
+        std::vector<RouteThreat> t = BelievedRouteThreats(c_->intel->Threats(), a, prof, GroundC().HasGround(), Tune());
+        if (Mode() >= 2 && front_ != nullptr) {
+            // Our fighters as it believes them (roadmap S7): a cost on the legs near our believed air bases.
+            std::vector<RouteThreat> f = BelievedFighterThreats(c_->intel->entries, front_->friendly_fighters, a, prof, Tune());
+            t.insert(t.end(), f.begin(), f.end());
+        }
+        return route_threats_[k] = std::move(t);
     }
     // One flight's route by the route planner (cached by the request for this cycle).
     PlannedRoute RouteFor(const AircraftType& a, Profile prof, DayPart part, const EntryPoint& gate, const std::vector<const EntryPoint*>& exits,
@@ -691,6 +708,7 @@ private:
             switch (mk) {
                 case MissionKind::Strike:
                     if (ad || e.kind == ObjectKind::Troops || e.kind == ObjectKind::City) continue;
+                    if (NominationWaits(*c_->data, e, to_front, now)) continue;
                     break;
                 case MissionKind::Dead:
                     if (!ad || e.sigma_m > 4000.0) continue;
@@ -1318,7 +1336,7 @@ private:
         const RouteThreat* best = nullptr;
         double best_w = 0.0;
         for (const RouteThreat& th : threats) {
-            if (th.weight <= 0.0 || Dist2d(th.pos, target) < th.ring_m) continue;
+            if (th.weight <= 0.0 || th.fighter || Dist2d(th.pos, target) < th.ring_m) continue;  // the group ahead suppresses sites
             const double w = th.weight * RouteChord(r, th.pos, th.ring_m);
             if (w > best_w + 1e-9) {
                 best_w = w;
