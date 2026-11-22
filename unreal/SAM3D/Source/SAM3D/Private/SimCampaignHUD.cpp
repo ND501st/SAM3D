@@ -1060,25 +1060,25 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		{
 			return FString::Printf(TEXT("%s, %.0f h old%s"), *CampaignToF(FormatHour(M.h, StartH)), M.age_h, M.stale ? TEXT(", stale") : TEXT(""));
 		};
-		Lines.Add({FString::Printf(TEXT("The regiment's map (%s)"), *CampaignToF(Sit->post)), CPaper});
+		Lines.Emplace(FString::Printf(TEXT("The regiment's map (%s)"), *CampaignToF(Sit->post)), CPaper);
 		for (const simcore::command::MapUnit& U : Sit->ours)
 		{
-			Lines.Add({FString::Printf(TEXT("%s %.0f%%%s  %s"), *CampaignToF(U.name), U.fraction * 100.0, U.out ? TEXT(" out of the fight") : TEXT(""), *Age(U.mark)),
-				U.mark.stale ? CDim : CGreen});
+			Lines.Emplace(FString::Printf(TEXT("%s %.0f%%%s  %s"), *CampaignToF(U.name), U.fraction * 100.0, U.out ? TEXT(" out of the fight") : TEXT(""), *Age(U.mark)),
+				U.mark.stale ? CDim : CGreen);
 		}
 		for (const simcore::command::MapEnemy& E : Sit->enemy)
 		{
-			Lines.Add({FString::Printf(TEXT("Enemy %s %.0f%%%s  %s"), *CampaignToF(E.name), E.fraction * 100.0, E.out ? TEXT(" out") : TEXT(""), *Age(E.mark)),
-				E.mark.stale ? CDim : CRed});
+			Lines.Emplace(FString::Printf(TEXT("Enemy %s %.0f%%%s  %s"), *CampaignToF(E.name), E.fraction * 100.0, E.out ? TEXT(" out") : TEXT(""), *Age(E.mark)),
+				E.mark.stale ? CDim : CRed);
 		}
 		if (Sit->air_front.empty())
 		{
-			Lines.Add({FString(TEXT("No staff conclusion on the enemy's air front has reached the regiment")), CDim});
+			Lines.Emplace(FString(TEXT("No staff conclusion on the enemy's air front has reached the regiment")), CDim);
 		}
 		for (const simcore::command::MapAirFront& A : Sit->air_front)
 		{
-			Lines.Add({FString::Printf(TEXT("Enemy air front, %s: %.0f km deep, the air defence staff's conclusion, %s"), *CampaignToF(A.sector_name),
-						  A.depth_m / 1000.0, *Age(A.mark)), A.mark.stale ? CDim : CAmber});
+			Lines.Emplace(FString::Printf(TEXT("Enemy air front, %s: %.0f km deep, the air defence staff's conclusion, %s"), *CampaignToF(A.sector_name),
+						  A.depth_m / 1000.0, *Age(A.mark)), A.mark.stale ? CDim : CAmber);
 		}
 		const int32 MaxLines = 14;
 		const float LineH = 14.0f;
