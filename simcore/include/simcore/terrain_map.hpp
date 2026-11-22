@@ -646,6 +646,20 @@ public:
     // detail areas' imported ones), or of a river's: what the map's dressing keeps its trees off (scenery/map_dressing.hpp).
     bool NearLine(double e, double n, double clear_m) const { return lines_.Near(e, n, clear_m); }
     bool NearWater(double e, double n, double clear_m) const { return water_.Near(e, n, clear_m); }
+    // Whether (east, north) is water (roadmap E9's sea areas; Terrain::WaterAt): on a river of the map or its detail
+    // areas within half its width, in one of the map's lakes, or beyond the map proper on its country's lakes and rivers.
+    bool WaterAt(double e, double n) const {
+        if (!has_water_) return false;
+        if (water_.Near(e, n, 0.0)) return true;
+        const bool beyond = def_.far_ground != nullptr && !def_.InCore(e, n);
+        for (const LakeBox& b : lake_boxes_) {
+            if ((b.far && !beyond) || e < b.w || e > b.e || n < b.s || n > b.n) continue;
+            const MapLakeDef& l = b.far ? def_.far_ground->lakes[b.index] : def_.lakes[b.index];
+            if (mapgeo::InPolygon(l.points, e, n)) return true;
+        }
+        return beyond && far_water_.Near(e, n, 0.0);
+    }
+    bool HasWater() const { return has_water_; }
 
     // The ground's lattices as they are drawn, finest first: the detail areas (roadmap R6), the map proper, the far
     // ground, the country's, the land beyond (those it has). A coarser level leaves out only the cells lying wholly
@@ -1262,7 +1276,28 @@ private:
         for (const MapSiteDef& s : def_.sites) {
             occupied_.Take(s.centre.east_m, s.centre.north_m, SiteClearance(s));
         }
+        // The water a path's reflection and smooth earth look for (WaterAt): the rivers above, the map's lakes, and beyond
+        // the map proper its country's lakes and rivers.
+        has_water_ = !def_.rivers.empty() || !detail_lines_.rivers.empty();
+        const auto add_lake = [&](const MapLakeDef& l, bool far, std::size_t index) {
+            if (l.points.size() < 3) return;
+            LakeBox b{1e300, 1e300, -1e300, -1e300, far, index};
+            for (const MapPoint& p : l.points) {
+                b.w = std::min(b.w, p.east_m);
+                b.s = std::min(b.s, p.north_m);
+                b.e = std::max(b.e, p.east_m);
+                b.n = std::max(b.n, p.north_m);
+            }
+            lake_boxes_.push_back(b);
+            has_water_ = true;
+        };
+        for (std::size_t i = 0; i < def_.lakes.size(); ++i) add_lake(def_.lakes[i], false, i);
         if (!def_.far_ground) return;
+        for (std::size_t i = 0; i < def_.far_ground->lakes.size(); ++i) add_lake(def_.far_ground->lakes[i], true, i);
+        for (const MapLineDef& r : def_.far_ground->rivers) {
+            far_water_.Add(r.points, 0.5 * r.width_m);
+            has_water_ = true;
+        }
         for (const MapSettlementDef& t : def_.far_ground->settlements) {
             bool laid = def_.InCore(t.centre.east_m, t.centre.north_m);
             for (const MapSettlementDef& s : def_.settlements) laid = laid || s.id == t.id;
@@ -2016,6 +2051,14 @@ private:
     MapLayout layout_;
     mapgeo::SegmentIndex lines_{250.0};
     mapgeo::SegmentIndex water_{250.0};
+    mapgeo::SegmentIndex far_water_{250.0};  // the country's rivers beyond the map proper (WaterAt)
+    struct LakeBox {
+        double w, s, e, n;  // the shore's bounds
+        bool far;           // the country's (beyond the map proper), else the map's
+        std::size_t index;
+    };
+    std::vector<LakeBox> lake_boxes_;
+    bool has_water_ = false;
     mapgeo::Occupancy occupied_{40.0};
     std::unordered_set<long long> canopy_cells_;
     // What blocks sight (BakeObstacles): the footprints, their dense cells (the detail areas', then the map proper's),
@@ -2246,6 +2289,11 @@ public:
     double ObstacleSpacingM() const override { return map_->NarrowestObstacle(); }
     double ObstacleTopCeilingM() const override { return map_->TallestObstacleTop(); }
     double ObstacleTallestM() const override { return map_->TallestObstacle(); }
+    bool WaterAt(double east_m, double north_m) const override {
+        const MapPoint p = link_.FrameToMap(east_m, north_m);
+        return map_->WaterAt(p.east_m, p.north_m);
+    }
+    bool HasWater() const override { return map_->HasWater(); }
     double ObstacleTopAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->ObstacleTop(p.east_m, p.north_m);

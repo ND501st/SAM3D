@@ -13,6 +13,7 @@
 #include "simcore/clutter.hpp"
 #include "simcore/command/em_radio.hpp"
 #include "simcore/country_map.hpp"
+#include "simcore/em/propagation.hpp"
 #include "simcore/radar.hpp"
 #include "simcore/scenery/map_dressing.hpp"
 #include "simcore/terrain_map.hpp"
@@ -284,6 +285,63 @@ SC_TEST("map: no country's line is drawn twice: where the map lays it as its own
         SC_EXPECT(m->LaysCountryLinesAt(cap->centre.east_m + cap->half_m + 900.0, cap->centre.north_m));
         SC_EXPECT(!m->LaysCountryLinesAt(cap->centre.east_m + cap->half_m + 1100.0, cap->centre.north_m));
     }
+}
+
+SC_TEST("water: the map's river and its country's lakes, and the country's own ground's, are water to a path (E9's sea areas)") {
+    const MapData* m = Kesmark();
+    const std::shared_ptr<const CountryMap> c = Country();
+    SC_EXPECT(m != nullptr && c != nullptr);
+    if (m == nullptr || c == nullptr) return;
+    const MapDef& d = m->Def();
+    SC_EXPECT(m->HasWater() && !d.rivers.empty() && d.far_ground != nullptr);
+    if (d.rivers.empty() || d.far_ground == nullptr) return;
+    // On the Rava's centre line it is water; 300 m off it, across, it is not.
+    const MapLineDef& rava = d.rivers.front();
+    int on = 0, off = 0, tried = 0;
+    for (std::size_t i = 1; i < rava.points.size(); ++i) {
+        const MapPoint& p = rava.points[i - 1];
+        const MapPoint& q = rava.points[i];
+        const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+        if (len < 1.0) continue;
+        const double me = 0.5 * (p.east_m + q.east_m), mn = 0.5 * (p.north_m + q.north_m);
+        const double ne = -(q.north_m - p.north_m) / len, nn = (q.east_m - p.east_m) / len;  // across the river
+        ++tried;
+        on += m->WaterAt(me, mn) ? 1 : 0;
+        off += m->WaterAt(me + 300.0 * ne, mn + 300.0 * nn) || m->WaterAt(me - 300.0 * ne, mn - 300.0 * nn) ? 1 : 0;
+    }
+    std::printf("    the Rava: %d of %d middles water, %d with water 300 m across\n", on, tried, off);
+    SC_EXPECT(tried > 5 && on == tried && off == 0);
+    // The country's lakes beyond the map proper, through the scenario's terrain too; and a path across one finds it.
+    const MapTerrain ground(std::shared_ptr<const MapData>(m, [](const MapData*) {}), d.origin);
+    const command::CountryGround cluttered(c, Heights());
+    const command::CountryGround bare(c);
+    SC_EXPECT(cluttered.HasWater() && !bare.HasWater());
+    const ClutterRaster& r = cluttered.Clutter();
+    int lakes = 0;
+    for (const MapLakeDef& l : d.far_ground->lakes) {
+        // A cell of the country's raster whose middle lies in the lake (BakeClutter's rule): water to both grounds.
+        bool found = false;
+        for (int y = 0; y < r.rows && !found; ++y) {
+            for (int x = 0; x < r.cols && !found; ++x) {
+                const double e = r.CentreEast(x), n = r.CentreNorth(y);
+                if (d.InCore(e, n) || !mapgeo::InPolygon(l.points, e, n) || !mapgeo::InPolygon(l.points, e - 200.0, n) ||
+                    !mapgeo::InPolygon(l.points, e + 200.0, n)) {
+                    continue;
+                }
+                found = true;
+                ++lakes;
+                SC_EXPECT(m->WaterAt(e, n) && ground.WaterAt(e, n) && cluttered.WaterAt(e, n) && !bare.WaterAt(e, n));
+                const em::PathGeometry g = em::AnalysePath(ground, Vec3{e - 5000.0, n, 0.0}, ground.HeightAt(e - 5000.0, n) + 5.0,
+                                                           Vec3{e + 5000.0, n, 0.0}, ground.HeightAt(e + 5000.0, n) + 50.0, 100.0);
+                SC_EXPECT(((g.water_mask >> 31) & 3u) == 3u);  // the two stretches either side of the path's middle, in the lake
+                const em::PathGeometry gc = em::AnalysePath(cluttered, Vec3{e - 5000.0, n, 0.0}, cluttered.HeightAt(e - 5000.0, n) + 5.0,
+                                                            Vec3{e + 5000.0, n, 0.0}, cluttered.HeightAt(e + 5000.0, n) + 50.0, 100.0);
+                SC_EXPECT(gc.water_mask != 0);
+            }
+        }
+    }
+    std::printf("    %d of %zu lakes of the country found by both grounds\n", lakes, d.far_ground->lakes.size());
+    SC_EXPECT(lakes == static_cast<int>(d.far_ground->lakes.size()) && lakes > 0);
 }
 
 SC_TEST("map dressing: a line in the land cover is unbroken and at least a cell wide, whichever way it runs") {

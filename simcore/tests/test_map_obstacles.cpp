@@ -86,13 +86,20 @@ SC_TEST("obstacles: a ray through the Lazne woods 8 m up is blocked, 40 m up it 
     SC_EXPECT(!g.line_of_sight);
 }
 
-SC_TEST("obstacles: woods within 60 m of an end do not hide it; with no skip they would") {
+SC_TEST("obstacles: woods within 60 m of an end do not hide it; with no skip the sight would be; a radio path takes them as its end's loss") {
     const ObstacleTerrain around(0.0, Around20);
     const Vec3 a{0.0, 0.0, 2.0}, b{2000.0, 0.0, 300.0};
     SC_EXPECT(HasLineOfSight(around, a, 2.0, b, 300.0, 10.0));
     SC_EXPECT(!HasLineOfSight(around, a, 2.0, b, 300.0, 10.0, kStandardRefractionK, 0.0, 0.0));
     SC_EXPECT(em::AnalysePath(around, a, 2.0, b, 300.0, 10.0).line_of_sight);
-    SC_EXPECT(!em::AnalysePath(around, a, 2.0, b, 300.0, 10.0, 600, kStandardRefractionK, 0.0).line_of_sight);
+    // The radio path (roadmap E9, ITU-R P.2108 section 3.1): the wood the antenna stands in is its end's own loss, and the
+    // path is worked out from the canopy's top, so with no skip it is no longer blocked by its own wood (until E9's last
+    // part it was: the ray from 2 m ran into the 20 m wood round it).
+    const em::PathGeometry no_skip = em::AnalysePath(around, a, 2.0, b, 300.0, 10.0, 600, kStandardRefractionK, 0.0);
+    SC_EXPECT(no_skip.line_of_sight);
+    SC_EXPECT_NEAR(no_skip.clutter_a_m, 20.0, 1e-12);
+    SC_EXPECT_NEAR(no_skip.antenna_a_m, 2.0, 1e-12);
+    SC_EXPECT(em::TerminalClutterLossDb(no_skip, 50e6) > 10.0);
 }
 
 SC_TEST("obstacles: a 20 m strip of woods across a flat path blocks it and makes a diffraction edge (P.1812 clutter)") {
