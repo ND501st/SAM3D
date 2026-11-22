@@ -1537,6 +1537,9 @@ void USimFxSubsystem::DrawMunitions()
 		if (M->GetStaticMesh() != D.Mesh)
 		{
 			M->SetStaticMesh(D.Mesh);
+			// A munition built from its shape is coloured by its vertices (FSimMunitionModels::Material); a real asset
+			// drawing it (docs/scenery/ASSETS.md) keeps its own materials, its textures.
+			M->SetMaterial(0, D.Mesh->IsAsset() ? nullptr : FSimMunitionModels::Material());
 		}
 		M->SetWorldLocationAndRotation(D.Pos, D.Rot);
 		if (!M->IsVisible())
