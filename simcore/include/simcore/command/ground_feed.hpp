@@ -102,6 +102,22 @@ struct ArmySummary {
     std::vector<double> axes_h;
 };
 
+// The army's intelligence summary as the pipeline holds it (F5.1): which of the enemy's formations not in contact it
+// believed at about what strength, compiled `compiled_h`, the fact that carries it.
+struct IntelRecord {
+    std::string key;
+    int fact = -1;
+    double h = 0.0;
+    double compiled_h = 0.0;
+    struct Line {
+        int formation = -1;
+        double fraction = 0.0;
+        bool out = false;
+        int sector = -1;
+    };
+    std::vector<Line> lines;
+};
+
 class GroundFeed {
 public:
     void Bind(InfoNet* net, const GroundFeedRoles& roles = GroundFeedRoles()) {
@@ -116,6 +132,7 @@ public:
     const std::vector<SituationReport>& Reports() const { return reports_; }
     const std::vector<OrderRecord>& Orders() const { return orders_; }
     const std::vector<ArmySummary>& Summaries() const { return summaries_; }
+    const std::vector<IntelRecord>& Intels() const { return intels_; }
     // Intelligence summaries made (facts of kind Intsum, keys "ground_intsum:<n>").
     int IntelSummaries() const { return intel_made_; }
     // Strikes passed to the air defence watch, and those it took as signs.
@@ -216,6 +233,7 @@ private:
     std::vector<SituationReport> reports_;
     std::vector<OrderRecord> orders_;
     std::vector<ArmySummary> summaries_;
+    std::vector<IntelRecord> intels_;
     double next_summary_h_ = -1.0;
     int intel_made_ = 0;
     int air_reports_ = 0;
@@ -230,6 +248,7 @@ private:
         reports_.clear();
         orders_.clear();
         summaries_.clear();
+        intels_.clear();
         next_summary_h_ = -1.0;
         intel_made_ = air_reports_ = air_signs_ = 0;
     }
@@ -431,8 +450,12 @@ private:
         std::string text = FormatClock(s.h, c.Data().theatre.start_hour) + ". The army's intelligence summary of the enemy not in contact (compiled " +
                            FormatClock(s.compiled_h, c.Data().theatre.start_hour) + "):";
         char buf[192];
+        IntelRecord rec;
+        rec.h = s.h;
+        rec.compiled_h = s.compiled_h;
         for (std::uint32_t k = 0; k < s.lines_count; ++k) {
             const groundwar::SitIntelLine& l = lines[s.lines_first + k];
+            rec.lines.push_back({l.formation, l.fraction, l.out, l.sector});
             std::snprintf(buf, sizeof(buf), " %s about %.0f%%%s;", g.Formations()[static_cast<std::size_t>(l.formation)].name.c_str(), 100.0 * l.fraction,
                           l.out ? " (out of the fight)" : "");
             text += buf;
@@ -448,7 +471,9 @@ private:
         f.to = {roles_.army_staff, roles_.air_chief, roles_.sector};
         f.precedence = 0;
         f.document = true;
-        net_->AddFact(f);
+        rec.key = f.key;
+        rec.fact = net_->AddFact(f);
+        intels_.push_back(std::move(rec));
     }
 
     // The first summary hour after h (campaign hours): the local hours of the roles, each day.

@@ -15,6 +15,7 @@
 
 #include "simcore/air_war/raid_scenario.hpp"
 #include "simcore/command/info_net.hpp"
+#include "simcore/command/situation_map.hpp"
 #include "simcore/json.hpp"
 
 namespace simcore {
@@ -44,10 +45,14 @@ struct PostView {
     double now_h = 0.0;
     std::vector<ViewItem> items;  // by the hour he learned them
     std::vector<ViewContact> contacts;
+    // The situation map the post holds (F5.1, situation_map.hpp), whole: marks with their sources and ages, nothing but what
+    // its facts hold. Sent only when the server has one for the post.
+    bool has_situation = false;
+    SituationMap situation;
 };
 
 // The view of `post` as the server sends it: what reached him after since_h (or became full after it).
-inline std::string PostViewJson(const InfoNet& net, int post, double since_h = -1e18) {
+inline std::string PostViewJson(const InfoNet& net, int post, double since_h = -1e18, const SituationMap* situation = nullptr) {
     using namespace airwar::jsonb;
     const ChainData& data = net.Data();
     json::Value root = Obj();
@@ -80,7 +85,13 @@ inline std::string PostViewJson(const InfoNet& net, int post, double since_h = -
         Push(contacts, j);
     }
     Put(root, "contacts", contacts);
+    if (situation != nullptr) Put(root, "situation", SituationMapValue(*situation));
     return Dump(root, 0, 17);
+}
+// The same with the post's situation map (F5.1): the map is sent whole each time (it is small, and a mark that aged is a
+// change), the items since since_h.
+inline std::string PostViewJson(const InfoNet& net, int post, const SituationMap& situation, double since_h = -1e18) {
+    return PostViewJson(net, post, since_h, &situation);
 }
 
 inline bool ReadPostView(const std::string& text, PostView& out, std::string* error = nullptr) {
@@ -120,6 +131,7 @@ inline bool ReadPostView(const std::string& text, PostView& out, std::string* er
     if (const json::Value* contacts = root.Find("contacts")) {
         for (const json::Value& j : contacts->items) out.contacts.push_back({str(j, "post"), str(j, "label")});
     }
+    if (const json::Value* sit = root.Find("situation")) out.has_situation = ReadSituationMap(*sit, out.situation);
     return true;
 }
 
@@ -135,6 +147,10 @@ inline void MergePostView(PostView& into, const PostView& update) {
     }
     std::stable_sort(into.items.begin(), into.items.end(), [](const ViewItem& a, const ViewItem& b) { return a.h < b.h; });
     if (!update.contacts.empty()) into.contacts = update.contacts;
+    if (update.has_situation && (!into.has_situation || update.situation.now_h >= into.situation.now_h)) {
+        into.situation = update.situation;
+        into.has_situation = true;
+    }
 }
 
 // The client's player tells someone: the request his machine sends.

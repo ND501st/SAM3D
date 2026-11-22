@@ -44,6 +44,7 @@
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
 #include "simcore/command/own_air.hpp"
+#include "simcore/command/situation_map.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
@@ -270,10 +271,28 @@ public:
     // The runner's debrief, then the two outcomes (from the truth: for the debrief and the reveal only), the enemy's
     // phase checked now.
     std::string Debrief() const {
-        const std::string d = runner_->Debrief();
+        std::string d = runner_->Debrief();
         if (!campaign_ && outcomes_.Assets().empty()) return d;
         const SuppressionCheck now = campaign_ ? CheckSuppression(*campaign_, campaign_->Now()) : SuppressionCheck();
-        return d + "\n" + outcomes_.Text(campaign_ ? &now : nullptr);
+        d += "\n" + outcomes_.Text(campaign_ ? &now : nullptr);
+        return d + FrontsDebrief();
+    }
+    // The situation maps of the battery commander and the regiment's staff at the end (F5.1): the front as their facts gave
+    // it, each mark with its source and age; empty without the fronts' pipeline. What the posts did not hold is not here:
+    // the truth's line is the outcomes' and the developer's.
+    std::string FrontsDebrief() const {
+        if (!feed_ || !net_ || !campaign_) return std::string();
+        const command::SituationLayout layout = command::SituationLayoutOf(*campaign_, &feed_->Ad(), &own_air_);
+        std::string out;
+        const std::string posts[2] = {feed_->Ground().Roles().battery, feed_->Ground().Roles().regiment};
+        for (const std::string& id : posts) {
+            const int post = net_->Data().PositionIndex(id);
+            if (post < 0) continue;
+            command::SituationMap map;
+            command::BuildSituationMap(*net_, *feed_, layout, post, map);
+            out += "\n" + command::SituationMapText(map, campaign_->Data().theatre.start_hour);
+        }
+        return out;
     }
 
 private:
@@ -493,6 +512,7 @@ private:
             return false;
         }
         split_m_ = own_air.coop.split_height_m;
+        own_air_ = own_air;
         regiment_->SetSplitHeight(split_m_);
         regiment_->SetPlaceDepth([this](const std::string& place, double& depth_m, std::string& name) {
             const nav::SessionNav* nav = runner_ ? runner_->Nav() : nullptr;
@@ -722,6 +742,7 @@ private:
     std::unique_ptr<airwar::AirCampaign> campaign_;
     std::unique_ptr<command::InfoNet> net_;          // F4.4: the campaign's pipeline (the fronts on)
     std::unique_ptr<command::CampaignFeed> feed_;
+    command::OwnAirDef own_air_;                     // F5.1: the sky's sharing, for the situation maps' layout
     RegimentWatch watch_;
     double pumped_h_ = -1.0;
     double split_m_ = 5000.0;
