@@ -342,6 +342,48 @@ SC_TEST("water: the map's river and its country's lakes, and the country's own g
     }
     std::printf("    %d of %zu lakes of the country found by both grounds\n", lakes, d.far_ground->lakes.size());
     SC_EXPECT(lakes == static_cast<int>(d.far_ground->lakes.size()) && lakes > 0);
+    // The grid's quick no (MapData::WaterAt) never says no where the exact test says water: 20 m apart along the Rava
+    // and either side of it, and on a 250 m lattice over the map and its country beyond.
+    int wet = 0, differ = 0;
+    const auto same = [&](double e, double n) {
+        const bool exact = m->WaterAtExact(e, n);
+        wet += exact ? 1 : 0;
+        differ += exact != m->WaterAt(e, n) ? 1 : 0;
+    };
+    for (const MapLineDef& river : d.rivers) {
+        for (std::size_t i = 1; i < river.points.size(); ++i) {
+            const MapPoint& p = river.points[i - 1];
+            const MapPoint& q = river.points[i];
+            const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+            if (len < 1.0) continue;
+            for (double s = 0.0; s < len; s += 20.0) {
+                const double f = s / len;
+                for (double across = -0.6 * river.width_m; across <= 0.6 * river.width_m; across += 0.2 * river.width_m) {
+                    same(p.east_m + f * (q.east_m - p.east_m) - across * (q.north_m - p.north_m) / len,
+                         p.north_m + f * (q.north_m - p.north_m) + across * (q.east_m - p.east_m) / len);
+                }
+            }
+        }
+    }
+    for (double n = -150000.0; n <= 150000.0; n += 250.0) {
+        for (double e = -150000.0; e <= 150000.0; e += 250.0) same(e, n);
+    }
+    double w = 1e300, s = 1e300, e = -1e300, n = -1e300;
+    const auto bound = [&](const std::vector<MapPoint>& pts) {
+        for (const MapPoint& p : pts) {
+            w = std::min(w, p.east_m);
+            s = std::min(s, p.north_m);
+            e = std::max(e, p.east_m);
+            n = std::max(n, p.north_m);
+        }
+    };
+    for (const MapLineDef& river : d.rivers) bound(river.points);
+    for (const MapLineDef& river : d.far_ground->rivers) bound(river.points);
+    for (const MapLakeDef& l : d.lakes) bound(l.points);
+    for (const MapLakeDef& l : d.far_ground->lakes) bound(l.points);
+    std::printf("    %d points water by the exact test, %d where the grid differs; the grid's %.0f by %.0f km, %.0f kB\n", wet,
+                differ, (e - w) / 1000.0, (n - s) / 1000.0, (e - w) * (n - s) / 1e4 / 8.0 / 1024.0);
+    SC_EXPECT(wet > 1000 && differ == 0);
 }
 
 SC_TEST("map dressing: a line in the land cover is unbroken and at least a cell wide, whichever way it runs") {
