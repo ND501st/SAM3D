@@ -3,9 +3,15 @@
 // keep a priority per sector (defend, the offence, economy) and change it on their rhythm, on what reached their posts
 // through our pipeline only, at most one sector a decision; each change is an order through the pipeline to the posts
 // below, the SAM regiment's commander among them. At ad_strategy.mode 0 nothing is built or added.
+//
+// F4.2: our SAM units and radar companies move on those commanders' orders (simcore/air_war/unit_moves.hpp, section 3): an
+// order goes through the pipeline to the unit's commander's post, the campaign hears it there inside its steps and moves
+// the unit by its class's norms on the roads, off the air while it moves; a unit the line overruns before it gets away is
+// lost with the ground.
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -43,16 +49,19 @@ cmp::AdStrategyData LoadStrategy() {
 
 // A faction's war on the nation with the ground war and the air front on and our air defence commanders at `mode`, the
 // feed pumped after every step (or once at the end, as after a load). `reports` false keeps our units' reports out of the
-// pipeline (the ground feed's posts named none). `rules` replaces the data's (nullptr: the data's).
+// pipeline (the ground feed's posts named none). `rules` replaces the data's (nullptr: the data's). `orders`: the campaign
+// asks the feed for the orders its units heard (F4.2), else no unit moves on an order.
 struct AdRun {
     AirWarData data;
     AirCampaign campaign;
     command::InfoNet net;
     command::CampaignFeed feed;
     bool ok = false;
+    std::function<void(AirWarData&)> edit;          // the theatre changed before Init (F4.2's tests)
+    const UnitMoveRules* move_rules = nullptr;      // other move rules than the data's (F4.2's tests)
 
     bool Go(const std::string& faction, unsigned seed, double until_h, double mode, bool once, bool reports, const cmp::AdStrategyData* rules,
-            const std::string& theatre = "air_war/theatre_pannonia_nation.json", const std::map<std::string, double>& tune = {}) {
+            const std::string& theatre = "air_war/theatre_pannonia_nation.json", const std::map<std::string, double>& tune = {}, bool orders = false) {
         std::string e;
         if (!LoadAirWarData(kData, theatre, "air_war/faction_" + faction + ".json", data, &e)) {
             std::printf("    %s\n", e.c_str());
@@ -62,10 +71,12 @@ struct AdRun {
         data.tuning.values["air_front.mode"] = 1.0;
         data.tuning.values["ad_strategy.mode"] = mode;
         for (const auto& kv : tune) data.tuning.values[kv.first] = kv.second;
+        if (edit) edit(data);
         if (!campaign.Init(data, seed, &e)) {
             std::printf("    %s\n", e.c_str());
             return false;
         }
+        if (move_rules != nullptr && !campaign.UseMoveRules(*move_rules)) return false;
         net.Init(LoadChain(), seed, data.theatre.start_hour);
         feed.Bind(&net);
         if (!reports) {
@@ -74,6 +85,7 @@ struct AdRun {
             feed.UseGroundRoles(off);
         }
         if (rules != nullptr) feed.UseAdStrategy(*rules);
+        if (orders) campaign.SetOrderSource(feed.OrderSource());
         while (campaign.Now() < until_h) {
             if (campaign.Advance(until_h)) campaign.SkipPlayerMission();
             if (!once) feed.Pump(campaign);
@@ -321,7 +333,7 @@ SC_TEST("ad strategy (F4.1): on the nation, our commanders decide on what reache
     for (std::size_t k = 0; k < ad.Commanders(); ++k) SC_EXPECT(ad.Reviews(static_cast<int>(k)) == once->feed.Ad().Reviews(static_cast<int>(k)));
 }
 
-SC_TEST("ad strategy (F4.1): a thrust not reported moves nothing; at mode 0 nothing is added; the air war is the same either way; a save keeps the mode") {
+SC_TEST("ad strategy (F4.1): a thrust not reported moves nothing; at mode 0 nothing is added; a save keeps the mode") {
     cmp::AdStrategyData rules = LoadStrategy();
     rules.rules.object_reach_m = -1e9;
     // The same war with our units' reports kept out of the pipeline: the ground war moves, our commanders hear nothing of it.
@@ -336,14 +348,16 @@ SC_TEST("ad strategy (F4.1): a thrust not reported moves nothing; at mode 0 noth
         for (const groundwar::Axis& x : blind->campaign.Ground()->Axes()) moved = moved || x.depth_m > 0.0;
     }
     SC_EXPECT(moved);  // the truth moved; nothing reached them
-    // Mode 0: nothing built, no order in the pipeline; and the war itself is the same as with the commanders on (they move
-    // nothing yet).
+    // Mode 0: nothing built, no order in the pipeline, no unit that moves on orders. (F4.1 had the war itself the same as with
+    // the commanders on; from F4.2 mode 1 changes it even with no order heard: the units that move on orders no longer escape
+    // on their own nor hop out of their sector, F3.7's rules, and lose their radar while they move.)
     auto zero = std::make_unique<AdRun>();
     SC_EXPECT(zero->Go("warsaw_pact", 7, 36.0, 0.0, false, true, &rules));
     if (!zero->ok) return;
     SC_EXPECT(!zero->feed.Ad().On() && zero->feed.Ad().Decisions().empty());
-    for (const command::Fact& f : zero->net.Facts()) SC_EXPECT(f.key.compare(0, 9, "ad_order:") != 0);
-    SC_EXPECT(Fnv(zero->campaign) == Fnv(blind->campaign) && zero->campaign.Journal().size() == blind->campaign.Journal().size());
+    for (const command::Fact& f : zero->net.Facts()) SC_EXPECT(f.key.compare(0, 9, "ad_order:") != 0 && f.key.compare(0, 8, "ad_move:") != 0);
+    SC_EXPECT(!zero->campaign.UnitMovesOn() && zero->campaign.UnitMoves().empty() && zero->feed.Ad().MoveUnits() == 0);
+    SC_EXPECT(blind->campaign.UnitMovesOn() && blind->campaign.UnitMoves().empty());  // no order source: no unit moved
     // The save keeps the mode; a save without it replays at 0.
     std::string saved = SaveCampaignJson(blind->campaign, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json");
     SC_EXPECT(saved.find("\"ad_strategy_mode\"") != std::string::npos);
@@ -399,4 +413,250 @@ SC_TEST("ad strategy (F4.1): the air defence staff's estimate of the enemy's air
     std::printf("    %zu estimates stated; the chief held the first %s; %d changes to the offence\n", ks.size(),
                 r->net.Known(chief, r->net.FactIndex(ks[0].key)) != nullptr ? "by the end" : "never", offence);
     SC_EXPECT(offence >= 1);
+}
+
+// ------------------------------------------------------------------------------------- F4.2: units move on the orders
+
+namespace {
+
+// The nation's theatre at a mode, the campaign alone (no pipeline).
+bool Nation(AirWarData& d, AirCampaign& c, double mode, const std::string& faction = "warsaw_pact", unsigned seed = 7) {
+    std::string e;
+    if (!LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_" + faction + ".json", d, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return false;
+    }
+    d.tuning.values["ad_strategy.mode"] = mode;
+    if (!c.Init(d, seed, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return false;
+    }
+    return true;
+}
+
+void RunTo(AirCampaign& c, double h) {
+    while (c.Now() < h - 1e-9) {
+        if (c.Advance(h)) c.SkipPlayerMission();
+    }
+}
+
+}  // namespace
+
+SC_TEST("unit moves (F4.2): the classes load with their sources; every unit that moves on orders has its commander's post; nothing at mode 0") {
+    UnitMoveRules rules;
+    std::string e;
+    SC_EXPECT(LoadUnitMoveRules(kData, "campaign/ad_strategy.json", rules, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(rules.classes.size() == 3);
+    for (const MoveClassDef& m : rules.classes) SC_EXPECT(m.max_moves_day >= 1 && m.max_moves_day <= 3);  // mt_rozhdestvenskiy_depth pp. 6-7
+    const MoveClassDef& s75 = rules.classes[0];
+    SC_EXPECT(s75.id == "s75_class" && s75.national && !s75.leapfrog);
+    SC_EXPECT_NEAR(s75.FixedHours(), 2.5 + 3.0 + 2.25, 1e-9);  // mt_1973_nvn pp. 10-11
+    // A move of 30-40 km at the class's speed: 10-15 h, as the source's.
+    for (double km : {30.0, 40.0}) {
+        const double h = s75.FixedHours() + km / s75.night_kmh;
+        SC_EXPECT(h >= 10.0 && h <= 15.0);
+    }
+    AirWarData d;
+    AirCampaign c;
+    if (!Nation(d, c, 1.0)) return;
+    SC_EXPECT(c.UnitMovesOn());
+    command::ChainData chain = LoadChain();
+    std::map<std::string, int> by_class;
+    int with_post = 0, units = 0;
+    for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
+        const int k = c.MoveClassOf(i);
+        if (k < 0) continue;
+        ++units;
+        by_class[c.MoveRules().classes[static_cast<std::size_t>(k)].id] += 1;
+        bool post = false;
+        for (const command::Position& p : chain.positions) {
+            const command::Place* pl = chain.FindPlace(p.place);
+            post = post || (pl != nullptr && pl->theatre_object == d.theatre.objects[i].id);
+        }
+        with_post += post ? 1 : 0;
+        if (!post) std::printf("    %s has no post\n", d.theatre.objects[i].id.c_str());
+    }
+    for (const auto& kv : by_class) std::printf("    %s: %d units\n", kv.first.c_str(), kv.second);
+    SC_EXPECT(by_class["s75_class"] == 16 && by_class["kub"] == 1 && by_class["radar_company"] >= 10);
+    SC_EXPECT(with_post == units);
+    SC_EXPECT(c.MoveClassOf(static_cast<std::size_t>(d.theatre.IndexOf("kesmark_p40"))) < 0);  // the regiment's
+    SC_EXPECT(c.MoveClassOf(static_cast<std::size_t>(c.PlayerIndex())) < 0);                     // the player's battery
+    // Mode 0: no class, no move.
+    AirWarData d0;
+    AirCampaign c0;
+    if (!Nation(d0, c0, 0.0)) return;
+    SC_EXPECT(!c0.UnitMovesOn() && c0.MoveClassOf(0) < 0);
+    SC_EXPECT(!c0.MoveUnit("s75_capital_nw", d0.theatre.objects[static_cast<std::size_t>(d0.theatre.IndexOf("s75_capital_nw"))].pos + Vec3{30000.0, 0.0, 0.0}));
+    SC_EXPECT(c0.UnitMoves().empty() && c0.Actions().empty());
+}
+
+SC_TEST("unit moves (F4.2): an S-75 move of 30 km takes 10-15 h by the norms on the roads, packed and on the road off the air; a Kub's under 3 h") {
+    AirWarData d;
+    AirCampaign c;
+    if (!Nation(d, c, 1.0)) return;
+    const int i = d.theatre.IndexOf("s75_capital_nw");
+    SC_EXPECT(i >= 0);
+    if (i < 0) return;
+    const std::size_t u = static_cast<std::size_t>(i);
+    // The Kub: minutes to pack and set up, the road at 20-30 km/h.
+    const int k = d.theatre.IndexOf("tiszavar_kub");
+    const Vec3 kfrom = c.Truth()[static_cast<std::size_t>(k)].pos;
+    SC_EXPECT(c.MoveUnit("tiszavar_kub", kfrom + Vec3{0.0, -20000.0, 0.0}, "test:kub"));
+    SC_EXPECT(c.UnitMoves().size() == 1);
+    if (c.UnitMoves().size() != 1) return;
+    const UnitMove km = c.UnitMoves()[0];
+    std::printf("    the Kub: %.1f km, %.2f h in all\n", km.road_km + km.cross_km, km.ready_h - km.start_h);
+    SC_EXPECT(km.ready_h - km.start_h < 3.0 && km.depart_h - km.start_h < 0.3);
+    const Vec3 from = c.Truth()[u].pos;
+    const Vec3 to = from + Vec3{-30000.0 / std::sqrt(2.0), -30000.0 / std::sqrt(2.0), 0.0};
+    SC_EXPECT(c.MoveUnit("s75_capital_nw", to, "test:s75"));
+    SC_EXPECT(!c.MoveUnit("s75_capital_nw", to, "test:again"));  // on a move already
+    SC_EXPECT(!c.MoveUnit("s125_dam", to, "test:s75"));          // the key was used
+    SC_EXPECT(c.UnitMoves().size() == 2);
+    if (c.UnitMoves().size() != 2) return;
+    const UnitMove m = c.UnitMoves()[1];
+    std::printf("    %.1f km by %s (%.1f km straight): packed %.2f h, on the road %.2f h, set up and checked %.2f h, %.2f h in all\n", m.road_km + m.cross_km,
+                m.on_roads ? "the roads" : "the straight line", Dist2d(from, to) / 1000.0, m.depart_h - m.start_h, m.arrive_h - m.depart_h, m.ready_h - m.arrive_h,
+                m.ready_h - m.start_h);
+    SC_EXPECT(m.ready_h - m.start_h >= 10.0 && m.ready_h - m.start_h <= 15.0);
+    SC_EXPECT_NEAR(m.depart_h - m.start_h, 2.5, 1e-9);
+    SC_EXPECT_NEAR(m.ready_h - m.arrive_h, 5.25, 1e-9);
+    SC_EXPECT(c.Truth()[u].march == 1);
+    RunTo(c, 1.0);
+    SC_EXPECT(c.Truth()[u].march == 1 && Dist2d(c.Truth()[u].pos, from) < 1.0);  // packing where it stood
+    RunTo(c, std::ceil(m.depart_h) + 1.0);
+    SC_EXPECT(c.Truth()[u].march == 2);  // on the road: at no place
+    RunTo(c, std::ceil(m.arrive_h) + 0.5);
+    SC_EXPECT(c.Truth()[u].march == 1 && Dist2d(c.Truth()[u].pos, to) < 1.0);  // setting up at the new place
+    RunTo(c, std::ceil(m.ready_h) + 1.0);
+    SC_EXPECT(c.Truth()[u].march == 0 && Dist2d(c.Truth()[u].pos, to) < 1.0);
+    SC_EXPECT(c.UnitMoves()[1].stage == 3 && c.UnitMoves()[1].end_h == m.ready_h);
+}
+
+SC_TEST("unit moves (F4.2): battalions in the main thrust's way ordered back in time get away; ordered late, or never, they are lost with the ground") {
+    // The Pact's deepest axis (tisava, F4.1's runs: 61 km in 10 days) with four of the sector's battalions put 35 km behind
+    // the border across it (the enemy's raids may wreck some first: a wrecked unit cannot move). In time: the data's rules
+    // (ordered back once the line as reported, carried on at its reported pace over his next cycle and the packing, is
+    // within 20 km). Late: ordered back only once that line is 10 km past them. Never: no order source.
+    AirWarData probe;
+    AirCampaign pc;
+    std::string e;
+    SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json", probe, &e));
+    probe.tuning.values["ground.mode"] = 1.0;
+    SC_EXPECT(pc.Init(probe, 7, &e));
+    if (pc.Ground() == nullptr) return;
+    const groundwar::Axis* deepest = nullptr;
+    for (const groundwar::Axis& x : pc.Ground()->Axes()) {
+        if (!x.raid && (deepest == nullptr || x.objective_m > deepest->objective_m)) deepest = &x;
+    }
+    SC_EXPECT(deepest != nullptr);
+    if (deepest == nullptr) return;
+    const std::vector<std::string> ids = {"s125_dam", "s125_refinery", "s125_paksany", "s75_northeast"};
+    std::vector<Vec3> at;
+    for (std::size_t k = 0; k < ids.size(); ++k) {
+        const double along = deepest->along_m + (static_cast<double>(k) - 1.5) * 2000.0;
+        at.push_back(pc.FrontLine().PointAt(along) + pc.FrontLine().InwardNormal(along) * 35000.0);
+    }
+    std::printf("    the axis %s (sector %d), objective %.0f km; %zu battalions put 35 km behind the border across it\n", deepest->id.c_str(), deepest->sector,
+                deepest->objective_m / 1000.0, ids.size());
+    const auto put = [ids, at](AirWarData& d) {
+        for (std::size_t k = 0; k < ids.size(); ++k) {
+            const int i = d.theatre.IndexOf(ids[k]);
+            if (i < 0) continue;
+            TheatreObject& o = d.theatre.objects[static_cast<std::size_t>(i)];
+            const Vec3 shift = at[k] - o.pos;
+            o.pos = at[k];
+            for (Vec3& q : o.prepared) q = q + shift;
+        }
+    };
+    cmp::AdStrategyData rules = LoadStrategy();
+    UnitMoveRules late;
+    SC_EXPECT(LoadUnitMoveRules(kData, "campaign/ad_strategy.json", late, &e));
+    late.classes[0].withdraw_within_m = -10000.0;  // ordered back only once the line, as he expects it, is past them
+    struct Case {
+        const char* name;
+        bool orders;
+        const UnitMoveRules* rules;
+    };
+    const Case cases[] = {{"in time", true, nullptr}, {"late", true, &late}, {"never", false, nullptr}};
+    int lost[3] = {0, 0, 0}, away[3] = {0, 0, 0};
+    for (int c = 0; c < 3; ++c) {
+        auto r = std::make_unique<AdRun>();
+        r->edit = put;
+        r->move_rules = cases[c].rules;
+        SC_EXPECT(r->Go("warsaw_pact", 7, 120.0, 1.0, false, true, &rules, "air_war/theatre_pannonia_nation.json", {}, cases[c].orders));
+        if (!r->ok) return;
+        std::string row;
+        for (std::size_t k = 0; k < ids.size(); ++k) {
+            const int i = r->data.theatre.IndexOf(ids[k]);
+            const ObjectState& st = r->campaign.Truth()[static_cast<std::size_t>(i)];
+            const UnitMove* m = nullptr;
+            for (const UnitMove& x : r->campaign.UnitMoves()) m = x.object == i && m == nullptr ? &x : m;
+            lost[c] += st.overrun ? 1 : 0;
+            away[c] += m != nullptr && m->escaped ? 1 : 0;
+            row += "  " + ids[k] + (st.overrun ? " lost" : " kept") + (m == nullptr ? "" : " (moved on an order heard " + FormatHour(m->heard_h, r->data.theatre.start_hour) +
+                                                                         (m->escaped ? ", got away)" : ")"));
+            // A unit that began a move before the line reached it was never caught where it stood.
+            if (m != nullptr && m->stage >= 1 && m->escaped) SC_EXPECT(!st.overrun || Dist2d(st.pos, at[k]) > 1.0);
+        }
+        std::printf("    %-8s:%s; the line %.1f km past where they stood\n", cases[c].name, row.c_str(), -r->campaign.FrontLine().DistanceTo(at[0]) / 1000.0);
+        SC_EXPECT(r->campaign.FrontLine().DistanceTo(at[0]) < 0.0);  // the line did pass them
+    }
+    SC_EXPECT(away[0] >= 1 && lost[0] < lost[1] && lost[1] == static_cast<int>(ids.size()) && lost[2] == static_cast<int>(ids.size()));
+    SC_EXPECT(away[1] == 0 && away[2] == 0);
+}
+
+SC_TEST("unit moves (F4.2): on the nation the units move only on orders heard at their posts, at most three a day, and a save replays the moves") {
+    cmp::AdStrategyData rules = LoadStrategy();
+    auto r = std::make_unique<AdRun>();
+    SC_EXPECT(r->Go("warsaw_pact", 7, 96.0, 1.0, false, true, &rules, "air_war/theatre_pannonia_nation.json", {}, true));
+    if (!r->ok) return;
+    const cmp::AdStrategy& ad = r->feed.Ad();
+    SC_EXPECT(ad.On() && ad.MoveUnits() >= 25);
+    const std::vector<cmp::AdStrategy::MoveOrder>& orders = ad.MoveOrders();
+    const std::vector<UnitMove>& moves = r->campaign.UnitMoves();
+    std::printf("    %zu orders, %zu moves begun\n", orders.size(), moves.size());
+    SC_EXPECT(!orders.empty() && !moves.empty());
+    // Every move on an order its unit's post had heard, from that hour on.
+    for (const UnitMove& m : moves) {
+        const cmp::AdStrategy::MoveOrder* o = nullptr;
+        for (const cmp::AdStrategy::MoveOrder& x : orders) o = x.key == m.key ? &x : o;
+        SC_EXPECT(o != nullptr);
+        if (o == nullptr) continue;
+        const command::Delivery* got = r->net.Known(o->post, o->fact);
+        SC_EXPECT(got != nullptr && got->h == m.heard_h && m.start_h >= m.heard_h - 1e-9 && m.start_h < m.heard_h + 1.0 + 1e-9);
+        SC_EXPECT(r->net.Facts()[static_cast<std::size_t>(o->fact)].to.size() == 1 &&
+                  r->net.Facts()[static_cast<std::size_t>(o->fact)].to[0] == r->net.Data().positions[static_cast<std::size_t>(o->post)].id);
+    }
+    // At most the class's moves a day (three at the most), each unit's orders in any 24 hours.
+    for (const cmp::AdStrategy::MoveOrder& o : orders) {
+        int day = 0;
+        for (const cmp::AdStrategy::MoveOrder& x : orders) day += x.unit == o.unit && x.h <= o.h + 1e-9 && x.h > o.h - 24.0 ? 1 : 0;
+        const int cls = r->campaign.MoveClassOf(static_cast<std::size_t>(o.object));
+        SC_EXPECT(cls >= 0 && day <= r->campaign.MoveRules().classes[static_cast<std::size_t>(cls)].max_moves_day && day <= 3);
+    }
+    // The save holds the moves; a load replays them at their hours with no order source.
+    const std::string saved = SaveCampaignJson(r->campaign, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json");
+    SC_EXPECT(saved.find("\"unit_move\"") != std::string::npos);
+    AirCampaign back;
+    std::string e;
+    SC_EXPECT(LoadCampaignJson(saved, kData, back, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(Fnv(back) == Fnv(r->campaign) && back.Journal().size() == r->campaign.Journal().size());
+    SC_EXPECT(back.UnitMoves().size() == moves.size());
+    for (std::size_t i = 0; i < moves.size() && i < back.UnitMoves().size(); ++i) {
+        SC_EXPECT(back.UnitMoves()[i].key == moves[i].key && back.UnitMoves()[i].ready_h == moves[i].ready_h && back.UnitMoves()[i].stage == moves[i].stage);
+    }
+    // A save at mode 0 has no moves and loads at 0.
+    AirWarData d0;
+    AirCampaign c0;
+    if (!Nation(d0, c0, 0.0, "nato")) return;
+    RunTo(c0, 24.0);
+    const std::string zero = SaveCampaignJson(c0, "air_war/theatre_pannonia_nation.json", "air_war/faction_nato.json");
+    SC_EXPECT(zero.find("\"unit_move\"") == std::string::npos);
+    AirCampaign z;
+    SC_EXPECT(LoadCampaignJson(zero, kData, z, &e));
+    SC_EXPECT_NEAR(z.Data().tuning.Get("ad_strategy.mode"), 0.0, 1e-12);
+    SC_EXPECT(!z.UnitMovesOn() && Fnv(z) == Fnv(c0));
 }

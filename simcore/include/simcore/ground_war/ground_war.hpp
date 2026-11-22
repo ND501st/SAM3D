@@ -803,6 +803,12 @@ public:
     // The route service's use (F3.6): the cache's asks, searches and hits, and the road net (null without a country map).
     const nav::RouteCache::Stats& RouteStats() const { return routes_.GetStats(); }
     const nav::RoadGraph* Roads() const { return roads_.get(); }
+    // The crossings whose bridges the air war has down now, refreshed (asked by another mover's route on the same roads:
+    // our SAM units' moves on orders, F4.2; the ground war's own marches would refresh it the same at their next ask).
+    const nav::Overlay& RoadOverlayNow() {
+        RefreshOverlay();
+        return overlay_;
+    }
     const nav::Overlay& RoadOverlay() const { return overlay_; }
     // A test's: a march's hours between two anchors on the roads now (-1: no way; F3.4's rule is not applied).
     double TestRoadHours(const std::string& from_id, const Vec3& from, const std::string& to_id, const Vec3& to, double h, const GroundEnv& env) {

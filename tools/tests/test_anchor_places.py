@@ -154,5 +154,6 @@ def test_the_real_data_stands_on_the_map_where_it_stood_before():
         if old_text is None:
             pytest.skip(f"git has no {BEFORE}")
         old = ap.resolve(kind, json.loads(old_text), at)
-        assert old == resolved, f"{rel}: a point moved"
+        # Places added since (later steps' posts) may follow; every point there before stands where it stood.
+        assert {k: resolved.get(k) for k in old} == old, f"{rel}: a point moved"
         assert len(old) > 30

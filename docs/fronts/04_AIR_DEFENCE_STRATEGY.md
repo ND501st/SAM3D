@@ -270,3 +270,112 @@ reached him (66.9 h).
 - Wrecks reported are out of the count for the site's repair time, not until a report that it is back.
 - Unreal needs no call: the data loads from the campaign's data directory when the mode is 1.
 - The thresholds, the traits and the rhythm are first values; balance is F6.
+
+## As built: F4.2 (22 Nov 2026)
+
+Our national SAM units, the army's Kub battery and the radar companies move only on their commanders' orders, heard at
+their own posts (section 3; `simcore/air_war/unit_moves.hpp`, `AirCampaign::MoveUnit`, the planner in
+`campaign/ad_strategy.hpp`). Only at `ad_strategy.mode` 1 on a front with a line; at 0 nothing is loaded, the classes
+are empty, `MoveUnit` refuses and `Relocate`'s timer, F3.7's escape and the overrun are as before.
+
+**The classes** (`data/campaign/ad_strategy.json` `"moves"`, every value sourced or labelled a game value):
+- *Fixed SAM battalion* (S-75, S-125; the national sector's commander's): 2.5 h to pack, 3 h to set up, 2-2.5 h of
+  checks (`mt_1973_nvn` pp. 10-11); 7.4 km/h on the road by day and night, derived from the same page's 30-40 km in
+  10-15 h; 5 km/h across country (`fm_100_2_1_1984` p. 5-2, the lower bound); three moves a day at most
+  (`mt_rozhdestvenskiy_depth` pp. 6-7). The S-125 moves by the S-75's norms (no source of ours gives its own).
+- *Kub battery* (the army's chief of air defence's): 5-15 min to pack and to set up (`mt_rozhdestvenskiy_depth` p. 8),
+  20-30 km/h by day, 15-20 by night, 5-15 across country (`fm_100_2_1_1984` p. 5-2), two moves a day (the army's rule);
+  leapfrog (a battery waits while another of its class in its sector moves), cover and the offence.
+- *Radar company* (`ew_radar` but the regiment's P-40; the sector's): 2 h to pack, 2 h to set up, 0.5 h of checks, 15
+  km/h (estimates, fitting `mt_1973_nvn`'s 15-20 km in a night), two a day.
+Thresholds by class (game values): ordered back when the line as he expects it will be within 20 km (S-75 class), 8 km
+(Kub, F3.7's escape distance), 15 km (radars); back to 40, 20 and 30 km behind it; sent to cover a sector 30 and 12 km
+behind it.
+
+**Who hears the order** (the open point F4.1 left). Each unit that moves on orders has its commander's post in the chain
+(`data/command/chain_pannonia.json`, `<unit>_cdr`, 29 posts at level 4 under the national sector's command post, the Kub's
+under the army's chief of air defence; their places at the units' sites in `places_pannonia.json`, game placements,
+fictional holders). The commander's order is a fact (`ad_move:<commander>:<unit>:<n>`, `FactKind::Order`, by voice,
+precedence 2 for a withdrawal) from his post to that post alone; the campaign moves a unit only on an order its post holds
+(`InfoNet::Known` with its hour at or before the campaign's). The unit's commander reports it ready at the new position
+(`ad_ready:<order>`, `Situation`, from his post to the commander's, at the hour it was ready); his post's place moves with
+it (`InfoNet::MovePlace`). The commander believes a unit where his last order put it once that report reached him; with no
+report for `stale_h` (72 h) he stops waiting.
+
+**How the campaign hears it, deterministically.** `AirCampaign::SetOrderSource` takes a callback (the feed's
+`CampaignFeed::OrderSource()`), asked at whole hours inside the steps: it pumps the feed to the campaign's hour and returns
+the orders the units' posts have heard; the campaign records each move begun as a `UnitMove` action (`in_step`), so a
+load puts every move back at its hour with no source at all, and moves do not depend on how the host chunks its
+`Advance` calls. The source asks again the next hour while an order is on its way, else at the next commander's decision.
+
+**The planner** (at each commander's review, after his priority decision, on what reached his post only):
+- *Withdrawals*: the line as he believes it, each axis he holds a report of pushed in to its reported depth over its
+  frontage and tapering off as the ground war shapes a penetration, carried on at its reported pace over his cycle, his
+  order's work and the class's packing: a unit within its class's distance of that line is ordered to the nearest of its
+  prepared positions far enough behind it, else straight back.
+- *Cover*: when he raises a sector to defend (or the offence), the units his shares give it come from his economy sectors
+  with more than they keep (one where national objects lie), the nearest first, `moves_per_review` (1) at a decision, to
+  the sector's middle at the class's distance behind the line as he believes it, `spacing_m` (10 km) apart.
+- At most the class's moves a day; leapfrog for the Kub.
+
+**The move** (`AirCampaign::MoveUnit`, `UnitMove`): packed at its place (`ObjectState::march` 1: no fire, no radar, no
+ELINT emission), on the road (`march` 2: at no place; no raid finds it there and the overrun does not take it), set up
+and checked at the new place (`march` 1), then ready (`last_moved_h`). The march: the route service on the country's roads
+(the ground war's graph and its bridges down when it runs, else `RoadGraph::ForCountry`, cached), its road legs at the
+class's speed by day or night as it leaves, a way off the roads up to 6 km across country and a longer one as local roads
+the country's map does not draw (x1.3 at road speed), a route longer than 3 straight lines not taken (the straight line
+x1.3). A unit wrecked while packing or setting up stops there.
+
+**Overrun and Relocate.** A unit of a class is exempt from F3.7's escape: it is lost with the ground when the line overruns
+it before its order came (the overrun counts it in `UnitsOverrun`, a move it was packing for ends at stage -1); a move whose
+old place the line later passes is counted as got away. `Relocate`'s timer stays for these units only inside the sector
+they stand in, about where their last order put them, as far from the line as their class's withdrawal distance.
+
+**Mode 1 on the nation** (`fronts_bench data --ad --days 10 --seeds 3 warsaw_pact nato`; the campaign asks the feed for the orders):
+
+| A campaign of 10 days, mean of 3 seeds | Warsaw Pact | NATO |
+|---|---|---|
+| Moves by class (mean march) | radar companies 2.0 (1.1 h), S-75 class 1.0 (7.6 h) | radar companies 0.3 (2.6 h), S-75 class 1.3 (35.6 h) |
+| Orders given (withdrawals, cover) | 6.0 (6.0, 0) | 3.3 (2.3, 1.0) |
+| Heard at the unit's post; reported ready | 4.3; 2.3 | 3.3; 1.7 |
+| Wrecked while packing or setting up | 0.7 | 0 |
+| Overrun before a move; got away on one | 0; 0 | 0; 0 |
+| Off the air, per unit that moves on orders (29) | 0.9 h | 2.1 h |
+| Packages, against mode 0 (F4.1's war) | 226.7 against 224.7 | 175.7 against 175.0 |
+| Loss rate a sortie, against mode 0 | 3.39% against 3.45% | 2.58% against 2.42% |
+
+The Pact's withdrawals come off its two deep axes (tisava 61 km, rava_reservoir 20 km in 10 days); orders not heard by
+the end were given in the last hours. NATO's long march is one battalion sent by a cover order 112 km straight, 304 km on
+the country's roads (under the detour cap of three). No unit was overrun in these seeds: the commanders ordered them back
+before the line came; the overrun itself, in time and late, is shown by the test below. The air war barely moves: a few
+units off the air for a few hours out of 29 is a small change to a whole nation's defence.
+
+**Cost.** the commanders with their unit moves add 1.13 ms (Pact) and 0.67 ms (NATO) to the pipeline's pump a campaign day
+(15.47 against 14.33 ms, 12.70 against 12.03 ms), inside the 5 ms budget; the routes are asked once a move and cached.
+The campaign and the pump together: 3518 against 3514 ms a day for the Pact, 2292 against 1987 ms for NATO, whose war
+differs once its units move (other raids, other fights; not the moves' own cost, which is the pump's share above and a
+route a move). The pump at mode 0 is 14.3 ms a day against F4.1's 13.3: the chain has 29 more posts.
+
+**Identity.** At `ad_strategy.mode` 0 `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json
+data 10 7` are byte-identical to track F's tip before it (61c3d1b, built the same way); the replay fingerprint
+(`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds. At mode 1 the air war now differs from
+F4.1's (the units move, and those that move on orders no longer escape on their own).
+
+**Tests** (`test_ad_strategy.cpp`, 4 new; F4.1's fifth no longer expects the same war at modes 0 and 1): the classes load,
+every unit of a class has its post, nothing at mode 0; an S-75 move of 30 km (44 km by the roads) takes 13.7 h, packed,
+on the road and set up as the stages say, a Kub's 32 km in 2.2 h; on the nation every move on an order its unit's post
+had heard, from that hour, at most three a day, a save replaying the moves with no order source and a mode 0 save with
+none; four battalions put across the Pact's main axis: ordered in time, three get away and one is lost (wrecked first);
+ordered late or never, all four are lost.
+
+**Left:**
+- Unreal: the subsystem that runs the campaign and the feed should call `Campaign->SetOrderSource(Feed->OrderSource())`
+  after making the feed and clear it before the feed goes; without it no unit moves on orders (the moves of a loaded
+  campaign replay all the same).
+- The units' posts are new in the chain: a wreck at a unit's site is now reported by its own post, a change at every mode.
+- A unit within reach at the war's start waits for its commander's first decision (no pre-war deployment order).
+- The S-125 moves by the S-75's norms; the radars' times are estimates.
+- No moves only by night: the class's night speed is used when the march starts in the dark.
+- The commander does not hear that a unit was wrecked or overrun before it moved (only the stale timeout clears it).
+- The Kub's leapfrog has one battery in the theatre to work on; the Osa regiment's batteries are F4.4's.
+- Cover moves only when a priority is raised; nothing brings units back to economy sectors when it is lowered.

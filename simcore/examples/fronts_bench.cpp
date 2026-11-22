@@ -51,9 +51,13 @@
 //   seed's), how long from the newest fact a change rested on reaching the commander's post to his order reaching the SAM
 //   regiment's commander (the army's chief's) or the fighter regiment (the national sector's), every fact a change rested
 //   on checked held by his post by the decision's hour (a change on a fact that had not reached it is counted and fails
-//   the gate), the air war the same with the commanders on and off (they move nothing yet), and the commanders' CPU a
-//   campaign day (the pump's with them against without; budget 5 ms, 04 section 10). Defaults 10 days, 3 seeds,
-//   warsaw_pact and nato.
+//   the gate), whether the air war differs with the commanders on and off (from F4.2 it does: the units move on their
+//   orders), and the commanders' CPU a campaign day (the pump's with them against without, the order source's pumps
+//   inside the steps counted; budget 5 ms, 04 section 10). F4.2: the campaign asks the feed for the orders its units heard
+//   (AirCampaign::SetOrderSource); the moves begun by class with their mean march, the orders (withdrawals and cover),
+//   heard and ready, the units overrun against those that got away on a move, the hours off the air per unit that moves
+//   on orders, the packages and the loss rate a sortie against mode 0 (F4.1's air war), and the campaign's and the
+//   pump's CPU together a day. Defaults 10 days, 3 seeds, warsaw_pact and nato.
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <algorithm>
@@ -711,7 +715,15 @@ int FeedMain(const std::string& data, const std::string& theatre, int days, int 
 
 struct AdStats {
     double pump_s = 0.0;
+    double total_s = 0.0;  // the campaign and the pump together (the order source pumps inside the steps, F4.2)
     int days = 0;
+    // F4.2: our units' moves on orders.
+    std::map<std::string, int> moves_by_class;  // begun
+    std::map<std::string, double> march_h_by_class;
+    int ordered = 0, heard = 0, withdrawals = 0, covers = 0, ready = 0, lost_on_move = 0;
+    int units = 0, overrun = 0, escaped = 0;
+    double offline_h = 0.0;
+    double packages = 0.0, sorties = 0.0, lost = 0.0;
     int reviews = 0, changes = 0, unheld = 0, journal_differs = 0;
     std::map<std::string, std::map<std::string, int>> by_sector;  // commander -> "sector to" -> changes
     int to_target = 0;
@@ -727,15 +739,60 @@ void AdCampaign(const AirWarData& d, unsigned seed, int days, const command::Cha
     command::CampaignFeed feed;
     feed.Bind(&net);
     double pump = 0.0;
+    // F4.2: the units hear their orders inside the steps (never asked at mode 0); its pumps are the pipeline's too.
+    const UnitOrderSource source = feed.OrderSource();
+    c.SetOrderSource([&](const AirCampaign& cc, std::vector<UnitOrder>& heard, double* next_h) {
+        const double p0 = CpuSeconds();
+        source(cc, heard, next_h);
+        pump += CpuSeconds() - p0;
+    });
+    const double t0 = CpuSeconds();
     while (c.Now() < days * 24.0) {
         if (c.Advance(days * 24.0)) c.SkipPlayerMission();
         const double p0 = CpuSeconds();
         feed.Pump(c);
         pump += CpuSeconds() - p0;
     }
+    out.total_s += CpuSeconds() - t0;
+    c.SetOrderSource(nullptr);
     out.pump_s += pump;
     out.days += days;
     if (journal != nullptr) *journal = JournalHash(c);
+    for (const Package& p : c.Packages()) {
+        if (!p.resolved) continue;
+        out.packages += 1.0;
+        for (const Flight& f : p.flights) {
+            const AircraftType* a = d.faction.Aircraft(f.aircraft);
+            if (a != nullptr && (a->drone || a->missile)) continue;
+            out.sorties += f.count;
+            out.lost += f.lost;
+        }
+    }
+    if (c.UnitMovesOn()) {
+        for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) out.units += c.MoveClassOf(i) >= 0 ? 1 : 0;
+        out.overrun += c.UnitsOverrun();
+        for (const UnitMove& m : c.UnitMoves()) {
+            const std::string& cls = c.MoveRules().classes[static_cast<std::size_t>(m.cls)].id;
+            out.moves_by_class[cls] += 1;
+            out.offline_h += m.OfflineHours(c.Now());
+            if (m.stage >= 2) out.march_h_by_class[cls] += m.MarchHours();
+            out.ready += m.stage == 3 ? 1 : 0;
+            out.lost_on_move += m.stage < 0 ? 1 : 0;
+            out.escaped += m.escaped ? 1 : 0;
+            if (log) {
+                std::printf("    move %-40s %-16s %s heard %s, on the road %s, ready %s: %.0f km%s (%.0f km straight), stage %d%s\n", m.key.c_str(),
+                            d.theatre.objects[static_cast<std::size_t>(m.object)].id.c_str(), cls.c_str(), command::FormatClock(m.heard_h, d.theatre.start_hour).c_str(),
+                            command::FormatClock(m.depart_h, d.theatre.start_hour).c_str(), command::FormatClock(m.ready_h, d.theatre.start_hour).c_str(),
+                            m.road_km + m.cross_km, m.on_roads ? " by road" : " straight", Dist2d(m.from, m.to) / 1000.0, m.stage, m.escaped ? ", got away" : "");
+            }
+        }
+        for (const campaign::AdStrategy::MoveOrder& o : feed.Ad().MoveOrders()) {
+            ++out.ordered;
+            out.heard += o.heard_h >= 0.0 ? 1 : 0;
+            out.withdrawals += o.withdraw ? 1 : 0;
+            out.covers += o.withdraw ? 0 : 1;
+        }
+    }
     const campaign::AdStrategy& ad = feed.Ad();
     if (!ad.On()) {
         if (!ad.Error().empty()) std::printf("  %s\n", ad.Error().c_str());
@@ -839,6 +896,25 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
             AdCampaign(d0, seed, days, chain, false, off, &j0);
             on.journal_differs += j1 != j0 ? 1 : 0;
         }
+        // F4.2: the units' moves on the orders.
+        {
+            const double n = seeds > 0 ? static_cast<double>(seeds) : 1.0;
+            std::string by;
+            for (const auto& kv : on.moves_by_class) {
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "%s%s %.1f (march %.1f h)", by.empty() ? "" : ", ", kv.first.c_str(), kv.second / n,
+                              kv.second > 0 ? on.march_h_by_class[kv.first] / kv.second : 0.0);
+                by += buf;
+            }
+            std::printf("  units' moves a campaign (F4.2): %s; orders %.1f (%.1f withdrawals, %.1f to cover), heard %.1f, ready %.1f, lost on a move %.1f\n",
+                        by.empty() ? "none" : by.c_str(), on.ordered / n, on.withdrawals / n, on.covers / n, on.heard / n, on.ready / n, on.lost_on_move / n);
+            std::printf("  units overrun (lost with the ground) %.1f a campaign, got away on a move %.1f; off the air %.1f h per unit that moves on orders (%d units)\n",
+                        on.overrun / n, on.escaped / n, on.units > 0 ? on.offline_h / on.units : 0.0, seeds > 0 ? on.units / seeds : 0);
+            std::printf("  the air war, moves on against ad_strategy.mode 0 (F4.1's air war): %.1f against %.1f packages a campaign, loss rate %.2f%% against %.2f%% a sortie\n",
+                        on.packages / n, off.packages / n, on.sorties > 0 ? 100.0 * on.lost / on.sorties : 0.0, off.sorties > 0 ? 100.0 * off.lost / off.sorties : 0.0);
+            std::printf("  a campaign day, the campaign and the pump together: %.3f ms with the moves, %.3f ms at mode 0\n", on.days > 0 ? 1000.0 * on.total_s / on.days : 0.0,
+                        off.days > 0 ? 1000.0 * off.total_s / off.days : 0.0);
+        }
         auto mean = [](double sum, int n) { return n > 0 ? sum / n : 0.0; };
         std::printf("  %d reviews, %d changes (%.1f a campaign); every fact a change rested on held by the post by its hour: %s (%d not)\n", on.reviews,
                     on.changes, seeds > 0 ? static_cast<double>(on.changes) / seeds : 0.0, on.unheld == 0 ? "yes" : "NO", on.unheld);
@@ -850,13 +926,14 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
         std::printf("  from the newest fact at his post to the order at the regiment (or the fighters): %.2f h (of it to his decision hour %.2f h); from that "
                     "fact's own hour %.2f h; %d orders arrived\n",
                     mean(on.target_delay, on.to_target), mean(on.prompt_delay, on.to_target), mean(on.origin_delay, on.to_target), on.to_target);
-        std::printf("  the air war with the commanders on and off: %s\n", on.journal_differs == 0 ? "the same journal in every seed" : "DIFFERS");
+        std::printf("  the air war with the commanders on and off: %s\n",
+                    on.journal_differs == 0 ? "the same journal in every seed" : "differs (the units move on their orders, F4.2)");
         const double day_on = on.days > 0 ? 1000.0 * on.pump_s / on.days : 0.0, day_off = off.days > 0 ? 1000.0 * off.pump_s / off.days : 0.0;
         const double extra = day_on - day_off;
         const bool over = extra > budget_ms;
         std::printf("  the pipeline's pump a campaign day: %.3f ms with the commanders, %.3f ms without: %.3f ms for them%s\n\n", day_on, day_off, extra,
                     over ? "  OVER BUDGET" : "");
-        fails += (over ? 1 : 0) + (on.unheld > 0 ? 1 : 0) + (on.journal_differs > 0 ? 1 : 0);
+        fails += (over ? 1 : 0) + (on.unheld > 0 ? 1 : 0);
     }
     if (gate && fails > 0) {
         std::printf("%d over budget or failed\n", fails);

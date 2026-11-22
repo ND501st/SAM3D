@@ -1027,7 +1027,7 @@ public:
                 Push(fallback, Str(o.id));
             }
             if (o.kind != ObjectKind::City && !o.player && !o.decoy && e.HorizontalLength() < clip) m.objects.push_back({o.id, e});
-            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 &&
+            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 && st.march == 0 &&
                 e.HorizontalLength() < clip + o.defence.radius_m) {
                 RaidNeighbour nb;
                 nb.id = o.id;

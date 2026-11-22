@@ -550,7 +550,7 @@ private:
             for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
                 const TheatreObject& def = d.theatre.objects[oj];
                 ObjectState& st = (*c.truth)[oj];
-                if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
+                if (!def.defence.present || st.function <= 0.05 || def.decoy || st.march != 0) continue;  // a unit on a move fires nothing (F4.2)
                 if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
                 if (st.missiles == 0) continue;
                 if (def.defence.max_target_mps > 0.0 && a->cruise_mps > def.defence.max_target_mps) continue;  // too fast for it
@@ -917,7 +917,7 @@ private:
         const double stale = tune.Get("strike.stale_miss_m");
         for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
             const TheatreObject& o = d.theatre.objects[i];
-            if (o.kind == ObjectKind::City) continue;
+            if (o.kind == ObjectKind::City || (*c_->truth)[i].march == 2) continue;  // a unit on the road is at no place (F4.2)
             const double dist = Dist2d((*c_->truth)[i].pos, fl.aim_pos);
             const double reach = o.decoy ? tune.Get("strike.decoy_area_m") : stale;
             if (dist < reach && dist < best) {

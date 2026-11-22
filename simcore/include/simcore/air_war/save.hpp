@@ -45,7 +45,9 @@
 // a load rebuilds it by the replay.
 // A save without "ad_strategy_mode" was made before track F's F4.1 (our air defence commanders' sector priorities,
 // docs/fronts/04_AIR_DEFENCE_STRATEGY.md) and replays with ad_strategy.mode 0, as it was played: the priorities are our
-// side's pipeline's, rebuilt from the campaign's history on a load.
+// side's pipeline's, rebuilt from the campaign's history on a load. From track F's F4.2 a save at ad_strategy.mode 1 holds
+// our units' moves on orders ("unit_move": the unit, the order's key, where to, the hour it began, when it was heard, and
+// whether the order source gave it inside a step): a load puts each back at its hour, with no order source needed.
 #pragma once
 
 #include <cmath>
@@ -573,6 +575,16 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "post", Str(a.what));
                 Put(x, "by", Str(a.by));
                 break;
+            case CampaignAction::Kind::UnitMove:
+                Put(x, "kind", Str("unit_move"));
+                Put(x, "unit", Str(a.what));
+                Put(x, "key", Str(a.by));
+                Put(x, "east_m", Num(a.to.x));
+                Put(x, "north_m", Num(a.to.y));
+                Put(x, "h", Num(a.until_h));
+                Put(x, "heard_h", Num(a.observed_h));
+                Put(x, "in_step", Bool(a.in_step));
+                break;
         }
         Put(x, "posture", save_detail::PostureJson(a.posture));
         Push(actions, x);
@@ -667,6 +679,14 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
                 a.kind = CampaignAction::Kind::PostAttack;
                 a.what = r.String(x, "post");
                 a.by = r.String(x, "by");
+            } else if (kind == "unit_move") {
+                a.kind = CampaignAction::Kind::UnitMove;
+                a.what = r.String(x, "unit");
+                a.by = r.String(x, "key");
+                a.to = Vec3{r.Number(x, "east_m"), r.Number(x, "north_m"), 0.0};
+                a.until_h = r.Number(x, "h");
+                a.observed_h = r.Number(x, "heard_h");
+                a.in_step = r.Boolean(x, "in_step");
             } else if (kind == "report") {
                 a.kind = CampaignAction::Kind::Report;
                 a.package_id = r.Int(x, "package_id", -1);

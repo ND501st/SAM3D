@@ -111,7 +111,7 @@ namespace detail {
 class AdStrategyLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, AdStrategyData& out) {
-        if (!Keys(root, "", {"strategy_id", "name", "status", "source", "confidence", "notes", "rules", "commanders"}) || !Provenance(root, "")) {
+        if (!Keys(root, "", {"strategy_id", "name", "status", "source", "confidence", "notes", "rules", "commanders", "moves"}) || !Provenance(root, "")) {
             return false;
         }
         const json::Value* rules = root.Find("rules");
@@ -508,11 +508,67 @@ public:
         return static_cast<std::size_t>(sector) < plan.size() ? plan[static_cast<std::size_t>(sector)] : SectorPriority::Economy;
     }
 
+
+    // ------------------------------------------------------------ our units' moves on the commanders' orders (F4.2)
+
+    // One move a commander ordered (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 3): the order's fact from his post to
+    // the unit's commander's post, what the unit's post heard and when, its report of readiness back at his post.
+    struct MoveOrder {
+        int commander = -1;
+        int object = -1;          // the theatre object
+        std::string unit;         // its id
+        int post = -1;            // the unit's commander's position
+        Vec3 from;                // where he believed it was
+        Vec3 to;
+        double h = 0.0;           // decided (the order leaves order_work_h later)
+        bool withdraw = false;    // back from the line as reported; else to cover a sector
+        int sector = -1;          // the sector it covers (a cover move)
+        std::string why;
+        std::string key;          // the order's fact
+        int fact = -1;
+        double heard_h = -1.0;    // the unit's post had it (and the campaign was told), -1 not yet
+        int ready_fact = -1;      // the unit's report of readiness at the new position (-1 none yet)
+        double ready_h = -1.0;    // when it reached his post, -1 not yet
+    };
+    const std::vector<MoveOrder>& MoveOrders() const { return move_orders_; }
+    // The units each commander orders: what he believes of them (where, which sector, the move pending).
+    std::size_t MoveUnits() const { return units_.size(); }
+
+    // The orders the units' posts have heard by the campaign's hour, for the campaign to carry out (AirCampaign's order
+    // source: CampaignFeed::OrderSource()); each given once. *next_h: when to ask again (the next hour while an order is
+    // on its way, else the next commander's decision).
+    void Heard(const airwar::AirCampaign& c, std::vector<airwar::UnitOrder>& out, double* next_h) {
+        if (!on_ || units_.empty()) {
+            if (next_h != nullptr) *next_h = 1e18;
+            return;
+        }
+        std::size_t keep = 0;
+        for (std::size_t q = 0; q < waiting_.size(); ++q) {
+            MoveOrder& o = move_orders_[static_cast<std::size_t>(waiting_[q])];
+            const command::Delivery* d = o.fact >= 0 ? net_->Known(o.post, o.fact) : nullptr;
+            if (d != nullptr && d->h <= c.Now() + 1e-9) {
+                o.heard_h = d->h;
+                airwar::UnitOrder u;
+                u.key = o.key;
+                u.unit = o.unit;
+                u.to = o.to;
+                u.heard_h = d->h;
+                out.push_back(u);
+                continue;
+            }
+            waiting_[keep++] = waiting_[q];
+        }
+        waiting_.resize(keep);
+        if (next_h != nullptr) *next_h = waiting_.empty() ? std::max(c.Now() + 1.0, std::ceil(next_any_h_ - 1e-9)) : c.Now() + 1.0;
+    }
+
     // Each commander's decisions due by now, on what reached his post: after the feed added the campaign's facts and
     // brought the net up to the campaign's hour. True when an order was added (the net is to be advanced again).
     bool Pump(const airwar::AirCampaign& c, const command::GroundFeed& g, const command::AirFrontWatch& w) {
         if (net_ == nullptr || !Ready(c)) return false;
-        if (next_any_h_ > c.Now()) return false;
+        const std::size_t facts_before = net_->Facts().size();
+        if (!units_.empty()) ReportMoves(c);
+        if (next_any_h_ > c.Now()) return net_->Facts().size() > facts_before;
         double watermark_h = c.Now();
         for (const airwar::Package& p : c.Packages()) {
             if (!p.resolved) watermark_h = std::min(watermark_h, p.FirstH());
@@ -537,7 +593,7 @@ public:
         for (const Run& r : runs_) {
             if (r.post >= 0) next_any_h_ = std::min(next_any_h_, r.next_h);
         }
-        return added;
+        return added || net_->Facts().size() > facts_before;
     }
 
 private:
@@ -569,6 +625,8 @@ private:
         AdCommanderState state;
         int reviews = 0;
         int orders = 0;
+        int moves = 0;   // his move orders (F4.2)
+        int self = -1;   // his index
         // What has not reached his post yet, by source (indices into the source's list), and the cursors past what was listed.
         std::vector<int> reports, summaries, orders_in, conclusions, wrecks;
         std::size_t reports_seen = 0, summaries_seen = 0, orders_seen = 0, conclusions_seen = 0, wrecks_seen = 0;
@@ -593,6 +651,24 @@ private:
         int sam = -1;
         double h = 0.0;
     };
+    // A unit that moves on its commander's orders (F4.2), as he believes it.
+    struct UnitHeld {
+        int object = -1;
+        int cls = -1;
+        int commander = -1;
+        int post = -1;           // its commander's position
+        int place = -1;          // where that post stands (moves with the unit)
+        int sam = -1;            // its index among the SAM fire units (-1 a radar)
+        Vec3 at;                 // where he believes it stands
+        int sector = -1;         // the sector that is in
+        int pending = -1;        // the move he ordered and has no report of yet (move_orders_), -1 none
+        std::vector<double> ordered_h;  // his orders to it, the hours decided
+    };
+    // An axis as a commander believes it (BelieveLine).
+    struct BelievedAxis {
+        double along_m = 0.0, half_width_m = 0.0, taper_m = 0.0, depth_m = 0.0;
+        double pace_mph = 0.0;  // its reported pace
+    };
 
     command::InfoNet* net_ = nullptr;
     AdStrategyData data_;
@@ -610,6 +686,16 @@ private:
     std::vector<int> conclusion_fact_;
     std::vector<std::string> sector_ids_, sector_names_;
     double next_any_h_ = 0.0;
+    // F4.2
+    std::vector<UnitHeld> units_;
+    std::map<int, int> unit_by_object_;
+    std::map<int, int> sam_unit_;     // a SAM fire unit's (sams_) unit that moves on orders
+    std::vector<MoveOrder> move_orders_;
+    std::vector<int> waiting_;        // move_orders_ not yet heard
+    std::size_t moves_seen_ = 0;      // the campaign's UnitMoves() read for arrivals and readiness
+    std::vector<int> moves_open_;     // of those, not ready yet
+    std::vector<BelievedAxis> believed_;  // the line as the deciding commander believes it (BelieveLine)
+    bool by_axis_ = false;
 
     void Reset() {
         ready_ = on_ = false;
@@ -625,6 +711,13 @@ private:
         sector_ids_.clear();
         sector_names_.clear();
         next_any_h_ = 0.0;
+        units_.clear();
+        unit_by_object_.clear();
+        sam_unit_.clear();
+        move_orders_.clear();
+        waiting_.clear();
+        moves_seen_ = 0;
+        moves_open_.clear();
     }
 
     // On at ad_strategy.mode 1 on a front with a line, with the data and the commanders' posts; decided once. The
@@ -665,6 +758,7 @@ private:
             for (const std::string& to : def.to) {
                 if (d.PositionIndex(to) < 0) r.post = -1;
             }
+            r.self = static_cast<int>(runs_.size());
             r.cycle_h = CycleHoursOf(def, data_.rules);
             r.next_h = r.cycle_h;
             r.fronts.assign(n, FrontHeld());
@@ -678,7 +772,315 @@ private:
             error_ = "ad_strategy: none of the commanders' posts (or the posts their orders are for) is in the chain";
             return false;
         }
+        ReadyUnits(c);
         on_ = true;
+        return true;
+    }
+
+    // The units that move on orders (F4.2): each with its commander (the class's) and its own commander's post, the post
+    // whose place stands at it. A unit with no post in the chain gets no orders.
+    void ReadyUnits(const airwar::AirCampaign& c) {
+        if (!c.UnitMovesOn()) return;
+        const command::ChainData& d = net_->Data();
+        const std::vector<airwar::TheatreObject>& objs = c.Data().theatre.objects;
+        int national = -1, troops = -1;
+        for (std::size_t k = 0; k < data_.commanders.size(); ++k) {
+            if (runs_[k].post < 0) continue;
+            if (data_.commanders[k].role == AdRole::National && national < 0) national = static_cast<int>(k);
+            if (data_.commanders[k].role == AdRole::Troops && troops < 0) troops = static_cast<int>(k);
+        }
+        for (std::size_t i = 0; i < objs.size(); ++i) {
+            const int cls = c.MoveClassOf(i);
+            if (cls < 0) continue;
+            UnitHeld u;
+            u.object = static_cast<int>(i);
+            u.cls = cls;
+            u.commander = c.MoveRules().classes[static_cast<std::size_t>(cls)].national ? national : troops;
+            for (std::size_t p = 0; p < d.positions.size() && u.post < 0; ++p) {
+                const int pl = d.PlaceIndex(d.positions[p].place);
+                if (pl >= 0 && d.places[static_cast<std::size_t>(pl)].theatre_object == objs[i].id) {
+                    u.post = static_cast<int>(p);
+                    u.place = pl;
+                }
+            }
+            if (u.commander < 0 || u.post < 0) continue;
+            const auto it = sam_by_id_.find(objs[i].id);
+            u.sam = it == sam_by_id_.end() ? -1 : it->second;
+            u.at = objs[i].pos;
+            u.sector = c.FrontLine().SectorOf(u.at);
+            if (u.sam >= 0) sam_unit_[u.sam] = static_cast<int>(units_.size());
+            unit_by_object_[u.object] = static_cast<int>(units_.size());
+            units_.push_back(u);
+        }
+    }
+
+    // The campaign's moves the units made: a post moves with its unit on arrival; at readiness its commander reports it
+    // to the commander who ordered the move (a fact from its post to his, at the hour it was ready).
+    void ReportMoves(const airwar::AirCampaign& c) {
+        const std::vector<airwar::UnitMove>& moves = c.UnitMoves();
+        for (; moves_seen_ < moves.size(); ++moves_seen_) moves_open_.push_back(static_cast<int>(moves_seen_));
+        std::size_t keep = 0;
+        for (std::size_t q = 0; q < moves_open_.size(); ++q) {
+            const airwar::UnitMove& m = moves[static_cast<std::size_t>(moves_open_[q])];
+            const auto it = unit_by_object_.find(m.object);
+            if (m.stage < 0 || it == unit_by_object_.end()) continue;  // lost on it, or nobody's
+            if (m.stage < 3) {
+                moves_open_[keep++] = moves_open_[q];
+                continue;
+            }
+            const UnitHeld& u = units_[static_cast<std::size_t>(it->second)];
+            const command::ChainData& d = net_->Data();
+            net_->MovePlace(d.places[static_cast<std::size_t>(u.place)].id, m.arrive_h, m.to);
+            int order = -1;
+            for (std::size_t k = 0; k < move_orders_.size() && order < 0; ++k) {
+                if (move_orders_[k].key == m.key) order = static_cast<int>(k);
+            }
+            if (order < 0) continue;  // not his (a caller's MoveUnit)
+            MoveOrder& o = move_orders_[static_cast<std::size_t>(order)];
+            const AdCommanderDef& def = Def(o.commander);
+            const airwar::TheatreObject& ob = c.Data().theatre.objects[static_cast<std::size_t>(m.object)];
+            command::Fact f;
+            f.key = "ad_ready:" + o.key;
+            f.kind = command::FactKind::Situation;
+            f.h = m.ready_h;
+            f.origin = d.positions[static_cast<std::size_t>(u.post)].id;
+            f.subject = ob.id;
+            f.text = command::FormatClock(f.h, c.Data().theatre.start_hour) + ". " + ob.name + ": ready at the new position, " +
+                     std::to_string(static_cast<int>(std::lround((m.road_km + m.cross_km)))) + " km from the old, on the order " + o.key + ".";
+            f.summary = ob.name + " is ready at its new position.";
+            f.to = {def.post};
+            f.precedence = 1;
+            o.ready_fact = net_->AddFact(f);
+        }
+        moves_open_.resize(keep);
+    }
+
+    // The readiness reports that reached commander k's post by t: the unit stands where he sent it, the move done.
+    bool TakeReady(int k, double t, const airwar::AirCampaign& c) {
+        bool fresh = false;
+        for (UnitHeld& u : units_) {
+            if (u.commander != k || u.pending < 0) continue;
+            MoveOrder& o = move_orders_[static_cast<std::size_t>(u.pending)];
+            const command::Delivery* d = o.ready_fact >= 0 ? net_->Known(runs_[static_cast<std::size_t>(k)].post, o.ready_fact) : nullptr;
+            if (d != nullptr && d->h <= t + 1e-9) {
+                o.ready_h = d->h;
+                u.at = o.to;
+                u.sector = c.FrontLine().SectorOf(u.at);
+                u.pending = -1;
+                fresh = true;
+            } else if (t - o.h > data_.rules.stale_h) {
+                u.pending = -1;  // no word of it this long: he no longer waits (it was lost, or the report)
+            }
+        }
+        return fresh;
+    }
+
+    // The line as the commander believes it, for his moves: each axis he holds a report of pushed in to its reported depth
+    // over its frontage, tapering to nothing (the ground war's shape of a penetration, at the axis's place on the line);
+    // without the ground war's axes, the sector's deepest reported depth across the sector.
+    void BelieveLine(const Run& r, const airwar::AirCampaign& c) {
+        believed_.clear();
+        by_axis_ = c.Ground() != nullptr;
+        if (!by_axis_) return;
+        const std::vector<groundwar::Axis>& axes = c.Ground()->Axes();
+        for (std::size_t i = 0; i < r.axes.size() && i < axes.size(); ++i) {
+            if (!r.axes[i].has || !(r.axes[i].axis.depth_m > 0.0)) continue;
+            BelievedAxis b;
+            b.along_m = axes[i].along_m;
+            b.half_width_m = axes[i].half_width_m;
+            b.taper_m = axes[i].taper_m;
+            b.depth_m = r.axes[i].axis.depth_m;
+            b.pace_mph = std::max(0.0, r.axes[i].axis.pace_km_day) * 1000.0 / 24.0;
+            believed_.push_back(b);
+        }
+    }
+    // ahead_h: the axes carried on at their reported pace for that long.
+    double PushedAt(const AdPicture& p, double along_m, int sector, double ahead_h = 0.0) const {
+        if (!by_axis_) {
+            if (sector < 0 || static_cast<std::size_t>(sector) >= p.sectors.size()) return 0.0;
+            const AdSectorPicture& sp = p.sectors[static_cast<std::size_t>(sector)];
+            return sp.thrust_m + std::max(0.0, sp.pace_km_day) * 1000.0 / 24.0 * ahead_h;
+        }
+        double in = 0.0;
+        for (const BelievedAxis& b : believed_) {
+            const double off = std::fabs(along_m - b.along_m);
+            const double depth = b.depth_m + b.pace_mph * ahead_h;
+            double d = 0.0;
+            if (off <= b.half_width_m) {
+                d = depth;
+            } else if (b.taper_m > 0.0 && off < b.half_width_m + b.taper_m) {
+                d = depth * (1.0 - (off - b.half_width_m) / b.taper_m);
+            }
+            in = std::max(in, d);
+        }
+        return in;
+    }
+    // How far a point stands behind the line as he believes it (BelieveLine), or as he expects it ahead_h on.
+    double BelievedDepth(const airwar::LineOfContact& line, const AdPicture& p, const Vec3& at, int* sector = nullptr, double ahead_h = 0.0) const {
+        const airwar::FrontPlace pl = line.Place(at);
+        const int s = line.SectorAt(pl.along_m);
+        if (sector != nullptr) *sector = s;
+        return pl.side * pl.distance_m - PushedAt(p, pl.along_m, s, ahead_h);
+    }
+
+    bool MayOrder(const UnitHeld& u, const airwar::UnitMoveRules& rules, double t) const {
+        int today = 0;
+        for (double h : u.ordered_h) today += h > t - 24.0 + 1e-9 ? 1 : 0;
+        return today < rules.classes[static_cast<std::size_t>(u.cls)].max_moves_day;
+    }
+
+    // Commander k's moves at his decision hour t (section 3): back from the line as reported, every unit it has come
+    // within its class's reach of; and to cover the sector whose priority he has just raised, the units his shares say,
+    // from the economy sectors, each keeping a unit where national objects lie, moves_per_review at a time. A unit of a
+    // leapfrog class waits while another of its class in its sector is on a move. At most the class's moves a day.
+    bool PlanMoves(int k, double t, const AdPicture& p, const AdChange& ch, const airwar::AirCampaign& c) {
+        if (units_.empty()) return false;
+        const airwar::UnitMoveRules& rules = c.MoveRules();
+        const airwar::LineOfContact& line = c.FrontLine();
+        const std::vector<airwar::TheatreObject>& objs = c.Data().theatre.objects;
+        const Run& r = runs_[static_cast<std::size_t>(k)];
+        BelieveLine(r, c);
+        bool added = false;
+        const auto alive = [&](const UnitHeld& u) { return u.sam < 0 || u.sam >= static_cast<int>(r.lost.size()) || !(r.lost[static_cast<std::size_t>(u.sam)].until_h > t); };
+        // Withdrawals: the line as reported carried on at its reported pace until the unit could be packed, were it ordered
+        // now (his order's work and the packing) or at his next decision (his cycle more).
+        const AdCommanderDef& def = Def(k);
+        for (UnitHeld& u : units_) {
+            if (u.commander != k || u.pending >= 0 || !alive(u) || !MayOrder(u, rules, t)) continue;
+            const airwar::MoveClassDef& cls = rules.classes[static_cast<std::size_t>(u.cls)];
+            const double ahead_h = r.cycle_h + def.order_work_h + cls.pack_h;
+            const double depth = BelievedDepth(line, p, u.at, nullptr, ahead_h);
+            if (!(depth < cls.withdraw_within_m)) continue;
+            const airwar::TheatreObject& o = objs[static_cast<std::size_t>(u.object)];
+            Vec3 to;
+            double best = 1e18;
+            for (const Vec3& q : o.prepared) {
+                if (BelievedDepth(line, p, q, nullptr, ahead_h) < cls.withdraw_to_m) continue;
+                const double dist = std::hypot(q.x - u.at.x, q.y - u.at.y);
+                if (dist < best) {
+                    best = dist;
+                    to = q;
+                }
+            }
+            if (best >= 1e17) {
+                const double along = line.Place(u.at).along_m;
+                to = u.at + line.InwardNormal(along) * (cls.withdraw_to_m - depth);
+            }
+            char buf[192];
+            std::snprintf(buf, sizeof(buf), "the line as reported, at its pace, will be %.0f km from it in %.0f h, within its %.0f km; back to %.0f km behind it",
+                          depth / 1000.0, ahead_h, cls.withdraw_within_m / 1000.0, cls.withdraw_to_m / 1000.0);
+            added = OrderMove(k, u, to, true, -1, buf, t, c) || added;
+        }
+        // Cover for the sector he raised.
+        if (ch.sector < 0 || ch.to == SectorPriority::Economy) return added;
+        const std::size_t n = p.sectors.size();
+        const std::vector<double> shares = PriorityShares(r.state.now, data_.rules);
+        std::vector<int> count(n, 0), objects(n, 0);
+        int eligible = 0;
+        const auto fits = [&](const UnitHeld& u) {
+            const airwar::MoveClassDef& cls = rules.classes[static_cast<std::size_t>(u.cls)];
+            return ch.to == SectorPriority::Offence ? cls.offence : cls.cover;
+        };
+        for (const PlanObject& o : objects_) {
+            if (o.sector >= 0 && static_cast<std::size_t>(o.sector) < n) ++objects[static_cast<std::size_t>(o.sector)];
+        }
+        for (const UnitHeld& u : units_) {
+            if (u.commander != k || !alive(u) || !fits(u)) continue;
+            ++eligible;
+            int s = -1;
+            BelievedDepth(line, p, u.pending >= 0 ? move_orders_[static_cast<std::size_t>(u.pending)].to : u.at, &s);
+            if (s >= 0 && static_cast<std::size_t>(s) < n) ++count[static_cast<std::size_t>(s)];
+        }
+        const std::size_t target = static_cast<std::size_t>(ch.sector);
+        const int want = static_cast<int>(std::lround(shares[target] * static_cast<double>(eligible)));
+        int need = std::min(want - count[target], rules.moves_per_review);
+        const airwar::SectorDef& sd = line.Sector(target);
+        const double from_m = std::max(0.0, sd.from_m), to_m = std::min(line.Length(), sd.to_m > sd.from_m ? sd.to_m : line.Length());
+        const double mid = 0.5 * (from_m + to_m);
+        for (int placed = count[target]; need > 0; --need, ++placed) {
+            // The nearest unit that can go: from an economy sector with more than it keeps, not on a move, not over its day.
+            int pick = -1;
+            int pick_sector = -1;
+            double best = 1e18;
+            const Vec3 aim = line.PointAt(mid);
+            for (std::size_t q = 0; q < units_.size(); ++q) {
+                const UnitHeld& u = units_[q];
+                if (u.commander != k || u.pending >= 0 || !alive(u) || !fits(u) || !MayOrder(u, rules, t)) continue;
+                int s = -1;
+                BelievedDepth(line, p, u.at, &s);
+                if (s < 0 || static_cast<std::size_t>(s) >= n || s == ch.sector || r.state.now[static_cast<std::size_t>(s)] != SectorPriority::Economy) continue;
+                if (count[static_cast<std::size_t>(s)] <= (objects[static_cast<std::size_t>(s)] > 0 ? 1 : 0)) continue;
+                if (rules.classes[static_cast<std::size_t>(u.cls)].leapfrog && Busy(u, s, line, p)) continue;
+                const double dist = std::hypot(u.at.x - aim.x, u.at.y - aim.y);
+                if (dist < best) {
+                    best = dist;
+                    pick = static_cast<int>(q);
+                    pick_sector = s;
+                }
+            }
+            if (pick < 0) break;
+            UnitHeld& u = units_[static_cast<std::size_t>(pick)];
+            const airwar::MoveClassDef& cls = rules.classes[static_cast<std::size_t>(u.cls)];
+            // Spread along the sector by spacing, alternately either side of its middle.
+            const double off = (placed % 2 == 0 ? 1.0 : -1.0) * rules.spacing_m * static_cast<double>((placed + 1) / 2);
+            const double along = std::min(to_m, std::max(from_m, mid + off));
+            const Vec3 to = line.PointAt(along) + line.InwardNormal(along) * (cls.forward_behind_m + PushedAt(p, along, ch.sector));
+            --count[static_cast<std::size_t>(pick_sector)];
+            const std::string why = std::string("to ") + (ch.to == SectorPriority::Offence ? "take the offence in " : "defend ") +
+                                    sector_names_[target] + ", from the economy sector " + sector_names_[static_cast<std::size_t>(pick_sector)];
+            added = OrderMove(k, u, to, false, ch.sector, why, t, c) || added;
+        }
+        return added;
+    }
+
+    // Is another unit of u's class in sector s on a move he ordered (leapfrog: one stays firing)?
+    bool Busy(const UnitHeld& u, int s, const airwar::LineOfContact& line, const AdPicture& p) const {
+        for (const UnitHeld& v : units_) {
+            if (&v == &u || v.cls != u.cls || v.pending < 0) continue;
+            int sv = -1;
+            BelievedDepth(line, p, v.at, &sv);
+            if (sv == s) return true;
+        }
+        return false;
+    }
+
+    // The order: a fact from his post to the unit's commander's, order_work_h after his decision.
+    bool OrderMove(int k, UnitHeld& u, const Vec3& to, bool withdraw, int sector, const std::string& why, double t, const airwar::AirCampaign& c) {
+        const AdCommanderDef& def = Def(k);
+        Run& r = runs_[static_cast<std::size_t>(k)];
+        const command::ChainData& d = net_->Data();
+        const airwar::TheatreObject& ob = c.Data().theatre.objects[static_cast<std::size_t>(u.object)];
+        MoveOrder o;
+        o.commander = k;
+        o.object = u.object;
+        o.unit = ob.id;
+        o.post = u.post;
+        o.from = u.at;
+        o.to = to;
+        o.h = t;
+        o.withdraw = withdraw;
+        o.sector = sector;
+        o.why = why;
+        o.key = "ad_move:" + def.id + ":" + ob.id + ":" + std::to_string(++r.moves);
+        command::Fact f;
+        f.key = o.key;
+        f.kind = command::FactKind::Order;
+        f.h = t + def.order_work_h;
+        f.origin = def.post;
+        f.subject = ob.id;
+        const double km = std::hypot(to.x - u.at.x, to.y - u.at.y) / 1000.0;
+        char where[96];
+        std::snprintf(where, sizeof(where), "%.0f km %s", km, withdraw ? "back from the line" : "to its new position");
+        f.text = command::FormatClock(f.h, c.Data().theatre.start_hour) + ". " + Title(k) + " to " + ob.name + ": pack up and move " + where +
+                 ", ready to fire there; report when ready. Because " + why + ".";
+        f.summary = Title(k) + ": " + ob.name + " to move " + where + ".";
+        f.to = {d.positions[static_cast<std::size_t>(u.post)].id};
+        f.precedence = withdraw ? 2 : 1;
+        o.fact = net_->AddFact(f);
+        u.pending = static_cast<int>(move_orders_.size());
+        u.ordered_h.push_back(t);
+        waiting_.push_back(static_cast<int>(move_orders_.size()));
+        move_orders_.push_back(std::move(o));
         return true;
     }
 
@@ -869,7 +1271,9 @@ private:
             if (o.base_depth_m - sp.thrust_m <= data_.rules.object_reach_m) ++sp.objects_in_reach;
         }
         for (std::size_t i = 0; i < sams_.size(); ++i) {
-            const int s = sams_[i].sector;
+            int s = sams_[i].sector;
+            const auto u = sam_unit_.find(static_cast<int>(i));  // one of his that moves on orders: where he believes it (F4.2)
+            if (u != sam_unit_.end() && units_[static_cast<std::size_t>(u->second)].commander == r.self) s = units_[static_cast<std::size_t>(u->second)].sector;
             if (s < 0 || static_cast<std::size_t>(s) >= n) continue;
             if (i < r.lost.size() && r.lost[i].until_h > t) continue;
             ++p.sectors[static_cast<std::size_t>(s)].fire_units;
@@ -923,12 +1327,14 @@ private:
         Run& r = runs_[static_cast<std::size_t>(k)];
         r.prompt_fact = -1;
         r.prompt_h = -1.0;
-        if (!Take(r, t, c, g, w)) return false;
+        const bool ready = TakeReady(k, t, c);
+        if (!Take(r, t, c, g, w) && !ready) return false;
         ++r.reviews;
         const AdCommanderDef& def = Def(k);
         const AdPicture p = Picture(r, t);
         const AdChange ch = DecideChange(p, data_.rules, def.traits, r.state);
-        if (ch.sector < 0) return false;
+        const bool moved = PlanMoves(k, t, p, ch, c);
+        if (ch.sector < 0) return moved;
         AdDecision dec;
         dec.commander = k;
         dec.h = t;
