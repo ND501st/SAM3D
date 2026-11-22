@@ -143,6 +143,10 @@
     { "id": "rc_capital_post", "name": "Radar company 'Capital East''s command post", "kind": "military_post", "at": "rc_capital", "theatre_object": "rc_capital",
       "notes": "The unit's command post at its site; it moves with the unit (F4.2). Game placement." },
     { "id": "bugac_rtb_post", "name": "Radio-technical battalion 'Bugac''s command post", "kind": "military_post", "at": "bugac_rtb", "theatre_object": "bugac_rtb",
-      "notes": "The unit's command post at its site; it moves with the unit (F4.2). Game placement." }
+      "notes": "The unit's command post at its site; it moves with the unit (F4.2). Game placement." },
+    { "id": "bty21_depth_south", "name": "Battery 21's prepared position south of Vrbice", "kind": "military_post", "at": "bty21_depth_south",
+      "notes": "Open fields 500 m east of the Vrbice road, 11 km further from the Warsaw Pact's front than the position at the bridges: a line of the division's prepared positions in depth (vr_poltikovic_1984 p. 96: 3-4 a division, its lines 6-8 km apart), where the regiment moves the battery when the division withdraws (data/campaign/tasking.json withdraw_with_division). The place is SAM3D's." },
+    { "id": "bty21_depth_east", "name": "Battery 21's prepared position east of the Rava on the Tiszavar road", "kind": "military_post", "at": "bty21_depth_east",
+      "notes": "Fields 600 m south of the Tiszavar road east of the Rava, 9 km further from NATO's front than the position at the bridges: as bty21_depth_south, the line in depth against a war from the west. The place is SAM3D's." }
   ]
 }

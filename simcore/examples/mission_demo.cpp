@@ -6,9 +6,12 @@
 // (roadmap 14.2: data/campaign/tasking.json). The director (roadmap 15.4) counts what woke the battery commander and how
 // long the quiet between was.
 //
-// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h]
+// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts]
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
-//   --hours: the session held that long from its start (the task through the day), not to the scenario's end
+//   --hours: the session held that long from its start (the task through the day), not to the scenario's end;
+//   --theatre: the war's theatre in data/air_war/ (theatre_pannonia.json); --fronts: track F's modes at 1 (the ground war,
+//   the air front, our air defence commanders) and the regiment following them on what reached it (F4.4; needs a theatre
+//   with a country map: --theatre theatre_pannonia_nation.json)
 // Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
 // with --war also if no package came in.
 #include <cstdio>
@@ -36,6 +39,14 @@ int main(int argc, char** argv) {
         }
         if (a == "--hours" && i + 1 < argc) {
             md.hours = std::atof(argv[++i]);
+            continue;
+        }
+        if (a == "--theatre" && i + 1 < argc) {
+            md.theatre = std::string("air_war/") + argv[++i];
+            continue;
+        }
+        if (a == "--fronts") {
+            md.fronts = true;
             continue;
         }
         args.push_back(a);
@@ -99,6 +110,41 @@ int main(int argc, char** argv) {
         }
         if (s.TasksGiven().empty()) std::printf("  no new task\n");
         for (const std::string& n : s.Notes()) std::printf("  (%s)\n", n.c_str());
+    }
+    // Track F, F4.4: what reached the regiment of the fronts, the tasks it gave on it and how long each took to the battery.
+    if (s.Watch().Bound() && s.Campaign() != nullptr) {
+        const double h0 = s.CampaignHourAtStart();
+        const auto clock = [&](double h) { return h < h0 ? std::string("before the session") : r.TaskClock((h - h0) * 3600.0); };
+        const campaign::RegimentPicture held = s.RegimentHolds();
+        const std::string priority_from = held.priority_h < 0.0 ? std::string("his pre-war plan") : "his order at the regiment " + clock(held.priority_h);
+        const std::string sharing_from = held.sharing_h < 0.0 ? std::string("the pre-war plan") : "the order at the regiment " + clock(held.sharing_h);
+        std::printf("==== The regiment and the fronts (F4.4)\n");
+        std::printf("  it holds: the division's sector %s, %s by the army's chief of air defence (%s); the sky shared %s (%s); %d withdrawal(s) of the division\n",
+                    held.sector.c_str(), held.priority.c_str(), priority_from.c_str(), command::CooperationMethodName(held.sharing), sharing_from.c_str(),
+                    held.withdrawals);
+        int in_session = 0;
+        for (const campaign::RegimentArrival& a : s.Watch().Arrivals()) {
+            if (a.reached_h < h0) continue;
+            ++in_session;
+            std::printf("  reached the regiment %s: %s %s (its hour %s)\n", clock(a.reached_h).c_str(), a.what.c_str(), a.key.c_str(), clock(a.compiled_h).c_str());
+        }
+        if (in_session == 0) std::printf("  nothing of the fronts reached the regiment in the session\n");
+        for (const campaign::MissionSession::GivenTask& g : s.TasksGiven()) {
+            if (g.rule == "cover_priority_object" || g.rule == "relocate_when_known") continue;
+            const std::string fact = g.fact_s >= 0.0 ? r.TaskClock(g.fact_s) : std::string("before the session");
+            const std::string heard = g.heard_s >= 0.0 ? r.TaskClock(g.heard_s) : std::string("never");
+            std::printf("  %s (rule %s): the fact at the regiment %s, the order given %s, heard at the battery %s", g.task.c_str(), g.rule.c_str(), fact.c_str(),
+                        r.TaskClock(g.at_s).c_str(), heard.c_str());
+            if (g.fact_s >= 0.0 && g.heard_s >= 0.0) {
+                std::printf(": %.1f min from the fact at the regiment (%.1f of it to the order)", (g.heard_s - g.fact_s) / 60.0, (g.at_s - g.fact_s) / 60.0);
+            }
+            std::printf("\n");
+        }
+        const std::string told = r.SharingHeardS() >= 0.0 ? "heard " + r.TaskClock(r.SharingHeardS()) : std::string("no");
+        std::printf("  the battery marched to a new position on the regiment's tasks: %s; the sky's sharing told: %s (the plan of cooperation now %s, %d change(s) heard)\n",
+                    s.BatteryMoves() > 0 ? "yes" : "no", told.c_str(), command::CooperationMethodName(r.Task().own_air.method), r.SharingChanges());
+        std::printf("  the pipeline: %zu facts, %zu still looked for at the regiment\n", s.Net() != nullptr ? s.Net()->Facts().size() : std::size_t{0},
+                    s.Watch().Waiting());
     }
     // The debrief's account of the task.
     const std::string debrief = r.Debrief();

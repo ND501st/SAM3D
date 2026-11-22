@@ -436,6 +436,8 @@
     {"id": "bty21_v4", "name": "Vehicle 21-4's position", "east_km": 6.3, "north_km": -10.9},
     {"id": "bty21_bridges", "name": "Battery 21's position west of the Kesmark bridges", "east_km": 9.6, "north_km": -7.0},
     {"id": "bty21_bridges_reserve", "name": "Battery 21's reserve position by the dummy track", "east_km": 8.7, "north_km": -8.0},
+    {"id": "bty21_depth_south", "name": "Battery 21's prepared position south of Vrbice", "east_km": 2.0, "north_km": -17.5},
+    {"id": "bty21_depth_east", "name": "Battery 21's prepared position east of the Rava on the Tiszavar road", "east_km": 19.0, "north_km": -7.5},
     {"id": "rgt_cp", "name": "Regiment command post (the Lazne woods)", "east_km": -10, "north_km": -4},
     {"id": "rgt_rear", "name": "Regiment rear (transport company, field kitchen, medical post)", "east_km": -7.5, "north_km": -6.5},
     {"id": "div_hq", "name": "Division main command post (the Dubnik forest)", "east_km": -20, "north_km": 11},
