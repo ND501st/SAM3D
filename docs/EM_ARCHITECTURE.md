@@ -371,10 +371,11 @@ Co-operative crews share one node.
 
 ## 22. Known limitations
 
-* Knife edges by Deygout (three at most) and the smooth earth below 1 GHz (§36); no buildings, forest canopy or
-  land-use clutter on the radio path. Above 1 GHz past the horizon the two rays and the edges lose less than P.526's
-  smooth earth (§36).
-* Two-ray multipath uses a smooth-earth reflection point; real terrain reflections are not traced.
+* Knife edges by Deygout (three at most) and the smooth earth below 1 GHz (§36); woods and buildings on the profile
+  (§27) and round an antenna (§37), water under a path (§37). Above 1 GHz past the horizon the two rays and the edges
+  lose less than P.526's smooth earth (§36). No ducting.
+* Two-ray multipath uses a smooth-earth reflection point (over land or, by the share under its Fresnel zone, water:
+  §37); real terrain reflections are not traced.
 * Search-radar elevation measurement is the beam centre; no height-finding radars yet.
 * Tracker is GNN (no JPDA/MHT); no manoeuvre-adaptive filter.
 * VGPO, angle deception against non-monopulse radars, repeater false targets and sweep jamming not
@@ -498,7 +499,7 @@ the update rates or the data rules.
 
 The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C2Network`) holds selectable sources, each with its own plotting board: the PU-12 (main, from `command_post`), and library types (EWR voice net, division early-warning net, neighbouring battery, observation post, data link; `data/command/c2_sources.json`). Sources share voice nets (one message at a time), go down (outages, `c2_fail`, link range, a `C2LinkModel`), and the crew listens to one at a time: `RequestSource` (player/UI/trigger) or the NPC commander's fallback on silence (2.5 / 5 periods, as the EM C2 status) and return to the main source. The EM link budget is now the `C2LinkModel` for sources with a position (`EmSensorLink::AddRadioSource`). Voice designations as EM messages are still to do. Evidence: `docs/research/EM_C2_SOURCES_2026-10.md`.
 
-## 27. Environment depth (E9, started 16 October 2026)
+## 27. Environment depth (E9, started 16 October 2026; done 23 November 2026, §37)
 
 * **Deygout diffraction.** `AnalysePath` keeps, besides the main edge, the worst crest on each side of it measured against the line to the main edge's top (`sub_v_geometry_a/b`); `DiffractionLossDb` sums J(v) over the three. A sub-edge must be a crest of its own, with a 20 m valley between it and the main edge, so the flat top of one wide ridge stays one edge. Sub-edges are only looked for when the main edge blocks the ray. Two 300 m ridges on a 20 km path: 21 dB at 50 MHz for one, 38 dB for two.
 * **Rain.** `Environment::rain_rate_mmh` (scenario `own_unit.em.rain_mmh`) adds ITU-R P.838-3 specific attenuation (k R^alpha, horizontal polarisation, 1-40 GHz table; f^2 below 1 GHz) times the P.530 distance factor to a path's atmospheric loss, for radars and radios. Radar and radio calibration always uses the dry environment (`EmWorld::Dry`), so rain lowers ranges instead of being fitted away. 10 GHz, 50 mm/h: 1.66 dB/km; over 30 km 17.7 dB.
@@ -580,8 +581,9 @@ The battery's air picture is not tied to the PU-12. `simcore/c2_sources.hpp` (`C
     simulated second, a few per cent of the game's fixed step at real time. A cache keyed on a path's two ends would
     seldom hit (every target moves every step) and would need invalidating when a wood or a building changes. To
     revisit if a profile of the game's step shows the sight lines on top.
-* Left: sea areas and ducting; orchards, vineyards and parkland as clutter classes of their own (the country's land
-  cover has none); the map's far ground still clutters only its towns (its woods are boxes).
+* The clutter an antenna stands in and water under a path: §37 (23 November 2026).
+* Left: ducting; orchards, vineyards and parkland as clutter classes of their own (the country's land cover has none);
+  the map's far ground still clutters only its towns (its woods are boxes).
 
 ## 28. Scale (E8, started 16 October 2026)
 

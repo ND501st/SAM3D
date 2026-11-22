@@ -173,7 +173,7 @@ range) more than exact numbers, except where a source gives a number.
 ## 11. Known limitations
 
 See `docs/EM_ARCHITECTURE.md` §22. The big ones were: not yet connected to the Osa console and scopes (done in E2,
-E3); no missiles or optical sensor (done in E5, §33); minimal doctrine; single knife-edge (E9 started); GNN tracker.
+E3); no missiles or optical sensor (done in E5, §33); minimal doctrine; single knife-edge (E9 done: Deygout edges, woods, buildings, clutter round an antenna, water; §27, §37); GNN tracker.
 Anti-radiation missiles are not modelled in this track.
 
 ## 12. Next steps
