@@ -22,6 +22,8 @@ namespace
 	};
 	/** By "part#variant". Each mesh is rooted when built or loaded, so the raw pointers stay valid. */
 	TMap<FString, FSimMapAssetMesh> GSimMapAssetMeshes;
+	/** Whole models and munitions by "model:<id>" and "munition:<id>"; a null mesh: none on this machine (asked once). */
+	TMap<FString, FSimMapAssetMesh> GSimWholeAssetMeshes;
 
 	FString SimMapStd(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
 }
@@ -74,6 +76,59 @@ float FSimMapAssets::LodScreenSize(int32 Lod)
 	// tuned against -SimMapShots.
 	static const float Sizes[] = {1.0f, 0.1f, 0.03f, 0.01f};
 	return Sizes[FMath::Clamp(Lod, 0, 3)];
+}
+
+namespace
+{
+	/** A registered asset's mesh for a whole model or munition, loaded once and kept (rooted); logged once by Key. */
+	const FSimMapAssetMesh& SimWholeAsset(const FString& Key, const simcore::scenery::AssetEntry* Asset)
+	{
+		if (const FSimMapAssetMesh* Found = GSimWholeAssetMeshes.Find(Key))
+		{
+			return *Found;
+		}
+		FSimMapAssetMesh Entry;
+		if (Asset != nullptr)
+		{
+			const FString Path = SimMapStd(Asset->unreal_path);
+			if (UStaticMesh* Real = LoadObject<UStaticMesh>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet))
+			{
+				Real->AddToRoot();
+				Entry.Mesh = Real;
+				Entry.Fix = FTransform(FRotator(0.0, Asset->yaw_deg, 0.0), FVector(0.0, 0.0, Asset->z_offset_m * 100.0), FVector(Asset->scale));
+				UE_LOG(LogSAM3D, Log, TEXT("Assets: %s drawn by %s (%s, %s)"), *Key, *SimMapStd(Asset->id), *Path, *SimMapStd(Asset->licence));
+			}
+			else
+			{
+				UE_LOG(LogSAM3D, Log, TEXT("Assets: %s's asset %s is not on this machine (%s; docs/scenery/ASSETS.md): its own shape"), *Key,
+					*SimMapStd(Asset->id), *Path);
+			}
+		}
+		return GSimWholeAssetMeshes.Add(Key, Entry);
+	}
+}
+
+UStaticMesh* FSimMapAssets::ModelMesh(const FString& ModelId, FTransform& OutFix)
+{
+	OutFix = FTransform::Identity;
+	const simcore::scenery::AssetRegister* Reg = Register();
+	if (Reg == nullptr || ModelId.IsEmpty())
+	{
+		return nullptr;
+	}
+	const FSimMapAssetMesh& Entry = SimWholeAsset(TEXT("model:") + ModelId, Reg->AssetForModel(std::string(TCHAR_TO_UTF8(*ModelId))));
+	OutFix = Entry.Fix;
+	return Entry.Mesh;
+}
+
+UStaticMesh* FSimMapAssets::MunitionMesh(const FString& MunitionId)
+{
+	const simcore::scenery::AssetRegister* Reg = Register();
+	if (Reg == nullptr || MunitionId.IsEmpty())
+	{
+		return nullptr;
+	}
+	return SimWholeAsset(TEXT("munition:") + MunitionId, Reg->AssetForMunition(std::string(TCHAR_TO_UTF8(*MunitionId)))).Mesh;
 }
 
 UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransform& OutFix)

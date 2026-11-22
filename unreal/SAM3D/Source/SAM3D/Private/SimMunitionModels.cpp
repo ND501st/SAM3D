@@ -6,6 +6,7 @@
 #include "Misc/Paths.h"
 #include "SAM3D.h"
 #include "SimAirCampaignSubsystem.h"
+#include "SimMapAssets.h"
 #include "SimRuntimeMesh.h"
 #include "StaticMeshAttributes.h"
 #include "StaticMeshResources.h"
@@ -131,7 +132,13 @@ UStaticMesh* FSimMunitionModels::Mesh(const FString& AnyId)
 		}
 		else
 		{
-			Built = SimFxBuildMunition(*Spec, std::string(), Key);
+			// A real asset if the register names one for this munition and it is on this machine (docs/scenery/ASSETS.md),
+			// else the munition's own shape.
+			Built = FSimMapAssets::MunitionMesh(Key);
+			if (Built == nullptr)
+			{
+				Built = SimFxBuildMunition(*Spec, std::string(), Key);
+			}
 			GSimFxMunitionMeshes.Add(Key, Built);
 		}
 	}
@@ -154,6 +161,13 @@ UStaticMesh* FSimMunitionModels::PartMesh(const FString& AnyId, const FString& P
 		if (UStaticMesh** Same = GSimFxMunitionMeshes.Find(Key))
 		{
 			Built = *Same;
+		}
+		else if (simcore::scenery::PartReplacesBody(std::string(TCHAR_TO_UTF8(*Part))) &&
+				 FSimMapAssets::MunitionMesh(SimFxStd(Spec->id)) != nullptr)
+		{
+			// The whole munition in another state (the Snakeye's blades open, the wings folded): a real asset has no such
+			// state, so it stays as it is; Built stays null.
+			GSimFxMunitionMeshes.Add(Key, Built);
 		}
 		else
 		{
