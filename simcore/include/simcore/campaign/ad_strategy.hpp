@@ -555,6 +555,11 @@ public:
     const std::vector<MoveOrder>& MoveOrders() const { return move_orders_; }
     // The units each commander orders: what he believes of them (where, which sector, the move pending).
     std::size_t MoveUnits() const { return units_.size(); }
+    // Unit i's theatre object, its commander (an index of Commanders()) and its own commander's post (a position of the
+    // chain): which posts hold it in their plan (command/situation_map.hpp, F5.1). Fixed once the strategy is on.
+    int MoveUnitObject(std::size_t i) const { return units_[i].object; }
+    int MoveUnitCommander(std::size_t i) const { return units_[i].commander; }
+    int MoveUnitPost(std::size_t i) const { return units_[i].post; }
 
     // The orders the units' posts have heard by the campaign's hour, for the campaign to carry out (AirCampaign's order
     // source: CampaignFeed::OrderSource()); each given once. *next_h: when to ask again (the next hour while an order is

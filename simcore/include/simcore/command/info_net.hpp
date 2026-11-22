@@ -229,6 +229,7 @@ public:
         data_ = data;
         seed_ = seed;
         start_hour_ = start_hour;
+        ++revision_;
         facts_.clear();
         states_.clear();
         dangers_.clear();
@@ -267,6 +268,7 @@ public:
         if (it != by_key_.end()) return it->second;
         facts_.push_back(f);
         states_.emplace_back();
+        ++revision_;
         const int i = static_cast<int>(facts_.size()) - 1;
         by_key_[f.key] = i;
         return i;
@@ -507,6 +509,7 @@ public:
 
     // Everyone's knowledge up to campaign hour h. Call it only once every input known by h has been added.
     void AdvanceTo(double h) {
+        ++revision_;
         for (std::size_t i = 0; i < facts_.size(); ++i) Run(static_cast<int>(i), states_[i], h);
         now_h_ = std::max(now_h_, h);
     }
@@ -514,6 +517,9 @@ public:
     // ---------------------------------------------------------------- what people know
 
     double Now() const { return now_h_; }
+    // Counts every change to what anyone could know (a fact added, the net advanced, a fact played again): what a cache of
+    // a post's picture (command/situation_map.hpp) compares to know it is still the post's.
+    std::uint64_t Revision() const { return revision_; }
     double StartHour() const { return start_hour_; }
     // The sun's night instead of the fixed 20:00-06:00 (roadmap R7, light.hpp): the couriers' night speed by the sky of
     // the session this net runs in. `clock`'s day is the day of this net's hour 0; its start hour is taken as this net's.
@@ -780,6 +786,7 @@ private:
     int in_person_ = -1;
     std::vector<int> home_;
     std::vector<std::vector<Edge>> edges_;
+    std::uint64_t revision_ = 0;
     std::vector<Fact> facts_;
     mutable std::vector<FactState> states_;
     std::map<std::string, int> by_key_;
@@ -795,6 +802,7 @@ private:
     // A fact played again from its start (a telling or a report came in): deterministic, so all that was already
     // decided comes out the same, with the new input in its place.
     void Replay(int fact) {
+        ++revision_;
         if (fact < 0 || static_cast<std::size_t>(fact) >= states_.size()) return;
         states_[static_cast<std::size_t>(fact)] = FactState();
         if (now_h_ > -1e17) Run(fact, states_[static_cast<std::size_t>(fact)], now_h_);

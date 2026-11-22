@@ -6,6 +6,7 @@
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //        fronts_bench [data_dir] --feed [--days N] [--seeds N] [--theatre file] [--gate] [faction ...]
 //        fronts_bench [data_dir] --ad [--days N] [--seeds N] [--theatre file] [--gate] [--log] [--no-fighters] [faction ...]
+//        fronts_bench [data_dir] --map post[,post...] [--days N] [--seeds N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
 //   --sectors equal sectors (default 8, the most the design gives a front; 0: the theatre's own). At each day's end the
@@ -63,6 +64,11 @@
 //   cover by sector over time (each sector's mean over the campaign and at its end), the sum over the sectors against the
 //   front's (kept), and the abstract air fights, the enemy's aircraft our fighters shot down and ours lost, against mode 0.
 //   --no-fighters: the commanders without the data's "fighters" block (F4.2's war: the front's number everywhere).
+//   --map (F5.1): each faction's campaign with every front mode on and our pipeline pumped after every step, then the situation
+//   maps (command/situation_map.hpp) of the named posts (ids, comma separated) at the end, each mark with its source and age,
+//   and each against the truth, which only this bench reads: per axis the reported depth against the true one and the age of
+//   the report, the believed line against the true line over the base line's stations (mean and worst difference in km), whether
+//   the posts' maps differ, and the CPU a map takes to build. Defaults 10 days, 1 seed, warsaw_pact and nato.
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <algorithm>
@@ -73,6 +79,7 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -1044,8 +1051,106 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
 
 }  // namespace
 
+// --map: the situation maps of some posts at the end of a campaign with every front mode on, against the truth.
+int MapMain(const std::string& data, const std::string& theatre, int days, int seeds, const std::string& posts_arg, const std::vector<std::string>& factions) {
+    command::ChainData chain;
+    command::OwnAirDef own_air;
+    std::string e;
+    if (!command::LoadChainData(data, "command/chain_pannonia.json", chain, &e) || !command::LoadOwnAirFile(data + "/command/own_air.json", own_air, &e)) {
+        std::printf("%s\n", e.c_str());
+        return 1;
+    }
+    std::vector<std::string> posts;
+    for (std::size_t from = 0; from <= posts_arg.size();) {
+        std::size_t to = posts_arg.find(',', from);
+        if (to == std::string::npos) to = posts_arg.size();
+        if (to > from) posts.push_back(posts_arg.substr(from, to - from));
+        from = to + 1;
+    }
+    for (const std::string& p : posts) {
+        if (chain.PositionIndex(p) < 0) {
+            std::printf("no such post: %s\n", p.c_str());
+            return 1;
+        }
+    }
+    const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato"} : factions;
+    for (const std::string& faction : list) {
+        AirWarData d;
+        if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
+            std::printf("%s: %s\n", faction.c_str(), e.c_str());
+            return 1;
+        }
+        d.tuning.values["ground.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["ad_strategy.mode"] = 1.0;
+        for (int s = 0; s < seeds; ++s) {
+            const unsigned seed = static_cast<unsigned>(7 + s);
+            AirCampaign c;
+            c.Init(d, seed);
+            command::InfoNet net;
+            net.Init(chain, seed, d.theatre.start_hour);
+            command::GiveTheatreSky(net, d.theatre);
+            command::CampaignFeed feed;
+            feed.Bind(&net);
+            c.SetOrderSource(feed.OrderSource());
+            while (c.Now() < days * 24.0) {
+                if (c.Advance(days * 24.0)) c.SkipPlayerMission();
+                feed.Pump(c);
+            }
+            c.SetOrderSource(nullptr);
+            const command::SituationLayout layout = command::SituationLayoutOf(c, &feed.Ad(), &own_air);
+            const groundwar::GroundWar* g = c.Ground();
+            std::printf("==== %s, seed %u, %d days (hour %.1f): the ground war %s, %zu axes, %zu reports, %zu orders, %zu summaries\n", faction.c_str(), seed, days, c.Now(),
+                        feed.Ground().On() ? "on" : "off", layout.axes.size(), feed.Ground().Reports().size(), feed.Ground().Orders().size(), feed.Ground().Summaries().size());
+            std::set<std::string> dumps;
+            for (const std::string& post : posts) {
+                const int pi = net.Data().PositionIndex(post);
+                command::SituationMap m;
+                command::BuildSituationMap(net, feed, layout, pi, m);
+                std::printf("\n%s", command::SituationMapText(m, d.theatre.start_hour).c_str());
+                dumps.insert(command::SituationMapJson(m));
+                // against the truth (this bench only)
+                if (g != nullptr) {
+                    std::printf("  against the truth (axis: reported / true depth, km; age of the report, h):\n");
+                    for (std::size_t k = 0; k < g->Axes().size(); ++k) {
+                        const double truth_m = g->Axes()[k].depth_m;
+                        const command::MapAxis* held = nullptr;
+                        for (const command::MapAxis& a : m.axes) held = a.index == static_cast<int>(k) ? &a : held;
+                        if (held != nullptr) {
+                            std::printf("    %-26s %6.1f / %6.1f  (%+6.1f)  age %5.1f h%s\n", held->name.c_str(), held->depth_m / 1000.0, truth_m / 1000.0,
+                                        (held->depth_m - truth_m) / 1000.0, held->mark.age_h, held->mark.stale ? " stale" : "");
+                        } else if (truth_m > 0.0) {
+                            std::printf("    %-26s  not reported to the post / %6.1f  (the axis is %.1f km in)\n", g->Axes()[k].name.c_str(), truth_m / 1000.0, truth_m / 1000.0);
+                        }
+                    }
+                }
+                if (!m.line.empty() && c.FrontLine().StationCount() == m.line.size()) {
+                    double sum = 0.0, worst = 0.0, true_sum = 0.0;
+                    for (std::size_t i = 0; i < m.line.size(); ++i) {
+                        const double truth_m = std::max(0.0, c.FrontLine().StationOffset(i));
+                        const double diff = std::fabs(m.line[i].depth_m - truth_m);
+                        sum += diff;
+                        worst = std::max(worst, diff);
+                        true_sum += truth_m;
+                    }
+                    const double n = static_cast<double>(m.line.size());
+                    std::printf("  the believed line against the true one over %zu stations: mean %.2f km, worst %.1f km (the true line is %.2f km in on average); oldest mark %.1f h\n",
+                                m.line.size(), sum / n / 1000.0, worst / 1000.0, true_sum / n / 1000.0, m.OldestAgeH());
+                }
+                const int reps = 200;
+                const double t0 = CpuSeconds();
+                for (int r = 0; r < reps; ++r) command::BuildSituationMap(net, feed, layout, pi, m);
+                std::printf("  built in %.3f ms (%zu marks)\n", (CpuSeconds() - t0) * 1000.0 / reps,
+                            m.axes.size() + m.ours.size() + m.enemy.size() + m.priorities.size() + m.air_front.size() + m.sams.size() + m.orders.size());
+            }
+            std::printf("\n%zu posts, %zu different maps\n\n", posts.size(), dumps.size());
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
-    std::string data = "data", theatre = "theatre_pannonia_nation.json", player;
+    std::string data = "data", theatre = "theatre_pannonia_nation.json", player, map_posts;
     int days = 7, seeds = 3, sectors = 8, campaign_days = 10, campaign_seeds = 1;
     bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false, ground = false, gate = false,
          days_given = false, seeds_given = false, feed = false, ad = false;
@@ -1072,6 +1177,8 @@ int main(int argc, char** argv) {
             feed = true;
         } else if (a == "--ad") {
             ad = true;
+        } else if (a == "--map" && i + 1 < argc) {
+            map_posts = argv[++i];
         } else if (a == "--no-fighters") {
             g_no_fighters = true;
         } else if (a == "--moves") {
@@ -1095,6 +1202,7 @@ int main(int argc, char** argv) {
             factions.push_back(a);
         }
     }
+    if (!map_posts.empty()) return MapMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 1, map_posts, factions);
     if (ad) return AdMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (feed) return FeedMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions, player);
