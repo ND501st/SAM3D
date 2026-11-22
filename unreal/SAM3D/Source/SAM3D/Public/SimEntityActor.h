@@ -9,10 +9,15 @@ class UStaticMeshComponent;
 class UStaticMesh;
 class USimPu12MastComponent;
 
+class USimWorldSubsystem;
+
 /**
- * Visual stand-in for one simcore entity (aircraft or missile).
- * Each tick it copies its transform from USimWorldSubsystem. Subclass it in Blueprint
- * to swap the placeholder cone for a real model, add trails, explosions, sounds, etc.
+ * Visual stand-in for one simcore entity (aircraft, missile, ground vehicle).
+ * Each tick it reads its state from USimWorldSubsystem's one snapshot a frame and draws it at render time: carried on by
+ * its velocity between sim steps (docs/fx/README.md 4.3). A finished missile hides where it was; a destroyed aircraft
+ * follows its wreck's fall (USimFxSubsystem::GetWreckPose), darkened, and hides when it reaches the ground; a mover or a
+ * visitor that comes back into sight is shown again. Subclass it in Blueprint to swap the placeholder cone for a real
+ * model, add trails, explosions, sounds, etc.
  */
 UCLASS(Blueprintable)
 class SAM3D_API ASimEntityActor : public AActor
@@ -72,7 +77,27 @@ protected:
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
 private:
+	/** Where a ground vehicle is drawn: on the level's ground at its sim position (roadmap R5). On a map's level the map's
+	 *  drawn ground (USimWorldSubsystem::GroundAt, every frame, no trace); on a Cesium level a ground-only trace every
+	 *  0.5 s, or when it has moved more than a metre. */
+	FVector GroundBelow(const FVector& At, const USimWorldSubsystem& Sim);
+	/** A destroyed aircraft: its wreck's pose while it falls (shown, darkened), hidden once it is down or with no wreck. */
+	void FollowWreck(const USimWorldSubsystem& Sim);
+	/** Every part in one dark colour, once (a burnt wreck). */
+	void DarkenAsWreck();
+
 	bool bReportedInactive = false;
+	/** Sim time it stopped being alive (for the wreck's wait). */
+	double InactiveSinceSimSeconds = 0.0;
+	/** The frame it stopped being alive (the wreck's first frames). */
+	uint64 InactiveSinceFrame = 0;
+	bool bWreckSeen = false;
+	bool bDarkened = false;
+
+	/** The ground trace: when and from where it was last made, and the ground's offset from there. */
+	double LastGroundTraceSeconds = -1.0;
+	FVector LastGroundTraceFrom = FVector::ZeroVector;
+	FVector GroundOffset = FVector::ZeroVector;
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> BoxMesh;

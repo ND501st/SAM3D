@@ -38,6 +38,7 @@ struct IntelEntry {
     IntelSource source = IntelSource::None;
     bool mobile = false;
     bool emitter = false;
+    double move_mps = 0.0;      // a supply column's speed: where it was last seen spreads with it
     double value = 0.5;         // its worth to the enemy's targeteers (before weights)
     double suspected_decoy = 0.0;
     // The air defence the enemy believes it has.
@@ -46,14 +47,20 @@ struct IntelEntry {
     bool threat_low = true;
     bool threat_medium = true;
     bool threat_radar = true;
+    int threat_channels = 0;    // aircraft it engages at once (DefenceDef::channels; 0: all in reach)
+    double threat_max_target_mps = 0.0;  // the fastest target it can engage (0: any)
     // Its record with the enemy.
     int strikes = 0;
     double last_struck_h = -1e9;
     double claimed_destroyed_h = -1.0;  // pilots claimed it destroyed then
+    double first_h = -1e9;              // when the enemy first learned of it (its delivery; the prior picture's at the war's start)
     bool claim_was_false = false;       // (truth, for the story) it was not destroyed when they claimed it
     double losses_credited = 0.0;       // aircraft the enemy believes it shot down
 
     bool IsThreat() const { return threat_radius_m > 0.0 && threat_lethality > 0.0; }
+    // A radar SAM site: what a rollback hunts and counts. Guns, radar-laid or not, are flown round or over and left to the
+    // strike's escort.
+    bool IsSamRadar() const { return kind == ObjectKind::SamSite && threat_radar; }
     // How much it is worth acting on now: believed there, believed working.
     double Live() const { return Clamp01(exists) * Clamp01(function) * (1.0 - 0.7 * suspected_decoy); }
 };
@@ -80,8 +87,11 @@ struct IntelReport {
     bool threat_low = true;
     bool threat_medium = true;
     bool threat_radar = true;
+    int threat_channels = 0;
+    double threat_max_target_mps = 0.0;
     std::string label;
     std::string note;
+    double move_mps = 0.0;      // how fast it moves (a supply column): the picture spreads with it
 };
 
 class IntelPicture {
@@ -116,8 +126,9 @@ public:
             }
         }
         pending.swap(later);
-        std::sort(arrived.begin(), arrived.end(),
+        std::stable_sort(arrived.begin(), arrived.end(),
                   [](const IntelReport& a, const IntelReport& b) { return a.arrive_h < b.arrive_h; });
+        delivering_h_ = now_h;
         for (const IntelReport& r : arrived) Merge(r, analyst_skill);
         return arrived;
     }
@@ -128,9 +139,11 @@ public:
         const double growth_m = tuning.Get("intel.mobile_sigma_growth_mps") * 3600.0 * dt_h;
         const double half = tuning.Get("intel.mobile_confidence_half_life_h");
         const double recovery = tuning.Get("intel.fixed_function_recovery");
+        const double column_share = tuning.Get("intel.column_sigma_share");
         for (IntelEntry& e : entries) {
             if (e.mobile || e.ghost) {
-                e.sigma_m += growth_m;  // it may have driven off in any direction at any time since
+                // It may have driven off in any direction at any time since (a column on the road at its own speed).
+                e.sigma_m += std::max(growth_m, e.move_mps * column_share * 3600.0 * dt_h);
                 if (half > 0.0) e.exists *= std::pow(0.5, dt_h / half);
             } else if (e.function < 1.0) {
                 e.function = std::min(1.0, e.function + recovery * dt_h / 48.0);
@@ -144,11 +157,14 @@ public:
     // ends on this): each weighed by the belief that it is there and real. A site found later counts like one known
     // from the start, so the share falls only as fast as the sites it knows of are destroyed, not as fast as it finds
     // new ones (the "percentage of known SAM sites destroyed or suppressed" a staff reports).
-    double BelievedIadsShare() const {
+    // The whole country's: a battery that survives anywhere keeps the rollback from ending (the enemy's freedom of action,
+    // docs/campaign/02_WHAT_WE_DEFEND.md §5).
+    // `without`: as it would be without that entry (the player's two outcomes, campaign/outcomes.hpp).
+    double BelievedIadsShare(const std::string& without = std::string()) const {
         double working = 0.0;
         double there = 0.0;
         for (const IntelEntry& e : entries) {
-            if (!IsAirDefence(e.kind) || !e.threat_radar) continue;
+            if (!e.IsSamRadar() || (!without.empty() && e.key == without)) continue;
             const double w = Clamp01(e.exists) * (1.0 - 0.7 * e.suspected_decoy);
             working += w * Clamp01(e.function);
             there += w;
@@ -172,6 +188,8 @@ public:
     std::vector<std::string> repaired;
 
 private:
+    double delivering_h_ = 0.0;  // the hour of the delivery being merged
+
     void Merge(const IntelReport& r, double analyst_skill) {
         IntelEntry* e = nullptr;
         if (!r.ghost) {
@@ -199,15 +217,19 @@ private:
             n.sigma_m = r.sigma_m;
             n.exists = r.exists;
             n.function = r.function >= 0.0 ? r.function : 1.0;
+            n.first_h = delivering_h_;
             n.observed_h = r.observed_h;
             n.source = r.source;
-            n.mobile = r.kind == ObjectKind::SamSite || r.kind == ObjectKind::Troops || r.ghost;
+            n.mobile = r.kind == ObjectKind::SamSite || r.kind == ObjectKind::Troops || IsColumn(r.kind) || r.ghost;
+            n.move_mps = r.move_mps;
             n.emitter = r.threat_radar && IsAirDefence(r.kind);
             n.threat_radius_m = r.threat_radius_m;
             n.threat_lethality = r.threat_lethality;
             n.threat_low = r.threat_low;
             n.threat_medium = r.threat_medium;
             n.threat_radar = r.threat_radar;
+            n.threat_channels = r.threat_channels;
+            n.threat_max_target_mps = r.threat_max_target_mps;
             n.losses_credited = r.losses;
             if (r.claim_destroyed) {
                 n.function = 0.0;
@@ -255,6 +277,8 @@ private:
             e->threat_low = r.threat_low;
             e->threat_medium = r.threat_medium;
             e->threat_radar = r.threat_radar;
+            e->threat_channels = r.threat_channels;
+            e->threat_max_target_mps = r.threat_max_target_mps;
             e->emitter = r.threat_radar;
         }
         e->losses_credited += r.losses;

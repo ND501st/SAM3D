@@ -583,6 +583,13 @@ preparation, firing under jamming, kill assessment (246-267).
   tracking В1-В4, command channel I А3, А4, А7, А8 and II А1, А2, А5, А6, the same pairs as `mon_2112_80`); wartime
   letters freed by a district-wide signal (two vehicles a battery retune their radars); in peacetime the command
   transmitters radiate only on ranges; even into the loads the emission is detectable along the beam to 10 / 4 / 2 km.
+  Radio camouflage (§5.1.3, pp. 208-211, added 27 Oct 2026): the letters are chosen for jamming resistance **and** the
+  complex's concealment in combat work; peacetime letters are lifted only when the formations are brought to higher
+  readiness, by one signal fixed in advance by the military district (group of forces) and sent to the air-defence units'
+  command posts; in peacetime the search transmitter radiates only on permitted frequencies, the tracking transmitter
+  only on permitted frequencies **and in permitted directions**; maintenance and repair work radiates into the dummy
+  loads; the missile tracker's (СВР) receivers sit on letter Б, and moving them to letter A takes a special decision; beyond this, radio camouflage follows "the troops'
+  instructions on radio camouflage of SAM systems", which the book does not reproduce (not held).
 - Special conditions (pp. 222-224): marching with the equipment on, all hatches shut but the needed ones, the antenna
   locks released, pressurisation on; in forest always in travel position; low bridges at 3.8 m loaded (the procedure);
   water crossing preparation; humidity then frost: warm on filaments 15-20 min before the anodes.
@@ -606,13 +613,18 @@ preparation, firing under jamming, kill assessment (246-267).
   the covered companies, TZMs within 500 m; defence 3-5 km from the forward edge; reserve positions within 2 km;
   1000 m apart under nuclear threat; **sectors of responsibility for each launcher and the MANPADS section**; halts of up
   to 1 h every 3-4 h, a 2 h meal halt; **on the march the battery commander rides the PU-12M at the column's head and
-  signals by flags and lamps; radio is forbidden except for fire control while repelling an attack**; changing position
+  signals by flags and lamps; radio is forbidden except for fire control while repelling an attack** (p240); changing position
   only on the regiment commander's order.
 - Control (pp. 240-245): the commander's sequence (task, time, preliminary orders, situation, decision, reconnaissance,
   the oral combat order, support, political work), the working map (attack directions, helicopter and jammer lines, ARM
   launch lines, SOC detection limits, the zones' far edges for the likeliest heights, the friendly air corridor, call
   signs and signals) and the battery's logs. Lebanon 1982: underrating Israeli EW cut the Syrian «Феда» group's
-  effectiveness.
+  effectiveness. **The battery commander's decision** (p243, added 27 Oct 2026) fixes the battery's combat order and how
+  it occupies the position; each crew's task; **each launcher's and the MANPADS section's sector of responsibility and
+  their order of reconnaissance (search) and fire**; control and cooperation; **the measures against jamming,
+  anti-radiation missiles and weapons of mass destruction**, and the position's guard and defence; support; political
+  work. He gives it as an oral combat order. So the emission regime under an ARM threat (pp262-264) is the battery
+  commander's to set; the vehicle commander and crew carry it out.
 - Preparation (pp. 246-258): the drill (already in the data); the commander's report «к бою готов» with channels and
   missiles; orienting the vehicle with an aiming circle 20-50 m ahead (Qc = grid bearing - the launcher's βн);
   readiness No. 1; the function check must not delay fire; clutter cards prepared in advance; **stopping on the move
@@ -674,10 +686,13 @@ preparation, firing under jamming, kill assessment (246-267).
 
 ### Recorded, not built
 
+- The battery commander's sequence and working map (pp. 240-245) and the battery's orders by task (pp. 232-239): planned
+  as the battery's war's 14.3 and 14.4 (`docs/campaign/03_THE_BATTERY_MISSION.md`).
 - (Built 20 Oct 2026, roadmap E6, `docs/EM_ARCHITECTURE.md` §35: the ARM drill, pp262-264. The search bursts, Table
   7.3 in `data/gameplay/osa_ak.json` `arm`, the tracking transmitter off after the burst, the search radar off while the
-  tracking radar holds a target alone, the PPI signs and the turn away. Still not built from that page: the signs on the
-  tracking radar's indicators and on the TV, the TV for tracking under the threat with the range by short bursts, p264.)
+  tracking radar holds a target alone, the PPI signs and the turn away. The signs on the
+  tracking radar's indicators and on the TV built 21 Oct 2026. Still not built from that page: the TV for tracking under
+  the threat, «использования ТОВ для сопровождения цели».)
 - Small drones' signs, helicopter sectors and duty launchers; the other group rules (the lead or the brightest mark when
   tracking a group; which mark to take when a group splits before or after the launch; two missiles 6-8 s apart).
 - The stabilisation's ДР mode and ПРЕДЕЛЬНЫЙ УГОЛ fault, ventilation summer / winter, pressurisation, the noise strip
@@ -703,7 +718,9 @@ once a sign settles it, no sooner than 2 s, or with what he has at 8 s, and may 
 nothing (a near miss at night: the burst, then the target flying on; a target diving away after a near miss). The crew's
 picture, the report to the battery and the commander's next move (wait for the call; drop a target called destroyed;
 engage again after a miss) follow his call. A target called destroyed that is still on the search scope 10 s later is
-reported flying on and taken back. The World has no wreck, so the wreck's fall, fire and the group and jamming signs are
+reported flying on and taken back; if the commander had reported it destroyed on the battery net he takes that back on
+the net too («21: цель 0012 не поражена, продолжает полёт!», `report_not_destroyed`, 21 Oct 2026), and a linked post
+puts the target back on its board. The World has no wreck, so the wreck's fall, fire and the group and jamming signs are
 drawn; the miss's signs are read from the live target. The game numbers: `data/gameplay/osa_ak.json` `kill_assessment`
 (estimates).
 

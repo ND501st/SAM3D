@@ -71,6 +71,12 @@
       "source": "voenizdat_osa_1991 p238 (a halt every 3-4 h of movement: checks, faults, maintenance, fuel, rest); video_osa agrees",
       "confidence": "high"
     },
+    "halt_interval_max_s": {
+      "value": 14400,
+      "source": "voenizdat_osa_1991 p239 (6.3.3: a halt of up to 1 h after 3-4 h of movement; the regulation points every 3-4 h of movement): the longest a march plan moves the column without a halt",
+      "confidence": "high",
+      "notes": "A march plan (simcore/nav/march.hpp) halts every halt_interval_s of movement while more than this is left to go; a march of up to 4 h has no halt."
+    },
     "halt_duration_s": {
       "value": 3600,
       "source": "voenizdat_osa_1991 p238 (halts of up to 1 h; one of up to 2 h for a meal in the second half of the day's march, not modelled)",

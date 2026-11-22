@@ -157,6 +157,9 @@ struct KillLook {
 class KillAssessment {
 public:
     enum class Call { Hit, Miss, Unknown };
+    // How the shot ended, as drawn when it was opened (the signs follow from it): on the target, the fuse beside it, the
+    // missile flying on past it, or its warhead gone before the meeting.
+    enum class End { Hit, NearBurst, Wide, Early };
     static const char* ToString(Call c) { return c == Call::Hit ? "hit" : c == Call::Miss ? "miss" : "not observed"; }
 
     struct Sign {
@@ -324,8 +327,24 @@ public:
     }
     std::size_t OpenCount() const { return open_.size(); }
 
+    // What Open drew for a shot still being judged (read right after Open, for the presentation feed: fx/events.hpp):
+    // its end, and a hit's wreck burning on the TV and falling. False / false if the shot is not open.
+    bool EndOf(int shot, End& out) const {
+        const Assessment* a = Find(shot);
+        if (a == nullptr) return false;
+        out = a->end;
+        return true;
+    }
+    bool TvFire(int shot) const {
+        const Assessment* a = Find(shot);
+        return a != nullptr && a->tv_fire;
+    }
+    bool Falls(int shot) const {
+        const Assessment* a = Find(shot);
+        return a != nullptr && a->falls;
+    }
+
 private:
-    enum class End { Hit, NearBurst, Wide, Early };
     struct Assessment {
         int shot = 0;
         std::string target;
@@ -343,6 +362,13 @@ private:
     };
 
     double Draw() { return static_cast<double>(rng_()) / 4294967296.0; }
+
+    const Assessment* Find(int shot) const {
+        for (const Assessment& a : open_) {
+            if (a.shot == shot) return &a;
+        }
+        return nullptr;
+    }
 
     void Show(Assessment& a, double t, KillSign s, KillInstrument where) {
         if (a.Shown(s)) return;

@@ -107,7 +107,7 @@ SC_TEST("crew data: the Osa's crew file and skill tiers load and agree with the 
     SC_EXPECT(o.crew.FindSeat("senior_operator")->number == 2 && o.crew.FindSeat("operator")->number == 1);
     SC_EXPECT(o.crew.callouts.size() > 80);
     const OrderDef* k = o.crew.FindOrder("order_k_boyu");
-    SC_EXPECT(k != nullptr && k->task == "ready_halted" && k->procedures.size() == 5);
+    SC_EXPECT(k != nullptr && k->task == "ready_halted" && k->procedures.size() == 6);
     SC_EXPECT(o.crew.FindCallout("power_on")->ru == "Питание подано!");  // voenizdat_osa_1991 p246
     SC_EXPECT(o.crew.FindFact("vehicle_stopped")->by_action);
     SC_EXPECT(o.crew.FindTask("ready_halted")->conditions.size() == 7);
@@ -272,9 +272,10 @@ SC_TEST("drill master: the plan follows the sourced drills and never pulls in a 
     SC_EXPECT(drills("driver") == std::vector<std::string>{"power_up"});
     SC_EXPECT(drills("operator") == (std::vector<std::string>{"equipment_on", "deploy_at_halt"}));
     SC_EXPECT(drills("senior_operator") == std::vector<std::string>{"search_on_march"});
-    SC_EXPECT(drills("deputy_commander").empty());  // the TV camera is one switch: not the EMCON engagement drill
+    // The TV camera is his drill of К бою (voenizdat_osa_1991 p247), not a loose switch or the EMCON engagement drill.
+    SC_EXPECT(drills("deputy_commander") == std::vector<std::string>{"tv_camera_on"});
     const DrillPlan::Seat* dep = plan.FindSeat("deputy_commander");
-    SC_EXPECT(dep != nullptr && dep->loose.size() == 1 && dep->loose[0].control == "tov.power");
+    SC_EXPECT(dep != nullptr && dep->loose.empty());
     SC_EXPECT(plan.world.empty());
 }
 
@@ -416,6 +417,19 @@ SC_TEST("callouts: in the practice shoot the crew speaks its drill: orders, ackn
     for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) on_radio = on_radio || m.net == "intercom";
     SC_EXPECT(on_radio);
     SC_EXPECT(r.Debrief().find("Питание подано!") != std::string::npos);
+}
+
+SC_TEST("callouts: the runner's bus takes the recorded lines' lengths it is given") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_practice_em.json", kData, def, console));
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT(r.Callouts() != nullptr && r.RecordedLengthsFrom().empty());
+    if (r.Callouts() == nullptr) return;
+    SC_EXPECT_NEAR(r.Callouts()->LineTimeS("order_search", "commander", "Поиск!"), 0.75, 1e-9);
+    r.SetRecordedLengths({{"commander/order_search", 1.37}}, "art/crew_voices/en");
+    SC_EXPECT(r.RecordedLengthsFrom() == "art/crew_voices/en");
+    SC_EXPECT_NEAR(r.Callouts()->LineTimeS("order_search", "commander", "Поиск!"), 1.37, 1e-9);
 }
 
 SC_TEST("callouts: a crewmate waiting on a player's seat reminds him, then the commander orders it by name") {

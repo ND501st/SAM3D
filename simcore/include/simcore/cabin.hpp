@@ -1105,7 +1105,9 @@ private:
             disp.kind = CabinDisplayKind::Document;
             allowed = {"document"};
             if (!OptionalString(d, path, "document", disp.document)) return false;
-            if (disp.document != "talk_tables" && disp.document != "radio_data") return Fail(Join(path, "document"), "talk_tables or radio_data");
+            if (disp.document != "talk_tables" && disp.document != "radio_data" && disp.document != "radio_journal") {
+                return Fail(Join(path, "document"), "talk_tables, radio_data or radio_journal");
+            }
         } else {
             return Fail(Join(path, "kind"), "must be ppi, range_scope, elevation_scope, tv, dial, meter, counters, aspd_scope, "
                                             "status_board, plot_board, keypad_window or document");

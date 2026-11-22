@@ -22,6 +22,19 @@ def test_random_streams_match_cpp_bit_for_bit():
     assert sum(x * x for x in xs) / len(xs) == pytest.approx(1.0, abs=0.04)
 
 
+def test_reaction_stream_matches_cpp():
+    # Roadmap B4: the pilots' reactions draw on stream 20 (simcore em::Stream::Reaction, tests/test_reactions.cpp).
+    assert em.STREAMS["reaction"] == 20
+    assert em.uniform01(em.draw_hash(42, 20, 7, 3, 1)) == pytest.approx(0.08319907501352408, abs=1e-15)  # C++
+
+
+def test_opportunity_stream_matches_cpp():
+    # Roadmap B6: a flight leader's chain on a target of opportunity draws on stream 21 (simcore em::Stream::Opportunity,
+    # tests/test_opportunity.cpp checks the same number).
+    assert em.STREAMS["opportunity"] == 21
+    assert em.uniform01(em.draw_hash(42, 21, 7, 3, 1)) == pytest.approx(0.7313714574912689, abs=1e-15)  # C++
+
+
 def test_free_space_and_knife_edge():
     assert em.free_space_loss_db(10000.0, 1e9) == pytest.approx(112.45, abs=0.01)
     assert em.knife_edge_loss_db(0.0) == pytest.approx(6.03, abs=0.01)
@@ -158,3 +171,62 @@ def test_arm_seeker_power_tuning_and_memory_point():
     assert math.hypot(p[0], p[1]) == pytest.approx(flat + drop, abs=1.5)
     # A line of sight above the horizon never meets the ground within 20 km.
     assert em.arm_ground_point((0.0, 0.0, 1000.0), em.direction_from_az_el(0.0, 0.1), lambda x, y: 0.0, 20000.0) is None
+
+
+def test_obstacles_stand_on_the_profile_like_clutter():
+    # Mirror of test_map_obstacles.cpp: a 20 m strip of woods across a flat 10 km path between two masts 5 m up.
+    flat = lambda e, n: 0.0  # noqa: E731
+    strip = lambda e, n: 20.0 if abs(e - 5000.0) < 100.0 else 0.0  # noqa: E731
+    bare = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 5.0, 50.0)
+    wooded = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 5.0, 50.0, obstacle=strip)
+    assert bare.line_of_sight and bare.worst_v_geometry < 0.0
+    assert not wooded.line_of_sight and wooded.worst_v_geometry > 0.0
+    # Woods round an end within the skip do not hide it.
+    around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
+    assert em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 50.0, obstacle=around).line_of_sight
+    assert not em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0).line_of_sight
+
+
+def test_eye_law_matches_cpp():
+    # Mirror of test_perception.cpp: NWC TP 5709's example (55 ft2 at 30 %, no haze, factors off) is 6.5 nmi.
+    area = 55.0 * 0.09290304
+    r = em.eye_range_m(1.0, 30.0, area, 1e12)
+    assert r / 1852.0 == pytest.approx(6.5, rel=0.02)
+    assert em.eye_range_m(1.0, 30.0, area, 1e12, empty_field=True) / r == pytest.approx(0.5, abs=0.005)
+    assert em.eye_threshold_pct(1.0, r, area) == pytest.approx(30.0, abs=0.05)
+    bare = dict(em.EYE, factor_ordinary=1.0)
+    assert em.eye_factor(False, 0.0, eye=bare) == pytest.approx(5.12, abs=0.02)  # 1.64 x 1.31 x 1.19 x 2.00
+    assert em.eye_factor(True, 1.0, eye=bare) == pytest.approx(1.64 * 1.19)
+    assert em.eye_range_m(1.0, 30.0, area, 10000.0) < r
+    assert em.eye_glimpse_chance(1.0, False) == 0.0
+    assert em.eye_glimpse_chance(4.0, True) > 3.0 * em.eye_glimpse_chance(4.0, False)
+    # A small SAM's trail (20 %, 1.5 m x 500 m) in the reference haze (5 nmi), cued and trained: 3-6 km.
+    trail = em.eye_range_m(em.eye_factor(True, 1.0), 20.0, 1.5 * 500.0, 5.0 * 1852.0)
+    assert 3000.0 <= trail <= 6000.0 and trail == pytest.approx(4010.0, abs=60.0)
+
+
+def test_ground_law_matches_cpp():
+    for pmax in (0.25, 0.5, 1.0):
+        assert em.ground_acquire_p(pmax, 6250.0, 10000.0) == pytest.approx(0.2 * pmax)
+        assert em.ground_acquire_p(pmax, 5000.0, 10000.0) == pytest.approx(0.5 * pmax)
+        assert em.ground_acquire_p(pmax, 3750.0, 10000.0) == pytest.approx(0.8 * pmax)
+        assert em.ground_acquire_p(pmax, 7600.0, 10000.0) == 0.0
+        assert em.ground_acquire_p(pmax, 1000.0, 10000.0) == pytest.approx(pmax)
+
+
+def test_smooth_spherical_earth_matches_cpp():
+    # ITU-R P.526-16 section 3: the same hand values as test_em_models.cpp
+    assert em.spherical_distance_term_db(1.0) == pytest.approx(-5.6488, abs=1e-9)
+    assert em.spherical_distance_term_db(2.0) == pytest.approx(11.0 + 10.0 * math.log10(2.0) - 35.2, abs=1e-9)
+    assert em.spherical_height_gain_db(3.0, 1.0, 0.01) == pytest.approx(14.8662, abs=1e-3)
+    assert em.spherical_height_gain_db(1.0, 1.0, 0.01) == pytest.approx(0.8279, abs=1e-3)
+    assert em.spherical_height_gain_db(1e-4, 1.0, 0.02) == pytest.approx(2.0 + 20.0 * math.log10(0.02), abs=1e-9)
+    assert em.surface_admittance_k(100.0, 8500.0, False) == pytest.approx(0.0010157, abs=2e-6)
+    assert em.surface_admittance_k(100.0, 8500.0, True) == pytest.approx(0.015236, abs=2e-5)
+    assert em.spherical_first_term_db(500e3, 3.0, 8000.0, 50e6, 8500e3) == pytest.approx(-73.976, abs=0.005)
+    assert em.spherical_earth_loss_db(10e3, 100.0, 100.0, 100e6, 8500e3) == 0.0
+    d_los = math.sqrt(2.0 * 8500e3) * (math.sqrt(3.0) + math.sqrt(8000.0))
+    inside = em.spherical_earth_loss_db(d_los - 1.0, 3.0, 8000.0, 50e6, 8500e3)
+    past = em.spherical_earth_loss_db(d_los + 1.0, 3.0, 8000.0, 50e6, 8500e3)
+    assert inside == pytest.approx(past, abs=0.05)
+    assert em.spherical_earth_loss_db(500e3, 3.0, 8000.0, 5e6, 8500e3) == 0.0

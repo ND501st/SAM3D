@@ -1,10 +1,12 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "SimCoreIncludes.h"
 #include "SimCrewBodiesComponent.h"
+#include "SimCrewVoiceComponent.h"
 #include "SimOsaVehicle.h"
 #include "SimSpeech.h"
 #include "SimWorldSubsystem.h"
@@ -122,6 +124,80 @@ bool FSimCrewBodiesTest::RunTest(const FString& Parameters)
 		Bodies->GetBodyHead(TEXT("operator"), Head, bVisible);
 		TestFalse(TEXT("the camera's seat is hidden"), bVisible);
 	}
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+// A recorded line takes its recording's time on the bus (docs/crew/10_BODIES_AND_VOICES.md section 4): with the crew
+// speaking English, the vehicle's voice component gives the runner the English recordings' lengths, and every fixed line
+// with a recording lasts exactly as long as the recording the component plays for it.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimCrewRecordedLinesTest, "SAM3D.Crew.RecordedLines",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimCrewRecordedLinesTest::RunTest(const FString& Parameters)
+{
+	FSimSpeech& Speech = FSimSpeech::Get();
+	for (int32 I = 0; I < 200 && !Speech.IsReady(); ++I)
+	{
+		FPlatformProcess::Sleep(0.05f);
+	}
+	IConsoleVariable* LanguageVar = IConsoleManager::Get().FindConsoleVariable(TEXT("sam3d.VoiceLanguage"));
+	TestNotNull(TEXT("sam3d.VoiceLanguage"), LanguageVar);
+	if (LanguageVar == nullptr || !Speech.IsReady())
+	{
+		return false;
+	}
+	const FString WasLanguage = LanguageVar->GetString();
+	LanguageVar->Set(TEXT("en"));
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, TEXT("SAM3DCrewRecordedLinesTest"));
+	FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+	Context.SetCurrentWorld(World);
+	World->InitializeActorsForPlay(FURL());
+	World->BeginPlay();
+	USimWorldSubsystem* Sim = World->GetSubsystem<USimWorldSubsystem>();
+	FString Error;
+	const bool bLoaded = Sim != nullptr && Sim->LoadScenario(TEXT("scenarios/osa_crew_practice.json"), Error);
+	TestTrue(FString::Printf(TEXT("the scenario loads %s"), *Error), bLoaded);
+	ASimOsaVehicle* Car = bLoaded ? World->SpawnActor<ASimOsaVehicle>() : nullptr;
+	USimCrewVoiceComponent* Voice = Car != nullptr ? Car->FindComponentByClass<USimCrewVoiceComponent>() : nullptr;
+	TestNotNull(TEXT("the vehicle has a voice component"), Voice);
+	if (Voice != nullptr)
+	{
+		for (int32 I = 0; I < 1200; ++I)  // a minute of the drill
+		{
+			Sim->Tick(0.05f);
+			Voice->TickComponent(0.05f, LEVELTICK_All, nullptr);
+		}
+		const simcore::ScenarioRunner* Runner = Sim->GetScenarioRunner();
+		TestEqual(TEXT("the crew speaks English"), Voice->GetLanguage(), FString(TEXT("en")));
+		const std::string Dir = Runner->RecordedLengthsFrom();
+		TestFalse(TEXT("the runner has the recordings' lengths"), Dir.empty());
+		const double KBoyuS = simcore::WavLengthS(Dir + "/commander/order_k_boyu.wav");
+		TestTrue(TEXT("the commander's К бою! is recorded"), KBoyuS > 0.0);
+		TestEqual(TEXT("К бою! takes its recording's time"), Runner->Callouts()->LineTimeS("order_k_boyu", "commander", "К бою!"), KBoyuS, 1e-9);
+		const std::map<std::string, double> Lengths = simcore::RecordedLineLengths(Dir, Runner->Def().crew_data);
+		int32 Checked = 0;
+		for (const simcore::SpokenCallout& S : Runner->Callouts()->Log())
+		{
+			const simcore::CalloutDef* Def = Runner->Def().crew_data.FindCallout(S.id);
+			auto It = Lengths.find(S.from + "/" + S.id);
+			if (It == Lengths.end())
+			{
+				It = Lengths.find(S.id);
+			}
+			if (Def == nullptr || Def->ru != S.ru || It == Lengths.end())
+			{
+				continue;
+			}
+			++Checked;
+			TestEqual(FString::Printf(TEXT("%s/%s lasts its recording"), UTF8_TO_TCHAR(S.from.c_str()), UTF8_TO_TCHAR(S.id.c_str())),
+				S.end_s - S.start_s, It->second, 1e-9);
+		}
+		AddInfo(FString::Printf(TEXT("%d recorded lines on the bus, %d said in a minute"), static_cast<int32>(Lengths.size()), Checked));
+		TestTrue(TEXT("recorded lines were said"), Checked > 0);
+	}
+	LanguageVar->Set(*WasLanguage);
 	GEngine->DestroyWorldContext(World);
 	World->DestroyWorld(false);
 	return true;

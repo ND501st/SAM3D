@@ -8,11 +8,12 @@ the cloud the game shows is the cloud the TV sight cannot see through.
 
 ## What is on it
 
-`data/maps/kesmark_range.json`, built by `simcore/terrain_map.hpp` (deterministic for its seed; about 0.7 s):
+`data/maps/kesmark_range.json`, built by `simcore/terrain_map.hpp` (deterministic for its seed; a few seconds with
+its detail areas):
 
 | Thing | How it is made |
 |---|---|
-| Ground | A plain at 110 m with three octaves of gentle relief, hills (Polany hill under the P-40, Ludas, the Kesmark heights, Varos hill, the neutral neighbour's hills beyond the border), the Rava's valley carved along the river, sites levelled. Baked at 50 m inside the map, 500 m out to 150 km |
+| Ground | A plain at 110 m with three octaves of gentle relief, hills (Polany hill under the P-40, Ludas, the Kesmark heights, Varos hill, the neutral neighbour's hills beyond the border), the Rava's valley carved along the river, sites levelled. Baked at 50 m inside the map, 500 m out to 150 km, finer in the two detail areas (below) |
 | River | The Rava through both Kesmark bridges (12, -6) and (14, -4) and the Rava marshes |
 | Roads, railway | Main and secondary roads and tracks between the places; the railway through Kesmark station, the rail bridge and the Horka siding. A bridge wherever a road or the railway crosses the river |
 | Towns | Kesmark (1400 buildings), five villages (90-110), Novo Varosd and four towns beyond the map; houses end on to the streets, flats in a town's centre; 70 lone farmsteads |
@@ -20,8 +21,52 @@ the cloud the game shows is the cloud the TV sight cannot see through.
 | Military sites | Battery 21's position (four launcher revetments, the PU-12M's pad), its two dummy positions, the ZU-23 at the bridges, the fuel depot, Kecel air base (runway, taxiway, 12 shelters, apron, hangars, tower), its guns, the S-125 at Kecel, the regiment's and division's posts, the missile technical battery, the P-40 and P-19 posts, the garrison barracks, the sector bunker, the church tower, the sugar factory, the station, Tiszavar air base and the Paksany power station far out |
 
 Every one is a box (cylinders for tanks, chimneys, cooling towers). Positions come from the theatre and places files;
-a test checks they agree (`test_world_map.cpp`). The woods' and buildings' heights are also kept as an obstacle grid
-(`MapData::ObstacleHeight`) for E9's forest and urban obstacles; the line of sight does not use it yet.
+a test checks they agree (`test_world_map.cpp`). The woods' and buildings' heights are also kept as obstacle grids
+(`MapData::ObstacleHeight`): the line of sight and the radio paths carry them (E9, `docs/EM_ARCHITECTURE.md` §27).
+
+## Detail areas (roadmap R6)
+
+Where play happens close up the ground is finer: two **detail areas** (`terrain.detail`), each a level of the drawn
+ground of its own (`MapData::DrawnLevels`, finest first; `docs/ARCHITECTURE.md`, "One ground, one vertical"), so the
+sim and the picture still share one ground:
+
+| Area | Where | Ground | Obstacles | What is in it |
+|---|---|---|---|---|
+| `bty21` | 9.5 km east, 6.5 km south, 12 km square (inside the map proper) | 10 m, micro relief 0.8 m | 25 m | Battery 21's position, both Kesmark bridges, Vrbice, the station |
+| `capital` | 36 km east, 58 km north, 15 km square (on the far ground) | 20 m, micro relief 0.6 m | 25 m | The capital, laid out (12000 buildings), and the dynamic campaign test round it |
+
+* **Edges on the coarse nodes.** An area's edges fall on the nodes of the ground it lies in (the map proper's 50 m, the
+  far ground's 500 m) and its spacing divides that ground's, so a coarse cell is wholly inside it (not drawn) or wholly
+  outside (`NoGroundDrawnTwice`); the loader refuses an area that does not.
+* **Its ground** is the coarse level's triangles sampled at its nodes, so at its edge it is the coarse ground exactly,
+  plus micro relief (`noise::Fbm`, 400 m, three octaves) faded to nothing over the last 300 m to the edge, within 15-60 m
+  of every road, railway and river, on every levelled site and in every town (50-100 m beyond its edge).
+* **The capital's lines.** The country's roads, railways and the Rava through the capital (`data/maps/pannonia.json`)
+  are imported, clipped to the area and a kilometre round it, and laid as the map's own strips and bridges
+  (`MapData::ImportedLines`); not in the map file's lines, so the route service and `NearestRoad` are unchanged.
+* **The capital's town** (`detail_settlements`) is laid after everything else on its own random stream: houses along
+  the imported roads, blocks of flats within 0.45 of its 7 km radius, nothing within 30 m of the Rava. The map proper's
+  layout is unchanged by it: the core's boxes per part are recorded in `test_world_map.cpp` and checked (12038 from
+  r-track before R6; 12029 since R6's review, when a site's clearance began to be found however far a block stands from
+  its centre, `mapgeo::Occupancy`, and 9 wood blocks inside the 140 m clearance of two field posts and the P-40 post
+  went). The far ground's woods within 100 m of its radius give way.
+* **The dynamic campaign test's positions are map sites** (`capital_*`, 35 of them: the Osa positions of battery 21
+  and of battery 22, the Kub, S-75 and S-125, the gun sites, the radars), so the town keeps clear of them (no house or
+  block of flats inside a site's clearance: `test_map_obstacles.cpp`) and their ground is levelled. The three on the
+  Rava's bank (`capital_zu23_bridge` and `capital_zu23_port`, the ZU-23s at the road bridge and the river port, and
+  `capital_s60_6`, S-60 battery 6; 55-107 m from the river's middle, the river 90 m wide) are sites since S9 (20 Nov
+  2026): a site's levelled flat stops short of the river's bed (`MapData::FromRiverBed`: the bed, half the river's
+  width and 15 m of bank, `kRiverBedBankM`, as `NaturalGround` carves it), so the bed is never filled, and a gun
+  site's pits go round their ring on the dry side (none within 25 m of the water, `kPitWaterClearM`, nor within 20 m
+  of another pit; rings of 55 m, then 35 m and 75 m). `test_map_leftovers.cpp` checks the three: the bed under them
+  as carved, the site's middle clear, 16 revetment walls each, none within 20 m of the water.
+* **Obstacles at 25 m** in each area, from the same boxes (`MapData::DetailObstacleGrids`).
+
+Unreal draws every level it is given (`ASimMapActor::BuildGround`): the area inside the map proper as the map proper
+(collision, shadows, its colours), the capital's as the far ground near the scenario; the country's hashed town blocks
+and strategic ribbons are not drawn where the map lays its own (the capital, the detail areas, and since S9 the
+kilometre round a detail area its lines are imported into: `MapData::LaysCountryLinesAt`, so no ribbon is drawn twice). Trees, roofs, field
+parcels and real assets are the next step (R6's dressing).
 
 ## The airspace and the weather
 
@@ -62,10 +107,21 @@ python tools/map_view.py out/kesmark_range_map.json --png                       
 
 `Content/Maps/KesmarkRange` (made by `tools/ue_build_kesmark_range.py` through the editor commandlet) holds no geometry:
 
-* `ASimMapActor` draws the map at play time in the running scenario's frame: the ground as a procedural mesh with
-  vertex-coloured fields and collision inside the map (the vehicle traces for the ground), the roads, railway and river
-  as ribbons, every box as instanced engine cubes and cylinders, one component and colour per kind. "Build Preview" in
-  the editor draws it at the map's own origin.
+* `ASimMapActor` draws the map at play time in the running scenario's frame.
+  * The ground: every drawn level (`MapData::DrawnLevels`) is a procedural mesh with vertex-coloured fields. The
+    levels are the map at 50 m, the far ground at 500 m, the country at 1 km and the land beyond at 4 km. Each mesh's
+    vertices are the sim's own ground points (one ground, roadmap R5; `docs/ARCHITECTURE.md`).
+  * Collision: inside the map, and on far tiles within 15 km.
+  * The roads, railway and river are ribbons. Every box is an instanced engine cube or cylinder, one component and
+    colour per kind.
+  * "Build Preview" in the editor draws it at the map's own origin.
+* Ground items stand on that ground through `USimWorldSubsystem::GroundAt`, from the map's own link, with no trace:
+  your vehicle, the battery, the works, the visitors, the movers and the neighbours' sites.
+* **Nothing under the map** (R5):
+  * `ground_check data 3600` plays the dynamic campaign testbed for an hour and every map mission for ten minutes. It
+    lists anything under the ground in simcore.
+  * `python tools/ue_ground_check.py` does the same in the game, with `-SimGroundCheck=<s>`, from the drawn actors.
+  * `sam3d.ground.check [s]` starts the check in a running game.
 * `ASimSkyWeatherActor`: the sun (a directional light at the sun's place), a physically based sky atmosphere whose haze
   is set from the day's visibility (Koschmieder: 3.912 / visibility, less Rayleigh), the engine's volumetric cloud on
   the main layer, and with `-SimCloudCells` the sim's own cloud cells as boxes, drifting.
@@ -83,7 +139,26 @@ and quits.
 
 * The volumetric cloud is the engine's sample material on one layer, set to the main layer's base, depth and cover; its
   clouds stand where its own noise puts them, not exactly where the sim's do. The cells (`-SimCloudCells`) are exact.
-* Buildings scatter on lots and a grid rather than real streets; no roofs, no detail, by design.
-* Ground colour is by patches of farmland tint, not a land-use map.
+* Buildings scatter on lots and a grid rather than real streets. Since R6 they are drawn with roofs (houses gabled
+  or hipped in four variants, barns, flats with a band of windows a floor, sawtooth halls: `scenery/map_meshes.hpp`),
+  procedural placeholders until a registered asset replaces them (`docs/scenery/ASSETS.md`).
+* The ground of the map proper and the detail areas is coloured from a 25 m land cover raster
+  (`scenery/map_dressing.hpp` `BakeCover`): fields in parcels with their crops, woods, marsh, towns with their
+  gardens, military ground, roads and water. The map proper's vertices are 50 m apart, so the colour is the
+  cover at each node: a road or a parcel's edge is soft by half a cell. The far ground keeps the country's tints.
+* Woods (R6): trees only in the map proper and the detail areas. A detail area's woods are planted whole (a tree
+  every 7 m), the map proper's elsewhere get two rows along each side open to the fields and a mass inside; the far
+  ground's are masses only. About 159 000 trees on Kesmark (80 000 in the detail areas), 20 000 masses. No tree
+  stands above the obstacle height the sight lines use, so what is drawn never hides more than the sim does; a
+  wood's edge in the sim is still soft by half an obstacle cell.
+* Bridges are drawn as deck, parapets and piers (`BridgeMesh`); the deck's box stays unseen for the traces. Roads
+  and the railway have shoulders, rivers banks; ribbons only, no cut or fill.
 * A scenario played in the level on its own flat ground gets a warning: its line of sight is not the drawn ground's.
-* The obstacle grid is not yet used by line of sight or propagation (E9).
+* On a Cesium level, ground items are put on the tiles by a ground-only trace from 3 km up; the tiles are not the
+  sim's ground (`docs/ARCHITECTURE.md`, known limitations). Woods and buildings are not part of the drawn ground that
+  aircraft are held over.
+* Obstacles are boxes widened to whole cells (50 m on the map proper, 25 m in the detail areas), sampled bilinearly:
+  a wood's edge is soft by half a cell. Beyond them, far woods are whole 400 m blocks and the far ground's other towns
+  two clutter heights.
+* The detail areas' ground is drawn at 10 m and 20 m with collision: about 2 million vertices more to cook when the
+  map loads.

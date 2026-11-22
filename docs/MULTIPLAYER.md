@@ -13,6 +13,14 @@ in a seat; a player commander gets the same reports and acknowledgements as an N
 * **The server runs the one simulation.** Every machine loads the same scenario (the map's `ASimScenarioDirector` does it
   on all of them), but a network client never steps it: `USimWorldSubsystem::IsMirrorOnly()` is true there and the
   fixed-step loop and the EM layer are skipped.
+* **The time of day** (roadmap R7, `docs/LIGHT.md`): each machine applies the time from its own URL or command line
+  (`?SimTime=` / `-SimTime=`, `-SimHour=`). Since roadmap S8 the server's sky reaches each client with the
+  console: `USimCrewSeatComponent::ClientReceiveSky` (unreliable, with every console snapshot, the newest wins) carries
+  the server's start hour, day and year and its sim time, and `USimWorldSubsystem::ApplyServerSky` keeps them. On a
+  client `GetSkyClock`, `GetSkyTimeSeconds` and `GetSunNow` are then the server's, so its sky (`ASimSkyWeatherActor`),
+  its fx's night and its light move with the server's clock whatever the client was launched with (it logs "Sky: the
+  server's clock, 17:08 ... (this machine was launched at 10:30)" once). A client without a seat component (`ASimCrewGameMode` gives every player one), or before its first
+  snapshot, draws its own start hour.
 * **Seats.** A player takes one of the console's stations (`commander`, `deputy_commander`, `senior_operator`,
   `operator`, `driver`) with `ScenarioRunner::TakeSeat`. The NPC there stops acting (and stops aiming its wheel; the
   engagement model's `AimCrew` follows the seats), its work in progress passes to the player, and orders for that seat

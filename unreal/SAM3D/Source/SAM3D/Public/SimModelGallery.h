@@ -42,6 +42,9 @@ private:
 	void LayOut();
 	void Aim(const FVector& From, const FVector& At);
 	bool AimAtScenario(bool bAir);
+	/** The nearest of the scenario's neighbours (our other air defences, drawn by the director), from 155 m off and 70 m
+	 *  up; false when the scenario has none. */
+	bool AimAtNeighbour();
 	/** Where the battery view's camera sits from the vehicle at At (cm): on a map, a side with a clear view past the woods. */
 	FVector BatteryViewOffset(const FVector& At) const;
 	void LogEntities() const;
@@ -58,6 +61,7 @@ private:
 	float Clock = 0.0f;
 	float NextAt = 0.0f;
 	int32 Phase = 0;
+	bool bNeighbourShot = false;
 	float ScenarioClockStart = -1.0f;
 
 	/** The aircraft the chase camera follows, and where the camera sits from it. */

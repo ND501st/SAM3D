@@ -1,0 +1,71 @@
+{
+  "task_id": "bty21_cover_bridges",
+  "kind": "cover_object",
+  "given_by": "rgt_commander",
+  "unit": "battery 21",
+  "covered": "kesmark_bridges",
+  "task": "cover the Kesmark bridges from low-flying attack from the main position west of the bridges",
+  "short_ru": "прикрыть мосты Кесмарк от ударов с малых высот",
+  "area_ru": "западнее мостов, у дороги на Лазне",
+  "reasons": [
+    "The bridges carry the group's supply over the Rava.",
+    "The enemy has struck crossings twice since the war began, from the west and south-west, low.",
+    "From Vrbice the battery's zone reaches the bridges only at its edge."
+  ],
+  "situation": [
+    { "kind": "attack", "from_deg": 225, "to_deg": 285, "text": "strike aircraft low along the Rava valley and over the Lazne road" },
+    { "kind": "helicopter", "from_deg": 190, "to_deg": 230, "text": "helicopters along the river's south bank" },
+    { "kind": "jammer", "from_deg": 250, "to_deg": 290, "range_km": 40, "text": "a stand-off jammer's orbit" }
+  ],
+  "habits": "The enemy comes at dawn and at dusk, under jamming, and has fired anti-radiation missiles at our radars.",
+  "area": {
+    "main": "bty21_bridges",
+    "reserve": [ "bty21_bridges_reserve" ],
+    "dummies": [ "vrbice_crossroads" ],
+    "tzm": "bty21_bridges_reserve",
+    "notes": "The main position by the order; the reserve within 2 km; a dummy at the crossroads."
+  },
+  "sectors": [
+    { "vehicle": "21", "from_deg": 225, "to_deg": 270, "duty": true },
+    { "vehicle": "22", "from_deg": 225, "to_deg": 270 },
+    { "vehicle": "23", "from_deg": 250, "to_deg": 300 },
+    { "vehicle": "24", "from_deg": 180, "to_deg": 235, "duty": true }
+  ],
+  "readiness": 1,
+  "readiness_text": "no. 1 at dawn and dusk, no. 2 otherwise",
+  "emission": "limited",
+  "ready_in_s": 5400,
+  "coordination": [
+    "the ZU-23 battery at the bridges' east end",
+    "battery 22's sector to the south-east",
+    "call signs and frequencies as the communications diagram"
+  ],
+  "own_air": {
+    "method": "by_zones",
+    "fighter_floor_m": 6000,
+    "floor_unable_m": 3000,
+    "zones": [
+      { "id": "2", "kind": "corridor", "path_m": [[-20000, 4000], [40000, 4000]], "half_width_m": 5000, "floor_m": 2000, "ceiling_m": 6000,
+        "from_h": 6, "to_h": 20, "notes": "our fighters' corridor north of Kesmark, west to the front and back, by day" },
+      { "id": "1", "kind": "duty_zone", "path_m": [[30000, 25000]], "half_width_m": 15000, "floor_m": 1500, "ceiling_m": 12000,
+        "notes": "the fighter regiment's duty zone north-east of the bridges, outside the battery's zone" }
+    ],
+    "recognition_signal": "by the day's signal table",
+    "fire_prohibition_signal": "code 20 on the battery net",
+    "code_issue": "the identification code table of the day",
+    "source": "sam3d: by mitronin_1976 pp. 5-9 (cooperation by zones against the first massed strike; corridors and duty zones named in the SAM unit's order; the fighters' floor above the regiment's highest kill limit) and mt_franchuk_front p. 6; the corridor's place, width, heights and hours and the duty zone are the campaign's (the regulations' widths and heights not found: docs/air_battle/08_OUR_FIGHTERS.md Left open); code 20 as the fire ban is the talk table's sam3d placeholder (pvo_bu_x_1984 art. 30)",
+    "confidence": "estimate"
+  },
+  "reports": [
+    "«к бою готов» to the regiment's command post by radio on arrival",
+    "each engagement as fought",
+    "the day's report by wire"
+  ],
+  "support": [
+    "the TZM at the reserve position",
+    "fuel from the regiment's rear at first light"
+  ],
+  "source": "sam3d: a fictional order in the form of voenizdat_osa_1991 pp. 240-245 (the working map's contents); the reasons and the situation are the campaign's (docs/campaign/03_THE_BATTERY_MISSION.md section 2's example)",
+  "confidence": "estimate",
+  "notes": "Battery 21's first task: from its position by Vrbice to the fields west of the Kesmark bridges, ready 90 minutes after the order."
+}

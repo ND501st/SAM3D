@@ -131,6 +131,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Battery")
 	FVector GroundScale = FVector(9.0, 3.0, 3.0);
 
+	/**
+	 * A level without the sky actor (OsaPractice, its CesiumSunSky): its sun's intensity in lux, set once the scenario
+	 * starts. The project's light scale is ASimSkyWeatherActor's 10-lux sun: auto exposure runs without the extended
+	 * luminance range (it cannot darken past a few cd/m2), and the effects' brightness is tuned to it (effects.json
+	 * sun_reference_lux). Cesium's physical 111000-lux sun burnt every outside view white. 0 keeps the level's own.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "0"))
+	float LevelSunLux = 10.0f;
+
 private:
 	UFUNCTION()
 	void HandleSimEvent(const FSimEvent& Event);
@@ -148,13 +157,42 @@ private:
 	void SpawnMissingEntityActors();
 	/** The prepared position's works (roadmap 7.6): spawned once each, their nets following the sim. */
 	void UpdatePositionWorks();
+	/** Our other air defences near the scenario (a raid's neighbours), drawn where they stand: each system's site from the
+	 *  model library (simcore ModelLibrary::SiteLayout), on the scenario's ground. Once, when the scenario runs. */
+	void SpawnNeighbourSites(USimWorldSubsystem* Sim);
+	/** Sets each neighbour vehicle on the level's ground, which the sim's flat or map ground need not match and whose
+	 *  Cesium tiles load after the spawn: a trace each second for the first minute, then every 5 s; after the minute one
+	 *  that has found none is put as far from the scenario's ground as the others were. */
+	void GroundNeighbourSites(bool bFirstMinuteOver);
 	void ShowStatus(const USimWorldSubsystem* Sim) const;
+	/** A level without the sky actor (OsaPractice): its own atmosphere sun (a DirectionalLight actor's, or a component of
+	 *  another actor such as CesiumSunSky's) turned by the scenario's sun once a second (roadmap R7) and set to
+	 *  LevelSunLux; never a second sun spawned. A sun that is not Movable is made Movable (the project has no static
+	 *  lighting). */
+	void FindLevelSun();
+	void UpdateLevelSun();
+	TWeakObjectPtr<class UDirectionalLightComponent> LevelSun;
+	float NextLevelSunAt = 0.0f;
+	/** A scenario loaded in place of the one running (the air battle check's second, an automation test's): its entities
+	 *  reuse the old one's ids, so the old one's actors, works and neighbour sites go and are spawned again for it. */
+	void ForgetScenarioActors();
+	const void* SeenRunner = nullptr;
 
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<ASimEntityActor>> SpawnedActors;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<class ASimPositionWork>> PositionWorks;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AActor>> NeighbourSites;
+	/** Each neighbour vehicle's place by the sim, and whether it stands on the level's ground yet. */
+	TArray<FVector> NeighbourSiteAt;
+	TArray<bool> NeighbourSiteGrounded;
+	bool bNeighboursSpawned = false;
+	bool bNeighbourFallbackPlaced = false;
+	float NeighboursSpawnedAt = 0.0f;
+	float NextNeighbourGroundAt = 0.0f;
 
 	bool bTerrainRequested = false;
 	float TimeSinceBeginPlay = 0.0f;

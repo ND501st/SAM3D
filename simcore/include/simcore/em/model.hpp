@@ -76,7 +76,9 @@ struct Platform {
     Vec3 velocity;
     RcsModel rcs;
     bool alive = true;
-    bool iff_reply = false;  // answers its own side's interrogations (codes and modes not modelled yet)
+    bool iff_reply = false;  // answers its own side's interrogations
+    int iff_code = 0;        // its transponder's code (Kremniy-2M's filter, roadmap B10; 0 the default both ends share)
+
     // Derived each tick by the scene:
     double altitude_m = 0.0;    // above the ellipsoid
     double height_agl_m = 0.0;  // above the terrain under it
@@ -118,6 +120,12 @@ struct RadarDef {
     RadarAnchor calibration;         // sets the loop gain (Calibrate)
     RadarAnchor low_altitude_check;  // reported by CheckCalibration, not fitted
     double antenna_height_m = 4.0;   // above the ground when deployed (the platform position includes it)
+    // An airborne radar (docs/air_battle/07_AIR_TO_AIR.md section 5.2): antenna_height_m is then the carrier's height, and
+    // the published range is a free-space figure, so the anchor's look has no ground reflection or diffraction.
+    bool airborne = false;
+    // Pulse-Doppler look-down: the ground clutter in the main lobe is cut by this much (a game value per radar until
+    // sourced); 0: no look-down mode (the APQ-120). The air combat layer reads it (B8); the radar equation does not.
+    double look_down_db = 0.0;
     double min_range_m = 0.0;
     double max_range_m = 0.0;
     double min_elevation_rad = -0.05;
@@ -317,6 +325,8 @@ struct RadarState {
     int emitter_id = 0;
     bool on = false;
     bool iff_interrogating = true;
+    int iff_code = 0;  // the code its interrogator asks on: a transponder replies only on the same (roadmap B10)
+
     MtiMode mti = MtiMode::Off;
     std::vector<int> beam_program;  // indices into the emitter's beams, one per revolution
     std::size_t program_pos = 0;
@@ -523,6 +533,28 @@ struct Message {
     int hops = 0;
     std::vector<KnowledgeTrack> tracks;
     bool done = false;
+    // What the call says, for whoever may read it (B9): an index into the session's call log (air_war/air_radio.hpp),
+    // -1 for a message that says nothing a listener can read. The EM layer only times and radiates it.
+    int payload = -1;
+    bool intercept_done = false;  // the comms intercept receivers have been asked once, at its start
+};
+
+// One call a comms intercept receiver (an EsmDef of kind CommsIntercept) heard at its start (em/comms_intercept.hpp):
+// when, from what bearing, how strongly. What it says is read through `payload` by the post's linguist, not here.
+struct CommsHeard {
+    long long message = 0;
+    int esm = 0;           // the receiver's EsmState id
+    int platform = 0;      // its platform
+    int from_node = 0;     // the transmitting node
+    int net = 0;
+    int payload = -1;
+    double start_s = 0.0;
+    double end_s = 0.0;
+    double freq_hz = 0.0;
+    double rx_dbw = -300.0;
+    double margin_db = -300.0;  // above the receiver's sensitivity
+    double bearing_rad = 0.0;   // as measured (true, from the receiver), with the receiver's error
+    bool line_of_sight = false;
 };
 
 // The fate of a voice message at its addressee, for whoever sent it.
@@ -735,6 +767,10 @@ struct EmScene {
     long long tick = 0;
     EmLibrary lib;
 
+    // A receiver skips the path to an emitter whose beam as it points now cannot reach it even over the best ground
+    // (roadmap S7: the receivers' cost near the battery; the intercepts are the same, the path cache's refreshes not).
+    bool esm_sidelobe_bound = false;
+
     std::vector<Platform> platforms;
     std::vector<EmitterState> emitters;
     std::vector<RadarState> radars;
@@ -745,6 +781,7 @@ struct EmScene {
     std::vector<NodeState> nodes;
     std::vector<NetState> nets;
     std::vector<Message> messages;  // queued or on the air
+    std::vector<CommsHeard> heard;  // calls the comms intercept receivers heard (em/comms_intercept.hpp), for whoever collects them
     std::vector<VoiceResult> voice_results;
     std::vector<DecoyLink> decoys;
     std::vector<DummyTraffic> dummy_traffic;  // outcomes of voice messages (the sender collects them)

@@ -4,6 +4,7 @@
 // entity state back for rendering. Nothing in here knows about rendering.
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -108,6 +109,15 @@ public:
         time_s_ += dt;
     }
 
+    // Takes an aircraft out of the world for good (one long gone: the testbed's waves keep the list short). A missile
+    // still after it self-destructs on the next step. False if there is none with that id.
+    bool RemoveAircraft(int id) {
+        const std::size_t i = IndexOfAircraft(id);
+        if (i == kNotFound) return false;
+        aircraft_.erase(aircraft_.begin() + static_cast<std::ptrdiff_t>(i));
+        return true;
+    }
+
     std::vector<Aircraft>& AircraftList() { return aircraft_; }
     const std::vector<Aircraft>& AircraftList() const { return aircraft_; }
     const std::vector<Missile>& MissileList() const { return missiles_; }
@@ -135,9 +145,11 @@ public:
 private:
     static constexpr std::size_t kNotFound = static_cast<std::size_t>(-1);
 
+    // The list is in id order (ids are given increasing, AddAircraft appends and RemoveAircraft keeps the order): a
+    // binary search (roadmap B12: hundreds of lookups a step).
     std::size_t IndexOfAircraft(int id) const {
-        for (std::size_t i = 0; i < aircraft_.size(); ++i) if (aircraft_[i].id == id) return i;
-        return kNotFound;
+        const auto it = std::lower_bound(aircraft_.begin(), aircraft_.end(), id, [](const Aircraft& a, int v) { return a.id < v; });
+        return it != aircraft_.end() && it->id == id ? static_cast<std::size_t>(it - aircraft_.begin()) : kNotFound;
     }
 
     void RecordOutcome(const Missile& m, std::size_t target_index, double t) {

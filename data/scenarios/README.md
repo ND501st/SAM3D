@@ -45,8 +45,13 @@ the readiness state they start in (march, deployed, powered).
   },
   "environment": { "visibility_km": 40, "daylight": true },  // optional: the air and the light for the TV sight (em/optical.hpp)
   "doctrine": { "tv_check": true,                     // optional (roadmap E6): warned of decoys, look on the TV before a launch
-                "search_bursts": { "on_s": 4, "off_s": 16 },  // emission discipline: the search radar in bursts while nothing is near
+                "emission": { "regime": "limited" },  // the combat order's emission regime: free, limited, arm, silent (docs/crew/16_EMISSION.md);
+                                                      // optional "on_turns", "off_turns" (else data/command/emission_regimes.json's), "from": "battery" | "regiment".
+                                                      // Older forms: "search_bursts": { "on_s": 4, "off_s": 16 } (limited, in seconds), "arm_threat": true (arm)
                 "salvo": 2 },                         // missiles per target at once (roadmap 10.1): 2 sends the second before the first arrives
+  "emission_orders": [ { "at_s": 60, "regime": "arm", "from": "regiment" } ],  // optional: the regime changed during the mission (needs a
+                                                      // battery or a post): the battery commander says it on the battery net; the regiment's
+                                                      // he passes on (at a post it comes on the regiment's net); each commander tells his crew
   "assistance": "guided",                             // optional: the training overlay's level: demonstrate, guided (default), hint, unassisted, exam
   "crew_commander": "npc",                            // optional: "npc" runs the crew by doctrine (docs/crew/), "script" (default) leaves the orders to the triggers
   "crew": [ { "name": "Commander", "role": "commander", "reaction_time_s": 1.0, "reaction_jitter_s": 0.3 },
@@ -110,6 +115,38 @@ the player (`ScenarioRunner::AssignBatteryTarget`); `"none"` lets them fire free
 the march, a raid, the fight, stowing and marching on). It starts with one missile (`empty_containers`), so the TZM
 comes within the mission. A battery vehicle may have a sector of fire, `"sector_deg": [from, to]` (true azimuths,
 clockwise): in free fire it takes only targets there, and the NPC battery commander gives it targets there first.
+
+**The air battle (track B, B8; `simcore/air_war/air_fight_session.hpp`, `docs/air_battle/07_AIR_TO_AIR.md`).** An
+optional `"air_fight"` makes some targets fight in the air: `{ "year": 1985, "combat": "air_war/air_combat.json",
+"sensors": "air_war/sensors.json", "fighters": [ { "target", "type", "faction", "role", "regiment", "controller",
+"skill" } ], "controllers": [ { "id", "side", "kind", "east_m", "north_m", "alt_m", "range_m", "post" } ] }`. A
+fighter's `type` needs a fit and its `faction` a doctrine in the combat file (`"ours"` for our side, with its
+`regiment`); `role` is escort, sweep, cap, intercept or strike (a striker only defends itself). A controller is a GCI
+post (`radar_control`) or an AWACS (`airborne_warning`) of `ours` or `enemy`; with a `post` of `"air_radio"` its vectors
+go out on that post's net and may be jammed or lost (B9), else they are heard at once. The fighters find, identify and
+fire by what they know (their pilots' picture, their radar, the controller's word); kills come back through the
+runner's `DestroyTarget`, ours with the regiment's id.
+
+**Our aviation (track B, B10; `simcore/command/own_air.hpp`, `own_flights.hpp`, `docs/air_battle/08_OUR_FIGHTERS.md`).**
+An optional `"own_air"` gives the session our side's air: `{ "data": "command/own_air.json", "codes":
+"command/iff_codes.json", "war": true, "fixed_code", "battery_table_s", "battery_last_code", "post_table_s",
+"post_last_code", "chain": "command/chain_pannonia.json", "origin": "fighter_rgt_duty", "notice_post": "rgt_cp_duty",
+"plan": { "method", "split_height_m", "zones", ... }, "notices": [ { "flight", "type", "count", "route_m": [[e, n], ...],
+"half_width_m", "floor_m", "ceiling_m", "cross_from_s", "cross_to_s", "back_s", "sent_s", "lost", "aircraft" } ],
+"regiments": [ { "id", "base", "base_east_m", "base_north_m", "type", "name", "skill", "function", "area_east_m",
+"area_north_m", "area_radius_m", "gci" } ], "gci": { "east_m", "north_m", "mast_m" }, "raid_warning_s" }`. The day's
+codes come from the table (or `fixed_code`); a holder whose table never came (`*_table_s` < 0) keeps its last code. A
+target of ours may have `"iff_code"` (fixed; -1 its transponder off) or `"iff_table": true` (its pilot sets the table's
+code, and may miss a change). Each notice goes down the chain from `origin` to `notice_post` with each post's work, then
+on the regiment's net into the post's journal (or, without a post, as the battery commander's line); the crew keeps what
+it read from the words. Regiments need an `"air_fight"` with our controller `gci` (its fighters may then be empty): the
+duty scrambles pairs on our GCI's picture, guided on that picture. Since S1: `"front": { "east_m", "north_m",
+"enemy_bearing_deg" }` is a point of the front line and the bearing across it to the enemy (each regiment puts
+`alert_pairs` on airborne alert behind it on the raid warning, and recalls a pair past its pursuit limit beyond it);
+`"enemy_allies": true` puts some of the enemy's aircraft on our Kremniy filters by the allies' own schedule (the Pact's
+false friend); without a `"plan"` the scenario's regiment's task (`"task"`) gives it. The regiments' loss and claim
+reports come down the same chain, and the Osa's interrogator code is its `iff.code` switch, set by the senior operator
+on the commander's order when the table's code changes.
 
 **The Osa and the PU-12M in one battery (a battery link, `simcore/battery_link.hpp`, docs/PU12_DEVELOPMENT.md P8).** A
 link file names two scenarios that share a battery and a sky, `{ "link_id", "name", "description", "osa", "post",
@@ -187,11 +224,17 @@ vehicle oriented, radars silent). A cold start takes the documented 3.8 min swit
 check (`function_check` procedure); in Unreal, `sam3d.TimeScale` (0.25 to 32) speeds the sim up so that stays playable.
 
 A trigger can set the console input `tzm_alongside` (`{ "set_input": "tzm_alongside", "value": true }`) to bring the
-transport-loader vehicle up: with the vehicle stopped, the launcher reloads one missile a minute (roadmap 7.3).
+transport-loader vehicle up: with the vehicle stopped, the crane lifts one side's three containers at a time, three minutes a lift (roadmap 7.3).
 `external_power` connects an external 220 V 400 Hz supply (a cable, not a console control): at a halt it powers the
 equipment without the turbine or the take-off generator and burns no fuel; it drops out when the vehicle moves.
 
 `"battery"` (optional, roadmap 7.5) puts the rest of the battery around the player's vehicle: `{ "tactics": "command/battery_tactics.json", "drive_own": false, "night": false, "share_picture": true, "own": { "id": "21", "callsign": "21" }, "vehicles": [ { "id": "22", "kind": "launcher" | "reload" | "fuel" | "command_post" | "maintenance", "position": {...} } ], "orders": [ { "at_s": 0, "order": "march", "route": [ {...}, {...} ] } ] }`. Orders: `march` (with `route`), `short_halt`, `combat_formation` (with `covered` and `axis_deg`; `"bounding": true` moves one pair at a time while the other stays deployed), `halt`, `resume`, `ambush` (with `points`, the prepared ambush points; `"roving": true` moves the pairs on between them), `river_crossing` (with `crossing`, the crossing point on the near bank, `axis_deg` and `width_m`: the battery waits 2 km short, then crosses in pairs once told), `far_bank_held` (the covered force holds the far bank: the pairs go over), `emcon` (with `"radiate": false`, the battery's radars silent: the crews make ready without radiating and fight by the TV on the PU-12's designations; `"radiate": true` lifts it), `reload` / `refuel` (with `vehicle`: the TZM or the fuel truck drives alongside and back; the runner also orders them itself when the player's launcher is empty and nothing is flying, or the fuel system asks for fuel, and sets `tzm_alongside` / `fuel_truck_alongside`); a trigger can give them (`{ "battery_order": "short_halt" }`) or set `{ "air_threat": true }`. `"deployed": true` starts every vehicle set up where it stands. When the player's vehicle is the PU-12M (`own_unit.console` `procedures/pu12m.json`, with a `post` block), `"launchers": { "console": "procedures/osa_ak.json", "tuning": "gameplay/osa_ak.json" }` gives the launchers their tuning and their tracking radar's reach; the battery commander in the post gives them targets by voice on the battery net (`ScenarioRunner::DesignateBatteryTarget`, or the NPC), and their reports fill the IT-1 and IT-2 boards (`StatusBoards`). `drive_own` lets the battery drive the player's vehicle too; `share_picture` makes the other launchers' radars neighbour sources of the command network.
+
+**The battery's orders carried by a means (roadmap G10.5).** `"by_means": { "chain": "command/chain_pannonia.json", "giver_post": "bty21_commander", "crews": [ { "vehicle": "23", "post": "veh21_3_commander", "set_on": false, "line": true } ] }` in the `"battery"` block gives every vehicle but the own and the PU-12 a commander, a post of the chain (default `<callsign>_commander`) with his skill tier's times, and runs the battery's moving orders on the order net (`simcore/command/battery_orders.hpp`, its numbers `data/command/battery_orders.json`): each vehicle stays where it is until its commander has heard by a means that reaches him (the battery net on a warm set, flags or lamps on the march, the telephone where `line` is laid, a shout, a runner), repeats back and reports by the first way back, and the battery commander's silence rule chases him. `set_on: false` starts his R-123M off. `ScenarioRunner::GetBatteryOrders` has the book and the debrief's lines. With `drive_own` our own vehicle is on the net too (a `crews` entry may name its commander's post): its commander reads each order back and reports «к маршу готов» on the net (an NPC by himself, a player from the crew menu), and on a march the vehicle moves off only once the crew is stowed. `osa_battery_orders.json` is the march order carried so.
+
+**The session's roads (roadmap G2.3, G11).** `"nav": { "country": "maps/pannonia.json", "chain": "command/chain_pannonia.json", "movers": [ { "id": "rgt_supply", "kind": "convoy", "mobility": "truck", "from": "rgt_rear", "to": "bty21_cp", "depart_s": 0, "vehicles": 4, "spacing_m": 50, "model": "ural_truck" } ] }` gives the session the route service (`simcore/nav/session.hpp`): the country's roads with the scenario's map's tracks (`terrain` of type `map`), the chain's places and the country's towns and landmarks as places by id. The scenario's `origin` must be the country's (46.9, 19.7), so its ENU is the roads' frame. Each mover goes on the roads between two places from its `depart_s` (`kind` and `model` for drawing; `model` by default from `mobility`), at full detail and drawn within the visual range of the own vehicle (`data/gameplay/visual_range.json`: day, dusk, night, the weather's visibility the cap; `ScenarioRunner::MoversInView`). A `march` order may name `"to_place"` (a place's id) instead of a `route`: the battery commander plans the march on the roads when he gives it (the slowest vehicle's speeds, the start point, halts, the order of march: `nav/march.hpp`), and the route card goes into the own vehicle's commander's and driver's map cases and the order of march into the battery commander's (`ScenarioRunner::MapCase`); a battery commander in the own vehicle also has his battery's staff list and communications diagram from the start. `pu12m_battery_march.json` is battery 21 marching to the Lazne woods so.
+
+**The regiment's task (roadmap 14.1, 14.3, 14.5).** `"task": { "file": "campaign/tasks/bty21_cover_bridges.json", "given_s": 60, "means": "radio" }` (top level, optional; needs a `battery` with `by_means` and a `nav`, and for `"radio"` the regiment's net) has the regiment give the battery commander a combat task (`simcore/campaign/battery_task.hpp`; the task file's nine parts, each place a place of the `nav`'s, each sector a launcher's) at `given_s`, on its net or `"in_person"`. He plans it by the textbook's sequence (`data/campaign/battery_plan.json`, `simcore/campaign/battery_plan.hpp`), timed to the task's `ready_in_s`, gives the preliminary and the oral combat order on the battery net when his plan has them, then the emission regime, the sectors and the march to the main position (`to_place`), and at the route's end the task kind's formation; his «к бою готова» up to the regiment is the task's readiness, in time or late in the debrief. The task's order and his plan are papers in his map case; in the battery commander's seat the orders are the player's to give. Its `battery.orders` (if any) run beside the task's: leave the battery's moves to the task. `"clock_start": "19:00"` (top level, optional) is the day's hour at the session's start, for the order's times. `pu12m_mission_cover.json` is battery 21 covering the Kesmark bridges.
 
 `own_unit.prepared_position` (optional, roadmap 7.6): `{ "emplacement": true, "nets": true, "wire": true, "dummies": [ { "position": {...}, "decoy": "when_radar_off" } ] }`; values from `command/prepared_positions.json`.
 
@@ -206,8 +249,9 @@ range; each ARM is set to the signal heard; after its last it turns away hard. T
 it is a ghost mark `T<n>`, in Tacview a `Weapon+Missile`; one that bursts on the vehicle ends the scenario ("the vehicle
 was hit by an anti-radiation missile"), one on a dummy or decoy is logged (`ScenarioRunner::ArmResults`).
 
-`"doctrine": { "arm_threat": true, "arm_silence_s": 60, "arm_search_off_turns": 3, "relocate_after_arm": { "to": {...} } }`:
-the crew warned of ARMs fights with the least emission (`voenizdat_osa_1991` pp262-264): the senior operator puts the
+`"doctrine": { "emission": { "regime": "arm" }, "arm_silence_s": 60, "relocate_after_arm": { "to": {...} } }` (the older form:
+`"arm_threat": true, "arm_search_off_turns": 3`): the crew told the least emission by its commander (`docs/crew/16_EMISSION.md`)
+fights with it (`voenizdat_osa_1991` pp262-264): the senior operator puts the
 search transmitter's high voltage on for 2 antenna turns after every `arm_search_off_turns` (3-4 in the textbook), with
 ЛУЧ АВТ. I–II so that both low beams are in each burst, and off while the tracking radar holds a target alone; the
 commander puts the tracking transmitter on only from Table 7.3's range for the target's speed
@@ -263,3 +307,13 @@ and kept as samples for the missions menu's "Air war" group. They use only the k
 `behaviour`, `evade`, `rwr` and `decoy`; `own_unit.em.jammers`; the `battery`, `prepared_position`, `c2` (with
 `regiment` radars and outages) and `command_post` blocks; an `air_threat` trigger; `doctrine`; `environment`; NPC
 commanders. Regenerate with `simcore/examples/air_war_demo` (it writes every raid it plays to its output folder).
+
+`"neighbours"` (the nation on the map N4, 23 Oct 2026) lists our other air defences whose zones reach into the scenario:
+`[ { "id": "tiszavar_kub", "name": "...", "system": "kub", "position": { "e_km": ..., "n_km": ... }, "radius_km": 24 } ]`
+(`system` an air war air defence id, `simcore/air_war/data.hpp` `kAirDefenceSystems`). The game draws each as its
+system's site (`data/scenery/basic_models.json` `"systems"`), the PU-12M's plotting board marks it in blue with its reach
+and our name for it (`PostFeed::neighbours`). Their fire in a raid is the mission bridge's abstract chance
+(`docs/air_war/05_EXECUTION.md`), except an Osa battery with `"fights": true` (and optionally `"launchers"`, 1-4, its
+working launchers, default 4; `"missiles"`, all of them together, default six a launcher): the runner fights it in the
+battery fire model, its launchers in the combat formation about its place, each taking the nearest hostile in its reach
+(`ScenarioRunner::NeighbourLaunchers`, `NeighbourKills`).

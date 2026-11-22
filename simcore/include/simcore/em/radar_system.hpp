@@ -86,6 +86,18 @@ inline RadarLookPhysics AnchorLook(const RadarDef& d, const Environment& env, do
                                    ? BeamFor(d.emitter, el)
                                    : ElevationBeam{MaxOf(el, d.low_target_elevation_rad), 0.0};
     const AntennaDef ant = d.role == RadarRole::Search ? BeamAntenna(d.emitter, beam) : d.emitter.antenna;
+    if (d.airborne) {
+        // An airborne radar's published range is a free-space figure (target and carrier high above the ground): the beam's
+        // pattern and the air's absorption only, no ground reflection and no diffraction.
+        const double f_air = d.emitter.waveform.freq_hz;
+        l.range_m = range_m;
+        l.rcs_m2 = rcs_m2;
+        const double peak_air_db = ant.gain_db - d.emitter.antenna.gain_db;
+        l.pattern_db = 2.0 * (AntennaGainDb(ant, 0.0, el - beam.centre_rad) - ant.gain_db + peak_air_db);
+        l.one_way_loss_db = GaseousLossDb(range_m, hr, target_alt_m, f_air) + RainLossDb(range_m, f_air, env.rain_rate_mmh);
+        l.multipath_factor = 1.0;
+        return l;
+    }
     const FlatTerrain flat(0.0);
     const PathGeometry g =
         AnalysePath(flat, Vec3{0.0, 0.0, hr}, hr, Vec3{0.0, ground, target_alt_m}, target_alt_m, env.profile_spacing_m,
@@ -99,7 +111,9 @@ inline RadarLookPhysics AnchorLook(const RadarDef& d, const Environment& env, do
     // Pattern relative to the reference beam's peak: a taller beam has lower gain (two-way).
     const double peak_db = ant.gain_db - d.emitter.antenna.gain_db;
     l.pattern_db = 2.0 * (AntennaGainDb(ant, 0.0, el - beam.centre_rad) - ant.gain_db + peak_db);
-    l.one_way_loss_db = DiffractionLossDb(g, f) + GaseousLossDb(range_m, hr, target_alt_m, f) + RainLossDb(range_m, f, env.rain_rate_mmh);
+    // The anchor look takes the ground by two rays at every frequency, so the terrain's edges alone (no spherical-earth term:
+    // propagation.hpp kSphericalEarthMaxFreqHz's rule): a radar's calibration is as before ITU-R P.526's smooth earth.
+    l.one_way_loss_db = TerrainEdgesLossDb(g, f) + GaseousLossDb(range_m, hr, target_alt_m, f) + RainLossDb(range_m, f, env.rain_rate_mmh);
     l.multipath_factor = TwoRayFactor(rg, lambda, rho, ratio);
     return l;
 }
@@ -396,7 +410,8 @@ inline void RunSearchRadar(const EmScene& s, RadarWork& w, RadarState& r, const 
         if (lr.detected) {
             RadarPlot pl = lr.plot;
             // IFF: the interrogator shares the antenna; a working transponder of our side replies.
-            if (d.has_iff && r.iff_interrogating && t.iff_reply && t.side == p.side)
+            if (d.has_iff && r.iff_interrogating && t.iff_reply && t.side == p.side && t.iff_code == r.iff_code)
+
                 pl.iff_reply = s.rng.Uniform01Of(Stream::Iff, LookKey(r.id, t.id, e.revolutions)) < d.iff_reply_probability;
             r.last_plots.push_back(pl);
         }

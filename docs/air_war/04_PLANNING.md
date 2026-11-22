@@ -99,3 +99,7 @@ Every package carries its reasons in its officer's words, logged when it is plan
 > dead '956 10' against SA-8 battery near Kesmark, D1 19:30 (dusk), in at N4, low: 4 dead, 2 sead, 1 escort, 1 jammer.
 > expects to lose 0.5 of 8 aircraft for an expected effect of 1.6. this one has cost us 3 aircraft: the commander wants
 > it gone. SEAD: 2 aircraft for 1 radar threat(s) believed on the route. stand-off jamming. the same way in as last time (N4).
+
+**Planned** (the battery's war, `docs/campaign/05_THE_SYSTEMS.md` §14, roadmap 13.6): a freedom-of-action ledger that
+records, per package, what the player's battery's entry in the picture changed (SEAD, decoys, jammers, route, height,
+approval, ARMs), by planning the package again without it.

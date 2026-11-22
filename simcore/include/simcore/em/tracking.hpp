@@ -206,7 +206,7 @@ public:
                 const double d2 = MahalanobisSq(tracks_[ti], zs[pi], rs[pi]);
                 if (d2 <= prm_.gate_chi2) cands.push_back({d2, pi, ti});
             }
-        std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) {
+        std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) {
             if (a.d2 != b.d2) return a.d2 < b.d2;
             if (a.plot != b.plot) return a.plot < b.plot;
             return a.track < b.track;

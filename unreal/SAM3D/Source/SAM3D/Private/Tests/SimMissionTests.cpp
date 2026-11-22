@@ -46,10 +46,10 @@ bool FSimMissionsMenuTest::RunTest(const FString& Parameters)
 	TArray<FSimMission> Missions;
 	FString Error;
 	TestTrue(FString::Printf(TEXT("the catalogue loads %s"), *Error), Sim->GetMissions(Missions, Error));
-	TestEqual(TEXT("eleven lessons (the Osa's and the PU-12M's), twenty-two missions and drills (with the two ARM drills and "
-		"the counter-jamming, low flier, VHF jamming and trainer drills), seven of ranges and history, the air war's seven sample "
-		"raids and the test range's map"),
-		Missions.Num(), 11 + 16 + 2 + 4 + 7 + 7 + 1);
+	TestEqual(TEXT("eleven lessons (the Osa's and the PU-12M's), twenty-three missions and drills (with the two ARM drills, the "
+		"emission regime and the counter-jamming, low flier, VHF jamming and trainer drills), seven of ranges and history, the air "
+		"war's seven sample raids and the test range's map"),
+		Missions.Num(), 11 + 16 + 2 + 1 + 4 + 7 + 7 + 1);
 	TestTrue(TEXT("the first lesson first, starting outside, with its guide"), Missions.Num() > 0 && Missions[0].Id == TEXT("tutorial_basics") &&
 		Missions[0].Start == TEXT("outside") && Missions[0].Tutorial == TEXT("tutorials/basics.json"));
 	// Then a lesson for each seat of the Osa, each starting in its seat.
@@ -109,6 +109,67 @@ bool FSimMissionsMenuTest::RunTest(const FString& Parameters)
 		Car->ToggleWalking();
 		TestTrue(TEXT("back in his seat"), !Car->IsWalking() && Car->GetStationId() == TEXT("battery_commander"));
 	}
+
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+// The time of day (roadmap R7): a mission that offers it passes the choice as ?SimTime (and ?SimHour); one that holds its
+// time never does; a scenario loaded with ?SimTime=night is dark by its own sun, which the sky reads.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSimMissionTimeTest, "SAM3D.Missions.TimeOfDay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimMissionTimeTest::RunTest(const FString& Parameters)
+{
+	FURL Url(nullptr, TEXT("OsaPractice?SimMission=osa_practice?SimTime=night"), TRAVEL_Absolute);
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false, TEXT("SAM3DMissionTimeTest"));
+	FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+	Context.SetCurrentWorld(World);
+	World->URL = Url;
+	World->InitializeActorsForPlay(Url);
+	World->BeginPlay();
+	USimWorldSubsystem* Sim = World->GetSubsystem<USimWorldSubsystem>();
+	TestNotNull(TEXT("the subsystem"), Sim);
+	if (Sim == nullptr)
+	{
+		GEngine->DestroyWorldContext(World);
+		World->DestroyWorld(false);
+		return true;
+	}
+	TArray<FSimMission> Missions;
+	FString Error;
+	TestTrue(FString::Printf(TEXT("the catalogue loads %s"), *Error), Sim->GetMissions(Missions, Error));
+	const FSimMission* Choice = Missions.FindByPredicate([](const FSimMission& M) { return M.Id == TEXT("osa_practice"); });
+	const FSimMission* Held = Missions.FindByPredicate([](const FSimMission& M) { return M.Id == TEXT("osa_angola_night"); });
+	TestTrue(TEXT("a drill offers six times, labelled"), Choice != nullptr && !Choice->bTimeFixed && Choice->TimeOptions.Num() == 6 &&
+		Choice->TimeLabels.Num() == 6 && Choice->TimeOptions[0] == TEXT("mission"));
+	TestTrue(TEXT("the Angola night raid holds its time"), Held != nullptr && Held->bTimeFixed);
+	if (Choice != nullptr && Choice->TimeOptions.Num() == 6)
+	{
+		const int32 Dusk = Choice->TimeOptions.IndexOfByKey(FString(TEXT("dusk")));
+		const int32 Hour = Choice->TimeOptions.IndexOfByKey(FString(TEXT("hour")));
+		TestEqual(TEXT("dusk"), ASimMissionMenuHUD::TimeOptionsFor(*Choice, Dusk, 10.5f), FString(TEXT("?SimTime=dusk")));
+		TestEqual(TEXT("an hour"), ASimMissionMenuHUD::TimeOptionsFor(*Choice, Hour, 17.5f), FString(TEXT("?SimTime=hour?SimHour=17.50")));
+		TestEqual(TEXT("the mission's own: nothing"), ASimMissionMenuHUD::TimeOptionsFor(*Choice, 0, 10.5f), FString());
+		TestEqual(TEXT("the options carry it"),
+			ASimMissionMenuHUD::OptionsFor(TEXT("osa_practice"), FString(), FString(), FString(), ASimMissionMenuHUD::TimeOptionsFor(*Choice, Dusk, 10.5f)),
+			FString(TEXT("SimMission=osa_practice?SimTime=dusk")));
+	}
+	if (Held != nullptr)
+	{
+		TestEqual(TEXT("a held mission never passes a time"), ASimMissionMenuHUD::TimeOptionsFor(*Held, 3, 12.0f), FString());
+	}
+	TestEqual(TEXT("?SimTime"), Sim->GetLaunchOption(TEXT("SimTime")), FString(TEXT("night")));
+	TestTrue(FString::Printf(TEXT("the drill loads %s"), *Error), Sim->LoadScenario(TEXT("scenarios/osa_practice.json"), Error));
+	double Elevation = 0.0;
+	double Azimuth = 0.0;
+	bool bDaylight = true;
+	float NightShare = 0.0f;
+	TestTrue(TEXT("its sun"), Sim->GetSunNow(Elevation, Azimuth, bDaylight, NightShare));
+	TestTrue(FString::Printf(TEXT("night: the sun %.1f deg, no daylight"), Elevation), !bDaylight && Elevation < -6.0 && NightShare > 0.99f);
+	simcore::SkyClock Clock;
+	TestTrue(TEXT("the sky's clock is the scenario's"), Sim->GetSkyClock(Clock) && Clock.day_of_year == 288);
 
 	GEngine->DestroyWorldContext(World);
 	World->DestroyWorld(false);

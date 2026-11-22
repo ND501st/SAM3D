@@ -1,0 +1,16 @@
+{
+  "light_id": "light",
+  "status": "first pass (roadmap R7, S8; docs/LIGHT.md)",
+  "notes": "The light everything reads from one sun (simcore/light.hpp): the sun's elevation at the scenario's place, date and hour (simcore/solar.hpp, meeus_1998) against these thresholds. Day with the sun at low_sun_deg or higher; night more than twilight_deg below the horizon; dawn or dusk between, by whether it rises. The TV sight has daylight down to tv_min_elevation_deg; the battery is dark (lamp signals, the night march, the guns' optical sights blind, the waves' night factor) below optical_night_deg. twilight_deg must equal visual_range.json's (test_light.cpp). Roadmap S8: the light on the ground in lux (the sun's clear sky by its elevation, brown_1952, and the moon by its phase and height, krisciunas_schaefer_1991); the TV's contrast threshold times the square root of tv_full_lux over that light when it is less (rose_1948), so the TV's range falls through the twilight before its daylight ends at tv_min_elevation_deg; the moon's share of the night 0 at moonless_lux and 1 at full_moon_lux, logarithmic between (the eye's range at night, visual_range.json's moonlit_m). The air war reads this file too (its theatre's parts of the day, roadmap S8).",
+  "source": "derived: civil twilight's 6 degrees is the astronomical definition (meeus_1998); the light in lux brown_1952 and krisciunas_schaefer_1991; the others game values",
+  "confidence": "estimate",
+  "values": {
+    "twilight_deg": { "value": 6, "source": "derived: civil twilight, the sun up to 6 degrees below the horizon (the astronomical definition)", "confidence": "high" },
+    "low_sun_deg": { "value": 6, "source": "game value: the sun this high or higher is full day; below it, the long shadows and glare of dawn or dusk", "confidence": "estimate" },
+    "tv_min_elevation_deg": { "value": -6, "source": "derived: the end of civil twilight (the astronomical definition), the light a daylight TV camera of the period still works in (simcore/solar.hpp's note)", "confidence": "estimate" },
+    "optical_night_deg": { "value": -6, "source": "derived: the end of civil twilight (the astronomical definition): below it the battery works by night (lamps, the night march, optical sights blind)", "confidence": "estimate" },
+    "tv_full_lux": { "value": 400, "source": "game value: the light on the ground at sunset (about 400 lux, brown_1952) taken as the least a daylight TV camera of the period works in at its full contrast threshold; below it the threshold rises as the square root of the light's fall (rose_1948)", "confidence": "estimate" },
+    "moonless_lux": { "value": 0.001, "source": "brown_1952: a clear moonless night's light on the ground (starlight and airglow), about a thousandth of a lux", "confidence": "estimate" },
+    "full_moon_lux": { "value": 0.25, "source": "krisciunas_schaefer_1991: a full moon high in a clear sky gives about a quarter of a lux on level ground (simcore/light.hpp MoonLux)", "confidence": "estimate" }
+  }
+}

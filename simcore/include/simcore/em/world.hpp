@@ -82,6 +82,40 @@ public:
         return true;
     }
 
+    // Adds the entries of `more` whose ids the library lacks, calibrated as SetLibrary does: a package entering a running
+    // session brings its jammers, warning receivers and anti-radiation missiles (roadmap 15.3). Entries are used by
+    // index, so those already here keep theirs. False, adding nothing, if a new radar has no calibration anchor.
+    bool MergeLibrary(const EmLibrary& more, std::string* error = nullptr) {
+        const Environment dry = Dry(s_.env);
+        EmLibrary& lib = s_.lib;
+        std::vector<RadarDef> radars;
+        for (const RadarDef& d : more.radars) {
+            if (lib.Radar(d.id) >= 0) continue;
+            radars.push_back(d);
+            if (!Calibrate(radars.back(), dry)) {
+                if (error != nullptr) *error = "radar '" + d.id + "' has no usable calibration anchor";
+                return false;
+            }
+        }
+        lib.radars.insert(lib.radars.end(), radars.begin(), radars.end());
+        for (const EsmDef& d : more.esm)
+            if (lib.Esm(d.id) < 0) lib.esm.push_back(d);
+        for (const JammerDef& d : more.jammers)
+            if (lib.Jammer(d.id) < 0) lib.jammers.push_back(d);
+        for (const RadioDef& d : more.radios) {
+            if (lib.Radio(d.id) >= 0) continue;
+            lib.radios.push_back(d);
+            CalibrateRadio(lib.radios.back(), dry);
+        }
+        for (const EmitterDef& d : more.emitters)
+            if (lib.Emitter(d.id) < 0) lib.emitters.push_back(d);
+        for (const ThreatLibrary& d : more.threat_libraries)
+            if (lib.Library(d.id) == nullptr) lib.threat_libraries.push_back(d);
+        for (const ArmDef& d : more.arms)
+            if (lib.Arm(d.id) < 0) lib.arms.push_back(d);
+        return true;
+    }
+
     // Changing the environment changes the propagation the calibration was done in: recalibrate.
     void SetEnvironment(const Environment& env) {
         s_.env = env;

@@ -170,3 +170,57 @@ SC_TEST("scenario: a target that passes its last waypoint ends the run") {
     SC_EXPECT(r.Time() > 195.0 && r.Time() < 205.0);  // 40 km at 200 m/s, less the 500 m capture radius
     SC_EXPECT(r.TargetRange("t1") > 19000.0);
 }
+
+SC_TEST("scenario: the chain's messages in the session (P1): said on their channel, a rider seen coming with a paper") {
+    ScenarioDef def;
+    ConsoleData console;
+    SC_EXPECT(Load(Small(R"js(, "end": { "time_limit_s": 400, "when_targets_gone": false },
+      "deliveries": [
+        { "id": "warn", "after_s": 20, "to": "commander", "means": "radio", "net": "battery net",
+          "from": "Captain Andrej Novak (Commander, battery 21)", "words": "Vozdukh! A raid over the sector in ten minutes.",
+          "air_warning": true, "azimuth_deg": 265 },
+        { "id": "summary", "after_s": 300, "means": "despatch_rider", "from": "Captain Milos Jelinek (Chief of signals)",
+          "words": "From the regiment: the day's summary.", "paper": { "title": "Intelligence summary", "text": "Two raids from the west." },
+          "from_bearing_deg": 90 } ] 
+)js"),
+                   def, console));
+    SC_EXPECT(def.deliveries.size() == 2);
+    ScenarioRunner r(def, console);
+    // The rider is on the road before he arrives: east of the vehicle, coming closer.
+    for (int i = 0; i < 1500; ++i) r.Step(0.1);  // 150 s
+    std::vector<ScenarioRunner::VisitorState> v = r.Visitors();
+    SC_EXPECT(v.size() == 1);
+    double first_east = 0.0;
+    if (!v.empty()) {
+        SC_EXPECT(v[0].model == "motorcycle" && !v[0].at_vehicle);
+        first_east = v[0].position.x;
+        SC_EXPECT(first_east > 100.0 && std::fabs(v[0].position.y) < 1.0 && std::fabs(v[0].heading_deg - 270.0) < 1e-6);
+    }
+    bool warned = false;
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) warned = warned || (m.net == "battery net" && m.text.find("Vozdukh") == 0);
+    SC_EXPECT(warned);
+    // The warning gave the raid's direction: whoever heard it has it in his picture, as told (P4).
+    const CrewPicture* cmdr = r.PictureOf("commander");
+    const KnownTarget* raid = cmdr != nullptr ? cmdr->Find("warning:warn") : nullptr;
+    SC_EXPECT(raid != nullptr && raid->has_azimuth && raid->true_azimuth && std::fabs(raid->azimuth_deg - 265.0) < 1e-9 && !raid->has_range &&
+              raid->source.find("Novak") != std::string::npos);
+    SC_EXPECT(r.MapCase("").empty());
+    for (int i = 0; i < 1550; ++i) r.Step(0.1);  // 305 s: he has come
+    v = r.Visitors();
+    SC_EXPECT(v.size() == 1 && v[0].at_vehicle && v[0].position.x < first_east && v[0].position.x < 7.0);
+    const std::vector<HeldPaper> papers = r.MapCase("commander");
+    SC_EXPECT(papers.size() == 1 && papers[0].title == "Intelligence summary" && papers[0].time_s > 299.0);
+    bool at_hatch = false;
+    for (const ScenarioRunner::RadioMessage& m : r.RadioLog()) at_hatch = at_hatch || m.net == "at the hatch";
+    SC_EXPECT(at_hatch);
+    // The loader checks the means, the net and the station.
+    SC_EXPECT(ErrorContains(Small(R"js(, "deliveries": [ { "id": "x", "means": "pigeon", "from": "A", "words": "B" } ]
+)js"), "unknown means"));
+    SC_EXPECT(ErrorContains(Small(R"js(, "deliveries": [ { "id": "x", "means": "radio", "from": "A", "words": "B" } ]
+)js"), "names its net"));
+    SC_EXPECT(ErrorContains(Small(R"js(, "deliveries": [ { "id": "x", "means": "intercom", "from": "A", "words": "B", "azimuth_deg": 400 } ]
+)js"), "[0, 360)"));
+    SC_EXPECT(ErrorContains(Small(R"js(, "deliveries": [ { "id": "x", "means": "runner", "to": "cook", "from": "A", "words": "B" } ]
+)js"),
+                            "unknown station"));
+}

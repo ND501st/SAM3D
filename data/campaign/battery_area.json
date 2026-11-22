@@ -1,0 +1,24 @@
+{
+  "area_id": "osa_battery_1985",
+  "status": "first pass (roadmap G4.1-G4.2, docs/campaign/11_BATTERY_LIFE_PROPOSAL.md section 5.4)",
+  "notes": "How an Osa battery lays out its area at a position (simcore/campaign/battery_area.hpp): the launchers in two pairs across the threat's direction, each TZM behind its pair, the PU-12M behind the pairs with its aiming circle ahead of it, a launcher's aiming circle ahead of it, the maintenance vehicle and the camp behind the post, a reserve position. Each rule: the value the planner aims for and the bounds a place must keep. The jobs: the hours of position work and the wire's laying rate.",
+  "source": "voenizdat_osa_1991 pp. 232-239 and 249-250; ru_pu12_text; sam3d estimates where a rule says so",
+  "confidence": "medium",
+  "rules": {
+    "pair_internal_m": { "value": 300, "min": 200, "max": 500, "source": "voenizdat_osa_1991 p234, p237 (at least 200 m within a pair, up to 500 m); the value sam3d's", "confidence": "high" },
+    "pair_separation_m": { "value": 2500, "min": 1000, "max": 3000, "source": "voenizdat_osa_1991 p234-237 (pairs up to 3 km apart, so their zones overlap); the value and the least sam3d's", "confidence": "high" },
+    "tzm_from_pair_m": { "value": 300, "min": 50, "max": 500, "source": "voenizdat_osa_1991 p234 (the TZM crews within 500 m of the launchers); the value sam3d's", "confidence": "high" },
+    "command_post_behind_m": { "value": 1000, "min": 300, "max": 2000, "source": "estimate after voenizdat_osa_1991 p234, p237 (the command post at the centre of the battle order or near a pair, at a distance that keeps control steady); as data/command/battery_tactics.json", "confidence": "estimate" },
+    "aiming_circle_post_m": { "value": 35, "min": 30, "max": 40, "source": "voenizdat_osa_1991 pp. 249-250 (the PU-12M's aiming circle 30-40 m from it)", "confidence": "high" },
+    "aiming_circle_launcher_m": { "value": 30, "min": 20, "max": 50, "source": "voenizdat_osa_1991 pp. 249-250 (a launcher's aiming circle 20-50 m from it)", "confidence": "high" },
+    "reserve_within_m": { "value": 1500, "min": 500, "max": 2000, "source": "voenizdat_osa_1991 pp. 232-239 (a reserve position within 2 km); the value and the least sam3d's", "confidence": "medium" },
+    "maintenance_behind_m": { "value": 500, "min": 200, "max": 1500, "source": "sam3d estimate (G0: the maintenance vehicle serves the four launchers, voenizdat_osa_1991 p189; its place not given)", "confidence": "estimate" },
+    "camp_behind_m": { "value": 800, "min": 300, "max": 2000, "source": "sam3d estimate (G0: the camp's place, pvo_bu_ix_1984, to be read)", "confidence": "estimate" },
+    "clear_m": { "value": 20, "source": "voenizdat_osa_1991 pp. 232-239 (nothing tall within 20 m of a launcher)", "confidence": "medium" }
+  },
+  "jobs": {
+    "dig_emplacement_h": { "value": 3.0, "source": "sam3d estimate (G0: an emplacement for a 9A33 dug by an engineer machine; the norm to be found)", "confidence": "estimate" },
+    "nets_h": { "value": 0.5, "source": "sam3d estimate (G0: camouflage nets over a vehicle by its crew)", "confidence": "estimate" },
+    "wire_lay_mps": { "value": 1.2, "source": "ru_pu12_text (the P-274 field cable: four lines of 500 m in 25-30 min, 2 km in about 27 min)", "confidence": "medium" }
+  }
+}

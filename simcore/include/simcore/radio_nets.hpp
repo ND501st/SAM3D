@@ -17,7 +17,8 @@
 //   * Emission control: radio silence on the nets it covers, the exempt ones (air data, designation, warning: vst_1988)
 //     excepted. Time on air adds up per net in a window; past `df_fix_s` the net is taken to be fixed by direction finding
 //     and, where the scenario allows, a spot jammer comes on it `df_reaction_s` later (palii_1989; SAM3D's inference).
-//   * Lines: the RTK-1's five, laid or not, and whom they reach. A line has no emission and no jamming.
+//   * Lines: the RTK-1's five, laid or not, and whom they reach. A line has no emission and no jamming. One not laid at
+//     the start is laid by a crewman who pays the P-274M out to its far end (the runner, docs/crew/13_OUT_OF_THE_VEHICLE.md).
 // It decides nothing about the battle: the runner asks it whether a message gets through.
 #pragma once
 
@@ -28,6 +29,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "simcore/vec3.hpp"
 
 namespace simcore {
 
@@ -50,7 +53,7 @@ struct RadioNetDef {
 
 struct JammingDef {
     std::vector<std::string> nets;       // by id; empty: by band
-    double band_lo_mhz = 0.0, band_hi_mhz = 0.0;
+    double band_lo_mhz = 0.0, band_hi_mhz = 0.0;  // with nets: only their frequencies in it (none set: any)
     double from_s = 0.0, to_s = 1e18;
     bool strong = true;
     bool spot = false;                   // a spot jammer on one frequency (finds a new one after follow_s)
@@ -61,7 +64,9 @@ struct LineDef {
     int line = 1;                        // the RTK-1's lever 1-5
     std::string to;                      // a launcher's call sign, "regiment", "radar"
     std::string to_name;
-    bool laid = true;
+    bool laid = true;                    // at the start
+    bool has_far_end = false;            // where the far set stands ("far_end"), when it isn't a vehicle of the battery
+    Vec3 far_end;                        // or the radar (ENU)
     struct Call {
         double at_s = 0.0;
         std::string text;                // what the far end says once the line is answered
@@ -230,6 +235,8 @@ public:
             if (!j.nets.empty()) {
                 for (const std::string& id : j.nets) covers = covers || id == net;
                 if (covers && j.spot) covers = jam_on_[i] == number;
+                // A jammer with a band reaches only the frequencies in it (a spare outside it escapes).
+                if (covers && j.band_hi_mhz > j.band_lo_mhz) covers = mhz >= j.band_lo_mhz && mhz <= j.band_hi_mhz;
             } else {
                 covers = mhz > 0.0 && mhz >= j.band_lo_mhz && mhz <= j.band_hi_mhz;
             }

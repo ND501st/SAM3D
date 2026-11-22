@@ -1,0 +1,601 @@
+{
+  "scenario_id": "dynamic_campaign_test",
+  "name": "Dynamic campaign test: battery 21 in the capital, every air defence round it, the waves never stop",
+  "description": "A testbed for the look, the sound and the play (docs/DYNAMIC_CAMPAIGN_TEST.md): battery 21 deployed on open ground at the capital's eastern edge, every kind of our air defence and radar within a few kilometres (an Osa battery that fights, a Kub, an S-75M2, an S-125M1, Strela-10 and Strela-1, Shilkas, ten S-60 batteries, KS-30s, ZU-23s, MANPADS teams; P-14, P-15, P-18, P-19, P-40, PRV-11), and random waves of every adversary's aircraft and our own coming in for four hours: strikes dropping their loads, SEAD with ARMs, jammers, decoys, helicopters, cruise missiles, AWACS and tankers on their orbits, our fighters on patrol. F12 visits every asset. Fictional; game values.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. The origin is the capital's middle (data/maps/pannonia.json settlements.capital, 36 km east and 58 km north of the theatre's origin); heights from the map's ground (map_dump --height), less the Earth's curve from the origin. The neighbours other than the Osa battery 22 are drawn and plotted but do not fire in the session (only an Osa battery fights in the battery fire model). The waves are data/gameplay/test_waves.json.",
+  "setting": "war",
+  "seed": 1985,
+  "origin": {
+    "lat_deg": 47.420689,
+    "lon_deg": 20.177063,
+    "alt_m": 108.9
+  },
+  "terrain": {
+    "type": "map",
+    "map": "maps/kesmark_range.json"
+  },
+  "weather": "fair_cumulus",
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12",
+    "regiment": {
+      "library": "command/regiment_radars.json",
+      "radars": [
+        {
+          "id": "capital_p19",
+          "type": "p19",
+          "position": {
+            "east_m": 3600,
+            "north_m": -6500,
+            "up_m": 6.8
+          }
+        },
+        {
+          "id": "capital_p40",
+          "type": "p40",
+          "position": {
+            "east_m": -6600,
+            "north_m": -6100,
+            "up_m": 9.0
+          }
+        },
+        {
+          "id": "capital_p15",
+          "type": "p15",
+          "position": {
+            "east_m": 7000,
+            "north_m": 6100,
+            "up_m": 11.5
+          }
+        },
+        {
+          "id": "capital_p18",
+          "type": "p18",
+          "position": {
+            "east_m": -2100,
+            "north_m": 6600,
+            "up_m": 1.0
+          }
+        }
+      ]
+    }
+  },
+  "battery": {
+    "share_picture": true,
+    "deployed": true,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 7300,
+          "north_m": 4300,
+          "up_m": 2.0
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": 7600,
+          "north_m": 2400,
+          "up_m": 2.4
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 6600,
+          "north_m": 1800,
+          "up_m": 3.8
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": 7200,
+          "north_m": 3300,
+          "up_m": 2.2
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": 7350,
+          "north_m": 3100,
+          "up_m": 2.3
+        }
+      },
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 6800,
+          "north_m": 2950,
+          "up_m": 2.8
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc",
+      "extra_libraries": [
+        "em/nato_1985.json",
+        "em/generic.json"
+      ]
+    },
+    "position": {
+      "east_m": 6200,
+      "north_m": 3500,
+      "up_m": 2.4
+    },
+    "heading_deg": 300,
+    "inputs": {
+      "vehicle_stopped": true
+    },
+    "readiness": "deployed"
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class2"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "crew_commander": "npc",
+  "battery_commander": "npc",
+  "neighbours": [
+    {
+      "id": "osa_22",
+      "name": "Osa-AK battery 22 in the city park",
+      "system": "osa",
+      "position": {
+        "east_m": -3500,
+        "north_m": 3200,
+        "up_m": -0.2
+      },
+      "radius_km": 10,
+      "fights": true
+    },
+    {
+      "id": "kub_capital",
+      "name": "Kub battery on the eastern heights",
+      "system": "kub",
+      "position": {
+        "east_m": 4600,
+        "north_m": 3600,
+        "up_m": 4.2
+      },
+      "radius_km": 22
+    },
+    {
+      "id": "s75_inner",
+      "name": "S-75M2 fire unit in the old barracks",
+      "system": "s75m2",
+      "position": {
+        "east_m": -5200,
+        "north_m": -3600,
+        "up_m": 4.4
+      },
+      "radius_km": 40
+    },
+    {
+      "id": "s125_inner",
+      "name": "S-125M1 fire unit by the stadium",
+      "system": "s125m1",
+      "position": {
+        "east_m": 5200,
+        "north_m": -4100,
+        "up_m": 6.8
+      },
+      "radius_km": 22
+    },
+    {
+      "id": "strela10_bridges",
+      "name": "Strela-10 platoon at the bridges",
+      "system": "strela10",
+      "position": {
+        "east_m": 300,
+        "north_m": -2500,
+        "up_m": 3.4
+      },
+      "radius_km": 5
+    },
+    {
+      "id": "strela1_ministries",
+      "name": "Strela-1 platoon by the ministries",
+      "system": "strela1",
+      "position": {
+        "east_m": -2400,
+        "north_m": -900,
+        "up_m": 1.5
+      },
+      "radius_km": 4
+    },
+    {
+      "id": "zsu_station",
+      "name": "ZSU-23-4 platoon at the main station",
+      "system": "zsu234",
+      "position": {
+        "east_m": 600,
+        "north_m": 2600,
+        "up_m": -0.4
+      },
+      "radius_km": 2.5
+    },
+    {
+      "id": "zsu_exchange",
+      "name": "ZSU-23-4 platoon at the telephone exchange",
+      "system": "zsu234",
+      "position": {
+        "east_m": -1800,
+        "north_m": 1900,
+        "up_m": 0.3
+      },
+      "radius_km": 2.5
+    },
+    {
+      "id": "ks30_west",
+      "name": "KS-30 battery in the western park",
+      "system": "ks30",
+      "position": {
+        "east_m": -6200,
+        "north_m": 1000,
+        "up_m": 3.4
+      },
+      "radius_km": 12
+    },
+    {
+      "id": "ks30_east",
+      "name": "KS-30 battery at the brickworks",
+      "system": "ks30",
+      "position": {
+        "east_m": 6600,
+        "north_m": 600,
+        "up_m": 5.9
+      },
+      "radius_km": 12
+    },
+    {
+      "id": "zu23_bridge",
+      "name": "ZU-23 guns at the road bridge",
+      "system": "zu23",
+      "position": {
+        "east_m": -500,
+        "north_m": 100,
+        "up_m": -5.5
+      },
+      "radius_km": 2.5
+    },
+    {
+      "id": "zu23_port",
+      "name": "ZU-23 guns at the river port",
+      "system": "zu23",
+      "position": {
+        "east_m": -900,
+        "north_m": -1500,
+        "up_m": -3.2
+      },
+      "radius_km": 2.5
+    },
+    {
+      "id": "zu23_plant",
+      "name": "ZU-23 guns at the radio plant",
+      "system": "zu23",
+      "position": {
+        "east_m": 3800,
+        "north_m": 4300,
+        "up_m": 2.2
+      },
+      "radius_km": 2.5
+    },
+    {
+      "id": "aaa_rail",
+      "name": "Anti-aircraft machine guns at the marshalling yard",
+      "system": "aaa",
+      "position": {
+        "east_m": 1500,
+        "north_m": 200,
+        "up_m": 1.1
+      },
+      "radius_km": 1.5
+    },
+    {
+      "id": "manpads_north",
+      "name": "Strela-2 team on the northern blocks",
+      "system": "manpads",
+      "position": {
+        "east_m": 2000,
+        "north_m": 3200,
+        "up_m": 0.5
+      },
+      "radius_km": 4
+    },
+    {
+      "id": "manpads_south",
+      "name": "Strela-2 team at the southern bridge",
+      "system": "manpads",
+      "position": {
+        "east_m": -1100,
+        "north_m": -3900,
+        "up_m": 2.2
+      },
+      "radius_km": 4
+    },
+    {
+      "id": "s60_1",
+      "name": "S-60 battery 1 at the castle hill",
+      "system": "s60",
+      "position": {
+        "east_m": 1020,
+        "north_m": 3138,
+        "up_m": -0.0
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_2",
+      "name": "S-60 battery 2 at the cemetery",
+      "system": "s60",
+      "position": {
+        "east_m": 4288,
+        "north_m": 3115,
+        "up_m": 3.4
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_3",
+      "name": "S-60 battery 3 at the gasworks",
+      "system": "s60",
+      "position": {
+        "east_m": 3300,
+        "north_m": 0,
+        "up_m": 2.9
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_4",
+      "name": "S-60 battery 4 at the university",
+      "system": "s60",
+      "position": {
+        "east_m": 4288,
+        "north_m": -3115,
+        "up_m": 4.8
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_5",
+      "name": "S-60 battery 5 at the tram depot",
+      "system": "s60",
+      "position": {
+        "east_m": 1020,
+        "north_m": -3138,
+        "up_m": 3.7
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_6",
+      "name": "S-60 battery 6 at the football ground",
+      "system": "s60",
+      "position": {
+        "east_m": -1638,
+        "north_m": -5041,
+        "up_m": -0.3
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_7",
+      "name": "S-60 battery 7 at the brewery",
+      "system": "s60",
+      "position": {
+        "east_m": -2670,
+        "north_m": -1940,
+        "up_m": 2.6
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_8",
+      "name": "S-60 battery 8 at the slaughterhouse",
+      "system": "s60",
+      "position": {
+        "east_m": -5300,
+        "north_m": 0,
+        "up_m": 2.9
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_9",
+      "name": "S-60 battery 9 at the hospital park",
+      "system": "s60",
+      "position": {
+        "east_m": -2670,
+        "north_m": 1940,
+        "up_m": 1.1
+      },
+      "radius_km": 6
+    },
+    {
+      "id": "s60_10",
+      "name": "S-60 battery 10 at the water tower",
+      "system": "s60",
+      "position": {
+        "east_m": -1638,
+        "north_m": 5041,
+        "up_m": -1.3
+      },
+      "radius_km": 6
+    }
+  ],
+  "scenery": [
+    {
+      "id": "p14_capital",
+      "name": "P-14 radar of the radar company 'Capital West'",
+      "model": "p14",
+      "position": {
+        "east_m": -7200,
+        "north_m": 5200,
+        "up_m": 2.9
+      },
+      "heading_deg": 0
+    },
+    {
+      "id": "prv11_capital",
+      "name": "PRV-11 height finder of the radar company 'Capital West'",
+      "model": "prv11",
+      "position": {
+        "east_m": -7000,
+        "north_m": 5600,
+        "up_m": 2.7
+      },
+      "heading_deg": 30
+    },
+    {
+      "id": "p15_capital",
+      "name": "P-15 low-level radar on the eastern heights",
+      "model": "p15",
+      "position": {
+        "east_m": 7000,
+        "north_m": 6100,
+        "up_m": 9.5
+      },
+      "heading_deg": 200
+    },
+    {
+      "id": "p18_capital",
+      "name": "P-18 radar in the northern allotments",
+      "model": "p18",
+      "position": {
+        "east_m": -2100,
+        "north_m": 6600,
+        "up_m": -1.0
+      },
+      "heading_deg": 160
+    },
+    {
+      "id": "p19_capital",
+      "name": "P-19 radar of the regiment's radar company",
+      "model": "p19",
+      "position": {
+        "east_m": 3600,
+        "north_m": -6500,
+        "up_m": 4.8
+      },
+      "heading_deg": 20
+    },
+    {
+      "id": "p40_capital",
+      "name": "P-40 radar of the brigade's radar battalion",
+      "model": "p40",
+      "position": {
+        "east_m": -6600,
+        "north_m": -6100,
+        "up_m": 7.0
+      },
+      "heading_deg": 70
+    },
+    {
+      "id": "pu12_regiment",
+      "name": "PU-12 of the regiment's gun battalion",
+      "model": "pu12",
+      "position": {
+        "east_m": -3000,
+        "north_m": -300,
+        "up_m": 1.3
+      },
+      "heading_deg": 90
+    }
+  ],
+  "waves": "gameplay/test_waves.json",
+  "own_air": {
+    "war": true,
+    "gci": {
+      "east_m": 3600,
+      "north_m": -6500,
+      "mast_m": 25
+    },
+    "source": "docs/air_battle/08_OUR_FIGHTERS.md (roadmap S1)",
+    "confidence": "estimate",
+    "notes": "The waves' flights of ours fly on the day's codes (their pilots set the table's, and may miss a change); the battery holds the day's table. Our GCI at the capital's P-19 site is a game value."
+  },
+  "air_fight": {
+    "year": 1985,
+    "controllers": [
+      {
+        "id": "our_gci",
+        "side": "ours",
+        "kind": "radar_control",
+        "east_m": 3600,
+        "north_m": -6500,
+        "range_m": 220000
+      }
+    ],
+    "source": "docs/air_battle/07_AIR_TO_AIR.md, 08_OUR_FIGHTERS.md (roadmap S1)",
+    "confidence": "estimate",
+    "notes": "The waves' aircraft join the fight as they come (runner WaveFightersIn): our CAP and interceptors under our GCI, the enemy's escorts fighting back, its others defending themselves. Game values."
+  },
+  "targets": [],
+  "triggers": [
+    {
+      "id": "air_raid_warning",
+      "when": {
+        "after_s": 0
+      },
+      "do": [
+        {
+          "air_threat": true
+        }
+      ]
+    }
+  ],
+  "environment": {
+    "visibility_km": 30,
+    "daylight": true
+  },
+  "end": {
+    "time_limit_s": 14400,
+    "when_targets_gone": false,
+    "on_unit_hit": false
+  }
+}

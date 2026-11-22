@@ -2,14 +2,45 @@
 //
 // A campaign is deterministic for its data and seed, so a save is small: the data files, the seed and the player's
 // actions in order (each Advance with the posture then in force, each move of the battery, each raid let pass, each raid
-// played with its outcome). Loading starts the campaign again from the seed and replays the actions; the result is the
+// played with its outcome; from version 2 (roadmap B5) each raid a session took, each of its pilots' reports and its end).
+// Loading starts the campaign again from the seed and replays the actions; the result is the
 // same campaign, to the bit. Numbers are written with 17 significant digits so that the replay sees exactly the times
 // and outcomes the original saw.
 //
-//   {"save_version": 1, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
-//    "seed": 7, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//   {"save_version": 2, "theatre_file": "air_war/theatre_pannonia.json", "faction_file": "air_war/faction_nato.json",
+//    "seed": 7, "route_mode": 1, "c2_mode": 1, "opportunity_mode": 1, "hot_mode": 1, "balance_mode": 1, "actions": [ {"kind": "advance", "until_h": 24, "posture": {...}}, {"kind": "complete", ...} ]}
+//
+// Version 2 (roadmap B2 and B5) adds the routes' mode the campaign was planned with (route.mode: 1 the route planner), its
+// command in the air's (c2.mode: 1 the posts and the packages flown in time), the raids a session took ("take", the
+// campaign going on while they flew) and their pilots' reports to the posts ("report"), and a "complete" naming its
+// package; a version 1 save was planned with the old shapes, its packages resolved whole at their first hour with no
+// posts, and replays with route.mode 0 and c2.mode 0, to the bit. A save without "hot_mode" was made before roadmap B11
+// (10_FACTIONS.md §9: NATO's medium altitude gated by the defences, the rollback's new shares, the quirk weights) and
+// replays with hot_phase.mode 0, as it was played; one with "hot_mode": 1 was made before roadmap S5 (§9.3's nerve,
+// §8.5's quirk weights, the played flights' "hot" values) and replays with mode 1. A save without "balance_mode" was made before roadmap B14 (an airborne
+// flight's divert at the faction's retask delay, the strikers' abort and the E-3A's warning in an air fight;
+// 09_BALANCE.md section 17) and replays with balance.mode 0. A save without "own_air_mode" was made before roadmap S1 (our pairs
+// in the played raids, the enemy's learning and use of our corridors, its own belt on its damaged aircraft) and replays with
+// own_air.mode 0.
+// A save without "damage_mode" was made before roadmap S4 (a damaged aircraft repaired by its level, a played
+// session's damaged aircraft on their own flights) and replays with damage.mode 0.
+// A save without "light_mode" was made before roadmap S8 (the tuned theatre dated, the light's values from
+// light.json: docs/LIGHT.md) and replays with light.mode 0, its theatre as it was then dated.
+// A save without "air_fight_mode" was made before roadmap S3 (the abstract air fight's attacks told apart, the drag, the
+// strikers' flares and chaff) and replays with air_fight.mode 0.
+// A save whose "route_mode" is 1 was planned before roadmap S7 (a gate with no feature, our believed air bases in a
+// leg's cost, the coarser lattice without a map, a played raid's navigation error, the routes as flown back) and
+// replays with route.mode 1. A save without "learning_mode" was made before S7 (losses nobody saw explained, the
+// sympathisers' word of our mobile batteries) and replays with learning.mode 0; one without "weather_mode" (S7, the
+// weather by month) with weather.mode 0.
+// A save without "radio_mode" was made before roadmap S6 (the abstract packages' calls heard by our posts, the intercept
+// facts rebuilt on a load, our dummy traffic on our fighters' nets, the Teaball relay) and replays with radio.mode 0.
+// An "opportunity_mode" of 2 was saved before a played session's strike flight owed its load to a target beyond the
+// session's circle (opportunity_session.hpp, mode 3; 06_OPPORTUNITY.md section 3.4); it replays with mode 2. The played
+// raids' outcomes are in the save, so the mode only reaches sessions played after the load.
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -74,10 +105,22 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
         Put(x, "north_m", Num(l.where.y));
         Put(x, "officer", Bool(l.officer));
         Put(x, "captured", Bool(l.captured));
+        Put(x, "fighter", Bool(l.fighter));
+        if (l.own_fire) Put(x, "own_fire", Bool(true));
         Push(losses, x);
     }
     Put(v, "losses", losses);
     Put(v, "damaged", Num(o.damaged));
+    if (!o.damaged_list.empty()) {  // roadmap S4
+        json::Value list = Arr();
+        for (const PackageOutcome::DamagedRecord& d : o.damaged_list) {
+            json::Value x = Obj();
+            Put(x, "flight", Num(d.flight));
+            Put(x, "heavy", Bool(d.heavy));
+            Push(list, x);
+        }
+        Put(v, "damaged_list", list);
+    }
     Put(v, "damage", Pairs(o.damage));
     Put(v, "destroyed", Strings(o.destroyed));
     Put(v, "decoys_hit", Strings(o.decoys_hit));
@@ -86,17 +129,121 @@ inline json::Value OutcomeJson(const PackageOutcome& o) {
     Put(v, "radars_suppressed", Strings(o.radars_suppressed));
     Put(v, "emissions", Pairs(o.emissions));
     Put(v, "fired", Strings(o.fired));
+    Put(v, "missiles_downed", Strings(o.missiles_downed));
     Put(v, "recce_seen", Strings(o.recce_seen));
     Put(v, "missiles_spent", Num(o.missiles_spent));
+    std::vector<std::pair<std::string, double>> by;
+    for (const auto& m : o.missiles_by) by.push_back({m.first, static_cast<double>(m.second)});
+    Put(v, "missiles_by", Pairs(by));
     Put(v, "arms_fired", Num(o.arms_fired));
+    Put(v, "our_fighters_lost", Strings(o.our_fighters_lost));
+    Put(v, "air_fights", Num(o.air_fights));
     Put(v, "aborted", Bool(o.aborted));
     Put(v, "delivered", Bool(o.delivered));
     Put(v, "collateral", Num(o.collateral));
     Put(v, "notes", Strings(o.notes));
     Put(v, "released_flights", Ints(o.released_flights));
     Put(v, "aborted_flights", Ints(o.aborted_flights));
+    if (!o.flown.empty()) {  // roadmap S7: an outcome without them reads as before
+        json::Value flown = Arr();
+        for (const PackageOutcome::FlownRecord& f : o.flown) {
+            json::Value x = Obj();
+            Put(x, "flight", Num(f.flight));
+            Put(x, "east_m", Num(f.at.x));
+            Put(x, "north_m", Num(f.at.y));
+            Put(x, "t_h", Num(f.t_h));
+            Push(flown, x);
+        }
+        Put(v, "flown", flown);
+    }
+    Put(v, "jettisoned_flights", Ints(o.jettisoned_flights));
+    Put(v, "tanks_dropped", Num(o.tanks_dropped));
+    Put(v, "stores_dropped", Num(o.stores_dropped));
+    json::Value retasks = Arr();
+    for (const RetaskRecord& r : o.retasks) {
+        json::Value x = Obj();
+        Put(x, "flight", Num(r.flight));
+        Put(x, "kind", Str(r.kind));
+        Put(x, "by", Str(r.by));
+        Put(x, "t_s", Num(r.t_s));
+        Push(retasks, x);
+    }
+    Put(v, "retasks", retasks);
+    json::Value heard = Arr();
+    for (const HeardRecord& h : o.heard) {
+        json::Value x = Obj();
+        Put(x, "post", Str(h.post));
+        Put(x, "t_s", Num(h.t_s));
+        Put(x, "kind", Str(h.kind));
+        Put(x, "text", Str(h.text));
+        Put(x, "understood", Bool(h.understood));
+        Put(x, "fact", Str(h.fact));
+        // Roadmap S6: what the campaign's pipeline rebuilds the facts from on a load.
+        if (!h.chain_post.empty()) Put(x, "chain_post", Str(h.chain_post));
+        if (h.h >= 0.0) {
+            Put(x, "h", Num(h.h));
+            Put(x, "written_h", Num(h.written_h));
+            Put(x, "bearing_deg", Num(h.bearing_deg));
+            Put(x, "precedence", Num(h.precedence));
+            Put(x, "names_battery", Bool(h.names_battery));
+        }
+        Push(heard, x);
+    }
+    Put(v, "heard", heard);
+    json::Value calls = Arr();
+    for (const PackageOutcome::CallRecord& c : o.calls) {
+        json::Value x = Obj();
+        Put(x, "kind", Str(c.kind));
+        Put(x, "from", Str(c.from));
+        Put(x, "to", Str(c.to));
+        Put(x, "net", Str(c.net));
+        Put(x, "t_h", Num(c.t_h));
+        Put(x, "lost", Bool(c.lost));
+        Put(x, "heard", Bool(c.heard));
+        Push(calls, x);
+    }
+    Put(v, "calls", calls);
+    json::Value reports = Arr();
+    for (const PackageOutcome::ReportRecord& r : o.reports) {
+        json::Value x = Obj();
+        Put(x, "flight", Num(r.flight));
+        Put(x, "what", Str(r.what));
+        Put(x, "east_m", Num(r.east_m));
+        Put(x, "north_m", Num(r.north_m));
+        Put(x, "sigma_m", Num(r.sigma_m));
+        Put(x, "observed_h", Num(r.observed_h));
+        Push(reports, x);
+    }
+    Put(v, "reports", reports);
+    if (!o.opportunities.empty()) {
+        json::Value opp = Arr();
+        for (const PackageOutcome::OpportunityRecord& r : o.opportunities) {
+            json::Value x = Obj();
+            Put(x, "flight", Num(r.flight));
+            Put(x, "t_h", Num(r.t_h));
+            Put(x, "believed", Str(r.believed));
+            Put(x, "east_m", Num(r.east_m));
+            Put(x, "north_m", Num(r.north_m));
+            Put(x, "act", Str(r.act));
+            Put(x, "stopped", Str(r.stopped));
+            Put(x, "why", Str(r.why));
+            Put(x, "reported_in_flight", Bool(r.reported_in_flight));
+            Put(x, "passes", Num(r.passes));
+            Put(x, "claimed", Num(r.claimed));
+            Put(x, "object", Str(r.object));
+            Put(x, "truth", Str(r.truth));
+            Put(x, "kills", Num(r.kills));
+            Put(x, "misidentified", Bool(r.misidentified));
+            Push(opp, x);
+        }
+        Put(v, "opportunities", opp);
+    }
     Put(v, "truth_applied", Bool(o.truth_applied));
     Put(v, "played", Bool(o.played));
+    Put(v, "reported", Bool(o.reported));
+    Put(v, "reported_destroyed", Num(o.reported_destroyed));
+    Put(v, "reported_missiles", Num(o.reported_missiles));
+    Put(v, "reported_targets", Num(o.reported_targets));
     return v;
 }
 
@@ -197,10 +344,20 @@ public:
                 l.where = Vec3{Number(x, "east_m"), Number(x, "north_m"), 0.0};
                 l.officer = Boolean(x, "officer");
                 l.captured = Boolean(x, "captured");
+                l.fighter = Boolean(x, "fighter");
+                l.own_fire = Boolean(x, "own_fire");
                 o.losses.push_back(l);
             }
         }
         o.damaged = Int(v, "damaged");
+        if (const json::Value* list = v.Find("damaged_list")) {
+            for (const json::Value& x : list->items) {
+                PackageOutcome::DamagedRecord d;
+                d.flight = Int(x, "flight", -1);
+                d.heavy = Boolean(x, "heavy");
+                o.damaged_list.push_back(d);
+            }
+        }
         o.damage = Pairs(v, "damage");
         o.destroyed = Strings(v, "destroyed");
         o.decoys_hit = Strings(v, "decoys_hit");
@@ -209,17 +366,111 @@ public:
         o.radars_suppressed = Strings(v, "radars_suppressed");
         o.emissions = Pairs(v, "emissions");
         o.fired = Strings(v, "fired");
+        o.missiles_downed = Strings(v, "missiles_downed");
         o.recce_seen = Strings(v, "recce_seen");
         o.missiles_spent = Int(v, "missiles_spent");
+        for (const auto& m : Pairs(v, "missiles_by")) o.missiles_by.push_back({m.first, static_cast<int>(std::lround(m.second))});
         o.arms_fired = Int(v, "arms_fired");
+        o.our_fighters_lost = Strings(v, "our_fighters_lost");
+        o.air_fights = Int(v, "air_fights");
         o.aborted = Boolean(v, "aborted");
         o.delivered = Boolean(v, "delivered");
         o.collateral = Number(v, "collateral");
         o.notes = Strings(v, "notes");
         o.released_flights = Ints(v, "released_flights");
         o.aborted_flights = Ints(v, "aborted_flights");
+        if (const json::Value* fs = v.Find("flown")) {
+            for (const json::Value& x : fs->items) {
+                PackageOutcome::FlownRecord f;
+                f.flight = Int(x, "flight", -1);
+                f.at = Vec3{Number(x, "east_m"), Number(x, "north_m"), 0.0};
+                f.t_h = Number(x, "t_h");
+                o.flown.push_back(f);
+            }
+        }
+        o.jettisoned_flights = Ints(v, "jettisoned_flights");
+        o.tanks_dropped = Int(v, "tanks_dropped");
+        o.stores_dropped = Int(v, "stores_dropped");
+        if (const json::Value* rs = v.Find("retasks")) {
+            for (const json::Value& x : rs->items) {
+                RetaskRecord r;
+                r.flight = Int(x, "flight", -1);
+                r.kind = String(x, "kind");
+                r.by = String(x, "by");
+                r.t_s = Number(x, "t_s");
+                o.retasks.push_back(r);
+            }
+        }
+        if (const json::Value* hs = v.Find("heard")) {
+            for (const json::Value& x : hs->items) {
+                HeardRecord h;
+                h.post = String(x, "post");
+                h.t_s = Number(x, "t_s");
+                h.kind = String(x, "kind");
+                h.text = String(x, "text");
+                h.understood = Boolean(x, "understood");
+                h.fact = String(x, "fact");
+                h.chain_post = String(x, "chain_post");
+                h.h = Number(x, "h", -1.0);
+                h.written_h = Number(x, "written_h", -1.0);
+                h.bearing_deg = Number(x, "bearing_deg", 0.0);
+                h.precedence = Int(x, "precedence", 1);
+                h.names_battery = Boolean(x, "names_battery", false);
+                o.heard.push_back(h);
+            }
+        }
+        if (const json::Value* cs = v.Find("calls")) {
+            for (const json::Value& x : cs->items) {
+                PackageOutcome::CallRecord c;
+                c.kind = String(x, "kind");
+                c.from = String(x, "from");
+                c.to = String(x, "to");
+                c.net = String(x, "net");
+                c.t_h = Number(x, "t_h");
+                c.lost = Boolean(x, "lost");
+                c.heard = Boolean(x, "heard");
+                o.calls.push_back(c);
+            }
+        }
+        if (const json::Value* rs2 = v.Find("reports")) {
+            for (const json::Value& x : rs2->items) {
+                PackageOutcome::ReportRecord rr;
+                rr.flight = Int(x, "flight", -1);
+                rr.what = String(x, "what");
+                rr.east_m = Number(x, "east_m");
+                rr.north_m = Number(x, "north_m");
+                rr.sigma_m = Number(x, "sigma_m");
+                rr.observed_h = Number(x, "observed_h");
+                o.reports.push_back(rr);
+            }
+        }
+        if (const json::Value* os = v.Find("opportunities")) {
+            for (const json::Value& x : os->items) {
+                PackageOutcome::OpportunityRecord r;
+                r.flight = Int(x, "flight", -1);
+                r.t_h = Number(x, "t_h");
+                r.believed = String(x, "believed");
+                r.east_m = Number(x, "east_m");
+                r.north_m = Number(x, "north_m");
+                r.act = String(x, "act");
+                r.stopped = String(x, "stopped");
+                r.why = String(x, "why");
+                r.reported_in_flight = Boolean(x, "reported_in_flight");
+                r.passes = Int(x, "passes");
+                r.claimed = Int(x, "claimed");
+                r.object = String(x, "object");
+                r.truth = String(x, "truth");
+                r.kills = Int(x, "kills");
+                r.misidentified = Boolean(x, "misidentified");
+                o.opportunities.push_back(r);
+            }
+        }
         o.truth_applied = Boolean(v, "truth_applied");
         o.played = Boolean(v, "played", true);
+        o.reported = Boolean(v, "reported");
+        o.reported_destroyed = Int(v, "reported_destroyed");
+        o.reported_missiles = Int(v, "reported_missiles");
+        o.reported_targets = Int(v, "reported_targets");
         return o;
     }
 
@@ -235,10 +486,23 @@ private:
 inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& theatre_file, const std::string& faction_file) {
     using namespace jsonb;
     json::Value root = Obj();
-    Put(root, "save_version", Num(1));
+    Put(root, "save_version", Num(2));
     Put(root, "theatre_file", Str(theatre_file));
     Put(root, "faction_file", Str(faction_file));
     Put(root, "seed", Num(static_cast<double>(c.Seed())));
+    Put(root, "route_mode", Num(c.Data().tuning.Get("route.mode")));
+    Put(root, "c2_mode", Num(c.Data().tuning.Get("c2.mode")));
+    Put(root, "opportunity_mode", Num(c.Data().tuning.Get("opportunity.mode")));
+    Put(root, "hot_mode", Num(c.Data().tuning.Get("hot_phase.mode")));
+    Put(root, "balance_mode", Num(c.Data().tuning.Get("balance.mode")));
+    Put(root, "c2_live_mode", Num(c.Data().tuning.Get("c2.live_mode")));
+    Put(root, "own_air_mode", Num(c.Data().tuning.Get("own_air.mode")));
+    Put(root, "damage_mode", Num(c.Data().tuning.Get("damage.mode")));
+    Put(root, "light_mode", Num(c.Data().tuning.Get("light.mode")));
+    Put(root, "radio_mode", Num(c.Data().tuning.Get("radio.mode")));
+    Put(root, "air_fight_mode", Num(c.Data().tuning.Get("air_fight.mode")));
+    Put(root, "learning_mode", Num(c.Data().tuning.Get("learning.mode")));
+    Put(root, "weather_mode", Num(c.Data().tuning.Get("weather.mode")));
     Put(root, "clock", Str(c.Clock()));
     json::Value actions = Arr();
     for (const CampaignAction& a : c.Actions()) {
@@ -252,14 +516,51 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                 Put(x, "kind", Str("relocate"));
                 Put(x, "east_m", Num(a.to.x));
                 Put(x, "north_m", Num(a.to.y));
+                if (a.march_h > 0.0) Put(x, "march_h", Num(a.march_h));
                 break;
             case CampaignAction::Kind::Skip:
                 Put(x, "kind", Str("skip"));
                 break;
             case CampaignAction::Kind::Complete:
                 Put(x, "kind", Str("complete"));
+                if (a.package_id >= 0) Put(x, "package_id", Num(a.package_id));
                 Put(x, "end_h", Num(a.end_h));
                 Put(x, "outcome", save_detail::OutcomeJson(a.outcome));
+                break;
+            case CampaignAction::Kind::Transmit: {
+                Put(x, "kind", Str("transmit"));
+                json::Value calls = Arr();
+                for (const Transmission& t : a.calls) {
+                    json::Value j = Obj();
+                    Put(j, "h", Num(t.h));
+                    Put(j, "intercept", Num(t.intercept));
+                    Put(j, "key", Str(t.key));
+                    Push(calls, j);
+                }
+                Put(x, "calls", calls);
+                break;
+            }
+            case CampaignAction::Kind::Take:
+                Put(x, "kind", Str("take"));
+                Put(x, "package_id", Num(a.package_id));
+                break;
+            case CampaignAction::Kind::Report:
+                Put(x, "kind", Str("report"));
+                Put(x, "package_id", Num(a.package_id));
+                Put(x, "flight", Num(a.flight));
+                Put(x, "what", Str(a.what));
+                Put(x, "east_m", Num(a.to.x));
+                Put(x, "north_m", Num(a.to.y));
+                Put(x, "from_east_m", Num(a.from.x));
+                Put(x, "from_north_m", Num(a.from.y));
+                Put(x, "from_up_m", Num(a.from.z));
+                Put(x, "sigma_m", Num(a.sigma_m));
+                Put(x, "observed_h", Num(a.observed_h));
+                break;
+            case CampaignAction::Kind::PostAttack:
+                Put(x, "kind", Str("post_attack"));
+                Put(x, "post", Str(a.what));
+                Put(x, "by", Str(a.by));
                 break;
         }
         Put(x, "posture", save_detail::PostureJson(a.posture));
@@ -279,10 +580,36 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
         return false;
     }
     save_detail::Reader r;
-    if (r.Int(root, "save_version") != 1) {
-        if (error != nullptr) *error = "save_version 1 expected";
+    const int version = r.Int(root, "save_version");
+    if (version != 1 && version != 2) {  // 1: before roadmap B2 (the old route shapes, route.mode 0) and B5 (no raids taken by a session), replayed the same
+        if (error != nullptr) *error = "save_version 1 or 2 expected";
         return false;
     }
+    // The routes' mode it was planned with: a version 1 save, the old shapes.
+    const double route_mode = version == 1 ? 0.0 : r.Number(root, "route_mode", 1.0);
+    // And its command in the air (roadmap B5): a version 1 save, packages resolved whole at their first hour, no posts.
+    const double c2_mode = version == 1 ? 0.0 : r.Number(root, "c2_mode", 1.0);
+    // And its targets of opportunity (roadmap B6): a save made before them has no key, and replays without them.
+    const double opportunity_mode = r.Number(root, "opportunity_mode", 0.0);
+    // And its hot phase's planning (roadmap B11): a save made before it has no key, and replays as it was played.
+    const double hot_mode = r.Number(root, "hot_mode", 0.0);
+    // And the balance pass's changes (roadmap B14): a save made before them has no key, and replays as it was played.
+    const double balance_mode = r.Number(root, "balance_mode", 0.0);
+    // And the command live in the session (roadmap S2): a save made before it has no key, and replays as it was played.
+    const double c2_live_mode = r.Number(root, "c2_live_mode", 0.0);
+    // And our fighters (roadmap S1): a save made before them has no key, and replays as it was played.
+    const double own_air_mode = r.Number(root, "own_air_mode", 0.0);
+    // And the damaged aircraft repaired by their level (roadmap S4): a save made before it has no key, and replays as it was.
+    const double damage_mode = r.Number(root, "damage_mode", 0.0);
+    // And the light (roadmap S8): a save made before it has no key, and replays on its theatre as it was then dated.
+    const double light_mode = r.Number(root, "light_mode", 0.0);
+    // And the abstract air fight in detail (roadmap S3): a save made before it has no key, and replays as it was played.
+    const double air_fight_mode = r.Number(root, "air_fight_mode", 0.0);
+    // And the planner's learning and the weather by month (roadmap S7): a save made before them has no keys.
+    const double learning_mode = r.Number(root, "learning_mode", 0.0);
+    const double weather_mode = r.Number(root, "weather_mode", 0.0);
+    // And the radio and intercept of roadmap S6: a save made before it has no key, and replays as it was played.
+    const double radio_mode = r.Number(root, "radio_mode", 0.0);
     const std::string theatre = r.String(root, "theatre_file");
     const std::string faction = r.String(root, "faction_file");
     const unsigned seed = static_cast<unsigned>(r.Number(root, "seed", 1.0));
@@ -297,12 +624,41 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
             } else if (kind == "relocate") {
                 a.kind = CampaignAction::Kind::Relocate;
                 a.to = Vec3{r.Number(x, "east_m"), r.Number(x, "north_m"), 0.0};
+                a.march_h = r.Number(x, "march_h");
             } else if (kind == "skip") {
                 a.kind = CampaignAction::Kind::Skip;
             } else if (kind == "complete") {
                 a.kind = CampaignAction::Kind::Complete;
+                a.package_id = r.Int(x, "package_id", -1);
                 a.end_h = r.Number(x, "end_h");
                 if (const json::Value* o = x.Find("outcome")) a.outcome = r.Outcome(*o);
+            } else if (kind == "transmit") {
+                a.kind = CampaignAction::Kind::Transmit;
+                if (const json::Value* calls = x.Find("calls")) {
+                    for (const json::Value& j : calls->items) {
+                        Transmission t;
+                        t.h = r.Number(j, "h");
+                        t.intercept = r.Number(j, "intercept", 1.0);
+                        t.key = r.String(j, "key");
+                        a.calls.push_back(t);
+                    }
+                }
+            } else if (kind == "take") {
+                a.kind = CampaignAction::Kind::Take;
+                a.package_id = r.Int(x, "package_id", -1);
+            } else if (kind == "post_attack") {
+                a.kind = CampaignAction::Kind::PostAttack;
+                a.what = r.String(x, "post");
+                a.by = r.String(x, "by");
+            } else if (kind == "report") {
+                a.kind = CampaignAction::Kind::Report;
+                a.package_id = r.Int(x, "package_id", -1);
+                a.flight = r.Int(x, "flight", -1);
+                a.what = r.String(x, "what");
+                a.to = Vec3{r.Number(x, "east_m"), r.Number(x, "north_m"), 0.0};
+                a.from = Vec3{r.Number(x, "from_east_m"), r.Number(x, "from_north_m"), r.Number(x, "from_up_m")};
+                a.sigma_m = r.Number(x, "sigma_m");
+                a.observed_h = r.Number(x, "observed_h");
             } else {
                 if (error != nullptr) *error = "unknown action '" + kind + "'";
                 return false;
@@ -317,7 +673,22 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
     }
     AirWarData data;
     if (!LoadAirWarData(data_dir, theatre, faction, data, error)) return false;
+    data.tuning.values["route.mode"] = route_mode;
+    data.tuning.values["c2.mode"] = c2_mode;
+    data.tuning.values["opportunity.mode"] = opportunity_mode;
+    data.tuning.values["hot_phase.mode"] = hot_mode;
+    data.tuning.values["balance.mode"] = balance_mode;
+    data.tuning.values["c2.live_mode"] = c2_live_mode;
+    data.tuning.values["own_air.mode"] = own_air_mode;
+    data.tuning.values["damage.mode"] = damage_mode;
+    data.tuning.values["light.mode"] = light_mode;
+    ApplyLightMode(data);
+    data.tuning.values["air_fight.mode"] = air_fight_mode;
+    data.tuning.values["learning.mode"] = learning_mode;
+    data.tuning.values["weather.mode"] = weather_mode;
+    data.tuning.values["radio.mode"] = radio_mode;
     AirCampaign c;
+
     if (!c.Init(data, seed, error)) return false;
     if (!c.Replay(actions, error)) return false;
     out = c;

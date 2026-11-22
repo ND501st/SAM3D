@@ -50,20 +50,24 @@ inline Vec3 ArmLaunchDirection(const Vec3& from, const Vec3& believed, double lo
 
 // Fire an ARM of library entry `def_index` from `shooter_platform_id` at `aim_point` (where its carrier believes the
 // radar is), set to the signal `freq_hz` / `prf_hz` its receiver heard. It leaves along `direction` when one is given,
-// else lofted along ArmLaunchDirection. Returns the ARM's id (0 if it can't).
-inline int LaunchArm(EmScene& s, int shooter_platform_id, int def_index, const Vec3& aim_point, double freq_hz, double prf_hz,
+// else lofted along ArmLaunchDirection. Returns the ARM's id (0 if it can't). Adding the missile's platform may move the
+// platforms in memory, so the aim point is taken by value (a caller may pass a platform's own position) and what is needed
+// of the shooter is copied first.
+inline int LaunchArm(EmScene& s, int shooter_platform_id, int def_index, Vec3 aim_point, double freq_hz, double prf_hz,
                      const Vec3* direction = nullptr) {
     const Platform* shooter = s.FindPlatform(shooter_platform_id);
     if (shooter == nullptr || !shooter->alive || def_index < 0 || static_cast<std::size_t>(def_index) >= s.lib.arms.size()) return 0;
     const ArmDef& d = s.lib.arms[static_cast<std::size_t>(def_index)];
-    const Vec3 dir = direction != nullptr ? direction->Normalized() : ArmLaunchDirection(shooter->position, aim_point, d.loft_rad);
+    const Vec3 from = shooter->position;
+    const std::string shooter_name = shooter->name;
+    const Vec3 dir = direction != nullptr ? direction->Normalized() : ArmLaunchDirection(from, aim_point, d.loft_rad);
     Platform p;
     p.id = s.next_id++;
     p.name = d.name;
     p.side = shooter->side;
     p.kind = PlatformKind::Missile;
     p.rcs = RcsModel{d.rcs_m2, d.rcs_m2, d.rcs_m2};
-    p.position = shooter->position;
+    p.position = from;
     p.velocity = dir * d.speed_mps;
     p.altitude_m = s.frame.AltitudeOf(p.position);
     p.height_agl_m = p.altitude_m - s.GetTerrain().HeightAt(p.position.x, p.position.y);
@@ -77,9 +81,9 @@ inline int LaunchArm(EmScene& s, int shooter_platform_id, int def_index, const V
     a.tuned_freq_hz = freq_hz;
     a.tuned_prf_hz = prf_hz;
     a.aim_point = aim_point;
-    a.loft_s = direction != nullptr ? 0.0 : 0.5 * (aim_point - shooter->position).Length() / d.speed_mps;
+    a.loft_s = direction != nullptr ? 0.0 : 0.5 * (aim_point - from).Length() / d.speed_mps;
     s.arms.push_back(a);
-    s.Log(EmEventKind::Info, a.id, p.id, shooter->name + " fires " + d.name);
+    s.Log(EmEventKind::Info, a.id, p.id, shooter_name + " fires " + d.name);
     return a.id;
 }
 

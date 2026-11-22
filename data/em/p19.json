@@ -1,0 +1,85 @@
+{
+  "library_id": "p19",
+  "display_name": "P-19 (1RL134, П-19Ш) early-warning radar, as cabled to a PU-12M",
+  "status": "First electromagnetic entry for the P-19 (22 October 2026), for a radar cabled to the battery command post (scenario post.em). The transmitter, receiver and antenna figures are the Soviet technical description's; the detection anchor is the published 160 km, which the radar equation with those figures reproduces. Internals no source gives (antenna gain, losses, clutter) are estimates labelled as such.",
+  "provenance": "per_value",
+  "notes": "Source ids are those of docs/SOURCES.md. The P-19 is a two-coordinate radar: it measures range and azimuth, not height (the ASPD takes the height zone from the operator).",
+
+  "sources": [
+    { "id": "p19_to", "title": "Радиолокационная станция П-19Ш. Техническое описание ЕИ1.001.015 ТО/с, part I (posted by veterans at rtv-pvo-gsvg.narod.ru)", "tier": "1",
+      "notes": "Section 2: decimetre band; three working frequencies, retuned semi-automatically in 4 s; PPI scales 100, 200, 300 km; errors (80 %, 200 km scale) +-2000 m and +-2 deg; resolution 2500 m and 8 deg; azimuth beam 4.5 deg at half power; vertical coverage to 20 deg; horizontal polarisation; sidelobes at most 5 % in power; sensitivity 1.65e-14 W (noise factor at most 4.8); bandwidth 0.8 MHz; pulse 2-2.2 us; at least 300 kW; repetition 500 and 600 Hz; 6 and 12 rpm. Section 6.2: channel 1 beam 4 deg in elevation. Section 7.3: the front end 857 +- 30 MHz. Section 4.3.3: the 1L23-6 interrogator. Section 4: a device that finds the azimuth of an active jammer." },
+    { "id": "ru_wiki_p19", "title": "П-19, Russian Wikipedia (citing rusarmy.com, 'Радиолокационные станции П-15 и П-19')", "tier": "4",
+      "notes": "Instrumented range 160 km; 830-882 MHz; 310 kW; 2e-14 W; 4.5 deg; 6 and 12 s per turn; coverage to 6000 m. The same 160 km is given in operator-country press as the maximum detection range." }
+  ],
+
+  "radars": [
+    {
+      "id": "p19",
+      "name": "P-19 early-warning radar (1RL134)",
+      "role": "search",
+      "emitter": {
+        "freq_hz": { "value": 857000000, "source": "p19_to (7.3: the front end works at 857 +- 30 MHz); ru_wiki_p19 (830-882 MHz)", "confidence": "high",
+          "notes": "The band's centre; the radar works on one of three frequencies in it." },
+        "prf_hz": { "value": 500, "source": "p19_to (2: 500 and 600 Hz)", "confidence": "high", "notes": "Unambiguous range 300 km, the largest PPI scale." },
+        "pulse_width_s": { "value": 2.1e-6, "source": "p19_to (2: 2-2.2 us)", "confidence": "high" },
+        "peak_power_w": { "value": 300000, "source": "p19_to (2: at least 300 kW); ru_wiki_p19 (310 kW)", "confidence": "high" },
+        "tx_loss_db": { "value": 2.0, "source": "estimate (a long feeder to a mast antenna on the second vehicle, p19_to 6.4)", "confidence": "estimate" },
+        "antenna": {
+          "gain_db": { "value": 31.4, "source": "derived from p19_to (4.5 deg by 4 deg)", "confidence": "estimate",
+            "notes": "G = 0.6 x 4 pi / (4.5 deg x 4 deg); 0.6 is a typical reflector efficiency." },
+          "beamwidth_az_deg": { "value": 4.5, "source": "p19_to (2: 4.5 deg at half power)", "confidence": "high" },
+          "beamwidth_el_deg": { "value": 4.0, "source": "p19_to (6.2: channel 1, 4 deg in elevation)", "confidence": "high" },
+          "sidelobe_db": { "value": -13, "source": "p19_to (2: sidelobes at most 5 % in power)", "confidence": "high" }
+        },
+        "scan": "circular",
+        "scan_period_s": { "value": 10.0, "source": "p19_to (2: 6 and 12 rpm; 6 rpm here, as the ASPD's radar_period_s)", "confidence": "high" },
+        "beams": [
+          { "name": "coverage",
+            "centre_deg": { "value": 10.0, "source": "p19_to (2: the vertical coverage to 20 deg)", "confidence": "medium" },
+            "height_deg": { "value": 20.0, "source": "p19_to (2: the vertical coverage to 20 deg)", "confidence": "medium",
+              "notes": "The real coverage is lobed by the ground reflection (p19_to 6.2: in-phase and anti-phase feeding of the two reflectors); one beam spanning it stands for that." } }
+        ],
+        "agility": "channels",
+        "notes": "Three working frequencies, retuned semi-automatically within 4 s against active jamming (p19_to 2); the frequencies themselves are not public, so no channel list."
+      },
+      "noise_figure_db": { "value": 6.8, "source": "p19_to (2: noise factor at most 4.8)", "confidence": "high" },
+      "rx_bandwidth_hz": { "value": 800000, "source": "p19_to (2: 0.8 +- 0.1 MHz)", "confidence": "high" },
+      "pfa": { "value": 1e-6, "source": "assumption", "confidence": "estimate" },
+      "calibration": {
+        "range_m": 160000,
+        "rcs_m2": 3.0,
+        "target_altitude_m": 5000,
+        "pd": 0.5,
+        "source": "ru_wiki_p19 (160 km); derived: p19_to's 300 kW, 4.5 x 4 deg beam and 1.65e-14 W at 857 MHz give 159 km for 3 m2 with 10 dB system losses",
+        "confidence": "low",
+        "notes": "No source gives a detection range against a stated target and height. The fighter-sized 3 m2, Pd 0.5 and 5000 m (inside the 6000 m coverage) are assumptions, as for the Osa's anchor."
+      },
+      "antenna_height_m": { "value": 8.0, "source": "estimate (as data/command/regiment_radars.json: a mast antenna on the second vehicle)", "confidence": "estimate" },
+      "min_range_m": { "value": 2000, "source": "estimate", "confidence": "estimate" },
+      "max_range_m": { "value": 160000, "source": "ru_wiki_p19 (instrumented range 160 km)", "confidence": "medium",
+        "notes": "p19_to's PPI goes to 300 km; data/command/regiment_radars.json keeps the 250 km of the coverage model." },
+      "min_elevation_deg": { "value": -1, "source": "estimate", "confidence": "estimate" },
+      "max_elevation_deg": { "value": 20, "source": "p19_to (2: the vertical coverage to 20 deg)", "confidence": "high" },
+      "range_sigma_floor_m": { "value": 800, "source": "estimate (finer than p19_to's +-2000 m in 80 % on the 200 km PPI scale: the ASPD takes coordinates on its 50-100 km scales)", "confidence": "estimate" },
+      "angle_sigma_floor_deg": { "value": 1.0, "source": "estimate (finer than p19_to's +-2 deg in 80 % on the 200 km PPI scale)", "confidence": "estimate" },
+      "range_resolution_m": { "value": 315, "source": "derived from the 2.1 us pulse (p19_to)", "confidence": "medium",
+        "notes": "p19_to's 2500 m resolution is on the 200 km PPI scale beyond 100 km." },
+      "clutter": {
+        "cnr_db_at_10km": { "value": 40, "source": "estimate", "confidence": "estimate" },
+        "max_elevation_deg": { "value": 1.0, "source": "estimate", "confidence": "estimate" }
+      },
+      "tracker": {
+        "confirm_hits": 2,
+        "confirm_window": 3,
+        "drop_confirmed_misses": 3,
+        "process_noise_accel": 15,
+        "notes": "Processing choices for the commander's take-off from the ASPD's tube, not system data."
+      },
+      "iff": { "reply_probability": 0.9, "source": "p19_to (4.3.3: the 1L23-6 interrogator, Kremniy-2, -2M, Parol-4, its replies on the indicators); the probability is an estimate", "confidence": "medium" },
+      "eccm": { "strobe_jn_threshold_db": 6, "source": "p19_to (4: a device finds the azimuth of an active jammer); the threshold is an estimate", "confidence": "estimate" },
+      "source": "p19_to; ru_wiki_p19; estimates as marked",
+      "confidence": "medium",
+      "notes": "Coherent (СДЦ) modes К and С exist (p19_to 4.2) and are not modelled: no mti block. The radar stands on its own at the scenario's post.radar position; its echoes and strobes go to the PU-12M's IT-45 by cable."
+    }
+  ]
+}

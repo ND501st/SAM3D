@@ -251,6 +251,10 @@ def build():
     L.control('pwr.input', p, (-0.07, 0.0), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.045, 'color': 'black'})
     L.control('pwr.ab1_set', p, (0.06, 0.035), 'toggle', {'kind': 'socket', 'size_m': 0.034, 'color': 'chrome'})
     L.control('pwr.ab1_start', p, (0.09, -0.05), 'toggle')
+    # Line 1's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:1). Where the reels ride is not published;
+    # SAM3D puts each man's beside the AB-1 set's socket.
+    L.control('wire.line1', p, (0.025, -0.055), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
     for u, sub, lab in ((-0.115, 'ab1_on_line', 'АГРЕГАТ'), (-0.07, 'g290_on_line', 'Г-290'), (-0.025, 'external_on_line', 'СЕТЬ')):
         L.lamp('scv_' + sub, lab, p, (u, 0.065), 'white', ready(sub),
                'valka_pu12 (ŠČV input board), ru_pu12_text (supply from the set, the G-290B or a 220 V network); the '
@@ -303,6 +307,10 @@ def build():
                 notes='The aiming circle\'s case (SAM3D: the plan doesn\'t show where it is stowed). Opening it stands for '
                       'taking the PAB-2 out and setting it up on the ground (nav.pab2).')
     L.control('nav.pab2', p, (0.0, 0.0), 'toggle', {'kind': 'latch', 'size_m': 0.04, 'color': 'chrome'})
+    # Line 2's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:2). Where the reels ride is not published;
+    # SAM3D puts each man's beside the aiming circle's case.
+    L.control('wire.line2', p, (0.08, 0.0), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
     L.nameplate(p, (0.0, 0.06), 'ПАБ-2', 0.05)
 
     # ---------------------------------------------------------------------------------------------- the mast
@@ -349,6 +357,8 @@ def build():
               watch='it45')
     L.control('dt2.range', p, (0.04, -0.01), 'wheel', {'kind': 'knob', 'size_m': 0.045, 'color': 'black'}, units_per_turn=0.25,
               watch='it45')
+    # СЪЁМ: the echo under the marker taken off (p19_to; the key is SAM3D's).
+    L.control('dt2.take_off', p, (0.0, 0.02), 'button', {'kind': 'button', 'size_m': 0.016, 'color': 'ivory', 'label': 'СЪЁМ'})
     L.nameplate(p, (-0.04, 0.045), 'АЗ', 0.025)
     L.nameplate(p, (0.04, 0.045), 'Д', 0.025)
     L.nameplate(p, (0.0, -0.065), 'ДТ-2', 0.04)
@@ -413,6 +423,10 @@ def build():
     for u in (-0.11, -0.07, -0.03, 0.01, 0.05, 0.09):
         L.fixture(p, (u, -0.04), 'button', 0.014, 'white', ring='chrome')
     L.nameplate(p, (0.1, -0.065), 'С-23', 0.04)
+    # Line 4's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:4). Where the reels ride is not published;
+    # SAM3D puts each man's beside the S-23 behind the driver, at his place on the bench.
+    L.control('wire.line4', p, (-0.1, -0.072), 'toggle', {'kind': 'latch', 'size_m': 0.02, 'color': 'chrome'})
     p = L.panel('skc_panel', "ŠČK commander's panel", 'battery_commander', 'skc', (0.24, 0.18),
                 notes='The commander\'s panel (ЩК; csla_pu12_manual item 36). What its switches do is not published; '
                       'SAM3D gives it the lamps of the commander\'s nets.')
@@ -436,10 +450,17 @@ def build():
     r123m_controls(L, p, 'fug4')
     p = L.panel('pvs1_panel', 'PVS-1 intercom box', 'radio_operator', 'pvs1', (0.19, 0.13))
     pvs_box(L, p, 'pvs1', 'radio_operator', (-0.05, -0.02))
+    # The plotter's headset in a second socket on PVS-1's top (SAM3D's choice: no source gives him a box); his own panel,
+    # since the box's face is the radiotelephonist's.
+    q = L.panel('pvs1_second_panel', "PVS-1: the plotter's socket", 'operator', 'pvs1', (0.06, 0.05), face='top',
+                notes="A second headset socket on top of the radiotelephonist's PVS-1, for the plotter's cord: SAM3D's choice "
+                      "(docs/research/PLOTTING_BOARD_2026-10.md, 'How the plotter got the picture'). One selector for both.")
+    L.control('headset.operator', q, (0.0, 0.0), 'toggle', {'kind': 'jack', 'size_m': 0.028, 'color': 'chrome', 'label': 'ШЛЕМОФОН 2'})
     L.nameplate(p, (-0.06, 0.045), 'ПВС-1')
     rk1u(L)
-    document(L, 'radio_data_panel', 'Radio data (радиоданные)', 'radio_operator', 'table51', (0.0, 0.0), 'radio_data',
+    document(L, 'radio_data_panel', 'Radio data (радиоданные)', 'radio_operator', 'table51', (0.0, 0.05), 'radio_data',
              "The radio data on the radio operator's table: each net's frequencies by number, the call signs, the changes.")
+    journal(L)
     document(L, 'talk_tables_panel', 'Talk tables ПТ-1, ПТ-2', 'battery_commander', 'desk', (-0.10, -0.22), 'talk_tables',
              "The talk tables on the commander's desk, in front of his R-123M (FuG-2), clear of the ДИ block.")
     p = L.panel('vs27_panel', 'VS-27 rectifier', 'radio_operator', 'vs27', (0.25, 0.14))
@@ -822,6 +843,25 @@ def document(L, pid, label, station, iid, at, kind_of, notes):
                        'notes': "What the paper holds is the scenario's: placeholders in the period's form."})
 
 
+def journal(L):
+    """The radiotelephonist's journal open on his table beside the radio data, the nearer of the two sheets: what he has written of every
+    message his radios carried (simcore/radio_journal.hpp), and his pencil on it (journal.write: a press writes the next
+    message he heard). The plotter and he find a missed message only on this page."""
+    p = L.panel('radio_journal_panel', 'Radio journal (журнал радиосвязи)', 'radio_operator', 'table51', (0.15, 0.10),
+                at=(0.0, -0.058), face='top', color='ivory',
+                notes="The radiotelephonist's journal, open on his table before the radio data (pvo_bu_x_1984 art. 24: every "
+                      "radiogram, signal, report and designation written with the time he took it). The page is the "
+                      "simulation's journal as he has written it.")
+    L.displays.append({'id': 'radio_journal', 'label': 'Radio journal (журнал радиосвязи)', 'kind': 'document', 'document': 'radio_journal',
+                       'panel': p, 'at_m': [0.0, 0.0], 'size_m': [0.15, 0.10],
+                       'source': 'pvo_bu_x_1984 (art. 24: the radiotelephonist writes into the journal every radiogram, signal, report '
+                                 'and designation with the time he took it; art. 37); pvo_bu_ix_1984 (App. 7: the columns); '
+                                 'rrs_1986 (art. 153: no notes on loose sheets)',
+                       'confidence': 'medium',
+                       'notes': "Its form (time, net, who, what) after App. 7; the words are what he heard and wrote."})
+    L.control('journal.write', p, (0.06, -0.035), 'button', {'kind': 'button', 'size_m': 0.012, 'color': 'black', 'label': 'КАРАНДАШ'})
+
+
 def rk1u(L):
     """The RK-1U at the radio operator's table (csla_pu12_manual item 38): its ПРИЕМ and ПЕРЕДАЧА rotaries and the
     С-23 / АСПД-У toggle (rwd_mb3's photograph)."""
@@ -832,6 +872,13 @@ def rk1u(L):
     L.control('rk1.tx', p, (-0.035, 0.015), 'rotary', {'kind': 'pointer_knob', 'size_m': 0.026, 'color': 'black', 'label': 'ПЕРЕДАЧА'})
     L.control('rk1.code', p, (0.0, -0.03), 'toggle')
     L.nameplate(p, (0.0, 0.035), 'РК-1У', 0.05)
+    # The radar's cable (flak11 PU12-0's figure: the radar 300 m off by cable): its latch stands for laying it outside.
+    # Where the cable comes in is not shown in the plan; SAM3D puts the latch beside the RK-1U's toggle.
+    L.control('cable.radar', p, (0.035, -0.005), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
+    # Line 3's reel (P-274M; ru_pu12_text: four lines laid from the post): its latch stands for taking the reel out and
+    # paying the line out to its far end (data/vehicles/pu12m.json, place line:3). Where the reels ride is not published;
+    # SAM3D puts each man's beside the radar cable's latch.
+    L.control('wire.line3', p, (0.04, 0.025), 'toggle', {'kind': 'latch', 'size_m': 0.022, 'color': 'chrome'})
 
 
 def rtk1(L):

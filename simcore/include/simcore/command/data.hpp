@@ -134,6 +134,7 @@ struct SignalMean {
     double intercept = 0.0;          // how much one message tells the enemy's intercept service
     bool documents = false;
     int precedence = 2;              // the highest precedence it is used for
+    std::string mobility;            // a carrier's class on the route service ("" : its kind's; nav/carriers.hpp)
 };
 
 struct RelayRules {
@@ -172,6 +173,13 @@ struct Position {
     std::vector<std::string> means;
     bool player = false;    // the player's character may hold it
     std::string duties;
+    // Where the post sits in a session ("osa:commander", "post:battery_commander"; "" none): the vehicle and station a
+    // delivery to it is played at (roadmap P1, command/scenes.hpp).
+    std::string seat;
+    // Who does the post's job while nobody holds it (roadmap P8: a casualty), and where the post works from when its own
+    // place is lost (the alternate command post). "" none.
+    std::string deputy;
+    std::string alternate_place;
 
     bool Has(const std::string& mean) const { return std::find(means.begin(), means.end(), mean) != means.end(); }
     // "Major Imre Sallai (chief of staff (first deputy), 15th SAM Regiment)"
@@ -336,7 +344,8 @@ public:
             std::string kind;
             double speed_kmh = 0.0, range_km = 0.0;
             if (!Keys(v, p, {"id", "name", "kind", "speed_kmh", "handling_s", "connect_s", "connect_routine_s", "range_km", "loss",
-                              "intercept", "documents", "precedence", "source", "confidence", "notes"}) ||
+                              "intercept", "documents", "precedence", "mobility", "source", "confidence", "notes"}) ||
+                !OptionalString(v, p, "mobility", m.mobility) ||
                 !RequireString(v, p, "id", m.id) || !RequireString(v, p, "name", m.name) || !RequireString(v, p, "kind", kind) ||
                 !Num(v, p, "speed_kmh", speed_kmh, 0.0, 1000.0) || !Num(v, p, "handling_s", m.handling_s, 0.0, 1.0e6) ||
                 !Num(v, p, "connect_s", m.connect_s, 0.0, 86400.0) || !Num(v, p, "connect_routine_s", m.connect_routine_s, 0.0, 86400.0) ||
@@ -373,13 +382,18 @@ public:
             const std::string p = Index("positions", i);
             Position pos;
             if (!Keys(v, p, {"id", "title", "unit", "kind", "level", "superior", "links", "place", "holder", "means", "player", "duties",
-                             "source", "confidence", "notes"}) ||
+                             "seat", "deputy", "alternate_place", "source", "confidence", "notes"}) ||
                 !RequireString(v, p, "id", pos.id) || !RequireString(v, p, "title", pos.title) || !RequireString(v, p, "unit", pos.unit) ||
                 !RequireString(v, p, "kind", pos.kind) || !Int(v, p, "level", pos.level, 0, 5) ||
                 !OptionalString(v, p, "superior", pos.superior) || !Strings(v, p, "links", pos.links) ||
                 !RequireString(v, p, "place", pos.place) || !Strings(v, p, "means", pos.means) ||
-                !OptionalBool(v, p, "player", pos.player) || !OptionalString(v, p, "duties", pos.duties)) {
+                !OptionalBool(v, p, "player", pos.player) || !OptionalString(v, p, "duties", pos.duties) ||
+                !OptionalString(v, p, "seat", pos.seat) || !OptionalString(v, p, "deputy", pos.deputy) ||
+                !OptionalString(v, p, "alternate_place", pos.alternate_place)) {
                 return false;
+            }
+            if (!pos.seat.empty() && (pos.seat.find(':') == std::string::npos || pos.seat.front() == ':' || pos.seat.back() == ':')) {
+                return Fail(Join(p, "seat"), "must be \"vehicle:station\"");
             }
             if (v.Find("level") == nullptr) return Fail(Join(p, "level"), "required");
             const json::Value* h = v.Find("holder");
@@ -446,6 +460,12 @@ public:
                 if (d.FindPosition(l) == nullptr) return Fail(Join(p, "links"), "no such position: " + l);
             }
             if (d.FindPlace(pos.place) == nullptr) return Fail(Join(p, "place"), "no such place: " + pos.place);
+            if (!pos.deputy.empty() && (pos.deputy == pos.id || d.FindPosition(pos.deputy) == nullptr)) {
+                return Fail(Join(p, "deputy"), "no such position: " + pos.deputy);
+            }
+            if (!pos.alternate_place.empty() && d.FindPlace(pos.alternate_place) == nullptr) {
+                return Fail(Join(p, "alternate_place"), "no such place: " + pos.alternate_place);
+            }
             for (const std::string& m : pos.means) {
                 if (d.FindMean(m) == nullptr) return Fail(Join(p, "means"), "no such means: " + m);
             }

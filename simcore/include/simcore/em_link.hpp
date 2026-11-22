@@ -29,6 +29,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <set>
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,6 +51,9 @@ struct EmJammerDef {
     Vec3 position;          // stand-off position (ENU)
     double on_at_s = 0.0;
     double off_at_s = -1.0;  // < 0: stays on
+    // Emission discipline (roadmap S5, 10_FACTIONS.md §7.1): a self-screening jammer held off until its carrier's warning
+    // receiver shows it locked on or fired at (the runner tells the link: Painted), then on from its time.
+    bool until_painted = false;
 };
 
 // A scripted chaff drop: a cloud at the target's position at a time.
@@ -107,6 +112,7 @@ inline bool LoadEmLinkDef(const std::string& data_dir, const std::string& librar
     }
     const em::Environment env;
     for (const auto& want : {std::make_pair(&search_id, em::RadarRole::Search), std::make_pair(&track_id, em::RadarRole::Track)}) {
+        if (want.first->empty() && want.second == em::RadarRole::Track) continue;  // a search radar alone (a radar cabled to a post)
         const int idx = lib.Radar(*want.first);
         if (idx < 0) return fail("radar '" + *want.first + "' is not in " + library_file);
         em::RadarDef d = lib.radars[static_cast<std::size_t>(idx)];
@@ -172,9 +178,10 @@ public:
         unit.position = Antenna();
         if (def.unit_rcs_m2 > 0.0) unit.rcs = em::RcsModel{def.unit_rcs_m2, def.unit_rcs_m2, def.unit_rcs_m2};
         unit_id_ = world_.AddPlatform(unit);
+        // No tracking radar: a search radar on its own (a radar cabled to a command post: its "unit" is the radar).
         search_ = world_.AddRadar(unit_id_, def.search_radar, false);
-        track_ = world_.AddRadar(unit_id_, def.track_radar, false);
-        if (search_ == 0 || track_ == 0) {
+        track_ = def.track_radar.empty() ? 0 : world_.AddRadar(unit_id_, def.track_radar, false);
+        if (search_ == 0 || (track_ == 0 && !def.track_radar.empty())) {
             error_ = "radar not found in the library";
             return;
         }
@@ -182,7 +189,7 @@ public:
         // reports from elsewhere (the battery's PU-12, roadmap phase 7 / E4).
         node_ = world_.AddNode("Own unit", unit_id_, em::Side::Red);
         world_.AttachSensor(node_, search_);
-        world_.AttachSensor(node_, track_);
+        if (track_ != 0) world_.AttachSensor(node_, track_);
         if (em::RadarState* sr = Radar(search_)) sr->iff_interrogating = false;  // until the console interrogates
         for (const EmDummyDef& dm : def.dummies) {
             const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
@@ -200,16 +207,27 @@ public:
         jammer_ids_.assign(def.jammers.size(), 0);
         chaff_done_.assign(def.chaff.size(), 0);
         for (std::size_t i = 0; i < def.jammers.size(); ++i) {
-            if (!def.jammers[i].target_id.empty()) continue;  // on a target: made when the target first appears
-            em::Platform sp;
-            sp.name = "Stand-off jammer";
-            sp.side = em::Side::Blue;
-            sp.kind = em::PlatformKind::FixedWing;
-            sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
-            sp.position = def.jammers[i].position;
-            const int pid = world_.AddPlatform(sp);
-            AddScriptedJammer(i, pid);
+            if (def.jammers[i].target_id.empty()) AddStandOffJammer(i);  // on a target: made when the target first appears
         }
+    }
+
+    // More of the library mid-run: the entries of `more` the scene's library lacks (em::EmWorld::MergeLibrary).
+    bool MergeLibrary(const em::EmLibrary& more, std::string* error = nullptr) { return world_.MergeLibrary(more, error); }
+
+    // Jammers entering a running session (a package's, roadmap 15.3), as the scenario's own: one on a target is made when
+    // the target first appears, a stand-off one now. False, adding none, if one is not in the library.
+    bool AddJammers(const std::vector<EmJammerDef>& js, std::string* error = nullptr) {
+        for (const EmJammerDef& j : js) {
+            if (world_.Scene().lib.Jammer(j.jammer_id) >= 0) continue;
+            if (error != nullptr) *error = "jammer '" + j.jammer_id + "' is not in the EM library";
+            return false;
+        }
+        for (const EmJammerDef& j : js) {
+            effects_.jammers.push_back(j);
+            jammer_ids_.push_back(0);
+            if (j.target_id.empty()) AddStandOffJammer(effects_.jammers.size() - 1);
+        }
+        return true;
     }
 
     // A radio source (a PU-12, an EWR site, a neighbour) on the ground at `enu`, on a two-member net with the unit using
@@ -353,6 +371,11 @@ public:
         }
         return false;
     }
+    // Its warning receiver showed it locked on or fired at (roadmap S5): a jammer held for that comes on from its time.
+    void Painted(const std::string& target_id) {
+        if (!target_id.empty()) painted_.insert(target_id);
+    }
+    bool WasPainted(const std::string& target_id) const { return painted_.count(target_id) != 0; }
     // Is its jammer radiating now (by the scenario's times or the instructor's switch)?
     bool TargetJamming(const std::string& target_id) const {
         for (std::size_t i = 0; i < effects_.jammers.size(); ++i) {
@@ -365,7 +388,11 @@ public:
     }
 
     // A target as it is now. Added on first sight; once not alive it stops echoing.
-    void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly) {
+    // `iff_code`: the code its transponder is set to now (roadmap B10; 0 the default the interrogator asks on).
+    // `transponder`: an enemy with our IFF system that answers on its code (S1: the false friend); its side stays the enemy's.
+    void SyncTarget(const std::string& id, bool alive, const Vec3& position, const Vec3& velocity, double rcs_m2, bool friendly,
+                    int iff_code = 0, bool transponder = false) {
+
         int pid = PlatformOf(id);
         if (pid == 0) {
             if (!alive) return;
@@ -374,13 +401,17 @@ public:
             p.side = friendly ? em::Side::Red : em::Side::Blue;
             p.kind = em::PlatformKind::FixedWing;
             p.rcs = em::RcsModel{rcs_m2, rcs_m2, rcs_m2};  // one number in the scenario file: the same from every aspect
-            p.iff_reply = friendly;
+            p.iff_reply = friendly || transponder;
             p.position = position;
             p.velocity = velocity;
             pid = world_.AddPlatform(p);
+            platform_of_[id] = pid;
             targets_.emplace_back(id, pid);
-            for (auto& r : rwrs_) {
-                if (r.target == id && r.esm == 0 && !r.esm_def.empty()) r.esm = world_.AddEsm(pid, r.esm_def);
+            if (Rwr* r = RwrOf(id)) {
+                if (r->esm == 0 && !r->esm_def.empty()) {
+                    r->esm = world_.AddEsm(pid, r->esm_def);
+                    if (!r->on) SetEsmOn(r->esm, false);
+                }
             }
         }
         em::Platform* p = world_.Scene().FindPlatform(pid);
@@ -390,8 +421,10 @@ public:
             world_.DestroyPlatform(pid);
             return;
         }
+        p->iff_code = iff_code;
         world_.SetPlatformState(pid, position, velocity);
     }
+
 
     // The console's state: is each radar radiating (and, for the search radar, is its MTI selected).
     void SetSearch(bool radiating, bool mti) {
@@ -427,6 +460,11 @@ public:
     void SetInterrogating(bool on) {
         if (em::RadarState* r = Radar(search_)) r->iff_interrogating = on;
     }
+    // The code the interrogator asks on: the one the crew set from the code table that reached it (roadmap B10).
+    void SetInterrogatorCode(int code) {
+        if (em::RadarState* r = Radar(search_)) r->iff_code = code;
+    }
+
 
     // The tracking radar: radiating; its СДЦ (staggered repetition periods: a repeater that walks the gate in becomes
     // non-synchronous) and its pull-off circuit (УВ. ПОМЕХА: the video after the tracked echo is blanked, so a repeater
@@ -569,7 +607,7 @@ public:
         // is the same echo on the scope, one blip, not a new contact. Not beside chaff: those echoes he sees apart.
         out.erase(std::remove_if(out.begin(), out.end(), [&](const Contact& c) { return c.ghost && DuplicateOf(c, claimed); }),
                   out.end());
-        std::sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
+        std::stable_sort(out.begin(), out.end(), [](const Contact& a, const Contact& b) { return a.range_m < b.range_m; });
         return out;
     }
 
@@ -740,13 +778,43 @@ public:
     // ---- A target's radar warning receiver: a library ESM receiver (kind rwr) on the target's platform, made when the
     // target first appears. Its contacts, named through its threat library, tell the pilot what illuminates him.
     void SetTargetRwr(const std::string& target_id, const std::string& esm_id) {
-        for (auto& r : rwrs_) {
-            if (r.target == target_id) {
-                r.esm_def = esm_id;
-                return;
-            }
+        if (Rwr* r = RwrOf(target_id)) {
+            r->esm_def = esm_id;
+            return;
         }
-        rwrs_.push_back({target_id, esm_id, 0});
+        rwr_of_[target_id] = rwrs_.size();
+        rwrs_.push_back({target_id, esm_id, 0, true});
+    }
+    // A target's warning receiver switched off and on (roadmap B12: a wingman at A1 keeping his slot hears on his
+    // leader's; air_levels.hpp). Off, it hears nothing, says nothing and holds nothing: back on, it starts from what it
+    // hears. Its own keyed draws are its own (em::DrawHash), so the others' receivers hear the same either way.
+    void SetRwrOn(const std::string& target_id, bool on) {
+        Rwr* r = RwrOf(target_id);
+        if (r == nullptr || r->on == on) return;
+        r->on = on;
+        if (r->esm == 0) return;
+        SetEsmOn(r->esm, on);
+        if (em::EsmState* es = world_.Scene().FindEsm(r->esm); es != nullptr && !on) {
+            es->contacts.clear();
+            es->intercepts.clear();
+        }
+    }
+    // The receivers' bound on a beam that cannot reach them (roadmap S7, em/esm_system.hpp RunEsmSite).
+    void SetEsmSidelobeBound(bool on) { world_.Scene().esm_sidelobe_bound = on; }
+    // A tracking emitter in the air holds this target (roadmap S7: a wingman at A1 locked up alone is lent no receiver).
+    bool TrackedBy(const std::string& target_id) const {
+        const auto it = platform_of_.find(target_id);
+        if (it == platform_of_.end() || it->second == 0) return false;
+        for (const em::EmitterState& e : world_.Scene().emitters) {
+            if (e.InAir() && e.track_target_platform == it->second) return true;
+        }
+        return false;
+    }
+    bool RwrOn(const std::string& target_id) const {
+        const Rwr* r = RwrOf(target_id);
+        if (r == nullptr || r->esm == 0) return false;
+        const em::EsmState* es = world_.Scene().FindEsm(r->esm);
+        return es != nullptr && es->on;
     }
     struct RwrWarning {
         bool lock = false;    // a hostile tracking radar holds him (steady illumination from an emitter named "track")
@@ -757,8 +825,9 @@ public:
     // What the target's RWR says now (heard within the last second). No RWR: nothing.
     RwrWarning WarningOf(const std::string& target_id) const {
         RwrWarning w;
-        for (const auto& r : rwrs_) {
-            if (r.target != target_id || r.esm == 0) continue;
+        for (const Rwr* rp = RwrOf(target_id); rp != nullptr; rp = nullptr) {
+            const Rwr& r = *rp;
+            if (r.esm == 0) continue;
             const em::EsmState* es = world_.Scene().FindEsm(r.esm);
             if (es == nullptr || !es->on) continue;
             for (const em::EsmContact& c : es->contacts) {
@@ -775,8 +844,164 @@ public:
         return w;
     }
     bool HasRwr(const std::string& target_id) const {
-        for (const auto& r : rwrs_) {
-            if (r.target == target_id && !r.esm_def.empty()) return true;
+        const Rwr* r = RwrOf(target_id);
+        return r != nullptr && !r->esm_def.empty();
+    }
+    // A pilot's own chaff (roadmap B4, reaction_chain.hpp): a cloud where the target is now, drifting on the wind. False
+    // if the target is not in the EM world.
+    // ---- A fighter's radar as an emitter on its platform (roadmap S3, the air fight's): its library's RadarDef
+    // `radar_def` (merged in with MergeLibrary), `state` 0 off, 1 searching its sector about the nose, 2 locked on
+    // `locked_id` (a steady track pointed at it each step by PointFighterRadars: the target's warning receiver hears a lock).
+    bool SetFighterRadar(const std::string& id, const std::string& radar_def, int state, const std::string& locked_id) {
+        if (!Ok()) return false;
+        const int pid = PlatformOf(id);
+        if (pid == 0) return false;
+        auto it = fighter_radars_.find(id);
+        if (it == fighter_radars_.end()) {
+            if (state == 0) return true;
+            const int ri = world_.Scene().lib.Radar(radar_def);
+            if (ri < 0) return false;
+            const int eid = world_.AddEmitter(pid, world_.Scene().lib.radars[static_cast<std::size_t>(ri)].emitter);
+            if (eid == 0) return false;
+            it = fighter_radars_.emplace(id, FighterRadar{eid, 0}).first;
+        }
+        em::EmitterState* e = world_.Scene().FindEmitter(it->second.emitter);
+        if (e == nullptr) return false;
+        const bool was = e->InAir();
+        e->radiating = state >= 1;
+        e->dummy_load = false;
+        e->def.scan = state == 2 ? em::ScanKind::Tracking : em::ScanKind::Sector;
+        it->second.locked = state == 2 ? PlatformOf(locked_id) : 0;
+        e->track_target_platform = it->second.locked;
+        if (e->InAir() && !was) e->on_since_s = world_.Time();
+        PointFighterRadars();
+        return true;
+    }
+    // Each locked fighter radar pointed at its target now (called every step).
+    void PointFighterRadars() {
+        if (!Ok()) return;
+        for (const auto& kv : fighter_radars_) {
+            if (kv.second.locked == 0) continue;
+            em::EmitterState* e = world_.Scene().FindEmitter(kv.second.emitter);
+            const em::Platform* me = world_.Scene().FindPlatform(PlatformOf(kv.first));
+            const em::Platform* at = world_.Scene().FindPlatform(kv.second.locked);
+            if (e == nullptr || me == nullptr || at == nullptr || !e->radiating) continue;
+            const Vec3 d = at->position - me->position;
+            if (d.LengthSquared() < 1.0) continue;
+            e->pointing_az_rad = AzimuthOf(d);
+            e->pointing_el_rad = ElevationOf(d);
+        }
+    }
+    // A fighter radar's emitter (0: none made): tests.
+    int FighterRadarEmitter(const std::string& id) const {
+        const auto it = fighter_radars_.find(id);
+        return it == fighter_radars_.end() ? 0 : it->second.emitter;
+    }
+
+    bool DropChaff(const std::string& target_id, double rcs_m2, double lifetime_s) {
+        const int pid = PlatformOf(target_id);
+        const em::Platform* p = pid != 0 ? world_.Scene().FindPlatform(pid) : nullptr;
+        if (p == nullptr || !p->alive) return false;
+        world_.AddChaff(p->position, rcs_m2, lifetime_s);
+        return true;
+    }
+
+    // ---- What the target's receiver heard (roadmap B3, docs/air_battle/03_PERCEPTION.md 3.2): every contact of the last
+    // second with what the set could make of it. The set's display (a quadrant, no type, no launch) is the pilot's
+    // perception (air_war/perception.hpp); this is the receiver's physics. Jammers and emitters of its own side are not
+    // listed; one the library does not know is a search contact with no name.
+    struct RwrContactView {
+        std::uint64_t key = 0;
+        int state = 0;             // 0 search, 1 lock (steady illumination from a track or fire-control entry), 2 launch (guidance)
+        std::string name;          // the library's, "" if it matched none
+        bool known = false;
+        double bearing_rad = 0.0;  // true azimuth as measured
+        double sigma_rad = 0.0;
+        double power_dbw = -300.0;
+    };
+    std::vector<RwrContactView> RwrPictureOf(const std::string& target_id) const {
+        std::vector<RwrContactView> out;
+        for (const Rwr* rp = RwrOf(target_id); rp != nullptr; rp = nullptr) {
+            const Rwr& r = *rp;
+            if (r.esm == 0) continue;
+            const em::EsmState* es = world_.Scene().FindEsm(r.esm);
+            if (es == nullptr || !es->on) continue;
+            for (const em::EsmContact& c : es->contacts) {
+                if (world_.Time() - c.last_seen_s > 1.0) continue;
+                const bool known = !c.sig.library_id.empty();
+                if (known && !c.sig.hostile) continue;
+                if (c.sig.library_kind == "jammer") continue;
+                RwrContactView v;
+                v.key = static_cast<std::uint64_t>(c.id);
+                v.known = known;
+                v.name = c.sig.library_name;
+                v.bearing_rad = c.bearing_rad;
+                v.sigma_rad = c.bearing_sigma_rad;
+                v.power_dbw = c.power_dbw;
+                if (c.sig.library_kind == "missile_guidance") v.state = 2;
+                else if (c.sig.steady && (c.sig.library_kind == "track" || c.sig.library_kind == "fire_control")) v.state = 1;
+                out.push_back(v);
+            }
+        }
+        return out;
+    }
+
+    // ---- The emitters of other sites (roadmap B3, 03_PERCEPTION.md 3.4): the battery's other launchers and the
+    // regiment's neighbours radiate the Osa's emitters from where they stand, so a receiver hears them. A site is a
+    // ground platform with no echo; its search radar radiates while it is on duty, its tracking radar and its command
+    // link point at the target it engages. `key` names the site (a callsign).
+    const em::EmitterDef* SearchEmitterDef() const {
+        const em::RadarState* r = Radar(search_);
+        return r != nullptr ? &DefOf(*r).emitter : nullptr;
+    }
+    const em::EmitterDef* TrackEmitterDef() const {
+        const em::RadarState* r = Radar(track_);
+        return r != nullptr ? &DefOf(*r).emitter : nullptr;
+    }
+    void SetOsaSite(const std::string& key, const Vec3& position, bool search_on, bool track_on, const std::string& target_id, bool link_on) {
+        if (!Ok()) return;
+        Site* s = EnsureSite(key, position);
+        if (s == nullptr) return;
+        if (s->search == 0) {
+            if (const em::EmitterDef* d = SearchEmitterDef()) s->search = world_.AddEmitter(s->platform, *d);
+        }
+        if (s->track == 0) {
+            if (const em::EmitterDef* d = TrackEmitterDef()) s->track = world_.AddEmitter(s->platform, *d);
+        }
+        if (s->link == 0) {
+            if (const em::EmitterDef* d = LibraryEmitter(em::EmitterKind::MissileUplink, 0)) s->link = world_.AddEmitter(s->platform, *d);
+        }
+        SetSiteEmitter(s->search, search_on, nullptr);
+        const em::Platform* me = world_.Scene().FindPlatform(s->platform);
+        const int tp = target_id.empty() ? 0 : PlatformOf(target_id);
+        const em::Platform* tg = tp != 0 ? world_.Scene().FindPlatform(tp) : nullptr;
+        const Vec3* toward = tg != nullptr && tg->alive && me != nullptr ? &tg->position : nullptr;
+        SetSiteEmitter(s->track, track_on && toward != nullptr, toward, me, tp);
+        SetSiteEmitter(s->link, link_on && toward != nullptr, toward, me, tp);
+    }
+    // An emitter of some other equipment of ours (the PU-12M's P-19): one emitter of the given definition at `position`.
+    void SetForeignEmitter(const std::string& key, const Vec3& position, const em::EmitterDef& def, bool on) {
+        if (!Ok()) return;
+        Site* s = EnsureSite(key, position);
+        if (s == nullptr) return;
+        if (s->search == 0) s->search = world_.AddEmitter(s->platform, def);
+        SetSiteEmitter(s->search, on, nullptr);
+    }
+    std::size_t SiteCount() const { return sites_.size(); }
+    // Is the site's search emitter (or its tracking emitter) in the air now?
+    bool SiteSearchRadiating(const std::string& key) const {
+        for (const Site& s : sites_) {
+            if (s.key != key || s.search == 0) continue;
+            const em::EmitterState* e = world_.Scene().FindEmitter(s.search);
+            return e != nullptr && e->InAir();
+        }
+        return false;
+    }
+    bool SiteTrackRadiating(const std::string& key) const {
+        for (const Site& s : sites_) {
+            if (s.key != key || s.track == 0) continue;
+            const em::EmitterState* e = world_.Scene().FindEmitter(s.track);
+            return e != nullptr && e->InAir();
         }
         return false;
     }
@@ -795,8 +1020,9 @@ public:
     bool RwrRadarInBand(const std::string& target_id, double freq_min_hz, double freq_max_hz, double aim_bearing_rad, double bearing_tol_rad,
                         RwrSignal& out) const {
         double best = -1e300;
-        for (const auto& r : rwrs_) {
-            if (r.target != target_id || r.esm == 0) continue;
+        for (const Rwr* rp = RwrOf(target_id); rp != nullptr; rp = nullptr) {
+            const Rwr& r = *rp;
+            if (r.esm == 0) continue;
             const em::EsmState* es = world_.Scene().FindEsm(r.esm);
             if (es == nullptr || !es->on) continue;
             for (const em::EsmContact& c : es->contacts) {
@@ -893,9 +1119,16 @@ public:
     // Referee-side view of the range indicator: whether the tracking radar's beam would show this target's echo now: inside the beam
     // (not only the range gate), strong enough to be detected. The answer holds for half a second at a time, as an
     // indicator integrates. Chaff echoes are not drawn here yet.
-    bool EchoVisible(const std::string& target_id) {
+    bool EchoVisible(const std::string& target_id) { return EchoInTrackBeam(PlatformOf(target_id)); }
+    // The same for an anti-radiation missile in flight (its id from ArmsInFlight): its small echo on the indicators.
+    bool ArmEchoVisible(int arm_id) {
+        for (const em::ArmState& a : world_.Scene().arms) {
+            if (a.id == arm_id) return a.outcome == em::ArmOutcome::Flying && EchoInTrackBeam(a.platform_id);
+        }
+        return false;
+    }
+    bool EchoInTrackBeam(int pid) {
         em::RadarState* r = Radar(track_);
-        const int pid = PlatformOf(target_id);
         if (r == nullptr || !r->on || pid == 0) return false;
         em::EmScene& s = world_.Scene();
         const em::Platform* p = s.FindPlatform(unit_id_);
@@ -1006,6 +1239,7 @@ private:
             em::JammerState* js = world_.Scene().FindJammer(jammer_ids_[i]);
             if (js == nullptr) continue;
             bool on = now >= j.on_at_s && (j.off_at_s < 0.0 || now < j.off_at_s);
+            if (j.until_painted && painted_.count(j.target_id) == 0) on = false;  // S5: held until it is needed
             const auto sw = j.target_id.empty() ? jam_switch_.end() : jam_switch_.find(j.target_id);
             if (sw != jam_switch_.end()) on = sw->second;  // the instructor's switch
             if (on != js->on) {
@@ -1030,11 +1264,19 @@ private:
         const int id = world_.AddJammer(platform_id, effects_.jammers[index].jammer_id, false);
         jammer_ids_[index] = id;
     }
+    void AddStandOffJammer(std::size_t index) {
+        em::Platform sp;
+        sp.name = "Stand-off jammer";
+        sp.side = em::Side::Blue;
+        sp.kind = em::PlatformKind::FixedWing;
+        sp.rcs = em::RcsModel{10.0, 10.0, 10.0};
+        sp.position = effects_.jammers[index].position;
+        AddScriptedJammer(index, world_.AddPlatform(sp));
+    }
 
     int PlatformOf(const std::string& id) const {
-        for (const auto& t : targets_)
-            if (t.first == id) return t.second;
-        return 0;
+        const auto it = platform_of_.find(id);
+        return it == platform_of_.end() ? 0 : it->second;
     }
     std::string CarrierOf(int arm_id) const {
         for (const auto& c : arm_carriers_)
@@ -1190,14 +1432,78 @@ private:
     std::vector<std::pair<std::string, int>> targets_;  // scenario target id <-> EM platform id
     std::vector<std::pair<Vec3, double>> downed_;        // where and when targets were destroyed
     std::map<std::string, bool> jam_switch_;             // target id -> the instructor's jammer switch
+    std::set<std::string> painted_;                      // targets whose receivers showed a lock or a launch (S5)
     std::array<int, 2> uplink_ids_{{0, 0}};             // the channels' command transmitters (0: not made yet)
     std::vector<std::pair<int, int>> missiles_;          // missile number <-> EM platform id
     struct Rwr {
         std::string target;
         std::string esm_def;
         int esm;
+        bool on;  // the receiver switched on (SetRwrOn)
     };
     std::vector<Rwr> rwrs_;
+    std::unordered_map<std::string, std::size_t> rwr_of_;   // a target's receiver (index into rwrs_)
+    std::unordered_map<std::string, int> platform_of_;      // a target's EM platform (targets_ as a map)
+    struct FighterRadar {
+        int emitter = 0;
+        int locked = 0;  // the platform it tracks (0: searching or off)
+    };
+    std::map<std::string, FighterRadar> fighter_radars_;    // roadmap S3: the air fight's radars by target id
+    Rwr* RwrOf(const std::string& target_id) {
+        const auto it = rwr_of_.find(target_id);
+        return it == rwr_of_.end() ? nullptr : &rwrs_[it->second];
+    }
+    const Rwr* RwrOf(const std::string& target_id) const {
+        const auto it = rwr_of_.find(target_id);
+        return it == rwr_of_.end() ? nullptr : &rwrs_[it->second];
+    }
+    void SetEsmOn(int esm_id, bool on) {
+        if (em::EsmState* es = world_.Scene().FindEsm(esm_id)) es->on = on;
+    }
+    struct Site {
+        std::string key;
+        int platform = 0;
+        int search = 0;
+        int track = 0;
+        int link = 0;
+    };
+    std::vector<Site> sites_;
+
+    Site* EnsureSite(const std::string& key, const Vec3& position) {
+        for (Site& s : sites_) {
+            if (s.key == key) {
+                if (em::Platform* p = world_.Scene().FindPlatform(s.platform)) {
+                    const Vec3 at = AntennaAt(position);
+                    if ((p->position - at).LengthSquared() > 1.0) world_.SetPlatformState(s.platform, at, Vec3{});
+                }
+                return &s;
+            }
+        }
+        Site s;
+        s.key = key;
+        const double mast = antenna_height_m_ > 0.0 ? antenna_height_m_ : 5.0;
+        s.platform = world_.AddGroundPlatform("Site " + key, em::Side::Red, position.x, position.y, mast, em::RcsModel{0.0, 0.0, 0.0});
+        sites_.push_back(s);
+        return &sites_.back();
+    }
+    // Turn a site emitter on or off; on, with `toward` it points there (a tracking antenna, a command link).
+    void SetSiteEmitter(int id, bool on, const Vec3* toward, const em::Platform* me = nullptr, int target_platform = 0) {
+        if (id == 0) return;
+        em::EmitterState* e = world_.Scene().FindEmitter(id);
+        if (e == nullptr) return;
+        const bool was = e->InAir();
+        e->radiating = on;
+        e->dummy_load = false;
+        if (on && toward != nullptr && me != nullptr) {
+            const Vec3 d = *toward - me->position;
+            if (d.LengthSquared() > 1.0) {
+                e->pointing_az_rad = AzimuthOf(d);
+                e->pointing_el_rad = ElevationOf(d);
+            }
+            e->track_target_platform = target_platform;
+        }
+        if (e->InAir() && !was) e->on_since_s = world_.Time();
+    }
 
     // The library's `index`-th emitter of a kind (null if it has none).
     const em::EmitterDef* LibraryEmitter(em::EmitterKind kind, int index) const {

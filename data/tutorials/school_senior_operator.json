@@ -65,10 +65,10 @@
     {
       "id": "seat_ready", "title": "Report your seat: «Второй готов!»", "report": "seat_ready",
       "lines": [
-        "At your place, your headset on: report to the commander on the intercom: O, then «Второй готов!» (Seat two ready!)."
+        "At your place, your headset on: report to the commander on the intercom: Caps Lock, then «Второй готов!» (Seat two ready!)."
       ],
       "why": "The intercom check: each seat says it is in place and hears the commander (voenizdat_osa_1991 p. 246). The R-124 runs on the vehicle's 27 V: it works before the turbine is up.",
-      "hint": "O: your reports, then the highlighted line's number."
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "search", "title": "Antenna turning: ПОИСК", "control": "soc.search", "position": 1, "procedure": "acquire_with_soc",
@@ -107,8 +107,8 @@
     },
     {
       "id": "report_ready", "title": "Report it: «Готов СОЦ!»", "report": "soc_ready",
-      "lines": ["Tell the commander the search radar is ready: O, then «Готов СОЦ!» (Search radar ready!)."],
-      "hint": "O: your reports, then the highlighted line's number."
+      "lines": ["Tell the commander the search radar is ready: Caps Lock, then «Готов СОЦ!» (Search radar ready!)."],
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "target", "chapter": "The target", "title": "Watch your scope",
@@ -130,9 +130,9 @@
     },
     {
       "id": "report_contact", "title": "Call it: «Цель, азимут …, дальность …!»", "report": "contact",
-      "lines": ["Report the contact to the commander: O, then «Цель…». The sim reads its azimuth and range off your scope for you."],
+      "lines": ["Report the contact to the commander: Caps Lock, then «Цель…». The sim reads its azimuth and range off your scope for you."],
       "why": "The commander can't see your scope. He orders a target taken only once he has heard where it is.",
-      "hint": "O: your reports, then the highlighted line's number."
+      "hint": "Caps Lock: your reports; 0 says the green line (or its sector, then its number)."
     },
     {
       "id": "az_lock", "title": "Unlock the azimuth wheel", "control": "ssc.az_lock", "position": 1, "procedure": "acquire_with_soc",

@@ -56,4 +56,4 @@ Cabin controls (done 12 Oct 2026): `radio.left.preset` (driver's side), `radio.r
 * A cabin control for the R-123M presets, and the Unreal UI for switching.'
 * Observation-post and EWR timings are estimates; a tier 1-2 source for VNOS practice and EWR voice procedure is still to find'
   (Bogdanov 2020, Yugoslav air defence in 1999, unread).'
-* Fusing two sources (the crew uses one at a time).'
+* Fusing two sources (the crew uses one at a time). Looked for 30 Oct 2026: the crew's comms as sourced (`docs/research/OSA_COMMS_2026-10.md`) put the commander's headset on one set at a time through its selector, and no source read describes a crew putting two nets' designations together. Not built without one.'

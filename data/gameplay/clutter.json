@@ -1,0 +1,15 @@
+{
+  "clutter_id": "clutter",
+  "status": "checked against the recommendation's text (roadmap S9, 20 Nov 2026; docs/EM_ARCHITECTURE.md section 27)",
+  "notes": "ITU-R P.1812's representative clutter heights (simcore/clutter.hpp), added to a path profile's intermediate points where the ground carries no footprints of its own: the far ground's towns the map does not lay out (simcore/terrain_map.hpp MapData::ObstacleHeight, read by LoadMap) and the country's own ground under the information pipeline's radios (simcore/command/em_radio.hpp CountryGround, a class per cell from the country's land cover). A town's middle (within dense_share of its radius) is dense urban, the rest suburban; a village is suburban throughout; the country's forests are urban/trees/forest; its water water/sea; the rest open/rural. Where the map lays a town or a wood out (the map proper's, the detail areas' and its own woods beyond them) its boxes are the obstacles instead. Checked 20 Nov 2026 against P.1812-6 (09/2021) section 3.2, Table 2, and P.1812-8 (09/2025) section 3.2.1, Table 2: the same five values the first pass wrote from memory (2 Nov 2026); water/sea, open/rural and urban/trees/forest added. The recommendation notes that open or rural ground is seldom bare and that small heights rather than zero may suit it, and that local statistics should be used where they exist: none exist for a fictional country, so its defaults are used.",
+  "source": "itu_r_p1812 (P.1812-6 section 3.2 Table 2 'Default representative clutter height values'); the share of the radius is a game value",
+  "confidence": "high",
+  "values": {
+    "water_sea_m": { "value": 0, "source": "itu_r_p1812: P.1812-6 section 3.2 Table 2, water/sea 0 m", "confidence": "high" },
+    "open_rural_m": { "value": 0, "source": "itu_r_p1812: P.1812-6 section 3.2 Table 2, open/rural 0 m", "confidence": "high" },
+    "suburban_m": { "value": 10, "source": "itu_r_p1812: P.1812-6 section 3.2 Table 2, suburban 10 m", "confidence": "high" },
+    "urban_trees_forest_m": { "value": 15, "source": "itu_r_p1812: P.1812-6 section 3.2 Table 2, urban/trees/forest 15 m", "confidence": "high" },
+    "dense_urban_m": { "value": 20, "source": "itu_r_p1812: P.1812-6 section 3.2 Table 2, dense urban 20 m", "confidence": "high" },
+    "dense_share": { "value": 0.45, "source": "game value: the same share of the radius as the map's towns lay blocks of flats in (terrain_map.hpp LaySettlement, a city)", "confidence": "estimate" }
+  }
+}

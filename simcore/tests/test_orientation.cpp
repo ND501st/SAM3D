@@ -84,8 +84,23 @@ SC_TEST("orientation: the Osa's data sets the correction, the compass work and t
     SC_EXPECT(c.has_orientation);
     SC_EXPECT(c.orientation.latitude_control == "orient.latitude");
     SC_EXPECT_NEAR(c.orientation.earth_rate_deg_h, 15.041, 1e-12);
-    SC_EXPECT(c.orientation.survey_s > 0.0 && c.orientation.survey_sigma_deg > 0.0);
+    SC_EXPECT(c.orientation.survey_sigma_deg > 0.0);
+    // The compass work is the crew chief's drill out at the aiming circle: set up by its first step, read once the
+    // console's measurement is ready, stowed by a drill of its own when he breaks off.
+    SC_EXPECT(c.orientation.survey_procedure == "measure_qc" && c.orientation.survey_subsystem == "qc_measured");
+    SC_EXPECT(c.orientation.survey_control == "nav.aiming_circle" && c.orientation.survey_up_position == 1);
+    SC_EXPECT(c.orientation.survey_break_procedure == "break_off_qc" && c.FindProcedure("break_off_qc") != nullptr);
     SC_EXPECT(c.orientation.qc_known_input == "qc_known" && c.orientation.oriented_input == "vehicle_oriented");
+}
+
+SC_TEST("orientation: a compass survey of no survey_s is timed by its instrument: Finish takes the reading") {
+    CompassSurvey s(0.0, 0.2, 7u);
+    SC_EXPECT(!s.Finish(40.0));  // not started
+    s.Start(10.0);
+    SC_EXPECT(!s.Step(10000.0, true, 40.0) && s.Running());
+    SC_EXPECT(s.Finish(40.0) && s.Known() && std::fabs(Off(s.ResultDeg(), 40.0)) < 1.0);
+    s.Start(20.0);
+    SC_EXPECT(!s.Step(21.0, false, 40.0) && !s.Running() && !s.Finish(40.0));  // moved off
 }
 
 SC_TEST("orientation: the compass survey takes its time at a halt, has its error, and moving off spoils it") {
@@ -110,7 +125,7 @@ SC_TEST("orientation: the compass survey takes its time at a halt, has its error
     for (int i = 0; i < n; ++i) {
         CompassSurvey k(0.0, 0.2, static_cast<unsigned>(1000 + i));
         k.Start(0.0);
-        k.Step(0.0, true, 359.9);  // across north
+        k.Finish(359.9);  // across north
         const double e = Off(k.ResultDeg(), 359.9);
         sum += e;
         sq += e * e;
@@ -147,7 +162,7 @@ SC_TEST("orientation: an oriented vehicle keeps north while the latitude is set;
     SC_EXPECT(std::fabs(Off(relay->Engagement().GyroHeadingDeg(), 40.0) - (-10.636)) <= 0.5 + 0.01);
 }
 
-SC_TEST("orientation: at a halt the NPC commander finds Qc with the compass, commands it, and the deputy orients the gyro") {
+SC_TEST("orientation: at a halt the NPC commander walks out to find Qc with the aiming circle, tells it once back, and the deputy orients the gyro") {
     // Cold at a halt: the commander's compass work runs while the equipment warms up.
     auto r = Load(Osa("", 50.0, "", true));
     SC_EXPECT(r != nullptr);
@@ -155,11 +170,26 @@ SC_TEST("orientation: at a halt the NPC commander finds Qc with the compass, com
     const ConsoleData& c = r->Console();
     r->GiveCrewOrder("order_k_boyu");
     r->Step(0.1);
-    SC_EXPECT(r->Compass().Running());
-    Run(*r, 175.0, 0.1);
-    SC_EXPECT(!c.equipment.GetInput("qc_known"));
-    Run(*r, 10.0, 0.1);
-    SC_EXPECT(c.equipment.GetInput("qc_known"));
+    SC_EXPECT(r->SurveyUnderWay() && !r->Compass().Running());  // first he carries the aiming circle out
+    // Out ahead, set up, the reading, and the Qc told to the deputy only once he can hear it: nobody is carried.
+    double out_s = -1.0, set_s = -1.0, read_s = -1.0, told_s = -1.0, told_from_m = -1.0, farthest = 0.0;
+    for (int i = 0; i < 6000 && told_s < 0.0; ++i) {
+        r->Step(0.1);
+        const MoverView v = r->Mover("commander")->View(r->Pose());
+        farthest = std::fmax(farthest, v.feet_m.y);
+        if (out_s < 0.0 && r->Outside("commander")) out_s = r->Time();
+        if (set_s < 0.0 && r->Compass().Running()) set_s = r->Time();
+        if (read_s < 0.0 && r->QcUntold()) read_s = r->Time();
+        if (told_s < 0.0 && c.equipment.GetInput("qc_known")) {
+            told_s = r->Time();
+            told_from_m = std::hypot(v.feet_m.x, v.feet_m.y);
+        }
+    }
+    std::printf("    out %.1f s, the aiming circle set up %.1f s (%.1f m ahead at the farthest), read %.1f s, told %.1f s %.1f m from the vehicle\n",
+                out_s, set_s, farthest, read_s, told_s, told_from_m);
+    SC_EXPECT(out_s > 0.0 && set_s > out_s && read_s > set_s + 140.0 && told_s > read_s + 5.0);
+    SC_EXPECT(farthest > 30.0 && told_from_m >= 0.0 && told_from_m < 8.0);
+    Run(*r, 5.0, 0.1);  // his words, after his speaking delay
     SC_EXPECT(r->Debrief().find("Курс машины") != std::string::npos);  // he says it to the deputy
     SC_EXPECT(r->Debrief().find("Qc by compass") != std::string::npos);
     for (int i = 0; i < 6000 && !r->OrientedAtHalt(); ++i) r->Step(0.1);
@@ -187,16 +217,30 @@ SC_TEST("orientation: a contact sends the commander back to his post before he h
     if (!r) return;
     // Deployed and oriented: no survey at all.
     Run(*r, 2.0, 0.1);
-    SC_EXPECT(!r->Compass().Running());
+    SC_EXPECT(!r->SurveyUnderWay());
     // A new halt after a move, then a target before he has Qc: he breaks the survey off.
     r->Console().equipment.SetInput("vehicle_stopped", false);
     Run(*r, 1.0, 0.1);
     r->Console().equipment.SetInput("vehicle_stopped", true);
     Run(*r, 1.0, 0.1);
-    SC_EXPECT(r->Compass().Running());
-    for (int i = 0; i < 3000 && r->Compass().Running(); ++i) r->Step(0.1);
-    SC_EXPECT(!r->Compass().Running() && !r->Compass().Known());
+    SC_EXPECT(r->SurveyUnderWay());
+    bool measuring = false;
+    for (int i = 0; i < 3000 && r->SurveyUnderWay(); ++i) {
+        r->Step(0.1);
+        measuring = measuring || r->Compass().Running();
+    }
+    SC_EXPECT(measuring && !r->Compass().Running() && !r->Compass().Known() && !r->Engagement().QcKnown());
+    // Out there he hears nothing of it: a man inside signals him back.
+    SC_EXPECT(r->Debrief().find("signals the crew chief back") != std::string::npos);
     SC_EXPECT(r->Debrief().find("breaks off the compass work") != std::string::npos);
+    // Out at the aiming circle: he stows it and comes back in to his post.
+    double back_s = -1.0;
+    for (int i = 0; i < 1200 && back_s < 0.0; ++i) {
+        r->Step(0.1);
+        if (r->Mover("commander")->Place() == BodyPlace::Seated && r->Console().panel.Get("nav.aiming_circle") == 0) back_s = r->Time();
+    }
+    std::printf("    broke off and back at his post at %.1f s\n", back_s);
+    SC_EXPECT(back_s > 0.0 && !r->SurveyUnderWay());
 }
 
 SC_TEST("orientation: the OR-31M Qc scale shows the gyro, turns while it is slaved and stops once they agree") {
@@ -251,13 +295,39 @@ SC_TEST("orientation: a player commander starts his compass work from the crew m
     if (!r) return;
     SC_EXPECT(r->TakeSeat("commander", "player"));
     r->Step(0.1);
-    SC_EXPECT(!r->Compass().Running());  // nobody does it for him
+    SC_EXPECT(!r->SurveyUnderWay());  // nobody does it for him
     SC_EXPECT(r->GiveCrewOrder("order_compass"));
+    // His own work: out to the aiming circle and set it up (headless, no body reported: from where he is). Nothing is
+    // put in his seat's drill.
+    const ProcedureTracker* t = r->SeatTracker("commander");
+    SC_EXPECT(!r->Compass().Running() && t != nullptr && t->GetProcedure().id != "measure_qc");
+    SC_EXPECT(r->SeatSet("commander", "nav.aiming_circle", 1) != StepResult::Blocked);
+    r->Step(0.1);
     SC_EXPECT(r->Compass().Running());
-    Run(*r, 181.0, 0.1);
+    Run(*r, 152.0, 0.1);
     SC_EXPECT(r->Engagement().QcKnown() && r->Console().equipment.GetInput("qc_known"));
+    // Read: the helper has him stow it.
+    const auto owed = [](const ScenarioRunner& run, int position) {
+        for (const SeatDuty& d : run.AllOwedDuties()) {
+            if (d.kind == SeatDuty::Kind::Control && d.id == "nav.aiming_circle" && d.number == position) return true;
+        }
+        return false;
+    };
+    SC_EXPECT(owed(*r, 0));
+    // Stowed before its reading, it gives nothing.
+    auto early = Load(Osa("", 45.0, "", false));
+    SC_EXPECT(early != nullptr && early->TakeSeat("commander", "player") && early->GiveCrewOrder("order_compass"));
+    if (!early) return;
+    early->SeatSet("commander", "nav.aiming_circle", 1);
+    Run(*early, 30.0, 0.1);
+    early->SeatSet("commander", "nav.aiming_circle", 0);
+    Run(*early, 150.0, 0.1);
+    SC_EXPECT(!early->Compass().Running() && !early->Engagement().QcKnown());
+    SC_EXPECT(early->Debrief().find("stowed before its reading") != std::string::npos);
     // К бою includes it too (and the deputy's drill then waits for his Qc).
     auto k = Load(Osa("", 45.0, "", false));
     SC_EXPECT(k != nullptr && k->TakeSeat("commander", "player"));
-    SC_EXPECT(k->GiveCrewOrder("order_k_boyu") && k->Compass().Running());
+    SC_EXPECT(k->GiveCrewOrder("order_k_boyu"));
+    k->Step(0.1);
+    SC_EXPECT(owed(*k, 1));  // the helper has him out to set it up
 }

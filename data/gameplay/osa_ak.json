@@ -40,8 +40,9 @@
   },
 
   "search": {
-    "clutter_altitude_m": 150,
-    "notes": "Game value: with СДЦ (MTI) off, targets below this height are lost in ground clutter."
+    "clutter_altitude_m": 150, "antenna_height_m": 5.0,
+    "source": "antenna_height_m: data/em/osa_ak.json, osa_ak_soc antenna_height_m (an estimate: the antenna on the turret roof of the deployed vehicle); tests/test_engagement_model.cpp keeps the two the same.",
+    "notes": "clutter_altitude_m is a game value: with СДЦ (MTI) off, targets below this height are lost in ground clutter. antenna_height_m: the SOC's line of sight to a target starts this high over the ground under the vehicle, for the player's Osa and for the battery's other launchers (engagement.hpp SearchAntennaAltitude)."
   },
 
   "track": {
@@ -79,12 +80,12 @@
       "helicopter": [ [10, 0.15], [50, 0.50], [100, 1.0] ]
     },
     "tv_factor": 0.85, "outside_zone_factor": 0.15,
-    "manoeuvre_penalty_per_deg_s": 0.04, "manoeuvre_factor_min": 0.3,
+    "manoeuvre_penalty_per_deg_s": 0.04, "manoeuvre_factor_min": 0.3, "manoeuvre_window_s": 8.0,
     "deviation_penalty": 0.1, "deviation_factor_min": 0.5,
     "method_factor": { "N": 0.75 },
     "no_range_fuse_factor": 0.0,
     "source": "method_factor and no_range_fuse_factor follow samsim_osa p34 and samsim_thread (ПОМЕХА selects method N and arms the fuse at once, with the medium beam, because there is no range to arm it by); voenizdat_osa_1991 p23-24 (fuse arming against a jamming target); the numbers are game values. low_altitude is calibrated to the published single-missile kill probabilities (docs/research/OSA_RESEARCH_2026-10.md section 5): flak11 (strike aircraft at 10 m 0.12-0.55, helicopters at 10 m 0.07-0.12, cruise missiles at 10 m 0.12-0.38) and korovin_tiv_2010 (0.35-0.4 at 50 m, 0.42-0.85 above 100 m, original 9K33 against an F-4C). With the class chances above this gives a fighter 0.39 at 50 m, a bomber 0.32 and a helicopter 0.10 at 10 m. Everything else here is a game value.",
-    "notes": "Game values. chance = hit_chance[class] x (TV track ? tv_factor : 1) x (in zone at launch ? 1 : outside_zone_factor) x max(manoeuvre_factor_min, 1 - penalty x target turn rate in deg/s) x max(deviation_factor_min, 1 - deviation_penalty x crew mistakes) x low_altitude[class](height of the target above the ground at impact), linear between the points, flat beyond them x method_factor[guidance method] (N: three-point on angles alone, the fuse armed early: a guess at 0.75) x (no range at launch and ПОМЕХА off ? no_range_fuse_factor : 1): with no range and ПОМЕХА off the fuse, armed by range, never arms."
+    "notes": "Game values. chance = hit_chance[class] x (TV track ? tv_factor : 1) x (in zone at launch ? 1 : outside_zone_factor) x max(manoeuvre_factor_min, 1 - penalty x the target's highest turn rate in deg/s in the last manoeuvre_window_s of the missile's flight (roadmap S4, docs/air_battle/04_REACTIONS.md section 6: a break finished before the missile closed gains little; checo_1967_tactics p. 31, mt_1984_babich)) x max(deviation_factor_min, 1 - deviation_penalty x crew mistakes) x low_altitude[class](height of the target above the ground at impact), linear between the points, flat beyond them x method_factor[guidance method] (N: three-point on angles alone, the fuse armed early: a guess at 0.75) x (no range at launch and ПОМЕХА off ? no_range_fuse_factor : 1): with no range and ПОМЕХА off the fuse, armed by range, never arms."
   },
   "kill_assessment": {
     "judge_role": "deputy_commander",

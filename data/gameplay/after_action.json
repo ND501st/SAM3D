@@ -1,0 +1,17 @@
+{
+  "after_action_id": "after_action",
+  "status": "first pass (roadmap P9, docs/command/07_IMPLEMENTATION_PLAN.md; docs/campaign/05_THE_SYSTEMS.md section 11)",
+  "notes": "The battery's combat report compiled from its records and the regiment's check of them (simcore/campaign/report.hpp): how far apart in time two raids are, how a record's entry is matched to the report the radar company said, the marks for the agreement, and the regiment's belief in a unit before its first check.",
+  "source": "game values; the check itself, a written record set against another, follows bguir_tsp (Dedyaev, BGUIR 2010), who checks an operator's record against a live plot (docs/research/PLOTTING_BOARD_2026-10.md); the marks are the Soviet five-point scale",
+  "confidence": "estimate",
+  "values": {
+    "raid_gap_s": { "value": 600, "source": "game value: targets first written more than ten minutes after the last line of a raid are another raid", "confidence": "estimate" },
+    "match_s": { "value": 20, "source": "game value: a journal line's time column is the time the report was heard; within this of the report said it is that report's line", "confidence": "estimate" },
+    "board_s": { "value": 90, "source": "game value: a mark is drawn when the plotter writes what he heard, or later from the journal's page; up to a reporting period and a half (aspd_u.json air_net_period_s 60) after the report", "confidence": "estimate" },
+    "grade_5": { "value": 0.95, "source": "game value: the share of the record's entries as said for 'excellent'", "confidence": "estimate" },
+    "grade_4": { "value": 0.85, "source": "game value: for 'good'", "confidence": "estimate" },
+    "grade_3": { "value": 0.7, "source": "game value: for 'satisfactory'; below it 'unsatisfactory'", "confidence": "estimate" },
+    "trust_prior_checked": { "value": 5, "source": "game value: the regiment's belief in a unit not yet checked counts as this many entries checked", "confidence": "estimate" },
+    "trust_prior_agreed": { "value": 4, "source": "game value: of which this many agreed (a unit is believed at 0.8 before its first check)", "confidence": "estimate" }
+  }
+}
