@@ -2,7 +2,10 @@
 import sys
 from pathlib import Path
 
-import numpy as np
+import pytest
+
+np = pytest.importorskip("numpy")  # the tool's own dependencies, as tools/tests/test_photo_trace.py
+pytest.importorskip("PIL")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import map_textures  # noqa: E402
