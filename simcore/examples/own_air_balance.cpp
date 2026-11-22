@@ -88,9 +88,9 @@ std::string Session(unsigned seed, const std::vector<Crossing>& cs, int setting)
         static const LocalFrame frame(GeoPoint::FromDegrees(46.9, 19.7, 110.0));
         const auto snap = [](double e, double n) {
             const Vec3 p{e, n, 0.0};
-            Vec3 c = p;
-            command::ReadSquare(frame, command::SquareOf(frame, p), p, c);
-            return c;
+            Vec3 centre = p;
+            command::ReadSquare(frame, command::SquareOf(frame, p), p, centre);
+            return centre;
         };
         const Vec3 a = snap(px + dx * 22000.0, py + dy * 22000.0);
         const Vec3 b = snap(px - dx * 22000.0, py - dy * 22000.0);

@@ -5,7 +5,7 @@
   "source": "sam3d",
   "confidence": "estimate",
   "notes": "Placeholder numbers for a picture, not a battle. The waves are data/gameplay/air_battle_shots_waves.json; the seed chosen so that an early flight is one that carries flares in 1985 (gameplay/reactions.json and air_war/countermeasures.json), so the flares come in the first minutes. The Strela-2 team's figures are the theatre's (test_waves.hpp WavePassKillChance). The Osa is cold: it does not fire.",
-  "seed": 7,
+  "seed": 5,
   "origin": { "lat_deg": 46.9, "lon_deg": 19.7, "alt_m": 110 },
   "terrain": { "type": "flat", "height_m": 110 },
   "damage": "gameplay/damage.json",

@@ -310,13 +310,18 @@ private:
         double height_m;   // above the ground if low, else above the ground under the centre
     };
 
+    // The engine's raw output made a number by hand: the standard fixes mt19937's sequence but not how a distribution
+    // uses it, so libc++, libstdc++ and MSVC's std::uniform_*_distribution give different waves for one seed.
+    double Unit() { return static_cast<double>(rng_()) / 4294967296.0; }  // [0, 1)
     double Uniform(double lo, double hi) {
         if (!(hi > lo)) return lo;
-        return std::uniform_real_distribution<double>(lo, hi)(rng_);
+        return lo + (hi - lo) * Unit();
     }
     int UniformInt(int lo, int hi) {
         if (hi <= lo) return lo;
-        return std::uniform_int_distribution<int>(lo, hi)(rng_);
+        const long long span = static_cast<long long>(hi) - static_cast<long long>(lo) + 1;
+        const long long k = static_cast<long long>(Unit() * static_cast<double>(span));
+        return static_cast<int>(static_cast<long long>(lo) + (k < span ? k : span - 1));
     }
     template <typename T>
     const T& Pick(const std::vector<T>& v) {
