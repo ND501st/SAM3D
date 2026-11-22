@@ -100,7 +100,10 @@ struct CampaignAction {
     // UnitMove: one of our units began a move on an order its commander heard (track F, F4.2; unit_moves.hpp): `what` the
     // unit, `by` the order's key, `to` where to, `until_h` the hour it began, `observed_h` when he heard it; `in_step` the
     // order source's, taken at a whole hour inside a step (a load puts it back at that hour), else the caller's (MoveUnit).
-    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report, PostAttack, UnitMove };
+    // FighterCover: our fighter regiment's duty by sector changed on its commander's priorities as its post held them
+    // (track F, F4.3): `shares` the front's fighters by sector, `by` the order's key, `until_h` the hour, `observed_h` when
+    // the post had it, `in_step` as UnitMove's (else the caller's, GiveFighterCover).
+    enum class Kind { Advance, Relocate, Skip, Complete, Transmit, Take, Report, PostAttack, UnitMove, FighterCover };
     Kind kind = Kind::Advance;
     BatteryPosture posture;  // the battery's posture when it was done
     double until_h = 0.0;    // Advance
@@ -115,8 +118,9 @@ struct CampaignAction {
     Vec3 from;               // Report: where he was
     double sigma_m = 0.0;    // Report
     double observed_h = 0.0; // Report: when he saw it (the place is `to`)
-    std::string by;          // PostAttack; UnitMove: the order's key
-    bool in_step = false;    // UnitMove
+    std::string by;          // PostAttack; UnitMove, FighterCover: the order's key
+    bool in_step = false;    // UnitMove, FighterCover
+    std::vector<double> shares;  // FighterCover: by sector
 };
 
 // The evidence our analysts gather from the raids they see.
@@ -261,6 +265,7 @@ public:
         PriorIntel();
         StartAirFront();
         if (!StartUnitMoves(error)) return false;
+        if (!StartFighterCover(error)) return false;
         if (!StartGroundWar(error)) return false;
         day_ = 1;
         Log("career", "staff", StaffLine(), false);
@@ -517,13 +522,14 @@ public:
     bool Replay(const std::vector<CampaignAction>& actions, std::string* error = nullptr) {
         // Our units' moves on the orders heard inside a step go back at their hours (F4.2), whatever the order source now.
         for (const CampaignAction& a : actions) {
-            if (a.kind != CampaignAction::Kind::UnitMove || !a.in_step) continue;
+            if ((a.kind != CampaignAction::Kind::UnitMove && a.kind != CampaignAction::Kind::FighterCover) || !a.in_step) continue;
             Recorded r;
             r.h = a.until_h;
             r.order.key = a.by;
             r.order.unit = a.what;
             r.order.to = a.to;
             r.order.heard_h = a.observed_h;
+            r.order.fighter_shares = a.shares;  // empty for a move
             inbox_.push_back(r);
         }
         for (std::size_t i = 0; i < actions.size(); ++i) {
@@ -532,6 +538,9 @@ public:
             switch (a.kind) {
                 case CampaignAction::Kind::UnitMove:
                     if (!a.in_step) MoveUnit(a.what, a.to, a.by, a.observed_h);
+                    break;
+                case CampaignAction::Kind::FighterCover:
+                    if (!a.in_step) GiveFighterCover(a.shares, a.by, a.observed_h);
                     break;
                 case CampaignAction::Kind::Advance: Advance(a.until_h); break;
                 case CampaignAction::Kind::Relocate: RelocateBattery(a.to, a.march_h); break;
@@ -669,6 +678,63 @@ public:
     const std::vector<UnitMove>& UnitMoves() const { return moves_; }
     // Units that move on orders the enemy's line overran before they got away (lost with the ground).
     int UnitsOverrun() const { return units_overrun_; }
+
+    // ------------------------------------------------------------------ our fighters by sector (track F, F4.3)
+
+    // On under ad_strategy.mode 1 where the front has a line and data/campaign/ad_strategy.json has its "fighters" block:
+    // the front's fighters (FrontDef::friendly_fighters) are shared over its sectors as the fighter regiment's post holds its
+    // commander's priorities (campaign::PriorityShares), each change heard through the order source (or given by a caller)
+    // and recorded; the sum over the sectors stays the front's number times their count. Until the first change, and off,
+    // every sector has the front's number.
+    bool FighterCoverOn() const { return fighters_on_; }
+    const FighterCoverRules& FighterRules() const { return fighter_rules_; }
+    // The front's number (0 without a front).
+    double FrontFighters() const {
+        const FrontDef* f = data_.theatre.FrontFor(data_.faction.front);
+        return f != nullptr ? f->friendly_fighters : 0.0;
+    }
+    // Our fighters' threat at a point: its sector's cover (the air fight's), else the front's number. A cached lookup.
+    double FighterCoverAt(const Vec3& p) const { return FighterView().At(p, FrontFighters()); }
+    // The same as the enemy's staff believes it (its planner's): the front's number until its packages flew there.
+    double BelievedFighterCoverAt(const Vec3& p) const { return BelievedFighterView().At(p, FrontFighters()); }
+    FighterCoverView FighterView() const {
+        FighterCoverView v;
+        if (fighters_on_) {
+            v.line = &front_line_;
+            v.by_sector = &fighter_cover_;
+        }
+        return v;
+    }
+    FighterCoverView BelievedFighterView() const {
+        FighterCoverView v;
+        if (fighters_on_) {
+            v.line = &front_line_;
+            v.by_sector = &fighter_belief_;
+        }
+        return v;
+    }
+    // By sector (empty: none given yet, the front's number): the regiment's shares, the cover, the enemy's belief.
+    const std::vector<double>& FighterShares() const { return fighter_shares_; }
+    const std::vector<double>& FighterCover() const { return fighter_cover_; }
+    const std::vector<double>& FighterBelief() const { return fighter_belief_; }
+    // Every change of the regiment's duty by sector, in order.
+    struct FighterCoverChange {
+        std::string key;
+        double h = 0.0;        // taken (a whole hour inside a step, or the caller's hour)
+        double heard_h = 0.0;  // when the regiment's post had the order
+        std::vector<double> shares, cover;
+    };
+    const std::vector<FighterCoverChange>& FighterCoverChanges() const { return fighter_changes_; }
+    // The regiment's duty by sector given now (a caller's: tests, a tool), on an order heard at heard_h (-1: now). Recorded.
+    // False when off, the key was used, or the shares are not one a sector.
+    bool GiveFighterCover(const std::vector<double>& shares, const std::string& key = "", double heard_h = -1.0) {
+        UnitOrder o;
+        o.unit = fighter_rules_.post;
+        o.heard_h = heard_h < 0.0 ? now_h_ : heard_h;
+        o.key = key.empty() ? "fighters@" + std::to_string(static_cast<long long>(std::llround(now_h_ * 100.0))) : key;
+        o.fighter_shares = shares;
+        return FighterCoverNow(o, false);
+    }
     // The fixed-wing and the helicopters' air front at a point: its sector's (0 and 0 at mode 0).
     double AirFrontAt(const Vec3& p) const {
         if (!air_front_on_ || air_front_.sectors.empty()) return 0.0;
@@ -980,6 +1046,7 @@ private:
         rc.own_corridors = OwnCorridors();
         rc.losses_today = politics_.losses_today;
         rc.front_line = &front_line_;
+        rc.fighters = FighterView();  // our fighters by sector as they are (F4.3; off: the front's number)
         // On the march, or fighting a raid in a session (whose rounds the session counts): not in the abstract fight.
         if (marching_ || !live_.empty()) rc.skip_defence = data_.theatre.objects[static_cast<std::size_t>(player_)].id;
         return rc;
@@ -1125,7 +1192,7 @@ private:
             marching_ = false;
             MoveBattery(march_to_);
         }
-        if (moves_on_) StepUnitMoves();  // our units' moves on orders: their stages, and the orders heard (F4.2)
+        if (moves_on_ || fighters_on_) StepUnitMoves();  // our units' moves and fighters on orders: stages, orders heard (F4.2, F4.3)
         return false;
     }
 
@@ -1246,6 +1313,7 @@ private:
         pc.ground = RouteGroundPtr();
         pc.front_line = &front_line_;
         pc.air_front = FrontView();
+        pc.fighters = BelievedFighterView();  // our fighters by sector as its staff believes them (F4.3; off: the front's number)
         // The sorties the plan holds back for on-call work (doctrine.on_call_fraction), squadron by squadron, before the
         // planner spends the rest (roadmap B5: the alert pools fly them).
         std::vector<double> held;
@@ -1603,6 +1671,7 @@ private:
             pc.ground = RouteGroundPtr();  // the route planner's ground (route.mode 1, roadmap B2)
             pc.front_line = &front_line_;
         pc.air_front = FrontView();
+            pc.fighters = BelievedFighterView();
             Planner planner;
             return planner.OnCall(pc, mk, e, pool.squadron, pool.aircraft, takeoff_h, out);
         };
@@ -1629,6 +1698,7 @@ private:
         const FactionDef& f = data_.faction;
         const TuningTable& tune = data_.tuning;
         p.resolved = true;
+        if (fighters_on_) LearnFighterCover(p);  // its pilots' debrief: what it met of our fighters there (F4.3)
         // The truth.
         if (!o.truth_applied) {
             for (const auto& d : o.damage) {
@@ -2244,15 +2314,86 @@ private:
         if (now_h_ + 1e-9 >= next_move_event_h_) AdvanceMoves();
         if (std::fabs(now_h_ - std::round(now_h_)) > 1e-9) return;
         bool began = false;
-        for (; inbox_next_ < inbox_.size() && inbox_[inbox_next_].h <= now_h_ + 1e-9; ++inbox_next_) began = MoveUnitNow(inbox_[inbox_next_].order, true) || began;
+        for (; inbox_next_ < inbox_.size() && inbox_[inbox_next_].h <= now_h_ + 1e-9; ++inbox_next_) began = OrderNow(inbox_[inbox_next_].order) || began;
         if (order_source_ && now_h_ + 1e-9 >= next_source_h_) {
             std::vector<UnitOrder> heard;
             double next = now_h_ + 1.0;
             order_source_(*this, heard, &next);
             next_source_h_ = std::max(next, now_h_ + 1.0);
-            for (const UnitOrder& o : heard) began = MoveUnitNow(o, true) || began;
+            for (const UnitOrder& o : heard) began = OrderNow(o) || began;
         }
         if (began && now_h_ + 1e-9 >= next_move_event_h_) AdvanceMoves();
+    }
+
+    // An order heard inside a step: the fighters' duty by sector (F4.3), else a move (true when a move began).
+    bool OrderNow(const UnitOrder& o) {
+        if (!o.fighter_shares.empty()) {
+            FighterCoverNow(o, true);
+            return false;
+        }
+        return MoveUnitNow(o, true);
+    }
+
+    // ---- our fighters by sector (track F, F4.3; docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5)
+
+    bool StartFighterCover(std::string* error) {
+        fighters_on_ = false;
+        fighter_rules_ = FighterCoverRules();
+        fighter_shares_.clear();
+        fighter_cover_.clear();
+        fighter_belief_.clear();
+        fighter_changes_.clear();
+        fighter_keys_.clear();
+        if (data_.tuning.Get("ad_strategy.mode") < 1.0 || front_line_.Empty() || data_.data_dir.empty()) return true;
+        std::string e;
+        if (!LoadFighterCoverRules(data_.data_dir, "campaign/ad_strategy.json", fighter_rules_, &e)) {
+            if (error != nullptr) *error = e;
+            return false;
+        }
+        fighters_on_ = fighter_rules_.present && front_line_.SectorCount() > 0;
+        return true;
+    }
+
+    // The regiment's duty by sector from now: the shares cached as the cover by sector (SpreadFighterCover), recorded.
+    bool FighterCoverNow(const UnitOrder& o, bool in_step) {
+        if (!fighters_on_ || o.key.empty() || fighter_keys_.count(o.key) > 0 || o.fighter_shares.size() != front_line_.SectorCount()) return false;
+        fighter_keys_.insert(o.key);
+        CampaignAction& a = Record(CampaignAction::Kind::FighterCover);
+        a.what = o.unit;
+        a.by = o.key;
+        a.until_h = now_h_;
+        a.observed_h = o.heard_h;
+        a.in_step = in_step;
+        a.shares = o.fighter_shares;
+        const double front = FrontFighters();
+        fighter_shares_ = o.fighter_shares;
+        fighter_cover_ = SpreadFighterCover(front, fighter_shares_, fighter_rules_.cap);
+        if (fighter_belief_.empty()) fighter_belief_.assign(fighter_cover_.size(), front);  // the enemy's: the front's number
+        FighterCoverChange ch;
+        ch.key = o.key;
+        ch.h = now_h_;
+        ch.heard_h = o.heard_h;
+        ch.shares = fighter_shares_;
+        ch.cover = fighter_cover_;
+        fighter_changes_.push_back(ch);
+        std::string text = "Our fighter regiment's duty by sector:";
+        for (std::size_t i = 0; i < fighter_cover_.size(); ++i) {
+            char buf[96];
+            std::snprintf(buf, sizeof(buf), "%s %.40s %.2f", i == 0 ? "" : ",", front_line_.Sector(i).id.c_str(), fighter_cover_[i]);
+            text += buf;
+        }
+        Log("ad_fighters", o.unit, text + ".", false);
+        return true;
+    }
+
+    // The enemy's staff learns a sector's cover from its packages' debriefs there: each moves its belief of the target's
+    // sector belief_learn of the way to the cover as it is (game value).
+    void LearnFighterCover(const Package& p) {
+        if (fighter_belief_.empty() || fighter_cover_.empty()) return;
+        const int s = front_line_.SectorOf(p.target_pos);
+        if (s < 0 || static_cast<std::size_t>(s) >= fighter_belief_.size()) return;
+        double& b = fighter_belief_[static_cast<std::size_t>(s)];
+        b += fighter_rules_.belief_learn * (fighter_cover_[static_cast<std::size_t>(s)] - b);
     }
 
     // The line overran a unit that moves on orders (Overrun): lost with the ground, its move (packing, or setting up where
@@ -2298,6 +2439,14 @@ private:
     int units_overrun_ = 0;
     nav::RouteCache move_routes_{64};
     std::shared_ptr<const nav::RoadGraph> move_roads_;  // without the ground war's: the country's, built on the first move
+    // F4.3
+    bool fighters_on_ = false;
+    FighterCoverRules fighter_rules_;
+    std::vector<double> fighter_shares_;  // by sector: the regiment's duty as last given (empty: none yet)
+    std::vector<double> fighter_cover_;   // by sector: the cover cached from it
+    std::vector<double> fighter_belief_;  // by sector: the enemy's staff's belief of it
+    std::vector<FighterCoverChange> fighter_changes_;
+    std::set<std::string> fighter_keys_;
     nav::Overlay move_open_;                    // no bridges down (without the ground war's overlay)
 
     // ---- the air war follows the units (track F, F3.7; docs/fronts/03_GROUND_WAR.md section 6)

@@ -105,6 +105,16 @@
     "confidence": "low"
   },
 
+  "sky_by_sector": {
+    "defend": "by_zones",
+    "offence": "one_zone",
+    "economy": "one_zone",
+    "min_sector_deg": 60,
+    "source": "vr_krupicka_1984 pp. 62-64 (the sky shared by zones and sectors of at least 60 degrees, the method set by the PVOS division's commander or the front's air force and air defence commander; fighters into a SAM zone only by the PVOS formation commander's decision, when the SAMs cannot destroy every target); mitronin_1976 pp. 6, 8-9 (by zones over covered objects and against the first massed strike; one zone shared by height when the ground air defence cannot engage every target); mt_lavrinovich_mdex p. 16 (in a moving battle the fighters given preference); docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5",
+    "confidence": "low",
+    "notes": "Track F's F4.3 (simcore/command/own_air.hpp SkySharingDef, SharingFor, TellSharing; campaign/ad_strategy.hpp SharingKnownBy): the method a sector's priority gives, as a post holds that priority from the national sector's commander's orders. Defend, the main thrust and the objects covered: by zones, the SAMs' zone kept and our fighters on its far approaches. The offence (an ambush, fighters given the sector) and economy (too few fire units to engage every target): one zone by height, the fighters above the cooperation's split_height_m. Which priority takes which method is SAM3D's reading of these sources; the front's sectors stand for Krupicka's sectors (min_sector_deg is not checked)."
+  },
+
   "enemy_learning": {
     "heard_per_use": 0.25,
     "break_talk_table": 0.15,

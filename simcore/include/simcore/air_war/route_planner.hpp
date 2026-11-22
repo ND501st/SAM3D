@@ -1441,18 +1441,22 @@ inline std::vector<RouteThreat> BelievedRouteThreats(const std::vector<const Int
 // ours it believes there and working is a ring of route.fighter_reach_m (with half its position's sigma) our interceptors
 // reach from under ground control, weighed by the front's fighter threat (friendly_fighters), route.fighter_weight and its
 // belief in the base; for a Low flight or a helicopter by route.fighter_low_share (the period's radars saw little below
-// them: 07_AIR_TO_AIR.md 5.2). Never masked (a fighter is not a site). Keys "fighter:<entry>", in key order.
+// them: 07_AIR_TO_AIR.md 5.2). Never masked (a fighter is not a site). Keys "fighter:<entry>", in key order. With our
+// fighters by sector (track F, F4.3: `cover` on), each base weighed by the cover believed in its sector instead.
 inline std::vector<RouteThreat> BelievedFighterThreats(const std::vector<IntelEntry>& entries, double friendly_fighters, const AircraftType& a,
-                                                       Profile prof, const TuningTable& tune) {
+                                                       Profile prof, const TuningTable& tune, const FighterCoverView& cover = FighterCoverView()) {
     std::vector<RouteThreat> out;
     const double reach = tune.Get("route.fighter_reach_m");
-    const double w0 = tune.Get("route.fighter_weight") * friendly_fighters;
-    if (reach <= 0.0 || w0 <= 0.0) return out;
+    const double weight = tune.Get("route.fighter_weight");
+    const double w_front = weight * friendly_fighters;
+    if (reach <= 0.0 || (w_front <= 0.0 && !cover.On())) return out;
     const bool low = a.helicopter || prof == Profile::Low;
     for (const IntelEntry& e : entries) {
         if (e.kind != ObjectKind::Airfield || e.ghost) continue;
         const double live = e.Live();
         if (live < 0.15) continue;
+        const double w0 = cover.On() ? weight * cover.At(e.pos, friendly_fighters) : w_front;
+        if (w0 <= 0.0) continue;
         RouteThreat r;
         r.key = "fighter:" + e.key;
         r.pos = e.pos;

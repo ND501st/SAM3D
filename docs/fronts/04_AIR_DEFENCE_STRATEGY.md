@@ -379,3 +379,91 @@ ordered late or never, all four are lost.
 - The commander does not hear that a unit was wrecked or overrun before it moved (only the stale timeout clears it).
 - The Kub's leapfrog has one battery in the theatre to work on; the Osa regiment's batteries are F4.4's.
 - Cover moves only when a priority is raised; nothing brings units back to economy sectors when it is lowered.
+
+## As built: F4.3 (22 Nov 2026)
+
+Our fighters are shared to the sectors by the priorities the fighter regiment's post holds, and the sky is shared by the
+same priorities for the own-air rules (section 5). Only at `ad_strategy.mode` 1 on a front with a line and with the data's
+`"fighters"` block (`data/campaign/ad_strategy.json`); at 0 nothing is loaded, `FighterCoverAt` returns the front's
+`friendly_fighters` everywhere and every caller does the arithmetic it did before.
+
+**Who holds the duty** (first person). The national sector's commander (`sector_commander`) orders to the fighter
+regiment's duty officer (`fighter_rgt_duty`; the block's `post` and `commander`, the post checked to be among his
+addressees). `AdStrategy` (the feed's order source, as for F4.2's moves) builds the priorities that post holds: his pre-war
+plan, then for each sector the newest of his `ad_order:` facts that reached the post by the hour (`InfoNet::Known`), never
+his decisions themselves. When they differ from the duty last given it hands the campaign a `UnitOrder` with
+`fighter_shares` (`PriorityShares`: the defended sectors 0.6 together, `andersen_1979` p. 40, the rest by weights 2 and 1),
+keyed by the order it rests on; while an order is on its way the source asks again the next hour. The pre-war plan counts
+as held from the war's start (`prewar_held`, true, SAM3D's reading: F4.1's `PriorityKnownBy` falls back to it the same
+way), so the first duty is the pre-war plan's at the source's first ask.
+
+**The cover** (`AirCampaign::FighterCoverAt(pos)`; `air_fight.hpp`'s `SpreadFighterCover`). The front's number times the
+sectors times each share, water-filled at the cap (1.0, a game value: no sector holds more than the most an abstract
+fight's fighters can be), so the sum over the sectors is the front's number times the sectors, always (tested; the bench's
+worst error 0). Set only when a duty is given (`CampaignAction::FighterCover`, saved as `fighter_cover` with its shares and
+replayed at its hour with no source); `FighterCoverAt` is the sector's index (`LineOfContact::SectorOf`) into a cached
+vector (`FighterCoverView`). Who reads it:
+- the air fight (`resolve.hpp`'s `AirBattle`, B8's `SetupFor`): the true cover where the fight is fought;
+- the enemy's planner (`planner.hpp`: escorts, `ExpectedMainLoss`) and the route planner (`BelievedFighterThreats`, each
+  base weighted by the cover believed at it): the cover the enemy believes, which starts at the front's number and moves
+  half way (`belief_learn` 0.5, a game value) to the true cover of the target's sector on each package's debrief there.
+  The enemy learns of a new duty only by flying into it.
+
+**The sky's sharing** (`command/own_air.hpp`: `SkySharingDef`, `SharingFor`, `TellSharing`; `own_air.json`'s
+`"sky_by_sector"`). A defended sector shares by zones, an offence or economy sector in one zone by height, the fighters
+above the split (SAM3D's reading of `vr_krupicka_1984` pp. 62-64, `mitronin_1976` pp. 6, 8-9, `mt_lavrinovich_mdex` p. 16:
+the method the PVOS division's or the front's commander sets; at least 60° a sector). `AdStrategy::SharingKnownBy` gives
+the method a post holds by the orders that reached it; `TellSharing` changes a `CooperationPlan` (its version up) only when
+called with what was told, so a crew's `JudgeTrack` holds fire above the split only once told its sector is one zone
+(tested). Nothing calls `TellSharing` in a session yet.
+
+**Mode 1 on the nation** (`fronts_bench data --ad --days 10 --seeds 3 warsaw_pact nato`, every F mode at 1; F4.2's war is
+the same run with `--no-fighters`, whose numbers are F4.2's as built):
+
+| A campaign of 10 days, mean of 3 seeds | Warsaw Pact | NATO |
+|---|---|---|
+| The front's number (sectors) | 0.35 (5) | 0.40 (4) |
+| Changes of the duty (of them on the sector commander's orders) | 1.0 (0: the pre-war plan held) | 2.0 (1.0) |
+| Cover over the campaign, time-weighted | rava_reservoir, tisava 0.524; hradec, northern_forest, ne_crossings 0.234 | western_crossings 0.713; western_uplands, zlatno, upper_lenta 0.296 |
+| Cover at the end | 0.525 defended, 0.233 economy | western_crossings 0.960, the rest 0.213 |
+| Delay to the duty changing: from his decision; from the order's hour; from the post holding it | - | 1.39 h; 0.39 h; 0.16 h |
+| Air fights, against F4.2 | 15.0 against 14.7 | 8.3 against 11.3 |
+| The enemy's aircraft our fighters shot down; ours lost | 11.0 and 5.7, against 11.0 and 3.3 | 4.0 and 10.7, against 6.3 and 12.0 |
+| Packages, against F4.2 | 212.7 against 226.7 | 184.3 against 175.7 |
+| Loss rate a sortie, against F4.2 | 3.92% against 3.39% | 2.20% against 2.58% |
+
+The Pact's pre-war plan already defends its two thrusts, so its duty is the pre-war plan's from the first hour to the end
+(0.53 over rava_reservoir and tisava, 0.23 elsewhere); denser cover over the thrusts costs it more aircraft a sortie and
+fewer packages fly. NATO's sector commander takes western_crossings to defend on D6 (seed 7: decided 16:43, the order at
+the regiment's post 17:57, the duty changed 18:00), its cover from 0.40 to 0.96 while the rest thin to 0.21; NATO's air
+fights and losses fall. Three seeds of a whole war: a direction, not a balance (F6).
+
+**Cost.** The duty changes on orders only (one or two a campaign) and is read by a vector index: the pipeline's pump a
+campaign day with the commanders 14.60 against 14.43 ms without (the Pact) and 12.63 against 11.97 ms (NATO), F4.2's moves
+included. The campaign and the pump together differ from F4.2's only as the war does (3413 against 3487 ms a day for the
+Pact, 2376 against 2330 ms for NATO). At mode 0 the gates pass as before (`fronts_bench data --ground --gate`, `--ground
+--gate --player-sector battery`, `--feed --gate`).
+
+**Identity.** At `ad_strategy.mode` 0 `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical to track F's tip before it (af62f4d, built the same way); the
+replay fingerprint (`tests/test_routes.cpp`: journal 107, FNV 1375944258174313379, 41 packages) holds; with the
+`"fighters"` block off (`--no-fighters`) mode 1 is F4.2's war exactly.
+
+**Tests** (`test_air_fight.cpp`, 3; `test_own_air.cpp`, 1): the spread by hand (even, a sector at 60 %, the cap's cascade,
+no shares the front's number); at mode 0 the front's number for both factions everywhere, at mode 1 a duty given keeping
+the sum, the fight's setup reading it where fought, the belief moving toward it on packages flown there, a save replaying
+it; on the nation (the Pact, seed 7, 48 h, the sector commander on a 2-3 h rhythm) the first duty the pre-war plan's, every
+later change on an order his post held and within the hour of its arrival (decided 7.50 h, at the post 8.73 h, the duty
+9.00 h), and `SharingKnownBy` by the same orders; the sky's table, and a crew holding fire above the split only once told.
+
+**Left:**
+- Our fighter regiments' alert pools (B8's `FighterDuty`, the live fight in a session) do not take their duty from the
+  sectors yet; only the abstract fight, the planner and the route planner read the cover.
+- The battery's plan of cooperation is not told its sector's sharing (`TellSharing` is not called in a session: with F4.4's
+  tasking on the battery net), and the abstract SAM fire is not held above the split in one-zone sectors.
+- `min_sector_deg` (60°) is data only: the sectors are the front's, not checked against it.
+- The pre-war plan held from the war's start (`prewar_held`) is a decision to confirm (F4.2's units wait for their
+  commander's first decision). Before the source's first ask (the war's first whole hour) the cover is the front's number.
+- The enemy's belief (half way on each debrief in the sector) and the cap are game values; balance is F6.
+- Unreal: the same `SetOrderSource` call as F4.2's; without it the duty stays the front's number (a loaded campaign's duty
+  replays all the same).

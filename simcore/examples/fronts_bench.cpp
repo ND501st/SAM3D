@@ -5,7 +5,7 @@
 //                     [--gate] [--log] [faction ...]
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //        fronts_bench [data_dir] --feed [--days N] [--seeds N] [--theatre file] [--gate] [faction ...]
-//        fronts_bench [data_dir] --ad [--days N] [--seeds N] [--theatre file] [--gate] [--log] [faction ...]
+//        fronts_bench [data_dir] --ad [--days N] [--seeds N] [--theatre file] [--gate] [--log] [--no-fighters] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
 //   --sectors equal sectors (default 8, the most the design gives a front; 0: the theatre's own). At each day's end the
@@ -57,7 +57,12 @@
 //   (AirCampaign::SetOrderSource); the moves begun by class with their mean march, the orders (withdrawals and cover),
 //   heard and ready, the units overrun against those that got away on a move, the hours off the air per unit that moves
 //   on orders, the packages and the loss rate a sortie against mode 0 (F4.1's air war), and the campaign's and the
-//   pump's CPU together a day. Defaults 10 days, 3 seeds, warsaw_pact and nato.
+//   pump's CPU together a day. Defaults 10 days, 3 seeds, warsaw_pact and nato. F4.3: the fighter regiment's duty by sector
+//   as its post held the national sector's commander's priorities: each change (its order's hour, when the post had it,
+//   when the shares changed; the first seed's, --log every seed's), the delay from the order to the shares changing, the
+//   cover by sector over time (each sector's mean over the campaign and at its end), the sum over the sectors against the
+//   front's (kept), and the abstract air fights, the enemy's aircraft our fighters shot down and ours lost, against mode 0.
+//   --no-fighters: the commanders without the data's "fighters" block (F4.2's war: the front's number everywhere).
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <algorithm>
@@ -728,7 +733,17 @@ struct AdStats {
     std::map<std::string, std::map<std::string, int>> by_sector;  // commander -> "sector to" -> changes
     int to_target = 0;
     double target_delay = 0.0, prompt_delay = 0.0, origin_delay = 0.0;
+    // F4.3: our fighters by sector.
+    int fighter_changes = 0, fighter_orders = 0;
+    double order_to_change = 0.0, heard_to_change = 0.0, decided_to_change = 0.0;
+    std::vector<double> cover_h;  // by sector: the cover times the hours it held
+    std::vector<double> cover_end;
+    double cover_hours = 0.0;
+    double worst_sum_error = 0.0;
+    int air_fights = 0, fighter_kills = 0, ours_lost = 0;
 };
+
+bool g_no_fighters = false;
 
 void AdCampaign(const AirWarData& d, unsigned seed, int days, const command::ChainData& chain, bool log, AdStats& out, std::uint64_t* journal) {
     AirCampaign c;
@@ -738,6 +753,20 @@ void AdCampaign(const AirWarData& d, unsigned seed, int days, const command::Cha
     command::GiveTheatreSky(net, d.theatre);
     command::CampaignFeed feed;
     feed.Bind(&net);
+    if (g_no_fighters) {
+        campaign::AdStrategyData sd;
+        std::string se;
+        if (campaign::LoadAdStrategyData(d.data_dir, "campaign/ad_strategy.json", sd, &se)) {
+            sd.fighters.present = false;
+            feed.UseAdStrategy(sd);
+        }
+    }
+    // F4.3: the abstract air fights and their kills and losses (the truth, for the bench).
+    c.ObserveOutcomes([&](const Package&, const PackageOutcome& o) {
+        out.air_fights += o.air_fights;
+        for (const LossRecord& l : o.losses) out.fighter_kills += l.fighter ? 1 : 0;
+        out.ours_lost += static_cast<int>(o.our_fighters_lost.size());
+    });
     double pump = 0.0;
     // F4.2: the units hear their orders inside the steps (never asked at mode 0); its pumps are the pipeline's too.
     const UnitOrderSource source = feed.OrderSource();
@@ -755,6 +784,52 @@ void AdCampaign(const AirWarData& d, unsigned seed, int days, const command::Cha
     }
     out.total_s += CpuSeconds() - t0;
     c.SetOrderSource(nullptr);
+    c.ObserveOutcomes(nullptr);
+    // F4.3: the fighters' duty by sector over time, and the delay from each order to the shares changing.
+    {
+        const std::size_t n = c.FrontLine().SectorCount();
+        const double front = c.FrontFighters();
+        if (out.cover_h.size() < n) out.cover_h.resize(n, 0.0);
+        if (out.cover_end.size() < n) out.cover_end.resize(n, 0.0);
+        std::vector<double> cur(n, front);
+        double from_h = 0.0;
+        const double end_h = c.Now();
+        const std::vector<AirCampaign::FighterCoverChange>& ch = c.FighterCoverChanges();
+        for (std::size_t i = 0; i <= ch.size(); ++i) {
+            const double t = i < ch.size() ? std::max(0.0, std::min(end_h, ch[i].h)) : end_h;
+            for (std::size_t s = 0; s < n; ++s) out.cover_h[s] += cur[s] * std::max(0.0, t - from_h);
+            from_h = std::max(from_h, t);
+            if (i == ch.size()) break;
+            cur = ch[i].cover;
+            double sum = 0.0;
+            for (double x : cur) sum += x;
+            out.worst_sum_error = std::max(out.worst_sum_error, std::fabs(sum - front * static_cast<double>(n)));
+        }
+        out.cover_hours += end_h;
+        for (std::size_t s = 0; s < n; ++s) out.cover_end[s] += cur[s];
+        out.fighter_changes += static_cast<int>(ch.size());
+        const campaign::AdStrategy& a = feed.Ad();
+        for (const AirCampaign::FighterCoverChange& x : ch) {
+            const campaign::AdDecision* dec = nullptr;
+            for (const campaign::AdDecision& y : a.Decisions()) dec = y.key == x.key ? &y : dec;
+            if (log || g_ground_log) {
+                std::string cov;
+                for (std::size_t s = 0; s < x.cover.size(); ++s) {
+                    char buf[96];
+                    std::snprintf(buf, sizeof(buf), "%s%s %.2f", s == 0 ? "" : ", ", c.FrontLine().Sector(s).id.c_str(), x.cover[s]);
+                    cov += buf;
+                }
+                std::printf("    fighters %s: %s (the order %s, at the regiment's post %s): %s\n", command::FormatClock(x.h, d.theatre.start_hour).c_str(),
+                            x.key.c_str(), dec != nullptr ? command::FormatClock(net.Facts()[static_cast<std::size_t>(dec->fact)].h, d.theatre.start_hour).c_str() : "the pre-war plan",
+                            command::FormatClock(x.heard_h, d.theatre.start_hour).c_str(), cov.c_str());
+            }
+            if (dec == nullptr) continue;
+            ++out.fighter_orders;
+            out.order_to_change += x.h - net.Facts()[static_cast<std::size_t>(dec->fact)].h;
+            out.heard_to_change += x.h - x.heard_h;
+            out.decided_to_change += x.h - dec->h;
+        }
+    }
     out.pump_s += pump;
     out.days += days;
     if (journal != nullptr) *journal = JournalHash(c);
@@ -896,6 +971,31 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
             AdCampaign(d0, seed, days, chain, false, off, &j0);
             on.journal_differs += j1 != j0 ? 1 : 0;
         }
+        // F4.3: our fighters by sector.
+        {
+            const double n = seeds > 0 ? static_cast<double>(seeds) : 1.0;
+            std::string mean_row, end_row;
+            LineOfContact probe;
+            if (const FrontDef* pf = d.theatre.FrontFor(d.faction.front)) probe.Build(*pf, 5000.0);
+            const LineOfContact* line = &probe;
+            for (std::size_t s = 0; s < on.cover_h.size(); ++s) {
+                char buf[96];
+                const std::string id = line != nullptr && s < line->SectorCount() ? line->Sector(s).id : std::to_string(s);
+                std::snprintf(buf, sizeof(buf), "%s%s %.3f", s == 0 ? "" : ", ", id.c_str(), on.cover_hours > 0.0 ? on.cover_h[s] / on.cover_hours : 0.0);
+                mean_row += buf;
+                std::snprintf(buf, sizeof(buf), "%s%s %.3f", s == 0 ? "" : ", ", id.c_str(), on.cover_end[s] / n);
+                end_row += buf;
+            }
+            const FrontDef* fr = d.theatre.FrontFor(d.faction.front);
+            std::printf("  fighters by sector (F4.3, the front's number %.2f): %.1f changes a campaign, %.1f on an order; from the order to the shares %.2f h "
+                        "(from his decision %.2f h, from the regiment's post having it %.2f h); the sum over the sectors off the front's by %.2g at worst\n",
+                        fr != nullptr ? fr->friendly_fighters : 0.0, on.fighter_changes / n, on.fighter_orders / n,
+                        on.fighter_orders > 0 ? on.order_to_change / on.fighter_orders : 0.0, on.fighter_orders > 0 ? on.decided_to_change / on.fighter_orders : 0.0,
+                        on.fighter_orders > 0 ? on.heard_to_change / on.fighter_orders : 0.0, on.worst_sum_error);
+            std::printf("    the cover over the campaign: %s\n    at its end: %s\n", mean_row.empty() ? "-" : mean_row.c_str(), end_row.empty() ? "-" : end_row.c_str());
+            std::printf("  air fights %.1f a campaign against %.1f at mode 0; the enemy's aircraft our fighters shot down %.1f against %.1f; ours lost %.1f against %.1f\n",
+                        on.air_fights / n, off.air_fights / n, on.fighter_kills / n, off.fighter_kills / n, on.ours_lost / n, off.ours_lost / n);
+        }
         // F4.2: the units' moves on the orders.
         {
             const double n = seeds > 0 ? static_cast<double>(seeds) : 1.0;
@@ -972,6 +1072,8 @@ int main(int argc, char** argv) {
             feed = true;
         } else if (a == "--ad") {
             ad = true;
+        } else if (a == "--no-fighters") {
+            g_no_fighters = true;
         } else if (a == "--moves") {
             print_moves = true;
         } else if (a == "--trace") {

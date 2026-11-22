@@ -143,6 +143,29 @@ struct FalseFriendDef {
     double allied_share = 0.5;       // the Pact's aircraft that are its allies' (on Kremniy), not Soviet (on Parol)
 };
 
+enum class CooperationMethod { ByZones, OneZone };
+
+inline const char* CooperationMethodName(CooperationMethod m) { return m == CooperationMethod::ByZones ? "by_zones" : "one_zone"; }
+
+// The sky shared by sector (track F, F4.3; docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5; own_air.json "sky_by_sector"):
+// the method a sector's priority gives, as the national sector's command post sets it (vr_krupicka_1984 p. 63). Our
+// side's posts and crews keep the one they hold (campaign::AdStrategy::SharingKnownBy), never the commander's state.
+struct SkySharingDef {
+    bool present = false;
+    CooperationMethod defend = CooperationMethod::ByZones;
+    CooperationMethod offence = CooperationMethod::OneZone;
+    CooperationMethod economy = CooperationMethod::OneZone;
+    double min_sector_deg = 60.0;  // a sector at least this wide from the SAM formation's centre (vr_krupicka_1984 p. 62)
+};
+
+// The method for a priority ("defend", "offence", "economy"): without the block, by zones (the cooperation's default).
+inline CooperationMethod SharingFor(const SkySharingDef& d, const std::string& priority) {
+    if (!d.present) return CooperationMethod::ByZones;
+    if (priority == "defend") return d.defend;
+    if (priority == "offence") return d.offence;
+    return d.economy;
+}
+
 struct OwnAirDef {
     std::vector<ReadinessDef> readiness;
     DutyDef duty;
@@ -158,6 +181,7 @@ struct OwnAirDef {
     NoticeDef notice;
     IffChangeDef iff_change;
     CooperationDefaults coop;
+    SkySharingDef sky;               // F4.3: the sky shared by sector by its priority
     EnemyLearningDef learning;
     // How our fighters choose in the air (roadmap B11, docs/air_battle/10_FACTIONS.md section 7.2, "Our side"): the same block
     // as each enemy faction's, read by the same functions (air_war/hot_phase.hpp). No alert pools (the readiness above).
@@ -264,7 +288,7 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
     std::string e;
     if (Unknown(root, "", {"own_air_id", "status", "source", "confidence", "notes", "readiness", "readiness_source", "duty", "airborne_alert",
                            "pursuit_limit_km", "gci", "notice", "iff_change", "cooperation", "enemy_learning", "hot_phase", "reports",
-                           "false_friend"}, &e)) {
+                           "false_friend", "sky_by_sector"}, &e)) {
         return fail(e);
     }
     out = OwnAirDef();
@@ -402,6 +426,22 @@ inline bool LoadOwnAirFile(const std::string& path, OwnAirDef& out, std::string*
         if (const json::Value* on = f->Find("on")) out.false_friend.on = on->Is(json::Type::Bool) && on->boolean;
         out.false_friend.allied_share = Num(*f, "allied_share", out.false_friend.allied_share);
         if (out.false_friend.allied_share < 0.0 || out.false_friend.allied_share > 1.0) return fail("false_friend.allied_share: in [0, 1]");
+    }
+    if (const json::Value* k = root.Find("sky_by_sector")) {
+        if (Unknown(*k, "sky_by_sector", {"defend", "offence", "economy", "min_sector_deg", "source", "confidence", "notes"}, &e)) return fail(e);
+        SkySharingDef& d = out.sky;
+        const auto method = [&](const char* key, CooperationMethod& m) {
+            const std::string v = Str(*k, key, CooperationMethodName(m));
+            if (v != "by_zones" && v != "one_zone") return false;
+            m = v == "by_zones" ? CooperationMethod::ByZones : CooperationMethod::OneZone;
+            return true;
+        };
+        if (!method("defend", d.defend) || !method("offence", d.offence) || !method("economy", d.economy)) {
+            return fail("sky_by_sector: defend, offence and economy are by_zones or one_zone");
+        }
+        d.min_sector_deg = Num(*k, "min_sector_deg", d.min_sector_deg);
+        if (Str(*k, "source").empty()) return fail("sky_by_sector.source: required");
+        d.present = true;
     }
     if (out.Readiness(1) == nullptr || out.Readiness(2) == nullptr) return fail("readiness: states 1 and 2 are needed");
     return true;
@@ -611,10 +651,6 @@ inline std::vector<OwnAirZone> FalseCorridors(const std::vector<OwnAirZone>& rea
     return out;
 }
 
-enum class CooperationMethod { ByZones, OneZone };
-
-inline const char* CooperationMethodName(CooperationMethod m) { return m == CooperationMethod::ByZones ? "by_zones" : "one_zone"; }
-
 // The cooperation plan as the battery was told it (its order's "own_air" block, then the notices): by zones, or one zone
 // shared by height (mitronin_1976 pp. 5-9).
 struct CooperationPlan {
@@ -651,6 +687,17 @@ struct CooperationPlan {
         return s;
     }
 };
+
+// The plan as a crew or a post is told its sector's sharing of the sky (F4.3): the method, and for one zone by height the
+// split (the plan's own, else `default_split_m`, own_air.json's cooperation). Its version moves on when the method changes.
+inline CooperationPlan TellSharing(const CooperationPlan& plan, CooperationMethod m, double default_split_m) {
+    CooperationPlan out = plan;
+    out.present = true;
+    if (out.method != m) ++out.version;
+    out.method = m;
+    if (m == CooperationMethod::OneZone && out.split_height_m <= 0.0) out.split_height_m = default_split_m;
+    return out;
+}
 
 // The "own_air" block of a task file or a scenario: {"method", "split_height_m", "fighter_floor_m", "floor_unable_m",
 // "units_unable", "zones": [{"id", "kind", "path_m": [[e, n], ...], "half_width_m", "floor_m", "ceiling_m", "from_h",
