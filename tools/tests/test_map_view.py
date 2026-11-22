@@ -118,3 +118,79 @@ def test_routes_are_drawn_over_the_country_each_stretch_in_its_kind():
     for k in ("road", "swim", "off_road"):
         assert map_view.ROUTE_COLOURS[k] in svg
     assert "rgt_cp 29 min" in svg and 'stroke-dasharray' in svg
+
+
+# ------------------------------------------------------------------------------------------------------ the fronts (F5.3)
+
+def _front_run():
+    stations = [{"along_m": i * 5000.0, "x": -20000.0 + i * 10000.0, "y": 0.0, "nx": 0.0, "ny": 1.0, "sector": 0 if i < 3 else 1} for i in range(5)]
+    day = lambda n, off: {"day": n, "hour": n * 24.0, "offset_m": [off] * 5, "line": [[s["x"], s["y"] + off] for s in stations],
+                          "air_front_m": [8000.0, 0.0],
+                          "formations": [{"name": "7th MRD", "kind": "division", "ours": True, "x": 0.0, "y": 20000.0, "fraction": 0.8, "axis": -1, "spent": False},
+                                         {"name": "Enemy 3rd", "kind": "division", "ours": False, "x": 0.0, "y": -9000.0, "fraction": 0.9, "axis": 0, "spent": False},
+                                         {"name": "Gone", "kind": "division", "ours": False, "x": 0.0, "y": -9000.0, "fraction": 0.0, "axis": 0, "spent": True}]}
+    belief = {"post": "sector_cp_duty", "now_h": 48.0,
+              "line": [{"along_m": s["along_m"], "depth_m": 10000.0 if s["sector"] == 0 else 0.0, "x": s["x"], "y": s["y"] + (10000.0 if s["sector"] == 0 else 0.0),
+                        "bx": s["x"], "by": s["y"], "sector": s["sector"]} for s in stations],
+              "axes": [{"name": "north road", "sector": 0, "depth_m": 10000.0, "h": 30.0, "age_h": 18.0, "stale": True}],
+              "ours": [{"name": "7th <MRD>", "fraction": 0.8, "h": 30.0, "age_h": 18.0, "stale": True}],
+              "enemy": [], "air_front": [{"sector": 0, "depth_m": 5000.0, "h": 40.0, "age_h": 8.0}],
+              "sams": [{"id": "s1", "name": "SAM 1", "x": 0.0, "y": 5000.0, "basis": "ordered", "h": 40.0},
+                       {"id": "s2", "name": "SAM 2", "x": 3000.0, "y": 5000.0, "basis": "plan", "h": -1.0}]}
+    return {"faction": "nato", "seed": 7, "days": 2, "start_hour": 0.0, "end_hour": 48.0,
+            "base_line": [[-20000.0, 0.0], [20000.0, 0.0]], "sectors": [{"id": "a", "name": "North"}, {"id": "b", "name": "South"}],
+            "stations": stations, "truth": [day(0, 0.0), day(1, 4000.0), day(2, 12000.0)], "posts": {"sector_cp_duty": belief}}
+
+
+def test_the_truth_shows_the_line_by_day_the_air_front_and_the_formations():
+    shapes = map_view.truth_shapes(_front_run())
+    reds = [s for s in shapes if s[0] == "line" and s[3] == 3]
+    assert len(reds) == 1 and reds[0][1][0] == (-20.0, 12.0)          # the last day's line, 12 km in
+    assert sum(1 for s in shapes if s[0] == "line" and s[3] == 1 and s[2] != "#777777") == 2   # the two earlier days, paler
+    assert any(s[0] == "line" and s[2] == map_view.AIR_FRONT for s in shapes)
+    names = [s[3] for s in shapes if s[0] == "ltext"]
+    assert "7th MRD" in names and "Enemy 3rd" in names and "Gone" not in names
+    # an earlier day is asked by number, and a day that is not there is refused
+    assert map_view.truth_shapes(_front_run(), 1)[-1][3].startswith("truth, day 1")
+    try:
+        map_view.truth_shapes(_front_run(), 9)
+        assert False
+    except ValueError as e:
+        assert "no day 9" in str(e)
+
+
+def test_the_belief_is_the_posts_map_with_stale_marked_and_never_the_truth():
+    run = _front_run()
+    shapes = map_view.belief_shapes(run, "sector_cp_duty")
+    lines = [s for s in shapes if s[0] == "line" and s[2] != "#777777"]
+    # the northern sector's axis is stale: its line is the pale dashed one; the southern sector has no axis and is drawn plainly
+    assert any(s[4] and s[2] == "#7f9ae0" for s in lines)
+    assert not any(s[0] == "line" and s[1][0] == (-20.0, 12.0) for s in shapes)   # the truth's 12 km is nowhere in the belief
+    text = " ".join(s[3] for s in shapes if s[0] == "ltext")
+    assert "north road 10 km in" in text and "18 h old, stale" in text and "7th <MRD>" in text
+    assert "SAM 1 (ordered h 40)" in text and "SAM 2" not in text   # the plan's mark is not a move
+    assert "staff: air front North 5 km" in text
+    # the comparison: the true line is 12 km in everywhere; the belief 10 km in over three stations and none over two
+    mean, worst = map_view.line_error_km(run, run["posts"]["sector_cp_duty"])
+    assert abs(worst - 12.0) < 1e-9 and abs(mean - (2 + 2 + 2 + 12 + 12) / 5) < 1e-9
+    try:
+        map_view.belief_shapes(run, "no_such_post")
+        assert False
+    except ValueError as e:
+        assert "sector_cp_duty" in str(e)
+
+
+def test_the_front_page_holds_two_drawings_and_the_cli_writes_it(tmp_path):
+    front = {"kind": "fronts_map", "runs": [_front_run()]}
+    page = map_view.front_page(COUNTRY, front, THEATRE)
+    assert page.count("<svg") == 2 and "the truth (left)" in page and "7th &lt;MRD&gt;" in page
+    d, f, out = tmp_path / "c.json", tmp_path / "f.json", tmp_path / "front.html"
+    d.write_text(json.dumps(COUNTRY), encoding="utf-8")
+    f.write_text(json.dumps(front), encoding="utf-8")
+    assert map_view.main([str(d), "--front", str(f), "--theatre", "", "--out", str(out)]) == 0
+    assert out.read_text(encoding="utf-8").count("<svg") == 2
+    try:
+        map_view.front_page(COUNTRY, {"runs": []}, THEATRE)
+        assert False
+    except ValueError as e:
+        assert "no runs" in str(e)

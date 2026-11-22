@@ -640,6 +640,10 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 	}
 	const TheatreDef& Th = C->Data().theatre;
 	const FrontDef* Front = Th.FrontFor(C->Data().faction.front);
+	// Under the fronts (any front mode on) the screen is our side's knowledge only: the regiment's situation map (F5.3). With
+	// them off this is null and everything below is what it always was.
+	USimAirCampaignSubsystem* MutableSub = Campaign();
+	const simcore::command::SituationMap* Sit = MutableSub != nullptr ? MutableSub->GetRegimentSituation() : nullptr;
 	// Bounds: our objects and the active front with its entry points.
 	FVector2D Lo(1e18, 1e18);
 	FVector2D Hi(-1e18, -1e18);
@@ -663,6 +667,17 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		for (const EntryPoint& E : Front->entries)
 		{
 			Grow(E.pos.x, E.pos.y);
+		}
+	}
+	if (Sit != nullptr)
+	{
+		for (const simcore::command::MapLinePoint& Lp : Sit->line)
+		{
+			Grow(Lp.x, Lp.y);
+		}
+		for (const simcore::command::MapSam& Ms : Sit->sams)
+		{
+			Grow(Ms.x, Ms.y);
 		}
 	}
 	const FVector2D Pad = (Hi - Lo) * 0.06 + FVector2D(5000.0, 5000.0);
@@ -784,9 +799,77 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		}
 	}
 
+	if (Sit != nullptr)
+	{
+		// The front as the regiment holds it: the base line faintly (the line the war began on), the line of contact as last
+		// reported over it, red where the report is current and dim where it is stale; each held axis named with the hour of
+		// the report. The enemy's entry points and the other fronts are the enemy's plan and are not drawn.
+		if (Front != nullptr)
+		{
+			for (int32 I = 0; I + 1 < static_cast<int32>(Front->line.size()); ++I)
+			{
+				MapLine(ToScreen(Front->line[I].x, Front->line[I].y), ToScreen(Front->line[I + 1].x, Front->line[I + 1].y),
+					FLinearColor(0.5f, 0.3f, 0.3f, 0.35f), 1.0f);
+			}
+		}
+		auto SectorStale = [&](int32 Sector)
+		{
+			bool bAny = false;
+			for (const simcore::command::MapAxis& Ax : Sit->axes)
+			{
+				if (Ax.sector == Sector)
+				{
+					if (!Ax.mark.stale)
+					{
+						return false;
+					}
+					bAny = true;
+				}
+			}
+			return bAny;
+		};
+		const int32 Points = static_cast<int32>(Sit->line.size());
+		for (int32 I = 0; I + 1 < Points; ++I)
+		{
+			const simcore::command::MapLinePoint& A = Sit->line[I];
+			const simcore::command::MapLinePoint& B = Sit->line[I + 1];
+			const bool bStale = SectorStale(A.sector) && SectorStale(B.sector);
+			MapLine(ToScreen(A.x, A.y), ToScreen(B.x, B.y), bStale ? FLinearColor(0.6f, 0.35f, 0.3f, 0.6f) : CRed, 3.0f);
+		}
+		for (const simcore::command::MapAxis& Ax : Sit->axes)
+		{
+			if (!(Ax.depth_m > 0.0))
+			{
+				continue;
+			}
+			// The label goes at the deepest point of the line in the axis's sector.
+			const simcore::command::MapLinePoint* Deepest = nullptr;
+			for (const simcore::command::MapLinePoint& Lp : Sit->line)
+			{
+				if (Lp.sector == Ax.sector && (Deepest == nullptr || Lp.depth_m > Deepest->depth_m))
+				{
+					Deepest = &Lp;
+				}
+			}
+			if (Deepest != nullptr)
+			{
+				const FVector2D P = ToScreen(Deepest->x, Deepest->y);
+				if (Inside(P, 6.0f))
+				{
+					Label(FString::Printf(TEXT("%s: %.0f km in, reported %s%s"), *CampaignToF(Ax.name), Ax.depth_m / 1000.0,
+							  *CampaignToF(FormatHour(Ax.mark.h, Th.start_hour)), Ax.mark.stale ? TEXT(" (stale)") : TEXT("")),
+						Ax.mark.stale ? CDim : CRed, P.X + 8.0f, P.Y - 6.0f);
+				}
+			}
+		}
+	}
 	// The other fronts faintly, the enemy's front in red with its entry points.
 	for (const FrontDef& F : Th.fronts)
 	{
+		if (Sit != nullptr)
+		{
+			break;
+		}
 		const bool bActive = &F == Front;
 		for (int32 I = 0; I + 1 < static_cast<int32>(F.line.size()); ++I)
 		{
@@ -795,7 +878,7 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 			MapLine(A, B, bActive ? CRed : FLinearColor(0.5f, 0.3f, 0.3f, 0.35f), bActive ? 3.0f : 1.0f);
 		}
 	}
-	if (Front != nullptr)
+	if (Front != nullptr && Sit == nullptr)
 	{
 		for (const EntryPoint& E : Front->entries)
 		{
@@ -850,6 +933,19 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		{
 			continue;
 		}
+		if (Sit != nullptr)
+		{
+			// A unit that moves on orders is drawn where the regiment holds it, below, not where the war has it.
+			bool bHeld = false;
+			for (const simcore::command::MapSam& Ms : Sit->sams)
+			{
+				bHeld = bHeld || Ms.id == O.id;
+			}
+			if (bHeld)
+			{
+				continue;
+			}
+		}
 		// The player's map holds where our side's objects are, not how they stand: damage only as it was reported.
 		const FLinearColor Col(0.55f, 0.62f, 0.55f, 0.8f);
 		if (IsAirDefence(O.kind))
@@ -866,6 +962,30 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 		{
 			DrawLine(P.X - 6.0f, P.Y - 6.0f, P.X + 6.0f, P.Y + 6.0f, CRed, 2.0f);
 			DrawLine(P.X - 6.0f, P.Y + 6.0f, P.X + 6.0f, P.Y - 6.0f, CRed, 2.0f);
+		}
+	}
+	if (Sit != nullptr)
+	{
+		// Our SAM units where the regiment holds them: the plan, the last move ordered, or reported ready there, with the
+		// hour of the mark; a stale one is dim.
+		for (const simcore::command::MapSam& Ms : Sit->sams)
+		{
+			if (Player >= 0 && Ms.id == Th.objects[Player].id)
+			{
+				continue;
+			}
+			const FVector2D P = ToScreen(Ms.x, Ms.y);
+			if (!Inside(P, 4.0f))
+			{
+				continue;
+			}
+			const FLinearColor Col = Ms.mark.stale ? FLinearColor(0.45f, 0.5f, 0.45f, 0.6f) : FLinearColor(0.55f, 0.62f, 0.55f, 0.9f);
+			Diamond(P, 4.0f, Col, Ms.basis != "plan");
+			if (Ms.basis != "plan")
+			{
+				Label(CampaignToF(Ms.name) + (Ms.basis == "ordered" ? TEXT(" (ordered ") : TEXT(" (reported ")) +
+						CampaignToF(FormatHour(Ms.mark.h, Th.start_hour)) + TEXT(")"), Col, P.X + 6.0f, P.Y - 6.0f);
+			}
 		}
 	}
 	// The district's villages and the posts of the chain of command (data/command/places_pannonia.json).
@@ -928,6 +1048,57 @@ void ASimCampaignHUD::DrawMap(float X, float Y, float W, float H)
 			? TEXT("M: march here, ") + MarchText(MarkMarchH)
 			: FString(TEXT("M: move here"));
 		Label(bOk ? MoveHere : CampaignToF(Why), Col, M.X + 9.0f, M.Y + 4.0f);
+	}
+	if (Sit != nullptr)
+	{
+		// The regiment's paper (F5.3): our units and the enemy as reported to it, and the air defence staff's conclusion on the
+		// enemy's air front if one reached it; each line with the hour it was made and its age, a stale one dim. The map has no
+		// place for a ground unit but its sector, so these are listed, not drawn at a point.
+		TArray<TPair<FString, FLinearColor>> Lines;
+		const double StartH = Th.start_hour;
+		auto Age = [&](const simcore::command::SituationMark& M)
+		{
+			return FString::Printf(TEXT("%s, %.0f h old%s"), *CampaignToF(FormatHour(M.h, StartH)), M.age_h, M.stale ? TEXT(", stale") : TEXT(""));
+		};
+		Lines.Add({FString::Printf(TEXT("The regiment's map (%s)"), *CampaignToF(Sit->post)), CPaper});
+		for (const simcore::command::MapUnit& U : Sit->ours)
+		{
+			Lines.Add({FString::Printf(TEXT("%s %.0f%%%s  %s"), *CampaignToF(U.name), U.fraction * 100.0, U.out ? TEXT(" out of the fight") : TEXT(""), *Age(U.mark)),
+				U.mark.stale ? CDim : CGreen});
+		}
+		for (const simcore::command::MapEnemy& E : Sit->enemy)
+		{
+			Lines.Add({FString::Printf(TEXT("Enemy %s %.0f%%%s  %s"), *CampaignToF(E.name), E.fraction * 100.0, E.out ? TEXT(" out") : TEXT(""), *Age(E.mark)),
+				E.mark.stale ? CDim : CRed});
+		}
+		if (Sit->air_front.empty())
+		{
+			Lines.Add({FString(TEXT("No staff conclusion on the enemy's air front has reached the regiment")), CDim});
+		}
+		for (const simcore::command::MapAirFront& A : Sit->air_front)
+		{
+			Lines.Add({FString::Printf(TEXT("Enemy air front, %s: %.0f km deep, the air defence staff's conclusion, %s"), *CampaignToF(A.sector_name),
+						  A.depth_m / 1000.0, *Age(A.mark)), A.mark.stale ? CDim : CAmber});
+		}
+		const int32 MaxLines = 14;
+		const float LineH = 14.0f;
+		const int32 Shown = FMath::Min(Lines.Num(), MaxLines);
+		float Bw = 0.0f;
+		for (int32 I = 0; I < Shown; ++I)
+		{
+			float Tw = 0.0f;
+			float Th2 = 0.0f;
+			GetTextSize(Lines[I].Key, Tw, Th2, Small);
+			Bw = FMath::Max(Bw, Tw);
+		}
+		Bw = FMath::Min(Bw + 12.0f, MapBox.Max.X - MapBox.Min.X - 8.0f);
+		const float Bx = MapBox.Min.X + 4.0f;
+		const float By = MapBox.Max.Y - 4.0f - Shown * LineH - 4.0f;
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.02f, 0.82f), Bx, By, Bw, Shown * LineH + 6.0f);
+		for (int32 I = 0; I < Shown; ++I)
+		{
+			DrawText(Lines[I].Key, Lines[I].Value, Bx + 6.0f, By + 3.0f + I * LineH, Small);
+		}
 	}
 }
 
