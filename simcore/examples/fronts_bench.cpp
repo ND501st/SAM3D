@@ -6,7 +6,7 @@
 //        fronts_bench [data_dir] --watch [--days N] [--seeds N] [--sectors N] [--theatre file] [faction ...]
 //        fronts_bench [data_dir] --feed [--days N] [--seeds N] [--theatre file] [--gate] [faction ...]
 //        fronts_bench [data_dir] --ad [--days N] [--seeds N] [--theatre file] [--gate] [--log] [--no-fighters] [faction ...]
-//        fronts_bench [data_dir] --map post[,post...] [--days N] [--seeds N] [--theatre file] [faction ...]
+//        fronts_bench [data_dir] --map post[,post...] [--map-json out.json] [--days N] [--seeds N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
 //   --sectors equal sectors (default 8, the most the design gives a front; 0: the theatre's own). At each day's end the
@@ -76,6 +76,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <ctime>
 #include <map>
 #include <memory>
@@ -1052,7 +1053,49 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
 }  // namespace
 
 // --map: the situation maps of some posts at the end of a campaign with every front mode on, against the truth.
-int MapMain(const std::string& data, const std::string& theatre, int days, int seeds, const std::string& posts_arg, const std::vector<std::string>& factions) {
+// The truth at the end of a day, for map_view.py --front (this bench only): the line of contact at every station of the base line,
+// the air front's depth by sector, the formations where they are.
+static json::Value TruthDayValue(const AirCampaign& c, int day) {
+    using namespace airwar::jsonb;
+    json::Value d = Obj();
+    Put(d, "day", Num(day));
+    Put(d, "hour", Num(c.Now()));
+    const LineOfContact& line = c.FrontLine();
+    json::Value offs = Arr(), pts = Arr();
+    for (std::size_t i = 0; i < line.StationCount(); ++i) {
+        Push(offs, Num(line.StationOffset(i)));
+        const Vec3 p = line.ContactPoint(i);
+        json::Value xy = Arr();
+        Push(xy, Num(p.x));
+        Push(xy, Num(p.y));
+        Push(pts, xy);
+    }
+    Put(d, "offset_m", offs);
+    Put(d, "line", pts);
+    json::Value af = Arr();
+    for (double depth : c.AirFrontDepths()) Push(af, Num(depth));
+    Put(d, "air_front_m", af);
+    json::Value fs = Arr();
+    if (const groundwar::GroundWar* g = c.Ground()) {
+        for (const groundwar::Formation& f : g->Formations()) {
+            json::Value j = Obj();
+            Put(j, "name", Str(f.name));
+            Put(j, "kind", Str(f.kind));
+            Put(j, "ours", Bool(f.unit.side == groundwar::Side::Ours));
+            Put(j, "x", Num(f.pos.x));
+            Put(j, "y", Num(f.pos.y));
+            Put(j, "fraction", Num(f.unit.Fraction()));
+            Put(j, "axis", Num(f.axis));
+            Put(j, "spent", Bool(f.spent));
+            Push(fs, j);
+        }
+    }
+    Put(d, "formations", fs);
+    return d;
+}
+
+int MapMain(const std::string& data, const std::string& theatre, int days, int seeds, const std::string& posts_arg, const std::vector<std::string>& factions,
+            const std::string& json_path = std::string()) {
     command::ChainData chain;
     command::OwnAirDef own_air;
     std::string e;
@@ -1074,6 +1117,7 @@ int MapMain(const std::string& data, const std::string& theatre, int days, int s
         }
     }
     const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato"} : factions;
+    json::Value runs = airwar::jsonb::Arr();
     for (const std::string& faction : list) {
         AirWarData d;
         if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
@@ -1093,13 +1137,26 @@ int MapMain(const std::string& data, const std::string& theatre, int days, int s
             command::CampaignFeed feed;
             feed.Bind(&net);
             c.SetOrderSource(feed.OrderSource());
-            while (c.Now() < days * 24.0) {
-                if (c.Advance(days * 24.0)) c.SkipPlayerMission();
-                feed.Pump(c);
+            json::Value truth_days = airwar::jsonb::Arr();
+            if (json_path.empty()) {
+                while (c.Now() < days * 24.0) {
+                    if (c.Advance(days * 24.0)) c.SkipPlayerMission();
+                    feed.Pump(c);
+                }
+            } else {
+                // the same war, stopped at each day's end to write the truth of the day (the dump's, not the player's)
+                for (int day = 0; day <= days; ++day) {
+                    while (c.Now() < day * 24.0) {
+                        if (c.Advance(day * 24.0)) c.SkipPlayerMission();
+                        feed.Pump(c);
+                    }
+                    airwar::jsonb::Push(truth_days, TruthDayValue(c, day));
+                }
             }
             c.SetOrderSource(nullptr);
             const command::SituationLayout layout = command::SituationLayoutOf(c, &feed.Ad(), &own_air);
             const groundwar::GroundWar* g = c.Ground();
+            json::Value posts_json = airwar::jsonb::Obj();
             std::printf("==== %s, seed %u, %d days (hour %.1f): the ground war %s, %zu axes, %zu reports, %zu orders, %zu summaries\n", faction.c_str(), seed, days, c.Now(),
                         feed.Ground().On() ? "on" : "off", layout.axes.size(), feed.Ground().Reports().size(), feed.Ground().Orders().size(), feed.Ground().Summaries().size());
             std::set<std::string> dumps;
@@ -1109,6 +1166,7 @@ int MapMain(const std::string& data, const std::string& theatre, int days, int s
                 command::BuildSituationMap(net, feed, layout, pi, m);
                 std::printf("\n%s", command::SituationMapText(m, d.theatre.start_hour).c_str());
                 dumps.insert(command::SituationMapJson(m));
+                airwar::jsonb::Put(posts_json, post, command::SituationMapValue(m));
                 // against the truth (this bench only)
                 if (g != nullptr) {
                     std::printf("  against the truth (axis: reported / true depth, km; age of the report, h):\n");
@@ -1144,13 +1202,68 @@ int MapMain(const std::string& data, const std::string& theatre, int days, int s
                             m.axes.size() + m.ours.size() + m.enemy.size() + m.priorities.size() + m.air_front.size() + m.sams.size() + m.orders.size());
             }
             std::printf("\n%zu posts, %zu different maps\n\n", posts.size(), dumps.size());
+            if (!json_path.empty()) {
+                using namespace airwar::jsonb;
+                json::Value run = Obj();
+                Put(run, "faction", Str(faction));
+                Put(run, "seed", Num(seed));
+                Put(run, "days", Num(days));
+                Put(run, "start_hour", Num(d.theatre.start_hour));
+                Put(run, "end_hour", Num(c.Now()));
+                json::Value base = Arr(), sectors = Arr(), stations = Arr();
+                for (const Vec3& p : c.FrontLine().BaseLine()) {
+                    json::Value xy = Arr();
+                    Push(xy, Num(p.x));
+                    Push(xy, Num(p.y));
+                    Push(base, xy);
+                }
+                for (const SectorDef& sd : c.FrontLine().Sectors()) {
+                    json::Value j = Obj();
+                    Put(j, "id", Str(sd.id));
+                    Put(j, "name", Str(sd.name.empty() ? sd.id : sd.name));
+                    Put(j, "from_m", Num(sd.from_m));
+                    Put(j, "to_m", Num(sd.to_m));
+                    Push(sectors, j);
+                }
+                for (std::size_t i = 0; i < c.FrontLine().StationCount(); ++i) {
+                    const double along = c.FrontLine().StationAlong(i);
+                    const Vec3 b = c.FrontLine().PointAt(along), n = c.FrontLine().InwardNormal(along);
+                    json::Value j = Obj();
+                    Put(j, "along_m", Num(along));
+                    Put(j, "x", Num(b.x));
+                    Put(j, "y", Num(b.y));
+                    Put(j, "nx", Num(n.x));
+                    Put(j, "ny", Num(n.y));
+                    Put(j, "sector", Num(c.FrontLine().SectorAt(along)));
+                    Push(stations, j);
+                }
+                Put(run, "base_line", base);
+                Put(run, "sectors", sectors);
+                Put(run, "stations", stations);
+                Put(run, "truth", truth_days);
+                Put(run, "posts", posts_json);
+                Push(runs, run);
+            }
         }
+    }
+    if (!json_path.empty()) {
+        json::Value root = airwar::jsonb::Obj();
+        airwar::jsonb::Put(root, "kind", airwar::jsonb::Str("fronts_map"));
+        airwar::jsonb::Put(root, "runs", runs);
+        std::ofstream f(json_path, std::ios::binary);
+        if (!f) {
+            std::printf("cannot write %s\n", json_path.c_str());
+            return 1;
+        }
+        f << airwar::jsonb::Dump(root, 0, 17);
+        f.close();
+        std::printf("wrote %s\n", json_path.c_str());
     }
     return 0;
 }
 
 int main(int argc, char** argv) {
-    std::string data = "data", theatre = "theatre_pannonia_nation.json", player, map_posts;
+    std::string data = "data", theatre = "theatre_pannonia_nation.json", player, map_posts, map_json;
     int days = 7, seeds = 3, sectors = 8, campaign_days = 10, campaign_seeds = 1;
     bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false, ground = false, gate = false,
          days_given = false, seeds_given = false, feed = false, ad = false;
@@ -1179,6 +1292,8 @@ int main(int argc, char** argv) {
             ad = true;
         } else if (a == "--map" && i + 1 < argc) {
             map_posts = argv[++i];
+        } else if (a == "--map-json" && i + 1 < argc) {
+            map_json = argv[++i];
         } else if (a == "--no-fighters") {
             g_no_fighters = true;
         } else if (a == "--moves") {
@@ -1202,7 +1317,7 @@ int main(int argc, char** argv) {
             factions.push_back(a);
         }
     }
-    if (!map_posts.empty()) return MapMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 1, map_posts, factions);
+    if (!map_posts.empty()) return MapMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 1, map_posts, factions, map_json);
     if (ad) return AdMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (feed) return FeedMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions, player);

@@ -183,6 +183,13 @@ public:
 	 *  Null if the chain of command's data did not load. C++ only. */
 	const simcore::command::InfoNet* GetInfoNet() const { return Net.Get(); }
 
+	/** Our side's picture of the front as the battery's regiment holds it (track F, F5.3; simcore/command/campaign_situation.hpp):
+	 *  the line of contact as last reported, our units and the enemy as reported, the air defence staff's conclusion on the
+	 *  enemy's air front if one reached the regiment, each mark with its date and age. Built from the pipeline's facts and the
+	 *  feed's records only, never from the war's state. Null with the fronts off (the screen then draws what it always did) or
+	 *  without the pipeline. Valid until the campaign next steps. C++ only. */
+	const simcore::command::SituationMap* GetRegimentSituation();
+
 	/** The post the player's character holds in the chain of command (data/command/chain_pannonia.json). */
 	UFUNCTION(BlueprintPure, Category = "SAM3D|AirWar")
 	FString GetPlayerPost() const;
@@ -217,6 +224,8 @@ private:
 	TUniquePtr<simcore::airwar::MissionBridge> Bridge;
 	TUniquePtr<simcore::command::InfoNet> Net;
 	TUniquePtr<simcore::command::CampaignFeed> Feed;
+	/** The regiment's situation map for the campaign screen (F5.3), rebuilt only when the pipeline's facts change. */
+	simcore::command::CampaignSituation Situation;
 	/** The country's roads and the battery's march tactics for its moves to a new position (G9.5; loaded on first use). */
 	TUniquePtr<simcore::nav::SessionNav> Roads;
 	TUniquePtr<simcore::BatteryTactics> RoadTactics;

@@ -153,3 +153,48 @@ no fronts, no maps (an empty map, an unknown post); a fronts session's debrief e
 - A commander's sector priorities are shown to the posts he is for or whose orders reached them; the air defence staff's conclusions only where the post is in
   their audience (F2.5).
 - The debrief prints the maps as text and does not set the truth's line beside the belief (that is `fronts_bench --map`'s and F5.3's `tools/map_view.py --front`).
+
+## As built: F5.3 (23 Nov 2026)
+
+The campaign screen of section 3 and the developer's view of section 4. Simcore gained one new header and a bench option; the Unreal side is written and
+compile-checked by reading only (the owner builds and looks). It changes no simulation: nothing in the war reads any of it.
+
+**The screen's source** (`command/campaign_situation.hpp`, new; `CampaignSituation`): the layout (`SituationLayoutOf`, the war's static data) and the cached
+maps (`SituationMaps`) for a caller that holds the campaign, the net and the feed. `RegimentMap` is the map of the feed's regiment post
+(`feed.Ground().Roles().regiment`, as `MissionSession::FrontsDebrief` finds it); `MapFor` any post. **With the fronts off** (`feed.Ground().On()` false: no ground
+war) both give null, and nothing is built. The layout is rebuilt once when the strategy turns on at the first pump. Nothing here reads the campaign's state.
+
+**Unreal.** `USimAirCampaignSubsystem` already kept the net and the feed (it pumps them after every step); it gains `GetRegimentSituation()` (a `CampaignSituation`,
+reset with the net in `StartInfoNet`). `ASimCampaignHUD::DrawMap`, where that is non-null (any front mode on):
+- the enemy's entry points and the other fronts are not drawn (they are the enemy's air plan); the base line is drawn faintly and over it **the line of
+  contact as the regiment holds it** (`SituationMap::line`), red where its sector's report is current and dim where every axis report of the sector is stale, each
+  axis labelled with its depth and the hour of the report ("(stale)" past 14 h);
+- our SAM units that move on orders are drawn where the regiment holds them (the plan faint, a move ordered or reported ready filled and labelled with the hour),
+  not where the war has them (`Truth()`); the player's own battery, the towns and the fixed sites are as before;
+- a paper in the map's lower left: our units' strength and the enemy as reported, each with its hour, its age and "stale", then the air defence staff's conclusion
+  on the enemy's air front by sector if one reached the regiment ("No staff conclusion ... has reached the regiment" if none). The enemy's air front is never drawn.
+With the fronts off, `Sit` is null and every branch is skipped: the screen is as it was.
+
+**`tools/map_view.py --front fronts_map.json`** (with the country's dump): two country drawings side by side, the truth (the line of contact on each day, paler for
+older days; the air front by sector as the line plus its depth; the formations where they are) and the belief of a post (`--post`, default the national sector's: the
+line as reported, dashed and pale where stale, each axis with its hour and age, the staff's air front conclusion, our SAM units as it has them, its units and the
+enemy as a list, and the mean and worst distance of its line from the truth's). `--run`, `--day`, `--png` (two files). `fronts_bench ... --map post,... --map-json
+out.json` writes the file: per run the base line, sectors and stations, the truth at the end of every day (when this option is given the campaign is stopped at each day's
+end to read it; the bench's printed numbers are the same) and each post's map (`SituationMapValue`).
+
+**Tests.** `test_campaign_situation.cpp` (2): the regiment's map is the one the regiment's post builds from its facts, byte for byte, every mark's fact held by the post,
+the air front only as a staff's conclusion with its key and hour, cached between asks, the army's map different, an unknown post null, an hour on the marks as old
+or older; with the fronts off, no map and no build. `tools/tests/test_map_view.py` (+3): the truth's drawing (last day red, earlier days paler, the air front, the
+formations, a spent one not drawn, an unknown day refused), the belief's (stale dashed, no truth in it, the plan's mark not a move, the error against the truth
+exact on a small fixture, an unknown post lists the posts), the page and the CLI.
+
+**Left:**
+- Unreal is unbuilt and unseen: the owner builds and looks at the screen with a campaign under the fronts and with them off.
+- A ground unit has no place on the regiment's map but its sector, so the screen lists the units and the enemy instead of marking them; the line by station and the
+  enemy's units in contact as places are F3.8's and F5.1's left.
+- The paper does not scroll and shows 14 lines; the sector priorities, orders held and radar and warning posts' marks are not on the screen (they are the PU-12M working
+  map's, 14.4).
+- The sky's sharing is not given to the screen's layout (no own-air definition is loaded by the campaign subsystem); the screen does not show it.
+- The campaign screen reads the regiment's map; the player's own post (`GetPlayerPost`) may differ and its map is not used: the regiment is the highest post the
+  player's character could have learnt it from (section 3).
+- `map_view --front` draws the end of a headless run, not a live campaign; nothing sends the live campaign's maps to the developer's tool.

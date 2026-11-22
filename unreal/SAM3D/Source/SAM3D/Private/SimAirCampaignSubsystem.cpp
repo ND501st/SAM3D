@@ -103,6 +103,7 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 {
 	Net.Reset();
 	Feed.Reset();
+	Situation.Reset();
 	if (!Campaign.IsValid())
 	{
 		return;
@@ -247,6 +248,15 @@ void USimAirCampaignSubsystem::Stepped()
 		Campaign->NoteTransmissions(Feed->BatteryCalls());
 	}
 	SaveCampaign();
+}
+
+const simcore::command::SituationMap* USimAirCampaignSubsystem::GetRegimentSituation()
+{
+	if (!Net.IsValid() || !Feed.IsValid() || !Campaign.IsValid())
+	{
+		return nullptr;
+	}
+	return Situation.RegimentMap(*Campaign, *Net, *Feed);
 }
 
 FString USimAirCampaignSubsystem::GetPlayerPost() const
