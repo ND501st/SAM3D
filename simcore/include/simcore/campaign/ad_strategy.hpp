@@ -25,6 +25,12 @@
 // chief's), which the pipeline carries with its delays. F4.1 only decides and orders: F4.2 moves units on the orders,
 // F4.3 shares the fighters by sector (PriorityShares), F4.4 gives the regiment's tasking a trigger (PriorityKnownBy).
 //
+// F4.3: the fighter regiment's duty by sector follows the national sector's commander's priorities only as its duty
+// officer's post holds them (his orders that reached it, his pre-war plan as the plan of cooperation held before the war):
+// the campaign hears each change through the order source (Heard, a UnitOrder with fighter_shares) and shares the front's
+// fighters by it (AirCampaign::FighterCoverAt). The sky's sharing in a sector follows the priority a post holds the same
+// way (SharingKnownBy, own_air.json's "sky_by_sector").
+//
 // Only at ad_strategy.mode 1 (data/gameplay/air_war.json), on a front with a line, with the commanders' posts in the
 // chain; at 0 nothing is loaded, read or added. Cheap: nothing per step; at a decision hour each source is read from a
 // cursor (what is new) and a short list of what has not yet reached the post; the picture is a pass over the sectors'
@@ -39,6 +45,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -104,6 +111,7 @@ struct AdRules {
 struct AdStrategyData {
     AdRules rules;
     std::vector<AdCommanderDef> commanders;
+    airwar::FighterCoverRules fighters;  // the "fighters" block (F4.3; absent: the fighters stay the front's number)
 };
 
 namespace detail {
@@ -111,7 +119,8 @@ namespace detail {
 class AdStrategyLoader : public simcore::detail::ConsoleLoader {
 public:
     bool Load(const json::Value& root, AdStrategyData& out) {
-        if (!Keys(root, "", {"strategy_id", "name", "status", "source", "confidence", "notes", "rules", "commanders", "moves"}) || !Provenance(root, "")) {
+        if (!Keys(root, "", {"strategy_id", "name", "status", "source", "confidence", "notes", "rules", "commanders", "moves", "fighters"}) ||
+            !Provenance(root, "")) {
             return false;
         }
         const json::Value* rules = root.Find("rules");
@@ -126,6 +135,19 @@ public:
                 if (o.id == c.id) return Fail(Index("commanders", i), "duplicate id '" + c.id + "'");
             }
             out.commanders.push_back(c);
+        }
+        std::string fe;
+        if (!airwar::LoadFighterCoverBlock(root, out.fighters, &fe)) return Fail("fighters", fe);
+        if (out.fighters.present) {
+            bool found = false;
+            for (const AdCommanderDef& c : out.commanders) {
+                if (c.id != out.fighters.commander) continue;
+                found = true;
+                if (std::find(c.to.begin(), c.to.end(), out.fighters.post) == c.to.end()) {
+                    return Fail("fighters.post", "'" + out.fighters.post + "' is not among the posts commander '" + c.id + "' orders");
+                }
+            }
+            if (!found) return Fail("fighters.commander", "no commander '" + out.fighters.commander + "'");
         }
         return true;
     }
@@ -538,7 +560,7 @@ public:
     // source: CampaignFeed::OrderSource()); each given once. *next_h: when to ask again (the next hour while an order is
     // on its way, else the next commander's decision).
     void Heard(const airwar::AirCampaign& c, std::vector<airwar::UnitOrder>& out, double* next_h) {
-        if (!on_ || units_.empty()) {
+        if (!on_ || (units_.empty() && fighter_cmd_ < 0)) {
             if (next_h != nullptr) *next_h = 1e18;
             return;
         }
@@ -559,7 +581,24 @@ public:
             waiting_[keep++] = waiting_[q];
         }
         waiting_.resize(keep);
-        if (next_h != nullptr) *next_h = waiting_.empty() ? std::max(c.Now() + 1.0, std::ceil(next_any_h_ - 1e-9)) : c.Now() + 1.0;
+        const bool fighters_waiting = FightersHeard(c, out);
+        if (next_h != nullptr) {
+            *next_h = waiting_.empty() && !fighters_waiting ? std::max(c.Now() + 1.0, std::ceil(next_any_h_ - 1e-9)) : c.Now() + 1.0;
+        }
+    }
+
+    // ------------------------------------------------------------ our fighters by sector on his orders (F4.3)
+
+    // The commander whose priorities share the fighters and the fighter regiment's post (-1: off).
+    int FighterCommander() const { return fighter_cmd_; }
+    int FighterPost() const { return fighter_post_; }
+    // The priorities the fighter regiment's post held when the campaign last heard them (empty: none given yet).
+    const std::vector<SectorPriority>& FighterPriorities() const { return fighter_told_; }
+    // The sky's sharing in a sector as a post holds it (own_air.json "sky_by_sector", docs/fronts/04_AIR_DEFENCE_STRATEGY.md
+    // section 5): the method for the priority the post holds from commander k (PriorityKnownBy, its hour in *h). Without
+    // the block: by zones, the cooperation's default.
+    command::CooperationMethod SharingKnownBy(int k, int position, int sector, const command::OwnAirDef& d, double* h = nullptr) const {
+        return command::SharingFor(d.sky, SectorPriorityName(PriorityKnownBy(k, position, sector, h)));
     }
 
     // Each commander's decisions due by now, on what reached his post: after the feed added the campaign's facts and
@@ -664,6 +703,50 @@ private:
         int pending = -1;        // the move he ordered and has no report of yet (move_orders_), -1 none
         std::vector<double> ordered_h;  // his orders to it, the hours decided
     };
+    // The fighter regiment's post's priorities by the campaign's hour: his orders on each sector that reached it by then
+    // (the newest of each), the rest his pre-war plan (held before the war when the data says so, else only from his first
+    // order on). A change from what was last given goes out as the regiment's duty (a UnitOrder with fighter_shares, its key
+    // the newest order held). True while one of his orders newer than stale_h is still on its way to the post.
+    bool FightersHeard(const airwar::AirCampaign& c, std::vector<airwar::UnitOrder>& out) {
+        if (fighter_cmd_ < 0 || !c.FighterCoverOn()) return false;
+        const double now = c.Now();
+        std::vector<SectorPriority> known = PreWar(fighter_cmd_);
+        std::vector<char> ordered(known.size(), 0);
+        bool waiting = false, any = false;
+        double heard_h = -1.0;
+        std::string key;
+        for (std::size_t i = decisions_.size(); i-- > 0;) {
+            const AdDecision& d = decisions_[i];
+            if (d.commander != fighter_cmd_ || d.fact < 0 || d.sector < 0 || static_cast<std::size_t>(d.sector) >= known.size()) continue;
+            const command::Delivery* got = net_->Known(fighter_post_, d.fact);
+            if (got == nullptr || got->h > now + 1e-9) {
+                waiting = waiting || now - d.h < data_.rules.stale_h;
+                continue;
+            }
+            any = true;
+            if (got->h > heard_h) {
+                heard_h = got->h;
+                key = d.key;
+            }
+            if (ordered[static_cast<std::size_t>(d.sector)] != 0) continue;
+            ordered[static_cast<std::size_t>(d.sector)] = 1;
+            known[static_cast<std::size_t>(d.sector)] = d.to;
+        }
+        if (!any && !data_.fighters.prewar_held) return waiting;
+        if (fighter_given_ && known == fighter_told_) return waiting;
+        airwar::UnitOrder u;
+        u.key = any ? key : "ad_plan:" + Def(fighter_cmd_).id;
+        if (fighter_keys_.count(u.key) > 0) u.key += "#" + std::to_string(fighter_keys_.size());
+        fighter_keys_.insert(u.key);
+        u.unit = data_.fighters.post;
+        u.heard_h = any ? heard_h : std::min(now, 0.0);
+        u.fighter_shares = PriorityShares(known, data_.rules);
+        out.push_back(u);
+        fighter_told_ = known;
+        fighter_given_ = true;
+        return waiting;
+    }
+
     // An axis as a commander believes it (BelieveLine).
     struct BelievedAxis {
         double along_m = 0.0, half_width_m = 0.0, taper_m = 0.0, depth_m = 0.0;
@@ -696,6 +779,12 @@ private:
     std::vector<int> moves_open_;     // of those, not ready yet
     std::vector<BelievedAxis> believed_;  // the line as the deciding commander believes it (BelieveLine)
     bool by_axis_ = false;
+    // F4.3
+    int fighter_cmd_ = -1;                     // the commander whose priorities share the fighters
+    int fighter_post_ = -1;                    // the fighter regiment's duty officer's position
+    bool fighter_given_ = false;
+    std::vector<SectorPriority> fighter_told_; // the priorities last given to the campaign
+    std::set<std::string> fighter_keys_;
 
     void Reset() {
         ready_ = on_ = false;
@@ -718,6 +807,10 @@ private:
         waiting_.clear();
         moves_seen_ = 0;
         moves_open_.clear();
+        fighter_cmd_ = fighter_post_ = -1;
+        fighter_given_ = false;
+        fighter_told_.clear();
+        fighter_keys_.clear();
     }
 
     // On at ad_strategy.mode 1 on a front with a line, with the data and the commanders' posts; decided once. The
@@ -773,6 +866,15 @@ private:
             return false;
         }
         ReadyUnits(c);
+        // The fighters (F4.3): his orders heard at the fighter regiment's duty officer's post.
+        if (c.FighterCoverOn() && data_.fighters.present) {
+            const int k = CommanderIndex(data_.fighters.commander);
+            const int post = d.PositionIndex(data_.fighters.post);
+            if (k >= 0 && post >= 0 && runs_[static_cast<std::size_t>(k)].post >= 0) {
+                fighter_cmd_ = k;
+                fighter_post_ = post;
+            }
+        }
         on_ = true;
         return true;
     }

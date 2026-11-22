@@ -102,12 +102,27 @@ struct UnitMove {
     }
 };
 
-// An order to move as the unit's commander heard it: our pipeline's (campaign/ad_strategy.hpp), or a caller's.
+// An order to move as the unit's commander heard it: our pipeline's (campaign/ad_strategy.hpp), or a caller's. With
+// fighter_shares (track F, F4.3) it is no move: the fighter regiment's duty by sector as its post now holds its commander's
+// priorities, the share of the front's fighters each sector is given (`unit` the regiment's post).
 struct UnitOrder {
     std::string key;
     std::string unit;   // the theatre object's id
     Vec3 to;
     double heard_h = 0.0;
+    std::vector<double> fighter_shares;
+};
+
+// Our fighters by sector (track F, F4.3; docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5; data/campaign/ad_strategy.json
+// "fighters"): whose priorities share them, the post where the fighter regiment hears his orders, and the campaign's values.
+struct FighterCoverRules {
+    bool present = false;
+    std::string post = "fighter_rgt_duty";      // the fighter regiment's duty officer's post
+    std::string commander = "sector_commander"; // the commander whose orders it takes (campaign/ad_strategy.hpp's id)
+    bool prewar_held = true;                    // it holds his pre-war plan from the war's start (the plan of cooperation)
+    double cap = 1.0;                           // a sector's cover at most (the front's number is a threat, 0..1)
+    double belief_learn = 0.5;                  // the enemy's belief of a sector's cover moves this share of the way to it
+                                                // with each of its packages debriefed there
 };
 
 class AirCampaign;
@@ -217,7 +232,56 @@ private:
     }
 };
 
+class FighterCoverLoader : public simcore::detail::ConsoleLoader {
+public:
+    bool Load(const json::Value& f, FighterCoverRules& out) {
+        const std::string p = "fighters";
+        if (!f.Is(json::Type::Object) || !Keys(f, p, {"post", "commander", "prewar_held", "cap", "belief_learn", "source", "confidence", "notes"}) ||
+            !Provenance(f, p) || !RequireString(f, p, "post", out.post) || !RequireString(f, p, "commander", out.commander) ||
+            !OptionalBool(f, p, "prewar_held", out.prewar_held) || !Valued(f, p, "cap", out.cap) || !Valued(f, p, "belief_learn", out.belief_learn)) {
+            return false;
+        }
+        if (!(out.cap > 0.0) || out.cap > 1.0) return Fail(Join(p, "cap"), "in (0, 1]");
+        if (out.belief_learn < 0.0 || out.belief_learn > 1.0) return Fail(Join(p, "belief_learn"), "in [0, 1]");
+        out.present = true;
+        return true;
+    }
+
+private:
+    bool Valued(const json::Value& obj, const std::string& path, const char* key, double& out) {
+        const json::Value* v = obj.Find(key);
+        if (v == nullptr) return Fail(Join(path, key), "required");
+        const std::string q = Join(path, key);
+        return Keys(*v, q, {"value", "source", "confidence", "notes"}) && Provenance(*v, q) && NumberOf(*v, q, "value", out);
+    }
+};
+
 }  // namespace detail
+
+// The "fighters" block of data/campaign/ad_strategy.json (track F, F4.3): absent, `present` false and true returned.
+inline bool LoadFighterCoverBlock(const json::Value& root, FighterCoverRules& out, std::string* error = nullptr) {
+    out = FighterCoverRules();
+    const json::Value* f = root.Find("fighters");
+    if (f == nullptr) return true;
+    detail::FighterCoverLoader loader;
+    FighterCoverRules r;
+    if (!loader.Load(*f, r)) {
+        if (error != nullptr) *error = "fighters: " + loader.Message();
+        return false;
+    }
+    out = r;
+    return true;
+}
+inline bool LoadFighterCoverRules(const std::string& data_dir, const std::string& rel, FighterCoverRules& out, std::string* error = nullptr) {
+    std::string text;
+    json::Value root;
+    std::string e;
+    if (!simcore::detail::ReadTextFile(data_dir + "/" + rel, text) || !json::Parse(text, root, &e)) {
+        if (error != nullptr) *error = "fighters: cannot read " + rel + (e.empty() ? "" : ": " + e);
+        return false;
+    }
+    return LoadFighterCoverBlock(root, out, error);
+}
 
 // The "moves" block of data/campaign/ad_strategy.json (the file's other keys are campaign/ad_strategy.hpp's).
 inline bool LoadUnitMoveRules(const std::string& data_dir, const std::string& rel, UnitMoveRules& out, std::string* error = nullptr) {

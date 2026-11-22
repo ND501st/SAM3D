@@ -74,12 +74,16 @@ struct PlanContext {
     // battlefield interdiction's nomination reach its fixed-wing depth further, helicopter raids its helicopters' depth,
     // the Pact's helicopter umbrella and the routes' let-down move with it. Off (air_front.mode 0): every depth 0.
     AirFrontView air_front;
+    // Our fighters by sector as the enemy's staff believes them (track F, F4.3; the campaign's BelievedFighterView()):
+    // the escort's need, the expected losses to our fighters and the routes' fighter threats at a point. Off: the front's
+    // number everywhere, as before.
+    FighterCoverView fighters;
 
     // The defender's fighter threat over the front, less what an AWACS on station takes away (warning, vectoring): only
     // an AWACS that controls fighters in the war's year (roadmap B8: the Pact's A-50 not before 1989).
-    double FriendlyFighters(const FrontDef& f) const {
+    double FriendlyFighters(const FrontDef& f, const Vec3& at) const {
         const double up = AwacsControlsFighters(*data) ? Clamp01(awacs) : 0.0;
-        return f.friendly_fighters * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * up);
+        return fighters.At(at, f.friendly_fighters) * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * up);
     }
 
     Weather WeatherAt(double h) const {
@@ -558,7 +562,7 @@ private:
         std::vector<RouteThreat> t = BelievedRouteThreats(c_->intel->Threats(), a, prof, GroundC().HasGround(), Tune());
         if (Mode() >= 2 && front_ != nullptr) {
             // Our fighters as it believes them (roadmap S7): a cost on the legs near our believed air bases.
-            std::vector<RouteThreat> f = BelievedFighterThreats(c_->intel->entries, front_->friendly_fighters, a, prof, Tune());
+            std::vector<RouteThreat> f = BelievedFighterThreats(c_->intel->entries, front_->friendly_fighters, a, prof, Tune(), c_->fighters);
             t.insert(t.end(), f.begin(), f.end());
         }
         return route_threats_[k] = std::move(t);
@@ -1072,8 +1076,8 @@ private:
             }
         }
         // Escort against the defender's fighters.
-        if (t.escort_ratio > 0.0 && c_->FriendlyFighters(*front_) > 0.05) {
-            const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * c_->FriendlyFighters(*front_) * 2.0));
+        if (t.escort_ratio > 0.0 && c_->FriendlyFighters(*front_, p.target_pos) > 0.05) {
+            const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * c_->FriendlyFighters(*front_, p.target_pos) * 2.0));
             if (want > 0) {
                 const int n = std::min(want, 4);
                 // How the faction sends them (roadmap B8, air_combat.json's fighter_plan): close escort, a sweep ahead on the
@@ -1478,7 +1482,7 @@ private:
         // Our fighters (roadmap B8): the abstract air battle's expectation, its escorts' cover and the AWACS where it
         // controls fighters.
         const AbstractAirFight air_fight(*c_->data);
-        const double fighters = air_fight.ExpectedMainLoss(p, AbstractAirFight::SetupFor(*c_->data, p, c_->awacs, w));
+        const double fighters = air_fight.ExpectedMainLoss(p, AbstractAirFight::SetupFor(*c_->data, p, c_->awacs, w, c_->fighters, p.target_pos));
         total += fighters;
         main += fighters;
         if (main_loss != nullptr) *main_loss = main;

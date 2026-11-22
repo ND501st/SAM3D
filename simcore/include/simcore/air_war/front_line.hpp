@@ -264,5 +264,21 @@ struct AirFrontView {
     }
 };
 
+// Our fighters by sector (track F, F4.3; docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5): the front's fighter threat
+// (FrontDef::friendly_fighters) shared out over its sectors, as AirCampaign::FighterCoverAt gives it (the truth, for the air
+// fight) and as the enemy's staff believes it (for its planner). Off (no cover by sector): every point has the front's number.
+// A lookup: the sector of a point by its projection on the front's base line, then the cover cached for it.
+struct FighterCoverView {
+    const LineOfContact* line = nullptr;
+    const std::vector<double>* by_sector = nullptr;  // null or empty: the front's number everywhere
+
+    bool On() const { return line != nullptr && by_sector != nullptr && !by_sector->empty(); }
+    double At(const Vec3& p, double front_value) const {
+        if (!On()) return front_value;
+        const int s = line->SectorOf(p);
+        return s >= 0 && static_cast<std::size_t>(s) < by_sector->size() ? (*by_sector)[static_cast<std::size_t>(s)] : front_value;
+    }
+};
+
 }  // namespace airwar
 }  // namespace simcore

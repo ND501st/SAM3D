@@ -128,5 +128,23 @@
         "notes": "The regiment's P-40 (kesmark_p40) moves with the regiment, not on the sector's orders."
       }
     ]
+  },
+  "fighters": {
+    "notes": "Track F's F4.3 (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5; simcore/air_war/unit_moves.hpp FighterCoverRules, campaign/ad_strategy.hpp, air_war/campaign.hpp FighterCoverAt): at ad_strategy.mode 1 the front's fighters (the theatre front's friendly_fighters) are shared over its sectors by the national sector's commander's priorities as the fighter regiment's duty officer holds them (campaign::PriorityShares: the defended sectors 60 % together, the rest by the offence's and economy's weights), the sum over the sectors kept; each change heard at the post through our pipeline.",
+    "source": "vr_krupicka_1984 pp. 62-64 (the PVOS formation's commander sets the sharing of the sky and puts the fighters to it); andersen_1979 pp. 40, 45 (60 % of the air defence to the main thrust; fighters fill the gap while SAMs move); docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5",
+    "confidence": "low",
+    "post": "fighter_rgt_duty",
+    "commander": "sector_commander",
+    "prewar_held": true,
+    "cap": {
+      "value": 1.0,
+      "source": "game value: a sector's fighter threat is a share of the most our fighters can do there (the front's friendly_fighters is 0..1); a sector given more than that passes the excess to the others",
+      "confidence": "estimate"
+    },
+    "belief_learn": {
+      "value": 0.5,
+      "source": "game value: the enemy's staff believes our fighters in a sector at the front's number until its packages fly there; each package's debrief moves its belief half the way to the cover it met (docs/air_battle/08_OUR_FIGHTERS.md section 11: the escort sized on the belief from what its pilots reported)",
+      "confidence": "estimate"
+    }
   }
 }
