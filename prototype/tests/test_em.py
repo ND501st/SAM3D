@@ -184,7 +184,11 @@ def test_obstacles_stand_on_the_profile_like_clutter():
     # Woods round an end within the skip do not hide it.
     around = lambda e, n: 20.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
     assert em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 50.0, obstacle=around).line_of_sight
-    assert not em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0).line_of_sight
+    # With no skip the wood the antenna stands in is its end's own loss and the ray starts from the canopy (ITU-R P.2108
+    # section 3.1, roadmap E9): no longer blocked by its own wood.
+    no_skip = em.analyse_path(flat, 0.0, 0.0, 2.0, 2000.0, 0.0, 300.0, 10.0, obstacle=around, obstacle_skip_m=0.0)
+    assert no_skip.line_of_sight and no_skip.clutter_a_m == 20.0 and no_skip.antenna_a_m == 2.0
+    assert em.terminal_clutter_path_loss_db(no_skip, 50e6) > 10.0
 
 
 def test_eye_law_matches_cpp():
@@ -230,3 +234,62 @@ def test_smooth_spherical_earth_matches_cpp():
     past = em.spherical_earth_loss_db(d_los + 1.0, 3.0, 8000.0, 50e6, 8500e3)
     assert inside == pytest.approx(past, abs=0.05)
     assert em.spherical_earth_loss_db(500e3, 3.0, 8000.0, 5e6, 8500e3) == 0.0
+
+
+def test_terminal_clutter_matches_cpp():
+    # Mirror of test_em_environment.cpp: ITU-R P.2108-1 section 3.1 by hand.
+    assert em.terminal_clutter_loss_db(5.0, 20.0, 50e6) == pytest.approx(11.2306, abs=1e-3)
+    assert em.terminal_clutter_loss_db(3.0, 15.0, 50e6) == pytest.approx(9.6767, abs=1e-3)
+    assert em.terminal_clutter_loss_db(5.0, 15.0, 1e9) == pytest.approx(20.5647, abs=1e-3)
+    assert em.terminal_clutter_loss_db(5.0, 15.0, 6e9) == pytest.approx(25.3498, abs=1e-3)
+    assert em.terminal_clutter_loss_db(14.0, 15.0, 50e6) == pytest.approx(0.9688, abs=1e-3)
+    assert em.terminal_clutter_loss_db(15.0, 15.0, 50e6) == 0.0
+    wood = lambda e, n: 15.0 if math.hypot(e, n) < 50.0 else 0.0  # noqa: E731
+    flat = lambda e, n: 0.0  # noqa: E731
+    g = em.analyse_path(flat, 0.0, 0.0, 3.0, 20000.0, 0.0, 3.0, 100.0, obstacle=wood)
+    assert g.clutter_a_m == 15.0 and g.antenna_a_m == 3.0 and g.clutter_b_m == 0.0 and g.line_of_sight
+    back = em.analyse_path(flat, 20000.0, 0.0, 3.0, 0.0, 0.0, 3.0, 100.0, obstacle=wood)
+    assert back.clutter_b_m == 15.0
+    assert em.terminal_clutter_path_loss_db(g, 50e6) == pytest.approx(9.6767, abs=1e-3)
+
+
+def test_water_matches_cpp():
+    # Mirror of test_em_environment.cpp: P.527 pure water, Fresnel, P.1546's mixed path, the water mask and the
+    # reflection's Fresnel zone, the smooth earth over water.
+    re, im = em.pure_water_permittivity(1e6, 20.0)
+    assert re == pytest.approx(80.0738, abs=1e-3)
+    re, im = em.pure_water_permittivity(10e9, 20.0)
+    assert (re, im) == (pytest.approx(60.7886, abs=1e-3), pytest.approx(32.7208, abs=1e-3))
+    re, im = em.pure_water_permittivity(1e9, 20.0)
+    assert em.water_conductivity_sm(im, 1e9) == pytest.approx(0.24446, abs=1e-4)
+    re, im = em.pure_water_permittivity(6e9)
+    assert em.fresnel_reflection_h(re, im, 0.5 * math.pi) == pytest.approx(0.79789, abs=1e-4)
+    assert em.fresnel_reflection_h(re, im, math.radians(0.3)) == pytest.approx(0.99882, abs=1e-4)
+    assert em.mixed_path_loss_db(60.0, 40.0, 0.5) == pytest.approx(55.4980, abs=1e-3)
+    assert em.mixed_path_loss_db(40.0, 60.0, 0.5) == pytest.approx(47.4008, abs=1e-3)
+    assert em.mixed_path_loss_db(60.0, 40.0, 0.25) == pytest.approx(58.5419, abs=1e-3)
+    flat = lambda e, n: 0.0  # noqa: E731
+    half = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 50.0, 100.0, water=lambda e, n: e >= 5000.0)
+    assert half.water_mask == 0xFFFFFFFF00000000 and em.water_fraction(half) == 0.5
+    assert em.water_share_between(half, 4000.0, 6000.0) == 0.5
+    assert em.water_share_between(half, 5100.0, 5110.0) == 1.0
+    env = em.Environment()
+    r = em.compute_reflection(5.0, 50.0, 10000.0)
+    lake = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 50.0, 100.0, water=lambda e, n: e >= -1000.0)
+    far = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 50.0, 100.0, water=lambda e, n: e >= 5000.0)
+    lam = em.wavelength(6e9)
+    land = em.effective_reflection(env, r.grazing_rad, lam)
+    water = em.water_reflection(env, r.grazing_rad, 6e9)
+    assert land < 0.5 and water > 0.99
+    assert em.path_reflection(env, lake, r, 6e9) == pytest.approx(water)
+    assert em.path_reflection(env, far, r, 6e9) == pytest.approx(land)
+    near = lambda e, n: e <= 2500.0  # noqa: E731
+    fwd = em.analyse_path(flat, 0.0, 0.0, 5.0, 10000.0, 0.0, 50.0, 100.0, water=near)
+    back = em.analyse_path(flat, 10000.0, 0.0, 50.0, 0.0, 0.0, 5.0, 100.0, water=near)
+    assert em.reflection_water_share(fwd, r, lam) > 0.95
+    assert em.reflection_water_share(back, r, lam, True) == pytest.approx(em.reflection_water_share(fwd, r, lam))
+    re, im = em.pure_water_permittivity(50e6)
+    sigma = em.water_conductivity_sm(im, 50e6)
+    assert em.surface_admittance_k(50.0, 8500.0, True, re, sigma) == pytest.approx(0.044098, abs=2e-5)
+    assert em.spherical_earth_loss_db(40e3, 3.0, 3.0, 50e6, 8500e3) == pytest.approx(66.3531, abs=1e-3)
+    assert em.spherical_earth_loss_db(40e3, 3.0, 3.0, 50e6, 8500e3, re, sigma) == pytest.approx(51.8418, abs=1e-3)

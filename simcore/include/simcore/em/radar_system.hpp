@@ -199,7 +199,7 @@ inline LookResult EvaluateLook(const EmScene& s, const RadarState& r, const Rada
     phys.rcs_m2 = rcs_m2;
     const double peak_db = ant.gain_db - d.emitter.antenna.gain_db;
     phys.pattern_db = 2.0 * (AntennaGainDb(ant, WrapPi(az - look_az), el - look_el) - ant.gain_db + peak_db);
-    phys.one_way_loss_db = loss.diffraction_db + loss.gas_db;
+    phys.one_way_loss_db = loss.diffraction_db + loss.gas_db + loss.clutter_db;
     phys.multipath_factor = loss.multipath_factor;
     double snr = RadarSnr(d, phys);
 

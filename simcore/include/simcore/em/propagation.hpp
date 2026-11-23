@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <vector>
 #include <cstddef>
 #include <cstdint>
@@ -110,10 +111,12 @@ inline double SphericalHeightGainDb(double y, double beta, double k) {
 }
 
 // The residue series' first term, 20 log10(E/E0) in dB (eq. 13; generally negative), for antennas h1, h2 (m) above a
-// sphere of radius ae (m), d (m) apart along it, at freq_hz.
-inline double SphericalFirstTermDb(double d_m, double h1_m, double h2_m, double freq_hz, double ae_m) {
+// sphere of radius ae (m), d (m) apart along it, at freq_hz, over a surface of this relative permittivity and conductivity
+// (S/m; the land of Fig. 2 by default, water: WaterPermittivity).
+inline double SphericalFirstTermDb(double d_m, double h1_m, double h2_m, double freq_hz, double ae_m,
+                                   double permittivity = kGroundPermittivity, double conductivity_s_m = kGroundConductivitySm) {
     const double f = freq_hz * 1e-6, ae = ae_m * 1e-3, d = d_m * 1e-3;
-    const double k = SurfaceAdmittanceK(f, ae);
+    const double k = SurfaceAdmittanceK(f, ae, true, permittivity, conductivity_s_m);
     const double beta = SphericalBeta(k);
     const double cf = std::cbrt(f), ca = std::cbrt(ae);
     const double x = 2.188 * beta * cf / (ca * ca) * d;
@@ -150,13 +153,14 @@ inline SphericalClearance SphericalClearanceOf(double d_m, double h1, double h2,
 }
 
 // Section 3.2's diffraction loss (dB, >= 0) over a smooth sphere of effective radius ae (m) for any distance, eqs. (21)-(25).
-// 0 below 10 MHz (section 3) and for degenerate input.
-inline double SphericalEarthLossDb(double d_m, double h1_m, double h2_m, double freq_hz, double ae_m) {
+// 0 below 10 MHz (section 3) and for degenerate input. The surface's constants as SphericalFirstTermDb's.
+inline double SphericalEarthLossDb(double d_m, double h1_m, double h2_m, double freq_hz, double ae_m,
+                                   double permittivity = kGroundPermittivity, double conductivity_s_m = kGroundConductivitySm) {
     if (freq_hz < kSphericalEarthMinFreqHz || d_m < 1.0 || ae_m <= 0.0) return 0.0;
     const double h1 = h1_m > 0.0 ? h1_m : 0.0, h2 = h2_m > 0.0 ? h2_m : 0.0;
     const SphericalClearance cl = SphericalClearanceOf(d_m, h1, h2, ae_m);
     if (cl.beyond) {
-        const double a = -SphericalFirstTermDb(d_m, h1, h2, freq_hz, ae_m);
+        const double a = -SphericalFirstTermDb(d_m, h1, h2, freq_hz, ae_m, permittivity, conductivity_s_m);
         return a > 0.0 ? a : 0.0;
     }
     const double h = cl.h_m;
@@ -164,9 +168,89 @@ inline double SphericalEarthLossDb(double d_m, double h1_m, double h2_m, double 
     if (h > h_req) return 0.0;
     const double s = std::sqrt(h1) + std::sqrt(h2);
     const double aem = 0.5 * (d_m / s) * (d_m / s);  // eq. (24)
-    const double ah = -SphericalFirstTermDb(d_m, h1, h2, freq_hz, aem);
+    const double ah = -SphericalFirstTermDb(d_m, h1, h2, freq_hz, aem, permittivity, conductivity_s_m);
     if (ah < 0.0) return 0.0;
     return h_req > 0.0 ? (1.0 - h / h_req) * ah : ah;  // eq. (25)
+}
+
+// --------------------------------------------------------------------------- water (roadmap E9's sea areas)
+//
+// The fictional country has lakes, reservoirs and rivers but no sea; any water the terrain names (Terrain::WaterAt) is
+// taken as fresh water. Its complex relative permittivity is ITU-R P.527-6 (09/2021) section 5.1.1's pure water, a double
+// Debye model in frequency and temperature (eqs. 5-13); a lake's few ions add a conductivity that changes nothing at these
+// frequencies. Below 1 GHz it enters the smooth earth's surface admittance (P.526 eqs. 11a, 12a) as a permittivity and the
+// conductivity eq. (3a) gives it, sigma = 0.05563 eps'' f_GHz; above, the Fresnel coefficient of a ground reflection.
+constexpr double kWaterTemperatureC = 10.0;  // a game value: a Central European lake's surface over the year
+
+struct WaterPermittivity {
+    double real = 0.0;  // eps'
+    double imag = 0.0;  // eps'' (eps = eps' - j eps'', eq. 5)
+    double ConductivitySm(double freq_hz) const { return 0.05563 * imag * freq_hz * 1e-9; }  // eq. (3a)
+};
+
+// P.527-6 eqs. (5)-(13), pure water at temperature_c (-4 to 40 C).
+inline WaterPermittivity PureWaterPermittivity(double freq_hz, double temperature_c = kWaterTemperatureC) {
+    const double theta = 300.0 / (temperature_c + 273.15) - 1.0;           // eq. (11)
+    const double es = 77.66 + 103.3 * theta;                                // eq. (8)
+    const double e1 = 0.0671 * es;                                          // eq. (9)
+    const double einf = 3.52 - 7.52 * theta;                                // eq. (10)
+    const double f1 = 20.20 - 146.4 * theta + 316.0 * theta * theta;        // eq. (12), GHz
+    const double f2 = 39.8 * f1;                                            // eq. (13), GHz
+    const double f = freq_hz * 1e-9;
+    const double r1 = f / f1, r2 = f / f2;
+    WaterPermittivity w;
+    w.real = (es - e1) / (1.0 + r1 * r1) + (e1 - einf) / (1.0 + r2 * r2) + einf;  // eq. (6)
+    w.imag = r1 * (es - e1) / (1.0 + r1 * r1) + r2 * (e1 - einf) / (1.0 + r2 * r2);  // eq. (7)
+    return w;
+}
+
+// The magnitude of the Fresnel reflection coefficient of a smooth surface of complex permittivity eps' - j eps'' at grazing
+// angle psi, horizontal polarisation: (sin psi - sqrt(eps - cos^2 psi)) / (sin psi + sqrt(eps - cos^2 psi)) (Fresnel's
+// equations for the grazing angle; Blake, "Radar Range-Performance Analysis"). The emitters carry no polarisation, so the
+// horizontal one is taken (over water at 6 GHz: 0.999 at 0.3 degrees and 0.996 at 1 degree; vertical 0.91 and 0.74).
+inline double FresnelReflectionH(const WaterPermittivity& w, double grazing_rad) {
+    const double s = std::sin(grazing_rad), c = std::cos(grazing_rad);
+    const std::complex<double> root = std::sqrt(std::complex<double>(w.real - c * c, -w.imag));
+    return std::abs((s - root) / (s + root));
+}
+
+// ITU-R P.1546-6 Annex 5 section 8's mixed-path interpolation, written for losses: a path a fraction `water` of whose
+// length is over water loses L = (1 - A) L_land + A L_water, A = A0^V (eq. 18), A0 = 1 - (1 - F)^(2/3) (eq. 19),
+// V = max(1, 1 + Delta / 40) (eq. 20), Delta = E_sea - E_land = L_land - L_water (eq. 21). P.1546 states it for sea
+// paths; it is used for the country's lakes by the same reasoning (the field over water carries further).
+inline double MixedPathLossDb(double land_db, double water_db, double water_fraction) {
+    if (water_fraction <= 0.0) return land_db;
+    if (water_fraction >= 1.0) return water_db;
+    const double a0 = 1.0 - std::pow(1.0 - water_fraction, 2.0 / 3.0);
+    const double v = std::max(1.0, 1.0 + (land_db - water_db) / 40.0);
+    const double a = std::pow(a0, v);
+    return (1.0 - a) * land_db + a * water_db;
+}
+
+// --------------------------------------------------------------------------- the clutter an antenna stands in
+//
+// ITU-R P.2108-1 (09/2021) section 3.1, the height gain terminal correction model, an end correction at either end of a
+// path: an antenna h (m) over the ground standing in clutter of representative height R loses, at f GHz,
+//   h >= R: nothing;
+//   woods and buildings (urban/trees/forest, suburban, dense urban; Table 3's eq. 2a):
+//     A_h = J(nu) - 6.03,  nu = K_nu sqrt(h_dif theta_clut),  h_dif = R - h,  theta_clut = atan(h_dif / w_s) in degrees,
+//     K_nu = 0.342 sqrt(f), w_s = 27 m (eqs. 1, 2a, 2c-2e, 2g; Table 2's street width);
+// added to a path worked out from the clutter's height R (section 3.1: "basic transmission loss should be calculated
+// to/from the height of the representative clutter height"). R is what the terrain says stands there (ObstacleHeightAt:
+// the map's woods and buildings, P.1812's representative heights in clutter.json), never a second set of numbers. Water
+// and open ground stand at 0 m there, so eq. (2b)'s height gain over them never applies. Section 3.1 holds from 0.03 to
+// 3 GHz; above, the 3 GHz loss is taken (a radar in a wood loses at least that).
+constexpr double kClutterStreetWidthM = 27.0;  // P.2108-1 Table 2's default
+constexpr double kClutterMinFreqHz = 0.03e9, kClutterMaxFreqHz = 3e9;
+
+inline double TerminalClutterLossDb(double antenna_m, double clutter_m, double freq_hz) {
+    if (clutter_m <= 0.0 || antenna_m >= clutter_m || freq_hz <= 0.0) return 0.0;
+    const double f = std::min(std::max(freq_hz, kClutterMinFreqHz), kClutterMaxFreqHz) * 1e-9;
+    const double h_dif = clutter_m - (antenna_m > 0.0 ? antenna_m : 0.0);                  // eq. (2d)
+    const double theta_deg = std::atan(h_dif / kClutterStreetWidthM) * 180.0 / kPi;        // eq. (2e)
+    const double nu = 0.342 * std::sqrt(f) * std::sqrt(h_dif * theta_deg);                 // eqs. (2c), (2g)
+    const double a = KnifeEdgeLossDb(nu) - 6.03;                                           // eqs. (1), (2a)
+    return a > 0.0 ? a : 0.0;
 }
 
 // Specific gaseous attenuation at sea level (dB/km, one way), standard atmosphere.
@@ -268,8 +352,51 @@ struct PathGeometry {
     double smooth_v_geometry = -1e9;
     SphericalClearance smooth_clearance;  // section 3.2's geometry over the smooth surface (frequency-free; a path clear of
                                           // h_req at a band skips the spherical term's work)
+    // The clutter each antenna stands in (ITU-R P.2108-1 section 3.1; TerminalClutterLossDb): the representative height R
+    // of what stands where it is (Terrain::ObstacleHeightAt) and its own height over the ground, when it stands lower
+    // than R; 0 and 0 otherwise. The ray and the profile's edges then start from the clutter's top (section 3.1's rule).
+    // "a" is the first end as AnalysePath was given it.
+    double clutter_a_m = 0.0, antenna_a_m = 0.0;
+    double clutter_b_m = 0.0, antenna_b_m = 0.0;
+    // Water under the path (roadmap E9's sea areas, Terrain::WaterAt): bit k is set where the surface at the middle of the
+    // k-th of kWaterSegments equal stretches from the first end is water. 0: none, or a terrain without water.
+    std::uint64_t water_mask = 0;
     int samples = 0;  // profile samples taken (for profiling)
 };
+
+// Water is looked for at this many points along a path, whatever its length (64: one bit each).
+constexpr int kWaterSegments = 64;
+
+// The share of a path's length over water (0 to 1): its water segments over all.
+inline double WaterFraction(const PathGeometry& g) {
+    int count = 0;
+    for (std::uint64_t m = g.water_mask; m != 0; m &= m - 1) ++count;
+    return static_cast<double>(count) / static_cast<double>(kWaterSegments);
+}
+
+// The share of water among the segments whose middles lie between s0 and s1 (m from the first end); when none does, the
+// segment holding the stretch's middle alone.
+inline double WaterShareBetween(const PathGeometry& g, double s0_m, double s1_m) {
+    if (g.water_mask == 0 || g.ground_range_m < 1.0) return 0.0;
+    const double seg = g.ground_range_m / static_cast<double>(kWaterSegments);
+    // middles at (k + 0.5) seg: k from ceil(s0 / seg - 0.5) to floor(s1 / seg - 0.5)
+    int k0 = static_cast<int>(std::ceil(std::min(s0_m, s1_m) / seg - 0.5));
+    int k1 = static_cast<int>(std::floor(std::max(s0_m, s1_m) / seg - 0.5));
+    k0 = std::max(k0, 0);
+    k1 = std::min(k1, kWaterSegments - 1);
+    if (k0 > k1) {
+        const int k = std::min(kWaterSegments - 1, std::max(0, static_cast<int>(0.5 * (s0_m + s1_m) / seg)));
+        return (g.water_mask >> k) & 1u ? 1.0 : 0.0;
+    }
+    int water = 0;
+    for (int k = k0; k <= k1; ++k) water += static_cast<int>((g.water_mask >> k) & 1u);
+    return static_cast<double>(water) / static_cast<double>(k1 - k0 + 1);
+}
+
+// The ends' clutter loss of a path (dB, both ends; TerminalClutterLossDb).
+inline double TerminalClutterLossDb(const PathGeometry& g, double freq_hz) {
+    return TerminalClutterLossDb(g.antenna_a_m, g.clutter_a_m, freq_hz) + TerminalClutterLossDb(g.antenna_b_m, g.clutter_b_m, freq_hz);
+}
 
 // Sample the terrain profile between two ENU points. Endpoint altitudes are above the ellipsoid
 // (LocalFrame::AltitudeOf). Spacing is relaxed for long paths so a profile never exceeds
@@ -300,8 +427,32 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     g.samples = n - 1;
     const double inv_n = 1.0 / static_cast<double>(n);
     const double range = g.ground_range_m;
+    // The clutter each antenna stands in (ITU-R P.2108-1 section 3.1): an antenna lower than what stands where it is
+    // takes its end's own loss (TerminalClutterLossDb), and the path is worked out from the clutter's top.
+    const double ground_a = terrain.HeightAt(a_enu.x, a_enu.y);
+    const double ground_b = terrain.HeightAt(b_enu.x, b_enu.y);
+    const double tallest = terrain.ObstacleTallestM();
+    const auto end_clutter = [&](const Vec3& at, double ground, double& alt, double& clutter, double& antenna) {
+        const double over = alt - ground;
+        if (over >= tallest) return;
+        const double r = terrain.ObstacleHeightAt(at.x, at.y);
+        if (r <= over) return;
+        clutter = r;
+        antenna = over > 0.0 ? over : 0.0;
+        alt = ground + r;
+    };
+    end_clutter(a_enu, ground_a, a_alt_m, g.clutter_a_m, g.antenna_a_m);
+    end_clutter(b_enu, ground_b, b_alt_m, g.clutter_b_m, g.antenna_b_m);
+    const double rise = b_alt_m - a_alt_m;  // the ray's, from the clutter's top where an antenna stands in it
     const auto bulge_at = [&](double s) { return s * (range - s) / (2.0 * re); };
-    const auto ray_at = [&](double s) { return a_alt_m + dz * (s / range); };
+    const auto ray_at = [&](double s) { return a_alt_m + rise * (s / range); };
+    const double ux = dx / range, uy = dy / range;
+    if (terrain.HasWater()) {
+        for (int k_seg = 0; k_seg < kWaterSegments; ++k_seg) {
+            const double s = (static_cast<double>(k_seg) + 0.5) * range / static_cast<double>(kWaterSegments);
+            if (terrain.WaterAt(a_enu.x + ux * s, a_enu.y + uy * s)) g.water_mask |= std::uint64_t{1} << k_seg;
+        }
+    }
     // The profile, ends excluded: (distance along, the ground with the woods and buildings on it away from the ends
     // and the Earth's bulge), in order.
     struct Point {
@@ -310,8 +461,6 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     std::vector<Point> profile;
     profile.reserve(static_cast<std::size_t>(n));
     const bool footprints = terrain.ObstacleSpacingM() > 0.0;
-    const double tallest = terrain.ObstacleTallestM();
-    const double ux = dx / range, uy = dy / range;
     for (int i = 1; i <= n; ++i) {
         const double s = static_cast<double>(i) * inv_n * range;
         if (footprints) {  // the stretch up to this sample: its highest footprint over the ray, if one comes near it
@@ -398,8 +547,6 @@ inline PathGeometry AnalysePath(const Terrain& terrain, const Vec3& a_enu, doubl
     // antenna (eq. 63); the antennas' heights above it (eq. 64). Flat-earth geometry, the woods and buildings on the profile,
     // the bare ground under the antennas.
     {
-        const double ground_a = terrain.HeightAt(a_enu.x, a_enu.y);
-        const double ground_b = terrain.HeightAt(b_enu.x, b_enu.y);
         double v1 = 0.0, v2 = 0.0;
         double prev_s = 0.0, prev_h = ground_a;
         double h_obs = -1e300, a_obt = -1e300, a_obr = -1e300;
@@ -489,14 +636,21 @@ inline double TerrainEdgesLossDb(const PathGeometry& g, double freq_hz) {
 // of Bullington's: L = L_edges(actual profile) + max(L_sph - L_edges(smooth profile), 0). The terrain's edges as before,
 // plus the smooth spherical earth's loss (section 3.2) over what the edge of the bare bulge already costs, so a path over
 // smooth ground takes the spherical earth's loss and a ridge adds its own. From 10 MHz (section 3) to 1 GHz
-// (kSphericalEarthMaxFreqHz); the edges alone outside it.
+// (kSphericalEarthMaxFreqHz); the edges alone outside it. Over water (roadmap E9) the spherical earth's surface is water's
+// (PureWaterPermittivity) and a path partly over it takes P.1546's mixed-path interpolation between the two (MixedPathLossDb).
 inline double DiffractionLossDb(const PathGeometry& g, double freq_hz) {
     const double edges = TerrainEdgesLossDb(g, freq_hz);
     if (g.earth_radius_m <= 0.0 || freq_hz < kSphericalEarthMinFreqHz || freq_hz >= kSphericalEarthMaxFreqHz) return edges;
     // Short of the horizon with the clearance over h_req (eq. 23) the spherical term is zero: most paths stop here.
     const SphericalClearance& cl = g.smooth_clearance;
     if (!cl.beyond && cl.h_m > 0.552 * std::sqrt(cl.fresnel_m2 * WavelengthOf(freq_hz))) return edges;
-    const double sph = SphericalEarthLossDb(g.ground_range_m, g.smooth_h1_m, g.smooth_h2_m, freq_hz, g.earth_radius_m);
+    double sph = SphericalEarthLossDb(g.ground_range_m, g.smooth_h1_m, g.smooth_h2_m, freq_hz, g.earth_radius_m);
+    if (g.water_mask != 0) {
+        const WaterPermittivity w = PureWaterPermittivity(freq_hz);
+        const double over_water = SphericalEarthLossDb(g.ground_range_m, g.smooth_h1_m, g.smooth_h2_m, freq_hz,
+                                                        g.earth_radius_m, w.real, w.ConductivitySm(freq_hz));
+        sph = MixedPathLossDb(sph, over_water, WaterFraction(g));
+    }
     if (sph <= 0.0) return edges;
     const double smooth = KnifeEdgeLossDb(g.smooth_v_geometry * std::sqrt(2.0 / WavelengthOf(freq_hz)));
     return edges + (sph > smooth ? sph - smooth : 0.0);
@@ -561,6 +715,22 @@ inline double TwoRayFactor(const ReflectionGeometry& r, double wavelength_m, dou
     double f2 = 1.0 + g * g - 2.0 * g * std::cos(phase);
     if (f2 < 1e-6) f2 = 1e-6;  // exact nulls don't survive real terrain
     return std::sqrt(f2);
+}
+
+// The share of water under a ground reflection (roadmap E9's sea areas): among the path's water segments along its first
+// Fresnel zone, the ground points whose path via them is within half a wavelength of the specular one. With the path's
+// length via u expanded to second order about the reflection point, L(u) = L(d1) + (u - d1)^2 tan^2 psi (1/d1 + 1/d2) / 2,
+// the zone reaches Delta = sqrt(lambda d1 d2 / d) / tan psi either side of it: kilometres along the path for a low ray, so
+// a lake under it reflects and a river crossing it is a small part. `from_second`: the reflection's end 1 is the path's
+// second end (b).
+inline double ReflectionWaterShare(const PathGeometry& g, const ReflectionGeometry& r, double wavelength_m, bool from_second) {
+    if (g.water_mask == 0 || !r.valid || wavelength_m <= 0.0) return 0.0;
+    const double d = g.ground_range_m;
+    const double d1 = r.d1_m, d2 = d - r.d1_m;
+    const double tan_psi = std::tan(r.grazing_rad);
+    const double reach = d1 > 0.0 && d2 > 0.0 && tan_psi > 0.0 ? std::sqrt(wavelength_m * d1 * d2 / d) / tan_psi : d;
+    const double at = from_second ? d - d1 : d1;
+    return WaterShareBetween(g, at - reach, at + reach);
 }
 
 // Plane-earth factor for links between antennas near the ground (VHF/UHF radios): beyond the

@@ -54,6 +54,7 @@ add_executable(simcore_tests
   tests/test_cabin.cpp
   tests/test_scopes.cpp
   tests/test_em_models.cpp
+  tests/test_em_environment.cpp
   tests/test_em_data.cpp
   tests/test_em_scenarios.cpp
   tests/test_em_link.cpp

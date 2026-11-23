@@ -7,6 +7,7 @@ bit-identical.
 """
 from __future__ import annotations
 
+import cmath
 import math
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Sequence, Tuple
@@ -126,24 +127,26 @@ def spherical_height_gain_db(y: float, beta: float, k: float) -> float:
     return max(g, 2.0 + 20.0 * math.log10(max(k, 1e-30)))
 
 
-def spherical_first_term_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float, ae_m: float) -> float:
-    """20 log10(E/E0), eq. (13), with X and Y from eqs. (14a), (15a)."""
+def spherical_first_term_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float, ae_m: float,
+                            permittivity: float = GROUND_PERMITTIVITY, conductivity: float = GROUND_CONDUCTIVITY_SM) -> float:
+    """20 log10(E/E0), eq. (13), with X and Y from eqs. (14a), (15a), over a surface of these constants."""
     f, ae, d = freq_hz * 1e-6, ae_m * 1e-3, d_m * 1e-3
-    k = surface_admittance_k(f, ae)
+    k = surface_admittance_k(f, ae, True, permittivity, conductivity)
     beta = spherical_beta(k)
     x = 2.188 * beta * f ** (1.0 / 3.0) * ae ** (-2.0 / 3.0) * d
     ky = 9.575e-3 * beta * f ** (2.0 / 3.0) * ae ** (-1.0 / 3.0)
     return spherical_distance_term_db(x) + spherical_height_gain_db(ky * h1_m, beta, k) + spherical_height_gain_db(ky * h2_m, beta, k)
 
 
-def spherical_earth_loss_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float, ae_m: float) -> float:
+def spherical_earth_loss_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float, ae_m: float,
+                            permittivity: float = GROUND_PERMITTIVITY, conductivity: float = GROUND_CONDUCTIVITY_SM) -> float:
     """Section 3.2, eqs. (21)-(25): the smooth earth's diffraction loss for any distance (dB, >= 0)."""
     if freq_hz < SPHERICAL_EARTH_MIN_FREQ_HZ or d_m < 1.0 or ae_m <= 0.0:
         return 0.0
     h1, h2 = max(h1_m, 0.0), max(h2_m, 0.0)
     d_los = math.sqrt(2.0 * ae_m) * (math.sqrt(h1) + math.sqrt(h2))
     if d_m >= d_los:
-        return max(-spherical_first_term_db(d_m, h1, h2, freq_hz, ae_m), 0.0)
+        return max(-spherical_first_term_db(d_m, h1, h2, freq_hz, ae_m, permittivity, conductivity), 0.0)
     c = (h1 - h2) / (h1 + h2)
     m = d_m * d_m / (4.0 * ae_m * (h1 + h2))
     arg = min(max(1.5 * c * math.sqrt(3.0 * m / (m + 1.0) ** 3), -1.0), 1.0)
@@ -155,10 +158,71 @@ def spherical_earth_loss_db(d_m: float, h1_m: float, h2_m: float, freq_hz: float
     if h > h_req:
         return 0.0
     aem = 0.5 * (d_m / (math.sqrt(h1) + math.sqrt(h2))) ** 2
-    ah = -spherical_first_term_db(d_m, h1, h2, freq_hz, aem)
+    ah = -spherical_first_term_db(d_m, h1, h2, freq_hz, aem, permittivity, conductivity)
     if ah < 0.0:
         return 0.0
     return (1.0 - h / h_req) * ah if h_req > 0.0 else ah
+
+
+# --- water (roadmap E9's sea areas; simcore em/propagation.hpp PureWaterPermittivity) ----------------------------------
+
+WATER_TEMPERATURE_C = 10.0  # a game value: a Central European lake's surface over the year
+
+
+def pure_water_permittivity(freq_hz: float, temperature_c: float = WATER_TEMPERATURE_C) -> Tuple[float, float]:
+    """ITU-R P.527-6 eqs. (5)-(13): (eps', eps'') of pure water, eps = eps' - j eps''."""
+    theta = 300.0 / (temperature_c + 273.15) - 1.0
+    es = 77.66 + 103.3 * theta
+    e1 = 0.0671 * es
+    einf = 3.52 - 7.52 * theta
+    f1 = 20.20 - 146.4 * theta + 316.0 * theta * theta
+    f2 = 39.8 * f1
+    f = freq_hz * 1e-9
+    r1, r2 = f / f1, f / f2
+    real = (es - e1) / (1.0 + r1 * r1) + (e1 - einf) / (1.0 + r2 * r2) + einf
+    imag = r1 * (es - e1) / (1.0 + r1 * r1) + r2 * (e1 - einf) / (1.0 + r2 * r2)
+    return real, imag
+
+
+def water_conductivity_sm(imag: float, freq_hz: float) -> float:
+    """P.527-6 eq. (3a)."""
+    return 0.05563 * imag * freq_hz * 1e-9
+
+
+def fresnel_reflection_h(real: float, imag: float, grazing: float) -> float:
+    """|Fresnel coefficient|, horizontal polarisation, at a grazing angle."""
+    s, c = math.sin(grazing), math.cos(grazing)
+    root = cmath.sqrt(complex(real - c * c, -imag))
+    return abs((s - root) / (s + root))
+
+
+def mixed_path_loss_db(land_db: float, water_db: float, water_fraction: float) -> float:
+    """ITU-R P.1546-6 Annex 5 section 8, eqs. (17)-(21), written for losses."""
+    if water_fraction <= 0.0:
+        return land_db
+    if water_fraction >= 1.0:
+        return water_db
+    a0 = 1.0 - (1.0 - water_fraction) ** (2.0 / 3.0)
+    v = max(1.0, 1.0 + (land_db - water_db) / 40.0)
+    a = a0 ** v
+    return (1.0 - a) * land_db + a * water_db
+
+
+# --- the clutter an antenna stands in: ITU-R P.2108-1 section 3.1 (simcore TerminalClutterLossDb) ---------------------
+
+CLUTTER_STREET_WIDTH_M = 27.0
+CLUTTER_MIN_FREQ_HZ, CLUTTER_MAX_FREQ_HZ = 0.03e9, 3e9
+
+
+def terminal_clutter_loss_db(antenna_m: float, clutter_m: float, freq_hz: float) -> float:
+    """Eqs. (1), (2a), (2c)-(2e), (2g): woods and buildings; 0 when the antenna stands as high as the clutter."""
+    if clutter_m <= 0.0 or antenna_m >= clutter_m or freq_hz <= 0.0:
+        return 0.0
+    f = min(max(freq_hz, CLUTTER_MIN_FREQ_HZ), CLUTTER_MAX_FREQ_HZ) * 1e-9
+    h_dif = clutter_m - max(antenna_m, 0.0)
+    theta_deg = math.degrees(math.atan(h_dif / CLUTTER_STREET_WIDTH_M))
+    nu = 0.342 * math.sqrt(f) * math.sqrt(h_dif * theta_deg)
+    return max(knife_edge_loss_db(nu) - 6.03, 0.0)
 
 
 _GAS = [(0.1e9, 0.0040), (1.0e9, 0.0055), (3.0e9, 0.0075), (6.0e9, 0.0090), (10.0e9, 0.0130), (15.0e9, 0.0280),
@@ -195,6 +259,35 @@ class PathGeometry:
     line_of_sight: bool = True
     min_clearance_m: float = 1e9
     worst_v_geometry: float = -1e9
+    clutter_a_m: float = 0.0
+    antenna_a_m: float = 0.0
+    clutter_b_m: float = 0.0
+    antenna_b_m: float = 0.0
+    water_mask: int = 0
+
+
+WATER_SEGMENTS = 64
+
+
+def water_fraction(g: PathGeometry) -> float:
+    return bin(g.water_mask).count("1") / WATER_SEGMENTS
+
+
+def water_share_between(g: PathGeometry, s0: float, s1: float) -> float:
+    if g.water_mask == 0 or g.ground_range_m < 1.0:
+        return 0.0
+    seg = g.ground_range_m / WATER_SEGMENTS
+    k0 = max(int(math.ceil(min(s0, s1) / seg - 0.5)), 0)
+    k1 = min(int(math.floor(max(s0, s1) / seg - 0.5)), WATER_SEGMENTS - 1)
+    if k0 > k1:
+        k = min(WATER_SEGMENTS - 1, max(0, int(0.5 * (s0 + s1) / seg)))
+        return float((g.water_mask >> k) & 1)
+    return sum((g.water_mask >> k) & 1 for k in range(k0, k1 + 1)) / (k1 - k0 + 1)
+
+
+def terminal_clutter_path_loss_db(g: PathGeometry, freq_hz: float) -> float:
+    return (terminal_clutter_loss_db(g.antenna_a_m, g.clutter_a_m, freq_hz)
+            + terminal_clutter_loss_db(g.antenna_b_m, g.clutter_b_m, freq_hz))
 
 
 # Below this a footprint matters to neither the sight nor the edge (simcore em/propagation.hpp kFootprintNearRayM, a game
@@ -205,11 +298,13 @@ FOOTPRINT_NEAR_RAY_M = 10.0
 def analyse_path(terrain: TerrainFn, a_e: float, a_n: float, a_alt: float, b_e: float, b_n: float, b_alt: float,
                  spacing_m: float = 100.0, max_samples: int = 600, k: float = K_STD,
                  obstacle: TerrainFn | None = None, obstacle_skip_m: float = 60.0,
-                 footprints: Footprints | None = None) -> PathGeometry:
+                 footprints: Footprints | None = None, water: Callable[[float, float], bool] | None = None) -> PathGeometry:
     """`obstacle(e, n)`: woods and buildings on the profile beyond `obstacle_skip_m` from either end, as ITU-R
     P.1812's representative clutter heights (simcore em/propagation.hpp AnalysePath). `footprints`: the same as
     footprints; each stretch between two samples is looked at at their own spacing where the ray runs within
-    FOOTPRINT_NEAR_RAY_M of what may stand there, and its highest point over the ray joins the profile (roadmap R6)."""
+    FOOTPRINT_NEAR_RAY_M of what may stand there, and its highest point over the ray joins the profile (roadmap R6).
+    An antenna lower than `obstacle` where it stands keeps the clutter for its end's loss and the ray starts from the
+    clutter's top (ITU-R P.2108 section 3.1); `water(e, n)` marks the path's water segments (roadmap E9)."""
     g = PathGeometry()
     dx, dy = b_e - a_e, b_n - a_n
     g.ground_range_m = math.hypot(dx, dy)
@@ -221,6 +316,22 @@ def analyse_path(terrain: TerrainFn, a_e: float, a_n: float, a_alt: float, b_e: 
     n = min(int(g.ground_range_m / max(spacing_m, 1.0)), max_samples)
     n = max(n, 2)
     rng = g.ground_range_m
+    if obstacle is not None:
+        for end in (0, 1):
+            e, nn, alt = (a_e, a_n, a_alt) if end == 0 else (b_e, b_n, b_alt)
+            ground = terrain(e, nn)
+            r = obstacle(e, nn)
+            if r > alt - ground:
+                if end == 0:
+                    g.clutter_a_m, g.antenna_a_m, a_alt = r, max(alt - ground, 0.0), ground + r
+                else:
+                    g.clutter_b_m, g.antenna_b_m, b_alt = r, max(alt - ground, 0.0), ground + r
+        dz = b_alt - a_alt
+    if water is not None:
+        for k_seg in range(WATER_SEGMENTS):
+            s = (k_seg + 0.5) * rng / WATER_SEGMENTS
+            if water(a_e + dx / rng * s, a_n + dy / rng * s):
+                g.water_mask |= 1 << k_seg
 
     def bulge_at(s: float) -> float:
         return s * (rng - s) / (2.0 * re)
@@ -321,6 +432,7 @@ class Environment:
     surface_roughness_m: float = 1.0
     k_factor: float = K_STD
     profile_spacing_m: float = 100.0
+    water_roughness_m: float = 0.05
 
 
 def effective_reflection(env: Environment, grazing: float, lam: float) -> float:
@@ -328,6 +440,32 @@ def effective_reflection(env: Environment, grazing: float, lam: float) -> float:
         return 0.0
     g = math.pi * env.surface_roughness_m * math.sin(grazing) / lam
     return env.surface_reflection * math.exp(-8.0 * g * g)
+
+
+def water_reflection(env: Environment, grazing: float, freq_hz: float) -> float:
+    lam = wavelength(freq_hz)
+    if lam <= 0:
+        return 0.0
+    g = math.pi * env.water_roughness_m * math.sin(grazing) / lam
+    return fresnel_reflection_h(*pure_water_permittivity(freq_hz), grazing) * math.exp(-8.0 * g * g)
+
+
+def reflection_water_share(g: PathGeometry, r: Reflection, lam: float, from_second: bool = False) -> float:
+    if g.water_mask == 0 or not r.valid or lam <= 0:
+        return 0.0
+    d = g.ground_range_m
+    d1, d2 = r.d1_m, d - r.d1_m
+    tan_psi = math.tan(r.grazing_rad)
+    reach = math.sqrt(lam * d1 * d2 / d) / tan_psi if d1 > 0 and d2 > 0 and tan_psi > 0 else d
+    at = d - d1 if from_second else d1
+    return water_share_between(g, at - reach, at + reach)
+
+
+def path_reflection(env: Environment, g: PathGeometry, r: Reflection, freq_hz: float, from_second: bool = False) -> float:
+    lam = wavelength(freq_hz)
+    land = effective_reflection(env, r.grazing_rad, lam)
+    share = reflection_water_share(g, r, lam, from_second)
+    return (1.0 - share) * land + share * water_reflection(env, r.grazing_rad, freq_hz) if share > 0 else land
 
 
 # ----------------------------------------------------------------------------------- detection

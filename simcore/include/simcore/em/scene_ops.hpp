@@ -93,7 +93,8 @@ struct LinkLossResult {
     double diffraction_db = 0.0;
     double gas_db = 0.0;
     double multipath_factor = 1.0;  // one-way amplitude factor F
-    double TotalOneWayDb() const { return diffraction_db + gas_db - 20.0 * std::log10(multipath_factor); }
+    double clutter_db = 0.0;        // the clutter the ends stand in (ITU-R P.2108 section 3.1, TerminalClutterLossDb)
+    double TotalOneWayDb() const { return diffraction_db + gas_db + clutter_db - 20.0 * std::log10(multipath_factor); }
 };
 
 // One-way propagation for a path whose profile is known: diffraction, gases and the ground.
@@ -102,12 +103,18 @@ struct LinkLossResult {
 // plane-earth loss and the knife-edge loss, not their sum: a ridge that lifts the path off the
 // ground also removes most of the grazing ground loss (the 'obstacle gain' of VHF over hills is
 // not modelled, so this stays on the conservative side). Bullington's rule of thumb.
+// The clutter an antenna stands in is its end's own loss on top (clutter_db; the profile's ray starts from the clutter's
+// top, AnalysePath). The ground's two rays and the plane earth keep the antennas' own heights: this layer's open ground
+// carries no clutter height (P.1812's 0 m), so raising an antenna in a wood to the canopy for them would make a whip among
+// trees reach further than one in a field. Above 1 GHz the reflection takes water's coefficient where water lies under it
+// (PathReflection, roadmap E9's sea areas); `reversed`: h1's end is the path geometry's second end.
 inline LinkLossResult LinkLossCore(const Environment& env, const PathGeometry& g, double h1, double h2, double alt1,
-                                   double alt2, double range_m, double freq_hz, double gain_ratio = 1.0) {
+                                   double alt2, double range_m, double freq_hz, double gain_ratio = 1.0, bool reversed = false) {
     LinkLossResult r;
     r.line_of_sight = g.line_of_sight;
     r.range_m = range_m;
     r.diffraction_db = DiffractionLossDb(g, freq_hz);
+    r.clutter_db = TerminalClutterLossDb(g, freq_hz);
     r.gas_db = GaseousLossDb(range_m, alt1, alt2, freq_hz) + RainLossDb(range_m, freq_hz, env.rain_rate_mmh);
     const double lambda = WavelengthOf(freq_hz);
     if (freq_hz < 1e9) {
@@ -122,7 +129,7 @@ inline LinkLossResult LinkLossCore(const Environment& env, const PathGeometry& g
     } else {
         const ReflectionGeometry rg =
             ComputeReflection(h1 > 0.5 ? h1 : 0.5, h2 > 0.5 ? h2 : 0.5, g.ground_range_m, env.k_factor);
-        const double rho = EffectiveReflection(env, rg.grazing_rad, lambda);
+        const double rho = PathReflection(env, g, rg, freq_hz, reversed);
         r.multipath_factor = TwoRayFactor(rg, lambda, rho, gain_ratio);
     }
     return r;
@@ -138,7 +145,7 @@ inline LinkLossResult LinkLossCached(const EmScene& s, PathCache& cache, const P
     const PathGeometry& g = cache.Get(PathCache::PairKey(lo.id, hi.id), s.GetTerrain(), lo.position, lo.altitude_m,
                                       hi.position, hi.altitude_m, s.env.profile_spacing_m);
     return LinkLossCore(s.env, g, a.height_agl_m, b.height_agl_m, a.altitude_m, b.altitude_m,
-                        (b.position - a.position).Length(), freq_hz, gain_ratio);
+                        (b.position - a.position).Length(), freq_hz, gain_ratio, !ab);
 }
 
 inline LinkLossResult LinkLoss(const EmScene& s, const Platform& a, const Platform& b, double freq_hz, double gain_ratio = 1.0) {
