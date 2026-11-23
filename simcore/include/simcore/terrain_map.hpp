@@ -656,8 +656,8 @@ public:
         if (water_.Near(e, n, 0.0)) return true;
         const bool beyond = def_.far_ground != nullptr && !def_.InCore(e, n);
         for (const LakeBox& b : lake_boxes_) {
-            if ((b.far && !beyond) || e < b.w || e > b.e || n < b.s || n > b.n) continue;
-            const MapLakeDef& l = b.far ? def_.far_ground->lakes[b.index] : def_.lakes[b.index];
+            if ((b.country && !beyond) || e < b.w || e > b.e || n < b.s || n > b.n) continue;
+            const MapLakeDef& l = b.country ? def_.far_ground->lakes[b.index] : def_.lakes[b.index];
             if (mapgeo::InPolygon(l.points, e, n)) return true;
         }
         return beyond && far_water_.Near(e, n, 0.0);
@@ -1282,9 +1282,9 @@ private:
         // The water a path's reflection and smooth earth look for (WaterAt): the rivers above, the map's lakes, and beyond
         // the map proper its country's lakes and rivers.
         has_water_ = !def_.rivers.empty() || !detail_lines_.rivers.empty();
-        const auto add_lake = [&](const MapLakeDef& l, bool far, std::size_t index) {
+        const auto add_lake = [&](const MapLakeDef& l, bool country, std::size_t index) {
             if (l.points.size() < 3) return;
-            LakeBox b{1e300, 1e300, -1e300, -1e300, far, index};
+            LakeBox b{1e300, 1e300, -1e300, -1e300, country, index};
             for (const MapPoint& p : l.points) {
                 b.w = std::min(b.w, p.east_m);
                 b.s = std::min(b.s, p.north_m);
@@ -2057,7 +2057,7 @@ private:
     mapgeo::SegmentIndex far_water_{250.0};  // the country's rivers beyond the map proper (WaterAt)
     struct LakeBox {
         double w, s, e, n;  // the shore's bounds
-        bool far;           // the country's (beyond the map proper), else the map's
+        bool country;       // the country's (beyond the map proper), else the map's
         std::size_t index;
     };
     std::vector<LakeBox> lake_boxes_;
