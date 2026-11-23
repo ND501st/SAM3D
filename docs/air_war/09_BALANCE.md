@@ -1520,3 +1520,24 @@ The benches were run on the same build at `--set radio.mode=1` and at the new de
 No value was changed and no band loosened. `air_battle_bench` and `air_war_bench` were not re-run. The testbed's sessions
 do carry the air radio at UHF, whose calls past the radio horizon now lose more (the calls inside it, between aircraft
 at height, almost never graze the earth): a call heard past the horizon before may not be now. Measuring that is left.
+
+## 25. The fronts against history (track F, F6.1, 23 November 2026)
+
+`fronts_bench data --history` (`docs/fronts/06_BALANCE.md`, "As built: F6.1") runs each faction's war on the nation with
+`ground.mode`, `air_front.mode` and `ad_strategy.mode` at 1 and measures the ground war and the air front against 33 bands
+of their own (`balance_bands.json`, `"tool": "fronts_bench"`), anchored on `fm_101_10_1_1976`, the HERO and CAA analyses
+(`dupuy_1986_attrition`, `fain_1988_posture`, `helmbold_1995_attrition`, `helmbold_1996_echelons`, `hero_1972_oralfore`),
+the Pact's and our doctrine and `werrell_2005`. Like B14's, a band the period's model misses for a reason no value should
+fix is argued in its `source`; F6.1 adds `"status": "argued"` to the bands' reader, printed and never failed.
+
+**For the air war** the one value F6.1 moved is on the ground side of a strike: `ground_war.json` `troops.strike_loss_share`
+0.1, the share of a strike's damage to a tied troops object its unit loses (F3.7 took it one for one, so a strike cost its
+division 10-20 % and the air made 38-60 % of our battle losses; now 1.4-1.8 % and 8-20 %). It reads only under
+`ground.mode` 1. With every F mode on the enemy's loss a sortie on the nation is the Pact's 3.48 % (3.73 before; F4.3 had
+3.92 against 3.39 with and without the fighter cover) and NATO's 2.50 % (2.54), inside this file's nation bands (section 8,
+`loss_share` 1.5-4.5 and 1.0-3.5 %). The air front stays at the border in both wars by its sourced gates: our radar SAMs
+lose 18-24 % in two weeks (band 10-40 %, `mt_rozhdestvenskiy_depth`), well short of the 60-80 % neutralised the gates ask.
+
+**At the defaults** nothing moves: `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json
+data 10 7` are byte-identical to 83caa77, and every band here is as it was. Section 3's re-run of B14's bands on the moving
+front is F6.2's.

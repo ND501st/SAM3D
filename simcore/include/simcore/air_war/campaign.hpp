@@ -628,6 +628,8 @@ public:
     const AirFrontState& AirFront() const { return air_front_; }
     const std::vector<double>& AirFrontDepths() const { return air_front_depth_; }
     const std::vector<double>& HeloFrontDepths() const { return air_front_helo_depth_; }
+    // And each sector's reward over its next band as the last decision weighed it (fronts_bench's account, F6.1).
+    const std::vector<double>& AirFrontRewards() const { return air_front_reward_; }
     // Both as the planner, the route planner and C2 read them (F2.4): off at mode 0, so their fixed depths stand.
     AirFrontView FrontView() const {
         AirFrontView v;

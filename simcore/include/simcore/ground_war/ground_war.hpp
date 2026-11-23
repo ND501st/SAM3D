@@ -65,10 +65,10 @@
 // over the object's owner). The campaign reads a tied object's working share from its unit's strength over the unit's
 // establishment at the war's start (TroopsFunction), its place from its unit's (TroopsPlace: its home, moved with an order's
 // march, never nearer the line of contact than its unit keeps), and hands back the enemy's strikes on it (AirStrike: the
-// damage times the object's share of its unit off the unit's strength, cohesion.air_attack_loss off its cohesion), the
-// strength a march column brings it (Reinforce) and its stocks as the unit's supply (SetSupply). The enemy's air picture of
-// our formations is its picture's entries for their tied objects. NATO's corps draws its fire support coordination line by
-// sector (Fscl) at the war's start, each day's end and when an axis starts, halts or resumes.
+// damage times the object's share of its unit and troops.strike_loss_share off the unit's strength, cohesion.air_attack_loss
+// off its cohesion), the strength a march column brings it (Reinforce) and its stocks as the unit's supply (SetSupply). The
+// enemy's air picture of our formations is its picture's entries for their tied objects. NATO's corps draws its fire
+// support coordination line by sector (Fscl) at the war's start, each day's end and when an axis starts, halts or resumes.
 #pragma once
 
 #include <algorithm>
@@ -207,6 +207,15 @@ struct Formation {
     // of its establishment they cost (the truth; the return carries the staff's count).
     int air_hits = 0;
     double air_lost = 0.0;
+    // F6.1's tally (fronts_bench --history; the truth, nothing in the simulation reads it): what it lost, T-55 equivalents,
+    // by cause (fighting while attacking or defending, the enemy's air, stragglers when dispersed, the rest rate out of the
+    // fight), and its hours in the fight.
+    double lost_attack = 0.0;
+    double lost_defence = 0.0;
+    double lost_air = 0.0;
+    double lost_straggle = 0.0;
+    double lost_rest = 0.0;
+    double fought_h = 0.0;
 
     double Tanks() const {
         double n = 0.0;
@@ -289,6 +298,12 @@ struct Axis {
     double last_ratio = 0.0;
     Opposition last_opposition = Opposition::Stalled;
     std::vector<AxisAnchor> anchors;  // its route's places, by depth (F3.6)
+    // F6.1's tally (the truth, for fronts_bench --history): the fighting's losses on it, T-55 equivalents, of the side
+    // attacking it (the enemy, or ours in a counterattack) and of the side defending; the hour the main defensive zone was
+    // reached (-1 not yet).
+    double lost_attack = 0.0;
+    double lost_defence = 0.0;
+    double zone_h = -1.0;
 };
 
 // The commanders' decisions as the log records them (F3.4).
@@ -738,6 +753,8 @@ public:
     }
     // What happened since the last ClearLog (the campaign journals it and clears it).
     const std::vector<GroundLogEntry>& Log() const { return log_; }
+    // F6.1: how many orders of a kind were given in the war so far (the log is cleared every hour; this is not).
+    std::uint32_t OrderCount(GroundOrder o) const { return order_counts_[static_cast<std::size_t>(o)]; }
     void ClearLog() { log_.clear(); }
 
     // Profiling (fronts_bench): the parts' times by steady_clock, off by default.
@@ -894,9 +911,10 @@ public:
         Settle(fi, h);
         const double before = f.unit.strength;
         const double have = t.regiment >= 0 ? regs_[static_cast<std::size_t>(t.regiment)].part * before : before;
-        const double lost = std::min(have, damage * t.share * t.unit_base);
+        const double lost = std::min(have, damage * t.share * t.unit_base * data_->tables.troops.strike_loss_share);
         if (!(lost > 0.0)) return 0.0;
         ApplyLoss(f, lost / before, -1.0);
+        f.lost_air += before - f.unit.strength;
         SitStruck(fi, t, lost, h, at != nullptr ? *at : t.home);
         const GroundTables& tb = data_->tables;
         double hit = 1.0;  // the formation's share the attack fell on
@@ -1073,6 +1091,7 @@ private:
     bool profiling_ = false;
     bool reverse_ = false;
     GroundProfile profile_;
+    std::uint32_t order_counts_[kGroundOrderCount] = {};  // F6.1: the orders given, by kind (the tally's)
 
     static bool Fail(std::string* error, const std::string& m) {
         if (error != nullptr) *error = "ground war: " + m;
@@ -2142,6 +2161,7 @@ private:
         e.value = value;
         e.other = other;
         log_.push_back(e);
+        ++order_counts_[static_cast<std::size_t>(o)];
     }
 
     // ---- the commanders' clock
@@ -2181,7 +2201,9 @@ private:
     void Settle(std::size_t i, double h) {
         Formation& f = forms_[i];
         if (!f.spent && h > f.settled_h) {
+            const double before = f.unit.strength;
             ApplyLoss(f, LossOverHours(DailyLoss(data_->tables, f.rest, 1), h - f.settled_h), -1.0);
+            f.lost_rest += before - f.unit.strength;
             const double regained = data_->tables.cohesion_recovery_per_day * (h - f.settled_h) / 24.0;
             if (f.level == UnitLevel::U1) {
                 double coh = 0.0;
@@ -2601,6 +2623,25 @@ private:
         return x.draw;
     }
 
+    // F6.1's tally of an hour's fighting: `lost` (T-55 equivalents) shared out among the axes the formation fought on by
+    // each one's share of `share`, attacking or defending. Nothing reads it but fronts_bench --history.
+    void Tally(std::size_t i, double lost, double share) {
+        Formation& f = forms_[i];
+        f.fought_h += 1.0;
+        if (!(lost > 0.0) || !(share > 0.0)) return;
+        const std::size_t na = axes_.size();
+        for (std::size_t a = 0; a < na; ++a) {
+            const std::uint8_t z = engaged_[i * na + a];
+            if (z == 0) continue;
+            const SectorResult& r = results_[a];
+            const double part = (z == 3 ? r.attacker_loss : r.defender_loss * part_[i * na + a]) / share;
+            const bool attacking = z == 3;
+            const double l = lost * part;
+            (attacking ? f.lost_attack : f.lost_defence) += l;
+            (attacking ? axes_[a].lost_attack : axes_[a].lost_defence) += l;
+        }
+    }
+
     // Phase 2: one formation's losses over the hour, from every axis it fought on, in the axes' order; its cohesion falls
     // with what it lost.
     void ApplyHour(std::size_t i, double h0) {
@@ -2655,6 +2696,7 @@ private:
         const double before = f.unit.strength;
         ApplyLoss(f, share, tank_share);
         const double lost = before > 0.0 ? 1.0 - f.unit.strength / before : 0.0;
+        Tally(i, before - f.unit.strength, share);
         // Cohesion falls with the hour's losses and is regained at its daily rate in contact too: a steady grind wears
         // it slowly, heavy losses in hours break it (03 section 5.4).
         const GroundTables& t = data_->tables;
@@ -2755,6 +2797,7 @@ private:
             if (x.status == AxisStatus::Attacking) {
                 if (!x.raid && !x.through_zone && x.depth_m >= security_zone_m_) {
                     x.through_zone = true;  // the penetration reaches the main defensive zone: our army hears of it
+                    if (x.zone_h < 0.0) x.zone_h = h1;
                     AxisAtOnce(Side::Ours, a, h1);
                     WakeAfterReaction(top_[0], h1, 0x6000ull + a);
                 }
@@ -3359,7 +3402,9 @@ private:
         Settle(i, h);
         Order(h, GroundOrder::Dispersed, cmdr, static_cast<int>(i), AxisOfFormation(i), why);
         const int on = AxisOfFormation(i);
+        const double before_straggle = f.unit.strength;
         ApplyLoss(f, data_->tables.straggler_loss, -1.0, false);
+        f.lost_straggle += before_straggle - f.unit.strength;
         f.spent = true;
         f.unit.state = UnitState::Dispersed;
         f.unit.posture = Posture::Withdrawal;
