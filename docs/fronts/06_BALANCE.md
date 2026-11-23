@@ -269,3 +269,41 @@ pipeline's pump, as F6.1's `--history`.
 - The player's effect on a front that moves in the battery's sector (a war or a theatre where the air front steps there).
 - The battery's sector by where it stands at the war's start; a war in which it moves to another sector is measured there.
 - `air_war_balance --fronts`'s CPU against the 1.05x line of section 5 with the pipeline left out (the pump dominates).
+
+## Decisions after F6 (24 Nov 2026)
+
+The owner left F6.1's and F6.2's open decisions to Claude. They were taken as follows.
+
+- **Kept as built:**
+  - `troops.strike_loss_share` stays at 0.1.
+  - F6.1's ten argued bands stay argued, with their reasons as written.
+  - The player's bounds stay as set: 5 km of line, one step of the air front, 48 h, and the draws' spread.
+- **The repair return** stays at 0.25 a day. Withdrawals are measured again once F7.1 and F7.2 make the fighting
+  heavier. Turning the return down without a source would only force the band.
+- **The engagement record is not made a player input.** The headless campaign keeps its abstract defence. What the
+  player's own missions do already reaches the campaign through the records (the written record is the war's memory).
+- **Counterattacks:** F7.1, below.
+- **The air front:** F7.2, below.
+
+### F7.1: army reserves and the counterattack at the tip
+
+- Each army of ours holds a reserve: a mobile formation from its order of battle, kept back by doctrine.
+- The counterattack's ratio is weighed against the enemy formations at the penetration's tip and flanks, not against the
+  whole axis's first echelon.
+- The attack is launched when the penetration's momentum is spent (its advance slows, or its losses rise) and the reserve
+  can reach the flank on the roads in time.
+- After F7.1, counterattacks fire in some wars and not in others, by the sourced ratio, and F6.1's counterattack band
+  comes out of argued.
+
+### F7.2: the air front follows its own ground offensive
+
+- A sector's reward also counts the enemy's need for close support of its own axes attacking there. Its air chief moves
+  the air front behind an advancing axis, so that it does not stand at the border while the line is 50 km in.
+- The sourced risk gates still hold. A sector whose air defence is intact keeps the air front back, whatever the reward.
+- After F7.2, the Pact's air front steps where its axes advance. F6.2's player measure then has a step's delay to
+  measure in the battery's sector, whenever an axis runs through it.
+
+### F7.3: the bands again
+
+- `fronts_bench --history`, `--player` and `air_war_balance --fronts` are re-run after F7.1 and F7.2.
+- Each argued band is held, re-argued or returned to green.
