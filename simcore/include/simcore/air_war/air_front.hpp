@@ -390,6 +390,37 @@ struct AirFrontMove {
 // A gate moved by a trait in [-1, 1], by at most `shift` of its value.
 inline double TraitMoved(double gate, double t, double shift) { return gate * (1.0 + shift * t); }
 
+// The faction's gates as its chief's traits move them (the decision's, and the outcomes' ledger's, F6.2).
+struct AirFrontGates {
+    double cover = 0.0;       // the believed cover at most this
+    double mobile = 1.0;      // our mobile air defence believed destroyed at least this
+    double loss_line = 0.0;   // losses above it pull the front back
+    double min_reward = 0.0;  // the next band's worth at least this
+};
+inline AirFrontGates GatesOf(const AirFrontDef& def, const AirFrontRules& rules, const AirFrontChief& chief) {
+    const Traits& tr = chief.traits;
+    const double bold = 2.0 * (Clamp01(tr.boldness) - 0.5);
+    const double ambition = 2.0 * (Clamp01(tr.ambition) - 0.5);
+    AirFrontGates g;
+    g.cover = Clamp01(TraitMoved(def.cover_at_most, bold, rules.trait_shift));
+    g.mobile = Clamp01(TraitMoved(def.mobile_destroyed_at_least, -bold, rules.trait_shift));
+    g.loss_line = TraitMoved(def.loss_line, bold, rules.trait_shift);
+    g.min_reward = TraitMoved(def.min_reward, -ambition, rules.trait_shift);
+    return g;
+}
+
+// The deepest sector s's air front may go: its own greatest depth and the politics' (measured from the border), none
+// before a border front's event.
+inline double AirFrontCap(const AirFrontDef& def, const LineOfContact& line, std::size_t s, double politics_max_depth_m, bool may_move) {
+    double cap = def.max_depth_m;
+    if (politics_max_depth_m > 0.0) {
+        const double mid = 0.5 * (std::max(0.0, line.Sector(s).from_m) + std::min(line.Length(), line.Sector(s).to_m));
+        cap = std::min(cap, politics_max_depth_m - line.Offset(mid));
+    }
+    if (!may_move) cap = 0.0;
+    return std::max(0.0, cap);
+}
+
 // The air staff's decision at a planning cycle (§3), sector by sector, on its picture: never the truth. Pure: the state
 // in, the state out, the moves for the journal. At most one move a sector a cycle. `reward_scratch`: a kept vector, so a
 // cycle allocates nothing once sized (null: a local one).
@@ -408,12 +439,11 @@ inline void DecideAirFront(const AirFrontDef& def, const AirFrontRules& rules, c
     SectorRewards(*in.picture, line, depth_now, rules.reward_reach_m, rules.step_m, in.target_weight, in.banned, reward);
 
     const Traits& tr = chief.traits;
-    const double bold = 2.0 * (Clamp01(tr.boldness) - 0.5);
-    const double ambition = 2.0 * (Clamp01(tr.ambition) - 0.5);
-    const double gate_cover = Clamp01(TraitMoved(def.cover_at_most, bold, rules.trait_shift));
-    const double gate_mobile = Clamp01(TraitMoved(def.mobile_destroyed_at_least, -bold, rules.trait_shift));
-    const double loss_line = TraitMoved(def.loss_line, bold, rules.trait_shift);
-    const double min_reward = TraitMoved(def.min_reward, -ambition, rules.trait_shift);
+    const AirFrontGates gates = GatesOf(def, rules, chief);
+    const double gate_cover = gates.cover;
+    const double gate_mobile = gates.mobile;
+    const double loss_line = gates.loss_line;
+    const double min_reward = gates.min_reward;
     // A methodical chief takes the long end of the delay, a bold one the short.
     const double delay_h = def.delay_lo_h + (def.delay_hi_h - def.delay_lo_h) * Clamp01(0.5 + 0.5 * (tr.methodical - tr.boldness));
     const double surge_h = def.surge_lo_h + (def.surge_hi_h - def.surge_lo_h) * Clamp01(tr.boldness);
@@ -446,13 +476,7 @@ inline void DecideAirFront(const AirFrontDef& def, const AirFrontRules& rules, c
         };
         if (c.sam_baseline >= rules.min_baseline || c.mobile_baseline >= rules.min_baseline) f.contested = true;
         // The deepest it may go here: its own greatest depth and the politics', which is measured from the border.
-        double cap = def.max_depth_m;
-        if (in.politics_max_depth_m > 0.0) {
-            const double mid = 0.5 * (std::max(0.0, line.Sector(s).from_m) + std::min(line.Length(), line.Sector(s).to_m));
-            cap = std::min(cap, in.politics_max_depth_m - line.Offset(mid));
-        }
-        if (!may_move) cap = 0.0;
-        cap = std::max(0.0, cap);
+        const double cap = AirFrontCap(def, line, s, in.politics_max_depth_m, may_move);
         const bool over = sorties >= rules.min_sorties && rate > loss_line;
         const bool crisis_now = in.crisis != nullptr && s < in.crisis->size() && (*in.crisis)[s] != 0;
         const bool in_crisis = in.now_h < f.crisis_until_h;

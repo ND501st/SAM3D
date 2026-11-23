@@ -1541,3 +1541,42 @@ lose 18-24 % in two weeks (band 10-40 %, `mt_rozhdestvenskiy_depth`), well short
 **At the defaults** nothing moves: `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json
 data 10 7` are byte-identical to 83caa77, and every band here is as it was. Section 3's re-run of B14's bands on the moving
 front is F6.2's.
+
+## 26. The air war's bands on a moving front (track F, F6.2, 23 November 2026)
+
+Section 3 of `docs/fronts/06_BALANCE.md`: B14's bands re-run on the nation with every F mode on. `air_war_balance` and
+`air_war_bench` take `--fronts` (`ground.mode`, `air_front.mode`, `ad_strategy.mode` 1; `air_war_balance` pumps our side's
+pipeline after every hour's step, as `fronts_bench --history` does) and `air_war_bench` `--theatre`. A band written for
+that run alone carries `"modes": "fronts"` and is read first; an argued band (`"status": "argued"`, F6.1) now prints
+ARGUED in `air_war_balance` and `air_war_bench` too. No band needed either: all hold.
+
+**`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`** against the same at the defaults (track F
+at 8c073bb; before → after):
+
+| Nation | Loss % | Battery wrecked | Exchange, theirs for ours | On call (min) | Close support of the packages |
+|---|---|---|---|---|---|
+| Rebels, careless | 14.1% → 12.0% | 0% → 0% | - | - | 0% → 0% |
+| Rebels, careful | 17.6% → 10.7% | 0% → 0% | - | - | 0% → 0% |
+| Neutral, careless | 6.3% → 5.3% | 0% → 0% | - | - | 0% → 0% |
+| Neutral, careful | 5.8% → 6.5% | 0% → 0% | - | - | 0% → 0% |
+| Warsaw Pact, careless | 3.6% → 3.2% | 30% → 40% | 1.66 → 1.57 | 29.1 → 28.3 | 1% → 1% (0% days 1-2, 2-3% days 3-5) |
+| Warsaw Pact, careful | 3.3% → 3.1% | 0% → 0% | 1.44 → 1.85 | 27.9 → 25.7 | 1% → 1% |
+| NATO, careless | 1.9% → 2.1% | 20% → 40% | 0.39 → 0.40 | 21.9 → 21.2 | 3% → 3% (0% day 1, 3-6% days 2-5) |
+| NATO, careful | 2.0% → 2.2% | 0% → 10% | 0.44 → 0.36 | 20.7 → 20.4 | 3% → 2% |
+
+Every band holds: the loss a sortie (rebels 0-20 %, neutral 0-8, the Pact 1.5-4.5, NATO 1.0-3.5), the careful battery
+wrecked in at most 40 % of runs, the exchanges (the Pact 0.8-2.5, NATO 0.25-1.2) and the on-call latencies (15-45, 15-60
+min). What moved is what section 3 expected and no more: close support follows the line where it moves (none before the
+ground war opens, then a few per cent of the packages), our troops are struck and overrun (the Pact 1.8-3.1 strikes on
+troops a week, 3 objects overrun; NATO 3.3-3.5 and 0.4), and the careless battery is wrecked a little more often where the
+line comes nearer. The air front makes no step in a week in any war (F6.1: its sourced gates), so the rollback ends as
+before and the loss rates move by the draws.
+
+**`air_war_bench data 400 --theatre theatre_pannonia_nation.json --fronts`**: the table byte for byte as at the defaults,
+the 17 bands green. Its benchmarks are small theatres of their own with no front, so the modes reach none of them.
+
+**The player's effect** (`fronts_bench --player`, 06 section 4, "As built: F6.2"): the battery careful against careless
+moves the line in its sector by 0.49 km at most on average (NATO's western_crossings; band 5 km), the air front there not at
+all, and elsewhere nothing beyond the draws' spread; the outcomes' ledger counts the hours the battery's entry alone held the
+air front's gates shut there (0-11 h a war). At the defaults nothing moves: `air_war_balance data 20 7` and the nation's
+`data 10 7` are byte-identical to 8c073bb.

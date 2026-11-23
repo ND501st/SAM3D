@@ -7,6 +7,7 @@
 //        fronts_bench [data_dir] --feed [--days N] [--seeds N] [--theatre file] [--gate] [faction ...]
 //        fronts_bench [data_dir] --ad [--days N] [--seeds N] [--theatre file] [--gate] [--log] [--no-fighters] [faction ...]
 //        fronts_bench [data_dir] --history [--days N] [--seeds N] [--theatre file] [--gate] [faction ...]
+//        fronts_bench [data_dir] --player [--days N] [--seeds N] [--theatre file] [--set tuning.key=value ...] [--gate] [faction ...]
 //        fronts_bench [data_dir] --map post[,post...] [--map-json out.json] [--days N] [--seeds N] [--theatre file] [faction ...]
 //   --air-front (F2.2-F2.3, the only part built so far): each faction's campaign run with air_front.mode 1 for N days
 //   (default 7) over N seeds (default 3) on the theatre (default theatre_pannonia_nation.json), its front cut into
@@ -78,6 +79,14 @@
 //   penetration, the air's share of our losses and a strike's toll, the air front's latency, pull-back and steps, our radar SAM
 //   units lost and back, an S-75 class move and a unit's moves a day, the enemy's loss rate a sortie. A band marked "argued" is
 //   printed and never fails; --gate exits 2 when another is out.
+//   --player (F6.2): each faction's war (default all four) as --history runs it, N days (default 7) over N seeds (default 3),
+//   twice on each seed: the player's battery careless and careful (air_war_balance's two postures: the moves and the
+//   emission discipline; its kills, its fate and what the enemy knows of it measured). The difference in the battery's sector
+//   (its sector at the war's start): the line of contact at the end, the air front's steps and the hour of its first step;
+//   elsewhere the line's difference over the draws' spread (the same posture's seeds against each other); the outcomes'
+//   ledger of the air front's delay the battery bought (campaign/outcomes.hpp). Against the bands "player_*" of
+//   balance_bands.json (docs/fronts/06_BALANCE.md section 4); --gate exits 2 when one is out. --set tries a tuning value in
+//   both wars (a sensitivity run: air_front.reward_reach_m=0 weighs the targets already in reach, so the air front moves).
 // Factions default to warsaw_pact and nato (--ground: all four). CPU time by std::clock (docs/air_battle/01_ROUTES.md: wall times move with
 // the machine's other load). Exits 2 when a cycle is over budget or the war differs with the mode on and no air front moved.
 #include <algorithm>
@@ -91,9 +100,11 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/campaign/outcomes.hpp"
 #include "simcore/command.hpp"
 #include "simcore/ground_war.hpp"
 
@@ -1478,6 +1489,233 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
 
 }  // namespace
 
+// ------------------------------------------------------------------ the player's effect (F6.2)
+
+// The battery careful or careless: air_war_balance's two postures (the moves and the emission discipline the headless
+// campaign exposes for the player's battery). The engagement record is not set: it follows from them (a battery found,
+// struck and wrecked shoots down less), and is measured below as the battery's kills.
+void PlayerPosture(BatteryPosture& p, bool careful) {
+    if (careful) {
+        p.emission = 0.1;
+        p.emcon_discipline = 0.7;
+        p.radio_discipline = 0.7;
+        p.dummy_traffic = true;
+        p.relocate_every_h = 20.0;
+    } else {
+        p.emission = 0.5;
+        p.emcon_discipline = 0.2;
+        p.radio_discipline = 0.2;
+        p.dummy_traffic = false;
+        p.relocate_every_h = 0.0;
+    }
+}
+
+// One war as --player measures it: the line and the air front in every sector at the end, the battery's own sector's
+// first step forward, the outcomes' ledger of its air front's delay, and the battery's record.
+struct PlayerRun {
+    int sector = -1;                 // the battery's sector at the war's start
+    std::string sector_id;
+    std::vector<double> line_km;     // each sector's line of contact at the end, km beyond the base line
+    std::vector<int> af_steps;       // each sector's air front: steps forward and back
+    std::vector<int> af_back;
+    std::vector<double> af_km;       // and its depth at the end
+    double first_step_h = -1.0;      // the battery's sector's first step forward (-1: none)
+    double held_h = 0.0;             // the ledger (campaign/outcomes.hpp): hours the battery's entry held its sector's air front
+    double watched_h = 0.0;
+    int kills = 0;                   // the enemy's manned aircraft and cruise missiles the battery shot down
+    bool wrecked = false;            // wrecked at some hour's end
+    double knowledge = 0.0;          // EnemyKnowledgeOfBattery at the end
+    double sorties = 0.0, lost = 0.0;
+    double cpu_s = 0.0;
+};
+
+bool PlayerCampaign(const AirWarData& d, unsigned seed, int days, const command::ChainData& chain, bool careful, PlayerRun& out) {
+    const double t0 = CpuSeconds();
+    AirCampaign c;
+    if (!c.Init(d, seed)) return false;
+    PlayerPosture(c.Posture(), careful);
+    command::InfoNet net;
+    net.Init(chain, seed, d.theatre.start_hour);
+    command::GiveTheatreSky(net, d.theatre);
+    command::CampaignFeed feed;
+    feed.Bind(&net);
+    c.SetOrderSource(feed.OrderSource());
+    const std::string own = campaign::OwnObject(c);
+    c.ObserveOutcomes([&out, &d, own](const Package& p, const PackageOutcome& o) {
+        for (const LossRecord& l : o.losses) {
+            if (l.by != own || l.flight < 0 || static_cast<std::size_t>(l.flight) >= p.flights.size()) continue;
+            const AircraftType* a = d.faction.Aircraft(p.flights[static_cast<std::size_t>(l.flight)].aircraft);
+            if (a != nullptr && a->drone) continue;  // decoy drones are meant to be shot down
+            ++out.kills;
+        }
+        for (const std::string& by : o.missiles_downed) out.kills += by == own ? 1 : 0;
+    });
+    const std::size_t player = static_cast<std::size_t>(c.PlayerIndex());
+    const LineOfContact& line = c.FrontLine();
+    const std::size_t ns = line.SectorCount();
+    out.sector = line.Empty() ? -1 : line.SectorOf(c.Truth()[player].pos);
+    if (out.sector >= 0) out.sector_id = line.Sector(static_cast<std::size_t>(out.sector)).id;
+    campaign::OutcomeLedger led;
+    for (int h = 1; h <= days * 24; ++h) {
+        while (c.Now() < h) {
+            if (c.Advance(static_cast<double>(h))) c.SkipPlayerMission();
+            feed.Pump(c);
+        }
+        if (c.Truth()[player].function <= 0.0) out.wrecked = true;
+        led.AirFront(campaign::CheckAirFront(c, c.Now()), 1.0);
+        if (out.first_step_h < 0.0 && out.sector >= 0 && static_cast<std::size_t>(out.sector) < c.AirFront().sectors.size() &&
+            c.AirFront().sectors[static_cast<std::size_t>(out.sector)].advances > 0) {
+            out.first_step_h = c.Now();
+        }
+    }
+    c.SetOrderSource(nullptr);
+    out.line_km.assign(ns, 0.0);
+    out.af_steps.assign(ns, 0);
+    out.af_back.assign(ns, 0);
+    out.af_km.assign(ns, 0.0);
+    for (std::size_t k = 0; k < ns; ++k) {
+        if (c.Ground() != nullptr) out.line_km[k] = groundwar::GroundWar::SectorDepth(line, k) / 1000.0;
+        if (k < c.AirFront().sectors.size()) {
+            const SectorFront& f = c.AirFront().sectors[k];
+            out.af_steps[k] = f.advances;
+            out.af_back[k] = f.pullbacks;
+            out.af_km[k] = f.depth_m / 1000.0;
+        }
+    }
+    out.held_h = led.AirFrontHeldH();
+    out.watched_h = led.AirFrontWatchedH();
+    out.knowledge = c.EnemyKnowledgeOfBattery();
+    for (const Package& p : c.Packages()) {
+        if (!p.resolved) continue;
+        for (const Flight& fl : p.flights) {
+            const AircraftType* ac = d.faction.Aircraft(fl.aircraft);
+            if (ac != nullptr && (ac->drone || ac->missile)) continue;
+            out.sorties += fl.count;
+            out.lost += fl.lost;
+        }
+    }
+    out.cpu_s = CpuSeconds() - t0;
+    return true;
+}
+
+// --player: each faction's war twice on the same seeds, the battery careful and careless, every front mode on and our
+// pipeline pumped (docs/fronts/06_BALANCE.md section 4): the difference in the battery's sector (the line at the end, the air
+// front's steps and its first step's hour) against the bands, and elsewhere against the draws' spread (the same posture's
+// seeds against each other).
+int PlayerMain(const std::string& data, const std::string& theatre, int days, int seeds, bool gate, const std::vector<std::string>& factions,
+               const std::vector<std::pair<std::string, double>>& sets) {
+    command::ChainData chain;
+    BalanceBands bands;
+    std::string e;
+    if (!command::LoadChainData(data, "command/chain_pannonia.json", chain, &e) || !LoadBalanceBands(data + "/air_war/balance_bands.json", bands, &e)) {
+        std::printf("%s\n", e.c_str());
+        return 1;
+    }
+    const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato", "neutral", "rebels"} : factions;
+    int fails = 0;
+    std::printf("The player's effect (F6.2) on %s: ground.mode, air_front.mode, ad_strategy.mode 1, %d days x %d seeds, the battery careless and careful\n",
+                theatre.c_str(), days, seeds);
+    for (const auto& kv : sets) std::printf("  --set %s=%g\n", kv.first.c_str(), kv.second);
+    std::printf("\n");
+    for (const std::string& faction : list) {
+        AirWarData d;
+        if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
+            std::printf("%s: %s\n", faction.c_str(), e.c_str());
+            return 1;
+        }
+        d.tuning.values["ground.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["ad_strategy.mode"] = 1.0;
+        for (const auto& kv : sets) d.tuning.values[kv.first] = kv.second;
+        std::vector<PlayerRun> runs[2];  // [0] careless, [1] careful
+        double cpu = 0.0;
+        for (int k = 0; k < seeds; ++k) {
+            for (int careful = 0; careful < 2; ++careful) {
+                PlayerRun r;
+                if (!PlayerCampaign(d, static_cast<unsigned>(7 + k), days, chain, careful != 0, r)) {
+                    std::printf("%s: the campaign does not start\n", faction.c_str());
+                    return 1;
+                }
+                cpu += r.cpu_s;
+                runs[careful].push_back(r);
+            }
+        }
+        std::printf("## %s (%.1f s CPU)\n\n", faction.c_str(), cpu);
+        std::printf("| Seed | The battery's sector | Line careless | careful | Air front careless: steps (first) | careful | Held by the battery careless | careful | "
+                    "Kills careless | careful | Wrecked | Enemy knows |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+        HistMean line_abs, line_signed, other_abs, spread, other_steps, step_spread, delay_h;
+        int worst_steps = 0, delay_none = 0;
+        for (int k = 0; k < seeds; ++k) {
+            const PlayerRun& a = runs[0][static_cast<std::size_t>(k)];
+            const PlayerRun& b = runs[1][static_cast<std::size_t>(k)];
+            const std::size_t s = static_cast<std::size_t>(std::max(0, a.sector));
+            const bool have = a.sector >= 0 && s < a.line_km.size() && s < b.line_km.size();
+            char fa[64], fb[64];
+            std::snprintf(fa, sizeof(fa), "%d (%s)", have ? a.af_steps[s] : 0, a.first_step_h >= 0.0 ? std::to_string(static_cast<int>(a.first_step_h)).append(" h").c_str() : "-");
+            std::snprintf(fb, sizeof(fb), "%d (%s)", have ? b.af_steps[s] : 0, b.first_step_h >= 0.0 ? std::to_string(static_cast<int>(b.first_step_h)).append(" h").c_str() : "-");
+            std::printf("| %d | %s | %.1f km | %.1f km | %s | %s | %.0f h of %.0f | %.0f h of %.0f | %d | %d | %s/%s | %.2f/%.2f |\n", 7 + k, a.sector_id.c_str(),
+                        have ? a.line_km[s] : 0.0, have ? b.line_km[s] : 0.0, fa, fb, a.held_h, a.watched_h, b.held_h, b.watched_h, a.kills, b.kills,
+                        a.wrecked ? "yes" : "no", b.wrecked ? "yes" : "no", a.knowledge, b.knowledge);
+            if (!have) continue;
+            line_abs.Add(std::fabs(b.line_km[s] - a.line_km[s]));
+            line_signed.Add(b.line_km[s] - a.line_km[s]);
+            worst_steps = std::max(worst_steps, std::abs(b.af_steps[s] - a.af_steps[s]));
+            if (a.first_step_h >= 0.0 && b.first_step_h >= 0.0) {
+                delay_h.Add(b.first_step_h - a.first_step_h);
+            } else if (a.first_step_h >= 0.0 || b.first_step_h >= 0.0) {
+                ++delay_none;  // one stepped, the other not: a step's difference (above), no delay to measure
+            }
+            for (std::size_t o = 0; o < a.line_km.size() && o < b.line_km.size(); ++o) {
+                if (o == s) continue;
+                other_abs.Add(std::fabs(b.line_km[o] - a.line_km[o]));
+                other_steps.Add(std::abs(b.af_steps[o] - a.af_steps[o]));
+                // The draws' spread: the same posture's other seeds in the same sector.
+                for (int j = k + 1; j < seeds; ++j) {
+                    for (int p = 0; p < 2; ++p) {
+                        const PlayerRun& x = runs[p][static_cast<std::size_t>(k)];
+                        const PlayerRun& y = runs[p][static_cast<std::size_t>(j)];
+                        if (o < y.line_km.size()) {
+                            spread.Add(std::fabs(x.line_km[o] - y.line_km[o]));
+                            step_spread.Add(std::abs(x.af_steps[o] - y.af_steps[o]));
+                        }
+                    }
+                }
+            }
+        }
+        std::printf("\n| Measure | Value | Band | | Anchor |\n|---|---|---|---|---|\n");
+        int f = 0;
+        f += HistRow(bands, theatre, faction, "player_line_km", "the battery's sector's line: careful against careless", line_abs.Get(), line_abs.n > 0, 1.0, " km");
+        f += HistRow(bands, theatre, faction, "player_air_front_steps", "the battery's sector's air front: steps apart", static_cast<double>(worst_steps), line_abs.n > 0);
+        f += HistRow(bands, theatre, faction, "player_air_front_delay_h", "its first step: careful later by, h", delay_h.Get(), delay_h.n > 0, 1.0, " h");
+        // Elsewhere: the careful battery's war against the careless one's in the other sectors, over the draws' spread there.
+        const double ratio = spread.Get() > 1e-9 ? other_abs.Get() / spread.Get() : (other_abs.Get() > 1e-9 ? 99.0 : 0.0);
+        f += HistRow(bands, theatre, faction, "player_elsewhere", "elsewhere: the line apart over the draws' spread", ratio, other_abs.n > 0);
+        std::printf("\n  the battery's sector: the line %.2f km apart on average (careful minus careless %+.2f km), the air front at most %d step(s) apart, "
+                    "its first step %+.1f h (%.0f seeds both stepped, %d one only)\n",
+                    line_abs.Get(), line_signed.Get(), worst_steps, delay_h.Get(), delay_h.n, delay_none);
+        std::printf("  elsewhere: the line %.2f km apart against %.2f km between seeds; the air front %.2f steps apart against %.2f between seeds\n",
+                    other_abs.Get(), spread.Get(), other_steps.Get(), step_spread.Get());
+        double held[2] = {0.0, 0.0}, kills[2] = {0.0, 0.0}, wrecked[2] = {0.0, 0.0}, lost[2] = {0.0, 0.0}, sorties[2] = {0.0, 0.0};
+        for (int p = 0; p < 2; ++p) {
+            for (const PlayerRun& r : runs[p]) {
+                held[p] += r.held_h;
+                kills[p] += r.kills;
+                wrecked[p] += r.wrecked ? 1.0 : 0.0;
+                lost[p] += r.lost;
+                sorties[p] += r.sorties;
+            }
+        }
+        const double n = seeds > 0 ? static_cast<double>(seeds) : 1.0;
+        std::printf("  the ledger's air front held by the battery: %.1f h careless, %.1f h careful a war; the battery's kills %.1f and %.1f, wrecked in %.0f %% and %.0f %%; "
+                    "the enemy's loss a sortie %.2f %% and %.2f %%\n\n",
+                    held[0] / n, held[1] / n, kills[0] / n, kills[1] / n, 100.0 * wrecked[0] / n, 100.0 * wrecked[1] / n,
+                    sorties[0] > 0.0 ? 100.0 * lost[0] / sorties[0] : 0.0, sorties[1] > 0.0 ? 100.0 * lost[1] / sorties[1] : 0.0);
+        fails += f;
+    }
+    if (fails > 0) std::printf("%d band(s) out\n", fails);
+    return gate && fails > 0 ? 2 : 0;
+}
+
 // --map: the situation maps of some posts at the end of a campaign with every front mode on, against the truth.
 // The truth at the end of a day, for map_view.py --front (this bench only): the line of contact at every station of the base line,
 // the air front's depth by sector, the formations where they are.
@@ -1692,11 +1930,20 @@ int main(int argc, char** argv) {
     std::string data = "data", theatre = "theatre_pannonia_nation.json", player, map_posts, map_json;
     int days = 7, seeds = 3, sectors = 8, campaign_days = 10, campaign_seeds = 1;
     bool air_front = false, print_moves = false, trace = false, watch = false, sectors_given = false, ground = false, gate = false,
-         days_given = false, seeds_given = false, feed = false, ad = false, history = false;
+         days_given = false, seeds_given = false, feed = false, ad = false, history = false, player_effect = false;
     std::vector<std::string> factions;
+    std::vector<std::pair<std::string, double>> sets;  // --player --set
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
-        if (a == "--air-front") {
+        if (a == "--set" && i + 1 < argc) {
+            const std::string kv = argv[++i];
+            const std::size_t eq = kv.find('=');
+            if (eq == std::string::npos || TuningTable::Defaults().count(kv.substr(0, eq)) == 0) {
+                std::printf("--set needs a tuning key=value: %s\n", kv.c_str());
+                return 1;
+            }
+            sets.push_back({kv.substr(0, eq), std::atof(kv.c_str() + eq + 1)});
+        } else if (a == "--air-front") {
             air_front = true;
         } else if (a == "--ground") {
             ground = true;
@@ -1718,6 +1965,8 @@ int main(int argc, char** argv) {
             ad = true;
         } else if (a == "--history") {
             history = true;
+        } else if (a == "--player") {
+            player_effect = true;
         } else if (a == "--map" && i + 1 < argc) {
             map_posts = argv[++i];
         } else if (a == "--map-json" && i + 1 < argc) {
@@ -1746,6 +1995,7 @@ int main(int argc, char** argv) {
         }
     }
     if (!map_posts.empty()) return MapMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 1, map_posts, factions, map_json);
+    if (player_effect) return PlayerMain(data, theatre, days_given ? days : 7, seeds_given ? seeds : 3, gate, factions, sets);
     if (history) return HistoryMain(data, theatre, days_given ? days : 14, seeds_given ? seeds : 3, gate, factions);
     if (ad) return AdMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (feed) return FeedMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);

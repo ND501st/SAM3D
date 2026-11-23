@@ -1,8 +1,13 @@
 // air_war_bench: the air war's weapons, attacks and losses against what history recorded (docs/air_war/09_BALANCE.md
 // section 9, docs/research/AIR_WAR_MISSIONS_2026-10.md).
 //
-// Usage: air_war_bench [data_dir] [runs] [--why] [--set tuning.key=value ...]
-//   --why: the losses by role and defence after each benchmark; --set: try a tuning value (a calibration sweep).
+// Usage: air_war_bench [data_dir] [runs] [--why] [--set tuning.key=value ...] [--theatre file] [--fronts]
+//   --why: the losses by role and defence after each benchmark; --set: try a tuning value (a calibration sweep);
+//   --theatre: the theatre whose values the benchmarks take (default theatre_pannonia.json); --fronts (track F, F6.2):
+//   ground.mode, air_front.mode and ad_strategy.mode 1 and the bands of "modes": "fronts" read first. The benchmarks fly
+//   their analogues through the resolver, the abstract fight, the delays' draws and the notices on small theatres of their
+//   own, none with a front line, so the modes reach none of them: with --fronts on the nation the table is the same, which
+//   is what F6.2's re-run on the moving front shows (docs/fronts/06_BALANCE.md, As built: F6.2).
 //
 // Each benchmark sets up a small theatre (a target and the defences around it, with the theatre's own values for its
 // guns and SAMs), flies a historical analogue through the abstract resolver (resolve.hpp) many times, and prints what
@@ -148,6 +153,8 @@ Package MakePackage(DayPart part = DayPart::Day) {
 
 // With --why: the losses of the benchmark just run, by the role shot down and the defence that did it.
 bool g_why = false;
+std::string g_theatre = "theatre_pannonia.json";  // --theatre
+bool g_fronts = false;                            // --fronts
 std::map<std::string, int> g_losses;
 
 void Why() {
@@ -186,11 +193,16 @@ double CepOf(const Bench& b, const char* type, const char* weapon, Delivery del)
 
 bool Load(Bench& b, const std::string& data_dir, const char* faction) {
     std::string e;
-    if (!LoadAirWarData(data_dir, "air_war/theatre_pannonia.json", std::string("air_war/faction_") + faction + ".json", b.d, &e)) {
+    if (!LoadAirWarData(data_dir, "air_war/" + g_theatre, std::string("air_war/faction_") + faction + ".json", b.d, &e)) {
         std::fprintf(stderr, "%s\n", e.c_str());
         return false;
     }
     for (FrontDef& fr : b.d.theatre.fronts) fr.friendly_fighters = 0.0;  // ground fire only, as in the analogues
+    if (g_fronts) {
+        b.d.tuning.values["ground.mode"] = 1.0;
+        b.d.tuning.values["air_front.mode"] = 1.0;
+        b.d.tuning.values["ad_strategy.mode"] = 1.0;
+    }
     Rng srng(5);
     b.staff.Build(b.d, srng, 0.0);
     return true;
@@ -244,7 +256,7 @@ int HotPhase(const std::string& data_dir, int runs, const Bench& nato, const Ben
         std::fprintf(stderr, "%s\n", e.c_str());
         return 1;
     }
-    const auto band = [&bands](const char* id) { return bands.Find("air_war_bench", id); };
+    const auto band = [&bands](const char* id) { return bands.Find("air_war_bench", id, std::string(), std::string(), std::string(), g_fronts ? "fronts" : ""); };
     int fails = 0;
     const int n_fights = std::max(2000, runs * 20);
     std::printf("\n# The hot phase against history (roadmap B14; %d abstract fights each)\n\n", n_fights);
@@ -445,10 +457,16 @@ int HotPhase(const std::string& data_dir, int runs, const Bench& nato, const Ben
 int main(int argc, char** argv) {
     const std::string data_dir = argc > 1 ? argv[1] : "data";
     const int runs = argc > 2 ? std::max(1, std::atoi(argv[2])) : 200;
+    for (int i = 3; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--theatre" && i + 1 < argc) g_theatre = argv[++i];
+        if (arg == "--fronts") g_fronts = true;
+    }
     Bench nato, pact;
     if (!Load(nato, data_dir, "nato") || !Load(pact, data_dir, "warsaw_pact")) return 1;
     for (int i = 3; i < argc; ++i) {
         const std::string arg = argv[i];
+        if (arg == "--theatre") ++i;
         if (arg == "--why") g_why = true;
         if (arg == "--set" && i + 1 < argc) {
             const std::string kv = argv[++i];
@@ -461,6 +479,9 @@ int main(int argc, char** argv) {
         }
     }
     std::printf("# The air war against history (%d runs each)\n\n", runs);
+    if (g_theatre != "theatre_pannonia.json" || g_fronts) {
+        std::printf("Theatre air_war/%s%s\n\n", g_theatre.c_str(), g_fronts ? ", every front mode on (F6.2): ground.mode, air_front.mode, ad_strategy.mode 1" : "");
+    }
     std::printf("| Benchmark | The model | History |\n|---|---|---|\n");
 
     // 1. A massive bridge (very_hard, two spans), F-4Es four at a time, its guns round it.
