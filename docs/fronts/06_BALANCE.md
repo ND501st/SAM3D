@@ -307,3 +307,54 @@ The owner left F6.1's and F6.2's open decisions to Claude. They were taken as fo
 
 - `fronts_bench --history`, `--player` and `air_war_balance --fronts` are re-run after F7.1 and F7.2.
 - Each argued band is held, re-argued or returned to green.
+
+## As built: F7.1 (24 Nov 2026)
+
+Our army's reserve is held back by its deployment, and the counterattack is weighed against the enemy at the
+penetration's tip once its momentum is spent (`03_GROUND_WAR.md`, As built: F7.1).
+- `fronts_bench --history` now counts a war in the counterattack band when the enemy is halted on our ground, as well as
+  when it penetrates the main zone. The label is "wars penetrated or held".
+- It prints two new lines:
+  - the tip's ratios (any hour, and the hours with the momentum spent);
+  - the reserve: its share and depth, the counterattacks that went in, the ratio they were ordered on, and the line
+    won back.
+
+**The bands** (14 days x 3 seeds; before is track F at 61f4e4e, after is F7.1):
+
+| Band | Range | Pact before → after | NATO before → after | Neutral before → after | |
+|---|---|---|---|---|---|
+| Wars penetrated or held: we counterattack | 0.3-1.0 | 0 → 0 | 0 → 0 | none → 1.00 (3 of 3) | Pact, NATO re-argued; the neutral's new and green |
+| Our army's day | 0.2-1.2 % | 1.26 → 1.22 | 2.47 → 2.47 | 0.07 → 0.33 (no band) | argued as before |
+| The air's share of our battle losses | 5-25 % | 20.15 → 17.39 | 8.45 → 8.45 | - | green |
+| A strike on troops, of its division | 0.2-3 % | 1.79 → 1.23 | unchanged | - | green |
+| Our radar SAM fire units lost at the end | 10-40 % | 24.24 → 25.76 | unchanged | - | green |
+| Of those wrecked, working at the end | 33-100 % | 63.83 → 62.50 | unchanged | - | green |
+| An S-75 class move, heard to ready | 7.5-20 h | 15.53 → 15.91 | none | - | green |
+| Our formations a day in the fight, withdrawn | 0.05-0.6 | 0 → 0 | 0 → 0 | - | argued as before |
+
+Every other band is the same to the digit, and none of NATO's moves. In the Pact's war the reserve now
+stands 55 km back rather than at the capital (61 km), so the enemy's strikes find different troops; the enemy's loss
+a sortie (printed beside, `air_war_balance`'s band) goes from 3.48 to 3.65 %. The neutral's printed values with no
+band move with the counterattack: our division's day in contact 5.49 → 4.92 %, the enemy's army's day 0.08 → 0.12 %,
+the exchange 0.95 → 2.50 (our counterattack pays as an attacker), the enemy's loss a sortie 3.85 → 2.97 %.
+
+**Argued** (each band's `source`):
+- *No counterattack against the Pact or NATO.* Our free force, the reserve with every other free formation, comes to
+  0.28 (Pact) and 0.51 (NATO) of the enemy at a penetration's tip at best. In the hours its momentum is spent it comes
+  to 0.29 and 0.52 (245 and 300 h a war). The army commander's ratio is 1.8-2.2. A front's three divisions on one
+  axis, or a NATO division's first echelon, outweigh our whole free force even at one breakthrough sector. Lowering
+  the ratio to that would send a brigade against a division.
+- *No withdrawals.* As F6.1 argued: no heavier fighting came, since no counterattack goes in against the Pact or NATO.
+
+**Counterattacks by war.**
+- *The neutral.* In every war: ordered on 2.57:1, on average 2.0 km won back in 24 h, the line still in our security
+  zone.
+- *The Pact, NATO and the rebels.* None.
+
+**Identity, cost, gates.** At the defaults `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` are byte-identical to 61f4e4e built the same way, and the replay fingerprint holds (journal 107, FNV 1375944258174313379, 41 packages). The ground war costs 0.02-0.07 ms a campaign day alone (03, As built: F7.1). `--ground --gate`, `--ground --gate --player-sector battery`, `--feed --gate` and `--history --gate` exit 0, and `--player`'s bands pass as F6.2's (the battery's line 0-0.49 km apart, its air front 0 steps, elsewhere 0-0.02).
+
+**Left:**
+- The neutral's counterattacks win little: they go in when ordered, at night or in the hills too.
+- Against the Pact and NATO the band stays argued. A front's reserve, a second army, or our divisions' own second
+  echelons fighting as one counterattack would be needed to reach the ratio: the owner's call.
+- Withdrawals are still for F7.3, with F7.2.

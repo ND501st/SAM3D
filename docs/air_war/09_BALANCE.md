@@ -1580,3 +1580,11 @@ moves the line in its sector by 0.49 km at most on average (NATO's western_cross
 all, and elsewhere nothing beyond the draws' spread; the outcomes' ledger counts the hours the battery's entry alone held the
 air front's gates shut there (0-11 h a war). At the defaults nothing moves: `air_war_balance data 20 7` and the nation's
 `data 10 7` are byte-identical to 8c073bb.
+
+## 27. Army reserves and the counterattack at the tip (track F, F7.1, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md`, "As built: F7.1". Our army's reserve is held back by its deployment, and its commander weighs a counterattack against the enemy at a penetration's tip once the penetration's momentum is spent. `fronts_bench --history`'s counterattack band now also counts an enemy halted on our ground.
+- The Pact's and NATO's bands stay argued, with new reasons: our free force is 0.28 and 0.51 of their tips, against the commander's 1.8-2.2.
+- The neutral gains its own band, green: a counterattack in 3 of 3 wars.
+- In the Pact's war the air's share of our battle losses goes from 20.2 to 17.4 % and a strike's toll from 1.79 to 1.23 %, as the reserve stands elsewhere. Both stay in their bands; the enemy's loss a sortie, read beside, goes from 3.48 to 3.65 %.
+- Nothing in `air_war_balance` moves at the defaults: `data 20 7` and the nation's `data 10 7` are byte-identical to 61f4e4e.

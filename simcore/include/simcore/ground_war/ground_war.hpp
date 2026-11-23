@@ -677,6 +677,8 @@ public:
         // U1's regiments and their commanders (F3.6); the roads, their anchors and the bridges on them.
         BuildRegiments(line);
         BuildRoads(theatre, country);
+        // Our army's reserve held back by its deployment (F7.1).
+        if (dep->reserve_depth_km > 0.0) HoldReserve(dep->reserve_depth_km * 1000.0, line);
         // The theatre's troops objects tied to our formations (F3.7).
         TieTroops(theatre, line);
         // Capacities: no list grows past these in the hour.
@@ -697,6 +699,7 @@ public:
         fought_.assign(nf, 0);
         moved_.assign(axes_.size(), 0);
         choices_.assign(axes_.size(), AxisChoice());
+        reach_.assign(nf, 0.0);
         log_.reserve(512);
         queue_.reserve(64 + 8 * (nf + cmdrs_.size() + axes_.size()) + 6 * nf + 4 * axes_.size() + 4 * regs_.size());
         rweight_.assign(regs_.size(), 0.0);
@@ -755,6 +758,8 @@ public:
     const std::vector<GroundLogEntry>& Log() const { return log_; }
     // F6.1: how many orders of a kind were given in the war so far (the log is cleared every hour; this is not).
     std::uint32_t OrderCount(GroundOrder o) const { return order_counts_[static_cast<std::size_t>(o)]; }
+    // F7.1: the ratios (as their commander believed them) our counterattacks were ordered on, summed (the tally's).
+    double CounterOrderedRatioSum() const { return counter_ratio_sum_; }
     void ClearLog() { log_.clear(); }
 
     // Profiling (fronts_bench): the parts' times by steady_clock, off by default.
@@ -806,6 +811,22 @@ public:
     }
     // A formation's strength fraction as its own commander knows it (his staff's count: his reaction time is its delay).
     double OwnFraction(std::size_t i) const { return forms_[i].unit.Fraction(); }
+    // F7.1: the enemy at an axis's tip and flanks by the truth (fronts_bench, tests; the commander reads TipSeen, his picture),
+    // its share of the axis's first echelons, a formation's share at the tip, and whether our picture has the penetration's
+    // momentum spent.
+    double TipPowerTruth(std::size_t a) const {
+        const GroundTables& t = data_->tables;
+        double p = 0.0;
+        for (int fi : axes_[a].first) {
+            const Formation& f = forms_[static_cast<std::size_t>(fi)];
+            if (!f.spent) p += UnitPower(t, f.unit.strength, f.unit.supply, f.unit.cohesion) * TipShareOf(static_cast<std::size_t>(fi));
+        }
+        return p * TipFraction(a, true);
+    }
+    double TipSeen(std::size_t a) const { return TipPower(Side::Ours, a); }
+    double TipFractionOf(std::size_t a) const { return TipFraction(a, true); }
+    double TipShare(std::size_t i) const { return TipShareOf(i); }
+    bool MomentumSpentSeen(std::size_t a) const { return MomentumSpent(a); }
 
     // U1 (F3.6): every formation's regiments (a formation's are Formations()[i].first_regiment on, regiment_count of them),
     // their commanders, a regiment's strength now and its fraction of its establishment, and the sector U1 is centred on.
@@ -1046,6 +1067,7 @@ private:
     std::vector<SectorResult> results_;
     std::vector<std::uint8_t> moved_;
     std::vector<AxisChoice> choices_;
+    std::vector<double> reach_;        // by formation (F7.1): a counterattack candidate's hours from the order to the flank
     std::vector<GroundLogEntry> log_;
     GroundPicture pictures_[2];  // ours, the enemy's (F3.5)
     std::vector<SitReport> sit_reports_;  // our side's reports and orders as compiled (F3.8)
@@ -1092,6 +1114,7 @@ private:
     bool reverse_ = false;
     GroundProfile profile_;
     std::uint32_t order_counts_[kGroundOrderCount] = {};  // F6.1: the orders given, by kind (the tally's)
+    double counter_ratio_sum_ = 0.0;                      // F7.1: our counterattacks' ordered ratios, summed (the tally's)
 
     static bool Fail(std::string* error, const std::string& m) {
         if (error != nullptr) *error = "ground war: " + m;
@@ -1444,6 +1467,20 @@ private:
     static constexpr double kNoRoadNearM = 6000.0;       // sam3d: an anchor farther than this from the map's roads has none (2 x a route's link)
     static constexpr double kFirstEchelonDepthM = 3000.0;   // a first-echelon battalion's depth, up to 3 km (vr_poltikovic_1984 p. 96)
     static constexpr double kSecondEchelonDepthM = 12000.0; // a regiment's depth in defence, up to 12 km (vr_poltikovic_1984 p. 96)
+
+    // Our army's reserve (the deployment's reserve role) held back out of the line (F7.1, 03 section 5.2): at its deployment
+    // place's station along the line, `depth_m` behind it; it marches from the anchor nearest there (none without a map).
+    void HoldReserve(double depth_m, const airwar::LineOfContact& line) {
+        for (Formation& f : forms_) {
+            if (f.unit.side != Side::Ours || f.role != DeployRole::Reserve) continue;
+            const double along = line.Place(f.pos).along_m;
+            f.pos = line.PointAt(along) + line.InwardNormal(along) * depth_m;
+            const nav::Anchor* an = NearestAnchor(f.pos);
+            if (an == nullptr) continue;
+            f.anchor = an->id;
+            f.anchor_pos = Vec3(an->at.east_m, an->at.north_m, 0.0);
+        }
+    }
 
     // The anchor nearest a point (a regiment's place), "" with none (no country map).
     const nav::Anchor* NearestAnchor(const Vec3& p) const {
@@ -2570,11 +2607,14 @@ private:
         const int screen = Screen(x);
         def.posture = screen >= 0 ? Posture::Delay : (x.halted != HaltReason::None ? Posture::HastyDefence : Posture::Attack);
         def.covering = screen >= 0;
+        // F7.1: the counterattack meets the enemy at the tip, not the whole axis (NATO's covering force alone while it screens).
+        const bool tip = t.counter_at_tip && screen < 0;
+        const double tip_fraction = tip ? TipFraction(a, true) : 1.0;
         for (int fi : x.first) {
             const std::size_t i = static_cast<std::size_t>(fi);
             const Formation& f = forms_[i];
             if (f.spent || shares_[i] <= 0.0 || (screen >= 0 && fi != screen)) continue;
-            const double share = 1.0 / shares_[i];
+            const double share = (tip ? TipShareOf(i) * tip_fraction : 1.0) / shares_[i];
             def.power += UnitPower(t, f.unit.strength, f.unit.supply, f.unit.cohesion) * share;
             engaged_[i * na + a] = 2;
             part_[i * na + a] = share;
@@ -3039,20 +3079,25 @@ private:
     // A march's hours to an axis from hour h (F3.6, 03 section 7): from the formation's place to its anchor, on the roads
     // to the anchor of the axis's route on its side of the fight, and from there to the fight, the two ends at F3.4's
     // straight line x the road factor; the whole march at F3.4's rule where either anchor or a way on the roads is missing.
-    double MarchHours(const Formation& f, std::size_t a, const airwar::LineOfContact& line, double h) {
+    // `count` false: an estimate for a decision (F7.1's reach), not a march timed for the profile.
+    double MarchHours(const Formation& f, std::size_t a, const airwar::LineOfContact& line, double h, bool count = true) {
         const Vec3 to = AxisPoint(axes_[a], line);
         const AxisAnchor* b = AxisAnchorFor(a, f.unit.side);
         const double straight = StraightHours(f.pos, to);
-        ++profile_.marches;
-        profile_.march_straight_h += straight;
+        if (count) {
+            ++profile_.marches;
+            profile_.march_straight_h += straight;
+        }
         const double road = b != nullptr ? RoadHours(f.anchor, f.anchor_pos, b->id, b->pos, h) : -1.0;
         if (road < 0.0) {
-            ++profile_.route_fallbacks;
-            profile_.march_h += straight;
+            if (count) {
+                ++profile_.route_fallbacks;
+                profile_.march_h += straight;
+            }
             return straight;
         }
         const double hours = StraightHours(f.pos, f.anchor_pos) + road + StraightHours(b->pos, to);
-        profile_.march_h += hours;
+        if (count) profile_.march_h += hours;
         return hours;
     }
 
@@ -3183,28 +3228,40 @@ private:
             Axis& x = axes_[a];
             if (x.status == AxisStatus::Counterattacked && h - x.counter_advance_h >= gain_h - 1e-9) EndCounter(a, h);
         }
-        // The deepest penetration of the main zone with no counterattack on it, if his force is strong enough.
+        // The deepest penetration of the main zone with no counterattack on it, if his force is strong enough. F7.1
+        // (t.counter_at_tip): the deepest whose momentum is spent, of the main zone's or an enemy halted in the security zone
+        // holding our ground (restoring the state border is a counterstrike's aim, vr_svatos_1985 p. 28), with the force that
+        // can reach its flank in time, weighed against the enemy at its tip; else F3.4's rule, against the whole axis's
+        // attackers.
         int best = -1;
         for (std::size_t a = 0; a < na; ++a) {
-            const Axis& x = axes_[a];
-            if (x.raid || !x.through_zone || x.counter_incoming > 0 || !x.counter.empty()) continue;
-            if (x.counter_end_h >= 0.0 && x.last_advance_h <= x.counter_end_h + 1e-9) continue;  // not again until he moves
-            if (x.status != AxisStatus::Attacking && x.status != AxisStatus::Halted) continue;
+            if (!CounterTarget(a)) continue;
+            if (t.counter_at_tip && !MomentumSpent(a)) continue;
             if (best < 0 || SeenDepth(Side::Ours, a) > SeenDepth(Side::Ours, static_cast<std::size_t>(best))) best = static_cast<int>(a);
         }
         if (best >= 0) {
             const std::size_t a = static_cast<std::size_t>(best);
             Axis& x = axes_[a];
             double ours = 0.0, theirs = 0.0;
+            const double plan_h = PlanningOf(c, 0xE000ull + a);
             for (std::size_t i = 0; i < forms_.size(); ++i) {
-                if (CounterCandidate(i, x)) ours += SeenPower(Side::Ours, i);
+                if (!CounterCandidate(i, x)) continue;
+                if (t.counter_at_tip) {
+                    reach_[i] = plan_h + MarchHours(forms_[i], a, line, h, false);
+                    if (reach_[i] > t.counter_reach_h + 1e-9) continue;
+                }
+                ours += SeenPower(Side::Ours, i);
             }
-            for (int fi : x.first) theirs += SeenPower(Side::Ours, static_cast<std::size_t>(fi));
+            if (t.counter_at_tip) {
+                theirs = TipPower(Side::Ours, a);
+            } else {
+                for (int fi : x.first) theirs += SeenPower(Side::Ours, static_cast<std::size_t>(fi));
+            }
             const double ratio = theirs > 0.0 ? ours / theirs : (ours > 0.0 ? 1e9 : 0.0);
             if (ours > 0.0 && WantsCounterattack(ratio, CounterattackRatioOf(t, g.traits))) {
-                const double plan_h = PlanningOf(c, 0xE000ull + a);
                 for (std::size_t i = 0; i < forms_.size(); ++i) {
                     if (!CounterCandidate(i, x)) continue;
+                    if (t.counter_at_tip && reach_[i] > t.counter_reach_h + 1e-9) continue;
                     Formation& f = forms_[i];
                     f.free = false;
                     f.task = Task::Counter;
@@ -3215,9 +3272,99 @@ private:
                     SitOrderTo(h, GroundOrder::CounterattackOrdered, c, static_cast<int>(i), best, ratio, -1);
                 }
                 Order(h, GroundOrder::CounterattackOrdered, c, -1, best, ratio);
+                counter_ratio_sum_ += ratio;
             }
         }
-        if (OursActive()) WakeAfterReaction(c, h, 0xF000ull);
+        if (OursActive() || (t.counter_at_tip && CounterWatch())) WakeAfterReaction(c, h, 0xF000ull);
+    }
+
+    // ---- our counterattack at the penetration's tip (F7.1, docs/fronts/03_GROUND_WAR.md "As built: F7.1")
+
+    // A formation's share at the tip: its first echelon's regiments (F3.6) and its artillery's fire at the levels' support
+    // weight (fire reaches the flank, the assault does not); a formation without regiments is all first echelon.
+    double TipShareOf(std::size_t i) const {
+        const Formation& f = forms_[i];
+        if (f.regiment_count <= 0) return 1.0;
+        const double sw = data_->tables.levels_support_weight;
+        double s = 0.0;
+        for (int k = 0; k < f.regiment_count; ++k) {
+            const Regiment& r = regs_[static_cast<std::size_t>(f.first_regiment + k)];
+            s += r.support ? sw * r.part : (r.first ? r.part : 0.0);
+        }
+        return s;
+    }
+    // Its first echelon's regiments (a formation without regiments: one).
+    int TipUnitsOf(std::size_t i) const {
+        const Formation& f = forms_[i];
+        if (f.regiment_count <= 0) return 1;
+        int n = 0;
+        for (int k = 0; k < f.regiment_count; ++k) {
+            const Regiment& r = regs_[static_cast<std::size_t>(f.first_regiment + k)];
+            n += r.first && !r.support ? 1 : 0;
+        }
+        return std::max(n, 1);
+    }
+    // The share of an axis's attackers' first echelons at its tip: the tip is one breakthrough sector wide, so it holds as many
+    // regiments as one formation's first echelon (F3.6: the breakthrough's width over a regiment's attack frontage), of all the
+    // first-echelon regiments its attackers bring (by our picture those believed in the fight; by the truth those not spent).
+    double TipFraction(std::size_t a, bool truth) const {
+        int units = 0, most = 0;
+        for (int fi : axes_[a].first) {
+            const std::size_t i = static_cast<std::size_t>(fi);
+            if (forms_[i].spent || (!truth && !(SeenPower(Side::Ours, i) > 0.0))) continue;
+            const int u = TipUnitsOf(i);
+            units += u;
+            most = std::max(most, u);
+        }
+        return units > 0 ? std::min(1.0, static_cast<double>(most) / units) : 0.0;
+    }
+    // The enemy at an axis's tip and flanks as `by` believes it: its attackers' power at the tip (TipShareOf) times the tip's
+    // fraction of their first echelons.
+    double TipPower(Side by, std::size_t a) const {
+        double p = 0.0;
+        for (int fi : axes_[a].first) {
+            const std::size_t i = static_cast<std::size_t>(fi);
+            if (forms_[i].spent) continue;
+            p += SeenPower(by, i) * TipShareOf(i);
+        }
+        return p * TipFraction(a, by != Side::Ours);
+    }
+    // The penetration's momentum is spent (our picture): the axis halted, its advance over the last day under the slowest
+    // sustained advance (commanders.moving_km_per_day, hero_1972_oralfore), or its attackers believed under our doctrine's
+    // degraded line (mt_novoselov_replacement p. 9).
+    bool MomentumSpent(std::size_t a) const {
+        const Axis& x = axes_[a];
+        if (x.status == AxisStatus::Halted) return true;
+        if (SeenPace(Side::Ours, a) < data_->tables.moving_km_per_day) return true;
+        double est = 0.0, now = 0.0;
+        for (int fi : x.first) {
+            const Formation& f = forms_[static_cast<std::size_t>(fi)];
+            if (f.spent) continue;
+            est += f.base_establishment;
+            now += f.base_establishment * SeenFraction(Side::Ours, static_cast<std::size_t>(fi));
+        }
+        return est > 0.0 && now / est < data_->ours.doctrine.effectiveness.degraded_below;
+    }
+    // An axis our army commander may counterattack: a penetration of the main defensive zone (F7.1: or the enemy halted
+    // in the security zone, holding our ground) attacking or halted, with no counterattack on it or coming, and not again
+    // until the enemy has advanced since the last ended.
+    bool CounterTarget(std::size_t a) const {
+        const Axis& x = axes_[a];
+        if (x.raid || x.counter_incoming > 0 || !x.counter.empty()) return false;
+        const bool held = data_->tables.counter_at_tip && x.status == AxisStatus::Halted && SeenDepth(Side::Ours, a) > 1000.0;
+        if (!x.through_zone && !held) return false;
+        if (x.counter_end_h >= 0.0 && x.last_advance_h <= x.counter_end_h + 1e-9) return false;
+        return x.status == AxisStatus::Attacking || x.status == AxisStatus::Halted;
+    }
+    // A penetration with a force free to counterattack it: our army commander keeps watching it (F7.1).
+    bool CounterWatch() const {
+        for (std::size_t a = 0; a < axes_.size(); ++a) {
+            if (!CounterTarget(a)) continue;
+            for (std::size_t i = 0; i < forms_.size(); ++i) {
+                if (CounterCandidate(i, axes_[a])) return true;
+            }
+        }
+        return false;
     }
 
     // Ours that may counterattack on an axis: free (a reserve, re-formed), or the sector's second echelon.

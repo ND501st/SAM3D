@@ -4,6 +4,7 @@
 // dispersal under the line when none comes, a relief and the withdrawal as a unit it allows, the second echelon to success,
 // NATO's breakpoints, our counterattack to the border against a covering force's screen, the rebels' raids by night where
 // we are thin; the order-free draws; and every faction's war on the nation, bounded and with no allocation in the hour.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -751,5 +752,246 @@ SC_TEST("ground commanders (F3.4): every faction's war on the nation: bounded, o
             axes += buf;
         }
         std::printf("    %-12s %zu commanders, %d decisions, %zu orders;%s\n", faction, g.Commanders().size(), decisions, log.all.size(), axes.c_str());
+    }
+}
+
+// ------------------------------------------------------------------------- F7.1: the army reserve and the counterattack at the tip
+
+namespace {
+
+// A division of three tank regiments and an artillery regiment (its first echelon two of the three: Bare's doctrines give no
+// frontage, so F3.6's half of its manoeuvre regiments, one kept back).
+void AddDivision(GroundWarData& d, bool enemy, const std::string& id, const std::string& parent, int tanks_each) {
+    command::OrderOfBattle& oob = enemy ? d.enemy.oob : d.ours.oob;
+    oob.units.push_back(Unit(id, "division", 0, 1000, parent));
+    for (int k = 1; k <= 3; ++k) oob.units.push_back(Unit(id + "_r" + std::to_string(k), "regiment", tanks_each, 2000, id));
+    command::OobUnit art = Unit(id + "_art", "regiment", 0, 1000, id);
+    art.equipment.push_back({"d30", 54});
+    oob.units.push_back(art);
+}
+
+double OobStrength(const command::OrderOfBattle& oob, const std::string& id) {
+    for (const command::OobUnit& u : oob.units) {
+        if (u.id == id) return StrengthOfUnit(Tables(), u);
+    }
+    return 0.0;
+}
+
+// The tip's war: two red divisions and a red brigade on the east axis (60 km deep) against a thin blue division; a blue tank
+// brigade in reserve. Its power is under 1.5 times the axis's attackers but over 2.5 times the enemy at the tip (two of the
+// five first-echelon regiments the axis brings).
+std::shared_ptr<GroundWarData> TipData() {
+    std::shared_ptr<GroundWarData> d = Bare();
+    d->enemy.oob.units.push_back(Unit("red_army", "army", 0, 500));
+    AddDivision(*d, true, "red_d1", "red_army", 100);
+    AddDivision(*d, true, "red_d2", "red_army", 100);
+    d->enemy.oob.units.push_back(Unit("red_bde", "brigade", 150, 3000, "red_army"));
+    AddAxis(*d, "east", "east", 75, 60, {"red_d1", "red_d2", "red_bde"});
+    d->ours.oob.units.push_back(Unit("blue_army", "army", 0, 500));
+    d->ours.oob.units.push_back(Unit("blue_div", "division", 60, 6000, "blue_army"));
+    d->ours.oob.units.push_back(Unit("blue_tb", "brigade", 700, 3000, "blue_army"));
+    Deploy(*d, "blue_div", DeployRole::FirstEchelon, {"east"});
+    Deploy(*d, "blue_tb", DeployRole::Reserve, {}, 75, 40);
+    d->ours.deployments.front().security_zone_km = 15.0;
+    d->ours.deployments.front().reserve_depth_km = 30.0;
+    return d;
+}
+
+struct TipWar {
+    LineOfContact line;
+    TheatreDef theatre;
+    GroundEnv env;
+    GroundWar g;
+    Logged log;
+    explicit TipWar(std::shared_ptr<GroundWarData> d) {
+        line.Build(StraightFront(), 5000.0);
+        env.theatre = &theatre;
+        SC_EXPECT(g.Build(d, line, theatre, nullptr, 7));
+    }
+};
+
+double PowerOf(const GroundWar& g, int i) {
+    const Formation& f = g.Formations()[static_cast<std::size_t>(i)];
+    return f.spent ? 0.0 : UnitPower(g.Data().tables, f.unit.strength, f.unit.supply, f.unit.cohesion);
+}
+
+}  // namespace
+
+SC_TEST("ground counterattack (F7.1): the enemy at the tip by hand: the first echelons' regiments one breakthrough sector holds") {
+    std::shared_ptr<GroundWarData> d = TipData();
+    TipWar w(d);
+    const GroundWar& g = w.g;
+    const int d1 = FormationOf(g, "red_d1"), d2 = FormationOf(g, "red_d2"), bde = FormationOf(g, "red_bde");
+    SC_EXPECT(d1 >= 0 && d2 >= 0 && bde >= 0);
+    // Each division: four regiments, two of its three tank regiments in its first echelon, the artillery at the support weight.
+    const Formation& f1 = g.Formations()[static_cast<std::size_t>(d1)];
+    SC_EXPECT(f1.regiment_count == 4);
+    int first = 0;
+    for (int k = 0; k < f1.regiment_count; ++k) first += g.Regiments()[static_cast<std::size_t>(f1.first_regiment + k)].first ? 1 : 0;
+    SC_EXPECT(first == 2);
+    const double r = OobStrength(d->enemy.oob, "red_d1_r1"), art = OobStrength(d->enemy.oob, "red_d1_art");
+    const double share = (2.0 * r + Tables().levels_support_weight * art) / (3.0 * r + art);
+    SC_EXPECT_NEAR(g.TipShare(static_cast<std::size_t>(d1)), share, 1e-9);
+    SC_EXPECT_NEAR(g.TipShare(static_cast<std::size_t>(bde)), 1.0, 1e-12);  // no regiments: all first echelon
+    // The tip holds one formation's first echelon (two regiments) of the five the axis brings (2 + 2 + the brigade).
+    SC_EXPECT_NEAR(g.TipFractionOf(0), 2.0 / 5.0, 1e-12);
+    const double tip = (PowerOf(g, d1) * share + PowerOf(g, d2) * share + PowerOf(g, bde)) * 2.0 / 5.0;
+    SC_EXPECT_NEAR(g.TipPowerTruth(0), tip, 1e-9 * tip);
+    SC_EXPECT_NEAR(g.TipSeen(0), tip, 1e-9 * tip);  // the picture on the truth (Bare)
+    // So our reserve, under 1.5 times the axis, is over 2.5 times its tip.
+    const double reserve = PowerOf(g, FormationOf(g, "blue_tb")), axis = PowerOf(g, d1) + PowerOf(g, d2) + PowerOf(g, bde);
+    SC_EXPECT(reserve < 1.5 * axis && reserve > 2.5 * tip);
+    std::printf("    a division's share at the tip %.3f, the tip's fraction %.2f: tip %.0f of the axis's %.0f; our reserve %.0f (%.2f : 1 at the tip, %.2f over the axis)\n",
+                share, g.TipFractionOf(0), tip, axis, reserve, reserve / tip, reserve / axis);
+}
+
+SC_TEST("ground counterattack (F7.1): the army reserve held back out of the line until committed; once the momentum is spent, at the tip") {
+    // Our doctrine's lines (2/3 and 1/2), so the thin division holds without asking for the reserve as its relief.
+    std::shared_ptr<GroundWarData> d = TipData();
+    d->ours.doctrine.effectiveness.degraded_below = 2.0 / 3.0;
+    d->ours.doctrine.effectiveness.ineffective_below = 0.5;
+    TipWar w(d);
+    GroundWar& g = w.g;
+    const int tb = FormationOf(g, "blue_tb");
+    const Formation& r = g.Formations()[static_cast<std::size_t>(tb)];
+    // Held back: at its place's station along the line, the deployment's 30 km behind it (from 40), out of the line.
+    SC_EXPECT_NEAR(r.pos.x, 75000.0, 1.0);
+    SC_EXPECT_NEAR(r.pos.y, 30000.0, 1.0);
+    const Axis& x = g.Axes()[0];
+    bool held = true, spent_at_order = false, gated = false;
+    double whole_at_order = 0.0, tip_at_order = 0.0, ours_at_order = 0.0;
+    int order_h = -1;
+    Run(g, w.line, w.env, 24 * 6, w.log, [&](int h) {
+        const bool ordered = w.log.First(GroundOrder::CounterattackOrdered) != nullptr;
+        if (!ordered && w.log.First(GroundOrder::ReliefOrdered, tb) == nullptr) {
+            // Out of the line until committed: free, in reserve, on no axis.
+            held = held && r.free && r.task == Task::None && r.unit.state == UnitState::Reserve;
+            for (int fi : x.defenders) held = held && fi != tb;
+            for (int fi : x.depth_defenders) held = held && fi != tb;
+            // Through the main zone, its tip under our reserve's ratio, and still moving: no counterattack yet.
+            if (x.through_zone && !g.MomentumSpentSeen(0) && PowerOf(g, tb) / g.TipSeen(0) >= 2.5) gated = true;
+        } else if (order_h < 0) {
+            order_h = h;
+            spent_at_order = g.MomentumSpentSeen(0) || x.status == AxisStatus::Counterattacked;
+            for (int fi = 0; fi < static_cast<int>(g.Formations().size()); ++fi) {
+                const Formation& f = g.Formations()[static_cast<std::size_t>(fi)];
+                const bool depth = std::find(x.depth_defenders.begin(), x.depth_defenders.end(), fi) != x.depth_defenders.end();
+                if (f.unit.side == Side::Ours && f.role != DeployRole::Support && (f.free || depth || f.task == Task::Counter)) ours_at_order += PowerOf(g, fi);
+            }
+            tip_at_order = g.TipPowerTruth(0);
+            for (int fi : x.first) whole_at_order += PowerOf(g, fi);
+        }
+    });
+    w.log.Print(g);
+    const GroundLogEntry* ordered = w.log.First(GroundOrder::CounterattackOrdered);
+    SC_EXPECT(held);
+    SC_EXPECT(ordered != nullptr && order_h >= 0);
+    if (ordered == nullptr) return;
+    const double threshold = CounterattackRatioOf(Tables(), g.Commanders()[static_cast<std::size_t>(ordered->cmdr)].traits);
+    SC_EXPECT(spent_at_order);
+    SC_EXPECT(ordered->value >= threshold - 1e-9);
+    // His ratio is his free force over the tip (the hour's march costs it nothing in the fight), never over the whole axis, where
+    // F3.4's rule would not have gone in.
+    SC_EXPECT_NEAR(ordered->value, ours_at_order / tip_at_order, 0.02 * ordered->value);
+    SC_EXPECT(ours_at_order / whole_at_order < threshold);
+    SC_EXPECT(w.log.First(GroundOrder::CounterattackStarts, tb) != nullptr);
+    std::printf("    ordered at %.0f h on %.2f : 1 at the tip (%.2f over the axis, his line %.2f); held back and gated before: %s\n", ordered->h,
+                ordered->value, ours_at_order / whole_at_order, threshold, gated ? "yes" : "no");
+}
+
+SC_TEST("ground counterattack (F7.1): no counterattack the reserve cannot bring in time, nor by F3.4's rule against the whole axis") {
+    // The reserve's march exceeds the reach: it stays free and out of the line.
+    std::shared_ptr<GroundWarData> slow = TipData();
+    slow->tables.counter_reach_h = 0.5;
+    TipWar a(slow);
+    Run(a.g, a.line, a.env, 24 * 6, a.log, [](int) {});
+    const Formation& r = a.g.Formations()[static_cast<std::size_t>(FormationOf(a.g, "blue_tb"))];
+    SC_EXPECT(a.log.First(GroundOrder::CounterattackOrdered) == nullptr);
+    SC_EXPECT(r.free && r.task == Task::None);
+    // Without the data's "counterattack" block: F3.4's rule, the reserve against the axis's whole first echelon.
+    std::shared_ptr<GroundWarData> old = TipData();
+    old->tables.counter_at_tip = false;
+    TipWar b(old);
+    Run(b.g, b.line, b.env, 24 * 6, b.log, [](int) {});
+    SC_EXPECT(b.log.First(GroundOrder::CounterattackOrdered) == nullptr);
+    std::printf("    in reach 0.5 h: %s; by the whole axis: %s\n", a.log.First(GroundOrder::CounterattackOrdered) ? "ordered" : "none",
+                b.log.First(GroundOrder::CounterattackOrdered) ? "ordered" : "none");
+}
+
+SC_TEST("ground counterattack (F7.1): an incursion halted in our security zone is counterattacked back to the border, never past it") {
+    // The enemy's goal 10 km in, inside the 15 km security zone: it halts there holding our ground.
+    std::shared_ptr<GroundWarData> d = TipData();
+    d->enemy.plan.axes.front().route.back().pos = Km(75, 10);
+    d->enemy.plan.objectives.front().place.pos = Km(75, 10);
+    TipWar w(d);
+    GroundWar& g = w.g;
+    const Axis& x = g.Axes()[0];
+    bool never_negative = true, through = false;
+    double halted_at = -1.0;
+    Run(g, w.line, w.env, 24 * 6, w.log, [&](int) {
+        never_negative = never_negative && x.depth_m >= 0.0;
+        for (std::size_t i = 0; i < w.line.StationCount(); ++i) never_negative = never_negative && w.line.StationOffset(i) >= 0.0;
+        through = through || x.through_zone;
+        if (halted_at < 0.0 && x.status == AxisStatus::Halted) halted_at = x.depth_m;
+    });
+    w.log.Print(g);
+    const GroundLogEntry* ordered = w.log.First(GroundOrder::CounterattackOrdered);
+    SC_EXPECT(!through);
+    SC_EXPECT(ordered != nullptr && w.log.First(GroundOrder::CounterattackEnds) != nullptr);
+    SC_EXPECT(never_negative);
+    SC_EXPECT(x.depth_m < halted_at);
+    // F3.4's rule counterattacks only a penetration of the main zone.
+    std::shared_ptr<GroundWarData> old = TipData();
+    old->enemy.plan.axes.front().route.back().pos = Km(75, 10);
+    old->enemy.plan.objectives.front().place.pos = Km(75, 10);
+    old->tables.counter_at_tip = false;
+    TipWar b(old);
+    Run(b.g, b.line, b.env, 24 * 6, b.log, [](int) {});
+    SC_EXPECT(b.log.First(GroundOrder::CounterattackOrdered) == nullptr);
+    std::printf("    halted %.1f km in, counterattacked at %.0f h, %.1f km in at the end\n", halted_at / 1000.0, ordered != nullptr ? ordered->h : -1.0,
+                x.depth_m / 1000.0);
+}
+
+SC_TEST("ground counterattack (F7.1): our army's reserve on the nation: about a ninth of the army, held back by its deployment, out of the line") {
+    for (const char* faction : {"warsaw_pact", "nato", "neutral"}) {
+        std::string e;
+        AirWarData d;
+        SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", std::string("air_war/faction_") + faction + ".json", d, &e));
+        auto gd = std::make_shared<GroundWarData>();
+        SC_EXPECT(LoadGroundWarData(kData, faction, *gd, &e));
+        const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+        SC_EXPECT(front != nullptr && d.country != nullptr);
+        if (front == nullptr || d.country == nullptr) return;
+        LineOfContact line;
+        line.Build(*front, d.tuning.Get("air_front.station_m"));
+        GroundWar g;
+        SC_EXPECT(g.Build(gd, line, d.theatre, d.country.get(), 21, &e));
+        SC_EXPECT(g.Data().tables.counter_at_tip);
+        const DeploymentDef* dep = gd->ours.For(faction);
+        SC_EXPECT(dep != nullptr && dep->reserve_depth_km > dep->security_zone_km);
+        if (dep == nullptr) return;
+        double all = 0.0, reserve = 0.0;
+        int n = 0;
+        for (std::size_t i = 0; i < g.Formations().size(); ++i) {
+            const Formation& f = g.Formations()[i];
+            if (f.unit.side != Side::Ours) continue;
+            all += PowerOf(g, static_cast<int>(i));
+            if (f.role != DeployRole::Reserve) continue;
+            ++n;
+            reserve += PowerOf(g, static_cast<int>(i));
+            const FrontPlace pl = line.Place(f.pos);
+            SC_EXPECT_NEAR(pl.side * pl.distance_m, dep->reserve_depth_km * 1000.0, 500.0);
+            SC_EXPECT(f.free && f.unit.state == UnitState::Reserve && !f.anchor.empty());
+            for (const Axis& x : g.Axes()) {
+                for (int fi : x.defenders) SC_EXPECT(fi != static_cast<int>(i));
+            }
+        }
+        // About a ninth (fm_100_2_1_1984 p. 2-11): within half and twice the doctrine's share (against the neutral the army
+        // deploys only part of its formations, so the same brigade is a larger share of them).
+        const double share = all > 0.0 ? reserve / all : 0.0;
+        const double norm = gd->ours.doctrine.reserve_share;
+        SC_EXPECT(n == 1 && norm > 0.1 && share >= 0.5 * norm && share <= 2.0 * norm);
+        std::printf("    %-12s the reserve %.1f %% of the army (doctrine %.1f %%), %.0f km behind the line\n", faction, 100.0 * share, 100.0 * norm,
+                    dep->reserve_depth_km);
     }
 }

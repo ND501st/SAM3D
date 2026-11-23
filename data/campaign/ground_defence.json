@@ -33,6 +33,7 @@
     "withdraw_needs_order": { "value": true, "source": "reznichenko_1984 pp. 49, 152; voenizdat_osa_1991 p. 238: only with the senior commander's permission", "confidence": "high" },
     "counterattack_by_senior": { "value": true, "source": "reznichenko_1984 pp. 177-179; vr_poltikovic_1984 p. 96: the next higher commander's; the second echelon from the march into the flank, tanks leading, to a set line", "confidence": "high" },
     "second_echelon_to_success": { "value": true, "source": "fm_100_2_1_1984 p. 2-11", "confidence": "medium" },
+    "reserve_share": { "value": 0.111, "source": "fm_100_2_1_1984 p. 2-11: a combined-arms reserve of about a ninth of the force (the Pact's norm, which our army follows); the 3rd Army keeps its tank brigade, 12.5 per cent of its weighted strength, as the army's reserve in every deployment but the rebels' (F7.1)", "confidence": "medium" },
     "counterattack_stops_at_border": { "value": true, "source": "SAM3D estimate: the owner's open decision 4 taken as proposed (docs/fronts/README.md); restoring the state border is among the ČSLA's 1985 counterstrike aims (vr_svatos_1985)", "confidence": "estimate" },
     "effectiveness": {
       "kind": "lines",
@@ -66,6 +67,7 @@
     {
       "adversary": "warsaw_pact",
       "security_zone_km": { "value": 30, "source": "SAM3D estimate within vr_poltikovic_1984 p. 96's 20-40 km: the army's choice against a peer's main thrust", "confidence": "estimate" },
+      "reserve_depth_km": { "value": 55, "source": "SAM3D estimate from vr_poltikovic_1984 pp. 95-96: the army's reserve held behind its first-echelon divisions, the security zone (30 km here) and a division's defence 20-25 km deep; out of the line until committed (fm_100_2_1_1984 p. 6-1: the second echelon and reserve held back for the counterattack)", "confidence": "estimate" },
       "source": "SAM3D estimate: the 7th Division on the Rava gorge and Dravec (battery 21 covers the dam's approach, the nation's theatre's battery_position), the 9th on the north-eastern road, the south-western brigade screening Hradec, the tank brigade the army's reserve by the capital",
       "confidence": "estimate",
       "units": [
@@ -79,6 +81,7 @@
     {
       "adversary": "nato",
       "security_zone_km": { "value": 30, "source": "SAM3D estimate within vr_poltikovic_1984 p. 96's 20-40 km", "confidence": "estimate" },
+      "reserve_depth_km": { "value": 55, "source": "SAM3D estimate from vr_poltikovic_1984 pp. 95-96: the army's reserve held behind its first-echelon divisions, the security zone (30 km here) and a division's defence 20-25 km deep; out of the line until committed (fm_100_2_1_1984 p. 6-1: the second echelon and reserve held back for the counterattack)", "confidence": "estimate" },
       "source": "SAM3D estimate: the 9th Division on the western road (its peacetime western group), the south-western brigade south of the Lenta, the 7th Division in the second echelon by Novo Varosd (battery 21 covers the hub behind, the nation's theatre's battery_position), the tank brigade the army's reserve",
       "confidence": "estimate",
       "units": [
@@ -103,6 +106,7 @@
     {
       "adversary": "neutral",
       "security_zone_km": { "value": 20, "source": "SAM3D estimate at vr_poltikovic_1984 p. 96's shallow end: a limited war on a short front", "confidence": "estimate" },
+      "reserve_depth_km": { "value": 45, "source": "SAM3D estimate from vr_poltikovic_1984 pp. 95-96: the army's reserve held behind its first-echelon divisions, the security zone (20 km here) and a division's defence 20-25 km deep", "confidence": "estimate" },
       "source": "SAM3D estimate: the south-western brigade and the 72nd Regiment (its peacetime south-western group; battery 21 covers it) on the border, the 9th Division behind, the tank brigade the army's reserve at Saldanj",
       "confidence": "estimate",
       "units": [
