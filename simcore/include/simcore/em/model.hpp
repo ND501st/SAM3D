@@ -275,6 +275,9 @@ struct Environment {
     double profile_spacing_m = 100.0;
     Vec3 wind_mps;                      // chaff drift
     double rain_rate_mmh = 0.0;         // rain over the whole scene (ITU-R P.838); never part of a radar's calibration
+    // rms height of the waves on the country's lakes (roadmap E9's sea areas; WaterReflection). A game value: a lake in a
+    // light breeze with waves of about 0.2 m significant height, rms = H_s / 4 (the Rayleigh wave-height relation).
+    double water_roughness_m = 0.05;
 };
 
 // Effective reflection coefficient: rho0 * Rayleigh roughness factor
@@ -284,6 +287,26 @@ inline double EffectiveReflection(const Environment& env, double grazing_rad, do
     if (wavelength_m <= 0.0) return 0.0;
     const double g = kPi * env.surface_roughness_m * std::sin(grazing_rad) / wavelength_m;
     return env.surface_reflection * std::exp(-8.0 * g * g);
+}
+
+// The same over water (roadmap E9's sea areas): the Fresnel coefficient of ITU-R P.527's pure water at this frequency
+// (FresnelReflectionH, PureWaterPermittivity) times the roughness factor of the lake's waves (water_roughness_m). Calm
+// water reflects a low microwave ray almost whole, where rolling land scatters it.
+inline double WaterReflection(const Environment& env, double grazing_rad, double freq_hz) {
+    const double lambda = WavelengthOf(freq_hz);
+    if (lambda <= 0.0) return 0.0;
+    const double g = kPi * env.water_roughness_m * std::sin(grazing_rad) / lambda;
+    return FresnelReflectionH(PureWaterPermittivity(freq_hz), grazing_rad) * std::exp(-8.0 * g * g);
+}
+
+// The reflection coefficient of a path's ground reflection: land's and water's weighted by the share of water under the
+// reflection's first Fresnel zone (ReflectionWaterShare). `from_second`: the reflection's end 1 is the path's second end.
+inline double PathReflection(const Environment& env, const PathGeometry& g, const ReflectionGeometry& r, double freq_hz,
+                             bool from_second) {
+    const double lambda = WavelengthOf(freq_hz);
+    const double land = EffectiveReflection(env, r.grazing_rad, lambda);
+    const double share = ReflectionWaterShare(g, r, lambda, from_second);
+    return share > 0.0 ? (1.0 - share) * land + share * WaterReflection(env, r.grazing_rad, freq_hz) : land;
 }
 
 // ------------------------------------------------------------------------------- runtime

@@ -597,6 +597,7 @@ public:
         m->SetLevels(false);
         m->ImportDetailLines();
         m->BuildIndices();
+        m->BuildWaterGrid();
         m->BakeDetail();
         m->Lay();
         m->LayDetailSettlements();
@@ -646,6 +647,22 @@ public:
     // detail areas' imported ones), or of a river's: what the map's dressing keeps its trees off (scenery/map_dressing.hpp).
     bool NearLine(double e, double n, double clear_m) const { return lines_.Near(e, n, clear_m); }
     bool NearWater(double e, double n, double clear_m) const { return water_.Near(e, n, clear_m); }
+    // Whether (east, north) is water (roadmap E9's sea areas; Terrain::WaterAt): on a river of the map or its detail
+    // areas within half its width, in one of the map's lakes, or beyond the map proper on its country's lakes and rivers.
+    bool WaterAt(double e, double n) const { return has_water_ && water_grid_.Maybe(e, n) && WaterAtExact(e, n); }
+    // The same without the grid's quick no (what the grid is tested against).
+    bool WaterAtExact(double e, double n) const {
+        if (!has_water_) return false;
+        if (water_.Near(e, n, 0.0)) return true;
+        const bool beyond = def_.far_ground != nullptr && !def_.InCore(e, n);
+        for (const LakeBox& b : lake_boxes_) {
+            if ((b.country && !beyond) || e < b.w || e > b.e || n < b.s || n > b.n) continue;
+            const MapLakeDef& l = b.country ? def_.far_ground->lakes[b.index] : def_.lakes[b.index];
+            if (mapgeo::InPolygon(l.points, e, n)) return true;
+        }
+        return beyond && far_water_.Near(e, n, 0.0);
+    }
+    bool HasWater() const { return has_water_; }
 
     // The ground's lattices as they are drawn, finest first: the detail areas (roadmap R6), the map proper, the far
     // ground, the country's, the land beyond (those it has). A coarser level leaves out only the cells lying wholly
@@ -1262,7 +1279,28 @@ private:
         for (const MapSiteDef& s : def_.sites) {
             occupied_.Take(s.centre.east_m, s.centre.north_m, SiteClearance(s));
         }
+        // The water a path's reflection and smooth earth look for (WaterAt): the rivers above, the map's lakes, and beyond
+        // the map proper its country's lakes and rivers.
+        has_water_ = !def_.rivers.empty() || !detail_lines_.rivers.empty();
+        const auto add_lake = [&](const MapLakeDef& l, bool country, std::size_t index) {
+            if (l.points.size() < 3) return;
+            LakeBox b{1e300, 1e300, -1e300, -1e300, country, index};
+            for (const MapPoint& p : l.points) {
+                b.w = std::min(b.w, p.east_m);
+                b.s = std::min(b.s, p.north_m);
+                b.e = std::max(b.e, p.east_m);
+                b.n = std::max(b.n, p.north_m);
+            }
+            lake_boxes_.push_back(b);
+            has_water_ = true;
+        };
+        for (std::size_t i = 0; i < def_.lakes.size(); ++i) add_lake(def_.lakes[i], false, i);
         if (!def_.far_ground) return;
+        for (std::size_t i = 0; i < def_.far_ground->lakes.size(); ++i) add_lake(def_.far_ground->lakes[i], true, i);
+        for (const MapLineDef& r : def_.far_ground->rivers) {
+            far_water_.Add(r.points, 0.5 * r.width_m);
+            has_water_ = true;
+        }
         for (const MapSettlementDef& t : def_.far_ground->settlements) {
             bool laid = def_.InCore(t.centre.east_m, t.centre.north_m);
             for (const MapSettlementDef& s : def_.settlements) laid = laid || s.id == t.id;
@@ -2016,6 +2054,79 @@ private:
     MapLayout layout_;
     mapgeo::SegmentIndex lines_{250.0};
     mapgeo::SegmentIndex water_{250.0};
+    mapgeo::SegmentIndex far_water_{250.0};  // the country's rivers beyond the map proper (WaterAt)
+    struct LakeBox {
+        double w, s, e, n;  // the shore's bounds
+        bool country;       // the country's (beyond the map proper), else the map's
+        std::size_t index;
+    };
+    std::vector<LakeBox> lake_boxes_;
+    bool has_water_ = false;
+    // Where water may be (WaterAt's quick no): 100 m cells over the water's bounds, set wherever a river's or a lake's
+    // bounds, widened by a cell, reach; the exact test follows only there.
+    struct WaterGrid {
+        double west = 0.0, south = 0.0;
+        long long nx = 0, ny = 0;
+        std::vector<std::uint64_t> bits;
+        static constexpr double kCellM = 100.0;
+        long long Cell(double v, double origin) const { return static_cast<long long>(std::floor((v - origin) / kCellM)); }
+        bool Maybe(double e, double n) const {
+            const long long x = Cell(e, west), y = Cell(n, south);
+            if (x < 0 || y < 0 || x >= nx || y >= ny) return false;
+            const long long i = y * nx + x;
+            return ((bits[static_cast<std::size_t>(i >> 6)] >> (i & 63)) & 1u) != 0;
+        }
+        void Mark(double w, double s, double e, double n) {
+            const long long x0 = std::max(0LL, Cell(w, west) - 1), x1 = std::min(nx - 1, Cell(e, west) + 1);
+            const long long y0 = std::max(0LL, Cell(s, south) - 1), y1 = std::min(ny - 1, Cell(n, south) + 1);
+            for (long long y = y0; y <= y1; ++y) {
+                for (long long x = x0; x <= x1; ++x) {
+                    const long long i = y * nx + x;
+                    bits[static_cast<std::size_t>(i >> 6)] |= std::uint64_t{1} << (i & 63);
+                }
+            }
+        }
+    };
+    WaterGrid water_grid_;
+
+    // WaterAt's grid: every river segment's bounds widened by its half width, and every lake's (BuildIndices's lakes).
+    void BuildWaterGrid() {
+        if (!has_water_) return;
+        struct Box {
+            double w, s, e, n;
+        };
+        std::vector<Box> boxes;
+        const auto add_river = [&](const MapLineDef& r) {
+            const double hw = 0.5 * r.width_m;
+            for (std::size_t i = 1; i < r.points.size(); ++i) {
+                const MapPoint& a = r.points[i - 1];
+                const MapPoint& b = r.points[i];
+                boxes.push_back({std::min(a.east_m, b.east_m) - hw, std::min(a.north_m, b.north_m) - hw,
+                                 std::max(a.east_m, b.east_m) + hw, std::max(a.north_m, b.north_m) + hw});
+            }
+        };
+        for (const MapLineDef& r : def_.rivers) add_river(r);
+        for (const MapLineDef& r : detail_lines_.rivers) add_river(r);
+        if (def_.far_ground) {
+            for (const MapLineDef& r : def_.far_ground->rivers) add_river(r);
+        }
+        for (const LakeBox& l : lake_boxes_) boxes.push_back({l.w, l.s, l.e, l.n});
+        if (boxes.empty()) return;
+        Box all = boxes.front();
+        for (const Box& b : boxes) {
+            all.w = std::min(all.w, b.w);
+            all.s = std::min(all.s, b.s);
+            all.e = std::max(all.e, b.e);
+            all.n = std::max(all.n, b.n);
+        }
+        WaterGrid& g = water_grid_;
+        g.west = all.w - 2.0 * WaterGrid::kCellM;
+        g.south = all.s - 2.0 * WaterGrid::kCellM;
+        g.nx = static_cast<long long>(std::ceil((all.e - g.west) / WaterGrid::kCellM)) + 3;
+        g.ny = static_cast<long long>(std::ceil((all.n - g.south) / WaterGrid::kCellM)) + 3;
+        g.bits.assign(static_cast<std::size_t>((g.nx * g.ny + 63) / 64), 0);
+        for (const Box& b : boxes) g.Mark(b.w, b.s, b.e, b.n);
+    }
     mapgeo::Occupancy occupied_{40.0};
     std::unordered_set<long long> canopy_cells_;
     // What blocks sight (BakeObstacles): the footprints, their dense cells (the detail areas', then the map proper's),
@@ -2246,6 +2357,11 @@ public:
     double ObstacleSpacingM() const override { return map_->NarrowestObstacle(); }
     double ObstacleTopCeilingM() const override { return map_->TallestObstacleTop(); }
     double ObstacleTallestM() const override { return map_->TallestObstacle(); }
+    bool WaterAt(double east_m, double north_m) const override {
+        const MapPoint p = link_.FrameToMap(east_m, north_m);
+        return map_->WaterAt(p.east_m, p.north_m);
+    }
+    bool HasWater() const override { return map_->HasWater(); }
     double ObstacleTopAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->ObstacleTop(p.east_m, p.north_m);

@@ -39,12 +39,24 @@ public:
         : map_(std::move(map)), heights_(heights) {
         if (map_ != nullptr && heights_.Tallest() > 0.0) clutter_ = map_->BakeClutter(cell_m, heights_.dense_share);
         for (std::size_t k = 0; k < height_of_.size(); ++k) height_of_[k] = heights_.HeightOf(static_cast<ClutterClass>(k));
+        for (std::uint8_t c : clutter_.cells) {
+            if (c == static_cast<std::uint8_t>(ClutterClass::WaterSea)) {
+                has_water_ = true;
+                break;
+            }
+        }
     }
     double HeightAt(double east_m, double north_m) const override { return map_ != nullptr ? map_->GroundHeight(east_m, north_m) : 0.0; }
     double ObstacleHeightAt(double east_m, double north_m) const override {
         return clutter_.cols > 0 ? height_of_[static_cast<std::size_t>(clutter_.ClassAt(east_m, north_m))] : 0.0;
     }
     double ObstacleTallestM() const override { return heights_.Tallest(); }
+    // The country's lakes and rivers, the clutter raster's water/sea cells (roadmap E9's sea areas): known where the
+    // raster is baked, with the clutter heights; a CountryGround made without them stays bare, its water too.
+    bool WaterAt(double east_m, double north_m) const override {
+        return has_water_ && clutter_.ClassAt(east_m, north_m) == ClutterClass::WaterSea;
+    }
+    bool HasWater() const override { return has_water_; }
     const ClutterRaster& Clutter() const { return clutter_; }
 
 private:
@@ -52,6 +64,7 @@ private:
     ClutterHeights heights_;
     ClutterRaster clutter_;
     std::array<double, static_cast<std::size_t>(ClutterClass::Count)> height_of_{};
+    bool has_water_ = false;
 };
 
 // A transmitter that drowns the net in noise: a ground or airborne communications jammer, from and until campaign hours.
