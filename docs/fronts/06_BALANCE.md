@@ -188,3 +188,84 @@ order counted as logged, the losses booked by axis the formations' own, the zone
   its gates should weigh the targets already in reach is F6.2's, with the player's effect.
 - The neutral's and the rebels' wars have no ground bands of their own (border fights, raids).
 - NATO's covering force and the helicopters' broken rule unmeasured on the nation (above).
+
+## As built: F6.2 (23 Nov 2026)
+
+**The air war's bands on the moving front.** `air_war_balance` and `air_war_bench` gained `--fronts`: `ground.mode`,
+`air_front.mode` and `ad_strategy.mode` at 1, and in `air_war_balance` our side's pipeline pumped after every hour's step
+(the units hear their orders from it), the way `fronts_bench --history` runs the war; `air_war_bench` also takes
+`--theatre`. A band may now be written for that run alone (`balance_bands.json`'s `"modes": "fronts"`, read before a band
+of any modes; `balance_bands.hpp`), and `BandRow` prints an argued band out of its range as ARGUED, never failed. None was
+needed. The defaults are unchanged.
+
+- `air_war_balance --theatre theatre_pannonia_nation.json --fronts --cpu data 10 7`: every band of the nation holds for
+  all four factions and both postures (`docs/air_war/09_BALANCE.md` section 26, the table before and after). The Pact's
+  loss a sortie 3.6/3.3 % → 3.2/3.1 % (careless/careful), NATO's 1.9/2.0 → 2.1/2.2 %, the exchanges and the on-call
+  latencies inside theirs. Close support rises from none on day 1 to 2-6 % of the packages on days 3-5 as the line moves
+  (NATO most), the mix otherwise the same; the air front makes no step in a week in any war (F6.1's "timid" item: its
+  sourced gates), so the rollback's end and the low-level work are where they were.
+- `air_war_bench data 400 --theatre theatre_pannonia_nation.json --fronts`: the same table, byte for byte, as without
+  (the header aside), all 17 bands green. Its benchmarks fly their analogues through the resolver, the abstract fight,
+  the delays' draws and the notices on small theatres of their own with no front line, so the modes reach none of them,
+  and the nation's defence values are the tuned theatre's.
+
+**The player's effect: `fronts_bench --player`.** Each faction's war twice on the same seeds (7, 8, 9; 7 days), every F
+mode on and the pipeline pumped, the battery careless and careful as `air_war_balance` has them (the moves and the
+emission discipline the headless campaign exposes for the player's battery; its engagement record is not set but follows
+and is measured: its kills, whether it was wrecked, what the enemy knew of it). The battery's sector is where it stands at
+the war's start. Four new bands, game values (`"player_*"`): the line of contact there at the end within 5 km careful
+against careless on average; the air front there at most a step apart; its first step later (or earlier) by at most 48 h;
+elsewhere the line's difference at most the draws' spread (the same posture's seeds against each other).
+
+| Faction (the battery's sector) | Line apart there | Air front apart | Elsewhere: apart / spread | Held by the battery (ledger), careless / careful | Kills | Wrecked |
+|---|---|---|---|---|---|---|
+| Pact (northern_forest, no axis) | 0.00 km | 0 steps | 0.00 / 0.00 km | 3.7 / 2.3 h a war | 0 / 0 | 67 / 0 % |
+| NATO (western_crossings, 34-38 km deep) | 0.49 km (careful +0.34) | 0 steps | 0.03 / 1.45 km | 0 / 0 h | 1.3 / 0.7 | 0 / 0 % |
+| Neutral (border_forest) | 0.00 km | 0 steps | 0.00 / 0.00 km | 0 / 0 h | 0.7 / 0.3 | 0 / 0 % |
+| Rebels (rava_crossing) | 0.00 km | 0 steps | 0.00 / 0.00 km | 0 / 0 h | 0.7 / 0 | 0 / 0 % |
+
+Every band holds; the effect is well inside its bound, so nothing in F2.2's sector cover baseline or F4.1's priorities
+needed changing. The ground war runs on its own draws, so a careful battery leaves the other sectors' lines all but as
+they were (0.03 km against 1.45 km between seeds). The air front never steps in the battery's sector, so its delay cannot
+be measured as a step's hour; the ledger bounds it instead: a step needs its gates open for the chief's 6-24 h, and the
+battery's entry held them shut, with every other gate open, 0-11 h a war (the Pact's seed 8 careless the most). A
+sensitivity run with `--set air_front.reward_reach_m=0` (F6.1's question: the targets already in reach weighed) moved the
+Pact's air front a step in one seed elsewhere and in no battery sector, and left every player band where it was.
+
+**The outcomes' ledger** (`campaign/outcomes.hpp`) gains the enemy's air front in the battery's sector as the enemy's
+freedom of action denied: `CheckAirFront` reads, on the last planning cycle's measure, the believed radar SAM cover over the
+sector's next band and our mobile air defence there believed destroyed with the battery's entry and without it
+(`CoverWithout`: its believed working share off the sums, the baseline kept, so a battery gone counts as one destroyed),
+against the gates as the chief's traits move them (`air_front.hpp`'s `GatesOf` and `AirFrontCap`, taken out of
+`DecideAirFront` unchanged), and whether every other gate was open. `OutcomeLedger::AirFront` adds the hours the battery's
+entry alone held the gates shut (`AirFrontHeldH`) and counts the steps made in its sectors while watched; the debrief
+prints them. The mission session checks it every minute (`mission_session.hpp`); nothing in the simulation reads it.
+
+**Tests.** `test_outcomes.cpp`: the cover without the battery by hand, equal to the book's own measure with it gone; the
+gates held shut by it, not when another gate is shut or they open with it; the ledger's hours and steps, across a move to
+another sector; in a running war the check on the staff's own measure, none at `air_front.mode` 0.
+
+**Identity and gates.** At the defaults `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical to track F at 8c073bb, and `air_war_bench data 400` too; the
+replay fingerprint holds. `fronts_bench --ground --gate`, `--ground --gate --player-sector battery`, `--feed --gate` and
+`--history --gate` pass. `crew_balance`, `helper_coverage` (the same 29 gaps as track F's own rows) and `ground_check`
+are unchanged.
+
+**Cost.** `--player` 188 s of CPU for the Pact's six weeks of war, 122 s for NATO's, a few seconds for the neutral and the
+rebels; `air_war_balance --fronts` on the nation 6.4-7.1 s a campaign day for the Pact and 4.2-4.5 for NATO, most of it the
+pipeline's pump, as F6.1's `--history`.
+
+**Owner decisions.**
+- The bound's values are game values set here: 5 km, a step, 48 h, the draws' spread. Tighter or looser is the owner's.
+- The careful and careless battery are `air_war_balance`'s postures; the headless campaign has no control of the
+  battery's engagement record (it fights as an abstract defence with its object's lethality). A crew tier or a
+  lethality scale for the record would be a new player input.
+- The air front stays at the border for a week in every war (F6.1's open item); while it does, the player's effect on it
+  is bounded by the ledger's held hours, not measured as a step's delay. Whether the gates should weigh the targets
+  already in reach (`air_front.reward_reach_m`) is the owner's: the sensitivity run shows it alone does not move the
+  front.
+
+**Left:**
+- The player's effect on a front that moves in the battery's sector (a war or a theatre where the air front steps there).
+- The battery's sector by where it stands at the war's start; a war in which it moves to another sector is measured there.
+- `air_war_balance --fronts`'s CPU against the 1.05x line of section 5 with the pipeline left out (the pump dominates).

@@ -144,6 +144,14 @@
     { "id": "s75_move_h", "tool": "fronts_bench", "lo": 7.5, "hi": 20.0,
       "source": "mt_1973_nvn pp. 10-11 (an S-75 battalion's 30-40 km in 10-15 h at night: 2.5 h to pack, 3 to set up, 2-2.5 of checks). F6.1: a move of 50 km or less, the order heard to ready (the commander's whole hour first)", "confidence": "medium" },
     { "id": "moves_a_day", "tool": "fronts_bench", "lo": 1.0, "hi": 3.0,
-      "source": "mt_rozhdestvenskiy_depth pp. 6-7 (a unit moves 2-3 times a day at most). F6.1: one unit's moves begun in a day, at most", "confidence": "medium" }
+      "source": "mt_rozhdestvenskiy_depth pp. 6-7 (a unit moves 2-3 times a day at most). F6.1: one unit's moves begun in a day, at most", "confidence": "medium" },
+    { "id": "player_line_km", "tool": "fronts_bench", "lo": 0.0, "hi": 5.0,
+      "source": "game value: docs/fronts/06_BALANCE.md section 4 (the player changes the war only a little: the line of contact in the battery's sector at the end of fronts_bench --player's week, the battery careful against careless on the same seeds, about 5 km apart at most on average). F6.2", "confidence": "estimate" },
+    { "id": "player_air_front_steps", "tool": "fronts_bench", "lo": 0.0, "hi": 1.0,
+      "source": "game value: docs/fronts/06_BALANCE.md section 4 (the enemy's air front in the battery's sector at most a step apart, careful against careless). F6.2", "confidence": "estimate" },
+    { "id": "player_air_front_delay_h", "tool": "fronts_bench", "lo": -48.0, "hi": 48.0,
+      "source": "game value: docs/fronts/06_BALANCE.md section 4 (its first step later by up to a day or two with the battery careful; earlier by as much the draws' spread). F6.2", "confidence": "estimate" },
+    { "id": "player_elsewhere", "tool": "fronts_bench", "lo": 0.0, "hi": 1.0,
+      "source": "game value: docs/fronts/06_BALANCE.md section 4 (elsewhere no difference beyond the draws' spread: the line in the other sectors, careful against careless, over the same posture's seeds against each other). F6.2", "confidence": "estimate" }
   ]
 }

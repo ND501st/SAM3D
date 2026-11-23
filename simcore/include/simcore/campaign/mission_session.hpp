@@ -586,6 +586,8 @@ private:
         if (r.Time() + 1e-9 >= next_seen_s_) {  // the raids resolved off the scene count too
             next_seen_s_ = r.Time() + kDecideEveryS;
             for (const CoveredAsset& a : outcomes_.Assets()) outcomes_.Seen(a.place, Function(a.object));
+            // The enemy's air front in the battery's sector (F6.2): the hours the battery's entry held it, a check a minute.
+            outcomes_.AirFront(CheckAirFront(*campaign_, campaign_->Now()), kDecideEveryS / 3600.0);
         }
         const std::vector<airwar::LivePackages::Played>& played = live_->PlayedPackages();
         for (; ledgered_ < played.size() && played[ledgered_].out_s >= 0.0; ++ledgered_) {

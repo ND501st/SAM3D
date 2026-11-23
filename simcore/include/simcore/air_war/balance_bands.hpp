@@ -4,7 +4,9 @@
 // in data/air_war/balance_bands.json. The benches read them and fail when a measure falls outside: `air_war_bench` the
 // measures against history (the strikers' answers, the missiles' rates, the exchanges, the latencies, friendly fire),
 // `air_war_balance` the campaign's (loss rates, the battery's fate, the air battle, the on-call latencies) for a
-// theatre, a faction and a posture. Nothing in the simulation reads them.
+// theatre, a faction and a posture. Nothing in the simulation reads them. A band may hold only with track F's modes on
+// (`"modes": "fronts"`: ground.mode, air_front.mode and ad_strategy.mode at 1, the pipeline pumped; F6.2): a tool run with
+// them on asks for its measure's "fronts" band first and falls back to the band of any modes.
 #pragma once
 
 #include <cstdio>
@@ -29,22 +31,28 @@ struct BalanceBand {
     std::string source;
     std::string confidence;
     std::string status;  // "" a band the tool gates on; "argued": out of it for a reason 09_BALANCE.md gives (F6.1), printed, never failed
+    std::string modes;   // "" any; "fronts": only with every track F mode on (F6.2)
 };
 
 struct BalanceBands {
     std::vector<BalanceBand> bands;
 
-    // The band for a measure in a context (the first that matches), or null.
+    // The band for a measure in a context (the first that matches), or null. With `modes` ("fronts") a band of those modes
+    // is preferred to one of any; a band of some modes never matches a run without them.
     const BalanceBand* Find(const std::string& tool, const std::string& id, const std::string& theatre = std::string(),
-                            const std::string& faction = std::string(), const std::string& posture = std::string()) const {
+                            const std::string& faction = std::string(), const std::string& posture = std::string(),
+                            const std::string& modes = std::string()) const {
+        const BalanceBand* any = nullptr;
         for (const BalanceBand& b : bands) {
             if (b.tool != tool || b.id != id) continue;
             if (!b.theatre.empty() && b.theatre != theatre) continue;
             if (!b.faction.empty() && b.faction != faction) continue;
             if (!b.posture.empty() && b.posture != posture) continue;
-            return &b;
+            if (!b.modes.empty() && b.modes != modes) continue;
+            if (b.modes == modes) return &b;
+            if (any == nullptr) any = &b;
         }
-        return nullptr;
+        return any;
     }
 };
 
@@ -85,6 +93,7 @@ inline bool LoadBalanceBands(const std::string& path, BalanceBands& out, std::st
         x.source = str("source");
         x.confidence = str("confidence");
         x.status = str("status");
+        x.modes = str("modes");
         if (x.id.empty() || x.tool.empty() || lo == nullptr || hi == nullptr || !lo->Is(json::Type::Number) || !hi->Is(json::Type::Number) ||
             x.source.empty() || x.confidence.empty()) {
             if (error != nullptr) *error = path + ": bands[" + std::to_string(i) + "] needs id, tool, lo, hi, source and confidence";
@@ -94,6 +103,14 @@ inline bool LoadBalanceBands(const std::string& path, BalanceBands& out, std::st
         x.hi = hi->number;
         if (x.lo > x.hi) {
             if (error != nullptr) *error = path + ": bands[" + std::to_string(i) + "] (" + x.id + ") lo above hi";
+            return false;
+        }
+        if (!x.modes.empty() && x.modes != "fronts") {
+            if (error != nullptr) *error = path + ": bands[" + std::to_string(i) + "] (" + x.id + ") modes must be \"fronts\" or absent";
+            return false;
+        }
+        if (!x.status.empty() && x.status != "argued") {
+            if (error != nullptr) *error = path + ": bands[" + std::to_string(i) + "] (" + x.id + ") status must be \"argued\" or absent";
             return false;
         }
         b.bands.push_back(x);
