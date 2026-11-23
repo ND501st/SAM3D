@@ -630,6 +630,9 @@ public:
     const std::vector<double>& HeloFrontDepths() const { return air_front_helo_depth_; }
     // And each sector's reward over its next band as the last decision weighed it (fronts_bench's account, F6.1).
     const std::vector<double>& AirFrontRewards() const { return air_front_reward_; }
+    // Its own axes advancing by sector, as its picture had them at the last decision (F7.2; air_front.mode 2 with the
+    // ground war, else empty): what the close support need of a step's worth counted.
+    const std::vector<int>& AirFrontAdvancing() const { return air_front_advancing_; }
     // Both as the planner, the route planner and C2 read them (F2.4): off at mode 0, so their fixed depths stand.
     AirFrontView FrontView() const {
         AirFrontView v;
@@ -972,6 +975,8 @@ private:
     std::vector<AirFrontMove> air_front_moves_;  // the last decision's (kept so a cycle allocates nothing once sized)
     std::vector<double> air_front_reward_;
     std::vector<double> air_front_scratch_;
+    bool air_front_support_ = false;       // air_front.mode 2 with the ground war: a step's worth counts its own axes' need (F7.2)
+    std::vector<int> air_front_advancing_;  // its own axes advancing by sector, its picture's, as of the last decision (F7.2)
     command::EnemyCorridorIntel corridor_intel_;  // what its COMINT heard of our fighters' corridors (roadmap S1)
     std::map<std::pair<int, std::string>, bool> session_heard_;  // (day, false corridor) -> heard in a played session (S6 follow-ups)
     int corridor_days_fed_ = 0;
@@ -2912,6 +2917,8 @@ private:
     // Under air_front.mode 1: the pre-war picture kept for the sectors' baselines, the losses by sector from now on.
     void StartAirFront() {
         air_front_on_ = data_.tuning.Get("air_front.mode") >= 1.0;
+        air_front_support_ = data_.tuning.Get("air_front.mode") >= 2.0;
+        air_front_advancing_.clear();
         cover_book_ = SectorCoverBook();
         sector_cover_.clear();
         sector_losses_ = SectorLossWindow();
@@ -2932,6 +2939,8 @@ private:
     // post; the commander's while it is empty) on the picture, the measure, the losses and the politics; each move in the
     // journal; the depths written for the planner (F2.4). No draw: the war's sequence is the same as at mode 0.
     void DecideAirFrontNow() {
+        // F7.2 (air_front.mode 2): its own axes advancing by sector, as its own units last reported them.
+        if (air_front_support_ && ground_on_) ground_war_.EnemyAdvancing(front_line_.SectorCount(), air_front_advancing_);
         AirFrontRules rules;
         AirFrontInputs in;
         AirFrontChief who;
@@ -2973,6 +2982,8 @@ public:
         in.event_fired = !def.after_event.empty() && politics_.fired_events.count(def.after_event) > 0;
         // Its own ground front collapsing, by sector, in its own ground picture (F3.5): only while the ground war runs.
         in.crisis = ground_on_ ? &ground_war_.EnemyCrisis() : nullptr;
+        // Its own axes advancing, by sector, in the same picture (F7.2): only at air_front.mode 2 while the ground war runs.
+        in.advancing = air_front_support_ && ground_on_ && air_front_advancing_.size() == front_line_.SectorCount() ? &air_front_advancing_ : nullptr;
         in.now_h = now_h_;
         return chief;
     }
@@ -3013,6 +3024,12 @@ private:
                 std::snprintf(buf, sizeof buf, "a crisis on the ground: the air front to %.0f km, the helicopters to %.0f km, whatever the losses",
                               m.depth_to_m / km, m.helo_to_m / km);
                 break;
+        }
+        // F7.2: what of the worth was its own advancing axes' need for close support (only where it counted).
+        if (m.support > 0.0 && (m.what == AirFrontMove::What::Seen || m.what == AirFrontMove::What::Advance)) {
+            char more[96];
+            std::snprintf(more, sizeof more, "; of the worth %.1f the close support of its own attack there", m.support);
+            return sector + ": " + buf + more;
         }
         return sector + ": " + buf;
     }

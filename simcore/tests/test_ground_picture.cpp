@@ -435,3 +435,35 @@ SC_TEST("ground picture (F3.5): the air front reads the enemy's crisis only whil
     std::printf("    %zu entries; %llu reports merged in ours, %llu in the enemy's\n", x.log.size(),
                 static_cast<unsigned long long>(x.g.Picture(Side::Ours).reports), static_cast<unsigned long long>(x.g.Picture(Side::Enemy).reports));
 }
+
+SC_TEST("ground picture (F7.2): the enemy's own axes advancing by sector, as its own units' reports have them, never the truth") {
+    // The east axis attacks from 2 h; its pace reaches the enemy's staff only with its units' reports (twice a day, late).
+    // EnemyAdvancing counts it in the east only while it attacks and its believed pace is at least moving_km_per_day.
+    Fixture w;
+    SC_EXPECT(w.Build(War(), 7));
+    const int east = w.line.SectorIndex("east"), west = w.line.SectorIndex("west");
+    const double moving = Tables().moving_km_per_day;
+    std::vector<int> adv;
+    w.g.EnemyAdvancing(w.line.SectorCount(), adv);
+    SC_EXPECT(adv.size() == w.line.SectorCount() && adv[Idx(east)] == 0 && adv[Idx(west)] == 0);
+    int truth_from = -1, believed_from = -1, apart = 0;
+    for (int h = 1; h <= 72; ++h) {
+        w.To(h);
+        w.g.EnemyAdvancing(w.line.SectorCount(), adv);
+        const Axis& x = w.g.Axes()[0];
+        const bool attacking = !x.raid && x.status == AxisStatus::Attacking;
+        const bool truth = attacking && x.pace_km_day >= moving;
+        const bool believed = attacking && w.g.Picture(Side::Enemy).axes[0].pace_km_day >= moving;
+        SC_EXPECT(adv[Idx(east)] == (believed ? 1 : 0) && adv[Idx(west)] == 0);
+        if (truth && truth_from < 0) truth_from = h;
+        if (believed && believed_from < 0) believed_from = h;
+        apart += truth != believed ? 1 : 0;
+    }
+    // It advanced, the staff heard of it later than it happened, and between reports the two part.
+    SC_EXPECT(truth_from >= 0 && believed_from > truth_from && apart > 0);
+    // Nothing counts beyond the sectors asked for, and a smaller ask is sized to it.
+    w.g.EnemyAdvancing(1, adv);
+    SC_EXPECT(adv.size() == 1);
+    std::printf("    the east axis moving by the truth from %d h, in the enemy's picture from %d h; %d hours of 72 the two differ\n", truth_from,
+                believed_from, apart);
+}

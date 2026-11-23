@@ -25,8 +25,8 @@
 // --cpu (track F, F3.3): after each posture, the CPU its campaigns took (std::clock) and, under ground.mode 1 on the
 // nation (--set ground.mode=1), the line of contact's depth by sector at each day's end, the mean over the seeds; without
 // it the output is as before, byte for byte.
-// --fronts (track F, F6.2, docs/fronts/06_BALANCE.md section 3): every front mode on (ground.mode, air_front.mode and
-// ad_strategy.mode 1) with our side's pipeline pumped after every hour's step (data/command/chain_pannonia.json; the units
+// --fronts (track F, F6.2, docs/fronts/06_BALANCE.md section 3): every front mode on (ground.mode and ad_strategy.mode 1,
+// air_front.mode 2 since F7.2: the air front follows its own ground offensive) with our side's pipeline pumped after every hour's step (data/command/chain_pannonia.json; the units
 // hear their orders from it), as fronts_bench --history runs the war; the bands of "modes": "fronts" are read before the
 // others; after each posture the close support share by day and the air front's steps. Without it nothing changes.
 // Exits 1 if the data fail to load, 2 if a measure is out of its band.
@@ -582,7 +582,7 @@ int main(int argc, char** argv) {
     if (factions.empty()) factions = {"rebels", "neutral", "warsaw_pact", "nato"};
     std::printf("Theatre: air_war/%s\n", theatre.c_str());
     if (g_fronts) {
-        std::printf("Every front mode on (F6.2): ground.mode, air_front.mode, ad_strategy.mode 1, our pipeline pumped every hour\n");
+        std::printf("Every front mode on (F6.2): ground.mode 1, air_front.mode 2 (F7.2), ad_strategy.mode 1, our pipeline pumped every hour\n");
         std::string ce;
         if (!command::LoadChainData(data_dir, "command/chain_pannonia.json", g_chain, &ce)) {
             std::fprintf(stderr, "%s\n", ce.c_str());
@@ -607,7 +607,7 @@ int main(int argc, char** argv) {
         }
         if (g_fronts) {
             data.tuning.values["ground.mode"] = 1.0;
-            data.tuning.values["air_front.mode"] = 1.0;
+            data.tuning.values["air_front.mode"] = 2.0;  // F7.2: --set air_front.mode=1 runs F6.2's
             data.tuning.values["ad_strategy.mode"] = 1.0;
         }
         for (const auto& kv : sets) data.tuning.values[kv.first] = kv.second;

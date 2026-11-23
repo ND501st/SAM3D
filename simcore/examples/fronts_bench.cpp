@@ -71,7 +71,8 @@
 //   and each against the truth, which only this bench reads: per axis the reported depth against the true one and the age of
 //   the report, the believed line against the true line over the base line's stations (mean and worst difference in km), whether
 //   the posts' maps differ, and the CPU a map takes to build. Defaults 10 days, 1 seed, warsaw_pact and nato.
-//   --history (F6.1): each faction's war (default all four) with ground.mode, air_front.mode and ad_strategy.mode 1 and our pipeline
+//   --history (F6.1): each faction's war (default all four) with ground.mode 1, air_front.mode 2 (F7.2; --set air_front.mode=1 for
+//   F7.1's) and ad_strategy.mode 1 and our pipeline
 //   pumped after every step, N days (default 14) over N seeds (default 3), sampled every hour, against the bands of
 //   data/air_war/balance_bands.json whose tool is fronts_bench (docs/fronts/06_BALANCE.md section 2): a formation's day in contact,
 //   each army's losses a day, the attacker's losses over the defender's, an axis's day of attack and its fastest, no advance under
@@ -112,6 +113,10 @@ using namespace simcore;
 using namespace simcore::airwar;
 
 namespace {
+
+// The air front's mode the fronts' runs use (--feed, --ad, --history, --player, --map): 2 since F7.2, a step's worth
+// counting the close support of the enemy's own advancing axes (air_front.hpp); --set air_front.mode=1 runs F7.1's.
+constexpr double kFrontsAirFrontMode = 2.0;
 
 bool g_ground_log = false;  // --ground --log: the first seed's ground log (the commanders' decisions), as it happens
 
@@ -690,8 +695,8 @@ int FeedMain(const std::string& data, const std::string& theatre, int days, int 
     const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato", "neutral", "rebels"} : factions;
     const double budget_ms = 20.0;
     int fails = 0;
-    std::printf("Our units' reports in the pipeline (F3.8) on %s, ground.mode 1, air_front.mode 1, %d days x %d seeds; budget %.0f ms a campaign day\n\n",
-                theatre.c_str(), days, seeds, budget_ms);
+    std::printf("Our units' reports in the pipeline (F3.8) on %s, ground.mode 1, air_front.mode %g, %d days x %d seeds; budget %.0f ms a campaign day\n\n",
+                theatre.c_str(), kFrontsAirFrontMode, days, seeds, budget_ms);
     for (const std::string& faction : list) {
         AirWarData d;
         if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
@@ -699,7 +704,7 @@ int FeedMain(const std::string& data, const std::string& theatre, int days, int 
             return 1;
         }
         d.tuning.values["ground.mode"] = 1.0;
-        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = kFrontsAirFrontMode;
         FeedStats on, off;
         int same = 0;
         for (int s = 0; s < seeds; ++s) {
@@ -974,9 +979,9 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
     const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato"} : factions;
     const double budget_ms = 5.0;
     int fails = 0;
-    std::printf("Our air defence commanders' sector priorities (F4.1) on %s, ground.mode 1, air_front.mode 1, ad_strategy.mode 1, %d days x %d seeds; "
+    std::printf("Our air defence commanders' sector priorities (F4.1) on %s, ground.mode 1, air_front.mode %g, ad_strategy.mode 1, %d days x %d seeds; "
                 "budget %.0f ms a campaign day\n\n",
-                theatre.c_str(), days, seeds, budget_ms);
+                theatre.c_str(), kFrontsAirFrontMode, days, seeds, budget_ms);
     for (const std::string& faction : list) {
         AirWarData d;
         if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
@@ -984,7 +989,7 @@ int AdMain(const std::string& data, const std::string& theatre, int days, int se
             return 1;
         }
         d.tuning.values["ground.mode"] = 1.0;
-        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = kFrontsAirFrontMode;
         AirWarData d0 = d;
         d.tuning.values["ad_strategy.mode"] = 1.0;
         d0.tuning.values["ad_strategy.mode"] = 0.0;
@@ -1127,6 +1132,13 @@ struct HistStats {
     HistMean pullback_h;              // the loss line first crossed to the step back
     double deepest_km = 0.0;
     int sectors_moved = 0;
+    // F7.2: sector-hours with an axis of the enemy's own advancing there in its picture (AirFrontAdvancing); of them
+    // contested, the cover gate held, and the mobile too (both risk gates); steps forward made in such a sector; at the
+    // war's end, each sector an axis pushed in: the axis's depth (truth) and the air front's beyond the line of contact.
+    double axis_h = 0.0, axis_contested_h = 0.0, axis_cover_h = 0.0, axis_mobile_h = 0.0;
+    int axis_steps = 0;
+    HistMean end_axis_km, end_front_km;
+    int end_axis_sectors = 0, end_axis_stepped = 0;
     // Our air defence.
     HistMean ad_lost;                 // radar SAM fire units wrecked or overrun at the end, of all
     int ad_ever = 0, ad_back = 0;     // wrecked at some day's end; of them working at the end
@@ -1201,7 +1213,22 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
             const int day = SectorLossWindow::DayOf(c.Now());
             for (std::size_t s = 0; s < ns; ++s) {
                 const SectorFront& f = c.AirFront().sectors[s];
-                if (f.advances > adv0[s] && pending[s] > SectorFront::kNever) out.latency_h.Add(c.Now() - pending[s]);
+                // The step's hour as the staff decided it (the cycle's), not the hour sampled after it (F7.2: a cycle runs as
+                // the campaign is advanced past its hour, so the sample came an hour late).
+                if (f.advances > adv0[s] && pending[s] > SectorFront::kNever) out.latency_h.Add(f.depth_since_h - pending[s]);
+                const bool axis_here = s < c.AirFrontAdvancing().size() && c.AirFrontAdvancing()[s] > 0;
+                if (axis_here) {
+                    out.axis_h += 1.0;
+                    if (f.advances > adv0[s]) out.axis_steps += f.advances - adv0[s];
+                    if (f.contested && s < c.SectorCovers().size()) {
+                        out.axis_contested_h += 1.0;
+                        const SectorCover& sc = c.SectorCovers()[s];
+                        if (sc.cover <= afd.cover_at_most) {
+                            out.axis_cover_h += 1.0;
+                            if (sc.mobile_destroyed >= afd.mobile_destroyed_at_least) out.axis_mobile_h += 1.0;
+                        }
+                    }
+                }
                 if (f.pullbacks > back0[s] && over_since[s] >= 0.0) out.pullback_h.Add(c.Now() - over_since[s]);
                 adv0[s] = f.advances;
                 back0[s] = f.pullbacks;
@@ -1345,6 +1372,21 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
     for (const JournalEntry& j : c.Journal()) {
         if (j.kind == "air_front" && j.text.find("crisis") != std::string::npos) ++out.crisis_steps;
     }
+    // F7.2: where the air front stands against the enemy's axes at the end, in each sector an axis pushed in.
+    if (const groundwar::GroundWar* gw = c.Ground()) {
+        std::vector<double> axis_km(ns, 0.0);
+        for (const groundwar::Axis& x : gw->Axes()) {
+            if (x.raid || x.sector < 0 || static_cast<std::size_t>(x.sector) >= ns) continue;
+            axis_km[static_cast<std::size_t>(x.sector)] = std::max(axis_km[static_cast<std::size_t>(x.sector)], x.depth_m / 1000.0);
+        }
+        for (std::size_t s = 0; s < ns && s < c.AirFront().sectors.size(); ++s) {
+            if (axis_km[s] < 1.0) continue;
+            ++out.end_axis_sectors;
+            out.end_axis_km.Add(axis_km[s]);
+            out.end_front_km.Add(c.AirFront().sectors[s].depth_m / 1000.0);
+            out.end_axis_stepped += c.AirFront().sectors[s].advances > 0 ? 1 : 0;
+        }
+    }
     // Our air defence: radar SAM fire units wrecked or overrun at the end; of those wrecked at some day's end, working again.
     {
         int all = 0, gone = 0;
@@ -1466,7 +1508,8 @@ int HistRow(const BalanceBands& bands, const std::string& theatre, const std::st
 }
 
 // --history: each faction's war on the nation with every front mode on, against the bands (docs/fronts/06_BALANCE.md section 2).
-int HistoryMain(const std::string& data, const std::string& theatre, int days, int seeds, bool gate, const std::vector<std::string>& factions) {
+int HistoryMain(const std::string& data, const std::string& theatre, int days, int seeds, bool gate, const std::vector<std::string>& factions,
+                const std::vector<std::pair<std::string, double>>& sets) {
     command::ChainData chain;
     BalanceBands bands;
     std::string e;
@@ -1476,7 +1519,10 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
     }
     const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato", "neutral", "rebels"} : factions;
     int fails = 0;
-    std::printf("The fronts against history (F6.1) on %s: ground.mode, air_front.mode, ad_strategy.mode 1, %d days x %d seeds\n\n", theatre.c_str(), days, seeds);
+    std::printf("The fronts against history (F6.1) on %s: ground.mode 1, air_front.mode %g, ad_strategy.mode 1, %d days x %d seeds\n", theatre.c_str(), kFrontsAirFrontMode,
+                days, seeds);
+    for (const auto& kv : sets) std::printf("  --set %s=%g\n", kv.first.c_str(), kv.second);
+    std::printf("\n");
     for (const std::string& faction : list) {
         AirWarData d;
         if (!LoadAirWarData(data, "air_war/" + theatre, "air_war/faction_" + faction + ".json", d, &e)) {
@@ -1484,8 +1530,9 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
             return 1;
         }
         d.tuning.values["ground.mode"] = 1.0;
-        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = kFrontsAirFrontMode;
         d.tuning.values["ad_strategy.mode"] = 1.0;
+        for (const auto& kv : sets) d.tuning.values[kv.first] = kv.second;
         HistStats s;
         const double t0 = CpuSeconds();
         for (int k = 0; k < seeds; ++k) HistoryCampaign(d, static_cast<unsigned>(7 + k), days, chain, s);
@@ -1542,6 +1589,11 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
                     100.0 * s.ad_lost.Get(), s.ad_ever, s.ad_back, s.s75_h.n, s.s75_h.Get(), s.s75_km.Get());
         std::printf("  the air front's gates: a contested sector's lowest cover %.2f, highest mobile destroyed %.2f (%.0f sectors); sector-hours a war the cover gate held %.0f, and the mobile %.0f, and the reward %.0f (mean %.3f), and the losses %.0f\n",
                     s.low_cover.Get(), s.low_mobile.Get(), s.low_cover.n, s.gate_h[0] / n, s.gate_h[1] / n, s.gate_h[2] / n, s.gate_reward.Get(), s.gate_h[3] / n);
+        std::printf("  the air front behind its own axes (F7.2): sector-hours a war with an axis advancing in its picture %.0f, contested %.0f, the cover gate held %.0f, "
+                    "and the mobile %.0f; steps forward there %.1f a war; at the end %d sectors pushed in (%.1f km on average), the air front there %.1f km beyond the line "
+                    "on average, %d of them stepped\n",
+                    s.axis_h / n, s.axis_contested_h / n, s.axis_cover_h / n, s.axis_mobile_h / n, s.axis_steps / n, s.end_axis_sectors, s.end_axis_km.Get(),
+                    s.end_front_km.Get(), s.end_axis_stepped);
         std::printf("  the air war: %.1f packages, %.0f sorties, %.1f lost a war\n", s.packages / n, s.sorties / n, s.lost / n);
         std::printf("  advance by the ratio's class (hours attacking, km a day):");
         for (std::size_t k = 0; k < groundwar::kAdvanceClassCount; ++k) {
@@ -1681,8 +1733,8 @@ int PlayerMain(const std::string& data, const std::string& theatre, int days, in
     }
     const std::vector<std::string> list = factions.empty() ? std::vector<std::string>{"warsaw_pact", "nato", "neutral", "rebels"} : factions;
     int fails = 0;
-    std::printf("The player's effect (F6.2) on %s: ground.mode, air_front.mode, ad_strategy.mode 1, %d days x %d seeds, the battery careless and careful\n",
-                theatre.c_str(), days, seeds);
+    std::printf("The player's effect (F6.2) on %s: ground.mode 1, air_front.mode %g, ad_strategy.mode 1, %d days x %d seeds, the battery careless and careful\n",
+                theatre.c_str(), kFrontsAirFrontMode, days, seeds);
     for (const auto& kv : sets) std::printf("  --set %s=%g\n", kv.first.c_str(), kv.second);
     std::printf("\n");
     for (const std::string& faction : list) {
@@ -1692,7 +1744,7 @@ int PlayerMain(const std::string& data, const std::string& theatre, int days, in
             return 1;
         }
         d.tuning.values["ground.mode"] = 1.0;
-        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = kFrontsAirFrontMode;
         d.tuning.values["ad_strategy.mode"] = 1.0;
         for (const auto& kv : sets) d.tuning.values[kv.first] = kv.second;
         std::vector<PlayerRun> runs[2];  // [0] careless, [1] careful
@@ -1857,7 +1909,7 @@ int MapMain(const std::string& data, const std::string& theatre, int days, int s
             return 1;
         }
         d.tuning.values["ground.mode"] = 1.0;
-        d.tuning.values["air_front.mode"] = 1.0;
+        d.tuning.values["air_front.mode"] = kFrontsAirFrontMode;
         d.tuning.values["ad_strategy.mode"] = 1.0;
         for (int s = 0; s < seeds; ++s) {
             const unsigned seed = static_cast<unsigned>(7 + s);
@@ -2064,7 +2116,7 @@ int main(int argc, char** argv) {
     }
     if (!map_posts.empty()) return MapMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 1, map_posts, factions, map_json);
     if (player_effect) return PlayerMain(data, theatre, days_given ? days : 7, seeds_given ? seeds : 3, gate, factions, sets);
-    if (history) return HistoryMain(data, theatre, days_given ? days : 14, seeds_given ? seeds : 3, gate, factions);
+    if (history) return HistoryMain(data, theatre, days_given ? days : 14, seeds_given ? seeds : 3, gate, factions, sets);
     if (ad) return AdMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (feed) return FeedMain(data, theatre, days_given ? days : 10, seeds_given ? seeds : 3, gate, factions);
     if (ground) return GroundMain(data, theatre, days_given ? days : 30, seeds_given ? seeds : 5, campaign_days, campaign_seeds, gate, factions, player);

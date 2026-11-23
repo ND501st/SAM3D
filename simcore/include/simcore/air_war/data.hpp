@@ -1735,7 +1735,8 @@ public:
         std::string kind, crisis = "none";
         double depth_km = a.max_depth_m / 1000.0;
         if (!Keys(*b, p, {"kind", "cover_at_most", "mobile_destroyed_at_least", "loss_line", "loss_days", "delay_h", "max_depth_km",
-                          "min_reward", "crisis", "crisis_h", "surge_h", "surge_rest_h", "after_event", "source", "confidence", "notes"}) ||
+                          "min_reward", "crisis", "crisis_h", "surge_h", "surge_rest_h", "after_event", "close_support", "source", "confidence",
+                          "notes"}) ||
             !Provenance(*b, p) || !RequireString(*b, p, "source", a.source) || !RequireString(*b, p, "confidence", a.confidence) ||
             !RequireString(*b, p, "kind", kind) || !OptionalString(*b, p, "crisis", crisis) ||
             !Num(*b, p, "cover_at_most", a.cover_at_most, 0.0, 1.0) ||
@@ -1776,6 +1777,18 @@ public:
             if (!found) return Fail(Join(p, "after_event"), "no political event '" + a.after_event + "' in its politics");
         } else if (!a.after_event.empty()) {
             return Fail(Join(p, "after_event"), "only a border's");
+        }
+        // F7.2: the close support its own offensive needs (optional; read at air_front.mode 2 only): {"worth", "source",
+        // "confidence", "notes"}, the worth a step is given for each axis of its own advancing in the sector.
+        if (const json::Value* cs = b->Find("close_support")) {
+            const std::string q = Join(p, "close_support");
+            if (!cs->Is(json::Type::Object)) return Fail(q, "expected an object");
+            if (cs->Find("worth") == nullptr) return Fail(Join(q, "worth"), "required");
+            if (!Keys(*cs, q, {"worth", "source", "confidence", "notes"}) || !Provenance(*cs, q) ||
+                !RequireString(*cs, q, "source", a.support_source) || !RequireString(*cs, q, "confidence", a.support_confidence) ||
+                !Num(*cs, q, "worth", a.support_worth, 0.0, 1000.0)) {
+                return false;
+            }
         }
         a.present = true;
         return true;
