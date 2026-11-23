@@ -1204,6 +1204,82 @@ ground tests as before.
 - F6: the spreads and delays, the summaries' and returns' hours, whether a division's report to a SAM regiment should be
   routine or priority.
 
+## As built: F7.1 (24 Nov 2026)
+
+Our army keeps a reserve, and its commander counterattacks the enemy at a penetration's tip, not its whole axis
+(`06_BALANCE.md`, Decisions after F6). Only at `ground.mode` 1, and only with the new `"counterattack"` block in
+`ground_war.json`. Without the block F3.4's rule stands as built (`GroundTables::counter_at_tip`), so the modes' defaults
+and old saves are unchanged.
+
+**The army's reserve** (`HoldReserve`). The 3rd Army's tank brigade is the deployment's reserve in every deployment but the
+rebels', whose reserve is a regiment of the 7th Division. It is 12.5 % of the army's weighted strength against the Pact
+and NATO, and 18.9 % against the neutral, where the army deploys fewer of its formations. The doctrine's norm is about a
+ninth (`reserve_share` 0.111, `fm_100_2_1_1984` p. 2-11). A deployment may give a `reserve_depth_km`:
+- 55 km against the Pact and NATO, behind the 30 km security zone and a division's defence 20-25 km deep
+  (`vr_poltikovic_1984` pp. 95-96);
+- 45 km against the neutral, behind its 20 km security zone.
+At Build the reserve moves to that depth behind the line, at its place's station along it, and stands at the map's
+nearest anchor, so the route service asks its march from there. It stays free, in reserve, on no axis and out of the
+line until an order commits it. That order may be a counterattack or, as before, a relief.
+
+**The tip** (`TipPower`). The counterattack meets the enemy at one breakthrough sector, not every regiment on the axis.
+- A formation's share at the tip (`TipShareOf`) is its first-echelon manoeuvre regiments' parts (F3.6), plus its
+  artillery's at `levels.support_weight` (0.5). A formation with no regiments counts whole.
+- The tip holds as many regiments as one formation's first echelon, out of all the first-echelon regiments the axis's
+  attackers bring (`TipFraction`, at most 1).
+- The tip's power is the attackers' power, as the army commander believes it, times their share times that fraction.
+The second echelons behind the tip do not meet the counterattack. When it goes in, each defending formation fights with
+that share (`ResolveCounter`), and its losses are spread by the same share. NATO's covering force still takes the
+counterattack alone while it screens.
+
+**When.** The army commander counterattacks the deepest axis that meets all of these (`CounterTarget`):
+- it has gone through the security zone, or it is halted more than 1 km inside our ground (by his picture). Restoring
+  the state border is a counterstrike's aim (`vr_svatos_1985` p. 28), so the neutral's incursion, which halts in our
+  security zone, is a target too;
+- its momentum is spent (`MomentumSpent`, his picture): the axis is halted, its pace is under
+  `commanders.moving_km_per_day` (2.8 km a day), or its attackers are believed under our degraded line (2/3);
+- he has no counterattack on it already, and none since the last ended unless the enemy has advanced since.
+Only a candidate whose planning time plus its march on the roads to the axis is within `counterattack.reach_h` (12 h,
+a game value) counts toward his force. He orders the attack when that force reaches his counterattack ratio over the
+tip: 1.5-2.5, moved by his boldness, 1.8-2.2 for the drawn commanders. The order still stops at the border. He keeps
+watching while an axis is a target and a candidate is free (`CounterWatch`), so a halted war still wakes him.
+
+**On the nation** (`fronts_bench data --history`, 14 days x 3 seeds):
+- *The Pact.* No counterattack. Our free force is 0.28 of the enemy at a penetration's tip at best (0.29 in the 245 h a
+  war its momentum is spent), against 1.8-2.2. Three divisions on one axis outweigh our whole free force even at a
+  single breakthrough sector.
+- *NATO.* No counterattack. Our free force is 0.51 of the tip at best (0.52 in the 300 h a war its momentum is spent).
+- *The neutral.* A counterattack in every war (3 of 3), ordered on 2.57:1 by the commander's picture. On average it
+  wins back 2.0 km and ends after 24 h, once it stops gaining, with the line still inside our ground. In the first
+  seed it went in at night: against the hasty defence's 1.3 and the night's 0.8 it fell under the first advance class
+  and stopped within 3 h.
+- *The rebels.* Their raids end at dawn, so no counterattack.
+The Pact's war moves a little because the reserve now stands 55 km back rather than at the capital. The air's share of
+our losses goes from 20.2 to 17.4 %, and a strike's toll from 1.79 to 1.23 %. NATO's bands are the same to the digit.
+Every band is in, or argued as before (`06_BALANCE.md`, As built: F7.1).
+
+**Cost.** The ground war alone (`fronts_bench data --ground`, 30 days x 5 seeds, against 61f4e4e on its own data): the Pact 0.026 → 0.038 ms a campaign day (worst 0.11 → 0.13), NATO 0.037 → 0.044, the neutral 0.016 → 0.022, the rebels 0.068 → 0.074, against a budget of 20. The army commander now keeps deciding at his reaction time while a penetration with its momentum spent is in reach of a free formation (the Pact's decisions a war 62 → 240). The tip's power is a few sums over the axis's attackers, and the reach one road ask per candidate. `--history`'s CPU (14 days x 3 seeds, everything on): the Pact 172.8 → 177.5 s, NATO 113.2 → 116.9 s, with other work on the machine.
+
+**Tests** (`test_ground_commanders.cpp`, "ground counterattack (F7.1)"):
+- the tip by hand: a division's share at it, (2 x a regiment + 0.5 x its artillery) over the division, and the tip's
+  fraction, 2 of the axis's 5 first-echelon regiments;
+- a hand war in which the reserve stays out of the line until committed and the order comes only once the momentum is
+  spent. The order's ratio is the free force over the tip (2.66:1), while over the whole axis it is 0.76, where F3.4's
+  rule would not have gone in;
+- no counterattack when the reserve cannot arrive in time, nor under F3.4's rule;
+- an incursion halted 10 km inside our 15 km security zone is counterattacked back toward the border, never past it.
+  F3.4's rule ignores it;
+- on the nation: the reserve is about a ninth of the army for the Pact, NATO and the neutral, and stands at its
+  deployment's depth.
+`test_ground_picture.cpp`'s stale-picture test now measures the reserve's loss when it is taken. The order now comes
+later, and part of the loss has come back by then.
+
+**Left:**
+- The counterattack goes in on the axis, not into its flank: the tip's share is how the flank is weighed.
+- The commander does not wait for daylight or open ground. The neutral's counterattacks stall at night in the hills.
+- No army or front reserve on the enemy's side beyond its plan's echelons.
+- `reach_h` is a game value.
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its

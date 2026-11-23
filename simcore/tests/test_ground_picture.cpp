@@ -333,12 +333,16 @@ SC_TEST("ground picture (F3.5): a commander acts on a stale picture; the truth c
     SC_EXPECT(b.Build(d, 7));
     b.To(arrived + 1);
     b.g.TestLoss(td, 0.5);
+    const Formation& tf = b.g.Formations()[td];
+    const double lost_to = UnitPower(Tables(), tf.unit.strength, tf.unit.supply, tf.unit.cohesion);
     b.To(hc + 1);
     const GroundLogEntry* stale = FirstOrder(b.log, GroundOrder::CounterattackOrdered);
     SC_EXPECT(stale != nullptr && stale->h == ordered->h && stale->value == ordered->value);
     const double believed = b.g.Picture(Side::Ours).units[td].power;
     const double truth = UnitPower(Tables(), b.g.Formations()[td].unit.strength, b.g.Formations()[td].unit.supply, b.g.Formations()[td].unit.cohesion);
-    SC_EXPECT(truth < 0.6 * believed);  // he decided on twice what he has
+    // He decided on about half what he had once the loss was taken (F7.1: his order now comes later, and what makes
+    // up the loss has begun to return by the order's hour, so the loss is measured when taken).
+    SC_EXPECT(lost_to < 0.6 * believed && truth < believed);
     // C: the same loss before the last report was compiled: the report carries it, and his decision moves.
     Fixture c;
     SC_EXPECT(c.Build(d, 7));
@@ -348,8 +352,8 @@ SC_TEST("ground picture (F3.5): a commander acts on a stale picture; the truth c
     const GroundLogEntry* told = FirstOrder(c.log, GroundOrder::CounterattackOrdered);
     SC_EXPECT(told == nullptr || told->value < ordered->value - 1e-6);
     std::printf("    ordered at %d h on %.2f:1 (the reserve's report compiled at %d h, in at %d h); with the loss after it %.2f:1 on a "
-                "reserve of %.0f believed, %.0f true; with the loss before it %s\n",
-                hc, ordered->value, compiled, arrived, stale != nullptr ? stale->value : 0.0, believed, truth,
+                "reserve of %.0f believed, %.0f true (%.0f at the loss); with the loss before it %s\n",
+                hc, ordered->value, compiled, arrived, stale != nullptr ? stale->value : 0.0, believed, truth, lost_to,
                 told == nullptr ? "no counterattack" : "a lower ratio");
 }
 

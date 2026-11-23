@@ -1103,6 +1103,15 @@ struct HistStats {
     int ours_engaged = 0, ours_out = 0;  // our formations a day or more in the fight; of them withdrawn or dispersed
     HistMean ours_frac;                   // their strength over establishment at the end
     HistMean counter_ratio;               // a penetrated axis's best truth ratio of our counterattack's candidates over its attackers
+    HistMean tip_ratio;                   // F7.1: the same over the enemy at its tip (TipPowerTruth), any hour
+    HistMean tip_spent_ratio;             // and in the hours our picture had its momentum spent (none: not counted)
+    double spent_h = 0.0;                 // penetrated axes' hours with the momentum spent (our picture), no counterattack on them
+    int counters_in = 0;                  // counterattacks that went in (started)
+    HistMean counter_won_km;              // a counterattack's line won back: its depth at the start less at its end
+    HistMean counter_h;                   // its hours from start to end
+    HistMean counter_ordered_ratio;       // the ratio its commander ordered it on (his picture)
+    HistMean reserve_share;               // our army reserve's (the deployment's reserve) power over our army's at the war's start
+    HistMean reserve_depth_km;            // how far behind the line it stands then
     HistMean low_cover, low_mobile;       // a contested sector's lowest believed cover and highest mobile destroyed share, the war's
     double gate_h[4] = {0.0, 0.0, 0.0, 0.0};  // contested sector-hours: cover gate held; and mobile; and reward; and losses under the line
     HistMean gate_reward;                 // the reward in the sector-hours both gates held
@@ -1152,6 +1161,23 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
     std::vector<double> day_strength(nf, 0.0), day_battle(nf, 0.0), day_fought(nf, 0.0);
     double start_strength[2] = {0.0, 0.0};
     std::vector<double> axis_depth(na, 0.0), axis_hours(na, 0.0), hour_depth(na, 0.0), best_counter(na, -1.0);
+    std::vector<double> best_tip(na, -1.0), best_tip_spent(na, -1.0), counter_from_m(na, -1.0), counter_from_h(na, 0.0);
+    std::vector<char> held_ground(na, 0);  // F7.1: an axis halted holding our ground (more than 1 km in), any hour
+    if (g != nullptr) {
+        // Our army reserve (F7.1): the deployment's reserve role, its share of our army's power and its depth at the war's start.
+        double all = 0.0, reserve = 0.0;
+        for (std::size_t i = 0; i < nf; ++i) {
+            const groundwar::Formation& f = g->Formations()[i];
+            if (f.unit.side != groundwar::Side::Ours) continue;
+            const double p = groundwar::UnitPower(g->Data().tables, f.unit.strength, f.unit.supply, f.unit.cohesion);
+            all += p;
+            if (f.role != groundwar::DeployRole::Reserve) continue;
+            reserve += p;
+            const FrontPlace pl = c.FrontLine().Place(f.pos);
+            out.reserve_depth_km.Add(pl.side * pl.distance_m / 1000.0);
+        }
+        if (all > 0.0) out.reserve_share.Add(reserve / all);
+    }
     double offensive_h = -1.0;
     for (std::size_t i = 0; i < nf; ++i) {
         const groundwar::Formation& f = g->Formations()[i];
@@ -1205,6 +1231,35 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
         }
         if (g == nullptr) continue;
         const groundwar::GroundTables& t = g->Data().tables;
+        // F7.1: a penetration's hours with its momentum spent and no counterattack on it, the best tip ratio then; our
+        // counterattacks going in and ending (the line won back).
+        for (std::size_t a = 0; a < na; ++a) {
+            const groundwar::Axis& x = g->Axes()[a];
+            const bool countered = x.status == groundwar::AxisStatus::Counterattacked;
+            if (!x.raid && x.status == groundwar::AxisStatus::Halted && x.depth_m > 1000.0) held_ground[a] = 1;
+            if (countered && counter_from_m[a] < 0.0) {
+                counter_from_m[a] = x.depth_m;
+                counter_from_h[a] = c.Now();
+                ++out.counters_in;
+            } else if (!countered && counter_from_m[a] >= 0.0) {
+                out.counter_won_km.Add((counter_from_m[a] - x.depth_m) / 1000.0);
+                out.counter_h.Add(c.Now() - counter_from_h[a]);
+                counter_from_m[a] = -1.0;
+            }
+            if (x.raid || !x.through_zone || !x.counter.empty() || x.counter_incoming > 0) continue;
+            if (x.status != groundwar::AxisStatus::Attacking && x.status != groundwar::AxisStatus::Halted) continue;
+            if (!g->MomentumSpentSeen(a)) continue;
+            out.spent_h += 1.0;
+            double ours = 0.0;
+            for (std::size_t i = 0; i < nf; ++i) {
+                const groundwar::Formation& f = g->Formations()[i];
+                if (f.unit.side != groundwar::Side::Ours || f.spent || f.task != groundwar::Task::None || f.role == groundwar::DeployRole::Support) continue;
+                if (!f.free && std::find(x.depth_defenders.begin(), x.depth_defenders.end(), static_cast<int>(i)) == x.depth_defenders.end()) continue;
+                ours += groundwar::UnitPower(g->Data().tables, f.unit.strength, f.unit.supply, f.unit.cohesion);
+            }
+            const double tip = g->TipPowerTruth(a);
+            if (tip > 0.0) best_tip_spent[a] = std::max(best_tip_spent[a], ours / tip);
+        }
         // The axes' hour: the ratio's class and the advance in it.
         for (std::size_t a = 0; a < na; ++a) {
             const groundwar::Axis& x = g->Axes()[a];
@@ -1228,6 +1283,8 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
                     theirs += groundwar::UnitPower(t, f.unit.strength, f.unit.supply, f.unit.cohesion);
                 }
                 if (theirs > 0.0) best_counter[a] = std::max(best_counter[a], ours / theirs);
+                const double tip = g->TipPowerTruth(a);
+                if (tip > 0.0) best_tip[a] = std::max(best_tip[a], ours / tip);
             }
             if (!x.raid) {
                 axis_hours[a] += 1.0;
@@ -1353,13 +1410,17 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
         ++out.axes;
         const bool won = x.depth_m >= x.objective_m - 1000.0 || (x.status == groundwar::AxisStatus::Attacking && x.depth_m >= 0.5 * x.objective_m);
         out.axes_won += won ? 1 : 0;
+        const std::size_t ai = static_cast<std::size_t>(&x - g->Axes().data());
         if (x.zone_h >= 0.0) {
             out.zone_h.Add(x.zone_h - x.start_h);
             ++out.penetrations;
-            const std::size_t ai = static_cast<std::size_t>(&x - g->Axes().data());
             if (best_counter[ai] >= 0.0) out.counter_ratio.Add(best_counter[ai]);
+            if (best_tip[ai] >= 0.0) out.tip_ratio.Add(best_tip[ai]);
+            if (best_tip_spent[ai] >= 0.0) out.tip_spent_ratio.Add(best_tip_spent[ai]);
             penetrated = true;
         }
+        // F7.1: an incursion halted on our ground (the neutral's in our security zone) is one our army counterattacks too.
+        if (g->Data().tables.counter_at_tip && held_ground[ai] != 0) penetrated = true;
     }
     using GO = groundwar::GroundOrder;
     out.withdrawn += static_cast<int>(g->OrderCount(GO::WithdrawOrdered) + g->OrderCount(GO::WithdrawDecided));
@@ -1369,6 +1430,7 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
     out.asked += static_cast<int>(g->OrderCount(GO::WithdrawAsked));
     const int counters = static_cast<int>(g->OrderCount(GO::CounterattackOrdered));
     out.counters += counters;
+    if (counters > 0) out.counter_ordered_ratio.Add(g->CounterOrderedRatioSum() / counters, counters);
     out.wars_penetrated += penetrated ? 1 : 0;
     out.wars_countered += penetrated && counters > 0 ? 1 : 0;
     out.strikes += c.GroundAir().troop_strikes;
@@ -1442,7 +1504,7 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
         f += HistRow(bands, theatre, faction, "security_zone_h", "the security zone: start to main zone, h", s.zone_h.Get(), s.zone_h.n > 0, 1.0, " h");
         f += HistRow(bands, theatre, faction, "attack_won", "the enemy's axes at or near their objective", s.axes > 0 ? static_cast<double>(s.axes_won) / s.axes : 0.0, s.axes > 0);
         f += HistRow(bands, theatre, faction, "ours_out", "our formations in the fight a day: withdrawn", s.ours_engaged > 0 ? static_cast<double>(s.ours_out) / s.ours_engaged : 0.0, s.ours_engaged > 0);
-        f += HistRow(bands, theatre, faction, "counterattacked", "wars with a penetration: we counterattack", s.wars_penetrated > 0 ? static_cast<double>(s.wars_countered) / s.wars_penetrated : 0.0, s.wars_penetrated > 0);
+        f += HistRow(bands, theatre, faction, "counterattacked", "wars penetrated or held: we counterattack", s.wars_penetrated > 0 ? static_cast<double>(s.wars_countered) / s.wars_penetrated : 0.0, s.wars_penetrated > 0);
         f += HistRow(bands, theatre, faction, "air_share", "the air's share of our battle losses", s.ours_battle > 0.0 ? s.ours_air / s.ours_battle : 0.0, s.ours_battle > 0.0, 100.0, " %");
         f += HistRow(bands, theatre, faction, "strike_toll", "a strike on troops: of its division", s.strikes > 0 ? s.strike_share / s.strikes : 0.0, s.strikes > 0, 100.0, " %");
         f += HistRow(bands, theatre, faction, "air_front_latency_h", "the air front: gates holding to the step, h", s.latency_h.Get(), s.latency_h.n > 0, 1.0, " h");
@@ -1465,7 +1527,13 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
                     "our formations a day in the fight %d, withdrawn %d, at the end %.0f %% of establishment (lowest %.0f %%)\n",
                     s.withdrawn / n, s.dispersed / n, s.asked / n, s.refused / n, s.reliefs / n, s.counters / n, s.wars_penetrated, s.wars_countered, s.ours_engaged, s.ours_out,
                     100.0 * s.ours_frac.Get(), 100.0 * (s.ours_frac.n > 0.0 ? s.ours_lowest : 0.0));
-        std::printf("  a penetrated axis's best counterattack ratio (truth, its candidates over its attackers): %.2f (%.0f axes)\n", s.counter_ratio.Get(), s.counter_ratio.n);
+        std::printf("  a penetrated axis's best counterattack ratio (truth, its candidates over its attackers): %.2f (%.0f axes); over the enemy at its tip (F7.1): %.2f, "
+                    "in the hours its momentum was spent %.2f (%.0f axes, %.0f h a war)\n",
+                    s.counter_ratio.Get(), s.counter_ratio.n, s.tip_ratio.Get(), s.tip_spent_ratio.Get(), s.tip_spent_ratio.n, s.spent_h / n);
+        std::printf("  our army reserve (F7.1): %.1f %% of our army's power at the start, %.0f km behind the line; counterattacks went in %d (%.1f a war), "
+                    "ordered on %.2f, the line won back %.1f km in %.0f h (%.0f ended)\n",
+                    100.0 * s.reserve_share.Get(), s.reserve_depth_km.Get(), s.counters_in, s.counters_in / n, s.counter_ordered_ratio.Get(), s.counter_won_km.Get(),
+                    s.counter_h.Get(), s.counter_won_km.n);
         std::printf("  losses on the axes, T-55 equivalents a war: attacker %.1f, defender %.1f (per axis mean ratio %.2f); our air losses %.1f of %.1f; strikes on troops %.1f a war\n",
                     s.att_lost / n, s.def_lost / n, s.exchange.Get(), s.ours_air / n, s.ours_battle / n, s.strikes / n);
         std::printf("  the air front: %.1f steps forward and %.1f back a war (%d sectors moved, deepest %.0f km, %d crisis entries); latency %.1f h (%.0f), pull-back %.1f h (%.0f)\n",

@@ -251,6 +251,12 @@ struct GroundTables {
     double repair_return_per_day = 0.25;
     double march_road_factor = 1.3;
 
+    // Our counterattack at the penetration's tip (F7.1, ground_war.json "counterattack"; absent: F3.4's rule, weighed against
+    // the whole axis's attackers at any hour): weighed against the enemy at the tip and launched only once the penetration's
+    // momentum is spent, with the force that can reach the flank within `counter_reach_h` of the order.
+    bool counter_at_tip = false;
+    double counter_reach_h = 12.0;
+
     // Each side's picture (F3.5).
     PictureTables picture;
 
@@ -452,6 +458,7 @@ struct DeployedUnitDef {
 struct DeploymentDef {
     std::string adversary;  // a faction id
     double security_zone_km = 0.0;
+    double reserve_depth_km = 0.0;  // F7.1: the army's reserve held this far behind the line of contact (0: where it is placed)
     std::vector<DeployedUnitDef> units;
 
     const DeployedUnitDef* Find(const std::string& unit) const {
@@ -530,7 +537,8 @@ public:
     bool LoadTables(const json::Value& root, GroundTables& out) {
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
-                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture", "troops"}) ||
+                             "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture", "troops",
+                             "counterattack"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -577,9 +585,20 @@ public:
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
             !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out) ||
-            !LoadPicture(root, out) || !LoadTroops(root, out)) {
+            !LoadPicture(root, out) || !LoadTroops(root, out) || !LoadCounterattack(root, out)) {
             return false;
         }
+        return true;
+    }
+
+    // Our counterattack at the tip (F7.1): optional; without it the F3.4 rule.
+    bool LoadCounterattack(const json::Value& root, GroundTables& out) {
+        const json::Value* c = root.Find("counterattack");
+        if (c == nullptr) return true;
+        const std::string p = "counterattack";
+        if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
+        if (!Keys(*c, p, {"reach_h", "notes"}) || !Sourced(*c, p, "reach_h", out.counter_reach_h, 0.0, 240.0)) return false;
+        out.counter_at_tip = true;
         return true;
     }
 
@@ -1332,8 +1351,9 @@ private:
             const std::string p = Index("deployments", i);
             const json::Value& r = a->items[i];
             DeploymentDef d;
-            if (!Keys(r, p, {"adversary", "security_zone_km", "source", "confidence", "notes", "units"}) || !Provenance(r, p) ||
-                !RequireString(r, p, "adversary", d.adversary) || !Sourced(r, p, "security_zone_km", d.security_zone_km, 0.0, 100.0)) {
+            if (!Keys(r, p, {"adversary", "security_zone_km", "reserve_depth_km", "source", "confidence", "notes", "units"}) || !Provenance(r, p) ||
+                !RequireString(r, p, "adversary", d.adversary) || !Sourced(r, p, "security_zone_km", d.security_zone_km, 0.0, 100.0) ||
+                (r.Find("reserve_depth_km") != nullptr && !Sourced(r, p, "reserve_depth_km", d.reserve_depth_km, 0.0, 300.0))) {
                 return false;
             }
             if (out.For(d.adversary) != nullptr) return Fail(Join(p, "adversary"), "'" + d.adversary + "' is listed twice");
