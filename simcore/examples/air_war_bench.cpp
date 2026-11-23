@@ -4,7 +4,7 @@
 // Usage: air_war_bench [data_dir] [runs] [--why] [--set tuning.key=value ...] [--theatre file] [--fronts]
 //   --why: the losses by role and defence after each benchmark; --set: try a tuning value (a calibration sweep);
 //   --theatre: the theatre whose values the benchmarks take (default theatre_pannonia.json); --fronts (track F, F6.2):
-//   ground.mode, air_front.mode and ad_strategy.mode 1 and the bands of "modes": "fronts" read first. The benchmarks fly
+//   ground.mode 1, air_front.mode 2 (F7.2) and ad_strategy.mode 1 and the bands of "modes": "fronts" read first. The benchmarks fly
 //   their analogues through the resolver, the abstract fight, the delays' draws and the notices on small theatres of their
 //   own, none with a front line, so the modes reach none of them: with --fronts on the nation the table is the same, which
 //   is what F6.2's re-run on the moving front shows (docs/fronts/06_BALANCE.md, As built: F6.2).
@@ -200,7 +200,7 @@ bool Load(Bench& b, const std::string& data_dir, const char* faction) {
     for (FrontDef& fr : b.d.theatre.fronts) fr.friendly_fighters = 0.0;  // ground fire only, as in the analogues
     if (g_fronts) {
         b.d.tuning.values["ground.mode"] = 1.0;
-        b.d.tuning.values["air_front.mode"] = 1.0;
+        b.d.tuning.values["air_front.mode"] = 2.0;
         b.d.tuning.values["ad_strategy.mode"] = 1.0;
     }
     Rng srng(5);
@@ -480,7 +480,7 @@ int main(int argc, char** argv) {
     }
     std::printf("# The air war against history (%d runs each)\n\n", runs);
     if (g_theatre != "theatre_pannonia.json" || g_fronts) {
-        std::printf("Theatre air_war/%s%s\n\n", g_theatre.c_str(), g_fronts ? ", every front mode on (F6.2): ground.mode, air_front.mode, ad_strategy.mode 1" : "");
+        std::printf("Theatre air_war/%s%s\n\n", g_theatre.c_str(), g_fronts ? ", every front mode on (F6.2, F7.2): ground.mode 1, air_front.mode 2, ad_strategy.mode 1" : "");
     }
     std::printf("| Benchmark | The model | History |\n|---|---|---|\n");
 

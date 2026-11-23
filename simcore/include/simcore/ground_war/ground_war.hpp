@@ -870,6 +870,21 @@ public:
     // picture.crisis_below, or our counterattack on an axis there): the air front's crisis input (air_front.hpp), by the
     // line's sector index.
     const std::vector<char>& EnemyCrisis() const { return pictures_[1].crisis; }
+    // F7.2: the enemy's own axes advancing, by the line's sector index, as its picture has them (the air front's close
+    // support need, air_front.hpp): an axis attacking (its own orders say so; a raid's night out is not an offensive) whose
+    // pace its own units last reported is at least commanders.moving_km_per_day (hero_1972_oralfore's slowest sustained
+    // advance, the line its seniors send an echelon to success by). `out` sized to `sectors` and counted here.
+    void EnemyAdvancing(std::size_t sectors, std::vector<int>& out) const {
+        out.assign(sectors, 0);
+        if (!data_) return;
+        const double moving = data_->tables.moving_km_per_day;
+        for (std::size_t a = 0; a < axes_.size(); ++a) {
+            const Axis& x = axes_[a];
+            if (x.raid || x.status != AxisStatus::Attacking || x.sector < 0 || static_cast<std::size_t>(x.sector) >= sectors) continue;
+            if (SeenPace(Side::Enemy, a) < moving) continue;
+            ++out[static_cast<std::size_t>(x.sector)];
+        }
+    }
     // A test's: takes a share off a formation's strength now (the truth moves; a picture moves only when a report comes).
     void TestLoss(std::size_t i, double share) {
         Settle(i, now_h_);

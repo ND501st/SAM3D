@@ -358,3 +358,72 @@ the exchange 0.95 → 2.50 (our counterattack pays as an attacker), the enemy's 
 - Against the Pact and NATO the band stays argued. A front's reserve, a second army, or our divisions' own second
   echelons fighting as one counterattack would be needed to reach the ratio: the owner's call.
 - Withdrawals are still for F7.3, with F7.2.
+
+## As built: F7.2 (24 Nov 2026)
+
+The air front follows the enemy's own ground offensive (`02_AIR_FRONT.md`, As built: F7.2). At `air_front.mode` 2 a
+sector's reward for a step also counts the faction's need for close support of its own axes advancing there: its
+`close_support.worth` (the Pact and NATO 0.5, a game value whose weighting is sourced from `fm_100_2_1_1984`,
+`mt_1965_krasovskiy_conventional`, `fm_100_5_1982`) for each axis its own picture has attacking at 2.8 km a day or more.
+The risk gates are unchanged. The defaults stay at mode 1; `fronts_bench --feed`, `--ad`, `--history`, `--player` and
+`--map` and `air_war_balance`/`air_war_bench --fronts` run at mode 2. `--history` takes `--set` (`--set
+air_front.mode=1` runs F7.1's), prints a new line, "the air front behind its own axes (F7.2)", and now measures the
+air front's latency to the cycle that stepped (`depth_since_h`), not the hour the bench sampled it, which read an hour
+late.
+
+**The bands** (14 days x 3 seeds; before is track F at c0d584e, F7.1, at mode 1; after is F7.2 at mode 2):
+
+| Band | Range | Pact before → after | NATO before → after | |
+|---|---|---|---|---|
+| The air front: gates holding to the step | 0-24 h | none → 24.0 h (3 steps) | none → none | green (before: no step to measure) |
+| The air front: loss line to the step back | 12-72 h | none → 14.0 h (2) | none → none | green |
+| The air front's steps forward a war | (printed) | 0 → 1.0 | 0 → 0 | |
+| The air's share of our battle losses | 5-25 % | 17.39 → 15.99 | 8.45 → 8.45 | green |
+| A strike on troops, of its division | 0.2-3 % | 1.23 → 1.18 | 1.38 → 1.38 | green |
+| Our formation's day in contact | 1-8 % | 7.03 → 6.93 | 5.00 → 5.00 | green |
+| Our army's day | 0.2-1.2 % | 1.22 → 1.20 | 2.47 → 2.47 | argued as before |
+| Our radar SAM fire units lost at the end | 10-40 % | 25.76 → 27.27 | 18.18 → 18.18 | green |
+| Of those wrecked, working at the end | 33-100 % | 62.50 → 64.71 | 62.50 → 62.50 | green |
+| The enemy's loss a sortie (`air_war_balance`'s band) | 1.5-4.5 %, 1.0-3.5 % | 3.65 → 3.73 | 2.50 → 2.50 | green |
+
+Every other band is the same to the digit, and so are the neutral's and the rebels' wars; NATO's differs only in the
+mean reward its gates saw (2.15 → 2.65: the need counted, but the cover gate held). F7.1's argued bands stay argued
+with their reasons: no counterattack against the Pact or NATO, no withdrawals (the Pact's step brought no heavier
+fighting: 6.0 strikes on troops a war against 6.3, the pull-back following within a day).
+
+**The air front against the axes** (the new line; 02, As built: F7.2):
+- *The Pact*: 100 sector-hours a war with an axis advancing in its picture, 80 of them contested; the cover gate held
+  48 of those and the mobile 48. One step a war, every one behind an axis, two of three pulled back on the loss line.
+  At the end its axes have pushed into two sectors a war (40.4 km on average) and its air front there stands 3.3 km
+  beyond the line on average (one sector in three wars still a step in).
+- *NATO*: 136 such sector-hours, 88 contested, the cover gate holding 80: no step. Our radar SAMs in its axes' sectors
+  are believed working, so its air front stays at the line, as the gates require.
+- *The neutral*: no block and gates that never open on their own: no step behind its three axes.
+
+**The player's effect** (`fronts_bench --player`, 7 days x 3 seeds): every band passes as F6.2's.
+- The battery's sector: the line 0-0.49 km apart (NATO's western_crossings, as before), the air front 0 steps apart.
+- Elsewhere: the line 0-0.02 km apart; the Pact's air front 0.08 steps apart against the draws' 0.42.
+- The battery's sector has no axis in the Pact's war (northern_forest), so the step's delay F6.2 asked for is still
+  not measured there: no axis runs through it on these seeds. The ledger's hours the battery alone held the air front:
+  the Pact 3.7/2.3 h → 0.0/2.3 h careless/careful.
+
+**`air_war_balance --fronts`** (the nation, 10 seeds x 7 days): every band holds. Only the Pact's war moves: its air front steps forward 0.6 times a campaign (the deepest 60 km
+careless, 40 km careful; before, 0). Its loss a sortie goes 3.10/3.03 → 3.12/3.02 %, the careless battery is wrecked in
+40 → 30 % of runs and the exchange goes 1.61/2.03 → 1.52/2.00. The rebels', the neutral's and NATO's runs are the same to
+the digit (`docs/air_war/09_BALANCE.md` section 28).
+
+**Identity, cost, gates.** At the defaults `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are byte-identical to c0d584e (compared by content), and the replay fingerprint
+holds (journal 107, FNV 1375944258174313379, 41 packages). The rule costs one pass over the axes at each decision. In paired runs side by side on the same machine
+(`fronts_bench --history --seeds 2`, mode 1 against mode 2, the war with our pipeline pumped hourly) a campaign day takes
+4471 → 4454 ms for the Pact and 3236 → 3214 ms for NATO: below the noise. In the gates the pipeline's pump at mode 2
+takes 17.1 ms a campaign day for the Pact, 13.3 for NATO, 2.4 for the neutral and 3.1 for the rebels, against 20
+(c0d584e's run at mode 1, on a busier machine: 25.1, 21.1, 6.0, 4.7). The ground war in the campaign takes 2.03 ms a day
+against 2.13 (it does not read the mode). `--ground --gate`, `--ground --gate
+--player-sector battery`, `--feed --gate` and `--history --gate` exit 0, and `--player`'s bands pass.
+
+**Left:**
+- The battery's sector sees no advancing axis in the Pact's war on these seeds, so F6.2's player measure with a step's
+  delay waits for a war whose axis runs through it (F7.3, or a seed or player sector that has one).
+- `mission_session.hpp`'s fronts flag still sets mode 1.
+- Withdrawals: still none. The Pact's step is short-lived, so the fighting is no heavier (F7.3).

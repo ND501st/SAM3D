@@ -641,3 +641,91 @@ sessions' heard requests (`PumpHeard` makes their facts but not their signs: the
 pull-back (a quiet sector after a conclusion); the regiment's tasking and F4's priorities reading `AirFrontKnownBy`
 (14.2, F4.1); the thresholds' balance against the enemy's real moves (F6: on the nation the moved sectors brought almost
 no deeper raids, so the evidence is thin).
+
+## As built: F7.2 (24 Nov 2026)
+
+The air front follows the enemy's own ground offensive (`06_BALANCE.md`, Decisions after F6). Before F7.2 a sector's
+reward was only our targets in the next band, and on the nation the Pact's chief found almost none there, so his air
+front stood at the line of contact while his axes were 40-60 km in.
+
+**The rule.** At `air_front.mode` 2 a sector's reward for a step also counts its own troops' need for close support
+(`SupportNeed`, `air_front.hpp`):
+
+```
+reward(s) = SectorRewards(s)  +  close_support.worth × (its own axes advancing in s)
+```
+
+- *An axis advancing* is one of its own that is attacking (not a raid) and moving at `commanders.moving_km_per_day`
+  (2.8 km a day, `hero_1972_oralfore`) or faster.
+- The pace is the one in the faction's own ground picture (`GroundWar::SeenPace(Side::Enemy, ...)`), from its units'
+  reports, never the truth. `GroundWar::EnemyAdvancing` counts these axes by sector, and the campaign asks it at
+  each decision (`AirCampaign::DecideAirFrontNow`).
+- The risk gates are as at mode 1 and are read before the reward: contested, cover at most the gate, mobile air
+  defence destroyed at least the gate, losses under the line, room under the cap. A sector whose air defence the
+  chief believes intact keeps the air front back, whatever its axes need.
+- The delay, the one step a cycle, the cap and the pull-back are as F2.3 built them. The journal's Seen and Advance
+  lines say how much of the worth was the close support (`AirFrontMove::support`).
+
+**Data.** Each faction's `air_front` block takes an optional `"close_support"` sub-block: `worth` (required, 0-1000),
+`source`, `confidence`, `notes`. The loader is strict about it.
+- *The Pact*, worth 0.5: `fm_100_2_1_1984` pp. 12-1 and 12-8 (frontal aviation's support of the offensive; its
+  accompaniment begins when the troops outrun the fire plan, so the air front goes on with an axis that moves),
+  `mt_1965_krasovskiy_conventional` (at least 50-60 % of the fighter-bombers' effort to the troops) and
+  `dia_1977_fa_support`.
+- *NATO*, worth 0.5: `fm_100_5_1982` p. 7-11 (close air support and BAI of the attack, the ground commander suppressing
+  the enemy's air defences for it) and `fm_101_5_1_1980` pp. 1-15, 1-16.
+- *The neutral and the rebels*: no block, so no need. Their gates already keep their fronts at the border.
+- The worth is a **game value** (confidence `estimate`). One advancing axis is worth one troops target of value 0.5 at
+  weight 1. That is above the reward gate (`min_reward` 0.3, at most 0.36 with an unambitious chief), so an advancing
+  axis alone is reason enough to step. The sources set who supports whom first, not the number.
+
+**Switch.** `air_front.mode` 2 (`data/gameplay/air_war.json` keeps 1). Mode 1 reads nothing new, and a save stores the
+mode as a number, so old saves replay as they were made. Mode 2 without the ground war (`ground.mode` 0) is mode 1.
+`fronts_bench --feed`, `--ad`, `--history`, `--player` and `--map`, `air_war_balance --fronts` and
+`air_war_bench --fronts` now run at mode 2. `--watch` and `--air-front` stay at 1, F2's measures.
+
+**Where it stands against the axes** (`fronts_bench --history`, 14 days x 3 seeds; its new line "the air front behind
+its own axes"):
+
+| War | Sector-hours a war with an axis advancing in its picture | contested | cover gate held | mobile gate held | Steps there a war | At the end: sectors pushed in, mean depth | the air front there, mean beyond the line |
+|---|---|---|---|---|---|---|---|
+| The Pact | 100 | 80 | 48 | 48 | 1.0 | 6 (2 a war), 40.4 km | 3.3 km (2 had stepped, 1 still at 20 km) |
+| NATO | 136 | 88 | 80 | 8 | 0 | 6, 61.5 km | 0 |
+| The neutral | 32 | 32 | 0 | 0 | 0 | 3, 17.9 km | 0 (no block; the neutral never moves on its own) |
+| The rebels | 0 | | | | 0 | 0 | |
+
+- *The Pact.* Its air front now steps behind an advancing axis once our cover there is believed down to the gate:
+  one step a war, 24 h after the gates first held (the delay's long end on 12-hour cycles, inside `werrell_2005`'s 24 h).
+  Twice in three wars it went back a step on the loss line (14 h from the line crossed to the step back). Where our
+  cover held (48 of its 80 contested hours), it stayed back. Every one of its steps was behind an axis. The battery's sector (northern_forest) has no axis, so the battery sees no step there.
+- *NATO.* Its axes advance (six sectors pushed in at the end, 61.5 km on average), but our radar SAMs there are
+  believed working: the cover gate held 80 of the 88 contested hours. Its air front holds, as the risk gates require.
+
+**Tests** (`test_air_front.cpp`, +3; `test_ground_picture.cpp`, +1), against hand calculations:
+- **Steps behind an advancing axis.** Worth 0.6, gate 1.0, reach 40 km. One axis (0.6) is not enough. Two axes give
+  1.2: Seen at 72 h with a 15 h delay, so the steps come at 87, 111 and 135 h, to 20, 40 and 60 km, held at the cap.
+  The intact sector beside it (cover 1.0) holds. When the axis halts, the front holds where it is.
+- **Holds where the gates forbid.** Worth 100 against each gate in turn:
+  - cover 0.225 over the 0.2 gate;
+  - mobile destroyed 0.4 with three guns working (and, as the control, the guns destroyed: it steps);
+  - losses 10 % over the 4 % line;
+  - a sector never contested.
+- **Data.** The Pact's and NATO's 0.5 load and the loader refuses bad blocks. On the nation over 72 h: the Pact at
+  mode 1, at mode 2, and at mode 2 with no ground war. A sector's reward is at least 0.5 × its advancing axes, and a
+  save keeps mode 2.
+- **The ground picture.** The enemy's own advancing axes by sector, as its own units' reports have them: the axis moves
+  by the truth from 4 h and in its picture from 15 h, never from the truth.
+
+**Identity.** At the defaults (mode 1) nothing moves: `air_war_balance data 20 7` and the nation's `data 10 7` are
+byte-identical to c0d584e, and the replay fingerprint holds (journal 107, FNV 1375944258174313379, 41 packages).
+
+**Cost.** One pass over the axes at each decision (every 12 h) and one add per sector. It is below the noise in paired
+runs: 4471 → 4454 ms a campaign day for the Pact's war and our pipeline (06_BALANCE.md, As built: F7.2).
+
+**Left:**
+- `mission_session.hpp`'s fronts flag (F4.4) still sets `air_front.mode` 1. A played mission sees a step only once it
+  is switched to 2.
+- The worth is the same for every axis: a main and a supporting attack weigh alike, and so do a tank army and a
+  brigade.
+- The need does not fall as its own helicopters or artillery take up the support.
+- F7.3: the bands re-argued on F7.1-F7.2.

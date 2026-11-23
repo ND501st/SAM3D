@@ -1,6 +1,7 @@
 // What the enemy's air staff weighs by sector and what it decides (track F, F2.2-F2.3; simcore/air_war/air_front.hpp,
 // docs/fronts/02_AIR_FRONT.md §3): the believed cover over a sector's next band against its pre-war baseline, our mobile
 // air defence there, the losses by sector; the air front moved on them. Generic placeholder pictures, checked by hand.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -288,6 +289,7 @@ struct Staff {
     std::vector<SectorCover> cover;
     std::vector<AirFrontMove> moves;
     std::vector<char> crisis;
+    std::vector<int> advancing;  // F7.2: its own axes advancing by sector (empty: air_front.mode 1, none read)
     double politics_m = 0.0;
     bool event = false;
 
@@ -308,6 +310,7 @@ struct Staff {
         in.politics_max_depth_m = politics_m;
         in.event_fired = event;
         in.crisis = crisis.empty() ? nullptr : &crisis;
+        in.advancing = advancing.empty() ? nullptr : &advancing;
         in.now_h = now_h;
         DecideAirFront(def, rules, in, chief, st, moves);
         return moves;
@@ -738,4 +741,229 @@ SC_TEST("air front (F2.3): a save keeps air_front_mode; one made without it repl
         if (zero.Advance(48.0)) zero.SkipPlayerMission();
     }
     SC_EXPECT(old.Journal().size() == zero.Journal().size() && JournalHashBut(old, "") == JournalHashBut(zero, ""));
+}
+
+// ------------------------------------------------------------------------------------- F7.2: its own offensive's need
+
+SC_TEST("air front (F7.2): the air front steps behind its own advancing axis, a step a delay, to its greatest depth, and holds") {
+    // A's radar SAMs (an Osa and a Kub) believed destroyed: its cover 0 and its mobile air defence all gone over every band.
+    // With the campaign's reach (40-60 km beyond the air front) nothing believed is worth a step: the troops at 8 km are in
+    // reach already. The worth of the close support of one advancing axis of its own is the test's 0.6 against the gate 1.0.
+    Staff s;
+    s.rules.reward_reach_m = 40000.0;
+    s.def.support_worth = 0.6;
+    IntelPicture pic = TwoSectors();
+    s.Start(pic);
+    pic.entries[0].function = 0.0;
+    pic.entries[1].function = 0.0;
+    // F7.1's rule (no axis read): nothing worth a step, so nothing moves in two days.
+    for (double t = 0.0; t <= 48.0; t += 12.0) s.Cycle(pic, t);
+    SC_EXPECT(s.Depth(0) == 0.0 && s.Depth(1) == 0.0);
+    // One axis advancing in A: 0.6 under the gate, still nothing; two: 2 x 0.6 = 1.2, the gate met. B has two as well,
+    // but its Osa and Kub are believed working (cover 1.0): its air front stays where it is.
+    s.advancing = {1, 0};
+    s.Cycle(pic, 60.0);
+    SC_EXPECT(s.moves.empty());
+    SC_EXPECT_NEAR(s.cover[0].cover, 0.0, 1e-12);
+    s.advancing = {2, 2};
+    s.Cycle(pic, 72.0);
+    SC_EXPECT(Has(s.moves, AirFrontMove::What::Seen, 0) && s.moves.size() == 1);
+    if (!s.moves.empty()) {
+        SC_EXPECT_NEAR(s.moves[0].reward, 1.2, 1e-12);
+        SC_EXPECT_NEAR(s.moves[0].support, 1.2, 1e-12);
+        SC_EXPECT_NEAR(s.moves[0].after_h, 15.0, 1e-12);  // a middling chief: 6 + 18 x 0.5
+    }
+    // The step after the chief's 15 h, then one a delay: the band [20, 40 km] still under the broken Osa's and Kub's rings
+    // (their centres 10 and 12 km in, rings 10 and 15 km), the band [40, 60 km] beyond every ring ever believed (cover 0,
+    // nothing there: all gone), and no further than the greatest depth, 60 km.
+    s.Cycle(pic, 84.0);
+    SC_EXPECT(s.Depth(0) == 0.0);
+    s.Cycle(pic, 87.0);
+    SC_EXPECT(Has(s.moves, AirFrontMove::What::Advance, 0));
+    SC_EXPECT_NEAR(s.Depth(0), 20000.0, 1e-9);
+    const double steps_at[] = {96.0, 111.0, 120.0, 135.0};
+    for (double t : steps_at) s.Cycle(pic, t);
+    SC_EXPECT_NEAR(s.Depth(0), 60000.0, 1e-9);
+    SC_EXPECT(s.st.sectors[0].advances == 3);
+    for (double t = 144.0; t <= 192.0; t += 12.0) s.Cycle(pic, t);
+    SC_EXPECT_NEAR(s.Depth(0), 60000.0, 1e-9);
+    SC_EXPECT_NEAR(s.Depth(1), 0.0, 1e-12);
+    // The axis halts: no worth to step on, and nothing pulls the front back (only losses over the line do).
+    s.advancing = {0, 0};
+    for (double t = 204.0; t <= 264.0; t += 12.0) s.Cycle(pic, t);
+    SC_EXPECT_NEAR(s.Depth(0), 60000.0, 1e-9);
+    SC_EXPECT(s.st.sectors[0].pullbacks == 0);
+    // The worth by hand: the reward's pass plus the worth of each axis advancing there, nothing without the block.
+    AirFrontDef none = PeerDef();
+    const std::vector<int> two = {2, 0};
+    SC_EXPECT_NEAR(SupportNeed(s.def, &two, 0), 1.2, 1e-12);
+    SC_EXPECT(SupportNeed(s.def, &two, 1) == 0.0 && SupportNeed(s.def, nullptr, 0) == 0.0 && SupportNeed(none, &two, 0) == 0.0);
+    SC_EXPECT(SupportNeed(s.def, &two, 5) == 0.0);
+}
+
+SC_TEST("air front (F7.2): where our air defence is believed intact it holds, whatever its own offensive's need") {
+    // A worth no gate could refuse (100 an axis), every sector with an axis advancing: each risk gate still keeps its
+    // sector's air front at the line.
+    const auto held = [](Staff& s, const IntelPicture& pic) {
+        for (double t = 0.0; t <= 72.0; t += 12.0) s.Cycle(pic, t);
+        return s.Depth(0) == 0.0 && s.Depth(1) == 0.0 && s.st.sectors[0].advances == 0 && s.st.sectors[1].advances == 0;
+    };
+    // The cover: A's Osa destroyed, its Kub believed working at 0.45: 0.45 / 2 = 0.225, over the gate 0.2. B intact (1.0).
+    Staff a;
+    a.def.support_worth = 100.0;
+    a.advancing = {1, 1};
+    IntelPicture pic = TwoSectors();
+    a.Start(pic);
+    pic.entries[0].function = 0.0;
+    pic.entries[1].function = 0.45;
+    a.Cycle(pic, 0.0);
+    SC_EXPECT_NEAR(a.cover[0].cover, 0.225, 1e-12);
+    SC_EXPECT_NEAR(a.cover[1].cover, 1.0, 1e-12);
+    SC_EXPECT(a.moves.empty());
+    SC_EXPECT(held(a, pic));
+    // Our mobile air defence: A's radar SAMs destroyed, three gun batteries there believed working: 1 - 3 / 5 = 0.4
+    // destroyed, under the gate 0.5.
+    Staff m;
+    m.def.support_worth = 100.0;
+    m.advancing = {1, 1};
+    IntelPicture guns = TwoSectors();
+    for (int k = 0; k < 3; ++k) {
+        IntelEntry g = Target("gun" + std::to_string(k), ObjectKind::Aaa, At(20.0 + 5.0 * k, 5), 0.5);
+        g.threat_radius_m = 3000.0;
+        g.threat_radar = false;
+        guns.entries.push_back(g);
+    }
+    m.Start(guns);
+    guns.entries[0].function = 0.0;
+    guns.entries[1].function = 0.0;
+    m.Cycle(guns, 0.0);
+    SC_EXPECT_NEAR(m.cover[0].cover, 0.0, 1e-12);
+    SC_EXPECT_NEAR(m.cover[0].mobile_destroyed, 0.4, 1e-12);
+    SC_EXPECT(held(m, guns));
+    // The same with the guns believed destroyed too: the gates open and the need alone carries the step (the control).
+    Staff open;
+    open.def.support_worth = 100.0;
+    open.advancing = {1, 1};
+    open.Start(guns);
+    for (std::size_t k = 6; k < 9; ++k) guns.entries[k].function = 0.0;
+    open.Cycle(guns, 0.0);
+    SC_EXPECT_NEAR(open.cover[0].mobile_destroyed, 1.0, 1e-12);
+    SC_EXPECT(Has(open.moves, AirFrontMove::What::Seen, 0) && !Has(open.moves, AirFrontMove::What::Seen, 1));
+    open.Cycle(guns, 15.0);
+    SC_EXPECT_NEAR(open.Depth(0), 20000.0, 1e-9);
+    SC_EXPECT_NEAR(open.Depth(1), 0.0, 1e-12);
+    // The losses: A broken, but 2 lost of 20 low-level sorties over its two days, 10 % over the line 4 %.
+    Staff l;
+    l.def.support_worth = 100.0;
+    l.advancing = {1, 1};
+    IntelPicture lost = TwoSectors();
+    l.Start(lost);
+    lost.entries[0].function = 0.0;
+    lost.entries[1].function = 0.0;
+    for (int day = 0; day < 4; ++day) {
+        l.losses.NoteSorties(0, day, 10);
+        l.losses.NoteLosses(0, day, 1);
+    }
+    SC_EXPECT(held(l, lost));
+    // A sector nobody ever believed covered (its SAMs never seen): no hole the staff has made, so no step on need alone.
+    Staff u;
+    u.def.support_worth = 100.0;
+    u.advancing = {1, 1};
+    IntelPicture empty;
+    empty.entries.push_back(Target("ta", ObjectKind::Troops, At(25, 8), 1.0));
+    u.Start(empty);
+    SC_EXPECT(held(u, empty));
+    SC_EXPECT(!u.st.sectors[0].contested);
+}
+
+SC_TEST("air front (F7.2): the Pact's and NATO's need load; mode 2 reads its own axes on the nation, mode 1 does not; a save keeps 2") {
+    const char* factions[] = {"nato", "warsaw_pact", "rebels", "neutral"};
+    const double worth[] = {0.5, 0.5, 0.0, 0.0};
+    for (int i = 0; i < 4; ++i) {
+        AirWarData d;
+        std::string e;
+        SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia.json", std::string("air_war/faction_") + factions[i] + ".json", d, &e));
+        SC_EXPECT_NEAR(d.faction.air_front.support_worth, worth[i], 1e-12);
+        SC_EXPECT((worth[i] > 0.0) == !d.faction.air_front.support_source.empty());
+        // Every advancing axis alone meets the reward gate, an unambitious chief's (1.2 x min_reward) too.
+        if (worth[i] > 0.0) SC_EXPECT(d.faction.air_front.support_worth >= 1.2 * d.faction.air_front.min_reward);
+    }
+    // The loader's refusals, on the Pact's file.
+    std::ifstream in(kData + "/air_war/faction_warsaw_pact.json", std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    auto loads = [&](const std::string& from, const std::string& to) {
+        std::string t = text;
+        const std::size_t at = t.find(from);
+        SC_EXPECT(at != std::string::npos);
+        if (at != std::string::npos) t.replace(at, from.size(), to);
+        FactionDef f;
+        std::string e;
+        return LoadFactionJson(t, f, &e);
+    };
+    SC_EXPECT(loads("\"close_support\": { \"worth\": 0.5,", "\"close_support\": { \"worth\": 0.5,"));
+    SC_EXPECT(!loads("\"close_support\": { \"worth\": 0.5,", "\"close_support\": {"));
+    SC_EXPECT(!loads("\"close_support\": { \"worth\": 0.5,", "\"close_support\": { \"worth\": -1,"));
+    SC_EXPECT(!loads("\"close_support\": { \"worth\": 0.5,", "\"close_support\": { \"worth\": 0.5, \"depth\": 1,"));
+    // The campaign on the nation with the ground war: at mode 1 the decision reads no axes; at mode 2 its own, by sector,
+    // as its picture has them, and each sector's worth holds their need; without the ground war none.
+    AirWarData d;
+    std::string e;
+    SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json", d, &e));
+    d.tuning.values["ground.mode"] = 1.0;
+    AirWarData one = d, two = d, no_ground = d;
+    one.tuning.values["air_front.mode"] = 1.0;
+    two.tuning.values["air_front.mode"] = 2.0;
+    no_ground.tuning.values["air_front.mode"] = 2.0;
+    no_ground.tuning.values["ground.mode"] = 0.0;
+    AirCampaign a, b, c;
+    SC_EXPECT(a.Init(one, 7, &e) && b.Init(two, 7, &e) && c.Init(no_ground, 7, &e));
+    const double until_h = 72.0;
+    int most = 0;
+    bool worth_holds = true;
+    for (double h = 12.0; h <= until_h; h += 12.0) {
+        while (b.Now() < h) {
+            if (b.Advance(h)) b.SkipPlayerMission();
+        }
+        if (b.AirFrontAdvancing().size() != b.FrontLine().SectorCount()) continue;
+        for (std::size_t s = 0; s < b.AirFrontAdvancing().size() && s < b.AirFrontRewards().size(); ++s) {
+            most = std::max(most, b.AirFrontAdvancing()[s]);
+            worth_holds = worth_holds && b.AirFrontRewards()[s] >= 0.5 * b.AirFrontAdvancing()[s] - 1e-12;
+        }
+    }
+    while (a.Now() < 12.0) {
+        if (a.Advance(12.0)) a.SkipPlayerMission();
+    }
+    AirFrontRules rules;
+    AirFrontInputs ia, ib, ic;
+    AirFrontChief who;
+    a.AirFrontDecisionInputs(rules, ia, who);
+    b.AirFrontDecisionInputs(rules, ib, who);
+    c.AirFrontDecisionInputs(rules, ic, who);
+    SC_EXPECT(ia.advancing == nullptr && a.AirFrontAdvancing().empty());
+    SC_EXPECT(ib.advancing == &b.AirFrontAdvancing() && b.AirFrontAdvancing().size() == b.FrontLine().SectorCount());
+    SC_EXPECT(ic.advancing == nullptr && c.AirFrontAdvancing().empty());
+    SC_EXPECT(most >= 1 && worth_holds);
+    std::vector<int> now;
+    if (b.Ground() != nullptr) b.Ground()->EnemyAdvancing(b.FrontLine().SectorCount(), now);
+    std::printf("    the Pact on the nation, %.0f h at mode 2: its own axes advancing by sector at the last decision", until_h);
+    for (int n : b.AirFrontAdvancing()) std::printf(" %d", n);
+    std::printf(" (now");
+    for (int n : now) std::printf(" %d", n);
+    std::printf("); air front depths");
+    for (double x : b.AirFrontDepths()) std::printf(" %.0f", x / 1000.0);
+    std::printf(" km\n");
+    // A save keeps mode 2 (one made at 1 replays at 1: F2.3's test).
+    AirWarData dd;
+    SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", dd, &e));
+    dd.tuning.values["air_front.mode"] = 2.0;
+    AirCampaign sv;
+    sv.Init(dd, 21);
+    while (sv.Now() < 24.0) {
+        if (sv.Advance(24.0)) sv.SkipPlayerMission();
+    }
+    const std::string saved = SaveCampaignJson(sv, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json");
+    AirCampaign back;
+    SC_EXPECT(LoadCampaignJson(saved, kData, back, &e));
+    SC_EXPECT_NEAR(back.Data().tuning.Get("air_front.mode"), 2.0, 1e-12);
+    SC_EXPECT(back.Journal().size() == sv.Journal().size() && JournalHashBut(back, "") == JournalHashBut(sv, ""));
 }
