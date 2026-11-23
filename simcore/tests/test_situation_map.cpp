@@ -113,14 +113,15 @@ std::size_t Marks(const command::SituationMap& m) {
     return n;
 }
 
-// One shared run: NATO on the nation, seed 9, 72 h (the army's chief takes western_crossings to defend on day 2, F4.1).
+// One shared run: NATO on the nation, seed 9, 120 h (the army's chief takes western_crossings to defend on day 2, F4.1;
+// NATO's corps attacks at 96 h, so the units' returns after it carry the axes in contact).
 MapRun* Shared() {
     static std::unique_ptr<MapRun> r;
     static bool tried = false;
     if (!tried) {
         tried = true;
         r = std::make_unique<MapRun>();
-        if (!r->Go("nato", 9, 72.0)) r.reset();
+        if (!r->Go("nato", 9, 120.0)) r.reset();
     }
     return r.get();
 }

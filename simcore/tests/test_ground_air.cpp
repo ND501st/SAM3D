@@ -210,7 +210,7 @@ SC_TEST("ground air (F3.7): a theatre troops object is tied to its owner's forma
     SC_EXPECT_NEAR(p.y, 10000.0, 1e-9);
 }
 
-SC_TEST("ground air (F3.7): the enemy's strike on troops comes off the unit: damage times share times its strength, and cohesion") {
+SC_TEST("ground air (F3.7): the enemy's strike on troops comes off the unit: damage times share times its strength times the strike's share, and cohesion") {
     Fixture w;
     SC_EXPECT(w.ok && !w.g.Ties().empty());
     if (w.g.Ties().empty()) return;
@@ -220,16 +220,19 @@ SC_TEST("ground air (F3.7): the enemy's strike on troops comes off the unit: dam
     const double s0 = w.g.StrengthAt(fi, 1.0), c0 = f.unit.cohesion, fn0 = w.g.TroopsFunction(0, 1.0);
     const double lost = w.g.AirStrike(0, 0.3, 1.0);
     const TroopsTie& t = w.g.Ties()[0];
-    SC_EXPECT_NEAR(lost, std::min(fn0, 0.3) * t.share * t.unit_base, 1e-9 * t.unit_base);
+    // F6.1: troops.strike_loss_share of the damage is the unit's (dug in and dispersed, they lose less than their positions).
+    const double k = Tables().troops.strike_loss_share;
+    SC_EXPECT(k > 0.0 && k < 1.0);
+    SC_EXPECT_NEAR(lost, std::min(fn0, 0.3) * t.share * t.unit_base * k, 1e-9 * t.unit_base);
     SC_EXPECT_NEAR(f.unit.strength, s0 - lost, 1e-9 * s0);
-    SC_EXPECT_NEAR(w.g.TroopsFunction(0, 1.0), fn0 - 0.3, 1e-9);
+    SC_EXPECT_NEAR(w.g.TroopsFunction(0, 1.0), fn0 - 0.3 * k, 1e-9);
     SC_EXPECT(f.unit.cohesion < c0 && f.unit.cohesion >= c0 - Tables().cohesion_air_attack_loss - 1e-12);
     bool noted = false;
     for (const GroundLogEntry& l : w.g.Log()) noted = noted || (l.what == GroundNote::AirAttack && l.other == 0 && l.formation == static_cast<int>(fi));
     SC_EXPECT(noted);
     // Never more than it has; nothing for nothing.
     SC_EXPECT(w.g.AirStrike(0, 0.0, 1.0) == 0.0);
-    const double rest = w.g.AirStrike(0, 5.0, 1.0);
+    const double rest = w.g.AirStrike(0, 5.0 / k, 1.0);  // more than it has, after the strike's share
     SC_EXPECT(rest <= s0 - lost + 1e-9);
     SC_EXPECT(w.g.TroopsFunction(0, 1.0) < 1e-9);
     std::printf("    strike 0.3: %.1f of %.1f lost, cohesion %.3f -> %.3f\n", lost, s0, c0, f.unit.cohesion);
@@ -246,7 +249,8 @@ SC_TEST("ground air (F3.7): a march column's strength brought reinforces the uni
     SC_EXPECT(w.g.Reinforce(0, 0.2, 1.0) <= room + 1e-9 * f.base_establishment);
     const double lost = w.g.AirStrike(0, 0.4, 1.0);
     const double s1 = f.unit.strength;
-    const double back = w.g.Reinforce(0, 0.1, 1.0);
+    // Less than the strike took (F6.1: the strike's loss is 0.4 times troops.strike_loss_share of the unit).
+    const double back = w.g.Reinforce(0, 0.25 * 0.4 * Tables().troops.strike_loss_share, 1.0);
     SC_EXPECT(back > 0.0 && back <= lost + 1e-9);
     SC_EXPECT_NEAR(f.unit.strength, s1 + back, 1e-9 * s1);
     SC_EXPECT(f.unit.strength <= f.base_establishment + 1e-9);

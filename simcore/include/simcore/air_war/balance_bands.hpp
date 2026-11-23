@@ -28,6 +28,7 @@ struct BalanceBand {
     double hi = 0.0;
     std::string source;
     std::string confidence;
+    std::string status;  // "" a band the tool gates on; "argued": out of it for a reason 09_BALANCE.md gives (F6.1), printed, never failed
 };
 
 struct BalanceBands {
@@ -83,6 +84,7 @@ inline bool LoadBalanceBands(const std::string& path, BalanceBands& out, std::st
         x.posture = str("posture");
         x.source = str("source");
         x.confidence = str("confidence");
+        x.status = str("status");
         if (x.id.empty() || x.tool.empty() || lo == nullptr || hi == nullptr || !lo->Is(json::Type::Number) || !hi->Is(json::Type::Number) ||
             x.source.empty() || x.confidence.empty()) {
             if (error != nullptr) *error = path + ": bands[" + std::to_string(i) + "] needs id, tool, lo, hi, source and confidence";

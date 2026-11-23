@@ -159,6 +159,7 @@ struct PictureTables {
 struct TroopsTables {
     double reform_depth_km = 25.0;   // a unit withdrawn, dispersed or re-forming stands this far behind the line of contact
     double full_supply_days = 1.0;   // a formation with this many days of stocks (the air war's consumption) fights at full supply
+    double strike_loss_share = 1.0;  // of a strike's damage to a tied object, the share its unit's strength loses (F6.1)
 };
 
 struct GroundTables {
@@ -588,9 +589,11 @@ public:
         if (c == nullptr) return true;
         const std::string p = "troops";
         if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
-        return Keys(*c, p, {"reform_depth_km", "full_supply_days", "notes"}) &&
-               Sourced(*c, p, "reform_depth_km", out.troops.reform_depth_km, 0.0, 200.0) &&
-               Sourced(*c, p, "full_supply_days", out.troops.full_supply_days, 0.01, 30.0);
+        if (!Keys(*c, p, {"reform_depth_km", "full_supply_days", "strike_loss_share", "notes"}) ||
+            !Sourced(*c, p, "reform_depth_km", out.troops.reform_depth_km, 0.0, 200.0) ||
+            !Sourced(*c, p, "full_supply_days", out.troops.full_supply_days, 0.01, 30.0))
+            return false;
+        return c->Find("strike_loss_share") == nullptr || Sourced(*c, p, "strike_loss_share", out.troops.strike_loss_share, 0.0, 1.0);
     }
 
     // `world`: the places and theatre the file names (LoadGroundWorld).

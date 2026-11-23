@@ -583,6 +583,40 @@ SC_TEST("ground commanders (F3.4): our counterattack into the penetration, back 
                 g.Axes()[0].status == AxisStatus::Halted ? HaltReasonName(g.Axes()[0].halted) : "on", acr_loss, div_loss);
 }
 
+SC_TEST("ground commanders (F6.1): the war's tally: every order counted as logged, the fighting losses by side and axis, the zone's hour") {
+    // fronts_bench --history reads the tally at a war's end (the campaign clears the log hourly): it must agree with the
+    // log a test keeps, and the losses it books by axis must be the formations' own.
+    std::shared_ptr<GroundWarData> d = CounterData(true);
+    LineOfContact line;
+    line.Build(StraightFront(), 5000.0);
+    TheatreDef theatre;
+    GroundEnv env;
+    env.theatre = &theatre;
+    GroundWar g;
+    SC_EXPECT(g.Build(d, line, theatre, nullptr, 7));
+    Logged log;
+    Run(g, line, env, 24 * 6, log, [&](int) {});
+    for (std::size_t o = 0; o < kGroundOrderCount; ++o) SC_EXPECT(static_cast<int>(g.OrderCount(static_cast<GroundOrder>(o))) == log.Count(static_cast<GroundOrder>(o)));
+    SC_EXPECT(g.OrderCount(GroundOrder::CounterattackOrdered) >= 1u);
+    double by_form[2] = {0.0, 0.0}, by_axis[2] = {0.0, 0.0};
+    for (const Formation& f : g.Formations()) {
+        SC_EXPECT(f.lost_attack >= 0.0 && f.lost_defence >= 0.0 && f.lost_air == 0.0 && f.fought_h >= 0.0);
+        by_form[0] += f.lost_attack;
+        by_form[1] += f.lost_defence;
+        if (f.lost_attack + f.lost_defence > 0.0) SC_EXPECT(f.fought_h >= 1.0);
+    }
+    for (const Axis& x : g.Axes()) {
+        by_axis[0] += x.lost_attack;
+        by_axis[1] += x.lost_defence;
+        if (x.depth_m > 0.0) SC_EXPECT(x.lost_attack > 0.0 && x.lost_defence > 0.0);
+        if (x.through_zone) SC_EXPECT(x.zone_h >= x.start_h);
+    }
+    SC_EXPECT_NEAR(by_form[0], by_axis[0], 1e-6 * (1.0 + by_axis[0]));
+    SC_EXPECT_NEAR(by_form[1], by_axis[1], 1e-6 * (1.0 + by_axis[1]));
+    std::printf("    attacking %.1f, defending %.1f (T-55 equivalents); counterattacks %u, orders logged %zu\n", by_axis[0], by_axis[1],
+                g.OrderCount(GroundOrder::CounterattackOrdered), log.all.size());
+}
+
 SC_TEST("ground commanders (F3.4): keyed and order-free: the same war resolved either way round, the same orders") {
     std::shared_ptr<GroundWarData> d = CounterData(false);
     d->tables.draw_sigma = Tables().draw_sigma;

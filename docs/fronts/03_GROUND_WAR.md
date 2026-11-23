@@ -1065,7 +1065,8 @@ nothing tied, overrun, labelled or drawn. `test_ground_picture.cpp`'s air sighti
 **Left:**
 - F6: the damage a strike on a troops object takes off its unit (a destroyed object is its regiment's share, 0.1-0.16 of
   a division: too much for a package against a regiment's area), `cohesion.air_attack_loss`, `troops.full_supply_days`
-  and the reform depth against history; the FSCL's terrain reach.
+  and the reform depth against history; the FSCL's terrain reach. (F6.1: the strike's share is `troops.strike_loss_share`,
+  0.1, a strike 1.4-1.8 % of a division; the rest stand, `06_BALANCE.md` As built: F6.1.)
 - Escapes and returning overrun objects move at once and straight; on the roads with the route service, and our units
   leaving objects before the line reaches them on an order, are F4's (F4.2's overrun in time and late).
 - The deep-strike line beyond the FSCL (the corps' area of interest) and the FSCL told to the enemy's own C2 posts as an
