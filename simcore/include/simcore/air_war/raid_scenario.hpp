@@ -602,11 +602,13 @@ public:
             }
             const bool low = fl.profile == Profile::Low || a->helicopter;
             const bool hide = a->helicopter && std::find(cl.tags.begin(), cl.tags.end(), std::string("hide")) != cl.tags.end();
-            // The height it follows the ground at: the route planner's low legs (from its let-down, gate or first turn
-            // point; its first point is at transit height), else its first point's.
+            // The height it follows the ground at: the route planner's low legs (from its let-down, else its gate or first
+            // turn point; its first point is at transit height, and inside the enemy's air front its gate too, F2.4),
+            // else its first point's.
             double follow_agl = cl.agl.empty() ? 0.0 : cl.agl[0];
+            const int letdown = RouteIndexOf(fl.route, "letdown");
             for (const RoutePoint& rp : fl.route) {
-                if (rp.tag == "letdown" || rp.tag == "gate" || rp.tag == "turn") {
+                if (letdown >= 0 ? rp.tag == "letdown" : (rp.tag == "gate" || rp.tag == "turn")) {
                     follow_agl = rp.agl_m;
                     break;
                 }
@@ -1025,7 +1027,7 @@ public:
                 Push(fallback, Str(o.id));
             }
             if (o.kind != ObjectKind::City && !o.player && !o.decoy && e.HorizontalLength() < clip) m.objects.push_back({o.id, e});
-            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 &&
+            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 && st.march == 0 &&
                 e.HorizontalLength() < clip + o.defence.radius_m) {
                 RaidNeighbour nb;
                 nb.id = o.id;
@@ -1043,7 +1045,12 @@ public:
         m.night = p.part == DayPart::Night;
         m.poor_weather = c.WeatherNow() == Weather::Poor;
         m.mission = p.kind;
-        if (const FrontDef* front = th.FrontFor(f.front)) m.depth_km = DistanceToLine(front->line, bst.pos) / 1000.0;
+        // From the line of contact (the ground war moves it, F3.3; at zero offsets the front's line to the bit).
+        if (!c.FrontLine().Empty()) {
+            m.depth_km = c.FrontLine().AbsDistance(bst.pos) / 1000.0;
+        } else if (const FrontDef* front = th.FrontFor(f.front)) {
+            m.depth_km = DistanceToLine(front->line, bst.pos) / 1000.0;
+        }
         m.free_hunt = c.C2().FreeHunt(bst.pos, c.Phase());
         for (const Flight& fl : p.flights) {
             OppLeader ld;
@@ -1333,8 +1340,21 @@ public:
             Put(g, "north_m", Num(std::round(gci.y)));
             Put(oa, "gci", g);
             Put(oa, "raid_warning_s", Num(std::round(warn_after_s)));
-            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it).
-            if (const FrontDef* front = th.FrontFor(f.front)) {
+            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it): the line
+            // of contact once the ground war has moved it (track F, F3.7: the point of the line of contact over the battery's
+            // projection on the base line), else the front's line as before.
+            const LineOfContact& contact = c.FrontLine();
+            if (contact.Moved()) {
+                const FrontPlace pl = contact.Place(bst.pos);
+                const Vec3 fs = to_scen(contact.PointAt(pl.along_m) + contact.InwardNormal(pl.along_m) * contact.Offset(pl.along_m));
+                if (fs.HorizontalLength() > 1.0) {
+                    json::Value fr = Obj();
+                    Put(fr, "east_m", Num(std::round(fs.x)));
+                    Put(fr, "north_m", Num(std::round(fs.y)));
+                    Put(fr, "enemy_bearing_deg", Num(std::round(RadToDeg(std::atan2(fs.x, fs.y)) * 10.0) / 10.0));
+                    Put(oa, "front", fr);
+                }
+            } else if (const FrontDef* front = th.FrontFor(f.front)) {
                 if (!front->line.empty()) {
                     Vec3 best = front->line.front();
                     for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {

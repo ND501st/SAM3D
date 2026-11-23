@@ -7,7 +7,7 @@ Code: `simcore/command/info_net.hpp` (`InfoNet`). Tests: `simcore/tests/test_com
 | Field | Meaning |
 |---|---|
 | key | Unique and stable: where it came from ("journal:12", "raid:3", "wreck:kesmark_road_bridge:3150") |
-| kind | war, air_warning, order, intsum, raid_seen, raid_result, own_damage, prisoner, enemy_officer, enemy_knows_battery, battery_news, press, rumour, mail |
+| kind | war, air_warning, order, intsum, raid_seen, raid_result, own_damage, prisoner, enemy_officer, enemy_knows_battery, battery_news, press, rumour, mail, intercept, own_air_notice, air_front, situation |
 | h | When its origin knew it (campaign hours) |
 | origin, witnesses | The post that first knew it; others who saw it themselves at that moment |
 | text, summary | The full text (the paper), and what voice carries (if different) |
@@ -81,3 +81,43 @@ call is in the call log for the debrief only. A heard report that names the batt
 (`campaign/mission_session.hpp`) the fast road's arrival is said on the battery's net (`ScenarioRunner::RegimentSays`) and
 written in the radiotelephonist's journal as heard; the summary comes as a paper by the means the pipeline picks
 (`ScenarioRunner::AddDeliveries`). Nothing appears on a panel.
+
+## 7. What our side learns of the enemy's air front (track F, F2.5)
+
+The enemy moves his air front by sector in his own mind (`docs/fronts/02_AIR_FRONT.md`); our side sees only its effects.
+Where the air war runs it (`air_front.mode` 1) the feed (`CampaignFeed`) sends the army's air defence staff
+(`army_ad_staff`, under `army_ad_chief` at the army's headquarters) its signs, each a fact for that post alone
+(`need_level` 0): the division's air defence CP's report of a raid the warning net saw attack our troops at low level by
+day, or with helicopters, deeper beyond the line of contact than his close support or helicopters usually work
+(`RaidSeen`, priority, key `front_watch:raid:<n>`); the intercept centre's form of a close support request heard on his
+request net naming a square that deep (`Intercept`, routine, `front_watch:intercept:<n>`); our troops' reports of air
+attack (`Troops`, `CampaignFeed::ReportAirAttack`, for F3.8). The staff counts each sign by sector and day when it reaches
+it (`command/air_front_watch.hpp`), and once enough fall in a sector within a few days it states, after its working
+delay, a new kind of fact, `FactKind::AirFront` (`air_front_estimate:<n>`, subject `air_front:<sector>`): a document of
+priority from `army_ad_staff` for the division's chief of air defence's tree down to the battery commanders (`need_level`
+3), saying how much deeper the enemy's close support and helicopters now work there. `CampaignFeed::AirFrontKnownBy(post,
+sector)` gives the estimate a post holds, from the latest conclusion that has reached it: what the regiment's tasking and
+F4's sector priorities read. Nothing reads the enemy's depths.
+
+## 8. What our side learns of the ground war (track F, F3.8)
+
+Where the ground war runs (`ground.mode` 1) our units' reports are facts (`command/ground_feed.hpp`, `GroundFeed`, a member
+of `CampaignFeed`, `docs/fronts/03_GROUND_WAR.md` section 10 and "As built: F3.8"). A formation's staff compiles its combat
+report twice a day (06:00 and 18:00 local) and at once when it reports, asks to be relieved, stops its attack, withdraws,
+breaks or re-forms: `FactKind::Situation`, priority, key `sitrep:<n>`, subject `situation:<unit>`, from the unit's duty
+officer (`div_chief_of_staff`, `div9_staff_duty`, `swbde_staff_duty`, `tankbde_staff_duty`; the army's own brigades report
+from the army's operations section) for `army_ops` and, for the SAM regiment's division, `rgt_chief_of_staff` and
+`bty21_commander` on the way down. A new field, `Fact::to`, names a fact's addressees when it is for posts that are not a
+tree (`audience` and `need_level` are then not read); the posts along the pipeline's way only pass it on, and so hold it
+(the garrison commandant, the regiment's commander). The report says what the unit believed: its strength and supplies as
+its staff counted them, the axes it reports (depth and pace as it knows them), the enemy it believes it faces, and the air
+attacks it counted since its last return (the picture's own errors, `ground_war/picture.hpp`). The army's operations
+section sums the latest return of each unit that has reached it, twice a day (09:00 and 21:00 local), for the national
+sector's post and the chief of air defence (`Situation`, `sitsummary:<n>`, made only of what the section held by then);
+the army's intelligence summary of the enemy it does not touch is an `Intsum` from `army_intel` (`ground_intsum:<n>`);
+an order our commander gives a unit (withdraw, relieve, counterattack) is an `Order` from his staff for the unit, the
+chief of air defence and, for the regiment's division, the regiment and the battery (`sitorder:<n>`). A struck unit's
+air attack is passed to `CampaignFeed::ReportAirAttack`, so the army's air defence staff's watch (section 7) sees it as
+a sign when it lies deeper than the enemy's close support usually works. F4's commanders and the regiment's tasking read
+what a post holds (`GroundFeed::LatestKnownBy`, `LatestAxisKnownBy`), never the ground war's state.
+

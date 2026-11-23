@@ -7,4 +7,5 @@
 
 THIRD_PARTY_INCLUDES_START
 #include "simcore/simcore.hpp"
+#include "simcore/command/campaign_situation.hpp"
 THIRD_PARTY_INCLUDES_END

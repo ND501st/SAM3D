@@ -19,6 +19,14 @@
 // join the post's feed beside the scenario's own, and each of them, with every warning source of the vehicle's standing
 // at a theatre object, is off the air while the war has it struck and on it again once repaired. The regiment tells the
 // battery on its command net: at the start what is already out, later each change.
+//
+// Track F, F4.4 (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 4): where the ground war and our air defence commanders run
+// (ground.mode and ad_strategy.mode 1, MissionSessionDef::fronts), the session keeps the campaign's pipeline (an InfoNet
+// on our chain and the CampaignFeed, pumped as the campaign advances and asked for the units' orders: F4.2-F4.3), and the
+// regiment's tasking reads what reached its posts (campaign/regiment.hpp's RegimentWatch): the covered division's
+// withdrawal, its sector's priority and the sky's sharing there, read again only when a fact reaches the regiment. Its
+// tasks go to the battery on the regiment's net as every task (GiveTask), the sharing as a word on it
+// (ScenarioRunner::RegimentTellsSharing). At the modes 0 none of it is made: the session is as before.
 #pragma once
 
 #include <algorithm>
@@ -32,7 +40,11 @@
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/package_injector.hpp"
+#include "simcore/command/air_war_feed.hpp"
+#include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
+#include "simcore/command/own_air.hpp"
+#include "simcore/command/situation_map.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
@@ -56,10 +68,20 @@ struct MissionSessionDef {
     // the buckets' dusk (18-21); by the sun that dusk is 16:13-17:25 and its package comes before the session starts.
     // -1: the war data's own (1, the theatre dated). docs/LIGHT.md section 7.
     int light_mode = 0;
+    // Track F (F4.4): the fronts on, ground.mode, air_front.mode and ad_strategy.mode at 1 (a theatre with a country map
+    // and fronts with lines: theatre_pannonia_nation.json); false: the war data's own modes.
+    bool fronts = false;
 };
 
 class MissionSession {
 public:
+    MissionSession() = default;
+    MissionSession(const MissionSession&) = delete;
+    MissionSession& operator=(const MissionSession&) = delete;
+    ~MissionSession() {
+        if (campaign_ && feed_) campaign_->SetOrderSource(nullptr);  // the feed goes first
+    }
+
     // False, with why, if the scenario or the war does not load, or the scenario has no clock to put the war on.
     bool Start(const MissionSessionDef& d, const std::string& data_dir, std::string* error = nullptr) {
         const auto fail = [error](const std::string& w) {
@@ -91,15 +113,30 @@ public:
             war.tuning.values["light.mode"] = static_cast<double>(d.light_mode);
             airwar::ApplyLightMode(war);
         }
+        if (d.fronts) {
+            for (const char* k : {"ground.mode", "air_front.mode", "ad_strategy.mode"}) war.tuning.values[k] = 1.0;
+        }
         campaign_ = std::make_unique<airwar::AirCampaign>();
         if (!campaign_->Init(war, d.seed)) return fail("the air war does not start");
+        if (regiment_ && war.tuning.Get("ground.mode") >= 1.0 && war.tuning.Get("ad_strategy.mode") >= 1.0 && !SetUpFronts(data_dir, war, d.seed, &e)) {
+            return fail(e);
+        }
         // The battery stands where the mission has it from the war's first hour, so the enemy's intelligence has
         // looked at the battery the session plays.
         campaign_->RelocateBattery(ToTheatre(BatteryCentre()));
         // The scenario's clock on the war's day, in campaign hours (hour 0 is the theatre's start hour on day 1).
         h0_ = static_cast<double>(d.day - 1) * 24.0 + clock_start_s / 3600.0 - campaign_->Data().theatre.start_hour;
         if (h0_ < 0.0) h0_ += 24.0;
-        while (campaign_->Advance(h0_)) campaign_->SkipPlayerMission();
+        while (campaign_->Advance(h0_)) {
+            campaign_->SkipPlayerMission();
+            PumpFronts();
+        }
+        PumpFronts();
+        if (watch_.Bound()) {  // what reached the regiment before the session was acted on before it
+            RegimentPicture pic;
+            watch_.Fill(pic, campaign_->Now());
+            regiment_->Since(pic);
+        }
         airwar::ScenarioFormat fmt;
         fmt.air_radio = war.faction.radio.present;  // the enemy's calls as transmissions in the session (roadmap B9)
         live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_, fmt);
@@ -114,6 +151,7 @@ public:
     void Step(double dt) {
         runner_->Step(dt);
         if (live_) live_->Step(*runner_);
+        PumpFronts();
         CarryTheMove();
         PumpIntercept();
         TellDummyHeard();
@@ -122,8 +160,11 @@ public:
         if (campaign_) FollowOurBridges(false);
         if (regiment_ && runner_->Time() + 1e-9 >= next_decide_s_) {
             next_decide_s_ = runner_->Time() + kDecideEveryS;
-            RegimentDecides(campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture(), BriefingNow());
+            RegimentPicture pic = campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture();
+            if (watch_.Bound()) watch_.Fill(pic, campaign_->Now());
+            RegimentDecides(pic, BriefingNow());
         }
+        NoteReceived();
     }
 
     // The regiment decides on what reached it (in play: our intelligence's estimates in the campaign's journal) and
@@ -136,13 +177,31 @@ public:
             if (!d.why.empty()) Note("the regiment's tasking: " + d.why);
             return false;
         }
+        const double fact_s = d.fact_h >= 0.0 ? (d.fact_h - h0_) * 3600.0 : -1.0;
+        if (d.tell_sharing) {  // F4.4: no task, the sky's sharing told on the net
+            const bool one = d.sharing == command::CooperationMethod::OneZone;
+            const std::string text = "Regiment to the battery: in sector " + pic.sector + " the sky is shared " +
+                                     (one ? "in one zone by height: our fighters above the split, you below it." : "by zones: our fighters stay out of your zone.");
+            if (!r.RegimentTellsSharing(d.sharing, split_m_, text, kRegimentTellsS)) {
+                Note("not told (no R-111 in the session): " + text);
+                return false;
+            }
+            given_.push_back({r.Time(), d.rule, std::string("sharing: ") + command::CooperationMethodName(d.sharing), fact_s, -1.0});
+            return true;
+        }
         std::string why;
+        const std::string was_main = r.HasTask() ? r.Task().main : std::string();
+        // F4.4: a new readiness on the task held while the battery is still carrying it out (not yet reported ready) keeps
+        // the ready-by the regiment gave it: the posture does not hurry the move.
+        if (r.HasTask() && d.task.main == was_main && r.TaskReceivedS() >= 0.0 && r.TaskReadyS() < r.TaskReceivedS() && r.TaskPlan().ready_by_s > r.Time()) {
+            d.task.ready_in_s = std::max(d.task.ready_in_s, r.TaskPlan().ready_by_s - r.Time());
+        }
         if (!r.GiveTask(d.task, "radio", &why)) {
             Note("the regiment's task " + d.task.id + " not given: " + why);
             return false;
         }
-        given_.push_back({r.Time(), d.rule, d.task.id});
-        arrived_h_ = kNeverH;  // until the battery is at the new task's position
+        given_.push_back({r.Time(), d.rule, d.task.id, fact_s, -1.0});
+        if (d.task.main != at_ || d.task.main != was_main) arrived_h_ = kNeverH;  // until the battery is at the new task's position
         return true;
     }
 
@@ -150,6 +209,10 @@ public:
         double at_s = 0.0;
         std::string rule;
         std::string task;
+        // F4.4: when the fact it acted on reached the regiment (session seconds, < 0: none or before the session) and when
+        // the battery had the order (the battery commander received the task, or the post heard the sharing; < 0 not yet).
+        double fact_s = -1.0;
+        double heard_s = -1.0;
     };
 
     ScenarioRunner& Runner() { return *runner_; }
@@ -157,6 +220,16 @@ public:
     const airwar::AirCampaign* Campaign() const { return campaign_.get(); }
     const airwar::LivePackages* Packages() const { return live_.get(); }
     const RegimentTasking* Regiment() const { return regiment_.get(); }
+    RegimentTasking* Regiment() { return regiment_.get(); }  // a test's own map of the front (SetPlaceDepth)
+    // F4.4: the campaign's pipeline and what reached the regiment of it (null and unbound at the fronts' modes 0).
+    const command::InfoNet* Net() const { return net_.get(); }
+    const command::CampaignFeed* Feed() const { return feed_.get(); }
+    const RegimentWatch& Watch() const { return watch_; }
+    RegimentPicture RegimentHolds() const {
+        RegimentPicture p = campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture();
+        if (watch_.Bound()) watch_.Fill(p, campaign_->Now());
+        return p;
+    }
     const std::vector<GivenTask>& TasksGiven() const { return given_; }
     const std::vector<std::string>& Notes() const { return notes_; }
     double CampaignHourAtStart() const { return h0_; }
@@ -198,10 +271,28 @@ public:
     // The runner's debrief, then the two outcomes (from the truth: for the debrief and the reveal only), the enemy's
     // phase checked now.
     std::string Debrief() const {
-        const std::string d = runner_->Debrief();
+        std::string d = runner_->Debrief();
         if (!campaign_ && outcomes_.Assets().empty()) return d;
         const SuppressionCheck now = campaign_ ? CheckSuppression(*campaign_, campaign_->Now()) : SuppressionCheck();
-        return d + "\n" + outcomes_.Text(campaign_ ? &now : nullptr);
+        d += "\n" + outcomes_.Text(campaign_ ? &now : nullptr);
+        return d + FrontsDebrief();
+    }
+    // The situation maps of the battery commander and the regiment's staff at the end (F5.1): the front as their facts gave
+    // it, each mark with its source and age; empty without the fronts' pipeline. What the posts did not hold is not here:
+    // the truth's line is the outcomes' and the developer's.
+    std::string FrontsDebrief() const {
+        if (!feed_ || !net_ || !campaign_) return std::string();
+        const command::SituationLayout layout = command::SituationLayoutOf(*campaign_, &feed_->Ad(), &own_air_);
+        std::string out;
+        const std::string posts[2] = {feed_->Ground().Roles().battery, feed_->Ground().Roles().regiment};
+        for (const std::string& id : posts) {
+            const int post = net_->Data().PositionIndex(id);
+            if (post < 0) continue;
+            command::SituationMap map;
+            command::BuildSituationMap(*net_, *feed_, layout, post, map);
+            out += "\n" + command::SituationMapText(map, campaign_->Data().theatre.start_hour);
+        }
+        return out;
     }
 
 private:
@@ -395,6 +486,63 @@ private:
         }
     }
 
+    // F4.4: the campaign's pipeline in the session (see the header). The net on our chain, the feed bound to it and asked
+    // for the units' orders, the regiment's watch on its posts, how the regiment places a position against the front's line
+    // (its map's base line: the line as reported is not a fact it holds) and the sky's table from own_air.json.
+    bool SetUpFronts(const std::string& data_dir, const airwar::AirWarData& war, unsigned seed, std::string* error) {
+        command::ChainData chain;
+        command::OwnAirDef own_air;
+        std::string e;
+        if (!command::LoadChainData(data_dir, "command/chain_pannonia.json", chain, &e) ||
+            !command::LoadOwnAirFile(data_dir + "/command/own_air.json", own_air, &e)) {
+            if (error != nullptr) *error = "the fronts' pipeline: " + e;
+            return false;
+        }
+        net_ = std::make_unique<command::InfoNet>();
+        if (!net_->Init(chain, seed, war.theatre.start_hour, &e)) {
+            if (error != nullptr) *error = "the fronts' pipeline: " + e;
+            return false;
+        }
+        command::GiveTheatreSky(*net_, war.theatre);
+        feed_ = std::make_unique<command::CampaignFeed>();
+        feed_->Bind(net_.get());
+        campaign_->SetOrderSource(feed_->OrderSource());
+        if (!watch_.Bind(net_.get(), feed_.get(), own_air, &e)) {
+            if (error != nullptr) *error = "the fronts' pipeline: " + e;
+            return false;
+        }
+        split_m_ = own_air.coop.split_height_m;
+        own_air_ = own_air;
+        regiment_->SetSplitHeight(split_m_);
+        regiment_->SetPlaceDepth([this](const std::string& place, double& depth_m, std::string& name) {
+            const nav::SessionNav* nav = runner_ ? runner_->Nav() : nullptr;
+            const nav::Anchor* a = nav != nullptr ? nav->GetAnchors().Find(place) : nullptr;
+            if (a == nullptr || !campaign_ || campaign_->FrontLine().Empty()) return false;
+            const airwar::FrontPlace pl = campaign_->FrontLine().Place(ToTheatre(Vec3{a->at.east_m, a->at.north_m, 0.0}));
+            depth_m = pl.side * pl.distance_m;
+            name = a->name;
+            return true;
+        });
+        return true;
+    }
+    // The feed brought up to the campaign's hour every kFrontsEveryS of the session (each delivery keeps its own hour; the
+    // regiment's staff works on a fact from then), the regiment's watch reading what is new.
+    void PumpFronts() {
+        if (!feed_ || !campaign_ || campaign_->Now() <= pumped_h_ + kFrontsEveryS / 3600.0 - 1e-9) return;
+        pumped_h_ = campaign_->Now();
+        feed_->Pump(*campaign_);
+        watch_.Update(*campaign_);
+    }
+    // When the battery had the regiment's last order (F4.4's delays): the battery commander received the task, the post
+    // heard the sharing.
+    void NoteReceived() {
+        if (given_.empty() || given_.back().heard_s >= 0.0) return;
+        GivenTask& g = given_.back();
+        const ScenarioRunner& r = *runner_;
+        const double heard = g.task.compare(0, 8, "sharing:") == 0 ? r.SharingHeardS() : r.TaskReceivedS();
+        if (heard >= g.at_s - 1e-9) g.heard_s = heard;
+    }
+
     // The battery at the position its task names (the task's march over, or in its area from the start): the
     // campaign's battery is there from then (between packages), and the regiment's estimates count from then.
     void CarryTheMove() {
@@ -438,6 +586,8 @@ private:
         if (r.Time() + 1e-9 >= next_seen_s_) {  // the raids resolved off the scene count too
             next_seen_s_ = r.Time() + kDecideEveryS;
             for (const CoveredAsset& a : outcomes_.Assets()) outcomes_.Seen(a.place, Function(a.object));
+            // The enemy's air front in the battery's sector (F6.2): the hours the battery's entry held it, a check a minute.
+            outcomes_.AirFront(CheckAirFront(*campaign_, campaign_->Now()), kDecideEveryS / 3600.0);
         }
         const std::vector<airwar::LivePackages::Played>& played = live_->PlayedPackages();
         for (; ledgered_ < played.size() && played[ledgered_].out_s >= 0.0; ++ledgered_) {
@@ -450,6 +600,7 @@ private:
     }
     double Function(const std::string& object) const { return campaign_ && !object.empty() ? ObjectFunction(*campaign_, object) : 1.0; }
     static constexpr double kDecideEveryS = 60.0;
+    static constexpr double kFrontsEveryS = 300.0;  // sam3d: the pipeline read every 5 min of the session (F4.4)
     static constexpr double kNeverH = 1e18;
 
     // The regiment's evening briefing fell in the last minute of the session's clock (none without a clock).
@@ -591,6 +742,12 @@ private:
     }
 
     std::unique_ptr<airwar::AirCampaign> campaign_;
+    std::unique_ptr<command::InfoNet> net_;          // F4.4: the campaign's pipeline (the fronts on)
+    std::unique_ptr<command::CampaignFeed> feed_;
+    command::OwnAirDef own_air_;                     // F5.1: the sky's sharing, for the situation maps' layout
+    RegimentWatch watch_;
+    double pumped_h_ = -1.0;
+    double split_m_ = 5000.0;
     std::unique_ptr<ScenarioRunner> runner_;
     std::unique_ptr<airwar::LivePackages> live_;
     std::unique_ptr<RegimentTasking> regiment_;

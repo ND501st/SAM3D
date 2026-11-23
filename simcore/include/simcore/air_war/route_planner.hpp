@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
@@ -565,6 +566,9 @@ struct RouteRequest {
     bool helicopter_hide = false;              // a battle position (hide) instead of an IP
     bool loiter = false;                       // a hunter: a circle round the area instead of an attack
     std::vector<std::string> avoid;            // features charged route.reuse_penalty (variant 0's for the other flank)
+    // The enemy's air front by sector (track F, F2.4): a fixed-wing flight lets down where it crosses it and climbs where
+    // it comes back inside it; helicopters hold behind their sector's helicopter front. Off (air_front.mode 0): as before.
+    AirFrontView air_front;
 };
 
 struct PlannedRoute {
@@ -784,7 +788,7 @@ public:
             r.push_back(q);
         };
         if (heli) {
-            const double hold = std::min(tune_.Get("route.helo_holding_m"), 0.9 * behind_in);
+            const double hold = std::min(HoldingBehind(rq, gate), 0.9 * behind_in);
             pt(gate - u_in * hold, agl_, cruise_mps_, "entry", "");
         } else {
             const double start = std::min(tune_.Get("route.start_before_gate_m"), behind_in);
@@ -831,11 +835,12 @@ public:
         }
         pt(gate_out, agl_, home_mps_, "gate", "gate:" + gx->id);
         if (heli) {
-            pt(gate_out + u_out * std::min(tune_.Get("route.helo_holding_m"), 0.9 * behind_out), agl_, cruise_mps_, "exit", "");
+            pt(gate_out + u_out * std::min(HoldingBehind(rq, gate_out), 0.9 * behind_out), agl_, cruise_mps_, "exit", "");
         } else {
             const double start = std::min(tune_.Get("route.start_before_gate_m"), behind_out);
             pt(gate_out + u_out * std::min(rules_.letdown_m, 0.9 * start), transit_agl_, cruise_mps_, "climb", "");
             pt(gate_out + u_out * start, transit_agl_, cruise_mps_, "exit", "");
+            LetDownAtAirFront(rq, r);
         }
         out.exit = gx->id;
         out.cost = rq.loiter ? best_total : best_total + best_home_cost;
@@ -1262,6 +1267,110 @@ private:
 
     // The route's believed exposure (the target's own zone from the IP on excluded) and its longest continuous exposure
     // to one threat on the way in.
+    // A helicopter's holding area behind a gate (track F, F2.4; 02_AIR_FRONT.md §3-4): route.helo_holding_m behind its
+    // sector's helicopter front, never nearer the line than route.helo_holding_floor_m (our artillery's reach). With the
+    // helicopters' front at 0 (air_front.mode 0) route.helo_holding_m, as before.
+    // Measured from the line of contact (track F, F3.7): where the ground war has moved it past the gate, that much less
+    // behind the gate (never ahead of it); at zero offsets the same to the bit.
+    double HoldingBehind(const RouteRequest& rq, const Vec3& gate) const {
+        const double hold = tune_.Get("route.helo_holding_m");
+        const double front = rq.air_front.HeloAt(gate);
+        const double from_line = front <= 0.0 ? hold : std::max(std::min(hold, tune_.Get("route.helo_holding_floor_m")), hold - front);
+        const LineOfContact* line = rq.air_front.line;
+        if (line == nullptr || !line->Moved()) return from_line;
+        const double moved = line->Offset(line->Place(gate).along_m);
+        return moved > 0.0 ? std::max(0.0, from_line - moved) : from_line;
+    }
+
+    // The let-down and the climb at the air front (track F, F2.4; 02_AIR_FRONT.md §4). Where the gate is inside its
+    // sector's fixed-wing air front, a low flight crosses the line of contact at its transit height and lets down where
+    // its way in leaves the air front (the first leg whose end is past it, the crossing found by halving the leg); on the
+    // way home it climbs where it comes back inside it. A target inside the air front: the let-down a leg short of the IP
+    // (route.letdown_m at most), the climb as far past the egress. The gate's sector at 0 (and air_front.mode 0): the
+    // route as built.
+    void LetDownAtAirFront(const RouteRequest& rq, std::vector<RoutePoint>& r) const {
+        if (!rq.air_front.On() || agl_ >= transit_agl_) return;
+        const int gi = RouteIndexOf(r, "gate");
+        int go = -1;
+        for (std::size_t i = r.size(); i-- > 0;) {
+            if (r[i].tag == "gate") {
+                go = static_cast<int>(i);
+                break;
+            }
+        }
+        if (gi < 0 || go <= gi) return;
+        const AirFrontView& af = rq.air_front;
+        const auto make = [](const Vec3& p, double agl, double mps, const char* tag) {
+            RoutePoint q;
+            q.pos = Vec3{p.x, p.y, 0.0};
+            q.agl_m = agl;
+            q.leg_mps = mps;
+            q.tag = tag;
+            return q;
+        };
+        // The crossing on a leg from a point inside the air front to one outside it (or back).
+        const auto crossing = [&](const Vec3& a, const Vec3& b) {
+            const bool a_in = af.Inside(a);
+            double lo = 0.0, hi = 1.0;
+            for (int k = 0; k < 24; ++k) {
+                const double mid = 0.5 * (lo + hi);
+                if (af.Inside(a + (b - a) * mid) == a_in) {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
+            }
+            return a + (b - a) * hi;
+        };
+        const auto short_of = [&](const Vec3& a, const Vec3& b) {  // on the leg a-b, route.letdown_m short of b at most
+            const double len = Dist2d(a, b);
+            const double back = std::min(rules_.letdown_m, 0.9 * len);
+            return len > 0.0 ? b + (a - b) * (back / len) : b;
+        };
+        // The way home first (its indices are after the way in's): from the attack's last point to the gate out.
+        int home_from = -1;
+        for (int i = go - 1; i > gi; --i) {
+            const std::string& t = r[static_cast<std::size_t>(i)].tag;
+            if (t == "egress" || t == "loiter" || t == "target") {
+                home_from = i;
+                break;
+            }
+        }
+        if (home_from > 0 && af.Inside(r[static_cast<std::size_t>(go)].pos)) {
+            int k = go - 1;  // the last point of the way home outside the air front
+            while (k > home_from && af.Inside(r[static_cast<std::size_t>(k)].pos)) --k;
+            const Vec3 a = r[static_cast<std::size_t>(k)].pos, b = r[static_cast<std::size_t>(k + 1)].pos;
+            const Vec3 c = af.Inside(a) ? short_of(b, a) : crossing(a, b);
+            const std::size_t old_climb = static_cast<std::size_t>(go) + 1;
+            if (old_climb < r.size() && r[old_climb].tag == "climb") r.erase(r.begin() + static_cast<std::ptrdiff_t>(old_climb));
+            for (int i = k + 1; i <= go; ++i) {
+                r[static_cast<std::size_t>(i)].agl_m = transit_agl_;
+                r[static_cast<std::size_t>(i)].leg_mps = cruise_mps_;
+            }
+            r.insert(r.begin() + (k + 1), make(c, transit_agl_, cruise_mps_, "climb"));
+        }
+        // The way in: from the gate to the IP (a hunter's: to its first circle point).
+        int in_to = -1;
+        for (std::size_t i = static_cast<std::size_t>(gi) + 1; i < r.size(); ++i) {
+            if (r[i].tag == "ip" || r[i].tag == "hide" || r[i].tag == "target") {
+                in_to = static_cast<int>(i);
+                break;
+            }
+        }
+        if (in_to < 0 || !af.Inside(r[static_cast<std::size_t>(gi)].pos)) return;
+        int k = gi + 1;  // the first point of the way in outside the air front
+        while (k < in_to && af.Inside(r[static_cast<std::size_t>(k)].pos)) ++k;
+        const Vec3 a = r[static_cast<std::size_t>(k - 1)].pos, b = r[static_cast<std::size_t>(k)].pos;
+        const Vec3 c = af.Inside(b) ? short_of(a, b) : crossing(a, b);
+        for (int i = 0; i < k; ++i) {  // the entry, the checkpoint, the gate and the turns inside: high
+            r[static_cast<std::size_t>(i)].agl_m = transit_agl_;
+            r[static_cast<std::size_t>(i)].leg_mps = cruise_mps_;
+        }
+        r.insert(r.begin() + k, make(c, agl_, in_mps_, "letdown"));
+        const int old_letdown = RouteIndexOf(r, "letdown");
+        if (old_letdown >= 0 && old_letdown < gi) r.erase(r.begin() + old_letdown);
+    }
+
     void Exposure(PlannedRoute& out, const RouteRequest& rq) const {
         const std::vector<RoutePoint>& r = out.points;
         const int ip = std::max(RouteIndexOf(r, "ip"), RouteIndexOf(r, "hide"));
@@ -1332,18 +1441,22 @@ inline std::vector<RouteThreat> BelievedRouteThreats(const std::vector<const Int
 // ours it believes there and working is a ring of route.fighter_reach_m (with half its position's sigma) our interceptors
 // reach from under ground control, weighed by the front's fighter threat (friendly_fighters), route.fighter_weight and its
 // belief in the base; for a Low flight or a helicopter by route.fighter_low_share (the period's radars saw little below
-// them: 07_AIR_TO_AIR.md 5.2). Never masked (a fighter is not a site). Keys "fighter:<entry>", in key order.
+// them: 07_AIR_TO_AIR.md 5.2). Never masked (a fighter is not a site). Keys "fighter:<entry>", in key order. With our
+// fighters by sector (track F, F4.3: `cover` on), each base weighed by the cover believed in its sector instead.
 inline std::vector<RouteThreat> BelievedFighterThreats(const std::vector<IntelEntry>& entries, double friendly_fighters, const AircraftType& a,
-                                                       Profile prof, const TuningTable& tune) {
+                                                       Profile prof, const TuningTable& tune, const FighterCoverView& cover = FighterCoverView()) {
     std::vector<RouteThreat> out;
     const double reach = tune.Get("route.fighter_reach_m");
-    const double w0 = tune.Get("route.fighter_weight") * friendly_fighters;
-    if (reach <= 0.0 || w0 <= 0.0) return out;
+    const double weight = tune.Get("route.fighter_weight");
+    const double w_front = weight * friendly_fighters;
+    if (reach <= 0.0 || (w_front <= 0.0 && !cover.On())) return out;
     const bool low = a.helicopter || prof == Profile::Low;
     for (const IntelEntry& e : entries) {
         if (e.kind != ObjectKind::Airfield || e.ghost) continue;
         const double live = e.Live();
         if (live < 0.15) continue;
+        const double w0 = cover.On() ? weight * cover.At(e.pos, friendly_fighters) : w_front;
+        if (w0 <= 0.0) continue;
         RouteThreat r;
         r.key = "fighter:" + e.key;
         r.pos = e.pos;

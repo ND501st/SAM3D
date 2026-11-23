@@ -49,6 +49,7 @@ struct IntelEntry {
     bool threat_radar = true;
     int threat_channels = 0;    // aircraft it engages at once (DefenceDef::channels; 0: all in reach)
     double threat_max_target_mps = 0.0;  // the fastest target it can engage (0: any)
+    std::string system;         // the air defence system it is believed to be (AirDefenceSystems' id; "": not known)
     // Its record with the enemy.
     int strikes = 0;
     double last_struck_h = -1e9;
@@ -61,6 +62,9 @@ struct IntelEntry {
     // A radar SAM site: what a rollback hunts and counts. Guns, radar-laid or not, are flown round or over and left to the
     // strike's escort.
     bool IsSamRadar() const { return kind == ObjectKind::SamSite && threat_radar; }
+    // How much it counts among what the enemy believes is there: believed there and real, whether working or not (the
+    // weight BelievedIadsShare gives each site; track F's cover over a sector's band, air_front.hpp).
+    double BelievedThere() const { return Clamp01(exists) * (1.0 - 0.7 * suspected_decoy); }
     // How much it is worth acting on now: believed there, believed working.
     double Live() const { return Clamp01(exists) * Clamp01(function) * (1.0 - 0.7 * suspected_decoy); }
 };
@@ -89,6 +93,7 @@ struct IntelReport {
     bool threat_radar = true;
     int threat_channels = 0;
     double threat_max_target_mps = 0.0;
+    std::string system;         // the air defence system it is believed to be (AirDefenceSystems' id; "": not known)
     std::string label;
     std::string note;
     double move_mps = 0.0;      // how fast it moves (a supply column): the picture spreads with it
@@ -113,6 +118,16 @@ public:
     }
 
     void Queue(IntelReport r) { pending.push_back(std::move(r)); }
+
+    // An object of ours the enemy's ground forces now hold (track F, F3.7): out of its picture, and no report of it merged
+    // while it holds it. Include: our side has taken it back (reports of it count again).
+    void Exclude(const std::string& object_id) {
+        if (std::find(held_.begin(), held_.end(), object_id) == held_.end()) held_.push_back(object_id);
+        entries.erase(std::remove_if(entries.begin(), entries.end(), [&object_id](const IntelEntry& e) { return !e.ghost && e.key == object_id; }),
+                      entries.end());
+    }
+    void Include(const std::string& object_id) { held_.erase(std::remove(held_.begin(), held_.end(), object_id), held_.end()); }
+    bool Held(const std::string& object_id) const { return !held_.empty() && std::find(held_.begin(), held_.end(), object_id) != held_.end(); }
 
     // Merge every report that has arrived by `now_h`. Returns the reports merged (for the journal).
     std::vector<IntelReport> Deliver(double now_h, double analyst_skill) {
@@ -185,6 +200,7 @@ public:
     }
 
     int ghosts_made = 0;
+    std::vector<std::string> held_;  // our objects its ground forces hold (F3.7)
     // Entries the pilots had claimed destroyed and that a later report shows working ("the truth comes out").
     std::vector<std::string> resurrected;
     // Entries truly destroyed that a later report shows working again: repaired, faster than the enemy assumed.
@@ -194,6 +210,7 @@ private:
     double delivering_h_ = 0.0;  // the hour of the delivery being merged
 
     void Merge(const IntelReport& r, double analyst_skill) {
+        if (!r.ghost && Held(r.object_id)) return;  // its own troops hold it (F3.7)
         IntelEntry* e = nullptr;
         if (!r.ghost) {
             e = Find(r.object_id);
@@ -233,6 +250,7 @@ private:
             n.threat_radar = r.threat_radar;
             n.threat_channels = r.threat_channels;
             n.threat_max_target_mps = r.threat_max_target_mps;
+            n.system = r.system;
             n.losses_credited = r.losses;
             if (r.claim_destroyed) {
                 n.function = 0.0;
@@ -283,6 +301,7 @@ private:
             e->threat_channels = r.threat_channels;
             e->threat_max_target_mps = r.threat_max_target_mps;
             e->emitter = r.threat_radar;
+            if (!r.system.empty()) e->system = r.system;
         }
         e->losses_credited += r.losses;
         if (r.decoy_spotted) e->suspected_decoy = Clamp01(e->suspected_decoy + 0.6);

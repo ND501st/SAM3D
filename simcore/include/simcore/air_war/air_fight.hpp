@@ -35,6 +35,7 @@
 
 #include "simcore/air_war/air_combat.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/state.hpp"
 #include "simcore/air_war/types.hpp"
 
@@ -48,6 +49,41 @@ inline bool AwacsControlsFighters(const AirWarData& d) {
         if (p.kind == "airborne_warning" && (p.from_year <= 0 || p.from_year <= d.theatre.year)) return true;
     }
     return false;
+}
+
+// The front's fighters shared over its n sectors by `shares` (summing to 1; the national sector's priorities through
+// campaign::PriorityShares): sector i gets n x front x share_i, so the sum over the sectors is n x front, as with the front's
+// number in every sector; none above `cap` (a threat is 0..1), the excess given to the others by their shares. Shares of the
+// wrong size, or summing to nothing: the front's number everywhere.
+inline std::vector<double> SpreadFighterCover(double front, const std::vector<double>& shares, double cap = 1.0) {
+    const std::size_t n = shares.size();
+    std::vector<double> out(n, front);
+    double sum = 0.0;
+    for (double x : shares) sum += std::max(0.0, x);
+    if (n == 0 || sum <= 0.0) return out;
+    const double total = front * static_cast<double>(n);
+    std::vector<bool> capped(n, false);
+    double left = total;
+    for (std::size_t round = 0; round <= n; ++round) {
+        double w = 0.0;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!capped[i]) w += std::max(0.0, shares[i]);
+        }
+        bool more = false;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (capped[i]) continue;
+            out[i] = w > 0.0 ? left * std::max(0.0, shares[i]) / w : 0.0;
+            if (out[i] > cap + 1e-12) more = true;
+        }
+        if (!more) break;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (capped[i] || out[i] <= cap + 1e-12) continue;
+            capped[i] = true;
+            out[i] = cap;
+            left -= cap;
+        }
+    }
+    return out;
 }
 
 // What the fight knows of the package's day.
@@ -90,9 +126,14 @@ public:
 
     // The setup of a package's day in the theatre: the front's fighters, the AWACS (only where it controls fighters).
     static AbstractFightSetup SetupFor(const AirWarData& d, const Package& p, double awacs_share, Weather w) {
+        return SetupFor(d, p, awacs_share, w, FighterCoverView(), p.target_pos);
+    }
+    // The same with our fighters by sector (F4.3): the cover at `at` (off: the front's number).
+    static AbstractFightSetup SetupFor(const AirWarData& d, const Package& p, double awacs_share, Weather w, const FighterCoverView& cover,
+                                       const Vec3& at) {
         AbstractFightSetup s;
         const FrontDef* front = d.theatre.FrontFor(d.faction.front);
-        s.friendly_fighters = front != nullptr ? front->friendly_fighters : 0.0;
+        s.friendly_fighters = cover.At(at, front != nullptr ? front->friendly_fighters : 0.0);
         s.awacs = AwacsControlsFighters(d) ? std::clamp(awacs_share, 0.0, 1.0) : 0.0;
         s.night = p.part == DayPart::Night;
         s.poor_weather = w == Weather::Poor;

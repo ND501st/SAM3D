@@ -414,6 +414,47 @@ gets its own branch and is merged once reviewed.
 
 **Order:** U1 first, then U2. S1-S9 run beside them, two or three at a time, and never touch the same files at once.
 
+## Track F: the fronts (planned 19 Nov 2026)
+
+The project owner, 19 Nov 2026, on three gaps:
+
+1. **The map is the only source of truth for where things are.** Today the air war's targets are coordinates of their
+   own in the theatre file, beside the country map. "If I shift a factory by 2 km, the source of truth is updated
+   automatically": every placed object takes its place from the map by id.
+2. **The enemy's air front moves.** Air front lines always start at the border. When the enemy assesses that air
+   defence coverage in a sector is significantly degraded, and that enough of our mobile ground assets there have
+   been destroyed, it becomes emboldened. It may move its air front forward in that sector if it judges the risk low
+   and the reward high. This matters most for low-level attack aircraft against tactical targets, and for helicopters.
+3. **The ground war moves.** Units make their own front line. When a unit (army, division, regiment, battalion,
+   platoon) loses too many of its tactical assets, it may retreat, dispersed or as a unit. When it is not taking many
+   losses, it attacks and moves the front forward. This is dynamic, and decided by its own officers' logic, like the
+   air officers' (`docs/air_war/`). The ground situation feeds our nation's air defence strategy (SAMs, AAA, radars,
+   fighters): where to defend, where to take the offence, and in which sectors.
+
+This changes an earlier principle: "the strategy layer stays thin ... the front as data" (22 Oct 2026). The front now
+moves by the units on it. What stays:
+- the war's aims;
+- one enemy at a time;
+- the first person rule: the player's character learns where the front is only through reports;
+- the written record as the war's memory;
+- the player changes the war only a little, by the assets kept and the enemy's freedom of action denied.
+
+A battery that survives in a sector is part of the air defence coverage the enemy weighs before it moves its air front
+forward there.
+
+The design and its research: `docs/fronts/` (F0). Each task follows track B's way of working: its own branch and
+worktree, reviewed, then merged.
+
+| Task | What | Depends on |
+|---|---|---|
+| F0 | **Research and design.** Ground war doctrine as of 1985, sourced as `docs/SOURCES.md` requires: the Pact's (FM 100-2-1, the offensive and the defensive), NATO's (FM 100-5, 1982), the rebels' and the neutral's, and our own army's as a Pact-trained national army. Covers fronts, sectors and their measures (the line of contact, the forward edge, the fire support coordination line), attack, defence, delay and withdrawal by echelon, and the norms that decide them: force ratios, losses at which a unit is combat-ineffective, rates of advance. Also the air front by sector, the enemy's risk and reward for flying low over a sector, and our national air defence's sector priorities. Ends in `docs/fronts/` and its implementation plan. **Done 20 Nov 2026** (branch `tf-f0`): four topic files in `docs/research/fronts_2026-11/` and their synthesis `docs/research/FRONTS_RESEARCH_2026-11.md` (56 sources registered in `docs/SOURCES.md`); the design in `docs/fronts/` (README with the decisions, the efficiency budget and the save modes `air_front.mode`, `ground.mode`, `ad_strategy.mode`; 01-06 one per task); the tasks F2.1-F6.2 in `docs/fronts/IMPLEMENTATION_PLAN.md`. **Left:** the owner's four decisions in the README (the front's base line, the rebels' and the neutral's ground war, who starts the ground war, our counterattack's limit); the open items of the synthesis's §5 | — |
+| F1 | **Anchors: the map as the source of truth.** Every placed object takes its position from the country map by id: the theatre's targets, its mobile units' prepared positions, depots and supply lines' ends, bases, fronts' battery positions, our chain's and order of battle's places. A place missing from the map is added to it. A loader refuses an object whose place is not on the map. Moving a place on the map moves everything anchored to it, with no other edit. **Done 20 Nov 2026** (`docs/fronts/F1_ANCHORS_AS_BUILT.md`): the map's `sites` beside its settlements and landmarks, one namespace of places; the theatres and the chain's places name them (`"at"`, `"place_map"`) and the loaders refuse a place the map lacks; the fronts' lines and entry points are places too, as F2.1 and F3 need; every position the same double as before (`tools/anchor_places.py`), the balance and the replay byte-identical. Left: the enemy's listeners (`intercept.json`) keep their coordinates; the Kesmark range's own sites and bridges are not tied to the country's; no place relative to a town | — |
+| F2 | **The enemy's air front by sector.** Starts at the border. Per sector, the enemy's staff weighs the air defence coverage it believes is left and the mobile ground assets it believes destroyed, against what lies behind them. With low risk and high reward, and an officer bold enough, it moves that sector's air front forward: gates, holding areas, helicopters' crossing points, and the depth of armed reconnaissance and close support. With losses it falls back. Low-level attack aircraft and helicopters move first. Each faction has its own appetite. Tasks F2.1-F2.5 (`docs/fronts/02_AIR_FRONT.md`): sectors and the line of contact, believed cover per sector, the decision, the planner and routes reading it, our side learning it by its signs | F0 (F1 for anchoring the line; F2.1 need not wait) |
+| F3 | **The ground war.** Units on both sides as actors on the country's roads and ground, at the level of detail the distance from the player needs. The front line is drawn from their positions. Combat is resolved at a gameplay level with period norms. Commanders with traits decide attack, hold, delay and withdrawal, as a unit or dispersed, by their losses and what they believe of the enemy. The air war's targets, close support and interdiction follow the units. Our units' situation reports go up the chain as facts (F3.8), so F4 reads reports, not the truth. Tasks F3.1-F3.8 (`docs/fronts/03_GROUND_WAR.md`); levels U0-U2; budget 20 ms CPU per campaign day for the nation | F0, F2.1 (F1 for places) |
+| F4 | **Our national air defence strategy.** From the ground situation and the air threat, our air defence commanders set each sector's priority: defend or take the offence. They redeploy SAM units between prepared positions, AAA and radars, and task fighters. The regiment's tasking (14.2) and the battery's task follow. The orders and the picture travel through the pipeline. Tasks F4.1-F4.4 (`docs/fronts/04_AIR_DEFENCE_STRATEGY.md`) | F2, F3 (F3.8's reports) |
+| F5 | **What the player sees.** The front only through reports, on the post's and the regiment's situation maps. Units moving within visual range in Unreal. The campaign screen's map from our side's knowledge. Tasks F5.1-F5.3 (`docs/fronts/05_WHAT_THE_PLAYER_SEES.md`); the Unreal parts are the owner's | F3, F4 |
+| F6 | **Balance.** The fronts against history and against each faction's war. The air war's balance bands (B14) kept or argued. The player's effect bounded; the budget a gate (`fronts_bench`). Tasks F6.1-F6.2 (`docs/fronts/06_BALANCE.md`) | F2-F5 |
+
 ## The battery's war: phases 13-21 (planned 22 Oct 2026)
 
 The project owner, 22 Oct 2026: our side and one enemy at a time fight over the fictional nation, the enemy grinding it

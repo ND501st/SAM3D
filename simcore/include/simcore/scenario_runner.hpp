@@ -6532,6 +6532,7 @@ private:
                     if (!plan.messages[i].destroyed.empty()) HeardDestroyed(plan.messages[i].destroyed);
                     if (!plan.messages[i].road_crossing.empty()) HeardRoad(plan.messages[i]);
                     if (plan.messages[i].own_air_notice > 0 && m.said == 1) HeardOwnAirNotice(plan.messages[i]);
+                    if (plan.messages[i].sharing >= 0) HeardSharing(plan.messages[i]);
                     r111_call_until_ = time_ + r111_->Def().call_s;
 
                     if (heard_back && talker) {
@@ -8238,6 +8239,20 @@ public:
         m.road_entry = entry;
         return true;
     }
+    // The regiment tells the battery the sky's sharing in its sector (track F, F4.4; command/own_air.hpp TellSharing): said on
+    // its command net `after_s` from now; once heard at the post, the battery's plan of cooperation (its task's, and the
+    // session's own-air plan where it has one) is shared that way, `split_m` the split height of one zone when the plan has
+    // none. False without the R-111 worked as a set.
+    bool RegimentTellsSharing(command::CooperationMethod method, double split_m, const std::string& text, double after_s) {
+        if (!RegimentSays(text, after_s)) return false;
+        RegimentMessage& m = def_.radio_plan.messages.back();
+        m.sharing = static_cast<int>(method);
+        m.sharing_split_m = split_m;
+        return true;
+    }
+    // When the post last heard the regiment's word on the sky's sharing (< 0: never), and how many times it changed the plan.
+    double SharingHeardS() const { return sharing_heard_s_; }
+    int SharingChanges() const { return sharing_changes_; }
     // The battery commander sends the TZM to the regiment's technical battery for missiles (roadmap 17.4): an order on the
     // battery net to its chief, who plans the way on the roads the commander knows. Refused (last_refusal_ why) without a
     // TZM on the net, while a run stands, on the march (the radio ban), with the TZM full by his reckoning or not at the
@@ -10198,6 +10213,21 @@ private:
             if (s.callsign == callsign) was = std::max(0, s.missiles);
         }
         tzm_reckoned_ = std::max(0, tzm_reckoned_ - std::max(0, missiles - was));
+    }
+    // The regiment's word on the sky's sharing, heard (F4.4): the plan of cooperation the battery holds is shared that way.
+    double sharing_heard_s_ = -1.0;
+    int sharing_changes_ = 0;
+    void HeardSharing(const RegimentMessage& m) {
+        const command::CooperationMethod method = m.sharing == 1 ? command::CooperationMethod::OneZone : command::CooperationMethod::ByZones;
+        const int was = def_.task.own_air.version;
+        def_.task.own_air = command::TellSharing(def_.task.own_air, method, m.sharing_split_m);
+        if (def_.own_air.present) def_.own_air.plan = command::TellSharing(def_.own_air.plan, method, m.sharing_split_m);
+        sharing_heard_s_ = time_;
+        if (def_.task.own_air.version != was) {
+            ++sharing_changes_;
+            Event("regiment net", std::string("the plan of cooperation: the sky shared ") +
+                                      (method == command::CooperationMethod::OneZone ? "in one zone by height" : "by zones"));
+        }
     }
     // The regiment's word on a road's bridge, heard: the commander's roads have it down from now, or open again.
     void HeardRoad(const RegimentMessage& m) {

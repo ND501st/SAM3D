@@ -18,6 +18,8 @@
 #include "simcore/air_war.hpp"
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/air_fight_session.hpp"
+#include "simcore/campaign/ad_strategy.hpp"
+#include "simcore/command.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 #include "simcore/scenery/munitions.hpp"
@@ -1440,4 +1442,249 @@ SC_TEST("air fight S6: the scenario's air_fight takes Teaball's relay, an enemy 
     ScenarioDef d2;
     SC_EXPECT(!LoadScenario(with("gci"), kData, d2, console, &e));  // our own GCI cannot be the enemy's relay
     SC_EXPECT(e.find("relay") != std::string::npos);
+}
+
+// ------------------------------------------------------------------ our fighters by sector (track F, F4.3)
+
+namespace {
+
+// The nation's theatre at ad_strategy.mode `mode`, the campaign alone (no pipeline: no order source).
+bool FighterNation(AirWarData& d, AirCampaign& c, double mode, const std::string& faction, unsigned seed = 7) {
+    std::string e;
+    if (!LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_" + faction + ".json", d, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return false;
+    }
+    d.tuning.values["ad_strategy.mode"] = mode;
+    if (!c.Init(d, seed, &e)) {
+        std::printf("    %s\n", e.c_str());
+        return false;
+    }
+    return true;
+}
+
+void FighterRunTo(AirCampaign& c, double h) {
+    while (c.Now() < h - 1e-9) {
+        if (c.Advance(h)) c.SkipPlayerMission();
+    }
+}
+
+std::uint64_t JournalFnv(const AirCampaign& c) {
+    std::uint64_t h = 1469598103934665603ull;
+    for (const JournalEntry& j : c.Journal()) {
+        for (char ch : j.text) {
+            h ^= static_cast<unsigned char>(ch);
+            h *= 1099511628211ull;
+        }
+    }
+    return h;
+}
+
+// A point in each sector of the front: the middle of its run on the base line.
+std::vector<Vec3> SectorMiddles(const LineOfContact& l) {
+    std::vector<Vec3> out;
+    for (std::size_t s = 0; s < l.SectorCount(); ++s) {
+        const double from = std::max(0.0, l.Sector(s).from_m), to = std::min(l.Length(), l.Sector(s).to_m);
+        out.push_back(l.PointAt(0.5 * (from + to)));
+    }
+    return out;
+}
+
+}  // namespace
+
+SC_TEST("fighters by sector (F4.3): the front's fighters shared over its sectors keep their sum, none above the cap; no shares, the front's number") {
+    const std::vector<double> even = SpreadFighterCover(0.4, {0.25, 0.25, 0.25, 0.25});
+    for (double x : even) SC_EXPECT_NEAR(x, 0.4, 1e-12);
+    // The main thrust's 60 % (andersen_1979 p. 40) of four sectors' fighters: 4 x 0.4 x 0.6.
+    const std::vector<double> main = SpreadFighterCover(0.4, {0.6, 0.4 / 3.0, 0.4 / 3.0, 0.4 / 3.0});
+    SC_EXPECT_NEAR(main[0], 0.96, 1e-12);
+    SC_EXPECT_NEAR(main[1], 4.0 * 0.4 * 0.4 / 3.0, 1e-12);
+    double sum = 0.0;
+    for (double x : main) sum += x;
+    SC_EXPECT_NEAR(sum, 1.6, 1e-12);
+    // Past the cap the excess goes to the others by their shares: the sum is kept.
+    const std::vector<double> capped = SpreadFighterCover(0.9, {0.6, 0.2, 0.1, 0.1});
+    // 2.16 for the first is capped; its excess takes the second past the cap too (2.6 x 0.5); the last two share the rest.
+    SC_EXPECT_NEAR(capped[0], 1.0, 1e-12);
+    SC_EXPECT_NEAR(capped[1], 1.0, 1e-12);
+    SC_EXPECT_NEAR(capped[2], 0.8, 1e-12);
+    SC_EXPECT_NEAR(capped[3], 0.8, 1e-12);
+    sum = 0.0;
+    for (double x : capped) sum += x;
+    SC_EXPECT_NEAR(sum, 3.6, 1e-12);
+    for (double x : capped) SC_EXPECT(x <= 1.0 + 1e-12);
+    // Nothing to share by: the front's number everywhere.
+    for (double x : SpreadFighterCover(0.35, {0.0, 0.0, 0.0})) SC_EXPECT(x == 0.35);
+}
+
+SC_TEST("fighters by sector (F4.3): at mode 0 the cover is the front's number everywhere; at mode 1 a duty given keeps the sum, the fight reads it where fought, the enemy learns it by flying there, a save replays it") {
+    const std::vector<std::string> factions = {"warsaw_pact", "nato"};
+    for (const std::string& faction : factions) {
+        AirWarData d;
+        AirCampaign c;
+        if (!FighterNation(d, c, 0.0, faction)) return;
+        FighterRunTo(c, 12.0);
+        const FrontDef* fr = d.theatre.FrontFor(d.faction.front);
+        SC_EXPECT(fr != nullptr && !c.FighterCoverOn() && c.FighterCoverChanges().empty());
+        if (fr == nullptr) return;
+        // Exactly the front's number, wherever asked and however believed; the fight's setup as before F4.3.
+        for (const TheatreObject& o : d.theatre.objects) {
+            SC_EXPECT(c.FighterCoverAt(o.pos) == fr->friendly_fighters && c.BelievedFighterCoverAt(o.pos) == fr->friendly_fighters);
+        }
+        Package p;
+        p.target_pos = d.theatre.objects.front().pos;
+        SC_EXPECT(AbstractAirFight::SetupFor(d, p, 0.3, airwar::Weather::Clear, c.FighterView(), p.target_pos).friendly_fighters ==
+                  AbstractAirFight::SetupFor(d, p, 0.3, airwar::Weather::Clear).friendly_fighters);
+    }
+    AirWarData d;
+    AirCampaign c;
+    if (!FighterNation(d, c, 1.0, "warsaw_pact")) return;
+    SC_EXPECT(c.FighterCoverOn());
+    const double front = c.FrontFighters();
+    const std::vector<Vec3> mid = SectorMiddles(c.FrontLine());
+    const std::size_t n = mid.size();
+    SC_EXPECT(n >= 3);
+    // On, but no order heard: the front's number.
+    for (const Vec3& m : mid) SC_EXPECT(c.FighterCoverAt(m) == front);
+    // A duty given: the second sector defended, the rest economy (PriorityShares by hand).
+    std::vector<double> shares(n, 0.4 / static_cast<double>(n - 1));
+    shares[1] = 0.6;
+    FighterRunTo(c, 2.0);
+    SC_EXPECT(c.GiveFighterCover(shares, "test:duty"));
+    SC_EXPECT(!c.GiveFighterCover(shares, "test:duty"));                       // a key once
+    SC_EXPECT(!c.GiveFighterCover(std::vector<double>(n + 1, 0.1), "test:x"));  // one share a sector
+    const std::vector<double> want = SpreadFighterCover(front, shares, c.FighterRules().cap);
+    double sum = 0.0;
+    for (std::size_t s = 0; s < n; ++s) {
+        SC_EXPECT_NEAR(c.FighterCoverAt(mid[s]), want[s], 1e-12);
+        sum += c.FighterCoverAt(mid[s]);
+        // The air fight reads the cover where it is fought.
+        Package p;
+        p.target_pos = mid[s];
+        SC_EXPECT_NEAR(AbstractAirFight::SetupFor(d, p, 0.0, airwar::Weather::Clear, c.FighterView(), mid[s]).friendly_fighters, want[s], 1e-12);
+        // The enemy's staff still believes the front's number.
+        SC_EXPECT(c.BelievedFighterCoverAt(mid[s]) == front);
+    }
+    SC_EXPECT_NEAR(sum, front * static_cast<double>(n), 1e-12);
+    std::printf("    the Pact's front %.2f over %zu sectors: the defended one %.3f, the others %.3f\n", front, n, want[1], want[0]);
+    // Its packages fly: the belief moves toward the cover in the sectors they flew to, never past it.
+    FighterRunTo(c, 48.0);
+    int learned = 0;
+    for (std::size_t s = 0; s < n; ++s) {
+        const double b = c.FighterBelief()[s];
+        SC_EXPECT(std::fabs(b - want[s]) <= std::fabs(front - want[s]) + 1e-12);
+        learned += std::fabs(b - front) > 1e-9 ? 1 : 0;
+        std::printf("    %-16s cover %.3f, believed %.3f\n", c.FrontLine().Sector(s).id.c_str(), want[s], b);
+    }
+    SC_EXPECT(learned >= 1);
+    // A save keeps the duty and replays the war.
+    const std::string saved = SaveCampaignJson(c, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json");
+    SC_EXPECT(saved.find("\"fighter_cover\"") != std::string::npos);
+    AirCampaign back;
+    std::string e;
+    SC_EXPECT(LoadCampaignJson(saved, kData, back, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(back.FighterCover() == c.FighterCover() && back.FighterBelief() == c.FighterBelief());
+    SC_EXPECT(JournalFnv(back) == JournalFnv(c) && back.Packages().size() == c.Packages().size());
+}
+
+SC_TEST("fighters by sector (F4.3): the regiment's duty follows the national sector's commander only as its post holds his orders; the sky's sharing likewise") {
+    // The data's commanders on the Pact's war, the national sector's commander quicker and plain (so he decides within two
+    // days) and no national object counted in the enemy's reach (his pre-war plan economy everywhere).
+    namespace cmp = simcore::campaign;
+    cmp::AdStrategyData rules;
+    std::string e;
+    SC_EXPECT(cmp::LoadAdStrategyData(kData, "campaign/ad_strategy.json", rules, &e));
+    SC_EXPECT(rules.fighters.present && rules.fighters.post == "fighter_rgt_duty" && rules.fighters.commander == "sector_commander");
+    rules.rules.object_reach_m = -1e9;
+    for (cmp::AdCommanderDef& c : rules.commanders) {
+        if (c.id != rules.fighters.commander) continue;
+        c.rhythm_h = groundwar::ValueRange{2.0, 3.0};
+        c.traits = airwar::Traits();
+    }
+    struct Run {
+        AirWarData data;
+        AirCampaign campaign;
+        command::InfoNet net;
+        command::CampaignFeed feed;
+    };
+    auto r = std::make_unique<Run>();
+    if (!LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json", r->data, &e)) {
+        std::printf("    %s\n", e.c_str());
+        SC_EXPECT(false);
+        return;
+    }
+    r->data.tuning.values["ground.mode"] = 1.0;
+    r->data.tuning.values["air_front.mode"] = 1.0;
+    r->data.tuning.values["ad_strategy.mode"] = 1.0;
+    SC_EXPECT(r->campaign.Init(r->data, 7, &e));
+    command::ChainData chain;
+    SC_EXPECT(command::LoadChainData(kData, "command/chain_pannonia.json", chain, &e));
+    r->net.Init(chain, 7, r->data.theatre.start_hour);
+    r->feed.Bind(&r->net);
+    r->feed.UseAdStrategy(rules);
+    r->campaign.SetOrderSource(r->feed.OrderSource());
+    const double until = 48.0;
+    while (r->campaign.Now() < until) {
+        if (r->campaign.Advance(until)) r->campaign.SkipPlayerMission();
+        r->feed.Pump(r->campaign);
+    }
+    r->campaign.SetOrderSource(nullptr);
+    const cmp::AdStrategy& ad = r->feed.Ad();
+    SC_EXPECT(ad.On() && ad.FighterCommander() >= 0 && ad.FighterPost() >= 0);
+    if (!ad.On() || ad.FighterCommander() < 0) return;
+    const int k = ad.FighterCommander(), post = ad.FighterPost();
+    const double front = r->campaign.FrontFighters();
+    const std::size_t n = r->campaign.FrontLine().SectorCount();
+    const std::vector<AirCampaign::FighterCoverChange>& ch = r->campaign.FighterCoverChanges();
+    SC_EXPECT(!ch.empty());
+    // The first: his pre-war plan, held from before the war (economy everywhere here: the front's number in each sector).
+    if (!ch.empty()) {
+        SC_EXPECT(ch[0].key == "ad_plan:" + rules.fighters.commander);
+        for (double x : ch[0].cover) SC_EXPECT_NEAR(x, front, 1e-12);
+    }
+    int on_orders = 0;
+    for (std::size_t i = 0; i < ch.size(); ++i) {
+        const AirCampaign::FighterCoverChange& x = ch[i];
+        double sum = 0.0;
+        for (double v : x.cover) sum += v;
+        SC_EXPECT_NEAR(sum, front * static_cast<double>(n), 1e-9);
+        // What the post held at that hour: his newest order on each sector that had reached it by then, else his pre-war plan.
+        std::vector<cmp::SectorPriority> held = ad.PreWar(k);
+        std::vector<char> seen(n, 0);
+        const cmp::AdDecision* newest = nullptr;
+        for (std::size_t j = ad.Decisions().size(); j-- > 0;) {
+            const cmp::AdDecision& dec = ad.Decisions()[j];
+            if (dec.commander != k) continue;
+            const command::Delivery* got = r->net.Known(post, dec.fact);
+            if (got == nullptr || got->h > x.h + 1e-9) continue;
+            if (newest == nullptr || got->h > r->net.Known(post, newest->fact)->h) newest = &dec;
+            if (seen[static_cast<std::size_t>(dec.sector)] != 0) continue;
+            seen[static_cast<std::size_t>(dec.sector)] = 1;
+            held[static_cast<std::size_t>(dec.sector)] = dec.to;
+        }
+        const std::vector<double> want = cmp::PriorityShares(held, rules.rules);
+        SC_EXPECT(x.shares.size() == want.size());
+        for (std::size_t s = 0; s < want.size() && s < x.shares.size(); ++s) SC_EXPECT_NEAR(x.shares[s], want[s], 1e-12);
+        if (i == 0) continue;
+        // Each later change on an order that had reached the regiment's post, taken at the first whole hour after it.
+        SC_EXPECT(newest != nullptr && newest->key == x.key);
+        if (newest == nullptr) continue;
+        ++on_orders;
+        const command::Delivery* got = r->net.Known(post, newest->fact);
+        SC_EXPECT(got != nullptr && std::fabs(got->h - x.heard_h) < 1e-9 && x.h >= x.heard_h - 1e-9 && x.h < x.heard_h + 1.0 + 1e-9);
+        SC_EXPECT(x.heard_h > newest->h);  // the order travelled: never his decision itself
+        std::printf("    %s decided %.2f h, at the regiment's post %.2f h, the duty changed %.2f h\n", x.key.c_str(), newest->h, x.heard_h, x.h);
+    }
+    std::printf("    %zu changes of the duty, %d on his orders; %zu decisions by him\n", ch.size(), on_orders,
+                static_cast<std::size_t>(std::count_if(ad.Decisions().begin(), ad.Decisions().end(), [&](const cmp::AdDecision& dd) { return dd.commander == k; })));
+    SC_EXPECT(on_orders >= 1);
+    // The sky's sharing as each post holds it: the fighters' post by his orders that reached it; the battery never by them.
+    for (std::size_t s = 0; s < n; ++s) {
+        double h = 0.0;
+        const cmp::SectorPriority held = ad.PriorityKnownBy(k, post, static_cast<int>(s), &h);
+        const command::CooperationMethod m = ad.SharingKnownBy(k, post, static_cast<int>(s), r->data.own_air, &h);
+        SC_EXPECT(m == command::SharingFor(r->data.own_air.sky, cmp::SectorPriorityName(held)));
+        SC_EXPECT(m == (held == cmp::SectorPriority::Defend ? command::CooperationMethod::ByZones : command::CooperationMethod::OneZone));
+    }
 }

@@ -11,6 +11,8 @@ docs/COUNTRY_MAP.md), with the theatre's objects and the enemy's fronts over it.
     python tools/map_view.py out/pannonia_map.json --png           # the country, with the nation's theatre over it
     ./simcore/build/nav_check data 200 --json out/routes.json
     python tools/map_view.py out/pannonia_map.json --routes out/routes.json   # battery 21's routes over the country
+    ./simcore/build/fronts_bench data --map sector_cp_duty,rgt_chief_of_staff --map-json out/fronts_map.json --days 10 nato
+    python tools/map_view.py out/pannonia_map.json --front out/fronts_map.json   # the truth beside our side's belief (F5.3)
 """
 import argparse
 import html
@@ -143,11 +145,41 @@ OBJECT_COLOURS = {
 }
 
 
+def map_places(map_path):
+    """A country map's places by id (roadmap F1): its settlements, landmarks and sites, as (east_km, north_km)."""
+    m = json.loads(Path(map_path).read_text(encoding="utf-8"))
+    return {p["id"]: (p["east_km"], p["north_km"]) for key in ("settlements", "landmarks", "sites") for p in m.get(key, [])}
+
+
+def place_points(t, places):
+    """Gives every point of a theatre on a place map its east_km and north_km from the place it names ("at"): its
+    objects, their prepared positions, its fronts' line and entry points, bases, battery positions and missile launch
+    points."""
+    def put(d):
+        if isinstance(d, dict) and "at" in d and "east_km" not in d:
+            if d["at"] not in places:
+                raise ValueError(f"no place '{d['at']}' on the theatre's place map")
+            d["east_km"], d["north_km"] = places[d["at"]]
+    for o in t.get("objects", []):
+        put(o)
+        for p in o.get("positions", []):
+            put(p)
+    for f in t.get("fronts", []):
+        for p in f.get("line", []) + f.get("entries", []):
+            put(p)
+        for key in ("bases", "battery_position", "missile_launch"):
+            put(f.get(key))
+    return t
+
+
 def load_theatre(path, depth=0):
     """A theatre file, following "extends" as simcore's LoadTheatreFile does: the base's objects in their places, one
-    with the same id replaced, "remove" dropped, the new ones after them; a front replaces the base's of its faction."""
+    with the same id replaced, "remove" dropped, the new ones after them; a front replaces the base's of its faction.
+    A theatre on a place map ("place_map", relative to the data folder above the theatre's) takes its points from it."""
     path = Path(path)
     t = json.loads(path.read_text(encoding="utf-8"))
+    if t.get("place_map"):
+        place_points(t, map_places(path.parent.parent / t["place_map"]))
     if "extends" not in t:
         return t
     if depth >= 4:
@@ -281,14 +313,14 @@ def country_bounds(dump, theatre=None):
     return w, s, e, n
 
 
-def country_svg(dump, theatre=None, size_px=1600, routes=None):
+def country_svg(dump, theatre=None, size_px=1600, routes=None, extra=None):
     w, s, e, n = country_bounds(dump, theatre)
     scale = size_px / max(e - w, n - s)
     X = lambda x: (x - w) * scale
     Y = lambda y: (n - y) * scale
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size_px} {size_px}" width="{size_px}" height="{size_px}">',
            f'<rect width="{size_px}" height="{size_px}" fill="#cfcfc8"/>']
-    for sh in country_shapes(dump, theatre, routes):
+    for sh in country_shapes(dump, theatre, routes) + list(extra or []):
         if sh[0] == "rect":
             _, x0, y0, x1, y1, fill = sh
             out.append(f'<rect x="{X(x0):.1f}" y="{Y(y1):.1f}" width="{(x1 - x0) * scale + 0.6:.1f}" height="{(y1 - y0) * scale + 0.6:.1f}" fill="{fill}"/>')
@@ -311,7 +343,7 @@ def country_svg(dump, theatre=None, size_px=1600, routes=None):
     return "\n".join(out)
 
 
-def country_png(dump, path, theatre=None, size_px=2400, routes=None):
+def country_png(dump, path, theatre=None, size_px=2400, routes=None, extra=None):
     from PIL import Image, ImageDraw
     w, s, e, n = country_bounds(dump, theatre)
     scale = size_px / max(e - w, n - s)
@@ -319,7 +351,7 @@ def country_png(dump, path, theatre=None, size_px=2400, routes=None):
     Y = lambda y: (n - y) * scale
     img = Image.new("RGB", (size_px, size_px), (207, 207, 200))
     d = ImageDraw.Draw(img, "RGBA")
-    for sh in country_shapes(dump, theatre, routes):
+    for sh in country_shapes(dump, theatre, routes) + list(extra or []):
         if sh[0] == "rect":
             _, x0, y0, x1, y1, fill = sh
             d.rectangle([X(x0), Y(y1), X(x1) + 1, Y(y0) + 1], fill=fill)
@@ -339,6 +371,170 @@ def country_png(dump, path, theatre=None, size_px=2400, routes=None):
     img.save(path)
 
 
+# ------------------------------------------------------------------------------------------------ the fronts (F5.3)
+# fronts_bench --map-json's runs: the war's truth by day and, beside it, the situation map a post held at the end (metres in
+# the file, km on the page). For the developer and the owner: the player's screen never shows the truth.
+
+TRUTH_LINE = "#b3261e"
+BELIEF_LINE = "#1d4ed8"
+AIR_FRONT = "#6d28d9"
+OURS = "#2e7d32"
+ENEMY = "#8b1a1a"
+
+
+def _km(p):
+    return (p[0] / 1000.0, p[1] / 1000.0)
+
+
+def _runs(front):
+    runs = front.get("runs", [])
+    if not runs:
+        raise ValueError("the fronts file holds no runs (fronts_bench --map ... --map-json)")
+    return runs
+
+
+def _base_shape(run):
+    return ("line", [_km(p) for p in run["base_line"]], "#777777", 1, True)
+
+
+def _air_band(run, offsets_m, depths_by_sector, label_prefix=""):
+    """The air front by sector: the line of contact (base line moved by offsets) moved on by that sector's depth."""
+    shapes = []
+    stations = run["stations"]
+    pts_by_sector = {}
+    for i, st in enumerate(stations):
+        depth = depths_by_sector.get(st["sector"])
+        if depth is None or depth <= 0:
+            continue
+        off = offsets_m[i] + depth
+        pts_by_sector.setdefault(st["sector"], []).append(((st["x"] + st["nx"] * off) / 1000.0, (st["y"] + st["ny"] * off) / 1000.0))
+    names = {i: sd["name"] for i, sd in enumerate(run.get("sectors", []))}
+    for sector, pts in sorted(pts_by_sector.items()):
+        shapes.append(("line", pts, AIR_FRONT, 2, True))
+        mid = pts[len(pts) // 2]
+        shapes.append(("ltext", mid[0] + 1, mid[1] + 1, f"{label_prefix}air front {names.get(sector, sector)} {depths_by_sector[sector] / 1000:.0f} km", 11))
+    return shapes
+
+
+def truth_shapes(run, day=None):
+    """The truth: the line of contact on every day (older days paler), the air front by sector and the formations on `day`."""
+    days = run["truth"]
+    if not days:
+        raise ValueError("the run holds no truth days")
+    last = days[-1] if day is None else next((d for d in days if d["day"] == day), None)
+    if last is None:
+        raise ValueError(f"no day {day} in the run (0..{days[-1]['day']})")
+    shapes = [_base_shape(run)]
+    for d in days:
+        if d["day"] > last["day"]:
+            break
+        fresh = d is last
+        shade = int(230 - 140 * (d["day"] / max(1, last["day"])))
+        colour = TRUTH_LINE if fresh else "#%02x%02x%02x" % (230, shade, shade)
+        shapes.append(("line", [_km(p) for p in d["line"]], colour, 3 if fresh else 1, False))
+    depths = {i: v for i, v in enumerate(last.get("air_front_m", []))}
+    shapes.extend(_air_band(run, last["offset_m"], depths))
+    for f in last.get("formations", []):
+        if f.get("spent"):
+            continue
+        colour = OURS if f["ours"] else ENEMY
+        x, y = _km((f["x"], f["y"]))
+        shapes.append(("dot", x, y, 0.7, colour))
+        shapes.append(("ltext", x + 1, y - 1, f["name"], 9))
+    shapes.append(("ltext", run["stations"][0]["x"] / 1000.0, _legend_y(run), f"truth, day {last['day']} (hour {last['hour']:.0f}): the line of contact by day, the air front, the formations", 13))
+    return shapes
+
+
+def _legend_y(run):
+    ys = [p[1] for p in run["base_line"]]
+    return min(ys) / 1000.0 - 10
+
+
+def _believed_line(m):
+    """The believed line split where the sector changes staleness: [(points, stale)]."""
+    stale_by_sector = {}
+    for a in m.get("axes", []):
+        sec = a["sector"]
+        stale_by_sector[sec] = stale_by_sector.get(sec, True) and bool(a.get("stale"))
+    out = []
+    for p in m.get("line", []):
+        stale = stale_by_sector.get(p["sector"], False)
+        if out and out[-1][1] == stale:
+            out[-1][0].append((p["x"] / 1000.0, p["y"] / 1000.0))
+        else:
+            if out:  # join to the previous piece so the line has no gaps
+                prev = out[-1][0][-1]
+                out.append(([prev, (p["x"] / 1000.0, p["y"] / 1000.0)], stale))
+            else:
+                out.append(([(p["x"] / 1000.0, p["y"] / 1000.0)], stale))
+    return [(pts, st) for pts, st in out if len(pts) >= 2]
+
+
+def line_error_km(run, m, day=None):
+    """Mean and worst |believed depth - true depth| over the stations, km (the true depth never below the base line)."""
+    days = run["truth"]
+    last = days[-1] if day is None else next(d for d in days if d["day"] == day)
+    pts = m.get("line", [])
+    if not pts or len(pts) != len(last["offset_m"]):
+        return None
+    diffs = [abs(p["depth_m"] - max(0.0, t)) for p, t in zip(pts, last["offset_m"])]
+    return sum(diffs) / len(diffs) / 1000.0, max(diffs) / 1000.0
+
+
+def belief_shapes(run, post, day=None):
+    """What `post` held at the end of the run: the line as reported (dashed where stale), our SAM units as it has them, the air
+    defence staff's conclusion on the enemy's air front, and its units and enemy as a list (the map has no place for them)."""
+    m = run["posts"].get(post)
+    if m is None:
+        raise ValueError(f"the run has no post {post!r}; it holds {', '.join(sorted(run['posts']))}")
+    shapes = [_base_shape(run)]
+    for pts, stale in _believed_line(m):
+        shapes.append(("line", pts, "#7f9ae0" if stale else BELIEF_LINE, 2 if stale else 3, stale))
+    for a in m.get("axes", []):
+        if a["depth_m"] <= 0:
+            continue
+        cands = [p for p in m["line"] if p["sector"] == a["sector"]]
+        if cands:
+            deepest = max(cands, key=lambda p: p["depth_m"])
+            tag = ", stale" if a.get("stale") else ""
+            shapes.append(("ltext", deepest["x"] / 1000.0 + 1, deepest["y"] / 1000.0 + 1,
+                           f"{a['name']} {a['depth_m'] / 1000:.0f} km in (h {a['h']:.0f}, {a['age_h']:.0f} h old{tag})", 10))
+    depths = {af["sector"]: af["depth_m"] for af in m.get("air_front", [])}
+    offsets = [p["depth_m"] for p in m.get("line", [])]
+    if depths and len(offsets) == len(run["stations"]):
+        shapes.extend(_air_band(run, offsets, depths, "staff: "))
+    for sm in m.get("sams", []):
+        if sm["basis"] != "plan":
+            shapes.append(("dot", sm["x"] / 1000.0, sm["y"] / 1000.0, 0.7, OURS))
+            shapes.append(("ltext", sm["x"] / 1000.0 + 1, sm["y"] / 1000.0 - 1, f"{sm['name']} ({sm['basis']} h {sm['h']:.0f})", 9))
+    x0 = run["stations"][0]["x"] / 1000.0
+    y0 = _legend_y(run)
+    err = line_error_km(run, m, day)
+    head = f"belief of {post} at hour {m['now_h']:.0f}: the line as reported, never the truth"
+    if err:
+        head += f" (against the truth: mean {err[0]:.1f} km, worst {err[1]:.0f} km)"
+    shapes.append(("ltext", x0, y0, head, 13))
+    lines = [f"{u['name']} {u['fraction'] * 100:.0f}% (h {u['h']:.0f}, {u['age_h']:.0f} h old{', stale' if u.get('stale') else ''})" for u in m.get("ours", [])]
+    lines += [f"enemy {e['name']} {e['fraction'] * 100:.0f}% (h {e['h']:.0f}, {e['age_h']:.0f} h old{', stale' if e.get('stale') else ''})" for e in m.get("enemy", [])]
+    if not lines:
+        lines = ["no unit has reported to this post"]
+    for i, text in enumerate(lines[:14]):
+        shapes.append(("ltext", x0, y0 - 7 - i * 5, text, 10))
+    return shapes
+
+
+def front_page(dump, front, theatre=None, run=0, post="sector_cp_duty", day=None, size_px=1100):
+    """The truth beside the belief as one page: two country drawings."""
+    r = _runs(front)[run]
+    truth = country_svg(dump, theatre, size_px=size_px, extra=truth_shapes(r, day))
+    belief = country_svg(dump, theatre, size_px=size_px, extra=belief_shapes(r, post, day))
+    title = f"{r['faction']}, seed {r['seed']}, {r['days']} days"
+    return (f'<!doctype html><meta charset="utf-8"><title>{html.escape(title)}: the truth beside the belief</title>'
+            f'<body style="margin:0;background:#ddd;font-family:sans-serif"><h3 style="margin:6px 10px">{html.escape(title)}: '
+            f'the truth (left) and what {html.escape(post)} held (right)</h3>'
+            f'<div style="display:flex;flex-wrap:wrap;gap:8px">{truth}{belief}</div></body>')
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("dump")
@@ -347,6 +543,11 @@ def main(argv=None):
     ap.add_argument("--theatre", default=str(ROOT / "data" / "air_war" / "theatre_pannonia_nation.json"),
                     help="the country: the theatre whose objects and fronts to draw over it ('' none)")
     ap.add_argument("--routes", default=None, help="the country: nav_check --json's routes to draw over it (roadmap G1.6)")
+    ap.add_argument("--front", default=None, help="the country: fronts_bench --map-json's file, to draw the truth's line, air front and formations "
+                    "beside our side's belief as a post held it (F5.3)")
+    ap.add_argument("--run", type=int, default=0, help="--front: which run of the file")
+    ap.add_argument("--post", default="sector_cp_duty", help="--front: the post whose situation map is the belief")
+    ap.add_argument("--day", type=int, default=None, help="--front: the truth's day (default the last)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     dump = json.loads(Path(a.dump).read_text(encoding="utf-8"))
@@ -355,6 +556,20 @@ def main(argv=None):
     if dump.get("kind") == "country":
         theatre = load_theatre(a.theatre) if a.theatre and Path(a.theatre).exists() else None
         routes = json.loads(Path(a.routes).read_text(encoding="utf-8")) if a.routes else None
+        if a.front:
+            front = json.loads(Path(a.front).read_text(encoding="utf-8"))
+            if not a.png:
+                fout = Path(a.out) if a.out else ROOT / "out" / "map_view" / (dump["map_id"] + "_front.html")
+                fout.parent.mkdir(parents=True, exist_ok=True)
+                fout.write_text(front_page(dump, front, theatre, a.run, a.post, a.day), encoding="utf-8")
+                print(f"wrote {fout}")
+                return 0
+            r = _runs(front)[a.run]
+            for tag, shapes in (("truth", truth_shapes(r, a.day)), ("belief", belief_shapes(r, a.post, a.day))):
+                fout = out.with_name(f"{out.stem}_front_{tag}.png")
+                country_png(dump, fout, theatre, extra=shapes)
+                print(f"wrote {fout}")
+            return 0
         if a.png:
             country_png(dump, out, theatre, routes=routes)
         else:

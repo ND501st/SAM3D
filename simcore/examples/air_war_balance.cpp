@@ -1,6 +1,6 @@
 // air_war_balance: the enemy air command over many seeds, for the balance pass (roadmap A12, docs/air_war/09_BALANCE.md).
 //
-// Usage: air_war_balance [--theatre file] [--set tuning.key=value ...] [--debug] [data_dir] [seeds] [days] [faction ...]
+// Usage: air_war_balance [--theatre file] [--set tuning.key=value ...] [--fronts] [--debug] [--cpu] [data_dir] [seeds] [days] [faction ...]
 //   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json, the one the balance pass tuned;
 //   theatre_pannonia_nation.json is the whole nation); --set: try a tuning value (a calibration sweep); data_dir
 //   (default data); seeds (default 10); days (default 6); factions (default all four: rebels, neutral, warsaw_pact, nato).
@@ -22,16 +22,26 @@
 // kind and by object) and on which missions, beside the losses the planners expected; the strikers' answers when our
 // fighters reached them; the on-call and divert latencies; and each measure that data/air_war/balance_bands.json gives a
 // band for this theatre, faction and posture, checked against it (--debug writes each loss to stderr).
+// --cpu (track F, F3.3): after each posture, the CPU its campaigns took (std::clock) and, under ground.mode 1 on the
+// nation (--set ground.mode=1), the line of contact's depth by sector at each day's end, the mean over the seeds; without
+// it the output is as before, byte for byte.
+// --fronts (track F, F6.2, docs/fronts/06_BALANCE.md section 3): every front mode on (ground.mode, air_front.mode and
+// ad_strategy.mode 1) with our side's pipeline pumped after every hour's step (data/command/chain_pannonia.json; the units
+// hear their orders from it), as fronts_bench --history runs the war; the bands of "modes": "fronts" are read before the
+// others; after each posture the close support share by day and the air front's steps. Without it nothing changes.
 // Exits 1 if the data fail to load, 2 if a measure is out of its band.
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/command.hpp"
 
 using namespace simcore;
 using namespace simcore::airwar;
@@ -39,6 +49,9 @@ using namespace simcore::airwar;
 namespace {
 
 bool g_debug = false;  // --debug: each loss to stderr
+bool g_cpu = false;    // --cpu: the CPU a posture's campaigns took, and the ground war's line
+bool g_fronts = false;  // --fronts: every front mode on, the pipeline pumped (F6.2)
+command::ChainData g_chain;  // --fronts: our side's chain of command, the pipeline's
 // The bands (roadmap B14, data/air_war/balance_bands.json) and what Print checks them for.
 BalanceBands g_bands;
 std::string g_theatre, g_faction;
@@ -52,6 +65,7 @@ struct DayStats {
     double iads = 0.0;  // working share of the true radar SAM sites the enemy measures, at the day's end
     double believed = 0.0;  // the enemy's belief of the same (IntelPicture::BelievedIadsShare)
     double phase = 0.0;     // the doctrine phase at the day's end (0 the first)
+    double cas = 0.0;       // --fronts: close support packages (their time on target that day)
     double wrecked = 0.0;
     double battery_raids = 0.0;
     double battery = 0.0;    // the battery's working share at the day's end
@@ -60,6 +74,9 @@ struct DayStats {
 
 struct RunStats {
     std::vector<DayStats> days;
+    std::map<std::string, std::vector<double>> ground_km;  // --cpu: the line's depth by sector at each day's end, summed
+    GroundAirStats ground_air;  // --cpu with the ground war: the air war and its units (F3.7), summed over the runs
+    double overrun_end = 0.0;   // our objects overrun at the campaign's end, summed
     double kinds[static_cast<int>(MissionKind::Count)] = {};
     double staff_changes = 0.0;
     double false_claims = 0.0;
@@ -106,6 +123,8 @@ struct RunStats {
     std::map<std::string, std::pair<double, double>> expect_mission;  // mission kind -> (packages, their planned losses)
     // The strikers' answer when our fighters reached them (roadmap B14 against red_baron_vol2 and aces_1976).
     double fight_attacked = 0.0, fight_jettison = 0.0, fight_abort = 0.0;
+    // --fronts: the air front's steps forward and back, summed over its sectors and the runs, and the deepest.
+    double air_front_advances = 0.0, air_front_pullbacks = 0.0, air_front_deepest_km = 0.0;
 };
 
 void Posture(BatteryPosture& p, bool careful) {
@@ -161,6 +180,15 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         return false;
     }
     Posture(c.Posture(), careful);
+    // --fronts: our side's pipeline beside the war, as fronts_bench --history runs it (the units hear their orders from it).
+    command::InfoNet net;
+    command::CampaignFeed feed;
+    if (g_fronts) {
+        net.Init(g_chain, seed, data.theatre.start_hour);
+        command::GiveTheatreSky(net, data.theatre);
+        feed.Bind(&net);
+        c.SetOrderSource(feed.OrderSource());
+    }
     acc.aircraft_day1 += c.AircraftInTheatre();
     {
         const std::vector<TheatreObject>& objs = data.theatre.objects;
@@ -205,10 +233,13 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         const double end = 24.0 * (d + 1);
         int raids = 0;
         while (c.Now() < end - 1e-9) {
-            if (c.Advance(end)) {
+            // --fronts: an hour at a time, the pipeline pumped after each step (fronts_bench --history's way).
+            const double to = g_fronts ? std::min(end, std::floor(c.Now() + 1e-9) + 1.0) : end;
+            if (c.Advance(to)) {
                 ++raids;
                 c.SkipPlayerMission();
             }
+            if (g_fronts) feed.Pump(c);
             if (c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].function <= 0.0) battery_wrecked = true;
         }
         DayStats& s = acc.days[static_cast<std::size_t>(d)];
@@ -220,6 +251,41 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         s.wrecked += Wrecked(c);
         s.battery += c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].function;
         s.knowledge += c.EnemyKnowledgeOfBattery();
+        if (g_cpu && c.Ground() != nullptr) {
+            for (std::size_t k = 0; k < c.FrontLine().SectorCount(); ++k) {
+                std::vector<double>& v = acc.ground_km[c.FrontLine().Sector(k).id];
+                if (v.size() < static_cast<std::size_t>(days)) v.resize(static_cast<std::size_t>(days), 0.0);
+                v[static_cast<std::size_t>(d)] += groundwar::GroundWar::SectorDepth(c.FrontLine(), k) / 1000.0;
+            }
+        }
+    }
+    if (g_fronts) {
+        c.SetOrderSource(nullptr);
+        for (const SectorFront& f : c.AirFront().sectors) {
+            acc.air_front_advances += f.advances;
+            acc.air_front_pullbacks += f.pullbacks;
+            acc.air_front_deepest_km = std::max(acc.air_front_deepest_km, f.depth_m / 1000.0);
+        }
+    }
+    if (g_cpu && c.Ground() != nullptr) {
+        const GroundAirStats& g = c.GroundAir();
+        GroundAirStats& a = acc.ground_air;
+        a.troop_strikes += g.troop_strikes;
+        a.strength_lost += g.strength_lost;
+        a.reinforced += g.reinforced;
+        a.strength_brought += g.strength_brought;
+        a.overrun += g.overrun;
+        a.retaken += g.retaken;
+        a.escapes += g.escapes;
+        a.troop_moves += g.troop_moves;
+        a.troops_moved_km += g.troops_moved_km;
+        a.supply_reroutes += g.supply_reroutes;
+        a.cas += g.cas;
+        a.bai += g.bai;
+        a.ai += g.ai;
+        a.bai_fixed += g.bai_fixed;
+        a.ai_fixed += g.ai_fixed;
+        for (const ObjectState& st : c.Truth()) acc.overrun_end += st.overrun ? 1.0 : 0.0;
     }
     for (const Package& p : c.Packages()) {
         if (!p.resolved && !p.played) continue;  // planned beyond the last day
@@ -228,6 +294,7 @@ bool Run(const AirWarData& data, unsigned seed, int days, bool careful, RunStats
         DayStats& s = acc.days[static_cast<std::size_t>(d)];
         s.packages += 1.0;
         s.sead += SeadPurpose(p) ? 1.0 : 0.0;
+        s.cas += p.kind == MissionKind::Cas ? 1.0 : 0.0;
         // Manned aircraft only: decoy drones are meant to be shot down (the campaign doesn't count them either).
         for (const Flight& f : p.flights) {
             const AircraftType* a = data.faction.Aircraft(f.aircraft);
@@ -453,7 +520,7 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
         };
         bool header = false;
         for (const M& m : ms) {
-            const BalanceBand* b = g_bands.Find("air_war_balance", m.id, g_theatre, g_faction, posture);
+            const BalanceBand* b = g_bands.Find("air_war_balance", m.id, g_theatre, g_faction, posture, g_fronts ? "fronts" : "");
             if (b == nullptr || !m.have) continue;
             if (!header) {
                 std::printf("\n| Measure | The model | Band | Anchor | |\n|---|---|---|---|---|\n");
@@ -466,6 +533,12 @@ void Print(const std::string& faction, const char* posture, const RunStats& r, i
             std::printf("Latencies: %.0f on-call packages over the place %.1f min after the sighting; %.0f diverts with the new task %.1f min after it.\n",
                         r.on_call_n, r.on_call_n > 0.0 ? r.on_call_min / r.on_call_n : 0.0, r.divert_n, r.divert_n > 0.0 ? r.divert_min / r.divert_n : 0.0);
         }
+    }
+    if (g_fronts) {
+        std::printf("Fronts (F6.2): close support by day (of the packages):");
+        for (const DayStats& s : r.days) std::printf(" %.0f%%", s.packages > 0.0 ? 100.0 * s.cas / s.packages : 0.0);
+        std::printf("; the air front %.1f steps forward and %.1f back a campaign, the deepest %.0f km.\n", r.air_front_advances / n,
+                    r.air_front_pullbacks / n, r.air_front_deepest_km);
     }
     if (r.lines > 0.0) {
         std::printf("Our supply lines (%.0f): %.2f stocks and %.2f strength delivered, %.2f stocks lost on the way, %.1f columns destroyed (%.0f vehicles), %.0f line-hours cut, %.1f reroutes a campaign; the troops' stocks at the end %.0f%%. Armed reconnaissance: %.1f searches a campaign, a column found in %.0f%%.\n",
@@ -484,6 +557,10 @@ int main(int argc, char** argv) {
         const std::string a = argv[i];
         if (a == "--debug") {
             g_debug = true;
+        } else if (a == "--cpu") {
+            g_cpu = true;
+        } else if (a == "--fronts") {
+            g_fronts = true;
         } else if (a == "--theatre" && i + 1 < argc) {
             theatre = argv[++i];
         } else if (a == "--set" && i + 1 < argc) {
@@ -504,6 +581,14 @@ int main(int argc, char** argv) {
     std::vector<std::string> factions(args.size() > 3 ? args.begin() + 3 : args.end(), args.end());
     if (factions.empty()) factions = {"rebels", "neutral", "warsaw_pact", "nato"};
     std::printf("Theatre: air_war/%s\n", theatre.c_str());
+    if (g_fronts) {
+        std::printf("Every front mode on (F6.2): ground.mode, air_front.mode, ad_strategy.mode 1, our pipeline pumped every hour\n");
+        std::string ce;
+        if (!command::LoadChainData(data_dir, "command/chain_pannonia.json", g_chain, &ce)) {
+            std::fprintf(stderr, "%s\n", ce.c_str());
+            return 1;
+        }
+    }
     g_theatre = theatre;
     {
         std::string be;
@@ -520,15 +605,45 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "%s\n", error.c_str());
             return 1;
         }
+        if (g_fronts) {
+            data.tuning.values["ground.mode"] = 1.0;
+            data.tuning.values["air_front.mode"] = 1.0;
+            data.tuning.values["ad_strategy.mode"] = 1.0;
+        }
         for (const auto& kv : sets) data.tuning.values[kv.first] = kv.second;
         ApplyLightMode(data);  // --set light.mode=0: the tuned theatre undated, as before roadmap S8
         for (int careful = 0; careful < 2; ++careful) {
             RunStats r;
+            const std::clock_t c0 = std::clock();
             for (int s = 1; s <= seeds; ++s) {
                 if (!Run(data, static_cast<unsigned>(s), days, careful != 0, r)) return 1;
             }
+            const double cpu_s = static_cast<double>(std::clock() - c0) / CLOCKS_PER_SEC;
             g_faction = faction;
             Print(data.faction.name, careful != 0 ? "careful" : "careless", r, seeds);
+            if (g_cpu) {
+                std::printf("CPU: %.2f s for %d campaigns of %d days (%.1f ms a campaign day), ground.mode %.0f\n", cpu_s, seeds, days,
+                            1000.0 * cpu_s / (seeds * std::max(1, days)), data.tuning.Get("ground.mode"));
+                if (data.tuning.Get("ground.mode") >= 1.0 && !r.ground_km.empty()) {
+                    const GroundAirStats& g = r.ground_air;
+                    const double n = static_cast<double>(seeds);
+                    std::printf("  F3.7 a campaign: %.1f strikes on troops (%.3f of their formations' establishments), %.1f march columns' "
+                                "reinforcements (%.3f); %.1f overrun (%.1f at the end), %.1f retaken, %.1f escapes; %.1f troop moves (%.0f km), %.1f "
+                                "supply lines routed again\n",
+                                g.troop_strikes / n, g.strength_lost / n, g.reinforced / n, g.strength_brought / n, g.overrun / n, r.overrun_end / n,
+                                g.retaken / n, g.escapes / n, g.troop_moves / n, g.troops_moved_km / n, g.supply_reroutes / n);
+                    std::printf("  F3.7 labels a campaign: cas %.1f, bai %.1f, ai %.1f (by c2.bai_depth_m bai %.1f, ai %.1f)\n", g.cas / n, g.bai / n,
+                                g.ai / n, g.bai_fixed / n, g.ai_fixed / n);
+                }
+                for (const auto& kv : r.ground_km) {
+                    bool moved = false;
+                    for (double v : kv.second) moved = moved || v > 0.0;
+                    if (!moved) continue;
+                    std::printf("  line in %-22s km by day:", kv.first.c_str());
+                    for (double v : kv.second) std::printf(" %5.1f", v / seeds);
+                    std::printf("\n");
+                }
+            }
         }
     }
     if (g_fails > 0) std::printf("\n%d measure(s) out of band.\n", g_fails);

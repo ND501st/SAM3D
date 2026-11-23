@@ -31,6 +31,7 @@
 
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/intel.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/officers.hpp"
@@ -66,12 +67,23 @@ struct PlanContext {
     // The map's features and ground for the route planner (route.mode 1, route_planner.hpp; null: the planner builds its
     // own from the data).
     const RouteGround* ground = nullptr;
+    // The front's line of contact (track F, front_line.hpp): what the target filter's depths are measured from (null: the
+    // front's base line; the same at zero offsets).
+    const LineOfContact* front_line = nullptr;
+    // The enemy's air front by sector (track F, F2.4; the campaign's FrontView()): close support, harassment and the
+    // battlefield interdiction's nomination reach its fixed-wing depth further, helicopter raids its helicopters' depth,
+    // the Pact's helicopter umbrella and the routes' let-down move with it. Off (air_front.mode 0): every depth 0.
+    AirFrontView air_front;
+    // Our fighters by sector as the enemy's staff believes them (track F, F4.3; the campaign's BelievedFighterView()):
+    // the escort's need, the expected losses to our fighters and the routes' fighter threats at a point. Off: the front's
+    // number everywhere, as before.
+    FighterCoverView fighters;
 
     // The defender's fighter threat over the front, less what an AWACS on station takes away (warning, vectoring): only
     // an AWACS that controls fighters in the war's year (roadmap B8: the Pact's A-50 not before 1989).
-    double FriendlyFighters(const FrontDef& f) const {
+    double FriendlyFighters(const FrontDef& f, const Vec3& at) const {
         const double up = AwacsControlsFighters(*data) ? Clamp01(awacs) : 0.0;
-        return f.friendly_fighters * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * up);
+        return fighters.At(at, f.friendly_fighters) * (1.0 - data->tuning.Get("support.awacs_fighter_cut") * up);
     }
 
     Weather WeatherAt(double h) const {
@@ -284,12 +296,21 @@ inline Weaponeering Weaponeer(const AirWarData& d, const AircraftType& a, Target
 // A target in the battlefield interdiction area learned during the war waits for the corps' nomination cycle: it is
 // flown no sooner than the faction's nomination_h after the enemy learned of it (gallant_knight_1983: 48 h for NATO's BAI;
 // roadmap S2, c2.live_mode 1). What it knew before the war is on the plan already. `to_front_m`: the target's distance
-// from the front line.
-inline bool NominationWaits(const AirWarData& d, const IntelEntry& e, double to_front_m, double now_h) {
+// from the line of contact; `air_front_m`: its sector's air front, which carries the interdiction area forward with it
+// (track F, F2.4; 0 at air_front.mode 0). `bai_depth_m`: the area's depth there where the enemy's corps draws an FSCL
+// (F3.7, AirFrontView::BaiDepth), < 0 c2.bai_depth_m.
+inline bool NominationWaits(const AirWarData& d, const IntelEntry& e, double to_front_m, double now_h, double air_front_m = 0.0,
+                            double bai_depth_m = -1.0) {
     const FactionC2& c2 = d.faction.c2;
     if (!c2.present || c2.nomination_h <= 0.0 || d.tuning.Get("c2.mode") < 1.0 || d.tuning.Get("c2.live_mode") < 1.0) return false;
-    if (to_front_m > d.tuning.Get("c2.bai_depth_m") || e.first_h <= 0.0) return false;
+    if (to_front_m > (bai_depth_m >= 0.0 ? bai_depth_m : d.tuning.Get("c2.bai_depth_m")) + air_front_m || e.first_h <= 0.0) return false;
     return now_h < e.first_h + c2.nomination_h;
+}
+
+// Whether a helicopter target lies beyond the Pact's umbrella (its own air defence's cover): further than `umbrella_m`
+// from the entry point, less its sector's fixed-wing air front, which carries the cover forward (track F, F2.4; 0 off).
+inline bool BeyondHeloUmbrella(const Vec3& target, const Vec3& entry, const AirFrontView& af, double umbrella_m) {
+    return Dist2d(target, entry) - af.At(target) > umbrella_m;
 }
 
 class Planner {
@@ -422,6 +443,15 @@ public:
         return out_;
     }
 
+    // What the target filter admits for a mission kind now, before any worth is weighed: the kind's depths from the line
+    // of contact (and its sector's air front, F2.4), the politics' and the no-strike zones (for tests and tools).
+    std::vector<const IntelEntry*> CandidatesFor(PlanContext& c, MissionKind mk) {
+        c_ = &c;
+        front_ = c.data->theatre.FrontFor(c.data->faction.front);
+        if (front_ == nullptr) return {};
+        return Candidates(mk);
+    }
+
     // An on-call package from an alert pool (roadmap B5, docs/air_battle/05_C2_AND_RETASKING.md §4.4): the main flights
     // of `mk` from the pool's squadron only (its `aircraft`, nothing else of the cycle's), against `target` as the report
     // has it (its place, sigma and age), in at the front's entry nearest it, its first aircraft up at `takeoff_h` (the
@@ -532,7 +562,7 @@ private:
         std::vector<RouteThreat> t = BelievedRouteThreats(c_->intel->Threats(), a, prof, GroundC().HasGround(), Tune());
         if (Mode() >= 2 && front_ != nullptr) {
             // Our fighters as it believes them (roadmap S7): a cost on the legs near our believed air bases.
-            std::vector<RouteThreat> f = BelievedFighterThreats(c_->intel->entries, front_->friendly_fighters, a, prof, Tune());
+            std::vector<RouteThreat> f = BelievedFighterThreats(c_->intel->entries, front_->friendly_fighters, a, prof, Tune(), c_->fighters);
             t.insert(t.end(), f.begin(), f.end());
         }
         return route_threats_[k] = std::move(t);
@@ -567,6 +597,7 @@ private:
         rq.helicopter_hide = hide;
         rq.loiter = loiter;
         rq.avoid = avoid;
+        rq.air_front = c_->air_front;
         const RoutePlanner planner(GroundC(), Tune(), rules_);
         return routes_[key] = planner.Plan(rq, RouteThreatsFor(a, prof), &legs_);
     }
@@ -587,12 +618,20 @@ private:
         const double agl = RouteProfileAgl(a, prof, part, Tune());
         const double transit = a.helicopter ? agl : std::max(agl, a.medium_alt_m);
         const double mps = a.helicopter ? a.cruise_mps : (prof == Profile::Low ? RouteLowMps(a) : a.cruise_mps);
+        // High from the entry to the let-down and from the climb on: inside the air front (F2.4) the let-down is past the
+        // gate and the climb short of it, so the gate and the turns between are flown high too.
+        bool before_letdown = RouteIndexOf(pr.points, "letdown") >= 0, after_climb = false;
         for (const RoutePoint& q : pr.points) {
             if (q.tag == "pull_up" || q.tag == "apex" || q.tag == "roll_in") continue;
+            if (q.tag == "letdown") before_letdown = false;
+            if (q.tag == "climb") after_climb = true;
             RoutePoint x = q;
-            const bool high = q.tag == "entry" || q.tag == "climb" || q.tag == "exit";
+            const bool high = q.tag == "entry" || q.tag == "climb" || q.tag == "exit" || before_letdown || after_climb;
             x.agl_m = high ? transit : agl;
-            x.leg_mps = q.tag == "entry" || q.tag == "climb" ? a.cruise_mps : (q.tag == "target" || q.tag == "egress" ? std::max(mps, a.attack_mps) : mps);
+            x.leg_mps = q.tag == "entry" || q.tag == "climb"         ? a.cruise_mps
+                        : (q.tag == "target" || q.tag == "egress") ? std::max(mps, a.attack_mps)
+                        : (high && q.tag != "exit")                ? a.cruise_mps
+                                                                   : mps;
             if (q.tag == "hide") x.tag = "ip";
             r.push_back(x);
         }
@@ -698,17 +737,25 @@ private:
     std::vector<const IntelEntry*> Candidates(MissionKind mk) const {
         std::vector<const IntelEntry*> out;
         const double now = c_->now_h;
+        const bool air_front_on = c_->air_front.On();
         for (const IntelEntry& e : c_->intel->entries) {
             // An armed reconnaissance searches the road whatever the last sighting says.
             if (e.Live() < 0.15 && mk != MissionKind::Recce && mk != MissionKind::Bda && mk != MissionKind::ArmedRecce) continue;
             // A column on the move is found by searching its road, not struck where it was seen.
             if (IsColumn(e.kind) && mk != MissionKind::ArmedRecce) continue;
-            const double to_front = DistanceToLine(front_->line, e.pos);
+            const double to_front = c_->front_line != nullptr ? c_->front_line->AbsDistance(e.pos) : DistanceToLine(front_->line, e.pos);
             const bool ad = IsAirDefence(e.kind) || e.kind == ObjectKind::EwRadar;
+            // The low-level work's depths reach the target's sector's air front further (F2.4, 02_AIR_FRONT.md §4): its
+            // sector looked up only for the kinds that read it, and only with the air front on.
+            double front_m = 0.0;
+            if (air_front_on && (mk == MissionKind::Strike || mk == MissionKind::Cas || mk == MissionKind::Harassment || mk == MissionKind::HeloRaid)) {
+                const int s = c_->air_front.line->SectorOf(e.pos);
+                front_m = mk == MissionKind::HeloRaid ? c_->air_front.HeloIn(s) : c_->air_front.DepthIn(s);
+            }
             switch (mk) {
                 case MissionKind::Strike:
                     if (ad || e.kind == ObjectKind::Troops || e.kind == ObjectKind::City) continue;
-                    if (NominationWaits(*c_->data, e, to_front, now)) continue;
+                    if (NominationWaits(*c_->data, e, to_front, now, front_m, c_->air_front.BaiDepth(e.pos, -1.0))) continue;
                     break;
                 case MissionKind::Dead:
                     if (!ad || e.sigma_m > 4000.0) continue;
@@ -728,13 +775,13 @@ private:
                     if (e.strikes == 0 || now - e.last_struck_h > 30.0 || e.observed_h > e.last_struck_h + 0.5) continue;
                     break;
                 case MissionKind::Cas:
-                    if (e.kind != ObjectKind::Troops || to_front > 40000.0) continue;
+                    if (e.kind != ObjectKind::Troops || to_front > 40000.0 + front_m) continue;
                     break;
                 case MissionKind::HeloRaid:
-                    if (to_front > 25000.0 || e.kind == ObjectKind::City || e.kind == ObjectKind::Airfield) continue;
+                    if (to_front > 25000.0 + front_m || e.kind == ObjectKind::City || e.kind == ObjectKind::Airfield) continue;
                     break;
                 case MissionKind::Harassment:
-                    if (to_front > 70000.0 || e.kind == ObjectKind::City) continue;
+                    if (to_front > 70000.0 + front_m || e.kind == ObjectKind::City) continue;
                     break;
                 case MissionKind::Missile:
                     // Fixed targets only: a missile flies to where it was told, and finds nothing that has moved.
@@ -746,7 +793,9 @@ private:
                 case MissionKind::Count: continue;
             }
             if (c_->politics->Banned(e.kind)) continue;
-            if (c_->politics->max_depth_m > 0.0 && to_front > c_->politics->max_depth_m) continue;
+            // The politics' depth is from the border, whatever the line of contact (§4; the same while it has not moved).
+            const double to_border = c_->front_line != nullptr && c_->front_line->Moved() ? DistanceToLine(c_->front_line->BaseLine(), e.pos) : to_front;
+            if (c_->politics->max_depth_m > 0.0 && to_border > c_->politics->max_depth_m) continue;
             if (InNoStrikeZone(e.pos) && mk != MissionKind::Recce && mk != MissionKind::Bda) continue;
             out.push_back(&e);
         }
@@ -1027,8 +1076,8 @@ private:
             }
         }
         // Escort against the defender's fighters.
-        if (t.escort_ratio > 0.0 && c_->FriendlyFighters(*front_) > 0.05) {
-            const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * c_->FriendlyFighters(*front_) * 2.0));
+        if (t.escort_ratio > 0.0 && c_->FriendlyFighters(*front_, p.target_pos) > 0.05) {
+            const int want = static_cast<int>(std::round(p.Main() * t.escort_ratio * c_->FriendlyFighters(*front_, p.target_pos) * 2.0));
             if (want > 0) {
                 const int n = std::min(want, 4);
                 // How the faction sends them (roadmap B8, air_combat.json's fighter_plan): close escort, a sweep ahead on the
@@ -1433,7 +1482,7 @@ private:
         // Our fighters (roadmap B8): the abstract air battle's expectation, its escorts' cover and the AWACS where it
         // controls fighters.
         const AbstractAirFight air_fight(*c_->data);
-        const double fighters = air_fight.ExpectedMainLoss(p, AbstractAirFight::SetupFor(*c_->data, p, c_->awacs, w));
+        const double fighters = air_fight.ExpectedMainLoss(p, AbstractAirFight::SetupFor(*c_->data, p, c_->awacs, w, c_->fighters, p.target_pos));
         total += fighters;
         main += fighters;
         if (main_loss != nullptr) *main_loss = main;
@@ -1473,7 +1522,7 @@ private:
             if (mk == MissionKind::ArmedRecce) {
                 if (line < 0 || used_lines.count(line) > 0) continue;
                 patrol = *seen;
-                patrol.pos = c_->supply->PatrolPoint(static_cast<std::size_t>(line), front_->line);
+                patrol.pos = c_->supply->PatrolPoint(static_cast<std::size_t>(line), front_->line, c_->front_line);
                 patrol.sigma_m = 0.0;
                 e = &patrol;
             }
@@ -1525,10 +1574,11 @@ private:
                 if (mk == MissionKind::Bda || mk == MissionKind::ArmedRecce) live = 1.0;
                 if (pln.Quirk("elint_trust") > 0.0 && e->source == IntelSource::Elint) live = std::min(1.0, live + 0.3);
                 // The Pact's helicopters beyond the cover of their own air defence: worth less to risk them
-                // there (route.mode 1, the doctrine's helo_umbrella).
+                // there (route.mode 1, the doctrine's helo_umbrella). The umbrella goes forward with the target's
+                // sector's air front (F2.4: within it of the air front, not of the entry point; 0 off).
                 double umbrella = 1.0;
                 if (routed && rules_.helo_umbrella && mk == MissionKind::HeloRaid &&
-                    Dist2d(e->pos, front_->entries[ei].pos) > tune.Get("route.helo_umbrella_m")) {
+                    BeyondHeloUmbrella(e->pos, front_->entries[ei].pos, c_->air_front, tune.Get("route.helo_umbrella_m"))) {
                     umbrella = tune.Get("route.helo_beyond_umbrella");
                 }
                 const double ev = v * live * p_loc * p_deliver * effect * umbrella;

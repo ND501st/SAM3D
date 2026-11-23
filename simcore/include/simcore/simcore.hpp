@@ -61,6 +61,7 @@
 #include "simcore/country_map.hpp"
 #include "simcore/nav.hpp"
 #include "simcore/campaign.hpp"
+#include "simcore/ground_war.hpp"
 #include "simcore/solar.hpp"
 #include "simcore/scenery.hpp"
 #include "simcore/fx.hpp"

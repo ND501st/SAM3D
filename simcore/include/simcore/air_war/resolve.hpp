@@ -20,6 +20,7 @@
 
 #include "simcore/air_war/air_fight.hpp"
 #include "simcore/air_war/data.hpp"
+#include "simcore/air_war/front_line.hpp"
 #include "simcore/air_war/hot_phase.hpp"
 #include "simcore/air_war/logistics.hpp"
 #include "simcore/air_war/opportunity.hpp"
@@ -58,6 +59,11 @@ struct ResolveContext {
     std::vector<command::OwnAirZone> own_corridors;
     // The enemy's losses so far today (roadmap S5: §9.3's husbanding, read under hot_phase.mode 2).
     double losses_today = 0.0;
+    // The front's line of contact (track F, F3.3: the ground war moves it; null: the theatre front's base line, as before).
+    const LineOfContact* front_line = nullptr;
+    // Our fighters by sector as they are (track F, F4.3; AirCampaign::FighterView()): the air battle's fighter threat is
+    // the cover where it is fought. Off: the front's number, as before.
+    FighterCoverView fighters;
 };
 
 // The leg a package's fighters meet its main flights on: the one from its IP (or a helicopter's hide); 1 without one.
@@ -461,13 +467,13 @@ private:
     // The air battle over the package at `t_h` (roadmap B8): our fighters against its fighters and its strikers, the losses
     // written to each flight where it is then, with our regiment as the one that shot it down. Its draws come from a fork
     // of the package's stream (taking none from it) and the chain's keyed draws.
-    void AirBattle(Package& p, double t_h) {
+    void AirBattle(Package& p, double t_h, const Vec3& where) {
         ResolveContext& c = *c_;
         PackageRun& run = *run_;
         PackageOutcome& out = run.out;
         const AirWarData& d = *c.data;
         const AbstractAirFight fight(d);
-        const AbstractFightSetup setup = AbstractAirFight::SetupFor(d, p, c.awacs, c.weather);
+        const AbstractFightSetup setup = AbstractAirFight::SetupFor(d, p, c.awacs, c.weather, c.fighters, where);
         std::vector<int> alive(p.flights.size(), 0);
         for (std::size_t fi = 0; fi < p.flights.size(); ++fi) alive[fi] = std::max(0, p.flights[fi].count - p.flights[fi].lost);
         Rng fork = R().Fork(0xB8F16B47ull ^ static_cast<std::uint64_t>(p.id));
@@ -547,7 +553,7 @@ private:
             for (std::size_t oj = 0; oj < d.theatre.objects.size(); ++oj) {
                 const TheatreObject& def = d.theatre.objects[oj];
                 ObjectState& st = (*c.truth)[oj];
-                if (!def.defence.present || st.function <= 0.05 || def.decoy) continue;
+                if (!def.defence.present || st.function <= 0.05 || def.decoy || st.march != 0) continue;  // a unit on a move fires nothing (F4.2)
                 if (!c.skip_defence.empty() && def.id == c.skip_defence) continue;
                 if (st.missiles == 0) continue;
                 if (def.defence.max_target_mps > 0.0 && a->cruise_mps > def.defence.max_target_mps) continue;  // too fast for it
@@ -661,7 +667,7 @@ private:
         // strike flight reaches the leg they meet it on.
         if (front != nullptr && main && static_cast<int>(si) == fighter_leg && alive > 0 && !run.fought) {
             run.fought = true;
-            AirBattle(p, r1.t_h);
+            AirBattle(p, r1.t_h, r1.pos);
             alive = fl.count - fl.lost;
         }
         // The leader's nerve: on the losses so far in time.
@@ -740,7 +746,9 @@ private:
             s.watched_s = 60.0;
             s.range_m = 1e5;  // the abstract level: room for a pass
             s.moving = true;
-            s.depth_km = front != nullptr ? DistanceToLine(front->line, st.pos) / 1000.0 : 0.0;
+            // Behind our side's line of contact (its base line to the bit while nothing has moved it, F2.1).
+            s.depth_km = c.front_line != nullptr && !c.front_line->Empty() ? c.front_line->AbsDistance(st.pos) / 1000.0
+                                                 : (front != nullptr ? DistanceToLine(front->line, st.pos) / 1000.0 : 0.0);
             const C2FreeHuntDef& fh = d.faction.c2.free_hunt;
             s.free_hunt_zone = fh.from_phase >= 0 && c.phase >= fh.from_phase && s.depth_km <= fh.depth_km;
             s.night = p.part == DayPart::Night;
@@ -912,7 +920,7 @@ private:
         const double stale = tune.Get("strike.stale_miss_m");
         for (std::size_t i = 0; i < d.theatre.objects.size(); ++i) {
             const TheatreObject& o = d.theatre.objects[i];
-            if (o.kind == ObjectKind::City) continue;
+            if (o.kind == ObjectKind::City || (*c_->truth)[i].march == 2) continue;  // a unit on the road is at no place (F4.2)
             const double dist = Dist2d((*c_->truth)[i].pos, fl.aim_pos);
             const double reach = o.decoy ? tune.Get("strike.decoy_area_m") : stale;
             if (dist < reach && dist < best) {

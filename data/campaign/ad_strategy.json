@@ -1,0 +1,150 @@
+{
+  "strategy_id": "pannonia_ad_strategy_first_form",
+  "name": "Our air defence commanders' sector priorities",
+  "status": "F4.1 (22 Nov 2026): the commanders decide and order; F4.2 (22 Nov 2026): the national SAM units, the army's Kub and the radar companies move on their orders (the moves block); F4.3 the fighters by sector and F4.4 the regiment and the battery to follow. Read only at data/gameplay/air_war.json ad_strategy.mode 1 (simcore/campaign/ad_strategy.hpp).",
+  "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2, from docs/research/fronts_2026-11/our_side.md: the national PVO's object and object-zonal defence by importance (vr_lhotsky_1985 p. 38), its cover of our troops on home ground (vr_popelka_1983 p. 53), the main thrust's share (andersen_1979 p. 40)",
+  "confidence": "estimate",
+  "notes": "Each commander holds a priority per sector of the front (the theatre's sectors, F2.1): defend, take the offence, or economy. The pre-war plan is the rule table on what he holds before the war (the national objects within the enemy's reach of the border). Then, on his rhythm, when a report has reached his post since his last decision, he reads the table again on what his post holds and changes at most one sector, which goes as an order through our pipeline to the posts named in 'to'. A written priority table between national objects and our troops was not found (our_side.md open item 3): the table keeps the national objects and gives the troops the main thrust. Thresholds a commander's traits move are moved by at most trait_shift of their range (docs/fronts/README.md decision 6).",
+  "rules": {
+    "trait_shift": { "value": 0.2, "source": "game value: a commander's traits move a threshold by at most this share of its range, as the ground war's commanders (data/gameplay/ground_war.json trait_shift; docs/fronts/README.md decision 6)", "confidence": "estimate" },
+    "object_value": { "value": 0.7, "source": "game value: a national object of high importance is a theatre object of these kinds worth this much or more; the PVO defends its objects by importance (vr_lhotsky_1985 p. 38), the threshold SAM3D's", "confidence": "estimate" },
+    "object_reach_m": { "value": 30000, "source": "SAM3D estimate: an object within a day's advance of a breakthrough (30 km, mt_kurkov_tank_army p. 9) of the line as our reports put it is within the enemy's reach", "confidence": "estimate" },
+    "offence_depth_m": { "min": 10000, "max": 20000, "source": "game value: the air defence staff's estimate of the enemy's air front this far beyond the line of contact (its step, air_front.step_m 20 km, and its rounding, 5 km) is a front moved enough to ambush; a bold commander acts on the lower end", "confidence": "estimate" },
+    "offence_fresh_h": { "value": 48, "source": "game value: an estimate of the air front older than the staff's window (air_front.watch_days, two days) no longer moves him to the offence", "confidence": "estimate" },
+    "thin_cover_units": { "value": 2, "source": "game value: fewer SAM fire units than this in a sector is thin cover, below a pair that can leapfrog with one firing (fm_100_2_1_1984 p. 11-9; andersen_1979 p. 45)", "confidence": "estimate" },
+    "main_share": { "value": 0.6, "source": "andersen_1979 p. 40: the 1st Baltic Front gave 60 % of its air defence to the army making the main thrust (1944), cited in the 1979 text; the defended sectors' share together", "confidence": "medium" },
+    "offence_weight": { "value": 2, "source": "game value: the rest of the air defence shared between the offence's sectors and economy's in these weights", "confidence": "estimate" },
+    "economy_weight": { "value": 1, "source": "game value: as offence_weight", "confidence": "estimate" },
+    "methodical_above": { "value": 0.6, "source": "game value: a commander this methodical or more waits for a second report before he changes a sector (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2)", "confidence": "estimate" },
+    "rigid_above": { "value": 0.6, "source": "game value: a commander this rigid or more holds the pre-war plan one decision longer (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2)", "confidence": "estimate" },
+    "stale_h": { "value": 72, "source": "game value: a report compiled this long ago that has not reached his post is no longer waited for (newer ones supersede it); a bound on the work, not a rule of his", "confidence": "estimate" },
+    "national_kinds": {
+      "value": ["airfield", "power_plant", "substation", "dam", "refinery", "pipeline_station", "factory", "government", "broadcast", "exchange", "bridge", "rail_junction", "port", "city"],
+      "source": "SAM3D estimate: the theatre's object kinds the national PVO defends as objects (object and object-zonal defence of the country's objects, vr_lhotsky_1985 p. 38); the troops, their headquarters and depots are the troop air defence's",
+      "confidence": "estimate"
+    }
+  },
+  "commanders": [
+    {
+      "id": "sector_commander",
+      "post": "sector_cp_duty",
+      "name": "Ferenc Halasz",
+      "rank": "Colonel",
+      "role": "national",
+      "bio": "Commands the central national air defence sector from its command post; his decisions go out from there by its duty officer. A PVO officer of the old school: object by object, by the plan.",
+      "to": ["fighter_rgt_duty", "army_ad_chief", "rgt_commander"],
+      "rhythm_h": { "min": 6, "max": 12, "source": "mt_lavrinovich_mdex p. 9: the district exercise's stages of 6-8 h (the first massed strike) and 10-12 h (the regrouping), the national sector's decisions by stage", "confidence": "medium" },
+      "order_work_h": { "value": 1.0, "source": "game value: from his decision to the order sent by the command post's duty officer", "confidence": "estimate" },
+      "traits": { "boldness": 0.4, "methodical": 0.7, "creativity": 0.4, "rigidity": 0.65, "ambition": 0.5, "skepticism": 0.55, "vindictiveness": 0.3, "composure": 0.7 },
+      "source": "game value: the national sector's commander (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2: the national PVO's objects, S-75 and S-125 class units, radars and fighters); his orders to the fighter regiment's duty officer, the army's chief of air defence and the SAM regiment's commander (vr_krupicka_1984 pp. 62-64: the sharing of the sky and the fighters by the PVOS formation's commander; the SAM troops in a sector are told how it is shared there, F4.4)",
+      "confidence": "estimate"
+    },
+    {
+      "id": "army_ad_chief",
+      "post": "army_ad_chief",
+      "role": "troops",
+      "bio": "The 3rd Army's chief of air defence (data/command/chain_pannonia.json army_ad_chief): the divisions' SAM regiments and the army's own, the troops first and the army's main effort first.",
+      "to": ["div_ad_chief", "rgt_commander", "sector_cp_duty"],
+      "rhythm_h": { "min": 2, "max": 4, "source": "fm_100_2_1_1984 p. 5-14: a division's reaction time, 2-4 h, his division commanders' rhythm (data/gameplay/ground_war.json decision_times_h)", "confidence": "medium" },
+      "order_work_h": { "value": 0.5, "source": "game value: a priority given by the chief's word and sent by his staff, shorter than a division's whole planning time (fm_100_2_1_1984 p. 5-14, 1-3 h)", "confidence": "estimate" },
+      "traits": { "boldness": 0.55, "methodical": 0.55, "creativity": 0.5, "rigidity": 0.45, "ambition": 0.55, "skepticism": 0.5, "vindictiveness": 0.35, "composure": 0.65 },
+      "source": "game value: the army's chief of air defence (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 2: the army's troop air defence, the troops first); his orders to the division's chief of air defence and the SAM regiment's commander (voenizdat_osa_1991 p. 238: the regiment moves its batteries) and to the national sector's post",
+      "confidence": "estimate"
+    }
+  ],
+  "moves": {
+    "notes": "Track F's F4.2 (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 3; simcore/air_war/unit_moves.hpp): at ad_strategy.mode 1 the units of these classes move only on their commander's order, heard at their post (data/command/chain_pannonia.json's <unit>_cdr), by their class's norms, on the roads; packed, on the road and setting up they are off the air. A class's commander: national, the national sector's commander's; troops, the army's chief of air defence's. Prepared positions inside the sector stay the unit's own hops after firing (Relocate), about where its last order put it.",
+    "moves_per_review": { "value": 1, "source": "game value: the cover moves (not the withdrawals) a commander orders at one decision, so that the coverage changes a unit at a time as his priorities do (one change a decision, F4.1)", "confidence": "estimate" },
+    "spacing_m": { "value": 10000, "source": "game value: the units sent to cover one sector stand this far apart along it (an S-75 battalion's zone is some 30 km across, mt_1973_nvn pp. 10-11's moves of 30-40 km; SAM3D's spread)", "confidence": "estimate" },
+    "road_factor": { "value": 1.3, "source": "game value: without a way on the roads (no country map, an end far from them) the march is the straight line times this, the usual ratio of a road's length to the crow's flight on rolling country", "confidence": "estimate" },
+    "no_road_near_m": { "value": 6000, "source": "game value: a way off the country's roads (data/maps/pannonia.json draws its main roads only) up to this long is driven across country at the class's cross-country speed; a longer one is taken as the local roads the map does not draw, road_factor times longer at the road speed", "confidence": "estimate" },
+    "detour_max": { "value": 3, "source": "game value: a way on the roads longer than this many straight lines (round a reservoir, a river with no bridge on the country's map) is not taken; the march goes the straight way (road_factor), as on local roads and ferries", "confidence": "estimate" },
+    "classes": [
+      {
+        "id": "s75_class",
+        "name": "Fixed SAM battalion (S-75, S-125)",
+        "systems": ["s75", "s75m2", "s125", "s125m1"],
+        "commander": "national",
+        "pack_h": { "value": 2.5, "source": "mt_1973_nvn pp. 10-11: the DRV's SAM battalions took 2.5 hours to pack up for a move", "confidence": "medium" },
+        "setup_h": { "value": 3.0, "source": "mt_1973_nvn pp. 10-11: 3 hours to set up at the new site", "confidence": "medium" },
+        "checks_h": { "min": 2.0, "max": 2.5, "source": "mt_1973_nvn pp. 10-11: 2-2.5 hours to check and adjust the equipment", "confidence": "medium" },
+        "road_kmh": { "value": 7.4, "source": "derived from mt_1973_nvn pp. 10-11: a move of 30-40 km took 10-15 hours, of which 7.5-8 hours packing, setting up and checks; 35 km in the middle's 4.75 hours on the road", "confidence": "medium" },
+        "night_kmh": { "value": 7.4, "source": "mt_1973_nvn pp. 10-11: the moves were made by night, so the derived speed is the night's", "confidence": "medium" },
+        "cross_kmh": { "value": 5.0, "source": "fm_100_2_1_1984 p. 5-2: columns cross-country at 5-15 km/h; a towed battalion at the lower bound (SAM3D's choice)", "confidence": "low" },
+        "max_moves_day": { "value": 3, "source": "mt_rozhdestvenskiy_depth pp. 6-7: long- and medium-range SAM units move whole, two or three times a day at most", "confidence": "high" },
+        "leapfrog": false,
+        "cover": true,
+        "offence": false,
+        "withdraw_within_m": { "value": 20000, "source": "game value: a battalion is ordered back once the line as reported is this close (its 2.5 h of packing at the enemy's pace of 20-30 km a day after a breakthrough, mt_kurkov_tank_army p. 9, with the reports' delay)", "confidence": "estimate" },
+        "withdraw_to_m": { "value": 40000, "source": "game value: back to a position this far behind the line as reported, a day's advance and more (mt_kurkov_tank_army p. 9)", "confidence": "estimate" },
+        "forward_behind_m": { "value": 30000, "source": "game value: a battalion sent to cover a defended sector stands this far behind the line as reported, out of the artillery's reach (15-20 km, barbeau_1985_sams pp. 14, 23) with a margin", "confidence": "estimate" },
+        "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 3; docs/research/fronts_2026-11/air_ground_cases.md f-32",
+        "confidence": "medium",
+        "notes": "The S-125 moves by the S-75's norms: the period's account gives one battalion's times, for the towed or semi-fixed systems; the S-125 was quicker to pack in practice, which no source of ours gives."
+      },
+      {
+        "id": "kub",
+        "name": "Kub battery (self-propelled)",
+        "systems": ["kub"],
+        "commander": "troops",
+        "pack_h": { "min": 0.083, "max": 0.25, "source": "mt_rozhdestvenskiy_depth p. 8: 5-15 minutes from the march to readiness (no system named; used for the self-propelled units only)", "confidence": "medium" },
+        "setup_h": { "min": 0.083, "max": 0.25, "source": "mt_rozhdestvenskiy_depth p. 8: 5-15 minutes to readiness", "confidence": "medium" },
+        "checks_h": { "value": 0, "source": "mt_rozhdestvenskiy_depth p. 8: readiness within the 5-15 minutes, no separate checks", "confidence": "medium" },
+        "road_kmh": { "min": 20, "max": 30, "source": "fm_100_2_1_1984 p. 5-2: columns on roads by day at 20-30 km/h (NATO's view)", "confidence": "medium" },
+        "night_kmh": { "min": 15, "max": 20, "source": "fm_100_2_1_1984 p. 5-2: on roads by night at 15-20 km/h", "confidence": "medium" },
+        "cross_kmh": { "min": 5, "max": 15, "source": "fm_100_2_1_1984 p. 5-2: cross-country at 5-15 km/h", "confidence": "medium" },
+        "max_moves_day": { "value": 2, "source": "mt_rozhdestvenskiy_depth pp. 6-7: an army's air defence makes no more than two moves a day", "confidence": "high" },
+        "leapfrog": true,
+        "cover": true,
+        "offence": true,
+        "withdraw_within_m": { "value": 8000, "source": "game value: F3.7's escape distance (docs/fronts/03_GROUND_WAR.md section 6), the line this close", "confidence": "estimate" },
+        "withdraw_to_m": { "value": 20000, "source": "game value: back out of the artillery's reach (15-20 km, barbeau_1985_sams pp. 14, 23)", "confidence": "estimate" },
+        "forward_behind_m": { "value": 12000, "source": "game value: sent forward to a sector for the offence or its defence, this far behind the line as reported (the troops' cover just out of the guns' reach)", "confidence": "estimate" },
+        "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 3; docs/research/fronts_2026-11/our_side.md",
+        "confidence": "medium",
+        "notes": "Leapfrog (fm_100_2_1_1984 p. 11-9; andersen_1979 p. 45): a Kub battery is not ordered to move while another of its class in its sector is on a move."
+      },
+      {
+        "id": "radar_company",
+        "name": "Radar company",
+        "kinds": ["ew_radar"],
+        "except": ["kesmark_p40"],
+        "commander": "national",
+        "pack_h": { "value": 2.0, "source": "SAM3D estimate: a radar company packs its P-19 or P-37 and its height-finder in about two hours (none of our sources gives the time; mt_1973_nvn pp. 10-11's companies moved 15-20 km in a night)", "confidence": "estimate" },
+        "setup_h": { "value": 2.0, "source": "SAM3D estimate, as pack_h", "confidence": "estimate" },
+        "checks_h": { "value": 0.5, "source": "SAM3D estimate: the set's checks and orientation after setting up", "confidence": "estimate" },
+        "road_kmh": { "value": 15, "source": "game value: within the night speeds of fm_100_2_1_1984 p. 5-2 (15-20 km/h); 15-20 km and the pack and setup fit one night, as mt_1973_nvn pp. 10-11's companies moved", "confidence": "estimate" },
+        "night_kmh": { "value": 15, "source": "game value, as road_kmh", "confidence": "estimate" },
+        "cross_kmh": { "value": 5, "source": "fm_100_2_1_1984 p. 5-2: cross-country at 5-15 km/h, the lower bound for the trailers", "confidence": "low" },
+        "max_moves_day": { "value": 2, "source": "game value: a company moves at most twice a day (its pack and setup take half a day's work; the army's rule of two moves, mt_rozhdestvenskiy_depth pp. 6-7)", "confidence": "estimate" },
+        "leapfrog": false,
+        "cover": false,
+        "offence": false,
+        "withdraw_within_m": { "value": 15000, "source": "game value: a radar company is ordered back once the line as reported is this close", "confidence": "estimate" },
+        "withdraw_to_m": { "value": 30000, "source": "game value: back this far behind the line as reported (a second line 50-70 km behind the first, mt_rozhdestvenskiy_depth p. 6, is the radar field's depth; a company keeps its place in it)", "confidence": "estimate" },
+        "forward_behind_m": { "value": 30000, "source": "game value, as withdraw_to_m (radars are not sent to cover sectors)", "confidence": "estimate" },
+        "source": "docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 3",
+        "confidence": "estimate",
+        "notes": "The regiment's P-40 (kesmark_p40) moves with the regiment, not on the sector's orders."
+      }
+    ]
+  },
+  "fighters": {
+    "notes": "Track F's F4.3 (docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5; simcore/air_war/unit_moves.hpp FighterCoverRules, campaign/ad_strategy.hpp, air_war/campaign.hpp FighterCoverAt): at ad_strategy.mode 1 the front's fighters (the theatre front's friendly_fighters) are shared over its sectors by the national sector's commander's priorities as the fighter regiment's duty officer holds them (campaign::PriorityShares: the defended sectors 60 % together, the rest by the offence's and economy's weights), the sum over the sectors kept; each change heard at the post through our pipeline.",
+    "source": "vr_krupicka_1984 pp. 62-64 (the PVOS formation's commander sets the sharing of the sky and puts the fighters to it); andersen_1979 pp. 40, 45 (60 % of the air defence to the main thrust; fighters fill the gap while SAMs move); docs/fronts/04_AIR_DEFENCE_STRATEGY.md section 5",
+    "confidence": "low",
+    "post": "fighter_rgt_duty",
+    "commander": "sector_commander",
+    "prewar_held": true,
+    "cap": {
+      "value": 1.0,
+      "source": "game value: a sector's fighter threat is a share of the most our fighters can do there (the front's friendly_fighters is 0..1); a sector given more than that passes the excess to the others",
+      "confidence": "estimate"
+    },
+    "belief_learn": {
+      "value": 0.5,
+      "source": "game value: the enemy's staff believes our fighters in a sector at the front's number until its packages fly there; each package's debrief moves its belief half the way to the cover it met (docs/air_battle/08_OUR_FIGHTERS.md section 11: the escort sized on the belief from what its pilots reported)",
+      "confidence": "estimate"
+    }
+  }
+}

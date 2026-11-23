@@ -57,7 +57,10 @@ enum class FactKind {
     Rumour,
     Mail,
     Intercept,    // what our radio intercept posts heard of the enemy's air radio and read (roadmap B9, command/intercept.hpp)
-    OwnAirNotice  // a notice of our own flights, coded by the talk table at each hop (roadmap B10, command/own_air.hpp)
+    OwnAirNotice,  // a notice of our own flights, coded by the talk table at each hop (roadmap B10, command/own_air.hpp)
+    AirFront,      // the army's air defence staff's conclusion on the enemy's air front in a sector (track F, F2.5,
+                   // command/air_front_watch.hpp)
+    Situation      // our units' situation reports, and the army's summary of them (track F, F3.8, command/ground_feed.hpp)
 };
 
 inline const char* FactKindName(FactKind k) {
@@ -78,6 +81,8 @@ inline const char* FactKindName(FactKind k) {
         case FactKind::Mail: return "mail";
         case FactKind::Intercept: return "intercept";
         case FactKind::OwnAirNotice: return "own_air_notice";
+        case FactKind::AirFront: return "air_front";
+        case FactKind::Situation: return "situation";
     }
     return "?";
 }
@@ -93,6 +98,8 @@ struct Fact {
     std::string subject;                 // what it is about (a raid's index, an object, an officer)
     std::string audience;                // the tree it is for ("" everyone)
     int need_level = 3;                  // down to this level
+    std::vector<std::string> to;         // when not empty: for these posts alone (a report's addressees: audience and
+                                         // need_level are not read); the others along its way only pass it on
     int precedence = 0;                  // 0 routine, 1 priority, 2 air raid
     bool document = false;               // a paper: its full text goes by hand (or teleprinter)
     bool broadcast = false;              // the state radio's next bulletin, to everyone it is for
@@ -222,6 +229,7 @@ public:
         data_ = data;
         seed_ = seed;
         start_hour_ = start_hour;
+        ++revision_;
         facts_.clear();
         states_.clear();
         dangers_.clear();
@@ -260,6 +268,7 @@ public:
         if (it != by_key_.end()) return it->second;
         facts_.push_back(f);
         states_.emplace_back();
+        ++revision_;
         const int i = static_cast<int>(facts_.size()) - 1;
         by_key_[f.key] = i;
         return i;
@@ -500,6 +509,7 @@ public:
 
     // Everyone's knowledge up to campaign hour h. Call it only once every input known by h has been added.
     void AdvanceTo(double h) {
+        ++revision_;
         for (std::size_t i = 0; i < facts_.size(); ++i) Run(static_cast<int>(i), states_[i], h);
         now_h_ = std::max(now_h_, h);
     }
@@ -507,6 +517,9 @@ public:
     // ---------------------------------------------------------------- what people know
 
     double Now() const { return now_h_; }
+    // Counts every change to what anyone could know (a fact added, the net advanced, a fact played again): what a cache of
+    // a post's picture (command/situation_map.hpp) compares to know it is still the post's.
+    std::uint64_t Revision() const { return revision_; }
     double StartHour() const { return start_hour_; }
     // The sun's night instead of the fixed 20:00-06:00 (roadmap R7, light.hpp): the couriers' night speed by the sky of
     // the session this net runs in. `clock`'s day is the day of this net's hour 0; its start hour is taken as this net's.
@@ -773,6 +786,7 @@ private:
     int in_person_ = -1;
     std::vector<int> home_;
     std::vector<std::vector<Edge>> edges_;
+    std::uint64_t revision_ = 0;
     std::vector<Fact> facts_;
     mutable std::vector<FactState> states_;
     std::map<std::string, int> by_key_;
@@ -788,6 +802,7 @@ private:
     // A fact played again from its start (a telling or a report came in): deterministic, so all that was already
     // decided comes out the same, with the new input in its place.
     void Replay(int fact) {
+        ++revision_;
         if (fact < 0 || static_cast<std::size_t>(fact) >= states_.size()) return;
         states_[static_cast<std::size_t>(fact)] = FactState();
         if (now_h_ > -1e17) Run(fact, states_[static_cast<std::size_t>(fact)], now_h_);
@@ -1242,6 +1257,7 @@ private:
 
     bool Wants(const Fact& f, std::size_t i) const {
         const Position& p = data_.positions[i];
+        if (!f.to.empty()) return std::find(f.to.begin(), f.to.end(), p.id) != f.to.end();
         if (p.level > f.need_level) return false;
         return f.audience.empty() || data_.InSubtree(p.id, f.audience);
     }

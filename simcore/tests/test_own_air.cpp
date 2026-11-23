@@ -995,3 +995,31 @@ SC_TEST("own air S1: a save keeps its own_air mode; one made before S1 loads wit
     SC_EXPECT(before.Data().tuning.Get("own_air.mode") == 0.0);
     SC_EXPECT(before.OwnCorridors().empty());
 }
+
+SC_TEST("own air (F4.3): the sky shared by sector by its priority; a crew holds fire above the split only once told its sector is one zone") {
+    const OwnAirDef d = Rules();
+    SC_EXPECT(d.sky.present);
+    SC_EXPECT_NEAR(d.sky.min_sector_deg, 60.0, 1e-12);  // vr_krupicka_1984 p. 62
+    SC_EXPECT(SharingFor(d.sky, "defend") == CooperationMethod::ByZones);
+    SC_EXPECT(SharingFor(d.sky, "offence") == CooperationMethod::OneZone && SharingFor(d.sky, "economy") == CooperationMethod::OneZone);
+    SC_EXPECT(SharingFor(SkySharingDef(), "economy") == CooperationMethod::ByZones);  // without the block: by zones
+    // A crew's plan by zones, no corridors: a silent track high above is free to engage.
+    CooperationPlan plan;
+    plan.present = true;
+    TrackSeen high;
+    high.alt_m = 8000.0;
+    high.clock_h = 10.0;
+    TrackSeen low = high;
+    low.alt_m = 2000.0;
+    SC_EXPECT(JudgeTrack(high, {}, plan, 0.0, 0.0) == OwnAirCall::Free);
+    // Told its sector is one zone shared by height: the fighters above the split (the cooperation's 5,000 m), held there.
+    const CooperationPlan told = TellSharing(plan, SharingFor(d.sky, "economy"), d.coop.split_height_m);
+    SC_EXPECT(told.method == CooperationMethod::OneZone && told.version == plan.version + 1);
+    SC_EXPECT_NEAR(told.split_height_m, d.coop.split_height_m, 1e-12);
+    SC_EXPECT(JudgeTrack(high, {}, told, 0.0, 0.0) == OwnAirCall::Hold && JudgeTrack(low, {}, told, 0.0, 0.0) == OwnAirCall::Free);
+    // Told again the same: nothing changes; told by zones (the sector defended): free again.
+    SC_EXPECT(TellSharing(told, CooperationMethod::OneZone, 9000.0).version == told.version);
+    const CooperationPlan zones = TellSharing(told, SharingFor(d.sky, "defend"), d.coop.split_height_m);
+    SC_EXPECT(zones.method == CooperationMethod::ByZones && zones.version == told.version + 1);
+    SC_EXPECT(JudgeTrack(high, {}, zones, 0.0, 0.0) == OwnAirCall::Free);
+}

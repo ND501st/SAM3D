@@ -1,0 +1,151 @@
+{
+  "ground_id": "warsaw_pact",
+  "faction": "warsaw_pact",
+  "name": "The Warsaw Pact's ground forces against Pannonia: a combined arms army of the front",
+  "status": "F3.1 (21 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md section 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "source": "the army's make-up from fm_100_2_1_1984 pp. 4-4 to 4-7 (two to four motor rifle and one or two tank divisions); the divisions' organisation as NATO saw it (fm100_2_3, organisation only), their numbers placeholders; doctrine from fm_100_2_1_1984, reznichenko_1984, mt_kurkov_tank_army, mt_stashek_losses and mt_novoselov_replacement (docs/research/fronts_2026-11/pact_ground.md); the invasion of Pannonia is the game's fiction and its plan a SAM3D estimate",
+  "confidence": "estimate",
+  "notes": "Units, names and numbers are placeholders as the factions' aircraft are. Equipment types are the strength weights' ids (data/gameplay/ground_war.json); they have no basic models yet (F5.2). Every place is the country map's (place_map, F1): garrisons, routes and objectives name its settlements, landmarks and sites, and the loader refuses one it lacks. Each axis names the sector of the front (the theatre's, F2.1) it attacks in.",
+  "place_map": "maps/pannonia.json",
+  "theatre": "air_war/theatre_pannonia_nation.json",
+  "oob": {
+    "oob_id": "pact_army",
+    "name": "The combined arms army of the Northern Group of Forces",
+    "source": "fm_100_2_1_1984 pp. 4-4 to 4-7 (an army of two to four motor rifle and one or two tank divisions); the regiments and their equipment of the order of the NATO view (fm100_2_3), numbers placeholders",
+    "confidence": "estimate",
+    "notes": "Three motor rifle divisions and a tank division, each of four manoeuvre regiments and an artillery regiment; the division's own troops (its independent tank battalion, reconnaissance, engineers, signals and rear) on the division itself. Garrisons are the assembly areas before the war.",
+    "services": [
+      { "id": "ground_forces", "name": "The ground forces of the Northern Group of Forces" }
+    ],
+    "units": [
+      { "id": "pact_army", "name": "The combined arms army", "service": "ground_forces", "kind": "army", "garrison": "pact_assembly_east",
+        "equipment": { "2s3": 48, "bm21": 36 }, "personnel": { "officers": 600, "ncos": 700, "conscripts": 5200, "basis": "estimate: the army's artillery brigade, rocket and support troops" } },
+
+      { "id": "pact_mrd_35", "name": "35th Motor Rifle Division", "service": "ground_forces", "kind": "division", "parent": "pact_army", "garrison": "pact_assembly_east",
+        "equipment": { "t72": 51 }, "personnel": { "officers": 300, "ncos": 300, "conscripts": 2400, "basis": "estimate: the division's own troops and its independent tank battalion" } },
+      { "id": "pact_mrr_35_1", "name": "101st Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_35",
+        "equipment": { "t72": 40, "bmp2": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_mrr_35_2", "name": "102nd Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_35",
+        "equipment": { "t72": 40, "bmp1": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_mrr_35_3", "name": "103rd Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_35",
+        "equipment": { "t72": 40, "btr70": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_tr_35", "name": "104th Tank Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_35",
+        "equipment": { "t72": 94, "bmp1": 45, "2s1": 18 }, "personnel": { "officers": 120, "ncos": 140, "conscripts": 1340, "basis": "estimate" } },
+      { "id": "pact_ar_35", "name": "105th Artillery Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_35",
+        "equipment": { "2s3": 36, "bm21": 18 }, "personnel": { "officers": 100, "ncos": 120, "conscripts": 1080, "basis": "estimate" } },
+
+      { "id": "pact_mrd_39", "name": "39th Motor Rifle Division", "service": "ground_forces", "kind": "division", "parent": "pact_army", "garrison": "pact_assembly_east",
+        "equipment": { "t72": 51 }, "personnel": { "officers": 300, "ncos": 300, "conscripts": 2400, "basis": "estimate: the division's own troops and its independent tank battalion" } },
+      { "id": "pact_mrr_39_1", "name": "117th Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_39",
+        "equipment": { "t72": 40, "bmp2": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_mrr_39_2", "name": "118th Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_39",
+        "equipment": { "t72": 40, "bmp1": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_mrr_39_3", "name": "119th Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_39",
+        "equipment": { "t72": 40, "btr70": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_tr_39", "name": "120th Tank Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_39",
+        "equipment": { "t72": 94, "bmp1": 45, "2s1": 18 }, "personnel": { "officers": 120, "ncos": 140, "conscripts": 1340, "basis": "estimate" } },
+      { "id": "pact_ar_39", "name": "121st Artillery Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_39",
+        "equipment": { "2s3": 36, "bm21": 18 }, "personnel": { "officers": 100, "ncos": 120, "conscripts": 1080, "basis": "estimate" } },
+
+      { "id": "pact_mrd_57", "name": "57th Motor Rifle Division", "service": "ground_forces", "kind": "division", "parent": "pact_army", "garrison": "pact_assembly_rava",
+        "equipment": { "t64": 51 }, "personnel": { "officers": 300, "ncos": 300, "conscripts": 2400, "basis": "estimate: the division's own troops and its independent tank battalion" } },
+      { "id": "pact_mrr_57_1", "name": "173rd Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_57",
+        "equipment": { "t64": 40, "bmp1": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_mrr_57_2", "name": "174th Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_57",
+        "equipment": { "t64": 40, "bmp1": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_mrr_57_3", "name": "175th Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_57",
+        "equipment": { "t64": 40, "btr70": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_tr_57", "name": "176th Tank Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_57",
+        "equipment": { "t64": 94, "bmp1": 45, "2s1": 18 }, "personnel": { "officers": 120, "ncos": 140, "conscripts": 1340, "basis": "estimate" } },
+      { "id": "pact_ar_57", "name": "177th Artillery Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_mrd_57",
+        "equipment": { "2s3": 36, "bm21": 18 }, "personnel": { "officers": 100, "ncos": 120, "conscripts": 1080, "basis": "estimate" } },
+
+      { "id": "pact_td_9", "name": "9th Tank Division", "service": "ground_forces", "kind": "division", "parent": "pact_army", "garrison": "pact_assembly_east",
+        "equipment": {}, "personnel": { "officers": 280, "ncos": 280, "conscripts": 2240, "basis": "estimate: the division's own troops" } },
+      { "id": "pact_tr_9_1", "name": "61st Tank Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_td_9",
+        "equipment": { "t72": 94, "bmp1": 45, "2s1": 18 }, "personnel": { "officers": 120, "ncos": 140, "conscripts": 1340, "basis": "estimate" } },
+      { "id": "pact_tr_9_2", "name": "62nd Tank Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_td_9",
+        "equipment": { "t72": 94, "bmp1": 45, "2s1": 18 }, "personnel": { "officers": 120, "ncos": 140, "conscripts": 1340, "basis": "estimate" } },
+      { "id": "pact_tr_9_3", "name": "63rd Tank Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_td_9",
+        "equipment": { "t72": 94, "bmp1": 45, "2s1": 18 }, "personnel": { "officers": 120, "ncos": 140, "conscripts": 1340, "basis": "estimate" } },
+      { "id": "pact_mrr_9", "name": "64th Motor Rifle Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_td_9",
+        "equipment": { "t72": 40, "bmp2": 140, "2s1": 18 }, "personnel": { "officers": 180, "ncos": 200, "conscripts": 2020, "basis": "estimate" } },
+      { "id": "pact_ar_9", "name": "65th Artillery Regiment", "service": "ground_forces", "kind": "regiment", "parent": "pact_td_9",
+        "equipment": { "2s3": 36, "bm21": 18 }, "personnel": { "officers": 100, "ncos": 120, "conscripts": 1080, "basis": "estimate" } }
+    ]
+  },
+  "commanders": {
+    "pool": {
+      "ranks": { "army": "General-Lieutenant", "division": "General-Major", "brigade": "Colonel", "regiment": "Colonel", "battalion": "Major" },
+      "first_names": ["Aleksandr", "Sergei", "Vladimir", "Nikolai", "Yuri", "Mikhail", "Andrei", "Igor", "Dmitri", "Valery", "Gennady", "Viktor", "Oleg"],
+      "last_names": ["Kuznetsov", "Orlov", "Gromov", "Zaitsev", "Belov", "Tarasov", "Komarov", "Medvedev", "Yakovlev", "Frolov", "Sorokin", "Zhukov", "Gusev", "Rodionov"],
+      "backgrounds": ["Frunze Academy", "General Staff Academy", "tank troops", "motor rifle troops", "Afghanistan, the 40th Army"],
+      "trait_mean": { "boldness": 0.55, "methodical": 0.65, "creativity": 0.3, "rigidity": 0.75, "ambition": 0.6, "skepticism": 0.4, "vindictiveness": 0.45, "composure": 0.65 },
+      "trait_sd": 0.15,
+      "source": "game value: the Pact's commanders drawn as its air officers are (data/air_war/faction_warsaw_pact.json officer_pool); rigid, by the norms, little flexibility below regiment (fm_100_2_1_1984 ch. 2)",
+      "confidence": "estimate"
+    },
+    "authored": [
+      { "id": "pact_army_cdr", "name": "Pavel Gromov", "unit": "pact_army", "age": 54, "background": "Tank troops, Frunze and General Staff Academies",
+        "bio": "Commanded a tank division in the Carpathian district. Plans to the hour and holds his divisions to the norms.",
+        "traits": { "boldness": 0.6, "methodical": 0.75, "creativity": 0.3, "rigidity": 0.8, "ambition": 0.7, "skepticism": 0.4, "vindictiveness": 0.4, "composure": 0.7 } },
+      { "id": "pact_mrd_35_cdr", "name": "Oleg Tarasov", "unit": "pact_mrd_35", "age": 47, "background": "Motor rifle troops, Afghanistan",
+        "bio": "Came back from Afghanistan with a taste for night attacks and little patience for staff work.",
+        "traits": { "boldness": 0.75, "methodical": 0.45, "creativity": 0.55, "rigidity": 0.5, "ambition": 0.7, "skepticism": 0.5, "vindictiveness": 0.5, "composure": 0.6 } },
+      { "id": "pact_td_9_cdr", "name": "Viktor Belov", "unit": "pact_td_9", "age": 49, "background": "Tank troops",
+        "bio": "The army's exploitation force; waits to be committed and wants it to be on the axis that moves.",
+        "traits": { "boldness": 0.65, "methodical": 0.6, "creativity": 0.35, "rigidity": 0.7, "ambition": 0.75, "skepticism": 0.35, "vindictiveness": 0.4, "composure": 0.7 } }
+    ]
+  },
+  "doctrine": {
+    "source": "docs/fronts/03_GROUND_WAR.md section 5.2 from docs/research/fronts_2026-11/pact_ground.md",
+    "confidence": "medium",
+    "attack_ratio": { "value": 3.0, "source": "fm_100_2_1_1984 pp. 2-10 to 2-11: about 3:1 in combat power, a minimum 3:1 at each level of attack", "confidence": "medium" },
+    "breakthrough_ratio": { "min": 3.0, "max": 5.0, "source": "reznichenko_1984 p. 79: WWII densities hardly possible now; local massing capped at 3-5:1 (pact_ground.md section 4)", "confidence": "medium" },
+    "withdraw_needs_order": { "value": true, "source": "reznichenko_1984 pp. 49, 152: only with the senior commander's permission", "confidence": "high" },
+    "counterattack_by_senior": { "value": true, "source": "reznichenko_1984 pp. 177-179; fm_100_2_1_1984 p. 6-3: the next higher commander's", "confidence": "medium" },
+    "second_echelon_to_success": { "value": true, "source": "fm_100_2_1_1984 p. 2-11: second echelons reinforce success, not failure", "confidence": "high" },
+    "echelons_against_deep_defence": { "value": 2, "source": "fm_100_2_1_1984 pp. 2-10 to 2-11: two echelons against a defence in depth, one and a reserve against a shallow one", "confidence": "high" },
+    "reserve_share": { "value": 0.111, "source": "fm_100_2_1_1984 p. 2-11: a combined-arms reserve of about a ninth of the force", "confidence": "high" },
+    "effectiveness": {
+      "kind": "lines",
+      "degraded_below": { "value": 0.667, "source": "mt_novoselov_replacement p. 9: effective status kept at two thirds of authorised strength; below it degraded and replaced first", "confidence": "medium" },
+      "ineffective_below": { "value": 0.5, "source": "mt_stashek_losses p. 7: still effective under 40-50% losses; below half ineffective, withdrawn and re-formed", "confidence": "high" },
+      "hq_hit_ineffective_below": { "value": 0.75, "source": "mt_stashek_losses p. 7: ineffective at about 24-25% losses when command, rockets and artillery are hit", "confidence": "medium" }
+    },
+    "advance_caps_km_per_day": {
+      "breakthrough": { "value": 30, "source": "mt_kurkov_tank_army p. 9; fm_100_2_1_1984 p. 4-4: 25-30 km a day breaking through a defence", "confidence": "high" },
+      "depth": { "value": 50, "source": "mt_kurkov_tank_army p. 9: 40-50 km a day in the operational depth", "confidence": "high" },
+      "broken": { "value": 70, "source": "mt_1967_volkov_nonnuclear p. 13-14: 50-70 km a day, only against a broken enemy (pact_ground.md section 4)", "confidence": "medium" }
+    },
+    "frontages_km": [
+      { "echelon": "army", "posture": "attack", "width_min": 60, "width_max": 100, "source": "fm_100_2_1_1984 pp. 4-4, 4-6", "confidence": "medium" },
+      { "echelon": "division", "posture": "attack", "width_min": 15, "width_max": 25, "source": "fm_100_2_1_1984 pp. 5-18 to 5-20: the division's attack zone", "confidence": "medium" },
+      { "echelon": "division", "posture": "breakthrough", "width_min": 6, "width_max": 10, "source": "fm_100_2_1_1984 pp. 5-18 to 5-21: a breakthrough on 6-10 km", "confidence": "medium" },
+      { "echelon": "regiment", "posture": "attack", "width_min": 3, "width_max": 8, "source": "fm_100_2_1_1984 p. 5-21: typically 4-5", "confidence": "medium" },
+      { "echelon": "battalion", "posture": "attack", "width_min": 1, "width_max": 2, "source": "fm_100_2_1_1984 p. 5-24", "confidence": "medium" },
+      { "echelon": "division", "posture": "defence", "width_min": 20, "width_max": 30, "depth_min": 15, "depth_max": 20, "source": "fm_100_2_1_1984 p. 6-5", "confidence": "high" },
+      { "echelon": "regiment", "posture": "defence", "width_min": 10, "width_max": 15, "depth_min": 7, "depth_max": 10, "source": "fm_100_2_1_1984 pp. 6-7 to 6-8", "confidence": "medium" }
+    ]
+  },
+  "plan": {
+    "kind": "offensive",
+    "start_after_h": { "value": 2, "source": "SAM3D estimate: the owner's open decision 3 taken as proposed (docs/fronts/README.md): the Pact's ground offensive opens with its air operation, two hours after the first massed blow", "confidence": "estimate" },
+    "source": "SAM3D estimate: the axes and objectives are the game's fiction on the country map; the depths by fm_100_2_1_1984 fig. p. 4-4 (the division's day 25-30 km; the army's immediate objective 100-150 km in 3-4 days)",
+    "confidence": "estimate",
+    "notes": "The main thrust down the north-eastern road to Mezovar and the capital; and a supporting attack down the Rava gorge past the dam to Dravec. The tank division follows the main thrust as the second echelon and goes to the axis that moves.",
+    "objectives": [
+      { "id": "dravec", "name": "Dravec and the dam", "at": "dravec", "by_day": 1, "notes": "The supporting attack's day objective (25-30 km)." },
+      { "id": "mezovar", "name": "Mezovar and the Tisava crossing", "at": "mezovar", "by_day": 2, "notes": "The main thrust's first divisions' objective." },
+      { "id": "capital", "name": "The capital", "at": "capital", "by_day": 4, "notes": "The army's immediate objective, about 100 km in." },
+      { "id": "kesmark", "name": "Kesmark and the Rava bridges", "at": "kesmark", "by_day": 7, "notes": "The army's subsequent objective." }
+    ],
+    "axes": [
+      { "id": "main", "name": "The north-eastern road", "main": true, "route": ["pact_assembly_east", "bx_road_ne", "mezovar", "capital"],
+        "first_echelon": ["pact_mrd_35", "pact_mrd_39"], "second_echelon": ["pact_td_9"], "objective": "capital", "sector": "tisava" },
+      { "id": "rava", "name": "The Rava gorge", "main": false, "route": ["pact_assembly_rava", "pact_rava_gorge", "rava_dam", "dravec", "capital"],
+        "first_echelon": ["pact_mrd_57"], "second_echelon": [], "objective": "dravec", "sector": "rava_reservoir" }
+    ],
+    "reserve": []
+  }
+}
