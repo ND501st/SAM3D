@@ -512,7 +512,8 @@ covering force and the helicopters' broken rule are still not reached on the nat
   24-25 % losses when command, rockets and artillery are hit) is loaded but no rule reads it, because the ground war has no
   measure of a formation's command or artillery being hit. With it, 1 of our 6 formations (Pact) and 3 of 9 (NATO) pass
   under 75 % at some hour and could be withdrawn if their command and artillery were hit. Wiring it needs a model of the hit (which of the air war's troops objects are a division's
-  command post and artillery, and when a strike counts): a design task for the owner, not a mis-applied rule.
+  command post and artillery, and when a strike counts): a design task for the owner, not a mis-applied rule. (F8.2
+  wired it: As built: F8.2 below.)
 
 **The counterattack, re-argued.** Our free force (the army reserve, the 3rd Army's tank brigade 55 km back, with every
 other free formation) comes to 0.28 of the enemy at a Pact penetration's tip at best (0.29 in the 245 h a war its
@@ -698,3 +699,115 @@ exit 0. The full test binary passes (1432 tests). `check_citations.py`: 161 data
   town, the posture or the dark. A design call.
 - The division has no object in the theatre, so the enemy's air cannot find or strike it.
 - The withdrawals band: F8.2.
+
+## As built: F8.2 (24 Nov 2026)
+
+If a formation's command post or artillery has been hit, it is judged against its doctrine's three-quarters line
+(`hq_hit_ineffective_below`, 0.75, `mt_stashek_losses` p. 7) instead of its commander's ask line. This lasts while its
+own staff knows of the hit, and it wears off as command is restored. The rule is behind `ground_war.json`'s new
+`"command_hit"` block. The design and the tests are in `03_GROUND_WAR.md`, As built: F8.2. No band's limits moved and no
+existing game value moved. Two new game values are labelled as such: `support_hit_below` (0.85) and
+`artillery_restore_h` (12-24 h).
+
+**The bands** (`fronts_bench --history`, 14 days x 3 seeds). Before is F8.2's code on a copy of the data without the
+block, which gives F8.1's published values to the digit; after is F8.2 with the block:
+
+| Band | Range | Pact before → now | NATO before → now | Status |
+|---|---|---|---|---|
+| Our formation's day in contact | 1-8 % | 6.93 → 6.93 | 4.98 → 4.98 | green |
+| The enemy's formation's day in contact | 1-6.6 % | 1.57 → 1.57 | 2.33 → 2.33 | green |
+| Our army's day | 0.2-1.2 % | 1.21 → 1.21 | 2.47 → 2.47 | argued, held (F6.1's reason) |
+| The enemy's army's day | 0.2-1.2 % | 0.35 → 0.35 | 1.80 → 1.80 | Pact green; NATO argued, held |
+| Attacker's losses over the defender's | 0.5-2.5 | 1.34 → 1.34 | 2.59 → 2.59 | Pact green; NATO argued, held |
+| An axis's day of attack | Pact 5-30, NATO 2.8-30 km | 13.8 → 13.8 | 9.3 → 9.3 | green |
+| The fastest day | Pact ≤ 50, NATO ≤ 80 km | 23.1 → 23.1 | 30.0 → 30.0 | green |
+| Advance under the stall ratio | ≤ 0.5 km | 0 → 0 | 0 → 0 | green |
+| The security zone to the main zone | 3-30 h | 29 → 29 | 36 → 36 | Pact green; NATO argued, held |
+| The enemy's axes at or near the objective | 0.4-0.9 | 1.00 → 1.00 | 0.50 → 0.50 | Pact argued, held; NATO green |
+| **Our formations a day in the fight, withdrawn** | 0.05-0.6 | **0 → 0** | **0 → 0** | **argued, re-argued below** |
+| Wars penetrated or held: we counterattack | 0.3-1.0 | 1.00 → 1.00 | 1.00 → 1.00 | green |
+| The air's share of our battle losses | 5-25 % | 14.98 → 14.98 | 7.59 → 7.59 | green |
+| A strike on troops, of its division | 0.2-3 % | 1.05 → 1.05 | 1.38 → 1.38 | green |
+| The air front: gates holding to the step | 0-24 h | 24.0 → 24.0 | none → none | Pact green; NATO not measured |
+| The air front: loss line to the step back | 12-72 h | 14.0 (2) → 14.0 (2) | none → none | Pact green; NATO not measured |
+| Our radar SAM fire units lost at the end | 10-40 % | 19.70 → 19.70 | 16.67 → 16.67 | green |
+| Of those wrecked, working at the end | 33-100 % | 72.00 → 72.00 | 66.67 → 66.67 | green |
+| An S-75 class move, heard to ready | 7.5-20 h | 15.47 → 15.47 | none → none | Pact green; NATO not measured |
+| A unit's moves begun in a day | 1-3 | 1 → 1 | 1 → 1 | green |
+| The enemy's loss a sortie (`air_war_balance`'s band, beside) | Pact 1.5-4.5, NATO 1.0-3.5 % | 3.80 → 3.80 | 2.46 → 2.46 | green |
+
+**No band moved** for any faction: every band line of the run with the block matches the run without it to the digit.
+The neutral's and the rebels' wars are as before, and no hit is learned in either (no command post or artillery of ours
+is struck, and their formations' support regiments are not actors outside a player's sector).
+
+**Withdrawals: what the hit does, measured** (the new line, 14 days x 3 seeds):
+
+| | Pact | NATO |
+|---|---|---|
+| Command post hits our staffs learn, a war | 2.0 | 4.7 |
+| Artillery hits (struck from the air or in the fighting), a war | 0 | 0 |
+| The enemy's hits (its support regiments in the fighting) | 0 | 0 |
+| Our formations' hours with a hit known, a war | 2 | 7 |
+| Our formations a day in the fight under 3/4 at some hour | 1 of 6 | 3 of 9 |
+| Of those, under 3/4 while their staff knew a hit | 0 | 1 |
+| Withdrawn | 0 | 0 |
+| **Sensitivity: the command post restored in 6-12 h** (a copy of the data) | 15 h a war with a hit known; 0 of the 1 under 3/4 while hit; none withdrawn | 37 h a war; 1 of 3; **1 of 9 withdrawn (0.11, inside the band)**; every other band as before |
+
+- *The rule.* It is applied as sourced. While the staff knows its command post or artillery is hit, the formation asks
+  to withdraw under three quarters of its establishment, and its senior answers as before. The command post is restored
+  in the doctrine's 1-3 h (`mt_stashek_losses`: about 1 h through a forward post, otherwise 2-3 h).
+- *Why the command post brings none.* The hit is restored before the division commander's reaction time (2-4 h) has run.
+  By the time he decides, his line is the line of half again.
+  - Only one of NATO's three formations under 3/4 was there while a hit was known.
+  - With the restore at 6-12 h, NATO's commander is still on the 3/4 line when he decides, and that formation
+    withdraws.
+  - The restore time is sourced, so it was not changed. A forward command post takes over within the hour, and the
+    doctrine counts the formation ineffective only while command is lost.
+- *Why the artillery brings none.* The enemy's air struck no artillery object in any war. Its strikes on troops fall on
+  the regiments' areas, and its strikes on the command posts are counted above.
+  - In the fighting, a support regiment's losses at the support weight (0.5) keep it above 0.85 where it is an actor
+    (U1). At U0 its losses are not kept apart from the formation's.
+  - The enemy's target choice belongs to the air war (13.8), so it was not changed.
+- *The band.* It stays argued, with two reasons:
+  - F7.3's: the days in contact, not the line, keep our formations up.
+  - The new one: the doctrine's three-quarters line is now applied, as the staff learns of the hit, but at its sourced
+    restore time a hit on the command post never outlasts the commander's reaction, and the enemy's air does not pick
+    our artillery.
+  Ten days' contact on one formation is not forced. `balance_bands.json`'s two withdrawal bands carry this reason; their
+  limits are unchanged.
+
+**The player's effect** (`fronts_bench --player`, 7 days x 3 seeds): every band passes, and every value is F8.1's: the
+battery's sector's line 0.00 km apart for the Pact, the neutral and the rebels and 0.49 for NATO; the air front 0 steps
+apart; the Pact's careful battery holds the ledger's air front 3.3 h a war, its careless one's kills 0.7 a war, the
+enemy's loss a sortie 2.59/2.84 %; elsewhere the neutral's line 3.47 km between seeds.
+
+**`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`**: every band holding for all four factions
+and both postures (20 rows), every value as F8.1's (`docs/air_war/09_BALANCE.md` section 31): the Pact's loss a sortie
+3.14/3.09 %, NATO's 2.06/2.21 %, the neutral's 5.61/6.44 %, the rebels' 11.97/10.67 %.
+
+**Identity, fingerprint, gates.**
+- The defaults are unchanged: the block is read only by the ground war, and the defaults do not build it.
+- `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7` are identical by
+  content to track F's references.
+- The replay fingerprint holds (journal 107, FNV 1375944258174313379, 41 packages).
+- `--ground --gate`, `--ground --gate --player-sector battery`, `--feed --gate` (the pipeline's pump 14.8 ms a campaign day for the Pact, 12.6 for NATO,
+2.4 for the neutral and 2.5 for the rebels, against 20) and `--history --gate` exit
+  0.
+- The full test binary passes (1437 tests). `check_citations.py`: 161 data files, 0 problems.
+
+**Cost.** The difference from F8.1 is noise: the command posts are read once an hour (three objects on the nation), and a
+hit is an event. The budget is 20 ms a campaign day.
+
+| | The Pact | NATO | The neutral | The rebels |
+|---|---|---|---|---|
+| The ground war alone (`--ground`, 30 days x 5 seeds), ms a campaign day | 0.032 (worst 0.14) | 0.039 (worst 0.13) | 0.020 | 0.068 |
+| F8.1, the same | 0.032 | 0.041 | 0.021 | 0.070 |
+| In the campaign (10 days), ms | 1.87 | 2.14 | 0.98 | 1.65 |
+| F8.1, the same | 2.01 | 2.41 | 0.99 | 1.75 |
+
+**Left:**
+- The enemy's air does not pick our artillery. Its target choice belongs to the air war (13.8).
+- The command post's sourced restore time is shorter than the division commander's reaction time, so a hit on the post
+  alone brings no withdrawal at the sourced values.
+- At U0 a support regiment's losses in the fighting are not kept apart, so the fighting's artillery hit works at U1
+  only.
