@@ -66,6 +66,7 @@ struct GroundCommander {
     int formation = -1;  // the formation he commands at U0, or -1 (a headquarters above them)
     int senior = -1;     // the commander he answers to, -1 the side's top
     bool top = false;    // the side's highest: his own senior (the plan's or the deployment's author)
+    bool front = false;  // ours (F8.1): the front's commander beside the army's top, who alone releases the national reserve
     airwar::Traits traits;
     // His clock: the decision queued for him (a stale one in the queue carries an older gen) and how many he made.
     std::uint32_t gen = 0;

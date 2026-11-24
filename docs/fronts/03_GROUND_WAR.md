@@ -1280,6 +1280,90 @@ later, and part of the loss has come back by then.
 - No army or front reserve on the enemy's side beyond its plan's echelons.
 - `reach_h` is a game value.
 
+## As built: F8.1 (24 Nov 2026)
+
+Our national command holds a reserve of its own, a tank division out of the 3rd Army's line, and the front's commander
+commits it on F7.1's rule at the tip (`06_BALANCE.md`, Decisions after F7). Only at `ground.mode` 1, with F7.1's
+`"counterattack"` block, and only with the new `"front_reserve"` block in `data/campaign/ground_defence.json`. Without it
+the division is never built and nothing changes: the defaults and old saves are as before.
+
+**The division.** Our order of battle had no tank division standing unused (the 3rd Army's tank brigade is its own
+reserve, the 7th Division and the territorial defence are in its line), so one was added: the **11th Tank Division**
+(`td_11`, `data/command/oob_pannonia.json`), under the Ground Forces' command, with three tank regiments (94 T-55s, 45
+BMP-1s and 18 D-30s each), a motor rifle regiment and an artillery regiment, in this army's own types (briefing §7). It is
+the Pact's tank division as NATO drew it (`fm_100_2_1_1984` pp. 4-4 to 4-7, `fm100_2_3` for the organisation only), held
+back as a small Pact-model nation would hold one: the front's and the armies' second echelons and reserves up to half the
+force (`fm_100_2_1_1984` p. 6-1), the second-echelon division preparing the counterstrike on the main axis
+(`vr_poltikovic_1984` p. 96). No new source: every one cited was registered. Its equipment and establishment are
+estimates. Every type has a basic model. It has no object in the nation's theatre, so the enemy's air cannot strike it:
+adding one would change the theatre at the defaults.
+
+**The block** (`FrontReserveDef`, `ground_data.hpp`): the unit (`td_11`), the command that releases it
+(`ground_forces`), its home (`cegled_junction`, the central rail junction 112-131 km behind the line, a place of the
+map by id), the front's planning (6-12 h, a game value: a quarter to half a day against a division's 1-3 h,
+`fm_100_2_1_1984` p. 5-14) and its reach (24 h, a game value: twice the army's 12 h). The loader refuses a unit or command
+not in the order of battle, a unit not under that command, and a unit that is deployed in any deployment or over or under
+one that is (`test_ground_data.cpp`).
+
+**Who commits it** (`AddFrontReserve`, `FrontTop`, `TryCounter`). A separate front decision, not the army commander's:
+- At Build the division is a formation of ours in reserve at its home, free, on no axis, marked `front`. Its commander
+  answers to a commander drawn for the Ground Forces (marked `front`, not the army's top), keyed like every other.
+- The army commander never sends it, as a counterattack or a relief (`CounterCandidate`, `FreeFormation`), and the
+  army's reserve (`HoldReserve`) leaves it where it is.
+- The front's commander decides at his own reaction time while a penetration is a target for F7.1's rule and his reserve
+  is free (`FrontWatch`). His rule is F7.1's: the deepest axis whose momentum is spent, his force being every free
+  formation of ours (his reserve with the army's free ones) whose planning plus its march on the roads is within his
+  reach, over the enemy at the tip as he believes it, against his counterattack ratio (1.5-2.5 by his boldness). He
+  orders only if his own reserve is in that force. The planning is drawn in the block's range, a methodical man the long
+  end.
+- Every counterattack under F7.1 now goes in together, at its slowest formation's hour (`reznichenko_1984` pp. 177-179:
+  the line and time of deployment are set for the whole force). Before, each formation went in as it arrived. With one
+  reserve that made no difference. With the division and the brigade from different depths, the brigade went in alone
+  and the army commander ended the attack before the division was there. F3.4's rule is unchanged.
+- The army commander still ends a counterattack that has stopped gaining ground (F7.1).
+
+**On the nation** (`fronts_bench data --history`, 14 days x 3 seeds):
+- *The Pact.* The front counterstrikes in every war (3 of 3), on 2.03:1 at the tip by his picture. The division is 64 % of
+  the army's power, home 112 km behind the line, and the force goes in 15-19 h after the order. It wins back no ground.
+  The Pact's axes are halted at their objectives, which are towns, in hasty defence (1.3 x the town's 1.4). His picture
+  had the tip lighter than it was, so the strike's 2.0 is 1.6-1.7 in truth, and that becomes 0.75-0.90 in the combat
+  (0.75 at night). That stalls under the first advance class (1.5), and the army commander ends it after 2-4 h.
+- *NATO.* The same in every war (3 of 3), on 2.05:1, the force in 11-13 h. NATO's axis is halted at its objective, a town
+  75 km in, and the strikes go in at night: 1.9 in truth, 0.82 in the combat. None gains ground.
+- *The neutral.* A counterattack in every war as before: the front's in one (on 4.13:1), the army's in the others, now
+  going in together. The line won back is 6.4 km on average (2.0 before), and the enemy's axes at or near their
+  objective fall from 1.00 to 0.67.
+- *The rebels.* Their raids end at dawn: no counterattack.
+To win ground against a town in hasty defence, the raw ratio would need 2.7 by day and 3.4 at night. The commander does
+not weigh the ground or the dark, and does not choose an axis still moving in the open (F7.1's "Left").
+
+**Cost.** The ground war alone (`fronts_bench data --ground`, 30 days x 5 seeds, against cc635af on its own data): the
+Pact 0.037 → 0.032 ms a campaign day (worst 0.12 → 0.14), NATO 0.040 → 0.041 (0.12 → 0.14), the neutral 0.019 → 0.021,
+the rebels 0.069 → 0.070, against a budget of 20. In the campaign (10 days): the Pact 1.99 → 2.01 ms, NATO 2.26 → 2.41,
+the neutral 0.72 → 0.99, the rebels 1.81 → 1.75. The front's commander decides only while a penetration is a target, and
+his rule is the army's with one more formation.
+
+**Tests** (`test_ground_commanders.cpp`, "front reserve (F8.1)"; `test_ground_data.cpp`):
+- a hand war: the division is held out of the line, free and at its home, until the front's commander orders it; the
+  army's brigade alone is under the army commander's ratio (0.44 against 1.89); the order is the front's, on his ratio,
+  and its value is his force over the enemy at the tip, by hand (3.58:1); the force goes in together, the division in it,
+  6-24 h after the order;
+- with a reach of 1 h no counterstrike is ordered and the division never leaves, though its commander keeps watching;
+- without the block the division is never built and the war's every order is that of the war whose order of battle
+  never had it; with the block but without F7.1's rule, none either;
+- on the nation, for every faction: the 11th Tank Division at Cegled, the Ground Forces' commander over it, out of every
+  axis's line; without the block one formation fewer;
+- the loader's refusals: deployed, over a deployed unit, not in the order of battle, not under its command, a home not on
+  the map, an unknown key.
+F3.4's counterattack test now finds the tank division among the force rather than the first to start.
+
+**Left:**
+- The front's commander weighs the raw ratio at the tip, not the defender's ground, posture or the dark, so his
+  counterstrikes go into towns at night and stall. Weighing them (or choosing an axis still moving in the open, or waiting
+  for daylight) is a design call.
+- The division has no object in the theatre: the enemy's air cannot find or strike it.
+- `planning_h` and `reach_h` are game values; the division's equipment and establishment are estimates.
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its

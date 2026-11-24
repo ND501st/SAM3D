@@ -80,6 +80,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war/data.hpp"
@@ -159,6 +160,7 @@ struct Formation {
     int last_sector = -1;
     bool thin = false;
     bool free = false;       // ours: free for the army commander to send (a reserve, or re-formed)
+    bool front = false;      // ours (F8.1): the national command's reserve, free only for the front's commander to send
     // Breakpoints (NATO and the small forces): cumulative losses at which an attack stops and a defence breaks.
     double attack_stop = 1.0;
     double defence_break = 1.0;
@@ -581,6 +583,9 @@ public:
         // The commanders: one per formation and per headquarters between them and the side's top.
         BuildCommanders(Side::Enemy);
         BuildCommanders(Side::Ours);
+        // The national command's reserve and the front's commander who releases it (F8.1): only with its block and F7.1's
+        // counterattack at the tip, added after everything else so that nothing drawn before moves.
+        if (d.ours.front_reserve.present && t.counter_at_tip && !AddFrontReserve(error)) return false;
         // Breakpoints drawn per formation (NATO, the small forces), moved by its commander's composure; the Pact and ours
         // go by their lines.
         for (std::size_t i = 0; i < forms_.size(); ++i) {
@@ -760,6 +765,14 @@ public:
     std::uint32_t OrderCount(GroundOrder o) const { return order_counts_[static_cast<std::size_t>(o)]; }
     // F7.1: the ratios (as their commander believed them) our counterattacks were ordered on, summed (the tally's).
     double CounterOrderedRatioSum() const { return counter_ratio_sum_; }
+    // F8.1: the front's commander and the national command's reserve's formation (-1 none); the counterstrikes he ordered
+    // (each also a counterattack order of the counts above), their ratios summed, and the best ratio he weighed at a
+    // penetration whose momentum was spent (his picture, with the force in his reach).
+    int FrontCommander() const { return front_cdr_; }
+    int FrontReserve() const { return front_form_; }
+    int FrontOrders() const { return front_orders_; }
+    double FrontOrderedRatioSum() const { return front_ratio_sum_; }
+    double FrontBestRatio() const { return front_best_ratio_; }
     void ClearLog() { log_.clear(); }
 
     // Profiling (fronts_bench): the parts' times by steady_clock, off by default.
@@ -1083,6 +1096,7 @@ private:
     std::vector<std::uint8_t> moved_;
     std::vector<AxisChoice> choices_;
     std::vector<double> reach_;        // by formation (F7.1): a counterattack candidate's hours from the order to the flank
+    std::vector<std::pair<std::size_t, double>> counter_go_;  // a counterattack order's force and each one's hour there (scratch)
     std::vector<GroundLogEntry> log_;
     GroundPicture pictures_[2];  // ours, the enemy's (F3.5)
     std::vector<SitReport> sit_reports_;  // our side's reports and orders as compiled (F3.8)
@@ -1130,6 +1144,13 @@ private:
     GroundProfile profile_;
     std::uint32_t order_counts_[kGroundOrderCount] = {};  // F6.1: the orders given, by kind (the tally's)
     double counter_ratio_sum_ = 0.0;                      // F7.1: our counterattacks' ordered ratios, summed (the tally's)
+    // F8.1: the front's commander and the national command's reserve (-1 none: no block); the front's counterstrikes
+    // ordered, their ratios summed and the best ratio he weighed (the tally's).
+    int front_cdr_ = -1;
+    int front_form_ = -1;
+    int front_orders_ = 0;
+    double front_ratio_sum_ = 0.0;
+    double front_best_ratio_ = 0.0;
 
     static bool Fail(std::string* error, const std::string& m) {
         if (error != nullptr) *error = "ground war: " + m;
@@ -1244,7 +1265,6 @@ private:
     // drawn from the pool otherwise.
     void BuildCommanders(Side side) {
         const command::OrderOfBattle& oob = OobOf(side);
-        const GroundCommandersDef& defs = side == Side::Ours ? data_->ours.commanders : data_->enemy.commanders;
         std::vector<std::size_t> mine;
         for (std::size_t i = 0; i < forms_.size(); ++i) {
             if (forms_[i].unit.side == side) mine.push_back(i);
@@ -1262,29 +1282,7 @@ private:
             const AxisDef* main = side == Side::Enemy ? data_->enemy.plan.MainAxis() : nullptr;
             top = main != nullptr && !main->first_echelon.empty() ? main->first_echelon.front() : forms_[mine.front()].unit.id;
         }
-        const auto add = [&](const std::string& unit, int formation) {
-            if (CommanderOfUnit(unit, side) >= 0) return;
-            const command::OobUnit* u = oob.Find(unit);
-            const std::string kind = u != nullptr ? u->kind : std::string("division");
-            const std::size_t idx = cmdrs_.size();
-            airwar::Rng r = root_.Fork(0xC0DE0000ull + (side == Side::Ours ? 0x10000ull : 0ull) + idx);
-            GroundCommander c = DrawCommander(defs.pool, kind, r);
-            for (const GroundCommanderDef& a : defs.authored) {
-                if (a.unit != unit) continue;
-                c.id = a.id;
-                c.name = a.name;
-                c.age = a.age;
-                c.background = a.background;
-                c.bio = a.bio;
-                c.traits = a.traits;
-                c.authored = true;
-            }
-            if (c.id.empty()) c.id = unit + "_cdr";
-            c.unit = unit;
-            c.side = side;
-            c.formation = formation;
-            cmdrs_.push_back(std::move(c));
-        };
+        const auto add = [&](const std::string& unit, int formation) { AddCommander(side, unit, formation); };
         for (std::size_t i : mine) {
             add(forms_[i].unit.id, static_cast<int>(i));
             forms_[i].cmdr = CommanderOfUnit(forms_[i].unit.id, side);
@@ -1314,6 +1312,72 @@ private:
             }
             if (g.senior < 0) g.senior = top_c;
         }
+    }
+
+    // A commander for `unit` of `side` (none if it has one): written by hand where the data name him, drawn from the pool
+    // otherwise, his draw keyed by his index. The new one's index, or the one he had.
+    int AddCommander(Side side, const std::string& unit, int formation) {
+        const int have = CommanderOfUnit(unit, side);
+        if (have >= 0) return have;
+        const command::OrderOfBattle& oob = OobOf(side);
+        const GroundCommandersDef& defs = side == Side::Ours ? data_->ours.commanders : data_->enemy.commanders;
+        const command::OobUnit* u = oob.Find(unit);
+        const std::string kind = u != nullptr ? u->kind : std::string("division");
+        const std::size_t idx = cmdrs_.size();
+        airwar::Rng r = root_.Fork(0xC0DE0000ull + (side == Side::Ours ? 0x10000ull : 0ull) + idx);
+        GroundCommander c = DrawCommander(defs.pool, kind, r);
+        for (const GroundCommanderDef& a : defs.authored) {
+            if (a.unit != unit) continue;
+            c.id = a.id;
+            c.name = a.name;
+            c.age = a.age;
+            c.background = a.background;
+            c.bio = a.bio;
+            c.traits = a.traits;
+            c.authored = true;
+        }
+        if (c.id.empty()) c.id = unit + "_cdr";
+        c.unit = unit;
+        c.side = side;
+        c.formation = formation;
+        cmdrs_.push_back(std::move(c));
+        return static_cast<int>(idx);
+    }
+
+    // The national command's reserve (F8.1, 03 "As built: F8.1"): its formation, free for the front's commander alone, at
+    // its home place and anchored there, out of every sector; its commander, and the front's commander over it (the
+    // order of battle's `command`), who answers to nobody and is not the army's top. Appended after our commanders, so the
+    // draws of every other commander are unchanged.
+    bool AddFrontReserve(std::string* error) {
+        const FrontReserveDef& fr = data_->ours.front_reserve;
+        if (FindFormation(fr.unit, Side::Ours) >= 0) return Fail(error, "the front reserve '" + fr.unit + "' is in our deployment");
+        const int fi = AddFormation(data_->ours.oob, fr.unit, Side::Ours);
+        if (fi < 0) return Fail(error, "the front reserve '" + fr.unit + "' is not in " + data_->ours.oob_file);
+        const std::size_t i = static_cast<std::size_t>(fi);
+        Formation& f = forms_[i];
+        f.role = DeployRole::Reserve;
+        f.free = true;
+        f.front = true;
+        f.pos = fr.place.pos;
+        f.anchor = fr.place.at;
+        f.anchor_pos = fr.place.pos;
+        Equip(i);
+        forms_[i].base_establishment = forms_[i].unit.establishment;
+        const int fc = AddCommander(Side::Ours, fr.command, -1);
+        if (fc == top_[0] || cmdrs_[static_cast<std::size_t>(fc)].formation >= 0) {
+            return Fail(error, "the front reserve's command '" + fr.command + "' is not over our army's top");
+        }
+        const int dc = AddCommander(Side::Ours, fr.unit, fi);
+        forms_[i].cmdr = dc;
+        GroundCommander& front = cmdrs_[static_cast<std::size_t>(fc)];
+        front.front = true;
+        front.top = false;
+        front.senior = -1;
+        front.formation = -1;
+        cmdrs_[static_cast<std::size_t>(dc)].senior = fc;
+        front_cdr_ = fc;
+        front_form_ = fi;
+        return true;
     }
 
     // Who runs an axis's security zone: the commander of the division (or brigade) holding its sector, the senior of a
@@ -1487,7 +1551,7 @@ private:
     // place's station along the line, `depth_m` behind it; it marches from the anchor nearest there (none without a map).
     void HoldReserve(double depth_m, const airwar::LineOfContact& line) {
         for (Formation& f : forms_) {
-            if (f.unit.side != Side::Ours || f.role != DeployRole::Reserve) continue;
+            if (f.unit.side != Side::Ours || f.role != DeployRole::Reserve || f.front) continue;
             const double along = line.Place(f.pos).along_m;
             f.pos = line.PointAt(along) + line.InwardNormal(along) * depth_m;
             const nav::Anchor* an = NearestAnchor(f.pos);
@@ -2932,6 +2996,7 @@ private:
         } else {
             AnswerRequests(c, h, line);
             if (g.top) OurTop(c, h, line);
+            if (g.front) FrontTop(c, h, line);
         }
     }
 
@@ -3081,7 +3146,7 @@ private:
     int FreeFormation() const {
         for (std::size_t k = 0; k < forms_.size(); ++k) {
             const Formation& f = forms_[k];
-            if (f.unit.side == Side::Ours && f.free && !f.spent && f.task == Task::None) return static_cast<int>(k);
+            if (f.unit.side == Side::Ours && f.free && !f.front && !f.spent && f.task == Task::None) return static_cast<int>(k);
         }
         return -1;
     }
@@ -3243,54 +3308,106 @@ private:
             Axis& x = axes_[a];
             if (x.status == AxisStatus::Counterattacked && h - x.counter_advance_h >= gain_h - 1e-9) EndCounter(a, h);
         }
-        // The deepest penetration of the main zone with no counterattack on it, if his force is strong enough. F7.1
-        // (t.counter_at_tip): the deepest whose momentum is spent, of the main zone's or an enemy halted in the security zone
-        // holding our ground (restoring the state border is a counterstrike's aim, vr_svatos_1985 p. 28), with the force that
-        // can reach its flank in time, weighed against the enemy at its tip; else F3.4's rule, against the whole axis's
-        // attackers.
+        TryCounter(c, h, line, false);
+        if (OursActive() || (t.counter_at_tip && CounterWatch())) WakeAfterReaction(c, h, 0xF000ull);
+        // F8.1: the front's commander hears of it while a penetration is a target and his reserve is free.
+        if (front_cdr_ >= 0 && FrontWatch()) WakeAfterReaction(front_cdr_, h, 0xF100ull);
+    }
+
+    // The front's commander (F8.1, 03 "As built: F8.1"): a counterstrike with the national command's reserve on F7.1's rule
+    // at the tip, with his own planning and reach; he keeps watching while a penetration is a target and the reserve free.
+    void FrontTop(int c, double h, const airwar::LineOfContact& line) {
+        TryCounter(c, h, line, true);
+        if (FrontWatch()) WakeAfterReaction(c, h, 0xF000ull);
+    }
+
+    // The front's reserve is free and some penetration is a target for it.
+    bool FrontWatch() const {
+        if (front_form_ < 0) return false;
+        for (std::size_t a = 0; a < axes_.size(); ++a) {
+            if (CounterTarget(a) && CounterCandidate(static_cast<std::size_t>(front_form_), axes_[a], true)) return true;
+        }
+        return false;
+    }
+
+    // The front's commander's planning for a counterstrike: drawn in the block's planning_h, a methodical man the long end.
+    double FrontPlanningOf(int c, std::uint64_t salt) const {
+        const GroundCommander& g = cmdrs_[static_cast<std::size_t>(c)];
+        const double u = airwar::Clamp01(DecisionDraw(c, salt) + data_->tables.trait_shift * TraitPull(g.traits.methodical));
+        return data_->ours.front_reserve.planning_h.At(u);
+    }
+
+    // A counterattack ordered by `c`: our army commander (`front` false: his free force and the sectors' second echelons,
+    // never the front's reserve) or the front's commander (`front` true: his reserve with every other candidate in his
+    // reach, and only if his reserve is among them). The deepest penetration of the main zone with no counterattack on
+    // it, if his force is strong enough. F7.1 (t.counter_at_tip): the deepest whose momentum is spent, of the main zone's
+    // or an enemy halted in the security zone holding our ground (restoring the state border is a counterstrike's aim,
+    // vr_svatos_1985 p. 28), with the force that can reach its flank in time, weighed against the enemy at its tip; else
+    // F3.4's rule, against the whole axis's attackers.
+    void TryCounter(int c, double h, const airwar::LineOfContact& line, bool front) {
+        const GroundTables& t = data_->tables;
+        const GroundCommander& g = cmdrs_[static_cast<std::size_t>(c)];
+        const std::size_t na = axes_.size();
         int best = -1;
         for (std::size_t a = 0; a < na; ++a) {
             if (!CounterTarget(a)) continue;
             if (t.counter_at_tip && !MomentumSpent(a)) continue;
             if (best < 0 || SeenDepth(Side::Ours, a) > SeenDepth(Side::Ours, static_cast<std::size_t>(best))) best = static_cast<int>(a);
         }
-        if (best >= 0) {
-            const std::size_t a = static_cast<std::size_t>(best);
-            Axis& x = axes_[a];
-            double ours = 0.0, theirs = 0.0;
-            const double plan_h = PlanningOf(c, 0xE000ull + a);
-            for (std::size_t i = 0; i < forms_.size(); ++i) {
-                if (!CounterCandidate(i, x)) continue;
-                if (t.counter_at_tip) {
-                    reach_[i] = plan_h + MarchHours(forms_[i], a, line, h, false);
-                    if (reach_[i] > t.counter_reach_h + 1e-9) continue;
-                }
-                ours += SeenPower(Side::Ours, i);
-            }
+        if (best < 0) return;
+        const std::size_t a = static_cast<std::size_t>(best);
+        Axis& x = axes_[a];
+        double ours = 0.0, theirs = 0.0;
+        const double plan_h = front ? FrontPlanningOf(c, 0xE000ull + a) : PlanningOf(c, 0xE000ull + a);
+        const double reach_h = front ? data_->ours.front_reserve.reach_h : t.counter_reach_h;
+        bool reserve_in = false;
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            if (!CounterCandidate(i, x, front)) continue;
             if (t.counter_at_tip) {
-                theirs = TipPower(Side::Ours, a);
-            } else {
-                for (int fi : x.first) theirs += SeenPower(Side::Ours, static_cast<std::size_t>(fi));
+                reach_[i] = plan_h + MarchHours(forms_[i], a, line, h, false);
+                if (reach_[i] > reach_h + 1e-9) continue;
             }
-            const double ratio = theirs > 0.0 ? ours / theirs : (ours > 0.0 ? 1e9 : 0.0);
-            if (ours > 0.0 && WantsCounterattack(ratio, CounterattackRatioOf(t, g.traits))) {
-                for (std::size_t i = 0; i < forms_.size(); ++i) {
-                    if (!CounterCandidate(i, x)) continue;
-                    if (t.counter_at_tip && reach_[i] > t.counter_reach_h + 1e-9) continue;
-                    Formation& f = forms_[i];
-                    f.free = false;
-                    f.task = Task::Counter;
-                    f.task_axis = best;
-                    f.unit.state = UnitState::March;
-                    ++x.counter_incoming;
-                    Push(h + plan_h + MarchHours(f, a, line, h), EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
-                    SitOrderTo(h, GroundOrder::CounterattackOrdered, c, static_cast<int>(i), best, ratio, -1);
-                }
-                Order(h, GroundOrder::CounterattackOrdered, c, -1, best, ratio);
-                counter_ratio_sum_ += ratio;
-            }
+            ours += SeenPower(Side::Ours, i);
+            reserve_in = reserve_in || static_cast<int>(i) == front_form_;
         }
-        if (OursActive() || (t.counter_at_tip && CounterWatch())) WakeAfterReaction(c, h, 0xF000ull);
+        if (front && !reserve_in) return;
+        if (t.counter_at_tip) {
+            theirs = TipPower(Side::Ours, a);
+        } else {
+            for (int fi : x.first) theirs += SeenPower(Side::Ours, static_cast<std::size_t>(fi));
+        }
+        const double ratio = theirs > 0.0 ? ours / theirs : (ours > 0.0 ? 1e9 : 0.0);
+        if (front) front_best_ratio_ = std::max(front_best_ratio_, ratio);
+        if (!(ours > 0.0) || !WantsCounterattack(ratio, CounterattackRatioOf(t, g.traits))) return;
+        // F7.1: the force goes in together at one hour, its slowest formation's (reznichenko_1984 pp. 177-179: a
+        // counterattack's line and time of deployment are set for the whole force); F3.4's rule, each as it arrives.
+        std::vector<std::pair<std::size_t, double>>& go = counter_go_;
+        go.clear();
+        double together_h = h;
+        for (std::size_t i = 0; i < forms_.size(); ++i) {
+            if (!CounterCandidate(i, x, front)) continue;
+            if (t.counter_at_tip && reach_[i] > reach_h + 1e-9) continue;
+            const double at = h + plan_h + MarchHours(forms_[i], a, line, h);
+            go.emplace_back(i, at);
+            together_h = std::max(together_h, at);
+        }
+        for (const std::pair<std::size_t, double>& p : go) {
+            const std::size_t i = p.first;
+            Formation& f = forms_[i];
+            f.free = false;
+            f.task = Task::Counter;
+            f.task_axis = best;
+            f.unit.state = UnitState::March;
+            ++x.counter_incoming;
+            Push(t.counter_at_tip ? together_h : p.second, EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
+            SitOrderTo(h, GroundOrder::CounterattackOrdered, c, static_cast<int>(i), best, ratio, -1);
+        }
+        Order(h, GroundOrder::CounterattackOrdered, c, -1, best, ratio);
+        counter_ratio_sum_ += ratio;
+        if (front) {
+            ++front_orders_;
+            front_ratio_sum_ += ratio;
+        }
     }
 
     // ---- our counterattack at the penetration's tip (F7.1, docs/fronts/03_GROUND_WAR.md "As built: F7.1")
@@ -3376,17 +3493,19 @@ private:
         for (std::size_t a = 0; a < axes_.size(); ++a) {
             if (!CounterTarget(a)) continue;
             for (std::size_t i = 0; i < forms_.size(); ++i) {
-                if (CounterCandidate(i, axes_[a])) return true;
+                if (CounterCandidate(i, axes_[a], false)) return true;
             }
         }
         return false;
     }
 
-    // Ours that may counterattack on an axis: free (a reserve, re-formed), or the sector's second echelon.
-    bool CounterCandidate(std::size_t i, const Axis& x) const {
+    // Ours that may counterattack on an axis: free (a reserve, re-formed), or the sector's second echelon. The national
+    // command's reserve (F8.1) only for the front's commander (`front`), who may also send the army's.
+    bool CounterCandidate(std::size_t i, const Axis& x, bool front) const {
         const Formation& f = forms_[i];
         if (f.unit.side != Side::Ours || f.spent || f.task != Task::None) return false;
         if (f.role == DeployRole::Support) return false;
+        if (f.front && !front) return false;
         if (f.free) return true;
         return std::find(x.depth_defenders.begin(), x.depth_defenders.end(), static_cast<int>(i)) != x.depth_defenders.end();
     }
