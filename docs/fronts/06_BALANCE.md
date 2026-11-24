@@ -512,7 +512,8 @@ covering force and the helicopters' broken rule are still not reached on the nat
   24-25 % losses when command, rockets and artillery are hit) is loaded but no rule reads it, because the ground war has no
   measure of a formation's command or artillery being hit. With it, 1 of our 6 formations (Pact) and 3 of 9 (NATO) pass
   under 75 % at some hour and could be withdrawn if their command and artillery were hit. Wiring it needs a model of the hit (which of the air war's troops objects are a division's
-  command post and artillery, and when a strike counts): a design task for the owner, not a mis-applied rule.
+  command post and artillery, and when a strike counts): a design task for the owner, not a mis-applied rule. (F8.2
+  wired it: As built: F8.2 below.)
 
 **The counterattack, re-argued.** Our free force (the army reserve, the 3rd Army's tank brigade 55 km back, with every
 other free formation) comes to 0.28 of the enemy at a Pact penetration's tip at best (0.29 in the 245 h a war its
