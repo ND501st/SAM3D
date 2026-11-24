@@ -8,6 +8,7 @@
 
 #include "simcore/air_war.hpp"
 #include "simcore/command.hpp"
+#include "simcore/ground_war/session_units.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenery.hpp"
 #include "test_framework.hpp"
@@ -359,4 +360,36 @@ SC_TEST("scenery: the asset register keeps its rules") {
     SC_EXPECT(refused(Register("", R"("house": {"asset": "nobody"})"), "not registered"));
     SC_EXPECT(refused(Register("", R"("house": {})"), "null for procedural"));
     SC_EXPECT(refused("{\"parts\": {}}", "assets"));
+}
+
+SC_TEST("scenery (F5.2): every ground equipment type of every adversary has a basic model as U2 draws it, never one of ours") {
+    const ModelLibrary lib = Library();
+    groundwar::GroundWarData base;
+    std::string e;
+    SC_EXPECT(groundwar::LoadGroundTables(kData, base.tables, &e) && groundwar::LoadGroundDefence(kData, base.ours, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    const std::vector<std::string> ours = groundwar::OurTypes(base);
+    int types = 0, variants = 0;
+    for (const char* f : {"rebels", "neutral", "warsaw_pact", "nato"}) {
+        groundwar::GroundForceDef force;
+        SC_EXPECT(groundwar::LoadGroundForce(kData, f, force, &e));
+        std::vector<std::string> seen;
+        for (const command::OobUnit& u : force.oob.units) {
+            for (const std::pair<std::string, int>& eq : u.equipment) {
+                if (std::find(seen.begin(), seen.end(), eq.first) != seen.end()) continue;
+                seen.push_back(eq.first);
+                const std::string model = groundwar::U2Model(eq.first, groundwar::Side::Enemy, f, ours);
+                const ModelDef* m = lib.Find(model);
+                if (m == nullptr) std::printf("    no model %s for %s's %s\n", model.c_str(), f, eq.first.c_str());
+                SC_EXPECT(m != nullptr);
+                SC_EXPECT(!std::binary_search(ours.begin(), ours.end(), model));
+                ++types;
+                variants += model != eq.first ? 1 : 0;
+            }
+        }
+    }
+    // Ours drawn by our own models.
+    for (const std::string& t : ours) SC_EXPECT(groundwar::U2Model(t, groundwar::Side::Ours, "nato", ours) == t);
+    std::printf("    %d enemy ground types with a model, %d of them a faction's variant of a type of ours\n", types, variants);
+    SC_EXPECT(types >= 25 && variants == 3);
 }

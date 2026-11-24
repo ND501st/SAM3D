@@ -769,6 +769,9 @@ public:
     }
     // The route service in the session (null: the scenario has no "nav"): the roads, the places, the world's movers.
     const nav::SessionNav* Nav() const { return nav_.get(); }
+    // The same for a session that puts the ground war's units on its roads (track F, F5.2: campaign/mission_session.hpp's
+    // U2, ground_war/session_units.hpp); null without the session's roads.
+    nav::SessionNav* MutableNav() { return nav_.get(); }
     // The march planned to a place (G2.3), if one was.
     const nav::MarchPlan* MarchPlanned() const { return has_march_plan_ ? &march_plan_ : nullptr; }
     // The world's movers inside the visual range (roadmap G11): each vehicle of another unit's column, a convoy, a carrier,
@@ -781,6 +784,7 @@ public:
         Vec3 position;
         double heading_deg = 0.0;
         bool moving = false;
+        bool enemy = false;  // the enemy's (track F's U2): drawn as the enemy's, never as ours
     };
     std::vector<WorldMover> MoversInView() const {
         std::vector<WorldMover> out;
@@ -794,6 +798,7 @@ public:
             v.position = GroundEnu(s.at.east_m, s.at.north_m);
             v.heading_deg = s.heading_rad * 180.0 / 3.14159265358979323846;
             v.moving = s.moving;
+            v.enemy = s.enemy;
             out.push_back(v);
         }
         return out;
@@ -2338,7 +2343,8 @@ private:
             for (const auto& d : def_.prepared.dummies) near_points_.push_back({d.position, v.ground_m});
             if (nav_) {
                 for (const nav::Mover& m : nav_->GetMovers().All()) {
-                    if (m.route.path.empty()) continue;  // one that arrived stays where the pilots may find it
+                    if (m.route.path.empty() || m.ground_war) continue;  // one that arrived stays where the pilots may find it;
+                                                                          // the ground war's U2 adds nothing to the fight
                     const MapPoint at = nav::PointAlong(m.route, m.arc_m);
                     near_points_.push_back({Vec3{at.east_m, at.north_m, 0.0}, v.ground_m});
                 }
@@ -3616,6 +3622,7 @@ private:
         if (!nav_) return;
         for (const nav::Mover& m : nav_->GetMovers().All()) {
             if (m.state == nav::MoverState::Waiting || m.state == nav::MoverState::Arrived || m.route.path.empty()) continue;
+            if (m.ground_war) continue;  // the ground war's U2 is not in the pilots' picture: it adds nothing to the fight
             const MapPoint at = nav::PointAlong(m.route, m.arc_m);
             const Vec3 g = GroundEnu(at.east_m, at.north_m);
             const bool column = m.state == nav::MoverState::Moving && (m.kind == "column" || m.kind == "convoy" || m.vehicles > 2);

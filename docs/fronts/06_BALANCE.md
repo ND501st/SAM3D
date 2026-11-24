@@ -596,6 +596,8 @@ as follows.
 - **F5.2, units in sight in Unreal (F8.3).** simcore's U2 movers in a session, drawn by Unreal as basic models within
   the player's visual range, and the front's distant sounds through the effects' sound subsystem. The Unreal code is
   written to the project's conventions. Building and looking in the editor stays the owner's.
+  Built 25 Nov 2026 (`05_WHAT_THE_PLAYER_SEES.md`, As built: F8.3): no band moves (presentation only: identity at the defaults, the
+  fingerprint, the gates); a 2 h Pact session with 52 U2 movers held costs about 1 % more.
 - **Not taken now:** the counterattack into the flank, the wait for daylight, axes weighed by main and supporting, and
   the army's day measured over attack days. They stay on the smaller items' list.
 

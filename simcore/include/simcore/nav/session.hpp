@@ -372,6 +372,7 @@ public:
         std::string kind;
         std::string model;
         bool moving = false;
+        bool enemy = false;  // the enemy's (track F's U2): never drawn as ours
     };
     // Every vehicle of every mover at full detail (inside the range): the head on its place, each after it at the
     // spacing behind along the route (before the start, queued back along its first stretch).
@@ -381,14 +382,16 @@ public:
         for (std::size_t k = 0; k < all.size(); ++k) {
             const Mover& m = all[k];
             if (m.level != MoverLevel::M2 || m.route.path.size() < 2) continue;
+            const std::string model = ModelOf(m.id);
             for (int i = 0; i < m.vehicles; ++i) {
                 Seen s;
                 s.mover = m.id;
                 s.ordinal = static_cast<int>(k);
                 s.index = i;
                 s.kind = m.kind;
-                s.model = ModelOf(m.id);
+                s.model = model;
                 s.moving = m.state == MoverState::Moving;
+                s.enemy = m.enemy;
                 const double arc = m.arc_m - i * m.spacing_m;
                 if (arc >= 0.0) {
                     s.at = PointAlong(m.route, arc, &s.heading_rad);
