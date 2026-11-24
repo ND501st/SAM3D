@@ -26,7 +26,9 @@
 //
 // F2.3's decision reads them (DecideAirFront, below): each sector's air front, a depth for the fixed-wing low-level work
 // and one for the helicopters, moved by the faction's rules (AirFrontDef) and its air operations chief's traits, a step at
-// a time, journalled by the campaign. At air_front.mode 0 nothing here is built, measured or decided.
+// a time, journalled by the campaign. At air_front.mode 0 nothing here is built, measured or decided. At mode 2 (F7.2) a
+// step's worth also counts the close support its own axes advancing in the sector need (SupportNeed), from its own ground
+// picture; the risk gates are as at mode 1.
 #pragma once
 
 #include <algorithm>
@@ -304,6 +306,17 @@ inline void SectorRewards(const IntelPicture& pic, const LineOfContact& line, co
     }
 }
 
+// F7.2, the air front follows its own ground offensive: a step's worth also counts the close support the faction's own
+// axes advancing in the sector need, its block's `support_worth` for each (`advancing`: by sector, from its own ground
+// picture, groundwar::GroundWar::EnemyAdvancing; null at air_front.mode 1 or without the ground war). The worth of
+// support of the troops is the faction's (fm_100_2_1_1984 pp. 12-1, 12-8: accompaniment once the troops outrun the fire
+// plan; mt_1965_krasovskiy_conventional: at least half the fighter-bombers' effort to the troops); the risk gates are
+// untouched, so a sector whose air defence is believed intact keeps the air front back whatever the worth.
+inline double SupportNeed(const AirFrontDef& def, const std::vector<int>* advancing, std::size_t s) {
+    if (advancing == nullptr || s >= advancing->size() || !(def.support_worth > 0.0)) return 0.0;
+    return def.support_worth * static_cast<double>((*advancing)[s]);
+}
+
 // One sector's air front and what its chief is waiting on.
 struct SectorFront {
     static constexpr double kNever = -1e18;
@@ -367,6 +380,7 @@ struct AirFrontInputs {
     double politics_max_depth_m = 0.0;                // > 0: no target deeper than this from the border (the politics' now)
     bool event_fired = false;                         // a border's after_event has fired
     const std::vector<char>* crisis = nullptr;        // its own ground front collapsing, by sector (F3.5; null: none yet)
+    const std::vector<int>* advancing = nullptr;      // its own axes advancing, by sector, in its own picture (F7.2; null: mode 1)
     double now_h = 0.0;
 };
 
@@ -382,6 +396,7 @@ struct AirFrontMove {
     double cover = 0.0;
     double mobile_destroyed = 0.0;
     double reward = 0.0;
+    double support = 0.0;  // of the reward, the close support its own advancing axes there need (F7.2)
     double loss_rate = 0.0;
     double after_h = 0.0;  // Seen: the delay to the step
     int sorties = 0;
@@ -437,6 +452,9 @@ inline void DecideAirFront(const AirFrontDef& def, const AirFrontRules& rules, c
     std::vector<double>& reward = reward_scratch != nullptr ? *reward_scratch : local_reward;
     st.Depths(depth_now);
     SectorRewards(*in.picture, line, depth_now, rules.reward_reach_m, rules.step_m, in.target_weight, in.banned, reward);
+    if (in.advancing != nullptr) {
+        for (std::size_t s = 0; s < reward.size(); ++s) reward[s] += SupportNeed(def, in.advancing, s);
+    }
 
     const Traits& tr = chief.traits;
     const AirFrontGates gates = GatesOf(def, rules, chief);
@@ -464,6 +482,7 @@ inline void DecideAirFront(const AirFrontDef& def, const AirFrontRules& rules, c
         m.cover = c.cover;
         m.mobile_destroyed = c.mobile_destroyed;
         m.reward = reward[s];
+        m.support = SupportNeed(def, in.advancing, s);
         const int sorties = in.losses != nullptr ? in.losses->Sorties(si, day, def.loss_days) : 0;
         const double rate = in.losses != nullptr ? in.losses->Rate(si, day, def.loss_days) : 0.0;
         m.sorties = sorties;

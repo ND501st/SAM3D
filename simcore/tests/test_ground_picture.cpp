@@ -333,12 +333,16 @@ SC_TEST("ground picture (F3.5): a commander acts on a stale picture; the truth c
     SC_EXPECT(b.Build(d, 7));
     b.To(arrived + 1);
     b.g.TestLoss(td, 0.5);
+    const Formation& tf = b.g.Formations()[td];
+    const double lost_to = UnitPower(Tables(), tf.unit.strength, tf.unit.supply, tf.unit.cohesion);
     b.To(hc + 1);
     const GroundLogEntry* stale = FirstOrder(b.log, GroundOrder::CounterattackOrdered);
     SC_EXPECT(stale != nullptr && stale->h == ordered->h && stale->value == ordered->value);
     const double believed = b.g.Picture(Side::Ours).units[td].power;
     const double truth = UnitPower(Tables(), b.g.Formations()[td].unit.strength, b.g.Formations()[td].unit.supply, b.g.Formations()[td].unit.cohesion);
-    SC_EXPECT(truth < 0.6 * believed);  // he decided on twice what he has
+    // He decided on about half what he had once the loss was taken (F7.1: his order now comes later, and what makes
+    // up the loss has begun to return by the order's hour, so the loss is measured when taken).
+    SC_EXPECT(lost_to < 0.6 * believed && truth < believed);
     // C: the same loss before the last report was compiled: the report carries it, and his decision moves.
     Fixture c;
     SC_EXPECT(c.Build(d, 7));
@@ -348,8 +352,8 @@ SC_TEST("ground picture (F3.5): a commander acts on a stale picture; the truth c
     const GroundLogEntry* told = FirstOrder(c.log, GroundOrder::CounterattackOrdered);
     SC_EXPECT(told == nullptr || told->value < ordered->value - 1e-6);
     std::printf("    ordered at %d h on %.2f:1 (the reserve's report compiled at %d h, in at %d h); with the loss after it %.2f:1 on a "
-                "reserve of %.0f believed, %.0f true; with the loss before it %s\n",
-                hc, ordered->value, compiled, arrived, stale != nullptr ? stale->value : 0.0, believed, truth,
+                "reserve of %.0f believed, %.0f true (%.0f at the loss); with the loss before it %s\n",
+                hc, ordered->value, compiled, arrived, stale != nullptr ? stale->value : 0.0, believed, truth, lost_to,
                 told == nullptr ? "no counterattack" : "a lower ratio");
 }
 
@@ -430,4 +434,36 @@ SC_TEST("ground picture (F3.5): the air front reads the enemy's crisis only whil
     SC_EXPECT(x.g.QueueCapacity() == cap);
     std::printf("    %zu entries; %llu reports merged in ours, %llu in the enemy's\n", x.log.size(),
                 static_cast<unsigned long long>(x.g.Picture(Side::Ours).reports), static_cast<unsigned long long>(x.g.Picture(Side::Enemy).reports));
+}
+
+SC_TEST("ground picture (F7.2): the enemy's own axes advancing by sector, as its own units' reports have them, never the truth") {
+    // The east axis attacks from 2 h; its pace reaches the enemy's staff only with its units' reports (twice a day, late).
+    // EnemyAdvancing counts it in the east only while it attacks and its believed pace is at least moving_km_per_day.
+    Fixture w;
+    SC_EXPECT(w.Build(War(), 7));
+    const int east = w.line.SectorIndex("east"), west = w.line.SectorIndex("west");
+    const double moving = Tables().moving_km_per_day;
+    std::vector<int> adv;
+    w.g.EnemyAdvancing(w.line.SectorCount(), adv);
+    SC_EXPECT(adv.size() == w.line.SectorCount() && adv[Idx(east)] == 0 && adv[Idx(west)] == 0);
+    int truth_from = -1, believed_from = -1, apart = 0;
+    for (int h = 1; h <= 72; ++h) {
+        w.To(h);
+        w.g.EnemyAdvancing(w.line.SectorCount(), adv);
+        const Axis& x = w.g.Axes()[0];
+        const bool attacking = !x.raid && x.status == AxisStatus::Attacking;
+        const bool truth = attacking && x.pace_km_day >= moving;
+        const bool believed = attacking && w.g.Picture(Side::Enemy).axes[0].pace_km_day >= moving;
+        SC_EXPECT(adv[Idx(east)] == (believed ? 1 : 0) && adv[Idx(west)] == 0);
+        if (truth && truth_from < 0) truth_from = h;
+        if (believed && believed_from < 0) believed_from = h;
+        apart += truth != believed ? 1 : 0;
+    }
+    // It advanced, the staff heard of it later than it happened, and between reports the two part.
+    SC_EXPECT(truth_from >= 0 && believed_from > truth_from && apart > 0);
+    // Nothing counts beyond the sectors asked for, and a smaller ask is sized to it.
+    w.g.EnemyAdvancing(1, adv);
+    SC_EXPECT(adv.size() == 1);
+    std::printf("    the east axis moving by the truth from %d h, in the enemy's picture from %d h; %d hours of 72 the two differ\n", truth_from,
+                believed_from, apart);
 }

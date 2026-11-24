@@ -1580,3 +1580,56 @@ moves the line in its sector by 0.49 km at most on average (NATO's western_cross
 all, and elsewhere nothing beyond the draws' spread; the outcomes' ledger counts the hours the battery's entry alone held the
 air front's gates shut there (0-11 h a war). At the defaults nothing moves: `air_war_balance data 20 7` and the nation's
 `data 10 7` are byte-identical to 8c073bb.
+
+## 27. Army reserves and the counterattack at the tip (track F, F7.1, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md`, "As built: F7.1". Our army's reserve is held back by its deployment, and its commander weighs a counterattack against the enemy at a penetration's tip once the penetration's momentum is spent. `fronts_bench --history`'s counterattack band now also counts an enemy halted on our ground.
+- The Pact's and NATO's bands stay argued, with new reasons: our free force is 0.28 and 0.51 of their tips, against the commander's 1.8-2.2.
+- The neutral gains its own band, green: a counterattack in 3 of 3 wars.
+- In the Pact's war the air's share of our battle losses goes from 20.2 to 17.4 % and a strike's toll from 1.79 to 1.23 %, as the reserve stands elsewhere. Both stay in their bands; the enemy's loss a sortie, read beside, goes from 3.48 to 3.65 %.
+- Nothing in `air_war_balance` moves at the defaults: `data 20 7` and the nation's `data 10 7` are byte-identical to 61f4e4e.
+
+## 28. The air front follows its own ground offensive (track F, F7.2, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md` and `02_AIR_FRONT.md`, "As built: F7.2". `air_front.mode` 2 counts, in a sector's reward
+for a step, the enemy's need for close support of its own axes advancing there, as its own picture has them. The risk
+gates are unchanged. `air_war_balance --fronts` and `air_war_bench --fronts` now run at mode 2 (`--set
+air_front.mode=1` runs F6.2's).
+
+**`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`**, c0d584e (mode 1) → F7.2 (mode 2).
+Only the Pact's war moved:
+
+| Nation | Loss % | Battery wrecked | Exchange, theirs for ours | On call (min) | Close support of the packages | The air front a campaign |
+|---|---|---|---|---|---|---|
+| Warsaw Pact, careless | 3.10% → 3.12% | 40% → 30% | 1.61 → 1.52 | 28.7 → 28.2 | 1% → 1% | 0 → 0.6 steps forward, the deepest 0 → 60 km |
+| Warsaw Pact, careful | 3.03% → 3.02% | 0% → 0% | 2.03 → 2.00 | 25.4 → 25.6 | 1% → 1% | 0 → 0.6 forward and 0.1 back, the deepest 0 → 40 km |
+
+- Every band holds.
+- The rebels', the neutral's and NATO's runs are the same to the digit, apart from the CPU lines. The rebels and the
+  neutral have no close support block. NATO's axes run where our cover is believed intact.
+- The Pact's air front now steps forward 0.6 times a campaign on average, behind its advancing axes. On average its lines in
+  tisava and ne_crossings are 42-55 km in by day 4. Its packages and losses move only by the draws.
+
+`fronts_bench --history`'s bands over 14 days (06, As built: F7.2):
+- The air front's latency band now has steps to measure: 24.0 h, within its 0-24 h.
+- The pull-back is 14.0 h, within its 12-72 h.
+- The Pact's air share of our battle losses goes from 17.4 to 16.0 %.
+- The enemy's loss a sortie, read beside, goes from 3.65 to 3.73 %.
+
+At the defaults nothing moves: `data 20 7` and the nation's `data 10 7` are byte-identical to c0d584e.
+
+## 29. The bands again (track F, F7.3, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md`, "As built: F7.3". `air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`
+re-run on F7.1 and F7.2 together (track F at 579899b, `air_front.mode` 2): **nothing moved from section 28.** Every band of
+the nation holds for all four factions and both postures (20 rows, none out):
+
+| Nation | Loss %, careless / careful | Battery wrecked | Exchange, theirs for ours | On call (min) | The air front a campaign |
+|---|---|---|---|---|---|
+| Rebels | 11.97 / 10.67 % | 0 / 0 % | - | - | none |
+| Neutral | 5.71 / 7.37 % | 0 / 0 % | - | - | none |
+| Warsaw Pact | 3.12 / 3.02 % | 30 / 0 % | 1.52 / 2.00 | 28.2 / 25.6 | 0.6 steps forward (0.1 back careful), the deepest 60 / 40 km |
+| NATO | 2.08 / 2.19 % | 40 / 10 % | 0.40 / 0.36 | 21.2 / 20.4 | none |
+
+F7.3 changed no simulation: its code change is the played mission's fronts flag (`mission_session.hpp`, `air_front.mode`
+2), which `air_war_balance` does not use. The defaults' identity holds (`data 20 7`, the nation's `data 10 7`).

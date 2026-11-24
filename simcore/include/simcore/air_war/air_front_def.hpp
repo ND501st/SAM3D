@@ -66,6 +66,12 @@ struct AirFrontDef {
     std::string after_event;           // Border: the political event after which it may move (its politics' events)
     std::string source;
     std::string confidence;
+    // F7.2, the close support its own offensive needs (the block's optional "close_support"; read only at air_front.mode 2):
+    // the worth a step is given, in the reward's units (value x weight), for each axis of its own its picture has advancing
+    // in the sector (groundwar::GroundWar::EnemyAdvancing). 0: none (no block).
+    double support_worth = 0.0;
+    std::string support_source;
+    std::string support_confidence;
 };
 
 // The game values of the air front (data/gameplay/air_war.json "air_front"), every one in TuningTable::Defaults.
@@ -73,7 +79,9 @@ inline std::vector<std::pair<std::string, double>> AirFrontTuningDefaults() {
     return {
         // 1: the enemy's air front by sector (F2.3: the per-cycle measure of the believed cover and the losses by sector,
         // and the air staff's decision on them, journalled; the planner reads the depths from F2.4); 0: before it, nothing
-        // built, measured or decided (a save without the key air_front_mode replays at 0).
+        // built, measured or decided (a save without the key air_front_mode replays at 0). 2: as 1, and a step's worth also
+        // counts the close support its own axes advancing in the sector need (F7.2, the faction block's "close_support";
+        // only while the ground war runs). A save keeps the mode it was played at: one made at 1 replays at 1.
         {"air_front.mode", 0.0},
         {"air_front.station_m", 5000.0},  // the line of contact's stations along the front's line
         {"air_front.step_m", 20000.0},    // the air front's step, and the depth of the band beyond it the cover is weighed over
