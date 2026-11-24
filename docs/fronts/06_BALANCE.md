@@ -597,3 +597,104 @@ as follows.
   written to the project's conventions. Building and looking in the editor stays the owner's.
 - **Not taken now:** the counterattack into the flank, the wait for daylight, axes weighed by main and supporting, and
   the army's day measured over attack days. They stay on the smaller items' list.
+
+## As built: F8.1 (24 Nov 2026)
+
+Our national command's reserve, the **11th Tank Division** (added to the order of battle: none stood there unused), held
+at Cegled out of the 3rd Army's line and committed by the front's commander on F7.1's rule at the tip, with his planning
+(6-12 h) and reach (24 h), game values. It is behind `ground_defence.json`'s `"front_reserve"` block. Every F7.1
+counterattack now goes in together at its slowest formation's hour, which F7.1 left piecemeal. The design and the tests
+are in `03_GROUND_WAR.md`, As built: F8.1. No band's limits moved and no game value moved.
+
+**The bands** (`fronts_bench --history`, 14 days x 3 seeds; before is F7.3 at cc635af, re-run here; after is F8.1):
+
+| Band | Range | Pact before → now | NATO before → now | Status |
+|---|---|---|---|---|
+| Our formation's day in contact | 1-8 % | 6.93 → 6.93 | 5.00 → 4.98 | green |
+| The enemy's formation's day in contact | 1-6.6 % | 1.57 → 1.57 | 2.33 → 2.33 | green |
+| Our army's day | 0.2-1.2 % | 1.20 → 1.21 | 2.47 → 2.47 | argued, held (F6.1's reason; the division is not counted in the army) |
+| The enemy's army's day | 0.2-1.2 % | 0.35 → 0.35 | 1.80 → 1.80 | Pact green; NATO argued, held |
+| Attacker's losses over the defender's | 0.5-2.5 | 1.29 → 1.34 | 2.56 → 2.59 | Pact green; NATO argued, held |
+| An axis's day of attack | Pact 5-30, NATO 2.8-30 km | 13.8 → 13.8 | 9.3 → 9.3 | green |
+| The fastest day | Pact ≤ 50, NATO ≤ 80 km | 23.1 → 23.1 | 30.0 → 30.0 | green |
+| Advance under the stall ratio | ≤ 0.5 km | 0 → 0 | 0 → 0 | green |
+| The security zone to the main zone | 3-30 h | 29 → 29 | 36 → 36 | Pact green; NATO argued, held |
+| The enemy's axes at or near the objective | 0.4-0.9 | 1.00 → 1.00 | 0.50 → 0.50 | Pact argued, held; NATO green |
+| Our formations a day in the fight, withdrawn | 0.05-0.6 | 0 → 0 | 0 → 0 | argued, held (F7.3's reason; F8.2 next) |
+| **Wars penetrated or held: we counterattack** | 0.3-1.0 | **0 → 1.00** | **0 → 1.00** | **green: out of argued for both** |
+| The air's share of our battle losses | 5-25 % | 15.99 → 14.98 | 8.45 → 7.59 | green |
+| A strike on troops, of its division | 0.2-3 % | 1.18 → 1.05 | 1.38 → 1.38 | green |
+| The air front: gates holding to the step | 0-24 h | 24.0 → 24.0 | none → none | Pact green; NATO not measured |
+| The air front: loss line to the step back | 12-72 h | 14.0 (2) → 14.0 (2) | none → none | Pact green; NATO not measured |
+| Our radar SAM fire units lost at the end | 10-40 % | 27.27 → 19.70 | 18.18 → 16.67 | green |
+| Of those wrecked, working at the end | 33-100 % | 64.71 → 72.00 | 62.50 → 66.67 | green |
+| An S-75 class move, heard to ready | 7.5-20 h | 15.91 → 15.47 | none → none | Pact green; NATO not measured |
+| A unit's moves begun in a day | 1-3 | 1 → 1 | 1 → 1 | green |
+| The enemy's loss a sortie (`air_war_balance`'s band, beside) | Pact 1.5-4.5, NATO 1.0-3.5 % | 3.73 → 3.80 | 2.50 → 2.46 | green |
+
+The neutral's counterattack band stays green (1.00). Its unbanded measures moved with its counterattacks:
+- the line won back is 6.4 km a counterattack, 2.0 before;
+- the enemy's axes at or near their objective fall from 1.00 to 0.67;
+- the exchange is 3.15, 2.50 before.
+The rebels' war is as before.
+
+**The counterattack, out of argued.** The front counterstrikes in every Pact and NATO war (3 of 3 each). Its ordered ratio
+is 2.03 (Pact) and 2.05 (NATO) at the tip by the front commander's picture. The front's best ratio is the same, so he goes
+in at the first chance. His force is the division (64 % of the army's power) and the army's free brigade. The bands'
+`source` in `balance_bands.json` now carries this, and their `status` is no longer argued. Their limits are unchanged.
+
+**What the counterstrikes do: nothing on the ground.** No counterstrike wins back ground against the Pact or NATO.
+The line won back is 0.0 km. Each ends after 2-4 h, by the army commander's rule that a counterattack which no longer
+gains stops.
+- *Where the targets are.* Both enemies' axes are halted at their objectives, which are towns. F7.1's momentum rule takes
+  a halt as spent, so these are the targets.
+- *The Pact.* The tip is in hasty defence (1.3) in a town (1.4), and heavier than the front believed. His 2.0 is 1.6-1.7 in
+  truth, which is 0.75-0.90 in the combat.
+- *NATO.* The strikes go in at night (0.8): 1.9 in truth, 0.82 in the combat.
+- *The threshold.* HERO's first advance class needs 1.5 in the combat. Against a town in hasty defence the raw ratio
+  would have to be 2.7 by day and 3.4 at night.
+So the band counts a counterattack that fires, as its anchors do (`reznichenko_1984` pp. 177-179, `fain_1988_posture` pp.
+D-13, D-14). Whether it should succeed is not what the band measures. Weighing the defender's ground and posture in the
+commander's ratio, choosing an axis still moving in the open, or waiting for daylight are design calls, left below.
+
+**The other bands' moves.** They move because the war differs from the start, not only after the strikes:
+- the enemy's prior picture has the division, and the front's decisions add reports;
+- the Pact's and NATO's strikes on troops and our SAM losses move inside their bands (the Pact's SAM fire units lost
+  27.27 → 19.70 %).
+The Pact's army's day is 1.21 %, 0.01 over the band's top. It was argued before and is held argued with F6.1's reason (our
+army is a corps' size, all of it in the enemy's path). The front reserve is not counted in it: the measure is the army's.
+
+A first run, before the force went in together, had the Pact's air front stepping back 11.67 h after the loss line
+(3 steps back, the band 12-72 h). One of those steps came from a crisis step. The brigade went in alone and the crisis
+override took the air front a step forward; when the override ended, the losses pulled it back at the chief's first
+cycle. Once the force goes in together, that war does not happen: 14.0 h on 2 steps, as F7.3. The model's step back
+comes at the air staff's first 12 h cycle after the loss line for a chief who is not composed, so a war can measure
+under 12 h. That is F2.3's rule and has not been changed.
+
+**The player's effect** (`fronts_bench --player`, 7 days x 3 seeds): every band passes, as F7.3.
+- The battery's sector's line is 0.00 km apart for the Pact, the neutral and the rebels, and 0.49 for NATO, as before.
+  The air front is 0 steps apart.
+- The Pact's northern_forest: the careful battery holds the ledger's air front 3.3 h a war (2.3 before). The careless
+  battery's kills are 0.7 a war (0.3 before), and the enemy's loss a sortie is 2.59/2.84 % (2.70/3.37 before).
+- The neutral's border_forest: seed 9's line there is 0.0 km at the end where it was 17.9 (the counterstrike pushed the
+  incursion back), careful and careless alike. Elsewhere the line now differs 3.47 km between seeds (0.00 before).
+
+**`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`**: every band holding for all four factions
+and both postures (`docs/air_war/09_BALANCE.md` section 30):
+- the Pact's loss a sortie 3.14/3.09 % (3.12/3.02 before);
+- NATO's 2.06/2.21 % (2.08/2.19), and NATO's air front now steps 0.2/0.1 times a campaign, to 20 km (none before): our
+  counterstrikes put its sector in crisis, and its crisis rule is to advance;
+- the neutral's 5.61/6.44 % (5.71/7.37).
+
+**Identity, fingerprint, gates.** The defaults are unchanged: the 11th Tank Division is read only by the ground war, and
+only with the block. `air_war_balance data 20 7` and `air_war_balance --theatre theatre_pannonia_nation.json data 10 7`
+are identical by content (byte for byte) to track F's references. The replay fingerprint holds (journal 107, FNV
+1375944258174313379, 41 packages). `--ground --gate`, `--ground --gate --player-sector battery`, `--feed --gate` (the pipeline's pump 15.3 ms a
+campaign day for the Pact, 12.7 for NATO, 2.5 for the neutral and 2.6 for the rebels, against 20) and `--history --gate`
+exit 0. The full test binary passes (1432 tests). `check_citations.py`: 161 data files, 0 problems.
+
+**Left:**
+- The counterstrikes fire but do not win ground against the Pact and NATO (above): the front's ratio does not weigh the
+  town, the posture or the dark. A design call.
+- The division has no object in the theatre, so the enemy's air cannot find or strike it.
+- The withdrawals band: F8.2.

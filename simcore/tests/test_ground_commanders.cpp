@@ -549,9 +549,10 @@ SC_TEST("ground commanders (F3.4): our counterattack into the penetration, back 
     const int div = FormationOf(g, "red_div"), acr = FormationOf(g, "red_acr"), td = FormationOf(g, "blue_td");
     Logged log;
     double deepest = 0.0, at_start = -1.0, div_at = 0.0, acr_at = 0.0, div_loss = 0.0, acr_loss = 0.0;
-    bool never_negative = true;
+    bool never_negative = true, td_in = false;
     Run(g, line, env, 24 * 6, log, [&](int) {
         const Axis& x = g.Axes()[0];
+        td_in = td_in || std::find(x.counter.begin(), x.counter.end(), td) != x.counter.end();
         deepest = std::max(deepest, x.depth_m);
         never_negative = never_negative && x.depth_m >= 0.0;
         for (std::size_t i = 0; i < line.StationCount(); ++i) never_negative = never_negative && line.StationOffset(i) >= 0.0;
@@ -569,8 +570,9 @@ SC_TEST("ground commanders (F3.4): our counterattack into the penetration, back 
     });
     log.Print(g);
     const GroundLogEntry* ordered = log.First(GroundOrder::CounterattackOrdered);
-    const GroundLogEntry* starts = log.First(GroundOrder::CounterattackStarts, td);
-    SC_EXPECT(ordered != nullptr && starts != nullptr);
+    // F7.1: the force goes in together, so the start is logged for whichever of it is first; the tank division is in it.
+    const GroundLogEntry* starts = log.First(GroundOrder::CounterattackStarts);
+    SC_EXPECT(ordered != nullptr && starts != nullptr && td_in);
     if (ordered == nullptr || starts == nullptr) return;
     SC_EXPECT(ordered->cmdr == g.TopOf(Side::Ours));  // the army commander's
     SC_EXPECT(ordered->value >= CounterattackRatioOf(Tables(), g.Commanders()[static_cast<std::size_t>(ordered->cmdr)].traits) - 1e-9);
@@ -1054,8 +1056,14 @@ SC_TEST("front reserve (F8.1): held out of the line until the front's commander 
     const Axis& x = g.Axes()[0];
     bool held = true, army_short = true;
     double ours_at_order = 0.0, tip_at_order = 0.0;
-    int order_h = -1;
+    int order_h = -1, together = -1;
     Run(g, w.line, w.env, 24 * 6, w.log, [&](int h) {
+        // The whole force goes in together: when the counterattack starts, the division and the brigade are both in it.
+        if (together < 0 && w.log.First(GroundOrder::CounterattackStarts) != nullptr) {
+            const bool d_in = std::find(x.counter.begin(), x.counter.end(), td) != x.counter.end();
+            const bool b_in = std::find(x.counter.begin(), x.counter.end(), tb) != x.counter.end();
+            together = d_in && b_in ? 1 : 0;
+        }
         if (w.log.First(GroundOrder::CounterattackOrdered) == nullptr) {
             // Out of the line until committed; never sent by the army, as a counterattack or a relief.
             held = held && r.free && r.task == Task::None && r.unit.state == UnitState::Reserve;
@@ -1087,7 +1095,7 @@ SC_TEST("front reserve (F8.1): held out of the line until the front's commander 
     SC_EXPECT(g.FrontOrders() >= 1 && g.FrontOrderedRatioSum() >= ordered->value - 1e-9);
     // It goes in after his planning (6-12 h) and its march, within his reach of the order.
     const GroundLogEntry* starts = w.log.First(GroundOrder::CounterattackStarts);
-    SC_EXPECT(starts != nullptr && w.log.First(GroundOrder::CounterattackStarts, td) != nullptr);
+    SC_EXPECT(starts != nullptr && together == 1);
     if (starts != nullptr) {
         SC_EXPECT(starts->h - ordered->h >= 6.0 - 1.0);
         SC_EXPECT(starts->h - ordered->h <= 24.0 + 1.0);

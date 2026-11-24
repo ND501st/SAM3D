@@ -1264,8 +1264,6 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
                     }
                 }
                 if (f.pullbacks > back0[s] && over_since[s] >= 0.0) out.pullback_h.Add(c.Now() - over_since[s]);
-                if (std::getenv("F81_DEBUG") != nullptr && f.pullbacks > back0[s]) std::printf("DBG pullback seed %u sector %zu now %.0f over_since %.0f depth_since %.1f crisis_until %.1f advances %d\n", seed, s, c.Now(), over_since[s], f.depth_since_h, f.crisis_until_h, f.advances);
-                if (std::getenv("F81_DEBUG") != nullptr && f.advances > adv0[s]) std::printf("DBG advance seed %u sector %zu now %.0f depth_since %.1f crisis_until %.1f\n", seed, s, c.Now(), f.depth_since_h, f.crisis_until_h);
                 adv0[s] = f.advances;
                 back0[s] = f.pullbacks;
                 pending[s] = f.pending_h;

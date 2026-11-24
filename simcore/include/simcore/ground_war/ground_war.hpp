@@ -80,6 +80,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "simcore/air_war/data.hpp"
@@ -1095,6 +1096,7 @@ private:
     std::vector<std::uint8_t> moved_;
     std::vector<AxisChoice> choices_;
     std::vector<double> reach_;        // by formation (F7.1): a counterattack candidate's hours from the order to the flank
+    std::vector<std::pair<std::size_t, double>> counter_go_;  // a counterattack order's force and each one's hour there (scratch)
     std::vector<GroundLogEntry> log_;
     GroundPicture pictures_[2];  // ours, the enemy's (F3.5)
     std::vector<SitReport> sit_reports_;  // our side's reports and orders as compiled (F3.8)
@@ -2699,7 +2701,6 @@ private:
         def.contact_day = att.contact_day;
         const SectorConditions c = Conditions(x, h0, env);
         results_[a] = ResolveSector(t, att, def, c, data_->ours.doctrine.caps, DayDraw(x, h0), 1.0);
-        if (std::getenv("F81_DEBUG") != nullptr) std::printf("DBG counter axis %zu h %.0f att %.1f def %.1f posture %d night %d terrain %d ratio %.2f adv_km %.3f depth %.1f\n", a, h0, att.power, def.power, static_cast<int>(def.posture), c.night ? 1 : 0, static_cast<int>(c.terrain), results_[a].ratio, results_[a].advance_km, x.depth_m / 1000.0);
         x.last_ratio = results_[a].ratio;
         x.last_opposition = results_[a].opposition;
     }
@@ -3378,17 +3379,27 @@ private:
         const double ratio = theirs > 0.0 ? ours / theirs : (ours > 0.0 ? 1e9 : 0.0);
         if (front) front_best_ratio_ = std::max(front_best_ratio_, ratio);
         if (!(ours > 0.0) || !WantsCounterattack(ratio, CounterattackRatioOf(t, g.traits))) return;
+        // F7.1: the force goes in together at one hour, its slowest formation's (reznichenko_1984 pp. 177-179: a
+        // counterattack's line and time of deployment are set for the whole force); F3.4's rule, each as it arrives.
+        std::vector<std::pair<std::size_t, double>>& go = counter_go_;
+        go.clear();
+        double together_h = h;
         for (std::size_t i = 0; i < forms_.size(); ++i) {
             if (!CounterCandidate(i, x, front)) continue;
             if (t.counter_at_tip && reach_[i] > reach_h + 1e-9) continue;
+            const double at = h + plan_h + MarchHours(forms_[i], a, line, h);
+            go.emplace_back(i, at);
+            together_h = std::max(together_h, at);
+        }
+        for (const std::pair<std::size_t, double>& p : go) {
+            const std::size_t i = p.first;
             Formation& f = forms_[i];
             f.free = false;
             f.task = Task::Counter;
             f.task_axis = best;
             f.unit.state = UnitState::March;
             ++x.counter_incoming;
-            if (std::getenv("F81_DEBUG") != nullptr) std::printf("DBG order front %d form %zu axis %d h %.1f plan %.1f march %.1f ratio %.2f ours %.1f theirs %.1f\n", front ? 1 : 0, i, best, h, plan_h, MarchHours(f, a, line, h), ratio, ours, theirs);
-            Push(h + plan_h + MarchHours(f, a, line, h), EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
+            Push(t.counter_at_tip ? together_h : p.second, EventKind::Arrive, best, static_cast<int>(i), 0, Task::Counter);
             SitOrderTo(h, GroundOrder::CounterattackOrdered, c, static_cast<int>(i), best, ratio, -1);
         }
         Order(h, GroundOrder::CounterattackOrdered, c, -1, best, ratio);
@@ -3510,7 +3521,6 @@ private:
     // Our counterattack ends: its force goes over to the defence on the axis; the enemy's senior decides whether to resume.
     void EndCounter(std::size_t a, double h) {
         Axis& x = axes_[a];
-        if (std::getenv("F81_DEBUG") != nullptr) std::printf("DBG endcounter axis %zu h %.1f start %.1f adv %.1f depth %.1f\n", a, h, x.counter_start_h, x.counter_advance_h, x.depth_m / 1000.0);
         for (int fi : x.counter) {
             Formation& f = forms_[static_cast<std::size_t>(fi)];
             f.task = Task::None;
