@@ -1198,7 +1198,7 @@ SC_TEST("front reserve (F8.1): the 11th Tank Division on the nation: the nationa
 
 namespace {
 
-// F8.2's hand war: the enemy's offensive a month out (no fighting), our two divisions on the line, the
+// F8.2's hand war: the enemy's offensive a month out (no fighting; start_h to fight), our two divisions on the line, the
 // doctrine's lines (2/3, 1/2, 3/4 hit). blue_a has its own command post; blue_b its regiments (two of tanks, one of
 // artillery, each with a troops object); the army's command post is no formation's; a reserve division to relieve.
 // The command post restored in 8 h (a test value inside the division's reaction time; the doctrine's is 1-3 h).
@@ -1212,7 +1212,7 @@ struct HitWar {
     GroundWar g;
     Logged log;
     int a = -1, b = -1;
-    explicit HitWar(bool block) {
+    explicit HitWar(bool block, double start_h = 24.0 * 30.0) {
         std::shared_ptr<GroundWarData> d = Bare();
         EffectivenessDef e;
         e.kind = EffectivenessKind::Lines;
@@ -1223,7 +1223,7 @@ struct HitWar {
         d->enemy.doctrine.effectiveness = e;
         d->ours.doctrine.restore_control_h = ValueRange{8.0, 8.0};
         d->tables.command_hit.on = block;
-        d->enemy.plan.start_after_h = 24.0 * 30.0;
+        d->enemy.plan.start_after_h = start_h;
         d->enemy.oob.units.push_back(Unit("red_div", "division", 700, 10000));
         AddAxis(*d, "east", "east", 75, 200, {"red_div"});
         command::OrderOfBattle& o = d->ours.oob;
@@ -1299,7 +1299,7 @@ SC_TEST("command hit (F8.2): its command post hit, a division at 66 % asks to wi
     w.To(1);
     w.g.TestLoss(static_cast<std::size_t>(w.a), 0.34);
     w.g.TestLoss(static_cast<std::size_t>(w.b), 0.34);
-    SC_EXPECT_NEAR(w.F(w.a).unit.Fraction(), 0.66, 1e-9);
+    SC_EXPECT_NEAR(w.F(w.a).unit.Fraction(), 0.66, 1e-3);  // its rest rate's hour on top
     SC_EXPECT(w.g.AskLine(static_cast<std::size_t>(w.a)) < 0.6 && w.g.AskLine(static_cast<std::size_t>(w.b)) < 0.6);
     // blue_a's command post struck; blue_b's tank regiment struck (its commander looks at his unit: under 2/3, he reports).
     w.truth[kACp].function = 0.4;
@@ -1409,8 +1409,8 @@ SC_TEST("command hit (F8.2): without its block no hit is learned, the line is th
     off.To(48);
     SC_EXPECT(off.Hits() == 0 && !off.g.HitKnown(static_cast<std::size_t>(off.a)) && !off.g.HitKnown(static_cast<std::size_t>(off.b)));
     SC_EXPECT(off.log.Count(GroundOrder::WithdrawAsked) == 0 && off.g.AskLine(static_cast<std::size_t>(off.a)) < 0.6);
-    // With the block and nothing hit, every entry and strength as without it.
-    HitWar p(true), q(false);
+    // With the block and nothing hit, a war fought for four days: every entry and strength as without it.
+    HitWar p(true, 2.0), q(false, 2.0);
     if (p.a < 0 || q.a < 0) return;
     for (HitWar* w : {&p, &q}) {
         w->To(1);
