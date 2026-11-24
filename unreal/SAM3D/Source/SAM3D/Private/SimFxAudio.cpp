@@ -956,6 +956,25 @@ namespace
 					S.Scene.AddOneShot(D);
 				}
 				break;
+			case EventKind::DistantFire:
+			{
+				// The ground war's artillery from afar (track F, F5.2): its rounds bursting along the fight's frontage through
+				// the salvo's span, each heard when its sound arrives (the scene's own delay and absorption, as the event's
+				// end_t_s and level_db were worked out in simcore), a far thud and its roll.
+				const uint64 Seed = static_cast<uint64>(E.seq) * 2654435761u;
+				const int32 N = FMath::Clamp(E.number, 1, 24);
+				const double Span = FMath::Max(E.span_s, 0.0);
+				const double ChargeKg = E.charge_kg > 0.0 ? E.charge_kg : 6.0;
+				for (int32 I = 0; I < N; ++I)
+				{
+					const double T = E.t_s + Span * (I + 0.5 + 0.4 * SimFxAudioSpread(Seed, I)) / N;
+					const simcore::Vec3 P = E.position + simcore::Vec3{150.0 * SimFxAudioSpread(Seed + 3, I), 150.0 * SimFxAudioSpread(Seed + 5, I), 0.0};
+					Blast(T, P, ChargeKg, false);
+				}
+				break;
+			}
+			case EventKind::FireGlow:
+				break;  // a far fire is seen, not heard
 			}
 		}
 

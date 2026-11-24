@@ -4,6 +4,10 @@
 // meets losing more, asking, relieved by the second echelon's, and down 6 h after the need ends with strength, posture and
 // place kept. The route service on the nation: asked once per pair of anchors and the overlay's version, a bridge down in
 // the air war cutting its crossing and asked again. And U1 against U0 over 20 seeds on every faction's front: the same war.
+// F5.2 (F8.3): U2, the regiments at U1 near the battery as the session's battalions and companies, ours by our models and
+// the enemy's never; the enemy's listed for drawing only within sight, by day and by night; nothing out of a session; the
+// front's distant fire with its retarded time and level, and its glow only at night.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -11,7 +15,9 @@
 #include <vector>
 
 #include "simcore/air_war.hpp"
+#include "simcore/campaign/mission_session.hpp"
 #include "simcore/ground_war.hpp"
+#include "simcore/ground_war/session_units.hpp"
 #include "test_framework.hpp"
 
 using namespace simcore;
@@ -460,5 +466,244 @@ SC_TEST("ground levels (F3.6): U1 against U0 over 20 seeds on every faction's fr
         SC_EXPECT(std::fabs(depth[1] - depth[0]) <= 0.10 * std::max(depth[0], 30.0));
         SC_EXPECT(std::fabs(ours[1] - ours[0]) <= 0.10 * std::max(ours[0], 0.2));
         SC_EXPECT(std::fabs(enemy[1] - enemy[0]) <= 0.10 * std::max(enemy[0], 0.2));
+    }
+}
+
+// ------------------------------------------------------------------------------------------------------------ U2 (F5.2)
+
+namespace {
+
+// The hand war with the red division's three regiments under it (U1 needs two with tanks).
+std::shared_ptr<GroundWarData> HandWarWithRedRegiments() {
+    std::shared_ptr<GroundWarData> d = HandWar();
+    d->enemy.oob.units.front().equipment.clear();
+    d->enemy.oob.units.front().equipment.push_back({"t55", 40});
+    for (const char* id : {"red_r1", "red_r2", "red_r3"}) d->enemy.oob.units.push_back(Unit(id, "regiment", 95, 2500, "red_div"));
+    return d;
+}
+
+}  // namespace
+
+SC_TEST("ground levels (F5.2): U2 near the battery: the regiments at U1 as battalions at their places, ours by our models, the enemy's never; none at U0") {
+    std::shared_ptr<GroundWarData> d = HandWarWithRedRegiments();
+    LineOfContact line;
+    line.Build(StraightFront(), 5000.0);
+    TheatreDef theatre;
+    GroundEnv env;
+    env.theatre = &theatre;
+    env.player_sector = 1;
+    GroundWar g;
+    std::string e;
+    SC_EXPECT(g.Build(d, line, theatre, nullptr, 7, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    g.Step(6.0, env, line);
+    const std::vector<std::string> ours = OurTypes(*d);
+    SC_EXPECT(std::find(ours.begin(), ours.end(), "t55") != ours.end());
+    const Vec3 battery = Km(65, 8);
+    const double radius_m = 20000.0;
+    const std::vector<U2Unit> u2 = U2Near(g, line, battery, radius_m, ours);
+    int n_ours = 0, n_enemy = 0, vehicles = 0;
+    for (const U2Unit& u : u2) {
+        (u.side == Side::Ours ? n_ours : n_enemy) += 1;
+        vehicles += u.vehicles;
+        SC_EXPECT(Dist2d(u.place, battery) <= radius_m + 1e-6);
+        SC_EXPECT(u.vehicles >= 1 && (u.kind == "battalion" || u.kind == "company"));
+        // Ours by our equipment's models; the enemy's never one of ours (its T-55s are its faction's variant).
+        if (u.side == Side::Ours) {
+            SC_EXPECT(u.model == u.type && std::binary_search(ours.begin(), ours.end(), u.model));
+            SC_EXPECT(line.DistanceTo(u.place) > 0.0);  // behind the line of contact, our side
+        } else {
+            SC_EXPECT(u.model == "t55_test" && !std::binary_search(ours.begin(), ours.end(), u.model));
+            SC_EXPECT(line.DistanceTo(u.place) < 0.0);  // its side
+        }
+        SC_EXPECT(std::fabs(std::hypot(u.along.x, u.along.y) - 1.0) < 1e-9);
+    }
+    std::printf("    at h 6: %zu units near the battery (%d ours, %d the enemy's), %d vehicles\n", u2.size(), n_ours, n_enemy, vehicles);
+    SC_EXPECT(n_ours >= 2 && n_enemy >= 1);
+    // Their vehicles follow the regiment's strength.
+    for (const U2Unit& u : u2) {
+        if (u.side != Side::Ours) continue;
+        SC_EXPECT(u.vehicles <= 50 && static_cast<double>(u.vehicles) >= std::floor(50.0 * g.RegimentFraction(static_cast<std::size_t>(u.reg))));
+    }
+    // A battery far behind the line has none; the same war out of the player's area comes down to U0 and has none either.
+    SC_EXPECT(U2Near(g, line, Km(65, 80), radius_m, ours).empty());
+    env.player_sector = -1;
+    g.Step(6.0 + Tables().levels_down_after_h + 2.0, env, line);
+    SC_EXPECT(U2Near(g, line, battery, radius_m, ours).empty());
+    // The enemy's model for a type of ours is its faction's; for one not ours, its own.
+    SC_EXPECT(U2Model("bmp1", Side::Enemy, "warsaw_pact", {"bmp1", "t55"}) == "bmp1_warsaw_pact");
+    SC_EXPECT(U2Model("t72", Side::Enemy, "warsaw_pact", {"bmp1", "t55"}) == "t72");
+    SC_EXPECT(U2Model("bmp1", Side::Ours, "warsaw_pact", {"bmp1", "t55"}) == "bmp1");
+}
+
+SC_TEST("ground levels (F5.2): U2's movers: deployed in line, the enemy's listed only within sight by day and by night, none once out of need, a moved place marched") {
+    std::shared_ptr<GroundWarData> d = HandWarWithRedRegiments();
+    nav::SessionNav nav;  // no roads: a march goes straight across country
+    SessionUnits su;
+    su.Start(*d);
+    std::vector<U2Unit> units(2);
+    units[0].id = "red_r1/t72/1";
+    units[0].side = Side::Enemy;
+    units[0].type = "t72";
+    units[0].model = "t72";
+    units[0].kind = "battalion";
+    units[0].vehicles = 31;
+    units[0].place = Vec3{5000.0, 0.0, 0.0};
+    units[0].along = Vec3{1.0, 0.0, 0.0};
+    units[1].id = "blue_r1/t55/1";
+    units[1].side = Side::Ours;
+    units[1].type = units[1].model = "t55";
+    units[1].kind = "company";
+    units[1].vehicles = 10;
+    units[1].place = Vec3{0.0, 3000.0, 0.0};
+    units[1].along = Vec3{1.0, 0.0, 0.0};
+    su.Apply(units, nav, 0.0);
+    SC_EXPECT(su.Made() == 2 && su.Near() == 2);
+    const nav::Mover* red = nav.GetMovers().Find("red_r1/t72/1");
+    SC_EXPECT(red != nullptr && red->ground_war && red->enemy && red->state == nav::MoverState::Arrived);
+    if (red == nullptr) return;
+    // Deployed in line across its place, its vehicles 50 m apart.
+    SC_EXPECT_NEAR(red->route.length_m, 30 * SessionUnits::kSpacingM, 1e-9);
+    const MapPoint mid = nav::PointAlong(red->route, 0.5 * red->route.length_m);
+    SC_EXPECT(std::hypot(mid.east_m - 5000.0, mid.north_m) < 1e-6);
+    const auto listed = [&nav](const std::string& id, bool* enemy = nullptr, std::string* model = nullptr) {
+        int n = 0;
+        for (const nav::SessionNav::Seen& v : nav.Visible()) {
+            if (v.mover != id) continue;
+            ++n;
+            if (enemy != nullptr) *enemy = v.enemy;
+            if (model != nullptr) *model = v.model;
+        }
+        return n;
+    };
+    const double day = nav::VisualRangeM(40000.0, 30.0, nav.Range());
+    const double night = nav::VisualRangeM(40000.0, -20.0, nav.Range());
+    std::printf("    visual range: %.0f m by day, %.0f m by night\n", day, night);
+    const std::vector<MapPoint> eye = {MapPoint{0.0, 0.0}};
+    // By day both, the enemy's as the enemy's with its own model, ours as ours.
+    nav.Step(1.0, 1.0, eye, day);
+    bool enemy = false;
+    std::string model;
+    SC_EXPECT(listed("red_r1/t72/1", &enemy, &model) == 31 && enemy && model == "t72");
+    SC_EXPECT(listed("blue_r1/t55/1", &enemy, &model) == 10 && !enemy && model == "t55");
+    // By night neither, 5 and 3 km off; the enemy's close enough again only within the night's range.
+    nav.Step(2.0, 1.0, eye, night);
+    SC_EXPECT(listed("red_r1/t72/1") == 0 && listed("blue_r1/t55/1") == 0);
+    nav.Step(3.0, 1.0, {MapPoint{5000.0, 1000.0}}, night);
+    SC_EXPECT(listed("red_r1/t72/1") == 31);
+    // Out of need: nothing listed of it, however close, until it is near again.
+    su.Apply({units[1]}, nav, 60.0);
+    SC_EXPECT(su.Near() == 1);
+    nav.Step(4.0, 1.0, {MapPoint{5000.0, 0.0}}, day);
+    SC_EXPECT(listed("red_r1/t72/1") == 0);
+    // Near again with its place moved 4 km: back in sight and marching there, straight (no roads in this session).
+    units[0].place = Vec3{5000.0, -4000.0, 0.0};
+    units[0].vehicles = 25;  // its losses
+    su.Apply(units, nav, 120.0);
+    nav.Step(121.0, 1.0, {MapPoint{5000.0, 0.0}}, day);
+    red = nav.GetMovers().Find("red_r1/t72/1");
+    SC_EXPECT(red != nullptr && su.Marches() == 1 && su.RoadSearches() == 0);
+    if (red == nullptr) return;
+    SC_EXPECT(red->state == nav::MoverState::Moving && red->vehicles == 25 && listed("red_r1/t72/1") == 25);
+    nav.Step(6000.0, 6000.0 - 121.0, {MapPoint{5000.0, 0.0}}, day);  // the march straight across country, an hour or so
+    SC_EXPECT(red->state == nav::MoverState::Arrived);
+    const MapPoint head = nav::PointAlong(red->route, red->arc_m);
+    SC_EXPECT(std::hypot(head.east_m - 5000.0, head.north_m + 4000.0) < 1.0);
+}
+
+SC_TEST("ground levels (F5.2): the front from afar: each salvo's retarded time and level at the battery, none too far; fires glow only at night") {
+    FrontContact c;
+    c.axis = "east";
+    c.at = Vec3{0.0, 20000.0, 0.0};
+    c.along = Vec3{1.0, 0.0, 0.0};
+    c.half_width_m = 0.0;  // the salvo where the tip is
+    FrontContact c2 = c;
+    c2.axis = "west";
+    c2.at = Vec3{0.0, 60000.0, 0.0};  // beyond hearing
+    FrontAir air;
+    air.temperature_k = 283.15;
+    air.rh_pct = 70.0;
+    const FrontFxValues v;
+    const Vec3 battery{0.0, 0.0, 0.0};
+    const std::vector<fx::Event> heard = DistantFire({c, c2}, battery, 100.0, 0, air, v, 1);
+    SC_EXPECT(heard.size() == 1);
+    if (heard.size() != 1) return;
+    const fx::Event& e = heard[0];
+    const double c_mps = fx::SpeedOfSound(air.temperature_k);
+    std::printf("    a salvo 20 km off: fired at %.1f s, heard at %.1f s (%.1f m/s), %.1f dB peak, %d rounds over %.0f s\n", e.t_s, e.end_t_s, c_mps,
+                e.level_db, e.number, e.span_s);
+    SC_EXPECT(e.kind == fx::EventKind::DistantFire && std::string(fx::ToString(e.kind)) == "distant_fire");
+    SC_EXPECT_NEAR(e.end_t_s - e.t_s, 20000.0 / c_mps, 1e-9);  // its retarded time
+    SC_EXPECT(e.end_t_s - e.t_s > 55.0 && e.end_t_s - e.t_s < 62.0);
+    const double expect_db = fx::PeakSplDb(v.shell_kg, 20000.0, air.pressure_pa, fx::kSurfaceBurstFactor) -
+                             fx::AirAbsorptionDbPerM(v.thud_hz, air.temperature_k, air.rh_pct, air.pressure_pa) * 20000.0;
+    SC_EXPECT_NEAR(e.level_db, expect_db, 1e-9);
+    SC_EXPECT(e.level_db >= v.heard_db && e.number == v.rounds && e.span_s == v.every_s);
+    // Farther is quieter and later; the air's absorption takes more than spreading alone.
+    c.at = Vec3{0.0, 40000.0, 0.0};
+    const std::vector<fx::Event> farther = DistantFire({c}, battery, 100.0, 0, air, v, 1);
+    SC_EXPECT(farther.size() == 1 && farther[0].level_db < e.level_db - 6.0 && farther[0].end_t_s > e.end_t_s);
+    // Too faint to hear over the battery: none.
+    FrontFxValues deaf = v;
+    deaf.heard_db = e.level_db + 1.0;
+    c.at = Vec3{0.0, 20000.0, 0.0};
+    SC_EXPECT(DistantFire({c}, battery, 100.0, 0, air, deaf, 1).empty());
+    // Along a frontage the salvo moves from step to step, the same for the same seed.
+    c.half_width_m = 4000.0;
+    const std::vector<fx::Event> a1 = DistantFire({c}, battery, 0.0, 3, air, v, 9), a2 = DistantFire({c}, battery, 0.0, 3, air, v, 9),
+                                 b1 = DistantFire({c}, battery, 0.0, 4, air, v, 9);
+    SC_EXPECT(a1.size() == 1 && a2.size() == 1 && b1.size() == 1);
+    if (a1.size() == 1 && a2.size() == 1 && b1.size() == 1) {
+        SC_EXPECT(a1[0].position.x == a2[0].position.x && a1[0].position.x != b1[0].position.x && std::fabs(a1[0].position.x) <= 4000.0);
+    }
+    // Fires: none by day; at night within the weather's visibility only.
+    SC_EXPECT(FireGlows({c}, battery, 0.0, 0, false, 40000.0, v, 1).empty());
+    const std::vector<fx::Event> glow = FireGlows({c}, battery, 0.0, 0, true, 40000.0, v, 1);
+    SC_EXPECT(glow.size() == 1 && glow[0].kind == fx::EventKind::FireGlow && glow[0].end_t_s == v.glow_lasts_s && glow[0].fire);
+    SC_EXPECT(FireGlows({c}, battery, 0.0, 0, true, 10000.0, v, 1).empty());
+}
+
+SC_TEST("ground levels (F5.2): a played mission with the fronts has the war's units near the battery as its movers; none without the fronts") {
+    for (int fronts = 0; fronts < 2; ++fronts) {
+        campaign::MissionSessionDef md;
+        md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
+        md.faction = "warsaw_pact";
+        md.seed = 1;
+        md.day = 3;
+        md.theatre = "air_war/theatre_pannonia_nation.json";
+        md.hours = 0.1;
+        md.fronts = fronts == 1;
+        md.u2_radius_m = 150000.0;  // battery 21 stands about 100 km from the Pact's nearest regiment on day 3
+        campaign::MissionSession s;
+        std::string e;
+        SC_EXPECT(s.Start(md, kData, &e));
+        if (!e.empty()) std::printf("    %s\n", e.c_str());
+        ScenarioRunner& r = s.Runner();
+        for (int k = 0; k < 600 && !r.Finished(); ++k) s.Step(0.5);
+        int gw = 0, enemy = 0, ours_seen = 0, enemy_seen = 0;
+        const nav::SessionNav* nav = r.Nav();
+        SC_EXPECT(nav != nullptr);
+        if (nav == nullptr) return;
+        const std::vector<std::string> our_types = s.GroundUnits().OurTypeList();
+        for (const nav::Mover& m : nav->GetMovers().All()) {
+            if (!m.ground_war) continue;
+            ++gw;
+            enemy += m.enemy ? 1 : 0;
+        }
+        for (const ScenarioRunner::WorldMover& v : r.MoversInView()) {
+            bool u2 = false;
+            for (const nav::Mover& m : nav->GetMovers().All()) u2 = u2 || (m.id == v.mover && m.ground_war);
+            if (!u2) continue;
+            (v.enemy ? enemy_seen : ours_seen) += 1;
+            // Ours by our models, the enemy's never.
+            SC_EXPECT(v.enemy != std::binary_search(our_types.begin(), our_types.end(), v.model));
+        }
+        std::printf("    fronts %s: %d U2 movers (%d the enemy's), %zu near now, %d of ours and %d of the enemy's vehicles in sight; %d salvos heard, %d fires seen\n",
+                    fronts == 1 ? "on " : "off", gw, enemy, s.GroundUnits().Near(), ours_seen, enemy_seen, s.FrontSalvosHeard(), s.FrontFiresSeen());
+        if (fronts == 0) {
+            SC_EXPECT(!s.GroundUnits().Started() && gw == 0 && s.FrontSalvosHeard() == 0);
+        } else {
+            SC_EXPECT(s.GroundUnits().Started() && gw > 0 && static_cast<std::size_t>(gw) == s.GroundUnits().Made());
+        }
     }
 }

@@ -55,6 +55,13 @@
 //   AirGunBurst    a fighter's burst at an aircraft: t_s..end_t_s the burst; position, velocity: the shooter's; aim: the
 //                  target where it was; world_id, source: the shooter; target_world_id, target; weapon: the gun's
 //                  air_combat.json id; end Hit (it brought the target down) or Wide; number: 0 (the gun's rate draws).
+//   DistantFire    the ground war's artillery heard from afar (track F, F5.2; ground_war/session_units.hpp): t_s the
+//                  salvo's first round fired, its `number` rounds spread over span_s after it; position = aim: where they
+//                  burst (on the ground, along the fight's frontage); end_t_s: its retarded time, when the first round's
+//                  sound reaches the battery at the speed of sound in the day's air; level_db: its peak level there after
+//                  the air's absorption (dB re 20 µPa); charge_kg: a shell's; source: the axis; weapon "artillery".
+//   FireGlow       a fire burning on the ground war's front, seen at night from the battery: t_s..end_t_s; position: where
+//                  (on the ground); source: the axis.
 // `weapon` is a munitions.json id, a data/air_war/weapons.json id, or an air defence system id (air_war/data.hpp
 // AirDefenceSystems: "osa", "zsu234", ...): the munitions library resolves any of them.
 #pragma once
@@ -91,6 +98,8 @@ enum class EventKind {
     AamLaunch,       // an air-to-air missile fired (roadmap B8): shooter, target, its shape, its flight time
     AamEnd,          // that missile's end: on the target, a miss flying on, or its target gone
     AirGunBurst,     // a fighter's gun burst at an aircraft (roadmap B8)
+    DistantFire,     // the ground war's artillery heard from afar (track F, F5.2): a salvo, its retarded time and level
+    FireGlow,        // a fire on the ground war's front glowing at night (track F, F5.2)
 };
 
 inline const char* ToString(EventKind k) {
@@ -113,6 +122,8 @@ inline const char* ToString(EventKind k) {
         case EventKind::AamLaunch: return "aam_launch";
         case EventKind::AamEnd: return "aam_end";
         case EventKind::AirGunBurst: return "air_gun_burst";
+        case EventKind::DistantFire: return "distant_fire";
+        case EventKind::FireGlow: return "fire_glow";
     }
     return "?";
 }
@@ -179,6 +190,9 @@ struct Event {
     Vec3 lead_error;            // m/s
     double correction_per_s = 0.0;
     double spread_mrad = 0.0;
+    // DistantFire: its rounds' spread after t_s (s) and its peak level at the battery (dB re 20 µPa).
+    double span_s = 0.0;
+    double level_db = 0.0;
 };
 
 // Bounded: the oldest are dropped past `capacity` (default 4096); a reader that fell behind skips them. The sequence

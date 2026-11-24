@@ -891,6 +891,22 @@ void FSimFxWorld::OnEvent(const simcore::fx::Event& E)
 	case EventKind::AirGunBurst:
 		AirGunBurst(E);
 		break;
+	case EventKind::DistantFire:
+		break;  // the ground war's artillery from afar (track F, F5.2) is heard (SimFxAudio.cpp), its bursts below the horizon
+	case EventKind::FireGlow:
+	{
+		// A fire burning on the ground war's front, seen from the battery at night (track F, F5.2): a ground fire where the
+		// event has it until its end, larger than a wreck's (a house or a column burning), without its smoke column.
+		FSimFxFire& F = Fires.AddDefaulted_GetRef();
+		const Vec3 At = GroundUnder(E.position);
+		F.Pos = ToU(At);
+		F.Wind = WindAt(At);
+		F.StartT = E.t_s;
+		F.FireEndT = FMath::Max(E.end_t_s, E.t_s + 1.0);
+		F.SmokeEndT = E.t_s;
+		F.SizeM = Tune.Wreck.FireM * 4.0;
+		break;
+	}
 	}
 }
 

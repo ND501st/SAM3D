@@ -1087,7 +1087,7 @@ private:
         if (const nav::SessionNav* nav = r.Nav()) {
             for (const nav::Mover& mv : nav->GetMovers().All()) {
                 if (mv.state == nav::MoverState::Waiting || mv.state == nav::MoverState::Arrived || mv.state == nav::MoverState::BrokenDown ||
-                    mv.route.path.empty())
+                    mv.route.path.empty() || mv.ground_war)  // the ground war's U2 is no target here (F5.2)
                     continue;
                 const MapPoint p = nav::PointAlong(mv.route, mv.arc_m);
                 consider(Vec3{p.east_m, p.north_m, 0.0}, "mover:" + mv.id, 4, TargetClass::Soft, mv.state == nav::MoverState::Moving);
