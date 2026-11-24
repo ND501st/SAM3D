@@ -571,3 +571,29 @@ passes.
 - NATO's covering force and the helicopters' broken rule are still only exercised by hand cases.
 - The player's effect as a step's delay: not measurable while the gates keep the air front back wherever the battery
   stands on an axis (above). A theatre with weaker cover in an axis's sector, or a longer war, would give one.
+
+## Decisions after F7 (24 Nov 2026)
+
+The owner asked for track F's development to be completed and left the calls of F7.3's list to Claude. They were taken
+as follows.
+
+- **Force structure: a front reserve (F8.1).** Our national command holds a reserve: a tank division of its own,
+  out of the army's line. It is taken from our order of battle if one stands there unused. Otherwise it is added, as a
+  small Pact-model nation of the period would keep one (sourced to the operator-country structures in `docs/SOURCES.md`).
+  It is committed by the front's commander on F7.1's rule at the tip, with its longer reach and planning time. Its
+  depth and reach come from the sources or are labelled game values.
+  - Behind a data block, so the defaults and old saves are unchanged.
+  - The counterattack band is then measured again. If a counterattack fires against NATO or the Pact, the band comes
+    out of argued for that faction; if it still cannot, it is re-argued with the new ratio.
+- **Withdrawals: command and artillery hit (F8.2).** A formation whose command post or artillery has been hit (by the
+  air war's strikes on troops, or by losses in its support regiments in combat) is judged against the doctrine's 75 %
+  line (`hq_hit_ineffective_below`, `mt_stashek_losses`) instead of the line of half. The hit is recorded as its own
+  staff learns it, and it wears off as command is restored.
+  - Wars that keep one formation in contact for about ten days are not forced: the war's length and tempo stay the
+    enemy's own.
+  - The withdrawals band is then measured again, and is green or re-argued.
+- **F5.2, units in sight in Unreal (F8.3).** simcore's U2 movers in a session, drawn by Unreal as basic models within
+  the player's visual range, and the front's distant sounds through the effects' sound subsystem. The Unreal code is
+  written to the project's conventions. Building and looking in the editor stays the owner's.
+- **Not taken now:** the counterattack into the flank, the wait for daylight, axes weighed by main and supporting, and
+  the army's day measured over attack days. They stay on the smaller items' list.
