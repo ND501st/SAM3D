@@ -112,7 +112,7 @@ struct GroundUnit {
 
 // The level a formation is stepped at (docs/fronts/03_GROUND_WAR.md section 3.3; F3.6): U0, the formation as the actor
 // with its regiments a list of strengths inside it; U1, in the player's sector and its neighbours, its regiments actors
-// with their own stations, posture, cohesion, commander and reports. U2 (movers in a session) is F5.2's.
+// with their own stations, posture, cohesion, commander and reports. U2 (movers in a session) is F5.2's (session_units.hpp).
 enum class UnitLevel : std::uint8_t { U0, U1 };
 
 inline const char* UnitLevelName(UnitLevel l) {

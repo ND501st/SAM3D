@@ -154,6 +154,83 @@ no fronts, no maps (an empty map, an unknown post); a fronts session's debrief e
   their audience (F2.5).
 - The debrief prints the maps as text and does not set the truth's line beside the belief (that is `fronts_bench --map`'s and F5.3's `tools/map_view.py --front`).
 
+## As built: F8.3 (25 Nov 2026)
+
+Section 2, units in sight, built as task F8.3. Simcore gained one new header; the Unreal side is written and compile-checked by reading only
+(the owner builds and looks). Nothing in the war or the session's fight reads any of it: `air_war_balance`'s two runs are identical to the
+base, the replay's fingerprint holds (journal 107, FNV 1375944258174313379, 41 packages), the four `fronts_bench` gates pass.
+
+**U2** (`ground_war/session_units.hpp`, new). `U2Near` takes every regiment at U1 (F3.6) of a formation not spent, within a reach of the
+battery, down to its battalions and companies: each equipment type of the regiment's own tree with a weight in the ground war's tables and at
+least 6 of it, in battalions of about 40 (a Pact tank battalion 31-40, a motor rifle battalion's BMPs 30-43, a NATO company team 14-17:
+`fm_100_2_3_1984`, `fm_71_2_1977`, rounded; under 20 vehicles a company), each with its vehicles now (its share of the regiment's
+establishment times `RegimentFraction`), spread across at most 6 km of the regiment's run of the line at its echelon's depth behind the line
+of contact as the war has it now (ours behind the line pushed in, the enemy's behind its axis's tip: `AssignStations`' rule). `SessionUnits`
+makes each one the session's mover (`nav::SessionNav::AddMover`, kind `column`, flagged `enemy` and `ground_war`), deployed in line along
+the line of contact at 50 m spacing; when the war moves its place more than 1 km, it marches there as a column at the ground war's own march
+speeds (the march table's day and cross-country middles, its night factor), on the roads when the move is 3 km or more and the session has
+roads, else straight across country; a unit no longer near drops to M0 (not listed, not stepped finely) and comes back when near again, so
+the movers' order, and Unreal's ids, never shift. `MissionSession` runs it with the fronts on (`MissionSessionDef::fronts`, a theatre with a
+country map), every 60 s of the session, the reach `MissionSessionDef::u2_radius_m` (20 km, a game value; `mission_demo --u2-km`).
+Nothing is made outside a session, nor with the fronts off.
+
+**What the player sees.** The session's rule for every mover: `SessionNav::Visible` lists only those within `nav::VisualRangeM` of the
+player's vehicle (8 km by day, 3 km at dusk, 1.5 km at night, the weather's visibility the cap), so an enemy's battalion out of sight has no
+mark anywhere. `Seen` and `ScenarioRunner::WorldMover` carry `enemy`. **Ours are drawn by our equipment's models, the enemy's by its own**
+(`U2Model`): 26 new basic models in `data/scenery/basic_models.json` for every enemy ground type of the four adversaries (NATO's M1, M60A3,
+Leopards, M2/M3, Marder, M113, M109, M110, MLRS; the Pact's T-72, T-64, BMP-2, BTR-70, 2S1, 2S3, BM-21; the neutral's SK-105 and
+Saurer 4K4F; the rebels' technicals, 82 mm mortars and SPG-9), and where an enemy type is also ours (the Pact's BMP-1, the rebels' T-55
+and BTR-60) its faction's variant, `<type>_<faction>`, in its faction's colours: never one of ours.
+
+**Kept out of the fight.** A U2 mover is not in the session's air battle: the runner's detail levels (`near_points_`), the pilots'
+perception and the mission bridge's targets of opportunity skip `nav::Mover::ground_war`. The war's strength is never read back from
+them. (An enemy pilot attacking a column he sees is the ground war's own business at U1, not the session's.)
+
+**The front from afar** (`DistantFire`, `FireGlows`; `fx::EventKind::DistantFire`, `FireGlow`, new). Every 20 s each attacking or
+counterattacked axis's tip is a salvo of 6 rounds over 20 s; its level at the battery is the burst's peak (`fx/explosions.hpp`, 6 kg of
+charge, a surface burst) less the air's absorption of its 125 Hz thud (`fx/acoustics.hpp`, ISO 9613-1, the scenario's weather), and it
+carries its retarded time (`end_t_s`, when the sound reaches the battery at the speed of sound in that air) and its level (`level_db`).
+One under 70 dB or past 50 km is not pushed. At night, every 5 min, a fire's glow (15 min) at a tip within 30 km and the weather's
+visibility. Game values in `FrontFxValues`. They go into the runner's fx feed; nothing in the simulation reads it.
+
+**Unreal** (written, unbuilt):
+- `SimWorldSubsystem.cpp`: the movers in view set `bFriendly` from `enemy`, so U2's movers are drawn by the track G mover code that already
+  draws every listed mover as its basic model (`FSimBasicModels`), ours as friendly.
+- `SimFxAudio.cpp`: `DistantFire` plays its rounds as blasts spread over the salvo's span from its emission time (the audio scene adds its
+  own delay and absorption from the distance), jittered 150 m about the tip.
+- `SimFxEffects.cpp`: `FireGlow` is a fire at the ground under the tip, four times a wreck's fire, burning to its end and without smoke;
+  `DistantFire` draws nothing.
+
+**What the owner should look at.** The mover models' colours and sizes for the new types; that ours and the enemy's are told apart (friendly
+vs hostile) as the other movers are; the salvos' loudness and spread at 20-50 km (the audio scene's own range limit for one-shots is 60 km);
+whether the glow reads as a distant fire at night or needs its own effect. **No game path runs a `MissionSession` yet** (the missions menu runs
+the runner straight; the campaign's raids have no roads), so nothing of this appears in the game until one does; and **battery 21 stands
+about 100 km from the nearest regiment** in every war on its default days (the Pact, NATO, the neutral and the rebels on days 4 and 8, the Pact also on day 3:
+no unit within 20 km, no axis's tip within 50 km), so even then a mission on an axis is needed to see or hear them. `mission_demo --war
+warsaw_pact 1 3 --theatre theatre_pannonia_nation.json --fronts --u2-km 150` shows them made (52: 28 ours, 24 the enemy's).
+
+**Cost.** A 2 h Pact session on day 3: 24.7-25.1 s without U2, 25.0-25.3 s with 52 U2 movers held (about 1 %).
+
+**Tests.** `test_ground_levels.cpp` (+4): U2 near the battery from a hand war (ours by our models, the enemy's by its variant, vehicles by
+the regiment's fraction; none far off, none once the levels come down to U0); the movers deployed in line, the enemy's listed only within
+sight by day and by night, none out of need, a moved place marched; the front from afar (retarded time 20 km / c, the level's formula,
+farther quieter and later, the deaf gate, deterministic per step and seed, glows only at night and within the visibility); a played mission
+with the fronts makes them, without the fronts none. `test_scenery.cpp` (+1): every enemy ground type of every adversary has its model, never
+one of ours.
+
+**Decisions.**
+- No crew sighting reports: no seam exists today for a crew's sighting of a ground unit into the records (the crews report raids through the
+  radiotelephonist's journal only); left.
+- U2 is presentation and place only: it neither fights nor feeds the war, so the air war's and the ground war's outcomes are unchanged.
+- A mover out of need drops to M0 rather than being removed, so ids stay stable for Unreal.
+
+**Left:**
+- Unreal is unbuilt and unseen; a game path that runs a `MissionSession` with the fronts (the campaign's mission, M-F's playthrough).
+- A mission in a sector with an axis (battery 21's has none on any default day).
+- The crews' sightings of a column or the enemy's tanks into the records as they saw them (section 2's fourth point).
+- U2's units do not take cover, dig in or disperse; they stand in line or march as a column. Ours and the enemy's never meet at U2: the
+  contact is fought at U1.
+
 ## As built: F5.3 (23 Nov 2026)
 
 The campaign screen of section 3 and the developer's view of section 4. Simcore gained one new header and a bench option; the Unreal side is written and
