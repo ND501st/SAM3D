@@ -9,8 +9,8 @@
 // Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts]
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
 //   --hours: the session held that long from its start (the task through the day), not to the scenario's end;
-//   --theatre: the war's theatre in data/air_war/ (theatre_pannonia.json); --fronts: track F's modes at 1 (the ground war,
-//   the air front, our air defence commanders) and the regiment following them on what reached it (F4.4; needs a theatre
+//   --theatre: the war's theatre in data/air_war/ (theatre_pannonia.json); --fronts: track F's modes on (the ground war
+//   and our air defence commanders at 1, the air front at 2, following its own ground offensive: F7.3) and the regiment following them on what reached it (F4.4; needs a theatre
 //   with a country map: --theatre theatre_pannonia_nation.json)
 // Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
 // with --war also if no package came in.
