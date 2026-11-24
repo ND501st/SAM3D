@@ -162,6 +162,17 @@ struct TroopsTables {
     double strike_loss_share = 1.0;  // of a strike's damage to a tied object, the share its unit's strength loses (F6.1)
 };
 
+// A formation's command or artillery hit (F8.2, ground_war.json's "command_hit"; docs/fronts/03_GROUND_WAR.md "As built:
+// F8.2"): while its staff knows its command post or its artillery hit, a formation of the lines' doctrine is judged
+// against the doctrine's hq_hit_ineffective_below instead of its ask line. The command post's hit wears off in the
+// doctrine's restore_control_h; the artillery's in `artillery_restore_h`. A support regiment (no tanks) under
+// `support_hit_below` of its own establishment by the fighting is its artillery hit. Without the block, none.
+struct CommandHitTables {
+    bool on = false;
+    double support_hit_below = 0.85;
+    ValueRange artillery_restore_h{12.0, 24.0};
+};
+
 struct GroundTables {
     // Strength: weighted equipment plus personnel, in T-55 equivalents.
     double personnel_per_man = 0.0;
@@ -256,6 +267,9 @@ struct GroundTables {
     // momentum is spent, with the force that can reach the flank within `counter_reach_h` of the order.
     bool counter_at_tip = false;
     double counter_reach_h = 12.0;
+
+    // A formation's command or artillery hit (F8.2): optional.
+    CommandHitTables command_hit;
 
     // Each side's picture (F3.5).
     PictureTables picture;
@@ -553,7 +567,7 @@ public:
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
                              "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture", "troops",
-                             "counterattack"}) ||
+                             "counterattack", "command_hit"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -600,9 +614,26 @@ public:
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
             !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out) ||
-            !LoadPicture(root, out) || !LoadTroops(root, out) || !LoadCounterattack(root, out)) {
+            !LoadPicture(root, out) || !LoadTroops(root, out) || !LoadCounterattack(root, out) || !LoadCommandHit(root, out)) {
             return false;
         }
+        return true;
+    }
+
+    // A formation's command or artillery hit (F8.2): optional; without it, none.
+    bool LoadCommandHit(const json::Value& root, GroundTables& out) {
+        const json::Value* c = root.Find("command_hit");
+        if (c == nullptr) return true;
+        const std::string p = "command_hit";
+        if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
+        CommandHitTables& h = out.command_hit;
+        if (!Keys(*c, p, {"support_hit_below", "artillery_restore_h", "notes"}) ||
+            !Sourced(*c, p, "support_hit_below", h.support_hit_below, 0.0, 1.0) ||
+            !RangeOf(*c, p, "artillery_restore_h", h.artillery_restore_h, 0.0, 240.0)) {
+            return false;
+        }
+        if (!(h.artillery_restore_h.hi > 0.0)) return Fail(Join(p, "artillery_restore_h"), "a hit that wears off at once is no hit");
+        h.on = true;
         return true;
     }
 

@@ -399,6 +399,12 @@ SC_TEST("ground data (F3.1): bad data is refused with a message") {
         {"a front reserve not under its command", 3, "\"command\": \"ground_forces\"", "\"command\": \"air_force\""},
         {"a front reserve's home the map lacks", 3, "\"at\": \"cegled_junction\"", "\"at\": \"cegled\""},
         {"a front reserve with no reach", 3, "\"reach_h\": { \"value\": 24,", "\"reach\": { \"value\": 24,"},
+        // F8.2: a command hit's block is whole, sourced and wears off.
+        {"a command hit without its support line", 0, "\"support_hit_below\": { \"value\": 0.85,", "\"support_hit\": { \"value\": 0.85,"},
+        {"a command hit's support line over 1", 0, "\"support_hit_below\": { \"value\": 0.85,", "\"support_hit_below\": { \"value\": 1.85,"},
+        {"an artillery restore the wrong way round", 0, "\"artillery_restore_h\": { \"min\": 12, \"max\": 24,", "\"artillery_restore_h\": { \"min\": 24, \"max\": 12,"},
+        {"an artillery restored at once", 0, "\"artillery_restore_h\": { \"min\": 12, \"max\": 24,", "\"artillery_restore_h\": { \"min\": 0, \"max\": 0,"},
+        {"an artillery restore without a source", 0, "\"max\": 24, \"source\": \"game value (F8.2)", "\"max\": 24, \"sourc\": \"game value (F8.2)"},
     };
     for (const Case& c : cases) {
         const std::string& base = c.file == 0 ? tables : c.file == 1 ? pact : c.file == 2 ? rebels : ours;

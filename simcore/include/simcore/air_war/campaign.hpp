@@ -2788,6 +2788,19 @@ private:
                     text = form_name(g.formation) + (g.regiment >= 0 ? " (" + reg_name(g.regiment) + ")" : std::string()) + buf + obj + ".";
                     break;
                 }
+                case groundwar::GroundNote::CommandHit: {
+                    // Its staff learns its command post or artillery hit (F8.2).
+                    if (g.formation >= 0 && static_cast<std::size_t>(g.formation) < forms.size() &&
+                        forms[static_cast<std::size_t>(g.formation)].unit.side == groundwar::Side::Ours) {
+                        who = gd.ours.name;
+                    }
+                    const char* what = g.other == static_cast<int>(groundwar::CommandHitKind::CommandPost) ? "its command post"
+                                       : g.other == static_cast<int>(groundwar::CommandHitKind::ArtilleryStruck) ? "its artillery, struck from the air"
+                                                                                                              : "its artillery, in the fighting";
+                    std::snprintf(buf, sizeof buf, " hit: judged against the three-quarters line until command is restored, in %.0f h.", g.value);
+                    text = form_name(g.formation) + "'s staff learns " + what + buf;
+                    break;
+                }
                 case groundwar::GroundNote::Order: {
                     // A commander's decision (F3.4): who decided, about whom, where.
                     if (g.cmdr >= 0 && static_cast<std::size_t>(g.cmdr) < cmdrs.size() &&

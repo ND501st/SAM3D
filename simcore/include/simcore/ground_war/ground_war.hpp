@@ -209,6 +209,10 @@ struct Formation {
     // of its establishment they cost (the truth; the return carries the staff's count).
     int air_hits = 0;
     double air_lost = 0.0;
+    // F8.2: its command post or artillery hit, as its staff learned it: judged against the doctrine's 3/4 line until then
+    // (-1 never); the hits its staff learned of, by CommandHitKind (a tally the bench reads too).
+    double hit_until_h = -1.0;
+    int hits[3] = {0, 0, 0};
     // F6.1's tally (fronts_bench --history; the truth, nothing in the simulation reads it): what it lost, T-55 equivalents,
     // by cause (fighting while attacking or defending, the enemy's air, stragglers when dispersed, the rest rate out of the
     // fight), and its hours in the fight.
@@ -375,8 +379,21 @@ inline const char* GroundOrderName(GroundOrder o) {
 
 // What the ground war says happened, for the campaign's journal (never read by the simulation). AirAttack (F3.7): the
 // enemy's strike on a tied troops object came off its unit (formation, regiment; other: the theatre object; value: the
-// strength lost as a share of the formation's establishment at the war's start).
-enum class GroundNote : std::uint8_t { AxisStarts, RiverReached, RiverCrossed, AxisHalted, DayLine, Order, AirAttack };
+// strength lost as a share of the formation's establishment at the war's start). CommandHit (F8.2): the formation's staff
+// learns its command post or artillery hit (other: a CommandHitKind; value: the hours until command is restored, the
+// doctrine's 3/4 line its own until then).
+enum class GroundNote : std::uint8_t { AxisStarts, RiverReached, RiverCrossed, AxisHalted, DayLine, Order, AirAttack, CommandHit };
+
+// F8.2: what of a formation was hit, as its staff learned it.
+enum class CommandHitKind : std::uint8_t { CommandPost, ArtilleryStruck, ArtilleryFought };
+inline const char* CommandHitKindName(CommandHitKind k) {
+    switch (k) {
+        case CommandHitKind::CommandPost: return "command_post";
+        case CommandHitKind::ArtilleryStruck: return "artillery_struck";
+        case CommandHitKind::ArtilleryFought: return "artillery_fought";
+    }
+    return "?";
+}
 struct GroundLogEntry {
     double h = 0.0;
     GroundNote what = GroundNote::AxisStarts;
@@ -436,6 +453,15 @@ struct TroopsTie {
     Vec3 home;                  // the object's theatre place (F1's anchor)
     double home_depth_m = 0.0;  // how far behind the base line its home is
     Vec3 centre;                // the mean home of its formation's tied objects (a march moves them about it)
+    bool artillery = false;     // F8.2: its unit is artillery (a support regiment, or a formation with no tanks)
+};
+
+// F8.2: a theatre command post or headquarters our order of battle lists as one of our formations' own (the formation's
+// own unit, not one under it), and its working share when the formation's staff last saw it.
+struct CommandTie {
+    int object = -1;
+    int formation = -1;
+    double seen = -1.0;  // -1: not yet
 };
 
 // Our side's reports and orders as its staffs compiled them (F3.8, docs/fronts/03_GROUND_WAR.md section 10), for
@@ -909,6 +935,17 @@ public:
     // The theatre's troops objects tied to our formations, and the tie of a theatre object (-1 none).
     const std::vector<TroopsTie>& Ties() const { return ties_; }
     int TieOf(std::size_t object) const { return object < tie_of_.size() ? tie_of_[object] : -1; }
+    // F8.2 (ground_war.json's "command_hit"; none without it): our formations' own command posts, and whether a formation's
+    // staff knows its command post or artillery hit now, and the line it is judged against (its commander's ask line, or
+    // the doctrine's 3/4 line while hit).
+    const std::vector<CommandTie>& CommandTies() const { return cp_ties_; }
+    bool HitKnown(std::size_t i) const { return forms_[i].hit_until_h > now_h_ + 1e-9; }
+    double AskLine(std::size_t i) const {
+        const Formation& f = forms_[i];
+        const EffectivenessDef& e = Doctrine(f.unit.side).effectiveness;
+        const double ask = f.cmdr >= 0 ? AskWithdrawLineOf(data_->tables, e, cmdrs_[static_cast<std::size_t>(f.cmdr)].traits) : e.ineffective_below;
+        return HitKnown(i) ? std::max(ask, e.hq_hit_ineffective_below) : ask;
+    }
     // Moved on every order that moves a formation's place (a march to an axis, a withdrawal, a dispersal, re-forming): the
     // campaign asks the tied objects' places again when it or the line's version changes.
     std::uint64_t PlacesVersion() const { return places_version_; }
@@ -994,6 +1031,8 @@ public:
         Note(h, GroundNote::AirAttack, -1, static_cast<int>(fi), -1, f.base_establishment > 0.0 ? lost / f.base_establishment : 0.0);
         log_.back().regiment = t.regiment;
         log_.back().other = t.object;
+        // F8.2: its artillery hit; the formation's staff has it by the artillery's report.
+        if (t.artillery && tb.command_hit.on) PushHit(fi, h + tb.picture.own_delay_h, CommandHitKind::ArtilleryStruck);
         if (!f.spent) {
             if (f.unit.cohesion < tb.cohesion_break_below && f.contact_from_h >= 0.0) {
                 Disperse(fi, h, f.cmdr, 1.0);
@@ -1049,7 +1088,8 @@ private:
     enum class EventKind : std::uint8_t {
         Start, Crossed, DayEnd, Decide, LineBack, Arrive, Reformed, RaidNight, RaidEnd,
         ReportsDue, IntelDue, UnitReport, AxisReport, LineReport,  // the pictures' (F3.5)
-        RegimentDecide, RegimentArrive                             // U1's regiments' (F3.6)
+        RegimentDecide, RegimentArrive,                            // U1's regiments' (F3.6)
+        CommandHit                                                 // F8.2: a hit learned (flag 1), or worn off (flag 0)
     };
     static bool IsPictureEvent(EventKind k) {
         return k == EventKind::ReportsDue || k == EventKind::IntelDue || k == EventKind::UnitReport || k == EventKind::AxisReport ||
@@ -1082,6 +1122,7 @@ private:
 
     std::shared_ptr<const GroundWarData> data_;
     std::vector<Formation> forms_;
+    std::vector<CommandTie> cp_ties_;  // F8.2
     std::vector<Axis> axes_;
     std::vector<GroundCommander> cmdrs_;
     int top_[2] = {-1, -1};  // ours, the enemy's
@@ -1653,6 +1694,7 @@ private:
             for (int k = 0; k < f.regiment_count && t.regiment < 0; ++k) {
                 if (oob.Under(owner->id, regs_[static_cast<std::size_t>(f.first_regiment + k)].id)) t.regiment = f.first_regiment + k;
             }
+            t.artillery = t.regiment >= 0 ? regs_[static_cast<std::size_t>(t.regiment)].support : !(f.Tanks() > 0.0);
             t.home = o.pos;
             if (!line.Empty()) {
                 const airwar::FrontPlace pl = line.Place(o.pos);
@@ -1675,6 +1717,85 @@ private:
             const Formation& f = forms_[static_cast<std::size_t>(t.formation)];
             t.unit_base = t.regiment >= 0 ? regs_[static_cast<std::size_t>(t.regiment)].est_part * f.base_establishment : f.base_establishment;
         }
+        // F8.2: each formation's own command posts (its own unit's, not a unit's under it), with the block only.
+        cp_ties_.clear();
+        if (!data_->tables.command_hit.on) return;
+        for (std::size_t i = 0; i < theatre.objects.size(); ++i) {
+            const airwar::TheatreObject& o = theatre.objects[i];
+            if ((o.kind != airwar::ObjectKind::CommandPost && o.kind != airwar::ObjectKind::Headquarters) || o.decoy) continue;
+            const command::OobUnit* owner = oob.OwnerOfObject(o.id);
+            const int fi = owner != nullptr ? FindFormation(owner->id, Side::Ours) : -1;
+            if (fi < 0) continue;
+            CommandTie c;
+            c.object = static_cast<int>(i);
+            c.formation = fi;
+            cp_ties_.push_back(c);
+        }
+    }
+
+    // F8.2: the formation's command posts as its staff sees them at the hour's start: a working share fallen since is a
+    // strike on it, and the staff there knows it at once.
+    void CommandPostsSeen(double h, const GroundEnv& env) {
+        if (cp_ties_.empty() || env.truth == nullptr) return;
+        for (CommandTie& c : cp_ties_) {
+            if (static_cast<std::size_t>(c.object) >= env.truth->size()) continue;
+            const double fn = (*env.truth)[static_cast<std::size_t>(c.object)].function;
+            if (c.seen >= 0.0 && fn < c.seen - 1e-9) HitLearned(static_cast<std::size_t>(c.formation), h, CommandHitKind::CommandPost);
+            c.seen = fn;
+        }
+    }
+
+    void PushHit(std::size_t i, double at, CommandHitKind what) {
+        Event e;
+        e.h = at;
+        e.seq = seq_++;
+        e.kind = EventKind::CommandHit;
+        e.who = static_cast<int>(i);
+        e.src = static_cast<std::uint8_t>(what);
+        e.flag = 1;
+        queue_.push_back(e);
+        std::push_heap(queue_.begin(), queue_.end(), Later());
+    }
+
+    // F8.2: the formation's staff learns its command post or artillery hit at h: judged against the doctrine's 3/4 line
+    // (hq_hit_ineffective_below, mt_stashek_losses p. 7) until command is restored: the command post's in its doctrine's
+    // restore_control_h (ours; mt_stashek_losses), the artillery's in command_hit.artillery_restore_h (a game value), drawn
+    // per hit. A line crossed by it wakes its commander. Only the lines' doctrine has the line; a formation out of the
+    // fight has its staff back by the time it re-forms.
+    void HitLearned(std::size_t i, double h, CommandHitKind what) {
+        Formation& f = forms_[i];
+        const GroundDoctrineDef& d = Doctrine(f.unit.side);
+        if (f.spent || d.effectiveness.kind != EffectivenessKind::Lines) return;
+        const CommandHitTables& ch = data_->tables.command_hit;
+        const ValueRange r = what == CommandHitKind::CommandPost && d.restore_control_h.hi > 0.0 ? d.restore_control_h : ch.artillery_restore_h;
+        const int n = f.hits[0] + f.hits[1] + f.hits[2];
+        const double u = root_.Fork(0xC0A1100000000000ull ^ (static_cast<std::uint64_t>(i + 1) << 24) ^ static_cast<std::uint64_t>(n)).Uniform();
+        const double until = h + r.At(u);
+        ++f.hits[static_cast<std::size_t>(what)];
+        Note(h, GroundNote::CommandHit, AxisOfFormation(i), static_cast<int>(i), -1, until - h);
+        log_.back().other = static_cast<int>(what);
+        if (until > f.hit_until_h) {
+            f.hit_until_h = until;
+            Event e;
+            e.h = until;
+            e.seq = seq_++;
+            e.kind = EventKind::CommandHit;
+            e.who = static_cast<int>(i);
+            e.flag = 0;
+            queue_.push_back(e);
+            std::push_heap(queue_.begin(), queue_.end(), Later());
+        }
+        const std::uint8_t now = Crossings(i);
+        if ((now & ~f.crossed) != 0) WakeAfterReaction(f.cmdr, h, 0xC0A1200000ull + i);
+        f.crossed = static_cast<std::uint8_t>(f.crossed | now);
+    }
+
+    // F8.2: command restored. A formation that did not ask is under its ask line again only by its own count, so a later
+    // fall under it wakes its commander as before.
+    void HitWornOff(std::size_t i) {
+        Formation& f = forms_[i];
+        if (HitKnown(i) || f.asked || f.spent) return;
+        if ((Crossings(i) & kCrossAsk) == 0) f.crossed = static_cast<std::uint8_t>(f.crossed & ~kCrossAsk);
     }
 
     // NATO's corps draws its FSCL by sector (fm_101_5_1_1980 p. 1-49; fm_6_20_1977 p. D-5; ota_1987_fofa pp. 78-79): in
@@ -1903,7 +2024,16 @@ private:
         for (int j = 0; j < f.regiment_count; ++j) {
             const std::size_t k = static_cast<std::size_t>(f.first_regiment + j);
             Regiment& r = regs_[k];
-            if (r.support) continue;
+            if (r.support) {
+                // F8.2: the artillery's losses in the fighting past command_hit.support_hit_below of its own: its artillery
+                // hit, the formation's staff has it by the regiment's report (once).
+                const CommandHitTables& ch = data_->tables.command_hit;
+                if (ch.on && (r.crossed & kCrossDegraded) == 0 && RegimentFraction(k) < ch.support_hit_below) {
+                    r.crossed = static_cast<std::uint8_t>(r.crossed | kCrossDegraded);
+                    PushHit(i, h1 + data_->tables.picture.own_delay_h, CommandHitKind::ArtilleryFought);
+                }
+                continue;
+            }
             const std::uint8_t now = RegimentCrossings(k);
             if ((now & ~r.crossed) != 0) Push(h1 + RegimentReaction(k, 0x5000ull + now), EventKind::RegimentDecide, -1, static_cast<int>(k));
             r.crossed = static_cast<std::uint8_t>(r.crossed | now);
@@ -2373,6 +2503,7 @@ private:
             profile_.ns[p] += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(t - lap).count());
             lap = t;
         };
+        CommandPostsSeen(h0, env);  // F8.2
         // The hour's events: the clock's and the commanders'.
         while (!queue_.empty() && queue_.front().h <= h0 + 1e-9) {
             std::pop_heap(queue_.begin(), queue_.end(), Later());
@@ -2533,6 +2664,13 @@ private:
                 break;
             case EventKind::RegimentArrive:
                 RegimentArrive(static_cast<std::size_t>(e.who), static_cast<std::size_t>(e.axis), h0);
+                break;
+            case EventKind::CommandHit:
+                if (e.flag != 0) {
+                    HitLearned(static_cast<std::size_t>(e.who), h0, static_cast<CommandHitKind>(e.src));
+                } else {
+                    HitWornOff(static_cast<std::size_t>(e.who));
+                }
                 break;
             case EventKind::RaidNight:
                 RaidNight(e.who, h0, env);
@@ -2953,7 +3091,7 @@ private:
         const double frac = OwnFraction(i);  // its own commander's count
         std::uint8_t c = 0;
         if (e.kind == EffectivenessKind::Lines) {
-            const double ask = f.cmdr >= 0 ? AskWithdrawLineOf(data_->tables, e, cmdrs_[static_cast<std::size_t>(f.cmdr)].traits) : e.ineffective_below;
+            const double ask = AskLine(i);  // the doctrine's 3/4 line while its staff knows its command or artillery hit (F8.2)
             if (frac < e.degraded_below) c = static_cast<std::uint8_t>(c | kCrossDegraded);
             if (frac < ask) c = static_cast<std::uint8_t>(c | kCrossAsk);
         } else {
@@ -3012,6 +3150,7 @@ private:
         s.lines = d.effectiveness.kind == EffectivenessKind::Lines;
         s.fraction = OwnFraction(i);  // he knows his own unit
         s.ask_line = AskWithdrawLineOf(t, d.effectiveness, g.traits);
+        if (HitKnown(i)) s.ask_line = std::max(s.ask_line, d.effectiveness.hq_hit_ineffective_below);  // F8.2
         s.degraded_line = d.effectiveness.degraded_below;
         s.attack_stop = f.attack_stop;
         s.defence_break = f.defence_break;
