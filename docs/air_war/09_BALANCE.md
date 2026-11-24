@@ -1617,3 +1617,19 @@ Only the Pact's war moved:
 - The enemy's loss a sortie, read beside, goes from 3.65 to 3.73 %.
 
 At the defaults nothing moves: `data 20 7` and the nation's `data 10 7` are byte-identical to c0d584e.
+
+## 29. The bands again (track F, F7.3, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md`, "As built: F7.3". `air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`
+re-run on F7.1 and F7.2 together (track F at 579899b, `air_front.mode` 2): **nothing moved from section 28.** Every band of
+the nation holds for all four factions and both postures (20 rows, none out):
+
+| Nation | Loss %, careless / careful | Battery wrecked | Exchange, theirs for ours | On call (min) | The air front a campaign |
+|---|---|---|---|---|---|
+| Rebels | 11.97 / 10.67 % | 0 / 0 % | - | - | none |
+| Neutral | 5.71 / 7.37 % | 0 / 0 % | - | - | none |
+| Warsaw Pact | 3.12 / 3.02 % | 30 / 0 % | 1.52 / 2.00 | 28.2 / 25.6 | 0.6 steps forward (0.1 back careful), the deepest 60 / 40 km |
+| NATO | 2.08 / 2.19 % | 40 / 10 % | 0.40 / 0.36 | 21.2 / 20.4 | none |
+
+F7.3 changed no simulation: its code change is the played mission's fronts flag (`mission_session.hpp`, `air_front.mode`
+2), which `air_war_balance` does not use. The defaults' identity holds (`data 20 7`, the nation's `data 10 7`).

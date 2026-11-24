@@ -335,6 +335,13 @@ SC_TEST("situation map (F5.1): the battery's session debrief ends with its comma
         std::printf("    %s\n", e.c_str());
         return;
     }
+    // F7.3: the fronts flag runs the ground war and our air defence commanders at 1 and the air front at 2 (it follows its
+    // own ground offensive, as the benches run it).
+    SC_EXPECT(s.Campaign() != nullptr);
+    if (s.Campaign() != nullptr) {
+        const airwar::TuningTable& t = s.Campaign()->Data().tuning;
+        SC_EXPECT(t.Get("ground.mode") == 1.0 && t.Get("ad_strategy.mode") == 1.0 && t.Get("air_front.mode") == 2.0);
+    }
     ScenarioRunner& r = s.Runner();
     while (!r.Finished()) s.Step(0.1);
     const std::string debrief = s.Debrief();

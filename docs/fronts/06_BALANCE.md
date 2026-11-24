@@ -437,12 +437,15 @@ withdrawals), the rest are held as they were, and the played mission's air front
 **What changed.**
 - `fronts_bench --history` prints a new line, "why none withdraws (F7.3)": for each of our formations a day or more in
   the fight, its lowest strength over its establishment in any hour of the war (its own count, the rest rate settled),
-  its losses by every cause over its base establishment, and what came back to it from repairs and columns.
+  its losses by every cause over its base establishment, and what came back to it from repairs and columns; and how
+  many fell under the degraded line and under the doctrine's line with command and artillery hit.
 - `fronts_bench --player --battery-sector id [--battery-back-km km]` puts the player's battery at the war's start in a
   named sector, 20 km behind the base line at the sector's middle by default, so the player's effect can be measured
   where an axis runs (F6.2's and F7.2's open item).
 - `mission_session.hpp`'s fronts flag sets `air_front.mode` 2 (F7.2's close support of its own axes); `ground.mode` and
-  `ad_strategy.mode` stay at 1. `mission_demo --fronts` says so.
+  `ad_strategy.mode` stay at 1. `mission_demo --fronts` says so. The one session test with the fronts on
+  (`test_situation_map.cpp`, the F5.1 debrief, NATO on day 3) now checks the three modes; it pinned no mode before and its
+  claims hold at mode 2 (NATO's air front does not step).
 - The two re-argued bands' `source` in `balance_bands.json` carries the F7.3 argument; their limits are unchanged.
 
 **The bands** (`fronts_bench --history`, 14 days x 3 seeds; before is F7.1 at c0d584e, from its report; now is F7.3):
@@ -482,7 +485,8 @@ covering force and the helicopters' broken rule are still not reached on the nat
 | Our formations a day or more in the fight (3 wars) | 6 | 9 |
 | Formation-days in contact a war, and the loss a day in contact | 17 for 6, 6.9 % | 65 for 9, 5.0 % |
 | Their lowest hour in the war, of establishment: mean (the lowest) | 84 % (73 %) | 75 % (64 %) |
-| Under the degraded line (2/3) at some hour | 0 of 6 | 3 of 9 (reported) |
+| Under the degraded line (2/3) at some hour | 0 of 6 | 3 of 9 |
+| Under the doctrine's line with command and artillery hit (3/4), which no rule reads | 1 of 6 | 3 of 9 |
 | Losses by every cause, of establishment | 32 % | 38 % |
 | Given back by repairs and columns | 21 points | 22 points |
 | At the end | 89 % (lowest 84 %) | 84 % (lowest 82 %) |
@@ -506,8 +510,8 @@ covering force and the helicopters' broken rule are still not reached on the nat
   sensitivity shows that turning it down would not bring a withdrawal either.
 - *Not applied anywhere:* the doctrine's `hq_hit_ineffective_below` (0.75, `mt_stashek_losses` p. 7: ineffective at
   24-25 % losses when command, rockets and artillery are hit) is loaded but no rule reads it, because the ground war has no
-  measure of a formation's command or artillery being hit. With it, 3 of 6 of our formations (Pact) and 9 of 9 (NATO) would
-  pass under 75 % at some hour. Wiring it needs a model of the hit (which of the air war's troops objects are a division's
+  measure of a formation's command or artillery being hit. With it, 1 of our 6 formations (Pact) and 3 of 9 (NATO) pass
+  under 75 % at some hour and could be withdrawn if their command and artillery were hit. Wiring it needs a model of the hit (which of the air war's troops objects are a division's
   command post and artillery, and when a strike counts): a design task for the owner, not a mis-applied rule.
 
 **The counterattack, re-argued.** Our free force (the army reserve, the 3rd Army's tank brigade 55 km back, with every
@@ -525,11 +529,39 @@ neutral it is green (3 of 3).
 **The player's effect** (`fronts_bench --player`, 7 days x 3 seeds, the battery where the theatre has it): every band
 passes, as F7.2's: the battery's sector's line 0.00 km apart (Pact, northern_forest), 0.49 (NATO, western_crossings),
 0.00 (the neutral and the rebels); the air front 0 steps apart; elsewhere 0.00-0.02 against the draws' spread. Its first
-step's delay is still not measured there, because no axis runs through those sectors. PLAYER_SECTOR_TBD
+step's delay is still not measured there, because no axis runs through those sectors.
 
-**`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`**: AWB_TBD
+With `--battery-sector` the battery was put in each of the Pact's five sectors in turn, 20 km behind the base line
+(3 seeds, careless and careful; tisava 7 days, the others 14):
 
-**Identity, fingerprint, gates.** IDENTITY_TBD
+| The battery's sector | The line there at the end | Air front steps there, careless / careful (first) | Bands |
+|---|---|---|---|
+| tisava (the main axis, to the capital) | 60.9 km in | 0 / 0 | pass; the delay not measured |
+| ne_crossings (an axis) | 46.8 km | 0 / 0 | pass; not measured |
+| rava_reservoir (an axis) | 20.0 km | 0 / 0 | pass; not measured |
+| hradec | 0 | 0 / 0 | pass; not measured |
+| northern_forest | 0 | 0 / 1 in two seeds (214 h, 310 h) | pass (at most 1 step apart); not measured |
+
+- Where an axis runs, the air front makes no step in the battery's sector over two weeks with the battery standing
+  there, careful or careless. The ledger gives the battery's entry alone 0-9 h of the gates held, so it is our other
+  air defence in those sectors that keeps the cover gate shut (F7.2: where our cover held, the air front stayed back).
+- In northern_forest the careful battery's sector stepped once late in two seeds, the careless one's never (the
+  careless battery is wrecked in every seed; its believed entry held the gates 0-24 h a war). That is one step apart, inside
+  the band, but the delay band needs both postures to step on a seed, so it is still not measured.
+- So the step's delay F6.2 and F7.2 asked for cannot be measured on the nation as built: the risk gates keep the air
+  front back wherever the battery stands in an axis's sector. Every `--player` band passes in every placement.
+
+**`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7`**: unchanged from F7.2, every band of the
+nation holding for all four factions and both postures (`docs/air_war/09_BALANCE.md` section 29): the Pact's loss a
+sortie 3.12/3.02 % careless/careful, its air front 0.6 steps forward a campaign (the deepest 60/40 km), the careless
+battery wrecked in 30 % of runs; NATO's 2.08/2.19 %, no step.
+
+**Identity, fingerprint, gates.** At the defaults `air_war_balance data 20 7` and `air_war_balance --theatre
+theatre_pannonia_nation.json data 10 7` are identical by content to track F's references (F6.1's base, as F7.1 and F7.2
+compared), and the replay fingerprint holds (journal 107, FNV 1375944258174313379, 41 packages). `--ground --gate`,
+`--ground --gate --player-sector battery`, `--feed --gate` (the pipeline's pump 14.8 ms a campaign day for the Pact,
+12.2 for NATO, 2.2 for the neutral and 2.5 for the rebels, against 20) and `--history --gate` exit 0. The full ctest
+passes.
 
 **Left:**
 - Counterattacks against the Pact and NATO need a front or national reserve: the owner's call (IMPLEMENTATION_PLAN.md,
@@ -537,3 +569,5 @@ step's delay is still not measured there, because no axis runs through those sec
 - Withdrawals on the nation would need either a model of a formation's command and artillery being hit (the doctrine's
   75 % line, loaded and unread) or wars that keep one formation in contact for ten days; both are design calls.
 - NATO's covering force and the helicopters' broken rule are still only exercised by hand cases.
+- The player's effect as a step's delay: not measurable while the gates keep the air front back wherever the battery
+  stands on an axis (above). A theatre with weaker cover in an axis's sector, or a longer war, would give one.
