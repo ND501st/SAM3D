@@ -156,8 +156,8 @@ no fronts, no maps (an empty map, an unknown post); a fronts session's debrief e
 
 ## As built: F8.3 (25 Nov 2026)
 
-Section 2, units in sight, built as task F8.3. Simcore gained one new header; the Unreal side is written and compile-checked by reading only
-(the owner builds and looks). Nothing in the war or the session's fight reads any of it: `air_war_balance`'s two runs are identical to the
+Section 2, units in sight, built as task F8.3. Simcore gained one new header; the Unreal side compiles (UnrealBuildTool, SAM3DEditor Win64 Development, 25 Nov 2026)
+and is not yet seen (the owner looks). Nothing in the war or the session's fight reads any of it: `air_war_balance`'s two runs are identical to the
 base, the replay's fingerprint holds (journal 107, FNV 1375944258174313379, 41 packages), the four `fronts_bench` gates pass.
 
 **U2** (`ground_war/session_units.hpp`, new). `U2Near` takes every regiment at U1 (F3.6) of a formation not spent, within a reach of the
@@ -193,7 +193,7 @@ carries its retarded time (`end_t_s`, when the sound reaches the battery at the 
 One under 70 dB or past 50 km is not pushed. At night, every 5 min, a fire's glow (15 min) at a tip within 30 km and the weather's
 visibility. Game values in `FrontFxValues`. They go into the runner's fx feed; nothing in the simulation reads it.
 
-**Unreal** (written, unbuilt):
+**Unreal** (compiled, not run):
 - `SimWorldSubsystem.cpp`: the movers in view set `bFriendly` from `enemy`, so U2's movers are drawn by the track G mover code that already
   draws every listed mover as its basic model (`FSimBasicModels`), ours as friendly.
 - `SimFxAudio.cpp`: `DistantFire` plays its rounds as blasts spread over the salvo's span from its emission time (the audio scene adds its
@@ -225,7 +225,7 @@ one of ours.
 - A mover out of need drops to M0 rather than being removed, so ids stay stable for Unreal.
 
 **Left:**
-- Unreal is unbuilt and unseen; a game path that runs a `MissionSession` with the fronts (the campaign's mission, M-F's playthrough).
+- Unreal is compiled but unseen; a game path that runs a `MissionSession` with the fronts (the campaign's mission, M-F's playthrough).
 - A mission in a sector with an axis (battery 21's has none on any default day).
 - The crews' sightings of a column or the enemy's tanks into the records as they saw them (section 2's fourth point).
 - U2's units do not take cover, dig in or disperse; they stand in line or march as a column. Ours and the enemy's never meet at U2: the
