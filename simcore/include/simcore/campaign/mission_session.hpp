@@ -68,8 +68,9 @@ struct MissionSessionDef {
     // the buckets' dusk (18-21); by the sun that dusk is 16:13-17:25 and its package comes before the session starts.
     // -1: the war data's own (1, the theatre dated). docs/LIGHT.md section 7.
     int light_mode = 0;
-    // Track F (F4.4): the fronts on, ground.mode, air_front.mode and ad_strategy.mode at 1 (a theatre with a country map
-    // and fronts with lines: theatre_pannonia_nation.json); false: the war data's own modes.
+    // Track F (F4.4): the fronts on, ground.mode and ad_strategy.mode at 1 and air_front.mode at 2 (F7.3: the air front
+    // follows its own ground offensive, as the benches run it) (a theatre with a country map and fronts with lines:
+    // theatre_pannonia_nation.json); false: the war data's own modes.
     bool fronts = false;
 };
 
@@ -114,7 +115,8 @@ public:
             airwar::ApplyLightMode(war);
         }
         if (d.fronts) {
-            for (const char* k : {"ground.mode", "air_front.mode", "ad_strategy.mode"}) war.tuning.values[k] = 1.0;
+            for (const char* k : {"ground.mode", "ad_strategy.mode"}) war.tuning.values[k] = 1.0;
+            war.tuning.values["air_front.mode"] = 2.0;  // F7.2's close support of its own axes (F7.3)
         }
         campaign_ = std::make_unique<airwar::AirCampaign>();
         if (!campaign_->Init(war, d.seed)) return fail("the air war does not start");

@@ -723,8 +723,9 @@ byte-identical to c0d584e, and the replay fingerprint holds (journal 107, FNV 13
 runs: 4471 → 4454 ms a campaign day for the Pact's war and our pipeline (06_BALANCE.md, As built: F7.2).
 
 **Left:**
-- `mission_session.hpp`'s fronts flag (F4.4) still sets `air_front.mode` 1. A played mission sees a step only once it
-  is switched to 2.
+- ~~`mission_session.hpp`'s fronts flag (F4.4) still sets `air_front.mode` 1.~~ Done in F7.3: the flag sets
+  `air_front.mode` 2, so a played mission's air front follows its own offensive as the benches' does (`06_BALANCE.md`,
+  As built: F7.3).
 - The worth is the same for every axis: a main and a supporting attack weigh alike, and so do a tank army and a
   brigade.
 - The need does not fall as its own helicopters or artillery take up the support.

@@ -115,3 +115,29 @@ sees the following.
 - An offensive into the enemy's country (the owner's decision 4).
 - An economy or a national strategy game.
 - The enemy's airfields moving forward with its front.
+
+## 7. What is left of track F (after F7.3, 24 Nov 2026)
+
+Every simcore task of the plan is done. What is left is the owner's: building and looking in Unreal, playing the
+milestone through, and the calls the benches cannot make.
+
+1. **F5.2, units in sight in Unreal.** The U2 movers in a session drawn as basic models within visual range, and the
+   front's distant sounds. Not built (simcore's U2 and `test_ground_levels.cpp` first).
+2. **F5.3's Unreal part.** `ASimCampaignHUD` from the regiment's situation map is written, not built: the owner builds
+   and looks. Units are listed, not placed, and the screen shows no sector priorities or orders.
+3. **M-F's playthrough** (section 5): a Pact campaign on the nation and a mission in battery 21's sector on day 4, with
+   `mission_demo --fronts` or the game. A played mission's air front now follows its own offensive (`air_front.mode` 2,
+   F7.3).
+4. **Force structure: a front or national reserve.** Counterattacks against the Pact and NATO need one. Our free force,
+   the army's tank brigade with every other free formation, is 0.28 of a Pact penetration's tip and 0.51 of NATO's,
+   against a sourced ratio of 1.5-2.5 (`06_BALANCE.md`, As built: F7.3). Adding a reserve (a second army, a front's tank
+   division, or our divisions' second echelons fighting as one counterattack) changes our order of battle and every
+   war on the nation, so it is the owner's decision. Until then the counterattack band stays argued for both.
+5. **Withdrawals.** None on the nation: in two weeks our formations never fall to the sourced line of half (the lowest
+   73 % against the Pact and 64 % against NATO; 62 % and 55 % even with no repairs back). Two ways to get them are
+   design calls: a model of a formation's command and artillery being hit, so that the doctrine's 75 % line
+   (`mt_stashek_losses`, loaded and unread) applies, or wars that hold one formation in contact for about ten days. The
+   band stays argued.
+6. **Smaller items the as-built notes list:** the counterattack on the axis rather than into the flank, and no wait for
+   daylight (F7.1); every axis weighing alike in the air front's close support need (F7.2); the army's day measured over
+   the days an axis attacks (F6.1); NATO's covering force and the helicopters' broken rule unmeasured on the nation.
