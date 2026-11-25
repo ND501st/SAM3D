@@ -20,7 +20,8 @@ def test_the_register_in_the_data_passes():
 def test_quixels_zip_members_and_its_normal_flipped_to_directx():
     import io
 
-    from PIL import Image
+    import pytest
+    Image = pytest.importorskip("PIL.Image")  # not installed on CI: skipped there
 
     names = ["Gravel_Ground_x_2K_AO.jpg", "Gravel_Ground_x_2K_BaseColor.jpg", "Gravel_Ground_x_2K_Bump.jpg",
              "Gravel_Ground_x_2K_Gloss.jpg", "Gravel_Ground_x_2K_Normal.jpg", "Gravel_Ground_x_2K_Roughness.jpg", "x.json"]
