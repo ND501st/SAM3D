@@ -130,14 +130,16 @@ SC_TEST("country map: the range's far ground is the country's, so what stands th
     SC_EXPECT(worst < 1e-6);
     // The border range stands in the range's far ground too (it once had none: its far woods and towns lay under it).
     SC_EXPECT(r->GroundHeight(85000.0, 118000.0) > r->GroundHeight(0.0, 0.0) + 250.0);
-    // The two grounds meet at the range's edge: the core's last sample and the far ground just beyond it.
+    // The two grounds meet at the range's edge: the core's last sample and the far ground just beyond it (10 cm: the
+    // hills' sides rise up to half a metre in a metre).
     double seam = 0.0;
     for (double t = rd.west_m; t <= rd.east_m; t += 250.0) {
-        seam = std::max(seam, std::fabs(r->GroundHeight(t, rd.north_m) - c->Natural(t, rd.north_m + 1.0)));
-        seam = std::max(seam, std::fabs(r->GroundHeight(t, rd.south_m) - c->Natural(t, rd.south_m - 1.0)));
-        seam = std::max(seam, std::fabs(r->GroundHeight(rd.east_m, t) - c->Natural(rd.east_m + 1.0, t)));
-        seam = std::max(seam, std::fabs(r->GroundHeight(rd.west_m, t) - c->Natural(rd.west_m - 1.0, t)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(t, rd.north_m) - c->Natural(t, rd.north_m + 0.1)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(t, rd.south_m) - c->Natural(t, rd.south_m - 0.1)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(rd.east_m, t) - c->Natural(rd.east_m + 0.1, t)));
+        seam = std::max(seam, std::fabs(r->GroundHeight(rd.west_m, t) - c->Natural(rd.west_m - 0.1, t)));
     }
+    std::printf("    the seam at the range's edge: %.2f m at worst\n", seam);
     SC_EXPECT(seam < 0.5);
     // No wood of the far ground stands in the country's lakes.
     int wet = 0;

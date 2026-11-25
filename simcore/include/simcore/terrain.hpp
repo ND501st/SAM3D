@@ -13,10 +13,12 @@
 namespace simcore {
 
 // What a terrain tells of each footprint a ground segment crosses (Terrain::ObstacleChords): the fractions of the
-// segment where it goes in and comes out (0..1, in <= out) and its top above sea level. Return false to stop.
+// segment where it goes in and comes out (0..1, in <= out) and its top above sea level where it goes in and where it
+// comes out (a wood's top on a slope follows the ground's plane, terrain roadmap A.3.20: linear along the chord; a level
+// footprint gives the same top twice). Return false to stop.
 class ObstacleChordSink {
 public:
-    virtual bool Chord(double t_in, double t_out, double top_m) = 0;
+    virtual bool Chord(double t_in, double t_out, double top_in_m, double top_out_m) = 0;
 
 protected:
     ObstacleChordSink() = default;
@@ -111,10 +113,15 @@ inline void ObstaclesAlong(const Terrain& t, double ax, double ay, double ux, do
         Visit& v;
         double lo_m, hi_m;
         Cuts(Visit& visit_fn, double l, double h) : v(visit_fn), lo_m(l), hi_m(h) {}
-        bool Chord(double t_in, double t_out, double top_m) override {
-            const double a = lo_m + (hi_m - lo_m) * (t_in < 0.0 ? 0.0 : t_in > 1.0 ? 1.0 : t_in);
-            const double b = lo_m + (hi_m - lo_m) * (t_out < 0.0 ? 0.0 : t_out > 1.0 ? 1.0 : t_out);
-            return v(a, top_m) && v(0.5 * (a + b), top_m) && v(b, top_m);
+        bool Chord(double t_in, double t_out, double top_in_m, double top_out_m) override {
+            const double ca = t_in < 0.0 ? 0.0 : t_in > 1.0 ? 1.0 : t_in;
+            const double cb = t_out < 0.0 ? 0.0 : t_out > 1.0 ? 1.0 : t_out;
+            // The top at the cut's ends and middle (a sloping top is linear along the chord, as the ray is).
+            const auto top_at = [&](double t) {
+                return t_out > t_in ? top_in_m + (top_out_m - top_in_m) * (t - t_in) / (t_out - t_in) : top_in_m;
+            };
+            const double a = lo_m + (hi_m - lo_m) * ca, b = lo_m + (hi_m - lo_m) * cb;
+            return v(a, top_at(ca)) && v(0.5 * (a + b), top_at(0.5 * (ca + cb))) && v(b, top_at(cb));
         }
     } cuts(visit, lo, hi);
     if (t.ObstacleChords(ax + ux * lo, ay + uy * lo, ax + ux * hi, ay + uy * hi, below_m, cuts)) return;

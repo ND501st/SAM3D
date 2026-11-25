@@ -2663,6 +2663,11 @@ bool USimWorldSubsystem::GetSkyClock(simcore::SkyClock& Out) const
 	return true;
 }
 
+int32 USimWorldSubsystem::GetScenarioYear() const
+{
+	return Runner ? Runner->Def().year : 1985;
+}
+
 double USimWorldSubsystem::GetSkyTimeSeconds() const
 {
 	return IsMirrorOnly() && bHasServerSky ? ServerSkySeconds : GetSimTimeSeconds();

@@ -1,0 +1,164 @@
+{
+  "scenario_id": "plot_lab_summer",
+  "name": "Plot lab: the Kesmark range in summer under fair cumulus",
+  "description": "The plot lab's scenario (tools/plot_lab.py, docs/scenery/TERRAIN_ROADMAP.md L1 and L12): the Kesmark range with battery 21 in its position as in kesmark_range_test.json, no raid, under fair-weather cumulus, the look target's weather (docs/scenery/LOOK_TARGET.md K11). 5 July at 15:30 (the sun about 39 degrees up), to compare like with like against the look target's summer; plots anchored on an October field state may find none. Not a mission: kept out of the missions menu in scenarios/lab/.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Battery 21's vehicles, origin and crew as kesmark_range_test.json; no targets.",
+  "seed": 21,
+  "origin": {
+    "lat_deg": 46.817217,
+    "lon_deg": 19.77862,
+    "alt_m": 107.6
+  },
+  "terrain": {
+    "type": "map",
+    "map": "maps/kesmark_range.json"
+  },
+  "weather": "fair_cumulus",
+  "date": "1985-07-05",
+  "clock_start": "15:30",
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12"
+  },
+  "battery": {
+    "share_picture": true,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 900,
+          "north_m": -700,
+          "up_m": 24.2
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": -600,
+          "north_m": -1200,
+          "up_m": 23
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 300,
+          "north_m": -1700,
+          "up_m": 24.2
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": -1000,
+          "north_m": -2300,
+          "up_m": 7.9
+        }
+      },
+      {
+        "id": "ATZ",
+        "kind": "fuel",
+        "position": {
+          "east_m": -800,
+          "north_m": -2600,
+          "up_m": 6.8
+        }
+      },
+      {
+        "id": "PU-12",
+        "kind": "command_post",
+        "position": {
+          "east_m": 400,
+          "north_m": -400,
+          "up_m": 25.9
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 0,
+      "north_m": 0,
+      "up_m": 20.7
+    },
+    "heading_deg": 290,
+    "inputs": {
+      "vehicle_stopped": true
+    },
+    "prepared_position": {
+      "emplacement": true,
+      "nets": true,
+      "wire": true,
+      "dummies": [
+        {
+          "position": {
+            "east_m": -1500,
+            "north_m": -200,
+            "up_m": 15.1
+          },
+          "decoy": "when_radar_off"
+        },
+        {
+          "position": {
+            "east_m": 4700,
+            "north_m": -300,
+            "up_m": 18.7
+          }
+        }
+      ]
+    }
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class2"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 1500,
+    "when_targets_gone": false
+  },
+  "crew_commander": "npc",
+  "battery_commander": "npc"
+}

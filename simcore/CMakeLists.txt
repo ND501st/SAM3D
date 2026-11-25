@@ -117,6 +117,7 @@ add_executable(simcore_tests
   tests/test_reactions.cpp
   tests/test_dynamic_campaign.cpp
   tests/test_ground.cpp
+  tests/test_landform.cpp
   tests/test_map_obstacles.cpp
   tests/test_map_leftovers.cpp
   tests/test_damage.cpp
@@ -157,7 +158,14 @@ add_executable(simcore_tests
   tests/test_fx_trajectories.cpp
   tests/test_munitions.cpp
   tests/test_map_meshes.cpp
-  tests/test_map_dressing.cpp)
+  tests/test_map_dressing.cpp
+  tests/test_ground_layers.cpp
+  tests/test_tree_tint.cpp
+  tests/test_clutter.cpp
+  tests/test_views.cpp
+  tests/test_plots.cpp
+  tests/test_recipes.cpp
+  tests/test_standing_crops.cpp)
 simcore_configure_target(simcore_tests)
 target_include_directories(simcore_tests PRIVATE examples)  # placeholder_vehicle.hpp
 target_compile_definitions(simcore_tests PRIVATE SIMCORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")

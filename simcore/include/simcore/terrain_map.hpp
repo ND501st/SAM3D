@@ -29,9 +29,11 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -41,6 +43,7 @@
 #include "simcore/clutter.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
+#include "simcore/farm_fields.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
 #include "simcore/noise.hpp"
@@ -85,6 +88,194 @@ struct MapRidgeDef {
     double height_m = 0.0;  // a ridge's crest above its foot; a valley's floor below its shoulders
 };
 
+// Hill country (roadmap L11, docs/scenery/TERRAIN_ROADMAP.md A.5; the look target's K1, docs/scenery/LOOK_TARGET.md): a
+// region of the map whose ground rolls in hills, its forms `relief_m` from the lowest ground to the highest at full
+// weight. The weight rises from nothing at the outline to full `blend_m` inside it (by an uneven line, so no outline
+// shows), and where regions overlap the stronger wins, so rolling ground can ring hilly ground.
+struct MapLandformRegionDef {
+    std::string id;
+    std::vector<MapPoint> points;  // its outline (closed by the loader into `ring`)
+    std::vector<MapPoint> ring;    // the outline, first point repeated at the end
+    double relief_m = 0.0;
+    double blend_m = 4000.0;
+};
+
+// A brook the hill country's drainage made (roadmap L11, A.5 step 2): its line, smoothed off the bake's cells, from its
+// head downstream to where it joins another brook or leaves the hills, with the area it drains at each point.
+struct MapBrookDef {
+    std::string id;
+    std::vector<MapPoint> points;
+    std::vector<double> area_m2;  // drained at each point
+};
+
+// The hill country as baked from its drainage (LandformBakeFor below): the height it adds to the ground on a grid, the
+// area each cell drains, and its brooks. Shared by every map whose landform is the same (a district and its country).
+struct LandformBake {
+    double west_m = 0.0, south_m = 0.0, spacing_m = 50.0;
+    int cols = 0, rows = 0;
+    std::vector<float> height;  // added to the ground, m
+    std::vector<float> area;    // drained through the cell, m^2
+    std::vector<MapBrookDef> brooks;
+
+    bool Empty() const { return cols < 2 || rows < 2; }
+    // The height added at a point: bilinear between the cells; nothing outside the bake.
+    double Height(double e, double n) const {
+        if (Empty()) return 0.0;
+        const double x = (e - west_m) / spacing_m, y = (n - south_m) / spacing_m;
+        if (x < 0.0 || y < 0.0 || x > cols - 1 || y > rows - 1) return 0.0;
+        const int c = std::min(cols - 2, static_cast<int>(x)), r = std::min(rows - 2, static_cast<int>(y));
+        const double fx = x - c, fy = y - r;
+        const std::size_t i = static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(c);
+        const std::size_t up = i + static_cast<std::size_t>(cols);
+        const double a = height[i], b = height[i + 1], cc = height[up], d = height[up + 1];
+        return (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (cc * (1.0 - fx) + d * fx) * fy;
+    }
+    // The area drained through the cell holding a point, m^2 (0 outside the bake).
+    double Area(double e, double n) const {
+        if (Empty()) return 0.0;
+        const long c = std::lround((e - west_m) / spacing_m), r = std::lround((n - south_m) / spacing_m);
+        if (c < 0 || r < 0 || c >= cols || r >= rows) return 0.0;
+        return area[static_cast<std::size_t>(r) * static_cast<std::size_t>(cols) + static_cast<std::size_t>(c)];
+    }
+    bool Inside(double e, double n) const {
+        return !Empty() && e >= west_m && n >= south_m && e <= west_m + spacing_m * (cols - 1) && n <= south_m + spacing_m * (rows - 1);
+    }
+
+    // The ground's measures (roadmap A.5 step 3), of the hills' own part of the ground, across a cell each way.
+    // The slope's tangent.
+    double SlopeTan(double e, double n) const {
+        const double d = spacing_m;
+        const double dx = (Height(e + d, n) - Height(e - d, n)) / (2.0 * d), dy = (Height(e, n + d) - Height(e, n - d)) / (2.0 * d);
+        return std::hypot(dx, dy);
+    }
+    double SlopeDeg(double e, double n) const { return std::atan(SlopeTan(e, n)) * 57.29577951308232; }
+    // The topographic wetness index, ln(a / tan b) (Beven and Kirkby 1979): a the area drained per metre of contour (the
+    // cell's area over its width), b the slope. About 4-7 on a hillside, 8-11 in a hollow, 12 and more on a valley floor.
+    double Wetness(double e, double n) const {
+        return std::log(std::max(Area(e, n), spacing_m * spacing_m) / spacing_m / std::max(SlopeTan(e, n), 0.005));
+    }
+    // How much higher the ground is than the ring `reach_m` round it (positive on a crest or spur, negative in a hollow).
+    double Rise(double e, double n, double reach_m) const {
+        double ring = 0.0;
+        for (int k = 0; k < 8; ++k) {
+            const double a = k * 0.7853981633974483;
+            ring += Height(e + reach_m * std::cos(a), n + reach_m * std::sin(a));
+        }
+        return Height(e, n) - ring / 8.0;
+    }
+};
+
+// Land use following the ground in the hill country (roadmap A.5 step 4, D12; data/scenery/land_use.json, read by LoadMap):
+// woods on the steep sides and the crests, meadow on the wet valley floors and on slopes too steep to plough. Estimates
+// until sourced, judged by eye against the look target (docs/scenery/LOOK_TARGET.md K2).
+struct MapLandUseDef {
+    bool laid = false;
+    double wood_slope_deg = 11.0;     // a side this steep is wooded
+    double wood_slope_spread_deg = 3.0;  // the threshold wanders this much either way (slow noise), so woods' edges wind
+    double crest_rise_m = 6.0;        // a crest this far above the ground 250 m round it is wooded...
+    double crest_share = 0.5;         // ...on this share of the crests (noise)
+    double min_relief_m = 3.0;        // nowhere the hills add less than this (their blend into the plain)
+    double meadow_wetness = 11.0;     // a valley floor this wet is meadow
+    double meadow_slope_deg = 8.0;    // a slope this steep (but not wooded) is pasture, not ploughed
+    double brook_row_share = 0.6;     // of a brook's 100 m pieces, the share with a row of alders on one bank (A.3.20)
+    std::string meadow_crop = "pasture";  // the dressing's crop on the meadows that are grazed
+    // The meadows' open ground by its use (terrain roadmap L13 step 1, A.3.39): a wet valley floor mown for hay, left
+    // unmown in patches (wet_tall_cut: where the patches' noise is under it); a steep slope grazed within graze_m of a
+    // village or a farmstead (the reach wandering a quarter either way), left to tall grass beyond.
+    std::string hay_crop = "hay";          // the dressing's crop on a mown floor
+    std::string tall_crop = "tall_grass";  // ...on unmown or ungrazed ground
+    double graze_m = 2000.0;
+    double wet_tall_cut = 0.3;
+    // Scrub in the open (L13 step 2, A.3.41): blackthorn, hawthorn and dog rose on the grazed slopes and in the tall grass,
+    // each a box of the layout (MapBox::scrub) so the sight lines see it. One candidate a cell of scrub_cell_m, kept by its
+    // class's share (none on a mown floor) times 1 + scrub_slope_gain a degree over meadow_slope_deg (at most
+    // scrub_slope_most times) and by patches about 400 m across (a parcel left longer or grazed harder). Within scrub_wood_m
+    // of a wood a candidate is a thicket by thicket_wood (the wood's mantle spreading, the succession to wood), elsewhere
+    // by thicket_tall in the tall grass and never on a grazed slope; of the rest clump_share are clumps, the others lone
+    // bushes. Sizes: a lone bush scrub_bush_m across, a clump scrub_clump_m, a thicket scrub_thicket_m long (each 0.7-1.3
+    // times); heights scrub_height_min_m-scrub_height_max_m.
+    double scrub_cell_m = 40.0;
+    double scrub_pasture = 0.05;
+    double scrub_tall = 0.2;
+    double scrub_slope_gain = 0.08;
+    double scrub_slope_most = 2.5;
+    double scrub_wood_m = 60.0;
+    double thicket_wood = 0.5;
+    double thicket_tall = 0.15;
+    double clump_share = 0.4;
+    double scrub_bush_m = 4.0;
+    double scrub_clump_m = 10.0;
+    double scrub_thicket_m = 30.0;
+    double scrub_height_min_m = 1.8;
+    double scrub_height_max_m = 3.5;
+    // The lines fit the ground (A.5 step 5, the look target's K8): no road or railway steeper than its class's grade. Each
+    // line's profile is held to the grade (halfway between the highest and the lowest profiles that keep it, so cut and
+    // fill balance) and the ground cut or filled to it: the formation level, its sides at `side_slope` (run per rise).
+    double max_grade_main = 0.06;     // a main road
+    double max_grade_road = 0.08;     // a secondary road
+    double max_grade_track = 0.14;    // a field or forest track
+    double max_grade_rail = 0.025;    // the railway
+    double side_slope = 1.5;          // a cutting's or an embankment's side, metres out per metre down or up
+    double formation_m = 6.0;         // the formation beyond the strip's edge each side (shoulder and ditch)
+    double formation_min_half_m = 25.0;  // never narrower than this each side, so the 50 m ground has a node on it
+    // Sunken lanes (A.5 step 5, A.3.34): where a farm track climbs a bank steeper than a track's grade in the hills' loess,
+    // a share of the climbs are lanes worn into the slope (De Geeter, Poesen and Vanmaercke's 132 lanes of the Belgian loess
+    // belt: depth 0.5-10 m, mean 2.5; floor 0.8-11 m, mean 2.3; top 5-28 m, mean 10; deepest where the slope is steepest).
+    // Each is drawn on its own tiles of finer ground (`lane_grid_m`), one per core cell it touches.
+    double lane_share = 0.5;          // of the climbs, the share worn into lanes
+    double lane_depth_m = 2.5;        // a lane's depth at its deepest (the middle of its draw)...
+    double lane_depth_spread = 2.0;   // ...times or divided by up to this
+    double lane_floor_m = 4.0;        // its floor's width
+    double lane_bank_run = 1.5;       // its banks' run per metre of depth (rounded at top and foot)
+    double lane_min_rise_m = 3.0;     // a climb rising less is not a lane
+    double lane_grid_m = 2.0;         // the tiles' spacing (divides the core's)
+    double lane_row_share = 0.5;      // of a lane's 40 m pieces, each side, the share with shrubs and trees on the bank's top
+    // A village's pond (A.5 step 6's p22, A.3.34; the look target's K-f): one by each village of the map proper, in the
+    // lowest open ground at its edge, long along the contour, its bed and banks on tiles of finer ground as a lane's.
+    double pond_radius_m = 16.0;      // half its length (drawn 0.8-1.2 times)
+    double pond_aspect = 0.6;         // its width to its length
+    double pond_depth_m = 1.5;        // its bed below the water at the middle
+    double pond_drop_m = 0.4;         // the water below the lowest of its rim
+    double pond_shore_m = 4.0;        // its bank's run from the water's edge up to the ground round it
+    double pond_max_dam_m = 1.5;      // where the ground falls away more than this from its bank's top, no pond there
+    double pond_trees = 2.0;          // waterside trees on its bank
+};
+
+// How the hill country drains (terrain.landform.drainage; game values, judged by eye against the look target and the
+// hill plots, docs/scenery/TERRAIN_ROADMAP.md A.5). The forms' noise is no longer the ground: it only decides where the
+// water goes. From the hills' outline inwards every cell is reached once, lowest first (a priority flood, Barnes,
+// Lehman and Mulla 2014, with the forms as the priority), so each cell has one downstream of it and no basin is closed;
+// the area drained is summed down that tree. Where it passes `channel_area_m2` a valley runs, its bed falling towards
+// the outline at `channel_slope` times (channel_area / area)^concavity (the slope-area relation of streams: steep high
+// up, gentle lower down); away from its nearest valley the ground rises at `hillslope`, rounding off towards a crest at
+// a share of the region's relief, and a valley draining more has a wider flat floor (up to `floor_m` each side).
+struct MapLandformDrainageDef {
+    double spacing_m = 50.0;            // the bake's grid (the core's spacing, so their nodes coincide)
+    double channel_area_m2 = 150000.0;  // where a valley starts
+    double channel_slope = 0.02;        // its bed's fall at its head
+    double concavity = 0.5;             // how fast the bed flattens with the area drained
+    double hillslope = 0.18;            // the valley sides' slope at their foot (tan)
+    double steepness_spread = 0.6;      // the crests' height varies by this share either way (slow noise)
+    double floor_m = 60.0;              // a big valley's flat floor, each side of its brook
+    double trunk_share = 0.6;           // the share of slow noise in the priority (so trunk valleys run far)
+    double trunk_wavelength_m = 6000.0;
+    double inland_tilt = 0.5;           // the priority's rise per 20 km in from the outline (valleys run outwards)
+    double brook_area_m2 = 3.0e6;       // a valley draining this much carries a brook (a map line)
+};
+
+// The landform: one field of forms over the whole map (warped value noise with a ridged share, so the hills wind and
+// have crests and spurs, turned off the noise's lattice). Since A.5 step 2 the forms set where the water goes and the
+// ground is baked from the drainage (MapLandformDrainageDef): valleys that all run out of the hills, ridges between.
+struct MapLandformDef {
+    double exaggeration = 1.0;     // the owner's dial: every region's relief times this
+    double wavelength_m = 2500.0;  // the main forms' size, crest to crest
+    double warp_m = 800.0;         // how far the forms are pushed sideways (domain warping)
+    double ridged = 0.35;          // the share of ridged noise (crests and spurs) against rounded fBm
+    std::vector<MapLandformRegionDef> regions;
+    MapLandformDrainageDef drainage;
+    std::shared_ptr<const LandformBake> bake;  // set by the loader (LandformBakeFor)
+};
+
 // A lake or reservoir: the ground under it lies below its level, deepening from the shore.
 struct MapLakeDef {
     std::string id;
@@ -121,6 +312,14 @@ struct MapDetailDef {
     double half_m = 5000.0;   // half its side
     double spacing_m = 10.0;  // its ground's
     double micro_m = 0.0;     // the micro relief's amplitude
+    // The meso relief (roadmap L3, docs/scenery/TERRAIN_ROADMAP.md D5): the plain's swells and swales, bands of zero-mean
+    // value noise (wavelength 60-2000 m, amplitude to 3 m), faded as the micro relief is.
+    std::vector<MapReliefDef> meso;
+    double MesoTotalM() const {
+        double t = 0.0;
+        for (const MapReliefDef& r : meso) t += r.amplitude_m;
+        return t;
+    }
     bool Contains(double e, double n) const { return std::fabs(e - centre.east_m) <= half_m && std::fabs(n - centre.north_m) <= half_m; }
 };
 
@@ -148,6 +347,24 @@ inline const std::vector<std::string>& MapSiteKinds() {
     return kinds;
 }
 
+// The plain's fields and what is laid along them (roadmap T4, docs/scenery/T3_T4_PLAN.md): farm tracks along some of the
+// fields' long sides, tree rows along some tracks and roads, groves round the tanyas. In the file: laid; left out: none
+// (the fields are still the default grid's). The rows and groves block sight, so they are the map's, not the dressing's.
+struct MapFarmlandDef {
+    bool laid = false;
+    FieldGrid fields;               // the fields' sizes (the seed is the map's: MapData::Fields)
+    double track_share = 0.5;       // of the fields' long sides that carry a farm track
+    double track_width_m = 4.0;
+    double row_share = 0.3;         // of a farm track's length planted with a tree row
+    double road_row_share = 0.5;    // of a main or secondary road's length inside the map proper
+    double row_width_m = 7.0;
+    double row_height_min_m = 12.0, row_height_max_m = 22.0;
+    double site_clear_m = 600.0;    // no row or grove this close to a site's centre (its sectors stay open)
+    double position_clear_m = 0.0;  // nor this close to an Osa or dummy position's (its crews fell them; 0: site_clear_m)
+    double grove_width_m = 20.0;    // a tanya's grove, round three of its sides
+    double grove_height_min_m = 12.0, grove_height_max_m = 18.0;
+};
+
 struct MapDef {
     std::string map_id;
     std::string name;
@@ -170,6 +387,8 @@ struct MapDef {
     double valley_depth_m = 0.0;
     double valley_half_width_m = 500.0;
     std::vector<MapLakeDef> lakes;
+    MapLandformDef landform;  // the hill country (terrain.landform, roadmap L11)
+    MapLandUseDef land_use;   // land use on the hills' ground (data/scenery/land_use.json)
     // Lines and places.
     std::vector<MapLineDef> rivers;
     std::vector<MapLineDef> roads;
@@ -180,6 +399,7 @@ struct MapDef {
     std::vector<MapSettlementDef> detail_settlements;
     std::vector<MapDetailDef> detail;  // the detail areas (terrain.detail)
     MapClutterDef clutter;
+    MapFarmlandDef farmland;
     int farmsteads = 0;
     int farm_buildings_min = 2, farm_buildings_max = 4;
     std::vector<MapPolygonDef> forests;
@@ -219,7 +439,7 @@ struct MapDef {
 // Every kind of box the map is made of; the game gives each kind its colour and shape.
 enum class MapPart {
     House, Flats, Industrial, Farm, Military, Hangar, Shelter, Tower, Station, Tank, Chimney, CoolingTower, Bridge,
-    Canopy, Marsh, Revetment, Pad, Runway, Mast, Tent, Bunker, Launcher, Count
+    Canopy, Marsh, Revetment, Pad, Runway, Mast, Tent, Bunker, Launcher, TreeRow, Count
 };
 
 inline const char* MapPartName(MapPart p) {
@@ -246,6 +466,7 @@ inline const char* MapPartName(MapPart p) {
     case MapPart::Tent: return "tent";
     case MapPart::Bunker: return "bunker";
     case MapPart::Launcher: return "launcher";
+    case MapPart::TreeRow: return "tree_row";
     case MapPart::Count: break;
     }
     return "?";
@@ -265,6 +486,16 @@ struct MapBox {
     double width_m = 10.0;
     double height_m = 5.0;
     double heading_rad = 0.0;
+    // A wood's top on a slope (terrain roadmap A.3.20): it rises this much per metre east and north of its centre, as the
+    // ground under it does, so it stands its height over the ground across the block (a level top was buried uphill and
+    // twice as tall downhill). 0 for everything else: a building's roof is level.
+    double rise_e = 0.0, rise_n = 0.0;
+    bool by_water = false;  // a tree row along a brook (A.3.20): alders, not the fields' poplars and black locust
+    bool by_pond = false;   // a village pond's waterside tree (A.3.37): one willow, never gapped (by_water too)
+    bool scrub = false;     // scrub in the open (L13, A.3.41): a lone bush, a clump or a thicket of the dressing's scrub_mix
+    double Top() const { return base_m + height_m; }
+    // Its top over (east, north), above sea level.
+    double TopAt(double e, double n) const { return base_m + height_m + rise_e * (e - east_m) + rise_n * (n - north_m); }
 };
 
 enum class MapSurface { Water, MainRoad, Road, Track, Rail };
@@ -524,6 +755,342 @@ private:
 
 }  // namespace mapgeo
 
+// The landform's shape at a point, 0..1 (the share of the local relief): a contrast-stretched blend of fBm and ridged
+// noise on warped coordinates. Pure: the same (seed, point) always gives the same value.
+inline double LandformShape(const MapLandformDef& l, std::uint64_t seed, double e, double n) {
+    // Turned 27 degrees, so no form lines up with the noise's lattice (and the map's north).
+    const double ca = 0.8910065241883679, sa = 0.4539904997395468;
+    const double x0 = ca * e - sa * n, y0 = sa * e + ca * n;
+    const std::uint64_t s0 = noise::Mix64(seed ^ 0x4C414E44464F524Dull);  // "LANDFORM"
+    const double ww = 1.7 * l.wavelength_m;
+    const double x = x0 + l.warp_m * (2.0 * noise::Fbm(noise::Mix64(s0 + 1), x0, y0, ww, 2) - 1.0);
+    const double y = y0 + l.warp_m * (2.0 * noise::Fbm(noise::Mix64(s0 + 2), x0, y0, ww, 2) - 1.0);
+    const double round = noise::Fbm(noise::Mix64(s0 + 3), x, y, l.wavelength_m, 4);
+    const double fold = 1.0 - std::fabs(2.0 * noise::Fbm(noise::Mix64(s0 + 4), x, y, 1.4 * l.wavelength_m, 3) - 1.0);
+    const double f = (1.0 - l.ridged) * round + l.ridged * fold * fold;
+    // The blend gathers round its middle; stretch it so the forms use their whole relief, softly at both ends (a valley
+    // floor flattens, a crest rounds). kLandformMid and kLandformSpread are measured (test_terrain_map's landform test).
+    constexpr double kLandformMid = 0.54, kLandformSpread = 0.36;
+    const double t = std::clamp((f - kLandformMid) / kLandformSpread + 0.5, 0.0, 1.0);
+    return noise::Smooth(t);
+}
+
+// The local relief the landform reaches at a point: the strongest region's, by its weight there; 0 outside them all.
+inline double LandformRelief(const MapLandformDef& l, std::uint64_t seed, double e, double n) {
+    double best = 0.0;
+    for (const MapLandformRegionDef& r : l.regions) {
+        if (r.relief_m <= best || r.ring.size() < 4 || !mapgeo::InPolygon(r.points, e, n)) continue;
+        // The edge of full weight wanders up to a third of the blend inwards, so the hills do not end on a line.
+        const double inside = mapgeo::DistToLine(r.ring, e, n) - r.blend_m * 0.35 * noise::Value(seed ^ 0x0B1E7D0ull, e, n, 3000.0);
+        const double w = noise::Smooth(std::clamp(inside / r.blend_m, 0.0, 1.0));
+        best = std::max(best, r.relief_m * w);
+    }
+    return best * l.exaggeration;
+}
+
+// How far a point lies inside the landform's regions (the deepest), 0 outside them all.
+inline double LandformInside(const MapLandformDef& l, double e, double n) {
+    double best = 0.0;
+    for (const MapLandformRegionDef& r : l.regions) {
+        if (r.ring.size() < 4 || !mapgeo::InPolygon(r.points, e, n)) continue;
+        best = std::max(best, mapgeo::DistToLine(r.ring, e, n));
+    }
+    return best;
+}
+
+namespace landform_detail {
+
+// Every cell's nearest marked cell (its index; -1 where none), by jump flooding: passes of halving reach, each cell
+// taking a neighbour's nearest when it is nearer. Near-exact for these fields, linear in the cells per pass.
+inline void NearestMarked(int cols, int rows, std::vector<int>& near_of) {
+    const auto d2 = [cols](int a, int b) {
+        if (a < 0) return 1LL << 62;
+        const long long dc = a % cols - b % cols, dr = a / cols - b / cols;
+        return dc * dc + dr * dr;
+    };
+    int k = 1;
+    while (k < std::max(cols, rows)) k *= 2;
+    // Halving reaches, then 2 and 1 again (JFA+2), which mends the few cells one sweep leaves wrong.
+    std::vector<int> reaches;
+    for (k /= 2; k >= 1; k /= 2) reaches.push_back(k);
+    reaches.push_back(2);
+    reaches.push_back(1);
+    for (int reach : reaches) {
+        k = reach;
+        {
+            for (int r = 0; r < rows; ++r) {
+                for (int c = 0; c < cols; ++c) {
+                    const int i = r * cols + c;
+                    int best = near_of[static_cast<std::size_t>(i)];
+                    long long bd = d2(best, i);
+                    for (int dr = -k; dr <= k; dr += k) {
+                        for (int dc = -k; dc <= k; dc += k) {
+                            const int rr = r + dr, cc = c + dc;
+                            if ((dr == 0 && dc == 0) || rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+                            const int cand = near_of[static_cast<std::size_t>(rr * cols + cc)];
+                            const long long cd = d2(cand, i);
+                            if (cd < bd || (cd == bd && cand >= 0 && cand < best)) {
+                                best = cand;
+                                bd = cd;
+                            }
+                        }
+                    }
+                    near_of[static_cast<std::size_t>(i)] = best;
+                }
+            }
+        }
+    }
+}
+
+// Chaikin's corner cutting, twice, keeping the ends: a brook's line off the grid's steps.
+inline void SmoothLine(std::vector<MapPoint>& pts, std::vector<double>& area) {
+    for (int it = 0; it < 2 && pts.size() >= 3; ++it) {
+        std::vector<MapPoint> p{pts.front()};
+        std::vector<double> a{area.front()};
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+            const MapPoint& u = pts[i];
+            const MapPoint& v = pts[i + 1];
+            p.push_back({0.75 * u.east_m + 0.25 * v.east_m, 0.75 * u.north_m + 0.25 * v.north_m});
+            p.push_back({0.25 * u.east_m + 0.75 * v.east_m, 0.25 * u.north_m + 0.75 * v.north_m});
+            a.push_back(0.75 * area[i] + 0.25 * area[i + 1]);
+            a.push_back(0.25 * area[i] + 0.75 * area[i + 1]);
+        }
+        p.push_back(pts.back());
+        a.push_back(area.back());
+        pts.swap(p);
+        area.swap(a);
+    }
+}
+
+inline std::shared_ptr<const LandformBake> Bake(const MapLandformDef& l, std::uint64_t seed) {
+    auto out = std::make_shared<LandformBake>();
+    const MapLandformDrainageDef& dr = l.drainage;
+    double west = 1e300, south = 1e300, east = -1e300, north = -1e300, relief_ref = 0.0;
+    for (const MapLandformRegionDef& r : l.regions) {
+        for (const MapPoint& p : r.points) {
+            west = std::min(west, p.east_m);
+            east = std::max(east, p.east_m);
+            south = std::min(south, p.north_m);
+            north = std::max(north, p.north_m);
+        }
+        relief_ref = std::max(relief_ref, r.relief_m);
+    }
+    const double sp = dr.spacing_m;
+    if (l.regions.empty() || relief_ref <= 0.0 || l.exaggeration <= 0.0 || sp <= 0.0) return out;
+    out->spacing_m = sp;
+    out->west_m = std::floor(west / sp) * sp;
+    out->south_m = std::floor(south / sp) * sp;
+    out->cols = static_cast<int>(std::lround((std::ceil(east / sp) * sp - out->west_m) / sp)) + 1;
+    out->rows = static_cast<int>(std::lround((std::ceil(north / sp) * sp - out->south_m) / sp)) + 1;
+    const int cols = out->cols, rows = out->rows;
+    const std::size_t count = static_cast<std::size_t>(cols) * static_cast<std::size_t>(rows);
+    const auto east_of = [&](int i) { return out->west_m + (i % cols) * sp; };
+    const auto north_of = [&](int i) { return out->south_m + (i / cols) * sp; };
+
+    // The relief each cell reaches, how hard its crests rise, and the order the flood takes it in.
+    const double relief_full = relief_ref * l.exaggeration;
+    std::vector<double> rel(count), prio(count), steep(count);
+    std::vector<char> outlet(count, 0);
+    const std::uint64_t ts = noise::Mix64(seed ^ 0x5452554E4B53ull);   // "TRUNKS"
+    const std::uint64_t ss = noise::Mix64(seed ^ 0x5354454550ull);     // "STEEP"
+    // The trunks' slow forms: the landform's own shape at a longer wavelength, on its own stream.
+    MapLandformDef slow;
+    slow.wavelength_m = dr.trunk_wavelength_m;
+    slow.warp_m = 0.5 * dr.trunk_wavelength_m;
+    slow.ridged = 0.0;
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const double e = east_of(i), n = north_of(i);
+        const std::size_t u = static_cast<std::size_t>(i);
+        rel[u] = LandformRelief(l, seed, e, n);
+        const int c = i % cols, r = i / cols;
+        outlet[u] = (rel[u] < 0.01 * relief_full || c == 0 || r == 0 || c == cols - 1 || r == rows - 1) ? 1 : 0;
+        if (outlet[u]) continue;
+        prio[u] = (1.0 - dr.trunk_share) * LandformShape(l, seed, e, n) + dr.trunk_share * LandformShape(slow, ts, e, n) +
+                  dr.inland_tilt * LandformInside(l, e, n) / 20000.0;
+        steep[u] = 1.0 - dr.steepness_spread + 2.0 * dr.steepness_spread * noise::Fbm(ss, e, n, 3000.0, 2);
+    }
+
+    // The flood: from every outlet at once, then always the lowest cell on its edge; the cell that reached a cell is the
+    // one downstream of it. Ties go by index, so the tree is the same on every machine.
+    std::vector<int> down(count, -1), order;
+    order.reserve(count);
+    std::vector<char> seen(count, 0);
+    using Entry = std::pair<double, int>;
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> edge;
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        if (!outlet[static_cast<std::size_t>(i)]) continue;
+        seen[static_cast<std::size_t>(i)] = 1;
+        edge.push({-1.0, i});
+    }
+    while (!edge.empty()) {
+        const int i = edge.top().second;
+        edge.pop();
+        order.push_back(i);
+        const int c = i % cols, r = i / cols;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int cc = c + dx, rr = r + dy;
+                if ((dx == 0 && dy == 0) || cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+                const int j = rr * cols + cc;
+                if (seen[static_cast<std::size_t>(j)]) continue;
+                seen[static_cast<std::size_t>(j)] = 1;
+                down[static_cast<std::size_t>(j)] = i;
+                edge.push({prio[static_cast<std::size_t>(j)], j});
+            }
+        }
+    }
+    // The area drained, summed from the heads down.
+    std::vector<double> area(count, sp * sp);
+    for (std::size_t k = order.size(); k-- > 0;) {
+        const int i = order[k];
+        const int j = down[static_cast<std::size_t>(i)];
+        if (j >= 0) area[static_cast<std::size_t>(j)] += area[static_cast<std::size_t>(i)];
+    }
+    const auto step_to = [cols, sp](int i, int j) { return (i % cols != j % cols && i / cols != j / cols) ? sp * std::sqrt(2.0) : sp; };
+    // The valleys' beds, falling down the tree to the outline (0 there).
+    std::vector<double> bed(count, 0.0);
+    std::vector<int> near_of(count, -1);
+    for (int i : order) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const int j = down[u];
+        const bool channel = outlet[u] || area[u] >= dr.channel_area_m2;
+        if (!channel) continue;
+        near_of[u] = i;
+        if (j < 0) continue;
+        bed[u] = bed[static_cast<std::size_t>(j)] +
+                 step_to(i, j) * dr.channel_slope * std::pow(dr.channel_area_m2 / area[u], dr.concavity) * rel[u] / relief_ref;
+    }
+    NearestMarked(cols, rows, near_of);
+
+    // The ground: the nearest valley's bed, its floor, then its side rising and rounding off towards a crest.
+    std::vector<double> h(count, 0.0);
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const int s = near_of[u];
+        if (s < 0) continue;
+        const std::size_t su = static_cast<std::size_t>(s);
+        const double dist = std::hypot(east_of(i) - east_of(s), north_of(i) - north_of(s));
+        const double floor_half = dr.floor_m * std::clamp(std::log10(area[su] / dr.channel_area_m2) / 2.0, 0.0, 1.0);
+        const double x = std::max(0.0, dist - floor_half);
+        const double cap = rel[u] * (0.25 + 0.5 * steep[u]);
+        h[u] = bed[su] + (cap > 1e-6 ? cap * (1.0 - std::exp(-dr.hillslope * x / cap)) : 0.0);
+    }
+    // Where the sides of two valleys of different heights meet, the nearer valley changes from one cell to the next and
+    // the ground would step: bring the higher side down to a slope of `kTalus` at most (a chamfer pass each way, which
+    // only lowers a cell to just above a neighbour, so every cell still drains through it).
+    constexpr double kTalus = 0.5;  // 27 degrees
+    const double diag = sp * std::sqrt(2.0);
+    for (int pass = 0; pass < 2; ++pass) {
+        const bool fwd = pass == 0;
+        const int dir = fwd ? -1 : 1;  // the cells the sweep has passed
+        const int nb[4][2] = {{dir, 0}, {-1, dir}, {0, dir}, {1, dir}};
+        for (int k = 0; k < static_cast<int>(count); ++k) {
+            const int i = fwd ? k : static_cast<int>(count) - 1 - k;
+            const int c = i % cols, r = i / cols;
+            double& hi = h[static_cast<std::size_t>(i)];
+            for (const auto& o : nb) {
+                const int cc = c + o[0], rr = r + o[1];
+                if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+                const double reach = (o[0] != 0 && o[1] != 0) ? diag : sp;
+                hi = std::min(hi, h[static_cast<std::size_t>(rr * cols + cc)] + kTalus * reach);
+            }
+        }
+    }
+    // Where two valleys' sides meet badly a hollow can be left: fill it to its sill (a second flood, on the ground), so
+    // the bake has no closed basin at all.
+    std::fill(seen.begin(), seen.end(), static_cast<char>(0));
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        if (!outlet[static_cast<std::size_t>(i)]) continue;
+        seen[static_cast<std::size_t>(i)] = 1;
+        edge.push({h[static_cast<std::size_t>(i)], i});
+    }
+    while (!edge.empty()) {
+        const double level = edge.top().first;
+        const int i = edge.top().second;
+        edge.pop();
+        const int c = i % cols, r = i / cols;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int cc = c + dx, rr = r + dy;
+                if ((dx == 0 && dy == 0) || cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+                const std::size_t j = static_cast<std::size_t>(rr * cols + cc);
+                if (seen[j]) continue;
+                seen[j] = 1;
+                h[j] = std::max(h[j], level);
+                edge.push({h[j], static_cast<int>(j)});
+            }
+        }
+    }
+    out->height.resize(count);
+    out->area.resize(count);
+    for (std::size_t u = 0; u < count; ++u) {
+        out->height[u] = static_cast<float>(h[u]);
+        out->area[u] = static_cast<float>(area[u]);
+    }
+
+    // The brooks: each from its head (no brook flows into it) down to where it meets one already traced or the outline.
+    std::vector<char> brook(count, 0), fed(count, 0), traced(count, 0);
+    for (std::size_t u = 0; u < count; ++u) brook[u] = (!outlet[u] && area[u] >= dr.brook_area_m2) ? 1 : 0;
+    for (std::size_t u = 0; u < count; ++u) {
+        const int j = down[u];
+        if (brook[u] && j >= 0) fed[static_cast<std::size_t>(j)] = 1;
+    }
+    for (int i = 0; i < static_cast<int>(count); ++i) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        if (!brook[u] || fed[u]) continue;
+        MapBrookDef b;
+        int at = i;
+        while (true) {
+            const std::size_t a = static_cast<std::size_t>(at);
+            b.points.push_back({east_of(at), north_of(at)});
+            b.area_m2.push_back(area[a]);
+            if (traced[a] || outlet[a]) break;
+            traced[a] = 1;
+            const int j = down[a];
+            if (j < 0) break;
+            at = j;
+        }
+        if (b.points.size() < 3) continue;
+        SmoothLine(b.points, b.area_m2);
+        b.id = "brook_" + std::to_string(out->brooks.size() + 1);
+        out->brooks.push_back(std::move(b));
+    }
+    return out;
+}
+
+}  // namespace landform_detail
+
+// The hill country's bake for a landform and seed: built once per process and shared, so a district and the country it
+// lies in (whose files carry the same landform) hold the very same ground, to the last bit.
+inline std::shared_ptr<const LandformBake> LandformBakeFor(const MapLandformDef& l, std::uint64_t seed) {
+    std::string key = std::to_string(seed);
+    const auto add = [&key](double v) {
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), ",%.17g", v);
+        key += buf;
+    };
+    for (double v : {l.exaggeration, l.wavelength_m, l.warp_m, l.ridged, l.drainage.spacing_m, l.drainage.channel_area_m2,
+                     l.drainage.channel_slope, l.drainage.concavity, l.drainage.hillslope, l.drainage.steepness_spread, l.drainage.floor_m,
+                     l.drainage.trunk_share, l.drainage.trunk_wavelength_m, l.drainage.inland_tilt, l.drainage.brook_area_m2}) {
+        add(v);
+    }
+    for (const MapLandformRegionDef& r : l.regions) {
+        key += ";" + r.id;
+        add(r.relief_m);
+        add(r.blend_m);
+        for (const MapPoint& p : r.points) {
+            add(p.east_m);
+            add(p.north_m);
+        }
+    }
+    static std::mutex lock;
+    static std::map<std::string, std::shared_ptr<const LandformBake>> cache;
+    std::lock_guard<std::mutex> guard(lock);
+    std::shared_ptr<const LandformBake>& held = cache[key];
+    if (!held) held = landform_detail::Bake(l, seed);
+    return held;
+}
+
 // How deep a river's bed is cut below the ground around it.
 constexpr double kRiverBedDepthM = 2.0;
 // The bed reaches this far beyond the water's edge, shallowing to nothing (a game value).
@@ -547,6 +1114,8 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
         const double dist = std::hypot(e - hill.centre.east_m, n - hill.centre.north_m);
         if (dist < hill.radius_m) h += hill.height_m * 0.5 * (1.0 + std::cos(kPi * dist / hill.radius_m));
     }
+    // The hill country, rising from the plain (before the valleys and rivers, which cut through it).
+    if (d.landform.bake) h += d.landform.bake->Height(e, n);
     // Ranges: across, a smooth rise to the crest; along it, peaks and saddles (two thirds to four thirds of its height).
     for (std::size_t i = 0; i < d.ridges.size(); ++i) {
         const MapRidgeDef& r = d.ridges[i];
@@ -583,6 +1152,17 @@ inline double NaturalGround(const MapDef& d, double e, double n) {
     return h;
 }
 
+// Where (east, north) lies off an ellipse's edge (negative inside), along the ray from its middle: the ellipse centred at
+// (centre_e, centre_n), half length `rx` along `heading` (from north) and half width `ry` (a village pond's, A.3.34).
+inline double EllipseEdgeDistance(double centre_e, double centre_n, double rx, double ry, double heading, double e, double n) {
+    const double ue = std::sin(heading), un = std::cos(heading);
+    const double de = e - centre_e, dn = n - centre_n;
+    const double x = de * ue + dn * un, y = de * un - dn * ue;
+    const double rho = std::hypot(x, y);
+    if (rho < 1e-9) return -ry;
+    return rho - rx * ry / std::hypot(ry * x / rho, rx * y / rho);
+}
+
 // ---------------------------------------------------------------------------------------------- the built map
 
 class MapData {
@@ -597,6 +1177,7 @@ public:
         m->SetLevels(false);
         m->ImportDetailLines();
         m->BuildIndices();
+        m->BakeLanes();
         m->BuildWaterGrid();
         m->BakeDetail();
         m->Lay();
@@ -645,15 +1226,31 @@ public:
     const std::vector<Flat>& Flats() const { return flats_; }
     // Whether (east, north) lies within `clear_m` (under 125 m) of the edge of a road, railway or river (the map's and the
     // detail areas' imported ones), or of a river's: what the map's dressing keeps its trees off (scenery/map_dressing.hpp).
+    // The plain's fields (farm_fields.hpp): the map's farmland sizes with the map's own seed.
+    FieldGrid Fields() const {
+        FieldGrid g = def_.farmland.fields;
+        g.seed = Seed32(noise::Mix64(def_.seed ^ 0xF1E1D5ull));
+        return g;
+    }
     bool NearLine(double e, double n, double clear_m) const { return lines_.Near(e, n, clear_m); }
-    bool NearWater(double e, double n, double clear_m) const { return water_.Near(e, n, clear_m); }
+    // Whether (east, north) lies within `clear_m` of water: a river's strip, or a village pond's ellipse (A.3.37; the
+    // layout keeps clear of the pond's whole capsule, water_, which reaches past the ellipse's ends onto its bank).
+    bool NearWater(double e, double n, double clear_m) const {
+        if (river_water_.Near(e, n, clear_m)) return true;
+        for (const Pond& p : ponds_) {
+            if (std::hypot(e - p.c.east_m, n - p.c.north_m) > p.rx + clear_m) continue;
+            if (PondEdgeDistance(p, e, n) < clear_m) return true;
+        }
+        return false;
+    }
     // Whether (east, north) is water (roadmap E9's sea areas; Terrain::WaterAt): on a river of the map or its detail
     // areas within half its width, in one of the map's lakes, or beyond the map proper on its country's lakes and rivers.
+    // The village ponds are not (BuildWaterGrid leaves them out).
     bool WaterAt(double e, double n) const { return has_water_ && water_grid_.Maybe(e, n) && WaterAtExact(e, n); }
     // The same without the grid's quick no (what the grid is tested against).
     bool WaterAtExact(double e, double n) const {
         if (!has_water_) return false;
-        if (water_.Near(e, n, 0.0)) return true;
+        if (river_water_.Near(e, n, 0.0)) return true;
         const bool beyond = def_.far_ground != nullptr && !def_.InCore(e, n);
         for (const LakeBox& b : lake_boxes_) {
             if ((b.country && !beyond) || e < b.w || e > b.e || n < b.s || n > b.n) continue;
@@ -676,14 +1273,59 @@ public:
     // Whether level `level` of DrawnLevels draws its cell (c, r) (corners c..c+1, r..r+1): not wholly inside a finer one.
     bool DrawsCell(std::size_t level, int c, int r) const {
         if (level >= levels_.size()) return false;
+        if (IsLaneTile(level)) return true;  // nothing finer under a lane's tile
+        if (levels_[level] == &core_ && lane_tile_at_.count(LaneCellKey(c, r)) != 0) return false;
         const MapGrid& g = *levels_[level];
         const double w = g.EastOf(c), s = g.NorthOf(r), e = g.EastOf(c + 1), n = g.NorthOf(r + 1);
         for (std::size_t j = 0; j < level; ++j) {
+            if (IsLaneTile(j)) continue;  // no cell but the core's lies wholly in one
             const MapGrid& f = *levels_[j];
             if (f.Covers(w, s) && f.Covers(e, s) && f.Covers(w, n) && f.Covers(e, n)) return false;
         }
         return true;
     }
+    // The sunken lanes' tiles among DrawnLevels (A.3.34): each a core cell's square of finer ground, after the detail
+    // areas and before the map proper; FinerLevelCount the levels before the map proper (the detail areas and the tiles).
+    bool IsLaneTile(std::size_t level) const { return level >= lane_first_ && level < lane_end_; }
+    std::size_t FinerLevelCount() const { return lane_end_; }
+    // How deep the sunken lanes cut the ground at (east, north), 0 off them; how many there are.
+    double LaneDepthAt(double e, double n) const {
+        double d = 0.0;
+        for (const Lane& l : lanes_) d = std::max(d, LaneCut(l, e, n));
+        return d;
+    }
+    std::size_t LaneCount() const { return lanes_.size(); }
+    // A lane's foot and head (east, north) and its depth at the deepest.
+    void LaneEnds(std::size_t i, MapPoint& foot, MapPoint& head, double& depth_m) const {
+        foot = lanes_[i].a;
+        head = lanes_[i].b;
+        depth_m = lanes_[i].depth_m;
+    }
+
+    // The villages' ponds (A.3.34): how many, and one's middle, half length and width, heading (the length's, from north),
+    // and its water's level above sea level.
+    std::size_t PondCount() const { return ponds_.size(); }
+    void PondAt(std::size_t i, MapPoint& centre, double& half_length_m, double& half_width_m, double& heading_rad, double& level_m) const {
+        const Pond& p = ponds_[i];
+        centre = p.c;
+        half_length_m = p.rx;
+        half_width_m = p.ry;
+        heading_rad = p.heading;
+        level_m = p.level_m;
+    }
+    // How wet the ground at (east, north) is by a pond (A.3.35): 1 at its water's edge and under it, falling smoothly to 0
+    // at kPondWetM beyond its shore (the ground's darker, smoother margin; presentation only).
+    static constexpr double kPondWetM = 2.0;  // the wet margin beyond the shore (a game value)
+    double PondWetness(double e, double n) const {
+        double wet = 0.0;
+        for (const Pond& p : ponds_) {
+            if (std::hypot(e - p.c.east_m, n - p.c.north_m) >= p.reach_m) continue;
+            const double t = std::clamp(PondEdgeDistance(p, e, n) / (p.shore_m + kPondWetM), 0.0, 1.0);
+            wet = std::max(wet, 1.0 - t * t * (3.0 - 2.0 * t));
+        }
+        return wet;
+    }
+
     // The level of DrawnLevels the ground at (east, north) is drawn by (-1: none, beyond every lattice: Analytic).
     int LevelAt(double e, double n) const {
         int index = -1;
@@ -714,14 +1356,14 @@ public:
             const std::size_t i = cells->Cell(e, n);
             for (std::uint32_t k = cells->first[i]; k < cells->first[i + 1]; ++k) {
                 const Foot& f = feet_[cells->feet[k]];
-                if (f.top > top && f.Holds(e, n)) top = f.top;
+                if (f.top > top && f.Holds(e, n)) top = std::max(top, f.TopAt(e, n));
             }
         } else {
             const auto it = loose_.find(CellKey(e, n, kLooseCellM));
             if (it != loose_.end()) {
                 for (std::uint32_t k : it->second) {
                     const Foot& f = feet_[k];
-                    if (f.top > top && f.Holds(e, n)) top = f.top;
+                    if (f.top > top && f.Holds(e, n)) top = std::max(top, f.TopAt(e, n));
                 }
             }
         }
@@ -779,7 +1421,7 @@ public:
             if (!f.Chord(e0, n0, de, dn, t_in, t_out)) return;
             const double first = std::max(t_in, walk_in);  // where the walk first meets it
             if (first < cell_in - kWalkEps || first > cell_out + kWalkEps) return;
-            going = sink.Chord(t_in, t_out, f.top);
+            going = sink.Chord(t_in, t_out, f.TopAt(e0 + de * t_in, n0 + dn * t_in), f.TopAt(e0 + de * t_out, n0 + dn * t_out));
         };
         const double w = std::min(e0, e1), s = std::min(n0, n1), ea = std::max(e0, e1), nn = std::max(n0, n1);
         bool inside_one = false;
@@ -820,7 +1462,7 @@ public:
                 const double v = std::max(0.0, std::fabs(de * f.cos_h - dn * f.sin_h) - f.half_w);
                 d = std::hypot(u, v);
             }
-            if (d <= radius_m) most = std::max(most, f.top - GroundHeight(f.e, f.n));
+            if (d <= radius_m) most = std::max(most, f.top0 - GroundHeight(f.e, f.n));
         };
         const double w = e - radius_m, ea = e + radius_m, s = n - radius_m, nn = n + radius_m;
         for (const FootCells& c : rects_) {
@@ -861,6 +1503,7 @@ public:
     // The ground as the file shapes it (relief, hills, the valley, the flattened sites), before baking.
     double Analytic(double e, double n) const {
         double h = Natural(e, n);
+        h = FitToLines(e, n, h);
         for (const Flat& f : flats_) {
             const double d = std::hypot(e - f.e, n - f.n);
             if (d >= f.r) continue;
@@ -879,6 +1522,15 @@ private:
     // The lattice drawing the ground at (east, north) and its place in DrawnLevels (null, -1: none).
     const MapGrid* LevelGridAt(double e, double n, int* index) const {
         for (std::size_t i = 0; i < levels_.size(); ++i) {
+            if (i == lane_first_ && lane_end_ > lane_first_) {  // the lanes' tiles: by the core cell (A.3.34)
+                const int tile = LaneTileAt(e, n);
+                if (tile >= 0) {
+                    if (index != nullptr) *index = static_cast<int>(lane_first_) + tile;
+                    return levels_[lane_first_ + static_cast<std::size_t>(tile)];
+                }
+                i = lane_end_ - 1;
+                continue;
+            }
             if (levels_[i]->Covers(e, n)) {
                 if (index != nullptr) *index = static_cast<int>(i);
                 return levels_[i];
@@ -901,6 +1553,9 @@ private:
                 if (detail_ground_[i].cols > 1 && detail_ground_[i].rows > 1) levels_.push_back(&detail_ground_[i]);
             }
         }
+        lane_first_ = levels_.size();
+        for (const MapGrid& g : lane_tiles_) levels_.push_back(&g);
+        lane_end_ = levels_.size();
         for (const MapGrid* g : {&core_, &far_, &country_, &beyond_}) {
             if (g->cols > 1 && g->rows > 1) levels_.push_back(g);
         }
@@ -918,8 +1573,12 @@ private:
     // A box that blocks sight as the paths look it up (roadmap R6): its footprint (the turned rectangle, or the round
     // part's circle), its top above sea level, its narrowest side.
     struct Foot {
+        // `top` its highest (what every bound reads); `top0` its top at its centre, rising `ge` and `gn` per metre east and
+        // north (MapBox::rise_e, rise_n: a wood on a slope; 0 and top0 == top for anything level).
         double e = 0.0, n = 0.0, sin_h = 0.0, cos_h = 1.0, half_l = 0.0, half_w = 0.0, top = 0.0, side = 0.0;
+        double top0 = 0.0, ge = 0.0, gn = 0.0;
         bool round = false;
+        double TopAt(double pe, double pn) const { return top0 + ge * (pe - e) + gn * (pn - n); }
         bool Holds(double pe, double pn) const {
             const double de = pe - e, dn = pn - n;
             if (round) return de * de + dn * dn <= half_l * half_l;
@@ -1084,6 +1743,44 @@ private:
     // Relief, hills and the river valley: the ground before the sites are levelled.
     double Natural(double e, double n) const { return NaturalGround(def_, e, n); }
 
+public:
+    // The hill country's land use at a point (A.5 step 4, MapLandUseDef): a wood on a steep side or a crest.
+    bool LandUseWood(double e, double n) const {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake) return false;
+        const LandformBake& bake = *def_.landform.bake;
+        if (!bake.Inside(e, n) || bake.Height(e, n) < u.min_relief_m) return false;
+        const std::uint64_t ls = noise::Mix64(def_.seed ^ 0x4C414E44555345ull);  // "LANDUSE"
+        const double threshold = u.wood_slope_deg + u.wood_slope_spread_deg * (2.0 * noise::Fbm(ls, e, n, 700.0, 2) - 1.0);
+        if (bake.SlopeDeg(e, n) >= threshold) return true;
+        return bake.Rise(e, n, 250.0) >= u.crest_rise_m && noise::Value(ls + 1, e, n, 900.0) < u.crest_share;
+    }
+    // Meadow: a wet valley floor, or a slope too steep to plough that is not wooded.
+    bool LandUseMeadow(double e, double n) const { return LandUseGrass(e, n) != GrassUse::None; }
+    // Which use the meadow there is put to (L13 step 1, A.3.39): a wet floor mown for hay or, in patches, left unmown; a
+    // steep slope grazed near a village or a farmstead, else left to tall grass. None off the meadows.
+    enum class GrassUse { None, Hay, Pasture, Tall };
+    GrassUse LandUseGrass(double e, double n) const {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake) return GrassUse::None;
+        const LandformBake& bake = *def_.landform.bake;
+        if (!bake.Inside(e, n) || bake.Height(e, n) < u.min_relief_m) return GrassUse::None;
+        const std::uint64_t gs = noise::Mix64(def_.seed ^ 0x4752415353ull);  // "GRASS"
+        if (bake.Wetness(e, n) >= u.meadow_wetness) return noise::Value(gs, e, n, 300.0) < u.wet_tall_cut ? GrassUse::Tall : GrassUse::Hay;
+        if (bake.SlopeDeg(e, n) < u.meadow_slope_deg) return GrassUse::None;
+        return GrazedWithin(e, n, u.graze_m * (0.75 + 0.5 * noise::Value(gs + 1, e, n, 600.0))) ? GrassUse::Pasture : GrassUse::Tall;
+    }
+    // Whether (east, north) lies within `reach_m` of a village's edge or of a farmstead (its stock grazes that far).
+    bool GrazedWithin(double e, double n, double reach_m) const {
+        if (NearSettlement(e, n, reach_m)) return true;
+        for (const Farmstead& f : farmsteads_) {
+            if (std::hypot(e - f.e, n - f.n) < reach_m) return true;
+        }
+        return false;
+    }
+
+private:
+
     static double SiteClearance(const MapSiteDef& s) {
         if (s.kind == "airfield") return 0.5 * s.runway_length_m + 400.0;
         if (s.kind == "power_station" ) return 450.0;
@@ -1099,6 +1796,444 @@ private:
         if (s.kind == "airfield") return 0.5 * s.runway_length_m + 600.0;
         if (s.kind == "tower" || s.kind == "station" || s.kind == "factory" || s.kind == "barracks") return 0.0;  // in a town
         return SiteClearance(s);
+    }
+
+    // ------------------------------------------------------------------ sunken lanes (A.5 step 5, A.3.34)
+
+    // A lane: from its foot (where it fans out, downhill) to its head, deepest at `peak` (the share of the way up, where
+    // the slope under it was steepest), its floor and its banks.
+    struct Lane {
+        MapPoint a, b;
+        double depth_m = 0.0, peak = 0.5, floor_half_m = 2.0, bank_run = 1.5;
+        double Reach() const { return floor_half_m + bank_run * depth_m; }
+    };
+    // How deep lane `l` cuts the ground at (east, north): its depth along it rising from nothing at the foot to the full
+    // depth at the peak and falling to nothing at the head (smoothstep each way); across, the floor at that depth and the
+    // banks rounded up to the ground over `bank_run` per metre of it. 0 off the lane.
+    static double LaneCut(const Lane& l, double e, double n) {
+        const double dx = l.b.east_m - l.a.east_m, dy = l.b.north_m - l.a.north_m, len2 = dx * dx + dy * dy;
+        if (len2 <= 0.0) return 0.0;
+        const double t = ((e - l.a.east_m) * dx + (n - l.a.north_m) * dy) / len2;
+        if (t <= 0.0 || t >= 1.0) return 0.0;
+        const double x = std::fabs((e - l.a.east_m) * dy - (n - l.a.north_m) * dx) / std::sqrt(len2);
+        const double along = t < l.peak ? noise::Smooth(t / l.peak) : noise::Smooth((1.0 - t) / (1.0 - l.peak));
+        const double d = l.depth_m * along;
+        if (d <= 0.0) return 0.0;
+        if (x <= l.floor_half_m) return d;
+        const double run = l.bank_run * d;
+        if (x >= l.floor_half_m + run) return 0.0;
+        return d * (1.0 - noise::Smooth((x - l.floor_half_m) / run));
+    }
+    // A village's pond: its middle, half length and width, the length's heading, the water's level, its bed's depth, its
+    // bank's run, and how far from its middle it changes the ground (its bank and any dam).
+    struct Pond {
+        MapPoint c;
+        double rx = 16.0, ry = 10.0, heading = 0.0, level_m = 0.0, depth_m = 1.5, shore_m = 4.0, reach_m = 0.0;
+        std::string id;
+    };
+    static constexpr double kPondFreeboardM = 0.3;  // its bank's top over the water (a game value)
+    static constexpr double kPondCrestM = 2.0;      // a dam's crest beyond its bank before it falls at 1 in 2 (a game value)
+    // Where (east, north) lies off the pond's edge (negative inside), along the ray from its middle.
+    static double PondEdgeDistance(const Pond& p, double e, double n) {
+        return EllipseEdgeDistance(p.c.east_m, p.c.north_m, p.rx, p.ry, p.heading, e, n);
+    }
+    // The ground at (east, north) with the pond, `h` the ground there without it: under the water its bed, from the water's
+    // edge at 0.15 m under the water up over shore_m to the ground round it, and where that ground lies lower than the
+    // bank's top (the water's level and the freeboard), a dam (its crest kPondCrestM wide, then falling at 1 in 2 to it).
+    static double PondGround(const Pond& p, double e, double n, double h) {
+        if (std::hypot(e - p.c.east_m, n - p.c.north_m) >= p.reach_m) return h;
+        const double d = PondEdgeDistance(p, e, n);
+        const double edge = p.level_m - 0.15;
+        if (d < 0.0) return std::min(h, edge - p.depth_m * noise::Smooth(Clamp(-d / (0.6 * p.ry), 0.0, 1.0)));
+        const double top = p.level_m + kPondFreeboardM;
+        if (d <= p.shore_m) return edge + (std::max(h, top) - edge) * noise::Smooth(d / p.shore_m);
+        return std::max(h, top - 0.5 * std::max(0.0, d - p.shore_m - kPondCrestM));
+    }
+    static long long LaneCellKey(long long c, long long r) { return c * 1000003LL + r; }
+    static constexpr double kLaneClimbShare = 0.5;  // a lane runs on while the ground climbs at this share of a track's grade
+    static constexpr double kLaneMinLengthM = 50.0;  // shorter, no lane (game values)
+    // The tile drawing (east, north) (an index into lane_tiles_), -1: none.
+    int LaneTileAt(double e, double n) const {
+        if (lane_tile_at_.empty()) return -1;
+        const long long c = static_cast<long long>(std::floor((e - core_.west_m) / core_.spacing_m));
+        const long long r = static_cast<long long>(std::floor((n - core_.south_m) / core_.spacing_m));
+        const auto it = lane_tile_at_.find(LaneCellKey(c, r));
+        return it == lane_tile_at_.end() ? -1 : it->second;
+    }
+
+    // Each farm track's line inside the map proper, as the fields lay them (a share of the long sides between parcels, each
+    // estate's own, clipped to its square): fn(p, q).
+    template <class F>
+    void ForEachTrackLine(F&& fn) const {
+        const MapFarmlandDef& fd = def_.farmland;
+        const FieldGrid grid = Fields();
+        const double est = grid.estate_m;
+        const std::uint32_t tag = grid.seed ^ 0x7A5C0DEu;
+        const double cx0 = def_.west_m, cx1 = def_.east_m, cy0 = def_.south_m, cy1 = def_.north_m;
+        for (std::int32_t iy = static_cast<std::int32_t>(std::floor(cy0 / est)); iy <= static_cast<std::int32_t>(std::floor(cy1 / est)); ++iy) {
+            for (std::int32_t ix = static_cast<std::int32_t>(std::floor(cx0 / est)); ix <= static_cast<std::int32_t>(std::floor(cx1 / est)); ++ix) {
+                const FieldEstate e = EstateAt(grid, ix, iy);
+                const double sh = std::sin(e.heading_rad), ch = std::cos(e.heading_rad);
+                const double xs[2] = {ix * est, (ix + 1) * est}, ys[2] = {iy * est, (iy + 1) * est};
+                double vmin = 1e18, vmax = -1e18, umin = 1e18, umax = -1e18;
+                for (double x : xs) {
+                    for (double y : ys) {
+                        const double u = x * sh + y * ch, v = x * ch - y * sh;
+                        vmin = std::min(vmin, v);
+                        vmax = std::max(vmax, v);
+                        umin = std::min(umin, u);
+                        umax = std::max(umax, u);
+                    }
+                }
+                for (std::int32_t k = static_cast<std::int32_t>(std::ceil(vmin / e.width_m)); k * e.width_m <= vmax; ++k) {
+                    if (Unit24(FieldHash(tag, ix * 1031 + k, iy)) >= fd.track_share) continue;
+                    const double v = k * e.width_m;
+                    MapPoint p{umin * sh + v * ch, umin * ch - v * sh}, q{umax * sh + v * ch, umax * ch - v * sh};
+                    // The estate's square (an estate's border cuts the fields, and its rows are its own), inside the map proper.
+                    if (!ClipSegment(std::max(xs[0], cx0), std::max(ys[0], cy0), std::min(xs[1], cx1), std::min(ys[1], cy1), p, q)) continue;
+                    fn(p, q);
+                }
+            }
+        }
+    }
+
+    // An empty tile of finer ground on the core cell `key`, `per` of its cells to a side.
+    MapGrid TileOf(long long key, int per, double spacing) const {
+        const long long r = key % 1000003LL, c = key / 1000003LL;
+        MapGrid g;
+        g.spacing_m = spacing;
+        g.west_m = core_.EastOf(static_cast<int>(c));
+        g.south_m = core_.NorthOf(static_cast<int>(r));
+        g.cols = per + 1;
+        g.rows = per + 1;
+        g.values.assign(static_cast<std::size_t>(g.cols) * static_cast<std::size_t>(g.rows), 0.0);
+        return g;
+    }
+
+    // The sunken lanes (A.3.34): along each farm track's line, sampled every 25 m on the map proper's ground, each climb
+    // steeper than a track's grade (the steps in a row that are) is a lane if it draws one (`lane_share`) and rises enough,
+    // from a sample below it (its foot, where the wash fans out) to a sample above (its head), in the open: in the map
+    // proper, out of the detail areas, off the lines, the water, the brooks, the named forests, the towns, the marshes,
+    // the sites and the hills' woods. Its tiles: every core cell its banks reach, none shared with another lane (the later
+    // one is dropped), each the core's triangles at `lane_grid_m` less the lane's cut, so its edges are the core's.
+    void BakeLanes() {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake || !def_.farmland.laid || core_.cols < 2) return;
+        const MapGrid& core = core_;
+        const double cell = core_.spacing_m;
+        const int per = static_cast<int>(std::lround(cell / u.lane_grid_m));
+        if (per < 2 || std::fabs(per * u.lane_grid_m - cell) > 1e-6) return;  // the tiles' nodes must fall on the core's
+        constexpr double kStepM = 25.0;
+        const std::uint32_t tag = Fields().seed ^ 0x1A4E5u;
+        mapgeo::SegmentIndex brooks(250.0);
+        for (const MapBrookDef& b : def_.landform.bake->brooks) brooks.Add(b.points, 2.0);
+        std::vector<std::vector<long long>> cells_of;
+        std::unordered_set<long long> taken;
+        int line_index = 0;
+        const auto open = [&](double e, double n, double reach) {
+            if (!def_.InCore(e, n) || def_.DetailAt(e, n) != nullptr) return false;
+            if (lines_.Near(e, n, reach + 5.0) || water_.Near(e, n, reach + 12.0) || brooks.Near(e, n, reach + 10.0)) return false;
+            if (InForest(e, n) || NearSettlement(e, n, reach + 40.0) || !occupied_.Free(e, n, reach + 20.0) || LandUseWood(e, n)) return false;
+            for (const MapPolygonDef& m : def_.marshes) {
+                if (mapgeo::InPolygon(m.points, e, n)) return false;
+            }
+            return true;
+        };
+        const auto try_lane = [&](const std::vector<MapPoint>& pts, const std::vector<double>& h, std::size_t s0, std::size_t s1,
+                                  std::size_t steepest) {
+            const std::uint32_t draw = FieldHash(tag, line_index, static_cast<std::int32_t>(s0));
+            if (u.lane_share <= 0.0 || Unit24(draw) >= u.lane_share || std::fabs(h[s1] - h[s0]) < u.lane_min_rise_m) return;
+            Lane l;
+            const bool up = h[s1] >= h[s0];
+            l.a = up ? pts[s0] : pts[s1];
+            l.b = up ? pts[s1] : pts[s0];
+            const double len = std::hypot(l.b.east_m - l.a.east_m, l.b.north_m - l.a.north_m);
+            if (len < kLaneMinLengthM) return;
+            const MapPoint mid{0.5 * (pts[steepest].east_m + pts[steepest + 1].east_m), 0.5 * (pts[steepest].north_m + pts[steepest + 1].north_m)};
+            l.peak = Clamp(std::hypot(mid.east_m - l.a.east_m, mid.north_m - l.a.north_m) / len, 0.2, 0.8);
+            l.depth_m = u.lane_depth_m * std::pow(u.lane_depth_spread, 2.0 * Unit24(Hash32(draw ^ 0x9u)) - 1.0);
+            l.floor_half_m = 0.5 * u.lane_floor_m;
+            l.bank_run = u.lane_bank_run;
+            const double reach = l.Reach();
+            const int k = std::max(1, static_cast<int>(std::ceil(len / 10.0)));
+            for (int i = 0; i <= k; ++i) {
+                const double f = static_cast<double>(i) / k;
+                if (!open(l.a.east_m + (l.b.east_m - l.a.east_m) * f, l.a.north_m + (l.b.north_m - l.a.north_m) * f, reach)) return;
+            }
+            // The core cells its banks reach: any whose centre lies within the reach and half a cell's diagonal.
+            std::vector<long long> cells;
+            const auto col = [&](double e) { return static_cast<long long>(std::floor((e - core_.west_m) / cell)); };
+            const auto row = [&](double n) { return static_cast<long long>(std::floor((n - core_.south_m) / cell)); };
+            const double grow = reach + cell;
+            for (long long r = row(std::min(l.a.north_m, l.b.north_m) - grow); r <= row(std::max(l.a.north_m, l.b.north_m) + grow); ++r) {
+                for (long long c = col(std::min(l.a.east_m, l.b.east_m) - grow); c <= col(std::max(l.a.east_m, l.b.east_m) + grow); ++c) {
+                    const double ce = core_.west_m + (static_cast<double>(c) + 0.5) * cell, cn = core_.south_m + (static_cast<double>(r) + 0.5) * cell;
+                    if (mapgeo::DistToSegment(ce, cn, l.a.east_m, l.a.north_m, l.b.east_m, l.b.north_m) >= reach + 0.7072 * cell) continue;
+                    if (c < 0 || r < 0 || c >= core_.cols - 1 || r >= core_.rows - 1 || taken.count(LaneCellKey(c, r)) != 0) return;
+                    for (int corner = 0; corner < 4; ++corner) {
+                        const double e = core_.west_m + static_cast<double>(c + (corner & 1)) * cell, n = core_.south_m + static_cast<double>(r + (corner >> 1)) * cell;
+                        if (!def_.InCore(e, n) || def_.DetailAt(e, n) != nullptr) return;
+                    }
+                    cells.push_back(LaneCellKey(c, r));
+                }
+            }
+            for (long long key : cells) taken.insert(key);
+            lanes_.push_back(l);
+            cells_of.push_back(std::move(cells));
+        };
+        ForEachTrackLine([&](const MapPoint& p, const MapPoint& q) {
+            ++line_index;
+            const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+            const std::size_t steps = static_cast<std::size_t>(std::max(1, static_cast<int>(std::ceil(len / kStepM))));
+            std::vector<MapPoint> pts;
+            std::vector<double> h;
+            for (std::size_t i = 0; i <= steps; ++i) {
+                const double f = static_cast<double>(i) / static_cast<double>(steps);
+                pts.push_back({p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f});
+                h.push_back(GroundHeight(pts.back().east_m, pts.back().north_m));
+            }
+            const double step_m = len / static_cast<double>(steps);
+            const auto steep = [&](std::size_t i) { return std::fabs(h[i + 1] - h[i]) > u.max_grade_track * step_m; };
+            std::size_t i = 0;
+            while (i < steps) {
+                if (!steep(i)) {
+                    ++i;
+                    continue;
+                }
+                std::size_t j = i, steepest = i;
+                while (j < steps && steep(j)) {
+                    if (std::fabs(h[j + 1] - h[j]) > std::fabs(h[steepest + 1] - h[steepest])) steepest = j;
+                    ++j;
+                }
+                // The whole climb: on down and up from the steep steps while the ground still climbs the same way at half a
+                // track's grade or more (a lane runs the length of its slope, De Geeter et al.'s mean 285 m), and a step
+                // beyond each end (its head, and its foot where the wash fans out).
+                const double sign = h[j] >= h[i] ? 1.0 : -1.0;
+                const auto climbs = [&](std::size_t k) { return sign * (h[k + 1] - h[k]) > kLaneClimbShare * u.max_grade_track * step_m; };
+                std::size_t s0 = i, s1 = j;
+                while (s0 > 0 && climbs(s0 - 1)) --s0;
+                while (s1 < steps && climbs(s1)) ++s1;
+                try_lane(pts, h, s0 > 0 ? s0 - 1 : 0, std::min(s1 + 1, steps), steepest);
+                i = std::max(j, s1);
+            }
+        });
+        // The villages' ponds (A.3.34): one by each village of the map proper, in the lowest open ground round its edge (16
+        // bearings at three distances), long along the contour there, its water the lowest of its rim less pond_drop_m;
+        // passed over where a dam would be higher than pond_max_dam_m, or its ground touches a lane's or another's.
+        std::vector<std::vector<long long>> pond_cells_of;
+        // A pond's ground: in the map proper, out of the detail areas, off the lines (its village's streets), the water, the
+        // brooks, the named forests, the hills' woods, the marshes and the sites.
+        const auto pond_open = [&](double e, double n, double reach) {
+            if (!def_.InCore(e, n) || def_.DetailAt(e, n) != nullptr) return false;
+            if (lines_.Near(e, n, reach + 3.0) || water_.Near(e, n, reach + 15.0) || brooks.Near(e, n, reach + 5.0)) return false;
+            if (InForest(e, n) || LandUseWood(e, n) || !occupied_.Free(e, n, reach + 10.0)) return false;
+            for (const MapPolygonDef& m : def_.marshes) {
+                if (mapgeo::InPolygon(m.points, e, n)) return false;
+            }
+            return true;
+        };
+        for (const MapSettlementDef& s : def_.settlements) {
+            if (s.kind != "village" || !def_.InCore(s.centre.east_m, s.centre.north_m) || u.pond_radius_m <= 0.0) continue;
+            const std::uint32_t draw = FieldHash(tag ^ 0x90D5u, static_cast<std::int32_t>(std::llround(s.centre.east_m)), static_cast<std::int32_t>(std::llround(s.centre.north_m)));
+            Pond pond;
+            pond.id = s.id;
+            pond.rx = u.pond_radius_m * (0.8 + 0.4 * Unit24(draw));
+            pond.ry = pond.rx * u.pond_aspect;
+            pond.depth_m = u.pond_depth_m;
+            pond.shore_m = u.pond_shore_m;
+            struct Spot {
+                double h, e, n;
+            };
+            std::vector<Spot> spots;
+            for (const double share : {0.6, 0.85, 1.1}) {
+                for (int k = 0; k < 16; ++k) {
+                    const double b = 2.0 * kPi * (k + 0.5 * Unit24(Hash32(draw ^ static_cast<std::uint32_t>(k)))) / 16.0;
+                    const double e = s.centre.east_m + (share * s.radius_m) * std::sin(b), n = s.centre.north_m + (share * s.radius_m) * std::cos(b);
+                    if (pond_open(e, n, pond.rx + pond.shore_m)) spots.push_back({core.SampleTri(e, n), e, n});
+                }
+            }
+            std::sort(spots.begin(), spots.end(), [](const Spot& x, const Spot& y) { return x.h < y.h; });
+            for (const Spot& spot : spots) {
+                pond.c = {spot.e, spot.n};
+                // Along the contour: across the slope's fall.
+                const double ge = core.SampleTri(spot.e + 20.0, spot.n) - core.SampleTri(spot.e - 20.0, spot.n);
+                const double gn = core.SampleTri(spot.e, spot.n + 20.0) - core.SampleTri(spot.e, spot.n - 20.0);
+                pond.heading = std::hypot(ge, gn) > 1e-6 ? std::atan2(-gn, ge) : 0.0;
+                const double ue = std::sin(pond.heading), un = std::cos(pond.heading);
+                double rim = 1e18, ring = 1e18;
+                for (int k = 0; k < 32; ++k) {
+                    const double a = 2.0 * kPi * k / 32.0;
+                    const double x = std::cos(a), y = std::sin(a);
+                    for (const double out : {0.0, pond.shore_m}) {
+                        const double xe = (pond.rx + out) * x, ye = (pond.ry + out) * y;
+                        const double h = core.SampleTri(spot.e + xe * ue + ye * un, spot.n + xe * un - ye * ue);
+                        if (out == 0.0) rim = std::min(rim, h);
+                        else ring = std::min(ring, h);
+                    }
+                }
+                pond.level_m = rim - u.pond_drop_m;
+                const double dam = std::max(0.0, pond.level_m + kPondFreeboardM - ring);
+                if (dam > u.pond_max_dam_m) continue;
+                pond.reach_m = pond.rx + pond.shore_m + kPondCrestM + 2.0 * dam + 4.0;
+                std::vector<long long> cells;
+                bool fits = true;
+                const auto col = [&](double e) { return static_cast<long long>(std::floor((e - core_.west_m) / cell)); };
+                const auto row = [&](double n) { return static_cast<long long>(std::floor((n - core_.south_m) / cell)); };
+                for (long long r = row(spot.n - pond.reach_m - cell); fits && r <= row(spot.n + pond.reach_m + cell); ++r) {
+                    for (long long c = col(spot.e - pond.reach_m - cell); fits && c <= col(spot.e + pond.reach_m + cell); ++c) {
+                        const double ce = core_.west_m + (static_cast<double>(c) + 0.5) * cell, cn = core_.south_m + (static_cast<double>(r) + 0.5) * cell;
+                        if (std::hypot(ce - spot.e, cn - spot.n) >= pond.reach_m + 0.7072 * cell) continue;
+                        fits = c >= 0 && r >= 0 && c < core_.cols - 1 && r < core_.rows - 1 && taken.count(LaneCellKey(c, r)) == 0;
+                        for (int corner = 0; fits && corner < 4; ++corner) {
+                            const double e = core_.west_m + static_cast<double>(c + (corner & 1)) * cell, n = core_.south_m + static_cast<double>(r + (corner >> 1)) * cell;
+                            fits = def_.InCore(e, n) && def_.DetailAt(e, n) == nullptr;
+                        }
+                        cells.push_back(LaneCellKey(c, r));
+                    }
+                }
+                if (!fits) continue;
+                for (long long key : cells) taken.insert(key);
+                ponds_.push_back(pond);
+                pond_cells_of.push_back(std::move(cells));
+                break;
+            }
+        }
+        // The tiles, and the indices the layout keeps off them with.
+        for (std::size_t pi = 0; pi < ponds_.size(); ++pi) {
+            const Pond& pond = ponds_[pi];
+            const double ue = std::sin(pond.heading), un = std::cos(pond.heading);
+            const std::vector<MapPoint> axis = {{pond.c.east_m - pond.rx * ue, pond.c.north_m - pond.rx * un}, {pond.c.east_m + pond.rx * ue, pond.c.north_m + pond.rx * un}};
+            pond_reach_.Add(axis, pond.ry + pond.shore_m);
+            water_.Add(axis, pond.ry);
+            occupied_.Take(pond.c.east_m, pond.c.north_m, pond.rx + pond.shore_m);
+            for (long long key : pond_cells_of[pi]) {
+                MapGrid g = TileOf(key, per, u.lane_grid_m);
+                for (int gr = 0; gr < g.rows; ++gr) {
+                    for (int gc = 0; gc < g.cols; ++gc) {
+                        const double e = g.EastOf(gc), n = g.NorthOf(gr);
+                        g.At(gc, gr) = PondGround(pond, e, n, core_.SampleTri(e, n));
+                    }
+                }
+                lane_tile_at_[key] = static_cast<int>(lane_tiles_.size());
+                lane_tiles_.push_back(std::move(g));
+            }
+        }
+        for (std::size_t li = 0; li < lanes_.size(); ++li) {
+            const Lane& l = lanes_[li];
+            lane_floor_.Add({l.a, l.b}, l.floor_half_m);
+            lane_reach_.Add({l.a, l.b}, l.Reach());
+            for (long long key : cells_of[li]) {
+                MapGrid g = TileOf(key, per, u.lane_grid_m);
+                for (int gr = 0; gr < g.rows; ++gr) {
+                    for (int gc = 0; gc < g.cols; ++gc) {
+                        const double e = g.EastOf(gc), n = g.NorthOf(gr);
+                        g.At(gc, gr) = core_.SampleTri(e, n) - LaneCut(l, e, n);
+                    }
+                }
+                lane_tile_at_[key] = static_cast<int>(lane_tiles_.size());
+                lane_tiles_.push_back(std::move(g));
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ the lines fit the ground (A.5 step 5)
+
+    // A span of a road's or the railway's held profile where it leaves the natural ground: its ends at the formation's
+    // level, the formation's half width, the side slope, and the most it cuts or fills (for its reach).
+    struct LineFit {
+        double ae, an, az, be, bn, bz, half_m, side, reach_m;
+    };
+    static constexpr double kFitCellM = 250.0;   // the index's cells
+    static constexpr double kFitStepM = 20.0;    // the profile's samples along a line
+    static constexpr double kFitMinM = 0.3;      // nearer the natural ground than this, no cut or fill
+    static constexpr double kFitEdgeM = 500.0;   // faded out over this to the map proper's edge (the country beyond)
+    static long long FitKey(long long c, long long r) { return c * 1000003LL + r; }
+
+    // The ground at (east, north) cut or filled to the nearest line's formation (`h` the natural ground there).
+    double FitToLines(double e, double n, double h) const {
+        if (fits_.empty() || !def_.InCore(e, n)) return h;
+        const auto it = fit_cells_.find(FitKey(static_cast<long long>(std::floor(e / kFitCellM)), static_cast<long long>(std::floor(n / kFitCellM))));
+        if (it == fit_cells_.end()) return h;
+        double best_d = 1e18, best_w = 0.0, best_z = h;
+        for (const int i : it->second) {
+            const LineFit& f = fits_[static_cast<std::size_t>(i)];
+            const double dx = f.be - f.ae, dy = f.bn - f.an, len2 = dx * dx + dy * dy;
+            const double t = len2 > 0.0 ? Clamp(((e - f.ae) * dx + (n - f.an) * dy) / len2, 0.0, 1.0) : 0.0;
+            const double d = std::hypot(e - (f.ae + dx * t), n - (f.an + dy * t));
+            if (d >= f.reach_m || d >= best_d) continue;
+            const double z = f.az + (f.bz - f.az) * t;
+            const double side = f.side * std::fabs(z - h);  // the side's run down or up to the natural ground
+            if (d >= f.half_m + side) continue;
+            best_d = d;
+            best_z = z;
+            best_w = d <= f.half_m ? 1.0 : 1.0 - (d - f.half_m) / side;
+        }
+        if (best_w <= 0.0) return h;
+        const double to_edge = std::min(std::min(e - def_.west_m, def_.east_m - e), std::min(n - def_.south_m, def_.north_m - n));
+        return h + (best_z - h) * best_w * noise::Smooth(Clamp(to_edge / kFitEdgeM, 0.0, 1.0));
+    }
+
+    // Each road's and the railway's profile held to its class's grade: sampled every 20 m on the natural ground, the
+    // highest profile under the ground that keeps the grade (cut only) and the lowest over it (fill only), both by two
+    // sweeps, and their mean (it keeps the grade too); then the spans that leave the ground by more than 0.3 m, indexed.
+    // Not within 40 m of a river's bank: the bridges' ramps lift the strip there (Strip). The hills only, inside the map.
+    void BakeLineFits() {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake) return;
+        const auto fit = [&](const MapLineDef& line, double grade) {
+            std::vector<double> se, sn, sh, ss;
+            for (std::size_t i = 1; i < line.points.size(); ++i) {
+                const MapPoint& a = line.points[i - 1];
+                const MapPoint& b = line.points[i];
+                const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+                const int k = std::max(1, static_cast<int>(std::ceil(len / kFitStepM)));
+                for (int j = (i == 1 ? 0 : 1); j <= k; ++j) {
+                    const double f = static_cast<double>(j) / k;
+                    const double e = a.east_m + (b.east_m - a.east_m) * f, n = a.north_m + (b.north_m - a.north_m) * f;
+                    ss.push_back(se.empty() ? 0.0 : ss.back() + std::hypot(e - se.back(), n - sn.back()));
+                    se.push_back(e);
+                    sn.push_back(n);
+                    sh.push_back(Natural(e, n));
+                }
+            }
+            const std::size_t m = sh.size();
+            if (m < 2) return;
+            std::vector<double> lo = sh, hi = sh;
+            for (std::size_t i = 1; i < m; ++i) {
+                lo[i] = std::min(lo[i], lo[i - 1] + grade * (ss[i] - ss[i - 1]));
+                hi[i] = std::max(hi[i], hi[i - 1] - grade * (ss[i] - ss[i - 1]));
+            }
+            for (std::size_t i = m - 1; i-- > 0;) {
+                lo[i] = std::min(lo[i], lo[i + 1] + grade * (ss[i + 1] - ss[i]));
+                hi[i] = std::max(hi[i], hi[i + 1] - grade * (ss[i + 1] - ss[i]));
+            }
+            const double half = std::max(0.5 * line.width_m + u.formation_m, u.formation_min_half_m);
+            for (std::size_t i = 1; i < m; ++i) {
+                const double za = 0.5 * (lo[i - 1] + hi[i - 1]), zb = 0.5 * (lo[i] + hi[i]);
+                const double dev = std::max(std::fabs(za - sh[i - 1]), std::fabs(zb - sh[i]));
+                if (dev < kFitMinM || !def_.InCore(se[i], sn[i])) continue;
+                bool by_river = false;
+                for (const MapLineDef& r : def_.rivers) {
+                    by_river = by_river || mapgeo::DistToLine(r.points, se[i], sn[i]) < 0.5 * r.width_m + 40.0;
+                }
+                if (by_river) continue;
+                LineFit lf{se[i - 1], sn[i - 1], za, se[i], sn[i], zb, half, u.side_slope, half + u.side_slope * (dev + 2.0)};
+                const int idx = static_cast<int>(fits_.size());
+                fits_.push_back(lf);
+                const double r = lf.reach_m;
+                const long long c0 = static_cast<long long>(std::floor((std::min(lf.ae, lf.be) - r) / kFitCellM));
+                const long long c1 = static_cast<long long>(std::floor((std::max(lf.ae, lf.be) + r) / kFitCellM));
+                const long long r0 = static_cast<long long>(std::floor((std::min(lf.an, lf.bn) - r) / kFitCellM));
+                const long long r1 = static_cast<long long>(std::floor((std::max(lf.an, lf.bn) + r) / kFitCellM));
+                for (long long c = c0; c <= c1; ++c) {
+                    for (long long rr = r0; rr <= r1; ++rr) fit_cells_[FitKey(c, rr)].push_back(idx);
+                }
+            }
+        };
+        for (const MapLineDef& r : def_.roads) {
+            fit(r, r.line_class == "main" ? u.max_grade_main : (r.line_class == "track" ? u.max_grade_track : u.max_grade_road));
+        }
+        for (const MapLineDef& r : def_.railways) fit(r, u.max_grade_rail);
     }
 
     // How far (east, north) is from the nearest river's bed (NaturalGround's: half its width and 15 m), the map's own and
@@ -1119,6 +2254,7 @@ private:
             const double r = std::min(SiteFlatRadius(s), FromRiverBed(s.centre.east_m, s.centre.north_m));
             if (r > 0.0) flats_.push_back({s.centre.east_m, s.centre.north_m, r, Natural(s.centre.east_m, s.centre.north_m)});
         }
+        BakeLineFits();
         const auto fill = [this](MapGrid& g, double west, double south, double east, double north, double spacing) {
             g.spacing_m = spacing;
             g.west_m = west;
@@ -1176,7 +2312,18 @@ private:
 
     // ------------------------------------------------------------------ laying the map out
 
-    void Box(MapPart part, double e, double n, double length, double width, double height, double heading, double sink = 0.5) {
+    void Box(MapPart part, double e, double n, double length, double width, double height, double heading, double sink = 0.5,
+             bool by_lane = false) {
+        // Nothing built or grown in a sunken lane or a pond (A.3.34) but the trees on their banks.
+        if (!by_lane && (!lanes_.empty() || !ponds_.empty()) &&
+            (part == MapPart::House || part == MapPart::Farm || part == MapPart::Canopy || part == MapPart::TreeRow)) {
+            const double ue = std::sin(heading), un = std::cos(heading);
+            const int k = std::max(1, static_cast<int>(std::ceil(length / 5.0)));
+            for (int i = 0; i <= k; ++i) {
+                const double f = length * (static_cast<double>(i) / k - 0.5);
+                if (lane_reach_.Near(e + ue * f, n + un * f, 0.5 * width) || pond_reach_.Near(e + ue * f, n + un * f, 0.5 * width)) return;
+            }
+        }
         MapBox b;
         b.part = part;
         b.east_m = e;
@@ -1268,12 +2415,14 @@ private:
         for (const MapLineDef& r : def_.railways) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : def_.rivers) {
             water_.Add(r.points, 0.5 * r.width_m);
+            river_water_.Add(r.points, 0.5 * r.width_m);
             lines_.Add(r.points, 0.5 * r.width_m);
         }
         for (const MapLineDef& r : detail_lines_.roads) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : detail_lines_.railways) lines_.Add(r.points, 0.5 * r.width_m);
         for (const MapLineDef& r : detail_lines_.rivers) {
             water_.Add(r.points, 0.5 * r.width_m);
+            river_water_.Add(r.points, 0.5 * r.width_m);
             lines_.Add(r.points, 0.5 * r.width_m);
         }
         for (const MapSiteDef& s : def_.sites) {
@@ -1357,12 +2506,20 @@ private:
                 for (int c = 0; c < g.cols; ++c) {
                     const double e = g.EastOf(c), n = g.NorthOf(r);
                     double v = GroundHeight(e, n);  // the coarse level's triangles (the detail levels are not in yet)
-                    if (a.micro_m > 0.0) {
+                    if (a.micro_m > 0.0 || !a.meso.empty()) {
                         const double to_edge = a.half_m - std::max(std::fabs(e - a.centre.east_m), std::fabs(n - a.centre.north_m));
                         const double w = noise::Smooth(Clamp(to_edge / 300.0, 0.0, 1.0));
                         if (w > 0.0) {
                             const double m = MicroWeight(e, n, flats, towns);
-                            if (m > 0.0) v += w * m * a.micro_m * (2.0 * noise::Fbm(seed, e, n, 400.0, 3) - 1.0);
+                            if (m > 0.0) {
+                                double add = a.micro_m * (2.0 * noise::Fbm(seed, e, n, 400.0, 3) - 1.0);
+                                std::uint64_t ms = noise::Mix64(seed ^ 0x4E5050ull);
+                                for (const MapReliefDef& band : a.meso) {
+                                    ms = noise::Mix64(ms);
+                                    add += band.amplitude_m * (2.0 * noise::Value(ms, e, n, band.wavelength_m) - 1.0);
+                                }
+                                v += w * m * add;
+                            }
                         }
                     }
                     g.At(c, r) = v;
@@ -1395,14 +2552,89 @@ private:
 
     // ------------------------------------------------------------------ the map proper
 
+    // The hill country's brooks (A.5 step 2) as water strips where the map's own ground is fine enough for them (the
+    // core and the detail areas): a hand's breadth over the ground in their valley's floor, 1.5-4 m wide by the area
+    // drained (a game value; the bed itself is below the bake's 50 m cells).
+    // The villages' ponds (A.3.34): the water a strip along the pond's length as wide as the pond at its level (the banks
+    // rise out of it, so the ground draws the shore), and waterside trees on its bank, each a short row on its own draw.
+    void LayPonds() {
+        for (std::size_t i = 0; i < ponds_.size(); ++i) {
+            const Pond& p = ponds_[i];
+            const double ue = std::sin(p.heading), un = std::cos(p.heading);
+            MapStrip s;
+            s.id = "pond_" + p.id;
+            s.surface = MapSurface::Water;
+            s.width_m = 2.0 * p.ry;
+            s.points.push_back({p.c.east_m - p.rx * ue, p.c.north_m - p.rx * un, p.level_m});
+            s.points.push_back({p.c.east_m + p.rx * ue, p.c.north_m + p.rx * un, p.level_m});
+            layout_.strips.push_back(s);
+            const std::uint32_t draw = Hash32(static_cast<std::uint32_t>(def_.seed) ^ static_cast<std::uint32_t>(HashId(p.id)));
+            const int trees = static_cast<int>(std::lround(def_.land_use.pond_trees));
+            for (int k = 0; k < trees; ++k) {
+                const double a = 2.0 * kPi * (static_cast<double>(k) + Unit24(Hash32(draw ^ static_cast<std::uint32_t>(k)))) / std::max(1, trees);
+                const double x = (p.rx + 0.6 * p.shore_m) * std::cos(a), y = (p.ry + 0.6 * p.shore_m) * std::sin(a);
+                const double e = p.c.east_m + x * ue + y * un, n = p.c.north_m + x * un - y * ue;
+                const double h = 8.0 + 4.0 * Unit24(Hash32(draw ^ 0x77u ^ static_cast<std::uint32_t>(k)));
+                Box(MapPart::TreeRow, e, n, 7.0, 7.0, h, a, 0.3, true);
+                layout_.boxes.back().by_water = true;
+                layout_.boxes.back().by_pond = true;
+            }
+        }
+    }
+
+    void LayBrooks() {
+        if (!def_.landform.bake) return;
+        for (const MapBrookDef& b : def_.landform.bake->brooks) {
+            MapStrip s;
+            s.surface = MapSurface::Water;
+            double area = 0.0;
+            int piece = 0;
+            const auto flush = [&]() {
+                if (s.points.size() >= 2) {
+                    s.width_m = std::clamp(1.0 + 0.6 * std::sqrt(area / static_cast<double>(s.points.size()) / 1e6), 1.5, 4.0);
+                    s.id = piece == 0 ? b.id : b.id + "_" + std::to_string(piece);
+                    ++piece;
+                    layout_.strips.push_back(s);
+                }
+                s.points.clear();
+                area = 0.0;
+            };
+            for (std::size_t i = 0; i < b.points.size(); ++i) {
+                const MapPoint& p = b.points[i];
+                if (!def_.InCore(p.east_m, p.north_m) && !def_.InDetail(p.east_m, p.north_m)) {
+                    flush();
+                    continue;
+                }
+                if (!s.points.empty()) {  // every half cell of the core, so the strip follows the ground
+                    const Vec3& q = s.points.back();
+                    const double len = std::hypot(p.east_m - q.x, p.north_m - q.y);
+                    const int n = std::max(1, static_cast<int>(std::ceil(len / (0.5 * def_.core_spacing_m))));
+                    for (int k = 1; k < n; ++k) {
+                        const double f = static_cast<double>(k) / n;
+                        const double e = q.x + (p.east_m - q.x) * f, nn = q.y + (p.north_m - q.y) * f;
+                        s.points.push_back({e, nn, GroundHeight(e, nn) + 0.08});
+                        area += b.area_m2[i];
+                    }
+                }
+                s.points.push_back({p.east_m, p.north_m, GroundHeight(p.east_m, p.north_m) + 0.08});
+                area += b.area_m2[i];
+            }
+            flush();
+        }
+    }
+
     void Lay() {
         noise::Stream rng(noise::Mix64(def_.seed ^ 0x1A70Full));
         LayLinesOf(def_.roads, def_.railways, def_.rivers);
+        LayBrooks();
+        LayPonds();
         for (const MapSiteDef& s : def_.sites) LaySite(s, rng);
         for (const MapSettlementDef& s : def_.settlements) LaySettlement(s, rng, def_.roads);
         LayFarmsteads(rng);
         LayWoods(rng);
         LayMarshes();
+        LayFarmland();
+        LayScrub();
         for (const MapSettlementDef& s : def_.settlements) layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
         for (const MapSiteDef& s : def_.sites) layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
     }
@@ -1779,6 +3011,7 @@ private:
                     barn ? rng.Range(8.0, 12.0) : 8.0, barn ? rng.Range(5.0, 8.0) : 5.0, heading + (barn && rng.Chance(0.5) ? kPi / 2 : 0.0));
             }
             occupied_.Take(e, n, 60.0);
+            farmsteads_.push_back({e, n, heading});
             ++placed;
         }
     }
@@ -1791,7 +3024,15 @@ private:
         canopy_cells_.insert(key);
         const double u = noise::Value(seed, e, n, 300.0);
         Box(MapPart::Canopy, e, n, size, size, def_.canopy_min_m + (def_.canopy_max_m - def_.canopy_min_m) * u, 0.0, 1.0);
+        // On a slope its top follows the ground's plane across it (A.3.20); on the plain (under 2%) it stays level.
+        const double h = 0.5 * size;
+        const double ge = (GroundHeight(e + h, n) - GroundHeight(e - h, n)) / size, gn = (GroundHeight(e, n + h) - GroundHeight(e, n - h)) / size;
+        if (std::hypot(ge, gn) >= kCanopySlopeMin) {
+            layout_.boxes.back().rise_e = ge;
+            layout_.boxes.back().rise_n = gn;
+        }
     }
+    static constexpr double kCanopySlopeMin = 0.02;  // a game value: the plain's woods stay level, as they were
 
     void LayWoods(noise::Stream& rng) {
         const std::uint64_t seed = noise::Mix64(def_.seed ^ 0xF0E57ull);
@@ -1809,6 +3050,35 @@ private:
             for (double y = snap(s, b); y < nn; y += b) {
                 for (double x = snap(w, b); x < e; x += b) {
                     if (mapgeo::InPolygon(f.points, x, y)) Canopy(x, y, b, seed);
+                }
+            }
+        }
+        // The hill country's woods (A.5 step 4): its steep sides and crests, in the map at its blocks and beyond it at the
+        // far ground's, so the panorama's far ridges are wooded too.
+        if (def_.land_use.laid && def_.landform.bake) {
+            const LandformBake& bake = *def_.landform.bake;
+            const double fb = def_.far_block_m;
+            // A block is wood where most of it and its neighbours are (a majority of the nine): no lone speck of a block,
+            // no one-block hole, so the woods' outlines are whole woods' and their edges fewer.
+            const auto wooded = [&](double x, double y, double size) {
+                int votes = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) votes += LandUseWood(x + dx * size, y + dy * size) ? 1 : 0;
+                }
+                return votes >= 5;
+            };
+            for (double y = snap(bake.south_m, b); y < bake.south_m + bake.spacing_m * (bake.rows - 1); y += b) {
+                for (double x = snap(bake.west_m, b); x < bake.west_m + bake.spacing_m * (bake.cols - 1); x += b) {
+                    if (def_.InCore(x, y) && wooded(x, y, b)) Canopy(x, y, b, seed);
+                }
+            }
+            for (double y = snap(bake.south_m, fb); y < bake.south_m + bake.spacing_m * (bake.rows - 1); y += fb) {
+                for (double x = snap(bake.west_m, fb); x < bake.west_m + bake.spacing_m * (bake.cols - 1); x += fb) {
+                    if (std::fabs(x) > def_.far_m - fb || std::fabs(y) > def_.far_m - fb) continue;
+                    const bool near_core = x > def_.west_m - 0.5 * fb && x < def_.east_m + 0.5 * fb && y > def_.south_m - 0.5 * fb &&
+                                           y < def_.north_m + 0.5 * fb;
+                    if (near_core || NearSettlement(x, y, 0.5 * fb + 100.0) || OnFarWater(x, y, 0.5 * fb)) continue;
+                    if (wooded(x, y, fb)) Canopy(x, y, fb, seed);
                 }
             }
         }
@@ -1854,6 +3124,282 @@ private:
         }
     }
 
+    // A point where a farm track, a tree row or a grove may stand: inside the map proper and clear of woods, marsh, water,
+    // buildings, sites and settlements; `lines_m` clear of the roads, railways and rivers too (0: the point may be beside
+    // one), `built_m` clear of what is built (a grove stands near its own farm).
+    bool FarmlandClear(double e, double n, double lines_m, double built_m) const {
+        if (!def_.InCore(e, n)) return false;
+        if (lines_m > 0.0 && lines_.Near(e, n, lines_m)) return false;
+        if (built_m > 0.0 && !occupied_.Free(e, n, built_m)) return false;
+        if (water_.Near(e, n, 12.0) || InForest(e, n) || NearSettlement(e, n, 40.0)) return false;
+        for (const MapPolygonDef& m : def_.marshes) {
+            if (mapgeo::InPolygon(m.points, e, n)) return false;
+        }
+        const double b = def_.block_m;
+        return canopy_cells_.count(CanopyKey((std::floor(e / b) + 0.5) * b, (std::floor(n / b) + 0.5) * b)) == 0;
+    }
+
+    bool NearAnySite(double e, double n, double reach_m) const {
+        for (const MapSiteDef& s : def_.sites) {
+            if (std::hypot(e - s.centre.east_m, n - s.centre.north_m) < reach_m) return true;
+        }
+        return false;
+    }
+    // Whether a row or grove there would stand in a site's sectors: within site_clear_m of any site, or position_clear_m of
+    // an Osa or dummy position (its launchers stand up to a kilometre out, and the crews fell what masks their antennas).
+    bool InSitesSectors(double e, double n) const {
+        const MapFarmlandDef& fd = def_.farmland;
+        const double position_m = std::max(fd.site_clear_m, fd.position_clear_m);
+        for (const MapSiteDef& s : def_.sites) {
+            const double reach = s.kind == "osa_position" || s.kind == "dummy_position" ? position_m : fd.site_clear_m;
+            if (std::hypot(e - s.centre.east_m, n - s.centre.north_m) < reach) return true;
+        }
+        return false;
+    }
+
+    // Farm tracks along the fields' long sides, then tree rows along some tracks and roads, then a grove round each tanya
+    // (roadmap T4). Each from the field grid's own hash, after everything else, so no box laid before moves.
+    void LayFarmland() {
+        const MapFarmlandDef& fd = def_.farmland;
+        if (!fd.laid) return;
+        const FieldGrid grid = Fields();
+        constexpr double kStepM = 25.0;  // a track's samples
+        const std::uint32_t tag = grid.seed ^ 0x7A5C0DEu;
+        std::vector<std::vector<MapPoint>> runs;
+        int serial = 0;
+        ForEachTrackLine([&](const MapPoint& p, const MapPoint& q) {
+            const double len = std::hypot(q.east_m - p.east_m, q.north_m - p.north_m);
+            const int steps = std::max(1, static_cast<int>(std::ceil(len / kStepM)));
+            std::vector<MapPoint> run;
+            const auto close_run = [&]() {
+                if (run.size() >= 3 || (run.size() == 2 && lane_floor_.Near(run[0].east_m, run[0].north_m, 0.5))) {
+                    MapStrip s;
+                    s.id = "farm_track_" + std::to_string(++serial);
+                    s.surface = MapSurface::Track;
+                    s.width_m = fd.track_width_m;
+                    // On a detail area's finer ground (its meso relief, roadmap L3) the strip takes a point at
+                    // each of its spacings between the run's, so it lies on the swells rather than across them.
+                    for (std::size_t j = 0; j < run.size(); ++j) {
+                        const MapPoint& m = run[j];
+                        if (j > 0) {
+                            const MapPoint& a = run[j - 1];
+                            const double me =0.5 * (a.east_m + m.east_m), mn = 0.5 * (a.north_m + m.north_m);
+                            const MapDetailDef* area = def_.DetailAt(me, mn);
+                            // In a sunken lane (A.3.34), every two of its tiles' spacings, so the track lies on its floor.
+                            const double fine = area != nullptr ? area->spacing_m : (lane_floor_.Near(me, mn, 1.0) ? 2.0 * def_.land_use.lane_grid_m : kStepM);
+                            const int sub = std::max(1, static_cast<int>(std::ceil(kStepM / fine)));
+                            for (int k = 1; k < sub; ++k) {
+                                const double f = static_cast<double>(k) / sub;
+                                const double e = a.east_m + (m.east_m - a.east_m) * f, n = a.north_m + (m.north_m - a.north_m) * f;
+                                s.points.push_back({e, n, GroundHeight(e, n) + 0.15});
+                            }
+                        }
+                        s.points.push_back({m.east_m, m.north_m, GroundHeight(m.east_m, m.north_m) + 0.15});
+                    }
+                    layout_.strips.push_back(std::move(s));
+                    runs.push_back(run);
+                }
+                run.clear();
+            };
+            // In the hills a track does not climb a bank steeper than a track's grade (A.5 step 5): it stops at
+            // its foot and goes on beyond it (the field's edge, not the slope's line).
+            const double steepest = def_.land_use.laid ? def_.land_use.max_grade_track : 1e9;
+            for (int i = 0; i <= steps; ++i) {
+                const double f = static_cast<double>(i) / steps;
+                const MapPoint m{p.east_m + (q.east_m - p.east_m) * f, p.north_m + (q.north_m - p.north_m) * f};
+                const bool steep = !run.empty() && std::fabs(GroundHeight(m.east_m, m.north_m) - GroundHeight(run.back().east_m, run.back().north_m)) >
+                                                       steepest * std::hypot(m.east_m - run.back().east_m, m.north_m - run.back().north_m);
+                // Up a sunken lane (A.3.34) the track goes on: the lane is its way up.
+                const bool lane = run.empty() ? lane_floor_.Near(m.east_m, m.north_m, 0.5)
+                                              : lane_floor_.Near(0.5 * (m.east_m + run.back().east_m), 0.5 * (m.north_m + run.back().north_m), 0.5);
+                if (lane) run.push_back(m);
+                else if (steep) close_run();
+                else if (FarmlandClear(m.east_m, m.north_m, 0.5 * fd.track_width_m + 8.0, 6.0)) run.push_back(m);
+                else close_run();
+            }
+            close_run();
+        });
+        // A row of trees (a box) along the segment a-b, `side` of the line by `off` m (the road's or track's half width and
+        // the row's), unless something stands there or a site's sectors need the sight.
+        const auto row = [&](const MapPoint& a, const MapPoint& b, double side, double off, std::uint32_t draw) {
+            const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+            if (len < 20.0) return;
+            const double ue = (b.east_m - a.east_m) / len, un = (b.north_m - a.north_m) / len;
+            const double e = 0.5 * (a.east_m + b.east_m) + side * off * un, n = 0.5 * (a.north_m + b.north_m) - side * off * ue;
+            if (InSitesSectors(e, n) || !FarmlandClear(e, n, 0.0, 4.0)) return;
+            const double h = fd.row_height_min_m + (fd.row_height_max_m - fd.row_height_min_m) * Unit24(Hash32(draw ^ 0x3u));
+            Box(MapPart::TreeRow, e, n, 0.92 * len, fd.row_width_m, h, std::atan2(ue, un), 0.3);
+        };
+        // Along the farm tracks: a piece of four samples at a time, a share of them, on the side each draws.
+        for (std::size_t r = 0; r < runs.size(); ++r) {
+            const std::vector<MapPoint>& pts = runs[r];
+            for (std::size_t i = 0; i + 1 < pts.size(); i += 4) {
+                const std::size_t j = std::min(i + 4, pts.size() - 1);
+                const std::uint32_t draw = FieldHash(tag ^ 0x11u, static_cast<std::int32_t>(r), static_cast<std::int32_t>(i));
+                if (Unit24(draw) >= fd.row_share) continue;
+                row(pts[i], pts[j], Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0, 0.5 * fd.track_width_m + 0.5 * fd.row_width_m + 1.5, draw);
+            }
+        }
+        // On the sunken lanes' banks (A.3.34): shrubs and trees along the top of each bank, a share of each side's 40 m
+        // pieces where the lane is a metre or more deep, beyond the bank's top.
+        for (std::size_t li = 0; li < lanes_.size(); ++li) {
+            const Lane& l = lanes_[li];
+            const double len = std::hypot(l.b.east_m - l.a.east_m, l.b.north_m - l.a.north_m);
+            const double ue = (l.b.east_m - l.a.east_m) / len, un = (l.b.north_m - l.a.north_m) / len;
+            int piece = 0;
+            for (double s = 0.0; s + 20.0 < len; s += 40.0, ++piece) {
+                const double t = (s + 20.0) / len;
+                const double d = l.depth_m * (t < l.peak ? noise::Smooth(t / l.peak) : noise::Smooth((1.0 - t) / (1.0 - l.peak)));
+                if (d < 1.0) continue;
+                for (int side = -1; side <= 1; side += 2) {
+                    const std::uint32_t draw = FieldHash(tag ^ 0x55u, static_cast<std::int32_t>(li), piece * 2 + (side > 0 ? 1 : 0));
+                    if (Unit24(draw) >= def_.land_use.lane_row_share) continue;
+                    const double off = l.floor_half_m + l.bank_run * d + 0.5 * fd.row_width_m + 0.5;
+                    const double e = l.a.east_m + ue * (s + 20.0) + side * off * un, n = l.a.north_m + un * (s + 20.0) - side * off * ue;
+                    if (InSitesSectors(e, n) || lines_.Near(e, n, 4.0)) continue;
+                    const double h = fd.row_height_min_m + (fd.row_height_max_m - fd.row_height_min_m) * Unit24(Hash32(draw ^ 0x3u));
+                    Box(MapPart::TreeRow, e, n, 0.92 * std::min(40.0, len - s), fd.row_width_m, h, std::atan2(ue, un), 0.3, true);
+                }
+            }
+        }
+        // Along the main and secondary roads inside the map proper, on the side each piece draws.
+        int road_index = 0;
+        for (const MapLineDef& road : def_.roads) {
+            ++road_index;
+            if (road.line_class == "track") continue;
+            std::vector<MapPoint> pts;
+            for (std::size_t i = 1; i < road.points.size(); ++i) {
+                const MapPoint& a = road.points[i - 1];
+                const MapPoint& b = road.points[i];
+                const double len = std::hypot(b.east_m - a.east_m, b.north_m - a.north_m);
+                const int steps = std::max(1, static_cast<int>(std::ceil(len / kStepM)));
+                for (int k = pts.empty() ? 0 : 1; k <= steps; ++k) {
+                    const double f = static_cast<double>(k) / steps;
+                    pts.push_back({a.east_m + (b.east_m - a.east_m) * f, a.north_m + (b.north_m - a.north_m) * f});
+                }
+            }
+            for (std::size_t i = 0; i + 1 < pts.size(); i += 4) {
+                const std::size_t j = std::min(i + 4, pts.size() - 1);
+                const std::uint32_t draw = FieldHash(tag ^ 0x22u, road_index, static_cast<std::int32_t>(i));
+                if (Unit24(draw) >= fd.road_row_share) continue;
+                row(pts[i], pts[j], Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0, 0.5 * road.width_m + 0.5 * fd.row_width_m + 2.5, draw);
+            }
+        }
+        // Along the hills' brooks (A.3.20): alders on one bank, a share of each brook's 100 m pieces, the bank each draws.
+        if (def_.land_use.laid && def_.land_use.brook_row_share > 0.0) {
+            int brook_index = 0;
+            const std::size_t strips = layout_.strips.size();
+            for (std::size_t si = 0; si < strips; ++si) {
+                const MapStrip& s = layout_.strips[si];
+                if (s.surface != MapSurface::Water || s.id.compare(0, 6, "brook_") != 0) continue;
+                ++brook_index;
+                for (std::size_t i = 0; i + 1 < s.points.size(); i += 4) {
+                    const std::size_t j = std::min(i + 4, s.points.size() - 1);
+                    const std::uint32_t draw = FieldHash(tag ^ 0x44u, brook_index, static_cast<std::int32_t>(i));
+                    if (Unit24(draw) >= def_.land_use.brook_row_share) continue;
+                    const std::size_t before = layout_.boxes.size();
+                    row({s.points[i].x, s.points[i].y}, {s.points[j].x, s.points[j].y}, Unit24(Hash32(draw ^ 0x5u)) < 0.5 ? 1.0 : -1.0,
+                        0.5 * s.width_m + 0.5 * fd.row_width_m + 1.0, draw);
+                    if (layout_.boxes.size() > before) layout_.boxes.back().by_water = true;
+                }
+            }
+        }
+        // A grove round three sides of each tanya (the fourth, the farm's front, open).
+        for (const Farmstead& f : farmsteads_) {
+            if (InSitesSectors(f.e, f.n)) continue;
+            const double sh = std::sin(f.heading), ch = std::cos(f.heading);
+            const double g = fd.grove_width_m;
+            struct Belt {
+                double fwd, right, length, width;
+            };
+            const Belt belts[3] = {{-(35.0 + 6.0 + 0.5 * g), 0.0, g, 96.0}, {-8.0, -(38.0 + 0.5 * g), 84.0, g}, {-8.0, 38.0 + 0.5 * g, 84.0, g}};
+            for (std::size_t b = 0; b < 3; ++b) {
+                const double e = f.e + belts[b].fwd * sh + belts[b].right * ch, n = f.n + belts[b].fwd * ch - belts[b].right * sh;
+                if (!FarmlandClear(e, n, 0.0, 0.0)) continue;
+                const std::uint32_t draw = FieldHash(tag ^ 0x33u, static_cast<std::int32_t>(std::llround(f.e)), static_cast<std::int32_t>(std::llround(f.n)) + static_cast<std::int32_t>(b));
+                const double h = fd.grove_height_min_m + (fd.grove_height_max_m - fd.grove_height_min_m) * Unit24(draw);
+                Box(MapPart::TreeRow, e, n, belts[b].length, belts[b].width, h, f.heading, 0.3);
+            }
+        }
+    }
+
+    // Whether a wood's block (of the map proper's size) lies within `reach_m` of (east, north).
+    bool NearWoodBlock(double e, double n, double reach_m) const {
+        const double b = def_.block_m;
+        const double ce = (std::floor(e / b) + 0.5) * b, cn = (std::floor(n / b) + 0.5) * b;
+        const int k = static_cast<int>(std::ceil(reach_m / b)) + 1;
+        for (int dy = -k; dy <= k; ++dy) {
+            for (int dx = -k; dx <= k; ++dx) {
+                const double x = ce + dx * b, y = cn + dy * b;
+                if (canopy_cells_.count(CanopyKey(x, y)) == 0) continue;
+                const double u = std::max(0.0, std::fabs(e - x) - 0.5 * b), v = std::max(0.0, std::fabs(n - y) - 0.5 * b);
+                if (std::hypot(u, v) <= reach_m) return true;
+            }
+        }
+        return false;
+    }
+
+    // Scrub in the open (L13 step 2, A.3.41; MapLandUseDef's scrub rules): on the hills' grazed slopes and tall grass, a
+    // lone bush, a clump or a thicket, each a box (a tree row's part, flagged `scrub`) so the obstacle heights and every
+    // sight line see it. One candidate a cell, each from its cell's own hash, after everything else so no box laid
+    // before moves; none where a farm track or a row could not stand (FarmlandClear) nor in a site's sectors.
+    void LayScrub() {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake || (u.scrub_pasture <= 0.0 && u.scrub_tall <= 0.0)) return;
+        const LandformBake& bake = *def_.landform.bake;
+        const std::uint64_t patches = noise::Mix64(def_.seed ^ 0x5343525542ull);  // "SCRUB"
+        const std::uint32_t tag = static_cast<std::uint32_t>(def_.seed) ^ 0x5C2B5u;
+        const double c = u.scrub_cell_m;
+        const double w = std::max(def_.west_m, bake.west_m), s = std::max(def_.south_m, bake.south_m);
+        const double ea = std::min(def_.east_m, bake.west_m + bake.spacing_m * (bake.cols - 1));
+        const double nn = std::min(def_.north_m, bake.south_m + bake.spacing_m * (bake.rows - 1));
+        for (long long row = CellIndex(s, c); static_cast<double>(row) * c < nn; ++row) {
+            for (long long col = CellIndex(w, c); static_cast<double>(col) * c < ea; ++col) {
+                const std::uint32_t draw = FieldHash(tag, static_cast<std::int32_t>(col), static_cast<std::int32_t>(row));
+                const double e = (static_cast<double>(col) + 0.15 + 0.7 * Unit24(Hash32(draw ^ 0x1u))) * c;
+                const double n = (static_cast<double>(row) + 0.15 + 0.7 * Unit24(Hash32(draw ^ 0x2u))) * c;
+                const GrassUse g = LandUseGrass(e, n);
+                if (g != GrassUse::Pasture && g != GrassUse::Tall) continue;
+                double share = g == GrassUse::Pasture ? u.scrub_pasture : u.scrub_tall;
+                share *= std::min(u.scrub_slope_most, 1.0 + u.scrub_slope_gain * std::max(0.0, bake.SlopeDeg(e, n) - u.meadow_slope_deg));
+                share *= 0.3 + 1.4 * noise::Value(patches, e, n, 400.0);
+                if (Unit24(Hash32(draw ^ 0x3u)) >= share) continue;
+                // A thicket against a wood (its mantle spreading) or in the tall grass; else a clump or a lone bush.
+                const double thicket = NearWoodBlock(e, n, u.scrub_wood_m) ? u.thicket_wood : (g == GrassUse::Tall ? u.thicket_tall : 0.0);
+                const double pick = Unit24(Hash32(draw ^ 0x4u)), a = Unit24(Hash32(draw ^ 0x5u)), b2 = Unit24(Hash32(draw ^ 0x6u));
+                double len = 0.0, wid = 0.0;
+                bool along_contour = false;
+                if (pick < thicket) {
+                    len = u.scrub_thicket_m * (0.7 + 0.6 * a);
+                    wid = len * (0.3 + 0.25 * b2);
+                    along_contour = true;
+                } else if (pick < thicket + (1.0 - thicket) * u.clump_share) {
+                    len = u.scrub_clump_m * (0.7 + 0.6 * a);
+                    wid = len * (0.6 + 0.4 * b2);
+                } else {
+                    len = u.scrub_bush_m * (0.7 + 0.6 * a);
+                    wid = len * (0.8 + 0.2 * b2);
+                }
+                if (InSitesSectors(e, n) || !FarmlandClear(e, n, 0.5 * len + 4.0, 0.5 * len + 2.0)) continue;
+                const double h = u.scrub_height_min_m + (u.scrub_height_max_m - u.scrub_height_min_m) * Unit24(Hash32(draw ^ 0x7u));
+                // The ground's fall across it: a thicket lies along the contour; its top follows the ground's plane.
+                const double half = 0.5 * std::max(len, 8.0);
+                const double ge = (GroundHeight(e + half, n) - GroundHeight(e - half, n)) / (2.0 * half);
+                const double gn = (GroundHeight(e, n + half) - GroundHeight(e, n - half)) / (2.0 * half);
+                const double heading = along_contour && std::hypot(ge, gn) > 0.01 ? std::atan2(gn, -ge) : kPi * Unit24(Hash32(draw ^ 0x8u));
+                const std::size_t before = layout_.boxes.size();
+                Box(MapPart::TreeRow, e, n, len, wid, h, heading, 0.3);
+                if (layout_.boxes.size() == before) continue;  // in a lane or a pond's reach
+                MapBox& box = layout_.boxes.back();
+                box.scrub = true;
+                if (std::hypot(ge, gn) >= kCanopySlopeMin) {
+                    box.rise_e = ge;
+                    box.rise_n = gn;
+                }
+            }
+        }
+    }
+
     void LayMarshes() {
         const double b = def_.block_m;
         for (const MapPolygonDef& m : def_.marshes) {
@@ -1893,7 +3439,7 @@ private:
             for (int c = c0; c <= c1; ++c) {
                 if (!f.Holds(g.EastOf(c), g.NorthOf(r))) continue;
                 double& v = g.At(c, r);
-                v = std::max(v, f.top - GroundHeight(g.EastOf(c), g.NorthOf(r)));
+                v = std::max(v, f.TopAt(g.EastOf(c), g.NorthOf(r)) - GroundHeight(g.EastOf(c), g.NorthOf(r)));
             }
         }
     }
@@ -1914,7 +3460,10 @@ private:
             f.round = MapPartIsRound(bx.part);
             f.half_l = 0.5 * bx.length_m;
             f.half_w = f.round ? f.half_l : 0.5 * bx.width_m;
-            f.top = bx.base_m + bx.height_m;
+            f.top0 = bx.Top();
+            f.ge = bx.rise_e;
+            f.gn = bx.rise_n;
+            f.top = f.top0 + std::fabs(f.ge) * f.HalfE() + std::fabs(f.gn) * f.HalfN();
             f.side = std::max(kFootSpacingFloorM, f.round ? bx.length_m : std::min(bx.length_m, bx.width_m));
             narrowest_m_ = narrowest_m_ > 0.0 ? std::min(narrowest_m_, f.side) : f.side;
             feet_.push_back(f);
@@ -2051,9 +3600,23 @@ private:
     std::vector<const MapGrid*> levels_;                    // DrawnLevels
     DetailLines detail_lines_;
     std::vector<Flat> flats_;
+    std::vector<LineFit> fits_;                                  // the lines' cuts and fills (BakeLineFits)
+    std::vector<Lane> lanes_;                                    // the sunken lanes (BakeLanes)
+    std::vector<MapGrid> lane_tiles_;                            // their tiles of finer ground
+    std::unordered_map<long long, int> lane_tile_at_;           // a core cell's tile
+    std::size_t lane_first_ = 0, lane_end_ = 0;                  // the tiles' range in levels_
+    mapgeo::SegmentIndex lane_floor_{250.0}, lane_reach_{250.0}; // their floors, and their banks' tops
+    std::vector<Pond> ponds_;                                    // the villages' ponds (BakeLanes)
+    mapgeo::SegmentIndex pond_reach_{250.0};                     // their banks
+    std::unordered_map<long long, std::vector<int>> fit_cells_;  // by kFitCellM cell
     MapLayout layout_;
+    struct Farmstead {
+        double e, n, heading;
+    };
+    std::vector<Farmstead> farmsteads_;  // the tanyas laid (their groves: LayFarmland)
     mapgeo::SegmentIndex lines_{250.0};
     mapgeo::SegmentIndex water_{250.0};
+    mapgeo::SegmentIndex river_water_{250.0};  // the rivers alone (NearWater asks the ponds by their ellipses)
     mapgeo::SegmentIndex far_water_{250.0};  // the country's rivers beyond the map proper (WaterAt)
     struct LakeBox {
         double w, s, e, n;  // the shore's bounds
@@ -2337,11 +3900,39 @@ inline bool NoGroundDrawnTwice(const MapData& map, std::string* why = nullptr) {
     return true;
 }
 
+// What stands on the map on the session's day besides its boxes, in the map's frame: the standing crops
+// (scenery/standing_crops.hpp StandingCrops, roadmap L5 and D4). MapTerrain merges it with the boxes.
+class MapStandingObstacles {
+public:
+    MapStandingObstacles() = default;
+    MapStandingObstacles(const MapStandingObstacles&) = default;
+    MapStandingObstacles& operator=(const MapStandingObstacles&) = default;
+    virtual ~MapStandingObstacles() = default;
+    // How high it stands over the ground at (east, north), its top there above sea level (Terrain::kNoObstacleTop: none),
+    // and the tallest within `radius_m`.
+    virtual double StandAt(double e, double n) const = 0;
+    virtual double TopAt(double e, double n) const = 0;
+    virtual double StandWithin(double e, double n, double radius_m) const = 0;
+    // A bound on its top over the ground segment's bounds; every stretch of it the segment crosses (as MapData's chords).
+    virtual double TopBound(double e0, double n0, double e1, double n1) const = 0;
+    virtual void Chords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const = 0;
+    virtual double TallestStand() const = 0;
+    virtual double TallestTop() const = 0;
+    // The spacing a path looks at it at where no chords are walked (> 0 while anything stands).
+    virtual double CellM() const = 0;
+};
+
 // The map's ground as a scenario's terrain: heights above sea level under the scenario's (east, north).
 class MapTerrain final : public Terrain {
 public:
     MapTerrain(std::shared_ptr<const MapData> map, const GeoPoint& frame_origin)
         : map_(std::move(map)), link_(map_->Def().origin, frame_origin) {}
+
+    // What stands on the day besides the boxes (the standing crops); null: nothing.
+    void SetStanding(std::shared_ptr<const MapStandingObstacles> standing) {
+        standing_ = standing && standing->TallestStand() > 0.0 ? std::move(standing) : nullptr;
+    }
+    const MapStandingObstacles* Standing() const { return standing_.get(); }
 
     double HeightAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
@@ -2349,14 +3940,22 @@ public:
     }
     double ObstacleHeightAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
-        return map_->ObstacleHeight(p.east_m, p.north_m);
+        const double box = map_->ObstacleHeight(p.east_m, p.north_m);
+        return standing_ ? std::max(box, standing_->StandAt(p.east_m, p.north_m)) : box;
     }
     // The map's boxes as footprints (roadmap R6): a path looks at them at their own spacing (terrain.hpp ObstaclesAlong).
     // The scenario's frame and the map's are an affine pair, near enough a rotation, so a segment stays a segment and
-    // a footprint's sides keep their lengths.
-    double ObstacleSpacingM() const override { return map_->NarrowestObstacle(); }
-    double ObstacleTopCeilingM() const override { return map_->TallestObstacleTop(); }
-    double ObstacleTallestM() const override { return map_->TallestObstacle(); }
+    // a footprint's sides keep their lengths. The standing crops are walked as chords too.
+    double ObstacleSpacingM() const override {
+        const double narrow = map_->NarrowestObstacle();
+        return narrow > 0.0 || !standing_ ? narrow : standing_->CellM();
+    }
+    double ObstacleTopCeilingM() const override {
+        return standing_ ? std::max(map_->TallestObstacleTop(), standing_->TallestTop()) : map_->TallestObstacleTop();
+    }
+    double ObstacleTallestM() const override {
+        return standing_ ? std::max(map_->TallestObstacle(), standing_->TallestStand()) : map_->TallestObstacle();
+    }
     bool WaterAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
         return map_->WaterAt(p.east_m, p.north_m);
@@ -2364,21 +3963,43 @@ public:
     bool HasWater() const override { return map_->HasWater(); }
     double ObstacleTopAt(double east_m, double north_m) const override {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
-        return map_->ObstacleTop(p.east_m, p.north_m);
+        const double box = map_->ObstacleTop(p.east_m, p.north_m);
+        return standing_ ? std::max(box, standing_->TopAt(p.east_m, p.north_m)) : box;
     }
     double ObstacleTopBoundM(double e0, double n0, double e1, double n1, double below_m, double& spacing_m) const override {
         const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);
-        return map_->ObstacleTopBound(a.east_m, a.north_m, b.east_m, b.north_m, below_m, spacing_m);
+        double top = map_->ObstacleTopBound(a.east_m, a.north_m, b.east_m, b.north_m, below_m, spacing_m);
+        if (standing_) {
+            const double crop = standing_->TopBound(a.east_m, a.north_m, b.east_m, b.north_m);
+            if (crop > Terrain::kNoObstacleTop) {
+                top = std::max(top, crop);
+                spacing_m = spacing_m > 0.0 ? std::min(spacing_m, standing_->CellM()) : standing_->CellM();
+            }
+        }
+        return top;
     }
     bool ObstacleChords(double e0, double n0, double e1, double n1, double below_m, ObstacleChordSink& sink) const override {
         const MapPoint a = link_.FrameToMap(e0, n0), b = link_.FrameToMap(e1, n1);  // affine: a fraction stays a fraction
-        map_->ObstacleChords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, sink);
+        // Once the sink has said stop, neither the boxes nor the crops tell it more.
+        struct Once final : ObstacleChordSink {
+            ObstacleChordSink& to;
+            bool going = true;
+            explicit Once(ObstacleChordSink& sink_to) : to(sink_to) {}
+            bool Chord(double t_in, double t_out, double top_in_m, double top_out_m) override {
+                if (going) going = to.Chord(t_in, t_out, top_in_m, top_out_m);
+                return going;
+            }
+        } once(sink);
+        map_->ObstacleChords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, once);
+        if (standing_ && once.going) standing_->Chords(a.east_m, a.north_m, b.east_m, b.north_m, below_m, once);
         return true;
     }
-    // The tallest box whose footprint comes within `radius_m` of the scenario's (east, north) (MapData::ObstacleHeightWithin).
+    // The tallest box whose footprint comes within `radius_m` of the scenario's (east, north) (MapData::ObstacleHeightWithin),
+    // or standing crop.
     double ObstacleHeightWithin(double east_m, double north_m, double radius_m) const {
         const MapPoint p = link_.FrameToMap(east_m, north_m);
-        return map_->ObstacleHeightWithin(p.east_m, p.north_m, radius_m);
+        const double box = map_->ObstacleHeightWithin(p.east_m, p.north_m, radius_m);
+        return standing_ ? std::max(box, standing_->StandWithin(p.east_m, p.north_m, radius_m)) : box;
     }
     // The nearest point of a road's centre line to the scenario's (east, north), within `within_m` of it (ENU; its z is
     // not the ground's), and that road's width. False if no road is that near.
@@ -2414,6 +4035,7 @@ public:
 private:
     std::shared_ptr<const MapData> map_;
     MapFrameLink link_;
+    std::shared_ptr<const MapStandingObstacles> standing_;
 };
 
 // ---------------------------------------------------------------------------------------------- loading
@@ -2424,7 +4046,7 @@ class MapLoader : public ConsoleLoader {
 public:
     bool Load(const json::Value& root, MapDef& out) {
         if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "origin", "seed", "extent_km",
-                             "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads",
+                             "far_km", "far_ground", "airspace", "terrain", "rivers", "roads", "railways", "settlements", "farmsteads", "farmland",
                              "forests", "woods", "marshes", "lakes", "sites", "detail_settlements"}) ||
             !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
             !OptionalString(root, "", "description", out.description) || !OptionalString(root, "", "far_ground", out.far_ground_file) ||
@@ -2458,7 +4080,7 @@ public:
             out.airspace_radius_m = r * 1000.0;
         }
         return LoadTerrain(root, out) && LoadLines(root, "rivers", "river", out.rivers) && LoadLines(root, "roads", "", out.roads) &&
-               LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) &&
+               LoadLines(root, "railways", "rail", out.railways) && LoadSettlements(root, out) && LoadFarmsteads(root, out) && LoadFarmland(root, out) &&
                LoadPolygons(root, "forests", out.forests) && LoadPolygons(root, "marshes", out.marshes) && LoadLakes(root, out.lakes) &&
                LoadWoods(root, out) &&
                LoadSites(root, out) && LoadDetail(root, out) && LoadSettlements(root, "detail_settlements", out.detail_settlements) &&
@@ -2546,7 +4168,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
         const json::Value* t = root.Find("terrain");
         if (t == nullptr) return Fail("terrain", "required");
         if (!Keys(*t, "terrain", {"base_m", "core_spacing_m", "far_spacing_m", "roughness_m", "relief", "hills", "ridges", "valleys", "valley",
-                                  "detail", "notes"}) ||
+                                  "landform", "detail", "notes"}) ||
             !Number(*t, "terrain", "base_m", out.base_m) || !OptionalNumber(*t, "terrain", "core_spacing_m", out.core_spacing_m) ||
             !OptionalNumber(*t, "terrain", "far_spacing_m", out.far_spacing_m) || !OptionalNumber(*t, "terrain", "roughness_m", out.roughness_m)) {
             return false;
@@ -2595,6 +4217,79 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             }
             if (out.valley_half_width_m <= 0.0) return Fail("terrain.valley.half_width_m", "must be > 0");
         }
+        return LoadLandform(*t, out.seed, out.landform);
+    }
+
+    // terrain.landform (roadmap L11): {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions": [{"id", "relief_m",
+    // "blend_km", "points": [[e, n], ...]}]}. Optional; without it the map has no hill country.
+    bool LoadLandform(const json::Value& t, std::uint64_t seed, MapLandformDef& out) {
+        const json::Value* l = t.Find("landform");
+        if (l == nullptr) return true;
+        const std::string p = "terrain.landform";
+        double wl = out.wavelength_m / 1000.0, warp = out.warp_m / 1000.0;
+        if (!Keys(*l, p, {"exaggeration", "wavelength_km", "warp_km", "ridged", "regions", "drainage", "source", "confidence", "notes"}) ||
+            !OptionalNumber(*l, p, "exaggeration", out.exaggeration) || !OptionalNumber(*l, p, "wavelength_km", wl) ||
+            !OptionalNumber(*l, p, "warp_km", warp) || !OptionalNumber(*l, p, "ridged", out.ridged)) {
+            return false;
+        }
+        if (out.exaggeration < 0.0 || out.exaggeration > 4.0) return Fail(Join(p, "exaggeration"), "between 0 and 4");
+        if (wl < 0.2 || wl > 50.0) return Fail(Join(p, "wavelength_km"), "between 0.2 and 50");
+        if (warp < 0.0 || warp > 10.0) return Fail(Join(p, "warp_km"), "between 0 and 10");
+        if (out.ridged < 0.0 || out.ridged > 1.0) return Fail(Join(p, "ridged"), "between 0 and 1");
+        out.wavelength_m = wl * 1000.0;
+        out.warp_m = warp * 1000.0;
+        const json::Value* regions = OptionalArray(*l, p, "regions");
+        if (regions == nullptr) return Message().empty();
+        for (std::size_t i = 0; i < regions->items.size(); ++i) {
+            const std::string rp = Index(p + ".regions", i);
+            const json::Value& r = regions->items[i];
+            MapLandformRegionDef region;
+            double blend_km = region.blend_m / 1000.0;
+            if (!Keys(r, rp, {"id", "relief_m", "blend_km", "points", "notes"}) || !RequireString(r, rp, "id", region.id) ||
+                !Number(r, rp, "relief_m", region.relief_m) || !OptionalNumber(r, rp, "blend_km", blend_km) || !Points(r, rp, 3, region.points)) {
+                return false;
+            }
+            if (region.relief_m < 0.0 || region.relief_m > 1000.0) return Fail(Join(rp, "relief_m"), "between 0 and 1000");
+            if (blend_km <= 0.0) return Fail(Join(rp, "blend_km"), "must be > 0");
+            region.blend_m = blend_km * 1000.0;
+            region.ring = region.points;
+            region.ring.push_back(region.points.front());
+            out.regions.push_back(region);
+        }
+        if (!LoadDrainage(*l, out.drainage)) return false;
+        out.bake = LandformBakeFor(out, seed);
+        return true;
+    }
+
+    bool LoadDrainage(const json::Value& l, MapLandformDrainageDef& out) {
+        const json::Value* d = l.Find("drainage");
+        if (d == nullptr) return true;
+        const std::string p = "terrain.landform.drainage";
+        double channel_km2 = out.channel_area_m2 / 1e6, brook_km2 = out.brook_area_m2 / 1e6, trunk_km = out.trunk_wavelength_m / 1000.0;
+        if (!Keys(*d, p, {"spacing_m", "channel_area_km2", "channel_slope", "concavity", "hillslope", "steepness_spread", "floor_m",
+                          "trunk_share", "trunk_wavelength_km", "inland_tilt", "brook_area_km2", "notes"}) ||
+            !OptionalNumber(*d, p, "spacing_m", out.spacing_m) || !OptionalNumber(*d, p, "channel_area_km2", channel_km2) ||
+            !OptionalNumber(*d, p, "channel_slope", out.channel_slope) || !OptionalNumber(*d, p, "concavity", out.concavity) ||
+            !OptionalNumber(*d, p, "hillslope", out.hillslope) || !OptionalNumber(*d, p, "steepness_spread", out.steepness_spread) ||
+            !OptionalNumber(*d, p, "floor_m", out.floor_m) || !OptionalNumber(*d, p, "trunk_share", out.trunk_share) ||
+            !OptionalNumber(*d, p, "trunk_wavelength_km", trunk_km) || !OptionalNumber(*d, p, "inland_tilt", out.inland_tilt) ||
+            !OptionalNumber(*d, p, "brook_area_km2", brook_km2)) {
+            return false;
+        }
+        if (out.spacing_m < 20.0 || out.spacing_m > 1000.0) return Fail(Join(p, "spacing_m"), "between 20 and 1000");
+        if (channel_km2 <= 0.0 || channel_km2 > 100.0) return Fail(Join(p, "channel_area_km2"), "between 0 and 100");
+        if (brook_km2 < channel_km2) return Fail(Join(p, "brook_area_km2"), "at least channel_area_km2");
+        if (out.channel_slope < 0.0 || out.channel_slope > 0.5) return Fail(Join(p, "channel_slope"), "between 0 and 0.5");
+        if (out.concavity < 0.0 || out.concavity > 2.0) return Fail(Join(p, "concavity"), "between 0 and 2");
+        if (out.hillslope <= 0.0 || out.hillslope > 1.0) return Fail(Join(p, "hillslope"), "between 0 and 1");
+        if (out.steepness_spread < 0.0 || out.steepness_spread > 0.9) return Fail(Join(p, "steepness_spread"), "between 0 and 0.9");
+        if (out.floor_m < 0.0 || out.floor_m > 1000.0) return Fail(Join(p, "floor_m"), "between 0 and 1000");
+        if (out.trunk_share < 0.0 || out.trunk_share > 1.0) return Fail(Join(p, "trunk_share"), "between 0 and 1");
+        if (trunk_km < 0.2 || trunk_km > 100.0) return Fail(Join(p, "trunk_wavelength_km"), "between 0.2 and 100");
+        if (out.inland_tilt < 0.0 || out.inland_tilt > 10.0) return Fail(Join(p, "inland_tilt"), "between 0 and 10");
+        out.channel_area_m2 = channel_km2 * 1e6;
+        out.brook_area_m2 = brook_km2 * 1e6;
+        out.trunk_wavelength_m = trunk_km * 1000.0;
         return true;
     }
 
@@ -2667,7 +4362,7 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             const json::Value& v = list->items[i];
             MapDetailDef d;
             double half_km = 5.0;
-            if (!Keys(v, p, {"id", "east_km", "north_km", "half_km", "spacing_m", "micro_m", "source", "confidence", "notes"}) ||
+            if (!Keys(v, p, {"id", "east_km", "north_km", "half_km", "spacing_m", "micro_m", "meso", "source", "confidence", "notes"}) ||
                 !RequireString(v, p, "id", d.id) || !Centre(v, p, d.centre) || !Number(v, p, "half_km", half_km) ||
                 !Number(v, p, "spacing_m", d.spacing_m) || !OptionalNumber(v, p, "micro_m", d.micro_m)) {
                 return false;
@@ -2675,6 +4370,21 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
             d.half_m = half_km * 1000.0;
             if (d.spacing_m < 5.0 || d.spacing_m > out.core_spacing_m) return Fail(Join(p, "spacing_m"), "needs 5 m <= spacing_m <= core_spacing_m");
             if (d.micro_m < 0.0 || d.micro_m > 1.5) return Fail(Join(p, "micro_m"), "needs 0 <= micro_m <= 1.5");
+            if (const json::Value* meso = OptionalArray(v, p, "meso")) {
+                for (std::size_t k = 0; k < meso->items.size(); ++k) {
+                    const std::string q = Index(Join(p, "meso"), k);
+                    MapReliefDef r;
+                    if (!Keys(meso->items[k], q, {"wavelength_m", "amplitude_m"}) || !Number(meso->items[k], q, "wavelength_m", r.wavelength_m) ||
+                        !Number(meso->items[k], q, "amplitude_m", r.amplitude_m)) {
+                        return false;
+                    }
+                    if (r.wavelength_m < 60.0 || r.wavelength_m > 2000.0) return Fail(Join(q, "wavelength_m"), "needs 60 m <= wavelength_m <= 2000 m");
+                    if (r.amplitude_m < 0.0 || r.amplitude_m > 3.0) return Fail(Join(q, "amplitude_m"), "needs 0 <= amplitude_m <= 3 m");
+                    d.meso.push_back(r);
+                }
+            } else if (!Message().empty()) {
+                return false;
+            }
             const double w = d.centre.east_m - d.half_m, e = d.centre.east_m + d.half_m;
             const double s = d.centre.north_m - d.half_m, n = d.centre.north_m + d.half_m;
             const bool in_core = out.InCore(w, s) && out.InCore(e, n);
@@ -2706,6 +4416,33 @@ protected:  // the country map's loader (simcore/country_map.hpp) reads its terr
                 return Fail(Index("detail_settlements", i), "must lie in a detail area (terrain.detail)");
             }
         }
+        return true;
+    }
+
+    bool LoadFarmland(const json::Value& root, MapDef& out) {
+        const json::Value* f = root.Find("farmland");
+        if (f == nullptr) return true;
+        MapFarmlandDef& d = out.farmland;
+        d.laid = true;
+        if (!Keys(*f, "farmland", {"estate_m", "field_length_m", "field_width_m", "track_share", "track_width_m", "row_share", "road_row_share", "row_width_m",
+                                   "row_height_m", "site_clear_m", "position_clear_m", "grove_width_m", "grove_height_m", "notes"}) ||
+            !OptionalNumber(*f, "farmland", "estate_m", d.fields.estate_m) || !Pair(*f, "farmland", "field_length_m", d.fields.length_min_m, d.fields.length_max_m) ||
+            !Pair(*f, "farmland", "field_width_m", d.fields.width_min_m, d.fields.width_max_m) || !OptionalNumber(*f, "farmland", "track_share", d.track_share) ||
+            !OptionalNumber(*f, "farmland", "track_width_m", d.track_width_m) || !OptionalNumber(*f, "farmland", "row_share", d.row_share) ||
+            !OptionalNumber(*f, "farmland", "road_row_share", d.road_row_share) || !OptionalNumber(*f, "farmland", "row_width_m", d.row_width_m) ||
+            !Pair(*f, "farmland", "row_height_m", d.row_height_min_m, d.row_height_max_m) || !OptionalNumber(*f, "farmland", "site_clear_m", d.site_clear_m) ||
+            !OptionalNumber(*f, "farmland", "position_clear_m", d.position_clear_m) ||
+            !OptionalNumber(*f, "farmland", "grove_width_m", d.grove_width_m) || !Pair(*f, "farmland", "grove_height_m", d.grove_height_min_m, d.grove_height_max_m)) {
+            return false;
+        }
+        if (d.fields.estate_m < 500.0) return Fail("farmland.estate_m", "needs 500 m or more");
+        if (d.fields.length_min_m < 50.0 || d.fields.width_min_m < 20.0) return Fail("farmland", "a field needs 50 m by 20 m or more");
+        if (d.track_share < 0.0 || d.track_share > 1.0 || d.row_share < 0.0 || d.row_share > 1.0 || d.road_row_share < 0.0 || d.road_row_share > 1.0) {
+            return Fail("farmland", "the shares are in 0..1");
+        }
+        if (d.track_width_m <= 0.0 || d.row_width_m <= 0.0 || d.grove_width_m <= 0.0 || d.site_clear_m < 0.0 || d.position_clear_m < 0.0) return Fail("farmland", "widths are positive");
+        if (d.row_height_min_m <= 0.0 || d.grove_height_min_m <= 0.0) return Fail("farmland", "heights are positive");
+        if (d.fields.length_max_m > d.fields.estate_m || d.fields.width_max_m > d.fields.estate_m) return Fail("farmland", "a field fits in its estate");
         return true;
     }
 
@@ -2885,6 +4622,71 @@ inline bool LoadMapDefJson(const std::string& text, MapDef& out, std::string* er
     return true;
 }
 
+// Reads data/scenery/land_use.json into `out` (laid when it loads).
+inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::string* error = nullptr) {
+    json::Value root;
+    std::string parse_error;
+    const auto fail = [error](const std::string& why) {
+        if (error) *error = "scenery/land_use.json: " + why;
+        return false;
+    };
+    if (!json::Parse(text, root, &parse_error)) return fail(parse_error);
+    const json::Value* values = root.Find("values");
+    if (values == nullptr || !values->Is(json::Type::Object)) return fail("\"values\" missing");
+    MapLandUseDef u;
+    struct Field {
+        const char* key;
+        double* to;
+        double lo, hi;
+    };
+    const Field fields[] = {{"wood_slope_deg", &u.wood_slope_deg, 1.0, 60.0},       {"wood_slope_spread_deg", &u.wood_slope_spread_deg, 0.0, 20.0},
+                            {"crest_rise_m", &u.crest_rise_m, 0.5, 100.0},          {"crest_share", &u.crest_share, 0.0, 1.0},
+                            {"min_relief_m", &u.min_relief_m, 0.0, 100.0},          {"meadow_wetness", &u.meadow_wetness, 0.0, 30.0},
+                            {"meadow_slope_deg", &u.meadow_slope_deg, 1.0, 60.0},  {"max_grade_main", &u.max_grade_main, 0.01, 0.3},
+                            {"max_grade_road", &u.max_grade_road, 0.01, 0.3},      {"max_grade_track", &u.max_grade_track, 0.01, 0.4},
+                            {"max_grade_rail", &u.max_grade_rail, 0.005, 0.1},     {"side_slope", &u.side_slope, 0.5, 5.0},
+                            {"formation_m", &u.formation_m, 0.0, 30.0},            {"formation_min_half_m", &u.formation_min_half_m, 0.0, 100.0},
+                            {"brook_row_share", &u.brook_row_share, 0.0, 1.0},     {"lane_share", &u.lane_share, 0.0, 1.0},
+                            {"lane_depth_m", &u.lane_depth_m, 0.5, 15.0},          {"lane_depth_spread", &u.lane_depth_spread, 1.0, 4.0},
+                            {"lane_floor_m", &u.lane_floor_m, 1.0, 12.0},          {"lane_bank_run", &u.lane_bank_run, 0.2, 5.0},
+                            {"lane_min_rise_m", &u.lane_min_rise_m, 0.0, 50.0},    {"lane_grid_m", &u.lane_grid_m, 0.5, 10.0},
+                            {"lane_row_share", &u.lane_row_share, 0.0, 1.0},       {"pond_radius_m", &u.pond_radius_m, 0.0, 100.0},
+                            {"pond_aspect", &u.pond_aspect, 0.2, 1.0},             {"pond_depth_m", &u.pond_depth_m, 0.2, 10.0},
+                            {"pond_drop_m", &u.pond_drop_m, 0.0, 3.0},             {"pond_shore_m", &u.pond_shore_m, 0.5, 30.0},
+                            {"pond_max_dam_m", &u.pond_max_dam_m, 0.0, 10.0},      {"pond_trees", &u.pond_trees, 0.0, 10.0},
+                            {"graze_m", &u.graze_m, 0.0, 20000.0},                 {"wet_tall_cut", &u.wet_tall_cut, 0.0, 1.0},
+                            {"scrub_cell_m", &u.scrub_cell_m, 10.0, 500.0},        {"scrub_pasture", &u.scrub_pasture, 0.0, 1.0},
+                            {"scrub_tall", &u.scrub_tall, 0.0, 1.0},               {"scrub_slope_gain", &u.scrub_slope_gain, 0.0, 1.0},
+                            {"scrub_slope_most", &u.scrub_slope_most, 1.0, 10.0},  {"scrub_wood_m", &u.scrub_wood_m, 0.0, 500.0},
+                            {"thicket_wood", &u.thicket_wood, 0.0, 1.0},           {"thicket_tall", &u.thicket_tall, 0.0, 1.0},
+                            {"clump_share", &u.clump_share, 0.0, 1.0},             {"scrub_bush_m", &u.scrub_bush_m, 1.0, 20.0},
+                            {"scrub_clump_m", &u.scrub_clump_m, 2.0, 50.0},        {"scrub_thicket_m", &u.scrub_thicket_m, 5.0, 200.0},
+                            {"scrub_height_min_m", &u.scrub_height_min_m, 0.5, 8.0}, {"scrub_height_max_m", &u.scrub_height_max_m, 0.5, 8.0}};
+    for (std::size_t i = 0; i < values->keys.size(); ++i) {
+        const std::string& key = values->keys[i];
+        const json::Value& v = values->items[i];
+        const json::Value* number = v.Find("value");
+        if (key == "meadow_crop" || key == "hay_crop" || key == "tall_crop") {
+            if (number == nullptr || !number->Is(json::Type::String) || number->string.empty()) return fail(key + ": a crop's id");
+            (key == "meadow_crop" ? u.meadow_crop : key == "hay_crop" ? u.hay_crop : u.tall_crop) = number->string;
+            continue;
+        }
+        bool known = false;
+        for (const Field& f : fields) {
+            if (key != f.key) continue;
+            known = true;
+            if (number == nullptr || !number->Is(json::Type::Number)) return fail(key + ": a number");
+            if (number->number < f.lo || number->number > f.hi) return fail(key + ": out of its range");
+            *f.to = number->number;
+        }
+        if (!known) return fail("no value \"" + key + "\"");
+    }
+    if (u.scrub_height_min_m > u.scrub_height_max_m) return fail("scrub_height_min_m is above scrub_height_max_m");
+    u.laid = true;
+    out = u;
+    return true;
+}
+
 // Loads and builds data/<map_file> (e.g. "maps/kesmark_range.json").
 inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const std::string& map_file, std::string* error = nullptr) {
     std::string text;
@@ -2896,6 +4698,11 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
     if (!LoadMapDefJson(text, def, error)) return nullptr;
     // The representative clutter heights of the far ground's towns (data/gameplay/clutter.json; none without it).
     if (!LoadClutterHeights(data_dir, def.clutter, error)) return nullptr;
+    // Land use on the hills' ground (data/scenery/land_use.json; none without it).
+    std::string land_use_text;
+    if (detail::ReadTextFile(data_dir + "/scenery/land_use.json", land_use_text) && !LoadLandUseJson(land_use_text, def.land_use, error)) {
+        return nullptr;
+    }
     if (!def.far_ground_file.empty()) {
         // A district: its far ground is its country's (the same frame, so one ground meets the other at the map's edge).
         std::string far_text;

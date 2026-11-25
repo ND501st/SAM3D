@@ -297,16 +297,56 @@ const char* kCc0Oak =
 
 }  // namespace
 
-SC_TEST("scenery: the asset register starts empty, every part of the map procedural") {
+SC_TEST("scenery: the shipped asset register loads, lists every part, holds only redistributable or ignored art, and its models and munitions are the libraries' own") {
     AssetRegister reg;
     std::string e;
-    SC_EXPECT(reg.Load(kData + "/scenery/assets.json", &e));
+    SC_EXPECT(reg.Load(kData + "/scenery/assets.json", &e));  // Load applies every rule of the register
     if (!e.empty()) std::printf("    %s\n", e.c_str());
-    SC_EXPECT(reg.assets.empty());
     for (const std::string& part : MapMeshParts()) {
         SC_EXPECT(reg.parts.count(part) == 1);  // every part listed, so the file says what it may hold
-        SC_EXPECT(reg.AssetFor(part, 0) == nullptr);
     }
+    // A part whose asset is named names one the register holds (Load checks it); the first variant's lookup agrees.
+    for (const auto& kv : reg.parts) {
+        const AssetEntry* a = reg.AssetFor(kv.first, 0);
+        SC_EXPECT(a == nullptr || !a->id.empty());
+    }
+    std::printf("    %zu registered asset(s)\n", reg.assets.size());
+    // Every model the register draws by a real asset is a basic model, every munition a munition: a typo would leave
+    // the asset never drawn and the basic shape in its place, silently.
+    ModelLibrary models;
+    SC_EXPECT(LoadModelLibrary(kData + "/scenery/basic_models.json", models, &e));
+    for (const auto& m : reg.models) {
+        if (models.Find(m.first) == nullptr) std::printf("    models: %s is not a basic model\n", m.first.c_str());
+        SC_EXPECT(models.Find(m.first) != nullptr);
+    }
+    MunitionLibrary munitions;
+    SC_EXPECT(munitions.Load(kData + "/scenery/munitions.json", &e));
+    for (const auto& m : reg.munitions) {
+        if (munitions.Find(m.first) == nullptr) std::printf("    munitions: %s is not a munition\n", m.first.c_str());
+        SC_EXPECT(munitions.Find(m.first) != nullptr);
+    }
+}
+
+SC_TEST("scenery: the asset register draws whole models and munitions by an asset") {
+    const std::string jet =
+        R"({"id": "mig21_sf", "unreal_path": "/Game/ThirdParty/Sketchfab/Aircraft/SM_MiG21.SM_MiG21", "origin": "https://sketchfab.com/3d-models/x", "author": "someone", "licence": "CC-BY-4.0", "redistributable": true, "fetched": "2026-11-22", "yaw_deg": 180})";
+    const std::string bomb =
+        R"({"id": "fab500_sf", "unreal_path": "/Game/ThirdParty/Sketchfab/Munitions/SM_FAB500.SM_FAB500", "origin": "https://sketchfab.com/3d-models/y", "author": "", "licence": "CC0-1.0", "redistributable": true, "fetched": "2026-11-22"})";
+    auto text = [](const std::string& assets, const std::string& tail) { return "{\"assets\": [" + assets + "], \"parts\": {}, " + tail + "}"; };
+    std::string e;
+    AssetRegister reg;
+    SC_EXPECT(reg.Load(text(jet + ", " + bomb, R"("models": {"mig21": "mig21_sf", "mig21bis": "mig21_sf", "f4g": null}, "munitions": {"fab500": "fab500_sf"})"), &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(reg.AssetForModel("mig21") != nullptr && reg.AssetForModel("mig21bis") == reg.AssetForModel("mig21"));
+    SC_EXPECT(reg.AssetForModel("mig21")->yaw_deg == 180.0);  // a model's asset may carry a fix
+    SC_EXPECT(reg.AssetForModel("f4g") == nullptr && reg.AssetForModel("su25") == nullptr);
+    SC_EXPECT(reg.AssetForMunition("fab500") != nullptr && reg.AssetForMunition("fab250") == nullptr);
+    SC_EXPECT(reg.AssetFor("house", 0) == nullptr);
+    // An unregistered asset, a number, a munition's asset with a fix: refused, and the register left as it was.
+    SC_EXPECT(!reg.Load(text(jet, R"("models": {"mig21": "nobody"})"), &e) && e.find("not registered") != std::string::npos);
+    SC_EXPECT(!reg.Load(text(jet, R"("models": {"mig21": 3})"), &e) && e.find("asset's id or null") != std::string::npos);
+    SC_EXPECT(!reg.Load(text(jet, R"("munitions": {"fab500": "mig21_sf"})"), &e) && e.find("munition's frame") != std::string::npos);
+    SC_EXPECT(reg.AssetForMunition("fab500") != nullptr);
 }
 
 SC_TEST("scenery: the asset register keeps its rules") {
@@ -359,4 +399,64 @@ SC_TEST("scenery: the asset register keeps its rules") {
     SC_EXPECT(refused(Register("", R"("house": {"asset": "nobody"})"), "not registered"));
     SC_EXPECT(refused(Register("", R"("house": {})"), "null for procedural"));
     SC_EXPECT(refused("{\"parts\": {}}", "assets"));
+}
+
+SC_TEST("scenery: a part's alternates are drawn instance by instance, the same model at the same place every time") {
+    const std::string oak_b =
+        R"({"id": "oak_b", "unreal_path": "/Game/SAM3D/Map/Trees/SM_OakB.SM_OakB", "origin": "own work", "licence": "Own", "redistributable": true, "fetched": "2026-11-08"})";
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_a", "oak_b"]})"), &e));
+    SC_EXPECT(reg.AlternateCount("tree_oak") == 2 && reg.AlternateCount("tree_pine") == 1);
+    SC_EXPECT(reg.AlternateFor("tree_oak", 0)->id == "oak_a" && reg.AlternateFor("tree_oak", 1)->id == "oak_b");
+    SC_EXPECT(reg.AlternateFor("tree_pine", 1) == nullptr);
+    // A place keeps its alternate; over many places each is drawn about as often as the other.
+    SC_EXPECT(AssetRegister::AlternateAt(1234.5, -987.6, 4) == AssetRegister::AlternateAt(1234.5, -987.6, 4));
+    SC_EXPECT(AssetRegister::AlternateAt(5.0, 5.0, 1) == 0);
+    int counts[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4000; ++i) ++counts[AssetRegister::AlternateAt(7.3 * i - 9000.0, 3.1 * (i % 97) + 0.4 * i, 4)];
+    for (int c : counts) SC_EXPECT(c > 800 && c < 1200);
+    // The first alternate is the part's asset; every alternate is registered.
+    AssetRegister bad;
+    SC_EXPECT(!bad.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_b", "oak_a"]})"), &e));
+    SC_EXPECT(e.find("first alternate") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("tree_oak": {"asset": "oak_a", "alternates": ["oak_a", "oak_c"]})"), &e));
+    SC_EXPECT(e.find("not registered") != std::string::npos);
+}
+
+SC_TEST("scenery: a part's fallback stands in where its asset's files are absent (a clone without the Fab packs)") {
+    const std::string grass_fab =
+        R"({"id": "grass_fab", "unreal_path": "/Game/ThirdParty/Grass/SM_Grass.SM_Grass", "origin": "https://www.fab.com/", "licence": "Fab-Standard", "redistributable": false, "fetched": "2026-11-06"})";
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(Register(std::string(kCc0Oak) + ", " + grass_fab, R"("clutter_grass": {"asset": "grass_fab", "fallback": "oak_a"})"), &e));
+    SC_EXPECT(reg.AssetFor("clutter_grass", 0)->id == "grass_fab");  // the asset is drawn where it loads
+    SC_EXPECT(reg.FallbackFor("clutter_grass") != nullptr && reg.FallbackFor("clutter_grass")->id == "oak_a");
+    SC_EXPECT(reg.FallbackFor("tree_oak") == nullptr && reg.FallbackFor("windmill") == nullptr);
+    // A fallback is registered, and stands in for an asset the part names.
+    AssetRegister bad;
+    SC_EXPECT(!bad.Load(Register(grass_fab, R"("clutter_grass": {"asset": "grass_fab", "fallback": "grass_own"})"), &e));
+    SC_EXPECT(e.find("not registered") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("clutter_grass": {"asset": null, "fallback": "oak_a"})"), &e));
+    SC_EXPECT(e.find("stand in for") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(std::string(kCc0Oak) + ", " + grass_fab, R"("clutter_grass": {"asset": "grass_fab", "fallback": 3})"), &e));
+    SC_EXPECT(e.find("fallback") != std::string::npos);
+}
+
+SC_TEST("scenery: a part's near models are drawn within their distance, its own asset beyond") {
+    const std::string oak_b =
+        R"({"id": "oak_b", "unreal_path": "/Game/SAM3D/Map/Trees/SM_OakB.SM_OakB", "origin": "own work", "licence": "Own", "redistributable": true, "fetched": "2026-11-08"})";
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "near": {"alternates": ["oak_b"], "within_m": 80}})"), &e));
+    SC_EXPECT(reg.NearCount("tree_oak") == 1 && reg.NearFor("tree_oak", 0)->id == "oak_b" && reg.NearFor("tree_oak", 1) == nullptr);
+    SC_EXPECT_NEAR(reg.NearM("tree_oak"), 80.0, 1e-12);
+    SC_EXPECT(reg.AssetFor("tree_oak", 0)->id == "oak_a");  // beyond, the part's own
+    SC_EXPECT(reg.NearCount("tree_pine") == 0 && reg.NearM("tree_pine") == 0.0);
+    // A near model is registered; it has a distance above 0.
+    AssetRegister bad;
+    SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("tree_oak": {"asset": "oak_a", "near": {"alternates": ["oak_z"], "within_m": 80}})"), &e));
+    SC_EXPECT(e.find("not registered") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(std::string(kCc0Oak) + ", " + oak_b, R"("tree_oak": {"asset": "oak_a", "near": {"alternates": ["oak_b"]}})"), &e));
+    SC_EXPECT(e.find("within_m") != std::string::npos);
 }

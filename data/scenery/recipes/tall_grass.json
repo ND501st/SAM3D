@@ -1,0 +1,49 @@
+{
+  "recipe_id": "tall_grass",
+  "notes": "Meadow left uncut or ungrazed in October (terrain roadmap L13 step 1, A.3.40): tall grass 0.5-1 m, dry stalks with their seed heads and wheatgrass with its ears, in dense clumps over a shorter green sward, no bare ground between them.",
+  "applies": {
+    "layers": [
+      "tall_grass"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "tall_grass",
+          "process": "thomas",
+          "per_ha": 18000,
+          "kappa_per_ha": 1500,
+          "spread_m": 1.0
+        },
+        {
+          "kind": "grass",
+          "process": "uniform",
+          "per_ha": 14000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "tall_grass",
+      "per_ha": [
+        14000,
+        22000
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        11000,
+        17000
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (judged by eye against the look target's K6: grass 0.2-1 m everywhere not worked, dry tall grass at margins; A.3.39's 12 000 and 6000 left bare ground between the tussocks)",
+  "confidence": "estimate"
+}

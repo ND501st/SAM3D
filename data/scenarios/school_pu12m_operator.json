@@ -25,7 +25,7 @@
     "notes": "Placeholders: a 1980s regiment's radio data are not public. Each net's working frequency is its set's preset 1, its spare preset 2. They keep the R-111's rules (r111_to p. 3): the post's own sets at least 10 % from its frequency and not 8 or 16 MHz off. The battery net and the air picture are exempt from radio silence (vst_1988: air defence and the warning system)."
   },
 
-  "own_unit": {"console": "procedures/pu12m.json", "position": {"east_m": 400, "north_m": -400, "up_m": 3.9}, "heading_deg": 290, "inputs": {"vehicle_stopped": true}, "readiness": "deployed_board_folded"},
+  "own_unit": {"console": "procedures/pu12m.json", "position": {"east_m": 400, "north_m": -400, "up_m": 25.9}, "heading_deg": 290, "inputs": {"vehicle_stopped": true}, "readiness": "deployed_board_folded"},
   "crew": [
     {"name": "Battery commander", "role": "battery_commander", "skill": "class1"},
     {"name": "Squad leader", "role": "squad_leader", "skill": "class1"},

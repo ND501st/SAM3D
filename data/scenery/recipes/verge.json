@@ -1,0 +1,34 @@
+{
+  "recipe_id": "verge",
+  "notes": "A road's or track's verge, cut late in the summer.",
+  "applies": {
+    "layers": [
+      "verge"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "uniform",
+          "per_ha": 5000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        4000,
+        6000
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (verges cut to about 100 mm into October: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.6)",
+  "confidence": "estimate"
+}

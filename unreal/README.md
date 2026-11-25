@@ -36,6 +36,27 @@ reachable. Only one editor can hold port 8000, and a session talks to whichever 
 editor is the checkout you mean (a worktree has its own `Binaries/` and `Saved/`; the Cesium ion token is also per
 checkout and not in git).
 
+### Working in the live editor
+
+Rules for Claude (or anyone) changing the project through the MCP, from tests of this workflow
+(`docs/research/TOOLING_POSTS_2026-11.md`). One of its tools runs Python in the editor with full access, and its edits
+are not always undoable.
+
+1. **Commit first.** Save and commit before a session, and at every gate passed.
+2. **One system per request**, with what "done" means (a check that can be run or seen), what must not change, and a
+   report of every asset and Blueprint created or changed.
+3. **No silent workarounds.** If a tool is missing or fails, stop and say so. In one published test a request for a
+   procedural city came back as hand-placed meshes.
+4. **The map is never placed by hand.** Where trees, fields, roads and buildings stand is simcore's data, drawn by
+   `ASimMapActor` (`docs/scenery/TERRAIN_ROADMAP.md` rule 4): something placed in the editor is not in the sight lines
+   and not on the other clients. The editor is for inspecting, materials, imported assets, screenshots and logs.
+5. **Check after every batch**: each tool's own status (many report failure quietly in their reply), then a
+   screenshot and the Output Log's new errors. A successful call does not mean the result is right.
+6. **Not while playing or compiling.** Stop Play before asking for changes; send nothing while C++ or shaders compile.
+7. **A bug** is reported as steps, expected and actual, and its cause found before anything is changed. After two
+   failed fixes, go back to the last commit and ask again in a smaller piece.
+8. **Never change the terrain, the lighting and a character in one request.**
+
 ## Time compression
 
 `sam3d.TimeScale <x>` (console variable; also `USimWorldSubsystem::SetTimeScale`) runs sim time faster or slower than

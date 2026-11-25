@@ -3,6 +3,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -58,6 +59,12 @@ ASimSkyWeatherActor::ASimSkyWeatherActor()
 	HeightFog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("HeightFog"));
 	HeightFog->SetupAttachment(Root);
 	HeightFog->SetVolumetricFog(false);
+
+	// The outdoors' exposure (OutdoorExposureBias), for every view not setting its own.
+	Exposure = CreateDefaultSubobject<UPostProcessComponent>(TEXT("Exposure"));
+	Exposure->SetupAttachment(Root);
+	Exposure->bUnbound = true;
+	Exposure->Settings.bOverride_AutoExposureBias = true;
 }
 
 void ASimSkyWeatherActor::BeginPlay()
@@ -67,6 +74,20 @@ void ASimSkyWeatherActor::BeginPlay()
 	if (FParse::Param(FCommandLine::Get(), TEXT("SimCloudCells")))
 	{
 		bDrawCloudCells = true;  // the sim's own cloud, as boxes: what the TV cannot see through
+	}
+	FParse::Value(FCommandLine::Get(), TEXT("SimExposureBias="), OutdoorExposureBias);
+	Exposure->Settings.AutoExposureBias = OutdoorExposureBias;
+	// -SimFixedExposure=<ev>: no eye adaptation, a fixed exposure of <ev> stops (the plot lab's, terrain roadmap L12 and
+	// A.3.20: every pass rendered at the same exposure, so a darker wood is darker, not re-exposed).
+	float FixedEv = 0.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("SimFixedExposure="), FixedEv))
+	{
+		Exposure->Settings.bOverride_AutoExposureMethod = true;
+		Exposure->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+		Exposure->Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+		Exposure->Settings.AutoExposureApplyPhysicalCameraExposure = false;
+		Exposure->Settings.AutoExposureBias = FixedEv;
+		UE_LOG(LogTemp, Log, TEXT("Sky: a fixed exposure of %.2f EV"), FixedEv);
 	}
 	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud_Inst.m_SimpleVolumetricCloud_Inst")))
 	{
@@ -153,6 +174,19 @@ void ASimSkyWeatherActor::ApplyWeather()
 	}
 	Atmosphere->SetMieExponentialDistribution(1.2f);  // km: the haze lives in the boundary layer
 	Atmosphere->SetGroundAlbedo(FColor(60, 64, 40));  // the plain's farmland beyond the drawn ground
+	// -SimAtmoGround=R,G,B: a probe, the planet's colour the atmosphere shows where no ground is drawn (a hole shows it).
+	{
+		FString Probe;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimAtmoGround="), Probe, false))
+		{
+			TArray<FString> Parts;
+			Probe.ParseIntoArray(Parts, TEXT(","));
+			if (Parts.Num() == 3)
+			{
+				Atmosphere->SetGroundAlbedo(FColor(FCString::Atoi(*Parts[0]), FCString::Atoi(*Parts[1]), FCString::Atoi(*Parts[2])));
+			}
+		}
+	}
 
 	// The main cloud layer (the lowest that covers a quarter of the sky or more, else the most covering one).
 	int32 Main = -1;
@@ -174,8 +208,8 @@ void ASimSkyWeatherActor::ApplyWeather()
 		Clouds->SetLayerHeight(static_cast<float>(FMath::Max(0.1, L.thickness_m / 1000.0)));
 		if (CloudMaterial != nullptr)
 		{
-			// The sample material's coverage is a bias on its noise (default -0.2, which reads as broken cloud, about
-			// 5 oktas): shift it by the layer's cover against that; a full overcast well past it.
+			// The sample material's coverage is a bias on its noise (default -0.2, measured to show no cloud at its own
+			// layout scale: A.3.32), set below from the layer's cover by measured tables.
 			float Default = 0.0f;
 			if (!bHaveDefaultCoverage && CloudMaterial->GetScalarParameterValue(TEXT("Cloud_GlobalCoverage"), Default))
 			{
@@ -185,9 +219,42 @@ void ASimSkyWeatherActor::ApplyWeather()
 			const double Cover = Wx.LayerCover(static_cast<std::size_t>(Main));
 			if (bHaveDefaultCoverage)
 			{
-				const float Value = static_cast<float>(Cover >= 0.999 ? DefaultCoverage + 1.0 : DefaultCoverage + 1.2 * (Cover - 0.625));
+				// The material's layout scale from the layer's cell size (A.3.33): 0.04 per metre, so fair cumulus (1200 m)
+				// takes 48, separate cells with blue between; stratocumulus (2500 m) 100, altostratus (6000 m) 240, near the
+				// material's own 256 (soft banks). Judged by eye at 16, 48, 128 and 256 against fair cumulus.
+				float Scale = static_cast<float>(FMath::Clamp(0.04 * L.cell_m, 16.0, 512.0));
+				// -SimCloudScale=<v> (A.3.33, a measurement): the layout scale itself.
+				FParse::Value(FCommandLine::Get(), TEXT("SimCloudScale="), Scale);
+				CloudMaterial->SetScalarParameterValue(TEXT("Layout_CloudGlobalScale"), Scale);
+				// The coverage for the layer's cover, through the sky's cloud share measured at each coverage (A.3.32-33: the
+				// plot lab's sky cameras, the 14 plots' directions, a pixel cloud where brighter than the cloudless sky at
+				// -0.5), at two layout scales, and between them by the scale's logarithm. At 256: -0.2 none, 0.0 30 %, +0.1
+				// 56 %. At 48: -0.2 11 %, -0.1 26 %, 0.0 45 % (none at -0.27, extrapolated). A full overcast at the default
+				// + 1 (0.8). The old line (the default + 1.2 (cover - 5/8)) showed no cloud below 5 oktas.
+				auto Through = [Cover](const double* Share, const double* Coverage, int32 N)
+				{
+					for (int32 k = 1; k < N; ++k)
+					{
+						if (Cover <= Share[k])
+						{
+							const double T = (Cover - Share[k - 1]) / (Share[k] - Share[k - 1]);
+							return Coverage[k - 1] + FMath::Clamp(T, 0.0, 1.0) * (Coverage[k] - Coverage[k - 1]);
+						}
+					}
+					return Coverage[N - 1];
+				};
+				static const double Share48[] = {0.0, 0.107, 0.256, 0.449, 1.0};
+				static const double Coverage48[] = {-0.27, -0.2, -0.1, 0.0, 0.8};
+				static const double Share256[] = {0.0, 0.30, 0.56, 1.0};
+				static const double Coverage256[] = {-0.2, 0.0, 0.1, 0.8};
+				const double Blend = FMath::Clamp((FMath::Log2(static_cast<double>(Scale)) - FMath::Log2(48.0)) / (FMath::Log2(256.0) - FMath::Log2(48.0)), 0.0, 1.0);
+				const double Interp = FMath::Lerp(Through(Share48, Coverage48, 5), Through(Share256, Coverage256, 4), Blend);
+				float Value = static_cast<float>(Cover >= 0.999 ? DefaultCoverage + 1.0 : Interp);
+				// -SimCloudCoverage=<v> (A.3.32, a measurement): the material's coverage itself, to measure the sky's
+				// cloud share against it.
+				FParse::Value(FCommandLine::Get(), TEXT("SimCloudCoverage="), Value);
 				CloudMaterial->SetScalarParameterValue(TEXT("Cloud_GlobalCoverage"), Value);
-				UE_LOG(LogSAM3D, Log, TEXT("Sky: cloud coverage %.3f (the material's default %.3f, the layer's cover %.0f oktas)"), Value,
+				UE_LOG(LogSAM3D, Log, TEXT("Sky: cloud coverage %.3f at layout scale %.0f (the material's default %.3f, the layer's cover %.0f oktas)"), Value, Scale,
 					DefaultCoverage, Cover * 8.0);
 			}
 		}

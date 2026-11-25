@@ -442,6 +442,9 @@ SC_TEST("map dressing: a line in the land cover is unbroken and at least a cell 
     const CoverRaster raster = BakeCover(*m, rules);
     int looked = 0, off = 0;
     for (const MapStrip& s : m->Layout().strips) {
+        // A village pond's strip is its water, not a line: the raster leaves it out and finds its reed margin at the exact
+        // point (BakeCover, terrain roadmap A.3.35).
+        if (s.id.rfind("pond_", 0) == 0) continue;
         for (std::size_t i = 1; i < s.points.size(); ++i) {
             const Vec3& a = s.points[i - 1];
             const Vec3& b = s.points[i];

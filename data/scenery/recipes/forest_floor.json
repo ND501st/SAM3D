@@ -1,0 +1,97 @@
+{
+  "recipe_id": "forest_floor",
+  "notes": "The floor under the woods (plot 11): at the wood's open side the herb fringe, a strip of tall grass and dry herb stems the plough and the mower leave (in October standing dry); under the mantle and the shrub belt, where the light still comes in from the side, grass in patches; further in, grass only where light comes through, in patches. Measured from the land cover's nearest open cell (edge wood), so the fringe follows every wood's side; the trees' line stands back from it by map_dressing.json's edge_setback_m, so the fringe widens into the bays.",
+  "applies": {
+    "layers": [
+      "forest_floor"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "fringe",
+      "edge": "wood",
+      "from_m": 0,
+      "to_m": 3.5,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 45000,
+          "kappa_per_ha": 6000,
+          "spread_m": 0.6
+        },
+        {
+          "kind": "stalk",
+          "process": "thomas",
+          "per_ha": 8000,
+          "kappa_per_ha": 1200,
+          "spread_m": 0.8
+        }
+      ]
+    },
+    {
+      "id": "mantle_floor",
+      "edge": "wood",
+      "from_m": 3.5,
+      "to_m": 12,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 5000,
+          "kappa_per_ha": 400,
+          "spread_m": 1.5
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 1500,
+          "kappa_per_ha": 100,
+          "spread_m": 2.0
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "fringe",
+      "kind": "grass",
+      "per_ha": [
+        38000,
+        52000
+      ]
+    },
+    {
+      "band": "fringe",
+      "kind": "stalk",
+      "per_ha": [
+        6000,
+        10000
+      ]
+    },
+    {
+      "band": "mantle_floor",
+      "kind": "grass",
+      "per_ha": [
+        3500,
+        6500
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "grass",
+      "per_ha": [
+        800,
+        2200
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (a natural edge's herb fringe at least 5 m, a 1980s managed edge against ploughland thinner, so 3.5 m; the mantle and shrub belt 10-20 m in practice: Thurgau forestry office, Waldrandgestaltung, and BIO Austria, Waldraender, as in docs/scenery/VEGETATION.md section 1; densities judged by eye at plot 11)",
+  "confidence": "estimate"
+}

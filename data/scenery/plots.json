@@ -1,0 +1,172 @@
+{
+  "notes": "The test plots the terrain's look is perfected on (roadmap L1, docs/scenery/TERRAIN_ROADMAP.md part A; the catalogue in docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md section 6.2). Each is found on the map by its anchor, as the views are (data/scenery/views.json), and rendered at the plot lab's fixed exposure, 0 EV unless its exposure_ev says otherwise (tools/plot_lab.py, A.3.20), and seen from three cameras looking at its middle: eye (1.7 m, 30 m back), low (25 m, 43 m back) and high (150 m, 260 m back) (simcore/scenery/plots.hpp). A field_layer anchor finds the nearest field within 3 km of close_km whose whole 50 m square is one parcel in that ground layer on the scenario's day (with edge set true, the cameras look at where that field ends toward them, from outside it: a standing crop's face); turn_deg turns the cameras from the anchor's own bearing (a field's: its furrows). Close to battery 21's district (10 m ground) where it can be. Photos are ids in views.json's register. Rendered by -SimMapShots=<folder> -SimShotSet=plots, set beside their photographs and their last approved render by tools/plot_lab.py. Presentation only.",
+  "plots": [
+    {
+      "id": "p01_ploughland",
+      "name": "Ploughland (autumn)",
+      "anchor": { "kind": "field_layer", "layer": "ploughed", "close_km": [8.0, -8.0] },
+      "turn_deg": 30,
+      "photos": ["P01", "P03", "P12", "P65"],
+      "must_see": "Furrows along the parcel's heading at the plough's 30-50 cm, big dry clods, a pale dusty top; the headland worked across the furrows; the parcel's edge against its neighbour."
+    },
+    {
+      "id": "p02_maize_stover",
+      "name": "Maize stover (harvested)",
+      "anchor": { "kind": "field_layer", "layer": "maize_stubble", "close_km": [8.0, -8.0] },
+      "turn_deg": 30,
+      "photos": ["P77"],
+      "must_see": "Stalks lying and broken, stumps in rows 70-76 cm apart, cut stalks or bales in places."
+    },
+    {
+      "id": "p03_standing_maize",
+      "name": "Standing maize (dry)",
+      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "crop": "maize", "close_km": [10.8, -11.5], "edge": true },
+      "turn_deg": 90,
+      "photos": ["P09", "P71", "P77"],
+      "must_see": "A 2-3 m wall of dry tan stalks in rows; the field's edge as a face."
+    },
+    {
+      "id": "p04_standing_sunflower",
+      "name": "Standing sunflower (dry)",
+      "anchor": { "kind": "field_layer", "layer": "dry_stalks", "crop": "sunflower", "close_km": [8.0, -8.0], "edge": true },
+      "turn_deg": 90,
+      "photos": [],
+      "must_see": "A 1.6-2 m stand of near-black dry stalks in rows, the heads hanging face down; darker than maize from afar."
+    },
+    {
+      "id": "p05_wheat_stubble",
+      "name": "Wheat stubble",
+      "anchor": { "kind": "field_layer", "layer": "stubble", "close_km": [8.0, -8.0] },
+      "turn_deg": 30,
+      "photos": ["P91"],
+      "must_see": "Short straw 10-20 cm in the drill's rows, the combine's straw lines, weeds."
+    },
+    {
+      "id": "p08_black_locust",
+      "name": "Inside a black locust wood on the plain",
+      "anchor": {
+        "kind": "wood_inside",
+        "stand": "black_locust",
+        "close_km": [6.2, -10.1]
+      },
+      "photos": ["P72"],
+      "must_see": "Dense thin stems, many in groups from one stool, 12-20 m; open light crowns of small leaflets turning yellow, light reaching the floor; elder under them (method 6.2 row 8). Never a wall.",
+      "exposure_ev": 1.5
+    },
+    {
+      "id": "p09_poplar_plantation",
+      "name": "Inside a hybrid poplar plantation by the water",
+      "anchor": {
+        "kind": "wood_inside",
+        "stand": "poplar_plantation",
+        "close_km": [6.2, -10.1]
+      },
+      "photos": ["P24"],
+      "must_see": "Straight grey boles in a strict 6 x 6 m lattice, one age, lanes running away between the rows; the crowns high and narrow, gold; grass or bare ground between (method 6.2 row 9).",
+      "exposure_ev": 1.5
+    },
+    {
+      "id": "p11_forest_edge",
+      "name": "Forest edge against a field",
+      "anchor": { "kind": "wood_edge", "close_km": [8.0, -8.0], "bearing_deg": 0 },
+      "photos": ["P22", "P66"],
+      "must_see": "The herb fringe, a shrub belt, a mantle of lower trees, then the stand; never a wall."
+    },
+    {
+      "id": "p13_road_verge",
+      "name": "Road with verge and ditch",
+      "anchor": { "kind": "road", "road": "f_vrbice", "at": 0.5 },
+      "turn_deg": 60,
+      "photos": ["P60", "P76"],
+      "must_see": "Asphalt 4-6 m, earth shoulders 1-2 m, a ditch, a pole line, a tree row on one side."
+    },
+    {
+      "id": "p14_river_bank",
+      "name": "River bank with reeds",
+      "anchor": { "kind": "river", "river": "rava", "close_km": [16.0, -10.0], "side_m": 60 },
+      "turn_deg": 90,
+      "photos": ["P26"],
+      "must_see": "A reed belt 1-5 m wide, reeds 2-4 m tall, willows on the bank."
+    },
+    {
+      "id": "p15_town_yard",
+      "name": "Village ground",
+      "anchor": { "kind": "settlement", "settlement": "vrbice", "from_centre_m": 60 },
+      "photos": ["P76", "P85"],
+      "must_see": "The town's open ground (the yard layer): packed earth and gravel worn by wheels, weeds at the edges."
+    },
+    {
+      "id": "p16_battery_position",
+      "name": "The battery's position, worn",
+      "anchor": { "kind": "site", "site": "bty21", "from_m": 25, "bearing_deg": 110 },
+      "photos": ["P03", "P12"],
+      "must_see": "Ground churned by the vehicles: wheel ruts in mud, bare earth, the grass left only between."
+    },
+    {
+      "id": "p18_slope_field_edge",
+      "name": "A field's edge on a slope in the hill country",
+      "anchor": { "kind": "parcel_edge", "close_km": [-14.0, 2.0] },
+      "photos": ["P65"],
+      "must_see": "The field climbing the slope, its edge and the hill beyond; the ground rolling, not flat (look target K1, K3).",
+      "exposure_ev": -1.0
+    },
+    {
+      "id": "p19_slope_wood_edge",
+      "name": "A wood's edge on a hillside",
+      "anchor": { "kind": "wood_edge", "close_km": [-11.0, -0.4], "bearing_deg": 180 },
+      "photos": ["P66", "P23"],
+      "must_see": "The wood holding the slope, its edge layered and closed; the ground falling away (look target K2, K4).",
+      "exposure_ev": 1.0
+    },
+    {
+      "id": "p20_brook_alders",
+      "name": "Alders along a brook in the hills",
+      "anchor": { "kind": "brook_row", "close_km": [-12.0, 0.0] },
+      "photos": [],
+      "must_see": "A line of dark alders on one bank of a narrow brook in a valley floor, broken in places; meadow to the water."
+    },
+    {
+      "id": "p21_wood_inside",
+      "name": "Inside a wood in the hills",
+      "anchor": { "kind": "wood_inside", "close_km": [-11.0, -0.4] },
+      "photos": [],
+      "must_see": "Trunks receding into shade, the crowns closed overhead, hazel and elder in patches under them, the floor dark; never a wall or a green slab (A.3.19, A.3.21).",
+      "exposure_ev": 1.5
+    },
+    {
+      "id": "p22_village_pond",
+      "name": "A village pond in the hills",
+      "anchor": { "kind": "pond", "close_km": [-8.0, -7.0], "from_m": 14 },
+      "photos": [],
+      "must_see": "Still water low in its hollow at the village's edge, a soft grassed bank rising from it, reeds along the water, a waterside tree; the village behind (the look target's K-f)."
+    },
+    {
+      "id": "p23_sunken_lane",
+      "name": "A sunken lane up a loess slope",
+      "anchor": { "kind": "sunken_lane", "close_km": [-3.67, 11.71] },
+      "photos": [],
+      "must_see": "A track worn 1-5 m into the slope between grassed banks, deepest halfway up, shrubs and trees along the banks' tops, the field beyond hidden (A.3.34)."
+    },
+    {
+      "id": "p24_tall_grass",
+      "name": "Tall grass in the hills, left unmown",
+      "anchor": { "kind": "field_layer", "layer": "tall_grass", "close_km": [-12.0, 0.0] },
+      "photos": [],
+      "must_see": "Grass knee-high and gone to seed, pale and dry in October, uneven in tussocks; the hay meadow and pasture beside it mown and grazed short (terrain roadmap L13, A.3.39)."
+    },
+    {
+      "id": "p06_pasture_bushes",
+      "name": "A grazed slope with lone bushes",
+      "anchor": { "kind": "pasture_bush", "close_km": [-12.0, 0.0] },
+      "photos": [],
+      "must_see": "Short grazed grass on a hillside, a lone hawthorn, blackthorn or dog rose standing in it as wide as tall, the flock's tracks and tussocks round it (terrain roadmap L13, A.3.41)."
+    },
+    {
+      "id": "p25_scrubby_hillside",
+      "name": "A thicket on a hillside",
+      "anchor": { "kind": "scrub_thicket", "close_km": [-11.0, -0.4] },
+      "photos": [],
+      "must_see": "A long low thicket of blackthorn, hawthorn and dog rose along the slope, dark and dense, hiding what is behind it, tall grass up to it and the wood's edge beyond (terrain roadmap L13, A.3.41)."
+    }
+  ]
+}

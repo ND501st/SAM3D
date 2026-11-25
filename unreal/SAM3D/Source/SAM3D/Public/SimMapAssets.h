@@ -7,7 +7,7 @@ class UMaterialInterface;
 class UStaticMesh;
 
 /**
- * The map's dressing as static meshes (roadmap R6, docs/scenery/ASSETS.md): a tree by kind, a wood's mass, a house, a barn,
+ * The register of third-party art and the map's dressing as static meshes (roadmap R6, docs/scenery/ASSETS.md): a tree by kind, a wood's mass, a house, a barn,
  * flats, an industrial hall, each by its part key (simcore/scenery/map_meshes.hpp MapMeshParts) and variant.
  *
  * The register (data/scenery/assets.json, simcore/scenery/asset_register.hpp) may name a real asset for a part: it is
@@ -30,11 +30,31 @@ public:
 	 * mesh's frame into the part's (identity for a procedural mesh). Null for an unknown part. Logs once per part and
 	 * variant whether it is drawn by a real asset or procedurally.
 	 */
-	static UStaticMesh* MeshFor(const FString& Part, int32 Variant, FTransform& OutFix);
+	static UStaticMesh* MeshFor(const FString& Part, int32 Variant, FTransform& OutFix, int32 Alternate = 0);
+
+	/** Alternate codes from NearAlternate up are a part's near models (A.3.26): NearAlternate + k is the k-th. A near model
+	 * that is not on this machine is null, never procedural. */
+	static constexpr int32 NearAlternate = 1000;
+
+	/** True if every near model of a part is on this machine (then the part's own hides itself within their distance). */
+	static bool NearOnMachine(const FString& Part);
 
 	/** The map's material: /Game/SAM3D/Map/M_SimMapVertexColor, else the engine's VertexColorMaterial (as the ground). */
 	static UMaterialInterface* Material();
 
 	/** The screen size below which LOD 1, 2 and 3 of a procedural part are drawn. */
 	static float LodScreenSize(int32 Lod);
+
+	/**
+	 * A basic model drawn whole by a real asset (the register's "models": an aircraft from Sketchfab in place of its basic
+	 * shapes, docs/scenery/ASSETS.md), loaded if it is on this machine, with its fix from the asset's frame into the
+	 * model's in OutFix. Null: the model keeps its basic shapes (FSimBasicModels). Logged once per model.
+	 */
+	static UStaticMesh* ModelMesh(const FString& ModelId, FTransform& OutFix);
+
+	/**
+	 * A munition drawn by a real asset (the register's "munitions", by the munition's own id), in the munition's own frame
+	 * (the register refuses a fix for one). Null: its procedural mesh (FSimMunitionModels). Logged once per munition.
+	 */
+	static UStaticMesh* MunitionMesh(const FString& MunitionId);
 };

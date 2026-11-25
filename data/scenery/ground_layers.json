@@ -1,0 +1,181 @@
+{
+  "layers_id": "ground_layers",
+  "status": "second pass (roadmap T4.3: the crop calendar)",
+  "notes": "The ground's surface layers (simcore/scenery/ground_layers.hpp, read by LoadGroundLayers): the land cover's cells take a layer by their cover, a field's by its crop and the season (autumn_months by the scenario's date). Each layer is drawn by Unreal's ground material from its textures (\"texture\": an id in data/scenery/textures.json; empty: none chosen, the land cover's colour only), repeated every tile_m metres, which divides 600 m (simcore::scenery::kGroundTilePeriodM; near each scan's own width); a layer with rows turns with the field's furrows (its textures' furrows run across the image, along U, as farm_furrows' do). patch (0..0.5) darkens and lightens a layer in damp and dry patches 15-40 m across; break_up (0..1) mixes in a second sample shifted along the furrows in blobs about 8 m across, so the repeat does not show (plot lab, roadmap L4). furrow_m and furrow_depth_m (a layer with rows only) draw the furrows procedurally in the material, spacing and crest to trough: a mouldboard plough's slice is 30-40 cm wide, a seed drill's rows 12-15 cm apart; each field's spacing is its own within 12 percent, the furrows waver and their crests are uneven, and the scan's own furrows across are damped under them, so the 2 m repeat no longer shows across the field (plot lab p01 a4). The summer's standing wheat, maize and sunflowers have no texture: no free scan of a standing crop exists (docs/scenery/TERRAIN_ROADMAP.md section 4). At most 16 layers (all 16 used since tall_grass, terrain roadmap L13 step 1: hay is mown short and wears the meadow's layer; a further layer needs the material's slots widened). Presentation only: nothing in the simulation reads it. A field's layer is its crop's calendar's on the scenario's day of the year (simcore/scenery/ground_layers.hpp LayerOnDay): each crop starts the year in its first state and enters the next in a window of days, each field on a day of its own drawn from its number, so the plain changes field by field. The windows are estimates from the Hungarian harvest calendars of recent years (docs/research/TERRAIN_REFERENCES_2026-11.md T11: maize 87 percent in by 16 October; sunflower from the second week of September; winter wheat sown in October), within a week or two of 1985's. Standing maize and sunflower dry out before the harvest: dry_stalks (the stubble texture, tan) from August or September, so mid-October shows no summer green. The sown layer wears the ploughed texture until farm_soil is fetched (docs/scenery/T3_T4_PLAN.md T4.3). A state's stand_m is how high the crop stands in it, reached grow_days after the field's own day: the one thing here the simulation reads (scenery/standing_crops.hpp: a standing crop blocks sight as the woods do, roadmap D4 and L5), estimates for the 1980s plain: maize hybrids 2.2-2.8 m, sunflower 1.6-2.0 m, winter wheat 0.8-1.0 m (docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md lists the sourcing still to do).",
+  "source": "game value: sam3d estimate (the Pannonian plain's fields, woods and villages; tile sizes to be tuned against -SimMapShots and the reference views in docs/scenery/TERRAIN_ROADMAP.md)",
+  "confidence": "estimate",
+  "stand_vary": {
+    "notes": "A crop does not stand at one height (roadmap A.3.10): each field a share taller or shorter than its state's stand_m (its own sowing and soil), and over it patches about patch_m across a share taller or shorter again (wetter hollows, poorer ground), so a maize field's top and its edge's line undulate. What blocks sight and what Unreal draws both read it (StandAtPoint). Judged by eye: the plain's maize from 1.8 m in a poor patch to 3 m in a good one.",
+    "field": 0.05,
+    "patch": 0.20,
+    "patch_m": 40
+  },
+  "layers": [
+    {
+      "id": "meadow",
+      "tile_m": 1.5,
+      "rows": false,
+      "texture": "meadow_sward",
+      "patch": 0.2,
+      "break_up": 1.0
+    },
+    {
+      "id": "wheat",
+      "tile_m": 2.5,
+      "rows": true,
+      "texture": ""
+    },
+    {
+      "id": "stubble",
+      "tile_m": 1.875,
+      "rows": true,
+      "texture": "stubble_soil"
+    },
+    {
+      "id": "maize",
+      "tile_m": 3.0,
+      "rows": true,
+      "texture": ""
+    },
+    {
+      "id": "maize_stubble",
+      "tile_m": 3.0,
+      "rows": true,
+      "texture": "maize_litter"
+    },
+    {
+      "id": "sunflower",
+      "tile_m": 3.0,
+      "rows": true,
+      "texture": ""
+    },
+    {
+      "id": "ploughed",
+      "tile_m": 2.0,
+      "rows": true,
+      "texture": "farm_furrows",
+      "patch": 0.35,
+      "break_up": 1.0,
+      "furrow_m": 0.36,
+      "furrow_depth_m": 0.09
+    },
+    {
+      "id": "sown",
+      "tile_m": 2.0,
+      "rows": true,
+      "texture": "farm_furrows",
+      "patch": 0.35,
+      "break_up": 1.0,
+      "furrow_m": 0.15,
+      "furrow_depth_m": 0.03
+    },
+    {
+      "id": "forest_floor",
+      "tile_m": 2.4,
+      "rows": false,
+      "texture": "forest_leaves"
+    },
+    {
+      "id": "marsh",
+      "tile_m": 1.0,
+      "rows": false,
+      "texture": "q_soil_mud_pkbch0"
+    },
+    {
+      "id": "yard",
+      "tile_m": 0.8,
+      "rows": false,
+      "texture": "q_soil_and_gravel_pcciq0"
+    },
+    {
+      "id": "trampled",
+      "tile_m": 2.0,
+      "rows": false,
+      "texture": "q_grassy_soil_xbreair"
+    },
+    {
+      "id": "verge",
+      "tile_m": 2.5,
+      "rows": false,
+      "texture": "grass_ground"
+    },
+    {
+      "id": "bank",
+      "tile_m": 3.75,
+      "rows": false,
+      "texture": "river_silt"
+    },
+    {
+      "id": "dry_stalks",
+      "tile_m": 1.875,
+      "rows": true,
+      "texture": "stubble_soil"
+    },
+    {
+      "id": "tall_grass",
+      "tile_m": 1.5,
+      "rows": false,
+      "texture": "meadow_sward",
+      "patch": 0.3,
+      "break_up": 1.0
+    }
+  ],
+  "cover": {
+    "forest": "forest_floor",
+    "marsh": "marsh",
+    "town": "yard",
+    "military": "trampled",
+    "road": "verge",
+    "water": "bank"
+  },
+  "crops": {
+    "wheat": {
+      "states": [
+        { "layer": "sown" },
+        { "layer": "wheat", "from_day": 100, "to_day": 130, "stand_m": 0.9, "grow_days": 45 },
+        { "layer": "stubble", "from_day": 185, "to_day": 210 },
+        { "layer": "ploughed", "from_day": 235, "to_day": 300 },
+        { "layer": "sown", "from_day": 301, "to_day": 345 }
+      ]
+    },
+    "maize": {
+      "states": [
+        { "layer": "ploughed" },
+        { "layer": "maize", "from_day": 110, "to_day": 140, "stand_m": 2.4, "grow_days": 75 },
+        { "layer": "dry_stalks", "from_day": 225, "to_day": 244, "stand_m": 2.4 },
+        { "layer": "maize_stubble", "from_day": 245, "to_day": 295 },
+        { "layer": "ploughed", "from_day": 296, "to_day": 350 }
+      ]
+    },
+    "sunflower": {
+      "block_tone": [0.50, 0.44, 0.40],
+      "states": [
+        { "layer": "ploughed" },
+        { "layer": "sunflower", "from_day": 105, "to_day": 135, "stand_m": 1.8, "grow_days": 70 },
+        { "layer": "dry_stalks", "from_day": 210, "to_day": 249, "stand_m": 1.8 },
+        { "layer": "ploughed", "from_day": 250, "to_day": 300 }
+      ]
+    },
+    "ploughed": {
+      "states": [
+        { "layer": "ploughed" },
+        { "layer": "sown", "from_day": 270, "to_day": 320 }
+      ]
+    },
+    "pasture": {
+      "states": [
+        { "layer": "meadow" }
+      ]
+    },
+    "hay": {
+      "states": [
+        { "layer": "meadow" }
+      ]
+    },
+    "tall_grass": {
+      "states": [
+        { "layer": "tall_grass" }
+      ]
+    }
+  }
+}

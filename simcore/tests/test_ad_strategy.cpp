@@ -568,6 +568,9 @@ SC_TEST("unit moves (F4.2): battalions in the main thrust's way ordered back in 
             const Vec3 shift = at[k] - o.pos;
             o.pos = at[k];
             for (Vec3& q : o.prepared) q = q + shift;
+            // Unknown to the enemy before the war, so its first day's raids are not flown at them: the test is the
+            // ground's, and a battalion wrecked from the air before the order reaches it moves on no order.
+            o.prior_known = 0.0;
         }
     };
     cmp::AdStrategyData rules = LoadStrategy();

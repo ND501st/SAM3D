@@ -1,11 +1,17 @@
 #include "SimMapActor.h"
 
 #include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
+#include "DynamicRHI.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -20,10 +26,16 @@
 #include "SAM3D.h"
 #include "SimAirCampaignSubsystem.h"
 #include "SimBasicModels.h"
+#include "SimClutterRing.h"
 #include "SimCoreIncludes.h"
 #include "SimMapAssets.h"
+#include "simcore/scenery/clutter.hpp"
+#include "simcore/scenery/standing_crops.hpp"
+#include "simcore/scenery/tree_tint.hpp"
 #include "SimWorldSubsystem.h"
 #include "UnrealClient.h"
+#include "EngineUtils.h"
+#include "UObject/UObjectIterator.h"
 
 namespace
 {
@@ -60,6 +72,7 @@ namespace
 		case MapPart::Tent: return FLinearColor(0.27f, 0.31f, 0.20f);
 		case MapPart::Bunker: return FLinearColor(0.28f, 0.30f, 0.22f);
 		case MapPart::Launcher: return FLinearColor(0.24f, 0.29f, 0.18f);
+		case MapPart::TreeRow: return FLinearColor(0.09f, 0.17f, 0.06f);
 		case MapPart::Count: break;
 		}
 		return FLinearColor::Gray;
@@ -127,6 +140,54 @@ namespace
 		std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
 	};
 	FSimDressingCache GSimDressingCache;
+
+	// The day of the year the ground's crops are read on: the scenario's date (15 October, day 288, the sky clock's default,
+	// without a scenario). The crop calendar (simcore/scenery/ground_layers.hpp) turns it into each field's layer.
+	int GroundDay(const UWorld* World)
+	{
+		simcore::SkyClock Clock;
+		if (USimWorldSubsystem* Sim = World != nullptr ? World->GetSubsystem<USimWorldSubsystem>() : nullptr)
+		{
+			Sim->GetSkyClock(Clock);
+		}
+		return Clock.day_of_year;
+	}
+
+	// The ground's layer mask as a texture (roadmap T1): a texel per land cover cell, unfiltered (the material reads the
+	// four cells round a point itself), row 0 the southernmost, as simcore bakes it.
+	UTexture2D* MaskTexture(const simcore::scenery::GroundMask& Mask)
+	{
+		if (Mask.cols <= 0 || Mask.rows <= 0 || Mask.cols > 16384 || Mask.rows > 16384)
+		{
+			return nullptr;
+		}
+		UTexture2D* T = UTexture2D::CreateTransient(Mask.cols, Mask.rows, PF_B8G8R8A8,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), FName(*FString::Printf(TEXT("GroundMask_%hs"), Mask.id.c_str()))));
+		if (T == nullptr || T->GetPlatformData() == nullptr || T->GetPlatformData()->Mips.Num() == 0)
+		{
+			return nullptr;
+		}
+		T->Filter = TF_Nearest;
+		T->SRGB = false;
+		T->AddressX = TA_Clamp;
+		T->AddressY = TA_Clamp;
+		T->NeverStream = true;
+		T->CompressionSettings = TC_VectorDisplacementmap;
+		FTexture2DMipMap& Mip = T->GetPlatformData()->Mips[0];
+		uint8* Out = static_cast<uint8*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+		const int64 Count = static_cast<int64>(Mask.cols) * Mask.rows;
+		for (int64 I = 0; I < Count; ++I)
+		{
+			// simcore's RGBA to the texture's BGRA.
+			Out[I * 4 + 0] = Mask.texels[I * 4 + 2];
+			Out[I * 4 + 1] = Mask.texels[I * 4 + 1];
+			Out[I * 4 + 2] = Mask.texels[I * 4 + 0];
+			Out[I * 4 + 3] = Mask.texels[I * 4 + 3];
+		}
+		Mip.BulkData.Unlock();
+		T->UpdateResource();
+		return T;
+	}
 }
 
 ASimMapActor::ASimMapActor()
@@ -177,8 +238,9 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	// Views: a camera over the map's (east, north) km, metres above the ground there, looking at another point.
 	struct FView
 	{
-		const TCHAR* Name;
+		FString Name;
 		double E, N, Up, Te, Tn, TUp;
+		double FovDeg = 0.0;  // 0: the camera's own (90)
 	};
 	static const FView Views[] = {
 		{TEXT("battery"), 5.75, -9.05, 4.0, 12.0, -6.0, 30.0},
@@ -239,8 +301,171 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 		const double E = S.centre.east_m / 1000.0, N = S.centre.north_m / 1000.0;
 		All.Add(FView{TEXT("capital_150m"), E, N - 1.5, 150.0, E, N, 0.0});
 	}
+	// Track T's furrows (docs/scenery/TERRAIN_ROADMAP.md, view V1): 1.7 m over the turned field nearest the battery, well
+	// inside it, looking along its furrows. The ground material turns a field's texture with them, so they run straight
+	// ahead.
+	if (bTexturedGround && GroundLayers && Cover && DressRules)
+	{
+		const int Day = GroundDay(GetWorld());
+		const double Be = 5750.0, Bn = -9050.0, Reach = 1500.0;
+		double BestD = 1e18, Fe = 0.0, Fn = 0.0, Fh = 0.0;
+		for (const simcore::scenery::CoverGrid& G : Cover->grids)
+		{
+			for (int32 Row = 0; Row < G.rows; Row += 2)
+			{
+				const double Cn = G.CentreNorth(Row);
+				if (FMath::Abs(Cn - Bn) > Reach)
+				{
+					continue;
+				}
+				for (int32 Col = 0; Col < G.cols; Col += 2)
+				{
+					const double Ce = G.CentreEast(Col);
+					const double D = FMath::Square(Ce - Be) + FMath::Square(Cn - Bn);
+					const std::size_t I = G.Index(Col, Row);
+					if (D >= BestD || D > Reach * Reach || G.cover[I] != static_cast<std::uint8_t>(simcore::scenery::Cover::Field))
+					{
+						continue;
+					}
+					const int Layer = GroundLayers->LayerOnDay(simcore::scenery::Cover::Field, G.crop[I],
+							simcore::FieldParcel(G.fields, Ce, Cn), Day);
+					if (!GroundLayers->layers[static_cast<std::size_t>(Layer)].rows)
+					{
+						continue;
+					}
+					const double H = simcore::FieldHeading(G.fields, Ce, Cn);
+					const double Ae = FMath::Sin(H), An = FMath::Cos(H);
+					const std::uint64_t P = simcore::FieldParcel(G.fields, Ce, Cn);
+					const auto Same = [&](double Along, double Across)
+					{
+						return simcore::FieldParcel(G.fields, Ce + Along * Ae + Across * An, Cn + Along * An - Across * Ae) == P;
+					};
+					if (Same(60.0, 0.0) && Same(-20.0, 0.0) && Same(0.0, 30.0) && Same(0.0, -30.0))
+					{
+						BestD = D;
+						Fe = Ce;
+						Fn = Cn;
+						Fh = H;
+					}
+				}
+			}
+		}
+		if (BestD < 1e18)
+		{
+			All.Add(FView{TEXT("furrows"), Fe / 1000.0, Fn / 1000.0, 1.7, (Fe + 12.0 * FMath::Sin(Fh)) / 1000.0, (Fn + 12.0 * FMath::Cos(Fh)) / 1000.0, 0.0});
+		}
+	}
+	// -SimShotSet=views (roadmap T2, data/scenery/views.json): the terrain's check views, resolved on the map by simcore, in
+	// place of the list above. A view the map cannot give leaves <name>.missing.txt with its reason.
+	FString ShotSet;
+	FParse::Value(FCommandLine::Get(), TEXT("SimShotSet="), ShotSet);
+	// -SimShotSet=plots (roadmap L1, data/scenery/plots.json): each test plot's three cameras (eye, low, high), named
+	// <plot>_<camera>; -SimPlots=<id>,<id> renders only those.
+	const bool bPlotShots = ShotSet == TEXT("plots");
+	const bool bViewShots = ShotSet == TEXT("views") || bPlotShots;
+	if (bPlotShots)
+	{
+		static TArray<FView> PlotList;
+		static bool bPlotListBuilt = false;
+		if (!bPlotListBuilt)
+		{
+			bPlotListBuilt = true;
+			IFileManager::Get().MakeDirectory(*ShotFolder, true);
+			FString Only;
+			FParse::Value(FCommandLine::Get(), TEXT("SimPlots="), Only, false);  // the whole list, past its commas
+			TArray<FString> OnlyIds;
+			Only.ParseIntoArray(OnlyIds, TEXT(","), true);
+			simcore::scenery::PlotSet Set;
+			std::string Error;
+			const FString PlotsPath = FPaths::Combine(FindDataDirectory(), TEXT("scenery/plots.json"));
+			if (!simcore::scenery::LoadPlots(TCHAR_TO_UTF8(*PlotsPath), Set, &Error))
+			{
+				UE_LOG(LogSAM3D, Error, TEXT("Map shots: %s: %s"), *PlotsPath, UTF8_TO_TCHAR(Error.c_str()));
+			}
+			else if (DressRules && Cover && GroundLayers)
+			{
+				const int Day = GroundDay(GetWorld());
+				for (const simcore::scenery::PlotDef& Def : Set.plots)
+				{
+					if (OnlyIds.Num() > 0 && !OnlyIds.Contains(FString(UTF8_TO_TCHAR(Def.id.c_str()))))
+					{
+						continue;
+					}
+					for (const simcore::scenery::ResolvedView& C : simcore::scenery::ResolvePlot(*Map, *DressRules, *Cover, *GroundLayers, Day, Def))
+					{
+						const FString Name = UTF8_TO_TCHAR(C.id.c_str());
+						if (!C.ok)
+						{
+							UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s is missing: %s"), *Name, UTF8_TO_TCHAR(C.missing_reason.c_str()));
+							FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(C.missing_reason.c_str())), *FPaths::Combine(ShotFolder, Name + TEXT(".missing.txt")));
+							continue;
+						}
+						PlotList.Add(FView{Name, C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m, C.target_e / 1000.0, C.target_n / 1000.0, C.target_up_m,
+							FMath::RadiansToDegrees(C.fov_rad)});
+						// -SimSkyShots (A.3.32, a measurement): from each eye camera also the sky ahead, 1 km on and 600 m up (31 deg up
+						// the middle), named <plot>_sky, to measure the clouds' share of it.
+						static const bool bSkyShots = FParse::Param(FCommandLine::Get(), TEXT("SimSkyShots"));
+						if (bSkyShots && Name.EndsWith(TEXT("_eye")))
+						{
+							const FVector2D Ahead = FVector2D(C.target_e - C.eye_e, C.target_n - C.eye_n).GetSafeNormal();
+							PlotList.Add(FView{Name.LeftChop(4) + TEXT("_sky"), C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m,
+								(C.eye_e + 1000.0 * Ahead.X) / 1000.0, (C.eye_n + 1000.0 * Ahead.Y) / 1000.0, C.eye_up_m + 600.0,
+								FMath::RadiansToDegrees(C.fov_rad)});
+						}
+					}
+				}
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Map shots: %d plot cameras from %s"), PlotList.Num(), *PlotsPath);
+		}
+		All = PlotList;
+	}
+	else if (bViewShots)
+	{
+		static TArray<FView> ViewList;
+		static bool bViewListBuilt = false;
+		if (!bViewListBuilt)
+		{
+			bViewListBuilt = true;
+			IFileManager::Get().MakeDirectory(*ShotFolder, true);
+			simcore::scenery::ViewSet Set;
+			std::string Error;
+			const FString ViewsPath = FPaths::Combine(FindDataDirectory(), TEXT("scenery/views.json"));
+			if (!simcore::scenery::LoadViews(TCHAR_TO_UTF8(*ViewsPath), Set, &Error))
+			{
+				UE_LOG(LogSAM3D, Error, TEXT("Map shots: %s: %s"), *ViewsPath, UTF8_TO_TCHAR(Error.c_str()));
+			}
+			else if (DressRules && Cover)
+			{
+				for (const simcore::scenery::ViewDef& Def : Set.views)
+				{
+					for (const simcore::scenery::ResolvedView& C : simcore::scenery::ResolveView(*Map, *DressRules, *Cover, Def))
+					{
+						const FString Name = UTF8_TO_TCHAR(C.id.c_str());
+						if (!C.ok)
+						{
+							UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s is missing: %s"), *Name, UTF8_TO_TCHAR(C.missing_reason.c_str()));
+							FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(C.missing_reason.c_str())), *FPaths::Combine(ShotFolder, Name + TEXT(".missing.txt")));
+							continue;
+						}
+						ViewList.Add(FView{Name, C.eye_e / 1000.0, C.eye_n / 1000.0, C.eye_up_m, C.target_e / 1000.0, C.target_n / 1000.0, C.target_up_m,
+							FMath::RadiansToDegrees(C.fov_rad)});
+					}
+				}
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Map shots: %d views from %s"), ViewList.Num(), *ViewsPath);
+		}
+		All = ViewList;
+	}
 	const int32 Count = All.Num();
 	ShotTimer -= DeltaSeconds;
+	// The cost: the frames' times over the last second and a half of the wait before the picture (the sky has settled).
+	if (bViewShots && ShotIndex >= 0 && ShotIndex % 2 == 1 && ShotTimer > 0.0f && ShotTimer < 1.5f)
+	{
+		ShotGpuMs += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles());
+		ShotGameMs += FPlatformTime::ToMilliseconds(GGameThreadTime);
+		ShotRenderMs += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+		++ShotSamples;
+	}
 	if (ShotTimer > 0.0f)
 	{
 		return;
@@ -267,6 +492,10 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 			ShotCamera = GetWorld()->SpawnActor<ACameraActor>(From, (To - From).Rotation());
 		}
 		ShotCamera->SetActorLocationAndRotation(From, (To - From).Rotation());
+		ShotCamera->GetCameraComponent()->SetFieldOfView(V.FovDeg > 0.0 ? static_cast<float>(V.FovDeg) : 90.0f);
+		// This view's cost starts afresh.
+		ShotGpuMs = ShotGameMs = ShotRenderMs = 0.0;
+		ShotSamples = 0;
 		if (APlayerController* Pc = UGameplayStatics::GetPlayerController(this, 0))
 		{
 			Pc->SetViewTarget(ShotCamera);
@@ -279,18 +508,100 @@ void ASimMapActor::RunShots(float DeltaSeconds)
 	}
 	else
 	{
-		const FString Path = FPaths::Combine(ShotFolder, FString::Printf(TEXT("map_%d_%s.png"), ShotIndex / 2, V.Name));
+		// -SimShotHide=a,b: hide every actor whose name contains one of these (a probe: what hides the ground at a view).
+		FString HideList;
+		if (FParse::Value(FCommandLine::Get(), TEXT("SimShotHide="), HideList, false) && !HideList.IsEmpty())
+		{
+			TArray<FString> Names;
+			HideList.ParseIntoArray(Names, TEXT(","));
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				for (const FString& N : Names)
+				{
+					if (It->GetName().Contains(N))
+					{
+						It->SetActorHiddenInGame(true);
+					}
+				}
+			}
+		}
+		// -SimShotProbe: what the picture's eye is inside or beside (a probe): every visible primitive within 300 m of the eye, its
+		// class, owner, size and first material.
+		if (FParse::Param(FCommandLine::Get(), TEXT("SimShotProbe")) && ShotCamera != nullptr)
+		{
+			const FVector Eye = ShotCamera->GetActorLocation();
+			for (TObjectIterator<UPrimitiveComponent> It; It; ++It)
+			{
+				UPrimitiveComponent* P = *It;
+				if (P->GetWorld() != GetWorld() || !P->IsVisible() || !P->IsRegistered())
+				{
+					continue;
+				}
+				const FBoxSphereBounds& B = P->Bounds;
+				const double Away = FMath::Max(0.0, FVector::Dist(B.Origin, Eye) - B.SphereRadius);
+				if (Away > 30000.0)
+				{
+					continue;
+				}
+				UMaterialInterface* Mat = P->GetNumMaterials() > 0 ? P->GetMaterial(0) : nullptr;
+				UE_LOG(LogSAM3D, Log, TEXT("Probe %s: %s (%s) owner %s, extent %.0f x %.0f x %.0f m, %.0f m away, material %s"), *V.Name,
+					*P->GetName(), *P->GetClass()->GetName(), P->GetOwner() != nullptr ? *P->GetOwner()->GetName() : TEXT("-"), B.BoxExtent.X / 50.0,
+					B.BoxExtent.Y / 50.0, B.BoxExtent.Z / 50.0, Away / 100.0, Mat != nullptr ? *Mat->GetName() : TEXT("-"));
+			}
+		}
+		const FString Path = FPaths::Combine(ShotFolder, bViewShots ? V.Name + TEXT(".png") : FString::Printf(TEXT("map_%d_%s.png"), ShotIndex / 2, *V.Name));
 		FScreenshotRequest::RequestScreenshot(Path, false, false);
 		UE_LOG(LogSAM3D, Log, TEXT("Map shots: %s"), *Path);
+		if (bViewShots)
+		{
+			// The mean of each time over the wait's frames, ms; 0 where the platform does not give one.
+			const double N = FMath::Max(1, ShotSamples);
+			FFileHelper::SaveStringToFile(FString::Printf(TEXT("{\"view\": \"%s\", \"samples\": %d, \"gpu_ms\": %.3f, \"game_ms\": %.3f, \"render_ms\": %.3f}\n"),
+				*V.Name, ShotSamples, ShotGpuMs / N, ShotGameMs / N, ShotRenderMs / N), *FPaths::Combine(ShotFolder, V.Name + TEXT(".cost.json")));
+			// The GPU's passes of one frame, to the log (read by tools/terrain_views.py).
+			GEngine->Exec(GetWorld(), TEXT("r.ProfileGPU.ShowUI 0"));
+			GEngine->Exec(GetWorld(), TEXT("ProfileGPU"));
+		}
 		ShotTimer = 1.0f;
 	}
 	++ShotIndex;
+}
+
+void ASimMapActor::UpdateMassTiles()
+{
+	// The woods' masses near the camera give way to the trees inside them (A.3.19): a tile is hidden while its nearest
+	// point is within nine tenths of the distance the inside trees are drawn to, so the trees always cover it.
+	if (MassTiles.Num() == 0 || GetWorld() == nullptr)
+	{
+		return;
+	}
+	const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (Cam == nullptr)
+	{
+		return;
+	}
+	const FVector At = Cam->GetCameraLocation();
+	const double Near = 0.9 * 100.0 * FMath::Min(InteriorTreeDistanceM, TreeCullDistanceM);
+	for (int32 I = 0; I < MassTiles.Num(); ++I)
+	{
+		UHierarchicalInstancedStaticMeshComponent* T = MassTiles[I];
+		if (T == nullptr)
+		{
+			continue;
+		}
+		const bool bShow = !bDrawTrees || MassTileBounds[I].ComputeSquaredDistanceToPoint(At) >= Near * Near;
+		if (T->IsVisible() != bShow)
+		{
+			T->SetVisibility(bShow);
+		}
+	}
 }
 
 void ASimMapActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	RunShots(DeltaSeconds);
+	UpdateMassTiles();
 	CheckTimer -= DeltaSeconds;
 	if (CheckTimer > 0.0f)
 	{
@@ -416,6 +727,35 @@ bool ASimMapActor::Build(const FVector& FrameOriginLonLatAlt, const FString& Dat
 	BuildBoxes(Link);
 	BuildTrees(Link);
 	BuildBridges(Link);
+	BuildCrops(Link, DataDirectory);
+	// The ground clutter round the camera (roadmap T6.1): simcore's ring and kinds, placed by the land's recipes (L2), one
+	// ring that follows the camera.
+	if (bDrawTrees && GroundLayers && Cover && DressRules)
+	{
+		auto ClutterRules = std::make_shared<simcore::scenery::ClutterRules>();
+		std::string ClutterError;
+		const FString ClutterPath = FPaths::Combine(DataDirectory, TEXT("scenery/clutter.json"));
+		const FString RecipeDir = FPaths::Combine(DataDirectory, TEXT("scenery/recipes"));
+		if (simcore::scenery::LoadClutterRules(TCHAR_TO_UTF8(*ClutterPath), *ClutterRules, &ClutterError) &&
+			simcore::scenery::LoadClutterRecipes(TCHAR_TO_UTF8(*RecipeDir), *GroundLayers, *ClutterRules, &ClutterError))
+		{
+			USimClutterRing* Ring = NewObject<USimClutterRing>(this, TEXT("Map_clutter"));
+			Ring->SetupAttachment(Root);
+			Ring->RegisterComponent();
+			if (Ring->Init(Map, GroundLink, Cover, DressRules, GroundLayers, ClutterRules, GroundDay(GetWorld())))
+			{
+				AssetParts.Add(Ring);
+			}
+			else
+			{
+				Ring->DestroyComponent();
+			}
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map: no ground clutter (%s)"), UTF8_TO_TCHAR(ClutterError.c_str()));
+		}
+	}
 	if (Country)
 	{
 		BuildCountry(FrameOriginLonLatAlt);
@@ -441,6 +781,8 @@ void ASimMapActor::Clear()
 		}
 	}
 	Parts.Reset();
+	MassTiles.Reset();
+	MassTileBounds.Reset();
 	for (UProceduralMeshComponent* T : GroundTiles)
 	{
 		if (T != nullptr)
@@ -449,6 +791,11 @@ void ASimMapActor::Clear()
 		}
 	}
 	GroundTiles.Reset();
+	GroundMaterials.Reset();
+	TexturedMaterials.Reset();
+	GroundMasks.Reset();
+	CoverTextures.Reset();
+	FarCover.reset();
 	if (Strips != nullptr)
 	{
 		Strips->DestroyComponent();
@@ -463,6 +810,11 @@ void ASimMapActor::Clear()
 	{
 		Bridges->DestroyComponent();
 		Bridges = nullptr;
+	}
+	if (Crops != nullptr)
+	{
+		Crops->DestroyComponent();
+		Crops = nullptr;
 	}
 	for (USceneComponent* P : AssetParts)
 	{
@@ -710,6 +1062,190 @@ void ASimMapActor::LoadDressing(const FString& DataDirectory)
 	DressRules = C.Rules;
 	Cover = C.Cover;
 	Dressing = C.Dressing;
+	// The ground's layers (roadmap T1): a small file, read each build. Without it the ground keeps the cover's colours.
+	GroundLayers.reset();
+	const FString LayersPath = FPaths::Combine(DataDirectory, TEXT("scenery/ground_layers.json"));
+	std::shared_ptr<simcore::scenery::GroundLayerRules> LayerRules = std::make_shared<simcore::scenery::GroundLayerRules>();
+	std::string Error;
+	if (simcore::scenery::LoadGroundLayers(TCHAR_TO_UTF8(*LayersPath), *DressRules, *LayerRules, &Error))
+	{
+		GroundLayers = LayerRules;
+	}
+	else
+	{
+		UE_LOG(LogSAM3D, Warning, TEXT("Map %s: %s: the ground keeps the land cover's colours"), *MapFile, UTF8_TO_TCHAR(Error.c_str()));
+	}
+}
+
+TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrameLink& Link, const std::vector<const simcore::MapGrid*>& Levels)
+{
+	TArray<UMaterialInterface*> Out;
+	Out.Init(nullptr, static_cast<int32>(Levels.size()));
+	if (!bTexturedGround || !GroundLayers || !Cover || !DressRules)
+	{
+		return Out;
+	}
+	// The ground material with this machine's texture arrays (tools/ue_build_ground_material.py makes it once the
+	// textures are fetched, docs/scenery/TERRAIN_ROADMAP.md). Not there: the plain ground, said once.
+	UMaterialInterface* Parent =
+		LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ThirdParty/Ground/MI_SimGround.MI_SimGround"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (Parent == nullptr)
+	{
+		static bool bSaid = false;
+		if (!bSaid)
+		{
+			bSaid = true;
+			UE_LOG(LogSAM3D, Log, TEXT("Map %s: no /Game/ThirdParty/Ground/MI_SimGround on this machine: the ground keeps the land cover's colours "
+				"(python tools/fetch_textures.py, then tools/ue_build_ground_material.py)"), *MapFile);
+		}
+		return Out;
+	}
+	const int Day = GroundDay(GetWorld());
+	// The world's (east, north) in m to the map's: the scenario's frame is the world's less this actor's place, and the
+	// frame's (east, north) goes to the map's by an affine map (MapFrameLink::FrameToMap, exactly). The material finds a
+	// pixel's land cover cell by it (the tiles' UVs would do, but a procedural mesh may store them as 16-bit floats: steps
+	// of 30 m this far out).
+	const FVector Here = GetActorLocation();
+	const double ActE = Here.Y / 100.0, ActN = Here.X / 100.0;
+	const simcore::MapPoint O = Link.FrameToMap(0.0, 0.0), Ex = Link.FrameToMap(1000.0, 0.0), Ny = Link.FrameToMap(0.0, 1000.0);
+	const double Ma = (Ex.east_m - O.east_m) / 1000.0, Mb = (Ny.east_m - O.east_m) / 1000.0;
+	const double Mc = (Ex.north_m - O.north_m) / 1000.0, Md = (Ny.north_m - O.north_m) / 1000.0;
+	const FLinearColor MapOff(static_cast<float>(O.east_m - Ma * ActE - Mb * ActN), static_cast<float>(O.north_m - Mc * ActE - Md * ActN), 0.0f, 0.0f);
+	const FLinearColor MapAxes(static_cast<float>(Ma), static_cast<float>(Mb), static_cast<float>(Mc), static_cast<float>(Md));
+	FLinearColor Tiles[4], Patches[4], Breaks[4], Furrows[4], FurrowDepths[4];
+	for (int32 I = 0; I < simcore::scenery::kMaxGroundLayers; ++I)
+	{
+		const bool bLayer = I < static_cast<int32>(GroundLayers->layers.size());
+		Tiles[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].tile_m) : 3.0f;
+		// Its surface's variation (plot lab, roadmap L4): damp and dry patches, and its repeat broken.
+		Patches[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].patch) : 0.0f;
+		Breaks[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].break_up) : 0.0f;
+		// Its furrows drawn procedurally: spacing and depth, m.
+		Furrows[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].furrow_m) : 0.0f;
+		FurrowDepths[I / 4].Component(I % 4) = bLayer ? static_cast<float>(GroundLayers->layers[I].furrow_depth_m) : 0.0f;
+	}
+	// The far ground wears the country's land cover (roadmap T3.2): baked once a session (a second) and kept.
+	if (Country && !FarCover)
+	{
+		static TMap<FString, std::shared_ptr<const simcore::scenery::CoverGrid>> FarCache;
+		const FString Key = MapFile + TEXT("|") + CountryFile;
+		if (const std::shared_ptr<const simcore::scenery::CoverGrid>* Found = FarCache.Find(Key))
+		{
+			FarCover = *Found;
+		}
+		else
+		{
+			FarCover = std::make_shared<const simcore::scenery::CoverGrid>(simcore::scenery::BakeFarCover(*Map, *Country, *DressRules));
+			FarCache.Add(Key, FarCover);
+		}
+	}
+	// A level is drawn with the land cover square that matches it: a detail area's own, the map proper's ("map"), the far
+	// ground's.
+	const simcore::MapGrid& Proper = Map->CoreGrid();
+	for (std::size_t L = 0; L < Levels.size(); ++L)
+	{
+		const simcore::MapGrid& G = *Levels[L];
+		const simcore::scenery::CoverGrid* Square = nullptr;
+		const bool bFarLevel = &G == &Map->FarGrid() && FarCover != nullptr;
+		if (bFarLevel)
+		{
+			Square = FarCover.get();
+		}
+		for (const simcore::scenery::CoverGrid& C : Cover->grids)
+		{
+			if (bFarLevel)
+			{
+				break;
+			}
+			const bool bProper = C.id == "map";
+			if ((&G == &Proper) == bProper && (bProper || (FMath::Abs(C.west_m - G.west_m) < 1.0 && FMath::Abs(C.south_m - G.south_m) < 1.0)))
+			{
+				Square = &C;
+				break;
+			}
+		}
+		if (Square == nullptr)
+		{
+			continue;
+		}
+		UTexture2D* Mask = MaskTexture(simcore::scenery::BakeGroundMask(*Square, *DressRules, *GroundLayers, Day));
+		if (Mask == nullptr)
+		{
+			continue;
+		}
+		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Parent, this);
+		Mid->SetTextureParameterValue(TEXT("Mask"), Mask);
+		// -SimGroundDebug=1 or 2: the material draws what it found (the layers, the depth) instead of the ground (a probe).
+		float GroundDebug = 0.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("SimGroundDebug="), GroundDebug);
+		Mid->SetScalarParameterValue(TEXT("Debug"), GroundDebug);
+		// The layers' average colours take over from the detail textures: near on the map proper, from the first metre on the
+		// far ground (no detail textures that far: the albedo's last mip). They give way to the vertex colours over 60-120 km,
+		// the same for every level, so the map proper and the far ground meet at the same colour at any depth (the 40 km map
+		// seen from one edge has its far edge 40-57 km off; roadmap T3.2).
+		Mid->SetScalarParameterValue(TEXT("FarStartM"), bFarLevel ? 0.0f : 400.0f);
+		Mid->SetScalarParameterValue(TEXT("FarLengthM"), bFarLevel ? 1.0f : 1600.0f);
+		Mid->SetScalarParameterValue(TEXT("CoverStartM"), 60000.0f);
+		Mid->SetScalarParameterValue(TEXT("CoverLengthM"), 60000.0f);
+		Mid->SetVectorParameterValue(TEXT("MapOff"), MapOff);
+		Mid->SetVectorParameterValue(TEXT("MapAxes"), MapAxes);
+		Mid->SetScalarParameterValue(TEXT("PeriodM"), static_cast<float>(simcore::scenery::kGroundTilePeriodM));
+		// The square in the map's frame, km.
+		Mid->SetVectorParameterValue(TEXT("MaskRect"), FLinearColor(static_cast<float>(Square->west_m / 1000.0), static_cast<float>(Square->south_m / 1000.0),
+			static_cast<float>(Square->cell_m * Square->cols / 1000.0), static_cast<float>(Square->cell_m * Square->rows / 1000.0)));
+		Mid->SetScalarParameterValue(TEXT("MaskCols"), static_cast<float>(Square->cols));
+		Mid->SetScalarParameterValue(TEXT("MaskRows"), static_cast<float>(Square->rows));
+		// The plain's fields (simcore/farm_fields.hpp), found exactly by the material's port of FieldAt. The seed is a 32-bit
+		// number: two halves, each exact in a float. Without a "farmland" block the estate size 0 turns the port off.
+		if (Map->Def().farmland.laid)
+		{
+			const simcore::FieldGrid FG = Map->Fields();
+			Mid->SetVectorParameterValue(TEXT("FieldGridA"), FLinearColor(static_cast<float>(FG.estate_m), static_cast<float>(FG.length_min_m),
+				static_cast<float>(FG.length_max_m), static_cast<float>(FG.width_min_m)));
+			Mid->SetVectorParameterValue(TEXT("FieldGridB"), FLinearColor(static_cast<float>(FG.width_max_m), static_cast<float>(FG.seed >> 16),
+				static_cast<float>(FG.seed & 0xFFFFu), 0.0f));
+		}
+		Mid->SetVectorParameterValue(TEXT("TileA"), Tiles[0]);
+		Mid->SetVectorParameterValue(TEXT("TileB"), Tiles[1]);
+		Mid->SetVectorParameterValue(TEXT("TileC"), Tiles[2]);
+		Mid->SetVectorParameterValue(TEXT("TileD"), Tiles[3]);
+		Mid->SetVectorParameterValue(TEXT("PatchA"), Patches[0]);
+		Mid->SetVectorParameterValue(TEXT("PatchB"), Patches[1]);
+		Mid->SetVectorParameterValue(TEXT("PatchC"), Patches[2]);
+		Mid->SetVectorParameterValue(TEXT("PatchD"), Patches[3]);
+		Mid->SetVectorParameterValue(TEXT("BreakA"), Breaks[0]);
+		Mid->SetVectorParameterValue(TEXT("BreakB"), Breaks[1]);
+		Mid->SetVectorParameterValue(TEXT("BreakC"), Breaks[2]);
+		Mid->SetVectorParameterValue(TEXT("BreakD"), Breaks[3]);
+		Mid->SetVectorParameterValue(TEXT("FurrowA"), Furrows[0]);
+		Mid->SetVectorParameterValue(TEXT("FurrowB"), Furrows[1]);
+		Mid->SetVectorParameterValue(TEXT("FurrowC"), Furrows[2]);
+		Mid->SetVectorParameterValue(TEXT("FurrowD"), Furrows[3]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthA"), FurrowDepths[0]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthB"), FurrowDepths[1]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthC"), FurrowDepths[2]);
+		Mid->SetVectorParameterValue(TEXT("FurrowDepthD"), FurrowDepths[3]);
+		GroundMasks.Add(Mask);
+		TexturedMaterials.Add(Mid);
+		Out[static_cast<int32>(L)] = Mid;
+	}
+	// The sunken lanes' tiles (A.3.34) are the map proper's ground, finer: its material.
+	for (std::size_t L = 0; L < Levels.size(); ++L)
+	{
+		if (Levels[L] == &Proper)
+		{
+			for (std::size_t T = 0; T < Levels.size(); ++T)
+			{
+				if (Map->IsLaneTile(T))
+				{
+					Out[static_cast<int32>(T)] = Out[static_cast<int32>(L)];
+				}
+			}
+		}
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (crops of day %d)"), *MapFile, TexturedMaterials.Num(), static_cast<int32>(Levels.size()),
+		Day);
+	return Out;
 }
 
 void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
@@ -751,22 +1287,24 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	}
 	const FLinearColor TownColour(0.21f, 0.2f, 0.18f);
 	const std::vector<const simcore::MapGrid*> Levels = M.DrawnLevels();
+	// The map proper and the detail areas with their layers' textures where this machine has them (roadmap T1).
+	const TArray<UMaterialInterface*> Textured = TexturedGround(Link, Levels);
 	// The detail areas (roadmap R6) come first in the levels: one inside the map proper is drawn as the map proper is
 	// (its colours, collision, shadows), one beyond it as the far ground near the scenario is.
 	const auto IsCoreLike = [&](std::size_t Level)
 	{
 		const simcore::MapGrid* G = Levels[Level];
-		return G == &M.CoreGrid() || (Level < M.DetailGrids().size() && D.InCore(G->west_m + 1.0, G->south_m + 1.0));
+		return G == &M.CoreGrid() || (Level < M.FinerLevelCount() && D.InCore(G->west_m + 1.0, G->south_m + 1.0));
 	};
 	const auto IsFarLike = [&](std::size_t Level)
 	{
-		return Levels[Level] == &M.FarGrid() || (Level < M.DetailGrids().size() && !IsCoreLike(Level));
+		return Levels[Level] == &M.FarGrid() || (Level < M.FinerLevelCount() && !IsCoreLike(Level));
 	};
 	const auto Colour = [&](std::size_t Level, double E, double N, double H)
 	{
 		// The map proper and the detail areas: the land cover's colour (roadmap R6: a field's crop, a wood, a town, military
 		// ground), a little browner up the hills and greener low by the river, as GroundColour tints its fields.
-		if ((IsCoreLike(Level) || Level < M.DetailGrids().size()) && Cover && DressRules && Cover->Has(E, N))
+		if ((IsCoreLike(Level) || Level < M.FinerLevelCount()) && Cover && DressRules && Cover->Has(E, N))
 		{
 			FLinearColor C = Linear(Cover->ColourAt(*DressRules, E, N));
 			const double Rise = FMath::Clamp((H - D.base_m) / 60.0, -0.3, 1.0);
@@ -818,6 +1356,16 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		const std::string Land = Country->LandCoverAt(P.east_m, P.north_m);
 		return Land == "town" ? 1.0f : (Land == "forest" || Land == "marsh" ? 0.5f : 0.0f);
 	};
+	// The vertex colour's alpha: on a level with the textured ground (roadmap T1), a village pond's wet margin on a sunken
+	// lane's tile (A.3.35: its material darkens and smooths the ground by 1 - alpha), 1 elsewhere; else the S9 detail kind.
+	const auto VertexAlpha = [&](std::size_t Level, double E, double N, bool bLane) -> float
+	{
+		if (Textured[static_cast<int32>(Level)] != nullptr)
+		{
+			return bLane ? static_cast<float>(1.0 - M.PondWetness(E, N)) : 1.0f;
+		}
+		return DetailKind(Level, E, N);
+	};
 	// The land cover's grid a level is drawn with: the map proper's ("map") or a detail area's (its id); none beyond.
 	const auto CoverGridFor = [&](std::size_t Level) -> const simcore::scenery::CoverGrid*
 	{
@@ -859,6 +1407,16 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 	const simcore::MapPoint Here = Link.FrameToMap(0.0, 0.0);
 	constexpr double QueryReachM = 15000.0;
 	constexpr double SkirtM = 5.0;
+	struct FLaneBlock
+	{
+		std::size_t Level = 0;
+		TArray<FVector> Verts;
+		TArray<FVector> Normals;
+		TArray<FLinearColor> Colours;
+		TArray<FVector2D> Uv;
+		TArray<int32> Tris;
+	};
+	TMap<FIntPoint, FLaneBlock> LaneBlocks;
 	// One square of a level as a mesh of its own: cells [C0, C1) x [R0, R1).
 	auto AddSection = [&](std::size_t Level, int32 C0, int32 C1, int32 R0, int32 R1)
 	{
@@ -892,11 +1450,53 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		Uv.Reserve(Nc * Nr);
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(G.EastOf((C0 + C1) / 2), G.NorthOf((R0 + R1) / 2), Ae, An, Au);
+		const bool bLaneTile = M.IsLaneTile(Level);
+		const simcore::MapGrid& Core = M.CoreGrid();
+		// The map proper's slope at its node (c, r), per metre east and north.
+		const auto CoreSlope = [&](int32 Cc, int32 Cr, double& Se, double& Sn)
+		{
+			Se = (Core.At(FMath::Min(Cc + 1, Core.cols - 1), Cr) - Core.At(FMath::Max(Cc - 1, 0), Cr)) / (2.0 * Core.spacing_m);
+			Sn = (Core.At(Cc, FMath::Min(Cr + 1, Core.rows - 1)) - Core.At(Cc, FMath::Max(Cr - 1, 0))) / (2.0 * Core.spacing_m);
+		};
 		const auto NormalAt = [&](int32 Gc, int32 Gr)
 		{
-			const double He = G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr);
-			const double Hn = G.At(Gc, FMath::Min(Gr + 1, G.rows - 1)) - G.At(Gc, FMath::Max(Gr - 1, 0));
-			const simcore::Vec3 Local(-He / (2.0 * G.spacing_m), -Hn / (2.0 * G.spacing_m), 1.0);
+			double Se = 0.0, Sn = 0.0;
+			if (bLaneTile)
+			{
+				// A sunken lane's tile (A.3.34): the map proper's slope as its triangle carries it between its nodes' (as
+				// the GPU interpolates the map proper's normals, so the tile's edge shades as its neighbours do), less the
+				// lane's cut.
+				const double E = G.EastOf(Gc), N = G.NorthOf(Gr);
+				int Cc = 0, Cr = 0;
+				Core.CellOf(E, N, Cc, Cr);
+				const double Tx = FMath::Clamp((E - Core.EastOf(Cc)) / Core.spacing_m, 0.0, 1.0), Ty = FMath::Clamp((N - Core.NorthOf(Cr)) / Core.spacing_m, 0.0, 1.0);
+				struct FCorner
+				{
+					int32 C, R;
+					double W;
+				};
+				const bool bLower = Tx + Ty <= 1.0;
+				const FCorner Corners[3] = {bLower ? FCorner{Cc, Cr, 1.0 - Tx - Ty} : FCorner{Cc + 1, Cr + 1, Tx + Ty - 1.0},
+					FCorner{Cc + 1, Cr, bLower ? Tx : 1.0 - Ty}, FCorner{Cc, Cr + 1, bLower ? Ty : 1.0 - Tx}};
+				for (const FCorner& K : Corners)
+				{
+					double Ke = 0.0, Kn = 0.0;
+					CoreSlope(K.C, K.R, Ke, Kn);
+					Se += K.W * Ke;
+					Sn += K.W * Kn;
+				}
+				// The cut: the map proper's triangles less the tile's (a lane's cut, a pond's bed and banks), across a node.
+				const double Step = 0.5 * G.spacing_m;
+				const auto Cut = [&](double Pe, double Pn) { return Core.SampleTri(Pe, Pn) - M.GroundHeight(Pe, Pn); };
+				Se -= (Cut(E + Step, N) - Cut(E - Step, N)) / (2.0 * Step);
+				Sn -= (Cut(E, N + Step) - Cut(E, N - Step)) / (2.0 * Step);
+			}
+			else
+			{
+				Se = (G.At(FMath::Min(Gc + 1, G.cols - 1), Gr) - G.At(FMath::Max(Gc - 1, 0), Gr)) / (2.0 * G.spacing_m);
+				Sn = (G.At(Gc, FMath::Min(Gr + 1, G.rows - 1)) - G.At(Gc, FMath::Max(Gr - 1, 0))) / (2.0 * G.spacing_m);
+			}
+			const simcore::Vec3 Local(-Se, -Sn, 1.0);
 			return DirToUnreal((Ae * Local.x + An * Local.y + Au * Local.z).Normalized());
 		};
 		for (int32 r = 0; r < Nr; ++r)
@@ -908,7 +1508,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				Verts.Add(GroundVertex(Link, G, Gc, Gr));
 				Normals.Add(NormalAt(Gc, Gr));
 				FLinearColor Col = Colour(Level, E, N, H);
-				Col.A = DetailKind(Level, E, N);
+				Col.A = VertexAlpha(Level, E, N, bLaneTile);
 				Colours.Add(Col);
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
 			}
@@ -926,7 +1526,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				Normals.Add(Nrm);
 				Normals.Add(Nrm);
 				FLinearColor Col = Colour(Level, E, N, H);
-				Col.A = DetailKind(Level, E, N);
+				Col.A = VertexAlpha(Level, E, N, false);
 				Colours.Add(Col);
 				Colours.Add(Col);
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
@@ -960,6 +1560,10 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				// The face's normal is (C - A) x (B - A) for (A, B, C): A, B (east), C (north) faces up. The split along
 				// B-C is simcore's (MapGrid::SampleTri): the contract.
 				Tris.Append({A, B, Cc, B, Dd, Cc});
+				if (bLaneTile)
+				{
+					continue;  // a lane's tile meets the map proper's triangles node for node along their edge: no skirt
+				}
 				if (!DrawnAt(Gc, Gr - 1))
 				{
 					Skirt(Gc, Gr, Gc + 1, Gr);
@@ -980,6 +1584,23 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		}
 		// Collision: the map proper's (bCollision), the far ground's near the scenario for queries only.
 		const double E0 = G.EastOf(C0), E1 = G.EastOf(C1), N0 = G.NorthOf(R0), N1 = G.NorthOf(R1);
+		if (bLaneTile)
+		{
+			// The sunken lanes' tiles go into one mesh per kilometre square (hundreds of 50 m tiles: one component each would
+			// be a draw call each).
+			FLaneBlock& Block = LaneBlocks.FindOrAdd(FIntPoint(FMath::FloorToInt32(E0 / 1000.0), FMath::FloorToInt32(N0 / 1000.0)));
+			Block.Level = Level;
+			const int32 Base = Block.Verts.Num();
+			Block.Verts.Append(Verts);
+			Block.Normals.Append(Normals);
+			Block.Colours.Append(Colours);
+			Block.Uv.Append(Uv);
+			for (const int32 T : Tris)
+			{
+				Block.Tris.Add(Base + T);
+			}
+			return;
+		}
 		const double Away = FMath::Sqrt(FMath::Square(FMath::Max3(E0 - Here.east_m, 0.0, Here.east_m - E1)) +
 										FMath::Square(FMath::Max3(N0 - Here.north_m, 0.0, Here.north_m - N1)));
 		const bool bCollide = IsCoreLike(Level) ? bCollision : (IsFarLike(Level) && bCollision && Away < QueryReachM);
@@ -989,7 +1610,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		Tile->bUseAsyncCooking = true;
 		Tile->SetCastShadow(IsCoreLike(Level));
 		Tile->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, Uv, Colours, Tangents, bCollide);
-		Tile->SetMaterial(0, GroundMaterialFor(CoverGridFor(Level)));
+		Tile->SetMaterial(0, Textured[static_cast<int32>(Level)] != nullptr ? Textured[static_cast<int32>(Level)] : GroundMaterialFor(CoverGridFor(Level)));
 		Tile->SetCollisionEnabled(!bCollide ? ECollisionEnabled::NoCollision
 											: (IsCoreLike(Level) ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly));
 		Tile->RegisterComponent();
@@ -1007,6 +1628,23 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 			}
 		}
 	}
+	int32 LaneTris = 0;
+	for (TPair<FIntPoint, FLaneBlock>& Pair : LaneBlocks)
+	{
+		FLaneBlock& Block = Pair.Value;
+		UProceduralMeshComponent* Tile = NewObject<UProceduralMeshComponent>(this);
+		Tile->SetupAttachment(Root);
+		Tile->bUseAsyncCooking = true;
+		Tile->SetCastShadow(true);
+		Tile->CreateMeshSection_LinearColor(0, Block.Verts, Block.Tris, Block.Normals, Block.Uv, Block.Colours, TArray<FProcMeshTangent>(), bCollision);
+		Tile->SetMaterial(0, Textured[static_cast<int32>(Block.Level)] != nullptr ? Textured[static_cast<int32>(Block.Level)] : GroundMaterialFor(CoverGridFor(Block.Level)));
+		Tile->SetCollisionEnabled(bCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+		Tile->RegisterComponent();
+		GroundTiles.Add(Tile);
+		LaneTris += Block.Tris.Num() / 3;
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: %d sunken lanes on %d blocks of finer ground (%d triangles)"), *MapFile, static_cast<int32>(M.LaneCount()), LaneBlocks.Num(),
+		LaneTris);
 }
 
 void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
@@ -1062,17 +1700,57 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 		}
 	};
 	const simcore::MapData& M = *Map;
-	for (const simcore::MapStrip& S : M.Layout().strips)
+	// A road or track on a slope (terrain roadmap A.3.18, the look target's K8): each edge on the ground under it, at the
+	// strip's own lift over the ground at its line, so the uphill edge is not buried and the downhill one does not float;
+	// points every 12.5 m (a quarter of the core's cell), so the ribbon follows the ground's cells between the map's points.
+	// On a bridge or its ramp (the strip a metre or more over the ground) the deck stays level across.
+	constexpr double DrapeStepM = 12.5, OnDeckM = 1.0;
+	const auto Densify = [&M](const simcore::MapStrip& S)
 	{
-		const int32 K = static_cast<int32>(S.surface);
-		if (S.points.size() < 2)
+		simcore::MapStrip D = S;
+		D.points.clear();
+		D.points.push_back(S.points.front());
+		for (size_t i = 1; i < S.points.size(); ++i)
+		{
+			const simcore::Vec3& A = S.points[i - 1];
+			const simcore::Vec3& B = S.points[i];
+			const double Len = FMath::Sqrt(FMath::Square(B.x - A.x) + FMath::Square(B.y - A.y));
+			const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Len / DrapeStepM));
+			const double LiftA = A.z - M.GroundHeight(A.x, A.y), LiftB = B.z - M.GroundHeight(B.x, B.y);
+			for (int32 k = 1; k < Steps; ++k)
+			{
+				const double F = static_cast<double>(k) / Steps;
+				const double E = A.x + (B.x - A.x) * F, N = A.y + (B.y - A.y) * F;
+				const double Lift = LiftA + (LiftB - LiftA) * F;
+				D.points.push_back({E, N, Lift >= OnDeckM ? A.z + (B.z - A.z) * F : M.GroundHeight(E, N) + Lift});
+			}
+			D.points.push_back(B);
+		}
+		return D;
+	};
+	for (const simcore::MapStrip& Raw : M.Layout().strips)
+	{
+		const int32 K = static_cast<int32>(Raw.surface);
+		if (Raw.points.size() < 2)
 		{
 			continue;
 		}
+		const bool bWater = Raw.surface == simcore::MapSurface::Water;
+		const simcore::MapStrip S = bWater ? Raw : Densify(Raw);
 		const double Half = 0.5 * S.width_m;
-		const auto OnStrip = [](const simcore::Vec3& P, double, double, bool) { return P.z; };
+		const auto OnStrip = [&M, bWater](const simcore::Vec3& P, double E, double N, bool)
+		{
+			if (bWater)
+			{
+				return P.z;  // water lies level across
+			}
+			const double Lift = P.z - M.GroundHeight(P.x, P.y);
+			return Lift >= OnDeckM ? P.z : M.GroundHeight(E, N) + Lift;
+		};
 		Ribbon(S, K, -Half, Half, OnStrip);
-		if (S.surface == simcore::MapSurface::Water)
+		// A village pond's water (A.3.34) is a rectangle its ground's bowl clips to its shape: its banks are the ground's own
+		// (the wet margin, A.3.35), not a river's ribbons along the rectangle's sides.
+		if (S.surface == simcore::MapSurface::Water && S.id.rfind("pond_", 0) != 0)
 		{
 			// The bank: its inner edge under the water's edge, its outer edge on the ground.
 			const auto BankAt = [&M](const simcore::Vec3& P, double E, double N, bool bInner)
@@ -1082,9 +1760,9 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 			Ribbon(S, Bank, Half - BankIntoWaterM, Half + BankM, BankAt);
 			Ribbon(S, Bank, -Half + BankIntoWaterM, -Half - BankM, BankAt);
 		}
-		else if (S.surface != simcore::MapSurface::Track)
+		else if (S.surface != simcore::MapSurface::Track && S.surface != simcore::MapSurface::Water)
 		{
-			const auto ShoulderAt = [](const simcore::Vec3& P, double, double, bool) { return P.z - 0.06; };  // under the surface
+			const auto ShoulderAt = [&OnStrip](const simcore::Vec3& P, double E, double N, bool bInner) { return OnStrip(P, E, N, bInner) - 0.06; };  // under the surface
 			Ribbon(S, Shoulder, -Half - ShoulderM, Half + ShoulderM, ShoulderAt);
 		}
 	}
@@ -1132,9 +1810,13 @@ void ASimMapActor::BuildBoxes(const simcore::MapFrameLink& Link)
 	const int32 HouseVariants = DressRules ? DressRules->house_variants : simcore::scenery::kHouseVariants;
 	for (const simcore::MapBox& B : Map->Layout().boxes)
 	{
-		if (B.part == simcore::MapPart::Canopy)
+		if (B.part == simcore::MapPart::Canopy || B.part == simcore::MapPart::TreeRow)
 		{
-			continue;  // the woods are trees and masses (BuildTrees)
+			continue;  // the woods, tree rows and groves are trees and masses (BuildTrees)
+		}
+		if (B.part == simcore::MapPart::Marsh)
+		{
+			continue;  // the marsh is the ground's own (its land cover's colour and its layer's texture), not a slab laid over it
 		}
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(B.east_m, B.north_m, Ae, An, Au);
@@ -1231,17 +1913,48 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		return;
 	}
 	const simcore::scenery::MapDressing& Dr = *Dressing;
-	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM)
+	// Each tree's season (roadmap T5.1, simcore/scenery/tree_tint.hpp): its colour multiplier on the day, in the instances'
+	// custom data for M_SimMapTree. Without the rules or the material the trees are drawn as before, in the plain colours.
+	simcore::scenery::TreeSeasons Seasons;
+	bool bSeasons = false;
+	{
+		std::string SeasonError;
+		const FString SeasonsPath = FPaths::Combine(FindDataDirectory(), TEXT("scenery/tree_seasons.json"));
+		bSeasons = simcore::scenery::LoadTreeSeasons(TCHAR_TO_UTF8(*SeasonsPath), Seasons, &SeasonError);
+		if (!bSeasons)
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map: no tree seasons (%s): the trees keep their summer colours"), UTF8_TO_TCHAR(SeasonError.c_str()));
+		}
+	}
+	static UMaterialInterface* TreeMaterial = nullptr;
+	static bool bTreeMaterialTried = false;
+	if (!bTreeMaterialTried)
+	{
+		bTreeMaterialTried = true;
+		TreeMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapTree.M_SimMapTree"), nullptr, LOAD_Quiet | LOAD_NoWarn);
+		if (TreeMaterial != nullptr)
+		{
+			TreeMaterial->AddToRoot();
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Map: no M_SimMapTree (tools/ue_build_tree_material.py): the trees keep their summer colours"));
+		}
+	}
+	const bool bTints = bSeasons && TreeMaterial != nullptr;
+	const int32 Day = GroundDay(GetWorld());
+	const auto Add = [&](const FString& Part, int32 Variant, const TArray<FTransform>& Xf, bool bShadow, float CullM, const TArray<FLinearColor>* Tints = nullptr,
+						 float StartM = 0.0f, const FString& Tag = FString(), int32 Alternate = 0) -> UHierarchicalInstancedStaticMeshComponent*
 	{
 		if (Xf.Num() == 0)
 		{
-			return;
+			return nullptr;
 		}
 		FTransform Fix;
-		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Part, Variant, Fix);
+		UStaticMesh* Mesh = FSimMapAssets::MeshFor(Part, Variant, Fix, Alternate);
 		if (Mesh == nullptr)
 		{
-			return;
+			return nullptr;
 		}
 		TArray<FTransform> Placed;
 		Placed.Reserve(Xf.Num());
@@ -1250,34 +1963,103 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 			Placed.Add(Fix * T);
 		}
 		UHierarchicalInstancedStaticMeshComponent* H = NewObject<UHierarchicalInstancedStaticMeshComponent>(
-			this, FName(*FString::Printf(TEXT("Map_%s_%d"), *Part, Variant)));
+			this, FName(*FString::Printf(TEXT("Map_%s_%d%s"), *Part, Variant, *Tag)));
 		H->SetupAttachment(Root);
 		H->SetStaticMesh(Mesh);
 		H->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		H->SetCastShadow(bShadow);
 		if (CullM > 0.0f)
 		{
-			H->SetCullDistances(0, static_cast<int32>(CullM * 100.0f));
+			H->SetCullDistances(static_cast<int32>(StartM * 100.0f), static_cast<int32>(CullM * 100.0f));
+		}
+		// The season's tint is for the procedural parts (one vertex-colour material). A registered model has its own materials
+		// (several slots): it keeps them, as the model's own season (a fall variant) is its colour.
+		const bool bTinted = Tints != nullptr && bTints && Tints->Num() == Placed.Num() && Mesh->GetStaticMaterials().Num() == 1;
+		if (bTinted)
+		{
+			H->SetMaterial(0, TreeMaterial);
+			H->NumCustomDataFloats = 3;  // before the instances: each carries its colour multiplier
+		}
+		if (Mesh->GetStaticMaterials().Num() > 1)
+		{
+			// A registered model with its own materials (A.3.25: a Megaplant's foliage) may move its vertices (wind, world
+			// position offset): on Nanite that costs a programmable raster per frame and throws away the virtual shadow maps'
+			// cache. The map's trees stand still, so neither is asked for.
+			H->bEvaluateWorldPositionOffset = false;
+			H->ShadowCacheInvalidationBehavior = EShadowCacheInvalidationBehavior::Static;
 		}
 		H->RegisterComponent();
 		H->AddInstances(Placed, false, true);
+		if (bTinted)
+		{
+			for (int32 I = 0; I < Placed.Num(); ++I)
+			{
+				const FLinearColor& C = (*Tints)[I];
+				const float Data[3] = {C.R, C.G, C.B};
+				H->SetCustomData(I, MakeArrayView(Data, 3), false);
+			}
+			H->MarkRenderStateDirty();
+		}
 		Parts.Add(H);
 		BoxCount += Placed.Num();
+		return H;
 	};
-	// The masses: the box the wood's block was, inset, on the engine cube's frame.
+	// The masses: the box the wood's block was, inset, on the engine cube's frame. The far ground's by variant; the map
+	// proper's (whose insides are trees near the camera) by 2 km tile, each tile one variant, so a tile can be hidden.
+	const simcore::MapDef& MapDefinition = Map->Def();
 	TArray<FTransform> Masses[simcore::scenery::kCanopyMassVariants];
+	TMap<FIntPoint, TArray<FTransform>> TileMasses;
+	constexpr double MassTileM = 2000.0;
 	for (const simcore::scenery::CanopyMass& C : Dr.masses)
 	{
 		simcore::Vec3 Ae, An, Au;
 		Link.AxesAt(C.east_m, C.north_m, Ae, An, Au);
 		const FVector Forward = DirToUnreal(Ae * FMath::Sin(C.heading_rad) + An * FMath::Cos(C.heading_rad));
-		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
+		// Its up the normal of its block's plane (A.3.20: a wood on a slope lies along it, as its top does in simcore).
+		const FVector Up = DirToUnreal(Au - Ae * C.rise_e - An * C.rise_n).GetSafeNormal();
+		const FRotator Rot = FRotationMatrix::MakeFromZX(Up, Forward).Rotator();
 		const FVector At = ToUnreal(Link.GroundPoint(C.east_m, C.north_m, C.base_m + 0.5 * C.height_m));
-		Masses[C.variant % simcore::scenery::kCanopyMassVariants].Add(FTransform(Rot, At, FVector(C.length_m, C.width_m, C.height_m)));
+		const FTransform Xf(Rot, At, FVector(C.length_m, C.width_m, C.height_m));
+		if (MapDefinition.InCore(C.east_m, C.north_m))
+		{
+			TileMasses.FindOrAdd(FIntPoint(FMath::FloorToInt32(C.east_m / MassTileM), FMath::FloorToInt32(C.north_m / MassTileM))).Add(Xf);
+		}
+		else
+		{
+			Masses[C.variant % simcore::scenery::kCanopyMassVariants].Add(Xf);
+		}
 	}
+	const simcore::scenery::TreeTintRgb MassTint = bTints ? simcore::scenery::MassTintOn(Seasons, Day) : simcore::scenery::TreeTintRgb{{1.0f, 1.0f, 1.0f}};
 	for (int32 V = 0; V < simcore::scenery::kCanopyMassVariants; ++V)
 	{
-		Add(TEXT("canopy_mass"), V, Masses[V], false, 0.0f);
+		TArray<FLinearColor> Tints;
+		if (bTints)
+		{
+			Tints.Init(FLinearColor(MassTint[0], MassTint[1], MassTint[2]), Masses[V].Num());
+		}
+		Add(TEXT("canopy_mass"), V, Masses[V], false, 0.0f, &Tints);
+	}
+	for (const TPair<FIntPoint, TArray<FTransform>>& Tile : TileMasses)
+	{
+		TArray<FLinearColor> Tints;
+		if (bTints)
+		{
+			Tints.Init(FLinearColor(MassTint[0], MassTint[1], MassTint[2]), Tile.Value.Num());
+		}
+		const uint32 TileHash = (static_cast<uint32>(Tile.Key.X) * 73856093u) ^ (static_cast<uint32>(Tile.Key.Y) * 19349663u);
+		const int32 V = static_cast<int32>(TileHash % static_cast<uint32>(simcore::scenery::kCanopyMassVariants));
+		UHierarchicalInstancedStaticMeshComponent* H =
+			Add(TEXT("canopy_mass"), V, Tile.Value, false, 0.0f, &Tints, 0.0f, FString::Printf(TEXT("_t%d_%d"), Tile.Key.X, Tile.Key.Y));
+		if (H != nullptr)
+		{
+			FBox Bounds(ForceInit);
+			for (const FTransform& T : Tile.Value)
+			{
+				Bounds += T.GetLocation();
+			}
+			MassTiles.Add(H);
+			MassTileBounds.Add(Bounds.ExpandBy(100.0 * 60.0));  // a block's half and a little
+		}
 	}
 	if (!bDrawTrees)
 	{
@@ -1286,7 +2068,9 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 	// The trees: base on the ground (simcore's, 0.3 m into it), turned by their own yaw, scaled (crown, crown, height)
 	// from the unit tree (scenery/map_meshes.hpp TreeMesh).
 	constexpr int32 TreeKinds = static_cast<int32>(simcore::scenery::TreeKind::Count);
-	TArray<FTransform> Trees[TreeKinds];
+	// The trees inside the map proper's woods (A.3.19) in components of their own, drawn only as far as InteriorTreeDistanceM.
+	TArray<FTransform> Trees[TreeKinds], Inside[TreeKinds];
+	TArray<FLinearColor> TreeTints[TreeKinds], InsideTints[TreeKinds];
 	for (const simcore::scenery::TreeInstance& T : Dr.trees)
 	{
 		simcore::Vec3 Ae, An, Au;
@@ -1294,12 +2078,94 @@ void ASimMapActor::BuildTrees(const simcore::MapFrameLink& Link)
 		const FVector Forward = DirToUnreal(Ae * FMath::Sin(T.yaw_rad) + An * FMath::Cos(T.yaw_rad));
 		const FRotator Rot = FRotationMatrix::MakeFromXZ(Forward, DirToUnreal(Au)).Rotator();
 		const FVector At = ToUnreal(Link.GroundPoint(T.east_m, T.north_m, T.base_m));
-		Trees[T.kind % TreeKinds].Add(FTransform(Rot, At, FVector(T.crown_m, T.crown_m, T.height_m)));
+		const int32 K = T.kind % TreeKinds;
+		(T.interior != 0 ? Inside : Trees)[K].Add(FTransform(Rot, At, FVector(T.crown_m, T.crown_m, T.height_m)));
+		if (bTints)
+		{
+			const simcore::scenery::TreeTintRgb C = simcore::scenery::TreeTintOn(Seasons, K, T.east_m, T.north_m, Day);
+			(T.interior != 0 ? InsideTints : TreeTints)[K].Add(FLinearColor(C[0], C[1], C[2]));
+		}
 	}
 	for (int32 K = 0; K < TreeKinds; ++K)
 	{
-		Add(FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K))), 0, Trees[K], true,
-			TreeCullDistanceM);
+		const FString PartName = FString(TEXT("tree_")) + UTF8_TO_TCHAR(simcore::scenery::TreeKindName(static_cast<simcore::scenery::TreeKind>(K)));
+		// A kind the register names a real model for is drawn by that model alone (variant 0), out to the kind's distance:
+		// its thinner variants (tools/prepare_model.py's budgets) are the model's own LODs (tools/ue_tree_lods.py). It keeps
+		// its own materials (no season tint). A distance ladder of separate meshes cannot work: an instanced component's
+		// start distance only fades, it never hides the instances nearer, so every rung was drawn from 0 m (the procedural
+		// crown under the model, roadmap A.1 item 6).
+		const simcore::scenery::AssetRegister* Reg = FSimMapAssets::Register();
+		const std::string PartStd(TCHAR_TO_UTF8(*PartName));
+		const bool bRegistered = Reg != nullptr && Reg->AssetFor(PartStd, 0) != nullptr;
+		// A wood's fringe of shrubs (hazel, elder) is not drawn as far as the trees: under 4 m, it is lost behind them.
+		const float KindCullM = simcore::scenery::IsShrub(static_cast<simcore::scenery::TreeKind>(K)) ? FMath::Min(TreeCullDistanceM, 800.0f) : TreeCullDistanceM;
+		// A kind with alternates (A.3.25: a Megaplant's variants) is split among them by each tree's place, the same on every
+		// machine (AssetRegister::AlternateAt); each its own component. Registered models carry no tints.
+		const int32 Alternates = bRegistered ? Reg->AlternateCount(PartStd) : 1;
+		// Near models (A.3.26) only if every one is on this machine, and only over a single own model (its cards).
+		const int32 NearCount = bRegistered && Alternates <= 1 && FSimMapAssets::NearOnMachine(PartName) ? Reg->NearCount(PartStd) : 0;
+		const float NearM = NearCount > 0 ? static_cast<float>(Reg->NearM(PartStd)) : 0.0f;
+		if (NearCount > 0)
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Map: %s within %.0f m by %d near model(s), its own beyond"), *PartName, NearM, NearCount);
+		}
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			const TArray<FTransform>& All = Pass == 0 ? Trees[K] : Inside[K];
+			const float CullM = Pass == 0 ? KindCullM : FMath::Min(InteriorTreeDistanceM, KindCullM);
+			const FString Tag = Pass == 0 ? FString() : FString(TEXT("_in"));
+			// -SimNearOff (A.3.30, a measurement): the near models left out while the cards still hide within NearM, so what
+			// is left near the camera (a shadow with no tree) is the hidden cards'.
+			static const bool bNearOff = FParse::Param(FCommandLine::Get(), TEXT("SimNearOff"));
+			if (NearM > 0.0f && !bNearOff)
+			{
+				// The near models (A.3.26): each tree within NearM of the camera drawn by one of them, picked by its place;
+				// beyond, by the part's own, which hides its instances within NearM (M_SimFoliage's NearHideM, per instance,
+				// by its pivot). No work per frame: both by distance, on the GPU.
+				TArray<TArray<FTransform>> Near;
+				Near.SetNum(NearCount);
+				for (const FTransform& T : All)
+				{
+					const FVector L = T.GetLocation();
+					Near[simcore::scenery::AssetRegister::AlternateAt(L.X / 100.0, L.Y / 100.0, NearCount)].Add(T);
+				}
+				for (int32 A = 0; A < NearCount; ++A)
+				{
+					Add(PartName, 0, Near[A], true, NearM, nullptr, 0.0f, Tag + FString::Printf(TEXT("_near%d"), A), FSimMapAssets::NearAlternate + A);
+				}
+			}
+			if (Alternates <= 1)
+			{
+				// The understorey's shrubs (A.3.21) as near as the edge's; the inside trees out to InteriorTreeDistanceM.
+				UHierarchicalInstancedStaticMeshComponent* Own =
+					Add(PartName, 0, All, true, CullM, bRegistered ? nullptr : (Pass == 0 ? &TreeTints[K] : &InsideTints[K]), 0.0f, Tag);
+				if (Own != nullptr && NearM > 0.0f)
+				{
+					for (int32 Slot = 0; Slot < Own->GetNumMaterials(); ++Slot)
+					{
+						UMaterialInstanceDynamic* Hide = UMaterialInstanceDynamic::Create(Own->GetMaterial(Slot), this);
+						Hide->SetScalarParameterValue(TEXT("NearHideM"), NearM);
+						Own->SetMaterial(Slot, Hide);
+					}
+				}
+				continue;
+			}
+			TArray<TArray<FTransform>> Split;
+			Split.SetNum(Alternates);
+			for (const FTransform& T : All)
+			{
+				const FVector L = T.GetLocation();
+				Split[simcore::scenery::AssetRegister::AlternateAt(L.X / 100.0, L.Y / 100.0, Alternates)].Add(T);
+			}
+			for (int32 A = 0; A < Alternates; ++A)
+			{
+				Add(PartName, 0, Split[A], true, CullM, nullptr, 0.0f, Tag + FString::Printf(TEXT("_a%d"), A), A);
+			}
+		}
+	}
+	if (bTints)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Map: trees in the colours of day %d"), Day);
 	}
 }
 
@@ -1361,6 +2227,105 @@ void ASimMapActor::BuildBridges(const simcore::MapFrameLink& Link)
 	Bridges->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 	Bridges->SetMaterial(0, FSimMapAssets::Material());
 	Bridges->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void ASimMapActor::BuildCrops(const simcore::MapFrameLink& Link, const FString& DataDirectory)
+{
+	// The crops standing on the session's day (roadmap L5, simcore/scenery/standing_crops.hpp): the same bake the sim's
+	// sight lines meet (LoadStandingCropsCached shares one per map and day), drawn as a block per 1 km tile, a section each.
+	Standing.reset();
+	std::string Error;
+	Standing = simcore::scenery::LoadStandingCropsCached(TCHAR_TO_UTF8(*DataDirectory), TCHAR_TO_UTF8(*MapFile), Map, GroundDay(GetWorld()), &Error);
+	if (!Standing)
+	{
+		if (!Error.empty())
+		{
+			UE_LOG(LogSAM3D, Warning, TEXT("Map %s: no standing crops (%s)"), *MapFile, UTF8_TO_TCHAR(Error.c_str()));
+		}
+		return;
+	}
+	if (!Standing->Any())
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Map %s: no crop stands on day %d"), *MapFile, Standing->Day());
+		return;
+	}
+	const double T0 = FPlatformTime::Seconds();
+	double W = 1e300, S = 1e300, E = -1e300, N = -1e300;
+	for (const simcore::scenery::CoverGrid& G : Standing->CoverCells().grids)
+	{
+		W = FMath::Min(W, G.west_m);
+		S = FMath::Min(S, G.south_m);
+		E = FMath::Max(E, G.west_m + G.cell_m * G.cols);
+		N = FMath::Max(N, G.south_m + G.cell_m * G.rows);
+	}
+	// Dry maize standing: the tops a warm tan, the faces a little darker (linear; a field's shade varies by its number),
+	// matched by eye to the maize cards that stand in near the camera (plot 3, c7).
+	const std::array<float, 3> Top{0.30f, 0.225f, 0.11f}, Side{0.27f, 0.20f, 0.10f};
+	constexpr double TileM = 1000.0;
+	Crops = NewObject<UProceduralMeshComponent>(this, TEXT("MapCrops"));
+	Crops->SetupAttachment(Root);
+	Crops->SetCastShadow(true);
+	Crops->RegisterComponent();
+	// M_SimMapCrop draws the blocks as plants (their UVs: StandingCrops::BlockMesh) with ragged tops, and near the camera
+	// dithers them away (clutter.json's crop_fade_m) so the clutter ring's crop plants stand in their place; without the
+	// ring the blocks are drawn whole, and without the material in the plain vertex colour material.
+	UMaterialInterface* CropMaterial = FSimMapAssets::Material();
+	UMaterialInterface* Plants = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapCrop.M_SimMapCrop"), nullptr, LOAD_Quiet | LOAD_NoWarn);
+	if (Plants != nullptr)
+	{
+		simcore::scenery::ClutterRules Rules;
+		const FString ClutterPath = FPaths::Combine(DataDirectory, TEXT("scenery/clutter.json"));
+		const bool bFade = bDrawTrees && simcore::scenery::LoadClutterRules(TCHAR_TO_UTF8(*ClutterPath), Rules) && Rules.crop_fade_to_m > 0.0;
+		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Plants, this);
+		Mid->SetScalarParameterValue(TEXT("FadeFromCm"), bFade ? static_cast<float>(Rules.crop_fade_from_m * 100.0) : -2.0f);
+		Mid->SetScalarParameterValue(TEXT("FadeToCm"), bFade ? static_cast<float>(Rules.crop_fade_to_m * 100.0) : -1.0f);
+		CropMaterial = Mid;
+	}
+	int32 Section = 0, Triangles = 0;
+	for (double Ts = S; Ts < N; Ts += TileM)
+	{
+		for (double Tw = W; Tw < E; Tw += TileM)
+		{
+			std::vector<std::array<float, 2>> Uv;
+			const simcore::scenery::TriMesh T = Standing->BlockMesh(Tw, Ts, Tw + TileM, Ts + TileM, Top, Side, Plants != nullptr ? &Uv : nullptr);
+			if (T.Empty())
+			{
+				continue;
+			}
+			simcore::Vec3 Ae, An, Au;
+			Link.AxesAt(Tw + 0.5 * TileM, Ts + 0.5 * TileM, Ae, An, Au);
+			TArray<FVector> Verts;
+			TArray<FVector> Normals;
+			TArray<FLinearColor> Colours;
+			TArray<int32> Tris;
+			Verts.Reserve(static_cast<int32>(T.positions.size()));
+			for (std::size_t I = 0; I < T.positions.size(); ++I)
+			{
+				const simcore::Vec3& P = T.positions[I];
+				const simcore::Vec3& Nrm = T.normals[I];
+				Verts.Add(ToUnreal(Link.GroundPoint(P.x, P.y, P.z)));
+				Normals.Add(DirToUnreal(Ae * Nrm.x + An * Nrm.y + Au * Nrm.z));
+				Colours.Add(Linear(T.colours[I]));
+			}
+			for (const std::uint32_t I : T.indices)
+			{
+				Tris.Add(static_cast<int32>(I));
+			}
+			TArray<FVector2D> Uvs;
+			Uvs.Reserve(static_cast<int32>(Uv.size()));
+			for (const std::array<float, 2>& U : Uv)
+			{
+				Uvs.Add(FVector2D(U[0], U[1]));
+			}
+			Crops->CreateMeshSection_LinearColor(Section, Verts, Tris, Normals, Uvs, Colours, TArray<FProcMeshTangent>(), false);
+			Crops->SetMaterial(Section, CropMaterial);
+			++Section;
+			Triangles += static_cast<int32>(T.Triangles());
+		}
+	}
+	Crops->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: crops standing on day %d drawn in %d tiles, %d triangles, tallest %.1f m (%.2f s)"), *MapFile,
+		Standing->Day(), Section, Triangles, Standing->TallestStand(), FPlatformTime::Seconds() - T0);
 }
 
 void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)

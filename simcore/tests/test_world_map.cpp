@@ -298,7 +298,7 @@ SC_TEST("map: the ground is a plain with hills, a river valley, levelled sites a
         hi = std::max(hi, v);
     }
     std::printf("    ground in the map %.1f to %.1f m\n", lo, hi);
-    SC_EXPECT(lo > 80.0 && hi < 200.0);
+    SC_EXPECT(lo > 80.0 && hi < 270.0);  // the hill country (terrain.landform, roadmap L11) to 70 m over the plain's hills
     SC_EXPECT(map->GroundHeight(2000, 14500) > 150.0);  // Polany hill
     // The air base's runway is level end to end.
     const MapSiteDef* kecel = Site(*map, "kecel_airbase");
@@ -322,9 +322,11 @@ SC_TEST("map: the map proper's layout is the same with the detail areas (counts 
     // The core's boxes as laid before the detail areas (roadmap R6, recorded from r-track at acea88a): the detail
     // areas' towns draw on their own random streams, so nothing in the map proper moves. Since R6's review, 9 fewer wood
     // blocks: a site's clearance is found however far a block is from the site's centre (mapgeo::Occupancy), and r-track
-    // had 9 blocks inside the 140 m clearance of two field posts and the P-40 post (8842 canopy, 12038 boxes).
+    // had 9 blocks inside the 140 m clearance of two field posts and the P-40 post (8842 canopy, 12038 boxes). Since the
+    // hill country's land use (terrain roadmap A.3.17, 7 Nov 2026), 3554 more: the woods on its steep sides and crests.
+    // Since the sunken lanes (A.3.34, 8 Nov 2026), 16 fewer: the wood blocks over a lane's banks.
     const std::pair<MapPart, std::size_t> before[] = {
-        {MapPart::Bridge, 3},  {MapPart::Canopy, 8833}, {MapPart::Chimney, 1},   {MapPart::Farm, 204},     {MapPart::Flats, 77},
+        {MapPart::Bridge, 3},  {MapPart::Canopy, 12371}, {MapPart::Chimney, 1},   {MapPart::Farm, 204},     {MapPart::Flats, 77},
         {MapPart::House, 1836}, {MapPart::Industrial, 6}, {MapPart::Launcher, 3}, {MapPart::Marsh, 951},   {MapPart::Mast, 7},
         {MapPart::Military, 21}, {MapPart::Pad, 6},      {MapPart::Revetment, 54}, {MapPart::Station, 1}, {MapPart::Tank, 8},
         {MapPart::Tent, 17},   {MapPart::Tower, 1}};
@@ -333,6 +335,7 @@ SC_TEST("map: the map proper's layout is the same with the detail areas (counts 
     std::size_t total = 0;
     for (const MapBox& b : map->Layout().boxes) {
         if (!map->Def().InCore(b.east_m, b.north_m)) continue;
+        if (b.part == MapPart::TreeRow) continue;  // laid after, along the fields (roadmap T4): not part of the layout this pins
         ++counts[static_cast<int>(b.part)];
         ++total;
         last = &b;
@@ -343,7 +346,7 @@ SC_TEST("map: the map proper's layout is the same with the detail areas (counts 
         SC_EXPECT(counts[static_cast<int>(p.first)] == p.second);
         expected += p.second;
     }
-    SC_EXPECT(total == expected && total == 12029);
+    SC_EXPECT(total == expected && total == 15567);
     SC_EXPECT(last != nullptr && last->part == MapPart::Marsh && last->east_m == 16250.0 && last->north_m == -8450.0);
 }
 
@@ -372,11 +375,11 @@ SC_TEST("map: the detail areas are levels of the ground: their edges the coarse 
                 inside = std::max(inside, std::fabs(map->GroundHeight(x, y) - coarse.SampleTri(x, y)));
             }
         }
-        std::printf("    %s: %d x %d at %.0f m; edge off the coarse ground by %.4f m, inside by up to %.2f m (micro %.1f m)\n", a.id.c_str(),
-                    map->DetailGrids()[i].cols, map->DetailGrids()[i].rows, a.spacing_m, edge, inside, a.micro_m);
+        std::printf("    %s: %d x %d at %.0f m; edge off the coarse ground by %.4f m, inside by up to %.2f m (micro %.1f m, meso %.1f m)\n", a.id.c_str(),
+                    map->DetailGrids()[i].cols, map->DetailGrids()[i].rows, a.spacing_m, edge, inside, a.micro_m, a.MesoTotalM());
         SC_EXPECT(edge < 0.02);
-        SC_EXPECT(inside <= a.micro_m + 1e-9);
-        SC_EXPECT(inside > 0.1 * a.micro_m);
+        SC_EXPECT(inside <= a.micro_m + a.MesoTotalM() + 1e-9);
+        SC_EXPECT(inside > 0.1 * (a.micro_m + a.MesoTotalM()));
     }
     // A loader refuses an area whose edges do not fall on the coarse ground's nodes.
     std::string text, e;
@@ -416,7 +419,7 @@ SC_TEST("map: the capital is laid out on the country's roads and river, its site
     int bridges = 0;
     for (const MapCrossing& c : map->Layout().crossings) bridges += d.InDetail(c.at.east_m, c.at.north_m) && !d.InCore(c.at.east_m, c.at.north_m) ? 1 : 0;
     SC_EXPECT(bridges >= 2);
-    double worst = 0.0;
+    double worst = 0.0, worst_e = 0.0, worst_n = 0.0, worst_step = 0.0;
     for (const MapStrip& s : map->Layout().strips) {
         if (s.surface == MapSurface::Water) continue;
         const double lift = s.surface == MapSurface::Rail ? 0.45 : 0.25;
@@ -426,10 +429,17 @@ SC_TEST("map: the capital is laid out on the country's roads and river, its site
             bool ramp = false;
             for (const MapCrossing& c : map->Layout().crossings) ramp = ramp || std::hypot(e - c.at.east_m, n - c.at.north_m) < c.half_length_m + 150.0;
             if (ramp) continue;
-            worst = std::max(worst, std::fabs(0.5 * (s.points[i - 1].z + s.points[i].z) - map->GroundHeight(e, n) - lift));
+            const double off = std::fabs(0.5 * (s.points[i - 1].z + s.points[i].z) - map->GroundHeight(e, n) - lift);
+            if (off > worst) {
+                worst = off;
+                worst_e = e;
+                worst_n = n;
+                worst_step = std::hypot(s.points[i].x - s.points[i - 1].x, s.points[i].y - s.points[i - 1].y);
+            }
         }
     }
-    std::printf("    strips in the detail areas: at most %.3f m off the ground between their points\n", worst);
+    std::printf("    strips in the detail areas: at most %.3f m off the ground between their points (at %.0f, %.0f, points %.0f m apart)\n", worst,
+                worst_e, worst_n, worst_step);
     SC_EXPECT(worst < 0.3);
     // The blocks of flats round its middle stand in the way; a site of the dynamic campaign test is clear.
     double tallest = 0.0;

@@ -1,0 +1,70 @@
+{
+  "recipe_id": "ploughland",
+  "notes": "An autumn-ploughed parcel (plot lab p01). Clods on a jittered lattice (none closer than a fifth of their spacing), more on the headlands at the parcel's ends, where the plough turns and the ground is worked twice; a weedy strip the plough leaves at every edge. The furrows themselves are the ground material's (ground_layers.json furrow_m).",
+  "applies": {
+    "layers": [
+      "ploughed"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "margin",
+      "edge": "any",
+      "from_m": 0,
+      "to_m": 0.6,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 6000,
+          "kappa_per_ha": 1500,
+          "spread_m": 0.35
+        }
+      ]
+    },
+    {
+      "id": "headland",
+      "edge": "ends",
+      "from_m": 0.6,
+      "to_m": 18,
+      "scatter": [
+        {
+          "kind": "clod",
+          "process": "blue_noise",
+          "per_ha": 22000
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "clod",
+          "process": "blue_noise",
+          "per_ha": 18000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "clod",
+      "per_ha": [
+        15000,
+        21000
+      ]
+    },
+    {
+      "band": "headland",
+      "kind": "clod",
+      "per_ha": [
+        18500,
+        25500
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (clods: plot lab p01, judged by eye; headlands of 2-3 implement widths, 10-25 m, and a grassy margin of 1-3 m at tracks and ditches: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5, an estimate; a mouldboard plough's random roughness 25-53 mm, NRCS, ibid.)",
+  "confidence": "estimate"
+}

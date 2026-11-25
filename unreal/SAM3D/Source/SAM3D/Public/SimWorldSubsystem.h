@@ -1752,6 +1752,9 @@ public:
 	 *  network client, the server's (its start hour may be another than this machine's -SimTime gave, roadmap S8). */
 	bool GetSkyClock(simcore::SkyClock& Out) const;
 
+	/** The year of the scenario's "date" (1985 without a scenario): the sky clock's day of the year read as a date. */
+	int32 GetScenarioYear() const;
+
 	/** The session second the sky stands at: the sim time, or on a network client (which never steps) the server's, as it
 	 *  last sent it with the console (roadmap S8). */
 	double GetSkyTimeSeconds() const;

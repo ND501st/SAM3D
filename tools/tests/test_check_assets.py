@@ -45,5 +45,16 @@ def test_the_licence_rules():
     assert any("licence" in p for p in check_assets.problems({"assets": [odd]}, set(), ignored_third_party))
 
 
+def test_models_and_munitions_name_library_ids_and_registered_assets():
+    ccby = dict(FAB, id="mig21_sf", licence="CC-BY-4.0", redistributable=True, author="someone")
+    libraries = {"models": {"mig21"}, "munitions": {"mk82"}}
+    good = {"assets": [ccby], "models": {"mig21": "mig21_sf"}, "munitions": {"mk82": None}}
+    assert check_assets.problems(good, set(), ignored_third_party, libraries) == []
+    unknown = {"assets": [ccby], "models": {"mig99": "mig21_sf"}}
+    assert any("not in data/scenery/basic_models.json" in p for p in check_assets.problems(unknown, set(), ignored_third_party, libraries))
+    unregistered = {"assets": [ccby], "munitions": {"mk82": "mk82_sf"}}
+    assert any("not registered" in p for p in check_assets.problems(unregistered, set(), ignored_third_party, libraries))
+
+
 def test_the_repository_passes():
     assert check_assets.main() == 0

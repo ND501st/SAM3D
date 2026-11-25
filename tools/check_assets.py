@@ -7,7 +7,9 @@ The register's own rules (licence, author, paths) are simcore's (simcore/scenery
 test_scenery.cpp); this checks the repository against them:
 - nothing under the third-party folders (unreal/<project>/Content/ThirdParty/, art/thirdparty/) is tracked;
 - every asset that may not be redistributed lives under /Game/ThirdParty/, and its file there is ignored by git;
-- every asset's licence is one the register knows, and a CC-BY one names its author.
+- every asset's licence is one the register knows, and a CC-BY one names its author;
+- "models" names basic models (data/scenery/basic_models.json) and "munitions" munitions (data/scenery/munitions.json)
+  that exist, each drawn by a registered asset (or null).
 """
 import json
 import subprocess
@@ -28,10 +30,17 @@ def content_file(unreal_path):
     return f"{PROJECT_CONTENT}/{package}.uasset"
 
 
-def problems(register, tracked, is_ignored):
-    """Every problem, given the register (parsed JSON), the tracked files (repository-relative, forward slashes) and a
-    function telling whether git ignores a path."""
+def problems(register, tracked, is_ignored, libraries=None):
+    """Every problem, given the register (parsed JSON), the tracked files (repository-relative, forward slashes), a
+    function telling whether git ignores a path and, optionally, the libraries' ids ({"models": set, "munitions": set})."""
     out = []
+    ids = {a.get("id") for a in register.get("assets", [])}
+    for kind, library in (("models", "basic_models.json"), ("munitions", "munitions.json")):
+        for key, asset in register.get(kind, {}).items():
+            if libraries is not None and key not in libraries[kind]:
+                out.append(f"{kind}: {key} is not in data/scenery/{library}")
+            if asset is not None and asset not in ids:
+                out.append(f"{kind}: {key} names {asset}, which is not registered")
     for f in tracked:
         lower = f.lower()
         if any(lower.startswith(d.lower()) for d in THIRD_PARTY_DIRS):
@@ -67,9 +76,17 @@ def git_ignored(path):
     return r.returncode == 0
 
 
+def library_ids():
+    """The ids of the basic models and the munitions the register may name."""
+    scenery = ROOT / "data" / "scenery"
+    models = json.loads((scenery / "basic_models.json").read_text(encoding="utf-8"))["models"]
+    munitions = json.loads((scenery / "munitions.json").read_text(encoding="utf-8"))["munitions"]
+    return {"models": {m["id"] for m in models}, "munitions": {m["id"] for m in munitions}}
+
+
 def main(argv=None):
     register = json.loads((ROOT / "data" / "scenery" / "assets.json").read_text(encoding="utf-8"))
-    found = problems(register, git_tracked(), git_ignored)
+    found = problems(register, git_tracked(), git_ignored, library_ids())
     # The folders themselves must be ignored even while the register is empty.
     for d in THIRD_PARTY_DIRS:
         if not git_ignored(d + "probe.uasset"):

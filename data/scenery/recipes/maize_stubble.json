@@ -1,0 +1,63 @@
+{
+  "recipe_id": "maize_stubble",
+  "notes": "A picked maize field: the stumps stand in the drill's rows 75 cm apart along the parcel's furrows (one cut stalk drawn every half metre along a row, for the ring's budget: a field has some 70 000 plants a hectare, one every 18-20 cm; at a metre along, plot 2's b2, the rows read as a scatter), and the harvester's broken stalks lie over the stubble, mostly along the rows (the stover kind's along_rows_deg).",
+  "applies": {
+    "layers": [
+      "maize_stubble"
+    ]
+  },
+  "priority": 10,
+  "bands": [
+    {
+      "id": "margin",
+      "edge": "any",
+      "from_m": 0,
+      "to_m": 0.8,
+      "scatter": [
+        {
+          "kind": "grass",
+          "process": "thomas",
+          "per_ha": 5000,
+          "kappa_per_ha": 1500,
+          "spread_m": 0.35
+        }
+      ]
+    },
+    {
+      "id": "body",
+      "scatter": [
+        {
+          "kind": "stump",
+          "process": "rows",
+          "per_ha": 26667,
+          "row_m": 0.75
+        },
+        {
+          "kind": "stover",
+          "process": "uniform",
+          "per_ha": 5000
+        }
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "band": "body",
+      "kind": "stump",
+      "per_ha": [
+        23000,
+        30000
+      ]
+    },
+    {
+      "band": "body",
+      "kind": "stover",
+      "per_ha": [
+        4000,
+        6000
+      ]
+    }
+  ],
+  "source": "game value: sam3d estimate (maize rows 70-76 cm, stalk stubble 25-30 cm: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.5)",
+  "confidence": "estimate"
+}

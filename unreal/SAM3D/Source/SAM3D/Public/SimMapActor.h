@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -8,11 +9,13 @@
 
 class ACameraActor;
 class UHierarchicalInstancedStaticMeshComponent;
+class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
 class UTexture2D;
 class USimWorldSubsystem;
+class UTexture2D;
 
 namespace simcore
 {
@@ -25,7 +28,9 @@ namespace simcore
 		struct CoverGrid;
 		struct CoverRaster;
 		struct DressingRules;
+		struct GroundLayerRules;
 		struct MapDressing;
+		class StandingCrops;
 	}
 }
 
@@ -100,9 +105,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
 	bool bDrawTrees = true;
 
+	/** The map proper's and the detail areas' ground drawn with its layers' textures (roadmap T1,
+	 *  data/scenery/ground_layers.json, docs/scenery/TERRAIN_ROADMAP.md): a mask of each land cover cell's layer and the
+	 *  ground material MI_SimGround, whose texture arrays are fetched and imported per machine. Off, or without them: the
+	 *  land cover's colours alone, as before. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map")
+	bool bTexturedGround = true;
+
 	/** How far a tree is drawn (m): beyond it the wood's mass and the trees' crowns at their lowest LOD are gone. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "500", ClampMax = "30000"))
 	float TreeCullDistanceM = 8000.0f;
+
+	/** How far the trees inside the map proper's woods are drawn (m; terrain roadmap A.3.19): nearer, the woods' masses are
+	 *  hidden (by 2 km tiles) and the woods are trees throughout; farther, the edge rows and the masses. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Map", meta = (ClampMin = "500", ClampMax = "30000"))
+	float InteriorTreeDistanceM = 2500.0f;
 
 	/** The nation's assets on the map: every theatre object as its basic models where it stands, the running campaign's
 	 *  (where it has moved them; the wrecked dark) or else TheatreFile's. Not what the scenario draws itself: its own
@@ -165,8 +182,12 @@ private:
 	void BuildStrips(const simcore::MapFrameLink& Link);
 	void BuildBoxes(const simcore::MapFrameLink& Link);
 	void BuildTrees(const simcore::MapFrameLink& Link);
+	void UpdateMassTiles();
 	void BuildBridges(const simcore::MapFrameLink& Link);
+	void BuildCrops(const simcore::MapFrameLink& Link, const FString& DataDirectory);
 	void LoadDressing(const FString& DataDirectory);
+	/** The textured ground's material for each drawn level (null: that level wears the plain one). */
+	TArray<UMaterialInterface*> TexturedGround(const simcore::MapFrameLink& Link, const std::vector<const simcore::MapGrid*>& Levels);
 	void BuildCountry(const FVector& FrameOriginLonLatAlt);
 	void BuildAssets(const FVector& FrameOriginLonLatAlt);
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
@@ -189,20 +210,42 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Bridges;
 
+	/** The crops standing on the session's day (roadmap L5): a block per 1 km tile, from the sim's own (BuildCrops). */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Crops;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> Parts;
+
+	/** The map proper's woods' masses by 2 km tile (also in Parts), hidden near the camera (UpdateMassTiles). */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> MassTiles;
+	TArray<FBox> MassTileBounds;
 
 	std::shared_ptr<const simcore::MapData> Map;
 	std::shared_ptr<const simcore::CountryMap> Country;
 	// The map's dressing (roadmap R6): its rules, the land cover and the trees, built once per map (LoadDressing).
 	std::shared_ptr<const simcore::scenery::DressingRules> DressRules;
 	std::shared_ptr<const simcore::scenery::CoverRaster> Cover;
+	// The far ground's land cover (roadmap T3.2, simcore/scenery/far_cover.hpp): the country's, at 250 m, with the map's fields.
+	std::shared_ptr<const simcore::scenery::CoverGrid> FarCover;
 	std::shared_ptr<const simcore::scenery::MapDressing> Dressing;
+	// The ground's layers (roadmap T1): which layer each land cover cell is drawn with (LoadDressing).
+	std::shared_ptr<const simcore::scenery::GroundLayerRules> GroundLayers;
+	// The crops standing on the session's day: the same the sim's sight lines meet (scenery/standing_crops.hpp).
+	std::shared_ptr<const simcore::scenery::StandingCrops> Standing;
 	// The map's frame to the frame it is drawn in (set by Build): GroundAt's.
 	std::shared_ptr<const simcore::MapFrameLink> GroundLink;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CountryStrips;
+
+	// The textured ground (roadmap T1): a mask per land cover square and the material made from each (TexturedGround).
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTexture2D>> GroundMasks;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> TexturedMaterials;
 
 	// The land cover's grids as textures, and the ground's material for each (GroundMaterialFor), by the grid's id.
 	UPROPERTY(Transient)
@@ -222,6 +265,9 @@ private:
 	FString ShotFolder;
 	int32 ShotIndex = -1;
 	float ShotTimer = 0.0f;
+	// -SimShotSet=views: the frames' times summed over the wait before each picture, for its cost file (ms).
+	double ShotGpuMs = 0.0, ShotGameMs = 0.0, ShotRenderMs = 0.0;
+	int32 ShotSamples = 0;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ACameraActor> ShotCamera;

@@ -195,7 +195,7 @@ SC_TEST("obstacles: masts, chimneys, towers, launchers and tents are not; the fa
                 bool laid = false;
                 for (const MapBox& b : m->Layout().boxes) {
                     if (std::fabs(b.east_m - e) < 50.0 + 0.5 * std::max(b.length_m, b.width_m) &&
-                        std::fabs(b.north_m - n) < 50.0 + 0.5 * std::max(b.length_m, b.width_m) && h <= b.base_m + b.height_m - m->GroundHeight(e, n) + 1e-6) {
+                        std::fabs(b.north_m - n) < 50.0 + 0.5 * std::max(b.length_m, b.width_m) && h <= b.TopAt(e, n) - m->GroundHeight(e, n) + 1e-6) {
                         laid = true;
                         break;
                     }
@@ -238,7 +238,7 @@ SC_TEST("obstacles: what is laid beyond the map proper (woods running out of it,
         ++boxes;
         houses += b.part == MapPart::House ? 1 : 0;
         small_woods += b.part == MapPart::Canopy && b.length_m < d.far_block_m ? 1 : 0;
-        const double top = b.base_m + b.height_m;
+        // A wood on a slope has a sloping top (A.3.20): its obstacle follows the plane, so the plane is what it reaches.
         const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
         const double hl = std::max(0.0, 0.5 * b.length_m - 1.0), hw = std::max(0.0, 0.5 * b.width_m - 1.0);
         const double at[5][2] = {{0.0, 0.0}, {hl, hw}, {hl, -hw}, {-hl, hw}, {-hl, -hw}};
@@ -246,7 +246,7 @@ SC_TEST("obstacles: what is laid beyond the map proper (woods running out of it,
         for (const auto& p : at) {
             const double e = b.east_m + p[0] * sh + p[1] * ch, n = b.north_m + p[0] * ch - p[1] * sh;
             if (d.InCore(e, n) || d.InDetail(e, n)) continue;
-            const double gap = top - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
+            const double gap = b.TopAt(e, n) - (m->GroundHeight(e, n) + m->ObstacleHeight(e, n));
             worst = std::max(worst, gap);
             short_of = short_of || gap > 1e-6;
         }
@@ -468,7 +468,7 @@ public:
             t_in = std::max(t_in, std::min(ta, tb));
             t_out = std::min(t_out, std::max(ta, tb));
         }
-        if (t_in <= t_out) sink.Chord(t_in, t_out, OneBoxTerrain::kTop);
+        if (t_in <= t_out) sink.Chord(t_in, t_out, OneBoxTerrain::kTop, OneBoxTerrain::kTop);
         return true;
     }
 
@@ -518,7 +518,6 @@ SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a 
     std::size_t index = 0;
     for (const MapBox& b : m->Layout().boxes) {
         if (!OpaqueForSight(b.part) || (index++ % 5) != 0) continue;  // every fifth, for the time
-        const double top = b.base_m + b.height_m, up = top - 2.0;
         const double sh = std::sin(b.heading_rad), ch = std::cos(b.heading_rad);
         double pe = 0.0, pn = 0.0, de = 0.0, dn = 0.0;  // the cut's middle, inside it, and the ray's direction
         if (MapPartIsRound(b.part)) {
@@ -535,9 +534,13 @@ SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a 
             de = (sh - ch) * c;
             dn = (ch + sh) * c;
         }
+        const double up = b.TopAt(pe, pn) - 2.0;  // a wood on a slope: its top there (A.3.20)
         const double reach = 300.0;
         const Vec3 a{pe - reach * de, pn - reach * dn, 0.0}, z{pe + reach * de, pn + reach * dn, 0.0};
         if (!HasLineOfSight(bare, a, up, z, up, 100.0)) continue;  // the ground in the way: nothing to show
+        // An end under the ground (on the hills, terrain roadmap A.5): AnalysePath stands that antenna on the ground, so
+        // its ray is not this one.
+        if (t.HeightAt(a.x, a.y) > up || t.HeightAt(z.x, z.y) > up) continue;
         if (t.ObstacleTopAt(pe, pn) < up) continue;
         ++tried;
         if (HasLineOfSight(t, a, up, z, up, 100.0)) ++stepped_los;
@@ -556,6 +559,51 @@ SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a 
     SC_EXPECT(tried > 1000);
     SC_EXPECT(tried - from_clutter > 1000);
     SC_EXPECT(stepped_los == 0 && stepped_path == 0);
+}
+
+// A wood on a hillside (terrain roadmap A.3.20): its top follows the ground's plane across the block, so it stands about
+// its height over the ground at its uphill and its downhill edge alike (a level top was buried uphill, twice as tall
+// downhill), and a ray along the slope just under that top is blocked across the block, just over it is not.
+SC_TEST("obstacles: a wood on a slope stands its height over the ground across it, and a ray along its top meets it") {
+    const std::shared_ptr<const MapData> m = KesmarkMap();
+    if (!m) return;
+    const MapTerrain ground(m, m->Def().origin);
+    const Terrain& t = ground;
+    int sloped = 0, checked = 0, blocked = 0, cleared = 0;
+    double worst_spread = 0.0, level_spread = 0.0;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (b.part != MapPart::Canopy || !m->Def().InCore(b.east_m, b.north_m)) continue;
+        const double g = std::hypot(b.rise_e, b.rise_n);
+        if (g == 0.0) continue;
+        ++sloped;
+        if (g < 0.08 || checked >= 200) continue;
+        // Uphill and downhill, 40 m from its centre along the slope.
+        const double ue = b.rise_e / g, un = b.rise_n / g, d = 0.4 * b.length_m;
+        const double hu = m->ObstacleHeight(b.east_m + ue * d, b.north_m + un * d), hd = m->ObstacleHeight(b.east_m - ue * d, b.north_m - un * d);
+        if (hu <= 0.0 || hd <= 0.0) continue;  // another wood's corner, a clearing
+        ++checked;
+        worst_spread = std::max(worst_spread, std::fabs(hu - hd));
+        level_spread = std::max(level_spread, 2.0 * d * g);
+        // A ray along the slope, 1 m under the top and 1 m over it, from 300 m before the block to 300 m past it.
+        const double reach = 0.5 * b.length_m + 300.0;
+        const Vec3 a{b.east_m - ue * reach, b.north_m - un * reach, 0.0}, z{b.east_m + ue * reach, b.north_m + un * reach, 0.0};
+        const double ta = b.TopAt(b.east_m - ue * 0.45 * b.length_m, b.north_m - un * 0.45 * b.length_m);
+        const double tz = b.TopAt(b.east_m + ue * 0.45 * b.length_m, b.north_m + un * 0.45 * b.length_m);
+        // The ray through those two points of the top, 1 m under and over, carried out to the ends.
+        const double slope = (tz - ta) / (0.9 * b.length_m);
+        const double za = ta - slope * (reach - 0.45 * b.length_m), zz = tz + slope * (reach - 0.45 * b.length_m);
+        const GroundOnly bare(t);
+        if (!HasLineOfSight(bare, a, za - 1.0, z, zz - 1.0, 100.0)) continue;  // the ground itself in the way
+        blocked += HasLineOfSight(t, a, za - 1.0, z, zz - 1.0, 100.0) ? 0 : 1;
+        cleared += HasLineOfSight(t, a, za + 1.0, z, zz + 1.0, 100.0) ? 1 : 0;
+    }
+    std::printf("    %d sloping wood blocks; %d checked: their height uphill and downhill differs by at most %.1f m (a level top: %.1f m); "
+                "rays along their tops: %d blocked 1 m under, %d clear 1 m over\n",
+                sloped, checked, worst_spread, level_spread, blocked, cleared);
+    SC_EXPECT(sloped > 1000);
+    SC_EXPECT(checked > 50);
+    SC_EXPECT(worst_spread < 0.5 * level_spread);
+    SC_EXPECT(blocked > 0);
 }
 
 // R6's second review: a raid's sites were judged open by looking at nine points 20 m round the spot, between which a

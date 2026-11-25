@@ -1,0 +1,233 @@
+// The test plots (simcore/scenery/plots.hpp, roadmap L1): the data loads and refuses what is wrong, a field_layer plot is
+// found whole in one parcel of its layer, and every plot's three cameras stand where they should, looking at its middle.
+#include <cmath>
+#include <cstdio>
+#include <memory>
+#include <string>
+
+#include "simcore/scenery/plots.hpp"
+#include "simcore/terrain_map.hpp"
+#include "test_framework.hpp"
+
+using namespace simcore;
+using namespace simcore::scenery;
+
+namespace {
+
+const std::string kData = SIMCORE_DATA_DIR;
+constexpr int kDay = 288;  // 15 October (1985), the scenarios' day
+
+const DressingRules& PlotDressing() {
+    static DressingRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadDressingRules(kData + "/scenery/map_dressing.json", rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+const GroundLayerRules& PlotLayers() {
+    static GroundLayerRules rules;
+    static bool loaded = false;
+    if (!loaded) {
+        loaded = true;
+        std::string e;
+        if (!LoadGroundLayers(kData + "/scenery/ground_layers.json", PlotDressing(), rules, &e)) std::printf("    %s\n", e.c_str());
+    }
+    return rules;
+}
+
+PlotSet Plots() {
+    ViewSet views;
+    std::string e;
+    if (!LoadViews(kData + "/scenery/views.json", views, &e)) std::printf("    %s\n", e.c_str());
+    PlotSet set;
+    if (!LoadPlots(kData + "/scenery/plots.json", set, &e, &views)) std::printf("    %s\n", e.c_str());
+    return set;
+}
+
+const PlotDef* Find(const PlotSet& set, const std::string& id) {
+    for (const PlotDef& p : set.plots) {
+        if (p.id == id) return &p;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+SC_TEST("plots: the data loads, each plot with photos from the views' register") {
+    const PlotSet set = Plots();
+    SC_EXPECT(set.plots.size() >= 1);
+    SC_EXPECT(Find(set, "p01_ploughland") != nullptr);
+    // Every plot but the dry sunflower's, the brook's alders (A.3.21), a wood's inside (A.3.22), a village pond and a sunken lane (A.3.34), the tall grass
+    // (A.3.39) and the scrub (A.3.41), which have no photo in the register yet (fetching one waits for the owner).
+    for (const PlotDef& p : set.plots) {
+        SC_EXPECT(!p.photos.empty() || p.id == "p04_standing_sunflower" || p.id == "p20_brook_alders" || p.id == "p21_wood_inside" ||
+                   p.id == "p22_village_pond" || p.id == "p23_sunken_lane" || p.id == "p24_tall_grass" || p.id == "p06_pasture_bushes" ||
+                   p.id == "p25_scrubby_hillside");
+    }
+}
+
+SC_TEST("plots: the loader refuses a field_layer without its layer, an unknown kind, a photo not in the register") {
+    ViewSet views;
+    std::string e;
+    SC_EXPECT(LoadViews(kData + "/scenery/views.json", views, &e));
+    PlotSet set;
+    SC_EXPECT(!LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"field_layer\", \"close_km\": [0, 0]}}]}", set, &e));
+    SC_EXPECT(!LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"meadowland\"}}]}", set, &e));
+    SC_EXPECT(!LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"field_layer\", \"layer\": \"ploughed\", \"close_km\": [0, 0]},"
+                         " \"photos\": [\"P99999\"]}]}", set, &e, &views));
+    SC_EXPECT(LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"road\", \"road\": \"f_vrbice\"}}]}", set, &e));
+    // A stand only on a wood_inside anchor (A.3.38).
+    SC_EXPECT(!LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"road\", \"road\": \"f_vrbice\", \"stand\": \"oak\"}}]}", set, &e));
+    SC_EXPECT(LoadPlots("{\"plots\": [{\"id\": \"a\", \"anchor\": {\"kind\": \"wood_inside\", \"stand\": \"oak\", \"close_km\": [0, 0]}}]}", set, &e));
+}
+
+SC_TEST("plots: a wood plot of one stand stands in that stand, its eye and low camera too; an unknown stand is missing") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (map == nullptr) return;
+    const CoverRaster cover = BakeCover(*map, PlotDressing());
+    const PlotSet set = Plots();
+    for (const char* id : {"p08_black_locust", "p09_poplar_plantation"}) {
+        const PlotDef* p = Find(set, id);
+        SC_EXPECT(p != nullptr && !p->stand.empty());
+        if (p == nullptr) continue;
+        const std::vector<ResolvedView> cams = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, *p);
+        SC_EXPECT(cams.size() == 3);
+        for (const ResolvedView& c : cams) {
+            SC_EXPECT(c.ok);
+            if (!c.ok) {
+                std::printf("    %s: %s\n", c.id.c_str(), c.missing_reason.c_str());
+                continue;
+            }
+            const auto stand_of = [&](double pe, double pn) {
+                const StandPick s = StandAt(*map, PlotDressing(), pe, pn);
+                return s.type != nullptr ? s.type->id : std::string();
+            };
+            SC_EXPECT(stand_of(c.target_e, c.target_n) == p->stand);
+            if (c.eye_up_m < 100.0) SC_EXPECT(stand_of(c.eye_e, c.eye_n) == p->stand);
+            SC_EXPECT(map->ObstacleHeight(c.target_e, c.target_n) > 5.0);  // inside a wood
+        }
+        std::printf("    %s at (%.0f, %.0f)\n", id, cams[0].target_e, cams[0].target_n);
+    }
+    PlotDef odd = *Find(set, "p08_black_locust");
+    odd.stand = "palm_grove";
+    const std::vector<ResolvedView> none = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, odd);
+    SC_EXPECT(none.size() == 3 && !none[0].ok && none[0].missing_reason.find("palm_grove") != std::string::npos);
+}
+
+SC_TEST("plots: the ploughland plot is a whole 50 m square of one ploughed parcel, its cameras at 1.7, 25 and 150 m") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (map == nullptr) return;
+    const CoverRaster cover = BakeCover(*map, PlotDressing());
+    const PlotSet set = Plots();
+    const PlotDef* p = Find(set, "p01_ploughland");
+    SC_EXPECT(p != nullptr);
+    if (p == nullptr) return;
+    const std::vector<ResolvedView> cams = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, *p);
+    SC_EXPECT(cams.size() == 3);
+    if (cams.size() != 3) return;
+    const int ploughed = PlotLayers().Index("ploughed");
+    const double heights[] = {1.7, 25.0, 150.0};
+    for (std::size_t i = 0; i < cams.size(); ++i) {
+        const ResolvedView& c = cams[i];
+        SC_EXPECT(c.ok);
+        if (!c.ok) {
+            std::printf("    %s: %s\n", c.id.c_str(), c.missing_reason.c_str());
+            continue;
+        }
+        SC_EXPECT_NEAR(c.eye_up_m, heights[i], 1e-9);
+        // Every camera looks at the same middle, which is ploughed and well inside its parcel.
+        SC_EXPECT_NEAR(c.target_e, cams[0].target_e, 1e-9);
+        SC_EXPECT_NEAR(c.target_n, cams[0].target_n, 1e-9);
+        SC_EXPECT(PointLayer(cover, PlotDressing(), PlotLayers(), c.target_e, c.target_n, kDay) == ploughed);
+        // The low and high cameras look down at about 30 degrees.
+        if (i > 0) {
+            const double back = std::hypot(c.eye_e - c.target_e, c.eye_n - c.target_n);
+            const double down = std::atan2(c.eye_up_m, back) * 180.0 / kPi;
+            SC_EXPECT(down > 25.0 && down < 35.0);
+        }
+    }
+    const CoverGrid* g = cover.GridAt(cams[0].target_e, cams[0].target_n);
+    SC_EXPECT(g != nullptr);
+    if (g == nullptr) return;
+    const std::uint64_t parcel = FieldParcel(g->fields, cams[0].target_e, cams[0].target_n);
+    for (double de = -25.0; de <= 25.0; de += 5.0) {
+        for (double dn = -25.0; dn <= 25.0; dn += 5.0) {
+            SC_EXPECT(FieldParcel(g->fields, cams[0].target_e + de, cams[0].target_n + dn) == parcel);
+        }
+    }
+    // Resolved again, the same cameras (the plot is found the same way every time, on every machine).
+    const std::vector<ResolvedView> again = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, *p);
+    SC_EXPECT(again.size() == 3 && again[2].eye_e == cams[2].eye_e && again[2].eye_n == cams[2].eye_n);
+}
+
+SC_TEST("plots: the scrub's plots find a thicket and a lone bush on a grazed slope, looked at from open ground below (A.3.41)") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (map == nullptr) return;
+    const CoverRaster cover = BakeCover(*map, PlotDressing());
+    const PlotSet set = Plots();
+    for (const char* id : {"p25_scrubby_hillside", "p06_pasture_bushes"}) {
+        const PlotDef* p = Find(set, id);
+        SC_EXPECT(p != nullptr);
+        if (p == nullptr) continue;
+        const std::vector<ResolvedView> cams = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, *p);
+        SC_EXPECT(cams.size() == 3);
+        if (cams.empty() || !cams[0].ok) {
+            std::printf("    %s: %s\n", id, cams.empty() ? "no cameras" : cams[0].missing_reason.c_str());
+            SC_EXPECT(false);
+            continue;
+        }
+        const ResolvedView& eye = cams[0];
+        // The scrub stands where the eye looks: a box of it within a few metres of the target, up the slope or level.
+        const MapBox* box = nullptr;
+        for (const MapBox& b : map->Layout().boxes) {
+            if (b.scrub && std::hypot(b.east_m - eye.target_e, b.north_m - eye.target_n) < 1.0) box = &b;
+        }
+        SC_EXPECT(box != nullptr);
+        if (box == nullptr) continue;
+        const double away = std::hypot(box->east_m - eye.eye_e, box->north_m - eye.eye_n);
+        std::printf("    %s: a box %.0f x %.0f m, %.1f m tall, on %s, the eye %.0f m from it and %.1f m below\n", id, box->length_m, box->width_m,
+                    box->base_m + box->height_m - map->GroundHeight(box->east_m, box->north_m),
+                    map->LandUseGrass(box->east_m, box->north_m) == MapData::GrassUse::Pasture ? "pasture" : "tall grass", away,
+                    map->GroundHeight(box->east_m, box->north_m) - map->GroundHeight(eye.eye_e, eye.eye_n));
+        SC_EXPECT(away > 10.0 && away < 150.0);
+        SC_EXPECT(map->GroundHeight(eye.eye_e, eye.eye_n) <= map->GroundHeight(box->east_m, box->north_m) + 0.5);
+        if (std::string(id) == "p06_pasture_bushes") {
+            SC_EXPECT(map->LandUseGrass(box->east_m, box->north_m) == MapData::GrassUse::Pasture && box->length_m < 6.0);
+        } else {
+            SC_EXPECT(box->length_m > 20.0);
+        }
+    }
+}
+
+SC_TEST("plots: every plot on the Kesmark map gives its three cameras, or says why not") {
+    std::string e;
+    std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (map == nullptr) return;
+    const CoverRaster cover = BakeCover(*map, PlotDressing());
+    for (const PlotDef& p : Plots().plots) {
+        const std::vector<ResolvedView> cams = ResolvePlot(*map, PlotDressing(), cover, PlotLayers(), kDay, p);
+        SC_EXPECT(cams.size() == 3);
+        for (const ResolvedView& c : cams) {
+            SC_EXPECT(c.ok || !c.missing_reason.empty());
+            if (!c.ok) {
+                std::printf("    (missing) %s: %s\n", c.id.c_str(), c.missing_reason.c_str());
+                continue;
+            }
+            // Clear of what stands there, but for the eye inside a wood, among its trunks (A.3.22).
+            const double ground = map->GroundHeight(c.eye_e, c.eye_n);
+            const bool among_trees = p.anchor.kind == "wood_inside" && c.eye_up_m < 3.0;
+            SC_EXPECT(among_trees || map->ObstacleTop(c.eye_e, c.eye_n) < ground + c.eye_up_m);
+        }
+    }
+}

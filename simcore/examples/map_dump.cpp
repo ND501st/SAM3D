@@ -3,6 +3,7 @@
 //
 //   map_dump <data dir> maps/kesmark_range.json out/kesmark_range_map.json
 //   map_dump <data dir> maps/kesmark_range.json --height 6.0 -9.2 [east_km north_km ...]
+//   map_dump <data dir> maps/kesmark_range.json --horizon 6.4 -9.6 5   (east_km north_km antenna_m: the lowest target seen)
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <string>
 
+#include "simcore/radar.hpp"
 #include "simcore/scenery/map_dressing.hpp"
 #include "simcore/terrain_map.hpp"
 
@@ -45,6 +47,40 @@ int main(int argc, char** argv) {
         const double dress_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count();
         std::fprintf(stderr, "dressing in %.0f ms: %zu trees, %zu wood masses, %zu land cover cells\n", dress_ms, dressing.trees.size(),
                      dressing.masses.size(), cells);
+    }
+    if (std::strcmp(argv[3], "--horizon") == 0 && argc >= 7) {
+        // The lowest target an antenna there sees, every degree round and at 5, 10, 15 and 20 km, by the sight rule the
+        // battery fire model and the player's Osa use (engagement.hpp SearchAntennaSees: the ground, woods, buildings,
+        // tree rows; 4/3 earth). Heights above the ground under the target.
+        const double e0 = std::atof(argv[4]) * 1000.0, n0 = std::atof(argv[5]) * 1000.0, antenna_m = std::atof(argv[6]);
+        const MapTerrain terrain(map, map->Def().origin);
+        const double eye = map->GroundHeight(e0, n0) + antenna_m;
+        const double ranges_m[4] = {5000.0, 10000.0, 15000.0, 20000.0};
+        std::printf("horizon from %.3f %.3f km, antenna %.1f m (ground %.1f m)\naz", e0 / 1000.0, n0 / 1000.0, antenna_m, eye - antenna_m);
+        for (double r : ranges_m) std::printf("  min_%.0fkm", r / 1000.0);
+        std::printf("\n");
+        for (int az = 0; az < 360; ++az) {
+            std::printf("%3d", az);
+            const double a = az * kPi / 180.0;
+            for (double r : ranges_m) {
+                const double e = e0 + r * std::sin(a), n = n0 + r * std::cos(a);
+                const double ground = map->GroundHeight(e, n);
+                const auto sees = [&](double h) {
+                    return HasLineOfSight(terrain, Vec3{e0, n0, eye}, eye, Vec3{e, n, ground + h}, ground + h, 100.0);
+                };
+                double lo = 0.0, hi = 3000.0;
+                if (sees(lo)) {
+                    hi = 0.0;
+                } else if (!sees(hi)) {
+                    lo = hi;
+                } else {
+                    for (int i = 0; i < 14; ++i) (sees(0.5 * (lo + hi)) ? hi : lo) = 0.5 * (lo + hi);
+                }
+                std::printf("  %9.0f", hi);
+            }
+            std::printf("\n");
+        }
+        return 0;
     }
     if (std::strcmp(argv[3], "--height") == 0) {
         for (int i = 4; i + 1 < argc; i += 2) {

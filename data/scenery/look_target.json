@@ -1,0 +1,28 @@
+{
+  "notes": "The terrain's look target (docs/scenery/LOOK_TARGET.md; roadmap D10): the owner's six screenshots of Kingdom Come: Deliverance II's countryside, 6 Nov 2026. A quality bar only: the pictures are the publisher's, kept on the owner's PC in the folder below (git-ignored), never committed, traced, sampled or recreated. tools/plot_lab.py shows them beside the renders where the PC has them, with the traits as a checklist.",
+  "folder": "reference/look/kcd2",
+  "pictures": [
+    {"id": "K-a", "file": "k1_track_between_wheat.jpg", "shows": "a rutted track between wheat, dipping to a village in a fold of wooded hills"},
+    {"id": "K-b", "file": "k2_hill_meadow_valley.webp", "shows": "from a hilltop meadow over a valley floor to ridges fading in steps"},
+    {"id": "K-c", "file": "k3_fields_from_shade.webp", "shows": "fields of different states side by side, from dappled shade"},
+    {"id": "K-d", "file": "k4_wheat_lone_tree.jpg", "shows": "standing wheat on a crest, a lone broad tree, wooded hills to the horizon"},
+    {"id": "K-e", "file": "k5_rock_valley_meadow.jpg", "shows": "a valley meadow, a worn track and a stony brook"},
+    {"id": "K-f", "file": "k6_village_pond.jpg", "shows": "a worn path past a pond with reeds and a willow, dense cover"}
+  ],
+  "traits": [
+    {"id": "K1", "name": "Relief at every scale", "target": "rolling ground near and far; a track dips and climbs; banks and hollows near the eye"},
+    {"id": "K2", "name": "Land use follows the ground", "target": "woods on slopes and crests, fields on gentle ground, meadows on valley floors"},
+    {"id": "K3", "name": "Patches with soft edges", "target": "fields of different states, uneven edges, grass margins and balks"},
+    {"id": "K4", "name": "Edges layered and closed", "target": "a wall of leaves from the ground up, no trunks seen from outside, an uneven outline"},
+    {"id": "K5", "name": "Trees that read as trees", "target": "clumped foliage, dark inside, each species its own silhouette"},
+    {"id": "K6", "name": "Ground cover dense to the horizon", "target": "grass and herbs everywhere not worked, never a bare texture"},
+    {"id": "K7", "name": "Crops as volume", "target": "a crop a mass of plants with a soft edge, darker into its depth"},
+    {"id": "K8", "name": "Tracks worn into the ground", "target": "two ruts and a grass median, sunk a little, grassy shoulders"},
+    {"id": "K9", "name": "Things that give scale", "target": "stones, branches, fences, poles, sheds, stacks, animals"},
+    {"id": "K10", "name": "Light", "target": "warm sun, blue sky light in the shadows, occlusion in foliage, dappled shade"},
+    {"id": "K11", "name": "Sky and air", "target": "cumulus with form and their shadows; far ridges bluer and paler; no brown haze"},
+    {"id": "K12", "name": "Colour and value", "target": "muted natural greens, a full range of value, the ground's colour in patches"},
+    {"id": "K13", "name": "Water with its banks", "target": "reeds, still reflections, a willow; a stony brook bed"},
+    {"id": "K14", "name": "Every distance has its detail, and no seams", "target": "near, middle and far each detailed; no ring where the cover ends, no grid"}
+  ]
+}

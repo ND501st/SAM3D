@@ -8,6 +8,7 @@ class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UHierarchicalInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UPostProcessComponent;
 class USceneComponent;
 class USkyAtmosphereComponent;
 class USkyLightComponent;
@@ -83,6 +84,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "0.1", ClampMax = "10"))
 	float HeightFogScaleHeightKm = 1.2f;
 
+	/** The outdoor views' exposure compensation, EV (the engine's own is +1, which lifts the plain's dark ground to a
+	 *  light sand). Set by an unbound post process, so every view outdoors takes it; the cabin and its displays set
+	 *  their own. A game value, tuned against -SimMapShots (track T); -SimExposureBias=<ev> overrides it to tune. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Sky", meta = (ClampMin = "-4", ClampMax = "4"))
+	float OutdoorExposureBias = 0.0f;
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -109,6 +116,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Sky")
 	TObjectPtr<UExponentialHeightFogComponent> HeightFog;
+
+	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Sky")
+	TObjectPtr<UPostProcessComponent> Exposure;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> CloudMaterial;

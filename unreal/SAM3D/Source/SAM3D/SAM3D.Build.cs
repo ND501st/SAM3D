@@ -23,7 +23,8 @@ public class SAM3D : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MeshDescription",
-			"StaticMeshDescription"
+			"StaticMeshDescription",
+			"AssetRegistry"  // texture arrays made by the editor scripts (USimEditorScripting::MakeTextureArray)
 		});
 
 		// simcore is a header-only C++17 library that lives at the repo root (../../../../simcore).

@@ -105,6 +105,7 @@ public:
         assist_level_ = def_.assistance;
         if (def_.map) {  // a generated map's ground under the whole scenario (terrain_map.hpp)
             map_ground_ = std::make_unique<MapTerrain>(def_.map, def_.origin);
+            map_ground_->SetStanding(def_.crops);  // the crops standing on the day block sight as the woods do
             world_.SetTerrain(map_ground_.get());
         }
         if (def_.has_weather) {  // the winds and the cloud over the whole airspace (weather.hpp)

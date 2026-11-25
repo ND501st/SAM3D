@@ -30,13 +30,45 @@
       { "id": "dubnik_rise", "east_km": -19, "north_km": 13, "radius_km": 4.0, "height_m": 22 },
       { "id": "varos_hill", "east_km": -34, "north_km": 36, "radius_km": 4.0, "height_m": 70, "notes": "The air defence sector's bunker (places_pannonia nv_sector_cp)." },
       { "id": "noric_hills", "east_km": -150, "north_km": -140, "radius_km": 70, "height_m": 450, "notes": "The neutral neighbour's hills beyond the south-western border." },
-      { "id": "northern_uplands", "east_km": 20, "north_km": 150, "radius_km": 60, "height_m": 300 }
+      { "id": "northern_uplands", "east_km": 20, "north_km": 150, "radius_km": 60, "height_m": 300 },
+      {"id": "bty21_rise", "east_km": 6.15, "north_km": -10.1, "radius_km": 2.5, "height_m": 25, "notes": "The low rise battery 21 stands on: its launchers 19-22 m above the plain, so the tree rows round it stay under the antennas (docs/air_war/09_BALANCE.md section 13)."},
+      {"id": "bty21_dummy_a_rise", "east_km": 4.5, "north_km": -9.4, "radius_km": 1.2, "height_m": 12, "notes": "Dummy position A on a rise of its own, as a real position would be."},
+      {"id": "bty21_dummy_b_rise", "east_km": 10.7, "north_km": -9.5, "radius_km": 1.4, "height_m": 16, "notes": "Dummy position B on a rise of its own."},
+      {"id": "vrbice_west_mound", "east_km": -3, "north_km": -15, "radius_km": 1.5, "height_m": 12},
+      {"id": "sugar_works_back", "east_km": 15, "north_km": 8, "radius_km": 2.0, "height_m": 16},
+      {"id": "kecel_road_back", "east_km": -14, "north_km": -12, "radius_km": 1.8, "height_m": 14},
+      {"id": "sand_ridge_north_1", "east_km": -6.0, "north_km": 1.0, "radius_km": 1.4, "height_m": 13, "notes": "A sand ridge of the plain, north-west to south-east, as a chain of low hills."},
+      {"id": "sand_ridge_north_2", "east_km": -4.33, "north_km": 2.33, "radius_km": 1.4, "height_m": 11},
+      {"id": "sand_ridge_north_3", "east_km": -2.67, "north_km": 3.67, "radius_km": 1.4, "height_m": 13},
+      {"id": "sand_ridge_north_4", "east_km": -1.0, "north_km": 5.0, "radius_km": 1.4, "height_m": 11},
+      {"id": "sand_ridge_south_1", "east_km": -2.0, "north_km": -6.0, "radius_km": 1.2, "height_m": 10, "notes": "A lower sand ridge south of the barracks."},
+      {"id": "sand_ridge_south_2", "east_km": 0.0, "north_km": -4.5, "radius_km": 1.2, "height_m": 8},
+      {"id": "sand_ridge_south_3", "east_km": 2.0, "north_km": -3.0, "radius_km": 1.2, "height_m": 10}
     ],
     "valley": { "depth_m": 6, "half_width_m": 700, "notes": "The Rava's valley, carved along the river." },
+    "landform": {
+      "exaggeration": 1.0, "wavelength_km": 1.0, "warp_km": 0.8, "ridged": 0.35,
+      "drainage": {
+        "spacing_m": 50, "channel_area_km2": 0.15, "channel_slope": 0.02, "concavity": 0.5, "hillslope": 0.26,
+        "steepness_spread": 0.6, "floor_m": 60, "trunk_share": 0.6, "trunk_wavelength_km": 6, "inland_tilt": 0.5, "brook_area_km2": 3,
+        "notes": "The ground baked from where the water goes (roadmap A.5 step 2): every valley runs out of the hills, none ends in a closed basin; the forms above only steer the valleys. Game values, judged by eye against the look target (docs/scenery/LOOK_TARGET.md K1, K2, K13) and the hill plots."
+      },
+      "regions": [
+        { "id": "western_rolling", "relief_m": 22, "blend_km": 4,
+          "points": [[-60, -16], [-3, -16], [1, -6], [0, 4], [-1, 14], [0, 30], [-60, 30]],
+          "notes": "Rolling ground between the plain and the hills: its outline 6-7 km west of battery 21 and Vrbice, west of Polany hill, north of the Kecel airfield." },
+        { "id": "western_hills", "relief_m": 70, "blend_km": 5,
+          "points": [[-60, -8], [-9, -8], [-5, 0], [-7, 9], [-4, 18], [-6, 30], [-60, 30]],
+          "notes": "The hills: round the Lazne woods (the regiment's post), the Dubnik forest and Ludas hill (the P-19); south of Varos hill and Novo Varosd." }
+      ],
+      "source": "game value: sam3d estimate", "confidence": "estimate",
+      "notes": "The hill country of the owner's choice (6 Nov 2026: west and north-west; docs/scenery/TERRAIN_ROADMAP.md L11 and A.5, the look target's K1): rolling ground ringing hilly ground, both rising from the plain, the plain kept east along the Rava (battery 21, the bridges, Kesmark) and at Kecel. Relief and form judged by eye against the look target and photographs of Transdanubian hill country (to be gathered); the same block in maps/pannonia.json, so the range and the country share one ground (tests/test_country_map.cpp)."
+    },
     "detail": [
       { "id": "bty21", "east_km": 9.5, "north_km": -6.5, "half_km": 6, "spacing_m": 10, "micro_m": 0.8,
+        "meso": [ { "wavelength_m": 700, "amplitude_m": 2.5 }, { "wavelength_m": 250, "amplitude_m": 1.2 }, { "wavelength_m": 90, "amplitude_m": 0.3 } ],
         "source": "game value: sam3d estimate", "confidence": "estimate",
-        "notes": "Battery 21's district (its position at 6.4, -9.6 and both Kesmark bridges inside): 10 m ground with a little micro relief (roadmap R6). Its edges are nodes of the map proper's 50 m ground." },
+        "notes": "Battery 21's district (its position at 6.4, -9.6 and both Kesmark bridges inside): 10 m ground with a little micro relief (roadmap R6). Its edges are nodes of the map proper's 50 m ground. The meso relief (roadmap L3) is the loess plain's swells and swales, a few hundred metres across and a metre or two high, judged by eye against the plot lab's photographs; kept off the roads, sites and towns as the micro relief is." },
       { "id": "capital", "east_km": 36, "north_km": 58, "half_km": 7.5, "spacing_m": 20, "micro_m": 0.6,
         "source": "game value: sam3d estimate", "confidence": "estimate",
         "notes": "The capital (data/maps/pannonia.json settlements.capital, radius 7 km) and the dynamic campaign test round it: 20 m ground (roadmap R6). Its edges are nodes of the far ground's 500 m ground." }
@@ -115,6 +147,12 @@
   ],
   "farmsteads": { "count": 70, "buildings": [2, 4],
                   "notes": "Tanyas: lone farmsteads on the plain, inside the map only." },
+  "farmland": {
+    "estate_m": 4000, "field_length_m": [1200, 2000], "field_width_m": [700, 1000],
+    "track_share": 0.5, "track_width_m": 4, "row_share": 0.3, "road_row_share": 0.5, "row_width_m": 7, "row_height_m": [12, 22],
+    "site_clear_m": 600, "position_clear_m": 2000, "grove_width_m": 20, "grove_height_m": [12, 18],
+    "notes": "game values, sam3d estimates (docs/scenery/T3_T4_PLAN.md): the plain in estates of 4 km, each a collective farm's fields of 84-200 ha (a TSZ's, 100-200 ha, 1970s-80s; docs/research/TERRAIN_REFERENCES_2026-11.md) in rows along one heading; farm tracks (dulout) along half the fields' long sides, tree rows (12-22 m, poplar and locust) along 30 percent of them and 50 percent of the main and secondary roads, a grove round three sides of each tanya. None within 600 m of a site, nor 2 km of an Osa or dummy position (its launchers stand up to a kilometre out and its crews fell what masks the antennas; docs/air_war/09_BALANCE.md section 13). Rows and groves block sight (they are boxes of the map)."
+  },
   "forests": [
     { "id": "lazne_woods", "name": "The Lazne woods",
       "points": [ [-13.6, -5.6], [-12.4, -0.8], [-10.2, -0.2], [-8.8, -1.8], [-9.0, -4.6], [-9.6, -5.9], [-11.4, -6.4] ],

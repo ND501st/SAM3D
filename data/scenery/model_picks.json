@@ -1,0 +1,994 @@
+{
+  "notes": "The models picked to replace the map's procedural parts, one entry each (tools/ue_import_model.py imports, fits and registers a pick; tools/fetch_models.py fetches Poly Haven ones; Fab and Sketchfab ones the owner puts under art/thirdparty/models/<folder>/). 'frame' is the part's: cube (a building or mass, a unit cube) or tree (a tree or plant, one tall, one across). docs/scenery/ASSETS.md has the register's rules: a model is added only with the owner's say-so. A pick: {\"id\": register id, \"folder\": the source folder under art/thirdparty/models/, \"file\": the glTF, GLB, FBX or OBJ in it, \"part\": the part key (map_meshes.hpp MapMeshParts), \"variant\": optional (a building's variant), \"frame\": cube or tree, \"origin\": the page, \"author\", \"licence\" (CC0-1.0, CC-BY-4.0, Fab-Standard), \"fetched\": a date, optional \"yaw_deg\", \"keep_aspect\", \"notes\"}. Then: python tools/prepare_model.py <id> (Blender), and tools/ue_import_model.py with SAM3D_MODEL=<id> (Unreal).",
+  "picks": [
+    {
+      "id": "oak_pc37",
+      "folder": "oak_plantcatalog",
+      "file": "oak_fall_37.glb",
+      "part": "tree_oak",
+      "frame": "tree",
+      "origin": "https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-37138-b7ed18f291c3445a8b805da379e3de4f",
+      "author": "PlantCatalog (e-on software)",
+      "licence": "CC-BY-4.0",
+      "fetched": "2026-11-04",
+      "notes": "Realistic HD Northern red oak (37/138), juvenile, fall; 202.6k triangles, 10.5 m, 1k textures. Credit: Realistic HD Northern red oak (37/138) by PlantCatalog, CC BY 4.0. TRIED 4 Nov 2026 and taken out of the register: as imported (40k triangles in the GLB's LOD0 at Nanite, 10 materials) it cost 20-36 ms of GPU at the views with woods (against 6-8 ms) and its leaves drew grey; it needs thinning (twigs dropped, leaves thinned and enlarged, trunk decimated), LODs and its own foliage material first.",
+      "thin_tris": 9000,
+      "foliage": true,
+      "variant": 0,
+      "z_offset_m": -0.07,
+      "bark_gain": 0.35,
+      "bark_gain_source": "game value: sam3d estimate (A.3.31): the texture averages 0.45 sRGB (about 0.17 linear) and drew near white in sun; times 0.35 is about 0.06, a dark grey bark"
+    },
+    {
+      "id": "oak_pc37_l1",
+      "folder": "oak_plantcatalog",
+      "file": "oak_fall_37.glb",
+      "part": "tree_oak",
+      "frame": "tree",
+      "origin": "https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-37138-b7ed18f291c3445a8b805da379e3de4f",
+      "author": "PlantCatalog (e-on software)",
+      "licence": "CC-BY-4.0",
+      "fetched": "2026-11-04",
+      "notes": "The same oak thinned to about 2200 triangles: the mid band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown).",
+      "thin_tris": 2200,
+      "foliage": true,
+      "variant": 1,
+      "z_offset_m": -0.07,
+      "bark_gain": 0.35,
+      "bark_gain_source": "game value: sam3d estimate (A.3.31): the texture averages 0.45 sRGB (about 0.17 linear) and drew near white in sun; times 0.35 is about 0.06, a dark grey bark"
+    },
+    {
+      "id": "oak_pc37_l2",
+      "folder": "oak_plantcatalog",
+      "file": "oak_fall_37.glb",
+      "part": "tree_oak",
+      "frame": "tree",
+      "origin": "https://sketchfab.com/3d-models/realistic-hd-northern-red-oak-37138-b7ed18f291c3445a8b805da379e3de4f",
+      "author": "PlantCatalog (e-on software)",
+      "licence": "CC-BY-4.0",
+      "fetched": "2026-11-04",
+      "notes": "The same oak thinned to about 600 triangles: the far band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown).",
+      "thin_tris": 600,
+      "foliage": true,
+      "variant": 2,
+      "z_offset_m": -0.07,
+      "bark_gain": 0.35,
+      "bark_gain_source": "game value: sam3d estimate (A.3.31): the texture averages 0.45 sRGB (about 0.17 linear) and drew near white in sun; times 0.35 is about 0.06, a dark grey bark"
+    },
+    {
+      "id": "grass_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "grass_card.glb",
+      "part": "clutter_grass",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "notes": "Ground clutter drawn as a tuft of dry grass: three crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "grass_ms_c",
+      "folder": "quixel/wild_grass_vczndjqja",
+      "file": "prepared/VarC_LOD0.glb",
+      "part": "clutter_grass",
+      "frame": "tree",
+      "up": "z",
+      "foliage": true,
+      "origin": "https://www.fab.com/listings/50d9a417-73ed-4132-9421-6be3d4f7432e",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-06",
+      "notes": "Megascans Wild Grass, variant C (212 triangles, a clump 0.54 x 0.48 m and 0.32 m high as scanned), its colour and opacity in one RGBA texture at 2048 px (tools/megascans_plant.py --gltf): the sward's clump (A.3.40), tinted green to dry per plant (clutter.json). Fab Standard licence (not redistributable): under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "grass_ms_b",
+      "folder": "quixel/wild_grass_vczndjqja",
+      "file": "prepared/VarB_LOD2.glb",
+      "part": "clutter_grass_b",
+      "frame": "tree",
+      "up": "z",
+      "foliage": true,
+      "origin": "https://www.fab.com/listings/50d9a417-73ed-4132-9421-6be3d4f7432e",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-06",
+      "notes": "Megascans Wild Grass, variant B at its LOD2 (424 triangles, 0.65 x 0.60 m and 0.44 m high as scanned): the sward's second, fuller clump (A.3.40). Fab Standard licence: under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "tall_ms_dry",
+      "folder": "quixel/dry_grass_tbbqejqr",
+      "file": "prepared/VarA_LOD1.glb",
+      "part": "clutter_tall",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "https://www.fab.com/listings/472c99c7-2d67-4190-9ad4-3bb04cfc80f3",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-06",
+      "notes": "Megascans Dry Grass, variant A at its LOD1 (458 triangles, 0.34 x 0.37 m and 0.69 m high as scanned): tall grass's dry stalks with their seed heads (A.3.40). Fab Standard licence: under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "tall_ms_wheat",
+      "folder": "quixel/wheat_grass_tdcrdbur",
+      "file": "prepared/VarD_LOD1.glb",
+      "part": "clutter_tall_b",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "https://www.fab.com/listings/9070350f-dea8-40ec-ba57-0777a2c1fb24",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-06",
+      "notes": "Megascans Wheat Grass (wheatgrass, Elymus: a wild grass, not the crop), variant D at its LOD1 (342 triangles, 0.49 x 0.47 m and 1.11 m high as scanned): tall grass's taller clumps with their ears (A.3.40). Fab Standard licence: under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "straw_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "straw_card.glb",
+      "part": "clutter_straw",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "notes": "Ground clutter drawn as a bundle of stubble or a maize stump: two crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "reed_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "reed_card.glb",
+      "part": "clutter_reed",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "notes": "Ground clutter drawn as a stand of dry reeds or a stalk: two crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "maize_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maize_card.glb",
+      "part": "clutter_maize",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-05",
+      "notes": "Standing maize dried before the harvest, two or three plants: two crossed cards with an alpha texture drawn by tools/make_cards.py, drawn in rows near the camera where the crop block dithers away (data/scenery/clutter.json's maize kind)."
+    },
+    {
+      "id": "maize_card_b",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maize_card_b.glb",
+      "part": "clutter_maize_b",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-05",
+      "notes": "The second standing maize card: plants drawn less in order (more leaves limp, some on the same side running, a top snapped over), so the rows do not repeat one card (data/scenery/clutter.json's maize kind draws one of its cards per plant)."
+    },
+    {
+      "id": "sunflower_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "sunflower_card.glb",
+      "part": "clutter_sunflower",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing sunflower dried before the harvest, two plants: a grey-brown stalk, shrivelled dark leaves, the head hanging face down from a bent neck; one of the sunflower kind's cards (data/scenery/clutter.json)."
+    },
+    {
+      "id": "sunflower_card_b",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "sunflower_card_b.glb",
+      "part": "clutter_sunflower_b",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing sunflower, uneven: each plant its own height from half to full, a shade darker; one of the sunflower kind's cards."
+    },
+    {
+      "id": "sunflower_card_c",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "sunflower_card_c.glb",
+      "part": "clutter_sunflower_c",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing sunflower, three short plants, a shade paler; one of the sunflower kind's cards."
+    },
+    {
+      "id": "hazel_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "hazel_card.glb",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A hazel bush in October, many stems fanning from one foot, broad round leaves turning yellow: three crossed cards (A.3.23; the understorey and the brooks' bushes)."
+    },
+    {
+      "id": "elder_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "elder_card.glb",
+      "part": "tree_elder",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "An elder bush in October, arching stems, narrow leaflets still green, black-purple berry umbels: three crossed cards (A.3.23)."
+    },
+    {
+      "id": "blackthorn_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "blackthorn_card.glb",
+      "part": "tree_blackthorn",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "notes": "A blackthorn bush in October, many thin dark stems from the foot, small dark leaves, blue-black sloes: three crossed cards (terrain roadmap A.3.41, the hills' scrub)."
+    },
+    {
+      "id": "hawthorn_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "hawthorn_card.glb",
+      "part": "tree_hawthorn",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "notes": "A hawthorn bush in October, a short stem and a rounded crown of lobed leaves turning, red haws: three crossed cards (terrain roadmap A.3.41, the hills' scrub)."
+    },
+    {
+      "id": "dog_rose_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "dog_rose_card.glb",
+      "part": "tree_dog_rose",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "notes": "A dog rose in October, long arching canes, leaves yellowing, orange-red hips: three crossed cards (terrain roadmap A.3.41, the hills' scrub)."
+    },
+    {
+      "id": "poplar_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "poplar_card.glb",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A Lombardy or hybrid poplar in October, a narrow lumpy column turning yellow on a short trunk: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "alder_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "alder_card.glb",
+      "part": "tree_alder",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A black alder by the water in October, an oval crown still dark green: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "acacia_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "acacia_card.glb",
+      "part": "tree_acacia",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A black locust (acacia) in October, a thin open crown of small leaflets in clumps, yellow-green, on a tall trunk: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "maple_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maple_card.glb",
+      "part": "tree_maple",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A field maple in October, a round dense crown turning orange and yellow: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "pine_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "pine_card.glb",
+      "part": "tree_pine",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A Scots pine, a tall bare trunk orange-brown up top, the crown a flat irregular cap of dark needle tufts in clumps: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "beech_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "beech_card.glb",
+      "part": "tree_beech",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-07",
+      "notes": "A beech in October, a broad dome on a smooth grey trunk, its leaves turning copper and orange: three crossed cards, our own drawing (A.3.24)."
+    },
+    {
+      "id": "willow_card",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "willow_card.glb",
+      "part": "tree_willow",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "notes": "A white willow by a village pond or a brook in October, a broad loose dome of narrow silvery grey-green leaves, a few gone yellow: three crossed cards, our own drawing (A.3.37)."
+    },
+    {
+      "id": "maize_card_c",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maize_card_c.glb",
+      "part": "clutter_maize_c",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing maize, stunted: plants half to two thirds of the card's height, a shade darker (a wet hollow or a late sowing); one of the maize kind's cards."
+    },
+    {
+      "id": "maize_card_d",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maize_card_d.glb",
+      "part": "clutter_maize_d",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing maize, the tallest: plants the card's full height, a shade paler (dried out first); one of the maize kind's cards."
+    },
+    {
+      "id": "maize_card_e",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maize_card_e.glb",
+      "part": "clutter_maize_e",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing maize, uneven: each plant its own height from under half to full, slightly darker; one of the maize kind's cards."
+    },
+    {
+      "id": "maize_card_f",
+      "root": "art/clutter",
+      "folder": "",
+      "file": "maize_card_f.glb",
+      "part": "clutter_maize_f",
+      "frame": "tree",
+      "foliage": true,
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-06",
+      "notes": "Standing maize, middling: plants two thirds to most of the card's height, a shade paler, more leaves hanging and a top snapped now and then; one of the maize kind's cards."
+    },
+    {
+      "folder": "elderberry_megascans",
+      "part": "tree_elder",
+      "frame": "tree",
+      "origin": "https://www.fab.com/listings/d72dd7bb-d514-4a14-8b4b-3333c99057fb",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-04",
+      "foliage": true,
+      "id": "elder_ms",
+      "file": "prepared/VarA_LOD2.glb",
+      "variant": 0,
+      "notes": "NOT USED (5 Nov 2026): its flowers show white at a wood edge in October (V12); the procedural elder draws instead. Megascans Elderberry, variant A at its LOD2 (3150 triangles), colour and opacity in one RGBA texture (tools/megascans_plant.py): the fringe's elder, 0-150 m. Fab Standard licence (not redistributable): the files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "folder": "elderberry_megascans",
+      "part": "tree_elder",
+      "frame": "tree",
+      "origin": "https://www.fab.com/listings/d72dd7bb-d514-4a14-8b4b-3333c99057fb",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-04",
+      "foliage": true,
+      "id": "elder_ms_l1",
+      "file": "prepared/VarA_LOD3.glb",
+      "variant": 1,
+      "notes": "NOT USED (5 Nov 2026): its flowers show white at a wood edge in October (V12); the procedural elder draws instead. Megascans Elderberry, variant A's billboard made two crossed cards (22 triangles): 150-600 m, then the procedural shrub to 800 m."
+    },
+    {
+      "folder": "gv_shrub_b",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "origin": "Fab listing: Free Shrubs Pack (Ultra Realistic), Greenleaf Vision, in the owner's Fab library (GV_Vol7_Shrub_B_type1_L2, exported from the Unreal pack)",
+      "author": "Greenleaf Vision",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "foliage": true,
+      "id": "hazel_gv_b",
+      "file": "prepared/ShrubB_L2.glb",
+      "variant": 0,
+      "thin_tris": 1500,
+      "notes": "NOT USED (5 Nov 2026): thinned to a solid green column with pale patches at the wood edge (V12); the procedural hazel draws instead. GV Free Shrubs Pack, shrub B type 1 at its lowest level (6878 triangles of leaf geometry) thinned to 1500, the leaf atlas at 2048 px as one RGBA texture: the fringe's hazel, 0-150 m. Fab Standard licence (not redistributable): the files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "folder": "gv_shrub_b",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "origin": "Fab listing: Free Shrubs Pack (Ultra Realistic), Greenleaf Vision, in the owner's Fab library (GV_Vol7_Shrub_B_type1_L2, exported from the Unreal pack)",
+      "author": "Greenleaf Vision",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "foliage": true,
+      "id": "hazel_gv_b_l1",
+      "file": "prepared/ShrubB_L2.glb",
+      "variant": 1,
+      "thin_tris": 400,
+      "notes": "NOT USED (5 Nov 2026): thinned to a solid green column with pale patches at the wood edge (V12); the procedural hazel draws instead. The same shrub thinned to 400 triangles: 150-600 m, then the procedural shrub to 800 m."
+    },
+    {
+      "folder": "card_hornbeam",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "origin": "own generator (tools/blender/card_tree.py); leaf photographs from Quixel Megaplants: European Hornbeam (Fab listing in the owner's library)",
+      "author": "SAM3D (generator); leaves: Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "foliage": true,
+      "id": "hornbeam_cards",
+      "file": "prepared/hornbeam_L0.glb",
+      "variant": 0,
+      "notes": "A hornbeam of twig cards (leaf photographs composed into twigs by tools/leaf_atlas.py), the near level (about 420 triangles): 0-150 m. Fab Standard licence for the leaf photographs (not redistributable): files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "folder": "card_hornbeam",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "origin": "own generator (tools/blender/card_tree.py); leaf photographs from Quixel Megaplants: European Hornbeam (Fab listing in the owner's library)",
+      "author": "SAM3D (generator); leaves: Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "foliage": true,
+      "id": "hornbeam_cards_l1",
+      "file": "prepared/hornbeam_L1.glb",
+      "variant": 1,
+      "notes": "A hornbeam of twig cards (leaf photographs composed into twigs by tools/leaf_atlas.py), the far level (about 170 triangles): 150-600 m. Fab Standard licence for the leaf photographs (not redistributable): files under art/thirdparty and /Game/ThirdParty, ignored by git."
+    },
+    {
+      "id": "hornbeam_mp_a",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_A.Tree_Hornbeam_01_A",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants European Hornbeam, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.32,
+          0.3,
+          0.04
+        ],
+        "color_2": [
+          1.2,
+          1.0,
+          0.12
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "hornbeam_mp_c",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_C.Tree_Hornbeam_01_C",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants European Hornbeam, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.32,
+          0.3,
+          0.04
+        ],
+        "color_2": [
+          1.2,
+          1.0,
+          0.12
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "hornbeam_mp_d",
+      "part": "tree_hornbeam",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.32,
+          0.3,
+          0.04
+        ],
+        "color_2": [
+          1.2,
+          1.0,
+          0.12
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hornbeam turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "poplar_mp_a",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_A.Tree_Black_Poplar_01_A",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "poplar_mp_b",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_B.Tree_Black_Poplar_01_B",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant B, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "poplar_mp_c",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_C.Tree_Black_Poplar_01_C",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "poplar_mp_d",
+      "part": "tree_poplar",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Black_Poplar/Tree_Black_Poplar_01/Tree_Black_Poplar_01_D.Tree_Black_Poplar_01_D",
+      "origin": "Fab listing: Quixel Megaplants: Black Poplar, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Black Poplar, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 3,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.34,
+          0.04
+        ],
+        "color_2": [
+          1.3,
+          1.15,
+          0.1
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: poplar turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "maple_mp_a",
+      "part": "tree_maple",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Norway_Maple/Tree_Norway_Maple_Forest_01/Tree_Norway_Maple_Forest_01_A.Tree_Norway_Maple_Forest_01_A",
+      "origin": "Fab listing: Quixel Megaplants: Norway Maple, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Norway Maple, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.341176,
+          0.231373,
+          0.0
+        ],
+        "color_2": [
+          2.0,
+          0.59174,
+          0.0
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "maple_mp_b",
+      "part": "tree_maple",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Norway_Maple/Tree_Norway_Maple_Forest_01/Tree_Norway_Maple_Forest_01_B.Tree_Norway_Maple_Forest_01_B",
+      "origin": "Fab listing: Quixel Megaplants: Norway Maple, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Norway Maple, variant B, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.341176,
+          0.231373,
+          0.0
+        ],
+        "color_2": [
+          2.0,
+          0.59174,
+          0.0
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "maple_mp_c",
+      "part": "tree_maple",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Norway_Maple/Tree_Norway_Maple_Forest_01/Tree_Norway_Maple_Forest_01_C.Tree_Norway_Maple_Forest_01_C",
+      "origin": "Fab listing: Quixel Megaplants: Norway Maple, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Norway Maple, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.341176,
+          0.231373,
+          0.0
+        ],
+        "color_2": [
+          2.0,
+          0.59174,
+          0.0
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: maple turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "hazel_mp_a",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_A.Tree_Common_Hazel_01_A",
+      "origin": "Fab listing: Quixel Megaplants: Common Hazel, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Common Hazel, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.34,
+          0.3,
+          0.02
+        ],
+        "color_2": [
+          1.5,
+          1.1,
+          0.05
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "hazel_mp_b",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_B.Tree_Common_Hazel_01_B",
+      "origin": "Fab listing: Quixel Megaplants: Common Hazel, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Common Hazel, variant B, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.34,
+          0.3,
+          0.02
+        ],
+        "color_2": [
+          1.5,
+          1.1,
+          0.05
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "hazel_mp_c",
+      "part": "tree_hazel",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Common_Hazel/Tree_Common_Hazel_01/Tree_Common_Hazel_01_C.Tree_Common_Hazel_01_C",
+      "origin": "Fab listing: Quixel Megaplants: Common Hazel, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "Megaplants Common Hazel, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.34,
+          0.3,
+          0.02
+        ],
+        "color_2": [
+          1.5,
+          1.1,
+          0.05
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: hazel turning; the maple's own pair from its Megaplant instance)"
+      },
+      "sink_m": "auto"
+    },
+    {
+      "id": "beech_mp_a",
+      "part": "tree_beech",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_A.Tree_Hornbeam_01_A",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant A, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 0,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.2,
+          0.03
+        ],
+        "color_2": [
+          1.5,
+          0.7,
+          0.06
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: beech turning copper-orange, later than the hornbeam's yellow)"
+      },
+      "sink_m": "auto",
+      "near_m": 40
+    },
+    {
+      "id": "beech_mp_c",
+      "part": "tree_beech",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_C.Tree_Hornbeam_01_C",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant C, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 1,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.2,
+          0.03
+        ],
+        "color_2": [
+          1.5,
+          0.7,
+          0.06
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: beech turning copper-orange, later than the hornbeam's yellow)"
+      },
+      "sink_m": "auto",
+      "near_m": 40
+    },
+    {
+      "id": "beech_mp_d",
+      "part": "tree_beech",
+      "frame": "tree",
+      "unreal_source": "/Game/Megaplant_Library/Tree_Hornbeam/Tree_Hornbeam_01/Tree_Hornbeam_01_D.Tree_Hornbeam_01_D",
+      "origin": "Fab listing: Quixel Megaplants: European Hornbeam, in the owner's Fab library (added to the project from the editor's Fab window)",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "fetched": "2026-11-05",
+      "notes": "A stand-in (A.3.31): the European Hornbeam Megaplant drawn as a beech near the camera; the two share the smooth grey bark and the crown's build, and differ in October by the leaves' copper (no beech Megaplant in the project). Megaplants European Hornbeam, variant D, made static and fitted in Unreal by tools/ue_fab_part.py (A.3.25; no wind). Fab Standard licence (not redistributable): under /Game/ThirdParty/Fab, ignored by git.",
+      "alternate": 2,
+      "season": {
+        "name": "October",
+        "color_1": [
+          0.36,
+          0.2,
+          0.03
+        ],
+        "color_2": [
+          1.5,
+          0.7,
+          0.06
+        ],
+        "source": "game value: sam3d estimate (mid-October on the plain: beech turning copper-orange, later than the hornbeam's yellow)"
+      },
+      "sink_m": "auto",
+      "near_m": 40
+    }
+  ]
+}

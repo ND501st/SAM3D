@@ -22,6 +22,8 @@ namespace
 	};
 	/** By "part#variant". Each mesh is rooted when built or loaded, so the raw pointers stay valid. */
 	TMap<FString, FSimMapAssetMesh> GSimMapAssetMeshes;
+	/** Whole models and munitions by "model:<id>" and "munition:<id>"; a null mesh: none on this machine (asked once). */
+	TMap<FString, FSimMapAssetMesh> GSimWholeAssetMeshes;
 
 	FString SimMapStd(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
 }
@@ -67,6 +69,21 @@ UMaterialInterface* FSimMapAssets::Material()
 	return GSimMapAssetMaterial;
 }
 
+bool FSimMapAssets::NearOnMachine(const FString& Part)
+{
+	const simcore::scenery::AssetRegister* Reg = Register();
+	const int32 Count = Reg != nullptr ? Reg->NearCount(std::string(TCHAR_TO_UTF8(*Part))) : 0;
+	for (int32 K = 0; K < Count; ++K)
+	{
+		FTransform Fix;
+		if (MeshFor(Part, 0, Fix, NearAlternate + K) == nullptr)
+		{
+			return false;
+		}
+	}
+	return Count > 0;
+}
+
 float FSimMapAssets::LodScreenSize(int32 Lod)
 {
 	// A tree or a house fills little of the screen: its full shape while its bounds' sphere is a tenth of the screen or
@@ -76,10 +93,63 @@ float FSimMapAssets::LodScreenSize(int32 Lod)
 	return Sizes[FMath::Clamp(Lod, 0, 3)];
 }
 
-UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransform& OutFix)
+namespace
+{
+	/** A registered asset's mesh for a whole model or munition, loaded once and kept (rooted); logged once by Key. */
+	const FSimMapAssetMesh& SimWholeAsset(const FString& Key, const simcore::scenery::AssetEntry* Asset)
+	{
+		if (const FSimMapAssetMesh* Found = GSimWholeAssetMeshes.Find(Key))
+		{
+			return *Found;
+		}
+		FSimMapAssetMesh Entry;
+		if (Asset != nullptr)
+		{
+			const FString Path = SimMapStd(Asset->unreal_path);
+			if (UStaticMesh* Real = LoadObject<UStaticMesh>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet))
+			{
+				Real->AddToRoot();
+				Entry.Mesh = Real;
+				Entry.Fix = FTransform(FRotator(0.0, Asset->yaw_deg, 0.0), FVector(0.0, 0.0, Asset->z_offset_m * 100.0), FVector(Asset->scale));
+				UE_LOG(LogSAM3D, Log, TEXT("Assets: %s drawn by %s (%s, %s)"), *Key, *SimMapStd(Asset->id), *Path, *SimMapStd(Asset->licence));
+			}
+			else
+			{
+				UE_LOG(LogSAM3D, Log, TEXT("Assets: %s's asset %s is not on this machine (%s; docs/scenery/ASSETS.md): its own shape"), *Key,
+					*SimMapStd(Asset->id), *Path);
+			}
+		}
+		return GSimWholeAssetMeshes.Add(Key, Entry);
+	}
+}
+
+UStaticMesh* FSimMapAssets::ModelMesh(const FString& ModelId, FTransform& OutFix)
 {
 	OutFix = FTransform::Identity;
-	const FString Key = FString::Printf(TEXT("%s#%d"), *Part, Variant);
+	const simcore::scenery::AssetRegister* Reg = Register();
+	if (Reg == nullptr || ModelId.IsEmpty())
+	{
+		return nullptr;
+	}
+	const FSimMapAssetMesh& Entry = SimWholeAsset(TEXT("model:") + ModelId, Reg->AssetForModel(std::string(TCHAR_TO_UTF8(*ModelId))));
+	OutFix = Entry.Fix;
+	return Entry.Mesh;
+}
+
+UStaticMesh* FSimMapAssets::MunitionMesh(const FString& MunitionId)
+{
+	const simcore::scenery::AssetRegister* Reg = Register();
+	if (Reg == nullptr || MunitionId.IsEmpty())
+	{
+		return nullptr;
+	}
+	return SimWholeAsset(TEXT("munition:") + MunitionId, Reg->AssetForMunition(std::string(TCHAR_TO_UTF8(*MunitionId)))).Mesh;
+}
+
+UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransform& OutFix, int32 Alternate)
+{
+	OutFix = FTransform::Identity;
+	const FString Key = Alternate > 0 ? FString::Printf(TEXT("%s#%d/%d"), *Part, Variant, Alternate) : FString::Printf(TEXT("%s#%d"), *Part, Variant);
 	if (const FSimMapAssetMesh* Found = GSimMapAssetMeshes.Find(Key))
 	{
 		OutFix = Found->Fix;
@@ -90,7 +160,12 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 
 	// A real asset, if the register names one and it is on this machine.
 	const simcore::scenery::AssetRegister* Reg = Register();
-	const simcore::scenery::AssetEntry* Asset = Reg != nullptr ? Reg->AssetFor(PartStd, Variant) : nullptr;
+	// An alternate (A.3.25) is another model of the same part, drawn in place of the first instance by instance.
+	const bool bNear = Alternate >= NearAlternate;
+	const simcore::scenery::AssetEntry* Asset = Reg == nullptr ? nullptr
+		: bNear						   ? Reg->NearFor(PartStd, Alternate - NearAlternate)
+		: Alternate > 0				   ? Reg->AlternateFor(PartStd, Alternate)
+									   : Reg->AssetFor(PartStd, Variant);
 	if (Asset != nullptr)
 	{
 		const FString Path = SimMapStd(Asset->unreal_path);
@@ -99,17 +174,34 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 			Real->AddToRoot();
 			Entry.Mesh = Real;
 			Entry.Fix = FTransform(FRotator(0.0, Asset->yaw_deg, 0.0), FVector(0.0, 0.0, Asset->z_offset_m * 100.0), FVector(Asset->scale));
-			UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s drawn by %s (%s, %s)"), *Key, *SimMapStd(Asset->id), *Path, *SimMapStd(Asset->licence));
+			UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s drawn by %s (%s, %s), %d LODs, %d material slots"), *Key, *SimMapStd(Asset->id), *Path,
+					*SimMapStd(Asset->licence), Real->GetNumLODs(), Real->GetStaticMaterials().Num());
 		}
 		else
 		{
-			UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s's asset %s is not on this machine (%s; docs/scenery/ASSETS.md): procedural"), *Key,
-				*SimMapStd(Asset->id), *Path);
+			// Its fallback (A.3.40: our own card where a Fab model is not on this machine), else procedural.
+			const simcore::scenery::AssetEntry* Fallback = (Alternate == 0 && Reg != nullptr) ? Reg->FallbackFor(PartStd) : nullptr;
+			UStaticMesh* Instead = Fallback != nullptr
+				? LoadObject<UStaticMesh>(nullptr, *SimMapStd(Fallback->unreal_path), nullptr, LOAD_NoWarn | LOAD_Quiet)
+				: nullptr;
+			if (Instead != nullptr)
+			{
+				Instead->AddToRoot();
+				Entry.Mesh = Instead;
+				Entry.Fix = FTransform(FRotator(0.0, Fallback->yaw_deg, 0.0), FVector(0.0, 0.0, Fallback->z_offset_m * 100.0), FVector(Fallback->scale));
+				UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s's asset %s is not on this machine (%s): its fallback %s draws"), *Key,
+					*SimMapStd(Asset->id), *Path, *SimMapStd(Fallback->id));
+			}
+			else
+			{
+				UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s's asset %s is not on this machine (%s; docs/scenery/ASSETS.md): procedural"), *Key,
+					*SimMapStd(Asset->id), *Path);
+			}
 		}
 	}
 
-	// Else simcore's own mesh, LOD 0 down to the first empty one.
-	if (Entry.Mesh == nullptr)
+	// Else simcore's own mesh, LOD 0 down to the first empty one (never for a near model: there the part's own draws).
+	if (Entry.Mesh == nullptr && !bNear)
 	{
 		TArray<simcore::scenery::TriMesh> Lods;
 		for (int32 L = 0; L < 4; ++L)
