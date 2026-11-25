@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "simcore/json.hpp"
+#include "simcore/noise.hpp"
 #include "simcore/scenery/ground_layers.hpp"
 #include "simcore/scenery/map_meshes.hpp"
 #include "simcore/scenery/recipes.hpp"
@@ -45,10 +46,19 @@ struct ClutterKind {
     // The height drawn is a share of the field's stand on the day (height_m's two numbers are shares), none where nothing
     // stands.
     bool to_stand = false;
+    // Its colours (A.3.40): one to six multipliers of the part's own colour (linear RGB), in order from one end to the
+    // other (green to dry, say). A plant takes its colour between them by a patch about tint_patch_m across (a greener
+    // or a drier patch of the sward) and its own draw, so neighbours are alike and no two are the same. None: the part's
+    // own colour.
+    std::vector<std::array<float, 3>> tints;
+    double tint_patch_m = 6.0;
 };
 
 struct ClutterRules {
     double ring_m = 100.0, cell_m = 4.0, falloff_m = 30.0, rebuild_m = 16.0;
+    // A plant kept farther out stands for those thinned round it (A.3.40): its width times 1 / sqrt of the share the
+    // falloff keeps there, at most widen_max (1: never wider). Not a near kind's.
+    double widen_max = 1.0;
     // The crop blocks dither away near the camera (Unreal's M_SimMapCrop): gone within the first, whole from the second.
     // The ring lags the camera by up to rebuild_m, so the second plus rebuild_m must lie within every near kind's near_m.
     double crop_fade_from_m = 0.0, crop_fade_to_m = 0.0;
@@ -68,10 +78,11 @@ struct ClutterRules {
     }
 };
 
-// One plant: where, how big, which kind, how bright.
+// One plant: where, how big, which kind, how bright and in what colour (a multiplier of its part's, linear RGB).
 struct ClutterPlant {
     double east_m = 0.0, north_m = 0.0;
     float height_m = 0.0f, width_m = 0.0f, yaw_rad = 0.0f, brightness = 1.0f;
+    std::array<float, 3> tint{{1.0f, 1.0f, 1.0f}};
     std::uint8_t kind = 0;
     std::uint8_t part = 0;  // the part it is drawn as: an index into ClutterRules::parts
 };
@@ -118,7 +129,7 @@ inline bool LoadClutterRules(const std::string& path_or_json, ClutterRules& out,
         return true;
     };
     if (!number("ring_m", r.ring_m, 5.0, 500.0) || !number("cell_m", r.cell_m, 1.0, 20.0) || !number("falloff_m", r.falloff_m, 1.0, 500.0) ||
-        !number("rebuild_m", r.rebuild_m, 1.0, 100.0)) {
+        !number("rebuild_m", r.rebuild_m, 1.0, 100.0) || !number("widen_max", r.widen_max, 1.0, 4.0)) {
         return false;
     }
     if (root.Find("layers") != nullptr) return Fail(error, "\"layers\" is no longer read: where the kinds go is the recipes' (data/scenery/recipes/)");
@@ -159,6 +170,24 @@ inline bool LoadClutterRules(const std::string& path_or_json, ClutterRules& out,
             if (!to->Is(json::Type::Bool)) return Fail(error, c.id + ": to_stand is not true or false");
             c.to_stand = to->boolean;
             if (c.to_stand && c.height_max_m > 1.5f) return Fail(error, c.id + ": with to_stand, height_m is two shares of the stand in 0..1.5");
+        }
+        if (const json::Value* tints = k.Find("tints")) {
+            if (!tints->Is(json::Type::Array) || tints->items.empty() || tints->items.size() > 6) return Fail(error, c.id + ": tints is a list of one to six colours");
+            for (const json::Value& t : tints->items) {
+                if (!t.Is(json::Type::Array) || t.items.size() != 3) return Fail(error, c.id + ": a tint is three numbers (linear RGB)");
+                std::array<float, 3> rgb{};
+                for (std::size_t ch = 0; ch < 3; ++ch) {
+                    if (!t.items[ch].Is(json::Type::Number) || t.items[ch].number < 0.1 || t.items[ch].number > 3.0) {
+                        return Fail(error, c.id + ": a tint's channel is not in 0.1..3");
+                    }
+                    rgb[ch] = static_cast<float>(t.items[ch].number);
+                }
+                c.tints.push_back(rgb);
+            }
+        }
+        if (const json::Value* patch = k.Find("tint_patch_m")) {
+            if (!patch->Is(json::Type::Number) || patch->number < 0.5 || patch->number > 100.0) return Fail(error, c.id + ": tint_patch_m is not in 0.5..100");
+            c.tint_patch_m = patch->number;
         }
         for (const std::string& v : c.variants) {
             if (r.PartIndex(v) < 0) r.parts.push_back(v);
@@ -243,6 +272,20 @@ inline void ClutterAround(const ClutterRules& rules, const CoverRaster& cover, c
                     plant.yaw_rad = static_cast<float>(draw(3) * 2.0 * kPi);
                 }
                 plant.brightness = static_cast<float>(1.0 + (draw(4) - 0.5) * 2.0 * kind.brightness);
+                // Its colour between the kind's tints: a patch's (value noise, mostly mid) spread to the ends, and its own.
+                if (!kind.tints.empty()) {
+                    const double patch = noise::Value(0x71A7ull + static_cast<std::uint64_t>(c.kind), c.east_m, c.north_m, kind.tint_patch_m);
+                    const double at = std::clamp(0.5 + 1.8 * (patch - 0.5) + 0.5 * (draw(7) - 0.5), 0.0, 1.0) * static_cast<double>(kind.tints.size() - 1);
+                    const std::size_t lo = std::min(kind.tints.size() - 1, static_cast<std::size_t>(at));
+                    const std::size_t hi = std::min(kind.tints.size() - 1, lo + 1);
+                    const float f = static_cast<float>(at - static_cast<double>(lo));
+                    for (std::size_t ch = 0; ch < 3; ++ch) plant.tint[ch] = kind.tints[lo][ch] + (kind.tints[hi][ch] - kind.tints[lo][ch]) * f;
+                }
+                // Farther out, wider: it stands for the plants the falloff thinned round it.
+                if (rules.widen_max > 1.0 && kind.near_m <= 0.0) {
+                    const double share = 1.0 / (1.0 + (dp / rules.falloff_m) * (dp / rules.falloff_m));
+                    plant.width_m *= static_cast<float>(std::min(rules.widen_max, 1.0 / std::sqrt(share)));
+                }
                 plant.kind = static_cast<std::uint8_t>(c.kind);
                 const std::size_t variant = std::min(kind.variants.size() - 1, static_cast<std::size_t>(draw(6) * static_cast<double>(kind.variants.size())));
                 plant.part = static_cast<std::uint8_t>(std::max(0, rules.PartIndex(kind.variants[variant])));

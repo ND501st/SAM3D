@@ -53,6 +53,14 @@
       "source": "the shrub belt: hazel, elder, blackthorn, hawthorn, dog rose (BIO Austria); the two the art has (docs/scenery/VEGETATION.md section 4)",
       "confidence": "estimate"
     },
+    "scrub_mix": {
+      "value": { "blackthorn": 0.45, "hawthorn": 0.35, "dog_rose": 0.2 },
+      "source": "the scrub of abandoned and extensively grazed grassland: blackthorn (Prunus spinosa), hawthorn (Crataegus monogyna) and dog rose (Rosa canina), the thorny shrubs a flock leaves (docs/scenery/TERRAIN_ROADMAP.md A.6; BIO Austria lists them in the woods' shrub belt too); the shares a sam3d estimate, blackthorn first as it spreads by suckers into thickets",
+      "confidence": "estimate"
+    },
+    "scrub_spacing_m": { "value": 2.5, "source": "game value: sam3d estimate (A.3.41: the bushes of a clump or thicket about 2.5 m apart, their crowns about 2.3 m across nearly touching; at 2 m the hills' 81 000 bushes took the map's trees past their budget of 1.5 million)", "confidence": "estimate" },
+    "scrub_keep": { "value": 0.85, "source": "game value: sam3d estimate (A.3.41: a few gaps inside a thicket)", "confidence": "estimate" },
+    "scrub_lone_m": { "value": 5.5, "source": "game value: sam3d estimate (A.3.41: a scrub box this short is a lone bush, one plant)", "confidence": "estimate" },
     "shrub_spacing_m": { "value": 3, "source": "game value: sam3d estimate (a shrub every 3 m along an open edge)", "confidence": "estimate" },
     "shrub_inset_m": { "value": 1.5, "source": "game value: sam3d estimate (the fringe just inside the wood's block, so no shrub stands where the sight lines see open ground)", "confidence": "estimate" },
     "shrub_keep": { "value": 0.35, "source": "game value: sam3d estimate (of the belt's two places every shrub_spacing_m, in runs and gaps by the edge's wave; gaps in the fringe: a managed edge's shrubs are patchy, the Swiss inventory's classes run from none to over 4 m, lfi.ch)", "confidence": "estimate" },
@@ -82,11 +90,11 @@
         { "id": "maize", "share": 0.25, "colour": [0.17, 0.25, 0.08] },
         { "id": "sunflower", "share": 0.1, "colour": [0.3, 0.29, 0.09] },
         { "id": "ploughed", "share": 0.15, "colour": [0.24, 0.18, 0.12] },
-        { "id": "pasture", "share": 0.1, "colour": [0.2, 0.27, 0.1] },
-        { "id": "hay", "share": 0.06, "colour": [0.23, 0.28, 0.11] },
-        { "id": "tall_grass", "share": 0.04, "colour": [0.31, 0.29, 0.13] }
+        { "id": "pasture", "share": 0.1, "colour": [0.105, 0.2, 0.037] },
+        { "id": "hay", "share": 0.06, "colour": [0.115, 0.205, 0.042] },
+        { "id": "tall_grass", "share": 0.04, "colour": [0.16, 0.2, 0.06] }
       ],
-      "source": "game value: sam3d estimate (the plain's crops in summer; the grass's 0.2 split by its use, terrain roadmap L13 step 1: grazed pasture, a hay meadow mown, tall grass uncut or abandoned, its colour paler and straw-coloured)",
+      "source": "game value: sam3d estimate (the plain's crops in summer; the grass's 0.2 split by its use, terrain roadmap L13 step 1: grazed pasture, a hay meadow mown, tall grass uncut or abandoned, its colour paler and straw-coloured; the three grasses' colours since A.3.40 near the meadow_sward texture's linear average, so the far ground meets the near without a seam, tall grass a little drier: 0.122 0.156 0.032 as fetched, 0.105 0.205 0.037 since its grade, A.3.40's second pass)",
       "confidence": "estimate"
     },
     "cover_colours": {

@@ -63,6 +63,9 @@ struct AssetPart {
     // themselves within `near_m` (M_SimFoliage's NearHideM).
     std::vector<std::string> near_models;
     double near_m = 0.0;
+    // Optional (A.3.40): the asset drawn when `asset` is not on this machine (a Fab model, never committed, falling back to
+    // our own card rather than the procedural placeholder).
+    std::string fallback;
 };
 
 class AssetRegister {
@@ -169,9 +172,15 @@ public:
                     part.near_m = Number(*nr, "within_m", 0.0);
                     if (!(part.near_m > 0.0)) return Fail(error, "parts: " + key + ": \"near\" needs \"within_m\" above 0");
                 }
+                if (const json::Value* fb = p.Find("fallback")) {
+                    if (!fb->Is(json::Type::String) || fb->string.empty()) return Fail(error, "parts: " + key + ": \"fallback\" must be an asset's id");
+                    if (part.asset.empty()) return Fail(error, "parts: " + key + ": a \"fallback\" needs an \"asset\" to stand in for");
+                    part.fallback = fb->string;
+                }
                 std::vector<std::string> named = part.variants;
                 named.insert(named.end(), part.near_models.begin(), part.near_models.end());
                 named.push_back(part.asset);
+                if (!part.fallback.empty()) named.push_back(part.fallback);
                 named.insert(named.end(), part.alternates.begin(), part.alternates.end());
                 for (const std::string& id : named) {
                     if (!id.empty() && ids.count(id) == 0) return Fail(error, "parts: " + key + " names " + id + ", which is not registered");
@@ -200,6 +209,12 @@ public:
             return v.empty() ? nullptr : Find(v);
         }
         return p.asset.empty() ? nullptr : Find(p.asset);
+    }
+
+    // The asset drawn for a part when its own is not on this machine (A.3.40), or null.
+    const AssetEntry* FallbackFor(const std::string& part) const {
+        const auto it = parts.find(part);
+        return it == parts.end() || it->second.fallback.empty() ? nullptr : Find(it->second.fallback);
     }
 
     // The near models of a part (A.3.26): how many, the k-th (null past the end), and the distance they are drawn to (0:

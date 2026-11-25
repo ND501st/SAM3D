@@ -20,6 +20,24 @@
       }
     },
     {
+      "id": "meadow_sward",
+      "site": "ambientcg",
+      "asset": "Grass004",
+      "licence": "CC0-1.0",
+      "author": "ambientCG",
+      "origin": "https://ambientcg.com/view?id=Grass004",
+      "resolution": "2k",
+      "scan_m": 1.4,
+      "grade": [0.84, 1.29, 1.1],
+      "for": "hay meadow, pasture and tall grass (terrain roadmap A.3.40): a dense green sward with dry yellow blades in it, under the near ring's grass and as the meadow's tint beyond it (Grass003, darker, was tried for tall grass and left out: its albedo averages 0.06, near black from afar). Graded greener (game value, judged by eye against the look target's K6): as fetched it averages 0.125 0.159 0.033 in linear light, an olive green 1.27 times as green as red; graded about 0.105 0.205 0.036",
+      "sha256": {
+        "ao": "0f9180993db4c7b9479ad2a4b65763d90e8668fb7e800baff68cac1883a9dff5",
+        "albedo": "735b141c8f1972e70a45879424f1238fea9f887324173097785f4ac36e67e9a3",
+        "normal": "8681bb16df1050d50053b38a5a24aa1d235ce35e1888fcbff8a97a1dd11bf034",
+        "roughness": "c449fdf1e779eb7be5a19c1d58ee28cc155ed0523a141b151f3cbc843c4ae2e3"
+      }
+    },
+    {
       "id": "stubble_soil",
       "site": "ambientcg",
       "asset": "Ground071",

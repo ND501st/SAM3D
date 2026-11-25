@@ -100,7 +100,8 @@ inline const std::vector<std::string>& LookKinds() {
 }
 
 inline const std::vector<std::string>& AnchorKinds() {
-    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row", "wood_inside", "pond", "sunken_lane"};
+    static const std::vector<std::string> k = {"parcel_edge", "settlement", "road", "farmstead", "farmyard", "wood_edge", "site", "river", "hill", "high_ground", "brook_row", "wood_inside", "pond", "sunken_lane",
+                                               "scrub_thicket", "pasture_bush"};
     return k;
 }
 
@@ -145,7 +146,8 @@ inline bool ParseAnchor(const json::Value& a_value, const std::string& id, ViewA
     const bool by_id = an.kind == "settlement" || an.kind == "road" || an.kind == "site" || an.kind == "river" || an.kind == "hill";
     if (by_id && an.id.empty()) return Fail(error, id + ": a " + an.kind + " anchor names its " + an.kind);
     if ((an.kind == "parcel_edge" || an.kind == "farmstead" || an.kind == "farmyard" || an.kind == "wood_edge" || an.kind == "high_ground" ||
-         an.kind == "brook_row" || an.kind == "wood_inside" || an.kind == "pond" || an.kind == "sunken_lane") &&
+         an.kind == "brook_row" || an.kind == "wood_inside" || an.kind == "pond" || an.kind == "sunken_lane" || an.kind == "scrub_thicket" ||
+         an.kind == "pasture_bush") &&
         !an.has_close) {
         return Fail(error, id + ": a " + an.kind + " anchor needs close_km");
     }
@@ -592,6 +594,41 @@ inline views_detail::Spot ResolveSpot(const MapData& map, const CoverRaster& cov
             s.eye_e = c.east_m - back * std::sin(bearing);
             s.eye_n = c.north_m - back * std::cos(bearing);
             s.bearing_rad = bearing;
+        }
+    } else if (a.kind == "scrub_thicket" || a.kind == "pasture_bush") {
+        // The nearest of the hills' scrub to close_km (terrain roadmap A.3.41): a thicket (longer than a clump's longest),
+        // or a lone bush on a grazed slope (plot 6's). Looked at up the slope from from_m below its edge (30 m for a
+        // thicket, 15 for a bush, when none), along the data's bearing when given; the eye stepped back to open ground.
+        const bool thicket = a.kind == "scrub_thicket";
+        const MapLandUseDef& u = map.Def().land_use;
+        const MapBox* box = nullptr;
+        double best = std::numeric_limits<double>::max();
+        for (const MapBox& b : map.Layout().boxes) {
+            if (!b.scrub) continue;
+            const bool fits = thicket ? b.length_m > 1.3 * u.scrub_clump_m
+                                      : b.length_m <= 1.3 * u.scrub_bush_m && map.LandUseGrass(b.east_m, b.north_m) == MapData::GrassUse::Pasture;
+            const double d = std::hypot(b.east_m - a.close_e_m, b.north_m - a.close_n_m);
+            if (fits && d < best) {
+                best = d;
+                box = &b;
+            }
+        }
+        if (box == nullptr) {
+            s = Missing(thicket ? "the map has no thickets" : "the map has no lone bushes on its pastures");
+        } else {
+            const double ge = map.GroundHeight(box->east_m + 10.0, box->north_m) - map.GroundHeight(box->east_m - 10.0, box->north_m);
+            const double gn = map.GroundHeight(box->east_m, box->north_m + 10.0) - map.GroundHeight(box->east_m, box->north_m - 10.0);
+            const double bearing = a.has_bearing ? a.bearing_rad : (std::hypot(ge, gn) > 1e-3 ? std::atan2(ge, gn) : box->heading_rad + 0.5 * kPi);
+            const double from = a.from_m > 0.0 ? a.from_m : (thicket ? 30.0 : 15.0);
+            const double edge = 0.5 * std::fabs(box->length_m * std::cos(bearing - box->heading_rad)) + 0.5 * std::fabs(box->width_m * std::sin(bearing - box->heading_rad));
+            double back = edge + from;
+            while (back < edge + from + 100.0 && map.ObstacleHeight(box->east_m - back * std::sin(bearing), box->north_m - back * std::cos(bearing)) > 1.0) back += 5.0;
+            s.ok = true;
+            s.e = box->east_m;
+            s.n = box->north_m;
+            s.bearing_rad = bearing;
+            s.eye_e = box->east_m - back * std::sin(bearing);
+            s.eye_n = box->north_m - back * std::cos(bearing);
         }
     } else if (a.kind == "brook_row") {
         // The nearest row of trees along a brook to close_km (terrain roadmap A.3.20's alders), looked at across the brook:

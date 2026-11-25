@@ -185,6 +185,28 @@ struct MapLandUseDef {
     std::string tall_crop = "tall_grass";  // ...on unmown or ungrazed ground
     double graze_m = 2000.0;
     double wet_tall_cut = 0.3;
+    // Scrub in the open (L13 step 2, A.3.41): blackthorn, hawthorn and dog rose on the grazed slopes and in the tall grass,
+    // each a box of the layout (MapBox::scrub) so the sight lines see it. One candidate a cell of scrub_cell_m, kept by its
+    // class's share (none on a mown floor) times 1 + scrub_slope_gain a degree over meadow_slope_deg (at most
+    // scrub_slope_most times) and by patches about 400 m across (a parcel left longer or grazed harder). Within scrub_wood_m
+    // of a wood a candidate is a thicket by thicket_wood (the wood's mantle spreading, the succession to wood), elsewhere
+    // by thicket_tall in the tall grass and never on a grazed slope; of the rest clump_share are clumps, the others lone
+    // bushes. Sizes: a lone bush scrub_bush_m across, a clump scrub_clump_m, a thicket scrub_thicket_m long (each 0.7-1.3
+    // times); heights scrub_height_min_m-scrub_height_max_m.
+    double scrub_cell_m = 40.0;
+    double scrub_pasture = 0.05;
+    double scrub_tall = 0.2;
+    double scrub_slope_gain = 0.08;
+    double scrub_slope_most = 2.5;
+    double scrub_wood_m = 60.0;
+    double thicket_wood = 0.5;
+    double thicket_tall = 0.15;
+    double clump_share = 0.4;
+    double scrub_bush_m = 4.0;
+    double scrub_clump_m = 10.0;
+    double scrub_thicket_m = 30.0;
+    double scrub_height_min_m = 1.8;
+    double scrub_height_max_m = 3.5;
     // The lines fit the ground (A.5 step 5, the look target's K8): no road or railway steeper than its class's grade. Each
     // line's profile is held to the grade (halfway between the highest and the lowest profiles that keep it, so cut and
     // fill balance) and the ground cut or filled to it: the formation level, its sides at `side_slope` (run per rise).
@@ -472,6 +494,7 @@ struct MapBox {
     double rise_e = 0.0, rise_n = 0.0;
     bool by_water = false;  // a tree row along a brook (A.3.20): alders, not the fields' poplars and black locust
     bool by_pond = false;   // a village pond's waterside tree (A.3.37): one willow, never gapped (by_water too)
+    bool scrub = false;     // scrub in the open (L13, A.3.41): a lone bush, a clump or a thicket of the dressing's scrub_mix
     double Top() const { return base_m + height_m; }
     // Its top over (east, north), above sea level.
     double TopAt(double e, double n) const { return base_m + height_m + rise_e * (e - east_m) + rise_n * (n - north_m); }
@@ -2539,6 +2562,7 @@ private:
         LayWoods(rng);
         LayMarshes();
         LayFarmland();
+        LayScrub();
         for (const MapSettlementDef& s : def_.settlements) layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
         for (const MapSiteDef& s : def_.sites) layout_.labels.push_back({s.id, s.name, s.kind, s.centre});
     }
@@ -3201,6 +3225,83 @@ private:
                 const std::uint32_t draw = FieldHash(tag ^ 0x33u, static_cast<std::int32_t>(std::llround(f.e)), static_cast<std::int32_t>(std::llround(f.n)) + static_cast<std::int32_t>(b));
                 const double h = fd.grove_height_min_m + (fd.grove_height_max_m - fd.grove_height_min_m) * Unit24(draw);
                 Box(MapPart::TreeRow, e, n, belts[b].length, belts[b].width, h, f.heading, 0.3);
+            }
+        }
+    }
+
+    // Whether a wood's block (of the map proper's size) lies within `reach_m` of (east, north).
+    bool NearWoodBlock(double e, double n, double reach_m) const {
+        const double b = def_.block_m;
+        const double ce = (std::floor(e / b) + 0.5) * b, cn = (std::floor(n / b) + 0.5) * b;
+        const int k = static_cast<int>(std::ceil(reach_m / b)) + 1;
+        for (int dy = -k; dy <= k; ++dy) {
+            for (int dx = -k; dx <= k; ++dx) {
+                const double x = ce + dx * b, y = cn + dy * b;
+                if (canopy_cells_.count(CanopyKey(x, y)) == 0) continue;
+                const double u = std::max(0.0, std::fabs(e - x) - 0.5 * b), v = std::max(0.0, std::fabs(n - y) - 0.5 * b);
+                if (std::hypot(u, v) <= reach_m) return true;
+            }
+        }
+        return false;
+    }
+
+    // Scrub in the open (L13 step 2, A.3.41; MapLandUseDef's scrub rules): on the hills' grazed slopes and tall grass, a
+    // lone bush, a clump or a thicket, each a box (a tree row's part, flagged `scrub`) so the obstacle heights and every
+    // sight line see it. One candidate a cell, each from its cell's own hash, after everything else so no box laid
+    // before moves; none where a farm track or a row could not stand (FarmlandClear) nor in a site's sectors.
+    void LayScrub() {
+        const MapLandUseDef& u = def_.land_use;
+        if (!u.laid || !def_.landform.bake || (u.scrub_pasture <= 0.0 && u.scrub_tall <= 0.0)) return;
+        const LandformBake& bake = *def_.landform.bake;
+        const std::uint64_t patches = noise::Mix64(def_.seed ^ 0x5343525542ull);  // "SCRUB"
+        const std::uint32_t tag = static_cast<std::uint32_t>(def_.seed) ^ 0x5C2B5u;
+        const double c = u.scrub_cell_m;
+        const double w = std::max(def_.west_m, bake.west_m), s = std::max(def_.south_m, bake.south_m);
+        const double ea = std::min(def_.east_m, bake.west_m + bake.spacing_m * (bake.cols - 1));
+        const double nn = std::min(def_.north_m, bake.south_m + bake.spacing_m * (bake.rows - 1));
+        for (long long row = CellIndex(s, c); static_cast<double>(row) * c < nn; ++row) {
+            for (long long col = CellIndex(w, c); static_cast<double>(col) * c < ea; ++col) {
+                const std::uint32_t draw = FieldHash(tag, static_cast<std::int32_t>(col), static_cast<std::int32_t>(row));
+                const double e = (static_cast<double>(col) + 0.15 + 0.7 * Unit24(Hash32(draw ^ 0x1u))) * c;
+                const double n = (static_cast<double>(row) + 0.15 + 0.7 * Unit24(Hash32(draw ^ 0x2u))) * c;
+                const GrassUse g = LandUseGrass(e, n);
+                if (g != GrassUse::Pasture && g != GrassUse::Tall) continue;
+                double share = g == GrassUse::Pasture ? u.scrub_pasture : u.scrub_tall;
+                share *= std::min(u.scrub_slope_most, 1.0 + u.scrub_slope_gain * std::max(0.0, bake.SlopeDeg(e, n) - u.meadow_slope_deg));
+                share *= 0.3 + 1.4 * noise::Value(patches, e, n, 400.0);
+                if (Unit24(Hash32(draw ^ 0x3u)) >= share) continue;
+                // A thicket against a wood (its mantle spreading) or in the tall grass; else a clump or a lone bush.
+                const double thicket = NearWoodBlock(e, n, u.scrub_wood_m) ? u.thicket_wood : (g == GrassUse::Tall ? u.thicket_tall : 0.0);
+                const double pick = Unit24(Hash32(draw ^ 0x4u)), a = Unit24(Hash32(draw ^ 0x5u)), b2 = Unit24(Hash32(draw ^ 0x6u));
+                double len = 0.0, wid = 0.0;
+                bool along_contour = false;
+                if (pick < thicket) {
+                    len = u.scrub_thicket_m * (0.7 + 0.6 * a);
+                    wid = len * (0.3 + 0.25 * b2);
+                    along_contour = true;
+                } else if (pick < thicket + (1.0 - thicket) * u.clump_share) {
+                    len = u.scrub_clump_m * (0.7 + 0.6 * a);
+                    wid = len * (0.6 + 0.4 * b2);
+                } else {
+                    len = u.scrub_bush_m * (0.7 + 0.6 * a);
+                    wid = len * (0.8 + 0.2 * b2);
+                }
+                if (InSitesSectors(e, n) || !FarmlandClear(e, n, 0.5 * len + 4.0, 0.5 * len + 2.0)) continue;
+                const double h = u.scrub_height_min_m + (u.scrub_height_max_m - u.scrub_height_min_m) * Unit24(Hash32(draw ^ 0x7u));
+                // The ground's fall across it: a thicket lies along the contour; its top follows the ground's plane.
+                const double half = 0.5 * std::max(len, 8.0);
+                const double ge = (GroundHeight(e + half, n) - GroundHeight(e - half, n)) / (2.0 * half);
+                const double gn = (GroundHeight(e, n + half) - GroundHeight(e, n - half)) / (2.0 * half);
+                const double heading = along_contour && std::hypot(ge, gn) > 0.01 ? std::atan2(gn, -ge) : kPi * Unit24(Hash32(draw ^ 0x8u));
+                const std::size_t before = layout_.boxes.size();
+                Box(MapPart::TreeRow, e, n, len, wid, h, heading, 0.3);
+                if (layout_.boxes.size() == before) continue;  // in a lane or a pond's reach
+                MapBox& box = layout_.boxes.back();
+                box.scrub = true;
+                if (std::hypot(ge, gn) >= kCanopySlopeMin) {
+                    box.rise_e = ge;
+                    box.rise_n = gn;
+                }
             }
         }
     }
@@ -4380,7 +4481,14 @@ inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::st
                             {"pond_aspect", &u.pond_aspect, 0.2, 1.0},             {"pond_depth_m", &u.pond_depth_m, 0.2, 10.0},
                             {"pond_drop_m", &u.pond_drop_m, 0.0, 3.0},             {"pond_shore_m", &u.pond_shore_m, 0.5, 30.0},
                             {"pond_max_dam_m", &u.pond_max_dam_m, 0.0, 10.0},      {"pond_trees", &u.pond_trees, 0.0, 10.0},
-                            {"graze_m", &u.graze_m, 0.0, 20000.0},                 {"wet_tall_cut", &u.wet_tall_cut, 0.0, 1.0}};
+                            {"graze_m", &u.graze_m, 0.0, 20000.0},                 {"wet_tall_cut", &u.wet_tall_cut, 0.0, 1.0},
+                            {"scrub_cell_m", &u.scrub_cell_m, 10.0, 500.0},        {"scrub_pasture", &u.scrub_pasture, 0.0, 1.0},
+                            {"scrub_tall", &u.scrub_tall, 0.0, 1.0},               {"scrub_slope_gain", &u.scrub_slope_gain, 0.0, 1.0},
+                            {"scrub_slope_most", &u.scrub_slope_most, 1.0, 10.0},  {"scrub_wood_m", &u.scrub_wood_m, 0.0, 500.0},
+                            {"thicket_wood", &u.thicket_wood, 0.0, 1.0},           {"thicket_tall", &u.thicket_tall, 0.0, 1.0},
+                            {"clump_share", &u.clump_share, 0.0, 1.0},             {"scrub_bush_m", &u.scrub_bush_m, 1.0, 20.0},
+                            {"scrub_clump_m", &u.scrub_clump_m, 2.0, 50.0},        {"scrub_thicket_m", &u.scrub_thicket_m, 5.0, 200.0},
+                            {"scrub_height_min_m", &u.scrub_height_min_m, 0.5, 8.0}, {"scrub_height_max_m", &u.scrub_height_max_m, 0.5, 8.0}};
     for (std::size_t i = 0; i < values->keys.size(); ++i) {
         const std::string& key = values->keys[i];
         const json::Value& v = values->items[i];
@@ -4400,6 +4508,7 @@ inline bool LoadLandUseJson(const std::string& text, MapLandUseDef& out, std::st
         }
         if (!known) return fail("no value \"" + key + "\"");
     }
+    if (u.scrub_height_min_m > u.scrub_height_max_m) return fail("scrub_height_min_m is above scrub_height_max_m");
     u.laid = true;
     out = u;
     return true;

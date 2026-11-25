@@ -7,6 +7,14 @@ by its own yaw is never seen edge-on. Then tools/prepare_model.py and tools/ue_i
 
 writes <folder>/prepared/<VarA>_LOD2.glb and <VarA>_LOD3.glb (and the RGBA PNGs, at 1024 px). The download's files are
 data: nothing in the folder is run.
+
+A plant in Unreal's format (the "_ue_mid" zips unpacked under art/thirdparty/models/quixel/: <id>_tier_2.gltf holding
+every variant and level as its own mesh, Textures/T_<id>_2K_B-O.png its colour with the opacity already as alpha), one
+clump a call, its texture kept at 2048 px (a grass's blades are a pixel or two wide at 1024; A.3.40):
+
+    python tools/megascans_plant.py --gltf art/thirdparty/models/quixel/wild_grass_vczndjqja VarC_LOD1
+
+writes <folder>/prepared/VarC_LOD1.glb.
 """
 import subprocess
 import sys
@@ -38,7 +46,28 @@ def blender():
     return str(found[-1])
 
 
+def from_gltf(folder, level):
+    """One mesh of an Unreal-format download (its name SM_<id>_<level>, the full level as SM_<id>_VarA) to a GLB."""
+    gltf = next(folder.glob("*_tier_2.gltf"))
+    asset = gltf.name.split("_tier_2")[0]
+    mesh = f"SM_{asset}_{level[:-5] if level.endswith('_LOD0') else level}"
+    tex = next((folder / "Textures").glob("T_*_2K_B-O.png"))
+    out = folder / "prepared" / f"{level}.glb"
+    out.parent.mkdir(exist_ok=True)
+    args = [blender(), "--background", "--python", str(ROOT / "tools" / "blender" / "megascans_gltf_plant.py"), "--", str(gltf), mesh,
+            str(tex), str(out)]
+    done = subprocess.run(args, capture_output=True, text=True, check=False)
+    line = [l for l in done.stdout.splitlines() if l.startswith("PLANT ")]
+    if done.returncode != 0 or not line:
+        print(done.stdout[-1500:], done.stderr[-1500:])
+        raise SystemExit(f"Blender did not prepare {mesh}")
+    print(line[0])
+    return 0
+
+
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "--gltf":
+        return from_gltf((ROOT / sys.argv[2]).resolve(), sys.argv[3])
     if len(sys.argv) < 4:
         print(__doc__)
         return 2

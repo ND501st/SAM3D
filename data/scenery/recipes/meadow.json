@@ -1,6 +1,6 @@
 {
   "recipe_id": "meadow",
-  "notes": "Grazed or mown grass in October, dry after six dry weeks: tussocks in clumps, not an even lawn.",
+  "notes": "Grazed or mown grass in October: a closed sward of clumps in greener and drier patches, no bare ground between them at the eye (the look target's K6; terrain roadmap A.3.40). Before A.3.40 9000 clumps a hectare left the ground showing between tussocks.",
   "applies": {
     "layers": [
       "meadow"
@@ -14,9 +14,9 @@
         {
           "kind": "grass",
           "process": "thomas",
-          "per_ha": 9000,
-          "kappa_per_ha": 600,
-          "spread_m": 1.2
+          "per_ha": 30000,
+          "kappa_per_ha": 2500,
+          "spread_m": 1.0
         }
       ]
     }
@@ -26,11 +26,11 @@
       "band": "body",
       "kind": "grass",
       "per_ha": [
-        6500,
-        11500
+        24000,
+        36000
       ]
     }
   ],
-  "source": "game value: sam3d estimate (sheep pasture 10-15 cm, grazed bare on the puszta in autumn: docs/research/TERRAIN_PROCEDURAL_METHOD_2026-11.md 3.6)",
+  "source": "game value: sam3d estimate (judged by eye against the look target's K6, grass everywhere not worked and no bare texture between the clumps; a clump about 0.6 m across, so 30 000 a hectare cover about two thirds of it, the green sward texture the rest)",
   "confidence": "estimate"
 }

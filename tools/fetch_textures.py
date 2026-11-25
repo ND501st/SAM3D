@@ -14,6 +14,8 @@ the owner claims and downloads from Fab into art/thirdparty/quixel/zips/ and thi
 roughness and, when the site has one, ao, as the site serves them (JPEG: a quarter of PNG's size, and Unreal compresses
 them again), and orm.png made from them (R the occlusion, white without one; G the roughness), which the ground
 material reads. A file whose SHA-256 differs from the register's is refused. Packing needs Pillow (pip install pillow).
+A texture the register grades ("grade": its albedo's gain per channel in linear light) also gets albedo_graded.png beside
+the albedo as fetched, written again on every run, which the ground material reads in its place.
 Then tools/ue_build_ground_material.py imports them into Unreal.
 """
 import argparse
@@ -64,6 +66,11 @@ def check_register(register):
         scan = t.get("scan_m", 1.0)
         if isinstance(scan, bool) or not isinstance(scan, (int, float)) or scan <= 0:
             out.append(f"{tid}: scan_m (the scan's real width) is not a positive number of metres")
+        grade = t.get("grade")
+        if grade is not None and not (isinstance(grade, list) and len(grade) == 3
+                                      and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0.25 <= v <= 3.0
+                                              for v in grade)):
+            out.append(f"{tid}: grade is the albedo's gain per channel in linear light, [r, g, b], each 0.25..3")
         crop = t.get("crop_u")
         if crop is not None and not (isinstance(crop, list) and len(crop) == 2
                                      and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in crop)
@@ -183,6 +190,39 @@ def crop_u(data, lo, hi):
     return out.getvalue()
 
 
+def grade_albedo(data, gain):
+    """An albedo's bytes with each channel times its gain in linear light (sRGB decoded, scaled, encoded, clipped), as PNG:
+    a texture's colour brought to the map's (A.3.40: the meadow's sward greener, as the look target's K6)."""
+    from PIL import Image  # only grading needs Pillow
+
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    lut = []
+    for g in gain:
+        for v in range(256):
+            c = v / 255.0
+            lin = c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+            lin = min(1.0, lin * g)
+            s = lin * 12.92 if lin <= 0.0031308 else 1.055 * lin ** (1.0 / 2.4) - 0.055
+            lut.append(max(0, min(255, round(s * 255.0))))
+    out = io.BytesIO()
+    img.point(lut).save(out, format="PNG")
+    return out.getvalue()
+
+
+def write_graded(t, folder):
+    """albedo_graded.png beside the albedo as fetched, when the register grades the texture (the ground material reads the
+    graded one first); an old graded file is removed when it no longer does. True when one was written."""
+    graded = folder / "albedo_graded.png"
+    if "grade" not in t:
+        graded.unlink(missing_ok=True)
+        return False
+    src = next((folder / f"albedo{ext}" for ext in (".png", ".jpg") if (folder / f"albedo{ext}").exists()), None)
+    if src is None:
+        return False
+    graded.write_bytes(grade_albedo(src.read_bytes(), t["grade"]))
+    return True
+
+
 def download_size(t):
     """What fetching the texture downloads, bytes, from the site's API (nothing else fetched)."""
     res = t.get("resolution", "2k")
@@ -276,7 +316,12 @@ def main(argv=None):
     changed = False
     for t in textures:
         if here(t) and not args.record:
-            print(f"{t['id']}: here")
+            try:
+                graded = write_graded(t, OUT / t["id"])
+            except ImportError:
+                print(f"{t['id']}: here, its grade not written (pip install pillow)")
+                continue
+            print(f"{t['id']}: here" + (", graded" if graded else ""))
             continue
         try:
             maps = maps_of(t)
@@ -310,6 +355,7 @@ def main(argv=None):
         for m, (data, ext) in named.items():
             (folder / f"{m}{ext}").write_bytes(data)
         (folder / "orm.png").write_bytes(orm)
+        write_graded(t, folder)
         if args.record:
             t["sha256"] = {m: recorded.get(m, sha256(data)) for m, data in maps.items()}
             changed = True

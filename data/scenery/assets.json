@@ -44,20 +44,6 @@
       "notes": "The same oak thinned to about 600 triangles: the far band of the tree_oak ladder (0-150 m, 150-600 m, 600-1500 m, then the procedural crown)."
     },
     {
-      "id": "grass_card",
-      "unreal_path": "/Game/SAM3D/Map/Cards/grass_card/grass_card/StaticMeshes/grass_card.grass_card",
-      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
-      "author": "SAM3D",
-      "licence": "Own",
-      "redistributable": true,
-      "fetched": "2026-11-04",
-      "sha256": "c7634928a6eae15ec20bd9e1b19c9f82e58bec93699a99d148a9a4ec5f664656",
-      "scale": 1.0,
-      "yaw_deg": 0.0,
-      "z_offset_m": 0.0,
-      "notes": "Ground clutter drawn as a tuft of dry grass: three crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
-    },
-    {
       "id": "straw_card",
       "unreal_path": "/Game/SAM3D/Map/Cards/straw_card/straw_card/StaticMeshes/straw_card.straw_card",
       "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
@@ -588,6 +574,118 @@
       "yaw_deg": 0.0,
       "z_offset_m": 0.0,
       "notes": "A white willow by a village pond or a brook in October, a broad loose dome of narrow silvery grey-green leaves, a few gone yellow: three crossed cards, our own drawing (A.3.37)."
+    },
+    {
+      "id": "grass_ms_c",
+      "unreal_path": "/Game/ThirdParty/Models/grass_ms_c/grass_ms_c/StaticMeshes/grass_ms_c.grass_ms_c",
+      "origin": "https://www.fab.com/listings/50d9a417-73ed-4132-9421-6be3d4f7432e",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-06",
+      "sha256": "c92f44683a3c43c7badfe2f7418e4245f885713e4bf47916753bd37fa054276c",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megascans Wild Grass, variant C (212 triangles, a clump 0.54 x 0.48 m and 0.32 m high as scanned), its colour and opacity in one RGBA texture at 2048 px (tools/megascans_plant.py --gltf): the sward's clump (A.3.40), tinted green to dry per plant (clutter.json). Fab Standard licence (not redistributable): under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "grass_ms_b",
+      "unreal_path": "/Game/ThirdParty/Models/grass_ms_b/grass_ms_b/StaticMeshes/grass_ms_b.grass_ms_b",
+      "origin": "https://www.fab.com/listings/50d9a417-73ed-4132-9421-6be3d4f7432e",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-06",
+      "sha256": "afa4260d27b0fc53d85f6a9ed98d9310059bb433e75950b020a238813af6b5da",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megascans Wild Grass, variant B at its LOD2 (424 triangles, 0.65 x 0.60 m and 0.44 m high as scanned): the sward's second, fuller clump (A.3.40). Fab Standard licence: under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "tall_ms_dry",
+      "unreal_path": "/Game/ThirdParty/Models/tall_ms_dry/tall_ms_dry/StaticMeshes/tall_ms_dry.tall_ms_dry",
+      "origin": "https://www.fab.com/listings/472c99c7-2d67-4190-9ad4-3bb04cfc80f3",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-06",
+      "sha256": "60464afda6586e0d5b09ba4f44652a5907cde4a768d64c8df9568e585f3ee05b",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megascans Dry Grass, variant A at its LOD1 (458 triangles, 0.34 x 0.37 m and 0.69 m high as scanned): tall grass's dry stalks with their seed heads (A.3.40). Fab Standard licence: under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "tall_ms_wheat",
+      "unreal_path": "/Game/ThirdParty/Models/tall_ms_wheat/tall_ms_wheat/StaticMeshes/tall_ms_wheat.tall_ms_wheat",
+      "origin": "https://www.fab.com/listings/9070350f-dea8-40ec-ba57-0777a2c1fb24",
+      "author": "Quixel Megascans",
+      "licence": "Fab-Standard",
+      "redistributable": false,
+      "fetched": "2026-11-06",
+      "sha256": "ae4ccc2839a0c8d5ef81fdfc9a5cf317b661424e29013468c4c892feae557cc3",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Megascans Wheat Grass (wheatgrass, Elymus: a wild grass, not the crop), variant D at its LOD1 (342 triangles, 0.49 x 0.47 m and 1.11 m high as scanned): tall grass's taller clumps with their ears (A.3.40). Fab Standard licence: under art/thirdparty and /Game/ThirdParty, ignored by git; grass_card draws where it is not."
+    },
+    {
+      "id": "grass_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/grass_card/grass_card/StaticMeshes/grass_card.grass_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-04",
+      "sha256": "c7634928a6eae15ec20bd9e1b19c9f82e58bec93699a99d148a9a4ec5f664656",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "Ground clutter drawn as a tuft of dry grass: three crossed cards with an alpha texture drawn by tools/make_cards.py (thin, abundant plants are cards, not solid models)."
+    },
+    {
+      "id": "blackthorn_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/blackthorn_card/blackthorn_card/StaticMeshes/blackthorn_card.blackthorn_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "sha256": "d7ce06daed29356c9c121e7d6042f0b4d8d0518eff7343d373e87e32e14e1b23",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A blackthorn bush in October, many thin dark stems from the foot, small dark leaves, blue-black sloes: three crossed cards (terrain roadmap A.3.41, the hills' scrub)."
+    },
+    {
+      "id": "hawthorn_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/hawthorn_card/hawthorn_card/StaticMeshes/hawthorn_card.hawthorn_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "sha256": "a26a626e1344dc6dd341f53df5944c0df5b1c574466bb2b06e1681b168eda7ab",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A hawthorn bush in October, a short stem and a rounded crown of lobed leaves turning, red haws: three crossed cards (terrain roadmap A.3.41, the hills' scrub)."
+    },
+    {
+      "id": "dog_rose_card",
+      "unreal_path": "/Game/SAM3D/Map/Cards/dog_rose_card/dog_rose_card/StaticMeshes/dog_rose_card.dog_rose_card",
+      "origin": "own work (tools/make_cards.py, tools/blender/build_cards.py)",
+      "author": "SAM3D",
+      "licence": "Own",
+      "redistributable": true,
+      "fetched": "2026-11-16",
+      "sha256": "2fbccb150ec8252317f4f55df4b78b175e44736cd41c0fbf0065a3fd54996557",
+      "scale": 1.0,
+      "yaw_deg": 0.0,
+      "z_offset_m": 0.0,
+      "notes": "A dog rose in October, long arching canes, leaves yellowing, orange-red hips: three crossed cards (terrain roadmap A.3.41, the hills' scrub)."
     }
   ],
   "parts": {
@@ -687,7 +785,8 @@
       "asset": null
     },
     "clutter_grass": {
-      "asset": "grass_card"
+      "asset": "grass_card",
+      "fallback": "grass_card"
     },
     "clutter_straw": {
       "asset": "straw_card"
@@ -733,6 +832,27 @@
     },
     "tree_willow": {
       "asset": "willow_card"
+    },
+    "clutter_grass_b": {
+      "asset": "grass_ms_b",
+      "fallback": "grass_card"
+    },
+    "clutter_tall": {
+      "asset": "tall_ms_dry",
+      "fallback": "grass_card"
+    },
+    "clutter_tall_b": {
+      "asset": "tall_ms_wheat",
+      "fallback": "grass_card"
+    },
+    "tree_blackthorn": {
+      "asset": "blackthorn_card"
+    },
+    "tree_hawthorn": {
+      "asset": "hawthorn_card"
+    },
+    "tree_dog_rose": {
+      "asset": "dog_rose_card"
     }
   }
 }

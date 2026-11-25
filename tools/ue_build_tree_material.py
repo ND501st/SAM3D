@@ -19,6 +19,7 @@ MATERIAL_DIR = '/Game/SAM3D/Map'
 MATERIAL = 'M_SimMapTree'
 CLUTTER = 'M_SimMapClutter'
 FOLIAGE = 'M_SimFoliage'
+GRASS = 'M_SimGrass'
 
 
 def build_material():
@@ -135,6 +136,52 @@ def build_foliage_material():
     unreal.log('FOLIAGE MATERIAL: %s' % path)
 
 
+def build_grass_material():
+    """M_SimGrass (terrain roadmap A.3.40): M_SimFoliage for the near ring's grass, lit as the ground it stands on. Its normal
+    is the world's up on both faces (a world-space normal, not the blades' own), so a blade turned from a low sun is not
+    drawn near black and a clump's colour reads as the sward's beside it. Masked and two-sided as the foliage, its colour
+    the texture times the instance's multiplier; the import gives it to a pick whose part is the clutter's."""
+    path = MATERIAL_DIR + '/' + GRASS
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        unreal.EditorAssetLibrary.delete_asset(path)
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    mat = tools.create_asset(GRASS, MATERIAL_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
+    mat.set_editor_property('two_sided', True)
+    mat.set_editor_property('opacity_mask_clip_value', 0.4)
+    mat.set_editor_property('used_with_instanced_static_meshes', True)
+    mat.set_editor_property('tangent_space_normal', False)
+    lib = unreal.MaterialEditingLibrary
+    base = lib.create_material_expression(mat, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0)
+    base.set_editor_property('parameter_name', 'BaseColorTexture')
+    base.set_editor_property('texture', unreal.load_asset('/Engine/EngineResources/WhiteSquareTexture'))
+    tint = lib.create_material_expression(mat, unreal.MaterialExpressionPerInstanceCustomData3Vector, -700, 550)
+    tint.set_editor_property('data_index', 0)
+    tint.set_editor_property('const_default_value', unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    colour = lib.create_material_expression(mat, unreal.MaterialExpressionMultiply, -400, 100)
+    lib.connect_material_expressions(base, 'RGB', colour, 'A')
+    lib.connect_material_expressions(tint, '', colour, 'B')
+    up = lib.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -400, 300)
+    up.set_editor_property('constant', unreal.LinearColor(0.0, 0.0, 1.0, 1.0))
+    rough = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -400, 400)
+    rough.set_editor_property('r', 0.9)
+    spec = lib.create_material_expression(mat, unreal.MaterialExpressionConstant, -400, 480)
+    spec.set_editor_property('r', 0.25)
+    lib.connect_material_property(colour, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    lib.connect_material_property(up, '', unreal.MaterialProperty.MP_NORMAL)
+    lib.connect_material_property(rough, '', unreal.MaterialProperty.MP_ROUGHNESS)
+    lib.connect_material_property(spec, '', unreal.MaterialProperty.MP_SPECULAR)
+    colour_gain(mat, colour)
+    near_hide(mat, base)
+    lib.recompile_material(mat)
+    if lib.get_material_property_input_node(mat, unreal.MaterialProperty.MP_OPACITY_MASK) is None:
+        raise RuntimeError('the alpha did not connect to the opacity mask')
+    if lib.get_material_property_input_node(mat, unreal.MaterialProperty.MP_NORMAL) is None:
+        raise RuntimeError('the up vector did not connect to the normal')
+    unreal.EditorAssetLibrary.save_asset(path)
+    unreal.log('GRASS MATERIAL: %s' % path)
+
+
 def near_hide(mat, base):
     """The opacity mask is the texture's alpha times 'not within NearHideM metres of the camera', measured from the
     instance's pivot (the local origin taken to the world: per instance on an instanced mesh), so a card tree near the
@@ -234,7 +281,10 @@ if os.environ.get('SAM3D_FOLIAGE_GAINS') == '1':
     patch_foliage_gains()
 elif os.environ.get('SAM3D_FOLIAGE_NEAR_ONLY') == '1':
     patch_foliage_near_hide()
+elif os.environ.get('SAM3D_GRASS_ONLY') == '1':
+    build_grass_material()  # alone: rebuilding M_SimFoliage would leave every imported plant's instance without its parent
 else:
     build_material()
     build_clutter_material()
     build_foliage_material()
+    build_grass_material()

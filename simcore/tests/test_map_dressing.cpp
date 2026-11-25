@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -469,6 +470,9 @@ SC_TEST("map dressing: the stand rules refuse what they cannot use") {
     SC_EXPECT(!load(R"("stands": {"value": [{"id": "a", "site": "dry", "weight": 1, "mix": {"baobab": 1}}, {"id": "b", "site": "wet", "weight": 1, "mix": {"alder": 1}}]})"));
     SC_EXPECT(!load(R"("shrub_mix": {"value": {"oak": 1}})"));
     SC_EXPECT(!load(R"("edge_mix": {"value": {"oak": 0}})"));
+    SC_EXPECT(!load(R"("scrub_mix": {"value": {"oak": 1}})") && e.find("scrub_mix") != std::string::npos);
+    SC_EXPECT(!load(R"("scrub_spacing_m": {"value": 0.1})") && e.find("scrub_spacing_m") != std::string::npos);
+    SC_EXPECT(!load(R"("scrub_keep": {"value": 1.5})") && e.find("scrub_keep") != std::string::npos);
     SC_EXPECT(!load(R"("shrub_height_m": {"value": [4, 1]})"));
     std::printf("    the last refusal: %s\n", e.c_str());
 }
@@ -677,7 +681,7 @@ SC_TEST("map dressing: farm tracks, tree rows and groves lie along the fields, c
     std::size_t pond_trees = 0;
     std::size_t rows = 0, bad_site = 0, bad_water = 0, bad_town = 0, bad_height = 0, outside = 0;
     for (const MapBox& b : m->Layout().boxes) {
-        if (b.part != MapPart::TreeRow) continue;
+        if (b.part != MapPart::TreeRow || b.scrub) continue;  // scrub in the open (A.3.41): checked in test_landform.cpp
         // A village pond's trees (A.3.34): by its water, in the village, checked in test_landform.cpp.
         bool by_pond = false;
         for (std::size_t i = 0; i < m->PondCount() && b.by_water; ++i) {
@@ -769,4 +773,68 @@ SC_TEST("map dressing: the Osa and dummy positions keep their rows off, and batt
     }
     std::printf("    battery 21: %d of 72 directions hide a target 50 m up at 15 km\n", hidden);
     SC_EXPECT(hidden == 0);
+}
+
+SC_TEST("map dressing: the hills' scrub is blackthorn, hawthorn and dog rose, and those grow only in it (A.3.41)") {
+    const MapData* m = Kesmark();
+    SC_EXPECT(m != nullptr);
+    if (m == nullptr) return;
+    const MapDressing& dress = Dressing();
+    const auto scrub_kind = [](int k) {
+        return k == static_cast<int>(TreeKind::Blackthorn) || k == static_cast<int>(TreeKind::Hawthorn) || k == static_cast<int>(TreeKind::DogRose);
+    };
+    // The scrub boxes by 50 m cells, each in every cell its round reaches.
+    constexpr double kCell = 50.0;
+    std::vector<const MapBox*> boxes;
+    std::map<std::pair<long long, long long>, std::vector<std::size_t>> cells;
+    for (const MapBox& b : m->Layout().boxes) {
+        if (!b.scrub) continue;
+        const double r = 0.5 * std::hypot(b.length_m, b.width_m) + 2.0;
+        for (long long y = static_cast<long long>(std::floor((b.north_m - r) / kCell)); y <= static_cast<long long>(std::floor((b.north_m + r) / kCell)); ++y) {
+            for (long long x = static_cast<long long>(std::floor((b.east_m - r) / kCell)); x <= static_cast<long long>(std::floor((b.east_m + r) / kCell)); ++x) {
+                cells[{x, y}].push_back(boxes.size());
+            }
+        }
+        boxes.push_back(&b);
+    }
+    // Whether (e, n) is within `pad` of a scrub box's footprint; which one.
+    const auto in_box = [&](double e, double n, double pad) -> long long {
+        const auto it = cells.find({static_cast<long long>(std::floor(e / kCell)), static_cast<long long>(std::floor(n / kCell))});
+        if (it == cells.end()) return -1;
+        for (std::size_t i : it->second) {
+            const MapBox& b = *boxes[i];
+            const double ue = std::sin(b.heading_rad), un = std::cos(b.heading_rad), de = e - b.east_m, dn = n - b.north_m;
+            if (std::fabs(de * ue + dn * un) <= 0.5 * b.length_m + pad && std::fabs(de * un - dn * ue) <= 0.5 * b.width_m + pad) return static_cast<long long>(i);
+        }
+        return -1;
+    };
+    std::size_t scrub = 0, astray = 0, in_scrub = 0, other_in_scrub = 0;
+    std::size_t kinds[3] = {};
+    std::vector<int> planted(boxes.size(), 0);
+    for (const TreeInstance& t : dress.trees) {
+        const bool s = scrub_kind(t.kind);
+        const long long near_box = in_box(t.east_m, t.north_m, s ? 2.0 : 0.0);
+        if (s) {
+            ++scrub;
+            ++kinds[static_cast<std::size_t>(t.kind - static_cast<int>(TreeKind::Blackthorn))];
+            astray += near_box < 0 ? 1 : 0;
+            if (near_box >= 0) ++planted[static_cast<std::size_t>(near_box)];
+        } else if (near_box >= 0) {
+            ++other_in_scrub;
+        }
+        in_scrub += near_box >= 0 ? 1 : 0;
+    }
+    std::size_t bare = 0;
+    for (int p : planted) bare += p == 0 ? 1 : 0;
+    const auto pct = [](std::size_t a, std::size_t of) { return of > 0 ? 100.0 * static_cast<double>(a) / static_cast<double>(of) : 0.0; };
+    std::printf("    %zu scrub boxes, %zu bushes in them (blackthorn %.0f%%, hawthorn %.0f%%, dog rose %.0f%%), %zu boxes bare; "
+                "astray %zu; other plants in the boxes %zu of %zu\n",
+                boxes.size(), scrub, pct(kinds[0], scrub), pct(kinds[1], scrub), pct(kinds[2], scrub), bare, astray, other_in_scrub, in_scrub);
+    SC_EXPECT(boxes.size() > 100 && scrub > boxes.size());
+    // The scrub's kinds only in its boxes; the boxes nearly all scrub (a wood's fringe may reach into a thicket by it).
+    SC_EXPECT(astray == 0);
+    SC_EXPECT(pct(other_in_scrub, in_scrub) < 5.0);
+    // Each kind there, none of them rare; nearly every box planted.
+    SC_EXPECT(pct(kinds[0], scrub) > 15.0 && pct(kinds[1], scrub) > 15.0 && pct(kinds[2], scrub) > 5.0);
+    SC_EXPECT(pct(bare, boxes.size()) < 5.0);
 }

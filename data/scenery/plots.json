@@ -153,6 +153,20 @@
       "anchor": { "kind": "field_layer", "layer": "tall_grass", "close_km": [-12.0, 0.0] },
       "photos": [],
       "must_see": "Grass knee-high and gone to seed, pale and dry in October, uneven in tussocks; the hay meadow and pasture beside it mown and grazed short (terrain roadmap L13, A.3.39)."
+    },
+    {
+      "id": "p06_pasture_bushes",
+      "name": "A grazed slope with lone bushes",
+      "anchor": { "kind": "pasture_bush", "close_km": [-12.0, 0.0] },
+      "photos": [],
+      "must_see": "Short grazed grass on a hillside, a lone hawthorn, blackthorn or dog rose standing in it as wide as tall, the flock's tracks and tussocks round it (terrain roadmap L13, A.3.41)."
+    },
+    {
+      "id": "p25_scrubby_hillside",
+      "name": "A thicket on a hillside",
+      "anchor": { "kind": "scrub_thicket", "close_km": [-11.0, -0.4] },
+      "photos": [],
+      "must_see": "A long low thicket of blackthorn, hawthorn and dog rose along the slope, dark and dense, hiding what is behind it, tall grass up to it and the wood's edge beyond (terrain roadmap L13, A.3.41)."
     }
   ]
 }

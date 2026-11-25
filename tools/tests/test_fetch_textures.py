@@ -53,6 +53,30 @@ def test_the_register_rules():
     assert fetch_textures.check_register({"textures": [dict(GOOD, crop_u=[0.17, 0.8])]}) == []
     for bad in ([0.5], [0.6, 0.4], [0.5, 0.6], [-0.1, 0.8], [0.2, 1.2], "0.2-0.8"):
         assert any("crop_u" in p for p in fetch_textures.check_register({"textures": [dict(GOOD, crop_u=bad)]})), bad
+    assert fetch_textures.check_register({"textures": [dict(GOOD, grade=[0.84, 1.29, 1.1])]}) == []
+    for bad in ([1.0, 1.0], [0.1, 1.0, 1.0], [1.0, 4.0, 1.0], [1.0, True, 1.0], "greener"):
+        assert any("grade" in p for p in fetch_textures.check_register({"textures": [dict(GOOD, grade=bad)]})), bad
+
+
+def test_a_grade_scales_each_channel_in_linear_light_and_keeps_the_fetched_albedo(tmp_path):
+    """A.3.40: sRGB 128 is 0.216 linear; times 2 it is 0.432, sRGB 175; times 0.5, 0.108, sRGB 92; a gain past white clips."""
+    pytest = __import__("pytest")
+    Image = pytest.importorskip("PIL.Image")
+    import io
+
+    src = io.BytesIO()
+    Image.new("RGB", (4, 4), (128, 128, 250)).save(src, format="PNG")
+    out = Image.open(io.BytesIO(fetch_textures.grade_albedo(src.getvalue(), [2.0, 0.5, 2.0])))
+    r, g, b = out.getpixel((0, 0))
+    assert abs(r - 175) <= 1 and abs(g - 92) <= 1 and b == 255
+    folder = tmp_path / "meadow"
+    folder.mkdir()
+    (folder / "albedo.png").write_bytes(src.getvalue())
+    assert fetch_textures.write_graded(dict(GOOD, grade=[2.0, 0.5, 2.0]), folder)
+    assert (folder / "albedo_graded.png").exists()
+    assert Image.open(folder / "albedo.png").getpixel((0, 0)) == (128, 128, 250)
+    assert not fetch_textures.write_graded(GOOD, folder)  # graded no more: the old file goes
+    assert not (folder / "albedo_graded.png").exists()
 
 
 def test_crop_u_keeps_the_middle_across_the_width():

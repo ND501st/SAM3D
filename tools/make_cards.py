@@ -335,10 +335,16 @@ def ellipse_leaf(d, cx, cy, length, width, angle, colour):
     d.polygon(pts, fill=colour + (255,))
 
 
-def bush(rng, name, stems, leaf_len, leaf_w, greens, yellows, yellow_share, berries=0.0, arch=0.25):
-    """A woodland shrub in October (roadmap L7, A.3.23: the understorey and the brooks' bushes), many stems from one foot
-    fanning out, their upper two thirds in leaves: a hazel's broad round leaves turning yellow, an elder's narrower leaflets
-    still green with black-purple umbels of berries. Drawn as three crossed cards (tools/blender/build_cards.py)."""
+def bush(rng, name, stems, leaf_len, leaf_w, greens, yellows, yellow_share, berries=0.0, arch=0.25,
+         berry_colour=(32, 18, 30), berry_r=0.006, berry_count=(12, 22), berry_spread=(0.03, 0.012, 0.03), leafy_from=0.3,
+         spread=0.42, leaf_mult=1.0):
+    """A shrub in October (roadmap L7, A.3.23: the understorey and the brooks' bushes; L13, A.3.41: the scrub in the open),
+    many stems from one foot fanning out, their upper part in leaves (from `leafy_from` of a stem's length): a hazel's broad
+    round leaves turning yellow, an elder's narrower leaflets still green with black-purple umbels of berries; blackthorn's
+    small dark leaves and blue-black sloes, hawthorn's lobed leaves turning and its red haws, dog rose's arching canes and
+    orange-red hips. Each fruiting stem has one cluster of `berry_count` fruits within `berry_spread` (sideways, up, down,
+    of the card) of a point near its tip. The stems fan out to `spread` of the card either side at full length; each
+    carries `leaf_mult` times the leaves. Drawn as three crossed cards (tools/blender/build_cards.py)."""
     img = canvas()
     d = ImageDraw.Draw(img)
     W = H = SIZE * SS
@@ -347,15 +353,15 @@ def bush(rng, name, stems, leaf_len, leaf_w, greens, yellows, yellow_share, berr
     for i in range(stems):
         x0 = W * rng.uniform(0.42, 0.58)
         length = H * rng.uniform(0.55, 0.95)
-        lean = W * (-0.42 + 0.84 * (i + rng.uniform(0.2, 0.8)) / stems) * (length / H)  # spread across the fan, not by chance
+        lean = W * (-spread + 2.0 * spread * (i + rng.uniform(0.2, 0.8)) / stems) * (length / H)  # spread across the fan, not by chance
         blade(d, x0, base_y, length, lean, W * rng.uniform(0.012, 0.022), (70, 60, 48), (104, 92, 74), taper=0.6)
         tips.append((x0, length, lean))
     # The leaves in layers: the inner ones darker (in the bush's shade), the outer lit; each along a stem's upper part.
     for layer in range(3):
         shade = 0.62 + 0.19 * layer
         for x0, length, lean in tips:
-            for _ in range(int(rng.uniform(10, 18))):
-                t = rng.uniform(0.3, 1.0)
+            for _ in range(int(rng.uniform(10, 18) * leaf_mult)):
+                t = rng.uniform(leafy_from, 1.0)
                 droop = arch * length * t * t * (1.0 - t) * 1.5
                 x = x0 + lean * t * t + rng.uniform(-0.05, 0.05) * W
                 y = base_y - length * t + droop + rng.uniform(-0.04, 0.04) * H
@@ -366,10 +372,10 @@ def bush(rng, name, stems, leaf_len, leaf_w, greens, yellows, yellow_share, berr
         if rng.random() < berries:
             t = rng.uniform(0.6, 0.95)
             cx, cy = x0 + lean * t * t, base_y - length * t
-            for _ in range(rng.randint(12, 22)):
-                r = W * 0.006
-                bx, by = cx + rng.uniform(-0.03, 0.03) * W, cy + rng.uniform(-0.012, 0.03) * H
-                d.ellipse((bx - r, by - r, bx + r, by + r), fill=(32, 18, 30, 255))
+            for _ in range(rng.randint(*berry_count)):
+                r = W * berry_r
+                bx, by = cx + rng.uniform(-berry_spread[0], berry_spread[0]) * W, cy + rng.uniform(-berry_spread[1], berry_spread[2]) * H
+                d.ellipse((bx - r, by - r, bx + r, by + r), fill=berry_colour + (255,))
     fill = tuple(int(sum(c[i] for c in greens + yellows) / len(greens + yellows) * 0.8) for i in range(3))
     return finish(img, name, fill=fill)
 
@@ -520,6 +526,17 @@ def main():
     # The woods' bushes (A.3.23): hazel turning yellow, elder still green with its berries.
     sheets += [bush(random.Random(211), "hazel_card", 11, 0.075, 0.062, [(92, 104, 44), (110, 116, 50)], [(178, 160, 62), (196, 172, 70), (160, 138, 56)], 0.55),
                bush(random.Random(223), "elder_card", 8, 0.06, 0.03, [(56, 78, 34), (68, 90, 40), (80, 98, 46)], [(150, 140, 60)], 0.12, berries=0.6, arch=0.45)]
+    # The scrub in the open (L13, A.3.41): blackthorn dense and dark from the ground with blue-black sloes, hawthorn's small
+    # leaves turning, with red haws all over, dog rose's arching canes yellowing, with orange-red hips.
+    sheets += [bush(random.Random(307), "blackthorn_card", 18, 0.04, 0.02, [(34, 46, 26), (42, 54, 30), (50, 60, 34)], [(104, 96, 56), (88, 64, 52)], 0.12,
+                    berries=0.8, arch=0.12, berry_colour=(46, 52, 78), berry_r=0.007, berry_count=(4, 9), berry_spread=(0.06, 0.08, 0.04), leafy_from=0.05,
+                    spread=0.62, leaf_mult=2.6),
+               bush(random.Random(311), "hawthorn_card", 13, 0.046, 0.038, [(58, 76, 34), (68, 86, 38), (52, 68, 30)], [(168, 122, 48), (150, 84, 38), (182, 146, 60)], 0.35,
+                    berries=0.9, arch=0.2, berry_colour=(150, 26, 22), berry_r=0.0065, berry_count=(6, 12), berry_spread=(0.07, 0.07, 0.05), leafy_from=0.2,
+                    spread=0.56, leaf_mult=1.8),
+               bush(random.Random(313), "dog_rose_card", 12, 0.042, 0.026, [(76, 96, 44), (88, 106, 50)], [(182, 152, 60), (160, 120, 50)], 0.4,
+                    berries=0.85, arch=0.65, berry_colour=(186, 54, 24), berry_r=0.008, berry_count=(2, 5), berry_spread=(0.05, 0.05, 0.05), leafy_from=0.1,
+                    spread=0.58, leaf_mult=1.9)]
     trees = tree_cards()
     sheet = Image.new("RGB", (SIZE * len(sheets) + len(talls) * MAIZE_W // 4, SIZE), (92, 110, 150))
     for i, im in enumerate(sheets):
@@ -542,7 +559,7 @@ def main():
     ok = [l for l in done.stdout.splitlines() if l.startswith("CARD ")]
     for l in ok:
         print(l)
-    if done.returncode != 0 or len(ok) != 21:
+    if done.returncode != 0 or len(ok) != 24:
         print(done.stdout[-1200:], done.stderr[-1200:])
         raise SystemExit("Blender did not build the cards")
     return 0

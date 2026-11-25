@@ -79,12 +79,19 @@ def import_mesh(pick):
     return meshes[0], src
 
 
+GRASS_PARTS = ('clutter_grass', 'clutter_tall')  # the near ring's grass, lit as the ground (A.3.40); not the crops' cards
+
+
 def foliage(mesh, pick):
     """Each material slot gets an instance of M_SimFoliage with the textures the importer found for it (masked, two-sided,
-    the instance's colour multiplier): the importer's own glTF materials draw a plant's leaves blended and grey."""
-    master = unreal.load_asset('/Game/SAM3D/Map/M_SimFoliage.M_SimFoliage')
+    the instance's colour multiplier): the importer's own glTF materials draw a plant's leaves blended and grey. The near
+    ring's grass (a part of GRASS_PARTS) gets M_SimGrass instead, lit as the ground it stands on (A.3.40). Each base
+    texture's mips keep its alpha's coverage (keep_coverage)."""
+    grass = str(pick.get('part', '')).startswith(GRASS_PARTS)
+    name_of = 'M_SimGrass' if grass else 'M_SimFoliage'
+    master = unreal.load_asset('/Game/SAM3D/Map/%s.%s' % (name_of, name_of))
     if master is None:
-        raise RuntimeError('no M_SimFoliage: run tools/ue_build_tree_material.py first')
+        raise RuntimeError('no %s: run tools/ue_build_tree_material.py first (SAM3D_GRASS_ONLY=1 for the grass alone)' % name_of)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     mat_dir = dest_of(pick) + '/SimMaterials'
     lib = unreal.MaterialEditingLibrary
@@ -100,10 +107,27 @@ def foliage(mesh, pick):
         for param in ('BaseColorTexture', 'NormalTexture'):
             if textures.get(param) is not None:
                 lib.set_material_instance_texture_parameter_value(mi, param, textures[param])
+        keep_coverage(textures.get('BaseColorTexture'))
         mesh.set_material(i, mi)
         unreal.EditorAssetLibrary.save_loaded_asset(mi)
     unreal.EditorAssetLibrary.save_loaded_asset(mesh)
-    log('%d slots on M_SimFoliage' % len(mesh.static_materials))
+    log('%d slots on %s' % (len(mesh.static_materials), name_of))
+
+
+def keep_coverage(texture, clip=0.4):
+    """The texture's mips keep its alpha's coverage at the foliage materials' clip (0.4), so a clump or a card keeps its
+    fill as it shrinks with the distance instead of thinning to stalks and going (A.3.40: Wild Grass covered 14% of its
+    texture at 2048 px, 3.4% at 64 and 1.6% at 16 with plain mips)."""
+    if texture is None:
+        return
+    try:
+        texture.set_editor_property('do_scale_mips_for_alpha_coverage', True)
+        texture.set_editor_property('alpha_coverage_thresholds', unreal.Vector4(0.0, 0.0, 0.0, clip))
+    except Exception as e:  # an engine without the setting: the plain mips, as before
+        log('alpha coverage not kept on %s: %s' % (texture.get_name(), e))
+        return
+    unreal.EditorAssetLibrary.save_loaded_asset(texture)
+    log('alpha coverage kept on %s at %.2f' % (texture.get_name(), clip))
 
 
 def make_lods(mesh, steps):

@@ -13,7 +13,7 @@ import bpy
 CARDS = {"grass_card": (3, 60.0), "straw_card": (2, 90.0), "reed_card": (2, 90.0), "maize_card": (2, 90.0), "maize_card_b": (2, 90.0),
          "maize_card_c": (2, 90.0), "maize_card_d": (2, 90.0), "maize_card_e": (2, 90.0), "maize_card_f": (2, 90.0),
          "sunflower_card": (2, 90.0), "sunflower_card_b": (2, 90.0), "sunflower_card_c": (2, 90.0),
-         "hazel_card": (3, 60.0), "elder_card": (3, 60.0),
+         "hazel_card": (3, 60.0), "elder_card": (3, 60.0), "blackthorn_card": (3, 60.0), "hawthorn_card": (3, 60.0), "dog_rose_card": (3, 60.0),
          "poplar_card": (3, 60.0), "alder_card": (3, 60.0), "acacia_card": (3, 60.0), "maple_card": (3, 60.0), "pine_card": (3, 60.0), "beech_card": (3, 60.0),
          "willow_card": (3, 60.0)}
 

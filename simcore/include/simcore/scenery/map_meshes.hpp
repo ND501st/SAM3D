@@ -35,12 +35,16 @@ namespace scenery {
 // The kinds of tree the map's woods, rows and gardens are planted with (the plain's oak, the poplar of the river banks,
 // the planted pine and the black locust of the shelter belts), then the oak-hornbeam and beech woods' hornbeam and beech,
 // the black alder of the wet ground, the field maple of the edges, the two shrubs of a wood's fringe (hazel, elder), and
-// the white willow of the ponds and brooks (A.3.37): docs/scenery/VEGETATION.md. The first four keep their numbers (a kind
-// is an index into the instance lists).
-enum class TreeKind { Oak, Poplar, Pine, Acacia, Hornbeam, Beech, Alder, Maple, Hazel, Elder, Willow, Count };
+// the white willow of the ponds and brooks (A.3.37), and the scrub of the open ground, blackthorn, hawthorn and dog rose
+// (terrain roadmap L13, A.3.41): docs/scenery/VEGETATION.md. The first four keep their numbers (a kind is an index into the
+// instance lists).
+enum class TreeKind { Oak, Poplar, Pine, Acacia, Hornbeam, Beech, Alder, Maple, Hazel, Elder, Willow, Blackthorn, Hawthorn, DogRose, Count };
 
-// A shrub of a wood's fringe: lower than a tree (data/scenery/map_dressing.json "shrub_height_m"), several stems from the ground.
-inline bool IsShrub(TreeKind k) { return k == TreeKind::Hazel || k == TreeKind::Elder; }
+// A shrub: lower than a tree (data/scenery/map_dressing.json "shrub_height_m"), several stems from the ground. Hazel and
+// elder of a wood's fringe; blackthorn, hawthorn and dog rose of the scrub in the open.
+inline bool IsShrub(TreeKind k) {
+    return k == TreeKind::Hazel || k == TreeKind::Elder || k == TreeKind::Blackthorn || k == TreeKind::Hawthorn || k == TreeKind::DogRose;
+}
 
 inline const char* TreeKindName(TreeKind k) {
     switch (k) {
@@ -55,6 +59,9 @@ inline const char* TreeKindName(TreeKind k) {
     case TreeKind::Hazel: return "hazel";
     case TreeKind::Elder: return "elder";
     case TreeKind::Willow: return "willow";
+    case TreeKind::Blackthorn: return "blackthorn";
+    case TreeKind::Hawthorn: return "hawthorn";
+    case TreeKind::DogRose: return "dog_rose";
     case TreeKind::Count: break;
     }
     return "?";
@@ -79,6 +86,10 @@ constexpr Colour kPoplarCrown{0.060f, 0.120f, 0.030f};  // #456130
 constexpr Colour kPineCrown{0.024f, 0.059f, 0.025f};    // #2b452c
 constexpr Colour kAcaciaCrown{0.070f, 0.115f, 0.035f};  // #4a5f35
 constexpr Colour kWillowCrown{0.096f, 0.120f, 0.068f};  // #566149 a willow's grey-green (its leaves silvery beneath)
+// The scrub (A.3.41): blackthorn dense and dark, hawthorn a duller green, dog rose a lighter, yellower green.
+constexpr Colour kBlackthornCrown{0.026f, 0.036f, 0.018f};  // #2d3523
+constexpr Colour kHawthornCrown{0.046f, 0.066f, 0.024f};    // #3d4a2a
+constexpr Colour kDogRoseCrown{0.070f, 0.088f, 0.034f};     // #4b5334
 constexpr Colour kGrassBase{0.040f, 0.046f, 0.018f};    // #2e3220 dry grass, the foot of a tuft
 constexpr Colour kGrassTip{0.110f, 0.095f, 0.035f};     // #5e5434 its straw-coloured tips
 constexpr Colour kStrawFoot{0.100f, 0.075f, 0.028f};    // #4f4128 stubble and a maize stump
@@ -312,6 +323,27 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
         trunk_top = 0.1;
         trunk_r = 0.05;
         break;
+    case TreeKind::Blackthorn:
+        // Dense from the ground, a low flat-topped mound (it spreads by suckers into a thicket).
+        crown = kBlackthornCrown;
+        profile = {{0.07, 0.42}, {0.45, 0.5}, {0.85, 0.4}, {1.0, 0.0}};
+        trunk_top = 0.09;
+        trunk_r = 0.04;
+        break;
+    case TreeKind::Hawthorn:
+        // A small tree of a shrub: a short stem under a rounded head.
+        crown = kHawthornCrown;
+        profile = {{0.16, 0.36}, {0.5, 0.5}, {0.85, 0.4}, {1.0, 0.0}};
+        trunk_top = 0.22;
+        trunk_r = 0.05;
+        break;
+    case TreeKind::DogRose:
+        // Arching canes from one foot: a broad mound, its top falling away.
+        crown = kDogRoseCrown;
+        profile = {{0.07, 0.44}, {0.35, 0.5}, {0.75, 0.32}, {1.0, 0.0}};
+        trunk_top = 0.09;
+        trunk_r = 0.035;
+        break;
     case TreeKind::Hornbeam:
     case TreeKind::Beech:
     case TreeKind::Maple:
@@ -339,14 +371,16 @@ inline TriMesh TreeMesh(TreeKind kind, int lod) {
 // base at the origin, unit height, a unit across. "clutter_grass" a tuft of dry grass, "clutter_straw" a stubble clump or a
 // maize stump (a short stalk cut flat), "clutter_reed" a reed or a dry stalk with its seed head, "clutter_clod" a clod of
 // the plough's (a solid, as a clod is: no card), "clutter_stalk" a maize stalk lying on the stubble, "clutter_maize" a
-// standing maize plant ("clutter_maize_b" to "_f" its other cards, the same placeholder). Placeholders: spiky
-// solids that read as ground cover from a metre or more.
+// standing maize plant ("clutter_maize_b" to "_f" its other cards, the same placeholder). "clutter_grass_b" a second
+// clump of the sward and "clutter_tall", "clutter_tall_b" tall grass's clumps (A.3.40: the Megascans grasses where this
+// machine has them, our own cards where not), the grass tuft's placeholder. Placeholders: spiky solids that read as
+// ground cover from a metre or more.
 inline TriMesh ClutterMesh(const std::string& part, int lod) {
     using namespace map_mesh_detail;
     TriMesh m;
     if (lod < 0 || lod > 1) return m;
     SolidBuilder b(m);
-    if (part == "clutter_grass") {
+    if (part.rfind("clutter_grass", 0) == 0 || part.rfind("clutter_tall", 0) == 0) {
         const int sides = lod == 0 ? 5 : 3;
         b.Loft({Ring(sides, 0.0, 0.5), Ring(sides, 0.45, 0.32, 0.3), Ring(sides, 1.0, 0.0)}, {kGrassBase, kGrassTip}, kGrassBase, kGrassTip);
     } else if (part == "clutter_straw") {
@@ -671,7 +705,7 @@ inline TriMesh MapPartMesh(const std::string& part, int variant, int lod) {
 inline std::vector<std::string> MapMeshParts() {
     std::vector<std::string> out;
     for (int k = 0; k < static_cast<int>(TreeKind::Count); ++k) out.push_back(std::string("tree_") + TreeKindName(static_cast<TreeKind>(k)));
-    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk", "clutter_maize", "clutter_maize_b", "clutter_maize_c", "clutter_maize_d", "clutter_maize_e", "clutter_maize_f", "clutter_sunflower", "clutter_sunflower_b", "clutter_sunflower_c", "clutter_swath"}) out.push_back(p);
+    for (const char* p : {"canopy_mass", "house", "barn", "flats", "industrial", "clutter_grass", "clutter_grass_b", "clutter_tall", "clutter_tall_b", "clutter_straw", "clutter_reed", "clutter_clod", "clutter_stalk", "clutter_maize", "clutter_maize_b", "clutter_maize_c", "clutter_maize_d", "clutter_maize_e", "clutter_maize_f", "clutter_sunflower", "clutter_sunflower_b", "clutter_sunflower_c", "clutter_swath"}) out.push_back(p);
     return out;
 }
 

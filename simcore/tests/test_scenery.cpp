@@ -388,6 +388,25 @@ SC_TEST("scenery: a part's alternates are drawn instance by instance, the same m
     SC_EXPECT(e.find("not registered") != std::string::npos);
 }
 
+SC_TEST("scenery: a part's fallback stands in where its asset's files are absent (a clone without the Fab packs)") {
+    const std::string grass_fab =
+        R"({"id": "grass_fab", "unreal_path": "/Game/ThirdParty/Grass/SM_Grass.SM_Grass", "origin": "https://www.fab.com/", "licence": "Fab-Standard", "redistributable": false, "fetched": "2026-11-06"})";
+    AssetRegister reg;
+    std::string e;
+    SC_EXPECT(reg.Load(Register(std::string(kCc0Oak) + ", " + grass_fab, R"("clutter_grass": {"asset": "grass_fab", "fallback": "oak_a"})"), &e));
+    SC_EXPECT(reg.AssetFor("clutter_grass", 0)->id == "grass_fab");  // the asset is drawn where it loads
+    SC_EXPECT(reg.FallbackFor("clutter_grass") != nullptr && reg.FallbackFor("clutter_grass")->id == "oak_a");
+    SC_EXPECT(reg.FallbackFor("tree_oak") == nullptr && reg.FallbackFor("windmill") == nullptr);
+    // A fallback is registered, and stands in for an asset the part names.
+    AssetRegister bad;
+    SC_EXPECT(!bad.Load(Register(grass_fab, R"("clutter_grass": {"asset": "grass_fab", "fallback": "grass_own"})"), &e));
+    SC_EXPECT(e.find("not registered") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(kCc0Oak, R"("clutter_grass": {"asset": null, "fallback": "oak_a"})"), &e));
+    SC_EXPECT(e.find("stand in for") != std::string::npos);
+    SC_EXPECT(!bad.Load(Register(std::string(kCc0Oak) + ", " + grass_fab, R"("clutter_grass": {"asset": "grass_fab", "fallback": 3})"), &e));
+    SC_EXPECT(e.find("fallback") != std::string::npos);
+}
+
 SC_TEST("scenery: a part's near models are drawn within their distance, its own asset beyond") {
     const std::string oak_b =
         R"({"id": "oak_b", "unreal_path": "/Game/SAM3D/Map/Trees/SM_OakB.SM_OakB", "origin": "own work", "licence": "Own", "redistributable": true, "fetched": "2026-11-08"})";

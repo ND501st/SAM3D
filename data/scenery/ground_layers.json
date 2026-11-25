@@ -13,9 +13,11 @@
   "layers": [
     {
       "id": "meadow",
-      "tile_m": 2.0,
+      "tile_m": 1.5,
       "rows": false,
-      "texture": "leafy_grass"
+      "texture": "meadow_sward",
+      "patch": 0.2,
+      "break_up": 1.0
     },
     {
       "id": "wheat",
@@ -111,9 +113,11 @@
     },
     {
       "id": "tall_grass",
-      "tile_m": 2.5,
+      "tile_m": 1.5,
       "rows": false,
-      "texture": "grass_ground"
+      "texture": "meadow_sward",
+      "patch": 0.3,
+      "break_up": 1.0
     }
   ],
   "cover": {

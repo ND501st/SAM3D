@@ -125,7 +125,10 @@ L12's foliage shading and colour calibration go with L6 (they are the asset kit'
 plot 12 and the road (13). Everything not worked is grass or scrub, on the plain's balks, pastures and embankments and on
 the hills' slopes and valley floors (A.3.17 measured meadow at 27% of the hills), and today it reads as sparse dark
 tufts on a bare texture (A.3.36's Left). L13's steps in A.6's order; then the plots resume (12, 13, the rest). Step 1
-built (A.3.39, 16 Nov 2026): hay, pasture and tall grass, plot p24.
+built (A.3.39, 16 Nov 2026): hay, pasture and tall grass, plot p24. The grass made greener and denser (A.3.40, the
+owner's comparison with K6). Steps 2 and 3 built (A.3.41): the hills' scrub as boxes the sight lines read, our own
+blackthorn, hawthorn and dog rose, plots p06 and p25. Step 4 next: the plain's scrub, the mantle's new kinds, and the
+grass under the bushes.
 
 **Paused:** gathering from Fab (except leaf and ground textures); the Megaplants and GV exports through Blender; the
 hand tuning of `card_tree.py`'s hornbeam (it becomes L6's tree builder's leaves); the Sketchfab landmarks and the AI
@@ -1188,6 +1191,159 @@ plain by share and in the hills on the wet floors and the slopes too steep to pl
     track or a hedge (step 5, with the far tints).
   - `graze_m` and `wet_tall_cut` are estimates. Tall grass at 40% of the hills' meadow wants a source for 1985.
 
+### A.3.40 The grass greener and denser: a green sward, scanned clumps, three times as many (L13, 16 Nov 2026)
+
+The owner, 16 Nov 2026, comparing our grass with the look target's (`LOOK_TARGET.md`, K6 and K12): not green enough,
+not dense enough; look for more grass and ground models and textures. This pass changes the meadow's and the tall
+grass's ground, clumps, density and far colour.
+
+- **The ground under it.** The meadow's and the tall grass's layers wear ambientCG's `Grass004` (CC0), a dense green
+  sward with dry blades in it, laid every 1.5 m with its patches broken up (`ground_layers.json`, `textures.json`). It
+  replaces Poly Haven's `leafy_grass` (the meadow's, now unused) and the verge's `grass_ground` (the tall grass's).
+  `Grass003` was tried for the tall grass and left out: its albedo averages 0.06, near black from afar.
+- **The clumps.** Four Megascans plants already on disk (Fab Standard: under `art/thirdparty` and `/Game/ThirdParty`,
+  ignored by git), prepared by `tools/megascans_plant.py --gltf` and `tools/blender/megascans_gltf_plant.py` into one
+  RGBA texture each:
+  - Wild Grass variants C and B for the sward (`clutter_grass`, `clutter_grass_b`);
+  - Dry Grass, stalks with seed heads, for the tall grass (`clutter_tall`);
+  - Wheat Grass (wheatgrass, a wild grass, not the crop) with its ears, the tall grass's taller clumps
+    (`clutter_tall_b`).
+
+  A clutter kind may draw from several parts (`clutter.json`).
+- **Tints.** Each clump is tinted from its kind's `tints`, green to dry, in patches `tint_patch_m` across (5 m for the
+  sward, 8 m for the tall grass), carried in the instances' custom data with the brightness.
+- **Density.**
+  - The meadow recipe goes from 9000 to 30 000 clumps a hectare. A clump is about 0.6 m across, so they cover about two
+    thirds of the ground, the green sward texture between them.
+  - The tall grass goes from 12 000 to 18 000 tussocks and 6000 to 14 000 short tufts a hectare.
+  - The ring's falloff goes from 30 to 40 m.
+  - Beyond the falloff each clump is drawn wider with the distance, times √(1 + (d / falloff)²) up to `widen_max`
+    (2.5), so fewer plants still cover the ground far off. A kind with `near_m` (the standing maize) is not widened.
+- **Far off.** The plain's pasture, hay and tall grass take the sward's own linear average (0.122, 0.156, 0.032) as
+  their land cover colours: pasture (0.13, 0.165, 0.04), was (0.20, 0.27, 0.10). They are darker and more saturated,
+  so the meadows beyond the ring meet the ring's colour.
+- **A clone without the Fab packs.** A register part may name a `fallback` (`asset_register.hpp`, `FallbackFor`),
+  drawn where its asset's files are absent. The four Megascans grasses fall back to our own `grass_card`, so a clone
+  without the packs still has grass.
+- **The ring off the game thread.** At the battery the ring is now 32 146 plants and takes about 50 ms to scatter.
+  `USimClutterRing` builds it on a worker of the thread pool and swaps it in when it is ready. A generation number
+  drops a build the camera has left behind.
+- **Second pass, the clumps' fill** (renders l15-l17). The scanned clumps thinned to dark stalks a few metres off and
+  went by about 25 m. Measured at a 0.5 cut-off, Wild Grass covers 14% of its texture at 2048 px, 3.4% at 64 and 1.6%
+  at 16: plain mips average the alpha away. Two changes:
+  - `tools/ue_import_model.py` sets each foliage texture's mips to keep its alpha's coverage at the materials' clip
+    (`keep_coverage`, 0.4). Since l17 the clumps keep their fill out to the wood line.
+  - The near ring's grass (`clutter_grass*`, `clutter_tall*`) gets `M_SimGrass` (`tools/ue_build_tree_material.py`,
+    `SAM3D_GRASS_ONLY=1` builds it alone). It is the foliage material with the world's up as its normal, so a blade
+    turned from a low sun is lit as the ground beside it, not drawn near black.
+- **Second pass, the colour** (render l18). The sward as fetched is an olive green, 1.27 times as green as red. The
+  register may now grade a texture (`textures.json` `grade`, a gain per channel in linear light; `fetch_textures.py`
+  writes `albedo_graded.png` beside the albedo as fetched, which the ground material reads first). `meadow_sward` is
+  graded (0.84, 1.29, 1.1), from 0.125 0.159 0.033 to 0.105 0.205 0.037. The far pasture, hay and tall grass colours
+  follow it. The grass's tints are now mostly green with one straw end, the tall grass's a little greener, and the
+  sward's clumps 0.55-0.95 m wide (were 0.45-0.80).
+- **Seen** (l18 against K6's look target): the meadow is now green, near the target's tone. The clumps still read as
+  separate tufts with ground between them, and the short ones a little darker than the bright ground; the target's
+  sward is closed. The tall grass reads well.
+- **Costs: a regression found, not resolved.** At the eye, p24 went from 15 ms of GPU (l16) to about 105 ms (l17 and
+  l18), p20 from 15 to 80, p06 from 13 to 60-95. The low and high cameras are unchanged (about 10 ms).
+  - With coverage off on the grass textures (l18b), p24 at the eye is still 108 ms, so the mips are not the cause.
+  - That leaves `M_SimGrass`. A run with the grass put back on `M_SimFoliage` (l18c) drew no grass at all, so its
+    17 ms proves nothing. Not yet explained.
+  - The ring's instance budgets in `test_clutter.cpp` (20 000) and `test_recipes.cpp` (24 000) fail at 32 146 and
+    29 121 plants since the first pass's density. They stay failing until the costs are settled.
+- **Left:**
+  - The regression above, first: re-import the four grass picks on `M_SimFoliage` (not a re-parent) and render p24;
+    if the cost goes, find what in `M_SimGrass` costs it (the world-space normal on a two-sided masked material is
+    the suspect) or drop it.
+  - Then settle the budgets against the measured costs, and a closed sward: more and smaller low clumps, or a short
+    grass layer under the clumps.
+  - The tree cards are not re-imported with coverage kept. The maize and sunflower cards are unchanged.
+  - The 1985 summer was dry: a greener sward is the look target's, not a source's.
+  - `grass_card`, the fallback without the Fab packs, is far darker under the new tints (its texture averages 0.15
+    0.13 0.04 against Wild Grass's 0.5 0.43 0.23).
+
+### A.3.41 Scrub in the open: lone bushes, clumps and thickets on the hills (L13 steps 2-3, 16 Nov 2026)
+
+L13's scrub (A.6 steps 2 and 3): where it grows, as boxes the sight lines read, and our own art for its three bushes.
+
+- **Where** (`LayScrub`, `terrain_map.hpp`; the rules in `land_use.json`, all estimates). One candidate in each 40 m
+  cell over the hills of the map proper, on the grazed slopes and in the tall grass only (A.3.39's classes). The hay
+  meadows are mown, so none there. A cell's chance:
+  - 5% on a grazed slope, 20% in the tall grass (ungrazed and unmown ground scrubs over);
+  - times 1 + 0.08 for each degree over `meadow_slope_deg`, at most 2.5 (the steeper, the harder to graze or mow);
+  - times 0.3-1.7 in 400 m patches.
+
+  What grows there:
+  - **a thicket**, 21-39 m long and a third to a half as wide, laid along the contour. Half the scrub within 60 m of a
+    wood's block is thicket (the wood's mantle spreading into the grass), 15% in the tall grass away from a wood, none
+    on a grazed slope away from a wood;
+  - **a clump**, 7-13 m, 40% of the rest;
+  - **a lone bush**, 3-5 m, the others.
+
+  Their tops are 1.8-3.5 m. None stands where a farm track or row could not (`FarmlandClear`), in a site's sectors, in
+  a sunken lane or in a pond's reach. Laid after everything else, so no box laid before moves.
+- **In the sight lines.** Each is a box in the map's layout (a tree row's part, flagged `MapBox::scrub`), so
+  `ObstacleHeight`, the radars' masking and the crews' sight read it, and the dressing keeps every bush under its top.
+  A.6 planned the lone bush as the dressing's alone. It is a box too, so the rule that no plant stands above what a
+  sight line reads keeps no exception. On a slope a box's top follows the ground's plane (`rise_e`, `rise_n`), as a
+  wood's does.
+- **The bushes** (`map_dressing.hpp`; `scrub_mix`, `scrub_spacing_m`, `scrub_keep`, `scrub_lone_m` in
+  `map_dressing.json`). Three new kinds of `TreeKind`: blackthorn, hawthorn and dog rose, with their meshes' profiles
+  and colours (`map_meshes.hpp`) and their autumn (`tree_seasons.json`). The mix is 45% blackthorn, 35% hawthorn and
+  20% dog rose. A lone bush's box gets one bush as wide as the box, up to 1.15 times its height (A.3.24's bound, a bush
+  about as wide as tall). A clump or thicket gets its bushes on a 2.5 m lattice inside the box's ellipse, its outline
+  wobbling, 85% of them kept, lower towards the edge. The kind goes by patches about 6 m across (a run of blackthorn, a
+  hawthorn standing out of it), a third of the bushes each its own.
+- **The art**, our own (`tools/make_cards.py`, `tools/blender/build_cards.py`), imported and registered
+  (`model_picks.json`, `assets.json`):
+  - blackthorn, dark and dense, many thin stems, blue-black sloes;
+  - hawthorn, a short stem under a rounded head, its leaves turning, red haws;
+  - dog rose, arching canes, its leaves yellowing, orange-red hips.
+
+  `bush()` gained the fan's spread and a leaf factor. Their defaults keep hazel and elder byte for byte.
+- **The plots** p06 (a grazed slope with lone bushes) and p25 (a thicket on a hillside). Two new anchor kinds in
+  `views.hpp`: `pasture_bush`, the nearest lone bush on a grazed slope, and `scrub_thicket`, the nearest thicket. Each
+  is looked at up the slope.
+- **Tests.**
+  - `test_landform.cpp`: scrub only on the two classes; its tops within the heights; a sight line sees each at its
+    middle; none at a site, in a town, in water or off the map; no thicket on a grazed slope away from a wood; every
+    sloped thicket along the contour; more a hectare in the tall grass than on the grazed slopes (over twice); none on
+    the plain.
+  - `test_map_dressing.cpp`: the three kinds only in the scrub's boxes, the boxes nearly all scrub, each kind present,
+    nearly every box planted, the rules' refusals.
+  - `test_plots.cpp`: the two plots find their scrub and look at it from below.
+  - The tree rows' test skips scrub (its heights are not a row's).
+- **Measured** (the tests' prints):
+  - 5636 boxes over the hills: 2755 lone bushes, 1856 clumps, 1025 thickets. 67 thickets stand on grazed slopes, all of
+    them by a wood. 928 boxes stand on grazed slopes (0.32 a hectare), 4708 in the tall grass (1.19 a hectare).
+  - 52 175 bushes in them: blackthorn 45%, hawthorn 35%, dog rose 20%. 3 boxes are bare (the dressing plants nothing
+    by a line or the water, nor a bush under 1 m; which held there is not looked at). 270 of the 52 445 plants inside
+    the boxes are of other kinds, presumably a wood's fringe reaching into a thicket beside it.
+  - At 2 m apart the bushes were 81 000, taking the map's trees and shrubs to 1 521 122, over the budget of 1.5
+    million. At 2.5 m they are 1 492 231.
+  - The first draw of the kind by value noise gave hawthorn 56% and dog rose 4%: the noise bunches round its middle, so
+    the middle of the mix took most. Each patch now draws its kind on its own.
+- **The balance runs re-read**, A against B on the same build: the data as it is, and a copy with `scrub_pasture` and
+  `scrub_tall` at 0, which lays none.
+  - `em_demo`'s output is the same byte for byte, and it passes 11 of 11.
+  - `helper_coverage`'s report is the same to the line, with its 25 gaps.
+  - No sight line these runs draw meets a scrub box, or none that changes an outcome.
+  - `crew_balance` builds no map (A.3.5), so it is unaffected by construction.
+- **Seen** (renders l15-l18):
+  - p25's thicket reads from below as a dark run of bushes along the slope under a wood's edge, as a mantle should.
+    There are gaps between its bushes where the lattice's 15% dropped ones fall together.
+  - p06's lone bush stands alone on the grazed slope. Black pillars and a white slab near it are probably a line's
+    poles and a road beside the chosen bush. Its low camera looks through a tree row's crowns.
+- **Costs** (warm GPU ms at the eye): p25 about 27 to 38, p19 about 21 to 30 (16 in l11). That is about 12 ms more where
+  the scrub is near the camera, not yet looked into.
+- **Left:**
+  - No scrub on the plain's grass parcels: only the hills' classes have it. Balks (p26) are not built.
+  - The wood's mantle (`VEGETATION.md` section 5) does not take the three new kinds yet.
+  - No recipe for the grass under and between the bushes. A thicket far off is drawn bush by bush, not as a mass.
+  - The shares and densities are estimates: ÁNÉR's scrub classes and photographs of the hills would source them.
+  - The scrub's cost near the camera, above.
+
 ### A.4 How a plot is worked (the loop)
 
 1. Write or change the recipe (one JSON); sources in its `source`, numbers an estimate where none was found.
@@ -1491,7 +1647,8 @@ checked again on 3 Nov 2026 (confirmed CC0, free, the page the right texture).
 
 | Layer | Where | Texture (site, author) | Scan | Laid every |
 |---|---|---|---|---|
-| meadow | pasture, meadows | `leafy_grass` (Poly Haven, Charlotte Baglioni) | 2.0 m | 2.0 m |
+| meadow | pasture, hay meadows | `Grass004` (ambientCG): a dense green sward with dry blades in it, graded greener (A.3.40; was `leafy_grass`, Poly Haven, Charlotte Baglioni, 2.0 m, now unused) | 1.4 m | 1.5 m |
+| tall_grass | meadow left uncut (A.3.39) | `Grass004`, as the meadow (A.3.40; was the verge's `grass_ground`) | 1.4 m | 1.5 m |
 | stubble | wheat in autumn | `Ground071` (ambientCG): soil strewn with straw | 1.75 m | 1.875 m, turned with the furrows |
 | maize_stubble | maize in autumn | `Ground072` (ambientCG): chopped stalks on soil | 1.75 m | 3.0 m (stover is coarser), turned |
 | ploughed | ploughland; sunflower in autumn | `farm_furrows` (Poly Haven, Amal Kumar): ridged furrows | 2.1 m | 2.0 m, turned |

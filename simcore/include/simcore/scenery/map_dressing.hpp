@@ -78,7 +78,7 @@ struct DressingRules {
     double crown_jitter = 0.2;
     double top_drop = 0.15;      // a tree's top up to this share of the wood's height below the wood's top
     double poplar_river_m = 60.0;
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> species_shares{{0.55, 0.1, 0.15, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> species_shares{{0.55, 0.1, 0.15, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
     // Stands (docs/scenery/VEGETATION.md): a wood is cut into compartments on a stand_m grid, each of one stand type drawn
     // by its site (wet: within wet_m of water; dry elsewhere) and of one age (its trees' height times a factor in
     // age_min..1). A plantation's trees stand in rows (jitter times plantation_jitter). With no stand types the species
@@ -101,8 +101,15 @@ struct DressingRules {
     double edge_setback_min_m = 0.0, edge_setback_max_m = 7.0;
     double edge_wave_m = 35.0;
     double shrub_belt_min_m = 1.0, shrub_belt_max_m = 7.0;
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> edge_mix{{0.4, 0.0, 0.0, 0.25, 0.15, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0}};
-    std::array<double, static_cast<std::size_t>(TreeKind::Count)> shrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.4, 0.0}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> edge_mix{{0.4, 0.0, 0.0, 0.25, 0.15, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> shrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.4, 0.0, 0.0, 0.0, 0.0}};
+    // The scrub in the open (terrain roadmap L13, A.3.41): the bushes of the layout's scrub boxes (MapBox::scrub), on a
+    // lattice scrub_spacing_m apart inside each box's wobbling ellipse, scrub_keep of them, by scrub_mix in patches; a box
+    // no longer than scrub_lone_m is one bush.
+    std::array<double, static_cast<std::size_t>(TreeKind::Count)> scrub_mix{{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.45, 0.35, 0.2}};
+    double scrub_spacing_m = 2.0;
+    double scrub_keep = 0.85;
+    double scrub_lone_m = 5.5;
     double shrub_spacing_m = 3.0;
     double shrub_inset_m = 1.5;
     double shrub_keep = 0.75;
@@ -273,6 +280,9 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
     number("shrub_inset_m", r.shrub_inset_m, 0.0, 20.0);
     number("shrub_keep", r.shrub_keep, 0.0, 1.0);
     range("shrub_height_m", r.shrub_height_min_m, r.shrub_height_max_m, 0.5, 8.0);
+    number("scrub_spacing_m", r.scrub_spacing_m, 0.5, 20.0);
+    number("scrub_keep", r.scrub_keep, 0.0, 1.0);
+    number("scrub_lone_m", r.scrub_lone_m, 0.0, 30.0);
     if (!ok) return Fail(error, "\"" + bad + "\" is missing its number or out of range");
     // A mix by kind: {"oak": 0.5, ...}, kinds named, shares not negative, summing to more than nothing.
     const auto mix = [&](const json::Value& s, std::array<double, static_cast<std::size_t>(TreeKind::Count)>& to, const std::string& what) {
@@ -298,6 +308,12 @@ inline bool LoadDressingRules(const std::string& path_or_json, DressingRules& ou
         if (!mix(*s, r.shrub_mix, "shrub_mix")) return false;
         for (std::size_t k = 0; k < r.shrub_mix.size(); ++k) {
             if (r.shrub_mix[k] > 0.0 && !IsShrub(static_cast<TreeKind>(k))) return Fail(error, "shrub_mix: a tree is not a shrub");
+        }
+    }
+    if (const json::Value* s = value("scrub_mix")) {
+        if (!mix(*s, r.scrub_mix, "scrub_mix")) return false;
+        for (std::size_t k = 0; k < r.scrub_mix.size(); ++k) {
+            if (r.scrub_mix[k] > 0.0 && !IsShrub(static_cast<TreeKind>(k))) return Fail(error, "scrub_mix: a tree is not a shrub");
         }
     }
     if (const json::Value* s = value("stands")) {
@@ -724,7 +740,7 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         }
         top = std::min(top, top_limit);
         double height = top - base;
-        if (!shrub) height *= height_factor;
+        height *= height_factor;  // (a shrub's is 1 but in the scrub's boxes, A.3.41: lower towards a clump's edge)
         if (height < (shrub ? 1.0 : 3.0)) return;
         TreeInstance t;
         t.east_m = e;
@@ -800,6 +816,41 @@ inline MapDressing PlaceTrees(const MapData& map, const DressingRules& rules) {
         }
     }
     for (const MapBox& b : map.Layout().boxes) {
+        if (b.part == MapPart::TreeRow && b.scrub) {
+            // Scrub in the open (L13, A.3.41): a box no longer than scrub_lone_m one bush at its middle, as wide as the box;
+            // a clump or thicket its bushes on a lattice scrub_spacing_m apart inside the box's ellipse, its outline
+            // wobbling, scrub_keep of them, the kinds in patches a few metres across (a run of blackthorn, a hawthorn
+            // standing out of it), lower and narrower towards the edge. Their tops keep to the box's, which the sight
+            // lines read.
+            if (b.length_m <= rules.scrub_lone_m) {
+                // Its spread the box's width as far as a bush stays about as wide as tall (A.3.24's bound).
+                const int kind = draw(rules.scrub_mix, At(seed ^ 0x5C0ull, b.east_m, b.north_m));
+                const double crown = b.width_m / std::max(0.5, b.height_m * rules.crown_ratio * rules.shrub_crown);
+                plant(b, b.east_m, b.north_m, kind, 1.0, std::clamp(crown, 0.8, 1.15));
+                continue;
+            }
+            const int count_l = std::max(1, static_cast<int>(std::floor(b.length_m / rules.scrub_spacing_m)));
+            const int count_w = std::max(1, static_cast<int>(std::floor(b.width_m / rules.scrub_spacing_m)));
+            const double step_l = b.length_m / count_l, step_w = b.width_m / count_w;
+            for (int i = 0; i < count_l; ++i) {
+                for (int j = 0; j < count_w; ++j) {
+                    const double fwd = (i + 0.5) * step_l - 0.5 * b.length_m, right = (j + 0.5) * step_w - 0.5 * b.width_m;
+                    double e = 0.0, n = 0.0;
+                    jittered(b, fwd, right, std::min(step_l, step_w), e, n);
+                    const double r2 = (fwd / (0.5 * b.length_m)) * (fwd / (0.5 * b.length_m)) + (right / (0.5 * b.width_m)) * (right / (0.5 * b.width_m));
+                    if (r2 > 0.7 + 0.5 * wave(0x5C1ull, e, n)) continue;
+                    if (At(seed ^ 0x5C2ull, e, n) >= rules.scrub_keep) continue;
+                    // The kind a patch's, about 6 m across (its warped square's own draw, so the mix's shares hold: value
+                    // noise bunches round its middle and gave the middle kind most); a third of the bushes each its own.
+                    const double pe = std::floor((e + 3.0 * noise::Value(seed ^ 0x5C6ull, e, n, 4.0)) / 6.0);
+                    const double pn = std::floor((n + 3.0 * noise::Value(seed ^ 0x5C7ull, e, n, 4.0)) / 6.0);
+                    const double u = At(seed ^ 0x5C4ull, e, n) < 0.35 ? At(seed ^ 0x5C8ull, e, n) : At(seed ^ 0x5C3ull, 0.1 * pe, 0.1 * pn);
+                    const double edge = std::min(1.0, r2);
+                    plant(b, e, n, draw(rules.scrub_mix, u), 0.6 + 0.4 * (1.0 - edge), 0.85 + 0.3 * At(seed ^ 0x5C5ull, e, n));
+                }
+            }
+            continue;
+        }
         if (b.part == MapPart::TreeRow) {
             // A row or a grove (the map's farmland, roadmap T4): trees on a lattice of the row's own spacing, poplar and
             // black locust (some oak in a grove), the row's own kind each. Their tops keep to the box's height, which

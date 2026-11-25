@@ -124,8 +124,24 @@ UStaticMesh* FSimMapAssets::MeshFor(const FString& Part, int32 Variant, FTransfo
 		}
 		else
 		{
-			UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s's asset %s is not on this machine (%s; docs/scenery/ASSETS.md): procedural"), *Key,
-				*SimMapStd(Asset->id), *Path);
+			// Its fallback (A.3.40: our own card where a Fab model is not on this machine), else procedural.
+			const simcore::scenery::AssetEntry* Fallback = (Alternate == 0 && Reg != nullptr) ? Reg->FallbackFor(PartStd) : nullptr;
+			UStaticMesh* Instead = Fallback != nullptr
+				? LoadObject<UStaticMesh>(nullptr, *SimMapStd(Fallback->unreal_path), nullptr, LOAD_NoWarn | LOAD_Quiet)
+				: nullptr;
+			if (Instead != nullptr)
+			{
+				Instead->AddToRoot();
+				Entry.Mesh = Instead;
+				Entry.Fix = FTransform(FRotator(0.0, Fallback->yaw_deg, 0.0), FVector(0.0, 0.0, Fallback->z_offset_m * 100.0), FVector(Fallback->scale));
+				UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s's asset %s is not on this machine (%s): its fallback %s draws"), *Key,
+					*SimMapStd(Asset->id), *Path, *SimMapStd(Fallback->id));
+			}
+			else
+			{
+				UE_LOG(LogSAM3D, Log, TEXT("Map assets: %s's asset %s is not on this machine (%s; docs/scenery/ASSETS.md): procedural"), *Key,
+					*SimMapStd(Asset->id), *Path);
+			}
 		}
 	}
 

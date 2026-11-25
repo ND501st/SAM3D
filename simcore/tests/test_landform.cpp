@@ -534,6 +534,88 @@ SC_TEST("village ponds: one by each village of the map proper, in its lowest ope
     }
 }
 
+SC_TEST("scrub: on the hills' grazed slopes and tall grass, more in the tall; thickets by a wood or in the tall grass (L13, A.3.41)") {
+    std::string e;
+    const std::shared_ptr<const MapData> map = LoadMapCached(kData, "maps/kesmark_range.json", &e);
+    SC_EXPECT(map != nullptr);
+    if (!map) return;
+    const MapDef& d = map->Def();
+    const MapLandUseDef& u = d.land_use;
+    int on_pasture = 0, on_tall = 0, lone = 0, clumps = 0, thickets = 0, thickets_pasture = 0, thicket_far = 0, off_contour = 0, sloped = 0;
+    int bad_class = 0, bad_height = 0, bad_site = 0, bad_town = 0, bad_water = 0, outside = 0, unseen = 0;
+    std::vector<const MapBox*> woods;
+    for (const MapBox& b : map->Layout().boxes) {
+        if (b.part == MapPart::Canopy) woods.push_back(&b);
+    }
+    for (const MapBox& b : map->Layout().boxes) {
+        if (!b.scrub) continue;
+        SC_EXPECT(b.part == MapPart::TreeRow);
+        outside += d.InCore(b.east_m, b.north_m) ? 0 : 1;
+        const MapData::GrassUse g = map->LandUseGrass(b.east_m, b.north_m);
+        bad_class += g == MapData::GrassUse::Pasture || g == MapData::GrassUse::Tall ? 0 : 1;
+        on_pasture += g == MapData::GrassUse::Pasture ? 1 : 0;
+        on_tall += g == MapData::GrassUse::Tall ? 1 : 0;
+        // Its top over the ground at its middle within the rules' heights; a sight line sees it there.
+        const double up = b.base_m + b.height_m - map->GroundHeight(b.east_m, b.north_m);
+        bad_height += up < u.scrub_height_min_m - 1e-6 || up > u.scrub_height_max_m + 1e-6 ? 1 : 0;
+        unseen += map->ObstacleTop(b.east_m, b.north_m) >= b.base_m + b.height_m - 1e-6 ? 0 : 1;
+        for (const MapSiteDef& s : d.sites) bad_site += std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) < d.farmland.site_clear_m - 1.0 ? 1 : 0;
+        for (const MapSettlementDef& s : d.settlements) bad_town += std::hypot(b.east_m - s.centre.east_m, b.north_m - s.centre.north_m) < s.radius_m ? 1 : 0;
+        bad_water += map->NearWater(b.east_m, b.north_m, 0.0) ? 1 : 0;
+        // Its size: a lone bush, a clump or a thicket (their lengths do not overlap: 0.7-1.3 times each).
+        if (b.length_m <= 1.3 * u.scrub_bush_m + 1e-6) {
+            ++lone;
+            continue;
+        }
+        if (b.length_m <= 1.3 * u.scrub_clump_m + 1e-6) {
+            ++clumps;
+            continue;
+        }
+        ++thickets;
+        // A thicket on a grazed slope only by a wood (its mantle): a wood's block within reach.
+        if (g == MapData::GrassUse::Pasture) {
+            ++thickets_pasture;
+            bool by_wood = false;
+            for (const MapBox* w : woods) {
+                by_wood = by_wood || std::hypot(w->east_m - b.east_m, w->north_m - b.north_m) <= u.scrub_wood_m + 0.75 * d.block_m;
+            }
+            thicket_far += by_wood ? 0 : 1;
+        }
+        // A thicket on a slope lies along the contour: its length across the ground's fall.
+        const double rise = std::hypot(b.rise_e, b.rise_n);
+        if (rise > 0.03) {
+            ++sloped;
+            off_contour += std::fabs(b.rise_e * std::sin(b.heading_rad) + b.rise_n * std::cos(b.heading_rad)) / rise > 0.3 ? 1 : 0;
+        }
+    }
+    // The open ground of each class, sampled every 50 m over the hills of the map proper.
+    int pasture_cells = 0, tall_cells = 0;
+    for (double n = d.south_m + 25.0; n < d.north_m; n += 50.0) {
+        for (double x = d.west_m + 25.0; x < d.east_m; x += 50.0) {
+            const MapData::GrassUse g = map->LandUseGrass(x, n);
+            pasture_cells += g == MapData::GrassUse::Pasture ? 1 : 0;
+            tall_cells += g == MapData::GrassUse::Tall ? 1 : 0;
+        }
+    }
+    const double per_pasture_ha = pasture_cells > 0 ? on_pasture / (0.25 * pasture_cells) : 0.0;
+    const double per_tall_ha = tall_cells > 0 ? on_tall / (0.25 * tall_cells) : 0.0;
+    std::printf("    scrub: %d lone bushes, %d clumps, %d thickets (%d on a grazed slope, %d of them far from a wood); "
+                "%d on pasture (%.3f a ha), %d in tall grass (%.3f a ha); %d thickets on a slope, %d off the contour\n",
+                lone, clumps, thickets, thickets_pasture, thicket_far, on_pasture, per_pasture_ha, on_tall, per_tall_ha, sloped, off_contour);
+    std::printf("    of another class %d, of a wrong height %d, unseen by the sight lines %d, at a site %d, in a town %d, in water %d, off the map %d\n",
+                bad_class, bad_height, unseen, bad_site, bad_town, bad_water, outside);
+    SC_EXPECT(lone > 50 && clumps > 50 && thickets > 10);
+    SC_EXPECT(bad_class == 0 && bad_height == 0 && unseen == 0 && bad_site == 0 && bad_town == 0 && bad_water == 0 && outside == 0);
+    SC_EXPECT(thicket_far == 0);
+    SC_EXPECT(sloped > 0 && off_contour == 0);
+    // More in the tall grass than on the grazed slopes, the succession to wood (A.6).
+    SC_EXPECT(per_tall_ha > 2.0 * per_pasture_ha && per_pasture_ha > 0.0);
+    // None on the plain.
+    for (const MapBox& b : map->Layout().boxes) {
+        if (b.scrub) SC_EXPECT(d.landform.bake->Height(b.east_m, b.north_m) >= u.min_relief_m);
+    }
+}
+
 SC_TEST("land use: the loader refuses what it should") {
     std::string text;
     SC_EXPECT(detail::ReadTextFile(kData + "/scenery/land_use.json", text));

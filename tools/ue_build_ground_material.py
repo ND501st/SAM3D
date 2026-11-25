@@ -424,7 +424,9 @@ def layer_files(index, layer, textures):
     tex = textures.get(layer.get('texture', ''))
     if tex is not None:
         folder = os.path.join(ROOT, 'art', 'thirdparty', 'textures', tex['id'])
-        a, n, o = find_map(folder, 'albedo'), find_map(folder, 'normal'), find_map(folder, 'orm')
+        # A graded albedo (tools/fetch_textures.py, the register's "grade") in place of the one fetched.
+        a = (find_map(folder, 'albedo_graded') if tex.get('grade') else None) or find_map(folder, 'albedo')
+        n, o = find_map(folder, 'normal'), find_map(folder, 'orm')
         if a and n and o:
             return (a, n, o), tex['id'], True
         unreal.log_warning('GROUND: layer %s: texture %s is not on this machine (python tools/fetch_textures.py)' % (layer['id'], tex['id']))
