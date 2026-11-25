@@ -57,6 +57,7 @@
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_state.hpp"
 #include "simcore/campaign/outcomes.hpp"
+#include "simcore/campaign/briefings.hpp"
 #include "simcore/campaign/regiment.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/ground_war/session_units.hpp"
@@ -96,6 +97,17 @@ struct MissionSessionDef {
     // Resumed at a briefing's seam: the briefing is held at the first decision (it was due when the save was taken, which
     // may have been after its hour, once the sky was clear).
     bool briefing_due = false;
+    // Track O, O3: the orders as people give them (campaign/briefings.hpp, relative to the data folder; "" none): the
+    // battery commander drives to the regiment's evening briefing and back, the task traced and the papers handed there,
+    // his combat order in person or by radio, the crews' briefings, the state radio's morning news. The session starts
+    // at the briefing (the mission's 19:00): its task is given in person.
+    std::string briefings;
+    // O3: the battery's Osa played beside the post, so a launcher commander's seat can be taken: its scenario (a path,
+    // like `scenario`) and its callsign in the post's battery ("" none). The post's runner stays the sky's truth.
+    std::string osa_scenario;
+    std::string osa_callsign;
+    // The session's start hour, local (the missions menu's time of day, roadmap R7; < 0: the mission's own).
+    double start_hour = -1.0;
 };
 
 class MissionSession {
@@ -118,6 +130,7 @@ public:
         std::string e;
         if (!LoadScenarioFile(d.scenario, data_dir, def, console, &e)) return fail(e);
         if (d.battery != nullptr) ApplyBatteryState(def, *d.battery);
+        if (d.start_hour >= 0.0) SetStartHour(def, d.start_hour);
         if (!d.tasking.empty()) {
             TaskingRules rules;
             if (!LoadTaskingRules(data_dir, d.tasking, rules, &e)) return fail(e);
@@ -130,7 +143,35 @@ public:
             def.end_when_targets_gone = false;
         }
         const double clock_start_s = def.clock_start_s;
+        if (!d.briefings.empty()) {
+            if (!LoadBriefings(data_dir, d.briefings, brief_, &e)) return fail(e);
+            // A session that opens at the regiment's briefing (the mission's 19:00, a briefing's seam): its task is given there.
+            const double start_h = std::fmod(std::max(0.0, def.clock_start_s) / 3600.0, 24.0);
+            const double to_h = std::fmod(brief_.regiment.hour - start_h + 48.0, 24.0);
+            if (def.has_task && (d.briefing_due || to_h < 1e-3 || to_h > 24.0 - 1e-3)) def.task_means = "in_person";
+            def.briefings = brief_;
+        }
+        if (!d.osa_scenario.empty()) {
+            ScenarioDef od;
+            ConsoleData oc;
+            if (!LoadScenarioFile(d.osa_scenario, data_dir, od, oc, &e)) return fail("osa: " + e);
+            if (d.start_hour >= 0.0) SetStartHour(od, d.start_hour);
+            if (d.battery != nullptr) SetStartHour(od, def.clock.start_local_h);  // resumed: the seam's hour
+            if (od.battery_commander != "post" || !od.has_battery) return fail("osa: needs a battery with its battery_commander \"post\"");
+            if (std::fabs(od.origin.lat_rad - def.origin.lat_rad) > 1e-12 || std::fabs(od.origin.lon_rad - def.origin.lon_rad) > 1e-12 ||
+                std::fabs(od.clock.start_local_h - def.clock.start_local_h) > 1e-6) {
+                return fail("osa: the Osa's and the post's scenarios need the same origin and clock");
+            }
+            od.briefings = brief_;
+            od.time_limit_s = std::max(od.time_limit_s, def.time_limit_s);  // the post's runner ends the session
+            od.end_when_targets_gone = false;
+            od.targets.clear();  // one sky: the post's (SyncOsa)
+            osa_ = std::make_unique<ScenarioRunner>(std::move(od), std::move(oc));
+            osa_callsign_ = d.osa_callsign;
+        }
         runner_ = std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
+        if (osa_) runner_->SetExternalLauncher(osa_callsign_);
+        StartBriefings(d.briefing_due);
         if (d.faction.empty()) return true;
         if (clock_start_s < 0.0) return fail(d.scenario + ": no \"clock_start\" to put the air war's day on");
         faction_file_ = "air_war/faction_" + d.faction + ".json";
@@ -203,7 +244,13 @@ public:
     // One step of the session, of the war beside it and of the regiment's tasking.
     void Step(double dt) {
         runner_->Step(dt);
+        if (osa_) {
+            osa_->Step(dt);
+            osa_->HearPostRadarOf(*runner_);
+        }
         if (live_) live_->Step(*runner_);
+        if (osa_) SyncOsa();
+        StepBriefings();
         StepGroundUnits(false);
         PumpFronts();
         CarryTheMove();
@@ -258,7 +305,9 @@ public:
         if (r.HasTask() && d.task.main == was_main && r.TaskReceivedS() >= 0.0 && r.TaskReadyS() < r.TaskReceivedS() && r.TaskPlan().ready_by_s > r.Time()) {
             d.task.ready_in_s = std::max(d.task.ready_in_s, r.TaskPlan().ready_by_s - r.Time());
         }
-        if (!r.GiveTask(d.task, "radio", &why)) {
+        // O3: at the briefing, with the battery commander there, the task is traced on his map in person.
+        const bool there = brief_.present && trip_ == Trip::AtCp;
+        if (!r.GiveTask(d.task, there ? "in_person" : "radio", &why)) {
             Note("the regiment's task " + d.task.id + " not given: " + why);
             return false;
         }
@@ -279,6 +328,28 @@ public:
 
     ScenarioRunner& Runner() { return *runner_; }
     const ScenarioRunner& Runner() const { return *runner_; }
+    // O3: the battery's Osa beside the post (null without MissionSessionDef::osa_scenario), and its callsign.
+    ScenarioRunner* Osa() { return osa_.get(); }
+    const ScenarioRunner* Osa() const { return osa_.get(); }
+    const std::string& OsaCallsign() const { return osa_callsign_; }
+    // O3: where the battery commander is on his way to and from the regiment's briefing.
+    enum class Trip { AtPost, Driving, AtCp, Returning };
+    Trip BriefingTrip() const { return trip_; }
+    static const char* TripName(Trip t) {
+        switch (t) {
+            case Trip::AtPost: return "at his post";
+            case Trip::Driving: return "on the road to the regiment's command post";
+            case Trip::AtCp: return "at the regiment's command post";
+            case Trip::Returning: return "on the road back from the regiment's command post";
+        }
+        return "?";
+    }
+    // The next evening briefing (session seconds) and how many he attended and missed.
+    double NextBriefingS() const { return next_brief_s_; }
+    int BriefingsHeld() const { return briefings_held_; }
+    int BriefingsMissed() const { return briefings_missed_; }
+    // The id of the battery commander's car among the session's movers (nav/movers.hpp).
+    static constexpr const char* kCarId = "bty21_commander_car";
     const airwar::AirCampaign* Campaign() const { return campaign_.get(); }
     const airwar::LivePackages* Packages() const { return live_.get(); }
     const RegimentTasking* Regiment() const { return regiment_.get(); }
@@ -410,9 +481,12 @@ public:
     // his decision, a launcher commander's card) and, under the fronts, his situation map from the campaign's pipeline,
     // each mark with who told him, by what and when. Hours on the session's clock (second 0 at 0 h).
     command::HeldMap HeldMapFor(const std::string& post) const {
-        command::HeldMap m = runner_->HeldMapOf(post);
+        // O3: the Osa's commander holds his own map (his card as it reached him), in the Osa's runner.
+        const int p = net_ ? net_->Data().PositionIndex(post) : -1;
+        const bool osa_post = osa_ && (post == osa_callsign_ + ":commander" ||
+                                       (p >= 0 && net_->Data().positions[static_cast<std::size_t>(p)].seat == "osa:commander"));
+        command::HeldMap m = osa_post ? osa_->HeldMapOf(osa_callsign_ + ":commander") : runner_->HeldMapOf(post);
         if (!net_ || !feed_ || !campaign_) return m;
-        const int p = net_->Data().PositionIndex(post);
         if (p < 0) return m;
         m.holder_label = net_->Data().positions[static_cast<std::size_t>(p)].Label();
         if (!feed_->Ground().On()) return m;
@@ -759,6 +833,354 @@ private:
     static constexpr double kFrontsEveryS = 300.0;  // sam3d: the pipeline read every 5 min of the session (F4.4)
     static constexpr double kNeverH = 1e18;
 
+    // ---- Track O, O3: the orders as people give them ----
+    // The session's clock: the local hour of session second t, and the second of the next local hour `h` from t.
+    double LocalH(double t) const { return std::fmod((std::max(0.0, runner_->Def().clock_start_s) + t) / 3600.0, 24.0); }
+    double NextHourS(double t, double h) const {
+        double d = std::fmod(h - LocalH(t) + 48.0, 24.0);
+        if (d > 24.0 - 1e-6) d = 0.0;
+        return t + d * 3600.0;
+    }
+    std::string Clock(double t) const {
+        const long long m = std::llround(LocalH(t) * 60.0) % (24 * 60);
+        char b[16];
+        std::snprintf(b, sizeof(b), "%02lld:%02lld", m / 60, m % 60);
+        return b;
+    }
+    // A position of the chain as the listener knows him ("Lt Col Josef Vrana (regiment commander)"), else its id.
+    std::string Speaker(const std::string& position) const {
+        if (net_) {
+            const int p = net_->Data().PositionIndex(position);
+            if (p >= 0) return net_->Data().positions[static_cast<std::size_t>(p)].Label();
+        }
+        std::string s = position;
+        for (char& c : s) if (c == '_') c = ' ';
+        return s;
+    }
+    // The session opens at the briefing (the mission's 19:00, or a seam's): the battery commander is there; else at his
+    // post until the next.
+    void StartBriefings(bool due) {
+        if (!brief_.present) return;
+        const double first = NextHourS(0.0, brief_.regiment.hour);
+        const bool at_cp = due || first < 1.0;
+        next_brief_s_ = at_cp ? 0.0 : first;
+        trip_ = at_cp ? Trip::AtCp : Trip::AtPost;
+        if (at_cp) runner_->SetCommanderAway(TripName(trip_));
+        // The day's code table runs out at the next midnight: the next comes with the briefing.
+        table_until_s_ = NextHourS(1.0, 0.0);
+        runner_->SetCodeTableUntil(table_until_s_);
+        if (osa_) osa_->SetCodeTableUntil(table_until_s_);
+        next_news_s_ = NextNewsS(0.0);
+    }
+    // The battery commander's car on the roads (nav/): from his post to the regiment's command post, or back. False: no
+    // roads or no way (the session notes it).
+    bool StartDrive(bool back) {
+        nav::SessionNav* nav = runner_->MutableNav();
+        const nav::Anchor* cp = nav != nullptr ? nav->GetAnchors().Find(brief_.regiment.place) : nullptr;
+        const nav::Mobility* mob = nav != nullptr ? nav->MobilityClasses().Find(brief_.regiment.car_mobility) : nullptr;
+        if (cp == nullptr || mob == nullptr) return false;
+        const Battery* b = runner_->GetBattery();
+        const Vec3 post = b != nullptr && b->Own() != nullptr ? b->Own()->position : runner_->UnitPosition();
+        nav::RouteRequest q;
+        q.from = back ? cp->at : MapPoint{post.x, post.y};
+        q.to = back ? MapPoint{post.x, post.y} : cp->at;
+        q.mobility = mob;
+        q.swim = false;
+        const nav::Route route = nav->Graph().Find(q);
+        if (!route.found) {
+            Note("the battery commander's car: no way " + std::string(back ? "back from" : "to") + " the regiment's command post: " + route.why);
+            return false;
+        }
+        if (nav::Mover* m = nav->GetMovers().Find(kCarId)) {
+            m->route = route;
+            m->depart_s = runner_->Time();
+            m->state = nav::MoverState::Waiting;
+            m->arc_m = 0.0;
+            m->moved_s = 0.0;
+            m->arrived_s = -1.0;
+            m->halt_until_s = -1.0;
+        } else {
+            nav::Mover car;
+            car.id = kCarId;
+            car.kind = "vehicle";
+            car.mobility = brief_.regiment.car_mobility;
+            car.route = route;
+            car.depart_s = runner_->Time();
+            nav->AddMover(car, brief_.regiment.car_model);
+        }
+        return true;
+    }
+    bool CarArrived() const {
+        const nav::SessionNav* nav = runner_->Nav();
+        const nav::Mover* m = nav != nullptr ? nav->GetMovers().Find(kCarId) : nullptr;
+        return m != nullptr && m->state == nav::MoverState::Arrived;
+    }
+    // The time the drive to the command post takes now (its route's), for when he leaves.
+    double DriveS() {
+        if (drive_s_ >= 0.0) return drive_s_;
+        drive_s_ = 0.0;
+        const nav::SessionNav* nav = runner_->Nav();
+        const nav::Anchor* cp = nav != nullptr ? nav->GetAnchors().Find(brief_.regiment.place) : nullptr;
+        const nav::Mobility* mob = nav != nullptr ? nav->MobilityClasses().Find(brief_.regiment.car_mobility) : nullptr;
+        if (cp == nullptr || mob == nullptr) return drive_s_;
+        const Battery* b = runner_->GetBattery();
+        const Vec3 post = b != nullptr && b->Own() != nullptr ? b->Own()->position : runner_->UnitPosition();
+        nav::RouteRequest q;
+        q.from = MapPoint{post.x, post.y};
+        q.to = cp->at;
+        q.mobility = mob;
+        q.swim = false;
+        const nav::Route route = nav->Graph().Find(q);
+        if (route.found) drive_s_ = route.time_s;
+        return drive_s_;
+    }
+    void StepBriefings() {
+        if (!brief_.present) return;
+        ScenarioRunner& r = *runner_;
+        const double now = r.Time();
+        const RegimentBriefingDef& rb = brief_.regiment;
+        switch (trip_) {
+            case Trip::AtPost: {
+                if (now + DriveS() + rb.leave_margin_s >= next_brief_s_ && now < next_brief_s_ + rb.wait_s) {
+                    r.NpcGoesToBriefing("the regiment's evening briefing at " + Clock(next_brief_s_) + ": he leaves to be there on time");
+                }
+                if (r.TakeBriefingTrip()) {
+                    if (StartDrive(false)) {
+                        trip_ = Trip::Driving;
+                        r.SetCommanderAway(TripName(trip_));
+                    }
+                } else if (now >= next_brief_s_ + rb.wait_s) {
+                    MissBriefing("he did not leave for it");
+                }
+                break;
+            }
+            case Trip::Driving:
+                if (!CarArrived()) break;
+                trip_ = Trip::AtCp;
+                r.SetCommanderAway(TripName(trip_));
+                if (now >= next_brief_s_ + rb.wait_s) {  // too late: the chief of staff went on without him
+                    MissBriefing("he came after it was over");
+                    if (StartDrive(true)) {
+                        trip_ = Trip::Returning;
+                        r.SetCommanderAway(TripName(trip_));
+                    }
+                }
+                break;
+            case Trip::AtCp:
+                // Held a little after its hour, once the regiment has decided on the evening's picture (Step's tasking).
+                if (!brief_held_ && now + 1e-9 >= next_brief_s_ + kDecideEveryS + 1.0) HoldBriefing();
+                if (brief_held_ && now + 1e-9 >= brief_end_s_) {
+                    if (!papers_given_) HandOutPapers();
+                    if (StartDrive(true)) {
+                        trip_ = Trip::Returning;
+                        r.SetCommanderAway(TripName(trip_));
+                    }
+                }
+                break;
+            case Trip::Returning:
+                if (!CarArrived()) break;
+                trip_ = Trip::AtPost;
+                r.SetCommanderAway(std::string());
+                next_brief_s_ = NextHourS(now + 3600.0, rb.hour);
+                brief_held_ = false;
+                papers_given_ = false;
+                drive_s_ = -1.0;
+                break;
+        }
+        StepNews();
+    }
+    void MissBriefing(const std::string& why) {
+        ++briefings_missed_;
+        const std::string text = "the battery commander missed the regiment's briefing of " + Clock(next_brief_s_) + " (" + why +
+                                 "): no task traced in person, no papers, no code table for tomorrow";
+        Note(text);
+        runner_->NoteInLog("Battery commander", "the regiment's briefing", text);
+        next_brief_s_ = NextHourS(runner_->Time() + 3600.0, brief_.regiment.hour);
+        brief_held_ = false;
+        papers_given_ = false;
+        drive_s_ = -1.0;
+    }
+    // The briefing as a scene: its items in order, each said by its officer, heard by the battery commander there.
+    void HoldBriefing() {
+        brief_held_ = true;
+        ++briefings_held_;
+        ScenarioRunner& r = *runner_;
+        std::map<std::string, std::string> f;
+        const int day = static_cast<int>(std::floor((std::max(0.0, r.Def().clock_start_s) + r.Time()) / 86400.0)) + 1;
+        f["summary"] = day <= 1 ? std::string("The regiment is at war from today.") : "Day " + std::to_string(day) + " of the war; the batteries' combat reports are in.";
+        f["enemy"] = r.HasTask() && !r.Task().habits.empty() ? r.Task().habits : std::string("as on your situation maps.");
+        f["task"] = r.HasTask() ? r.Task().task_text : std::string("your task stands");
+        f["area"] = r.HasTask() ? r.PlaceNameOf(r.Task().main) : std::string("as it is");
+        f["ready"] = r.HasTask() && r.TaskReceivedS() >= 0.0 ? Clock(r.TaskPlan().ready_by_s) : std::string("as ordered");
+        f["own_air"] = "Our aviation flies by the plan of cooperation: its corridors and hours are on it.";
+        f["code_changes"] = CodeChanges(r.Time());
+        double t = r.Time();
+        for (const BriefingItem& it : brief_.regiment.items) {
+            r.AddSceneLine({"regiment_briefing", t, Speaker(it.by), it.id, FillLine(it.en, f)});
+            t += brief_.regiment.line_s;
+        }
+        brief_end_s_ = t;
+    }
+    std::string CodeChanges(double now_s) const {
+        const command::IffSchedule* codes = runner_->IffCodes();
+        if (codes == nullptr) return "the times on the table";
+        const double now_h = (std::max(0.0, runner_->Def().clock_start_s) + now_s) / 3600.0;
+        std::string out;
+        for (const command::IffSchedule::Change& c : codes->Changes()) {
+            if (c.from_h <= now_h || c.from_h > now_h + 30.0) continue;
+            const long long m = static_cast<long long>(std::llround(c.from_h * 60.0)) % (24 * 60);
+            char b[16];
+            std::snprintf(b, sizeof(b), "%02lld:%02lld", m / 60, m % 60);
+            out += (out.empty() ? "" : ", ") + std::string(b);
+        }
+        return out.empty() ? std::string("the times on the table") : out;
+    }
+    // The papers handed to him at the briefing's end (D5: the code table only so): into his map case; the code table
+    // carries the battery to the end of tomorrow.
+    void HandOutPapers() {
+        papers_given_ = true;
+        ScenarioRunner& r = *runner_;
+        const double now = r.Time();
+        table_until_s_ = NextHourS(now + 1.0, 0.0) + 86400.0;
+        for (const BriefingPaper& pp : brief_.regiment.papers) {
+            HeldPaper paper;
+            paper.id = pp.id + ":" + std::to_string(briefings_held_);
+            paper.station = r.Cmdr();
+            paper.time_s = now;
+            paper.title = pp.title;
+            paper.from = Speaker(pp.by) + ", at the regiment's briefing";
+            if (pp.id == "code_table") {
+                paper.text = "Kremniy-2M: the filters change at " + CodeChanges(now) + ". Valid to 24:00 tomorrow. Signed for.";
+            } else if (pp.id == "cooperation_plan") {
+                paper.text = "Our aviation: corridors and hours as drawn; the sky shared with the fighter regiments by the regiment's order.";
+            } else {
+                paper.text = "The battery net and the regiment's command net: call signs and frequencies of the day.";
+            }
+            r.GivePaper(paper);
+        }
+        r.SetCodeTableUntil(table_until_s_);
+    }
+    // The state radio's morning news: a broadcast to whoever hears a radio, in each of our runners.
+    double NextNewsS(double t) const {
+        double best = -1.0;
+        for (double h : brief_.news.at_local_h) {
+            const double s = NextHourS(t, h);
+            if (best < 0.0 || s < best) best = s;
+        }
+        return best;
+    }
+    void StepNews() {
+        ScenarioRunner& r = *runner_;
+        const double now = r.Time();
+        if (next_news_s_ < 0.0 || now + 1e-9 < next_news_s_) return;
+        std::string items;
+        for (const DeliveryDef& d : r.Deliveries()) {
+            if (d.means != DeliveryMeans::Broadcast || d.after_s <= last_news_s_ || d.after_s > now) continue;
+            items += (items.empty() ? "" : " ") + d.words;
+        }
+        DeliveryDef d;
+        d.id = "news:" + std::to_string(++news_given_);
+        d.after_s = now;
+        d.means = DeliveryMeans::Broadcast;
+        d.from = brief_.news.from;
+        d.words = brief_.news.opening + " " + (items.empty() ? brief_.news.quiet : items);
+        r.AddDeliveries({d});
+        if (osa_) osa_->AddDeliveries({d});
+        last_news_s_ = now;
+        next_news_s_ = NextNewsS(now + 60.0);
+    }
+    // The Osa beside the post (O3): one sky, the post's (its targets copied in order and followed); the battery's net
+    // between them as BatteryLink has it; the combat order as it reached the Osa's commander (his card in person only if
+    // he came to the battery commander; his notes of the radio's order); the regiment's code table with the card.
+    void SyncOsa() {
+        ScenarioRunner& post = *runner_;
+        ScenarioRunner& osa = *osa_;
+        const std::vector<ScenarioTarget>& pt = post.Def().targets;
+        if (pt.size() > osa.Def().targets.size()) {
+            std::vector<ScenarioTarget> add(pt.begin() + static_cast<std::ptrdiff_t>(osa.Def().targets.size()), pt.end());
+            std::string why;
+            if (!osa.AddTargets(add, "the post's sky", &why)) Note("the Osa's sky: " + why);
+        }
+        osa.MirrorTargets(post);
+        for (const ScenarioRunner::LinkedDesignation& d : post.TakeLinkedDesignations()) {
+            if (d.callsign == osa_callsign_) osa.RelayDesignation(d.mark, d.start_s, d.end_s);
+        }
+        osa.SetPostNetUp(post.PostBatteryNetUp());
+        for (int to : post.TakeBatteryNetOrders()) osa.HearBatteryNetOrder(to);
+        for (const EmissionRegime& er : post.TakeBatteryEmissionOrders()) osa.HearBatteryEmissionOrder(er);
+        for (const std::string& az : osa.TakeArmAttackReports()) post.HearArmAttackReport(osa_callsign_, az);
+        for (int number : osa.TakeReadbacks()) post.HearReadback(osa_callsign_, number);
+        for (const ScenarioRunner::LinkReport& rep : osa.TakeOwnReports()) {
+            if (rep.kind == BatteryFire::Event::Kind::Hit) post.DestroyTarget(rep.target, osa_callsign_);
+            post.HearBatteryReport(rep);
+        }
+        for (const ScenarioRunner::LinkReport& rep : post.TakeNetReports()) {
+            if (rep.kind == BatteryFire::Event::Kind::Hit) osa.DestroyTarget(rep.target, rep.callsign);
+            osa.HearBatteryReport(rep);
+        }
+        const Launcher* l = osa.GetLauncher();
+        std::string target = osa.BatteryTarget();
+        if (!target.empty() && !osa.TargetAlive(target)) target.clear();
+        post.SetExternalLauncherState(osa_callsign_, l != nullptr ? l->LoadedCount() : -1, target, osa.Tracking());
+        // The Osa stands where the post's battery has its launcher (the battery's moves are the post's).
+        if (const Battery* b = post.GetBattery()) {
+            if (const Battery::Vehicle* v = b->Find(osa_callsign_)) {
+                const Vec3 d = v->position - osa.UnitPosition();
+                if (d.HorizontalLength() > 1.0) osa.SetUnitPosition(v->position);
+            }
+        }
+        // The combat order's gathering: the Osa's commander called over, the lines he hears there, his card at its end.
+        const ScenarioRunner::Gathering& g = post.CurrentGathering();
+        const double near_m = std::max(brief_.battery.gather_m, 1.0);
+        if (g.id != gathering_seen_ && g.end_s >= 0.0) {
+            gathering_seen_ = g.id;
+            osa.GoToGathering(g.at, "the combat order " + g.way);
+        }
+        const std::vector<SceneLine>& lines = post.SceneLines();
+        for (; scene_seen_ < lines.size(); ++scene_seen_) {
+            const SceneLine& sl = lines[scene_seen_];
+            if (sl.scene != "battery_order" || !osa.CommanderNear(g.at, near_m)) continue;
+            SceneLine heard = sl;
+            heard.at_s = osa.Time();
+            osa.AddSceneLine(heard);
+        }
+        const command::SectorCard* c = post.SectorCardOf(osa_callsign_);
+        if (c != nullptr && c->given_s > osa_card_s_ + 1e-9) {
+            osa_card_s_ = c->given_s;
+            if (c->written) {
+                osa.TakeSectorCard(*c, "written down by himself from the battery net");
+            } else if (g.end_s >= 0.0 && std::fabs(g.end_s - c->given_s) < 1.0) {
+                if (osa.CommanderNear(g.at, near_m)) {
+                    osa.TakeSectorCard(*c, "the battery commander, in person (" + g.way + ")");
+                    osa.SetCodeTableUntil(table_until_s_);
+                } else {
+                    const std::string text = "the commander of " + osa_callsign_ + " was not at the battery commander's: no card, no code table";
+                    Note(text);
+                    osa.NoteInLog(osa.Cmdr(), "the combat order", text);
+                }
+                osa.GatheringOver();
+            } else {
+                osa.TakeSectorCard(*c, "the battery commander, with the combat order");
+            }
+        }
+        if (!osa_table_out_ && osa.CodeTableRunOut()) {
+            osa_table_out_ = true;
+            Note("the Osa's identification code table ran out at " + Clock(osa.Time()) + ": its crew stays on the table's last code");
+        }
+        // The combat order said by radio in short form: the enemy's radio intercept may hear it.
+        for (int n = post.TakeRadioOrders(); n > 0; --n) {
+            Note("the combat order said by radio in short form at " + Clock(post.Time()) + ": the enemy's intercept may hear it");
+            if (campaign_) {
+                airwar::Transmission tx;
+                tx.h = campaign_->Now();
+                tx.intercept = 1.0;
+                tx.key = "battery_combat_order_" + std::to_string(++radio_orders_heard_);
+                tx.extra = true;
+                campaign_->NoteTransmissions({tx});
+            }
+        }
+    }
+
     // The regiment's evening briefing fell in the last minute of the session's clock (none without a clock).
     bool BriefingNow() {
         const ScenarioRunner& r = *runner_;
@@ -967,6 +1389,26 @@ private:
     double pumped_h_ = -1.0;
     double split_m_ = 5000.0;
     std::unique_ptr<ScenarioRunner> runner_;
+    std::unique_ptr<ScenarioRunner> osa_;  // O3: the battery's Osa beside the post (null none)
+    std::string osa_callsign_;
+    BriefingsData brief_;                 // O3 (present: the orders as people give them)
+    Trip trip_ = Trip::AtPost;
+    double next_brief_s_ = -1.0;
+    bool brief_held_ = false;
+    bool papers_given_ = false;
+    double brief_end_s_ = -1.0;
+    double drive_s_ = -1.0;
+    int briefings_held_ = 0;
+    int briefings_missed_ = 0;
+    double table_until_s_ = -1.0;
+    bool osa_table_out_ = false;
+    double next_news_s_ = -1.0;
+    double last_news_s_ = -1.0;
+    int news_given_ = 0;
+    int gathering_seen_ = 0;
+    std::size_t scene_seen_ = 0;
+    double osa_card_s_ = -1e18;
+    int radio_orders_heard_ = 0;
     std::unique_ptr<airwar::LivePackages> live_;
     std::unique_ptr<RegimentTasking> regiment_;
     double h0_ = 0.0;

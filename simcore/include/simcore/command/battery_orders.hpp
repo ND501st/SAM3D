@@ -426,6 +426,8 @@ private:
             if (Dist(giver_at_, v.at) <= def_.earshot_m) at = t + def_.say_s;
         } else if (mean == "messenger") {
             at = t + RunnerS(v);
+        } else if (mean == "gathered") {  // track O, O3: the vehicle commanders called to him, the order said to them there
+            at = t;
         }
         if (at < 0.0 || (tr.arrive_s >= 0.0 && at >= tr.arrive_s)) return;
         tr.arrive_s = at;
@@ -459,6 +461,7 @@ private:
         if (v.line) offer(from + (on_the_call ? 0.0 : def_.ring_s) + def_.say_s, "field_telephone");
         if (Dist(giver_at_, v.at) <= def_.earshot_m) offer(from + def_.say_s, "in_person");
         if (repeat_back && tr.heard_mean == "messenger") offer(from + RunnerS(v), "messenger");
+        if (tr.heard_mean == "gathered") offer(from + def_.say_s, "in_person");
         return best;
     }
 

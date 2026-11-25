@@ -569,11 +569,16 @@ struct IffHolding {
     bool has_document = true;
     double document_h = -1e18;  // when the paper reached it
     int last_filter = 0;        // the filter it had fitted before the paper (yesterday's last; 0: none)
+    // The hour the table it holds runs out (track O, O3: each evening's briefing hands out the next day's; 1e18: no end).
+    // Past it, without a newer paper, it stays on the table's last code.
+    double valid_until_h = 1e18;
 
     int FilterAt(const IffSchedule& s, double h) const {
-        if (has_document && h >= document_h && !s.Empty()) return s.FilterAt(h);
+        if (has_document && h >= document_h && !s.Empty()) return s.FilterAt(std::min(h, valid_until_h - 1e-6));
         return last_filter;
     }
+    // Past its table's end: a crew that missed the next paper.
+    bool RunOut(double h) const { return has_document && h >= valid_until_h; }
 };
 
 // A pilot's transponder: he sets it from the schedule at his briefing and switches by the clock in the air; a change he

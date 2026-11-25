@@ -259,6 +259,7 @@ public:
         clock_.Lap(StepProfile::Waves);
         DeliverOrders();
         PlayDeliveries();
+        UpdateOrdersInPerson();
         UpdateVoice();
         UpdateOsaNet();
         UpdateIntercomCheck();
@@ -989,7 +990,8 @@ public:
                 if (c.vehicle != vehicle) continue;
                 command::MarkSource src;
                 src.source = "the battery commander";
-                src.means = "messenger";  // the card is a paper, carried with the combat order
+                // The card a paper carried with the combat order; O3: handed in person, or his notes of the radio's order.
+                src.means = c.written ? "radio_voice" : (def_.briefings.present ? "in_person" : "messenger");
                 src.as_of_h = c.given_s / 3600.0;
                 src.as_of = c.given;
                 command::AddCardMarks(m, c, src, v);
@@ -997,6 +999,170 @@ public:
         }
         return m;
     }
+    // ---- Track O, O3: the orders as people give them (campaign/briefings.hpp; docs/campaign/12 section 4). The session's
+    // briefings data (without it every order goes as before O3). The lines of the session's scenes as they were spoken
+    // (the battery commander's combat order in person, the crew's briefing at the vehicle; the mission session adds the
+    // regiment's evening briefing's), each also in the log; a line comes when its time comes.
+    void SetBriefings(campaign::BriefingsData b) { def_.briefings = std::move(b); }
+    const campaign::BriefingsData& Briefings() const { return def_.briefings; }
+    const std::vector<campaign::SceneLine>& SceneLines() const { return scene_lines_; }
+    void AddSceneLine(const campaign::SceneLine& l, bool intercom = false) { pending_lines_.push_back({l, intercom}); }
+    // A paper handed to a seat in person (the regiment's code table at its briefing), into its map case and the record.
+    void GivePaper(const HeldPaper& p) {
+        own_papers_.push_back(p);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, p.station, "paper", p.title + " (" + p.from + ")"});
+    }
+    // A line in the session's record (the session's own: a briefing missed, a card not handed), and a place's name.
+    void NoteInLog(const std::string& who, const std::string& what, const std::string& text) {
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, what, text});
+    }
+    std::string PlaceNameOf(const std::string& id) const { return PlaceName(id); }
+    // The battery commander away from his post ("" back): on the road to the regiment's command post, at its briefing.
+    // Away, he gives his combat order only by radio.
+    void SetCommanderAway(const std::string& where) {
+        if (where == commander_away_) return;
+        commander_away_ = where;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "away", where.empty() ? std::string("back at his post") : where});
+    }
+    const std::string& CommanderAway() const { return commander_away_; }
+    // His leaving for the regiment's briefing: the NPC battery commander's when the session says it is time (through
+    // NpcDoes: a player in his seat owes it), the player's from the order menu. TakeBriefingTrip: once, the session's to
+    // drive him there.
+    bool NpcGoesToBriefing(const std::string& why) {
+        if (!PostGivesOrders() || def_.crew_data.FindOrder("order_to_briefing") == nullptr) return false;
+        SeatDuty d = SeatDuty::Order(Cmdr(), "order_to_briefing", why);
+        d.keep_s = 1.0;
+        return NpcDoes(Cmdr(), d) && GiveCrewOrder("order_to_briefing");
+    }
+    bool TakeBriefingTrip() {
+        const bool b = briefing_trip_;
+        briefing_trip_ = false;
+        return b;
+    }
+    // How he gave the task's combat order (Default: not yet, or before O3's data).
+    campaign::OrderWay CombatOrderWay() const { return given_way_; }
+    // The vehicle commanders called to him for the combat order in person: where, and the scene's start and end (end_s
+    // < 0: none). `id` counts the gatherings.
+    struct Gathering {
+        int id = 0;
+        Vec3 at;
+        double start_s = -1.0;
+        double end_s = -1.0;
+        std::string way;
+    };
+    const Gathering& CurrentGathering() const { return gathering_; }
+    // The combat orders said by radio in the short form since the last call (the session's for the enemy's intercept).
+    int TakeRadioOrders() {
+        const int n = radio_orders_;
+        radio_orders_ = 0;
+        return n;
+    }
+    // A launcher's card as the battery commander made it (null none).
+    const command::SectorCard* SectorCardOf(const std::string& vehicle) const {
+        for (const command::SectorCard& c : sector_cards_) {
+            if (c.vehicle == vehicle) return &c;
+        }
+        return nullptr;
+    }
+    // The linked Osa's side: its commander now holds his card (handed in person) or his notes of the order (by radio).
+    void TakeSectorCard(const command::SectorCard& c, const std::string& from) {
+        bool replaced = false;
+        for (command::SectorCard& old : sector_cards_) {
+            if (old.vehicle == c.vehicle) {
+                old = c;
+                replaced = true;
+            }
+        }
+        if (!replaced) sector_cards_.push_back(c);
+        HeldPaper paper;
+        paper.id = "sector_card:" + c.vehicle + ":" + std::to_string(own_papers_.size());
+        paper.station = Cmdr();
+        paper.time_s = time_;
+        paper.title = c.written ? "Notes of the combat order, launcher " + c.vehicle : "Sector card, launcher " + c.vehicle;
+        paper.text = command::SectorCardText(c, def_.held_map);
+        paper.from = from;
+        GivePaper(paper);
+    }
+    // The linked Osa's commander called to the battery commander (an NPC goes through NpcDoes; a player owes it), and
+    // back to his seat once it is over. CommanderNear: his body within r of a point.
+    bool GoToGathering(const Vec3& at, const std::string& why) {
+        gathering_place_ = at;
+        has_gathering_place_ = true;
+        Event(Cmdr(), "called to the battery commander: " + why);
+        if (def_.crew_data.FindOrder("order_to_gathering") == nullptr) return false;
+        SeatDuty d = SeatDuty::Order(Cmdr(), "order_to_gathering", why);
+        d.keep_s = kGatheringOweS;
+        return NpcDoes(Cmdr(), d) && GiveCrewOrder("order_to_gathering");
+    }
+    void GatheringOver() {
+        if (!has_gathering_place_) return;
+        has_gathering_place_ = false;
+        if (CrewMember* m = MemberAt(Cmdr())) {
+            if (m->WantedPlace() == "gathering") m->StayAt(std::string());
+        }
+    }
+    bool CommanderNear(const Vec3& at, double r) const {
+        Vec3 where = def_.unit_position;
+        if (const CrewMover* m = Mover(Cmdr())) where = Pose().ToEnu(m->View(Pose()).feet_m);
+        return std::hypot(where.x - at.x, where.y - at.y) <= r;
+    }
+    // The identification code table's end (D5: each evening's briefing hands out the next day's): past it, without the
+    // next, the crews stay on its last code.
+    void SetCodeTableUntil(double until_s) {
+        if (!own_air_) return;
+        own_air_->battery.valid_until_h = ClockH(until_s);
+        own_air_->post.valid_until_h = ClockH(until_s);
+    }
+    bool CodeTableRunOut() const { return own_air_ && own_air_->battery.RunOut(ClockH(time_)); }
+    // The vehicle commander's briefing of his crew at the vehicle (docs/campaign/12 section 4): each item a line on the
+    // intercom; whoever hears it knows it (CrewKnows). From the order menu, or the NPC commander's once he holds a new card.
+    bool BriefCrew(const std::string& who) {
+        const command::SectorCard* c = OwnCard();
+        if (!def_.briefings.present || c == nullptr) {
+            last_refusal_ = "no combat order to brief the crew on";
+            return false;
+        }
+        if (Outside(Cmdr())) {
+            last_refusal_ = "the briefing is given at the vehicle, on the intercom: get in first";
+            return false;
+        }
+        std::map<std::string, std::string> f;
+        f["point"] = c->point_name;
+        f["task"] = def_.has_task ? def_.task.task_text : std::string("cover the battery's position");
+        char sec[64];
+        std::snprintf(sec, sizeof(sec), "from %03.0f to %03.0f degrees", c->from_deg, c->to_deg);
+        f["sector"] = sec;
+        std::string marks;
+        for (const command::SectorCard::Landmark& l : c->landmarks) {
+            char b[96];
+            std::snprintf(b, sizeof(b), "%s%s at %03.0f, %.0f km", marks.empty() ? "" : "; ", l.name.c_str(), l.bearing_deg, l.range_m / 1000.0);
+            marks += b;
+        }
+        f["landmarks"] = marks.empty() ? std::string("none given") : marks;
+        f["readiness"] = c->duty ? std::string("no. 1, the duty launcher") : std::string("no. 1");
+        f["regime"] = EmissionKindName(CrewRegime().kind);
+        std::string codes;
+        for (const std::string& t : c->code_changes) codes += (codes.empty() ? "" : ", ") + t;
+        f["code_changes"] = codes;
+        f["reserve"] = c->has_reserve ? c->reserve_name : std::string();
+        double t = time_ + kBriefFirstLineS;
+        for (const campaign::BriefingItem& it : def_.briefings.crew.items) {
+            if (it.id == "codes" && codes.empty()) continue;  // not on his notes: never by radio (D5)
+            if (it.id == "reserve" && !c->has_reserve) continue;
+            AddSceneLine({"crew_briefing", t, who, it.id, campaign::FillLine(it.en, f)}, true);
+            t += def_.briefings.crew.line_s;
+        }
+        crew_briefed_card_s_ = c->given_s;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, "the crew's briefing", "at the vehicle, on the intercom"});
+        return true;
+    }
+    // What a crewman heard of the crew's briefing: its items' ids.
+    bool CrewKnows(const std::string& seat, const std::string& item) const {
+        const auto it = crew_briefed_.find(seat);
+        return it != crew_briefed_.end() && it->second.count(item) != 0;
+    }
+    static constexpr double kGatheringOweS = 600.0;  // sam3d: the player owes the walk this long
+    static constexpr double kBriefFirstLineS = 2.0;  // sam3d: the first line after his call to the crew
     static constexpr double kTaskWatchedS = 1200.0;  // sam3d: as the bridges mission's end, 19 min past its ready-by
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
@@ -1087,6 +1253,7 @@ public:
     // A place in words: "the line-up", a line's far end, a place round the vehicle by its label.
     std::string PlaceLabel(const std::string& id) const {
         if (id == "lineup") return "the line-up";
+        if (id == "gathering") return "the battery commander";
         if (const int n = LinePlace(id)) {
             const LineDef* l = def_.radio_data.Line(n);
             return "the far end of line " + std::to_string(n) + (l != nullptr ? " (" + l->to_name + ")" : std::string());
@@ -1103,6 +1270,7 @@ public:
             Vec3 end_at;
             if (def_.has_vehicle && LineFarEnd(n, end_at)) return MoveGoal::OnGroundAt(end_at, place, def_.vehicle.wire.lay_mps);
         }
+        if (place == "gathering" && has_gathering_place_) return MoveGoal::OnGroundAt(gathering_place_, place);  // O3
         return MoveGoal::AtPlace(place);
     }
 
@@ -1378,8 +1546,47 @@ public:
             if (done) orders_given_.push_back({time_, order_id});
             return done;
         }
+        // Track O, O3: the combat order on the ground or by radio (the plain one: at the map table when the player gives
+        // it, by the NPC's rule when he does); the battery commander off to the regiment's briefing; a vehicle commander
+        // to the battery commander's gathering; the crew's briefing at the vehicle.
+        if (order_id == "order_battery_combat_order_ground" || order_id == "order_battery_combat_order_radio") {
+            requested_way_ = order_id == "order_battery_combat_order_radio" ? campaign::OrderWay::Radio : campaign::OrderWay::Ground;
+            const bool done = PostGivesOrders() && GiveTaskOrder("order_battery_combat_order", "Battery commander");
+            requested_way_ = campaign::OrderWay::Default;
+            if (done) orders_given_.push_back({time_, order_id});
+            return done;
+        }
+        if (order_id == "order_to_briefing" || order_id == "order_to_gathering" || order_id == "order_crew_briefing") {
+            bool done = false;
+            if (order_id == "order_to_briefing") {
+                if (!def_.briefings.present) {
+                    last_refusal_ = "no briefing to go to";
+                } else if (!commander_away_.empty()) {
+                    last_refusal_ = "away already: " + commander_away_;
+                } else {
+                    briefing_trip_ = true;
+                    done = true;
+                }
+            } else if (order_id == "order_to_gathering") {
+                CrewMember* m = MemberAt(Cmdr());
+                if (!has_gathering_place_ || m == nullptr) {
+                    last_refusal_ = "nobody has called the commanders";
+                } else {
+                    m->StayAt("gathering");
+                    done = true;
+                }
+            } else {
+                done = BriefCrew(Cmdr());
+            }
+            if (!done) return false;
+            orders_given_.push_back({time_, order_id});
+            SpeakOrder(order_id);
+            return true;
+        }
         if (order_id == "order_battery_preliminary" || order_id == "order_battery_combat_order") {  // the task's plan (14.3)
+            if (order_id == "order_battery_combat_order" && !SeatHolder(Cmdr()).empty()) requested_way_ = campaign::OrderWay::MapTable;
             const bool done = PostGivesOrders() && GiveTaskOrder(order_id, "Battery commander");
+            requested_way_ = campaign::OrderWay::Default;
             if (done) orders_given_.push_back({time_, order_id});
             return done;
         }
@@ -6101,6 +6308,12 @@ private:
                 log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", st.en});
                 continue;
             }
+            // O3: away from his post (the regiment's briefing), he gives his combat order on his return, by radio only
+            // when the ready-by is too near to wait.
+            if (st.id == "combat_order" && def_.briefings.present && !commander_away_.empty() &&
+                task_plan_.ready_by_s - time_ >= def_.briefings.battery.urgent_s) {
+                continue;
+            }
             if (!PostGivesOrders()) {  // an NPC battery commander in a post we do not ride in
                 GiveTaskOrder(st.order, "Battery commander");
                 continue;
@@ -6223,6 +6436,7 @@ private:
         }
         if (!order_net_) return false;
         const bool combat = st->id == "combat_order";
+        if (combat && def_.briefings.present) return GiveCombatOrder(*st, who);
         const std::map<std::string, std::string> f{{"time", DayClock(task_plan_.march_at_s >= 0.0 ? task_plan_.march_at_s : task_plan_.order_s)},
                                                    {"task", def_.task.short_ru}, {"task_en", def_.task.task_text},
                                                    {"area", TaskArea()}, {"area_en", PlaceName(def_.task.main)},
@@ -6236,7 +6450,7 @@ private:
         if (combat) TaskCombatOrder();
         return true;
     }
-    void TaskCombatOrder() {
+    void TaskCombatOrder(bool written = false) {
         EmissionKind k = EmissionKind::Free;
         if (!def_.task.emission.empty() && ParseEmissionKind(def_.task.emission, k)) {
             EmissionRegime r = def_.emission.Make(k, "regiment");
@@ -6252,7 +6466,7 @@ private:
             for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
         }
         DecidedPlaces();
-        HandInSectorCards();
+        HandInSectorCards(written);
         BatteryOrder move;
         if (task_plan_.march_at_s >= 0.0) {
             move.kind = BatteryOrder::Kind::March;
@@ -6299,7 +6513,9 @@ private:
     }
     // The sector cards (O2): each launcher commander's paper with the combat order, in his map case (the own vehicle's
     // commander's seat when it is one of the launchers, else "<vehicle>:commander").
-    void HandInSectorCards() {
+    // O3: `written`, the order came by radio in the short form: each commander writes down what he heard (the point and
+    // the sectors; no landmarks, no reserve, and never the codes: D5), and no card is handed.
+    void HandInSectorCards(bool written = false) {
         if (!battery_) return;
         std::vector<command::DecidedSector> all;
         if (has_decision_ && !decision_.sectors.empty()) {
@@ -6362,6 +6578,12 @@ private:
             for (const command::DecidedSector& n : all) {
                 if (n.vehicle != s.vehicle) c.neighbours.push_back(n);
             }
+            if (written) {
+                c.written = true;
+                c.landmarks.clear();
+                c.code_changes.clear();
+                c.has_reserve = false;
+            }
             bool replaced = false;
             for (command::SectorCard& old : sector_cards_) {
                 if (old.vehicle == c.vehicle) {
@@ -6374,9 +6596,11 @@ private:
             paper.id = "sector_card:" + s.vehicle + ":" + std::to_string(own_papers_.size());
             paper.station = s.vehicle == own ? Cmdr() : s.vehicle + ":commander";
             paper.time_s = time_;
-            paper.title = "Sector card, launcher " + s.vehicle;
+            paper.title = (written ? "Notes of the combat order, launcher " : "Sector card, launcher ") + s.vehicle;
             paper.text = command::SectorCardText(c, def_.held_map);
-            paper.from = "the battery commander, with the combat order";
+            paper.from = written ? std::string("written down by its commander from the battery net")
+                                 : def_.briefings.present ? "the battery commander, in person (" + std::string(campaign::OrderWayName(given_way_)) + ")"
+                                                          : std::string("the battery commander, with the combat order");
             own_papers_.push_back(paper);
         }
     }
@@ -6388,6 +6612,174 @@ private:
     std::vector<command::SectorCard> sector_cards_;
     std::string decided_main_place_;  // the decided main's anchor ("" none)
     int decided_anchors_ = 0;
+
+    // ---- Track O, O3 (the orders as people give them) ----
+    struct PendingLine {
+        campaign::SceneLine line;
+        bool intercom = false;
+    };
+    std::vector<PendingLine> pending_lines_;
+    std::vector<campaign::SceneLine> scene_lines_;
+    std::string commander_away_;
+    bool briefing_trip_ = false;
+    campaign::OrderWay requested_way_ = campaign::OrderWay::Default;
+    campaign::OrderWay given_way_ = campaign::OrderWay::Default;
+    Gathering gathering_;
+    double combat_due_s_ = -1.0;  // the order in person: its last line, when the cards are handed
+    std::string combat_words_;
+    int radio_orders_ = 0;
+    std::map<std::string, std::set<std::string>> crew_briefed_;
+    double crew_briefed_card_s_ = -1e18;  // the card the crew was last briefed on
+    bool has_gathering_place_ = false;
+    Vec3 gathering_place_;
+    static constexpr double kGatherWalkMps = 1.2;  // sam3d: a vehicle commander's walk over to the battery commander
+    static constexpr double kGatherReadyS = 120.0;  // sam3d: and his getting out and going
+
+    const command::SectorCard* OwnCard() const {
+        if (!battery_ || battery_->Own() == nullptr) return nullptr;
+        return SectorCardOf(battery_->Own()->def.id);
+    }
+    // The combat order's words for the scene and the short form.
+    std::map<std::string, std::string> CombatOrderFields() const {
+        std::map<std::string, std::string> f{{"time", DayClock(task_plan_.march_at_s >= 0.0 ? task_plan_.march_at_s : task_plan_.order_s)},
+                                             {"task", def_.task.task_text}, {"task_en", def_.task.task_text},
+                                             {"area", PlaceName(def_.task.main)}, {"area_en", PlaceName(def_.task.main)},
+                                             {"ready", DayClock(task_plan_.ready_by_s)}};
+        f["enemy"] = def_.task.habits.empty() ? std::string("as on your maps") : def_.task.habits;
+        std::string sectors;
+        const auto add = [&sectors](const std::string& v, double a, double b) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%s%s from %03.0f to %03.0f", sectors.empty() ? "" : ", ", v.c_str(), a, b);
+            sectors += buf;
+        };
+        if (has_decision_ && !decision_.sectors.empty()) {
+            for (const command::DecidedSector& d : decision_.sectors) add(d.vehicle, d.from_deg, d.to_deg);
+        } else {
+            for (const campaign::TaskSector& d : def_.task.sectors) add(d.vehicle, d.from_deg, d.to_deg);
+        }
+        f["sectors"] = sectors;
+        f["regime"] = def_.task.emission.empty() ? std::string("as it is") : def_.task.emission;
+        f["point"] = PlaceName(def_.task.main);
+        f["reserve"] = def_.task.reserve.empty() ? std::string("none") : PlaceName(def_.task.reserve.front());
+        std::string codes;
+        if (const command::IffSchedule* table = IffCodes()) {
+            const double now_h = ClockH(time_);
+            for (const command::IffSchedule::Change& c : table->Changes()) {
+                if (c.from_h <= now_h || c.from_h > now_h + 24.0) continue;
+                const long long m = static_cast<long long>(std::llround(c.from_h * 60.0)) % (24 * 60);
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
+                codes += (codes.empty() ? "" : ", ") + std::string(buf);
+            }
+        }
+        f["code_changes"] = codes.empty() ? std::string("as on the table") : codes;
+        return f;
+    }
+    // The task's combat order with O3's data: by radio in the short form (each commander writes down what he heard), or
+    // in person at the map table or on the ground: the vehicle commanders called to him, the order item by item once they
+    // are there, the cards handed at its end (UpdateOrdersInPerson).
+    bool GiveCombatOrder(const campaign::PlannedStep& st, const std::string& who) {
+        using campaign::OrderWay;
+        OrderWay w = requested_way_;
+        if (w == OrderWay::Default) w = NpcOrderWay();
+        if (campaign::InPerson(w) && !commander_away_.empty()) {
+            last_refusal_ = "away (" + commander_away_ + "): by radio only";
+            return false;
+        }
+        given_way_ = w;
+        task_steps_done_.insert(st.id);
+        const std::map<std::string, std::string> f = CombatOrderFields();
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, "the combat order", std::string("given ") + campaign::OrderWayName(w)});
+        if (w == OrderWay::Radio) {
+            const CalloutDef* c = def_.crew_data.FindCallout("order_battery_combat_order");
+            const std::string en = campaign::FillLine(def_.briefings.battery.radio_en, f);
+            const std::string words = c != nullptr ? FillCallout(c->ru, RuFields(f)) : en;
+            NoticeOnOrderNet(st.id, words, std::make_pair(std::string("боевой приказ"), std::string("the combat order")));
+            log_.Record({time_, DebriefEntry::Kind::Scenario, who, "battery net", en});
+            ++radio_orders_;
+            TaskCombatOrder(true);
+            return true;
+        }
+        const Vec3 at = battery_ && battery_->Own() != nullptr ? battery_->Own()->position : def_.unit_position;
+        double gather_s = 0.0;
+        for (const command::OrderVehicle& v : order_net_->Vehicles()) gather_s = std::max(gather_s, std::hypot(v.at.x - at.x, v.at.y - at.y) / kGatherWalkMps);
+        gather_s += kGatherReadyS;
+        ++gathering_.id;
+        gathering_.at = at;
+        gathering_.start_s = time_;
+        gathering_.way = campaign::OrderWayName(w);
+        Radio("battery net", BatteryPostCall(), "Всем, я " + BatteryPostCall() + ": командирам машин — ко мне.");
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, "battery net", "the vehicle commanders called to him for the combat order"});
+        double t = time_ + gather_s;
+        for (const campaign::BriefingItem& it : def_.briefings.battery.items) {
+            AddSceneLine({"battery_order", t, "the battery commander", it.id, campaign::FillLine(it.en, f)});
+            t += def_.briefings.battery.line_s;
+        }
+        gathering_.end_s = t;
+        combat_due_s_ = t;
+        combat_words_ = c_words(f);
+        return true;
+    }
+    std::string c_words(const std::map<std::string, std::string>& f) const {
+        const CalloutDef* c = def_.crew_data.FindCallout("order_battery_combat_order");
+        return c != nullptr ? FillCallout(c->ru, RuFields(f)) : "Боевой приказ: " + def_.task.short_ru + ".";
+    }
+    // The callout's Russian words take the task and the area as said on the radio.
+    std::map<std::string, std::string> RuFields(std::map<std::string, std::string> f) const {
+        f["task"] = def_.task.short_ru;
+        f["area"] = TaskArea();
+        return f;
+    }
+    // The NPC battery commander's way (D1): by radio when away or the ready-by is near; at the map table before a march
+    // (the route on the map); else on the ground at the position.
+    campaign::OrderWay NpcOrderWay() const {
+        if (!commander_away_.empty() || task_plan_.ready_by_s - time_ < def_.briefings.battery.urgent_s) return campaign::OrderWay::Radio;
+        return task_plan_.march_at_s >= 0.0 ? campaign::OrderWay::MapTable : campaign::OrderWay::Ground;
+    }
+    // Each step: the scenes' lines whose time has come (a line on the intercom heard by whoever its router lets hear it,
+    // who then knows its item); the combat order in person at its end; the NPC commander's crew briefing.
+    void UpdateOrdersInPerson() {
+        if (pending_lines_.empty() && combat_due_s_ < 0.0 && !def_.briefings.present) return;
+        for (std::size_t i = 0; i < pending_lines_.size();) {
+            if (pending_lines_[i].line.at_s > time_ + 1e-9) {
+                ++i;
+                continue;
+            }
+            const PendingLine p = pending_lines_[i];
+            pending_lines_.erase(pending_lines_.begin() + static_cast<std::ptrdiff_t>(i));
+            scene_lines_.push_back(p.line);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, p.line.speaker, p.line.scene, p.line.text});
+            if (!p.intercom) continue;
+            const std::vector<std::string> heard = HeardBy("intercom");
+            Radio("intercom", Cmdr(), p.line.text, false, heard);
+            if (!voice_) {
+                for (const ConsoleStation& st : console_.stations) crew_briefed_[st.id].insert(p.line.item);
+            } else {
+                for (const std::string& h : heard) crew_briefed_[h].insert(p.line.item);
+            }
+        }
+        if (combat_due_s_ >= 0.0 && time_ + 1e-9 >= combat_due_s_) {
+            combat_due_s_ = -1.0;
+            if (order_net_) {
+                KeepOrderNetCurrent();
+                std::vector<std::string> to;
+                for (const command::OrderVehicle& v : order_net_->Vehicles()) to.push_back(v.vehicle);
+                const int order = order_net_->Give("combat_order", combat_words_, "gathered", time_, to);
+                order_words_[order] = std::make_pair(std::string("боевой приказ"), std::string("the combat order"));
+                notice_orders_.insert(order);
+            }
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the combat order", "given in person; the cards handed over"});
+            TaskCombatOrder(false);
+        }
+        if (def_.briefings.present && def_.crew_data.FindOrder("order_crew_briefing") != nullptr) {
+            const command::SectorCard* c = OwnCard();
+            if (c != nullptr && c->given_s > crew_briefed_card_s_ + 1e-9 && !Outside(Cmdr()) && !has_gathering_place_) {
+                SeatDuty d = SeatDuty::Order(Cmdr(), "order_crew_briefing", "back at the vehicle with the combat order: he briefs his crew");
+                d.keep_s = 1.0;
+                if (NpcDoes(Cmdr(), d)) GiveCrewOrder("order_crew_briefing");
+            }
+        }
+    }
     // An order of words only on the battery net (the task's preliminary order and the oral combat order): every vehicle
     // commander hears it and reads it back (only the launchers' for a fire order); nobody moves on it.
     int NoticeOnOrderNet(const std::string& kind, const std::string& words, const std::pair<std::string, std::string>& short_words,

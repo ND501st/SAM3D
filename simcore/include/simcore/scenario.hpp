@@ -32,6 +32,7 @@
 #include "simcore/c2_sources.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_task.hpp"
+#include "simcore/campaign/briefings.hpp"
 #include "simcore/campaign/report.hpp"
 #include "simcore/campaign/stocks.hpp"
 #include "simcore/command/battery_orders.hpp"
@@ -424,6 +425,9 @@ struct ScenarioDef {
     campaign::PlanSequence plan_sequence;
     // The maps people hold (track O, O2: data/gameplay/held_map.json): the decision's leeway and the sheet's drawing values.
     command::HeldMapValues held_map;
+    // The orders as people give them (track O, O3: "briefings", campaign/briefings.hpp); absent: the order by radio, as before.
+    std::string briefings_file;
+    campaign::BriefingsData briefings;
     // "clock_start": "19:00": the time of day at the session's second 0, for the order's paper, the order books and the
     // debrief (< 0: none, the session's own clock).
     double clock_start_s = -1.0;
@@ -505,7 +509,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air"})) {
+                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air", "briefings"})) {
 
             return false;
         }
@@ -558,6 +562,13 @@ public:
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
+        // "briefings": "campaign/briefings.json" (track O, O3): how the battery's orders are given in person and by radio,
+        // and the crew's briefing at the vehicle (campaign/briefings.hpp).
+        if (!OptionalString(root, "", "briefings", out.briefings_file)) return false;
+        if (!out.briefings_file.empty()) {
+            std::string error;
+            if (!campaign::LoadBriefings(data_dir, out.briefings_file, out.briefings, &error)) return Fail("briefings", error);
+        }
         if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out) || !LoadAirRadio(root, data_dir, out)) return false;
         if (!LoadAirFight(root, data_dir, out) || !LoadOwnAir(root, data_dir, out)) return false;
 

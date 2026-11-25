@@ -9,12 +9,15 @@
   "days": 14,
   "u2_radius_km": 20,
   "seed": 6,
+  "briefings": "campaign/briefings.json",
   "adversaries": [
     {
       "id": "rebels",
       "label": "The rebels",
       "line": "The Rava Liberation Front has risen in the south. Its light air wing strikes supply and crossings at dusk and by night. Battery 21 covers the Kesmark bridges for the 7th Division.",
       "mission": "scenarios/pu12m_mission_cover.json",
+      "osa_mission": "scenarios/osa_mission_cover.json",
+      "osa_callsign": "21",
       "playable": true
     },
     {

@@ -356,11 +356,15 @@ struct SectorCard {
     std::vector<std::string> code_changes;  // the clock times the identification code changes
     double given_s = 0.0;
     std::string given;                      // the clock
+    // Track O, O3: the order came by radio in short form, and this is what its commander wrote down of it himself (no
+    // card was handed over: only in person are papers given).
+    bool written = false;
 };
 
 inline std::string SectorCardText(const SectorCard& c, const HeldMapValues& v) {
     using namespace held_detail;
-    std::string s = "Launcher " + c.vehicle + (c.duty ? " (duty launcher)" : "") + ", with the combat order of " + c.given + ".\n";
+    std::string s = c.written ? "Launcher " + c.vehicle + ": the combat order as heard on the battery net at " + c.given + ", written down.\n"
+                              : "Launcher " + c.vehicle + (c.duty ? " (duty launcher)" : "") + ", with the combat order of " + c.given + ".\n";
     s += "Your point: " + c.point_name + ", square " + GridSquare(c.point, v) + "; your spot within " + Km(v.decision_leeway_m) + " of it.\n";
     s += "Your sector: " + Deg(c.from_deg) + " to " + Deg(c.to_deg) + ".\n";
     if (!c.landmarks.empty()) {

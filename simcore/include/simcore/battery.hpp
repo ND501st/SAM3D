@@ -415,6 +415,20 @@ public:
             v.speed_mps = 0.0;
         }
     }
+    // A vehicle as another model of the same battery has it (track O, O3: a linked Osa's runner follows the post's battery,
+    // which marches and deploys it): where it stands, its heading and speed, whether it is set up. False for no such vehicle.
+    bool Mirror(const std::string& id, const Vec3& position, double heading_deg, double speed_mps, bool deployed) {
+        for (Vehicle& v : vehicles_) {
+            if (v.def.id != id) continue;
+            v.position = position;
+            v.goal = position;
+            v.heading_deg = heading_deg;
+            v.speed_mps = speed_mps;
+            v.deployed = deployed;
+            return true;
+        }
+        return false;
+    }
     // What a service vehicle carries now (the TZM back from the technical battery with its load).
     void SetStock(const std::string& id, double stock) {
         for (Vehicle& v : vehicles_)

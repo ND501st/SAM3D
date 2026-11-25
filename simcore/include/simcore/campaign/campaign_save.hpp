@@ -45,6 +45,9 @@ struct CampaignAdversary {
     std::string mission;  // the mission the war opens with (relative to the data folder)
     bool playable = false;
     std::string not_yet;  // not playable: why, and when it comes
+    // Track O, O3: the battery's Osa beside the post (relative to the data folder) and its callsign ("" none).
+    std::string osa_mission;
+    std::string osa_callsign;
 };
 
 struct CampaignsData {
@@ -54,6 +57,7 @@ struct CampaignsData {
     double days = 14.0;    // the war's length (a game value)
     double u2_radius_m = 20000.0;
     unsigned seed = 1;     // a new campaign's war
+    std::string briefings; // O3: the orders as people give them ("" none)
     std::vector<CampaignAdversary> adversaries;
     const CampaignAdversary* Find(const std::string& id) const {
         for (const CampaignAdversary& a : adversaries) {
@@ -97,6 +101,7 @@ inline bool LoadCampaignsData(const std::string& data_dir, const std::string& re
     out.days = Num(root, "days", out.days);
     out.u2_radius_m = Num(root, "u2_radius_km", out.u2_radius_m / 1000.0) * 1000.0;
     out.seed = static_cast<unsigned>(Num(root, "seed", 1.0));
+    out.briefings = Str(root, "briefings");
     if (out.theatre.empty() || out.tasking.empty()) return fail("needs \"theatre\" and \"tasking\"");
     if (!(out.days > 0.0)) return fail("days: > 0");
     const json::Value* list = root.Find("adversaries");
@@ -109,6 +114,8 @@ inline bool LoadCampaignsData(const std::string& data_dir, const std::string& re
         c.mission = Str(a, "mission");
         c.playable = Flag(a, "playable");
         c.not_yet = Str(a, "not_yet");
+        c.osa_mission = Str(a, "osa_mission");
+        c.osa_callsign = Str(a, "osa_callsign");
         if (c.id.empty()) return fail("an adversary without an id");
         if (c.playable && c.mission.empty()) return fail(c.id + ": a playable adversary needs its \"mission\"");
         out.adversaries.push_back(c);
@@ -240,6 +247,9 @@ struct CampaignSave {
     std::string seat;       // the player's
     BatteryState battery;
     std::string air_war;    // air_war/save.hpp's text
+    std::string briefings;     // O3 ("" none)
+    std::string osa_mission;   // O3: the Osa beside the post ("" none)
+    std::string osa_callsign;
 };
 
 inline std::string CampaignSaveJson(const CampaignSave& s) {
@@ -255,6 +265,9 @@ inline std::string CampaignSaveJson(const CampaignSave& s) {
     Put(root, "u2_radius_m", Num(s.u2_radius_m));
     Put(root, "war_hours", Num(s.war_hours));
     Put(root, "seat", Str(s.seat));
+    if (!s.briefings.empty()) Put(root, "briefings", Str(s.briefings));
+    if (!s.osa_mission.empty()) Put(root, "osa_mission", Str(s.osa_mission));
+    if (!s.osa_callsign.empty()) Put(root, "osa_callsign", Str(s.osa_callsign));
     const BatteryState& b = s.battery;
     json::Value bj = Obj();
     Put(bj, "campaign_h", Num(b.campaign_h));
@@ -310,6 +323,9 @@ inline bool LoadCampaignSaveJson(const std::string& text, CampaignSave& out, std
     out.u2_radius_m = Num(root, "u2_radius_m", out.u2_radius_m);
     out.war_hours = Num(root, "war_hours");
     out.seat = Str(root, "seat");
+    out.briefings = Str(root, "briefings");
+    out.osa_mission = Str(root, "osa_mission");
+    out.osa_callsign = Str(root, "osa_callsign");
     if (out.adversary.empty() || out.mission.empty()) return fail("no adversary or mission");
     const json::Value* bj = root.Find("battery");
     if (bj == nullptr) return fail("no battery");
@@ -372,6 +388,11 @@ inline bool NewCampaign(const CampaignsData& c, const std::string& adversary, co
     def.u2_radius_m = c.u2_radius_m;
     def.hours = c.days * 24.0;  // from the mission's start, the war's first evening
     def.seams = true;
+    def.briefings = c.briefings;
+    if (!a->osa_mission.empty()) {
+        def.osa_scenario = data_dir + "/" + a->osa_mission;
+        def.osa_callsign = a->osa_callsign;
+    }
     header = CampaignSave();
     header.adversary = a->id;
     header.mission = a->mission;
@@ -379,6 +400,9 @@ inline bool NewCampaign(const CampaignsData& c, const std::string& adversary, co
     header.fronts = c.fronts;
     header.u2_radius_m = c.u2_radius_m;
     header.seat = seat;
+    header.briefings = c.briefings;
+    header.osa_mission = a->osa_mission;
+    header.osa_callsign = a->osa_callsign;
     return true;
 }
 
@@ -395,6 +419,11 @@ inline MissionSessionDef ResumeCampaign(const CampaignSave& save, const std::str
     def.hours = std::max(1.0, save.war_hours - save.battery.campaign_h);
     def.seams = true;
     def.briefing_due = save.kind == "briefing";
+    def.briefings = save.briefings;
+    if (!save.osa_mission.empty()) {
+        def.osa_scenario = data_dir + "/" + save.osa_mission;
+        def.osa_callsign = save.osa_callsign;
+    }
     return def;
 }
 
