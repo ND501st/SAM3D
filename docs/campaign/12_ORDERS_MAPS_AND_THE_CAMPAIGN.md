@@ -226,3 +226,23 @@ Try this: `?SimWar=new:rebels?SimSeat=battery_commander`, wait for the regiment'
 told you and when. Press 1 and click 1.5 km from the order's main: the breach is listed, not refused. S, then two clicks,
 draws launcher 21's sector; leave a gap and see it listed. Enter gives the combat order; the battery marches to your point.
 (A launcher commander's M shows his sector card once the Osa's seats are in the campaign, O3.)
+
+**O3** (26 Nov 2026). `data/campaign/briefings.json` and `simcore/campaign/briefings.hpp`: the regiment's evening
+briefing (seven items, each by a named officer of the chain, and three papers), the combat order's items, the crew's
+briefing and the 07:00 news. `MissionSession` (with `briefings`): the battery commander drives to the Lazne woods and
+back as a nav mover (his UAZ on the truck class's roads; the NPC leaves through `NpcDoes`, a player by `order_to_briefing`).
+Day 1 opens with him there and the task given in person. The lines are subtitled scene lines (`ScenarioRunner::SceneLines`).
+The code table, the plan of cooperation and the call-sign table go into his map case. A missed briefing goes into the notes
+and the record, with no papers. The runner's combat order goes one of three ways. At the map table or on the ground, the
+commanders are called, the items are spoken, and the cards are handed at the end. By radio in short form (`order_battery_combat_order_radio`, or the NPC when away and the ready-by is near), each
+commander writes his own notes: no landmarks, no reserve, no codes (D5), and the enemy's intercept hears it as an extra
+transmission. The session's Osa (`osa_mission_cover.json`, `osa_mission` in campaigns.json): one sky, its commander walks
+to the gathering and gets his card only if he is there; `order_crew_briefing` on the intercom tells each listener (`CrewKnows`).
+Unreal: `?SimSeat=osa:commander` plays the Osa, M shows its card, and the campaign line shows the subtitles. R0 was not
+carried out (the research agent was stopped); its items are labelled game values.
+
+Try this: `?SimWar=new:rebels?SimSeat=battery_commander`. Watch the briefing's subtitles and the drive back ("You are on
+the road..."), then open your map case. Back at the post, give the combat order: the orders sector for the map table, the air sector on the ground, the emission
+sector by radio. With `?SimSeat=osa:commander`, walk over when called (the fire sector), press M for your card, and brief
+your crew from the search sector.
+
