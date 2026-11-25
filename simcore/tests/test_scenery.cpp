@@ -297,7 +297,7 @@ const char* kCc0Oak =
 
 }  // namespace
 
-SC_TEST("scenery: the shipped asset register loads, lists every part, and holds only redistributable or ignored art") {
+SC_TEST("scenery: the shipped asset register loads, lists every part, holds only redistributable or ignored art, and its models and munitions are the libraries' own") {
     AssetRegister reg;
     std::string e;
     SC_EXPECT(reg.Load(kData + "/scenery/assets.json", &e));  // Load applies every rule of the register
@@ -311,6 +311,42 @@ SC_TEST("scenery: the shipped asset register loads, lists every part, and holds 
         SC_EXPECT(a == nullptr || !a->id.empty());
     }
     std::printf("    %zu registered asset(s)\n", reg.assets.size());
+    // Every model the register draws by a real asset is a basic model, every munition a munition: a typo would leave
+    // the asset never drawn and the basic shape in its place, silently.
+    ModelLibrary models;
+    SC_EXPECT(LoadModelLibrary(kData + "/scenery/basic_models.json", models, &e));
+    for (const auto& m : reg.models) {
+        if (models.Find(m.first) == nullptr) std::printf("    models: %s is not a basic model\n", m.first.c_str());
+        SC_EXPECT(models.Find(m.first) != nullptr);
+    }
+    MunitionLibrary munitions;
+    SC_EXPECT(munitions.Load(kData + "/scenery/munitions.json", &e));
+    for (const auto& m : reg.munitions) {
+        if (munitions.Find(m.first) == nullptr) std::printf("    munitions: %s is not a munition\n", m.first.c_str());
+        SC_EXPECT(munitions.Find(m.first) != nullptr);
+    }
+}
+
+SC_TEST("scenery: the asset register draws whole models and munitions by an asset") {
+    const std::string jet =
+        R"({"id": "mig21_sf", "unreal_path": "/Game/ThirdParty/Sketchfab/Aircraft/SM_MiG21.SM_MiG21", "origin": "https://sketchfab.com/3d-models/x", "author": "someone", "licence": "CC-BY-4.0", "redistributable": true, "fetched": "2026-11-22", "yaw_deg": 180})";
+    const std::string bomb =
+        R"({"id": "fab500_sf", "unreal_path": "/Game/ThirdParty/Sketchfab/Munitions/SM_FAB500.SM_FAB500", "origin": "https://sketchfab.com/3d-models/y", "author": "", "licence": "CC0-1.0", "redistributable": true, "fetched": "2026-11-22"})";
+    auto text = [](const std::string& assets, const std::string& tail) { return "{\"assets\": [" + assets + "], \"parts\": {}, " + tail + "}"; };
+    std::string e;
+    AssetRegister reg;
+    SC_EXPECT(reg.Load(text(jet + ", " + bomb, R"("models": {"mig21": "mig21_sf", "mig21bis": "mig21_sf", "f4g": null}, "munitions": {"fab500": "fab500_sf"})"), &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(reg.AssetForModel("mig21") != nullptr && reg.AssetForModel("mig21bis") == reg.AssetForModel("mig21"));
+    SC_EXPECT(reg.AssetForModel("mig21")->yaw_deg == 180.0);  // a model's asset may carry a fix
+    SC_EXPECT(reg.AssetForModel("f4g") == nullptr && reg.AssetForModel("su25") == nullptr);
+    SC_EXPECT(reg.AssetForMunition("fab500") != nullptr && reg.AssetForMunition("fab250") == nullptr);
+    SC_EXPECT(reg.AssetFor("house", 0) == nullptr);
+    // An unregistered asset, a number, a munition's asset with a fix: refused, and the register left as it was.
+    SC_EXPECT(!reg.Load(text(jet, R"("models": {"mig21": "nobody"})"), &e) && e.find("not registered") != std::string::npos);
+    SC_EXPECT(!reg.Load(text(jet, R"("models": {"mig21": 3})"), &e) && e.find("asset's id or null") != std::string::npos);
+    SC_EXPECT(!reg.Load(text(jet, R"("munitions": {"fab500": "mig21_sf"})"), &e) && e.find("munition's frame") != std::string::npos);
+    SC_EXPECT(reg.AssetForMunition("fab500") != nullptr);
 }
 
 SC_TEST("scenery: the asset register keeps its rules") {

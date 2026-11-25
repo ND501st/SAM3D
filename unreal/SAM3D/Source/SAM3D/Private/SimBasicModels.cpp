@@ -8,6 +8,7 @@
 #include "Materials/MaterialInterface.h"
 #include "SAM3D.h"
 #include "SimAirCampaignSubsystem.h"
+#include "SimMapAssets.h"
 #include "SimMunitionModels.h"
 #include "UObject/Package.h"
 
@@ -148,6 +149,35 @@ int32 FSimBasicModels::Build(const FString& ModelId, USceneComponent* Parent, TA
 			if (UMaterialInterface* Mat = ColourMaterial(*Override))
 			{
 				C->SetMaterial(0, Mat);
+			}
+		}
+		C->RegisterComponent();
+		if (OutParts != nullptr)
+		{
+			OutParts->Add(C);
+		}
+		return 1;
+	}
+	// A model the register draws whole by a real asset (an aircraft from Sketchfab, docs/scenery/ASSETS.md), if it is on
+	// this machine: one component, its fix into the model's frame; else its basic shapes below.
+	FTransform Fix;
+	if (UStaticMesh* Real = FSimMapAssets::ModelMesh(ModelId, Fix))
+	{
+		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(Owner != nullptr ? static_cast<UObject*>(Owner) : static_cast<UObject*>(Parent));
+		C->SetStaticMesh(Real);
+		C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		C->SetGenerateOverlapEvents(false);
+		C->SetCastShadow(true);
+		C->SetupAttachment(Parent);
+		C->SetRelativeTransform(Fix);
+		if (Override != nullptr)
+		{
+			if (UMaterialInterface* Mat = ColourMaterial(*Override))
+			{
+				for (int32 I = 0; I < FMath::Max(1, Real->GetStaticMaterials().Num()); ++I)
+				{
+					C->SetMaterial(I, Mat);
+				}
 			}
 		}
 		C->RegisterComponent();

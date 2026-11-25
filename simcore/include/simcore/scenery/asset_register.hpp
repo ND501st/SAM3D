@@ -1,15 +1,22 @@
 // simcore/scenery/asset_register.hpp — the register of third-party art the map may draw in place of its procedural meshes
 // (roadmap R6, data/scenery/assets.json, docs/scenery/ASSETS.md). Each asset says where it came from, who made it, its
 // licence, whether it may be redistributed, when it was fetched and its checksum; each map part (scenery/map_meshes.hpp's
-// keys) names the asset that replaces it, or none (null): procedural. The register starts empty and every part
-// procedural; a real asset is added only with the owner's say-so, per file.
+// keys) names the asset that replaces it, or none (null): procedural; so do the basic models and the munitions drawn
+// whole by an asset (the aircraft and air-to-ground weapons from Sketchfab, below). A real asset is added only with the
+// owner's say-so.
 //
 // The rules Load enforces (false with the reason, never a throw):
 // - every asset has an id (unique), an Unreal path under /Game/, an origin, a known licence and a fetched date;
 // - an asset that may not be redistributed (redistributable false: Fab's Standard licence, Epic's content-only one)
 //   lives under /Game/ThirdParty/, which git ignores (.gitignore, tools/check_assets.py): it is fetched per machine;
 // - CC-BY needs an author (the game's credits name them);
-// - every part key is a known part (MapMeshParts) and names a registered asset, or null.
+// - every part key is a known part (MapMeshParts) and names a registered asset, or null;
+// - "models" maps a basic model's id (data/scenery/basic_models.json: an aircraft, a vehicle) and "munitions" a
+//   munition's id (data/scenery/munitions.json: a bomb, a missile, a rocket) to a registered asset, or null. Such an
+//   asset is a whole model at full size in the model's own frame (x forward, y right, z up, metres; the origin at the
+//   middle of the fuselage or the body), prepared so (tools/blender/sketchfab_prepare.py): a munition's asset takes no
+//   fix (scale 1, no yaw, no offset), since the effects draw it by the munition's own transform. The ids themselves are
+//   checked against the libraries by test_scenery.cpp and tools/check_assets.py, not here.
 #pragma once
 
 #include <cstddef>
@@ -72,6 +79,8 @@ class AssetRegister {
 public:
     std::vector<AssetEntry> assets;
     std::map<std::string, AssetPart> parts;  // by part key; a key not listed is procedural
+    std::map<std::string, std::string> models;     // a basic model's id -> an asset's id (a model not listed: basic shapes)
+    std::map<std::string, std::string> munitions;  // a munition's id -> an asset's id (not listed: its procedural mesh)
 
     // A file's path, or the JSON text itself (it starts with '{'). False with the reason in `error`; the register is left
     // as it was.
@@ -188,6 +197,18 @@ public:
                 out.parts[key] = part;
             }
         }
+        if (!LoadIdMap(root, "models", ids, out.models, error)) return false;
+        if (!LoadIdMap(root, "munitions", ids, out.munitions, error)) return false;
+        for (const auto& m : out.munitions) {
+            const AssetEntry* a = nullptr;
+            for (const AssetEntry& e : out.assets) {
+                if (e.id == m.second) a = &e;
+            }
+            if (a != nullptr && (a->scale != 1.0 || a->yaw_deg != 0.0 || a->z_offset_m != 0.0)) {
+                return Fail(error, "munitions: " + m.first + "'s asset " + a->id +
+                                       " must be prepared in the munition's frame (scale 1, yaw 0, z offset 0)");
+            }
+        }
         *this = out;
         return true;
     }
@@ -258,6 +279,10 @@ public:
         return static_cast<int>(h % static_cast<unsigned long long>(count));
     }
 
+    // The asset that draws a basic model (an aircraft, a vehicle) or a munition whole, or null: its own procedural shape.
+    const AssetEntry* AssetForModel(const std::string& model_id) const { return InMap(models, model_id); }
+    const AssetEntry* AssetForMunition(const std::string& munition_id) const { return InMap(munitions, munition_id); }
+
     // The register's rules for one asset: true, or false with the rule it breaks.
     static bool Valid(const AssetEntry& e, std::string& rule) {
         if (e.id.empty()) return Broken(rule, "no id");
@@ -279,6 +304,28 @@ public:
     }
 
 private:
+    const AssetEntry* InMap(const std::map<std::string, std::string>& m, const std::string& key) const {
+        const auto it = m.find(key);
+        return it == m.end() ? nullptr : Find(it->second);
+    }
+    // "models" or "munitions": an object of id -> a registered asset's id or null (null entries are left out).
+    static bool LoadIdMap(const json::Value& root, const char* name, const std::set<std::string>& ids,
+                          std::map<std::string, std::string>& into, std::string* error) {
+        const json::Value* m = root.Find(name);
+        if (m == nullptr) return true;
+        const std::string what(name);
+        if (!m->Is(json::Type::Object)) return Fail(error, "assets: \"" + what + "\" is not an object");
+        for (std::size_t i = 0; i < m->keys.size(); ++i) {
+            const std::string& key = m->keys[i];
+            const json::Value& v = m->items[i];
+            if (key.empty()) return Fail(error, what + ": an empty id");
+            if (v.Is(json::Type::Null)) continue;
+            if (!v.Is(json::Type::String)) return Fail(error, what + ": " + key + " must name an asset's id or null");
+            if (ids.count(v.string) == 0) return Fail(error, what + ": " + key + " names " + v.string + ", which is not registered");
+            into[key] = v.string;
+        }
+        return true;
+    }
     static bool Fail(std::string* error, const std::string& why) {
         if (error != nullptr) *error = why;
         return false;
