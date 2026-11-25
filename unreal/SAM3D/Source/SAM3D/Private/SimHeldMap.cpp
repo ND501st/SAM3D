@@ -959,7 +959,8 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 	const HeldMark* Oldest = nullptr;
 	for (const HeldMark& M : S.Map.marks)
 	{
-		if (M.origin != MarkOrigin::Copied || M.as_of_h < 0.0) continue;
+		// Dated copies only: the plan from before the war has no hour (a fact from before the session's start has a negative one).
+		if (M.origin != MarkOrigin::Copied || M.as_of.empty() || M.means == "the plan") continue;
 		if (Newest == nullptr || M.as_of_h > Newest->as_of_h) Newest = &M;
 		if (Oldest == nullptr || M.as_of_h < Oldest->as_of_h) Oldest = &M;
 	}

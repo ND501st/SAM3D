@@ -210,3 +210,19 @@ seat or the briefing's save) and R (back to the last save), the campaign's line 
 run (`-SimMenuTest -SimMenuPick=campaign:rebels:battery_commander`, and `?SimWar=continue`). Left: the Osa's seats in the
 campaign (a `BatteryLink` in the session, O3), U2's ground units round the battery (0 made against the rebels), a save
 at a task's start, the director following the player to another seat.
+
+**O2** (26 Nov 2026). `simcore/command/held_map.hpp`: `HeldMark`/`HeldMap` (side, shape, label, source, means, hour,
+certainty, copied or decided), `GridSquare`, contours by marching squares, `BatteryDecision` and `CheckDecision` (breaches
+listed, nothing refused; `decision_leeway_m` 1 km and the drawing values in `data/gameplay/held_map.json`, game values),
+`SectorCard`. `command/held_situation.hpp`: F5's situation map copied only where the holder's `InfoNet` delivery exists,
+its sender, means and hour stamped. The runner's `HeldMapOf` (the task from its order book, his decision, a launcher
+commander's card), `SetBatteryDecision` (the combat order marches to a "point" anchor at the decided main, the decided
+sectors given), sector cards as papers in each launcher commander's map case; `MissionSession::HeldMapFor` adds the
+situation. Unreal: M in the cabin HUD (`SimHeldMap.cpp`) draws only that map as a 1:50 000 sheet; the battery commander
+drafts on it and gives the order with Enter. `-SimHeldMapShot=<png>` looks once. Left: a handwriting font, reported raids
+and launches as marks, routes and launch zones, the regiment's tracing, map case O and the PU-12M's table.
+
+Try this: `?SimWar=new:rebels?SimSeat=battery_commander`, wait for the regiment's task (W), press M. Hover a mark for who
+told you and when. Press 1 and click 1.5 km from the order's main: the breach is listed, not refused. S, then two clicks,
+draws launcher 21's sector; leave a gap and see it listed. Enter gives the combat order; the battery marches to your point.
+(A launcher commander's M shows his sector card once the Osa's seats are in the campaign, O3.)

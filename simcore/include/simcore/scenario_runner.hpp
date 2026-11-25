@@ -940,8 +940,10 @@ public:
         out = Vec3{a->at.east_m, a->at.north_m, 0.0};
         return true;
     }
-    // The battery commander's id in the chain (the regiment's orders go to him).
-    const std::string& BatteryCommanderPost() const { return def_.battery_giver; }
+    // The battery commander's position in the chain (the regiment's orders go to him), or his vehicle's id with no chain.
+    const std::string& BatteryCommanderPost() const {
+        return def_.battery_giver_post.empty() ? def_.battery_giver : def_.battery_giver_post;
+    }
     // The map a person of the battery holds, from what reached him in the session: the battery commander's (`holder` his
     // post, BatteryCommanderPost(), or "battery_commander") with the regiment's task once he has it and his decision; a
     // launcher commander's ("<vehicle>:commander") from his sector card. The situation from the campaign's pipeline is
@@ -955,7 +957,9 @@ public:
         const command::HeldMapValues& v = def_.held_map;
         const auto name = [this](const std::string& id) { return PlaceName(id); };
         const auto where = [this](const std::string& id, Vec3& out) { return TaskPlace(id, out); };
-        if (holder == def_.battery_giver || holder == "battery_commander") {
+        const bool is_commander = holder == def_.battery_giver || holder == "battery_commander" ||
+                                  (!def_.battery_giver_post.empty() && holder == def_.battery_giver_post);
+        if (is_commander) {
             m.holder_label = "the battery commander";
             if (def_.has_task && task_received_s_ >= 0.0) {
                 command::MarkSource src;

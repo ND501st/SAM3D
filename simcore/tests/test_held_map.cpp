@@ -225,6 +225,9 @@ SC_TEST("held map O2: the regiment's task on the battery commander's map with it
     SC_EXPECT_NEAR(main->as_of_h, r.TaskReceivedS() / 3600.0, 1e-9);
     const command::HeldMark* attack = m.Find("attack");
     SC_EXPECT(attack != nullptr && attack->side == command::MarkSide::Enemy && attack->has_arc && attack->certainty == command::MarkCertainty::Estimated);
+    // The post the campaign's pipeline names him by and the seat's name hold the same map.
+    SC_EXPECT(r.HeldMapOf("battery_commander").marks.size() == m.marks.size());
+    std::printf("    the commander's post: %s\n", post.c_str());
     // A launcher commander holds nothing until his card comes with the combat order.
     SC_EXPECT(r.HeldMapOf("22:commander").marks.empty());
 }
