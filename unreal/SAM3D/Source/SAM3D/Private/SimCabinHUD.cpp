@@ -16,6 +16,24 @@ void ASimCabinHUD::DrawHUD()
 	APlayerController* OwnerPc = GetOwningPlayerController();
 	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	UFont* SmallFont = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	// M: the holder's map full screen (track O, O2); while it is open it has the keys and the mouse, and nothing else is drawn.
+	ASimOsaVehicle* MapVehicle = OwnerPc != nullptr ? Cast<ASimOsaVehicle>(OwnerPc->GetPawn()) : nullptr;
+	TickHeldMapShot(Sim, MapVehicle, OwnerPc);
+	if (OwnerPc != nullptr && MapVehicle != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !MapVehicle->IsMissionMenuOpen() &&
+		!MapVehicle->IsAtJournal() && !MapVehicle->IsCrewMenuOpen() &&
+		(OwnerPc->WasInputKeyJustPressed(EKeys::M) || (bShowHeldMap && OwnerPc->WasInputKeyJustPressed(EKeys::Escape))))
+	{
+		SetHeldMapOpen(OwnerPc, MapVehicle, !bShowHeldMap);
+	}
+	if (bShowHeldMap)
+	{
+		if (Canvas != nullptr && Sim != nullptr && MapVehicle != nullptr && Sim->IsScenarioRunning() && !MapVehicle->IsMissionMenuOpen())
+		{
+			DrawHeldMap(Sim, MapVehicle, OwnerPc);
+			return;
+		}
+		SetHeldMapOpen(OwnerPc, MapVehicle, false);
+	}
 	if (OwnerPc != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::B))
 	{
 		bShowBoard = !bShowBoard;
@@ -837,7 +855,8 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("U / I / P   «Есть!» / «Выполнено!» / «Повторите!»"),
 				TEXT("H   the helper: off, hints, on, watch the crewman"), TEXT("1-9   quick crew drills (outside the crew menu)"),
 				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)"),
-				TEXT("O   your map case: the papers handed in to you")}},
+				TEXT("O   your map case: the papers handed in to you"),
+				TEXT("M   your map: what reached you, each mark's source on hover; the battery commander decides and orders on it")}},
 		{TEXT("Headset and radios"),
 			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
 				TEXT("Y   answer a ringing line or telephone (again: put it down)")}},

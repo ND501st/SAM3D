@@ -1570,6 +1570,61 @@ bool USimWorldSubsystem::GiveCrewOrder(const FString& OrderId)
 	return Runner && Runner->GiveCrewOrder(ToStd(OrderId));
 }
 
+simcore::command::HeldMap USimWorldSubsystem::GetHeldMap(const FString& Station, FString& OutHolder) const
+{
+	OutHolder.Reset();
+	if (!Runner)
+	{
+		return simcore::command::HeldMap();
+	}
+	std::string Holder = Session.IsValid() ? Session->PlayerPost() : std::string();
+	if (Holder.empty())
+	{
+		const simcore::Battery* B = Runner->GetBattery();
+		if (Station == TEXT("battery_commander") && Runner->HasTask())
+		{
+			Holder = Runner->BatteryCommanderPost();
+		}
+		else if (B != nullptr && B->Own() != nullptr)
+		{
+			Holder = B->Own()->def.id + ":commander";
+		}
+	}
+	OutHolder = ToF(Holder);
+	return Session.IsValid() ? Session->HeldMapFor(Holder) : Runner->HeldMapOf(Holder);
+}
+
+bool USimWorldSubsystem::CanDecideOnMap(const FString& Station) const
+{
+	return Runner && Runner->HasTask() && Runner->TaskReceivedS() >= 0.0 && Station == TEXT("battery_commander") && !IsMirrorOnly();
+}
+
+bool USimWorldSubsystem::GiveCombatOrderFromMap(const simcore::command::BatteryDecision& Decision, TArray<FString>& OutBreaches, FString& OutWhy)
+{
+	OutBreaches.Reset();
+	OutWhy.Reset();
+	if (!Runner || !Runner->HasTask())
+	{
+		OutWhy = TEXT("no task from the regiment");
+		return false;
+	}
+	for (const simcore::command::DecisionBreach& B : Runner->SetBatteryDecision(Decision))
+	{
+		OutBreaches.Add(ToF(B.text));
+	}
+	if (!Runner->GiveCrewOrder("order_battery_combat_order"))
+	{
+		OutWhy = ToF(Runner->LastRefusal());
+		return false;
+	}
+	return true;
+}
+
+bool USimWorldSubsystem::GetTaskPlace(const FString& Id, simcore::Vec3& Out) const
+{
+	return Runner && Runner->TaskPlace(ToStd(Id), Out);
+}
+
 FSimDrillAdvice USimWorldSubsystem::GetAssistance(const FString& Station) const
 {
 	FSimDrillAdvice Out;

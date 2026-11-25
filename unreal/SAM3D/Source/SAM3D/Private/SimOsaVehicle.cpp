@@ -168,7 +168,8 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	{
 		HandleJournal(Pc, Sim);
 	}
-	APlayerController* KeysPc = bWasAtJournal ? nullptr : Pc;
+	// The held map open (M) takes the keys and the mouse the same way.
+	APlayerController* KeysPc = bWasAtJournal || bHeldMapOpen ? nullptr : Pc;
 	// Esc: the mission's menu (unless the crew menu is open: Esc closes that). Nothing else moves while it is open.
 	if (KeysPc != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !bMenuOpen && !bTouring && Pc->WasInputKeyJustPressed(EKeys::Escape))
 	{
@@ -182,13 +183,13 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	// The camera views (F1-F12) and the time keys; the free camera's W A S D are its own, not the driver's.
 	if (!bTouring && ShotDelayLeft < 0.0f)
 	{
-		Views->UpdateViews(Pc, DeltaSeconds);
+		Views->UpdateViews(bHeldMapOpen ? nullptr : Pc, DeltaSeconds);
 	}
 	// W A S D are the walker's feet while he is up in the cabin or out of the vehicle, not the driver's. In a mission only
 	// the driver's seat drives the hull (the commander orders it); with no scenario running the hull is the player's.
 	const bool bDriverSeat = bInCabin && Body == EBodyMode::Seat && StationId == TEXT("driver");
 	const bool bMayDrive = bDriverSeat || (Sim == nullptr || !Sim->IsScenarioRunning());
-	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() || !bMayDrive ? nullptr : Pc);
+	Drive(DeltaSeconds, Views->IsFreeCamera() || IsWalking() || IsOutside() || !bMayDrive ? nullptr : KeysPc);
 	if (bAutoBrake && SpeedMps == 0.0)
 	{
 		bAutoBrake = false;  // the lesson autoplay's halt is made
@@ -196,7 +197,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 	FollowGround();
 	if (Sim != nullptr && Sim->IsScenarioRunning())
 	{
-		if (Pc != nullptr && !bMenuOpen && Sim->IsBatteryLink() && Pc->WasInputKeyJustPressed(SwitchVehicleKey))
+		if (KeysPc != nullptr && !bMenuOpen && Sim->IsBatteryLink() && Pc->WasInputKeyJustPressed(SwitchVehicleKey))
 		{
 			Sim->SwitchLinkedVehicle();
 		}
@@ -221,7 +222,7 @@ void ASimOsaVehicle::Tick(float DeltaSeconds)
 			PendingSeat.Reset();
 		}
 		UpdateSim(Sim);
-		if (Pc != nullptr && Pc->WasInputKeyJustPressed(EKeys::F9) && (bInstructorOpen || Sim->CanInstruct()))
+		if (KeysPc != nullptr && Pc->WasInputKeyJustPressed(EKeys::F9) && (bInstructorOpen || Sim->CanInstruct()))
 		{
 			SetInstructorOpen(!bInstructorOpen);
 		}

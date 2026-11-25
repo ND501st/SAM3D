@@ -4,6 +4,9 @@
 #include "GameFramework/HUD.h"
 #include "SimCabinHUD.generated.h"
 
+/** The held map's view, its cached map and the commander's draft (SimHeldMap.cpp). */
+struct FSimHeldMapState;
+
 /**
  * The player's HUD: in the cabin a crosshair, the name and state of the control under it, feedback from the last action
  * and the key help; outside, the camera view's name (F1-F11). Everywhere the radio lines, the time compression, the
@@ -28,6 +31,12 @@ public:
 	/** The seat's map case open (toggled with O): the papers the chain of command has handed in (roadmap P1). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Command")
 	bool bShowMapCase = false;
+
+	/** The holder's map full screen (toggled with M; track O, O2): the sheet with what reached him, each mark's source on
+	 *  hover; at the battery commander's seat his decision drawn on it and the combat order given from it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Command")
+	bool bShowHeldMap = false;
+
 
 	/** The lesson card's lower edge this frame (0: no card); the crew menu opens below it. */
 	float GuideBottom = 0.0f;
@@ -92,4 +101,17 @@ private:
 	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
 	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 	void DrawInstructor(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
+	/** M: open or close the held map; it takes the mouse (a cursor) and the keys from the cabin. */
+	void SetHeldMapOpen(APlayerController* Pc, class ASimOsaVehicle* Vehicle, bool bOpen);
+	/** The held map (M): its keys and mouse, then the sheet drawn (SimHeldMap.cpp). */
+	void DrawHeldMap(class USimWorldSubsystem* Sim, class ASimOsaVehicle* Vehicle, APlayerController* Pc);
+	/** -SimHeldMapShot=<file.png>: once the campaign's task has reached the player, open M and photograph it, then with a
+	 *  decision drawn, then quit (one look, track O's O2). */
+	void TickHeldMapShot(class USimWorldSubsystem* Sim, class ASimOsaVehicle* Vehicle, APlayerController* Pc);
+	TSharedPtr<FSimHeldMapState> HeldMapState;
+	bool bHeldMapShotParsed = false;
+	FString HeldMapShotFile;
+	int32 HeldMapShotStep = 0;
+	double HeldMapShotClock = 0.0;
+
 };

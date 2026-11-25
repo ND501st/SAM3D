@@ -1271,6 +1271,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	bool GiveCrewOrder(const FString& OrderId);
 
+	/** The map the player's character holds (track O, O2; simcore/command/held_map.hpp): in a campaign his post's, from what
+	 *  reached it through the pipeline (the net's player), else in the scenario the battery commander's (at his seat) or the
+	 *  own launcher's commander's from his sector card. OutHolder: whose. Nothing on it the holder was not told. */
+	simcore::command::HeldMap GetHeldMap(const FString& Station, FString& OutHolder) const;
+	/** The battery commander decides at his seat once the regiment's task has reached him. */
+	bool CanDecideOnMap(const FString& Station) const;
+	/** The battery commander's decision from his map, then the combat order given with it (O2): the march to the decided main,
+	 *  the decided sectors, the sector cards. OutBreaches: what it breaks of the order (listed, never refused); false with
+	 *  OutWhy when the order cannot be given now (the decision is kept for when it is). */
+	bool GiveCombatOrderFromMap(const simcore::command::BatteryDecision& Decision, TArray<FString>& OutBreaches, FString& OutWhy);
+	/** The order's point of a place (the task's positions), in the session's ENU metres; false if unknown. */
+	bool GetTaskPlace(const FString& Id, simcore::Vec3& Out) const;
+	const simcore::campaign::MissionSession* GetCampaignSession() const { return Session.Get(); }
+
 	/** The drill master's best next move for a seat toward a task of the crew data (e.g. "ready_halted"): the
 	 *  training overlay's highlight. Runs the ideal crew on a copy of the console: call it when the state changes or
 	 *  the player asks for help, not every frame. */
