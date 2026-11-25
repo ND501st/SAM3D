@@ -549,9 +549,10 @@ SC_TEST("ground commanders (F3.4): our counterattack into the penetration, back 
     const int div = FormationOf(g, "red_div"), acr = FormationOf(g, "red_acr"), td = FormationOf(g, "blue_td");
     Logged log;
     double deepest = 0.0, at_start = -1.0, div_at = 0.0, acr_at = 0.0, div_loss = 0.0, acr_loss = 0.0;
-    bool never_negative = true;
+    bool never_negative = true, td_in = false;
     Run(g, line, env, 24 * 6, log, [&](int) {
         const Axis& x = g.Axes()[0];
+        td_in = td_in || std::find(x.counter.begin(), x.counter.end(), td) != x.counter.end();
         deepest = std::max(deepest, x.depth_m);
         never_negative = never_negative && x.depth_m >= 0.0;
         for (std::size_t i = 0; i < line.StationCount(); ++i) never_negative = never_negative && line.StationOffset(i) >= 0.0;
@@ -569,8 +570,9 @@ SC_TEST("ground commanders (F3.4): our counterattack into the penetration, back 
     });
     log.Print(g);
     const GroundLogEntry* ordered = log.First(GroundOrder::CounterattackOrdered);
-    const GroundLogEntry* starts = log.First(GroundOrder::CounterattackStarts, td);
-    SC_EXPECT(ordered != nullptr && starts != nullptr);
+    // F7.1: the force goes in together, so the start is logged for whichever of it is first; the tank division is in it.
+    const GroundLogEntry* starts = log.First(GroundOrder::CounterattackStarts);
+    SC_EXPECT(ordered != nullptr && starts != nullptr && td_in);
     if (ordered == nullptr || starts == nullptr) return;
     SC_EXPECT(ordered->cmdr == g.TopOf(Side::Ours));  // the army commander's
     SC_EXPECT(ordered->value >= CounterattackRatioOf(Tables(), g.Commanders()[static_cast<std::size_t>(ordered->cmdr)].traits) - 1e-9);
@@ -974,7 +976,7 @@ SC_TEST("ground counterattack (F7.1): our army's reserve on the nation: about a 
         int n = 0;
         for (std::size_t i = 0; i < g.Formations().size(); ++i) {
             const Formation& f = g.Formations()[i];
-            if (f.unit.side != Side::Ours) continue;
+            if (f.unit.side != Side::Ours || f.front) continue;  // F8.1: the national command's reserve is not the army's
             all += PowerOf(g, static_cast<int>(i));
             if (f.role != DeployRole::Reserve) continue;
             ++n;
@@ -994,4 +996,470 @@ SC_TEST("ground counterattack (F7.1): our army's reserve on the nation: about a 
         std::printf("    %-12s the reserve %.1f %% of the army (doctrine %.1f %%), %.0f km behind the line\n", faction, 100.0 * share, 100.0 * norm,
                     dep->reserve_depth_km);
     }
+}
+
+// ------------------------------------------------------------------------------------------------- the front reserve (F8.1)
+
+namespace {
+
+// F8.1's war: the tip's war with our army's reserve too weak to counterattack alone (100 tanks against the tip), and the
+// national command's reserve, a division of three 250-tank regiments and an artillery regiment under the national
+// command over our army, at home 70 km behind the east axis. `block` false: the same order of battle without the
+// "front_reserve" block.
+std::shared_ptr<GroundWarData> FrontData(bool block, double reach_h = 24.0) {
+    std::shared_ptr<GroundWarData> d = TipData();
+    d->ours.doctrine.effectiveness.degraded_below = 2.0 / 3.0;
+    d->ours.doctrine.effectiveness.ineffective_below = 0.5;
+    for (command::OobUnit& u : d->ours.oob.units) {
+        if (u.id == "blue_tb") u.equipment = {{"t55", 100}};
+        if (u.id == "blue_army") u.parent = "blue_land";
+    }
+    d->ours.oob.units.push_back(Unit("blue_land", "service", 0, 0));
+    AddDivision(*d, false, "blue_td", "blue_land", 250);
+    if (block) {
+        FrontReserveDef& r = d->ours.front_reserve;
+        r.present = true;
+        r.unit = "blue_td";
+        r.command = "blue_land";
+        r.place = At("blue_td_home", 75, 70);
+        r.planning_h = ValueRange{6.0, 12.0};
+        r.reach_h = reach_h;
+    }
+    return d;
+}
+
+const GroundLogEntry* FirstOrderBy(const Logged& log, GroundOrder o, int cmdr) {
+    for (const GroundLogEntry& e : log.all) {
+        if (e.what == GroundNote::Order && e.order == o && e.cmdr == cmdr) return &e;
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+SC_TEST("front reserve (F8.1): held out of the line until the front's commander commits it, on the tip rule, within his reach") {
+    std::shared_ptr<GroundWarData> d = FrontData(true);
+    TipWar w(d);
+    GroundWar& g = w.g;
+    const int td = FormationOf(g, "blue_td"), tb = FormationOf(g, "blue_tb");
+    SC_EXPECT(td >= 0 && tb >= 0 && g.FrontReserve() == td && g.FrontCommander() >= 0);
+    if (td < 0 || tb < 0 || g.FrontCommander() < 0) return;
+    const Formation& r = g.Formations()[static_cast<std::size_t>(td)];
+    const GroundCommander& front = g.Commanders()[static_cast<std::size_t>(g.FrontCommander())];
+    // Its own: at its home, free, out of every sector; its commander answers to the front's, who is not the army's top.
+    SC_EXPECT(r.front && r.free && r.first_sector < 0 && r.unit.state == UnitState::Reserve);
+    SC_EXPECT_NEAR(r.pos.x, 75000.0, 1e-6);
+    SC_EXPECT_NEAR(r.pos.y, 70000.0, 1e-6);
+    SC_EXPECT(r.anchor == "blue_td_home" && r.regiment_count == 4);
+    SC_EXPECT(front.front && !front.top && front.unit == "blue_land" && g.TopOf(Side::Ours) != g.FrontCommander());
+    SC_EXPECT(r.cmdr >= 0 && g.Commanders()[static_cast<std::size_t>(r.cmdr)].senior == g.FrontCommander());
+    const Axis& x = g.Axes()[0];
+    bool held = true, army_short = true;
+    double ours_at_order = 0.0, tip_at_order = 0.0;
+    int order_h = -1, together = -1;
+    Run(g, w.line, w.env, 24 * 6, w.log, [&](int h) {
+        // The whole force goes in together: when the counterattack starts, the division and the brigade are both in it.
+        if (together < 0 && w.log.First(GroundOrder::CounterattackStarts) != nullptr) {
+            const bool d_in = std::find(x.counter.begin(), x.counter.end(), td) != x.counter.end();
+            const bool b_in = std::find(x.counter.begin(), x.counter.end(), tb) != x.counter.end();
+            together = d_in && b_in ? 1 : 0;
+        }
+        if (w.log.First(GroundOrder::CounterattackOrdered) == nullptr) {
+            // Out of the line until committed; never sent by the army, as a counterattack or a relief.
+            held = held && r.free && r.task == Task::None && r.unit.state == UnitState::Reserve;
+            for (int fi : x.defenders) held = held && fi != td;
+            for (int fi : x.depth_defenders) held = held && fi != td;
+        } else if (order_h < 0) {
+            order_h = h;
+            for (int fi = 0; fi < static_cast<int>(g.Formations().size()); ++fi) {
+                const Formation& f = g.Formations()[static_cast<std::size_t>(fi)];
+                const bool depth = std::find(x.depth_defenders.begin(), x.depth_defenders.end(), fi) != x.depth_defenders.end();
+                if (f.unit.side == Side::Ours && f.role != DeployRole::Support && (f.free || depth || f.task == Task::Counter)) ours_at_order += PowerOf(g, fi);
+            }
+            tip_at_order = g.TipPowerTruth(0);
+            // The army's own free force at the tip, under his ratio: he could not have gone in alone.
+            const GroundCommander& army = g.Commanders()[static_cast<std::size_t>(g.TopOf(Side::Ours))];
+            army_short = PowerOf(g, tb) / tip_at_order < CounterattackRatioOf(Tables(), army.traits);
+        }
+    });
+    w.log.Print(g);
+    const GroundLogEntry* ordered = w.log.First(GroundOrder::CounterattackOrdered);
+    SC_EXPECT(held && army_short);
+    SC_EXPECT(ordered != nullptr && order_h >= 0);
+    if (ordered == nullptr) return;
+    // The front's commander's order, on his ratio, once the momentum was spent: his force in reach (his reserve and the army's
+    // brigade) over the enemy at the tip, by hand.
+    SC_EXPECT(ordered->cmdr == g.FrontCommander());
+    SC_EXPECT(ordered->value >= CounterattackRatioOf(Tables(), front.traits) - 1e-9);
+    SC_EXPECT_NEAR(ordered->value, ours_at_order / tip_at_order, 0.02 * ordered->value);
+    SC_EXPECT(g.FrontOrders() >= 1 && g.FrontOrderedRatioSum() >= ordered->value - 1e-9);
+    // It goes in after his planning (6-12 h) and its march, within his reach of the order.
+    const GroundLogEntry* starts = w.log.First(GroundOrder::CounterattackStarts);
+    SC_EXPECT(starts != nullptr && together == 1);
+    if (starts != nullptr) {
+        SC_EXPECT(starts->h - ordered->h >= 6.0 - 1.0);
+        SC_EXPECT(starts->h - ordered->h <= 24.0 + 1.0);
+    }
+    std::printf("    the front ordered at %.0f h on %.2f : 1 at the tip (his line %.2f; the army's brigade alone %.2f), in at %.0f h\n", ordered->h, ordered->value,
+                CounterattackRatioOf(Tables(), front.traits), PowerOf(g, tb) / tip_at_order, starts != nullptr ? starts->h : -1.0);
+}
+
+SC_TEST("front reserve (F8.1): no counterstrike it cannot reach in time; the army never sends it") {
+    // His reach under his least planning: never in reach, so never weighed and never sent; the army's brigade is too weak alone.
+    std::shared_ptr<GroundWarData> d = FrontData(true, 1.0);
+    TipWar w(d);
+    Run(w.g, w.line, w.env, 24 * 6, w.log, [](int) {});
+    const int td = FormationOf(w.g, "blue_td");
+    SC_EXPECT(td >= 0 && w.g.FrontCommander() >= 0);
+    if (td < 0 || w.g.FrontCommander() < 0) return;
+    const Formation& r = w.g.Formations()[static_cast<std::size_t>(td)];
+    SC_EXPECT(w.log.First(GroundOrder::CounterattackOrdered) == nullptr && w.log.First(GroundOrder::ReliefOrdered, td) == nullptr);
+    SC_EXPECT(r.free && r.task == Task::None && r.unit.state == UnitState::Reserve && w.g.FrontOrders() == 0);
+    SC_EXPECT(w.g.FrontBestRatio() == 0.0);
+    SC_EXPECT(FirstOrderBy(w.log, GroundOrder::CounterattackOrdered, w.g.FrontCommander()) == nullptr);
+    // The front's commander still watched: he decided while a penetration was a target and his reserve free.
+    const int decided = w.g.Commanders()[static_cast<std::size_t>(w.g.FrontCommander())].decisions;
+    SC_EXPECT(decided > 0);
+    std::printf("    reach 1 h: no order; the front's commander decided %d times\n", decided);
+}
+
+SC_TEST("front reserve (F8.1): without its block (or F7.1's) the division is never built, and the war is the war without it") {
+    // The same order of battle, no block: no front reserve, no front commander, and every order as in the war whose order of
+    // battle never had the division (TipData with the same weak brigade).
+    std::shared_ptr<GroundWarData> none = FrontData(false);
+    std::shared_ptr<GroundWarData> bare = TipData();
+    bare->ours.doctrine.effectiveness = none->ours.doctrine.effectiveness;
+    for (command::OobUnit& u : bare->ours.oob.units) {
+        if (u.id == "blue_tb") u.equipment = {{"t55", 100}};
+    }
+    TipWar a(none), b(bare);
+    SC_EXPECT(FormationOf(a.g, "blue_td") < 0 && a.g.FrontReserve() < 0 && a.g.FrontCommander() < 0);
+    SC_EXPECT(a.g.Formations().size() == b.g.Formations().size() && a.g.Commanders().size() == b.g.Commanders().size());
+    Run(a.g, a.line, a.env, 24 * 6, a.log, [](int) {});
+    Run(b.g, b.line, b.env, 24 * 6, b.log, [](int) {});
+    bool same = a.log.all.size() == b.log.all.size();
+    for (std::size_t k = 0; same && k < a.log.all.size(); ++k) {
+        const GroundLogEntry& p = a.log.all[k];
+        const GroundLogEntry& q = b.log.all[k];
+        same = p.h == q.h && p.what == q.what && p.order == q.order && p.formation == q.formation && p.cmdr == q.cmdr && p.value == q.value;
+    }
+    SC_EXPECT(same);
+    SC_EXPECT(a.g.Axes()[0].depth_m == b.g.Axes()[0].depth_m);
+    // With the block but without F7.1's counterattack at the tip: none either.
+    std::shared_ptr<GroundWarData> old = FrontData(true);
+    old->tables.counter_at_tip = false;
+    TipWar c(old);
+    SC_EXPECT(FormationOf(c.g, "blue_td") < 0 && c.g.FrontCommander() < 0);
+    std::printf("    %zu log entries the same; the line %.1f km in either way\n", a.log.all.size(), a.g.Axes()[0].depth_m / 1000.0);
+}
+
+SC_TEST("front reserve (F8.1): the 11th Tank Division on the nation: the national command's, at its home, out of every war's line") {
+    for (const char* faction : {"warsaw_pact", "nato", "neutral", "rebels"}) {
+        std::string e;
+        AirWarData d;
+        SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", std::string("air_war/faction_") + faction + ".json", d, &e));
+        auto gd = std::make_shared<GroundWarData>();
+        SC_EXPECT(LoadGroundWarData(kData, faction, *gd, &e));
+        const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+        SC_EXPECT(front != nullptr && d.country != nullptr && gd->ours.front_reserve.present);
+        if (front == nullptr || d.country == nullptr) return;
+        LineOfContact line;
+        line.Build(*front, d.tuning.Get("air_front.station_m"));
+        GroundWar g;
+        SC_EXPECT(g.Build(gd, line, d.theatre, d.country.get(), 21, &e));
+        const int td = g.FrontReserve();
+        SC_EXPECT(td >= 0 && td == FormationOf(g, "td_11") && g.FrontCommander() >= 0);
+        if (td < 0 || g.FrontCommander() < 0) return;
+        const Formation& f = g.Formations()[static_cast<std::size_t>(td)];
+        SC_EXPECT(f.front && f.free && f.anchor == "cegled_junction" && f.first_sector < 0);
+        SC_EXPECT(g.Commanders()[static_cast<std::size_t>(g.FrontCommander())].unit == "ground_forces");
+        double army = 0.0;
+        for (std::size_t i = 0; i < g.Formations().size(); ++i) {
+            const Formation& o = g.Formations()[i];
+            if (o.unit.side == Side::Ours && !o.front) army += PowerOf(g, static_cast<int>(i));
+        }
+        for (const Axis& x : g.Axes()) {
+            for (int fi : x.defenders) SC_EXPECT(fi != td);
+            for (int fi : x.depth_defenders) SC_EXPECT(fi != td);
+        }
+        const FrontPlace pl = line.Place(f.pos);
+        std::printf("    %-12s the 11th Tank Division %.0f %% of the army's power, its home %.0f km behind the line\n", faction,
+                    army > 0.0 ? 100.0 * PowerOf(g, td) / army : 0.0, pl.side * pl.distance_m / 1000.0);
+        // Without the block: one formation fewer, no front commander.
+        auto off = std::make_shared<GroundWarData>(*gd);
+        off->ours.front_reserve.present = false;
+        GroundWar h;
+        SC_EXPECT(h.Build(off, line, d.theatre, d.country.get(), 21, &e));
+        SC_EXPECT(h.Formations().size() + 1 == g.Formations().size() && h.FrontCommander() < 0 && FormationOf(h, "td_11") < 0);
+    }
+}
+
+// ------------------------------------------------------------------------------------------ F8.2: command or artillery hit
+
+namespace {
+
+// F8.2's hand war: the enemy's offensive a month out (no fighting; start_h to fight), our two divisions on the line, the
+// doctrine's lines (2/3, 1/2, 3/4 hit). blue_a has its own command post; blue_b its regiments (two of tanks, one of
+// artillery, each with a troops object); the army's command post is no formation's; a reserve division to relieve.
+// The command post restored in 8 h (a test value inside the division's reaction time; the doctrine's is 1-3 h).
+enum : std::size_t { kACp = 0, kBArt = 1, kBR1 = 2, kArmyCp = 3 };
+
+struct HitWar {
+    LineOfContact line;
+    TheatreDef theatre;
+    std::vector<ObjectState> truth;
+    GroundEnv env;
+    GroundWar g;
+    Logged log;
+    int a = -1, b = -1;
+    explicit HitWar(bool block, double start_h = 24.0 * 30.0) {
+        std::shared_ptr<GroundWarData> d = Bare();
+        EffectivenessDef e;
+        e.kind = EffectivenessKind::Lines;
+        e.degraded_below = 0.667;
+        e.ineffective_below = 0.5;
+        e.hq_hit_ineffective_below = 0.75;
+        d->ours.doctrine.effectiveness = e;
+        d->enemy.doctrine.effectiveness = e;
+        d->ours.doctrine.restore_control_h = ValueRange{8.0, 8.0};
+        d->tables.command_hit.on = block;
+        d->enemy.plan.start_after_h = start_h;
+        d->enemy.oob.units.push_back(Unit("red_div", "division", 700, 10000));
+        AddAxis(*d, "east", "east", 75, 200, {"red_div"});
+        command::OrderOfBattle& o = d->ours.oob;
+        o.units.push_back(Unit("blue_army", "army", 0, 500));
+        o.units.back().objects = {"army_cp"};
+        o.units.push_back(Unit("blue_a", "division", 160, 10000, "blue_army"));
+        o.units.back().objects = {"a_cp"};
+        o.units.push_back(Unit("blue_b", "division", 0, 1000, "blue_army"));
+        o.units.push_back(Unit("b_r1", "regiment", 60, 3000, "blue_b"));
+        o.units.back().objects = {"b_r1_area"};
+        o.units.push_back(Unit("b_r2", "regiment", 60, 3000, "blue_b"));
+        o.units.push_back(Unit("b_art", "regiment", 0, 2000, "blue_b"));
+        o.units.back().objects = {"b_art_area"};
+        o.units.push_back(Unit("blue_res", "division", 160, 10000, "blue_army"));
+        Deploy(*d, "blue_a", DeployRole::FirstEchelon, {"east"});
+        Deploy(*d, "blue_b", DeployRole::FirstEchelon, {"west"});
+        Deploy(*d, "blue_res", DeployRole::Reserve, {}, 75, 40);
+        const auto add = [this](const std::string& id, ObjectKind kind, double e_km, double n_km) {
+            TheatreObject t;
+            t.id = id;
+            t.name = id;
+            t.kind = kind;
+            t.pos = Km(e_km, n_km);
+            theatre.objects.push_back(t);
+            ObjectState s;
+            s.id = id;
+            s.pos = t.pos;
+            truth.push_back(s);
+        };
+        add("a_cp", ObjectKind::CommandPost, 75, 20);
+        add("b_art_area", ObjectKind::Troops, 25, 20);
+        add("b_r1_area", ObjectKind::Troops, 20, 10);
+        add("army_cp", ObjectKind::CommandPost, 50, 60);
+        line.Build(StraightFront(), 5000.0);
+        env.theatre = &theatre;
+        env.truth = &truth;
+        std::string err;
+        SC_EXPECT(g.Build(d, line, theatre, nullptr, 7, &err));
+        if (!err.empty()) std::printf("    %s\n", err.c_str());
+        a = FormationOf(g, "blue_a");
+        b = FormationOf(g, "blue_b");
+    }
+    const Formation& F(int i) const { return g.Formations()[static_cast<std::size_t>(i)]; }
+    // Steps to hour `to`, the log kept.
+    void To(int to) {
+        for (int h = static_cast<int>(g.Now()) + 1; h <= to; ++h) {
+            g.Step(static_cast<double>(h), env, line);
+            log.Take(g);
+        }
+    }
+    const GroundLogEntry* Hit(int formation, CommandHitKind kind) const {
+        for (const GroundLogEntry& e : log.all) {
+            if (e.what == GroundNote::CommandHit && e.formation == formation && e.other == static_cast<int>(kind)) return &e;
+        }
+        return nullptr;
+    }
+    int Hits() const {
+        int n = 0;
+        for (const GroundLogEntry& e : log.all) n += e.what == GroundNote::CommandHit ? 1 : 0;
+        return n;
+    }
+};
+
+}  // namespace
+
+SC_TEST("command hit (F8.2): its command post hit, a division at 66 % asks to withdraw on the 3/4 line and is relieved; one not hit does not") {
+    SC_EXPECT(Tables().command_hit.on);  // the data's block
+    HitWar w(true);
+    SC_EXPECT(w.a >= 0 && w.b >= 0);
+    if (w.a < 0 || w.b < 0) return;
+    // Only blue_a's own command post is a formation's: the army's is not.
+    SC_EXPECT(w.g.CommandTies().size() == 1 && w.g.CommandTies()[0].object == static_cast<int>(kACp) && w.g.CommandTies()[0].formation == w.a);
+    w.To(1);
+    w.g.TestLoss(static_cast<std::size_t>(w.a), 0.34);
+    w.g.TestLoss(static_cast<std::size_t>(w.b), 0.34);
+    SC_EXPECT_NEAR(w.F(w.a).unit.Fraction(), 0.66, 1e-3);  // its rest rate's hour on top
+    SC_EXPECT(w.g.AskLine(static_cast<std::size_t>(w.a)) < 0.6 && w.g.AskLine(static_cast<std::size_t>(w.b)) < 0.6);
+    // blue_a's command post struck; blue_b's tank regiment struck (its commander looks at his unit: under 2/3, he reports).
+    w.truth[kACp].function = 0.4;
+    const int r1 = w.g.TieOf(kBR1);
+    SC_EXPECT(r1 >= 0 && !w.g.Ties()[static_cast<std::size_t>(r1)].artillery);
+    if (r1 >= 0) w.g.AirStrike(static_cast<std::size_t>(r1), 0.05, w.g.Now());
+    w.To(2);
+    SC_EXPECT(w.g.HitKnown(static_cast<std::size_t>(w.a)) && !w.g.HitKnown(static_cast<std::size_t>(w.b)));
+    SC_EXPECT_NEAR(w.g.AskLine(static_cast<std::size_t>(w.a)), 0.75, 1e-12);
+    w.To(48);
+    w.log.Print(w.g);
+    const GroundLogEntry* hit = w.Hit(w.a, CommandHitKind::CommandPost);
+    const GroundLogEntry* asked = w.log.First(GroundOrder::WithdrawAsked, w.a);
+    SC_EXPECT(hit != nullptr && asked != nullptr);
+    if (hit == nullptr || asked == nullptr) return;
+    SC_EXPECT(hit->h == 1.0 && hit->value == 8.0);
+    SC_EXPECT(asked->h > hit->h && asked->h <= hit->h + 8.0 && asked->value < 0.75 && asked->value > 0.5);
+    SC_EXPECT(w.log.Count(GroundOrder::ReliefOrdered) == 1 && w.F(w.a).withdrawals == 1);
+    // blue_b: decided (reported, under 2/3) on its own line; never asked.
+    SC_EXPECT(w.log.Count(GroundOrder::Reported, w.b) == 1 && w.log.Count(GroundOrder::WithdrawAsked, w.b) == 0 && w.F(w.b).withdrawals == 0);
+    SC_EXPECT(w.Hits() == 1 && w.F(w.a).hits[0] == 1);
+}
+
+SC_TEST("command hit (F8.2): known only as its staff learns it: the command post at the hour's start, the artillery by its report") {
+    HitWar w(true);
+    if (w.a < 0 || w.b < 0) return;
+    w.To(1);
+    // A loss is not a hit; nor is a strike on the army's command post, nor on a tank regiment.
+    w.g.TestLoss(static_cast<std::size_t>(w.a), 0.30);
+    w.truth[kArmyCp].function = 0.2;
+    const int r1 = w.g.TieOf(kBR1), art = w.g.TieOf(kBArt);
+    SC_EXPECT(r1 >= 0 && art >= 0);
+    if (r1 < 0 || art < 0) return;
+    w.g.AirStrike(static_cast<std::size_t>(r1), 0.5, w.g.Now());
+    w.To(4);
+    SC_EXPECT(!w.g.HitKnown(static_cast<std::size_t>(w.a)) && !w.g.HitKnown(static_cast<std::size_t>(w.b)) && w.Hits() == 0);
+    // The command post struck between the hours: its staff has it at the next hour's start, not before.
+    w.truth[kACp].function = 0.5;
+    SC_EXPECT(!w.g.HitKnown(static_cast<std::size_t>(w.a)));
+    w.To(5);
+    SC_EXPECT(w.g.HitKnown(static_cast<std::size_t>(w.a)));
+    // The artillery struck from the air: blue_b's staff has it by the artillery's report, own_delay_h later.
+    SC_EXPECT(w.g.Ties()[static_cast<std::size_t>(art)].artillery && w.g.Ties()[static_cast<std::size_t>(art)].regiment >= 0);
+    const double at = w.g.Now();
+    const double delay = Tables().picture.own_delay_h;
+    w.g.AirStrike(static_cast<std::size_t>(art), 0.5, at);
+    SC_EXPECT(!w.g.HitKnown(static_cast<std::size_t>(w.b)));
+    w.To(static_cast<int>(at + delay));
+    SC_EXPECT(!w.g.HitKnown(static_cast<std::size_t>(w.b)));
+    w.To(static_cast<int>(at + delay) + 1);
+    SC_EXPECT(w.g.HitKnown(static_cast<std::size_t>(w.b)));
+    const GroundLogEntry* hit = w.Hit(w.b, CommandHitKind::ArtilleryStruck);
+    SC_EXPECT(hit != nullptr && std::fabs(hit->h - (at + delay)) < 1e-9);
+    // Seen once: the command post's share standing low again is no new hit; risen and struck again is.
+    const int before = w.Hits();
+    const int now = static_cast<int>(w.g.Now());
+    w.To(now + 2);
+    SC_EXPECT(w.Hits() == before);
+    w.truth[kACp].function = 0.9;
+    w.To(now + 3);
+    w.truth[kACp].function = 0.3;
+    w.To(now + 4);
+    SC_EXPECT(w.Hits() == before + 1 && w.F(w.a).hits[0] == 2);
+}
+
+SC_TEST("command hit (F8.2): it wears off as command is restored: the command post's in restore_control_h, the artillery's in 12-24 h") {
+    HitWar w(true);
+    if (w.a < 0 || w.b < 0) return;
+    const double base = w.g.AskLine(static_cast<std::size_t>(w.a));
+    w.To(1);
+    w.truth[kACp].function = 0.5;
+    w.To(2);
+    SC_EXPECT(w.g.HitKnown(static_cast<std::size_t>(w.a)) && w.F(w.a).hit_until_h == 9.0);
+    w.To(8);
+    SC_EXPECT(w.g.HitKnown(static_cast<std::size_t>(w.a)));
+    w.To(10);
+    SC_EXPECT(!w.g.HitKnown(static_cast<std::size_t>(w.a)) && w.g.AskLine(static_cast<std::size_t>(w.a)) == base);
+    // The artillery's: drawn in the data's 12-24 h; a second hit inside it holds the line to the later end.
+    const int art = w.g.TieOf(kBArt);
+    if (art < 0) return;
+    w.g.AirStrike(static_cast<std::size_t>(art), 0.5, w.g.Now());
+    w.To(14);
+    const GroundLogEntry* hit = w.Hit(w.b, CommandHitKind::ArtilleryStruck);
+    SC_EXPECT(hit != nullptr);
+    if (hit == nullptr) return;
+    const ValueRange r = Tables().command_hit.artillery_restore_h;
+    SC_EXPECT(hit->value >= r.lo - 1e-9 && hit->value <= r.hi + 1e-9);
+    const double end = w.F(w.b).hit_until_h;
+    SC_EXPECT_NEAR(end, hit->h + hit->value, 1e-9);
+    w.To(static_cast<int>(std::ceil(end)) - 1);
+    SC_EXPECT(w.g.HitKnown(static_cast<std::size_t>(w.b)));
+    w.To(static_cast<int>(std::ceil(end)) + 1);
+    SC_EXPECT(!w.g.HitKnown(static_cast<std::size_t>(w.b)));
+    std::printf("    the command post's hit 8 h (a test value), the artillery's %.1f h\n", hit->value);
+}
+
+SC_TEST("command hit (F8.2): without its block no hit is learned, the line is the ask line, and the war is the war without it") {
+    // The same strikes without the block: no command post watched, no hit, no ask at 70 %.
+    HitWar off(false);
+    if (off.a < 0 || off.b < 0) return;
+    SC_EXPECT(off.g.CommandTies().empty());
+    off.To(1);
+    off.g.TestLoss(static_cast<std::size_t>(off.a), 0.30);
+    off.truth[kACp].function = 0.4;
+    const int art = off.g.TieOf(kBArt);
+    if (art >= 0) off.g.AirStrike(static_cast<std::size_t>(art), 0.5, off.g.Now());
+    off.To(48);
+    SC_EXPECT(off.Hits() == 0 && !off.g.HitKnown(static_cast<std::size_t>(off.a)) && !off.g.HitKnown(static_cast<std::size_t>(off.b)));
+    SC_EXPECT(off.log.Count(GroundOrder::WithdrawAsked) == 0 && off.g.AskLine(static_cast<std::size_t>(off.a)) < 0.6);
+    // With the block and nothing hit, a war fought for four days: every entry and strength as without it.
+    HitWar p(true, 2.0), q(false, 2.0);
+    if (p.a < 0 || q.a < 0) return;
+    for (HitWar* w : {&p, &q}) {
+        w->To(1);
+        w->g.TestLoss(static_cast<std::size_t>(w->a), 0.40);
+        const int r1 = w->g.TieOf(kBR1);
+        if (r1 >= 0) w->g.AirStrike(static_cast<std::size_t>(r1), 0.5, w->g.Now());
+        w->To(24 * 4);
+    }
+    bool same = p.log.all.size() == q.log.all.size() && !p.log.all.empty();
+    for (std::size_t k = 0; same && k < p.log.all.size(); ++k) {
+        const GroundLogEntry& x = p.log.all[k];
+        const GroundLogEntry& y = q.log.all[k];
+        same = x.h == y.h && x.what == y.what && x.order == y.order && x.formation == y.formation && x.cmdr == y.cmdr && x.value == y.value;
+    }
+    SC_EXPECT(same);
+    for (std::size_t i = 0; i < p.g.Formations().size(); ++i) SC_EXPECT(p.g.Formations()[i].unit.strength == q.g.Formations()[i].unit.strength);
+    std::printf("    %zu log entries the same with the block and without\n", p.log.all.size());
+}
+
+SC_TEST("command hit (F8.2): on the nation, each division's own command post and artillery; the army's and the regiments' are not") {
+    std::string e;
+    AirWarData d;
+    SC_EXPECT(LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_warsaw_pact.json", d, &e));
+    auto gd = std::make_shared<GroundWarData>();
+    SC_EXPECT(LoadGroundWarData(kData, "warsaw_pact", *gd, &e));
+    const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+    SC_EXPECT(front != nullptr && gd->tables.command_hit.on);
+    if (front == nullptr) return;
+    // Both doctrines' 3/4 line, and our restore of control (mt_stashek_losses).
+    SC_EXPECT(gd->ours.doctrine.effectiveness.hq_hit_ineffective_below == 0.75 && gd->enemy.doctrine.effectiveness.hq_hit_ineffective_below == 0.75);
+    SC_EXPECT(gd->ours.doctrine.restore_control_h.lo == 1.0 && gd->ours.doctrine.restore_control_h.hi == 3.0);
+    LineOfContact line;
+    line.Build(*front, d.tuning.Get("air_front.station_m"));
+    GroundWar g;
+    SC_EXPECT(g.Build(gd, line, d.theatre, d.country.get(), 21, &e));
+    const auto object = [&d](int k) { return d.theatre.objects[static_cast<std::size_t>(k)].id; };
+    std::vector<std::string> cps, arts;
+    for (const CommandTie& c : g.CommandTies()) cps.push_back(object(c.object) + ":" + g.Formations()[static_cast<std::size_t>(c.formation)].unit.id);
+    for (const TroopsTie& t : g.Ties()) {
+        if (t.artillery) arts.push_back(object(t.object) + ":" + g.Formations()[static_cast<std::size_t>(t.formation)].unit.id);
+    }
+    const auto has = [](const std::vector<std::string>& v, const std::string& s) { return std::find(v.begin(), v.end(), s) != v.end(); };
+    SC_EXPECT(has(cps, "mrd9_hq:mrd_9") && has(cps, "sw_brigade_cp:sw_brigade"));
+    SC_EXPECT(has(arts, "mrd7_artillery:mrd_7") && has(arts, "mrd9_artillery:mrd_9"));
+    for (const std::string& s : cps) SC_EXPECT(s.find("army_") != 0 && s.find("general_staff") != 0);
+    for (const std::string& s : arts) SC_EXPECT(s.find("tr_") != 0 && s.find("group_") != 0);
+    std::string all;
+    for (const std::string& s : cps) all += " " + s;
+    all += " |";
+    for (const std::string& s : arts) all += " " + s;
+    std::printf("    command posts and artillery:%s\n", all.c_str());
 }

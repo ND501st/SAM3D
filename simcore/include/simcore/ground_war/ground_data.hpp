@@ -162,6 +162,17 @@ struct TroopsTables {
     double strike_loss_share = 1.0;  // of a strike's damage to a tied object, the share its unit's strength loses (F6.1)
 };
 
+// A formation's command or artillery hit (F8.2, ground_war.json's "command_hit"; docs/fronts/03_GROUND_WAR.md "As built:
+// F8.2"): while its staff knows its command post or its artillery hit, a formation of the lines' doctrine is judged
+// against the doctrine's hq_hit_ineffective_below instead of its ask line. The command post's hit wears off in the
+// doctrine's restore_control_h; the artillery's in `artillery_restore_h`. A support regiment (no tanks) under
+// `support_hit_below` of its own establishment by the fighting is its artillery hit. Without the block, none.
+struct CommandHitTables {
+    bool on = false;
+    double support_hit_below = 0.85;
+    ValueRange artillery_restore_h{12.0, 24.0};
+};
+
 struct GroundTables {
     // Strength: weighted equipment plus personnel, in T-55 equivalents.
     double personnel_per_man = 0.0;
@@ -256,6 +267,9 @@ struct GroundTables {
     // momentum is spent, with the force that can reach the flank within `counter_reach_h` of the order.
     bool counter_at_tip = false;
     double counter_reach_h = 12.0;
+
+    // A formation's command or artillery hit (F8.2): optional.
+    CommandHitTables command_hit;
 
     // Each side's picture (F3.5).
     PictureTables picture;
@@ -469,6 +483,20 @@ struct DeploymentDef {
     }
 };
 
+// The national command's reserve (F8.1, ground_defence.json's "front_reserve"; docs/fronts/03_GROUND_WAR.md "As built:
+// F8.1"): a formation of the order of battle out of every deployment, standing at its home place, released only by the
+// front's commander (the commander of the order of battle's `command`) for a counterstrike on F7.1's rule at the tip,
+// with the force that reaches the flank within `reach_h` of his order, his planning drawn in `planning_h`. Without the
+// block, none.
+struct FrontReserveDef {
+    bool present = false;
+    std::string unit;     // the order of battle's formation
+    std::string command;  // the order of battle's unit whose commander releases it (over it)
+    GroundPlace place;    // its home ("at"), a place of the country map
+    ValueRange planning_h;
+    double reach_h = 0.0;
+};
+
 // Our side's defence (data/campaign/ground_defence.json): the order of battle it names, with its equipment filled.
 struct GroundDefenceDef {
     std::string defence_id;
@@ -480,6 +508,7 @@ struct GroundDefenceDef {
     GroundCommandersDef commanders;
     GroundDoctrineDef doctrine;
     std::vector<DeploymentDef> deployments;
+    FrontReserveDef front_reserve;  // F8.1: optional
 
     const DeploymentDef* For(const std::string& adversary) const {
         for (const DeploymentDef& d : deployments) {
@@ -538,7 +567,7 @@ public:
         if (!Keys(root, "", {"ground_war_id", "status", "source", "confidence", "notes", "strength", "power", "posture", "ground",
                              "conditions", "losses", "tank_losses", "advance", "crossing", "decision_times_h", "trait_shift",
                              "cohesion", "dispersal", "march", "reports", "levels", "clock", "commanders", "picture", "troops",
-                             "counterattack"}) ||
+                             "counterattack", "command_hit"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -585,9 +614,26 @@ public:
         }
         if (!LoadGround(root, out) || !LoadLosses(root, out) || !LoadTankLosses(root, out) || !LoadAdvance(root, out) ||
             !LoadDecisionTimes(root, out) || !LoadRest(root, out) || !LoadClock(root, out) || !LoadCommanders(root, out) ||
-            !LoadPicture(root, out) || !LoadTroops(root, out) || !LoadCounterattack(root, out)) {
+            !LoadPicture(root, out) || !LoadTroops(root, out) || !LoadCounterattack(root, out) || !LoadCommandHit(root, out)) {
             return false;
         }
+        return true;
+    }
+
+    // A formation's command or artillery hit (F8.2): optional; without it, none.
+    bool LoadCommandHit(const json::Value& root, GroundTables& out) {
+        const json::Value* c = root.Find("command_hit");
+        if (c == nullptr) return true;
+        const std::string p = "command_hit";
+        if (!c->Is(json::Type::Object)) return Fail(p, "expected an object");
+        CommandHitTables& h = out.command_hit;
+        if (!Keys(*c, p, {"support_hit_below", "artillery_restore_h", "notes"}) ||
+            !Sourced(*c, p, "support_hit_below", h.support_hit_below, 0.0, 1.0) ||
+            !RangeOf(*c, p, "artillery_restore_h", h.artillery_restore_h, 0.0, 240.0)) {
+            return false;
+        }
+        if (!(h.artillery_restore_h.hi > 0.0)) return Fail(Join(p, "artillery_restore_h"), "a hit that wears off at once is no hit");
+        h.on = true;
         return true;
     }
 
@@ -635,7 +681,7 @@ public:
     bool LoadDefence(const json::Value& root, const command::OrderOfBattle& oob, const GroundWorld& world, GroundDefenceDef& out) {
         world_ = &world;
         if (!Keys(root, "", {"defence_id", "name", "status", "source", "confidence", "notes", "oob", "place_map", "theatre",
-                             "commanders", "doctrine", "deployments"}) ||
+                             "commanders", "doctrine", "deployments", "front_reserve"}) ||
             !Provenance(root, "") || !RequireString(root, "", "defence_id", out.defence_id) ||
             !RequireString(root, "", "name", out.name) || !RequireString(root, "", "oob", out.oob_file) ||
             !WorldOf(root, out.place_map, out.theatre)) {
@@ -644,7 +690,37 @@ public:
         out.oob = oob;
         if (!Commanders(root, out.oob, out.commanders) || !Doctrine(root, out.doctrine)) return false;
         if (!out.doctrine.has_security_zone) return Fail("doctrine.security_zone", "required for our side");
-        return Deployments(root, out);
+        return Deployments(root, out) && FrontReserve(root, out);
+    }
+
+    // The national command's reserve (F8.1): optional. A formation of the order of battle under its command, out of every
+    // deployment (neither deployed itself nor over or under a deployed unit), at a place of the map.
+    bool FrontReserve(const json::Value& root, GroundDefenceDef& out) {
+        const json::Value* v = root.Find("front_reserve");
+        if (v == nullptr) return true;
+        const std::string p = "front_reserve";
+        if (!v->Is(json::Type::Object)) return Fail(p, "expected an object");
+        FrontReserveDef& r = out.front_reserve;
+        std::string at;
+        if (!Keys(*v, p, {"source", "confidence", "notes", "unit", "command", "at", "planning_h", "reach_h"}) || !Provenance(*v, p) ||
+            !RequireString(*v, p, "unit", r.unit) || !RequireString(*v, p, "command", r.command) || !RequireString(*v, p, "at", at) ||
+            !Place(Join(p, "at"), at, r.place) || !RangeOf(*v, p, "planning_h", r.planning_h, 0.0, 240.0) ||
+            !Sourced(*v, p, "reach_h", r.reach_h, 0.0, 240.0)) {
+            return false;
+        }
+        if (out.oob.Find(r.unit) == nullptr) return Fail(Join(p, "unit"), "unknown unit '" + r.unit + "' in " + out.oob_file);
+        if (out.oob.Find(r.command) == nullptr) return Fail(Join(p, "command"), "unknown unit '" + r.command + "' in " + out.oob_file);
+        if (r.command == r.unit || !out.oob.Under(r.unit, r.command)) return Fail(Join(p, "command"), "'" + r.unit + "' is not under '" + r.command + "'");
+        for (const DeploymentDef& d : out.deployments) {
+            for (const DeployedUnitDef& du : d.units) {
+                if (du.unit == r.unit || out.oob.Under(du.unit, r.unit) || out.oob.Under(r.unit, du.unit)) {
+                    return Fail(Join(p, "unit"), "'" + r.unit + "' is in the deployment against " + d.adversary + " (with '" + du.unit +
+                                                     "'): a front reserve stands out of the army's line");
+                }
+            }
+        }
+        r.present = true;
+        return true;
     }
 
     // A file's key naming a file, before the file is loaded ("oob", "place_map", "theatre"); false if missing.

@@ -52,6 +52,11 @@ struct Mover {
     double moved_s = 0.0;          // time spent moving (the route's time along it)
     double arrived_s = -1.0;
     double halt_until_s = -1.0;
+    // Track F, F5.2 (ground_war/session_units.hpp): the ground war's battalions and companies at U2. `enemy`: the enemy's,
+    // drawn as its own and never as ours; `ground_war`: seen and drawn only, not in the session's air battle (the pilots'
+    // picture, their targets of opportunity, the detail levels): U2 adds nothing to the fight.
+    bool enemy = false;
+    bool ground_war = false;
 
     double Length() const { return std::max(0, vehicles - 1) * spacing_m; }
 };

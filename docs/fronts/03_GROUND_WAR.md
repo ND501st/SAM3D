@@ -1280,6 +1280,196 @@ later, and part of the loss has come back by then.
 - No army or front reserve on the enemy's side beyond its plan's echelons.
 - `reach_h` is a game value.
 
+## As built: F8.1 (24 Nov 2026)
+
+Our national command holds a reserve of its own, a tank division out of the 3rd Army's line, and the front's commander
+commits it on F7.1's rule at the tip (`06_BALANCE.md`, Decisions after F7). Only at `ground.mode` 1, with F7.1's
+`"counterattack"` block, and only with the new `"front_reserve"` block in `data/campaign/ground_defence.json`. Without it
+the division is never built and nothing changes: the defaults and old saves are as before.
+
+**The division.** Our order of battle had no tank division standing unused (the 3rd Army's tank brigade is its own
+reserve, the 7th Division and the territorial defence are in its line), so one was added: the **11th Tank Division**
+(`td_11`, `data/command/oob_pannonia.json`), under the Ground Forces' command, with three tank regiments (94 T-55s, 45
+BMP-1s and 18 D-30s each), a motor rifle regiment and an artillery regiment, in this army's own types (briefing §7). It is
+the Pact's tank division as NATO drew it (`fm_100_2_1_1984` pp. 4-4 to 4-7, `fm100_2_3` for the organisation only), held
+back as a small Pact-model nation would hold one: the front's and the armies' second echelons and reserves up to half the
+force (`fm_100_2_1_1984` p. 6-1), the second-echelon division preparing the counterstrike on the main axis
+(`vr_poltikovic_1984` p. 96). No new source: every one cited was registered. Its equipment and establishment are
+estimates. Every type has a basic model. It has no object in the nation's theatre, so the enemy's air cannot strike it:
+adding one would change the theatre at the defaults.
+
+**The block** (`FrontReserveDef`, `ground_data.hpp`): the unit (`td_11`), the command that releases it
+(`ground_forces`), its home (`cegled_junction`, the central rail junction 112-131 km behind the line, a place of the
+map by id), the front's planning (6-12 h, a game value: a quarter to half a day against a division's 1-3 h,
+`fm_100_2_1_1984` p. 5-14) and its reach (24 h, a game value: twice the army's 12 h). The loader refuses a unit or command
+not in the order of battle, a unit not under that command, and a unit that is deployed in any deployment or over or under
+one that is (`test_ground_data.cpp`).
+
+**Who commits it** (`AddFrontReserve`, `FrontTop`, `TryCounter`). A separate front decision, not the army commander's:
+- At Build the division is a formation of ours in reserve at its home, free, on no axis, marked `front`. Its commander
+  answers to a commander drawn for the Ground Forces (marked `front`, not the army's top), keyed like every other.
+- The army commander never sends it, as a counterattack or a relief (`CounterCandidate`, `FreeFormation`), and the
+  army's reserve (`HoldReserve`) leaves it where it is.
+- The front's commander decides at his own reaction time while a penetration is a target for F7.1's rule and his reserve
+  is free (`FrontWatch`). His rule is F7.1's: the deepest axis whose momentum is spent, his force being every free
+  formation of ours (his reserve with the army's free ones) whose planning plus its march on the roads is within his
+  reach, over the enemy at the tip as he believes it, against his counterattack ratio (1.5-2.5 by his boldness). He
+  orders only if his own reserve is in that force. The planning is drawn in the block's range, a methodical man the long
+  end.
+- Every counterattack under F7.1 now goes in together, at its slowest formation's hour (`reznichenko_1984` pp. 177-179:
+  the line and time of deployment are set for the whole force). Before, each formation went in as it arrived. With one
+  reserve that made no difference. With the division and the brigade from different depths, the brigade went in alone
+  and the army commander ended the attack before the division was there. F3.4's rule is unchanged.
+- The army commander still ends a counterattack that has stopped gaining ground (F7.1).
+
+**On the nation** (`fronts_bench data --history`, 14 days x 3 seeds):
+- *The Pact.* The front counterstrikes in every war (3 of 3), on 2.03:1 at the tip by his picture. The division is 64 % of
+  the army's power, home 112 km behind the line, and the force goes in 15-19 h after the order. It wins back no ground.
+  The Pact's axes are halted at their objectives, which are towns, in hasty defence (1.3 x the town's 1.4). His picture
+  had the tip lighter than it was, so the strike's 2.0 is 1.6-1.7 in truth, and that becomes 0.75-0.90 in the combat
+  (0.75 at night). That stalls under the first advance class (1.5), and the army commander ends it after 2-4 h.
+- *NATO.* The same in every war (3 of 3), on 2.05:1, the force in 11-13 h. NATO's axis is halted at its objective, a town
+  75 km in, and the strikes go in at night: 1.9 in truth, 0.82 in the combat. None gains ground.
+- *The neutral.* A counterattack in every war as before: the front's in one (on 4.13:1), the army's in the others, now
+  going in together. The line won back is 6.4 km on average (2.0 before), and the enemy's axes at or near their
+  objective fall from 1.00 to 0.67.
+- *The rebels.* Their raids end at dawn: no counterattack.
+To win ground against a town in hasty defence, the raw ratio would need 2.7 by day and 3.4 at night. The commander does
+not weigh the ground or the dark, and does not choose an axis still moving in the open (F7.1's "Left").
+
+**Cost.** The ground war alone (`fronts_bench data --ground`, 30 days x 5 seeds, against cc635af on its own data): the
+Pact 0.037 → 0.032 ms a campaign day (worst 0.12 → 0.14), NATO 0.040 → 0.041 (0.12 → 0.14), the neutral 0.019 → 0.021,
+the rebels 0.069 → 0.070, against a budget of 20. In the campaign (10 days): the Pact 1.99 → 2.01 ms, NATO 2.26 → 2.41,
+the neutral 0.72 → 0.99, the rebels 1.81 → 1.75. The front's commander decides only while a penetration is a target, and
+his rule is the army's with one more formation.
+
+**Tests** (`test_ground_commanders.cpp`, "front reserve (F8.1)"; `test_ground_data.cpp`):
+- a hand war: the division is held out of the line, free and at its home, until the front's commander orders it; the
+  army's brigade alone is under the army commander's ratio (0.44 against 1.89); the order is the front's, on his ratio,
+  and its value is his force over the enemy at the tip, by hand (3.58:1); the force goes in together, the division in it,
+  6-24 h after the order;
+- with a reach of 1 h no counterstrike is ordered and the division never leaves, though its commander keeps watching;
+- without the block the division is never built and the war's every order is that of the war whose order of battle
+  never had it; with the block but without F7.1's rule, none either;
+- on the nation, for every faction: the 11th Tank Division at Cegled, the Ground Forces' commander over it, out of every
+  axis's line; without the block one formation fewer;
+- the loader's refusals: deployed, over a deployed unit, not in the order of battle, not under its command, a home not on
+  the map, an unknown key.
+F3.4's counterattack test now finds the tank division among the force rather than the first to start.
+
+**Left:**
+- The front's commander weighs the raw ratio at the tip, not the defender's ground, posture or the dark, so his
+  counterstrikes go into towns at night and stall. Weighing them (or choosing an axis still moving in the open, or waiting
+  for daylight) is a design call.
+- The division has no object in the theatre: the enemy's air cannot find or strike it.
+- `planning_h` and `reach_h` are game values; the division's equipment and establishment are estimates.
+
+## As built: F8.2 (24 Nov 2026)
+
+If a formation's command post or artillery has been hit, it is judged against its doctrine's three-quarters line
+(`hq_hit_ineffective_below`, 0.75) instead of its commander's ask line. This holds for as long as its own staff knows
+of the hit. The source is `mt_stashek_losses` p. 7: a formation is ineffective at about 24-25 % losses when its command,
+rockets and artillery are hit. The decision is in `06_BALANCE.md`, Decisions after F7.
+
+The rule needs the new `"command_hit"` block in `data/gameplay/ground_war.json`. Without it, no command post is tied, no
+hit is recorded, and every war matches the war before it entry by entry. The defaults and old saves are unchanged; the
+defaults do not build the ground war at all.
+
+**What counts as a hit** (`CommandHitKind`):
+- *The command post.* This is a theatre object of kind command post or headquarters (not a decoy) whose owner in the
+  order of battle is itself one of our formations (`TieTroops`, `CommandTies()`).
+  - On the nation there are three: `mrd9_hq` (the 9th Division), `sw_brigade_cp` (the south-western brigade) and
+    `div_ad_cp` (the 7th Division's air defence command post, which our order of battle lists as the division's).
+  - The army's `army_hq` and `army_cp_alt` are not tied. They belong to the 3rd Army, which is not a formation of the
+    ground war.
+  - At each hour's start, a fall in the object's working share since the staff last saw it counts as a strike
+    (`CommandPostsSeen`). A fresh fall after a repair is a new hit.
+- *The artillery, struck from the air.* This is a strike on a troops object (F3.3's ties) that belongs either to the
+  formation's support regiment (a regiment with no tanks) or to a formation with no tanks of its own
+  (`TroopsTie::artillery`).
+  - On the nation these are `mrd7_artillery`, `mrd9_artillery` and `army_artillery` (the army's artillery brigade).
+  - `sw_artillery` does not count. Its owner is the south-western brigade itself, which has tanks, so a strike there is
+    a strike on the brigade, not on its artillery.
+- *The artillery, in the fighting.* At U1 a formation's regiments are actors. A hit is recorded the first time its
+  support regiment's own count falls under `support_hit_below` (0.85, a game value) (`RegimentsAfterHour`). At U0 the
+  support regiment's losses are not kept apart from the formation's, so this trigger works at U1 only.
+
+**First person: the staff learns it.** Nothing reads the strike from the truth.
+- The command post's own staff knows its post is hit at once, at the next hour's start. This matches F3.6's `SitStruck`:
+  the staff that was hit knows.
+- The artillery's hit is known only when its report reaches the formation's staff, `picture.own_delay_h` (2 h) after
+  the strike or the loss (`PushHit`).
+- When the staff learns of a hit (`HitLearned`):
+  - the journal gets a note (`GroundNote::CommandHit`): "X's staff learns its command post / its artillery, struck from
+    the air / in the fighting hit: judged against the three-quarters line until command is restored, in N h";
+  - the formation's `hit_until_h` is set;
+  - its line crossings are checked again against the raised line (`AskLine`);
+  - its commander is woken after his reaction time.
+
+**The commander's rule.** While the hit is known (`HitKnown`), his ask line is the higher of two lines: his own (half, or
+earlier for a flexible man) and the doctrine's three-quarters line (`UnitDecision`, `AskLine`). His senior answers as
+before (`AnswerRequests`: permit, relieve or refuse).
+- Each side uses its own doctrine block: ours is `ground_defence.json`, the Pact's is `ground_warsaw_pact.json`, and
+  both set 0.75.
+- A doctrine of breakpoints (NATO's, the rebels') has no such line, so this rule does not apply to it.
+
+**It wears off** as command is restored.
+- The command post: in the doctrine's `restore_control_h`. Ours is 1-3 h (`mt_stashek_losses`: about 1 h through a
+  forward command post, otherwise 2-3 h).
+- The artillery: in `artillery_restore_h`, 12-24 h, a game value. The theatre repairs a troops object in 24 h.
+- Each time is drawn in its range by a keyed draw of the formation and the hit's number. A second hit extends the
+  first.
+- When the hit wears off, a formation that has not asked is judged against its own line again (`HitWornOff`).
+- The enemy's doctrine has no `restore_control_h`. Its command posts are not tied, because the air war strikes only
+  ours. Its artillery's hit in the fighting uses `artillery_restore_h`.
+
+**Not forced:** no war is lengthened and no formation is kept in contact. The war's length and tempo stay the enemy's.
+
+**On the nation** (`fronts_bench data --history`, 14 days x 3 seeds; `06_BALANCE.md`, As built: F8.2):
+
+| | The Pact | NATO |
+|---|---|---|
+| Command post hits our staffs learn a war | 2.0 | 4.7 |
+| Artillery hits a war | none | none |
+| Hours a war with a hit known | 2 | 7 |
+| Our formations under 75 % at some hour | 1 | 3 |
+| Of those, under 75 % while their staff knew a hit | 0 | 1 |
+
+None withdraws, for three reasons:
+- A command post is restored in 1-3 h, before the division commander's reaction time (2-4 h) has run.
+- The enemy's air never struck our artillery's objects. Its strikes on troops fall on the regiments' areas and the
+  command posts.
+- In the fighting, the support regiment's losses, at the support weight, keep it above 0.85.
+
+A sensitivity run on a copy of the data restored the command post in 6-12 h instead. With that, NATO withdraws one
+formation of nine (0.11) and every other band is as before. The Pact still withdraws none: its one formation under 75 %
+was not hit then. See `06_BALANCE.md`.
+
+**Cost.** Below the noise (`06_BALANCE.md`, As built: F8.2). The command posts are read once an hour (three objects on
+the nation), and a hit is an event.
+
+**Tests** (`test_ground_commanders.cpp`, "command hit (F8.2)"; `test_ground_data.cpp`):
+- A hand war:
+  - a formation at 66 % whose command post is hit asks within the restore time, is relieved and withdraws;
+  - a formation at 66 % with no hit reports and never asks.
+- The hit is known only as its staff learns it:
+  - a loss alone is no hit, nor is a strike on the army's post or on a tank regiment's area;
+  - the post is known at the next hour's start, and the artillery 2 h after the strike;
+  - a fresh fall after a repair is a new hit.
+- It wears off: the post at its restore time (8 h, a test value), the artillery inside 12-24 h.
+- Without the block, no post is tied and no hit is recorded. With the block and no hit, a four-day war is the same entry
+  by entry and strength by strength.
+- On the nation (the Pact's war), the ties are the three command posts and the three artillery objects above.
+- The loader refuses an unknown key, a line over 1, a range out of order, a restore of 0 and an unsourced value.
+
+**Left:**
+- The enemy's air does not pick our artillery: on the nation its strikes on troops never land on the artillery's
+  objects. Its target choice belongs to the air war (13.8).
+- The command post's sourced restore time (1-3 h) is shorter than the division commander's reaction time (2-4 h). At the
+  sourced values, a hit on the post alone never brings a withdrawal.
+- At U0 the support regiment's losses in the fighting are not kept apart, so the fighting's artillery trigger works at U1
+  only. `support_hit_below` and `artillery_restore_h` are game values.
+
 ## Done when
 
 Each faction's ground war (or the owner's choice for the rebels and the neutral) moves the line of contact by its

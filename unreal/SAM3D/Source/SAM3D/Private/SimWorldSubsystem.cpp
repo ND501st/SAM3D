@@ -2579,14 +2579,16 @@ void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<F
 			Out.Add(S);
 		}
 		// The world's movers inside the visual range (roadmap G11): another unit's column, a convoy, a carrier, each
-		// vehicle where the simulation has it. Out of range they are not listed, and their actors hide.
+		// vehicle where the simulation has it. Out of range they are not listed, and their actors hide. With the ground
+		// war in the session (track F, F5.2) its battalions and companies near the battery are movers too: the enemy's
+		// listed only while within sight, drawn by its own models (never ours) and not friendly.
 		for (const simcore::ScenarioRunner::WorldMover& V : Runner->MoversInView())
 		{
 			FSimEntityState S = MakeState(MoverIdBase + V.id, ToF(V.mover), false, true, V.position, simcore::Vec3{});
 			S.Rotation = FRotator(0.0, V.heading_deg, 0.0);
 			S.bIsGround = true;
 			S.Kind = ToF(V.kind);
-			S.bFriendly = true;
+			S.bFriendly = !V.enemy;
 			S.Model = ToF(V.model);
 			Out.Add(S);
 		}

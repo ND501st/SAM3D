@@ -116,5 +116,15 @@
         { "unit": "tank_brigade", "role": "reserve", "at": "saldanj" }
       ]
     }
-  ]
+  ],
+  "front_reserve": {
+    "source": "the national command's reserve (track F, F8.1; docs/fronts/06_BALANCE.md, Decisions after F7): a tank division of its own, out of the 3rd Army's line (data/command/oob_pannonia.json td_11), as a small Pact-model nation of the period would hold one: the front's and the armies' second echelons and reserves up to half the force (fm_100_2_1_1984 p. 6-1); the second-echelon division prepares a counterstrike on the main axis (vr_poltikovic_1984 p. 96); a counterstrike by the senior's second echelon or reserve into a wedged attacker (reznichenko_1984 pp. 177-179), restoring the forward edge or the state border (vr_svatos_1985 pp. 27-28); a Pact ally's army covers its border and then counterattacks (polnar_2022 pp. 147-149). Its home, planning and reach are SAM3D estimates and game values",
+    "confidence": "estimate",
+    "notes": "Released only by the front's commander (the Ground Forces' commander over the 3rd Army), on F7.1's rule at the tip (gameplay/ground_war.json counterattack): once a penetration's momentum is spent, with his reserve and every other free force of ours that reaches its flank within reach_h of his order, when that force over the enemy at the tip reaches his counterattack ratio. Without this block the division is never built and nothing changes (simcore/ground_war/ground_war.hpp, docs/fronts/03_GROUND_WAR.md As built: F8.1).",
+    "unit": "td_11",
+    "command": "ground_forces",
+    "at": "cegled_junction",
+    "planning_h": { "min": 6, "max": 12, "source": "game value: a front's staff plans a counterstrike longer than a division plans a counterattack (1-3 h, fm_100_2_1_1984 p. 5-14, the decision_times_h' division row): a quarter to half a day, a methodical commander the long end", "confidence": "estimate" },
+    "reach_h": { "value": 24, "source": "game value: the counterstrike goes in with the force that reaches the penetration's flank, the front's planning and the march on the roads, within a day of the order: twice the army's reach (counterattack.reach_h), before the enemy's next echelon, committed to success a day or more into an attack (fm_100_2_1_1984 p. 2-11), can restore the momentum of an axis that has stalled", "confidence": "estimate" }
+  }
 }

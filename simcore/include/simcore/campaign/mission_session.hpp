@@ -27,10 +27,17 @@
 // withdrawal, its sector's priority and the sky's sharing there, read again only when a fact reaches the regiment. Its
 // tasks go to the battery on the regiment's net as every task (GiveTask), the sharing as a word on it
 // (ScenarioRunner::RegimentTellsSharing). At the modes 0 none of it is made: the session is as before.
+//
+// Track F, F5.2 (built as F8.3; ground_war/session_units.hpp): with the ground war on and the session's roads, the war's
+// regiments near the battery come down to U2, their battalions and companies the session's movers at their places and on
+// the roads, following the war; the session draws those within the visual range, the enemy's only then. The front's
+// artillery heard from afar and its fires glowing at night go into the session's fx feed for show. Without the ground war
+// or the roads none of it is made.
 #pragma once
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <set>
 #include <string>
@@ -49,6 +56,7 @@
 #include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
 #include "simcore/geo.hpp"
+#include "simcore/ground_war/session_units.hpp"
 #include "simcore/scenario.hpp"
 #include "simcore/scenario_runner.hpp"
 
@@ -72,6 +80,9 @@ struct MissionSessionDef {
     // follows its own ground offensive, as the benches run it) (a theatre with a country map and fronts with lines:
     // theatre_pannonia_nation.json); false: the war data's own modes.
     bool fronts = false;
+    // F5.2: with the fronts, the war's units this near the battery come down to U2 as the session's movers (sam3d: 20 km,
+    // past the visual range by day; a test or the demo may widen it where the battery stands far from the line).
+    double u2_radius_m = 20000.0;
 };
 
 class MissionSession {
@@ -146,6 +157,9 @@ public:
         outcomes_.Check(CheckSuppression(*campaign_, h0_));
         JoinOurPosts();
         JoinOurBridges();
+        seed_ = d.seed;
+        u2_radius_m_ = d.u2_radius_m;
+        StartGroundUnits();
         return true;
     }
 
@@ -153,6 +167,7 @@ public:
     void Step(double dt) {
         runner_->Step(dt);
         if (live_) live_->Step(*runner_);
+        StepGroundUnits(false);
         PumpFronts();
         CarryTheMove();
         PumpIntercept();
@@ -238,6 +253,11 @@ public:
     int BatteryMoves() const { return moves_; }  // the campaign had our battery move where the session's arrived
     bool BatteryMoved() const { return moves_ > 0; }
     const OutcomeLedger& Outcomes() const { return outcomes_; }
+    // F5.2: the ground war's units at U2 in the session (none made without the ground war or the session's roads), and the
+    // front's salvos heard and fires seen at the battery so far (the fx feed's DistantFire and FireGlow events pushed).
+    const groundwar::SessionUnits& GroundUnits() const { return units_; }
+    int FrontSalvosHeard() const { return salvos_; }
+    int FrontFiresSeen() const { return glows_; }
     // A radar of the regiment's or a warning source the session follows the war's damage to.
     struct OurPost {
         std::string object;  // the theatre object (the session's id for it too)
@@ -730,6 +750,52 @@ private:
     static constexpr double kToldAtStartS = 90.0;    // sam3d: after the regiment's first word to the battery
     static constexpr double kRegimentTellsS = 180.0; // sam3d: the radar company reports up, the regiment passes it on
 
+    // F5.2 (see the header): U2 and the front from afar, read every kUnitsEveryS and the fx values' every_s of the session.
+    void StartGroundUnits() {
+        if (!campaign_ || campaign_->Ground() == nullptr || runner_->MutableNav() == nullptr) return;
+        units_.Start(campaign_->Ground()->Data());
+        StepGroundUnits(true);
+    }
+    void StepGroundUnits(bool start) {
+        if (!units_.Started()) return;
+        const double t = runner_->Time();
+        const groundwar::GroundWar& w = *campaign_->Ground();
+        const airwar::LineOfContact& line = campaign_->FrontLine();
+        const Vec3 centre = BatteryCentre();
+        if (start || t + 1e-9 >= next_units_s_) {
+            next_units_s_ = t + kUnitsEveryS;
+            std::vector<groundwar::U2Unit> now = groundwar::U2Near(w, line, ToTheatre(centre), u2_radius_m_, units_.OurTypeList());
+            for (groundwar::U2Unit& u : now) u.place = FromTheatre(u.place);
+            units_.Apply(now, *runner_->MutableNav(), t, runner_->LightNow().dark);
+        }
+        if (!start && t + 1e-9 < next_fire_s_) return;
+        next_fire_s_ = t + front_fx_.every_s;
+        std::vector<groundwar::FrontContact> contacts = groundwar::FrontContacts(w, line);
+        if (contacts.empty()) return;
+        for (groundwar::FrontContact& c : contacts) c.at = FromTheatre(c.at);
+        const ScenarioDef& def = runner_->Def();
+        groundwar::FrontAir air;
+        if (def.has_weather) {
+            air.temperature_k = def.weather.surface_temperature_c + 273.15;
+            air.rh_pct = fx::RelativeHumidityPct(def.weather.surface_temperature_c, def.weather.surface_dewpoint_c);
+            air.pressure_pa = def.weather.qnh_hpa * 100.0;
+        }
+        for (const fx::Event& e : groundwar::DistantFire(contacts, centre, t, fire_step_, air, front_fx_, seed_)) {
+            runner_->Fx().Push(e);
+            ++salvos_;
+        }
+        ++fire_step_;
+        if (t + 1e-9 < next_glow_s_) return;
+        next_glow_s_ = t + front_fx_.glow_every_s;
+        const double visibility_m = def.weather.visibility_km * 1000.0;
+        for (const fx::Event& e : groundwar::FireGlows(contacts, centre, t, glow_step_, runner_->LightNow().dark, visibility_m, front_fx_, seed_)) {
+            runner_->Fx().Push(e);
+            ++glows_;
+        }
+        ++glow_step_;
+    }
+    static constexpr double kUnitsEveryS = 60.0;  // sam3d: U2's places read every minute of the session
+
     // A theatre point in the session's frame (on the ground).
     Vec3 FromTheatre(const Vec3& theatre_enu) const {
         Vec3 to = airwar::MoveFrame(LocalFrame(campaign_->Data().theatre.origin), LocalFrame(runner_->Def().origin), theatre_enu);
@@ -764,6 +830,17 @@ private:
     std::vector<OurBridge> bridges_;
     double next_bridges_s_ = 0.0;
     std::vector<std::string> notes_;
+    unsigned seed_ = 1;
+    groundwar::SessionUnits units_;      // F5.2: U2
+    double u2_radius_m_ = 20000.0;       // MissionSessionDef::u2_radius_m
+    groundwar::FrontFxValues front_fx_;
+    double next_units_s_ = 0.0;
+    double next_fire_s_ = 0.0;
+    double next_glow_s_ = 0.0;
+    std::uint64_t fire_step_ = 0;
+    std::uint64_t glow_step_ = 0;
+    int salvos_ = 0;
+    int glows_ = 0;
     OutcomeLedger outcomes_;
     std::string covered_place_;     // the task's covered place the ledger has
     std::string covered_object_;    // its theatre object

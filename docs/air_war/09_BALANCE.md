@@ -1633,3 +1633,47 @@ the nation holds for all four factions and both postures (20 rows, none out):
 
 F7.3 changed no simulation: its code change is the played mission's fronts flag (`mission_session.hpp`, `air_front.mode`
 2), which `air_war_balance` does not use. The defaults' identity holds (`data 20 7`, the nation's `data 10 7`).
+
+## 30. A front reserve (track F, F8.1, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md`, "As built: F8.1": the national command's 11th Tank Division, committed by the front's
+commander on F7.1's rule at the tip, and every F7.1 counterattack going in together. `air_war_balance --theatre
+theatre_pannonia_nation.json --fronts data 10 7` against section 29: every band of the nation holds for all four factions
+and both postures (20 rows, none out).
+
+| Nation | Loss %, careless / careful | Battery wrecked | Exchange, theirs for ours | On call (min) | The air front a campaign |
+|---|---|---|---|---|---|
+| Rebels | 11.97 / 10.67 % (as before) | 0 / 0 % | - | - | none |
+| Neutral | 5.61 / 6.44 % (5.71 / 7.37) | 0 / 0 % | - | - | none |
+| Warsaw Pact | 3.14 / 3.09 % (3.12 / 3.02) | 30 / 0 % | 1.42 / 1.54 (1.52 / 2.00) | 28.2 / 25.3 | 0.6 steps forward, none back (0.1 back careful before), the deepest 60 / 60 km (60 / 40) |
+| NATO | 2.06 / 2.21 % (2.08 / 2.19) | 40 / 10 % | 0.40 / 0.36 | 21.2 / 20.4 | 0.2 / 0.1 steps forward, the deepest 20 km (none before) |
+
+- NATO's air front now steps: our counterstrikes against its halted axis put the sector in crisis in its own picture,
+  and NATO's crisis rule is to advance a step (F3.5).
+- The neutral's careful loss moves with its war, inside its band: our counterattacks now push its incursion back.
+- The Pact's exchange moves inside its band with its war.
+
+At the defaults the 11th Tank Division is read by nothing: only the ground war builds it, only with
+`ground_defence.json`'s block, and the defaults do not build the ground war. `data 20 7` and the nation's `data 10 7` are identical by content to the references.
+
+## 31. Withdrawals when command or artillery is hit (track F, F8.2, 24 November 2026)
+
+`docs/fronts/06_BALANCE.md`, "As built: F8.2": a formation whose command post or artillery is hit, as its own staff
+learns it, is judged against the doctrine's three-quarters line (`mt_stashek_losses` p. 7) until command is restored.
+`air_war_balance --theatre theatre_pannonia_nation.json --fronts data 10 7` against section 30: every band of the nation
+holds for all four factions and both postures (20 rows, none out), and every value is section 30's to the digit.
+
+| Nation | Loss %, careless / careful | Battery wrecked | Exchange, theirs for ours | On call (min) | The air front a campaign |
+|---|---|---|---|---|---|
+| Rebels | 11.97 / 10.67 % (as before) | 0 / 0 % | - | - | none |
+| Neutral | 5.61 / 6.44 % (as before) | 0 / 0 % | - | - | none |
+| Warsaw Pact | 3.14 / 3.09 % (as before) | 30 / 0 % | 1.42 / 1.54 | 28.2 / 25.3 | 0.6 steps forward, the deepest 60 / 60 km |
+| NATO | 2.06 / 2.21 % (as before) | 40 / 10 % | 0.40 / 0.36 | 21.2 / 20.4 | 0.2 / 0.1 steps forward, the deepest 20 km |
+
+The hit moves no air war value: it changes only when our formations ask to withdraw. On the nation none withdraws at
+the sourced restore time (a command post's hit wears off in 1-3 h, before the division commander's reaction), so the
+ground war, and the air war that follows it, are the war of section 30.
+
+At the defaults the block is read by nothing: only the ground war reads `ground_war.json`'s `"command_hit"`, and the
+defaults do not build the ground war. `data 20 7` and the nation's `data 10 7` are identical by content to the
+references.

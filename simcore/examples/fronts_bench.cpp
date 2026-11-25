@@ -1124,6 +1124,12 @@ struct HistStats {
     HistMean counter_ordered_ratio;       // the ratio its commander ordered it on (his picture)
     HistMean reserve_share;               // our army reserve's (the deployment's reserve) power over our army's at the war's start
     HistMean reserve_depth_km;            // how far behind the line it stands then
+    // F8.1: the national command's reserve (none without ground_defence.json's "front_reserve"): its power over our army's
+    // at the start, how far behind the line its home is, the front's counterstrikes ordered, their ratio (his picture), and
+    // the best ratio he weighed at a penetration with its momentum spent (his force in his reach over the tip).
+    bool front_reserve = false;
+    HistMean front_share, front_depth_km, front_ordered_ratio, front_best_ratio;
+    int front_orders = 0;
     HistMean low_cover, low_mobile;       // a contested sector's lowest believed cover and highest mobile destroyed share, the war's
     double gate_h[4] = {0.0, 0.0, 0.0, 0.0};  // contested sector-hours: cover gate held; and mobile; and reward; and losses under the line
     HistMean gate_reward;                 // the reward in the sector-hours both gates held
@@ -1134,8 +1140,15 @@ struct HistStats {
     HistMean ours_low_frac, ours_gross, ours_given;
     double ours_low_any = 1.0;
     int ours_under_degraded = 0;          // of them, under the degraded line (2/3) at some hour
-    int ours_under_hq = 0;                // and under the doctrine's line with command and artillery hit (3/4; no rule reads it)
+    int ours_under_hq = 0;                // and under the doctrine's line with command and artillery hit (3/4)
     double hq_line = 0.0;
+    // F8.2: the hits our formations' staffs learned (command post, artillery struck, artillery in the fighting) and the
+    // enemy's; our formations' hours with a hit known, and of those a day in the fight, how many were under the 3/4 line
+    // while their staff knew it.
+    int hits[3] = {0, 0, 0};
+    int enemy_hits = 0;
+    double hit_h = 0.0;
+    int ours_hit_under = 0;
     double ask_line = 0.0;                // our doctrine's ineffective line, where a unit asks to withdraw (a flexible man higher)
     double degraded_line = 0.0;
     int withdrawn = 0, dispersed = 0, reliefs = 0, refused = 0, asked = 0;
@@ -1193,25 +1206,36 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
     std::vector<double> best_tip(na, -1.0), best_tip_spent(na, -1.0), counter_from_m(na, -1.0), counter_from_h(na, 0.0);
     std::vector<char> held_ground(na, 0);  // F7.1: an axis halted holding our ground (more than 1 km in), any hour
     std::vector<double> low_frac(nf, 2.0);  // F7.3: our formations' lowest fraction, hourly
+    std::vector<char> hit_under(nf, 0);     // F8.2: under the 3/4 line in an hour its staff knew a hit
     if (g != nullptr) {
         // Our army reserve (F7.1): the deployment's reserve role, its share of our army's power and its depth at the war's start.
-        double all = 0.0, reserve = 0.0;
+        double all = 0.0, reserve = 0.0, front = 0.0;
         for (std::size_t i = 0; i < nf; ++i) {
             const groundwar::Formation& f = g->Formations()[i];
             if (f.unit.side != groundwar::Side::Ours) continue;
             const double p = groundwar::UnitPower(g->Data().tables, f.unit.strength, f.unit.supply, f.unit.cohesion);
+            const FrontPlace pl = c.FrontLine().Place(f.pos);
+            if (f.front) {  // F8.1: the national command's, not the army's
+                front += p;
+                out.front_depth_km.Add(pl.side * pl.distance_m / 1000.0);
+                continue;
+            }
             all += p;
             if (f.role != groundwar::DeployRole::Reserve) continue;
             reserve += p;
-            const FrontPlace pl = c.FrontLine().Place(f.pos);
             out.reserve_depth_km.Add(pl.side * pl.distance_m / 1000.0);
         }
         if (all > 0.0) out.reserve_share.Add(reserve / all);
+        if (g->FrontReserve() >= 0 && all > 0.0) {
+            out.front_reserve = true;
+            out.front_share.Add(front / all);
+        }
     }
     double offensive_h = -1.0;
     for (std::size_t i = 0; i < nf; ++i) {
         const groundwar::Formation& f = g->Formations()[i];
         day_strength[i] = f.unit.strength;
+        if (f.front) continue;  // F8.1: the army's day is the army's, not the national command's reserve
         start_strength[f.unit.side == groundwar::Side::Ours ? 0 : 1] += f.unit.strength;
     }
     const std::size_t ns = c.FrontLine().SectorCount();
@@ -1280,6 +1304,10 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
             const groundwar::Formation& f = g->Formations()[i];
             if (f.unit.side != groundwar::Side::Ours || f.spent || !(f.unit.establishment > 0.0)) continue;
             low_frac[i] = std::min(low_frac[i], g->StrengthAt(i, c.Now()) / f.unit.establishment);
+            if (g->HitKnown(i)) {
+                out.hit_h += 1.0;
+                if (g->StrengthAt(i, c.Now()) / f.unit.establishment < g->Data().ours.doctrine.effectiveness.hq_hit_ineffective_below) hit_under[i] = 1;
+            }
         }
         // F7.1: a penetration's hours with its momentum spent and no counterattack on it, the best tip ratio then; our
         // counterattacks going in and ending (the line won back).
@@ -1448,8 +1476,12 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
     for (std::size_t i = 0; i < nf; ++i) {
         const groundwar::Formation& f = g->Formations()[i];
         const int side = f.unit.side == groundwar::Side::Ours ? 0 : 1;
-        battle[side] += f.lost_attack + f.lost_defence + f.lost_air + f.lost_straggle;
-        if (side != 0) continue;
+        if (!f.front) battle[side] += f.lost_attack + f.lost_defence + f.lost_air + f.lost_straggle;  // F8.1: the army's
+        if (side != 0) {
+            out.enemy_hits += f.hits[0] + f.hits[1] + f.hits[2];
+            continue;
+        }
+        for (int k = 0; k < 3; ++k) out.hits[k] += f.hits[k];
         out.ours_air += f.lost_air;
         out.ours_battle += f.lost_attack + f.lost_defence + f.lost_air;
         if (f.fought_h >= 24.0) {
@@ -1473,6 +1505,7 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
             out.ours_under_degraded += low_frac[i] < e.degraded_below ? 1 : 0;
             out.hq_line = e.hq_hit_ineffective_below;
             out.ours_under_hq += low_frac[i] < e.hq_hit_ineffective_below ? 1 : 0;
+            out.ours_hit_under += hit_under[i] != 0 ? 1 : 0;
         }
     }
     const double op_days = offensive_h >= 0.0 ? (end_h - offensive_h) / 24.0 : 0.0;
@@ -1509,6 +1542,11 @@ void HistoryCampaign(const AirWarData& d, unsigned seed, int days, const command
     const int counters = static_cast<int>(g->OrderCount(GO::CounterattackOrdered));
     out.counters += counters;
     if (counters > 0) out.counter_ordered_ratio.Add(g->CounterOrderedRatioSum() / counters, counters);
+    if (g->FrontReserve() >= 0) {
+        out.front_orders += g->FrontOrders();
+        if (g->FrontOrders() > 0) out.front_ordered_ratio.Add(g->FrontOrderedRatioSum() / g->FrontOrders(), g->FrontOrders());
+        if (g->FrontBestRatio() > 0.0) out.front_best_ratio.Add(g->FrontBestRatio());
+    }
     out.wars_penetrated += penetrated ? 1 : 0;
     out.wars_countered += penetrated && counters > 0 ? 1 : 0;
     out.strikes += c.GroundAir().troop_strikes;
@@ -1611,17 +1649,26 @@ int HistoryMain(const std::string& data, const std::string& theatre, int days, i
                     s.withdrawn / n, s.dispersed / n, s.asked / n, s.refused / n, s.reliefs / n, s.counters / n, s.wars_penetrated, s.wars_countered, s.ours_engaged, s.ours_out,
                     100.0 * s.ours_frac.Get(), 100.0 * (s.ours_frac.n > 0.0 ? s.ours_lowest : 0.0));
         std::printf("  why none withdraws (F7.3): our formations a day in the fight at their lowest in the war %.0f %% of establishment on average (the lowest %.0f %%; "
-                    "%d of %d under the degraded line %.0f %%, the ask line %.0f %%; %d under the line with command and artillery hit, %.0f %%, which no rule "
-                    "reads); their losses by every cause %.0f %% of establishment, given back by repairs and columns %.0f %%\n",
+                    "%d of %d under the degraded line %.0f %%, the ask line %.0f %%; %d under the line with command and artillery hit, %.0f %%, "
+                    "%d of them while their staff knew a hit); their losses by every cause %.0f %% of establishment, given back by repairs and columns %.0f %%\n",
                     100.0 * s.ours_low_frac.Get(), 100.0 * (s.ours_low_frac.n > 0.0 ? s.ours_low_any : 0.0), s.ours_under_degraded, s.ours_engaged,
-                    100.0 * s.degraded_line, 100.0 * s.ask_line, s.ours_under_hq, 100.0 * s.hq_line, 100.0 * s.ours_gross.Get(), 100.0 * s.ours_given.Get());
+                    100.0 * s.degraded_line, 100.0 * s.ask_line, s.ours_under_hq, 100.0 * s.hq_line, s.ours_hit_under, 100.0 * s.ours_gross.Get(), 100.0 * s.ours_given.Get());
+        std::printf("  command or artillery hit (F8.2): learned by our staffs a war: the command post %.1f, the artillery struck %.1f, the artillery in the fighting %.1f "
+                    "(the enemy's %.1f); our formations' hours with a hit known %.0f a war\n",
+                    s.hits[0] / n, s.hits[1] / n, s.hits[2] / n, s.enemy_hits / n, s.hit_h / n);
         std::printf("  a penetrated axis's best counterattack ratio (truth, its candidates over its attackers): %.2f (%.0f axes); over the enemy at its tip (F7.1): %.2f, "
                     "in the hours its momentum was spent %.2f (%.0f axes, %.0f h a war)\n",
                     s.counter_ratio.Get(), s.counter_ratio.n, s.tip_ratio.Get(), s.tip_spent_ratio.Get(), s.tip_spent_ratio.n, s.spent_h / n);
-        std::printf("  our army reserve (F7.1): %.1f %% of our army's power at the start, %.0f km behind the line; counterattacks went in %d (%.1f a war), "
-                    "ordered on %.2f, the line won back %.1f km in %.0f h (%.0f ended)\n",
+        std::printf("  our army reserve (F7.1): %.1f %% of our army's power at the start, %.0f km behind the line; counterattacks went in %d (%.1f a war; "
+                    "the army's and the front's), ordered on %.2f, the line won back %.1f km in %.0f h (%.0f ended)\n",
                     100.0 * s.reserve_share.Get(), s.reserve_depth_km.Get(), s.counters_in, s.counters_in / n, s.counter_ordered_ratio.Get(), s.counter_won_km.Get(),
                     s.counter_h.Get(), s.counter_won_km.n);
+        if (s.front_reserve) {
+            std::printf("  the front reserve (F8.1): %.1f %% of our army's power at the start, its home %.0f km behind the line; the front's best ratio at a spent "
+                        "penetration, his force in reach over the tip (his picture): %.2f (%.0f wars); counterstrikes ordered %d (%.1f a war) on %.2f\n",
+                        100.0 * s.front_share.Get(), s.front_depth_km.Get(), s.front_best_ratio.Get(), s.front_best_ratio.n, s.front_orders, s.front_orders / n,
+                        s.front_ordered_ratio.Get());
+        }
         std::printf("  losses on the axes, T-55 equivalents a war: attacker %.1f, defender %.1f (per axis mean ratio %.2f); our air losses %.1f of %.1f; strikes on troops %.1f a war\n",
                     s.att_lost / n, s.def_lost / n, s.exchange.Get(), s.ours_air / n, s.ours_battle / n, s.strikes / n);
         std::printf("  the air front: %.1f steps forward and %.1f back a war (%d sectors moved, deepest %.0f km, %d crisis entries); latency %.1f h (%.0f), pull-back %.1f h (%.0f)\n",

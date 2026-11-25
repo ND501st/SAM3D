@@ -6,12 +6,14 @@
 // (roadmap 14.2: data/campaign/tasking.json). The director (roadmap 15.4) counts what woke the battery commander and how
 // long the quiet between was.
 //
-// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts]
+// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts [--u2-km km]]
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
 //   --hours: the session held that long from its start (the task through the day), not to the scenario's end;
 //   --theatre: the war's theatre in data/air_war/ (theatre_pannonia.json); --fronts: track F's modes on (the ground war
 //   and our air defence commanders at 1, the air front at 2, following its own ground offensive: F7.3) and the regiment following them on what reached it (F4.4; needs a theatre
-//   with a country map: --theatre theatre_pannonia_nation.json)
+//   with a country map: --theatre theatre_pannonia_nation.json); with the fronts, the ground war's units near the battery
+//   at U2 and the front heard from afar (F5.2); --u2-km: how near is near (20 km; battery 21 stands about 100 km from
+//   the nearest regiment in the Pact's war, so nothing comes down there unless widened)
 // Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
 // with --war also if no package came in.
 #include <cstdio>
@@ -47,6 +49,10 @@ int main(int argc, char** argv) {
         }
         if (a == "--fronts") {
             md.fronts = true;
+            continue;
+        }
+        if (a == "--u2-km" && i + 1 < argc) {
+            md.u2_radius_m = std::atof(argv[++i]) * 1000.0;
             continue;
         }
         args.push_back(a);
@@ -145,6 +151,21 @@ int main(int argc, char** argv) {
                     s.BatteryMoves() > 0 ? "yes" : "no", told.c_str(), command::CooperationMethodName(r.Task().own_air.method), r.SharingChanges());
         std::printf("  the pipeline: %zu facts, %zu still looked for at the regiment\n", s.Net() != nullptr ? s.Net()->Facts().size() : std::size_t{0},
                     s.Watch().Waiting());
+    }
+    // Track F, F5.2 (F8.3): the ground war's units at U2 in the session and the front heard and seen from the battery.
+    if (s.GroundUnits().Started()) {
+        const groundwar::SessionUnits& u2 = s.GroundUnits();
+        int mine = 0, theirs = 0, mine_seen = 0, theirs_seen = 0;
+        for (const groundwar::SessionUnits::Held& h : u2.All()) (h.side == groundwar::Side::Ours ? mine : theirs) += 1;
+        for (const ScenarioRunner::WorldMover& v : r.MoversInView()) {
+            const nav::Mover* m = r.Nav() != nullptr ? r.Nav()->GetMovers().Find(v.mover) : nullptr;
+            if (m != nullptr && m->ground_war) (v.enemy ? theirs_seen : mine_seen) += 1;
+        }
+        std::printf("==== The ground war in sight (F5.2)\n");
+        std::printf("  U2: %zu units made (%d ours, %d the enemy's), %zu near the battery at the end; %zu marches, %zu on the roads\n", u2.Made(), mine,
+                    theirs, u2.Near(), u2.Marches(), u2.RoadSearches());
+        std::printf("  in sight at the end: %d of our vehicles, %d of the enemy's\n", mine_seen, theirs_seen);
+        std::printf("  the front from afar: %d salvos heard, %d fires seen\n", s.FrontSalvosHeard(), s.FrontFiresSeen());
     }
     // The debrief's account of the task.
     const std::string debrief = r.Debrief();
