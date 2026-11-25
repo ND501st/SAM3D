@@ -200,9 +200,9 @@ SC_TEST("map dressing: the trees are planted the same each time, within budget, 
     // And with their understorey (A.3.21: a fifth of the inside lattice's cells, in patches).
     SC_EXPECT(d.trees.size() < 1500000);
     SC_EXPECT(interior > 100000);
-    SC_EXPECT(understorey > 0.05 * static_cast<double>(interior) && understorey < 0.4 * static_cast<double>(interior));
+    SC_EXPECT(static_cast<double>(understorey) > 0.05 * static_cast<double>(interior) && static_cast<double>(understorey) < 0.4 * static_cast<double>(interior));
     std::printf("    inside the woods: %zu canopy trees (%.1f-%.1f m), %zu saplings, %zu shrubs\n", canopy_trees, canopy_low, canopy_high, saplings, understorey);
-    SC_EXPECT(saplings > 0.03 * static_cast<double>(interior) && saplings < 0.3 * static_cast<double>(interior));
+    SC_EXPECT(static_cast<double>(saplings) > 0.03 * static_cast<double>(interior) && static_cast<double>(saplings) < 0.3 * static_cast<double>(interior));
     SC_EXPECT(d.trees.size() > 50000);
     SC_EXPECT(in_areas > 10000);
     for (std::size_t k : kinds) SC_EXPECT(k > 0);
@@ -320,6 +320,7 @@ SC_TEST("map dressing: woods by stands, a mantle and a fringe of shrubs on the o
     SC_EXPECT(!pond_boxes.empty() && willow_pond >= static_cast<int>(pond_boxes.size()));
     SC_EXPECT(pond_not_willow == 0);
     SC_EXPECT(willow_stray == 0);
+    SC_EXPECT(willow == willow_brook + willow_stray);  // every willow off the ponds counted once
     int alder_dry = 0, alder = 0, alder_brook = 0, pine_wet = 0, shrubs = 0, shrubs_deep = 0;
     for (const TreeInstance& t : d.trees) {
         const TreeKind k = static_cast<TreeKind>(t.kind);
