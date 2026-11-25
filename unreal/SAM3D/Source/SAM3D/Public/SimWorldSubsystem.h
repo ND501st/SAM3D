@@ -1139,8 +1139,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
 	bool IsCampaign() const { return Session.IsValid(); }
 
-	/** The seat the campaign was started in (the save's on a continue). */
+	/** The seat the campaign was started in (the save's on a continue), without its vehicle ("osa:commander": "commander"). */
 	const FString& GetCampaignSeat() const { return CampaignSeat; }
+
+	/** Track O, O3: the lines of the scenes the player's character is at as they are spoken (the regiment's briefing, the
+	 *  battery commander's combat order in person, the crew's briefing), "speaker: words", the newest last; and where the
+	 *  battery commander is while he is away from his post ("" at it, or not the player's seat). No voices yet. */
+	void GetSceneSubtitles(TArray<FString>& OutLines, FString& OutAway) const;
 
 	/** The pause menu's W: time runs at sam3d.WaitScale until the director wakes the player's seat (a word heard there, a
 	 *  new contact, a new mark on the board: what reaches the player's person, never the truth) or the evening briefing's

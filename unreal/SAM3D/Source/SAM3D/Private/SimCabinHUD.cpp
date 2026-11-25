@@ -130,6 +130,26 @@ void ASimCabinHUD::DrawHUD()
 			DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, Sim->IsCampaignWaiting() ? 0.7f : 0.45f), (Canvas->ClipX - Tw) * 0.5f - 10.0f, 6.0f, Tw + 20.0f, Th + 8.0f);
 			DrawText(Status, Sim->IsCampaignWaiting() ? FLinearColor(1.0f, 0.78f, 0.35f) : FLinearColor(0.93f, 0.92f, 0.86f, 0.85f),
 				(Canvas->ClipX - Tw) * 0.5f, 10.0f, Small);
+			// Track O, O3: the scene the player's character is at, as subtitles (no voices yet), and where he is when away.
+			TArray<FString> Lines;
+			FString Away;
+			Sim->GetSceneSubtitles(Lines, Away);
+			UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+			float Sy = Canvas->ClipY * 0.78f;
+			if (!Away.IsEmpty())
+			{
+				GetTextSize(Away, Tw, Th, Small);
+				DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), (Canvas->ClipX - Tw) * 0.5f - 10.0f, 30.0f, Tw + 20.0f, Th + 8.0f);
+				DrawText(Away, FLinearColor(1.0f, 0.78f, 0.35f), (Canvas->ClipX - Tw) * 0.5f, 34.0f, Small);
+			}
+			for (const FString& L : Lines)
+			{
+				GetTextSize(L, Tw, Th, Medium);
+				const float Fit = Tw > Canvas->ClipX - 80.0f ? (Canvas->ClipX - 80.0f) / Tw : 1.0f;
+				DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), (Canvas->ClipX - Tw * Fit) * 0.5f - 10.0f, Sy - 4.0f, Tw * Fit + 20.0f, Th * Fit + 8.0f);
+				DrawText(L, FLinearColor(1.0f, 1.0f, 0.92f), (Canvas->ClipX - Tw * Fit) * 0.5f, Sy, Medium, Fit);
+				Sy += Th * Fit + 12.0f;
+			}
 		}
 	}
 	// A battery link: the other vehicle is a key away.

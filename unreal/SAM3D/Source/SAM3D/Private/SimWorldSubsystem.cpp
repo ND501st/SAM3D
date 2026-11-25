@@ -676,9 +676,14 @@ bool USimWorldSubsystem::StartCampaign(const FString& How, const FString& Seat, 
 	Cabin.Reset();
 	ClearScenario();
 	Session = MoveTemp(NewSession);
-	Runner = &Session->Runner();
+	// O3: a launcher commander's seat ("osa:<station>") is played in the battery's Osa beside the post.
+	const FString SavedSeat = ToF(Header.seat);
+	const bool bOsaSeat = SavedSeat.StartsWith(TEXT("osa:")) && Session->Osa() != nullptr;
+	Runner = bOsaSeat ? Session->Osa() : &Session->Runner();
 	CampaignHeader = Header;
-	CampaignSeat = Header.seat.empty() ? ToF(Runner->Cmdr()) : ToF(Header.seat);
+	CampaignSeat = Header.seat.empty() ? ToF(Runner->Cmdr()) : SavedSeat;
+	CampaignSeat.RemoveFromStart(TEXT("osa:"));
+	CampaignSeat.RemoveFromStart(TEXT("post:"));
 	CampaignEnemy = ToF(Header.adversary);  // as the menu names it ("the rebels")
 	{
 		TArray<FSimCampaignChoice> Choices;
@@ -1578,6 +1583,10 @@ simcore::command::HeldMap USimWorldSubsystem::GetHeldMap(const FString& Station,
 		return simcore::command::HeldMap();
 	}
 	std::string Holder = Session.IsValid() ? Session->PlayerPost() : std::string();
+	if (Session.IsValid() && Session->Osa() != nullptr && Runner == Session->Osa())
+	{
+		Holder = Session->OsaCallsign() + ":commander";  // O3: the Osa's commander holds his own card
+	}
 	if (Holder.empty())
 	{
 		const simcore::Battery* B = Runner->GetBattery();
@@ -1592,6 +1601,34 @@ simcore::command::HeldMap USimWorldSubsystem::GetHeldMap(const FString& Station,
 	}
 	OutHolder = ToF(Holder);
 	return Session.IsValid() ? Session->HeldMapFor(Holder) : Runner->HeldMapOf(Holder);
+}
+
+void USimWorldSubsystem::GetSceneSubtitles(TArray<FString>& OutLines, FString& OutAway) const
+{
+	OutLines.Reset();
+	OutAway.Reset();
+	if (!Runner)
+	{
+		return;
+	}
+	// A line stays up this long after it is spoken (sam3d); the two newest.
+	constexpr double SubtitleSeconds = 8.0;
+	const double Now = Runner->Time();
+	for (const simcore::campaign::SceneLine& L : Runner->SceneLines())
+	{
+		if (L.at_s <= Now + 1e-6 && Now - L.at_s < SubtitleSeconds)
+		{
+			OutLines.Add(ToF(L.speaker) + TEXT(": ") + ToF(L.text));
+		}
+	}
+	while (OutLines.Num() > 2)
+	{
+		OutLines.RemoveAt(0);
+	}
+	if (Session.IsValid() && Runner == &Session->Runner() && CampaignSeat == ToF(Runner->Cmdr()) && !Runner->CommanderAway().empty())
+	{
+		OutAway = TEXT("You are ") + ToF(Runner->CommanderAway()) + TEXT(".");
+	}
 }
 
 bool USimWorldSubsystem::CanDecideOnMap(const FString& Station) const
