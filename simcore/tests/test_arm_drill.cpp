@@ -53,8 +53,17 @@ bool Has(const std::string& debrief, const std::string& text) { return debrief.f
 
 const char* kVehicleHit = "the vehicle was hit by an anti-radiation missile";
 
-std::string Harm() { return ReadFile(kData + "/scenarios/osa_arm_drill.json"); }
-std::string Shrike() { return ReadFile(kData + "/scenarios/osa_arm_drill_shrike.json"); }
+// The drill is the own vehicle's: the scenarios' second launcher (22, 400 m off) is taken out here. Since roadmap B3 a
+// battery's other launcher radiates when it engages, and a carrier's ARM then goes to one of the two.
+std::string Alone(std::string s) {
+    const std::string from = "{ \"id\": \"22\", \"kind\": \"launcher\", \"position\": { \"east_m\": 400, \"north_m\": -200, \"up_m\": 3 } }";
+    const std::size_t at = s.find(from);
+    if (at != std::string::npos) s.erase(at, from.size());
+    else std::printf("    test text not found: the second launcher\n");
+    return s;
+}
+std::string Harm() { return Alone(ReadFile(kData + "/scenarios/osa_arm_drill.json")); }
+std::string Shrike() { return Alone(ReadFile(kData + "/scenarios/osa_arm_drill_shrike.json")); }
 // The seats that watch for the signs of an ARM launch (the search scope, the tracking radar's indicators, the TV) of a
 // "basic" tier: they don't know the signs, so nobody reacts to them.
 std::string Untrained(const std::string& text) {

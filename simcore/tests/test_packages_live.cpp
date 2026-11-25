@@ -81,7 +81,7 @@ LiveRun RunFirstPackage(const AirWarData& d, unsigned seed) {
         r.Step(0.1);
         live.Step(r);
         for (const fx::Event& ev : r.Fx().Since(cursor)) {
-            if (ev.kind == fx::EventKind::WeaponRelease) out.releases.push_back(ev);
+            if (ev.kind == fx::EventKind::WeaponRelease && ev.delivery != "jettison") out.releases.push_back(ev);  // not a load thrown off (B4)
             if (ev.kind == fx::EventKind::WeaponImpact) out.impacts.push_back(ev);
             out.ahead += ev.t_s > r.Time() + 1e-9 ? 1 : 0;
         }
@@ -217,6 +217,7 @@ SC_TEST("packages live (15.3): a raid injected into a running session flies as t
     const PackageOutcome o = bridge.Finish(rb);
     SC_EXPECT(o.package_id == rs.manifest.package_id && o.played);
     SC_EXPECT(bridge.EmittedSeconds() > 0.0);
+    if (!bridge.Over(rb)) std::printf("    not over at %.1f s (the raid ends at %.1f s): %s\n", rb.Time(), inj.manifest.end_s, rb.EndReason().c_str());
     SC_EXPECT(bridge.Over(rb));
     // Its warning and its jammers came with it, on the session's clock.
     std::size_t raid_triggers = 0, raid_jammers = 0;
@@ -293,9 +294,14 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
     LiveRun first;
     unsigned seed = 1;
     double last_release_s = -1.0, last_impact_s = -1.0;
-    for (; seed <= 4; ++seed) {
+    for (; seed <= 12; ++seed) {
         first = RunFirstPackage(d, seed);
-        if (!first.ok || first.releases.empty()) continue;
+        // A package whose loads went at its planned aim: one whose flight spent them on what it found on the way (a
+        // dive-bombing pass at a target of opportunity, roadmap S4) delivered nothing even run to its end, so the
+        // shortened run's "delivered" below would test nothing. Since S5's hot phase (the quirks' weights, so the
+        // officers and their raids) seed 3's first NATO package was such a one: Falcon 70, an armed reconnaissance (its
+        // load is for what it finds, 06_OPPORTUNITY.md section 3.4), not a strike; a strike keeps its load for its target.
+        if (!first.ok || first.releases.empty() || !first.played.outcome.delivered) continue;
         last_release_s = last_impact_s = -1.0;
         for (const fx::Event& ev : first.releases) {
             last_release_s = std::fmax(last_release_s, ev.t_s);
@@ -303,8 +309,8 @@ SC_TEST("packages live (15.3): a package over by its clock while its loads still
         }
         if (last_impact_s > last_release_s + 2.0) break;  // a load still falls a second after the last release
     }
-    SC_EXPECT(seed <= 4 && first.ok && first.ahead == 0);
-    if (seed > 4 || !first.ok) return;
+    SC_EXPECT(seed <= 12 && first.ok && first.ahead == 0);
+    if (seed > 12 || !first.ok) return;
     const double end_s = last_release_s + 1.0;
     AirWarData shortened = d;
     shortened.tuning.values["scenario.margin_s"] = d.tuning.Get("scenario.margin_s") + (end_s - first.end_s);

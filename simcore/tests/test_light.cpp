@@ -10,6 +10,7 @@
 
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/raid_scenario.hpp"
+#include "simcore/air_war/save.hpp"
 #include "simcore/air_war/test_waves.hpp"
 #include "simcore/command/air_war_feed.hpp"
 #include "simcore/battery_link.hpp"
@@ -398,13 +399,19 @@ SC_TEST("light: the air war by the sun once its theatre has a date; undated, the
     airwar::AirWarData d;
     std::string e;
     SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", d, &e));
+    // The tuned theatre is dated (roadmap S8) under light.mode 1; a save made before S8 (light.mode 0) has it undated.
+    SC_EXPECT(d.theatre.day_of_year == 288 && d.theatre.date_day_of_year == 288 && d.theatre.dated_from_light_mode == 1);
+    d.tuning.values["light.mode"] = 0.0;
+    airwar::ApplyLightMode(d);
     // Undated: the buckets (dusk 18-21), the planner's hours as before.
     SC_EXPECT(d.theatre.day_of_year == 0);
     SC_EXPECT(airwar::TheatrePartAt(d.theatre, 19.0) == airwar::DayPart::Dusk);
     SC_EXPECT(airwar::TheatrePartHour(d.theatre, 19.0, airwar::DayPart::Dusk) == airwar::DayPartHour(airwar::DayPart::Dusk));
     // Dated 15 October: 19:00 is night, 17:00 dusk, 10:00 day; the dusk aimed at is sunset.
-    d.theatre.day_of_year = 288;
-    d.theatre.utc_offset_h = 1.0;
+    d.tuning.values["light.mode"] = 1.0;
+    airwar::ApplyLightMode(d);
+    SC_EXPECT(d.theatre.day_of_year == 288 && d.theatre.utc_offset_h == 1.0);
+    SC_EXPECT(airwar::TheatrePartAt(d.theatre, 19.0) == airwar::DayPart::Night);
     SC_EXPECT(airwar::DayPartBySun(d.theatre, 19.0) == airwar::DayPart::Night);
     SC_EXPECT(airwar::DayPartBySun(d.theatre, 17.0) == airwar::DayPart::Dusk);
     SC_EXPECT(airwar::DayPartBySun(d.theatre, 10.0) == airwar::DayPart::Day);
@@ -446,6 +453,8 @@ SC_TEST("light: an undated theatre's raid is lit as it was planned; the sample r
     airwar::AirWarData d;
     std::string e;
     SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", d, &e));
+    d.tuning.values["light.mode"] = 0.0;  // the tuned theatre as a save made before S8 has it: undated
+    airwar::ApplyLightMode(d);
     SC_EXPECT(d.theatre.day_of_year == 0);
     airwar::AirCampaign c;
     SC_EXPECT(c.Init(d, 1));
@@ -473,8 +482,9 @@ SC_TEST("light: an undated theatre's raid is lit as it was planned; the sample r
         SC_EXPECT(l.dark == night && l.daylight == !night);
     }
     SC_EXPECT(built >= 1);
-    // The menu's samples (generated on the undated theatre, their clocks set by hand): each plays at the part of the day
-    // its description names, in daylight for the TV from its second 0 to its end.
+    // The menu's samples (regenerated from the dated tuned theatre, roadmap S8): each has its planner's clock and date
+    // in the war's year, plays at the part of the day its description names, in daylight for the TV at its second 0 (the
+    // dusk raids run on into the dark, as their planners' clocks have them), and every aircraft in it carries its type's flight limits (R3).
     MissionCatalog cat;
     SC_EXPECT(LoadMissionCatalog(kData, cat, &e));
     int samples = 0;
@@ -484,6 +494,11 @@ SC_TEST("light: an undated theatre's raid is lit as it was planned; the sample r
             ScenarioDef def;
             ConsoleData console;
             SC_EXPECT(LoadScenarioFile(kData + "/" + m.file, kData, def, console, &e));
+            SC_EXPECT(def.clock_given && def.year == 1985 && def.clock.day_of_year >= 288);
+            for (const ScenarioTarget& t : def.targets) {
+                if (t.max_load_g <= 0.0) std::printf("    %s: %s has no flight limits\n", m.file.c_str(), t.name.c_str());
+                SC_EXPECT(t.max_load_g > 0.0 && t.roll_rate_rad_s > 0.0);
+            }
             const bool dawn = def.description.find(", dawn,") != std::string::npos;
             const bool dusk = def.description.find(", dusk,") != std::string::npos;
             SC_EXPECT(dawn != dusk);
@@ -492,9 +507,178 @@ SC_TEST("light: an undated theatre's raid is lit as it was planned; the sample r
             std::printf("    %s at %s: the sun %.1f deg, at the end %.1f deg\n", m.file.c_str(), FormatLocalHour(def.clock.start_local_h).c_str(),
                         first.sun_elevation_deg, last.sun_elevation_deg);
             SC_EXPECT(first.phase == (dawn ? LightPhase::Dawn : LightPhase::Dusk));
-            SC_EXPECT(first.daylight && last.daylight && !first.dark && !last.dark);
+            SC_EXPECT(first.daylight && !first.dark);
+            if (dawn) SC_EXPECT(last.daylight && !last.dark);  // dawn only brightens
             ++samples;
         }
     }
     SC_EXPECT(samples == 7);
+}
+
+// ---------------------------------------------------------------------------------------------- roadmap S8
+
+SC_TEST("light (S8): the moon's place and phase against two eclipses, and its light by hand") {
+    // The total lunar eclipse of 21 January 2000 (mid-eclipse about 04:44 UT): the moon full.
+    const MoonPosition full = MoonAt(46.9, 19.7, 2000, 21, 4.73);
+    std::printf("    21 Jan 2000 04:44 UT: %.4f lit, phase angle %.2f deg\n", full.illuminated, RadToDeg(full.phase_angle_rad));
+    SC_EXPECT(full.illuminated > 0.995);
+    // The total solar eclipse of 11 August 1999, its greatest about 11:03 UT near 45.1 N 24.3 E: the moon new, and on the
+    // sun (the parallax taken off) to within its own size and the formulas' few tenths of a degree.
+    const MoonPosition dark = MoonAt(45.1, 24.3, 1999, 223, 11.05);
+    const SunPosition sun = SunAt(45.1, 24.3, 223, 11.05);
+    const double cos_sep = std::sin(dark.elevation_rad) * std::sin(sun.elevation_rad) +
+                           std::cos(dark.elevation_rad) * std::cos(sun.elevation_rad) * std::cos(dark.azimuth_rad - sun.azimuth_rad);
+    const double sep = RadToDeg(std::acos(Clamp(cos_sep, -1.0, 1.0)));
+    std::printf("    11 Aug 1999 11:03 UT: %.4f lit, the moon %.2f deg from the sun (sun at %.1f deg)\n", dark.illuminated, sep,
+                RadToDeg(sun.elevation_rad));
+    SC_EXPECT(dark.illuminated < 0.005);
+    SC_EXPECT(sep < 0.8);
+    // The Julian day of J2000.0 and of 1 January 1985 (Meeus 1998, ch. 7).
+    SC_EXPECT_NEAR(JulianDay(2000, 1, 12.0), 2451545.0, 1e-9);
+    SC_EXPECT_NEAR(JulianDay(1985, 1, 0.0), 2446066.5, 1e-9);
+    // The moon's light by hand: full and overhead, magnitude -12.73, 2.54e-6 x 10^5.092 = 0.3140 lux above the air,
+    // times 10^(-0.08) through one air mass: 0.2610 lux. At a phase angle of 90 deg, magnitude
+    // -12.73 + 2.34 + 0.2624 = -10.1276: 0.02376 lux.
+    SC_EXPECT_NEAR(MoonLux(90.0, 0.0), 0.2610, 0.0005);
+    SC_EXPECT_NEAR(MoonLux(90.0, 90.0), 0.02376, 0.0002);
+    SC_EXPECT(MoonLux(-1.0, 0.0) == 0.0);
+    SC_EXPECT(MoonLux(10.0, 0.0) < MoonLux(40.0, 0.0));
+}
+
+SC_TEST("light (S8): the light on the ground through the twilight, and the TV's threshold rising with its fall") {
+    SC_EXPECT_NEAR(SkyLuxOfSun(-6.0), 3.4, 1e-9);
+    SC_EXPECT_NEAR(SkyLuxOfSun(-0.8), 400.0, 1e-9);
+    SC_EXPECT_NEAR(SkyLuxOfSun(-30.0), 0.001, 1e-12);
+    double last = 0.0;
+    for (int deg = -20; deg <= 90; ++deg) {
+        const double lux = SkyLuxOfSun(static_cast<double>(deg));
+        SC_EXPECT(lux >= last);
+        last = lux;
+    }
+    LightValues v;
+    std::string e;
+    SC_EXPECT(LoadLightValues(kData, "gameplay/light.json", v, &e));
+    SC_EXPECT(v.tv_full_lux > 0.0);
+    // Full light down to the sunset's 400 lux; Rose's square root below it: 4 x the threshold at a sixteenth of it.
+    SC_EXPECT_NEAR(TvThresholdFactor(5000.0, v), 1.0, 1e-12);
+    SC_EXPECT_NEAR(TvThresholdFactor(v.tv_full_lux / 16.0, v), 4.0, 1e-9);
+    SC_EXPECT_NEAR(TvThresholdFactor(10.0, LightValues()), 1.0, 1e-12);  // the code's defaults: no gradient
+    // The range a factor k takes off the TV's contrast range is ln(k) V / 3.912 (Koschmieder): 20 km at 40 km
+    // visibility in full light, 20 - ln 4 x 40 / 3.912 = 5.825 km at a factor of 4.
+    const em::OpticalSensorDef cam;
+    const double th = em::AnchorThreshold(cam.inherent_contrast, 20000.0, em::kReferenceVisibilityM);
+    SC_EXPECT_NEAR(em::ContrastRangeM(cam.inherent_contrast, th * 4.0, em::kReferenceVisibilityM), 20000.0 - std::log(4.0) * 40000.0 / 3.912, 1.0);
+    // A target at 12 km: seen in full light, too dark for the TV with the sun 3 deg down.
+    em::OpticalConditions c;
+    SC_EXPECT(em::Look(cam, th, c, 12000.0, 15.0, 0.05, true).seen);
+    const SunLight dusk = LightOfSun(-3.0, 260.0, false, v);
+    std::printf("    the sun 3 deg down: %.1f lux, the TV's threshold x %.2f\n", dusk.lux, dusk.tv_threshold_factor);
+    SC_EXPECT(dusk.daylight && dusk.tv_threshold_factor > 2.0);
+    c.threshold_factor = dusk.tv_threshold_factor;
+    const em::OpticalLook dim = em::Look(cam, th, c, 12000.0, 15.0, 0.05, true);
+    SC_EXPECT(!dim.seen && dim.why_not != nullptr && std::string(dim.why_not) == "too dark for the TV");
+    SC_EXPECT(em::Look(cam, th, c, 3000.0, 15.0, 0.05, true).seen);  // near, still seen
+    // The factor through the evening: 1 while the sun is up, rising through the twilight.
+    double prev = 0.0;
+    for (int i = 0; i <= 22; ++i) {
+        const double el = 5.0 - 0.5 * i;
+        const double k = LightOfSun(el, 260.0, false, v).tv_threshold_factor;
+        SC_EXPECT(k >= prev - 1e-12);
+        if (el >= 0.0) SC_EXPECT_NEAR(k, 1.0, 1e-12);
+        prev = k;
+    }
+}
+
+SC_TEST("light (S8): the runner tells the engagement the TV's threshold as the sun sets, and the night's moon in the debrief") {
+    ScenarioDef def;
+    ConsoleData console;
+    std::string e;
+    SC_EXPECT(LoadScenarioFile(kData + "/scenarios/osa_practice.json", kData, def, console, &e));
+    ApplyTimeChoice(def, TimePreset::Hour, 16.75);  // 16:45, the sun about to set; 17:25 night
+    def.time_limit_s = 2700.0;  // held past the dusk: the practice's targets gone, the sky still turns
+    def.end_when_targets_gone = false;
+    ScenarioRunner r(std::move(def), std::move(console));
+    SC_EXPECT_NEAR(r.Engagement().OpticalConditions().threshold_factor, 1.0, 1e-12);
+    double at_dusk = 0.0;
+    while (r.Time() < 2700.0 && !r.Finished()) {
+        r.Step(0.5);
+        if (r.LightNow().daylight) at_dusk = r.Engagement().OpticalConditions().threshold_factor;
+        SC_EXPECT_NEAR(r.Engagement().OpticalConditions().threshold_factor, r.LightNow().tv_threshold_factor, 0.01);
+    }
+    std::printf("    the TV's threshold x %.1f just before its daylight ended\n", at_dusk);
+    SC_EXPECT(at_dusk > 5.0);
+    if (!r.Finished()) {
+        SC_EXPECT(!r.LightNow().daylight);
+        const std::string d = r.Debrief();
+        SC_EXPECT(d.find("night: the sun") != std::string::npos);
+        SC_EXPECT(d.find("; no moon") != std::string::npos || d.find("% lit,") != std::string::npos);
+    }
+}
+
+SC_TEST("light (S8): the war's moon, and the night's visual range by it") {
+    // 15 October 1985 over the Kesmark range: two weeks before the total lunar eclipse of 28 October 1985, the moon new.
+    const SkyClock war = Kesmark(22.0);
+    LightValues v;
+    std::string e;
+    SC_EXPECT(LoadLightValues(kData, "gameplay/light.json", v, &e));
+    const SunLight night = LightAt(war, 0.0, v);
+    std::printf("    15 Oct 1985 22:00: the moon %.0f %% lit, %.1f deg up, %.4f lux, share %.2f\n", 100.0 * night.moon_illuminated,
+                night.moon_elevation_deg, night.moon_lux, night.moon_share);
+    SC_EXPECT(night.moon_illuminated < 0.05 && night.moon_share == 0.0);
+    // A fortnight later, the full moon high at midnight.
+    SkyClock full = Kesmark(0.0);
+    full.day_of_year = 302;  // 29 October 1985, the night after the eclipse
+    const SunLight bright = LightAt(full, 0.0, v);
+    std::printf("    29 Oct 1985 00:00: the moon %.0f %% lit, %.1f deg up, %.3f lux, share %.2f\n", 100.0 * bright.moon_illuminated,
+                bright.moon_elevation_deg, bright.moon_lux, bright.moon_share);
+    SC_EXPECT(bright.moon_illuminated > 0.97 && bright.moon_elevation_deg > 30.0 && bright.moon_share > 0.8);
+    SC_EXPECT(bright.lux > night.lux);
+    // The eye's range at night: night_m without a moon, towards moonlit_m with a full one.
+    nav::VisualRangeValues vr;
+    SC_EXPECT(nav::LoadVisualRange(kData, "gameplay/visual_range.json", vr, &e));
+    SC_EXPECT(vr.moonlit_m > vr.night_m);
+    SC_EXPECT_NEAR(nav::VisualRangeM(40000.0, -20.0, vr, 0.0), vr.night_m, 1e-9);
+    SC_EXPECT_NEAR(nav::VisualRangeM(40000.0, -20.0, vr, 1.0), vr.moonlit_m, 1e-9);
+    SC_EXPECT_NEAR(nav::VisualRangeM(40000.0, -20.0, vr, 0.5), 0.5 * (vr.night_m + vr.moonlit_m), 1e-9);
+    SC_EXPECT_NEAR(nav::VisualRangeM(40000.0, 10.0, vr, 1.0), vr.day_m, 1e-9);  // the moon by day changes nothing
+    SC_EXPECT_NEAR(nav::VisualRangeM(1000.0, -20.0, vr, 1.0), 1000.0, 1e-9);   // the weather's cap
+}
+
+SC_TEST("light (S8): the air war reads light.json, and a save keeps its light mode") {
+    airwar::AirWarData d;
+    std::string e;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia_nation.json", "air_war/faction_nato.json", d, &e));
+    // The nation's theatre keeps its own date under either mode (dated before S8).
+    SC_EXPECT(d.theatre.day_of_year == 288 && d.theatre.dated_from_light_mode == 0);
+    LightValues file;
+    SC_EXPECT(LoadLightValues(kData, "gameplay/light.json", file, &e));
+    SC_EXPECT_NEAR(d.theatre.light.tv_full_lux, file.tv_full_lux, 1e-12);
+    // The parts of the day follow the theatre's light values: a twilight ending 3 deg down makes 17:15 night.
+    const double quarter_past_five = 17.25;
+    SC_EXPECT(airwar::TheatrePartAt(d.theatre, quarter_past_five) == airwar::DayPart::Dusk);
+    d.theatre.light.twilight_deg = 3.0;
+    SC_EXPECT(airwar::TheatrePartAt(d.theatre, quarter_past_five) == airwar::DayPart::Night);
+    d.tuning.values["light.mode"] = 0.0;
+    airwar::ApplyLightMode(d);
+    SC_EXPECT(d.theatre.day_of_year == 288 && d.theatre.light.tv_full_lux == 0.0);  // the code's defaults
+    // A save now says its light mode and replays with it; one without the key replays with 0, the tuned theatre undated.
+    airwar::AirWarData t;
+    SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json", t, &e));
+    airwar::AirCampaign c;
+    SC_EXPECT(c.Init(t, 5));
+    c.Posture().emission = 0.1;
+    c.Advance(30.0);
+    const std::string saved = airwar::SaveCampaignJson(c, "air_war/theatre_pannonia.json", "air_war/faction_warsaw_pact.json");
+    const std::size_t at = saved.find("\"light_mode\"");
+    SC_EXPECT(at != std::string::npos);
+    airwar::AirCampaign back;
+    SC_EXPECT(airwar::LoadCampaignJson(saved, kData, back, &e));
+    if (!e.empty()) std::printf("    %s\n", e.c_str());
+    SC_EXPECT(back.Data().theatre.day_of_year == 288 && back.Journal().size() == c.Journal().size());
+    SC_EXPECT(back.Packages().size() == c.Packages().size());
+    std::string old = saved;
+    if (at != std::string::npos) old.replace(at, 12, "\"light_mode_before_s8\"");
+    airwar::AirCampaign before;
+    SC_EXPECT(airwar::LoadCampaignJson(old, kData, before, &e));
+    SC_EXPECT(before.Data().theatre.day_of_year == 0);
 }

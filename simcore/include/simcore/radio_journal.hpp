@@ -230,7 +230,7 @@ private:
     }
     static std::string Stamp(const RadioJournalEntry& e) {
         const int s = e.heard_s > 0.0 ? static_cast<int>(e.heard_s) : 0;
-        char stamp[32];
+        char stamp[64];
         std::snprintf(stamp, sizeof(stamp), "Ч+%02d:%02d  ", s / 60, s % 60);
         return std::string(stamp) + NetWord(e.net) + "  " + e.from + ": ";
     }

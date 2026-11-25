@@ -10,7 +10,106 @@
   "notes": "The Noric Republic is fictional. Nothing here is Austrian data: the analogue only gives the scale and the limits. Every aircraft number is a PLACEHOLDER.",
   "em_libraries": [],
   "callsigns": [ "Adler", "Falke", "Gams", "Steinbock", "Bergwind", "Edelweiss" ],
+  "radio": {
+    "air_radio": "neutral_air_vhf_am",
+    "ground_radio": "air_ground_uhf_am",
+    "band_mhz": 125.0,
+    "modulation": "AM",
+    "language": "de",
+    "callsign_rotation_h": 168.0,
+    "opsec": 0.5,
+    "have_quick_share": 0.0,
+    "secure_voice_share": 0.0,
+    "gci_channels_per_post": 2,
+    "demonstration": 0.0,
+    "source": "estimate (nothing was found on a small neutral air arm's radio procedure or listening, comms-24; the Austrian analogue austrian_af_wiki for scale only; German is an inference); demonstration 0: nothing found",
+    "confidence": "estimate",
+    "notes": "Weekly call signs, medium opsec: game values."
+  },
+  "flights": {
+    "source": "sam3d estimate: NATO-style pairs, short low routes by day (docs/air_battle/02_FLIGHTS_AND_PILOTS.md section 1.3, a design inference)",
+    "confidence": "estimate",
+    "notes": "Places in number order, the leader's [0, 0, 0] first: No. 2 his wingman, No. 3 the element lead, No. 4 his wingman; a place past the list repeats it further back. Each place is [right_m, back_m, up_m] of the leader. A phase not given flies the transit's. 1985 formations only: no welded wing (anderegg_2001 p. 20 puts Fluid Four before 1975).",
+    "fighter": {
+      "transit": { "slots": [ [0, 0, 0], [1600, 0, 600], [-3200, 0, 0], [-4800, 0, 600] ],
+        "source": "sam3d estimate: as NATO's fighters (anderegg_2001)", "confidence": "estimate" }
+    },
+    "strike": {
+      "transit": { "slots": [ [0, 0, 0], [2000, 0, 0], [0, 3000, 0], [2000, 3000, 0] ],
+        "source": "sam3d estimate: as NATO's strike at low level (rafhs_j20_1999)", "confidence": "estimate" }
+    },
+    "helicopter": {
+      "transit": { "slots": [ [0, 0, 0], [200, 300, 0], [400, 600, 0], [600, 900, 0] ],
+        "source": "sam3d estimate: as NATO's helicopters (fm_17_50_1977)", "confidence": "estimate" }
+    }
+  },
+  "opportunity_rules": {
+    "report_in_flight": {"value": false, "source": "SAM3D assumption (docs/research/air_battle_2026-11/c2_retasking.md c2-40)", "confidence": "low", "notes": "centralised: the rest reported after landing"},
+    "fired_on_may_attack": {"value": false, "source": "SAM3D assumption", "confidence": "low"},
+    "own_troops_keepout_m": {"value": 500, "source": "SAM3D estimate", "confidence": "low"},
+    "reattack": {"value": 0.2, "source": "SAM3D estimate (rarely: docs/research/air_battle_2026-11/opportunity.md section 4 item 4)", "confidence": "low"},
+    "armed_recce": {"value": "near_line", "source": "SAM3D assumption (ellitoral_crippa, an analogue)", "confidence": "low", "notes": "a pair near the line may be allowed to attack by its brief"},
+    "near_line_km": {"value": 30, "source": "SAM3D estimate", "confidence": "low"},
+    "strike_on_task": {"value": "report", "source": "SAM3D assumption", "confidence": "low"},
+    "cas": {"value": "attack", "source": "SAM3D assumption", "confidence": "low"}
+  },
+  "c2": {
+    "source": "SAM3D assumption: a small, centralised national system (docs/air_battle/05_C2_AND_RETASKING.md §2.3; no period source found)",
+    "confidence": "low",
+    "notes": "Fighters ground-controlled; ground attack flies planned missions only; no FACs; no in-air retasking beyond recall. Its ground alert stands down unused for ground attack.",
+    "posts": [
+      { "id": "national_cp", "name": "the national air operations centre", "kind": "tasking", "at": "bases", "reach_km": 200, "net": "neutral_air_vhf_am",
+        "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §2.3)", "confidence": "low" },
+      { "id": "gci", "name": "GCI post", "kind": "radar_control", "at": "line", "back_km": 30, "reach_km": 150, "net": "neutral_air_vhf_am",
+        "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §2.3)", "confidence": "low" },
+      { "id": "base", "name": "the base's operations", "kind": "squadron", "at": "bases", "reach_km": 60, "net": "neutral_air_vhf_am",
+        "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §2.3)", "confidence": "low" }
+    ],
+    "authority": [
+      { "post": "radar_control", "act": "warn", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
+      { "post": "tasking", "act": "scramble", "missions": ["fighters"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
+      { "post": "tasking", "act": "recall", "missions": ["any"], "where": "any", "source": "SAM3D assumption (docs/air_battle/05_C2_AND_RETASKING.md §4.2)", "confidence": "low" },
+      { "post": "radar_control", "act": "vector", "missions": ["fighters"], "where": "any", "source": "SAM3D assumption (docs/air_battle/07_AIR_TO_AIR.md section 9: a small air force's fighters under its own GCI)", "confidence": "low",
+        "notes": "Roadmap S3: the air fight reads it." }
+    ],
+    "timing": {
+      "report": { "relay_s": [60, 180], "decide_s": [300, 900], "encode_s": [20, 60],
+        "source": "SAM3D estimate: slow and careful (docs/air_battle/05_C2_AND_RETASKING.md §2.5)", "confidence": "low" },
+      "order": { "relay_s": [60, 180], "decide_s": [120, 600], "encode_s": [20, 60],
+        "source": "SAM3D estimate: recall only, 5-15 min (docs/air_battle/05_C2_AND_RETASKING.md §2.5)", "confidence": "low" },
+      "scramble": { "relay_s": [60, 180], "decide_s": [300, 600],
+        "source": "SAM3D estimate (docs/air_battle/05_C2_AND_RETASKING.md §3)", "confidence": "low" }
+    },
+    "report_missions": ["any"],
+    "hunter_leave": "none",
+    "max_report_age_h": 6
+  },
+  "hot_phase": {
+    "source": "docs/air_battle/10_FACTIONS.md section 7 (docs/research/air_battle_2026-11/factions_cases.md section 1, design-01: SAM3D estimates ordered by the sources)",
+    "confidence": "estimate",
+    "notes": "How its flights choose in the air (roadmap B11, simcore/air_war/hot_phase.hpp): each value the faction's, moved by the flight's officer (at most 0.2) and pilot (at most 0.15). Played flights (A2, A1) read it; the abstract resolver does not.",
+    "initiative": {"value": 0.6, "range": [0.4, 0.75], "source": "ellitoral_crippa (the lone pilot sent to count ships and allowed to attack chose his target); usn_falklands_1983; SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "plan_adherence": {"value": 0.6, "range": [0.4, 0.75], "source": "swe_stril_c2 (a neutral could control its fighters closely); goldhaube_refs; SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "press_on": {"value": 0.4, "range": [0.25, 0.55], "source": "usn_falklands_1983 (pressed on at extreme range, could not afford to manoeuvre over the target); SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "jettison_readiness": {"value": 0.6, "range": [0.4, 0.8], "source": "fundacion_malvinas_24may (A-4s jettisoned tanks and climbed away from Sea Harriers); docs/research/air_battle_2026-11/reactions.md section 2.6", "confidence": "estimate", "notes": "tanks first: the reactions table's tanks_only shares (data/gameplay/reactions.json)"},
+    "radio_discipline": {"value": 0.6, "by_role": {"escort": 0.2, "sweep": 0.2, "cap": 0.2}, "range": [0.2, 0.8], "source": "estimate (nothing was found on a small neutral air arm's radio procedure or listening, comms-24; the Austrian analogue austrian_af_wiki for scale only)", "confidence": "low", "notes": "by_role: its fighters under ground control talk to it (the radio block's discipline_gci_fighters before roadmap B11)"},
+    "emission_discipline": {"value": 0.5, "range": [0.3, 0.7], "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.2)", "confidence": "estimate"},
+    "air_combat_skill": {"value": 0.5, "range": [0.3, 0.6], "source": "austrian_af_wiki (interceptors with guns only); docs/research/air_battle_2026-11/air_combat.md neu-01; the same as data/air_war/air_combat.json's doctrine skill (checked on load)", "confidence": "estimate"},
+    "opportunity": {"value": 0.4, "range": [0.2, 0.6], "source": "SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "low", "notes": "moved from opportunity_rules.tendency (roadmap B11)"},
+    "turn_back": {"value": 0.5, "range": [0.3, 0.7], "source": "angola_saaf_1987 (pattern: a small force without replacements husbands its aircraft); SAM3D estimate ordered by the sources (docs/research/air_battle_2026-11/factions_cases.md section 1)", "confidence": "estimate"},
+    "husbanding": {"value": 0.3, "range": [0.1, 0.5], "source": "game value on angola_saaf_1987 (the pattern) and the faction's loss_tolerance_per_day (every aircraft irreplaceable)", "confidence": "estimate"},
+    "reaction_delay_s": {"value": [2, 5], "improvised_extra_s": 0, "source": "docs/research/air_battle_2026-11/reactions.md section 2.6 (trained 2-5 s, from a sighting: no warning receivers, twz_2025_argentine_chaff)", "confidence": "estimate"},
+    "alert": [
+      { "id": "ground", "share": 1.0, "takeoff_s": [900, 900], "hold_h": [4, 8],
+        "source": "SAM3D assumption: assumed to follow NATO's 15 min ground alert (hoak_1987_retasking); hold a game value", "confidence": "low" }
+    ],
+    "retask_air": {"delay_s": [300, 900], "never": 1.0, "source": "SAM3D estimate (docs/air_battle/10_FACTIONS.md section 7.4: recall only)", "confidence": "estimate", "notes": "its national control centre may recall a flight and nothing more"},
+    "authority": {"beyond_task": ["armed_recce"], "retask_by": [], "retask_kinds": [], "recall_only": true, "leader_may": ["attack", "break_off"], "source": "SAM3D assumption (c2-40: centralised, ground-controlled, no retasking in the air beyond a recall; docs/research/air_battle_2026-11/c2_retasking.md); goldhaube_refs; swe_stril_c2", "confidence": "estimate", "notes": "its armed reconnaissance pairs attack near the line (opportunity_rules.armed_recce near_line)"},
+    "on_control_lost": {"green": "abort", "skilled": "abort", "source": "lambeth_1984 (Skinner 1983: the mission aborted if contact is lost); the same as data/air_war/air_combat.json's doctrine (checked on load)", "confidence": "estimate"},
+    "pilots": {"hours_per_year": 130, "start_sorties": 0, "source": "game value (docs/air_battle/10_FACTIONS.md section 8.3: a small air force on a peacetime budget, no war)", "confidence": "estimate"}
+  },
   "doctrine": {
+    "routing": { "crossing": "entry", "letdown_m": 20000, "max_turn_points": 2, "variants": ["covered", "direct"], "w_exp": 6, "w_cont": 1, "w_low": 0.1, "lines_bonus": 0, "return": "same_entry", "deviation": "eye", "deviation_lateral_m": 3000, "navigation": { "drift_share": 0.02, "source": "game value (estimate: compass, clock and map between fixes; no period figure found, docs/air_battle/01_ROUTES.md As built S7)", "confidence": "estimate" }, "source": "game values: design inference, no period source on the neutral's routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
     "planning_cycle_h": 24, "lead_time_h": 4, "on_call_fraction": 0.15, "centralisation": 0.5, "simultaneous_bias": 0.4,
     "sortie_rate_per_day": 2.0, "serviceability": 0.75, "max_packages_per_cycle": 5, "delivery_risk": 0.7, "min_effect": 0.02, "min_value": 0.3,
     "source": "game values: a territorial-defence doctrine shaped like austrian_af_wiki's air arm (support of the own troops, raids near the front)",
@@ -45,6 +144,13 @@
     "source": "game values: a small air arm with no reserve of aircraft and no anti-radiation missiles",
     "confidence": "estimate"
   },
+  "air_front": {
+    "kind": "border", "after_event": "deeper_raids", "cover_at_most": 0.20, "mobile_destroyed_at_least": 0.5, "loss_line": 0.01,
+    "loss_days": 3, "delay_h": [12, 24], "max_depth_km": 40, "min_reward": 0.3, "crisis": "helicopters", "crisis_h": [24, 48],
+    "source": "SAM3D estimates bounded by the cases (docs/research/fronts_2026-11/air_ground_cases.md section 5.2, f-41): a neutral's air front is its own border by doctrine, dissuasion without untimely attrition (sadauer_schlup_1978 pp. 54, 88-90); it moves only after a political decision (its politics' deeper_raids event), then by the peer's gates; loss-shy at 1% a sortie over three days (jvl_1973_losses). min_reward is a game value",
+    "confidence": "estimate",
+    "notes": "docs/fronts/02_AIR_FRONT.md section 3, the neutral's border. Never past its politics' depth (40 km, 60 after the event), and here never past 40 km."
+  },
   "politics": {
     "support": 0.6, "pressure": 0.3, "loss_tolerance_per_day": 1.0, "pow_sensitivity": 0.8, "collateral_sensitivity": 0.9,
     "no_strike_city_radius_km": 6, "max_depth_km": 40, "banned": [ "city", "power_plant", "substation", "dam", "factory", "refinery", "headquarters", "government", "broadcast", "pipeline_station" ], "interference_per_cycle": 0.05,
@@ -62,22 +168,31 @@
     ]
   },
   "aircraft": [
-    { "id": "saab105", "name": "Light attack jet (Saab 105 class)", "roles": [ "strike", "recce" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 200, "attack_mps": 220,
+    { "id": "saab105", "name": "Light attack jet (Saab 105 class)", "roles": [ "strike", "recce", "escort" ], "class": "fighter", "rcs_m2": 2, "cruise_mps": 200, "attack_mps": 220,
       "low_agl_m": 60, "medium_alt_m": 3000, "max_turn_deg_s": 10, "strike_power": 0.3, "recce_quality": 0.5, "evasion": 0.45,
-      "loads": [["rocket135", 2], ["sneb68", 4], ["gp250", 4]], "computing": 0.3, "radius_km": 350,
+      "low_level": { "agl_m": 60, "mps": 200, "source": "game value: design inference, no period source on the neutral's routing (docs/air_battle/01_ROUTES.md section 4)", "confidence": "estimate" },
+      "flight": { "max_load_g": 6, "sustained_turn_deg_s": 6, "roll_rate_deg_s": 150, "max_mps": 270, "accel_mps2": 3, "climb_mps": 70, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
+      "loads": [["rocket135", 2], ["sneb68", 4], ["gp250", 4]], "computing": 0.3, "opportunity": {"ease": 0.55, "bingo_share": 0.3, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "a light jet near the line, few stores (estimate)"},
+      "radius_km": 350,
       "source": "austrian_af_wiki (40 Saab 105 light jets, trainer and light attack, delivered from 1970); every number a placeholder", "confidence": "low" },
     { "id": "ab212", "name": "Armed utility helicopter (AB 212 class)", "roles": [ "helicopter", "recce" ], "class": "helicopter", "helicopter": true,
       "rcs_m2": 8, "cruise_mps": 55, "attack_mps": 55, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 10, "strike_power": 0.25,
+      "flight": { "max_load_g": 2, "sustained_turn_deg_s": 10, "roll_rate_deg_s": 40, "max_mps": 67, "climb_mps": 8, "source": "game values (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2): a helicopter's bank limit, roll rate and climb", "confidence": "estimate" },
       "recce_quality": 0.3, "evasion": 0.3,
-      "loads": [["sneb68", 2], ["door_guns", 1]], "computing": 0.2, "radius_km": 150,
+      "loads": [["sneb68", 2], ["door_guns", 1]], "computing": 0.2, "opportunity": {"ease": 0.5, "bingo_share": 0.25, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "an armed utility helicopter near the line (estimate)"},
+      "radius_km": 150,
       "source": "austrian_af_wiki (about two dozen Agusta-Bell 212, from 1980); armed here for the game; numbers placeholders", "confidence": "low" },
     { "id": "draken_gun", "name": "Gun-armed interceptor (Draken class)", "roles": [ "escort" ], "class": "fighter", "rcs_m2": 4, "cruise_mps": 260, "attack_mps": 280,
-      "low_agl_m": 150, "medium_alt_m": 6000, "max_turn_deg_s": 12, "air_to_air": 0.5, "evasion": 0.5,
+      "low_agl_m": 150, "medium_alt_m": 6000, "max_turn_deg_s": 12, "in_service_year": 1988, "evasion": 0.5,
+      "flight": { "max_load_g": 7, "sustained_turn_deg_s": 8, "roll_rate_deg_s": 200, "max_mps": 400, "accel_mps2": 7, "climb_mps": 200, "source": "game values held to lambeth_1985's ordering (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2)", "confidence": "estimate" },
+      "opportunity": {"ease": 0.3, "bingo_share": 0.3, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "a fighter with its guns (estimate)"},
       "radius_km": 600,
       "source": "austrian_af_wiki (Draken interceptors with guns only under the ban on guided missiles; delivered 1988, later than this war, so here an analogue); numbers placeholders", "confidence": "low" },
     { "id": "alouette3", "name": "Liaison and observation helicopter (Alouette III class)", "roles": [ "recce" ], "class": "helicopter", "helicopter": true,
       "rcs_m2": 4, "cruise_mps": 50, "attack_mps": 50, "low_agl_m": 15, "medium_alt_m": 300, "max_turn_deg_s": 10, "recce_quality": 0.35, "evasion": 0.3,
-      "loads": [["ss11", 4]], "computing": 0.2, "radius_km": 120,
+      "flight": { "max_load_g": 2, "sustained_turn_deg_s": 10, "roll_rate_deg_s": 40, "max_mps": 58, "climb_mps": 6, "source": "game values (docs/air_battle/02_FLIGHTS_AND_PILOTS.md 3.2): a helicopter's bank limit, roll rate and climb", "confidence": "estimate" },
+      "loads": [["ss11", 4]], "computing": 0.2, "opportunity": {"ease": 0.5, "bingo_share": 0.25, "source": "SAM3D estimate ordered by docs/air_battle/06_OPPORTUNITY.md section 4 (bush_a10_simhq, tradoc_jaat_1983, agard_cp267_1979, schoeck_1987_ai_retasking, markovsky_afghan_sky, fm_100_2_1_1984)", "confidence": "low", "notes": "a light armed helicopter near the line (estimate)"},
+      "radius_km": 120,
       "source": "austrian_af_wiki (Alouette III for rescue and liaison); numbers placeholders", "confidence": "low" }
   ],
   "squadrons": [
@@ -88,7 +203,7 @@
     { "id": "liaison", "name": "Liaison flight", "aircraft": "alouette3", "count": 4 }
   ],
   "officer_pool": {
-    "ranks": { "commander": "Brigadier", "planner": "Oberst", "intelligence": "Oberstleutnant", "squadron_leader": "Major" },
+    "ranks": { "commander": "Brigadier", "planner": "Oberst", "intelligence": "Oberstleutnant", "squadron_leader": "Major", "cp_controller": "Oberstleutnant", "gci_controller": "Major" },
     "first_names": [ "Franz", "Karl", "Josef", "Anton", "Rudolf", "Ernst", "Walter", "Herbert", "Leopold", "Friedrich", "Johann", "Alois" ],
     "last_names": [ "Gruber", "Huber", "Bauer", "Wagner", "Pichler", "Steiner", "Moser", "Mayer", "Hofer", "Leitner", "Berger", "Fuchs" ],
     "backgrounds": [ "light-jet pilot", "helicopter pilot", "staff officer", "former display-team pilot", "border service officer" ],

@@ -102,6 +102,7 @@
     { "id": "rc135", "name": "RC-135V/W Rivet Joint", "archetype": "jet", "length_m": 41.1, "span_m": 39.9, "height_m": 12.7, "engines": 4, "wing": "swept", "colour": "nato_grey" },
     { "id": "bqm74", "name": "BQM-74 class decoy", "archetype": "drone", "length_m": 3.9, "span_m": 1.8, "height_m": 0.7, "colour": "drone_orange" },
 
+    { "id": "mig23ml_wp", "name": "MiG-23ML", "archetype": "jet", "length_m": 16.7, "span_m": 13.9, "height_m": 4.8, "engines": 1, "wing": "variable", "colour": "pact_camo" },
     { "id": "mig23mld", "name": "MiG-23MLD", "archetype": "jet", "length_m": 16.7, "span_m": 13.9, "height_m": 4.8, "engines": 1, "wing": "variable", "colour": "pact_camo" },
     { "id": "mig27", "name": "MiG-27", "archetype": "jet", "length_m": 17.1, "span_m": 13.9, "height_m": 5.0, "engines": 1, "wing": "variable", "colour": "pact_camo" },
     { "id": "su24", "name": "Su-24", "archetype": "jet", "length_m": 22.7, "span_m": 17.6, "height_m": 6.2, "engines": 2, "wing": "variable", "colour": "pact_grey" },
@@ -125,6 +126,8 @@
     { "id": "galeb", "name": "G-2 Galeb class", "archetype": "jet", "length_m": 10.3, "span_m": 10.5, "height_m": 3.3, "engines": 1, "wing": "straight", "colour": "neutral_grey" },
 
     { "id": "mig21", "name": "MiG-21 (our fighter regiment)", "archetype": "jet", "length_m": 14.7, "span_m": 7.2, "height_m": 4.1, "engines": 1, "wing": "delta", "colour": "own_grey" },
+    { "id": "mig21mf", "name": "MiG-21MF (our 1st and 2nd Fighter Regiments)", "archetype": "jet", "length_m": 14.7, "span_m": 7.2, "height_m": 4.1, "engines": 1, "wing": "delta", "colour": "own_grey" },
+    { "id": "mig21bis", "name": "MiG-21bis (our 3rd Fighter Regiment)", "archetype": "jet", "length_m": 14.7, "span_m": 7.2, "height_m": 4.1, "engines": 1, "wing": "delta", "colour": "own_grey" },
     { "id": "mig23ml", "name": "MiG-23ML (our 3rd Fighter Regiment)", "archetype": "jet", "length_m": 16.7, "span_m": 14.0, "height_m": 4.8, "engines": 1, "wing": "variable", "colour": "own_grey" },
     { "id": "su22m3", "name": "Su-22M3 (our fighter-bombers and reconnaissance)", "archetype": "jet", "length_m": 19.0, "span_m": 13.7, "height_m": 5.1, "engines": 1, "wing": "variable", "colour": "own_camo" },
     { "id": "l39", "name": "L-39 Albatros", "archetype": "jet", "length_m": 12.1, "span_m": 9.5, "height_m": 4.8, "engines": 1, "wing": "straight", "colour": "own_grey" },

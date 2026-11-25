@@ -415,12 +415,12 @@ void USimViewComponent::UpdateViews(APlayerController* Pc, float DeltaSeconds)
 	RunViewShots(Pc, DeltaSeconds);
 	HandleTimeKeys(Pc);
 	// A scripted photographer owns the camera (the scenario's photographs and the gallery, ASimModelGallery; the map's,
-	// ASimMapActor): taking the view back every frame would photograph this view instead of theirs.
+	// ASimMapActor; the air battle's, FSimAirShots): taking the view back every frame would photograph this view instead of theirs.
 	static const bool bPhotographer = []()
 	{
 		FString Folder;
 		return FParse::Value(FCommandLine::Get(), TEXT("SimShots="), Folder) || FParse::Value(FCommandLine::Get(), TEXT("SimModelGallery="), Folder) ||
-			   FParse::Value(FCommandLine::Get(), TEXT("SimMapShots="), Folder);
+			   FParse::Value(FCommandLine::Get(), TEXT("SimMapShots="), Folder) || FParse::Value(FCommandLine::Get(), TEXT("SimAirShots="), Folder);
 	}();
 	if (!bPhotographer)
 	{

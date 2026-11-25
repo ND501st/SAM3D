@@ -185,9 +185,17 @@ struct OverlayEntry {
 
 struct Overlay {
     std::vector<OverlayEntry> entries;
+    // Bumped by every change made through Cut and Clear (a route cache's key, RouteCache below; F3.6). Code that edits
+    // `entries` directly and caches routes bumps it itself.
+    std::uint64_t version = 0;
 
     void Cut(const std::string& id, const std::string& crossing, double from_h, double until_h = 1e18, const std::string& fact = "") {
         entries.push_back({id, crossing, from_h, until_h, fact});
+        ++version;
+    }
+    void Clear() {
+        entries.clear();
+        ++version;
     }
     // The entry that has the crossing down at hour h, or null.
     const OverlayEntry* Down(const std::string& crossing, double h) const {
@@ -697,6 +705,65 @@ private:
     std::vector<NavEdge> edges_;
     std::vector<NavCrossing> crossings_;
     std::vector<std::string> first_line_;  // the line that made each crossing (its id)
+};
+
+// ---------------------------------------------------------------------------------------------- the cache
+
+// Routes asked between anchors by their ids (never node numbers), kept by the two anchors, the mobility class and the
+// overlay's version (track F, F3.6; docs/fronts/03_GROUND_WAR.md section 7): an order asks once, a second order between
+// the same anchors on the same overlay takes the route found, and a bridge cut (a new overlay version) asks again. The
+// points are the anchors' own; the hour is not part of the key, so the overlay it is used with must hold only entries
+// that are down for good or not at all (the ground war rebuilds its own when a bridge's state changes). The oldest entry
+// leaves when it is full.
+class RouteCache {
+public:
+    struct Stats {
+        std::uint64_t asks = 0;   // routes asked
+        std::uint64_t finds = 0;  // of those, searched on the graph
+        std::uint64_t hits = 0;   // and taken from the cache
+    };
+
+    explicit RouteCache(std::size_t capacity = 128) : capacity_(capacity) { entries_.reserve(capacity); }
+
+    const Route& Get(const RoadGraph& g, const std::string& from_id, const MapPoint& from, const std::string& to_id, const MapPoint& to,
+                     const Mobility& m, const Overlay& overlay) {
+        ++stats_.asks;
+        for (const Entry& e : entries_) {
+            if (e.version == overlay.version && e.from == from_id && e.to == to_id && e.mobility == m.id) {
+                ++stats_.hits;
+                return e.route;
+            }
+        }
+        ++stats_.finds;
+        RouteRequest q;
+        q.from = from;
+        q.to = to;
+        q.mobility = &m;
+        if (capacity_ > 0 && entries_.size() >= capacity_) entries_.erase(entries_.begin());
+        Entry e;
+        e.from = from_id;
+        e.to = to_id;
+        e.mobility = m.id;
+        e.version = overlay.version;
+        e.route = g.Find(q, overlay);
+        entries_.push_back(std::move(e));
+        return entries_.back().route;
+    }
+
+    const Stats& GetStats() const { return stats_; }
+    std::size_t Size() const { return entries_.size(); }
+
+private:
+    struct Entry {
+        std::string from;
+        std::string to;
+        std::string mobility;
+        std::uint64_t version = 0;
+        Route route;
+    };
+    std::size_t capacity_;
+    std::vector<Entry> entries_;
+    Stats stats_;
 };
 
 }  // namespace nav

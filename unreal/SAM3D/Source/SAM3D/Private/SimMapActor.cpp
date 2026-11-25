@@ -792,7 +792,9 @@ void ASimMapActor::Clear()
 	}
 	GroundTiles.Reset();
 	GroundMaterials.Reset();
+	TexturedMaterials.Reset();
 	GroundMasks.Reset();
+	CoverTextures.Reset();
 	FarCover.reset();
 	if (Strips != nullptr)
 	{
@@ -836,6 +838,97 @@ UMaterialInterface* ASimMapActor::ColourMaterial(const FLinearColor& Colour)
 		Mid->SetVectorParameterValue(TEXT("Color"), Colour);
 	}
 	return Mid;
+}
+
+UMaterialInterface* ASimMapActor::RibbonMaterial(const FLinearColor& Colour, const FLinearColor& Channel, float Roughness)
+{
+	// The ribbons' material (roadmap S9, tools/ue_make_map_materials.py): the strip's colour times one channel of
+	// T_MapRibbon; the plain colour without it.
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapRibbon.M_SimMapRibbon"));
+	if (Base == nullptr)
+	{
+		return ColourMaterial(Colour);
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Base, this);
+	if (Mid != nullptr)
+	{
+		Mid->SetVectorParameterValue(TEXT("Colour"), Colour);
+		Mid->SetVectorParameterValue(TEXT("Channel"), Channel);
+		Mid->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+	}
+	return Mid;
+}
+
+UMaterialInterface* ASimMapActor::GroundMaterialFor(const simcore::scenery::CoverGrid* Grid)
+{
+	const FString Key = Grid != nullptr ? FString(UTF8_TO_TCHAR(Grid->id.c_str())) : FString(TEXT("-"));
+	if (TObjectPtr<UMaterialInterface>* Found = GroundMaterials.Find(Key))
+	{
+		return *Found;
+	}
+	// The ground's material (roadmap S9): M_SimMapGround's detail and normal textures over the land cover's colours; the
+	// vertex colour material without it.
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapGround.M_SimMapGround"));
+	if (Base == nullptr)
+	{
+		Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapVertexColor.M_SimMapVertexColor"));
+		if (Base == nullptr)
+		{
+			Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
+		}
+		GroundMaterials.Add(Key, Base);
+		return Base;
+	}
+	UMaterialInterface* Result = Base;
+	if (Grid != nullptr && DressRules && Map && Grid->cols > 0 && Grid->rows > 0)
+	{
+		// The land cover cell by cell as a texture: each texel a cell's colour (sRGB) and its detail kind in A (0 a field,
+		// 128 grass and litter, 255 hard ground: simcore CoverDetail), row 0 the grid's south, as the material reads it
+		// through CoverRect. Bilinear, so the cells' edges are soft at 25 m, sharper than the vertices' colours at 50 m.
+		UTexture2D* Tex = UTexture2D::CreateTransient(Grid->cols, Grid->rows, PF_B8G8R8A8);
+		if (Tex != nullptr)
+		{
+			Tex->SRGB = true;
+			Tex->Filter = TF_Bilinear;
+			Tex->AddressX = TA_Clamp;
+			Tex->AddressY = TA_Clamp;
+			Tex->NeverStream = true;
+			FTexture2DMipMap& Mip = Tex->GetPlatformData()->Mips[0];
+			FColor* Texels = static_cast<FColor*>(Mip.BulkData.Lock(LOCK_READ_WRITE));
+			const simcore::MapDef& D = Map->Def();
+			for (int32 r = 0; r < Grid->rows; ++r)
+			{
+				for (int32 c = 0; c < Grid->cols; ++c)
+				{
+					const std::size_t I = Grid->Index(c, r);
+					const simcore::scenery::Cover K = Grid->CoverOf(c, r);
+					FLinearColor Col = Linear(simcore::scenery::CoverRaster::ColourOf(*DressRules, K, Grid->crop[I]));
+					// A little browner up the hills, as the vertices' colours (BuildGround).
+					const double H = Map->GroundHeight(Grid->CentreEast(c), Grid->CentreNorth(r));
+					const double Rise = FMath::Clamp((H - D.base_m) / 60.0, -0.3, 1.0);
+					Col = FMath::Lerp(Col, FLinearColor(0.30f, 0.27f, 0.18f), static_cast<float>(FMath::Max(0.0, Rise) * 0.25));
+					FColor Out = Col.ToFColor(true);
+					Out.A = static_cast<uint8>(FMath::Clamp(simcore::scenery::CoverDetail(K) * 128, 0, 255));
+					Texels[I] = Out;
+				}
+			}
+			Mip.BulkData.Unlock();
+			Tex->UpdateResource();
+			CoverTextures.Add(Tex);
+			UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Base, this);
+			if (Mid != nullptr)
+			{
+				Mid->SetTextureParameterValue(TEXT("CoverTex"), Tex);
+				Mid->SetVectorParameterValue(TEXT("CoverRect"),
+					FLinearColor(static_cast<float>(Grid->west_m / 1000.0), static_cast<float>(Grid->south_m / 1000.0),
+						static_cast<float>(Grid->cols * Grid->cell_m / 1000.0), static_cast<float>(Grid->rows * Grid->cell_m / 1000.0)));
+				Mid->SetScalarParameterValue(TEXT("UseCover"), 1.0f);
+				Result = Mid;
+			}
+		}
+	}
+	GroundMaterials.Add(Key, Result);
+	return Result;
 }
 
 FVector ASimMapActor::GroundVertex(const simcore::MapFrameLink& Link, const simcore::MapGrid& Grid, int32 C, int32 R)
@@ -1133,7 +1226,7 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 		Mid->SetVectorParameterValue(TEXT("FurrowDepthC"), FurrowDepths[2]);
 		Mid->SetVectorParameterValue(TEXT("FurrowDepthD"), FurrowDepths[3]);
 		GroundMasks.Add(Mask);
-		GroundMaterials.Add(Mid);
+		TexturedMaterials.Add(Mid);
 		Out[static_cast<int32>(L)] = Mid;
 	}
 	// The sunken lanes' tiles (A.3.34) are the map proper's ground, finer: its material.
@@ -1150,18 +1243,15 @@ TArray<UMaterialInterface*> ASimMapActor::TexturedGround(const simcore::MapFrame
 			}
 		}
 	}
-	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (crops of day %d)"), *MapFile, GroundMaterials.Num(), static_cast<int32>(Levels.size()),
+	UE_LOG(LogSAM3D, Log, TEXT("Map %s: the textured ground on %d of %d levels (crops of day %d)"), *MapFile, TexturedMaterials.Num(), static_cast<int32>(Levels.size()),
 		Day);
 	return Out;
 }
 
 void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 {
-	UMaterialInterface* GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/SAM3D/Map/M_SimMapVertexColor.M_SimMapVertexColor"));
-	if (GroundMaterial == nullptr)
-	{
-		GroundMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineDebugMaterials/VertexColorMaterial.VertexColorMaterial"));
-	}
+	// The ground's material per level (GroundMaterialFor, roadmap S9): the land cover's grid as a texture where the level
+	// has one, the vertices' colours elsewhere.
 	const simcore::MapData& M = *Map;
 	const simcore::MapDef& D = M.Def();
 	// One ground (roadmap R5): every level simcore samples (MapData::DrawnLevels: the map proper at 50 m, its far
@@ -1238,6 +1328,80 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		}
 		const simcore::MapPoint P = ToCountry.FrameToMap(E, N);
 		return CoverTint(GroundColour(IsFarLike(Level) ? D : Country->Def().ground, E, N, H), Country->LandCoverAt(P.east_m, P.north_m));
+	};
+	// The ground material's detail kind in the vertex colour's alpha (roadmap S9): simcore's CoverDetail halved (0 a field,
+	// 0.5 grass and litter, 1 hard ground), from the land cover where the map has one, else the towns' and the country's.
+	const auto DetailKind = [&](std::size_t Level, double E, double N)
+	{
+		if ((IsCoreLike(Level) || Level < M.DetailGrids().size()) && Cover && Cover->Has(E, N))
+		{
+			return 0.5f * static_cast<float>(simcore::scenery::CoverDetail(Cover->At(E, N)));
+		}
+		if (IsCoreLike(Level))
+		{
+			return 0.0f;
+		}
+		for (const FTown& T : Towns)
+		{
+			if (FMath::Square(E - T.E) + FMath::Square(N - T.N) < T.R2)
+			{
+				return 1.0f;
+			}
+		}
+		if (!Country)
+		{
+			return 0.0f;
+		}
+		const simcore::MapPoint P = ToCountry.FrameToMap(E, N);
+		const std::string Land = Country->LandCoverAt(P.east_m, P.north_m);
+		return Land == "town" ? 1.0f : (Land == "forest" || Land == "marsh" ? 0.5f : 0.0f);
+	};
+	// The vertex colour's alpha: on a level with the textured ground (roadmap T1), a village pond's wet margin on a sunken
+	// lane's tile (A.3.35: its material darkens and smooths the ground by 1 - alpha), 1 elsewhere; else the S9 detail kind.
+	const auto VertexAlpha = [&](std::size_t Level, double E, double N, bool bLane) -> float
+	{
+		if (Textured[static_cast<int32>(Level)] != nullptr)
+		{
+			return bLane ? static_cast<float>(1.0 - M.PondWetness(E, N)) : 1.0f;
+		}
+		return DetailKind(Level, E, N);
+	};
+	// The land cover's grid a level is drawn with: the map proper's ("map") or a detail area's (its id); none beyond.
+	const auto CoverGridFor = [&](std::size_t Level) -> const simcore::scenery::CoverGrid*
+	{
+		if (!Cover)
+		{
+			return nullptr;
+		}
+		const simcore::MapGrid* G = Levels[Level];
+		std::string Id;
+		if (G == &M.CoreGrid())
+		{
+			Id = "map";
+		}
+		else if (Level < M.DetailGrids().size())
+		{
+			const double Ce = G->west_m + 0.5 * G->spacing_m * (G->cols - 1), Cn = G->south_m + 0.5 * G->spacing_m * (G->rows - 1);
+			for (const simcore::MapDetailDef& A : D.detail)
+			{
+				if (A.Contains(Ce, Cn))
+				{
+					Id = A.id;
+				}
+			}
+		}
+		if (Id.empty())
+		{
+			return nullptr;
+		}
+		for (const simcore::scenery::CoverGrid& Cg : Cover->grids)
+		{
+			if (Cg.id == Id)
+			{
+				return &Cg;
+			}
+		}
+		return nullptr;
 	};
 	// The scenario's origin in the map: the far ground's tiles within 15 km of it take queries (the camera's, physics').
 	const simcore::MapPoint Here = Link.FrameToMap(0.0, 0.0);
@@ -1344,11 +1508,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				Verts.Add(GroundVertex(Link, G, Gc, Gr));
 				Normals.Add(NormalAt(Gc, Gr));
 				FLinearColor Col = Colour(Level, E, N, H);
-				if (bLaneTile)
-				{
-					// A village pond's wet margin (A.3.35): the ground material darkens and smooths it by 1 - alpha.
-					Col.A = static_cast<float>(1.0 - M.PondWetness(E, N));
-				}
+				Col.A = VertexAlpha(Level, E, N, bLaneTile);
 				Colours.Add(Col);
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
 			}
@@ -1365,7 +1525,8 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 				const FVector Nrm = NormalAt(Node.X, Node.Y);
 				Normals.Add(Nrm);
 				Normals.Add(Nrm);
-				const FLinearColor Col = Colour(Level, E, N, H);
+				FLinearColor Col = Colour(Level, E, N, H);
+				Col.A = VertexAlpha(Level, E, N, false);
 				Colours.Add(Col);
 				Colours.Add(Col);
 				Uv.Add(FVector2D(E / 1000.0, N / 1000.0));
@@ -1449,7 +1610,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		Tile->bUseAsyncCooking = true;
 		Tile->SetCastShadow(IsCoreLike(Level));
 		Tile->CreateMeshSection_LinearColor(0, Verts, Tris, Normals, Uv, Colours, Tangents, bCollide);
-		Tile->SetMaterial(0, Textured[static_cast<int32>(Level)] != nullptr ? Textured[static_cast<int32>(Level)] : GroundMaterial);
+		Tile->SetMaterial(0, Textured[static_cast<int32>(Level)] != nullptr ? Textured[static_cast<int32>(Level)] : GroundMaterialFor(CoverGridFor(Level)));
 		Tile->SetCollisionEnabled(!bCollide ? ECollisionEnabled::NoCollision
 											: (IsCoreLike(Level) ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::QueryOnly));
 		Tile->RegisterComponent();
@@ -1476,7 +1637,7 @@ void ASimMapActor::BuildGround(const simcore::MapFrameLink& Link)
 		Tile->bUseAsyncCooking = true;
 		Tile->SetCastShadow(true);
 		Tile->CreateMeshSection_LinearColor(0, Block.Verts, Block.Tris, Block.Normals, Block.Uv, Block.Colours, TArray<FProcMeshTangent>(), bCollision);
-		Tile->SetMaterial(0, Textured[static_cast<int32>(Block.Level)] != nullptr ? Textured[static_cast<int32>(Block.Level)] : GroundMaterial);
+		Tile->SetMaterial(0, Textured[static_cast<int32>(Block.Level)] != nullptr ? Textured[static_cast<int32>(Block.Level)] : GroundMaterialFor(CoverGridFor(Block.Level)));
 		Tile->SetCollisionEnabled(bCollision ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 		Tile->RegisterComponent();
 		GroundTiles.Add(Tile);
@@ -1618,7 +1779,14 @@ void ASimMapActor::BuildStrips(const simcore::MapFrameLink& Link)
 								  : K == Bank	  ? FLinearColor(0.17f, 0.19f, 0.10f)
 												  : SurfaceColour(static_cast<simcore::MapSurface>(K));
 		Strips->CreateMeshSection_LinearColor(Section, Verts[K], Tris[K], Normals[K], Uvs[K], NoColours, NoTangents, false);
-		Strips->SetMaterial(Section, ColourMaterial(Colour));
+		// The ribbon texture's channel (roadmap S9): R asphalt for the roads, G dirt for the tracks, shoulders and banks,
+		// B ballast and sleepers for the railway, A ripples for the water.
+		const bool bWater = K == static_cast<int32>(simcore::MapSurface::Water);
+		const FLinearColor Channel = bWater ? FLinearColor(0, 0, 0, 1)
+								   : (K == Shoulder || K == Bank || K == static_cast<int32>(simcore::MapSurface::Track)) ? FLinearColor(0, 1, 0, 0)
+								   : K == static_cast<int32>(simcore::MapSurface::Rail) ? FLinearColor(0, 0, 1, 0)
+																					   : FLinearColor(1, 0, 0, 0);
+		Strips->SetMaterial(Section, RibbonMaterial(Colour, Channel, bWater ? 0.1f : 0.85f));
 		++Section;
 	}
 }
@@ -2204,7 +2372,10 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		TArray<FVector> Verts;
 		TArray<int32> Tris;
 		TArray<FVector> Normals;
+		TArray<FVector2D> Uvs;  // along (a unit every 10 m) and across (0 to 1), as the map's own ribbons (roadmap S9)
 		FLinearColor Colour;
+		FLinearColor Channel;  // the ribbon texture's channel (RibbonMaterial)
+		float Roughness = 0.85f;
 	};
 	FKind Kinds[5];  // water, main roads, other roads, railways, pipelines and the border
 	Kinds[0].Colour = SurfaceColour(simcore::MapSurface::Water);
@@ -2212,6 +2383,12 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 	Kinds[2].Colour = SurfaceColour(simcore::MapSurface::Road);
 	Kinds[3].Colour = SurfaceColour(simcore::MapSurface::Rail);
 	Kinds[4].Colour = FLinearColor(0.42f, 0.12f, 0.08f);
+	Kinds[0].Channel = FLinearColor(0, 0, 0, 1);
+	Kinds[0].Roughness = 0.1f;
+	Kinds[1].Channel = FLinearColor(1, 0, 0, 0);
+	Kinds[2].Channel = FLinearColor(1, 0, 0, 0);
+	Kinds[3].Channel = FLinearColor(0, 0, 1, 0);
+	Kinds[4].Channel = FLinearColor(0, 1, 0, 0);
 	const auto Ribbon = [&](const std::vector<simcore::MapPoint>& Points, double Width, FKind& K, bool bClosed)
 	{
 		// Resampled at a quarter of the ground's spacing (at most every 400 m), each point level across at the highest of
@@ -2244,9 +2421,15 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 				return;
 			}
 			const int32 Base = K.Verts.Num();
+			double Along = 0.0;
 			for (int32 i = From; i <= To; ++i)
 			{
 				const simcore::MapPoint& Q = P[static_cast<std::size_t>(i)];
+				if (i > From)
+				{
+					const simcore::MapPoint& Prev = P[static_cast<std::size_t>(i - 1)];
+					Along += FMath::Sqrt(FMath::Square(Q.east_m - Prev.east_m) + FMath::Square(Q.north_m - Prev.north_m));
+				}
 				const simcore::MapPoint& Qa = P[static_cast<std::size_t>(FMath::Max(i - 1, From))];
 				const simcore::MapPoint& Qb = P[static_cast<std::size_t>(FMath::Min(i + 1, To))];
 				const double Dx = Qb.east_m - Qa.east_m, Dy = Qb.north_m - Qa.north_m, L = FMath::Max(FMath::Sqrt(Dx * Dx + Dy * Dy), 1e-6);
@@ -2259,6 +2442,8 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 				K.Verts.Add(PointOf(Er, Nr, H));
 				K.Normals.Add(DirToUnreal(Au));
 				K.Normals.Add(DirToUnreal(Au));
+				K.Uvs.Add(FVector2D(Along / 10.0, 0.0));
+				K.Uvs.Add(FVector2D(Along / 10.0, 1.0));
 			}
 			for (int32 i = 0; i < To - From; ++i)
 			{
@@ -2268,10 +2453,11 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		};
 		for (int32 i = 0; i < static_cast<int32>(P.size()); ++i)
 		{
-			// Not under the map proper, nor in a detail area beyond it (the map lays the country's lines there as its own
-			// strips and bridges, roadmap R6).
+			// Not where the map lays the country's lines as its own strips and bridges (MapData::LaysCountryLinesAt, roadmap
+			// R6, S9): under the map proper, in a detail area, or in the kilometre round one its lines are imported into, so
+			// no ribbon is drawn twice.
 			const simcore::MapPoint Pm = ToMap.FrameToMap(P[static_cast<std::size_t>(i)].east_m, P[static_cast<std::size_t>(i)].north_m);
-			const bool bOut = !UnderMap(P[static_cast<std::size_t>(i)].east_m, P[static_cast<std::size_t>(i)].north_m, 0.0) && !D.InDetail(Pm.east_m, Pm.north_m);
+			const bool bOut = !UnderMap(P[static_cast<std::size_t>(i)].east_m, P[static_cast<std::size_t>(i)].north_m, 0.0) && !Map->LaysCountryLinesAt(Pm.east_m, Pm.north_m);
 			if (bOut && RunStart < 0)
 			{
 				RunStart = i;
@@ -2343,11 +2529,14 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 				{
 					K.Normals.Add(DirToUnreal(Au));
 				}
+				K.Uvs.Add(FVector2D(E / 10.0, N / 10.0));
+				K.Uvs.Add(FVector2D((E + Cell) / 10.0, N / 10.0));
+				K.Uvs.Add(FVector2D(E / 10.0, (N + Cell) / 10.0));
+				K.Uvs.Add(FVector2D((E + Cell) / 10.0, (N + Cell) / 10.0));
 				K.Tris.Append({A, B, Cc, B, Dd, Cc});
 			}
 		}
 	}
-	const TArray<FVector2D> NoUv;
 	const TArray<FLinearColor> NoColours;
 	const TArray<FProcMeshTangent> NoTangents;
 	int32 Section = 0;
@@ -2357,8 +2546,8 @@ void ASimMapActor::BuildCountry(const FVector& FrameOriginLonLatAlt)
 		{
 			continue;
 		}
-		CountryStrips->CreateMeshSection_LinearColor(Section, K.Verts, K.Tris, K.Normals, NoUv, NoColours, NoTangents, false);
-		CountryStrips->SetMaterial(Section, ColourMaterial(K.Colour));
+		CountryStrips->CreateMeshSection_LinearColor(Section, K.Verts, K.Tris, K.Normals, K.Uvs, NoColours, NoTangents, false);
+		CountryStrips->SetMaterial(Section, RibbonMaterial(K.Colour, K.Channel, K.Roughness));
 		++Section;
 	}
 

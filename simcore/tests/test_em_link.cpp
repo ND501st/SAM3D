@@ -688,6 +688,29 @@ SC_TEST("em link: a stand-off noise jammer shortens the search radar's first con
     SC_EXPECT(first_km[1] > 0.0 && first_km[1] < 0.8 * first_km[0]);
 }
 
+SC_TEST("em link S5: a disciplined flight's self-screening jammer stays off until its receiver shows a lock") {
+    for (int held = 0; held < 2; ++held) {
+        EffectsBench b({"em/nato_1985.json"}, [&](EmLinkDef& d) {
+            EmJammerDef j;
+            j.jammer_id = "nato_alq99_band8";
+            j.target_id = "t";
+            j.on_at_s = 0.0;
+            j.until_painted = held == 1;
+            d.jammers.push_back(j);
+        });
+        SC_EXPECT(b.ok);
+        b.link->SetSearch(true, false);
+        b.height_m = 3000.0;
+        b.north_m = 40000.0;
+        b.Run(5.0, false);
+        SC_EXPECT(b.link->TargetJamming("t") == (held == 0));
+        SC_EXPECT(!b.link->WasPainted("t"));
+        b.link->Painted("t");
+        b.Run(1.0, false);
+        SC_EXPECT(b.link->WasPainted("t") && b.link->TargetJamming("t"));
+    }
+}
+
 SC_TEST("em link: the unit's own radar tracks become knowledge and fuse with a report from elsewhere") {
     Bench b;
     SC_EXPECT(b.ok);
@@ -736,6 +759,14 @@ SC_TEST("em link: scenario em.jammers and em.chaff load; bad ones are refused wi
     SC_EXPECT(!load(with("\"extra_libraries\": [\"em/nato_1985.json\"], \"jammers\": [ { \"jammer\": \"nato_alq99_band8\" } ]"), &e) &&
               e.find("either a target") != std::string::npos);
     SC_EXPECT(!load(with("\"chaff\": [ { \"target\": \"t1\" } ]"), &e) && e.find("own_unit.em.chaff[0].at_s") != std::string::npos);
+    // Roadmap S5: a self-screening jammer may wait for a lock on its carrier; a stand-off one (no target) may not.
+    SC_EXPECT(load(with("\"extra_libraries\": [\"em/nato_1985.json\"], \"jammers\": [ { \"jammer\": \"nato_alq99_band8\", "
+                        "\"target\": \"t1\", \"on_at_s\": 60, \"until_painted\": true } ]"),
+                   &e));
+    SC_EXPECT(!load(with("\"extra_libraries\": [\"em/nato_1985.json\"], \"jammers\": [ { \"jammer\": \"nato_alq99_band8\", "
+                         "\"position\": { \"east_m\": 0, \"north_m\": 50000, \"up_m\": 8000 }, \"until_painted\": true } ]"),
+                    &e) &&
+              e.find("until_painted") != std::string::npos);
 }
 
 SC_TEST("em practice: the jamming-and-chaff variant plays to the end and shows the chaff as a ghost contact") {
@@ -799,6 +830,31 @@ SC_TEST("em link: IFF replies come from the friendly transponder's track, only w
         }
     }
     SC_EXPECT(seen_h > 20 && iff_h == 0);
+}
+
+SC_TEST("em link B10: a transponder replies only when the interrogator asks on its code") {
+    for (int asked : {9, 10}) {
+        Bench b;
+        SC_EXPECT(b.ok);
+        b.link->SetSearch(true, false);
+        b.link->SetInterrogating(true);
+        b.link->SetInterrogatorCode(asked);
+        double north = 28000.0;
+        int iff = 0, seen = 0;
+        for (int i = 0; i < 400; ++i) {
+            north -= 0.5;
+            b.link->SyncTarget("f", true, Vec3{0.0, north, 3000.0 - north * north / (2.0 * wgs84::kMeanRadius)}, Vec3{0.0, -5.0, 0.0}, 50.0, true, 9);
+            b.link->Advance(0.1);
+            for (const EmSensorLink::Contact& c : b.link->SearchPicture()) {
+                if (c.target_id != "f") continue;
+                ++seen;
+                iff += c.iff ? 1 : 0;
+            }
+        }
+        SC_EXPECT(seen > 20);
+        if (asked == 9) SC_EXPECT(iff > seen / 2);
+        else SC_EXPECT(iff == 0);
+    }
 }
 
 SC_TEST("em link: the Osa's decoys copy its search radar and blink with it (own_unit.em.decoys)") {

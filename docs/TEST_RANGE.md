@@ -50,15 +50,22 @@ sim and the picture still share one ground:
   r-track before R6; 12029 since R6's review, when a site's clearance began to be found however far a block stands from
   its centre, `mapgeo::Occupancy`, and 9 wood blocks inside the 140 m clearance of two field posts and the P-40 post
   went). The far ground's woods within 100 m of its radius give way.
-* **The dynamic campaign test's positions are map sites** (`capital_*`, 32 of them: the Osa positions of battery 21
+* **The dynamic campaign test's positions are map sites** (`capital_*`, 35 of them: the Osa positions of battery 21
   and of battery 22, the Kub, S-75 and S-125, the gun sites, the radars), so the town keeps clear of them (no house or
-  block of flats inside a site's clearance: `test_map_obstacles.cpp`) and their ground is levelled. Three on the Rava's bank are left out (the ZU-23 at the road bridge and at the river port, S-60
-  battery 6), because a levelled site would fill the river's bed.
+  block of flats inside a site's clearance: `test_map_obstacles.cpp`) and their ground is levelled. The three on the
+  Rava's bank (`capital_zu23_bridge` and `capital_zu23_port`, the ZU-23s at the road bridge and the river port, and
+  `capital_s60_6`, S-60 battery 6; 55-107 m from the river's middle, the river 90 m wide) are sites since S9 (20 Nov
+  2026): a site's levelled flat stops short of the river's bed (`MapData::FromRiverBed`: the bed, half the river's
+  width and 15 m of bank, `kRiverBedBankM`, as `NaturalGround` carves it), so the bed is never filled, and a gun
+  site's pits go round their ring on the dry side (none within 25 m of the water, `kPitWaterClearM`, nor within 20 m
+  of another pit; rings of 55 m, then 35 m and 75 m). `test_map_leftovers.cpp` checks the three: the bed under them
+  as carved, the site's middle clear, 16 revetment walls each, none within 20 m of the water.
 * **Obstacles at 25 m** in each area, from the same boxes (`MapData::DetailObstacleGrids`).
 
 Unreal draws every level it is given (`ASimMapActor::BuildGround`): the area inside the map proper as the map proper
 (collision, shadows, its colours), the capital's as the far ground near the scenario; the country's hashed town blocks
-and strategic ribbons are not drawn where the map lays its own (the capital, the detail areas). Trees, roofs, field
+and strategic ribbons are not drawn where the map lays its own (the capital, the detail areas, and since S9 the
+kilometre round a detail area its lines are imported into: `MapData::LaysCountryLinesAt`, so no ribbon is drawn twice). Trees, roofs, field
 parcels and real assets are the next step (R6's dressing).
 
 ## The airspace and the weather

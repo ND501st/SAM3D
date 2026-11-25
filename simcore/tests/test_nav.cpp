@@ -118,7 +118,7 @@ SC_TEST("nav: the road graph is the map's: the country's crossings by their own 
 
 SC_TEST("nav: battery 21's routes (G1): to the regiment's CP, the Horka siding, the division and the Rava dam, for each vehicle, with times") {
     const std::vector<std::string> classes = {"osa_9a33", "tzm_9t217", "pu12m", "truck", "motorcycle", "foot"};
-    for (const std::string& to : {"rgt_cp", "tech_battery", "div_hq", "rava_dam"}) {
+    for (const std::string to : {"rgt_cp", "tech_battery", "div_hq", "rava_dam"}) {
         std::string line = "    to " + to + ":";
         double osa = 0.0, foot = 0.0;
         for (const std::string& c : classes) {
@@ -248,7 +248,7 @@ SC_TEST("nav: anchors (G1.6's check): the battery's and the regiment's places st
     std::printf("    %d places of the chain, %d beyond 3 km of a road%s; %d other anchors, %d beyond\n", places, far_places, far_list.c_str(),
                 others, far_others);
     SC_EXPECT(places > 30);
-    for (const std::string& id : {"bty21_cp", "bty21_v1", "bty21_v2", "bty21_v3", "bty21_v4", "rgt_cp", "rgt_rear", "tech_battery"}) {
+    for (const std::string id : {"bty21_cp", "bty21_v1", "bty21_v2", "bty21_v3", "bty21_v4", "rgt_cp", "rgt_rear", "tech_battery"}) {
         const Anchor* a = w.anchors.Find(id);
         SC_EXPECT(a != nullptr && w.graph.DistanceToRoad(a->at) < 3000.0);
     }
@@ -660,7 +660,7 @@ SC_TEST("nav: the Kesmark range's ground (G1.3): its woods, marshes, water and t
     for (int k : n) SC_EXPECT(k > 0);
     RoadGraph g = w.graph;
     g.SetGround(std::make_shared<GroundGrid>(grid));
-    for (const std::string& to : {"bty21_v2", "rgt_cp", "tech_battery"}) {
+    for (const std::string to : {"bty21_v2", "rgt_cp", "tech_battery"}) {
         RouteRequest q;
         q.from = w.anchors.Find("bty21_cp")->at;
         q.to = w.anchors.Find(to)->at;

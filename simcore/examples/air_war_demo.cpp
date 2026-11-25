@@ -1,6 +1,9 @@
 // air_war_demo: the enemy air command's war, end to end (docs/air_war/).
 //
-// Usage: air_war_demo [--theatre file] [faction] [days] [data_dir] [out_dir] [seed] [map]
+// Usage: air_war_demo [--theatre file] [--build-only] [faction] [days] [data_dir] [out_dir] [seed] [map]
+//   --build-only: write each raid through the battery's sector without playing it (the campaign resolves it abstractly,
+//   as the balance pass does) and print a line on it: how the menu's sample raids are chosen (roadmap S8,
+//   data/scenarios/air_war_*.json, docs/LIGHT.md).
 //   --theatre: the theatre under data_dir/air_war/ (default theatre_pannonia.json; theatre_pannonia_nation.json is the
 //   whole nation); faction: rebels, neutral, warsaw_pact or nato (default nato); days (default 3); data_dir (default
 //   data); out_dir (default out/air_war); seed (default 1); map: the raids on a map's ground (e.g.
@@ -19,6 +22,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -49,10 +53,13 @@ std::string Escape(const std::string& s) {
 int main(int argc, char** argv) {
     std::string theatre = "theatre_pannonia.json";
     std::vector<std::string> args;
+    bool build_only = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--theatre" && i + 1 < argc) {
             theatre = argv[++i];
+        } else if (a == "--build-only") {
+            build_only = true;
         } else {
             args.push_back(a);
         }
@@ -120,6 +127,25 @@ int main(int argc, char** argv) {
             campaign.SkipPlayerMission();
             continue;
         }
+        if (build_only) {
+            std::map<std::string, int> types;
+            int arms = 0, drones = 0;
+            for (const RaidAircraft& a : rs.manifest.aircraft) {
+                ++types[a.aircraft];
+                arms += a.arms;
+                drones += a.drone ? 1 : 0;
+            }
+            std::string mix;
+            for (const auto& t : types) mix += (mix.empty() ? "" : ", ") + std::to_string(t.second) + " " + t.first;
+            const SunLight l = LightAt(def.clock, 0.0, def.light_values);
+            std::printf("  >> %s: %s %s '%s' on %s from %s at %s (%s, the sun %.1f deg, the moon %.0f %%), %.0f s; %s; %d ARMs, %d drones\n",
+                        rs.manifest.scenario_id.c_str(), DayPartName(p->part), MissionKindName(p->kind), p->name.c_str(),
+                        p->target_label.c_str(), p->corridor.c_str(), FormatLocalHour(def.clock.start_local_h).c_str(), LightPhaseName(l.phase),
+                        l.sun_elevation_deg, 100.0 * l.moon_illuminated, def.time_limit_s, mix.c_str(), arms, drones);
+            campaign.SkipPlayerMission();
+            ++played;
+            continue;
+        }
         ScenarioRunner runner(std::move(def), std::move(console));
         MissionBridge bridge(rs.manifest, campaign.Data(), seed * 977u + static_cast<unsigned>(p->id));
         while (!runner.Finished() && !bridge.UnitDestroyed()) {
@@ -165,5 +191,39 @@ int main(int argc, char** argv) {
     }
     js << "  ],\n  \"enemy_mind\": \"" << Escape(campaign.EnemyMind()) << "\",\n  \"intsum\": \"" << Escape(campaign.Intsum(24.0)) << "\"\n}\n";
     std::printf("Wrote %s\n", jpath.c_str());
+
+    // Each package's main route in the form tools/map_view.py --routes draws (km on the country's map): to the gate
+    // dashed, in to the release solid, home in blue (roadmap B2, docs/air_battle/01_ROUTES.md).
+    const std::string rpath = out_dir + "/air_war_" + faction + "_routes.json";
+    std::ofstream rs(rpath, std::ios::binary);
+    rs << "{\n  \"routes\": [\n";
+    bool first = true;
+    for (const Package& p : campaign.Packages()) {
+        const Flight* main = nullptr;
+        for (const Flight& fl : p.flights) {
+            if (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter || fl.role == FlightRole::Hunter) {
+                main = &fl;
+                break;
+            }
+        }
+        if (main == nullptr || main->route.size() < 2) continue;
+        const int gate = RouteIndexOf(main->route, "gate");
+        const int release = RouteIndexOf(main->route, "target");
+        rs << (first ? "" : ",\n") << "    {\"to\": \"" << Escape(p.name + " " + p.corridor) << "\", \"time_s\": "
+           << (main->route.back().t_h - main->route.front().t_h) * 3600.0 << ", \"points_km\": [";
+        for (std::size_t i = 0; i < main->route.size(); ++i) {
+            rs << (i == 0 ? "" : ", ") << "[" << main->route[i].pos.x / 1000.0 << ", " << main->route[i].pos.y / 1000.0 << "]";
+        }
+        rs << "], \"stretches\": [";
+        for (std::size_t i = 0; i + 1 < main->route.size(); ++i) {
+            const int k = static_cast<int>(i);
+            const char* kind = (gate >= 0 && k < gate) ? "off_road" : ((release >= 0 && k >= release) ? "swim" : "road");
+            rs << (i == 0 ? "" : ", ") << "\"" << kind << "\"";
+        }
+        rs << "]}";
+        first = false;
+    }
+    rs << "\n  ]\n}\n";
+    std::printf("Wrote %s\n", rpath.c_str());
     return failed == 0 ? 0 : 1;
 }

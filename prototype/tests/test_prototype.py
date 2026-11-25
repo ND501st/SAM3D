@@ -120,6 +120,33 @@ def test_waypoint_inside_turn_circle_is_passed():
     assert b.next_wp == 1 and abs(b.position.x) < 1.0
 
 
+def test_aircraft_demand():
+    """Mirror of test_flights.cpp: the command layer's demand steers for its point at the speed and turn rate given,
+    the waypoints kept; captured, the point is passed as a waypoint is; inactive, the waypoints as before."""
+    from samproto.engagement import AircraftDemand
+    for by_bank in (False, True):
+        a = Aircraft("a", Vec3(0, 0, 1000), speed_mps=200.0, velocity=Vec3(0, 200, 0),
+                     waypoints=[Vec3(0, 40000, 1000)], max_turn_rate_rad_s=math.radians(6.0))
+        if by_bank:
+            a.max_load_g = 7.0
+            a.roll_rate_rad_s = math.radians(90.0)
+        a.demand = AircraftDemand(active=True, point=Vec3(30000, 0, 1000), speed_mps=250.0,
+                                  turn_rate_rad_s=math.radians(10.0))
+        for _ in range(300):
+            a.step(0.1)
+        assert a.velocity.x > 240.0 and abs(a.velocity.y) < 30.0  # for the point, on y = 0
+        assert a.speed_mps == 200.0 and a.max_turn_rate_rad_s == math.radians(6.0)
+        assert a.next_wp == 0 and not a.demand.reached
+        a.demand.point = a.position + Vec3(400, 0, 0)
+        a.demand.capture = True
+        v = a.velocity
+        a.step(0.1)
+        assert a.demand.reached and (a.velocity - v).length() < 1.0
+        a.demand = AircraftDemand()
+        for _ in range(300):
+            a.step(0.1)
+        assert a.velocity.y > 150.0
+
 def test_line_of_sight_over_woods():
     # Mirror of test_map_obstacles.cpp: a wood 20 m tall between two points 8 m up blocks them; 40 m up it does not;
     # woods within 60 m of an end do not hide it.

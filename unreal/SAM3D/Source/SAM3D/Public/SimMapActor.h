@@ -13,6 +13,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
+class UTexture2D;
 class USimWorldSubsystem;
 class UTexture2D;
 
@@ -190,6 +191,12 @@ private:
 	void BuildCountry(const FVector& FrameOriginLonLatAlt);
 	void BuildAssets(const FVector& FrameOriginLonLatAlt);
 	UMaterialInterface* ColourMaterial(const FLinearColor& Colour);
+	// A ribbon's material (roadmap S9, M_SimMapRibbon, tools/ue_make_map_materials.py): its colour, the texture's
+	// channel it is drawn with (R asphalt, G dirt, B railway, A water) and its roughness; the flat colour without it.
+	UMaterialInterface* RibbonMaterial(const FLinearColor& Colour, const FLinearColor& Channel, float Roughness);
+	// The ground's material for a tile (roadmap S9, M_SimMapGround): with the land cover's grid drawn cell by cell as a
+	// texture where the tile has one (null: the vertices' colours), the vertex colour material without it.
+	UMaterialInterface* GroundMaterialFor(const simcore::scenery::CoverGrid* Grid);
 
 	UPROPERTY(VisibleAnywhere, Category = "SAM3D|Map")
 	TObjectPtr<USceneComponent> Root;
@@ -238,7 +245,13 @@ private:
 	TArray<TObjectPtr<UTexture2D>> GroundMasks;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> GroundMaterials;
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> TexturedMaterials;
+
+	// The land cover's grids as textures, and the ground's material for each (GroundMaterialFor), by the grid's id.
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UMaterialInterface>> GroundMaterials;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTexture2D>> CoverTextures;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> AssetParts;  // the assets' holders and their models' parts

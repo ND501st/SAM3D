@@ -103,6 +103,7 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 {
 	Net.Reset();
 	Feed.Reset();
+	Situation.Reset();
 	if (!Campaign.IsValid())
 	{
 		return;
@@ -122,6 +123,13 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 	}
 	// The couriers' night by the sun on a dated theatre (the nation's), as the air war's parts of the day are (roadmap R7).
 	simcore::command::GiveTheatreSky(*NewNet, Campaign->Data().theatre);
+	// Our radio intercept service and the enemy's listeners (roadmap S6): data/command/intercept.json.
+	simcore::command::InterceptData Intercept;
+	const bool bIntercept = simcore::command::LoadInterceptData(AirWarToStd(DataDirectory()), "command/intercept.json", Intercept, &Error);
+	if (!bIntercept)
+	{
+		UE_LOG(LogSAM3D, Warning, TEXT("Air war: the intercept service doesn't load (%s): our posts hear nothing, the enemy hears everything"), *AirWarToF(Error));
+	}
 	// On the country's ground the radio's hops are worked out by the EM layer (roadmap P5): the vehicles' R-123M and the
 	// command posts' R-111, over the hills between them.
 	if (Campaign->Data().country != nullptr)
@@ -132,9 +140,20 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 		const int R111 = Lib.Radio("r111");
 		if (Em.ok && R123 >= 0 && R111 >= 0)
 		{
+			// The country's woods and towns on the paths as ITU-R P.1812's clutter (roadmap S9, data/gameplay/clutter.json).
+			simcore::ClutterHeights Clutter;
+			std::string ClutterError;
+			if (!simcore::LoadClutterHeights(AirWarToStd(DataDirectory()), Clutter, &ClutterError))
+			{
+				UE_LOG(LogSAM3D, Warning, TEXT("Air war: %s: the radios' paths over the bare ground"), *AirWarToF(ClutterError));
+			}
 			auto Radio = std::make_shared<simcore::command::EmRadio>(Lib.radios[static_cast<std::size_t>(R123)],
-				std::make_shared<simcore::command::CountryGround>(Campaign->Data().country));
+				std::make_shared<simcore::command::CountryGround>(Campaign->Data().country, Clutter));
 			Radio->EquipCommandPosts(NewNet->Data(), 3, Radio->AddSet(Lib.radios[static_cast<std::size_t>(R111)]));
+			if (bIntercept)
+			{
+				simcore::command::PlaceCampaignListeners(*Radio, Intercept, *Campaign);  // our nets heard only within their reach
+			}
 			NewNet->SetRadioModel(Radio);
 		}
 		else
@@ -152,6 +171,10 @@ void USimAirCampaignSubsystem::StartInfoNet(bool bLoadInputs)
 	Net = MoveTemp(NewNet);
 	Feed = MakeUnique<simcore::command::CampaignFeed>();
 	Feed->Bind(Net.Get());
+	if (bIntercept)
+	{
+		Feed->UseIntercept(Intercept);
+	}
 	Feed->Pump(*Campaign);
 	FString Inputs;
 	if (bLoadInputs && FFileHelper::LoadFileToString(Inputs, *PipelineSaveFile()))
@@ -225,6 +248,15 @@ void USimAirCampaignSubsystem::Stepped()
 		Campaign->NoteTransmissions(Feed->BatteryCalls());
 	}
 	SaveCampaign();
+}
+
+const simcore::command::SituationMap* USimAirCampaignSubsystem::GetRegimentSituation()
+{
+	if (!Net.IsValid() || !Feed.IsValid() || !Campaign.IsValid())
+	{
+		return nullptr;
+	}
+	return Situation.RegimentMap(*Campaign, *Net, *Feed);
 }
 
 FString USimAirCampaignSubsystem::GetPlayerPost() const

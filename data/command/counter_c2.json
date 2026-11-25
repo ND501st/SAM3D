@@ -1,0 +1,57 @@
+{
+  "source": "miller_1980_tacs_jamming; fm_100_2_1_1984 ch. 15; fm_34_40_7 (the jamming rule, comms_jamming.hpp); SAM3D estimates as marked",
+  "confidence": "low",
+  "notes": "Our side's radio-electronic combat against the enemy's command in the air (roadmap S2, simcore/air_war/counter_c2.hpp, docs/air_battle/05_C2_AND_RETASKING.md section 9): each enemy post is marked to be destroyed, jammed or listened to; a post marked for destruction is struck by our fires once our listeners have heard enough of its calls to fix it; a post marked for jamming has its net jammed by our air-net jammers behind our line, judged by FM 34-40-7's J/S rule. Read by the air war's campaign and by a session's enemy radio (the jammers as EM spot jammers on the posts' nets, data/em/air_radios_1985.json 'our_air_net_jammer').",
+  "split": {
+    "destroy": 0.33,
+    "jam": 0.33,
+    "listen": 0.34,
+    "source": "miller_1980_tacs_jamming (the Soviet plan against NATO's tactical air control: destroy a third of its command, control and communications, jam a third, listen to the rest); the post-by-post draw a SAM3D game value",
+    "confidence": "medium"
+  },
+  "df_bearing_deg": {
+    "value": 3.5,
+    "source": "fm_100_2_1_1984 p. 15-2 (Soviet VHF direction finding: bearings within 3.5 degrees)",
+    "confidence": "medium"
+  },
+  "df_reach_km": {
+    "value": 40.0,
+    "source": "fm_100_2_1_1984 p. 15-2 (VHF intercept and direction finding to about 40 km)",
+    "confidence": "medium"
+  },
+  "fires_reach_km": {
+    "value": 60.0,
+    "source": "SAM3D estimate: how deep past the line the front's fires (rocket artillery, tactical missiles, the front's aviation) are laid on a located command post",
+    "confidence": "estimate"
+  },
+  "enemy_set_w": {
+    "value": 10.0,
+    "source": "estimate (the air sets' power in data/em/air_radios_1985.json, itself an estimate)",
+    "confidence": "estimate"
+  },
+  "jammers": [
+    {
+      "id": "air_net_jammer",
+      "name": "R-834-class jammer of the enemy's air-ground voice nets",
+      "em_jammer": "our_air_net_jammer",
+      "from_year": 1984,
+      "band_mhz": {
+        "value": [100.0, 400.0],
+        "source": "estimate: the air voice bands (VHF 100-156 MHz, UHF 225-400 MHz, data/em/air_radios_1985.json); the R-834's own band is not given by a source read",
+        "confidence": "estimate"
+      },
+      "power_w": {
+        "value": 1000.0,
+        "source": "estimate (no source read gives the R-834's power; the class of FM 34-40-7's worked examples, 1.5 kW)",
+        "confidence": "estimate"
+      },
+      "behind_km": {
+        "value": 10.0,
+        "source": "estimate: behind our leading troops, as the front's jamming units stood (fm_100_2_1_1984 p. 15-2 puts the intercept behind the leading regiments)",
+        "confidence": "estimate"
+      },
+      "source": "fm_100_2_1_1984 pp. 15-2 to 15-3 (the R-834 named among the jammers of the air-ground nets; TACS's strike control and the nets to the FACs among the targets); in service no later than that manual (1984)",
+      "confidence": "low"
+    }
+  ]
+}

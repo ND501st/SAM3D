@@ -904,6 +904,58 @@ namespace
 				break;
 			case EventKind::AircraftDamaged:
 				break;  // its smoke and fire are silent beside its engines
+			case EventKind::ChaffDrop:
+				break;  // a chaff cartridge's squib is lost in the engines
+			case EventKind::FlareDrop:
+				// Each flare's pop out of the dispenser as the picture throws it (roadmap B13), a few of a long salvo.
+				if (!Bank().FlarePop.Sample.IsNone())
+				{
+					const int32 N = FMath::Clamp(E.number, 1, FMath::Max(Bank().FlarePopsMax, 1));
+					for (int32 I = 0; I < N; ++I)
+					{
+						const double Dt = I * Bank().FlarePopS;
+						S.Scene.AddOneShot(At(E.t_s + Dt, E.position + E.velocity * Dt, Bank().FlarePop));
+					}
+				}
+				break;
+			case EventKind::AamLaunch:
+				// An air-to-air missile off its rail: the igniter's crack and its motor heard on its way to the target.
+				if (!Bank().AamLaunch.Sample.IsNone())
+				{
+					S.Scene.AddOneShot(At(E.t_s, E.position, Bank().AamLaunch));
+				}
+				LaunchFlyer(E);
+				break;
+			case EventKind::AamEnd:
+				// On the target now; a miss bursts where it destroys itself further on (the picture's fly-on); a missile whose
+				// target was gone ends where it is, unheard.
+				if (E.end == simcore::fx::BurstEnd::Hit)
+				{
+					Blast(E.t_s, Aim, ChargeOf(E.weapon, E.charge_kg, Bank().WarheadDefaultKg));
+					EndFlyer(E, E.t_s);
+				}
+				else if (E.end == simcore::fx::BurstEnd::Wide)
+				{
+					const double T1 = E.t_s + Bank().AamFlyOnS;
+					const simcore::Vec3 Run = E.velocity.LengthSquared() > 1.0 ? E.velocity.Normalized() : simcore::Vec3{0.0, 0.0, 0.0};
+					Blast(T1, E.position + Run * (600.0 * Bank().AamFlyOnS), ChargeOf(E.weapon, E.charge_kg, Bank().WarheadDefaultKg));
+					EndFlyer(E, T1);
+				}
+				else
+				{
+					EndFlyer(E, E.t_s);
+				}
+				break;
+			case EventKind::AirGunBurst:
+				// A fighter's gun at the shooter for the burst's seconds (its loop, the munition's own rate if it has one).
+				if (const SimFxAudio::FGunDef* G = Bank().GunFor(SimFxAudioToF(E.weapon)))
+				{
+					SimFxAudio::FOneShotDesc D = At(E.t_s, E.position,
+						SimFxAudio::FEventSoundDef{G->Loop.IsNone() ? G->Single : G->Loop, G->LevelDb1m, G->Pitch});
+					D.LoopForS = G->Loop.IsNone() ? 0.0 : FMath::Clamp(E.end_t_s - E.t_s, 0.2, 4.0);
+					S.Scene.AddOneShot(D);
+				}
+				break;
 			}
 		}
 

@@ -76,7 +76,9 @@ struct Platform {
     Vec3 velocity;
     RcsModel rcs;
     bool alive = true;
-    bool iff_reply = false;  // answers its own side's interrogations (codes and modes not modelled yet)
+    bool iff_reply = false;  // answers its own side's interrogations
+    int iff_code = 0;        // its transponder's code (Kremniy-2M's filter, roadmap B10; 0 the default both ends share)
+
     // Derived each tick by the scene:
     double altitude_m = 0.0;    // above the ellipsoid
     double height_agl_m = 0.0;  // above the terrain under it
@@ -118,6 +120,12 @@ struct RadarDef {
     RadarAnchor calibration;         // sets the loop gain (Calibrate)
     RadarAnchor low_altitude_check;  // reported by CheckCalibration, not fitted
     double antenna_height_m = 4.0;   // above the ground when deployed (the platform position includes it)
+    // An airborne radar (docs/air_battle/07_AIR_TO_AIR.md section 5.2): antenna_height_m is then the carrier's height, and
+    // the published range is a free-space figure, so the anchor's look has no ground reflection or diffraction.
+    bool airborne = false;
+    // Pulse-Doppler look-down: the ground clutter in the main lobe is cut by this much (a game value per radar until
+    // sourced); 0: no look-down mode (the APQ-120). The air combat layer reads it (B8); the radar equation does not.
+    double look_down_db = 0.0;
     double min_range_m = 0.0;
     double max_range_m = 0.0;
     double min_elevation_rad = -0.05;
@@ -267,6 +275,9 @@ struct Environment {
     double profile_spacing_m = 100.0;
     Vec3 wind_mps;                      // chaff drift
     double rain_rate_mmh = 0.0;         // rain over the whole scene (ITU-R P.838); never part of a radar's calibration
+    // rms height of the waves on the country's lakes (roadmap E9's sea areas; WaterReflection). A game value: a lake in a
+    // light breeze with waves of about 0.2 m significant height, rms = H_s / 4 (the Rayleigh wave-height relation).
+    double water_roughness_m = 0.05;
 };
 
 // Effective reflection coefficient: rho0 * Rayleigh roughness factor
@@ -276,6 +287,26 @@ inline double EffectiveReflection(const Environment& env, double grazing_rad, do
     if (wavelength_m <= 0.0) return 0.0;
     const double g = kPi * env.surface_roughness_m * std::sin(grazing_rad) / wavelength_m;
     return env.surface_reflection * std::exp(-8.0 * g * g);
+}
+
+// The same over water (roadmap E9's sea areas): the Fresnel coefficient of ITU-R P.527's pure water at this frequency
+// (FresnelReflectionH, PureWaterPermittivity) times the roughness factor of the lake's waves (water_roughness_m). Calm
+// water reflects a low microwave ray almost whole, where rolling land scatters it.
+inline double WaterReflection(const Environment& env, double grazing_rad, double freq_hz) {
+    const double lambda = WavelengthOf(freq_hz);
+    if (lambda <= 0.0) return 0.0;
+    const double g = kPi * env.water_roughness_m * std::sin(grazing_rad) / lambda;
+    return FresnelReflectionH(PureWaterPermittivity(freq_hz), grazing_rad) * std::exp(-8.0 * g * g);
+}
+
+// The reflection coefficient of a path's ground reflection: land's and water's weighted by the share of water under the
+// reflection's first Fresnel zone (ReflectionWaterShare). `from_second`: the reflection's end 1 is the path's second end.
+inline double PathReflection(const Environment& env, const PathGeometry& g, const ReflectionGeometry& r, double freq_hz,
+                             bool from_second) {
+    const double lambda = WavelengthOf(freq_hz);
+    const double land = EffectiveReflection(env, r.grazing_rad, lambda);
+    const double share = ReflectionWaterShare(g, r, lambda, from_second);
+    return share > 0.0 ? (1.0 - share) * land + share * WaterReflection(env, r.grazing_rad, freq_hz) : land;
 }
 
 // ------------------------------------------------------------------------------- runtime
@@ -317,6 +348,8 @@ struct RadarState {
     int emitter_id = 0;
     bool on = false;
     bool iff_interrogating = true;
+    int iff_code = 0;  // the code its interrogator asks on: a transponder replies only on the same (roadmap B10)
+
     MtiMode mti = MtiMode::Off;
     std::vector<int> beam_program;  // indices into the emitter's beams, one per revolution
     std::size_t program_pos = 0;
@@ -523,6 +556,28 @@ struct Message {
     int hops = 0;
     std::vector<KnowledgeTrack> tracks;
     bool done = false;
+    // What the call says, for whoever may read it (B9): an index into the session's call log (air_war/air_radio.hpp),
+    // -1 for a message that says nothing a listener can read. The EM layer only times and radiates it.
+    int payload = -1;
+    bool intercept_done = false;  // the comms intercept receivers have been asked once, at its start
+};
+
+// One call a comms intercept receiver (an EsmDef of kind CommsIntercept) heard at its start (em/comms_intercept.hpp):
+// when, from what bearing, how strongly. What it says is read through `payload` by the post's linguist, not here.
+struct CommsHeard {
+    long long message = 0;
+    int esm = 0;           // the receiver's EsmState id
+    int platform = 0;      // its platform
+    int from_node = 0;     // the transmitting node
+    int net = 0;
+    int payload = -1;
+    double start_s = 0.0;
+    double end_s = 0.0;
+    double freq_hz = 0.0;
+    double rx_dbw = -300.0;
+    double margin_db = -300.0;  // above the receiver's sensitivity
+    double bearing_rad = 0.0;   // as measured (true, from the receiver), with the receiver's error
+    bool line_of_sight = false;
 };
 
 // The fate of a voice message at its addressee, for whoever sent it.
@@ -735,6 +790,10 @@ struct EmScene {
     long long tick = 0;
     EmLibrary lib;
 
+    // A receiver skips the path to an emitter whose beam as it points now cannot reach it even over the best ground
+    // (roadmap S7: the receivers' cost near the battery; the intercepts are the same, the path cache's refreshes not).
+    bool esm_sidelobe_bound = false;
+
     std::vector<Platform> platforms;
     std::vector<EmitterState> emitters;
     std::vector<RadarState> radars;
@@ -745,6 +804,7 @@ struct EmScene {
     std::vector<NodeState> nodes;
     std::vector<NetState> nets;
     std::vector<Message> messages;  // queued or on the air
+    std::vector<CommsHeard> heard;  // calls the comms intercept receivers heard (em/comms_intercept.hpp), for whoever collects them
     std::vector<VoiceResult> voice_results;
     std::vector<DecoyLink> decoys;
     std::vector<DummyTraffic> dummy_traffic;  // outcomes of voice messages (the sender collects them)

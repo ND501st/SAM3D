@@ -16,6 +16,7 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class FSimFxWorld;
 class FSimFxShots;
+class FSimAirShots;
 
 /**
  * The weapons' effects, drawn (docs/fx/README.md 4.1, 5): what the simulation's fx::Feed says happened (our missiles'
@@ -88,6 +89,7 @@ private:
 
 	TPimplPtr<FSimFxWorld> Fx;
 	TPimplPtr<FSimFxShots> Shots;
+	TPimplPtr<FSimAirShots> AirShots;  // -SimAirShots (roadmap B13)
 
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> Host;

@@ -37,6 +37,9 @@ SC_TEST("mission session (15.2): the bridges mission with the Pact's air war on 
     campaign::MissionSessionDef md;
     md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
     md.faction = "warsaw_pact";
+    // Seed 1: with the routes as flown (B2) seed 1's package came by a way the regiment's late squares still found every
+    // time, so the «цели не наблюдаю» below was never said, and seed 2's raid said it; with S7's routes, weather and
+    // learning seed 2's raid is found every time and seed 1's says it again.
     md.seed = 1;
     md.day = 1;
     campaign::MissionSession s;
@@ -191,15 +194,22 @@ SC_TEST("mission bridge: a kill by the battery's launchers is the package's loss
     SC_EXPECT(airwar::LoadAirWarData(kData, "air_war/theatre_pannonia.json", "air_war/faction_nato.json", d, &e));
     airwar::AirCampaign c;
     SC_EXPECT(c.Init(d, 1));
+    // The first raid with a crewed aircraft in it (a decoy drone shot down is no loss: B11's day-1 shares may send the
+    // drones first).
     airwar::RaidScenario rs;
-    while (c.Now() < 6.0 * 24.0 && !rs.ok) {
+    std::string first;
+    while (c.Now() < 6.0 * 24.0 && first.empty()) {
         if (!c.Advance(6.0 * 24.0)) break;
         rs = airwar::RaidScenarioBuilder().Build(c, *c.PlayerMission());
-        if (!rs.ok) c.SkipPlayerMission();
+        if (rs.ok) {
+            for (const airwar::RaidAircraft& a : rs.manifest.aircraft) {
+                if (!a.drone && first.empty()) first = a.target_id;
+            }
+        }
+        if (first.empty()) c.SkipPlayerMission();
     }
-    SC_EXPECT(rs.ok && !rs.manifest.aircraft.empty());
-    if (!rs.ok || rs.manifest.aircraft.empty()) return;
-    const std::string first = rs.manifest.aircraft.front().target_id;
+    SC_EXPECT(rs.ok && !first.empty());
+    if (!rs.ok || first.empty()) return;
     const auto lost = [&](bool take_back) {
         ScenarioDef def;
         ConsoleData console;
@@ -454,17 +464,41 @@ SC_TEST("supply in the session (17.4): a bridge down nobody told of: the TZM sto
 }
 
 SC_TEST("supply in the session (17.4): the TZM's run is longer the day the war has wrecked the road bridge; the regiment says so on its net") {
-    // The Pact's war, seed 1: the Kesmark road bridge stands at 19:00 on the first day and lies wrecked on the third.
-    double plan_s[2] = {0.0, 0.0};
-    for (int day : {1, 3}) {
+    // The Pact's war: the first seed whose Kesmark road bridge stands at 19:00 on the first day and lies wrecked on a later
+    // one (the war's course is the campaign's: roadmap B5's packages fly in time, so the seed is found, not named).
+    const auto session = [](unsigned seed, int day) {
         campaign::MissionSessionDef md;
         md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
         md.faction = "warsaw_pact";
-        md.seed = 1;
+        md.seed = seed;
         md.day = day;
+        return md;
+    };
+    unsigned seed = 0;
+    int wrecked_day = 0;
+    for (unsigned sd = 1; sd <= 8 && wrecked_day == 0; ++sd) {
+        for (int day = 1; day <= 5; ++day) {
+            campaign::MissionSession s;
+            std::string e;
+            if (!s.Start(session(sd, day), kData, &e) || s.Campaign() == nullptr) break;
+            const bool down = s.Runner().Nav()->Truth().Down("b_ralje@rava", 0.0) != nullptr;
+            if (day == 1 && down) break;
+            if (down) {
+                seed = sd;
+                wrecked_day = day;
+                break;
+            }
+        }
+    }
+    std::printf("    seed %u: the bridge wrecked by 19:00 on day %d\n", seed, wrecked_day);
+    SC_EXPECT(wrecked_day > 1);
+    if (wrecked_day <= 1) return;
+    double plan_s[2] = {0.0, 0.0};
+    for (int day : {1, wrecked_day}) {
+        const bool later = day == wrecked_day;
         campaign::MissionSession s;
         std::string e;
-        SC_EXPECT(s.Start(md, kData, &e));
+        SC_EXPECT(s.Start(session(seed, day), kData, &e));
         if (s.Campaign() == nullptr) return;
         const campaign::MissionSession::OurBridge* kesmark = nullptr;
         for (const campaign::MissionSession::OurBridge& b : s.OurBridges()) kesmark = b.object == "kesmark_road_bridge" ? &b : kesmark;
@@ -472,7 +506,7 @@ SC_TEST("supply in the session (17.4): the TZM's run is longer the day the war h
         if (kesmark == nullptr) return;
         const ScenarioRunner& r = s.Runner();
         const bool down = r.Nav()->Truth().Down("b_ralje@rava", 0.0) != nullptr;
-        SC_EXPECT(down == (day == 3) && kesmark->open == (day == 1));
+        SC_EXPECT(down == later && kesmark->open == !later);
         SC_EXPECT(r.PlanTzmRun().Uses("b_ralje@rava"));  // before the regiment's word, the commander plans over it
         while (s.Runner().Time() < 300.0 && !s.Runner().Finished()) s.Step(0.1);
         bool told = false;
@@ -480,11 +514,11 @@ SC_TEST("supply in the session (17.4): the TZM's run is longer the day the war h
             told = told || (x.what == "regiment net" && x.detail.rfind("heard", 0) == 0 && x.detail.find("Kesmark road bridge is down") != std::string::npos);
         }
         const nav::Route way = r.PlanTzmRun();
-        plan_s[day == 1 ? 0 : 1] = way.time_s;
+        plan_s[later ? 1 : 0] = way.time_s;
         std::printf("    day %d: the bridge %s; the TZM's way %.0f min\n", day, down ? "wrecked, the regiment told" : "standing", way.time_s / 60.0);
-        SC_EXPECT(told == (day == 3));
-        SC_EXPECT((r.RoadsBelieved().Down("b_ralje@rava", r.Time() / 3600.0) != nullptr) == (day == 3));
-        SC_EXPECT(way.found && way.Uses("b_ralje@rava") == (day == 1));
+        SC_EXPECT(told == later);
+        SC_EXPECT((r.RoadsBelieved().Down("b_ralje@rava", r.Time() / 3600.0) != nullptr) == later);
+        SC_EXPECT(way.found && way.Uses("b_ralje@rava") == !later);
     }
     SC_EXPECT(plan_s[1] > 5.0 * plan_s[0]);
 }

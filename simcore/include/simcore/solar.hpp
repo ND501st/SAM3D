@@ -134,4 +134,67 @@ inline bool SunCrossing(double lat_deg, double lon_deg, int day_of_year, double 
     return false;
 }
 
+// ---------------------------------------------------------------------------------------------- the moon (roadmap S8)
+
+// The Julian day of a year's day 1-366 at a UTC hour (Meeus 1998, ch. 7, Gregorian calendar).
+inline double JulianDay(int year, int day_of_year, double utc_hours) {
+    const int y = year - 1;  // 1 January as month 13 of the year before
+    const int a = y / 100;
+    const int b = 2 - a + a / 4;
+    const double jan1 = std::floor(365.25 * (y + 4716)) + std::floor(30.6001 * 14.0) + 1.0 + b - 1524.5;
+    return jan1 + (day_of_year - 1) + utc_hours / 24.0;
+}
+
+struct MoonPosition {
+    double elevation_rad = 0.0;    // topocentric: the parallax taken off (about a degree)
+    double azimuth_rad = 0.0;      // true, clockwise from north
+    double phase_angle_rad = 0.0;  // the sun-moon-earth angle: 0 full, pi new
+    double illuminated = 0.0;      // the lit share of the disc, 0 new to 1 full
+};
+
+// Where the moon stands and how much of it is lit, for a place, a year's day and a UTC hour. The Astronomical Almanac's
+// low-precision lunar formulas (ecliptic longitude to about 0.3 deg, latitude 0.2 deg, the horizontal parallax), the
+// sidereal time and the illuminated fraction of Meeus 1998 (ch. 12, 48), the phase angle taken as 180 deg less the
+// elongation (good to a few tenths of a degree). Unlike the sun's (the year taken as 2001), the moon's place depends on
+// the year: a raid's phase of the moon is its date's.
+inline MoonPosition MoonAt(double lat_deg, double lon_deg, int year, int day_of_year, double utc_hours) {
+    const double jd = JulianDay(year, day_of_year, utc_hours);
+    const double d = jd - 2451545.0;
+    const double t = d / 36525.0;
+    const auto sind = [](double deg) { return std::sin(DegToRad(deg)); };
+    const auto cosd = [](double deg) { return std::cos(DegToRad(deg)); };
+    const double lambda = 218.32 + 481267.881 * t + 6.29 * sind(135.0 + 477198.87 * t) - 1.27 * sind(259.3 - 413335.36 * t) +
+                          0.66 * sind(235.7 + 890534.22 * t) + 0.21 * sind(269.9 + 954397.74 * t) - 0.19 * sind(357.5 + 35999.05 * t) -
+                          0.11 * sind(186.5 + 966404.03 * t);
+    const double beta = 5.13 * sind(93.3 + 483202.02 * t) + 0.28 * sind(228.2 + 960400.89 * t) - 0.28 * sind(318.3 + 6003.15 * t) -
+                        0.17 * sind(217.6 - 407332.21 * t);
+    const double parallax = 0.9508 + 0.0518 * cosd(135.0 + 477198.87 * t) + 0.0095 * cosd(259.3 - 413335.36 * t) +
+                            0.0078 * cosd(235.7 + 890534.22 * t) + 0.0028 * cosd(269.9 + 954397.74 * t);
+    // Equatorial: the direction cosines with the obliquity of J2000 (the Almanac's 0.9175 and 0.3978).
+    const double l = cosd(beta) * cosd(lambda);
+    const double m = 0.9175 * cosd(beta) * sind(lambda) - 0.3978 * sind(beta);
+    const double n = 0.3978 * cosd(beta) * sind(lambda) + 0.9175 * sind(beta);
+    const double ra = std::atan2(m, l);
+    const double dec = std::asin(Clamp(n, -1.0, 1.0));
+    // The local sidereal time (Meeus 12.4) and the hour angle.
+    const double gmst_deg = std::fmod(280.46061837 + 360.98564736629 * d + 0.000387933 * t * t, 360.0);
+    const double hour_angle = DegToRad(gmst_deg + lon_deg) - ra;
+    const double lat = DegToRad(lat_deg);
+    const double sin_el = std::sin(lat) * std::sin(dec) + std::cos(lat) * std::cos(dec) * std::cos(hour_angle);
+    MoonPosition p;
+    const double geo_el = std::asin(Clamp(sin_el, -1.0, 1.0));
+    p.elevation_rad = geo_el - DegToRad(parallax) * std::cos(geo_el);
+    const double east = -std::cos(dec) * std::sin(hour_angle);
+    const double north = std::sin(dec) * std::cos(lat) - std::cos(dec) * std::sin(lat) * std::cos(hour_angle);
+    p.azimuth_rad = std::atan2(east, north);
+    if (p.azimuth_rad < 0.0) p.azimuth_rad += kTwoPi;
+    // The sun's ecliptic longitude that day (the Almanac's, this time in the real year) and the elongation.
+    const double g = 357.528 + 0.9856003 * d;
+    const double sun_lambda = 280.460 + 0.9856474 * d + 1.915 * sind(g) + 0.020 * sind(2.0 * g);
+    const double cos_elong = Clamp(cosd(beta) * cosd(lambda - sun_lambda), -1.0, 1.0);
+    p.phase_angle_rad = kPi - std::acos(cos_elong);
+    p.illuminated = 0.5 * (1.0 + std::cos(p.phase_angle_rad));
+    return p;
+}
+
 }  // namespace simcore

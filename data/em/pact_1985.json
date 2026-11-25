@@ -1,0 +1,294 @@
+{
+  "library_id": "pact_1985",
+  "display_name": "Warsaw Pact radar warning receivers of the 1980s (SPO-10 and SPO-15L class) and what they know",
+  "status": "B3 data set (16 November 2026). Replaces generic_rwr on every Pact type (docs/air_battle/03_PERCEPTION.md 3.3). The SPO-10's design and its display come from one operator-country page (spo10_tulin); its band and every number no source gives are labelled estimates. The SPO-15L class is as the SPO-10 with a better bearing until a source says more (aam_weapons.md aam-wp-10: its date and fit unverified).",
+  "provenance": "per_value",
+  "notes": "The receiver's physics is here; what its display shows the pilot (a quadrant, no type, no launch) is data/air_war/sensors.json rwr_sets. The library 'blue_rwr_pact_view' is what the Pact believed about the emitters it meets: its own SAMs by their real parameters (it built them), and NATO's fighters' radars.",
+  "sources": [
+    {
+      "id": "nato_radar_refs",
+      "title": "Encyclopaedic pages: AN/APG-63 (X band, in service 1973 on the F-15A/B), AN/APG-66 (X band 6.2-10.9 GHz; mechanically scanned; ±10/30/60 deg; low PRF uplook, medium PRF downlook; 80 nmi), P-19 'Flat Face B' (UHF 830-875 MHz, 900 kW, 360 deg, 260 km, 1974)",
+      "url": "https://en.wikipedia.org/wiki/AN/APG-66",
+      "tier": "4",
+      "notes": "Wikipedia. Read 11 Oct 2026; no power or PRF values are given for the APG-63/66, so those are estimates."
+    },
+    {
+      "id": "nato_ew_refs",
+      "title": "Encyclopaedic pages: AN/ALR-46 RWR (2-18 GHz; flown in Southeast Asia from January 1973), AN/ALQ-99 tactical jamming system (10 bands from 64 MHz to 20 GHz; band 8 4-7.8 GHz, band 9 7.8-11 GHz, band 10 11-20 GHz; three under-wing transmit pods and a tail receive pod; maximum output 10.8 kW older, 6.8 kW newer; AN/ALQ-99A 1972; EA-6B, EF-111A)",
+      "url": "https://en.wikipedia.org/wiki/AN/ALQ-99",
+      "tier": "4",
+      "notes": "Wikipedia. Read 11 Oct 2026."
+    },
+    {
+      "id": "fm100_2_3",
+      "title": "US Army FM 100-2-3, The Soviet Army: Troops, Organization and Equipment, 6 June 1991 (distribution unlimited): SA-8 description p. 5-132, SAM-associated radar table p. 5-138",
+      "tier": "1 (for what NATO believed)",
+      "notes": "Local copy reference/sources/fm100-2-3(91).pdf (not in git). A statement of what the US Army believed, with 'probably' on the SA-8's bands; not evidence of the Soviet radars' real parameters. Never used for Osa values."
+    },
+    {
+      "id": "ew_textbooks",
+      "title": "D. Adamy, EW 101 and EW 102 (Artech); R. Wiley, ELINT (Artech); D. Schleher, Electronic Warfare in the Information Age: class values for receiver sensitivity, bearing accuracy, ERP and PRF ranges",
+      "tier": "textbook",
+      "notes": "Used only for labelled estimates of a system class."
+    }
+  ],
+  "esm": [
+    {
+      "id": "pact_spo10_class_rwr",
+      "name": "Warsaw Pact radar warning receiver, SPO-10 class (four antenna units)",
+      "kind": "rwr",
+      "freq_min_hz": {
+        "value": 2000000000.0,
+        "source": "estimate: the band is not in the sources read (spo10_tulin gives the design, not the band); the NATO class set's 2-18 GHz is used",
+        "confidence": "low"
+      },
+      "freq_max_hz": {
+        "value": 18000000000.0,
+        "source": "estimate: the band is not in the sources read (spo10_tulin gives the design, not the band); the NATO class set's 2-18 GHz is used",
+        "confidence": "low"
+      },
+      "sensitivity_dbw": {
+        "value": -95,
+        "source": "estimate (ew_textbooks): crystal-video class, as the NATO class set",
+        "confidence": "estimate"
+      },
+      "antenna_gain_db": {
+        "value": 0,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "bearing_sigma_deg": {
+        "value": 30,
+        "source": "estimate (spo10_tulin: a direction on the indicator from four antenna units, so a quadrant's accuracy)",
+        "confidence": "estimate"
+      },
+      "freq_sigma_fraction": {
+        "value": 0.01,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "pri_sigma_fraction": {
+        "value": 0.02,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "pw_sigma_fraction": {
+        "value": 0.1,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "line_interval_s": {
+        "value": 5.0,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "contact_timeout_s": {
+        "value": 8.0,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "threat_library": "blue_rwr_pact_view",
+      "source": "spo10_tulin; airwar_ru; estimates as marked",
+      "confidence": "low",
+      "notes": "The display quantises the bearing to the quadrant (rwr_sets); the measured bearing here is coarse. An intermittent tone and a light on the indicator; no type."
+    },
+    {
+      "id": "pact_spo15l_class_rwr",
+      "name": "Warsaw Pact radar warning receiver, SPO-15L Beryoza class",
+      "kind": "rwr",
+      "freq_min_hz": {
+        "value": 2000000000.0,
+        "source": "estimate: band as the SPO-10 class",
+        "confidence": "low"
+      },
+      "freq_max_hz": {
+        "value": 18000000000.0,
+        "source": "estimate: band as the SPO-10 class",
+        "confidence": "low"
+      },
+      "sensitivity_dbw": {
+        "value": -95,
+        "source": "estimate (ew_textbooks): crystal-video class, as the NATO class set",
+        "confidence": "estimate"
+      },
+      "antenna_gain_db": {
+        "value": 0,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "bearing_sigma_deg": {
+        "value": 6,
+        "source": "estimate (airwar_ru: 'more accurate bearings'; the figure is not given)",
+        "confidence": "estimate"
+      },
+      "freq_sigma_fraction": {
+        "value": 0.01,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "pri_sigma_fraction": {
+        "value": 0.02,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "pw_sigma_fraction": {
+        "value": 0.1,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "line_interval_s": {
+        "value": 5.0,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "contact_timeout_s": {
+        "value": 8.0,
+        "source": "estimate",
+        "confidence": "estimate"
+      },
+      "threat_library": "blue_rwr_pact_view",
+      "source": "spo10_tulin; airwar_ru; estimates as marked",
+      "confidence": "low",
+      "notes": "Date and fit unverified (03_PERCEPTION.md 8); on the MiG-23MLD from 1984 by SAM3D's estimate."
+    }
+  ],
+  "threat_libraries": [
+    {
+      "id": "blue_rwr_pact_view",
+      "name": "What Pact RWRs knew of the emitters they meet",
+      "owner": "red",
+      "notes": "SAM3D design: the Pact knew its own SAMs. The SPO-10 class names no type to the pilot (its display shows none); the library still tells it search from lock for the display's kinds.",
+      "entries": [
+        {
+          "id": "sa8_search",
+          "name": "SA-8 search radar (the Osa's СОЦ)",
+          "kind": "search",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 6400000000.0,
+          "freq_max_hz": 7600000000.0,
+          "prf_min_hz": 2200,
+          "prf_max_hz": 3400,
+          "pw_min_s": 3e-07,
+          "pw_max_s": 7e-07,
+          "source": "osa_ak.json emitters (voenizdat_osa_1991, mon_2112_80, flak11): the Warsaw Pact built the Osa, so its belief about it is its real parameters (a SAM3D design decision, 03_PERCEPTION.md 3.3)",
+          "confidence": "medium"
+        },
+        {
+          "id": "sa8_track",
+          "name": "SA-8 tracking radar (the Osa's ССЦ)",
+          "kind": "track",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 13600000000.0,
+          "freq_max_hz": 15400000000.0,
+          "prf_min_hz": 2200,
+          "prf_max_hz": 3400,
+          "pw_min_s": 1.5e-07,
+          "pw_max_s": 4e-07,
+          "source": "osa_ak.json emitters (voenizdat_osa_1991, mon_2112_80, flak11): the Warsaw Pact built the Osa, so its belief about it is its real parameters (a SAM3D design decision, 03_PERCEPTION.md 3.3)",
+          "confidence": "medium"
+        },
+        {
+          "id": "sa8_command_guidance",
+          "name": "SA-8 command transmitters (the Osa's СПК, two channels)",
+          "kind": "missile_guidance",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 7900000000.0,
+          "freq_max_hz": 8900000000.0,
+          "prf_min_hz": 500,
+          "prf_max_hz": 1000,
+          "pw_min_s": 4e-07,
+          "pw_max_s": 1.2e-06,
+          "source": "osa_ak.json emitters (voenizdat_osa_1991, mon_2112_80, flak11): the Warsaw Pact built the Osa, so its belief about it is its real parameters (a SAM3D design decision, 03_PERCEPTION.md 3.3)",
+          "confidence": "medium"
+        },
+        {
+          "id": "9m33_responder",
+          "name": "9M33 missile responder",
+          "kind": "track",
+          "owner": "red",
+          "platform": "air",
+          "freq_min_hz": 13600000000.0,
+          "freq_max_hz": 14800000000.0,
+          "prf_min_hz": 500,
+          "prf_max_hz": 1000,
+          "pw_min_s": 3e-07,
+          "pw_max_s": 8e-07,
+          "source": "osa_ak.json (the responder's estimate; its own emitter)",
+          "confidence": "estimate"
+        },
+        {
+          "id": "kub_straight_flush_acq",
+          "name": "SA-6 Straight Flush acquisition",
+          "kind": "search",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 4000000000.0,
+          "freq_max_hz": 8000000000.0,
+          "source": "fm100_2_3 p. 5-138 (windows as NATO's manual gives them; the Pact is taken to know its own SAMs: SAM3D design decision)",
+          "confidence": "low"
+        },
+        {
+          "id": "kub_straight_flush_track",
+          "name": "SA-6 Straight Flush tracking",
+          "kind": "track",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 8000000000.0,
+          "freq_max_hz": 10000000000.0,
+          "source": "fm100_2_3 p. 5-138 (as above)",
+          "confidence": "low"
+        },
+        {
+          "id": "s125_low_blow",
+          "name": "SA-3 Low Blow fire control",
+          "kind": "track",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 8000000000.0,
+          "freq_max_hz": 10000000000.0,
+          "source": "fm100_2_3 p. 5-138 (as above)",
+          "confidence": "low"
+        },
+        {
+          "id": "s75_fan_song",
+          "name": "SA-2 Fan Song",
+          "kind": "track",
+          "owner": "red",
+          "platform": "ground",
+          "freq_min_hz": 2000000000.0,
+          "freq_max_hz": 6000000000.0,
+          "source": "fm100_2_3 p. 5-138 (as above)",
+          "confidence": "low"
+        },
+        {
+          "id": "nato_fighter_fcr_x",
+          "name": "NATO fighter fire-control radar (X band)",
+          "kind": "fire_control",
+          "owner": "blue",
+          "platform": "air",
+          "freq_min_hz": 8500000000.0,
+          "freq_max_hz": 10500000000.0,
+          "prf_min_hz": 1000,
+          "prf_max_hz": 300000,
+          "source": "nato_radar_refs (band); estimate (PRF window: low to high PRF modes, ew_textbooks)",
+          "confidence": "low"
+        },
+        {
+          "id": "nato_noise_jammer",
+          "name": "NATO noise jammer (wideband)",
+          "kind": "jammer",
+          "owner": "blue",
+          "platform": "air",
+          "freq_min_hz": 64000000.0,
+          "freq_max_hz": 20000000000.0,
+          "cw": true,
+          "source": "nato_ew_refs (ALQ-99 covers 64 MHz-20 GHz)",
+          "confidence": "medium"
+        }
+      ]
+    }
+  ]
+}

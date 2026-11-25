@@ -6,16 +6,22 @@
 // the waves' night factor, the couriers' night speed. Unreal's sky is turned by the same clock. The thresholds are
 // data/gameplay/light.json.
 //
+// Roadmap S8: the light on the ground in lux (the sun's clear sky through the twilight, and the moon by its phase and
+// height), the TV's contrast threshold raised as that light fails through the twilight (a gradient, not only the yes or
+// no at -6 deg), and the moon's share of a night's light for the eye's range.
+//
 // The missions menu's time of day is a preset (the mission's own, dawn, day, dusk, night, an hour) turned into a start
 // hour by the scenario's own sun (PresetHour).
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <string>
 #include <utility>
 
 #include "simcore/console_data.hpp"
+#include "simcore/crew_data.hpp"  // detail::ReadTextFile
 #include "simcore/json.hpp"
 #include "simcore/solar.hpp"
 
@@ -29,6 +35,7 @@ struct SkyClock {
     int day_of_year = 288;       // 15 October unless the scenario has a "date"
     double utc_offset_h = 1.0;   // the local clock ahead of UTC
     double start_local_h = 10.5; // the local hour at the session's second 0
+    int year = 1985;             // the date's year: the sun's place repeats year on year, the moon's does not
 
     // Whole days and the local hour 0-24 at a session second.
     double LocalHourAt(double t_s) const {
@@ -48,7 +55,45 @@ struct SkyClock {
     SunPosition SunAtSession(double t_s) const {
         return SunAt(lat_deg, lon_deg, DayOfYearAt(t_s), LocalHourAt(t_s) - utc_offset_h);
     }
+    // The moon at a session second, in the date's own year (the next one past its last day, the one before its first).
+    MoonPosition MoonAtSession(double t_s) const {
+        const int days = static_cast<int>(std::floor((start_local_h + t_s / 3600.0) / 24.0));
+        const int doy = DayOfYearAt(t_s);
+        const int y = year + (days > 0 && doy < day_of_year ? 1 : 0) - (days < 0 && doy > day_of_year ? 1 : 0);
+        return MoonAt(lat_deg, lon_deg, y, doy, LocalHourAt(t_s) - utc_offset_h);
+    }
 };
+
+// ---------------------------------------------------------------------------------------------- light on the ground (S8)
+
+// The clear sky's light on level ground from the sun, in lux, by its elevation: log-interpolated between the natural
+// illumination tables' points (brown_1952): about 400 lux at sunset, 3.4 at the end of civil twilight (-6 deg), 0.008 at
+// the end of nautical twilight (-12 deg), the moonless night sky's own (starlight and airglow) about 0.001 below.
+inline double SkyLuxOfSun(double sun_elevation_deg) {
+    static const double kDeg[] = {-18.0, -12.0, -6.0, -0.8, 0.0, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0};
+    static const double kLux[] = {0.001, 0.008, 3.4, 400.0, 700.0, 5000.0, 15000.0, 35000.0, 55000.0, 80000.0, 100000.0, 115000.0};
+    const std::size_t n = sizeof(kDeg) / sizeof(kDeg[0]);
+    if (sun_elevation_deg <= kDeg[0]) return kLux[0];
+    if (sun_elevation_deg >= kDeg[n - 1]) return kLux[n - 1];
+    std::size_t i = 1;
+    while (sun_elevation_deg > kDeg[i]) ++i;
+    const double f = (sun_elevation_deg - kDeg[i - 1]) / (kDeg[i] - kDeg[i - 1]);
+    return std::exp(std::log(kLux[i - 1]) + f * (std::log(kLux[i]) - std::log(kLux[i - 1])));
+}
+
+// The moon's light on level ground in lux (krisciunas_schaefer_1991): its magnitude by the phase angle (Allen's
+// -12.73 + 0.026 |a| + 4e-9 a^4, a in degrees), 2.54e-6 lux from a source of magnitude 0, on level ground by the sine of
+// its height, dimmed by the air it shines through (0.2 magnitudes an air mass, a clear lowland sky: an estimate; the air
+// mass (1 - 0.96 sin^2 z)^-1/2). 0 with the moon down. A full moon high gives about a quarter of a lux.
+inline double MoonLux(double moon_elevation_deg, double phase_angle_deg) {
+    if (moon_elevation_deg <= 0.0) return 0.0;
+    const double a = std::fabs(phase_angle_deg);
+    const double mag = -12.73 + 0.026 * a + 4e-9 * a * a * a * a;
+    const double sin_h = std::sin(DegToRad(moon_elevation_deg));
+    const double sin_z = std::cos(DegToRad(moon_elevation_deg));
+    const double air_mass = 1.0 / std::sqrt(1.0 - 0.96 * sin_z * sin_z);
+    return 2.54e-6 * std::pow(10.0, -0.4 * mag) * sin_h * std::pow(10.0, -0.4 * 0.2 * air_mass);
+}
 
 // ---------------------------------------------------------------------------------------------- the light
 
@@ -70,6 +115,12 @@ struct LightValues {
     double low_sun_deg = 6.0;            // day: the sun at least this high; between the two, dawn or dusk
     double tv_min_elevation_deg = -6.0;  // the TV sight has daylight with the sun at or above this
     double optical_night_deg = -6.0;     // dark (lamps, night march, the guns' optical sights blind) below this
+    // Roadmap S8. The TV works at its full contrast threshold in this much light or more; below it the threshold rises as
+    // the square root of the light's fall (Rose's law, rose_1948). 0: no gradient (only the yes or no at
+    // tv_min_elevation_deg), the code's default for a data folder without the value.
+    double tv_full_lux = 0.0;
+    double moonless_lux = 0.001;  // a moonless night's light: the moon's share 0 at or below it
+    double full_moon_lux = 0.25;  // a full moon high: the moon's share 1 (log between)
 };
 
 struct SunLight {
@@ -79,7 +130,21 @@ struct SunLight {
     double night_share = 0.0;  // 0 by day to 1 by night, smooth through twilight (the fx's tracers and flashes)
     bool daylight = true;      // the TV sight's
     bool dark = false;
+    // Roadmap S8.
+    double lux = 100000.0;             // the light on level ground: the sun's sky and the moon's
+    double tv_threshold_factor = 1.0;  // the TV's contrast threshold times this (1 in full light, more in the twilight)
+    double moon_elevation_deg = -90.0;
+    double moon_azimuth_deg = 0.0;
+    double moon_illuminated = 0.0;     // the lit share of its disc
+    double moon_lux = 0.0;
+    double moon_share = 0.0;           // 0 no moon (down, new or thin) to 1 a full moon high: the night eye's light
 };
+
+// The TV's threshold factor in `lux` of light (Rose: the threshold contrast as one over the square root of the light).
+inline double TvThresholdFactor(double lux, const LightValues& v) {
+    if (v.tv_full_lux <= 0.0 || lux >= v.tv_full_lux) return 1.0;
+    return std::sqrt(v.tv_full_lux / (lux > 1e-9 ? lux : 1e-9));
+}
 
 // 0 with the sun 6 deg up or higher, 1 at 6 deg below or lower, a smoothstep between (Unreal's fx, SimFxLogic).
 inline double NightShare(double sun_elevation_deg) {
@@ -103,14 +168,33 @@ inline SunLight LightOfSun(double elevation_deg, double azimuth_deg, bool rising
     l.night_share = NightShare(elevation_deg);
     l.daylight = elevation_deg >= v.tv_min_elevation_deg;
     l.dark = elevation_deg < v.optical_night_deg;
+    l.lux = SkyLuxOfSun(elevation_deg);
+    l.tv_threshold_factor = TvThresholdFactor(l.lux, v);
     return l;
+}
+
+// The moon's part in a light: its place, its light added to the sun's, the TV's threshold again, the moon's share.
+inline void AddMoon(SunLight& l, const MoonPosition& m, const LightValues& v) {
+    l.moon_elevation_deg = RadToDeg(m.elevation_rad);
+    l.moon_azimuth_deg = RadToDeg(m.azimuth_rad);
+    l.moon_illuminated = m.illuminated;
+    l.moon_lux = MoonLux(l.moon_elevation_deg, RadToDeg(m.phase_angle_rad));
+    l.lux += l.moon_lux;
+    l.tv_threshold_factor = TvThresholdFactor(l.lux, v);
+    l.moon_share = 0.0;
+    if (l.moon_lux > v.moonless_lux && v.full_moon_lux > v.moonless_lux) {
+        const double share = std::log(l.moon_lux / v.moonless_lux) / std::log(v.full_moon_lux / v.moonless_lux);
+        l.moon_share = share > 1.0 ? 1.0 : share;
+    }
 }
 
 // The light at a session second. Rising: the sun higher a minute later.
 inline SunLight LightAt(const SkyClock& c, double t_s, const LightValues& v) {
     const SunPosition s = c.SunAtSession(t_s);
     const SunPosition later = c.SunAtSession(t_s + 60.0);
-    return LightOfSun(RadToDeg(s.elevation_rad), RadToDeg(s.azimuth_rad), later.elevation_rad > s.elevation_rad, v);
+    SunLight l = LightOfSun(RadToDeg(s.elevation_rad), RadToDeg(s.azimuth_rad), later.elevation_rad > s.elevation_rad, v);
+    AddMoon(l, c.MoonAtSession(t_s), v);
+    return l;
 }
 
 // ---------------------------------------------------------------------------------------------- the menu's time of day
@@ -173,7 +257,7 @@ inline double PresetHour(const SkyClock& c, TimePreset p) {
 inline std::string FormatLocalHour(double h) {
     long long m = std::llround(h * 60.0) % (24 * 60);
     if (m < 0) m += 24 * 60;
-    char buf[16];
+    char buf[64];
     std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
     return buf;
 }
@@ -188,24 +272,40 @@ public:
         if (!Keys(root, "", {"light_id", "status", "notes", "source", "confidence", "values"}) || !Provenance(root, "")) return false;
         const json::Value* values = root.Find("values");
         if (values == nullptr) return Fail("values", "required");
-        const std::pair<const char*, double*> each[] = {{"twilight_deg", &out.twilight_deg},
-                                                        {"low_sun_deg", &out.low_sun_deg},
-                                                        {"tv_min_elevation_deg", &out.tv_min_elevation_deg},
-                                                        {"optical_night_deg", &out.optical_night_deg}};
-        if (!Keys(*values, "values", {"twilight_deg", "low_sun_deg", "tv_min_elevation_deg", "optical_night_deg"})) return false;
-        for (const auto& e : each) {
-            const std::string p = Join("values", e.first);
-            const json::Value* v = values->Find(e.first);
-            if (v == nullptr) return Fail(p, "required");
+        struct Entry {
+            const char* key;
+            double* to;
+            double lo;
+            double hi;
+            bool required;  // the S8 values may be left out (the code's: no TV gradient)
+            const char* what;
+        };
+        const Entry each[] = {{"twilight_deg", &out.twilight_deg, -18.0, 18.0, true, "degrees, -18 to 18"},
+                              {"low_sun_deg", &out.low_sun_deg, -18.0, 18.0, true, "degrees, -18 to 18"},
+                              {"tv_min_elevation_deg", &out.tv_min_elevation_deg, -18.0, 18.0, true, "degrees, -18 to 18"},
+                              {"optical_night_deg", &out.optical_night_deg, -18.0, 18.0, true, "degrees, -18 to 18"},
+                              {"tv_full_lux", &out.tv_full_lux, 0.0, 200000.0, false, "lux, 0 to 200000"},
+                              {"moonless_lux", &out.moonless_lux, 1e-6, 1.0, false, "lux, 1e-6 to 1"},
+                              {"full_moon_lux", &out.full_moon_lux, 1e-6, 10.0, false, "lux, 1e-6 to 10"}};
+        if (!Keys(*values, "values",
+                  {"twilight_deg", "low_sun_deg", "tv_min_elevation_deg", "optical_night_deg", "tv_full_lux", "moonless_lux", "full_moon_lux"})) {
+            return false;
+        }
+        for (const Entry& e : each) {
+            const std::string p = Join("values", e.key);
+            const json::Value* v = values->Find(e.key);
+            if (v == nullptr) {
+                if (e.required) return Fail(p, "required");
+                continue;
+            }
             if (!Keys(*v, p, {"value", "source", "confidence", "notes"}) || !Provenance(*v, p)) return false;
             const json::Value* n = v->Find("value");
-            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number >= -18.0 && n->number <= 18.0)) {
-                return Fail(Join(p, "value"), "degrees, -18 to 18");
-            }
-            *e.second = n->number;
+            if (n == nullptr || !n->Is(json::Type::Number) || !(n->number >= e.lo && n->number <= e.hi)) return Fail(Join(p, "value"), e.what);
+            *e.to = n->number;
         }
         if (out.twilight_deg < 0.0) return Fail("values.twilight_deg.value", "degrees below the horizon, >= 0");
         if (-out.twilight_deg > out.low_sun_deg) return Fail("values.low_sun_deg.value", "must be above -twilight_deg");
+        if (out.full_moon_lux <= out.moonless_lux) return Fail("values.full_moon_lux.value", "must be above moonless_lux");
         return true;
     }
 };

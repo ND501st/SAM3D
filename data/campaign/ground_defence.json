@@ -1,0 +1,120 @@
+{
+  "defence_id": "pannonia",
+  "name": "The 3rd Army's defence of Pannonia, by adversary",
+  "status": "F3.1 (21 Nov 2026): data only (docs/fronts/03_GROUND_WAR.md sections 3.1, 5.2 and 11). Nothing reads it on the campaign path until F3.3; simcore/ground_war/ground_data.hpp loads it and tests/test_ground_data.cpp checks it.",
+  "source": "our doctrine from the ČSLA's 1985 regulations as previewed (vr_poltikovic_1984, vr_krizek_1985) and the Pact's texts (reznichenko_1984, mt_stashek_losses, mt_novoselov_replacement), docs/research/fronts_2026-11/our_side.md; the deployments are SAM3D estimates on the country map (data/maps/pannonia.json) for the order of battle data/command/oob_pannonia.json",
+  "confidence": "estimate",
+  "notes": "One enemy at a time: each deployment says which formations face that adversary's front and where. A unit on the line holds a run of the front's sectors (the theatre's, F2.1: \"sectors\", in order along the line); a reserve or support unit stands at a place. Every place is the country map's (place_map, F1). Units not listed stay in their garrisons. The regiments that had no equipment in the order of battle have it there now (F3.1, labelled estimates in their notes).",
+  "oob": "command/oob_pannonia.json",
+  "place_map": "maps/pannonia.json",
+  "theatre": "air_war/theatre_pannonia_nation.json",
+  "commanders": {
+    "pool": {
+      "ranks": { "army": "Lieutenant General", "division": "Major General", "brigade": "Colonel", "regiment": "Colonel", "battalion": "Major" },
+      "first_names": ["Jan", "Josef", "Karel", "Miroslav", "Jiri", "Laszlo", "Istvan", "Ferenc", "Zoltan", "Stefan", "Pavel", "Milan", "Imre"],
+      "last_names": ["Novotny", "Dvorak", "Cerny", "Prochazka", "Horvath", "Nagy", "Toth", "Szabo", "Benes", "Kovac", "Hajek", "Varga", "Molnar"],
+      "backgrounds": ["Military Academy, Vyskov", "Frunze Academy", "tank troops", "motor rifle troops", "border troops"],
+      "trait_mean": { "boldness": 0.45, "methodical": 0.65, "creativity": 0.4, "rigidity": 0.65, "ambition": 0.5, "skepticism": 0.5, "vindictiveness": 0.35, "composure": 0.65 },
+      "trait_sd": 0.15,
+      "source": "game value: our commanders drawn as the air war's officers are; a Pact-trained army, by the regulations, withdrawal and counterattack on the senior's order (reznichenko_1984)",
+      "confidence": "estimate"
+    },
+    "authored": [
+      { "id": "mrd_7_cdr", "name": "Rudolf Kral", "unit": "mrd_7", "post": "div_commander", "age": 51, "background": "Motor rifle troops, Frunze Academy",
+        "bio": "The 7th Division's commander (data/command/chain_pannonia.json div_commander). Careful with his regiments; asks early for permission he expects to be refused.",
+        "traits": { "boldness": 0.4, "methodical": 0.75, "creativity": 0.45, "rigidity": 0.6, "ambition": 0.45, "skepticism": 0.55, "vindictiveness": 0.3, "composure": 0.7 } }
+    ]
+  },
+  "doctrine": {
+    "source": "docs/fronts/03_GROUND_WAR.md section 5.2 from docs/research/fronts_2026-11/our_side.md and pact_ground.md",
+    "confidence": "medium",
+    "attack_ratio": { "value": 3.0, "source": "fm_100_2_1_1984 p. 2-11: a Pact-trained army's counterattack at about 3:1 (our side follows the Pact's norms)", "confidence": "medium" },
+    "breakthrough_ratio": { "min": 3.0, "max": 5.0, "source": "reznichenko_1984 p. 79", "confidence": "medium" },
+    "withdraw_needs_order": { "value": true, "source": "reznichenko_1984 pp. 49, 152; voenizdat_osa_1991 p. 238: only with the senior commander's permission", "confidence": "high" },
+    "counterattack_by_senior": { "value": true, "source": "reznichenko_1984 pp. 177-179; vr_poltikovic_1984 p. 96: the next higher commander's; the second echelon from the march into the flank, tanks leading, to a set line", "confidence": "high" },
+    "second_echelon_to_success": { "value": true, "source": "fm_100_2_1_1984 p. 2-11", "confidence": "medium" },
+    "reserve_share": { "value": 0.111, "source": "fm_100_2_1_1984 p. 2-11: a combined-arms reserve of about a ninth of the force (the Pact's norm, which our army follows); the 3rd Army keeps its tank brigade, 12.5 per cent of its weighted strength, as the army's reserve in every deployment but the rebels' (F7.1)", "confidence": "medium" },
+    "counterattack_stops_at_border": { "value": true, "source": "SAM3D estimate: the owner's open decision 4 taken as proposed (docs/fronts/README.md); restoring the state border is among the ČSLA's 1985 counterstrike aims (vr_svatos_1985)", "confidence": "estimate" },
+    "effectiveness": {
+      "kind": "lines",
+      "degraded_below": { "value": 0.667, "source": "mt_novoselov_replacement p. 9", "confidence": "medium" },
+      "ineffective_below": { "value": 0.5, "source": "mt_stashek_losses p. 7", "confidence": "high" },
+      "hq_hit_ineffective_below": { "value": 0.75, "source": "mt_stashek_losses p. 7", "confidence": "medium" }
+    },
+    "advance_caps_km_per_day": {
+      "breakthrough": { "value": 30, "source": "mt_kurkov_tank_army p. 9; fm_100_2_1_1984 p. 4-4 (the Pact's norms our army was trained to)", "confidence": "medium" },
+      "depth": { "value": 50, "source": "mt_kurkov_tank_army p. 9", "confidence": "medium" },
+      "broken": { "value": 70, "source": "mt_1967_volkov_nonnuclear p. 13-14", "confidence": "medium" }
+    },
+    "frontages_km": [
+      { "echelon": "division", "posture": "defence", "width_min": 30, "width_max": 45, "depth_min": 20, "depth_max": 25, "source": "vr_poltikovic_1984 pp. 95-96 (the ČSLA's 1985 regulations)", "confidence": "high" },
+      { "echelon": "brigade", "posture": "defence", "width_min": 15, "width_max": 25, "source": "estimate (SAM3D): between the regiment's and the division's (vr_poltikovic_1984 pp. 95-96)", "confidence": "estimate" },
+      { "echelon": "regiment", "posture": "defence", "width_min": 10, "width_max": 15, "depth_min": 0, "depth_max": 12, "source": "vr_poltikovic_1984 pp. 95-96", "confidence": "high" },
+      { "echelon": "battalion", "posture": "defence", "width_min": 0, "width_max": 5, "depth_min": 0, "depth_max": 3, "source": "vr_poltikovic_1984 pp. 95-96", "confidence": "high" }
+    ],
+    "security_zone": {
+      "depth_km": { "min": 20, "max": 40, "source": "vr_poltikovic_1984 p. 96; vr_krizek_1985 pp. 32-36: the army sets its depth, the division runs it and orders each withdrawal", "confidence": "high" },
+      "line_spacing_km": { "min": 6, "max": 8, "source": "vr_poltikovic_1984 p. 96", "confidence": "high" },
+      "delay_per_line_h": { "min": 1, "max": 2, "source": "vr_krizek_1985 pp. 32-36: a reinforced battalion delays a brigade 1-2 h a line", "confidence": "medium" }
+    },
+    "prepared_positions": {
+      "division": { "min": 3, "max": 4, "source": "vr_poltikovic_1984 p. 96", "confidence": "high" },
+      "regiment": { "min": 2, "max": 2, "source": "vr_poltikovic_1984 p. 96", "confidence": "high" }
+    },
+    "restore_control_h": { "min": 1, "max": 3, "source": "mt_stashek_losses: about 1 h through a forward command post, otherwise 2-3 h", "confidence": "medium" }
+  },
+  "deployments": [
+    {
+      "adversary": "warsaw_pact",
+      "security_zone_km": { "value": 30, "source": "SAM3D estimate within vr_poltikovic_1984 p. 96's 20-40 km: the army's choice against a peer's main thrust", "confidence": "estimate" },
+      "reserve_depth_km": { "value": 55, "source": "SAM3D estimate from vr_poltikovic_1984 pp. 95-96: the army's reserve held behind its first-echelon divisions, the security zone (30 km here) and a division's defence 20-25 km deep; out of the line until committed (fm_100_2_1_1984 p. 6-1: the second echelon and reserve held back for the counterattack)", "confidence": "estimate" },
+      "source": "SAM3D estimate: the 7th Division on the Rava gorge and Dravec (battery 21 covers the dam's approach, the nation's theatre's battery_position), the 9th on the north-eastern road, the south-western brigade screening Hradec, the tank brigade the army's reserve by the capital",
+      "confidence": "estimate",
+      "units": [
+        { "unit": "mrd_7", "role": "first_echelon", "sectors": ["rava_reservoir"], "at": "dravec" },
+        { "unit": "mrd_9", "role": "first_echelon", "sectors": ["tisava"], "at": "mezovar" },
+        { "unit": "sw_brigade", "role": "flank_screen", "sectors": ["hradec"], "at": "hradec" },
+        { "unit": "tank_brigade", "role": "reserve", "at": "capital" },
+        { "unit": "army_artillery_bde", "role": "support", "at": "capital" }
+      ]
+    },
+    {
+      "adversary": "nato",
+      "security_zone_km": { "value": 30, "source": "SAM3D estimate within vr_poltikovic_1984 p. 96's 20-40 km", "confidence": "estimate" },
+      "reserve_depth_km": { "value": 55, "source": "SAM3D estimate from vr_poltikovic_1984 pp. 95-96: the army's reserve held behind its first-echelon divisions, the security zone (30 km here) and a division's defence 20-25 km deep; out of the line until committed (fm_100_2_1_1984 p. 6-1: the second echelon and reserve held back for the counterattack)", "confidence": "estimate" },
+      "source": "SAM3D estimate: the 9th Division on the western road (its peacetime western group), the south-western brigade south of the Lenta, the 7th Division in the second echelon by Novo Varosd (battery 21 covers the hub behind, the nation's theatre's battery_position), the tank brigade the army's reserve",
+      "confidence": "estimate",
+      "units": [
+        { "unit": "mrd_9", "role": "first_echelon", "sectors": ["western_crossings"], "at": "kisvar" },
+        { "unit": "sw_brigade", "role": "first_echelon", "sectors": ["upper_lenta"], "at": "saldanj" },
+        { "unit": "mrd_7", "role": "second_echelon", "sectors": ["western_crossings"], "at": "novo_varosd" },
+        { "unit": "tank_brigade", "role": "reserve", "at": "novo_varosd" },
+        { "unit": "army_artillery_bde", "role": "support", "at": "novo_varosd" }
+      ]
+    },
+    {
+      "adversary": "rebels",
+      "security_zone_km": { "value": 10, "source": "SAM3D estimate: a line against rebels has no deep security zone, only outposts", "confidence": "estimate" },
+      "source": "SAM3D estimate: the 7th Division's southern regiments hold the line in the valley (battery 21 covers the southern group's forward troops), its tank regiment behind at Kesmark",
+      "confidence": "estimate",
+      "units": [
+        { "unit": "mrr_71", "role": "first_echelon", "sectors": ["rava_crossing"], "at": "ralje" },
+        { "unit": "mrr_72", "role": "first_echelon", "sectors": ["hollos"], "at": "hollos" },
+        { "unit": "tr_73", "role": "reserve", "at": "kesmark" }
+      ]
+    },
+    {
+      "adversary": "neutral",
+      "security_zone_km": { "value": 20, "source": "SAM3D estimate at vr_poltikovic_1984 p. 96's shallow end: a limited war on a short front", "confidence": "estimate" },
+      "reserve_depth_km": { "value": 45, "source": "SAM3D estimate from vr_poltikovic_1984 pp. 95-96: the army's reserve held behind its first-echelon divisions, the security zone (20 km here) and a division's defence 20-25 km deep", "confidence": "estimate" },
+      "source": "SAM3D estimate: the south-western brigade and the 72nd Regiment (its peacetime south-western group; battery 21 covers it) on the border, the 9th Division behind, the tank brigade the army's reserve at Saldanj",
+      "confidence": "estimate",
+      "units": [
+        { "unit": "sw_brigade", "role": "first_echelon", "sectors": ["lenta_marshes"], "at": "saldanj" },
+        { "unit": "mrr_72", "role": "first_echelon", "sectors": ["border_forest"], "at": "saldanj" },
+        { "unit": "mrd_9", "role": "second_echelon", "sectors": ["lenta_marshes"], "at": "saldanj" },
+        { "unit": "tank_brigade", "role": "reserve", "at": "saldanj" }
+      ]
+    }
+  ]
+}

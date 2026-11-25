@@ -72,13 +72,21 @@ public:
     // path's sample whose ray runs higher over the ground there does not look the obstacle up.
     virtual double ObstacleTallestM() const { return 1e300; }
 
+    // Whether the surface at (east, north) is water: a lake, a reservoir, a river or the sea (roadmap E9's sea areas). A
+    // low microwave ray reflects off calm water as it does not off rough land, and the smooth earth's loss below 1 GHz
+    // takes water's constants there (em/propagation.hpp, docs/EM_ARCHITECTURE.md section 37). None on a bare terrain.
+    virtual bool WaterAt(double /*east_m*/, double /*north_m*/) const { return false; }
+    // Whether this terrain has any water at all: a path over one without asks nothing more.
+    virtual bool HasWater() const { return false; }
+
     static constexpr double kNoObstacleTop = -1e300;
 };
 
 // A path's profile (radar.hpp HasLineOfSight, em/propagation.hpp AnalysePath) carries the woods and buildings as
 // ITU-R P.1812 carries its representative clutter heights, except within this distance of either end: a radar or a
 // vehicle at a wood's edge, in a clearing or in a street is not hidden by the cell it stands in (a game value,
-// docs/EM_ARCHITECTURE.md section 27).
+// docs/EM_ARCHITECTURE.md section 27). On the EM layer's paths the clutter an antenna stands in is its end's own loss
+// instead (ITU-R P.2108 section 3.1, em/propagation.hpp TerminalClutterLossDb, section 37).
 constexpr double kObstacleSkipM = 60.0;
 
 // The woods and buildings over one stretch of a straight path, between two of its samples: each footprint the stretch

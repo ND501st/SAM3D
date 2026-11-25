@@ -93,6 +93,10 @@ inline std::string PaperTitle(FactKind k) {
         case FactKind::BatteryNews: return "The battery's news";
         case FactKind::Press: return "Newspaper";
         case FactKind::Mail: return "Letter";
+        case FactKind::Intercept: return "Intercept report";
+        case FactKind::OwnAirNotice: return "Notice of our aircraft";
+        case FactKind::AirFront: return "The army's air defence staff's estimate of the enemy's air front";
+        case FactKind::Situation: return "Situation report";
         case FactKind::War: return "Announcement";
         case FactKind::AirWarning: return "Air-raid warning";
         case FactKind::Rumour: return "Note";
@@ -228,7 +232,7 @@ inline std::vector<BriefingScene> Briefings(const InfoNet& net, int position) {
             if (!b.items.empty()) out.push_back(b);
         }
     }
-    std::sort(out.begin(), out.end(), [](const BriefingScene& a, const BriefingScene& b) { return a.start_h < b.start_h; });
+    std::stable_sort(out.begin(), out.end(), [](const BriefingScene& a, const BriefingScene& b) { return a.start_h < b.start_h; });
     return out;
 }
 

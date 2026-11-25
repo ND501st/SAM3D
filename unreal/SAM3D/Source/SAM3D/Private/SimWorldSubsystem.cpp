@@ -529,6 +529,7 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	}
 	Accumulator = 0.0;
 	DebriefEntriesSent = 0;
+	bHasServerSky = false;  // a client takes the server's sky again with its next console (roadmap S8)
 	ResetEntityCache();
 	UE_LOG(LogSAM3D, Log, TEXT("Scenario loaded: %s (%s)%s"), *ToF(Runner->Def().name), *Path,
 		Link ? *FString::Printf(TEXT(", a battery link: the player in %s"), Runner == &Link->Post() ? TEXT("the PU-12M") : TEXT("the Osa")) : TEXT(""));
@@ -2292,7 +2293,22 @@ const FSimAircraftLook& USimWorldSubsystem::AircraftLookOf(const simcore::Aircra
 			{
 				if (Models != nullptr)
 				{
-					Look.Model = ToF(Models->ForTarget(T.model, T.target_class, T.type));
+					std::string Model = T.model;
+					if (Model.empty() && Runner->Def().air_fight.present)
+					{
+						// A fighter of the scenario's air battle with no model of its own (roadmap B13): its type's, when the
+						// library draws it. Never for ours: an enemy's type id would draw one of ours as the enemy (our
+						// regiments' pairs carry their own model, B10).
+						for (const simcore::airwar::AirFightFighterDef& F : Runner->Def().air_fight.fighters)
+						{
+							if (F.target == T.id && F.faction != "ours" && Models->Find(F.type) != nullptr)
+							{
+								Model = F.type;
+								break;
+							}
+						}
+					}
+					Look.Model = ToF(Models->ForTarget(Model, T.target_class, T.type));
 				}
 				Look.bFriendly = T.friendly;
 				Look.bIsWeapon = T.weapon;
@@ -2473,6 +2489,19 @@ void USimWorldSubsystem::BuildEntityList(const simcore::World& InWorld, TArray<F
 		S.bFriendly = Look.bFriendly;
 		S.bIsWeapon = Look.bIsWeapon;
 		S.GroundClearSeconds = GroundClearOf(*W, A.position, A.velocity, Look.bIsWeapon ? 0.0 : A.bottom_m);
+		if (A.attitude_set && !Look.bIsWeapon)
+		{
+			// The nose, not the track (roadmap R3): yaw and pitch from its heading and pitch, the roll its bank (right
+			// wing down > 0, as Unreal's roll). Taken through the display frame like the velocity above.
+			const double CosPitch = FMath::Cos(A.pitch_rad);
+			const simcore::Vec3 Nose{FMath::Sin(A.heading_rad) * CosPitch, FMath::Cos(A.heading_rad) * CosPitch, FMath::Sin(A.pitch_rad)};
+			const FVector NoseDir = ToUnreal(A.position + Nose * 100.0) - S.Location;
+			if (!NoseDir.IsNearlyZero())
+			{
+				S.Rotation = NoseDir.Rotation();
+				S.Rotation.Roll = FMath::RadiansToDegrees(A.bank_rad);
+			}
+		}
 	}
 	for (const simcore::Missile& M : W->MissileList())
 	{
@@ -2614,7 +2643,9 @@ bool USimWorldSubsystem::GetSunNow(double& ElevationDeg, double& AzimuthDeg, boo
 	{
 		return false;
 	}
-	const simcore::SunLight& Light = Runner->LightNow();
+	// A network client never steps: its light is the server's sky at the server's time (roadmap S8).
+	const simcore::SunLight Light =
+		IsMirrorOnly() && bHasServerSky ? simcore::LightAt(ServerSky, ServerSkySeconds, Runner->Def().light_values) : Runner->LightNow();
 	ElevationDeg = Light.sun_elevation_deg;
 	AzimuthDeg = Light.sun_azimuth_deg;
 	bDaylight = Light.daylight;
@@ -2628,13 +2659,40 @@ bool USimWorldSubsystem::GetSkyClock(simcore::SkyClock& Out) const
 	{
 		return false;
 	}
-	Out = Runner->Clock();
+	Out = IsMirrorOnly() && bHasServerSky ? ServerSky : Runner->Clock();
 	return true;
 }
 
 int32 USimWorldSubsystem::GetScenarioYear() const
 {
 	return Runner ? Runner->Def().year : 1985;
+}
+
+double USimWorldSubsystem::GetSkyTimeSeconds() const
+{
+	return IsMirrorOnly() && bHasServerSky ? ServerSkySeconds : GetSimTimeSeconds();
+}
+
+void USimWorldSubsystem::ApplyServerSky(double StartLocalHours, int32 DayOfYear, int32 Year, double ServerSimSeconds)
+{
+	if (!Runner || !IsMirrorOnly())
+	{
+		return;  // no scenario yet, or this machine runs the simulation itself
+	}
+	simcore::SkyClock Sky = Runner->Clock();  // the place and the clock's offset are the scenario's, the same file
+	const bool bFirst = !bHasServerSky;
+	const bool bMoved = FMath::Abs(Sky.start_local_h - StartLocalHours) > 1e-6 || Sky.day_of_year != DayOfYear || Sky.year != Year;
+	Sky.start_local_h = StartLocalHours;
+	Sky.day_of_year = FMath::Clamp(DayOfYear, 1, 366);
+	Sky.year = Year;
+	ServerSky = Sky;
+	ServerSkySeconds = FMath::Max(0.0, ServerSimSeconds);
+	bHasServerSky = true;
+	if (bFirst)
+	{
+		UE_LOG(LogSAM3D, Log, TEXT("Sky: the server's clock, %s on day %d of %d%s"), *ToF(simcore::FormatLocalHour(StartLocalHours)), Sky.day_of_year,
+			Year, bMoved ? *FString::Printf(TEXT(" (this machine was launched at %s)"), *ToF(simcore::FormatLocalHour(Runner->Clock().start_local_h))) : TEXT(""));
+	}
 }
 
 double USimWorldSubsystem::GetSimTimeSeconds() const
@@ -2985,6 +3043,9 @@ void USimWorldSubsystem::PumpConsole()
 		TArray<uint8> Packet;
 		Packet.Append(Bytes.data(), static_cast<int32>(Bytes.size()));
 		Seat->SendConsole(Packet);
+		// The sky with it (roadmap S8): the server's start hour and time, so a client's sun and light are this one's.
+		const simcore::SkyClock& Sky = In->Clock();
+		Seat->SendSky(Sky.start_local_h, Sky.day_of_year, Sky.year, In->Time());
 	}
 }
 

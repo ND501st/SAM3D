@@ -8,7 +8,15 @@ SAM3D's own art exists. Every such model is recorded in a register, as every dat
 
 **The register starts empty: every part is procedural.** A model is added only with the project owner's say-so, one
 file at a time (nothing is downloaded otherwise). The eight zips in `art/placeholder cold war models/` have no licence
-record: they are not registered, not used and not committed until the owner says where they came from.
+record: they are not registered, not used and not committed until the owner says where they came from. Their listings
+were read on 20 November 2026 (roadmap S9, nothing extracted): each holds only `source/<name>.zip` (an FBX and its
+BMP textures) and `textures/*.png`, with no readme, licence or credits file; the FBX headers' author, title, subject,
+keywords and comment are empty and the creator is "Blender (stable FBX IO) 2.79". So none states its origin, author
+or licence: `9k31-strela-1-sa-9-gaskin.zip`, `bmp-1p.zip`, `btr-70.zip`, `mt-lbm.zip`, `t-62-obr-1975.zip`,
+`t-72a-obr-1980.zip`, `zil-131.zip`, `zsu-23-4-shilka.zip`. The owner is to say where they came from.
+
+The map's ground and ribbon textures (`art/map/textures/`, S9) are not third-party art: `tools/map_textures.py` draws
+them from seeded noise, so they are the project's own and need no entry.
 
 ## The register: `data/scenery/assets.json`
 

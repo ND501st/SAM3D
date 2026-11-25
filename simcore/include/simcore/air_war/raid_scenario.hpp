@@ -33,9 +33,13 @@
 #include <vector>
 
 #include "simcore/air_war/campaign.hpp"
+#include "simcore/air_war/hot_phase.hpp"
+#include "simcore/air_war/opportunity.hpp"
 #include "simcore/air_war/types.hpp"
+#include "simcore/flights.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/json.hpp"
+#include "simcore/air_war/air_radio.hpp"
 #include "simcore/session_deliveries.hpp"
 #include "simcore/terrain_map.hpp"
 
@@ -91,7 +95,7 @@ inline void Escape(std::ostringstream& s, const std::string& t) {
             case '\r': s << "\\r"; break;
             default:
                 if (static_cast<unsigned char>(c) < 0x20) {
-                    char b[8];
+                    char b[64];
                     std::snprintf(b, sizeof(b), "\\u%04x", static_cast<unsigned>(static_cast<unsigned char>(c)));
                     s << b;
                 } else {
@@ -200,7 +204,23 @@ struct ScenarioFormat {
     // warning comes when it reached the vehicle through the chain, and the messages the vehicle's people get during the
     // raid are played in it (roadmap P1). Without it, the warning comes own_intel.warning_s ahead of the first aircraft.
     const DeliverySource* deliveries = nullptr;
+    // The enemy's radio (roadmap B9, air_radio.hpp): the flights' calls as transmissions in the session, and our intercept
+    // posts (in the scenario's frame) listening to them. Off: the flights keep B1's fixed delay and nobody hears them.
+    bool air_radio = false;
+    std::vector<AirRadioPostDef> intercept_posts;
+    // Its pilots react under fire by their faction's tables (roadmap B4, simcore/reactions.hpp: "reactions", the
+    // briefed SAM zones its intelligence believes in for the Pact's programme); off: the old scripted "evade".
+    bool reactions = true;
+    // R1's damage states for every aircraft in it (data/gameplay/damage.json, roadmap B4); off: a hit destroys.
+    bool damage_states = true;
+    // Our fighters (roadmap B10, command/own_air.hpp): the theatre's airfields as our fighter regiments' bases, their duty
+    // scrambling pairs on our GCI's picture as the raid comes in, the day's identification codes and the notices of the
+    // pairs down the chain; the package's aircraft in the air fight with them, our GCI on our radio, the front line for the
+    // airborne alert and the pursuit limit, the Pact's allies on our filters (S1). On by default from S1 (a campaign's
+    // own_air.mode 1; a save made before S1 plays its raids without them).
+    bool our_fighters = true;
 };
+
 
 // One scenario target, and the flight and aircraft it is.
 struct RaidAircraft {
@@ -211,7 +231,10 @@ struct RaidAircraft {
     std::string aircraft;
     bool helicopter = false;
     bool drone = false;
-    bool has_release = false;
+    bool has_release = false;  // it releases its load in the session (its release point inside the scenario's circle)
+    // Its load is fragged to a target: its flight's route has a release, in the session or beyond the scenario's circle
+    // (opportunity_session.hpp: owed to that target until released, opportunity.mode 3; 06_OPPORTUNITY.md section 3.4).
+    bool primary = false;
     Vec3 release_enu;  // where it releases its weapons (scenario ENU)
     Vec3 aim_enu;      // where they are aimed
     int arms = 0;
@@ -233,6 +256,10 @@ struct RaidAircraft {
     int weapons = 0;
     Delivery delivery = Delivery::Count;
     std::string arm_weapon;          // the EM library's ARM it carries (AircraftType::ArmEm): the feed's name for it
+    // Its flight's hot phase in the air fight (roadmap S5, hot_phase.mode 2; < 0: the doctrine's): its air combat skill
+    // moved by its officer and its pilots' sorties and currency, and its turn back once its controller is lost.
+    double hot_skill = -1.0;
+    double hot_turn_back_lost = -1.0;
 };
 
 // One of our other air defences whose reach overlaps the scenario. As the raid's aircraft pass through its zone it takes
@@ -260,6 +287,7 @@ struct RaidManifest {
     std::vector<std::pair<std::string, Vec3>> dummies;  // theatre dummy ids
     std::vector<std::pair<std::string, Vec3>> objects;  // other theatre objects inside the scenario
     std::vector<RaidAircraft> aircraft;
+    std::vector<std::string> flight_ids;  // per flight: its id in the session (flights.hpp), "" if not in it
     std::vector<double> flight_exit_h;   // per flight: when it leaves the scenario's circle (-1e18: never in it)
     std::vector<bool> flight_in;         // per flight: some of it is in the scenario
     std::vector<RaidNeighbour> neighbours;
@@ -269,6 +297,13 @@ struct RaidManifest {
     double airmanship = 0.5;   // PackageAirmanship
     bool night = false;
     bool poor_weather = false;
+    // Targets of opportunity (roadmap B6, opportunity.hpp): the package's mission, how far the battery stands past the
+    // faction's front (where its own troops are not), whether its free hunt is open there now (c2.free_hunt, by the
+    // campaign's phase), and each flight's leader as its chain reads him (an older save's manifest: none, no chain).
+    MissionKind mission = MissionKind::Strike;
+    double depth_km = 0.0;
+    bool free_hunt = false;
+    std::vector<OppLeader> leaders;  // per flight
 };
 
 struct RaidScenario {
@@ -280,6 +315,93 @@ struct RaidScenario {
 
 class RaidScenarioBuilder {
 public:
+    // A flight's "radio" block (roadmap B9): its squadron, its role, and how its people move the faction's discipline
+    // (its officer's quirks; loose lips lower it). HAVE QUICK and secure voice are per squadron, drawn from the faction's
+    // shares (both 0 in the 1985 data until a USAFE fielding date is found).
+    static json::Value FlightRadioJson(const AirCampaign& c, const FactionDef& f, const Flight& fl, const TuningTable& tune) {
+        using namespace jsonb;
+        AirRadioDef td;
+        for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = tune.Get(kv.first);
+        double chatter = 0.0, leak = 0.0;
+        if (fl.officer >= 0 && static_cast<std::size_t>(fl.officer) < c.Staff().officers.size()) {
+            const Officer& o = c.Staff().officers[static_cast<std::size_t>(fl.officer)];
+            chatter = o.Quirk("radio_chatter");
+            leak = o.Quirk("comsec_leak");
+        }
+        const double faction = f.radio.present ? f.radio.discipline : td.discipline;
+        json::Value r = Obj();
+        Put(r, "unit", Str(fl.squadron));
+        Put(r, "role", Str(FlightRoleName(fl.role)));
+        Put(r, "discipline_adjust", Num(std::round((RadioDiscipline(faction, 0.0, chatter, leak, td) - faction) * 1000.0) / 1000.0));
+        if (StableRadioKeys(td)) {
+            // Roadmap S6's follow-ups (radio.mode 2): the squadron's fit and codeword as the campaign's abstract calls draw
+            // them (SquadronRadioFit), so a squadron says the same word in a session and in the campaign.
+            const SquadronFit fit = SquadronRadioFit(fl.squadron, f.radio.have_quick_share, f.radio.secure_voice_share, static_cast<std::uint64_t>(c.Seed()));
+            if (f.radio.present && fit.have_quick) Put(r, "have_quick", Bool(true));
+            if (f.radio.present && fit.secure_voice) Put(r, "secure_voice", Bool(true));
+            Put(r, "codeword", Str(fit.codeword));
+            return r;
+        }
+        // Before radio.mode 2 (a save made before replays as played): std::hash and the session's own seed.
+        const std::size_t sq = std::hash<std::string>()(fl.squadron);
+        const em::Random rng(c.Seed() ^ 0x5EC0DEull);
+        if (f.radio.present) {
+            if (rng.Uniform(em::Stream::AirRadio, sq, 31) < f.radio.have_quick_share) Put(r, "have_quick", Bool(true));
+            if (rng.Uniform(em::Stream::AirRadio, sq, 32) < f.radio.secure_voice_share) Put(r, "secure_voice", Bool(true));
+        }
+        Put(r, "codeword", Str(kSquadronCodewords[sq % 5]));
+        return r;
+    }
+    // The scenario's "air_radio" block from the faction's radio block, the planner's habits and the tuning table.
+    static json::Value AirRadioJson(const AirCampaign& c, const Package& p, const ScenarioFormat& fmt) {
+        using namespace jsonb;
+        const FactionDef& f = c.Data().faction;
+        const TuningTable& tune = c.Data().tuning;
+        AirRadioDef td;
+        for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = tune.Get(kv.first);
+        double leak = 0.0, rotation = f.radio.callsign_rotation_h;
+        if (p.planner >= 0 && static_cast<std::size_t>(p.planner) < c.Staff().officers.size()) {
+            const Officer& pln = c.Staff().officers[static_cast<std::size_t>(p.planner)];
+            leak = pln.Quirk("comsec_leak");
+            if (pln.Quirk("punctuality") < 0.0) rotation *= 2.0;  // a careless planner doubles the call signs' interval
+        }
+        json::Value a = Obj();
+        Put(a, "faction", Str(f.id));
+        Put(a, "library", Str("em/air_radios_1985.json"));
+        Put(a, "radio", Str(f.radio.air_radio));
+        if (!f.radio.ground_radio.empty()) Put(a, "ground_radio", Str(f.radio.ground_radio));
+        Put(a, "freq_mhz", Num(f.radio.band_mhz));
+        Put(a, "language", Str(f.radio.language));
+        Put(a, "discipline", Num(f.radio.discipline));
+        Put(a, "callsign_rotation_h", Num(rotation));
+        Put(a, "have_quick_share", Num(f.radio.have_quick_share));
+        Put(a, "secure_voice_share", Num(f.radio.secure_voice_share));
+        Put(a, "opsec", Num(StaffOpsec(f.radio.opsec, leak, td)));
+        json::Value tn = Obj();
+        for (const auto& kv : AirRadioTuningDefaults()) Put(tn, kv.first.substr(6), Num(tune.Get(kv.first)));
+        Put(a, "tune", tn);
+        json::Value posts = Arr();
+        for (const AirRadioPostDef& d : fmt.intercept_posts) {
+            json::Value v = Obj();
+            Put(v, "id", Str(d.id));
+            Put(v, "name", Str(d.name));
+            Put(v, "kind", Str(d.kind));
+            Put(v, "east_m", Num(d.at.x));
+            Put(v, "north_m", Num(d.at.y));
+            Put(v, "mast_m", Num(d.mast_m));
+            if (!d.esm.empty()) Put(v, "esm", Str(d.esm));
+            if (!d.radio.empty()) Put(v, "radio", Str(d.radio));
+            if (d.freq_hz > 0.0) Put(v, "freq_mhz", Num(d.freq_hz / 1e6));
+            Put(v, "channels", Num(d.channels));
+            if (!d.chain_post.empty()) Put(v, "chain_post", Str(d.chain_post));
+            Push(posts, v);
+        }
+        Put(a, "posts", posts);
+        Put(a, "source", Str(f.radio.source));
+        Put(a, "confidence", Str(f.radio.confidence));
+        return a;
+    }
+
     RaidScenario Build(const AirCampaign& c, const Package& p, const ScenarioFormat& fmt = ScenarioFormat()) {
         using namespace jsonb;
         RaidScenario out;
@@ -338,6 +460,22 @@ public:
         m.flight_in.assign(p.flights.size(), false);
         m.scenario_id = "air_war_" + f.id + "_" + std::to_string(p.id);
 
+        // The SAM zones its intelligence believes in near the battery (the Pact's briefed programme, roadmap B4): where
+        // it believes them, with the reach it believes, in the scenario's frame. A battery that has moved since is not
+        // where its zone is briefed.
+        json::Value briefed_zones = jsonb::Arr();
+        if (fmt.reactions) {
+            for (const IntelEntry& e : c.Intel().entries) {
+                if (e.kind != ObjectKind::SamSite || e.threat_radius_m <= 0.0 || e.exists < 0.5) continue;
+                const Vec3 at = to_scen(e.pos + moved_by(e.key));
+                if (std::hypot(at.x, at.y) > clip + e.threat_radius_m) continue;
+                json::Value z = jsonb::Obj();
+                jsonb::Put(z, "east_m", jsonb::Num(std::round(at.x)));
+                jsonb::Put(z, "north_m", jsonb::Num(std::round(at.y)));
+                jsonb::Put(z, "radius_m", jsonb::Num(std::round(e.threat_radius_m)));
+                jsonb::Push(briefed_zones, z);
+            }
+        }
         // Each flight's part inside the circle.
         struct Clipped {
             int flight = -1;
@@ -345,8 +483,10 @@ public:
             std::vector<double> agl;
             std::vector<double> t_h;
             std::vector<std::string> tags;
+            std::vector<std::string> leg_tags;  // the tag of the leg flown to each point (an edge's: the leg it cuts)
             bool release = false;
             Vec3 release_pt;
+            int release_i = -1;
         };
         std::vector<Clipped> clipped;
         double first_h = 1e18, last_h = -1e18;
@@ -355,15 +495,30 @@ public:
             if (fl.route.size() < 2) continue;
             Clipped cl;
             cl.flight = static_cast<int>(fi);
+            // The leg's tag as the flight flies it: the route planner's turn points, gates and climb after the release
+            // are the way home (flights.hpp PastRelease reads the egress phase).
+            const int past = RouteIndexOf(fl.route, "target");
+            const auto leg_tag = [&](std::size_t i) {
+                const std::string& t = fl.route[i].tag;
+                if (past >= 0 && static_cast<int>(i) > past && (t == "turn" || t == "gate" || t == "climb")) return std::string("egress");
+                return t;
+            };
             std::vector<Vec3> pts;
             const Vec3 aim_moved = moved_by(fl.aim_key);  // a run at the battery or a dummy follows it to where it stands
-            for (const RoutePoint& r : fl.route) pts.push_back(to_scen(r.pos + aim_moved));
+            // Its navigation error between fixes (roadmap S7, route.mode 2): the faction's drift, the same for the flight.
+            std::vector<Vec3> drift(fl.route.size());
+            if (tune.Get("route.mode") >= 2.0) {
+                drift = NavigationDrift(fl.route, f.doctrine.routing.nav_drift_share, tune.Get("route.nav_fix_m"),
+                                        static_cast<std::uint64_t>(p.id) * 1315423911ull + fi);
+            }
+            for (std::size_t ri = 0; ri < fl.route.size(); ++ri) pts.push_back(to_scen(fl.route[ri].pos + aim_moved + drift[ri]));
             bool inside_prev = Vec3{pts[0].x, pts[0].y, 0.0}.HorizontalLength() < clip;
             if (inside_prev) {
                 cl.pts.push_back(pts[0]);
                 cl.agl.push_back(fl.route[0].agl_m);
                 cl.t_h.push_back(fl.route[0].t_h);
                 cl.tags.push_back(fl.route[0].tag);
+                cl.leg_tags.push_back(fl.route[0].tag);
             }
             for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
                 const Vec3 a = pts[i], b = pts[i + 1];
@@ -376,15 +531,18 @@ public:
                     cl.agl.push_back(Lerp(fl.route[i].agl_m, fl.route[i + 1].agl_m, tc));
                     cl.t_h.push_back(Lerp(fl.route[i].t_h, fl.route[i + 1].t_h, tc));
                     cl.tags.push_back("edge");
+                    cl.leg_tags.push_back(leg_tag(i + 1));
                 }
                 if (inside_b) {
                     cl.pts.push_back(b);
                     cl.agl.push_back(fl.route[i + 1].agl_m);
                     cl.t_h.push_back(fl.route[i + 1].t_h);
                     cl.tags.push_back(fl.route[i + 1].tag);
+                    cl.leg_tags.push_back(leg_tag(i + 1));
                     if (static_cast<int>(i + 1) == fl.release_index) {
                         cl.release = true;
                         cl.release_pt = b;
+                        cl.release_i = static_cast<int>(cl.pts.size()) - 1;
                     }
                 }
                 inside_prev = inside_b;
@@ -427,7 +585,11 @@ public:
         std::vector<std::string> libraries;
         int n_targets = 0;
         double end_s = 0.0;
-        const double spacing = tune.Get("scenario.flight_spacing_m");
+        // The flights and the package as the session keeps them (flights.hpp, roadmap B1).
+        const std::string pkg_id = "p" + std::to_string(p.id);
+        json::Value flights_json = Arr();
+        std::string commander, first_main;  // where an officer flies, else the first main flight (02_FLIGHTS_AND_PILOTS.md §1.2)
+        m.flight_ids.assign(p.flights.size(), std::string());
         for (const Clipped& cl : clipped) {
             const Flight& fl = p.flights[static_cast<std::size_t>(cl.flight)];
             const AircraftType* a = f.Aircraft(fl.aircraft);
@@ -438,16 +600,109 @@ public:
                 m.flight_exit_h[static_cast<std::size_t>(cl.flight)] = -1e18;
                 continue;
             }
-            const Vec3 dir0 = (cl.pts[1] - cl.pts[0]);
-            const double dl = std::max(1.0, dir0.HorizontalLength());
-            const Vec3 side{-dir0.y / dl, dir0.x / dl, 0.0};
             const bool low = fl.profile == Profile::Low || a->helicopter;
             const bool hide = a->helicopter && std::find(cl.tags.begin(), cl.tags.end(), std::string("hide")) != cl.tags.end();
+            // The height it follows the ground at: the route planner's low legs (from its let-down, else its gate or first
+            // turn point; its first point is at transit height, and inside the enemy's air front its gate too, F2.4),
+            // else its first point's.
+            double follow_agl = cl.agl.empty() ? 0.0 : cl.agl[0];
+            const int letdown = RouteIndexOf(fl.route, "letdown");
+            for (const RoutePoint& rp : fl.route) {
+                if (letdown >= 0 ? rp.tag == "letdown" : (rp.tag == "gate" || rp.tag == "turn")) {
+                    follow_agl = rp.agl_m;
+                    break;
+                }
+            }
+            std::string cs = fl.callsign;
+            cs.erase(std::remove(cs.begin(), cs.end(), ' '), cs.end());
+            // Its formation by phase from the faction's "flights" block for its type class (a stream of cruise missiles
+            // keeps none: each flies its own plan, set off by its slot).
+            const std::map<std::string, std::vector<Vec3>> forms = f.FormationsFor(FormationClassOf(a->helicopter, fl.role));
+            {
+                json::Value fj = Obj();
+                Put(fj, "id", Str(cs));
+                Put(fj, "callsign", Str(fl.callsign));
+                Put(fj, "package", Str(pkg_id));
+                if (a->missile) Put(fj, "keep_slots", Bool(false));
+                if (a->missile || a->drone) Put(fj, "crewed", Bool(false));  // no nerve: a decoy drone flies on
+                if (!a->missile && !a->drone) Put(fj, "radio", FlightRadioJson(c, f, fl, tune));
+                if (!forms.empty()) {
+                    json::Value fo = Obj();
+                    for (const auto& ph : forms) {
+                        json::Value sl = Arr();
+                        for (const Vec3& v : ph.second) {
+                            json::Value tri = Arr();
+                            Push(tri, Num(v.x));
+                            Push(tri, Num(v.y));
+                            Push(tri, Num(v.z));
+                            Push(sl, tri);
+                        }
+                        Put(fo, ph.first, sl);
+                    }
+                    Put(fj, "formations", fo);
+                }
+                Push(flights_json, fj);
+            }
+            m.flight_ids[static_cast<std::size_t>(cl.flight)] = cs;
+            if (commander.empty() && fl.officer >= 0 && !a->missile && !a->drone) commander = cs;
+            if (first_main.empty() && rank(cl) == 0 && !a->missile && !a->drone) first_main = cs;
+            // Each leg's speed from the route's own times (01_ROUTES.md §6.6), the whole route's where a leg has none.
+            const double route_len = RouteLength(cl.pts);
+            const double dt_s = (cl.t_h.back() - cl.t_h.front()) * 3600.0;
+            const double top_mps = std::max(600.0, a->cruise_mps * 1.2);
+            const double whole_mps = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, top_mps) : a->cruise_mps;
+            std::vector<double> leg_mps(cl.pts.size(), whole_mps);
+            for (std::size_t i = 1; i < cl.pts.size(); ++i) {
+                const double len = (cl.pts[i] - cl.pts[i - 1]).HorizontalLength();
+                const double dt = (cl.t_h[i] - cl.t_h[i - 1]) * 3600.0;
+                if (dt > 1.0 && len > 1.0) leg_mps[i] = ClampTo(len / dt, 20.0, top_mps);
+            }
+            // Its officer: the one flying in it, or his squadron's leader at half weight (the habits he trains; roadmap B11).
+            const Officer* lead_o = nullptr;
+            bool flies = true;
+            if (fl.officer >= 0 && static_cast<std::size_t>(fl.officer) < c.Staff().officers.size()) {
+                lead_o = &c.Staff().officers[static_cast<std::size_t>(fl.officer)];
+            } else {
+                const int sl = c.Staff().LeaderOf(fl.squadron);
+                if (sl >= 0) lead_o = &c.Staff().officers[static_cast<std::size_t>(sl)];
+                flies = false;
+            }
+            // Roadmap S5 (hot_phase.mode 2, 10_FACTIONS.md §7-8): the flight's values as its leader reads them, its faction's
+            // for its role moved by its officer and its squadron's pilots (their combat sorties and currency), and whether
+            // its self-screening jammers wait until they are needed (emission_discipline, a keyed draw per flight).
+            const bool hot5 = f.hot.present && tune.Get("hot_phase.mode") >= 2.0 && !a->missile && !a->drone;
+            HotPilot pilot5;
+            HotWho who5;
+            bool quiet_jam = false;
+            if (hot5) {
+                int sq_sorties = 0, sq_total = 0;
+                for (const SquadronState& s : c.Squadrons()) {
+                    if (s.id != fl.squadron) continue;
+                    sq_sorties = s.combat_sorties;
+                    sq_total = s.total;
+                }
+                pilot5 = HotPilotOf(f, sq_sorties, sq_total, tune.Get("hot_phase.currency_reference_h"), tune.Get("hot_phase.sortie_h"));
+                who5.leader = lead_o;
+                who5.leader_flies = flies;
+                who5.pilot = &pilot5;
+                const double u = em::Uniform01(em::DrawHash(static_cast<std::uint64_t>(c.Seed()), em::Stream::Opportunity, static_cast<std::uint64_t>(p.id),
+                                                             0xE315u, static_cast<std::uint64_t>(cl.flight)));
+                quiet_jam = fl.role != FlightRole::Jammer && u < HotPhase(f, HotParam::EmissionDiscipline, fl.role, f.pool, who5);
+            }
+            const auto r3 = [](double x) { return std::round(x * 1000.0) / 1000.0; };
             for (int k = 0; k < alive; ++k) {
-                const double off = (k - 0.5 * (alive - 1)) * spacing;
-                const Vec3 shift = side * off;
-                std::string cs = fl.callsign;
-                cs.erase(std::remove(cs.begin(), cs.end(), ' '), cs.end());
+                // Its place in the formation of each leg's phase, in that leg's frame: where its own plan runs. Only the
+                // start is set back by the slot's depth: a turn point or a release point is the leader's, passed by a man
+                // in trail when he gets there (set back, he would turn inside the leader and release short).
+                const auto shift_at = [&](std::size_t i, bool back) {
+                    const std::size_t j = std::max<std::size_t>(1, i);
+                    Vec3 dir = cl.pts[j] - cl.pts[j - 1];
+                    dir.z = 0.0;
+                    dir = dir.LengthSquared() > 1.0 ? dir.Normalized() : Vec3{0.0, 1.0, 0.0};
+                    const Vec3 o = FormationSlot(forms, PhaseOfTag(cl.leg_tags[j]), k);
+                    const double ob = back ? o.y : 0.0;
+                    return Vec3{dir.y * o.x - dir.x * ob, -dir.x * o.x - dir.y * ob, o.z};
+                };
                 const std::string tid = cs + "-" + std::to_string(k + 1);
                 json::Value t = Obj();
                 Put(t, "id", Str(tid));
@@ -455,28 +710,43 @@ public:
                 Put(t, "type", Str(a->missile ? "Air+Missile" : (a->helicopter ? "Air+Rotorcraft" : "Air+FixedWing")));
                 Put(t, "class", Str(a->target_class));
                 if (fmt.model) Put(t, "model", Str(a->id));
-                Vec3 start = cl.pts[0] + shift;
-                start.z = low ? std::max(5.0, cl.agl[0]) : cl.agl[0];
+                Put(t, "flight", Str(cs));
+                Put(t, "slot", Num(k + 1));
+                const Vec3 s0 = shift_at(0, true);
+                Vec3 start = cl.pts[0] + Vec3{s0.x, s0.y, 0.0};
+                start.z = (low ? std::max(5.0, cl.agl[0]) : cl.agl[0]) + s0.z;
+                if (low) start.z = std::max(5.0, start.z);
                 Put(t, "start", Pos(start));
                 json::Value wps = Arr();
+                json::Value legs = Arr();
                 for (std::size_t i = 1; i < cl.pts.size(); ++i) {
                     json::Value w = Obj();
-                    const Vec3 q = cl.pts[i] + shift;
+                    const Vec3 sh = shift_at(i, false);
+                    const Vec3 q = cl.pts[i] + Vec3{sh.x, sh.y, 0.0};
                     Put(w, "east_m", Num(std::round(q.x)));
                     Put(w, "north_m", Num(std::round(q.y)));
                     if (low) {
-                        Put(w, "agl_m", Num(std::round(std::max(5.0, cl.agl[i]))));
+                        Put(w, "agl_m", Num(std::round(std::max(5.0, cl.agl[i] + sh.z))));
                     } else {
-                        Put(w, "up_m", Num(std::round(cl.agl[i])));
+                        Put(w, "up_m", Num(std::round(cl.agl[i] + sh.z)));
                     }
                     Push(wps, w);
+                    json::Value l = Obj();
+                    Put(l, "speed_mps", Num(std::round(leg_mps[i])));
+                    Put(l, "tag", Str(cl.leg_tags[i]));
+                    Push(legs, l);
                 }
                 Put(t, "waypoints", wps);
-                const double route_len = RouteLength(cl.pts);
-                const double dt_s = (cl.t_h.back() - cl.t_h.front()) * 3600.0;
-                const double speed = dt_s > 1.0 ? ClampTo(route_len / dt_s, 20.0, std::max(600.0, a->cruise_mps * 1.2)) : a->cruise_mps;
-                Put(t, "speed_mps", Num(std::round(speed)));
+                Put(t, "legs", legs);
+                Put(t, "speed_mps", Num(std::round(leg_mps[1])));
                 Put(t, "max_turn_rate_deg_s", Num(a->max_turn_deg_s));
+                // Its type's flight limits (roadmap R3): it flies by bank-to-turn.
+                if (a->max_load_g > 0.0) Put(t, "max_load_g", Num(a->max_load_g));
+                if (a->sustained_turn_deg_s > 0.0) Put(t, "sustained_turn_deg_s", Num(a->sustained_turn_deg_s));
+                if (a->roll_rate_deg_s > 0.0) Put(t, "roll_rate_deg_s", Num(a->roll_rate_deg_s));
+                if (a->max_mps > 0.0) Put(t, "max_mps", Num(a->max_mps));
+                if (a->accel_mps2 > 0.0) Put(t, "accel_mps2", Num(a->accel_mps2));
+                if (a->climb_mps > 0.0) Put(t, "climb_mps", Num(a->climb_mps));
                 Put(t, "rcs_m2", Num(a->rcs_m2));
                 const double appear_s = std::max(0.0, (cl.t_h.front() - m.start_h) * 3600.0);
                 Put(t, "appear_at_s", Num(std::round(appear_s)));
@@ -496,13 +766,59 @@ public:
                 } else if (low) {
                     json::Value b = Obj();
                     Put(b, "kind", Str("terrain_following"));
-                    Put(b, "agl_m", Num(std::round(std::max(5.0, cl.agl[0]))));
+                    Put(b, "agl_m", Num(std::round(std::max(5.0, follow_agl))));
+
                     Put(b, "max_climb_mps", Num(a->helicopter ? 8 : 120));  // a jet's pop-up climbs at 100 m/s and more
                     Put(b, "lookahead_s", Num(6));
                     Put(t, "behaviour", b);
                 }
-                const bool has_rwr = !a->rwr_em.empty();
-                if (!a->drone && !a->missile) {
+                const std::string& rwr_em = a->RwrEm(d.theatre.year);
+                const bool has_rwr = !rwr_em.empty();
+                if (a->seats > 1) Put(t, "seats", Num(a->seats));
+                if (!a->drone && !a->missile && fmt.reactions) {
+                    // Its pilot's reactions (roadmap B4, 04_REACTIONS.md 12.3): his faction's profile, his type's
+                    // countermeasures and tanks by the year, the load he would throw off, the zones briefed.
+                    json::Value rx = Obj();
+                    Put(rx, "profile", Str(f.id));
+                    Put(rx, "aircraft", Str(a->id));
+                    const bool strike = fl.role == FlightRole::Strike || fl.role == FlightRole::Dead || fl.role == FlightRole::Helicopter;
+                    if (strike && !fl.weapon.empty()) Put(rx, "stores", Str(fl.weapon));
+                    if (!briefed_zones.items.empty()) Put(rx, "zones", briefed_zones);
+                    // His officer's shifts of the faction's press-on and jettison readiness, read once at the hand-over
+                    // (roadmap B11, hot_phase.hpp): the one flying in it, or his squadron's leader at half weight.
+                    if (f.hot.present && lead_o != nullptr) {
+                        const double po = r3(HotOfficerShift(f, HotParam::PressOn, fl.role, lead_o, flies));
+                        const double jt = r3(HotOfficerShift(f, HotParam::Jettison, fl.role, lead_o, flies));
+                        if (po != 0.0) Put(rx, "press_on_shift", Num(po));
+                        if (jt != 0.0) Put(rx, "jettison_shift", Num(jt));
+                    }
+                    // Roadmap S5 (hot_phase.mode 2): the rest of the flight's values, read by the chain (reaction_chain.hpp):
+                    // its leader's initiative and plan adherence round a site, his turn back when he knows the raid is
+                    // seen, what he may change himself, his pilots' reaction delay and the day's losses on its press-on.
+                    if (hot5) {
+                        json::Value hj = Obj();
+                        Put(hj, "initiative", Num(r3(HotPhase(f, HotParam::Initiative, fl.role, f.pool, who5))));
+                        Put(hj, "plan_adherence", Num(r3(HotPhase(f, HotParam::PlanAdherence, fl.role, f.pool, who5))));
+                        Put(hj, "turn_back", Num(r3(HotPhase(f, HotParam::TurnBack, fl.role, f.pool, who5))));
+                        if (f.hot.authority.set) {
+                            json::Value lm = Arr();
+                            for (const std::string& act : f.hot.authority.leader_may) Push(lm, Str(act));
+                            Put(hj, "leader_may", lm);
+                        }
+                        if (f.hot.reaction_delay.set) {
+                            const HotDelay dl = ReactionDelayS(f, f.pool, who5, false);
+                            json::Value ds = Arr();
+                            Push(ds, Num(r3(dl.lo_s)));
+                            Push(ds, Num(r3(dl.hi_s)));
+                            Put(hj, "delay_s", ds);
+                            if (f.hot.reaction_delay.improvised_extra_s > 0.0) Put(hj, "improvised_extra_s", Num(r3(f.hot.reaction_delay.improvised_extra_s)));
+                        }
+                        const double hb = r3(HusbandingShift(f, fl.role, c.Politics().losses_today));
+                        if (hb != 0.0) Put(hj, "husbanding_shift", Num(hb));
+                        Put(rx, "hot", hj);
+                    }
+                    Put(t, "reactions", rx);
+                } else if (!a->drone && !a->missile) {
                     json::Value e = Obj();
                     if (a->helicopter) {
                         Put(e, "on", Str("lock"));
@@ -519,7 +835,7 @@ public:
                 const std::string& arm_em = a->ArmEm(d.theatre.year);
                 const bool em_arms = fmt.em && fmt.target_rwr && fmt.target_arms && has_rwr && arms > 0 && !arm_em.empty();
                 if (fmt.em && fmt.target_rwr && has_rwr) {
-                    Put(t, "rwr", Str(a->rwr_em));
+                    Put(t, "rwr", Str(rwr_em));
                     for (const std::string& lib : f.em_libraries) {
                         if (std::find(libraries.begin(), libraries.end(), lib) == libraries.end()) libraries.push_back(lib);
                     }
@@ -547,6 +863,8 @@ public:
                     Put(j, "jammer", Str(jam));
                     Put(j, "target", Str(tid));
                     Put(j, "on_at_s", Num(std::round(appear_s)));
+                    // A disciplined flight's self-screening jammer waits for a lock on it (roadmap S5, emission_discipline).
+                    if (quiet_jam && a->standoff_jammer_em.empty()) Put(j, "until_painted", Bool(true));
                     Push(jammers, j);
                     for (const std::string& lib : f.em_libraries) {
                         if (std::find(libraries.begin(), libraries.end(), lib) == libraries.end()) libraries.push_back(lib);
@@ -560,10 +878,15 @@ public:
                 ra.aircraft = a->id;
                 ra.helicopter = a->helicopter;
                 ra.drone = a->drone;
-                ra.has_release = cl.release && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
-                                                fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
-                                                fl.role == FlightRole::Missile);
-                ra.release_enu = cl.release_pt + shift;
+                ra.primary = fl.release_index >= 0 && (fl.role == FlightRole::Strike || fl.role == FlightRole::Dead ||
+                                                       fl.role == FlightRole::Helicopter || fl.role == FlightRole::Recce ||
+                                                       fl.role == FlightRole::Missile);
+                ra.has_release = cl.release && ra.primary;
+                ra.release_enu = cl.release_pt;
+                if (cl.release_i >= 0) {
+                    const Vec3 sh = shift_at(static_cast<std::size_t>(cl.release_i), false);
+                    ra.release_enu = cl.release_pt + Vec3{sh.x, sh.y, 0.0};
+                }
                 ra.aim_enu = to_scen(fl.aim_pos + moved_by(fl.aim_key));
                 ra.arms = arms;
                 ra.arm_range_m = a->arm_range_m;
@@ -581,6 +904,12 @@ public:
                 ra.weapons = fl.weapons;
                 ra.delivery = fl.delivery;
                 ra.arm_weapon = arm_em;
+                if (hot5) {
+                    ra.hot_skill = HotPhase(f, HotParam::AirCombat, fl.role, f.pool, who5);
+                    HotWho lost = who5;
+                    lost.control_lost = true;
+                    ra.hot_turn_back_lost = HotPhase(f, HotParam::TurnBack, fl.role, f.pool, lost);
+                }
                 m.aircraft.push_back(ra);
                 ++n_targets;
                 end_s = std::max(end_s, (cl.t_h.back() - m.start_h) * 3600.0);
@@ -606,7 +935,7 @@ public:
         Put(root, "origin", og);
         // The raid's clock (roadmap R7): on a dated theatre, the local time at its second 0 and the theatre's date, so the
         // scenario's light is the sun's there and then (light.hpp), as the planner's part was by the sun. An undated theatre
-        // (the tuned theatre_pannonia.json) planned by the fixed buckets: its raid keeps the legacy light keys
+        // (the tuned theatre_pannonia.json replayed from a save made before roadmap S8) planned by the fixed buckets: its raid keeps the legacy light keys
         // (battery.night, environment.daylight) from the planner's part and no clock, so it plays in the light it was planned in.
         const bool dated = th.day_of_year > 0;
         if (dated) {
@@ -615,7 +944,7 @@ public:
             Put(root, "clock_start", Str(FormatLocalHour(std::floor(local * 60.0) / 60.0)));
             int month = 1, day = 1;
             if (DateOfDay(th.year, TheatreSky(th).DayOfYearAt(m.start_h * 3600.0), month, day)) {
-                char date[16];
+                char date[96];
                 std::snprintf(date, sizeof(date), "%04d-%02d-%02d", th.year, month, day);
                 Put(root, "date", Str(date));
             }
@@ -633,6 +962,7 @@ public:
         Put(root, "terrain", terrain);
         if (fmt.weather) Put(root, "weather", Str(WeatherName(c.WeatherNow())));  // winds and cloud (weather.hpp)
         Put(root, "command_post", Str("command/pu12.json"));
+        if (fmt.damage_states) Put(root, "damage", Str("gameplay/damage.json"));  // roadmap B4: R1's states in a played raid
 
         // C2: the warning nets of the theatre, and the regiment's radars that still stand.
         json::Value c2 = Obj();
@@ -697,7 +1027,7 @@ public:
                 Push(fallback, Str(o.id));
             }
             if (o.kind != ObjectKind::City && !o.player && !o.decoy && e.HorizontalLength() < clip) m.objects.push_back({o.id, e});
-            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 &&
+            if (o.defence.present && !o.player && !o.decoy && st.function > 0.05 && st.missiles != 0 && st.march == 0 &&
                 e.HorizontalLength() < clip + o.defence.radius_m) {
                 RaidNeighbour nb;
                 nb.id = o.id;
@@ -714,6 +1044,29 @@ public:
         m.airmanship = PackageAirmanship(p, c.Staff());
         m.night = p.part == DayPart::Night;
         m.poor_weather = c.WeatherNow() == Weather::Poor;
+        m.mission = p.kind;
+        // From the line of contact (the ground war moves it, F3.3; at zero offsets the front's line to the bit).
+        if (!c.FrontLine().Empty()) {
+            m.depth_km = c.FrontLine().AbsDistance(bst.pos) / 1000.0;
+        } else if (const FrontDef* front = th.FrontFor(f.front)) {
+            m.depth_km = DistanceToLine(front->line, bst.pos) / 1000.0;
+        }
+        m.free_hunt = c.C2().FreeHunt(bst.pos, c.Phase());
+        for (const Flight& fl : p.flights) {
+            OppLeader ld;
+            ld.skill = m.airmanship;
+            const int oi = fl.officer >= 0 ? fl.officer : (p.leader >= 0 ? p.leader : p.planner);
+            if (oi >= 0 && static_cast<std::size_t>(oi) < c.Staff().officers.size()) {
+                const Officer& o = c.Staff().officers[static_cast<std::size_t>(oi)];
+                ld.traits = o.def.traits;
+                ld.press_on = o.HasQuirk("press_on");
+                ld.by_the_book = o.HasQuirk("by_the_book");
+                ld.loss_shy = o.HasQuirk("loss_shy");
+                ld.chases_kills = o.HasQuirk("chases_kills");
+                ld.stress = o.stress;
+            }
+            m.leaders.push_back(ld);
+        }
         if (!fallback.items.empty()) Put(c2, "fallback_order", fallback);
         if (!sources.items.empty()) Put(c2, "sources", sources);
         if (!radars.items.empty()) {
@@ -824,6 +1177,26 @@ public:
         Put(root, "crew_commander", Str("npc"));
         Put(root, "battery_commander", Str("npc"));
         Put(root, "targets", targets);
+        // The flights and their package (flights.hpp, roadmap B1): the package turns back on the losses its commander
+        // knows of, at the abstract resolver's nerve (PackageNerve), counting those it lost before it came in.
+        if (!flights_json.items.empty()) {
+            Put(root, "flights", flights_json);
+            if (fmt.air_radio && f.radio.present) Put(root, "air_radio", AirRadioJson(c, p, fmt));
+            int lost_before = 0;
+            for (const Flight& fl : p.flights) lost_before += fl.role == FlightRole::Missile || fl.role == FlightRole::Decoy ? 0 : fl.lost;
+            json::Value pk = Obj();
+            Put(pk, "id", Str(pkg_id));
+            const std::string cmd = !commander.empty() ? commander : first_main;
+            if (!cmd.empty()) Put(pk, "commander", Str(cmd));
+            Put(pk, "size", Num(std::max(1, p.Aircraft())));
+            Put(pk, "lost_before", Num(lost_before));
+            // From hot_phase.mode 2, §9.3's nerve: its leader's press-on and the day's losses on the faction's husbanding.
+            const int hot_mode = static_cast<int>(tune.Get("hot_phase.mode"));
+            Put(pk, "turn_back_share", Num(std::round(PackageNerve(p, c.Staff(), &f, hot_mode, c.Politics().losses_today) * 1000.0) / 1000.0));
+            json::Value pks = Arr();
+            Push(pks, pk);
+            Put(root, "packages", pks);
+        }
         // Our other air defences round the battery: drawn where they stand, plotted on the board. Their fire is the
         // bridge's, except the regiment's other Osa batteries, which fight in the runner's battery fire model with the
         // launchers that work and the missiles they have.
@@ -851,11 +1224,165 @@ public:
         json::Value triggers = Arr();
         double warn_s = tune.Get("own_intel.warning_s");
         if (const Officer* pln = p.planner >= 0 ? &c.Staff().officers[static_cast<std::size_t>(p.planner)] : nullptr) {
-            if (pln->Quirk("comsec_leak") > 0.0) warn_s = std::max(warn_s, tune.Get("own_intel.leak_warning_s"));
+            if (fmt.air_radio && f.radio.present) {
+                // The hours warning of the staff's opsec (roadmap B9, docs/air_battle/09 section 5.3): a draw keyed on the
+                // package, replacing the fixed leak warning. Alerted, our side could have known the raid hours ahead.
+                AirRadioDef td;
+                for (const auto& kv : AirRadioTuningDefaults()) td.tune[kv.first] = tune.Get(kv.first);
+                const OpsecAlert alert = DrawOpsecAlert(StaffOpsec(f.radio.opsec, pln->Quirk("comsec_leak"), td), c.Seed(), static_cast<std::uint64_t>(p.id), td);
+                if (alert.alerted) warn_s = std::max(warn_s, alert.lead_h * 3600.0);
+            } else if (pln->Quirk("comsec_leak") > 0.0) {
+                warn_s = std::max(warn_s, tune.Get("own_intel.leak_warning_s"));
+            }
         }
         const double first_s = std::max(0.0, (first_h - m.start_h) * 3600.0);
         double warn_after_s = std::max(0.0, first_s - warn_s);
+        // Our fighters (B10): each of the theatre's airfields still working is a fighter regiment's base (the type of the
+        // 1985 regiments, MiG-21MF), its function the share it launches; one GCI at the battery's sector command post's
+        // radar, 40 km behind the battery from the raid (a game value, docs/air_battle/08 section 4).
+        json::Value own_air_regs = Arr();
+        if (fmt.our_fighters && tune.Get("own_air.mode") >= 1.0) {
+            for (std::size_t oi = 0; oi < th.objects.size(); ++oi) {
+                const TheatreObject& ob = th.objects[oi];
+                const ObjectState& os = c.Truth()[oi];
+                if (ob.kind != ObjectKind::Airfield || os.function <= 0.05) continue;
+                const Vec3 b = to_scen(os.pos);
+                json::Value r = Obj();
+                Put(r, "id", Str(ob.id));
+                Put(r, "base", Str(ob.id));
+                Put(r, "base_east_m", Num(std::round(b.x)));
+                Put(r, "base_north_m", Num(std::round(b.y)));
+                Put(r, "type", Str("mig21mf"));
+                Put(r, "name", Str("MiG-21"));
+                Put(r, "function", Num(std::round(os.function * 100.0) / 100.0));
+                Put(r, "area_east_m", Num(0.0));
+                Put(r, "area_north_m", Num(0.0));
+                Put(r, "gci", Str("our_gci"));
+                Push(own_air_regs, r);
+            }
+        }
+        if (!own_air_regs.items.empty()) {
+            Vec3 from{0.0, -1.0, 0.0};
+            const json::Value* tl = targets.items.empty() ? nullptr : targets.items.front().Find("start");
+            if (tl != nullptr && tl->Find("east_m") != nullptr && tl->Find("north_m") != nullptr) {
+                const Vec3 s{tl->Find("east_m")->number, tl->Find("north_m")->number, 0.0};
+                if (s.Length() > 1.0) from = s * (1.0 / s.Length());
+            }
+            const Vec3 gci = from * -40000.0;
+            json::Value af = Obj();
+            json::Value ctl = Obj();
+            Put(ctl, "id", Str("our_gci"));
+            Put(ctl, "side", Str("ours"));
+            Put(ctl, "kind", Str("radar_control"));
+            Put(ctl, "east_m", Num(std::round(gci.x)));
+            Put(ctl, "north_m", Num(std::round(gci.y)));
+            Put(ctl, "range_m", Num(220000.0));
+            // Our GCI's vectors on our radio (S1): with the enemy's radio in the session, our side's set and our GCI's post.
+            for (std::size_t ki = 0; ki < root.keys.size() && ki < root.items.size(); ++ki) {
+                if (root.keys[ki] != "air_radio") continue;
+                json::Value& ar = root.items[ki];
+                Put(ar, "our_radio", Str("pact_air_r832m"));
+                Put(ar, "our_freq_mhz", Num(124.0));
+                for (std::size_t kj = 0; kj < ar.keys.size() && kj < ar.items.size(); ++kj) {
+                    if (ar.keys[kj] != "posts") continue;
+                    json::Value post = Obj();
+                    Put(post, "id", Str("our_gci_post"));
+                    Put(post, "name", Str("our sector's GCI"));
+                    Put(post, "kind", Str("our_gci"));
+                    Put(post, "east_m", Num(std::round(gci.x)));
+                    Put(post, "north_m", Num(std::round(gci.y)));
+                    Put(post, "mast_m", Num(25.0));
+                    Push(ar.items[kj], post);
+                    Put(ctl, "post", Str("our_gci_post"));
+                }
+            }
+            json::Value ctls = Arr();
+            Push(ctls, ctl);
+            Put(af, "controllers", ctls);
+            // The package's aircraft in the fight (S1): its escorts fight our pairs, the rest only defend themselves; our pairs
+            // engage only aircraft the fight has. A type without a fit is unarmed (air_combat.json's "unarmed").
+            const AirCombatDef& ac = d.air_combat;
+            const bool s3 = d.tuning.Get("air_fight.mode") >= 1.0;
+            Put(af, "mode", Num(s3 ? 1.0 : 0.0));
+            if (ac.Doctrine(f.id) != nullptr) {
+                json::Value fighters = Arr();
+                for (const RaidAircraft& ra : m.aircraft) {
+                    if (ra.missile || ra.drone || ra.role == FlightRole::Decoy || ra.role == FlightRole::Missile) continue;
+                    std::string type = ra.aircraft;
+                    if (ac.Fit(type) == nullptr) type = ra.helicopter ? "helicopters" : "unarmed";
+                    if (ac.Fit(type) == nullptr) continue;
+                    json::Value fv = Obj();
+                    Put(fv, "target", Str(ra.target_id));
+                    Put(fv, "type", Str(type));
+                    Put(fv, "faction", Str(f.id));
+                    // S3 (air_fight.mode 1): its sweep and CAP fight as fighters too; before, as strikers.
+                    const char* role = ra.role == FlightRole::Escort ? "escort" : "strike";
+                    if (s3 && ra.role == FlightRole::Sweep) role = "sweep";
+                    if (s3 && ra.role == FlightRole::Cap) role = "cap";
+                    Put(fv, "role", Str(role));
+                    // Its flight's air combat skill and turn back on a lost controller (roadmap S5, hot_phase.mode 2).
+                    if (ra.hot_skill >= 0.0) Put(fv, "skill", Num(std::round(ra.hot_skill * 1000.0) / 1000.0));
+                    if (ra.hot_turn_back_lost >= 0.0) Put(fv, "turn_back_lost", Num(std::round(ra.hot_turn_back_lost * 1000.0) / 1000.0));
+                    Push(fighters, fv);
+                }
+                if (!fighters.items.empty()) Put(af, "fighters", fighters);
+            }
+            // The air war's hot-phase mode (roadmap S5): from 2 our scrambled pairs read our side's hot phase.
+            if (tune.Get("hot_phase.mode") >= 2.0) Put(af, "hot_mode", Num(std::floor(tune.Get("hot_phase.mode"))));
+            Put(af, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md section 4 (our GCI; a game value for its place)"));
+            Put(af, "confidence", Str("low"));
+            Put(root, "air_fight", af);
+            json::Value oa = Obj();
+            Put(oa, "war", Bool(true));
+            Put(oa, "regiments", own_air_regs);
+            json::Value g = Obj();
+            Put(g, "east_m", Num(std::round(gci.x)));
+            Put(g, "north_m", Num(std::round(gci.y)));
+            Put(oa, "gci", g);
+            Put(oa, "raid_warning_s", Num(std::round(warn_after_s)));
+            // The front line nearest the battery (S1: the airborne-alert zones behind it, the pursuit limit past it): the line
+            // of contact once the ground war has moved it (track F, F3.7: the point of the line of contact over the battery's
+            // projection on the base line), else the front's line as before.
+            const LineOfContact& contact = c.FrontLine();
+            if (contact.Moved()) {
+                const FrontPlace pl = contact.Place(bst.pos);
+                const Vec3 fs = to_scen(contact.PointAt(pl.along_m) + contact.InwardNormal(pl.along_m) * contact.Offset(pl.along_m));
+                if (fs.HorizontalLength() > 1.0) {
+                    json::Value fr = Obj();
+                    Put(fr, "east_m", Num(std::round(fs.x)));
+                    Put(fr, "north_m", Num(std::round(fs.y)));
+                    Put(fr, "enemy_bearing_deg", Num(std::round(RadToDeg(std::atan2(fs.x, fs.y)) * 10.0) / 10.0));
+                    Put(oa, "front", fr);
+                }
+            } else if (const FrontDef* front = th.FrontFor(f.front)) {
+                if (!front->line.empty()) {
+                    Vec3 best = front->line.front();
+                    for (std::size_t k = 0; k + 1 < front->line.size(); ++k) {
+                        const Vec3 p0 = front->line[k], p1 = front->line[k + 1];
+                        const Vec3 dl = p1 - p0;
+                        const double l2 = dl.x * dl.x + dl.y * dl.y;
+                        double u = l2 > 1e-9 ? ((bst.pos.x - p0.x) * dl.x + (bst.pos.y - p0.y) * dl.y) / l2 : 0.0;
+                        u = std::max(0.0, std::min(1.0, u));
+                        const Vec3 q = p0 + dl * u;
+                        if (Dist2d(q, bst.pos) < Dist2d(best, bst.pos)) best = q;
+                    }
+                    const Vec3 fs = to_scen(best);
+                    if (fs.HorizontalLength() > 1.0) {
+                        json::Value fr = Obj();
+                        Put(fr, "east_m", Num(std::round(fs.x)));
+                        Put(fr, "north_m", Num(std::round(fs.y)));
+                        Put(fr, "enemy_bearing_deg", Num(std::round(RadToDeg(std::atan2(fs.x, fs.y)) * 10.0) / 10.0));
+                        Put(oa, "front", fr);
+                    }
+                }
+            }
+            if (f.id == "warsaw_pact") Put(oa, "enemy_allies", Bool(true));  // the Pact's allies on our Kremniy (S1)
+            Put(oa, "source", Str("docs/air_battle/08_OUR_FIGHTERS.md (roadmap B10)"));
+            Put(oa, "confidence", Str("low"));
+            Put(root, "own_air", oa);
+        }
         std::vector<DeliveryDef> messages;
+
         if (fmt.deliveries != nullptr) {
             // From the pipeline: played as a message when it comes inside the raid; known from the start when it came
             // before; no warning at all when it never reached the vehicle.
@@ -958,7 +1485,8 @@ public:
             Put(root, "environment", env);
         }
         json::Value end = Obj();
-        Put(end, "time_limit_s", Num(std::round(m.end_s)));
+        // Rounded up: a session that stopped before the raid's end would leave it unfinished (MissionBridge::Over).
+        Put(end, "time_limit_s", Num(std::ceil(m.end_s)));
         Put(end, "when_targets_gone", Bool(true));
         Put(root, "end", end);
         out.json_text = Dump(root);

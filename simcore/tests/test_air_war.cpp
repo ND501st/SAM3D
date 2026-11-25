@@ -198,11 +198,12 @@ SC_TEST("air war: each adversary flies its own kind of war") {
     // NATO: most DEAD packages carry SEAD (one against a radar with no SAM known on its way goes without), and so does a
     // strike whose route meets a radar threat it knows of (one on a depot behind the lines, or loosing stand-off weapons
     // short of the target's own SAM, goes without); packages carry jamming; power plants and towns are off limits at the
-    // start. Judged over four campaigns: on Ubuntu one seed's maths library plans no strike that meets a known radar.
+    // start. Judged over sixteen campaigns: a strike that meets a known radar is rare (some 3 in 100 strikes over 24
+    // seeds), so four campaigns could hold none.
     {
         const AirWarData nato = Load("nato");
         std::vector<Package> ps;
-        for (unsigned seed = 1; seed <= 4; ++seed) {
+        for (unsigned seed = 1; seed <= 16; ++seed) {
             const std::vector<Package> one = PlanDays(nato, seed, 2.0);
             ps.insert(ps.end(), one.begin(), one.end());
         }
@@ -219,9 +220,8 @@ SC_TEST("air war: each adversary flies its own kind of war") {
         std::printf("    NATO DEAD packages %d (with SEAD %d), strikes %d (with SEAD %d, %d with none for want of ARMs), with jamming %d\n", dead,
                     dead_sead, strike, strike_sead, strike_no_arms, with_jam);
         SC_EXPECT(dead > 0 && dead_sead * 2 > dead && with_jam > 0);
-        // A strike past a known radar takes SEAD, unless the DEAD packages have the ARMs. Built with GCC (Ubuntu's CI)
-        // these four campaigns plan no strike past a known radar at all (MSVC and Clang plan 3 of 33 with SEAD): not yet
-        // understood, so there the reasons of a few strikes are printed instead of failing.
+        // A strike past a known radar takes SEAD, unless the DEAD packages have the ARMs (if none does, a few strikes'
+        // reasons are printed to show why).
         if (strike_sead == 0 && strike_no_arms == 0) {
             int shown = 0;
             for (const Package& p : ps) {
@@ -231,11 +231,7 @@ SC_TEST("air war: each adversary flies its own kind of war") {
                 std::printf("\n");
             }
         }
-#if defined(__GNUC__) && !defined(__clang__)
-        if (strike_sead == 0 && strike_no_arms == 0) std::printf("    GCC: no strike with SEAD (see above), not counted as a failure\n");
-#else
         SC_EXPECT(strike_sead > 0 || strike_no_arms > 0);
-#endif
     }
     // The Pact: the opening air operation goes for airfields, command posts and radars, its strike groups in massed
     // blows (the hunters, scouts and decoys around them fly in pairs). Judged over eight campaigns: one campaign's first
@@ -963,6 +959,12 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
                 o.decoys_hit.push_back(d.theatre.objects[static_cast<std::size_t>(c.Dummies().front())].id);
                 o.emissions.push_back({l.by, 123.456789});
                 o.released_flights.push_back(0);
+                RetaskRecord rt;  // roadmap B1: a diversion by a ground post, with who ordered it
+                rt.flight = 0;
+                rt.kind = "divert";
+                rt.by = "atoc_test";
+                rt.t_s = 61.25;
+                o.retasks.push_back(rt);
                 c.CompletePlayerMission(o, c.Now() + 0.123456789);
                 ++played;
             } else {
@@ -988,6 +990,12 @@ SC_TEST("air war: a saved campaign loads to the very same campaign (seed and act
     for (std::size_t i = 0; same && i < c.Journal().size(); ++i) same = loaded.Journal()[i].text == c.Journal()[i].text;
     SC_EXPECT(same);
     SC_EXPECT(loaded.Packages().size() == c.Packages().size() && loaded.AircraftLost() == c.AircraftLost());
+    int retasks = 0, retasks_loaded = 0;
+    for (const auto& a : c.Actions()) retasks += static_cast<int>(a.outcome.retasks.size());
+    for (const auto& a : loaded.Actions()) {
+        for (const RetaskRecord& rt : a.outcome.retasks) retasks_loaded += rt.by == "atoc_test" && rt.kind == "divert" && rt.t_s == 61.25 ? 1 : 0;
+    }
+    SC_EXPECT(retasks == played && retasks_loaded == played);
     const Vec3 a = loaded.Truth()[static_cast<std::size_t>(loaded.PlayerIndex())].pos;
     const Vec3 b = c.Truth()[static_cast<std::size_t>(c.PlayerIndex())].pos;
     SC_EXPECT_NEAR(Dist2d(a, b), 0.0, 0.0);
@@ -1042,6 +1050,61 @@ SC_TEST("air war on the nation's theatre: the rollback hunts SAM sites, never gu
         const TheatreObject* o = nd.theatre.Find(p.target_object);
         if (o != nullptr) SC_EXPECT(o->kind != ObjectKind::PipelineStation);
     }
+}
+
+SC_TEST("air war: a supply line's columns start at its depot, however the objects' vector grows under them") {
+    // MakeColumns once read each column's depot through a pointer into `objects` that the previous column's push_back
+    // could move (air_war_balance crashed on the nation).
+    const auto at_depots = [](const TheatreDef& t) {
+        int columns = 0, wrong = 0;
+        for (const TheatreObject& o : t.objects) {
+            if (o.supply_line < 0) continue;
+            ++columns;
+            const TheatreObject* depot = t.Find(t.supply_lines[static_cast<std::size_t>(o.supply_line)].from);
+            if (depot == nullptr || Dist2d(o.pos, depot->pos) > 1e-9 || std::fabs(o.pos.z - depot->pos.z) > 1e-9) ++wrong;
+        }
+        return std::make_pair(columns, wrong);
+    };
+    // The nation's lines as loaded.
+    TheatreDef nation;
+    std::string e;
+    SC_EXPECT(LoadTheatreFile(kData + "/air_war/theatre_pannonia_nation.json", nation, &e));
+    const auto loaded = at_depots(nation);
+    SC_EXPECT(nation.supply_lines.size() > 1 && loaded.first > 2 && loaded.second == 0);
+
+    // Generic placeholder theatre: three lines of three columns, and an objects vector with no spare room that is large
+    // enough (8 MB) that the heap hands its old block back to the system when it moves (a read through the old block
+    // then faults rather than finding the old bytes).
+    TheatreDef t;
+    const std::size_t fill = (std::size_t{8} << 20) / sizeof(TheatreObject);
+    t.objects.reserve(fill + 4);
+    for (int d = 0; d < 3; ++d) {
+        TheatreObject depot;
+        depot.id = "depot_" + std::to_string(d);
+        depot.kind = ObjectKind::Depot;
+        depot.pos = Vec3{1000.0 * (d + 1), -2000.0 * (d + 1), 10.0 * (d + 1)};
+        t.objects.push_back(depot);
+    }
+    TheatreObject troops;
+    troops.id = "troops";
+    troops.kind = ObjectKind::Troops;
+    troops.pos = Vec3{0.0, 50000.0, 0.0};
+    t.objects.push_back(troops);
+    t.objects.resize(fill + 4);  // the filler: default objects with empty ids
+    SC_EXPECT(t.objects.capacity() == t.objects.size());
+    for (int d = 0; d < 3; ++d) {
+        SupplyLineDef l;
+        l.id = "line_" + std::to_string(d);
+        l.name = "Line " + std::to_string(d);
+        l.from = "depot_" + std::to_string(d);
+        l.to = "troops";
+        l.columns = 3;
+        t.supply_lines.push_back(l);
+    }
+    simcore::airwar::detail::AirWarLoader loader;
+    SC_EXPECT(loader.MakeColumns(t));
+    const auto made = at_depots(t);
+    SC_EXPECT(made.first == 9 && made.second == 0);
 }
 
 SC_TEST("air war: a defence engages as many of a passing flight as it has fire channels") {
@@ -1421,4 +1484,131 @@ SC_TEST("air war (18.1): our side's journal says of a played raid what the batte
     bool same = loaded.Journal().size() == c.Journal().size();
     for (std::size_t i = 0; same && i < c.Journal().size(); ++i) same = loaded.Journal()[i].text == c.Journal()[i].text;
     SC_EXPECT(same);
+}
+
+// ---------------------------------------------------------------- track F, F2.4: the planner reads the air front
+
+namespace {
+
+// An entry `beyond_m` beyond the front's line into our country, at `along_m` along it.
+IntelEntry EntryBeyond(const LineOfContact& l, const std::string& key, ObjectKind kind, double along_m, double beyond_m, double first_h = -1e9) {
+    IntelEntry e;
+    e.key = key;
+    e.label = key;
+    e.kind = kind;
+    e.pos = l.PointAt(along_m) + l.InwardNormal(along_m) * beyond_m;
+    e.value = 0.6;
+    e.first_h = first_h;
+    return e;
+}
+
+std::vector<std::string> Keys(const std::vector<const IntelEntry*>& v) {
+    std::vector<std::string> out;
+    for (const IntelEntry* e : v) out.push_back(e->key);
+    return out;
+}
+
+bool HasKey(const std::vector<std::string>& v, const std::string& k) { return std::find(v.begin(), v.end(), k) != v.end(); }
+
+}  // namespace
+
+SC_TEST("air front (F2.4): close support, helicopter raids and harassment reach a sector's air front further; at 0 the fixed depths") {
+    AirWarData d = Load("nato");
+    d.tuning.values["c2.live_mode"] = 1.0;
+    const FrontDef* front = d.theatre.FrontFor(d.faction.front);
+    SC_EXPECT(front != nullptr);
+    if (front == nullptr) return;
+    LineOfContact line;
+    line.Build(*front, d.tuning.Get("air_front.station_m"));
+    SC_EXPECT(line.SectorCount() >= 2);
+    if (line.SectorCount() < 2) return;
+    // Targets in the first sector, a little way along it, and the same in the second.
+    const double a0 = 0.5 * (line.Sector(0).from_m + line.Sector(0).to_m);
+    const double a1 = 0.5 * (line.Sector(1).from_m + line.Sector(1).to_m);
+    SC_EXPECT(line.SectorAt(a0) == 0 && line.SectorAt(a1) == 1);
+    IntelPicture intel;
+    for (int s = 0; s < 2; ++s) {
+        const double a = s == 0 ? a0 : a1;
+        const std::string n = std::to_string(s);
+        intel.entries.push_back(EntryBeyond(line, "troops30_" + n, ObjectKind::Troops, a, 30000.0));
+        intel.entries.push_back(EntryBeyond(line, "troops50_" + n, ObjectKind::Troops, a, 50000.0));
+        intel.entries.push_back(EntryBeyond(line, "troops65_" + n, ObjectKind::Troops, a, 65000.0));
+        intel.entries.push_back(EntryBeyond(line, "bridge35_" + n, ObjectKind::Bridge, a, 35000.0));
+        intel.entries.push_back(EntryBeyond(line, "bridge80_" + n, ObjectKind::Bridge, a, 80000.0));
+        intel.entries.push_back(EntryBeyond(line, "bridge95_" + n, ObjectKind::Bridge, a, 95000.0));
+        // Learned in the war at 30 h, 40 km in: battlefield interdiction only with the air front 20 km forward.
+        intel.entries.push_back(EntryBeyond(line, "depot40_" + n, ObjectKind::Depot, a, 40000.0, 30.0));
+    }
+    AirStaff staff;
+    PoliticsState politics;
+    PlanContext pc;
+    pc.data = &d;
+    pc.staff = &staff;
+    pc.intel = &intel;
+    pc.politics = &politics;
+    pc.now_h = 40.0;
+    pc.front_line = &line;
+    Planner planner;
+    const auto admitted = [&](MissionKind mk) { return Keys(planner.CandidatesFor(pc, mk)); };
+    // No air front (and the view off: air_front.mode 0, its vectors empty): 40, 25 and 70 km, the BAI area 30 km.
+    const std::vector<double> none;
+    pc.air_front.line = &line;
+    pc.air_front.depth_m = &none;
+    pc.air_front.helo_depth_m = &none;
+    SC_EXPECT(!pc.air_front.On());
+    const std::vector<std::string> cas0 = admitted(MissionKind::Cas), helo0 = admitted(MissionKind::HeloRaid),
+                                   har0 = admitted(MissionKind::Harassment), str0 = admitted(MissionKind::Strike);
+    for (const char* n : {"0", "1"}) {
+        const std::string s(n);
+        SC_EXPECT(HasKey(cas0, "troops30_" + s) && !HasKey(cas0, "troops50_" + s));
+        SC_EXPECT(!HasKey(helo0, "troops30_" + s) && !HasKey(helo0, "bridge35_" + s));
+        SC_EXPECT(HasKey(har0, "troops65_" + s) && !HasKey(har0, "bridge80_" + s));
+        SC_EXPECT(HasKey(str0, "depot40_" + s));  // beyond the BAI area: the ATO's own target
+    }
+    // Mode 1 with every sector at 0: the same lists, in the same order.
+    const std::vector<double> zero(line.SectorCount(), 0.0);
+    pc.air_front.depth_m = &zero;
+    pc.air_front.helo_depth_m = &zero;
+    SC_EXPECT(pc.air_front.On());
+    SC_EXPECT(admitted(MissionKind::Cas) == cas0 && admitted(MissionKind::HeloRaid) == helo0 && admitted(MissionKind::Harassment) == har0 &&
+              admitted(MissionKind::Strike) == str0);
+    // The first sector's air front at 20 km, its helicopters' at 20 km: only its targets come into reach.
+    std::vector<double> deep(line.SectorCount(), 0.0), helo(line.SectorCount(), 0.0);
+    deep[0] = 20000.0;
+    helo[0] = 20000.0;
+    pc.air_front.depth_m = &deep;
+    pc.air_front.helo_depth_m = &helo;
+    const std::vector<std::string> cas = admitted(MissionKind::Cas), hr = admitted(MissionKind::HeloRaid), har = admitted(MissionKind::Harassment),
+                                   str = admitted(MissionKind::Strike);
+    SC_EXPECT(HasKey(cas, "troops50_0") && !HasKey(cas, "troops65_0"));  // 40 + 20 km
+    SC_EXPECT(!HasKey(cas, "troops50_1"));
+    SC_EXPECT(HasKey(hr, "troops30_0") && HasKey(hr, "bridge35_0") && !HasKey(hr, "troops50_0"));  // 25 + 20 km
+    SC_EXPECT(!HasKey(hr, "troops30_1"));
+    SC_EXPECT(HasKey(har, "bridge80_0") && !HasKey(har, "bridge95_0") && !HasKey(har, "bridge80_1"));  // 70 + 20 km
+    SC_EXPECT(!HasKey(str, "depot40_0") && HasKey(str, "depot40_1"));  // in the BAI area now: it waits for the corps' nomination
+    // The helicopters lag: the fixed-wing front alone moves close support, not the helicopters.
+    helo[0] = 0.0;
+    SC_EXPECT(!HasKey(admitted(MissionKind::HeloRaid), "troops30_0"));
+    SC_EXPECT(HasKey(admitted(MissionKind::Cas), "troops50_0"));
+    // The politics' depth is from the border, not moved by the air front.
+    politics.max_depth_m = 45000.0;
+    SC_EXPECT(!HasKey(admitted(MissionKind::Cas), "troops50_0"));
+    politics.max_depth_m = 0.0;
+    // Nomination by hand: 40 km in, the BAI area 30 km, the air front 0 or 20 km.
+    const double bai = d.tuning.Get("c2.bai_depth_m");
+    const IntelEntry& depot = intel.entries[6];
+    SC_EXPECT(!NominationWaits(d, depot, bai + 10000.0, 40.0));
+    SC_EXPECT(!NominationWaits(d, depot, bai + 10000.0, 40.0, 0.0));
+    SC_EXPECT(NominationWaits(d, depot, bai + 10000.0, 40.0, 20000.0));
+    SC_EXPECT(!NominationWaits(d, depot, bai + 10000.0, 30.0 + d.faction.c2.nomination_h, 20000.0));
+    // The Pact's helicopter umbrella goes forward with the air front.
+    const Vec3 entry{0.0, 0.0, 0.0};
+    const Vec3 target = line.PointAt(a0) + line.InwardNormal(a0) * 25000.0;
+    const double um = d.tuning.Get("route.helo_umbrella_m");
+    const AirFrontView off;
+    SC_EXPECT(BeyondHeloUmbrella(target, entry, off, um) == (Dist2d(target, entry) > um));
+    deep[0] = Dist2d(target, entry);  // the air front as far as the target from the entry: under the umbrella
+    SC_EXPECT(!BeyondHeloUmbrella(target, entry, pc.air_front, um));
+    deep[0] = 0.0;
+    SC_EXPECT(BeyondHeloUmbrella(target, entry, pc.air_front, um) == BeyondHeloUmbrella(target, entry, off, um));
 }
