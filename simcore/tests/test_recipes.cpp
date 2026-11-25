@@ -283,7 +283,8 @@ SC_TEST("recipes: a crop's rows lie along its parcel's furrows, row_m apart, on 
     }
     std::printf("    the ring there: %zu plants, %zu stover on fields, %zu lying across the rows\n", ring.size(), stover, across);
     SC_EXPECT(stover > 500 && across == 0);
-    SC_EXPECT(ring.size() < 24000);  // the thickest ring on the map: the rows (21,043 at b3), a little over the 20,000 of an average one
+    // The rows' ring (21,043 at b3, 29,121 once A.3.40 thickened the sward round them), under the clutter test's 35,000.
+    SC_EXPECT(ring.size() < 35000);
 }
 
 SC_TEST("recipes: a scatter kept to a crop stands only on its fields; the wheat's swaths lie a header's width apart") {

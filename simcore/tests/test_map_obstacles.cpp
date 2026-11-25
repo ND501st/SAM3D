@@ -538,6 +538,9 @@ SC_TEST("obstacles: the Kesmark map's buildings and woods block a ray cutting a 
         const double reach = 300.0;
         const Vec3 a{pe - reach * de, pn - reach * dn, 0.0}, z{pe + reach * de, pn + reach * dn, 0.0};
         if (!HasLineOfSight(bare, a, up, z, up, 100.0)) continue;  // the ground in the way: nothing to show
+        // An end under the ground (on the hills, terrain roadmap A.5): AnalysePath stands that antenna on the ground, so
+        // its ray is not this one.
+        if (t.HeightAt(a.x, a.y) > up || t.HeightAt(z.x, z.y) > up) continue;
         if (t.ObstacleTopAt(pe, pn) < up) continue;
         ++tried;
         if (HasLineOfSight(t, a, up, z, up, 100.0)) ++stepped_los;
