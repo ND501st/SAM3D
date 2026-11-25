@@ -4,8 +4,11 @@ import math
 import sys
 from pathlib import Path
 
-import numpy as np
-from PIL import Image
+import pytest
+
+# The reading needs numpy and Pillow, which CI does not install: skipped there, as test_fetch_textures' picture tests are.
+np = pytest.importorskip("numpy")
+Image = pytest.importorskip("PIL.Image")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import haze_reading  # noqa: E402
