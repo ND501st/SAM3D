@@ -121,6 +121,7 @@ add_executable(simcore_tests
   tests/test_map_leftovers.cpp
   tests/test_damage.cpp
   tests/test_mission_session.cpp
+  tests/test_campaign_save.cpp
   tests/test_outcomes.cpp
   tests/test_comms_jamming.cpp
   tests/test_director.cpp

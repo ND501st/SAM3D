@@ -1663,6 +1663,10 @@ void ASimOsaVehicle::SetMissionMenuOpen(bool bOpen)
 	{
 		Sim->SetSimPaused(bOpen);  // a networked game runs on for the others
 	}
+	if (Sim != nullptr && bOpen)
+	{
+		Sim->SetCampaignWaiting(false);  // Esc stops the campaign's wait
+	}
 	DraggedWheel = INDEX_NONE;
 }
 
@@ -1692,6 +1696,28 @@ void ASimOsaVehicle::HandleMissionMenu(APlayerController* Pc)
 		return;
 	}
 	const FName Level(*UGameplayStatics::GetCurrentLevelName(this, true));
+	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
+	if (Sim != nullptr && Sim->IsCampaign())
+	{
+		// The campaign (track O, O1): W waits until something reaches you; R goes back to the last save (the evening
+		// briefing); M the menu (the campaign stays saved).
+		if (Pc->WasInputKeyJustPressed(EKeys::W) && !Sim->IsScenarioFinished())
+		{
+			SetMissionMenuOpen(false);
+			Sim->SetCampaignWaiting(true);
+		}
+		else if (Pc->WasInputKeyJustPressed(EKeys::R))
+		{
+			const FString Options = FString::Printf(TEXT("SimWar=continue?SimSeat=%s"), *Sim->GetCampaignSeat());
+			UE_LOG(LogSAM3D, Log, TEXT("Mission menu: the campaign from its last save (%s)"), *Options);
+			UGameplayStatics::OpenLevel(this, Level, true, Options);
+		}
+		else if (Pc->WasInputKeyJustPressed(EKeys::M))
+		{
+			UGameplayStatics::OpenLevel(this, Level, true, TEXT("SimMenu"));
+		}
+		return;
+	}
 	if (Pc->WasInputKeyJustPressed(EKeys::R))
 	{
 		// The same mission from the start: the level's own options again (or the command line's scenario).

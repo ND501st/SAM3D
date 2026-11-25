@@ -201,6 +201,9 @@ namespace
 {
 TAutoConsoleVariable<float> CVarSimTimeScale(TEXT("sam3d.TimeScale"), 1.0f,
 	TEXT("Time compression: how fast sim time runs against real time, 0.25 to 32 (1 = real time)."), ECVF_Default);
+TAutoConsoleVariable<float> CVarSimWaitScale(TEXT("sam3d.WaitScale"), 120.0f,
+	TEXT("The campaign's wait (the pause menu's W, track O): how fast sim time runs until something reaches the player, 1 to 600."),
+	ECVF_Default);
 
 constexpr float MinTimeScale = 0.25f;
 constexpr float MaxTimeScale = 32.0f;
@@ -252,7 +255,8 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 		}
 	} SnapshotAfterStep{this, false};
 
-	const double Scale = GetTimeScale();
+	// The campaign's wait runs faster than any time compression, until the director wakes the player (track O, O1).
+	const double Scale = bCampaignWaiting && Session ? FMath::Clamp(CVarSimWaitScale.GetValueOnGameThread(), 1.0f, 600.0f) : GetTimeScale();
 	if (EmLayer && EmLayer->IsRunning())
 	{
 		if (!bPaused)
@@ -290,6 +294,17 @@ void USimWorldSubsystem::Tick(float DeltaTime)
 			if (Link)
 			{
 				Link->Step(ScenarioStepSeconds);  // both vehicles of the battery
+			}
+			else if (Session)
+			{
+				const bool bWasWaiting = bCampaignWaiting;
+				Session->Step(ScenarioStepSeconds);  // the campaign: the runner with the enemy's air war on its clock
+				AfterCampaignStep();
+				if (bWasWaiting && !bCampaignWaiting)
+				{
+					Accumulator = 0.0;  // woken: the rest of the frame's waited time is not run at the wait's speed
+					break;
+				}
 			}
 			else
 			{
@@ -445,6 +460,12 @@ void USimWorldSubsystem::ClearScenario()
 	Runner = nullptr;
 	Link.Reset();
 	OwnedRunner.Reset();
+	CampaignDirector.Reset();
+	Session.Reset();
+	bCampaignWaiting = false;
+	CampaignWoken.Reset();
+	CampaignWokenAtS = -1.0;
+	CampaignSavedLabel.Reset();
 	ResetEntityCache();
 }
 
@@ -543,6 +564,217 @@ bool USimWorldSubsystem::LoadScenario(const FString& ScenarioFile, FString& OutE
 	LoadCrewPresentation(DataDir);
 	BroadcastNewDebriefEntries();
 	return true;
+}
+
+// ---------------------------------------------------------------------------------------------- the campaign (track O, O1)
+
+namespace
+{
+	const TCHAR* const CampaignsFile = TEXT("campaign/campaigns.json");
+}
+
+FString USimWorldSubsystem::CampaignSaveFile()
+{
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), TEXT("campaign.json"));
+}
+
+bool USimWorldSubsystem::GetCampaignChoices(TArray<FSimCampaignChoice>& Out, FString& OutError) const
+{
+	Out.Reset();
+	simcore::campaign::CampaignsData Data;
+	std::string Error;
+	if (!simcore::campaign::LoadCampaignsData(ToStd(ResolveDataDirectory()), ToStd(CampaignsFile), Data, &Error))
+	{
+		OutError = ToF(Error);
+		return false;
+	}
+	for (const simcore::campaign::CampaignAdversary& A : Data.adversaries)
+	{
+		FSimCampaignChoice& C = Out.AddDefaulted_GetRef();
+		C.Id = ToF(A.id);
+		C.Label = ToF(A.label);
+		C.Line = ToF(A.line);
+		C.Mission = ToF(A.mission);
+		C.bPlayable = A.playable;
+		C.NotYet = ToF(A.not_yet);
+	}
+	return true;
+}
+
+bool USimWorldSubsystem::ReadCampaignSave(FString& OutLabel, FString& OutAdversary, FString& OutSeat) const
+{
+	FString Text;
+	if (!FFileHelper::LoadFileToString(Text, *CampaignSaveFile()))
+	{
+		return false;
+	}
+	simcore::campaign::CampaignSave Save;
+	if (!simcore::campaign::LoadCampaignSaveJson(ToStd(Text), Save))
+	{
+		return false;
+	}
+	OutLabel = ToF(Save.label);
+	OutAdversary = ToF(Save.adversary);
+	OutSeat = ToF(Save.seat);
+	return true;
+}
+
+bool USimWorldSubsystem::StartCampaign(const FString& How, const FString& Seat, FString& OutError)
+{
+	const FString DataDir = ResolveDataDirectory();
+	const std::string Data = ToStd(DataDir);
+	std::string Error;
+	simcore::campaign::MissionSessionDef Def;
+	simcore::campaign::CampaignSave Header;
+	simcore::campaign::CampaignSave Saved;  // a continue's: Def points into its battery until the session has started
+	if (How.StartsWith(TEXT("new:")))
+	{
+		simcore::campaign::CampaignsData Campaigns;
+		if (!simcore::campaign::LoadCampaignsData(Data, ToStd(CampaignsFile), Campaigns, &Error) ||
+			!simcore::campaign::NewCampaign(Campaigns, ToStd(How.Mid(4)), Data, ToStd(Seat), Def, Header, &Error))
+		{
+			OutError = ToF(Error);
+			return false;
+		}
+	}
+	else if (How == TEXT("continue"))
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *CampaignSaveFile()))
+		{
+			OutError = TEXT("No campaign is saved yet.");
+			return false;
+		}
+		if (!simcore::campaign::LoadCampaignSaveJson(ToStd(Text), Saved, &Error))
+		{
+			OutError = TEXT("The saved campaign does not read: ") + ToF(Error);
+			return false;
+		}
+		if (!Seat.IsEmpty())
+		{
+			Saved.seat = ToStd(Seat);
+		}
+		Header = Saved;
+		Def = simcore::campaign::ResumeCampaign(Saved, Data);
+	}
+	else
+	{
+		OutError = FString::Printf(TEXT("SimWar=%s is not new:<adversary> or continue"), *How);
+		return false;
+	}
+	TUniquePtr<simcore::campaign::MissionSession> NewSession = MakeUnique<simcore::campaign::MissionSession>();
+	if (!NewSession->Start(Def, Data, &Error))
+	{
+		OutError = ToF(Error);
+		UE_LOG(LogSAM3D, Error, TEXT("The campaign does not start: %s"), *OutError);
+		return false;
+	}
+	StopEmDemo();
+	SimWorld.Reset();
+	bDemoActive = false;
+	SampledTerrain.Reset();
+	Cabin.Reset();
+	ClearScenario();
+	Session = MoveTemp(NewSession);
+	Runner = &Session->Runner();
+	CampaignHeader = Header;
+	CampaignSeat = Header.seat.empty() ? ToF(Runner->Cmdr()) : ToF(Header.seat);
+	CampaignEnemy = ToF(Header.adversary);  // as the menu names it ("the rebels")
+	{
+		TArray<FSimCampaignChoice> Choices;
+		FString Ignored;
+		GetCampaignChoices(Choices, Ignored);
+		for (const FSimCampaignChoice& C : Choices)
+		{
+			if (C.Id == CampaignEnemy)
+			{
+				CampaignEnemy = C.Label.ToLower();
+			}
+		}
+	}
+	CampaignDirector = MakeUnique<simcore::campaign::Director>(ToStd(CampaignSeat));
+	CampaignSavedLabel = ToF(Saved.label);
+	Accumulator = 0.0;
+	DebriefEntriesSent = 0;
+	bHasServerSky = false;
+	ResetEntityCache();
+	UE_LOG(LogSAM3D, Log, TEXT("Campaign %s: against %s, %s, as %s (the war's hour %.2f)"), How == TEXT("continue") ? TEXT("continued") : TEXT("begun"),
+		*CampaignEnemy, *ToF(simcore::FormatLocalHour(Runner->Clock().start_local_h)), *CampaignSeat, Session->CampaignHourAtStart());
+	ApplyHelperLevel();
+	LoadCrewPresentation(DataDir);
+	BroadcastNewDebriefEntries();
+	return true;
+}
+
+void USimWorldSubsystem::SetCampaignWaiting(bool bWait)
+{
+	if (!Session || bWait == bCampaignWaiting)
+	{
+		return;
+	}
+	bCampaignWaiting = bWait && !Runner->Finished();
+	Accumulator = 0.0;
+	UE_LOG(LogSAM3D, Log, TEXT("Campaign: %s at %s"), bCampaignWaiting ? TEXT("waiting") : TEXT("the wait stopped"),
+		*ToF(simcore::FormatLocalHour(Runner->Clock().LocalHourAt(Runner->Time()))));
+}
+
+void USimWorldSubsystem::AfterCampaignStep()
+{
+	if (CampaignDirector)
+	{
+		const std::vector<simcore::campaign::Wake> Wakes = CampaignDirector->Step(*Runner);
+		if (!Wakes.empty())
+		{
+			CampaignWoken = ToF(Wakes.back().detail);
+			CampaignWokenAtS = Runner->Time();
+			if (bCampaignWaiting)
+			{
+				bCampaignWaiting = false;
+				UE_LOG(LogSAM3D, Log, TEXT("Campaign: woken at %s (%s): %s"), *ToF(simcore::FormatLocalHour(Runner->Clock().LocalHourAt(Runner->Time()))),
+					*ToF(Wakes.back().why), *CampaignWoken);
+			}
+		}
+	}
+	// The seam at the regiment's evening briefing: the campaign's save, and a wait ends there.
+	simcore::campaign::MissionSession::Seam Seam;
+	if (Session->TakeSeam(Seam))
+	{
+		const simcore::campaign::CampaignSave Save = simcore::campaign::SaveOfSeam(CampaignHeader, *Session, Seam);
+		const FString File = CampaignSaveFile();
+		if (FFileHelper::SaveStringToFile(ToF(simcore::campaign::CampaignSaveJson(Save)), *File, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			CampaignSavedLabel = ToF(Save.label);
+			UE_LOG(LogSAM3D, Log, TEXT("Campaign saved: %s (%s)"), *CampaignSavedLabel, *File);
+		}
+		else
+		{
+			UE_LOG(LogSAM3D, Error, TEXT("Campaign: the save could not be written to %s"), *File);
+		}
+		CampaignWoken = FString::Printf(TEXT("the regiment's evening briefing (saved: %s)"), *CampaignSavedLabel);
+		CampaignWokenAtS = Runner->Time();
+		bCampaignWaiting = false;
+	}
+}
+
+FString USimWorldSubsystem::GetCampaignStatus() const
+{
+	if (!Session || Runner == nullptr)
+	{
+		return FString();
+	}
+	const double T = Runner->Time();
+	const double StartHour = Session->Campaign() != nullptr ? Session->Campaign()->Data().theatre.start_hour : 0.0;
+	const int32 Day = FMath::FloorToInt32((Session->CampaignHourAtStart() + T / 3600.0 + StartHour) / 24.0) + 1;
+	FString Line = FString::Printf(TEXT("Campaign against %s   Day %d, %s"), *CampaignEnemy, Day, *ToF(simcore::FormatLocalHour(Runner->Clock().LocalHourAt(T))));
+	if (bCampaignWaiting)
+	{
+		return Line + TEXT("   waiting until something reaches you (Esc stops)");
+	}
+	if (CampaignWokenAtS >= 0.0 && T - CampaignWokenAtS < 120.0)
+	{
+		return Line + TEXT("   ") + CampaignWoken;
+	}
+	return Line + TEXT("   Esc, W: wait");
 }
 
 bool USimWorldSubsystem::SwitchLinkedVehicle()

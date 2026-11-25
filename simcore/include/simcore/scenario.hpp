@@ -416,6 +416,10 @@ struct ScenarioDef {
     campaign::BatteryTask task;
     double task_given_s = 0.0;
     std::string task_means = "radio";
+    // "held": true: the battery holds the task from before the session, in its area and reported ready (a campaign's
+    // session resumed from a save: track O, O1). Nobody gives it again: the battery commander has its paper, the
+    // launchers their sectors, and the regime is said once on the battery net as the watch begins.
+    bool task_held = false;
     campaign::PlanSequence plan_sequence;
     // "clock_start": "19:00": the time of day at the session's second 0, for the order's paper, the order books and the
     // debrief (< 0: none, the session's own clock).
@@ -2861,8 +2865,9 @@ private:
         if (t == nullptr) return true;
         const std::string p = "task";
         std::string file, error;
-        if (!Keys(*t, p, {"file", "given_s", "means", "notes"}) || !RequireString(*t, p, "file", file) ||
-            !OptionalNumber(*t, p, "given_s", out.task_given_s) || !OptionalString(*t, p, "means", out.task_means)) {
+        if (!Keys(*t, p, {"file", "given_s", "means", "held", "notes"}) || !RequireString(*t, p, "file", file) ||
+            !OptionalNumber(*t, p, "given_s", out.task_given_s) || !OptionalString(*t, p, "means", out.task_means) ||
+            !OptionalBool(*t, p, "held", out.task_held)) {
             return false;
         }
         if (out.task_given_s < 0.0) return Fail(Join(p, "given_s"), "must be >= 0");

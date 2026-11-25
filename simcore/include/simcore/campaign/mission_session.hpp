@@ -47,12 +47,14 @@
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/air_war/data.hpp"
 #include "simcore/air_war/package_injector.hpp"
+#include "simcore/air_war/save.hpp"
 #include "simcore/command/air_war_feed.hpp"
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
 #include "simcore/command/own_air.hpp"
 #include "simcore/command/situation_map.hpp"
 #include "simcore/campaign/battery_plan.hpp"
+#include "simcore/campaign/battery_state.hpp"
 #include "simcore/campaign/outcomes.hpp"
 #include "simcore/campaign/regiment.hpp"
 #include "simcore/geo.hpp"
@@ -83,6 +85,16 @@ struct MissionSessionDef {
     // F5.2: with the fronts, the war's units this near the battery come down to U2 as the session's movers (sam3d: 20 km,
     // past the visual range by day; a test or the demo may widen it where the battery stands far from the line).
     double u2_radius_m = 20000.0;
+    // Track O, O1 (campaign_save.hpp): a campaign resumed. The air war's save text (air_war/save.hpp), replayed instead of
+    // started: its data files, seed and modes are the save's (`theatre`, `seed`, `day`, `light_mode` and `fronts` are not
+    // read), the session's clock its hour. And the battery as it was (battery_state.hpp; null: the mission's own).
+    std::string air_war_save;
+    const BatteryState* battery = nullptr;
+    // The game's campaign: the session takes a seam at the regiment's evening briefing (TakeSeam).
+    bool seams = false;
+    // Resumed at a briefing's seam: the briefing is held at the first decision (it was due when the save was taken, which
+    // may have been after its hour, once the sky was clear).
+    bool briefing_due = false;
 };
 
 class MissionSession {
@@ -104,6 +116,7 @@ public:
         ConsoleData console;
         std::string e;
         if (!LoadScenarioFile(d.scenario, data_dir, def, console, &e)) return fail(e);
+        if (d.battery != nullptr) ApplyBatteryState(def, *d.battery);
         if (!d.tasking.empty()) {
             TaskingRules rules;
             if (!LoadTaskingRules(data_dir, d.tasking, rules, &e)) return fail(e);
@@ -119,31 +132,54 @@ public:
         runner_ = std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
         if (d.faction.empty()) return true;
         if (clock_start_s < 0.0) return fail(d.scenario + ": no \"clock_start\" to put the air war's day on");
-        airwar::AirWarData war;
-        if (!airwar::LoadAirWarData(data_dir, d.theatre, "air_war/faction_" + d.faction + ".json", war, &e)) return fail(e);
-        if (d.light_mode >= 0) {
-            war.tuning.values["light.mode"] = static_cast<double>(d.light_mode);
-            airwar::ApplyLightMode(war);
-        }
-        if (d.fronts) {
-            for (const char* k : {"ground.mode", "ad_strategy.mode"}) war.tuning.values[k] = 1.0;
-            war.tuning.values["air_front.mode"] = 2.0;  // F7.2's close support of its own axes (F7.3)
-        }
+        faction_file_ = "air_war/faction_" + d.faction + ".json";
+        theatre_file_ = d.theatre;
+        seams_ = d.seams;
+        briefing_due_ = d.briefing_due;
         campaign_ = std::make_unique<airwar::AirCampaign>();
-        if (!campaign_->Init(war, d.seed)) return fail("the air war does not start");
-        if (regiment_ && war.tuning.Get("ground.mode") >= 1.0 && war.tuning.Get("ad_strategy.mode") >= 1.0 && !SetUpFronts(data_dir, war, d.seed, &e)) {
-            return fail(e);
+        if (!d.air_war_save.empty()) {
+            // Resumed (O1): the war replayed from its save to the hour it was saved at, the session's clock that hour.
+            // The fronts' pipeline is set up after the replay (the replay puts our units' moves back without it) and
+            // rebuilt from the war's history; the war has had the battery where it stood.
+            if (!airwar::LoadCampaignJson(d.air_war_save, data_dir, *campaign_, &e, &theatre_file_, &faction_file_)) return fail(e);
+            const airwar::AirWarData& war = campaign_->Data();
+            if (regiment_ && war.tuning.Get("ground.mode") >= 1.0 && war.tuning.Get("ad_strategy.mode") >= 1.0 &&
+                !SetUpFronts(data_dir, war, campaign_->Seed(), &e)) {
+                return fail(e);
+            }
+            h0_ = campaign_->Now();
+            if (d.battery != nullptr) {
+                at_ = d.battery->at;
+                arrived_h_ = d.battery->arrived_h >= 0.0 ? d.battery->arrived_h : kNeverH;
+            }
+        } else {
+            airwar::AirWarData war;
+            if (!airwar::LoadAirWarData(data_dir, d.theatre, faction_file_, war, &e)) return fail(e);
+            if (d.light_mode >= 0) {
+                war.tuning.values["light.mode"] = static_cast<double>(d.light_mode);
+                airwar::ApplyLightMode(war);
+            }
+            if (d.fronts) {
+                for (const char* k : {"ground.mode", "ad_strategy.mode"}) war.tuning.values[k] = 1.0;
+                war.tuning.values["air_front.mode"] = 2.0;  // F7.2's close support of its own axes (F7.3)
+            }
+            if (!campaign_->Init(war, d.seed)) return fail("the air war does not start");
+            if (regiment_ && war.tuning.Get("ground.mode") >= 1.0 && war.tuning.Get("ad_strategy.mode") >= 1.0 && !SetUpFronts(data_dir, war, d.seed, &e)) {
+                return fail(e);
+            }
+            // The battery stands where the mission has it from the war's first hour, so the enemy's intelligence has
+            // looked at the battery the session plays.
+            campaign_->RelocateBattery(ToTheatre(BatteryCentre()));
+            // The scenario's clock on the war's day, in campaign hours (hour 0 is the theatre's start hour on day 1).
+            h0_ = static_cast<double>(d.day - 1) * 24.0 + clock_start_s / 3600.0 - campaign_->Data().theatre.start_hour;
+            if (h0_ < 0.0) h0_ += 24.0;
+            while (campaign_->Advance(h0_)) {
+                campaign_->SkipPlayerMission();
+                PumpFronts();
+            }
         }
-        // The battery stands where the mission has it from the war's first hour, so the enemy's intelligence has
-        // looked at the battery the session plays.
-        campaign_->RelocateBattery(ToTheatre(BatteryCentre()));
-        // The scenario's clock on the war's day, in campaign hours (hour 0 is the theatre's start hour on day 1).
-        h0_ = static_cast<double>(d.day - 1) * 24.0 + clock_start_s / 3600.0 - campaign_->Data().theatre.start_hour;
-        if (h0_ < 0.0) h0_ += 24.0;
-        while (campaign_->Advance(h0_)) {
-            campaign_->SkipPlayerMission();
-            PumpFronts();
-        }
+        const airwar::AirWarData& war = campaign_->Data();
+        const unsigned seed = campaign_->Seed();
         PumpFronts();
         if (watch_.Bound()) {  // what reached the regiment before the session was acted on before it
             RegimentPicture pic;
@@ -153,11 +189,11 @@ public:
         airwar::ScenarioFormat fmt;
         fmt.air_radio = war.faction.radio.present;  // the enemy's calls as transmissions in the session (roadmap B9)
         live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_, fmt);
-        SetUpIntercept(data_dir, war, d.seed);
+        SetUpIntercept(data_dir, war, seed);
         outcomes_.Check(CheckSuppression(*campaign_, h0_));
         JoinOurPosts();
         JoinOurBridges();
-        seed_ = d.seed;
+        seed_ = seed;
         u2_radius_m_ = d.u2_radius_m;
         StartGroundUnits();
         return true;
@@ -177,9 +213,17 @@ public:
         if (campaign_) FollowOurBridges(false);
         if (regiment_ && runner_->Time() + 1e-9 >= next_decide_s_) {
             next_decide_s_ = runner_->Time() + kDecideEveryS;
+            // The evening briefing (O1): held once the sky is clear of the enemy's packages, the campaign's seam taken there
+            // before the regiment decides, so that a load comes back to the briefing.
+            if (BriefingNow()) briefing_due_ = true;
+            const bool briefing = briefing_due_ && !(live_ && live_->Active());
+            if (briefing) {
+                briefing_due_ = false;
+                if (seams_) MakeSeam("briefing");
+            }
             RegimentPicture pic = campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture();
             if (watch_.Bound()) watch_.Fill(pic, campaign_->Now());
-            RegimentDecides(pic, BriefingNow());
+            RegimentDecides(pic, briefing);
         }
         NoteReceived();
     }
@@ -249,6 +293,68 @@ public:
     }
     const std::vector<GivenTask>& TasksGiven() const { return given_; }
     const std::vector<std::string>& Notes() const { return notes_; }
+
+    // Track O, O1: the campaign's seams. A seam is taken at the regiment's evening briefing (MissionSessionDef::seams):
+    // the air war as its save text and the battery as it stands (BatteryNow), once a day. The game writes it to the
+    // campaign's save (campaign_save.hpp) and a load comes back there.
+    struct Seam {
+        std::string kind;      // "briefing"
+        double at_s = 0.0;     // the session second it was taken
+        std::string air_war;   // air_war/save.hpp's text
+        BatteryState battery;
+    };
+    // The seam taken since the last call, once (false: none).
+    bool TakeSeam(Seam& out) {
+        if (!seam_ready_) return false;
+        seam_ready_ = false;
+        out = seam_;
+        return true;
+    }
+    int SeamsTaken() const { return seams_taken_; }
+    const std::string& TheatreFile() const { return theatre_file_; }
+    const std::string& FactionFile() const { return faction_file_; }
+    // The battery as it stands now, for a save (battery_state.hpp). The hour is the war's (the session's clock at the
+    // war's last step, within the live packages' 30 s of now).
+    BatteryState BatteryNow() const {
+        BatteryState s;
+        s.present = true;
+        const ScenarioRunner& r = *runner_;
+        s.campaign_h = campaign_ ? campaign_->Now() : h0_ + r.Time() / 3600.0;
+        const double t = std::max(0.0, (s.campaign_h - h0_) * 3600.0);
+        s.local_h = r.Def().clock.LocalHourAt(t);
+        s.day_of_year = r.Def().clock.DayOfYearAt(t);
+        s.own = r.UnitPosition();
+        if (const Battery* b = r.GetBattery()) {
+            bool all = true;
+            for (const Battery::Vehicle& v : b->Vehicles()) {
+                if (v.def.own) continue;
+                SavedVehicle sv;
+                sv.id = v.def.id;
+                sv.position = v.position;
+                if (v.def.kind == BatteryVehicleKind::Reload || v.def.kind == BatteryVehicleKind::Fuel) sv.stock = v.stock;
+                if (v.def.kind == BatteryVehicleKind::Launcher) {
+                    all = all && v.deployed;
+                    if (const BatteryFire* f = r.GetBatteryFire()) {
+                        for (const BatteryFire::Shooter& sh : f->Shooters()) {
+                            if (sh.callsign == v.def.id) sv.missiles = sh.missiles;
+                        }
+                    }
+                }
+                s.vehicles.push_back(sv);
+            }
+            s.deployed = all;
+        }
+        if (r.Def().has_supply) {
+            s.siding_tested = r.Siding().Tested();
+            s.siding_untested = r.Siding().Untested();
+        }
+        s.has_task = r.HasTask();
+        if (s.has_task) s.task = r.Task();
+        s.task_ready = r.TaskReadyS() >= 0.0;
+        s.at = at_;
+        s.arrived_h = arrived_h_ >= kNeverH ? -1.0 : arrived_h_;
+        return s;
+    }
     double CampaignHourAtStart() const { return h0_; }
     int BatteryMoves() const { return moves_; }  // the campaign had our battery move where the session's arrived
     bool BatteryMoved() const { return moves_ > 0; }
@@ -638,6 +744,15 @@ private:
     void Note(const std::string& n) {
         if (notes_.empty() || notes_.back() != n) notes_.push_back(n);
     }
+    void MakeSeam(const char* kind) {
+        if (!campaign_) return;
+        seam_.kind = kind;
+        seam_.at_s = runner_->Time();
+        seam_.air_war = airwar::SaveCampaignJson(*campaign_, theatre_file_, faction_file_);
+        seam_.battery = BatteryNow();
+        seam_ready_ = true;
+        ++seams_taken_;
+    }
 
     // Where the battery stands in the session: the middle of its launchers (our vehicle without a battery).
     Vec3 BatteryCentre() const {
@@ -810,6 +925,13 @@ private:
     }
 
     std::unique_ptr<airwar::AirCampaign> campaign_;
+    std::string theatre_file_;      // the war's data files, for its save (O1)
+    std::string faction_file_;
+    bool seams_ = false;
+    bool briefing_due_ = false;     // the briefing's hour has come; held once the sky is clear
+    Seam seam_;
+    bool seam_ready_ = false;
+    int seams_taken_ = 0;
     std::unique_ptr<command::InfoNet> net_;          // F4.4: the campaign's pipeline (the fronts on)
     std::unique_ptr<command::CampaignFeed> feed_;
     command::OwnAirDef own_air_;                     // F5.1: the sky's sharing, for the situation maps' layout

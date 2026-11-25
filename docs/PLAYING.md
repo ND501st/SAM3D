@@ -58,6 +58,18 @@ missions. (Left/Right on the mission's page still pick where to start.) The grou
 | Air war | Raids planned by the enemy air command (and the campaign screen). |
 | Test range | The Kesmark map with a raid at the bridges; the dynamic campaign test, the capital's air defences under endless waves of every aircraft (docs/DYNAMIC_CAMPAIGN_TEST.md). |
 
+## The campaign
+
+The menu's Campaign box (track O, docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md): 1-4 a new campaign against that
+enemy (for now only the rebels; the others come with their districts), then who you play in the battery's PU-12M; C
+continues the saved one. The war is one long battery mission from the regiment's evening briefing on its first day,
+with the enemy's air war on the same clock: its raids come when its officers send them, and you learn only what reaches
+your seat. It is saved at each evening briefing (19:00, once the sky is clear), in `Saved/Campaign/campaign.json`.
+In the pause menu (Esc), W waits: time runs at `sam3d.WaitScale` (120 times by default, 1 to 600) until something
+reaches you (a word heard at your seat, a new contact, a new mark on the board) or the next briefing's save; Esc stops
+it. R goes back to the last save, M to the menu. Shift+1-4 and Shift+C open the air war's old campaign screen, now the
+developer's view. The Osa's seats are not in the campaign yet.
+
 ## The helper
 
 Turn it on in the missions menu (H; kept for every mission) or in a mission (H, also in the pause menu). It shows the move

@@ -142,6 +142,7 @@ public:
                 s->has_sector = v.def.has_sector;  // the scenario's sector; the battery commander may change it later
                 s->sector_from_deg = v.def.sector_from_deg;
                 s->sector_to_deg = v.def.sector_to_deg;
+                if (v.def.missiles >= 0) s->missiles = v.def.missiles;  // what it had when the campaign was saved (O1)
             }
             if ((s->position - v.position).LengthSquared() > 1.0) s->sight.clear();  // moved: look again
             s->position = v.position;

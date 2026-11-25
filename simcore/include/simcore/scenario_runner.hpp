@@ -5979,6 +5979,14 @@ private:
     std::string TaskArea() const { return def_.task.area_ru.empty() ? PlaceName(def_.task.main) : def_.task.area_ru; }
     void UpdateTask() {
         if (!def_.has_task) return;
+        if (held_sectors_ && battery_fire_) {  // the launchers are on the battery net from the second step
+            held_sectors_ = false;
+            for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        }
+        if (def_.task_held && !task_given_) {
+            HoldTask();
+            return;
+        }
         if (!task_given_ && time_ + 1e-9 >= def_.task_given_s) {
             task_given_ = true;
             log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "the task", def_.task.task_text});
@@ -6052,6 +6060,39 @@ private:
         mine.from = "your own planning";
         own_papers_.push_back(mine);
     }
+    // A task the battery holds from before the session (ScenarioDef::task_held: a campaign resumed, track O's O1): received,
+    // carried out and reported ready at the start; the launchers' sectors set once they are on the battery net, the
+    // task's regime ordered on it as the watch begins, and the commander's paper of the order in his map case.
+    void HoldTask() {
+        task_given_ = true;
+        task_received_s_ = time_;
+        task_plan_ = campaign::BatteryPlan();
+        task_plan_.planned = true;
+        task_plan_.ready_by_s = task_plan_.order_s = task_plan_.ready_s = time_;
+        task_moved_ = true;
+        task_ready_s_ = time_;
+        held_sectors_ = !def_.task.sectors.empty();
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", "held from before the session: " + def_.task.task_text});
+        EmissionKind k = EmissionKind::Free;
+        if (battery_ && !def_.task.emission.empty() && ParseEmissionKind(def_.task.emission, k)) {
+            EmissionRegime r = def_.emission.Make(k, "regiment");
+            if (def_.task.on_turns > 0.0) r.on_turns = def_.task.on_turns;
+            if (def_.task.off_turns > 0.0) r.off_turns = def_.task.off_turns;
+            BatteryOrderRegime(r);
+        }
+        if (!PostGivesOrders()) return;
+        HeldPaper order;
+        order.id = "combat_order:" + std::to_string(own_papers_.size());
+        order.station = Cmdr();
+        order.time_s = time_;
+        order.title = "Combat order, " + def_.task.unit;
+        order.text = campaign::TaskDocument(def_.task, def_.task_given_s, [this](double t) { return DayClock(t); },
+                                            [this](const std::string& id) { return PlaceName(id); });
+        order.from = "held from before (the regiment's order)";
+        own_papers_.push_back(order);
+    }
+    bool held_sectors_ = false;  // a held task's sectors, set once the launchers are on the battery net
+
     // The head's time by the roads to the main position (< 0: the battery stands in the area, or no road there).
     double TaskMarchS() const {
         const Battery::Vehicle* head = battery_->Own() != nullptr ? battery_->Own() : battery_->Find(def_.battery_giver);

@@ -175,5 +175,10 @@ vehicle's place, missiles and stock, the siding, the task held and ready, the ho
 task from before the session (ready at once, sectors set, the regime said once, the paper in the post, nobody gives it
 again). `simcore/campaign/campaign_save.hpp`: a new campaign, the save (the air war's replay save inside it, the task in
 its file's format) and the resume; `MissionSession` takes a seam at the evening briefing once the sky is clear and
-resumes from a save. Left: the Osa's seats in the campaign (a `BatteryLink` in the session, O3), U2's ground units round
-the battery (0 made against the rebels), a save at a task's start.
+resumes from a save. Unreal: the menu's Campaign box (1-4 new, C continue; Shift the old screen as the developer's
+view), `?SimWar=new:<id>|continue`, `USimWorldSubsystem::StartCampaign` owning the session, the save in
+`Saved/Campaign/campaign.json`, the pause menu's W (a wait at `sam3d.WaitScale` until the director wakes the player's
+seat or the briefing's save) and R (back to the last save), the campaign's line at the top. Seen in the game by a scripted
+run (`-SimMenuTest -SimMenuPick=campaign:rebels:battery_commander`, and `?SimWar=continue`). Left: the Osa's seats in the
+campaign (a `BatteryLink` in the session, O3), U2's ground units round the battery (0 made against the rebels), a save
+at a task's start, the director following the player to another seat.

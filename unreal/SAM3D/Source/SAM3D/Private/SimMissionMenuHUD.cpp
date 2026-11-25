@@ -34,6 +34,12 @@ void ASimMissionMenuHUD::BeginPlay()
 	if (USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr)
 	{
 		Sim->GetMissions(Missions, LoadError);
+		FString CampaignError;
+		if (!Sim->GetCampaignChoices(CampaignChoices, CampaignError))
+		{
+			CampaignNote = TEXT("The campaigns don't load: ") + CampaignError;
+		}
+		bHasSavedCampaign = Sim->ReadCampaignSave(SavedCampaignLabel, SavedCampaignAdversary, SavedCampaignSeat);
 	}
 	if (Missions.Num() > 0)
 	{
@@ -175,10 +181,23 @@ void ASimMissionMenuHUD::StartSelected()
 	{
 		return;
 	}
-	const FString Options = OptionsFor(Missions[Selected].Id, Choices[StartIndex].Vehicle, Choices[StartIndex].Seat, Missions[Selected].Tutorial,
-		TimeOptionsFor(Missions[Selected], TimeIndex, TimeHour));
 	// A mission on a map of its own (missions.json "level") opens that level; the rest reopen this one.
 	const FString Level = Missions[Selected].Level.IsEmpty() ? UGameplayStatics::GetCurrentLevelName(this, true) : Missions[Selected].Level;
+	if (!CampaignWar.IsEmpty())
+	{
+		// A new campaign (track O, O1): the war's own mission, at its own hour, in the chosen seat.
+		FString Options = FString::Printf(TEXT("SimWar=%s"), *CampaignWar);
+		if (!Choices[StartIndex].Seat.IsEmpty())
+		{
+			Options += FString::Printf(TEXT("?SimSeat=%s"), *Choices[StartIndex].Seat);
+		}
+		CampaignWar.Reset();
+		UE_LOG(LogSAM3D, Log, TEXT("Missions menu: a new campaign in %s (%s)"), *Level, *Options);
+		UGameplayStatics::OpenLevel(this, FName(*Level), true, Options);
+		return;
+	}
+	const FString Options = OptionsFor(Missions[Selected].Id, Choices[StartIndex].Vehicle, Choices[StartIndex].Seat, Missions[Selected].Tutorial,
+		TimeOptionsFor(Missions[Selected], TimeIndex, TimeHour));
 	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: starting %s in %s (%s)"), *Missions[Selected].Id, *Level, *Options);
 	UGameplayStatics::OpenLevel(this, FName(*Level), true, Options);
 }
@@ -300,19 +319,34 @@ void ASimMissionMenuHUD::HandleInput()
 		TimeHour += Pc->WasInputKeyJustPressed(EKeys::Period) ? 0.5f : -0.5f;
 		TimeHour = FMath::Fmod(TimeHour + 24.0f, 24.0f);
 	}
-	// The air war: 1-4 a new campaign against that adversary, C continues the one under way.
+	// The campaign (track O, O1): 1-4 a new one against that enemy, C the saved one. Shift: the air war's developer screen.
+	const bool bShift = Pc->IsInputKeyDown(EKeys::LeftShift) || Pc->IsInputKeyDown(EKeys::RightShift);
 	const FKey CampaignKeys[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four};
 	for (int32 I = 0; I < 4; ++I)
 	{
 		if (Pc->WasInputKeyJustPressed(CampaignKeys[I]))
 		{
-			StartCampaign(I);
+			if (bShift)
+			{
+				StartCampaign(I);
+			}
+			else
+			{
+				NewCampaign(I);
+			}
 			return;
 		}
 	}
 	if (Pc->WasInputKeyJustPressed(EKeys::C))
 	{
-		ContinueCampaign();
+		if (bShift)
+		{
+			ContinueCampaign();
+		}
+		else
+		{
+			ContinueSavedCampaign();
+		}
 		return;
 	}
 	if (Pc->WasInputKeyJustPressed(EKeys::Q))
@@ -348,11 +382,11 @@ void ASimMissionMenuHUD::HandleInput()
 				{
 					if (I < 4)
 					{
-						StartCampaign(I);
+						NewCampaign(I);
 					}
 					else
 					{
-						ContinueCampaign();
+						ContinueSavedCampaign();
 					}
 					return;
 				}
@@ -396,6 +430,7 @@ void ASimMissionMenuHUD::HandleCrewChoiceInput(APlayerController* Pc)
 	if (Pc->WasInputKeyJustPressed(EKeys::Escape) || Pc->WasInputKeyJustPressed(EKeys::BackSpace))
 	{
 		bChoosingCrew = false;
+		CampaignWar.Reset();
 		return;
 	}
 	if (Pc->WasInputKeyJustPressed(EKeys::Down) || Pc->WasInputKeyJustPressed(EKeys::S))
@@ -438,6 +473,7 @@ void ASimMissionMenuHUD::HandleCrewChoiceInput(APlayerController* Pc)
 		if (CrewBackBox.bIsValid && CrewBackBox.IsInside(At))
 		{
 			bChoosingCrew = false;
+			CampaignWar.Reset();
 			return;
 		}
 		for (int32 I = 0; I < CrewBoxes.Num(); ++I)
@@ -481,7 +517,7 @@ void ASimMissionMenuHUD::DrawCrewChoice(float W, float H)
 	Y += 16.0f;
 	DrawText(TEXT("Who do you play?"), Amber, In, Y, Medium);
 	Y += 28.0f;
-	Y = DrawWrapped(Missions[Selected].Title, In, Y, TextW, Small, Dim, 2.0f) + 10.0f;
+	Y = DrawWrapped(CampaignWar.IsEmpty() ? Missions[Selected].Title : CampaignLabel, In, Y, TextW, Small, Dim, 2.0f) + 10.0f;
 
 	CrewBoxes.SetNum(Choices.Num());
 	for (int32 I = 0; I < Choices.Num(); ++I)
@@ -585,7 +621,7 @@ void ASimMissionMenuHUD::DrawHUD()
 	float Y = Margin * 0.8f;
 	DrawText(TEXT("SAM3D"), Amber, Margin, Y, Large, 1.4f);
 	Y += 46.0f;
-	DrawText(TEXT("9K33M2 Osa-AK battery, 1980s: choose a mission and your seat"), Dim, Margin, Y, Medium);
+	DrawText(TEXT("9K33M2 Osa-AK battery, 1985: the campaign (1-4, C continues it), or a training mission and your seat"), Dim, Margin, Y, Medium);
 	Y += 34.0f;
 	DrawLine(Margin, Y, W - Margin, Y, FLinearColor(1.0f, 0.78f, 0.35f, 0.4f), 1.0f);
 	Y += 14.0f;
@@ -670,10 +706,10 @@ void ASimMissionMenuHUD::DrawHUD()
 	DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.85f), X, Y, Bw, Bh);
 	DrawText(TEXT("Start"), FLinearColor(0.05f, 0.05f, 0.04f, 1.0f), X + 52.0f, Y + 7.0f, Medium);
 
-	const float BoxW = FMath::Min(420.0f, W * 0.3f);
-	DrawCampaignBox(W - Margin - BoxW, H - Margin - 200.0f, BoxW);
+	const float BoxW = FMath::Min(460.0f, W * 0.32f);
+	DrawCampaignBox(W - Margin - BoxW, H - Margin - 250.0f, BoxW);
 
-	DrawText(TEXT("Up / Down a mission    H the helper    T the time of day (, . the hour)    Enter choose who to play    1-4 air war campaign    Q quit    (in a mission: Esc for the menu)"),
+	DrawText(TEXT("Up / Down a mission    H the helper    T the time of day (, . the hour)    Enter choose who to play    1-4 a campaign, C continue (Shift: the air war's developer screen)    Q quit    (in a mission: Esc for the menu)"),
 		Dim, Margin, H - Margin, Small);
 
 	if (bChoosingCrew)
@@ -685,8 +721,6 @@ void ASimMissionMenuHUD::DrawHUD()
 namespace
 {
 	const TCHAR* const CampaignFactions[] = {TEXT("rebels"), TEXT("neutral"), TEXT("warsaw_pact"), TEXT("nato")};
-	const TCHAR* const CampaignLabels[] = {TEXT("1  Rebels: a civil war, light air power"), TEXT("2  The neutral neighbour: raids along the front"),
-		TEXT("3  The Warsaw Pact: massed blows, basic SEAD"), TEXT("4  NATO: packages, SEAD and DEAD, jamming")};
 }
 
 void ASimMissionMenuHUD::StartCampaign(int32 Index)
@@ -725,33 +759,103 @@ void ASimMissionMenuHUD::ContinueCampaign()
 	USimAirCampaignSubsystem::OpenCampaignScreen(this);
 }
 
+void ASimMissionMenuHUD::NewCampaign(int32 Index)
+{
+	if (!CampaignChoices.IsValidIndex(Index))
+	{
+		return;
+	}
+	const FSimCampaignChoice& C = CampaignChoices[Index];
+	if (!C.bPlayable)
+	{
+		CampaignNote = FString::Printf(TEXT("%s: not yet, %s."), *C.Label, *C.NotYet);
+		return;
+	}
+	// The crew to choose from is the war's opening mission's (the battery's post and its people).
+	const FString MissionId = FPaths::GetBaseFilename(C.Mission);
+	int32 Found = INDEX_NONE;
+	for (int32 I = 0; I < Missions.Num(); ++I)
+	{
+		if (Missions[I].Id == MissionId)
+		{
+			Found = I;
+		}
+	}
+	if (Found == INDEX_NONE)
+	{
+		CampaignNote = FString::Printf(TEXT("The campaign's mission %s is not in the missions list."), *MissionId);
+		return;
+	}
+	Selected = Found;
+	StartIndex = DefaultStart(Missions[Selected]);
+	ResetTime();
+	CampaignWar = TEXT("new:") + C.Id;
+	CampaignLabel = FString::Printf(TEXT("A campaign against %s. %s"), *C.Label.ToLower(), *C.Line);
+	CampaignNote.Reset();
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: a new campaign against %s: choosing who to play"), *C.Id);
+	OpenCrewChoice();
+}
+
+void ASimMissionMenuHUD::ContinueSavedCampaign()
+{
+	if (!bHasSavedCampaign)
+	{
+		CampaignNote = TEXT("No campaign is saved yet: 1 starts one.");
+		return;
+	}
+	FString Options = TEXT("SimWar=continue");
+	if (!SavedCampaignSeat.IsEmpty())
+	{
+		Options += FString::Printf(TEXT("?SimSeat=%s"), *SavedCampaignSeat);
+	}
+	UE_LOG(LogSAM3D, Log, TEXT("Missions menu: the saved campaign (%s, %s)"), *SavedCampaignLabel, *Options);
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, Options);
+}
+
 void ASimMissionMenuHUD::DrawCampaignBox(float X, float Y, float Width)
 {
 	UFont* Medium = GEngine->GetMediumFont();
 	UFont* Small = GEngine->GetSmallFont();
-	const USimAirCampaignSubsystem* AirWar = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<USimAirCampaignSubsystem>() : nullptr;
-	DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.08f), X - 10.0f, Y - 6.0f, Width + 20.0f, 172.0f);
-	DrawText(TEXT("AIR WAR CAMPAIGN"), Amber, X, Y, Medium);
+	DrawRect(FLinearColor(1.0f, 0.78f, 0.35f, 0.1f), X - 10.0f, Y - 6.0f, Width + 20.0f, 240.0f);
+	DrawText(TEXT("CAMPAIGN"), Amber, X, Y, Medium);
 	Y += 26.0f;
-	DrawText(TEXT("The enemy's air staff plans the raids; you fight what comes."), Dim, X, Y, Small);
-	Y += 22.0f;
+	Y = DrawWrapped(TEXT("Battery 21's war against one enemy: its raids come when they come, and you know only what reaches you. Saved at each evening briefing."),
+		X, Y, Width, Small, Dim, 2.0f) + 6.0f;
 	CampaignBoxes.SetNum(5);
 	for (int32 I = 0; I < 4; ++I)
 	{
+		if (!CampaignChoices.IsValidIndex(I))
+		{
+			CampaignBoxes[I] = FBox2D(ForceInit);
+			continue;
+		}
+		const FSimCampaignChoice& C = CampaignChoices[I];
 		CampaignBoxes[I] = FBox2D(FVector2D(X - 4.0f, Y - 2.0f), FVector2D(X + Width, Y + 20.0f));
-		DrawText(CampaignLabels[I], Paper, X, Y, Small);
+		DrawText(FString::Printf(TEXT("%d  %s%s"), I + 1, *C.Label, C.bPlayable ? TEXT("") : TEXT("   (not yet)")), C.bPlayable ? Paper : Dim, X, Y, Small);
 		Y += 22.0f;
 	}
-	if (AirWar != nullptr && (AirWar->HasCampaign() || AirWar->HasSavedCampaign()))
+	if (bHasSavedCampaign)
 	{
+		FString Against = SavedCampaignAdversary;
+		for (const FSimCampaignChoice& C : CampaignChoices)
+		{
+			if (C.Id == SavedCampaignAdversary)
+			{
+				Against = C.Label.ToLower();
+			}
+		}
 		CampaignBoxes[4] = FBox2D(FVector2D(X - 4.0f, Y - 2.0f), FVector2D(X + Width, Y + 20.0f));
-		DrawText(AirWar->HasCampaign() ? FString(TEXT("C  Continue the campaign under way"))
-									   : FString::Printf(TEXT("C  Continue the saved campaign (%s)"), *AirWar->GetSavedCampaignLabel()),
+		DrawText(FString::Printf(TEXT("C  Continue: %s, against %s, as the %s"), *SavedCampaignLabel, *Against, *SavedCampaignSeat.Replace(TEXT("_"), TEXT(" "))),
 			Amber, X, Y, Small);
+		Y += 22.0f;
 	}
 	else
 	{
 		CampaignBoxes[4] = FBox2D(ForceInit);
+	}
+	if (!CampaignNote.IsEmpty())
+	{
+		DrawWrapped(CampaignNote, X, Y + 4.0f, Width, Small, Bad, 2.0f);
 	}
 }
 
@@ -776,6 +880,35 @@ void ASimMissionMenuHUD::RunScriptedCheck(float DeltaSeconds)
 		while (Parts.Num() < 3)
 		{
 			Parts.Add(FString());
+		}
+		if (Parts[0] == TEXT("campaign"))
+		{
+			// campaign:<adversary>:<seat> (track O, O1): a new campaign's crew choice, the seat picked in it.
+			for (int32 I = 0; I < CampaignChoices.Num(); ++I)
+			{
+				if (CampaignChoices[I].Id == Parts[1])
+				{
+					NewCampaign(I);
+				}
+			}
+			const TArray<FStartChoice> Choices = CampaignWar.IsEmpty() ? TArray<FStartChoice>() : StartChoices(Missions[Selected]);
+			bool bSeat = false;
+			for (int32 I = 0; I < Choices.Num(); ++I)
+			{
+				if (Choices[I].Seat == Parts[2])
+				{
+					StartIndex = I;
+					bSeat = true;
+				}
+			}
+			UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: pick %s -> %s"), *TestPick, bSeat ? TEXT("found") : TEXT("NOT FOUND"));
+			if (!bSeat)
+			{
+				FGenericPlatformMisc::RequestExit(false);
+				return;
+			}
+			TestStep = 2;
+			return;
 		}
 		const bool bFound = Select(Parts[0], Parts[1], Parts[2]);
 		UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: pick %s -> %s"), *TestPick, bFound ? TEXT("found") : TEXT("NOT FOUND"));

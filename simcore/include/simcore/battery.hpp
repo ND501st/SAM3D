@@ -101,6 +101,7 @@ struct BatteryVehicleDef {
     double sector_from_deg = 0.0;
     double sector_to_deg = 0.0;
     double stock = -1.0;  // a TZM's missiles (a fuel truck's litres) at the start; < 0: the tactics' full load
+    int missiles = -1;    // a launcher's missiles at the start (a campaign's session resumed: track O, O1); < 0: a full load
 };
 
 // A point of a march plan on the column's route (nav/march.hpp): the start point, a halt, a regulation point, a river

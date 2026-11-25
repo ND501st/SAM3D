@@ -101,6 +101,18 @@ void ASimCabinHUD::DrawHUD()
 			DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), (Canvas->ClipX - Tw) * 0.5f - 12.0f, 8.0f, Tw + 24.0f, Th + 10.0f);
 			DrawText(Ended, FLinearColor(1.0f, 0.78f, 0.35f), (Canvas->ClipX - Tw) * 0.5f, 13.0f, Medium);
 		}
+		else if (Sim->IsCampaign())
+		{
+			// The campaign's line (track O, O1): the day and hour, waiting, or what woke you (the director: what reached your seat).
+			UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+			const FString Status = Sim->GetCampaignStatus();
+			float Tw = 0.0f;
+			float Th = 0.0f;
+			GetTextSize(Status, Tw, Th, Small);
+			DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, Sim->IsCampaignWaiting() ? 0.7f : 0.45f), (Canvas->ClipX - Tw) * 0.5f - 10.0f, 6.0f, Tw + 20.0f, Th + 8.0f);
+			DrawText(Status, Sim->IsCampaignWaiting() ? FLinearColor(1.0f, 0.78f, 0.35f) : FLinearColor(0.93f, 0.92f, 0.86f, 0.85f),
+				(Canvas->ClipX - Tw) * 0.5f, 10.0f, Small);
+		}
 	}
 	// A battery link: the other vehicle is a key away.
 	const FString SwitchHint = Sim != nullptr && Sim->IsBatteryLink() ? FString::Printf(TEXT("   V to %s"), *Sim->GetOtherLinkedVehicle()) : FString();
@@ -921,16 +933,37 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 	DrawText(Sim->GetScenarioName(), Paper, X, Y, Medium);
 	Y += 34.0f;
 	const bool bLeave = Vehicle->CanLeaveMission();
-	const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit"),
-		TEXT("G      every key")};
-	for (int32 I = 0; I < 5; ++I)
+	if (Sim->IsCampaign())
 	{
-		if (!bLeave && (I == 1 || I == 2))
+		// The campaign (track O, O1): saved at each evening briefing; W waits until something reaches you.
+		DrawText(Sim->GetCampaignStatus(), Dim, X, Y, Small);
+		Y += 24.0f;
+		const FString Saved = Sim->GetCampaignSavedLabel().IsEmpty() ? FString(TEXT("not saved yet")) : Sim->GetCampaignSavedLabel();
+		const FString Lines[] = {TEXT("Enter  back to the war"), TEXT("W      wait until something reaches you (Esc stops it)"),
+			TEXT("R      back to the last save: ") + Saved, TEXT("M      the menu (the campaign stays saved)"), TEXT("Q      quit"), TEXT("G      every key")};
+		for (int32 I = 0; I < 6; ++I)
 		{
-			continue;
+			if ((!bLeave && I >= 1 && I <= 3) || (bEnded && I == 1))
+			{
+				continue;
+			}
+			DrawText(Lines[I], Paper, X, Y, Medium);
+			Y += 26.0f;
 		}
-		DrawText(Lines[I], Paper, X, Y, Medium);
-		Y += 26.0f;
+	}
+	else
+	{
+		const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit"),
+			TEXT("G      every key")};
+		for (int32 I = 0; I < 5; ++I)
+		{
+			if (!bLeave && (I == 1 || I == 2))
+			{
+				continue;
+			}
+			DrawText(Lines[I], Paper, X, Y, Medium);
+			Y += 26.0f;
+		}
 	}
 	// The helper (docs/crew/14_HELPER.md): H off, hints, on; kept for the next missions.
 	DrawText(TEXT("H      the helper: ") + USimWorldSubsystem::HelperLevelLabel(Sim->GetAssistLevel()), Paper, X, Y, Medium);

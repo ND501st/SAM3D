@@ -117,6 +117,19 @@ struct FSimAircraftLook
 	bool bIsWeapon = false;
 };
 
+/** One enemy the game's campaign can be fought against (data/campaign/campaigns.json; track O, O1). */
+struct FSimCampaignChoice
+{
+	FString Id;
+	FString Label;
+	FString Line;
+	/** The mission the war opens with ("scenarios/....json"). */
+	FString Mission;
+	bool bPlayable = false;
+	/** Why not yet, for one that isn't playable. */
+	FString NotYet;
+};
+
 /** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimBoardMark
@@ -1113,6 +1126,48 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
 	bool HasUrlOption(const FString& Key) const;
 
+	// ------------------------------------------------------------------ the campaign (track O, O1)
+
+	/**
+	 * The game's campaign (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 9): one long battery mission with the
+	 * enemy's air war on its clock (simcore/campaign/mission_session.hpp), saved at the regiment's evening briefing.
+	 * How: "new:<adversary>" (data/campaign/campaigns.json) or "continue" (CampaignSaveFile()). Seat: the player's (empty:
+	 * the save's, else the battery commander's). Ends any running scenario.
+	 */
+	bool StartCampaign(const FString& How, const FString& Seat, FString& OutError);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
+	bool IsCampaign() const { return Session.IsValid(); }
+
+	/** The seat the campaign was started in (the save's on a continue). */
+	const FString& GetCampaignSeat() const { return CampaignSeat; }
+
+	/** The pause menu's W: time runs at sam3d.WaitScale until the director wakes the player's seat (a word heard there, a
+	 *  new contact, a new mark on the board: what reaches the player's person, never the truth) or the evening briefing's
+	 *  save comes. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Campaign")
+	void SetCampaignWaiting(bool bWait);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
+	bool IsCampaignWaiting() const { return bCampaignWaiting; }
+
+	/** The campaign's line for the HUD: the enemy, the day and the hour, and waiting or what woke the player last. Empty
+	 *  without a campaign. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
+	FString GetCampaignStatus() const;
+
+	/** The last save's label ("Day 2, 19:00"), or empty. */
+	const FString& GetCampaignSavedLabel() const { return CampaignSavedLabel; }
+
+	/** The campaign's save: <project>/Saved/Campaign/campaign.json. */
+	static FString CampaignSaveFile();
+
+	/** The saved campaign's label, adversary and seat; false: none, or it does not read. */
+	bool ReadCampaignSave(FString& OutLabel, FString& OutAdversary, FString& OutSeat) const;
+
+	/** The enemies a campaign can be fought against, for the menu. */
+	bool GetCampaignChoices(TArray<FSimCampaignChoice>& Out, FString& OutError) const;
+
 	/** Fired for every new debrief line while a scenario runs. */
 	UPROPERTY(BlueprintAssignable, Category = "SAM3D|Scenario")
 	FOnSimDebriefEntry OnDebriefEntry;
@@ -1898,6 +1953,20 @@ private:
 	TUniquePtr<simcore::ScenarioRunner> OwnedRunner;
 	/** A battery link (simcore/battery_link.hpp): the player's Osa and the PU-12M stepped as one battery. */
 	TUniquePtr<simcore::BatteryLink> Link;
+	/** The game's campaign (track O, O1): the mission session that owns the runner, the director of the player's seat, the
+	 *  save's header. */
+	TUniquePtr<simcore::campaign::MissionSession> Session;
+	TUniquePtr<simcore::campaign::Director> CampaignDirector;
+	simcore::campaign::CampaignSave CampaignHeader;
+	FString CampaignSeat;
+	FString CampaignEnemy;
+	bool bCampaignWaiting = false;
+	/** What woke the player last, and when (session seconds; < 0: nothing yet). */
+	FString CampaignWoken;
+	double CampaignWokenAtS = -1.0;
+	FString CampaignSavedLabel;
+	/** After each step of the session: the director's wakes (they end a wait) and the session's seam (written as the save). */
+	void AfterCampaignStep();
 	/** Drops the scenario (its runner or its link). */
 	void ClearScenario();
 	/** The crew's bodies and voices for the runner the player is in (presentation data: a scenario runs without them). */
