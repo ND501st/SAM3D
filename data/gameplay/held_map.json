@@ -1,0 +1,15 @@
+{
+  "held_map_id": "held_map",
+  "status": "first pass (track O, O2: docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 5)",
+  "notes": "The maps people hold (simcore/command/held_map.hpp): how far a commander's decided position may stand from the point the order gives before the decision is listed as a breach of it (D3: listed, never refused), how finely the launchers' sectors are checked against the battery's, how far a line or sector is drawn, and the sheet's grid numbering.",
+  "source": "game values; D3's 1 km by the owner's note (25 Nov 2026) against voenizdat_osa_1991 pp. 232-239 (a pair 200-500 m apart, pairs up to 3 km)",
+  "confidence": "estimate",
+  "values": {
+    "decision_leeway_m": { "value": 1000, "source": "game value: D3's 1 km (the owner's note, 25 Nov 2026), a position within this of the point the order gives", "confidence": "estimate" },
+    "coverage_step_deg": { "value": 1, "source": "game value: the bearing step at which the launchers' sectors are checked against the battery's", "confidence": "estimate" },
+    "line_range_m": { "value": 20000, "source": "game value: how far out an attack direction or helicopter line is drawn when the order gives no range", "confidence": "estimate" },
+    "sector_drawn_m": { "value": 10000, "source": "game value: the radius a launcher's sector is drawn to on the map (about the Osa's zone)", "confidence": "estimate" },
+    "false_easting_km": { "value": 50, "source": "game value: the sheet's grid numbers are the kilometres from the map's origin plus this (as on a Soviet-pattern sheet, two figures shown)", "confidence": "estimate" },
+    "false_northing_km": { "value": 50, "source": "game value: the same northward", "confidence": "estimate" }
+  }
+}

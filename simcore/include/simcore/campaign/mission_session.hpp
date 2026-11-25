@@ -52,6 +52,7 @@
 #include "simcore/command/info_net.hpp"
 #include "simcore/command/intercept.hpp"
 #include "simcore/command/own_air.hpp"
+#include "simcore/command/held_situation.hpp"
 #include "simcore/command/situation_map.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_state.hpp"
@@ -405,6 +406,33 @@ public:
         d += "\n" + outcomes_.Text(campaign_ ? &now : nullptr);
         return d + FrontsDebrief();
     }
+    // The map `post` holds (track O, O2; command/held_map.hpp): the runner's part (the regiment's task as it reached him,
+    // his decision, a launcher commander's card) and, under the fronts, his situation map from the campaign's pipeline,
+    // each mark with who told him, by what and when. Hours on the session's clock (second 0 at 0 h).
+    command::HeldMap HeldMapFor(const std::string& post) const {
+        command::HeldMap m = runner_->HeldMapOf(post);
+        if (!net_ || !feed_ || !campaign_) return m;
+        const int p = net_->Data().PositionIndex(post);
+        if (p < 0) return m;
+        m.holder_label = net_->Data().positions[static_cast<std::size_t>(p)].Label();
+        if (!feed_->Ground().On()) return m;
+        const command::SituationLayout layout = command::SituationLayoutOf(*campaign_, &feed_->Ad(), &own_air_);
+        command::SituationMap sm;
+        command::BuildSituationMap(*net_, *feed_, layout, p, sm);
+        command::SituationFrame f;
+        f.to_session = [this](const Vec3& v) { return FromTheatre(v); };
+        f.to_map_h = [this](double h) { return h - h0_; };
+        const double start_hour = campaign_->Data().theatre.start_hour;
+        f.clock = [start_hour](double h) { return command::FormatClock(h, start_hour); };
+        command::AddSituationMarks(m, sm, *net_, p, f, &layout);
+        return m;
+    }
+    // The player's post in the campaign's pipeline ("" without it).
+    std::string PlayerPost() const {
+        if (!net_ || net_->Player() < 0) return std::string();
+        return net_->Data().positions[static_cast<std::size_t>(net_->Player())].id;
+    }
+
     // The situation maps of the battery commander and the regiment's staff at the end (F5.1): the front as their facts gave
     // it, each mark with its source and age; empty without the fronts' pipeline. What the posts did not hold is not here:
     // the truth's line is the outcomes' and the developer's.

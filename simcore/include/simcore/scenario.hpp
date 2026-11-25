@@ -35,6 +35,7 @@
 #include "simcore/campaign/report.hpp"
 #include "simcore/campaign/stocks.hpp"
 #include "simcore/command/battery_orders.hpp"
+#include "simcore/command/held_map.hpp"
 #include "simcore/command/own_flights.hpp"
 
 #include "simcore/command_post.hpp"
@@ -421,6 +422,8 @@ struct ScenarioDef {
     // launchers their sectors, and the regime is said once on the battery net as the watch begins.
     bool task_held = false;
     campaign::PlanSequence plan_sequence;
+    // The maps people hold (track O, O2: data/gameplay/held_map.json): the decision's leeway and the sheet's drawing values.
+    command::HeldMapValues held_map;
     // "clock_start": "19:00": the time of day at the session's second 0, for the order's paper, the order books and the
     // debrief (< 0: none, the session's own clock).
     double clock_start_s = -1.0;
@@ -2887,6 +2890,7 @@ private:
             if (!found) return Fail(Join(p, "file"), file + ": a sector for '" + sec.vehicle + "', not a launcher of the battery");
         }
         if (!campaign::LoadPlanSequence(data_dir, "campaign/battery_plan.json", out.plan_sequence, &error)) return Fail(p, error);
+        if (!command::LoadHeldMapValues(data_dir, "gameplay/held_map.json", out.held_map, &error)) return Fail(p, error);
         out.has_task = true;
         return true;
     }

@@ -900,9 +900,99 @@ public:
         task_moved_ = false;
         task_ready_s_ = -1.0;
         task_sectors_set_ = 0;
+        has_decision_ = false;
+        decision_ = command::BatteryDecision();
+        decision_breaches_.clear();
         return true;
     }
     int TasksGiven() const { return static_cast<int>(tasks_before_.size()) + (def_.has_task ? 1 : 0); }
+
+    // ---- The maps people hold (track O, O2; command/held_map.hpp, docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 5)
+
+    // The battery commander's decision on his map (D3): the main, reserve and dummy positions and each launcher's sector.
+    // The combat order given after it uses it in place of the task's own (the march to the decided main, the decided
+    // sectors, the formation round the decided main). Checked against the task: what it breaks is returned and kept
+    // (DecisionBreaches), and nothing is refused (D4). Empty without a task.
+    std::vector<command::DecisionBreach> SetBatteryDecision(const command::BatteryDecision& d) {
+        decision_breaches_.clear();
+        if (!def_.has_task) return decision_breaches_;
+        decision_ = d;
+        has_decision_ = !d.Empty();
+        decision_breaches_ = command::CheckDecision(def_.task, d, [this](const std::string& id, Vec3& out) { return TaskPlace(id, out); }, def_.held_map);
+        if (has_decision_) {
+            std::string text = "his decision on the map:";
+            if (d.has_main) text += " the main position at " + command::GridSquare(d.main, def_.held_map) + ";";
+            for (const command::DecidedSector& s : d.sectors) text += " " + s.vehicle + " " + std::to_string(static_cast<int>(std::lround(s.from_deg))) + "-" +
+                                                                     std::to_string(static_cast<int>(std::lround(s.to_deg)));
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", text});
+        }
+        return decision_breaches_;
+    }
+    const command::BatteryDecision* BatteryDecisionHeld() const { return has_decision_ ? &decision_ : nullptr; }
+    const std::vector<command::DecisionBreach>& DecisionBreaches() const { return decision_breaches_; }
+    // The sector cards handed out with the last combat order, one per launcher (O2).
+    const std::vector<command::SectorCard>& SectorCards() const { return sector_cards_; }
+    const command::HeldMapValues& HeldMapValuesOf() const { return def_.held_map; }
+    // A place of the session's roads by id (an anchor), in the session's frame.
+    bool TaskPlace(const std::string& id, Vec3& out) const {
+        const nav::Anchor* a = nav_ ? nav_->GetAnchors().Find(id) : nullptr;
+        if (a == nullptr) return false;
+        out = Vec3{a->at.east_m, a->at.north_m, 0.0};
+        return true;
+    }
+    // The battery commander's id in the chain (the regiment's orders go to him).
+    const std::string& BatteryCommanderPost() const { return def_.battery_giver; }
+    // The map a person of the battery holds, from what reached him in the session: the battery commander's (`holder` his
+    // post, BatteryCommanderPost(), or "battery_commander") with the regiment's task once he has it and his decision; a
+    // launcher commander's ("<vehicle>:commander") from his sector card. The situation from the campaign's pipeline is
+    // the mission session's to add (MissionSession::HeldMapFor). Hours are the session's (second 0 at 0 h).
+    command::HeldMap HeldMapOf(const std::string& holder) const {
+        command::HeldMap m;
+        m.holder = holder;
+        m.now_h = time_ / 3600.0;
+        m.now = DayClock(time_);
+        m.leeway_m = def_.held_map.decision_leeway_m;
+        const command::HeldMapValues& v = def_.held_map;
+        const auto name = [this](const std::string& id) { return PlaceName(id); };
+        const auto where = [this](const std::string& id, Vec3& out) { return TaskPlace(id, out); };
+        if (holder == def_.battery_giver || holder == "battery_commander") {
+            m.holder_label = "the battery commander";
+            if (def_.has_task && task_received_s_ >= 0.0) {
+                command::MarkSource src;
+                src.source = "the regiment";
+                src.means = def_.task_held ? "in_person" : (def_.task_means == "radio" ? "radio_voice" : "in_person");
+                src.as_of_h = task_received_s_ / 3600.0;
+                src.as_of = DayClock(task_received_s_);
+                command::AddTaskMarks(m, def_.task, where, src, v, name, !(has_decision_ && !decision_.sectors.empty()));
+                if (has_decision_) {
+                    command::MarkSource own;
+                    own.source = "your decision";
+                    own.means = "own decision";
+                    own.as_of_h = m.now_h;
+                    own.as_of = m.now;
+                    Vec3 main;
+                    const bool has_main = TaskPlace(def_.task.main, main);
+                    command::AddDecisionMarks(m, decision_, has_main ? &main : nullptr, own, v);
+                }
+            }
+            return m;
+        }
+        const std::string suffix = ":commander";
+        if (holder.size() > suffix.size() && holder.compare(holder.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            const std::string vehicle = holder.substr(0, holder.size() - suffix.size());
+            m.holder_label = "the commander of " + vehicle;
+            for (const command::SectorCard& c : sector_cards_) {
+                if (c.vehicle != vehicle) continue;
+                command::MarkSource src;
+                src.source = "the battery commander";
+                src.means = "messenger";  // the card is a paper, carried with the combat order
+                src.as_of_h = c.given_s / 3600.0;
+                src.as_of = c.given;
+                command::AddCardMarks(m, c, src, v);
+            }
+        }
+        return m;
+    }
     static constexpr double kTaskWatchedS = 1200.0;  // sam3d: as the bridges mission's end, 19 min past its ready-by
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
@@ -6150,11 +6240,20 @@ private:
             if (def_.task.off_turns > 0.0) r.off_turns = def_.task.off_turns;
             BatteryOrderRegime(r);
         }
-        for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        // The sectors: the battery commander's decided split when he made one on his map (O2), else the task's.
+        const bool decided_sectors = has_decision_ && !decision_.sectors.empty();
+        if (decided_sectors) {
+            for (const command::DecidedSector& sec : decision_.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        } else {
+            for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        }
+        DecidedPlaces();
+        HandInSectorCards();
         BatteryOrder move;
         if (task_plan_.march_at_s >= 0.0) {
             move.kind = BatteryOrder::Kind::March;
             move.to_place = task_plan_.to_place;
+            if (!decided_main_place_.empty()) move.to_place = decided_main_place_;
             task_formation_pending_ = task_plan_.has_formation;
         } else if (task_plan_.has_formation) {
             move = task_plan_.formation;
@@ -6168,6 +6267,123 @@ private:
         task_orders_done_.push_back(0);
         task_moved_ = true;
     }
+    // The decided main position as a place of the session's roads (a "point" anchor the march is planned to), and the
+    // task's formation moved with it: the pairs round the decided main as they were round the order's (O2). The ambush's
+    // points are the decided main and reserves.
+    void DecidedPlaces() {
+        decided_main_place_.clear();
+        if (!has_decision_ || !decision_.has_main || !nav_) return;
+        Vec3 order_main;
+        if (!TaskPlace(def_.task.main, order_main)) return;
+        decided_main_place_ = "decision:main:" + std::to_string(decided_anchors_++);
+        nav_->MutableAnchors().Add(decided_main_place_, "point", {decision_.main.x, decision_.main.y}, PlaceName(def_.task.main) + " (decided)");
+        if (!task_plan_.has_formation) return;
+        const Vec3 delta{decision_.main.x - order_main.x, decision_.main.y - order_main.y, 0.0};
+        BatteryOrder& f = task_plan_.formation;
+        switch (def_.task.kind) {
+            case campaign::TaskKind::CoverObject:
+            case campaign::TaskKind::CoverRebuild:
+            case campaign::TaskKind::Relocate:
+                if (f.kind == BatteryOrder::Kind::CombatFormation) f.covered = f.covered + delta;
+                break;
+            case campaign::TaskKind::Ambush:
+                if (!f.route.empty()) f.route[0] = Vec3{decision_.main.x, decision_.main.y, 0.0};
+                for (std::size_t i = 0; i < decision_.reserve.size() && i + 1 < f.route.size(); ++i) f.route[i + 1] = decision_.reserve[i];
+                break;
+            default: break;  // the covered troops' or crossing's place is not the battery's to move
+        }
+    }
+    // The sector cards (O2): each launcher commander's paper with the combat order, in his map case (the own vehicle's
+    // commander's seat when it is one of the launchers, else "<vehicle>:commander").
+    void HandInSectorCards() {
+        if (!battery_) return;
+        std::vector<command::DecidedSector> all;
+        if (has_decision_ && !decision_.sectors.empty()) {
+            all = decision_.sectors;
+        } else {
+            for (const campaign::TaskSector& s : def_.task.sectors) all.push_back({s.vehicle, s.from_deg, s.to_deg, s.duty});
+        }
+        Vec3 point;
+        std::string point_name = PlaceName(def_.task.main);
+        const bool has_point = (has_decision_ && decision_.has_main) || TaskPlace(def_.task.main, point);
+        if (has_decision_ && decision_.has_main) {
+            point = decision_.main;
+            point_name += " (decided)";
+        }
+        if (!has_point) return;
+        command::SectorCard base;
+        base.point = point;
+        base.point_name = point_name;
+        base.given_s = time_;
+        base.given = DayClock(time_);
+        if (has_decision_ && !decision_.reserve.empty()) {
+            base.has_reserve = true;
+            base.reserve = decision_.reserve.front();
+            base.reserve_name = "decided";
+        } else if (!def_.task.reserve.empty() && TaskPlace(def_.task.reserve.front(), base.reserve)) {
+            base.has_reserve = true;
+            base.reserve_name = PlaceName(def_.task.reserve.front());
+        }
+        // The landmarks: the nearest towns and landmarks of the map within the card's reach, by bearing from the point.
+        if (nav_) {
+            std::vector<command::SectorCard::Landmark> near;
+            for (const nav::Anchor& a : nav_->GetAnchors().All()) {
+                if (a.kind != "settlement" && a.kind != "landmark") continue;
+                const double r = std::hypot(a.at.east_m - point.x, a.at.north_m - point.y);
+                if (r > kCardLandmarkM || r < 1.0) continue;
+                near.push_back({a.name, RadToDeg(AzimuthOf(Vec3{a.at.east_m - point.x, a.at.north_m - point.y, 0.0})), r});
+            }
+            std::stable_sort(near.begin(), near.end(), [](const command::SectorCard::Landmark& a, const command::SectorCard::Landmark& b) { return a.range_m < b.range_m; });
+            if (near.size() > kCardLandmarks) near.resize(kCardLandmarks);
+            base.landmarks = near;
+        }
+        // The identification code's change times over the next day (the codes are on the day's table, not on the card).
+        if (const command::IffSchedule* codes = IffCodes()) {
+            const double now_h = ClockH(time_);
+            for (const command::IffSchedule::Change& c : codes->Changes()) {
+                if (c.from_h <= now_h || c.from_h > now_h + 24.0) continue;
+                const long long m = static_cast<long long>(std::llround(c.from_h * 60.0)) % (24 * 60);
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
+                base.code_changes.push_back(buf);
+            }
+        }
+        const std::string own = battery_->Own() != nullptr ? battery_->Own()->def.id : std::string();
+        for (const command::DecidedSector& s : all) {
+            command::SectorCard c = base;
+            c.vehicle = s.vehicle;
+            c.from_deg = s.from_deg;
+            c.to_deg = s.to_deg;
+            c.duty = s.duty;
+            for (const command::DecidedSector& n : all) {
+                if (n.vehicle != s.vehicle) c.neighbours.push_back(n);
+            }
+            bool replaced = false;
+            for (command::SectorCard& old : sector_cards_) {
+                if (old.vehicle == c.vehicle) {
+                    old = c;
+                    replaced = true;
+                }
+            }
+            if (!replaced) sector_cards_.push_back(c);
+            HeldPaper paper;
+            paper.id = "sector_card:" + s.vehicle + ":" + std::to_string(own_papers_.size());
+            paper.station = s.vehicle == own ? Cmdr() : s.vehicle + ":commander";
+            paper.time_s = time_;
+            paper.title = "Sector card, launcher " + s.vehicle;
+            paper.text = command::SectorCardText(c, def_.held_map);
+            paper.from = "the battery commander, with the combat order";
+            own_papers_.push_back(paper);
+        }
+    }
+    static constexpr double kCardLandmarkM = 15000.0;  // sam3d: the landmarks a card names lie within this of the point
+    static constexpr std::size_t kCardLandmarks = 4;    // sam3d: and no more than these
+    command::BatteryDecision decision_;
+    bool has_decision_ = false;
+    std::vector<command::DecisionBreach> decision_breaches_;
+    std::vector<command::SectorCard> sector_cards_;
+    std::string decided_main_place_;  // the decided main's anchor ("" none)
+    int decided_anchors_ = 0;
     // An order of words only on the battery net (the task's preliminary order and the oral combat order): every vehicle
     // commander hears it and reads it back (only the launchers' for a fire order); nobody moves on it.
     int NoticeOnOrderNet(const std::string& kind, const std::string& words, const std::pair<std::string, std::string>& short_words,

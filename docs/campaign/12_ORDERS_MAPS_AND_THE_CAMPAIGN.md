@@ -85,6 +85,34 @@ the holder's own decision. Marks are made only from facts that reached the holde
 In the game: M, the map case (O) or the PU-12M's table shows your map full screen with zoom, the legend and each
 situation's hour. A commander moves the marks that are his own decisions and gives the order from the map.
 
+**O2's build (26 Nov 2026).**
+- **The model: `simcore/command/held_map.hpp`.**
+  - A `HeldMap` belongs to a holder (a position of the chain, or a vehicle's commander). Its `HeldMark`s each carry:
+    - a kind and a side (ours red, the enemy blue);
+    - a shape: points, or a point with an arc for a sector, in the session's frame;
+    - a short label in the map's hand;
+    - the source (who told the holder) and the means (by what);
+    - `as_of_h`, and the certainty (reported, confirmed, estimated);
+    - the origin: copied, or the holder's own decision.
+  - Marks come from three places:
+    - the holder's situation map (F5's `SituationMap`, already built only from facts the post holds); each mark's source and means come from its fact's `Delivery`;
+    - the regiment's task as it reached him (its order book's means and hour);
+    - his own decisions.
+- **Decisions: `BatteryDecision`.**
+  - It holds the main position, the reserve, the dummies and each launcher's sector.
+  - A position may stand within `decision_leeway_m` of the point the order gives (D3's 1 km, a labelled game value). The sectors must together cover the battery's.
+  - It is checked against the task (`CheckDecision` lists what breaks the order, and refuses nothing), then given: the runner's `SetBatteryDecision` makes the combat order use the commander's split and places in place of the task's own.
+- **The sector card.**
+  - Each launcher commander gets a paper with the combat order: his point, his sector and landmarks bearings, his neighbours' sectors, the reserve position and the code change times.
+  - It goes in his map case, as a paper carried with the order.
+- **Unreal: M in the cabin's HUD.**
+  - The holder's map, drawn as a Soviet-pattern sheet:
+    - the numbered 1 km grid, the sheet's number and margin with the classification stamped in it;
+    - brown contours from the map's heights, green woods, blue water, roads by class and dark settlement blocks;
+    - marks in red and blue pencil with their labels and hours.
+  - The legend and a mark's source are shown on hover. The mouse wheel zooms; dragging moves the map.
+  - As battery commander: place the main, reserve and dummy positions, draw each launcher's sector, then give the combat order from the map.
+
 ## 6. Who knows what, and freedom within the order
 
 | You are | You attend | You hold | You decide | Graded by |
