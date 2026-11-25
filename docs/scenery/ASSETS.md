@@ -93,6 +93,22 @@ as alternates are) and beyond by the part's own (its cards), whose material (`M_
 instance whose pivot is within that distance. Both by distance on the GPU, no work per frame. If any near model is not on
 the machine, the part's own draws everywhere and hides nothing. `tools/ue_fab_part.py` registers its models as near models.
 
+## One copy on the machine, linked into every worktree
+
+The ignored folders (`Content/ThirdParty/` and the packs Fab installs at the Content root: `Fab/`,
+`GV_FreeShrubsPack/`, `Megaplant_Library/`) are kept once, in `C:\dev\SAM3D-art\Content\` (or `$env:SAM3D_ART`), and
+linked into a worktree's `unreal/SAM3D/Content/` as directory junctions by `tools/link_art.ps1` (no copy, no
+administrator rights). A new worktree has none of them, and draws the basic shapes and our own grass, until it is linked:
+
+```powershell
+.\tools\link_art.ps1 -Worktree C:\dev\SAM3D-wt\<name>   # or -All for every worktree; -Status shows what each is
+.\tools\link_art.ps1 -Collect                            # after importing new art here: move it into the store
+```
+
+Before deleting a worktree, `-Unlink` it (or use `git worktree remove`): Windows PowerShell's `Remove-Item -Recurse`
+follows a junction and deletes the store's files through it. The repository's `info/exclude` lists the folders too, so
+no branch commits them.
+
 ## Fetching the files on a machine
 
 1. Get the model from the `origin` recorded in the register, under the licence recorded there (a Fab asset: add it to
