@@ -32,6 +32,8 @@ namespace
 {
 std::string HmStd(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
 FString HmF(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
+// An id the player reads, as words ("field_telephone" -> "field telephone").
+FString HmWords(const std::string& S) { return HmF(S).Replace(TEXT("_"), TEXT(" ")); }
 
 // The sheet's colours: paper, the printed map's inks and the pencils.
 const FLinearColor CPaper(0.93f, 0.91f, 0.83f, 1.0f);
@@ -720,11 +722,30 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 			Hover.Dist = Dd;
 		}
 	};
+	// The marks' labels, each stepped down a line until it clears those already written (two launchers sharing a
+	// direction, a reserve beside a TZM point).
+	TArray<FBox2D> Written;
+	auto Unclutter = [&](const FString& L, double X, double Y) -> double
+	{
+		float Tw = 0.0f, Tl = 0.0f;
+		GetTextSize(L, Tw, Tl, Small);
+		const double Step = FMath::Max(static_cast<double>(Tl), 10.0);
+		for (int32 Tries = 0; Tries < 8; ++Tries)
+		{
+			const FBox2D B(FVector2D(X, Y), FVector2D(X + Tw, Y + Tl));
+			bool bClear = true;
+			for (const FBox2D& O : Written) bClear = bClear && !B.Intersect(O);
+			if (bClear) break;
+			Y += Step;
+		}
+		Written.Add(FBox2D(FVector2D(X, Y), FVector2D(X + Tw, Y + Tl)));
+		return Y;
+	};
 	auto Label = [&](const HeldMark& M, const FVector2D& P, const FLinearColor& Colour)
 	{
 		FString L = HmF(M.label);
 		if (!M.as_of.empty() && M.origin == MarkOrigin::Copied && M.as_of != "the plan") L += TEXT(" ") + HmF(M.as_of);
-		Text(L, Colour, P.X + 7.0, P.Y - 6.0, Small);
+		Text(L, Colour, P.X + 7.0, Unclutter(L, P.X + 7.0, P.Y - 6.0), Small);
 	};
 	auto DrawMark = [&](const HeldMark& M, uint32 Seed)
 	{
@@ -779,7 +800,7 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 			else
 			{
 				const FVector2D Lp = P0 + Toward(Mid) * Rpx * 0.85;
-				Text(HmF(M.label), Colour, Lp.X, Lp.Y, Small);
+				Text(HmF(M.label), Colour, Lp.X, Unclutter(HmF(M.label), Lp.X, Lp.Y), Small);
 				NearSegment(M, P0, P0 + Toward(Mid) * Rpx);
 			}
 			return;
@@ -981,7 +1002,7 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 	{
 		if (M.kind != "note" || Notes >= 8 || Ly > Ch - 160.0f) continue;
 		++Notes;
-		for (const FString& L : Wrap(FString::Printf(TEXT("%s (%s, %s)"), *HmF(M.label), *HmF(M.as_of), *HmF(M.means)), Lw, Small))
+		for (const FString& L : Wrap(FString::Printf(TEXT("%s (%s, %s)"), *HmF(M.label), *HmF(M.as_of), *HmWords(M.means)), Lw, Small))
 		{
 			DrawText(L, M.side == MarkSide::Ours ? CRed : CBlue, Lx, Ly, Small);
 			Ly += 14.0f;
@@ -1024,7 +1045,7 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 		Lines.Add(FString::Printf(TEXT("%s, %s"), M.side == MarkSide::Ours ? TEXT("ours") : TEXT("the enemy's"),
 			M.origin == MarkOrigin::Decision ? TEXT("your own decision") : TEXT("copied from what you were told")));
 		Lines.Add(TEXT("told by: ") + HmF(M.source));
-		Lines.Add(TEXT("by: ") + HmF(M.means));
+		Lines.Add(TEXT("by: ") + HmWords(M.means));
 		Lines.Add(TEXT("as of: ") + HmF(M.as_of) + (M.stale ? TEXT(" (stale)") : TEXT("")));
 		Lines.Add(TEXT("how sure: ") + HmF(MarkCertaintyName(M.certainty)));
 		if (!M.points.empty()) Lines.Add(TEXT("square ") + HmF(GridSquare(M.points[0], Values)));
