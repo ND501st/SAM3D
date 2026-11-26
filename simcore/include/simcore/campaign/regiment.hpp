@@ -882,6 +882,19 @@ public:
     }
     const TaskingRules& Rules() const { return rules_; }
 
+    // O7: the regiment's radars known all off the air since `out_h` (RadarWord::Fill's radars_out_h) when the session
+    // starts or resumes: struck before it, in the situation the regiment's task to the battery was given on (its post
+    // still talks on its net and says so at the start). contact_lost acts only on an outage the regiment learns of later.
+    void RadarsOutBefore(double out_h) {
+        if (out_h < 0.0) return;
+        for (const TaskingRule& r : rules_.rules) {
+            if (r.when != "contact_lost") continue;
+            auto it = last_h_.find(r.id);
+            if (it == last_h_.end()) it = last_h_.emplace(r.id, -1e18).first;
+            if (out_h > it->second) it->second = out_h;
+        }
+    }
+
     // O7: the raids reported before `now_h` were weighed before the session (a session resumed, or the war's hours run
     // before it): the raid rules count only those reaching the regiment from then.
     void RaidsSince(double now_h) {

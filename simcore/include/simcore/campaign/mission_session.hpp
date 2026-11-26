@@ -1617,6 +1617,15 @@ private:
             }
         }
         FollowOurPosts(true);
+        // Those struck before the session were in the situation the regiment gave its task on: contact lost only on an
+        // outage it learns of from now (O7; its post still talks, and with no picture on the board the battery commander
+        // puts his launchers on their own anyway, 21.5).
+        if (regiment_) {
+            RegimentPicture p;
+            const double now_h = campaign_ ? campaign_->Now() : h0_ + runner_->Time() / 3600.0;
+            radar_word_.Fill(p, now_h);
+            regiment_->RadarsOutBefore(p.radars_out_h);
+        }
     }
     void FollowOurPosts(bool start) {
         if (!start && runner_->Time() + 1e-9 < next_posts_s_) return;

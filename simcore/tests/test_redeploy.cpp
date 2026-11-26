@@ -282,6 +282,25 @@ SC_TEST("redeploy (O7, situation 7): with all the regiment's radars off the air 
     campaign::RegimentPicture r = At(50.02, "warsaw_pact");
     quiet.Fill(r, 50.02);
     SC_EXPECT(r.radars_total == 1 && r.radars_out == 0);
+    // Both struck before the session (the session seeds them as long silent): the regiment knew it when it gave its task,
+    // so it is no news to act on; heard again and then silent again, it is.
+    campaign::RadarWord before;
+    before.Add("a", 19.0 - campaign::RadarWord::kSilentH);
+    before.Add("b", 19.0 - campaign::RadarWord::kSilentH);
+    campaign::RegimentPicture s = At(19.0, "warsaw_pact");
+    before.Fill(s, 19.0);
+    SC_EXPECT(s.radars_out == 2);
+    SC_EXPECT_NEAR(s.radars_out_h, 19.0, 1e-9);
+    campaign::RegimentTasking known = Regiment(Only("contact_lost_roving"));
+    known.RadarsOutBefore(s.radars_out_h);
+    s = At(19.5, "warsaw_pact");
+    before.Fill(s, 19.5);
+    SC_EXPECT(s.radars_out == 2 && !known.Decide(s, &holds, 0.0, false).give);
+    before.Heard("a", 20.0);
+    before.Heard("b", 20.0);
+    s = At(20.0 + campaign::RadarWord::kSilentH + 0.1, "warsaw_pact");
+    before.Fill(s, s.now_h);
+    SC_EXPECT(s.radars_out == 2 && known.Decide(s, &holds, 0.0, false).give);
 }
 
 SC_TEST("redeploy (O7, situation 3): the covered division broken, the battery withdraws alone to the next line, on its own") {
