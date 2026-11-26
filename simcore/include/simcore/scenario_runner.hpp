@@ -6568,6 +6568,11 @@ private:
             out = Vec3{a->at.east_m, a->at.north_m, 0.0};
             return true;
         };
+        // The regiment's post where his order and the communications diagram put it; his post's nets with it reach the
+        // shorter of the air-picture net's and the command net's ranges (the ASPD-U's data).
+        in.has_regiment_cp = def_.post_regiment.has_position;
+        in.regiment_cp = def_.post_regiment.position;
+        in.regiment_reach_m = std::min(def_.post_aspd.air_net_range_m, def_.post_aspd.regiment_net_range_m);
         task_plan_ = campaign::PlanBatteryTask(def_.task, def_.plan_sequence, battery_->Tactics(), in);
         if (task_plan_.march_at_s >= 0.0) task_plan_.to_place = march_to;
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task",

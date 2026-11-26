@@ -126,6 +126,8 @@ struct BatteryOrder {
                               // Relocate: where the own vehicle goes (the others keep their places around it)
     double axis_deg = 0.0;    // direction of advance, or across the river (true, clockwise from north)
     bool bounding = false;    // CombatFormation: the pairs move one at a time, the others staying deployed
+    double post_behind_m = -1.0;  // CombatFormation: the command post this far behind the pairs (< 0: the tactics'
+                                  // command_post_behind_m); 0: at the centre of the battle order (voenizdat_osa_1991 p234)
     bool roving = false;      // Ambush: the pairs move on to the next point every ambush_dwell_s
     double width_m = 100.0;   // RiverCrossing: the river's width
     std::string vehicle;      // Reload, Refuel: the vehicle served ("" : the player's)
@@ -648,7 +650,7 @@ public:
             case BatteryOrder::Kind::CombatFormation:
                 mode_ = Mode::Formation;
                 for (Vehicle& v : vehicles_) v.catching = false;  // a vehicle still catching up goes straight to its slot
-                FormationSlots(o.covered, o.axis_deg);
+                FormationSlots(o.covered, o.axis_deg, o.post_behind_m);
                 bounding_ = o.bounding;
                 if (bounding_) HoldPairsAfterFirst();
                 events_.push_back({t, "Battery commander", std::string(o.bounding ? "bound forward in pairs" : "combat formation") + ": pairs " +
@@ -1033,7 +1035,8 @@ private:
         }
     }
 
-    void FormationSlots(const Vec3& covered, double axis_deg) {
+    void FormationSlots(const Vec3& covered, double axis_deg, double post_behind_m = -1.0) {
+        const double post_behind = post_behind_m >= 0.0 ? post_behind_m : tactics_.command_post_behind_m;
         const double a = DegToRad(axis_deg);
         const Vec3 fwd{std::sin(a), std::cos(a), 0.0};
         const Vec3 right{std::cos(a), -std::sin(a), 0.0};
@@ -1070,7 +1073,7 @@ private:
         }
         for (std::size_t j = 0; j < others.size(); ++j) {
             Vehicle& v = vehicles_[others[j]];
-            v.goal = covered - fwd * (tactics_.behind_covered_m + tactics_.command_post_behind_m + 300.0 * static_cast<double>(j));
+            v.goal = covered - fwd * (tactics_.behind_covered_m + post_behind + 300.0 * static_cast<double>(j));
             v.deployed = false;
             v.deploy_done_s = -1.0;
         }

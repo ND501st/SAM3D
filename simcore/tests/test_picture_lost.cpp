@@ -15,7 +15,8 @@ namespace {
 const std::string kData = SIMCORE_DATA_DIR;
 
 // The bridges mission run until the battery reports ready at the bridges: some 20 km from the regiment's post, beyond
-// the air-picture net's reach (aspd_u.json's 20 km) and the telecode's (15 km).
+// the telecode's reach (15 km); the battery commander puts his post at the centre of the battle order to keep the
+// air-picture net (aspd_u.json's 20 km: battery_plan.hpp), so these tests take that net away with a barrage jammer.
 bool ReadyAtTheBridges(campaign::MissionSession& s) {
     campaign::MissionSessionDef md;
     md.scenario = kData + "/scenarios/pu12m_mission_cover.json";
@@ -27,7 +28,13 @@ bool ReadyAtTheBridges(campaign::MissionSession& s) {
     }
     ScenarioRunner& r = s.Runner();
     while (!r.Finished() && r.TaskReadyS() < 0.0) s.Step(0.1);
-    return r.TaskReadyS() >= 0.0;
+    if (r.TaskReadyS() < 0.0) return false;
+    JammingDef j;  // strong barrage on the air-picture net from now on: no frequency escapes it
+    j.nets = {"air_picture"};
+    j.from_s = r.Time();
+    j.strong = true;
+    j.spot = false;
+    return r.AddNetJamming(j, "the enemy's jammer");
 }
 
 // A strike aircraft low across launcher 21's sector (its task's 225-270 deg), passing 3 km from it.
