@@ -1657,6 +1657,22 @@ bool USimWorldSubsystem::GiveCombatOrderFromMap(const simcore::command::BatteryD
 	return true;
 }
 
+bool USimWorldSubsystem::CanChooseSpotOnMap(const FString& Station) const
+{
+	return Runner && Station == TEXT("commander") && Runner->CanChooseSpot() && !IsMirrorOnly();
+}
+
+bool USimWorldSubsystem::ChooseSpotFromMap(const simcore::Vec3& At, FString& OutWhy)
+{
+	OutWhy.Reset();
+	if (!Runner || !Runner->ChooseSpot(At))
+	{
+		OutWhy = Runner ? ToF(Runner->LastRefusal()) : FString(TEXT("no session"));
+		return false;
+	}
+	return true;
+}
+
 bool USimWorldSubsystem::GetTaskPlace(const FString& Id, simcore::Vec3& Out) const
 {
 	return Runner && Runner->TaskPlace(ToStd(Id), Out);

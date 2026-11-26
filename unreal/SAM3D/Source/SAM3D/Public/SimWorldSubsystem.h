@@ -1286,6 +1286,11 @@ public:
 	 *  the decided sectors, the sector cards. OutBreaches: what it breaks of the order (listed, never refused); false with
 	 *  OutWhy when the order cannot be given now (the decision is kept for when it is). */
 	bool GiveCombatOrderFromMap(const simcore::command::BatteryDecision& Decision, TArray<FString>& OutBreaches, FString& OutWhy);
+	/** O4: a launcher commander chooses his exact spot on his map once he holds his sector card (the Osa beside the post). */
+	bool CanChooseSpotOnMap(const FString& Station) const;
+	/** His spot, chosen on his map: his crew drives there and he reports it on the battery net once deployed. Nothing about
+	 *  the place is refused (a spot outside his leeway is in the post's record); false with OutWhy with no card yet. */
+	bool ChooseSpotFromMap(const simcore::Vec3& At, FString& OutWhy);
 	/** The order's point of a place (the task's positions), in the session's ENU metres; false if unknown. */
 	bool GetTaskPlace(const FString& Id, simcore::Vec3& Out) const;
 	const simcore::campaign::MissionSession* GetCampaignSession() const { return Session.Get(); }

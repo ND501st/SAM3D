@@ -246,3 +246,18 @@ the road..."), then open your map case. Back at the post, give the combat order:
 sector by radio. With `?SimSeat=osa:commander`, walk over when called (the fire sector), press M for your card, and brief
 your crew from the search sector.
 
+**O4** (26 Nov 2026). The order's limits as data: a task's `"limits"` (`campaign::OrderLimits`: spot and launcher-spot
+leeways, the covered unit, the leash, the fire mode), the leash 3 km and following 1.5 km behind (voenizdat_osa_1991 pp.
+232-239), the covered unit's reports every 10 min and a 15 min grace (game values, `held_map.json`). The sector card
+carries each launcher's leeway, fire mode and emission ceiling. The runner: the covered unit (a nav mover) says its grid
+on its net and the post sees it within the visual range; nothing else tells the battery commander where it is. Beyond
+the leash the NPC gives `order_battery_follow` through `NpcDoes`: a march on the roads behind it, then «К бою!». The Osa's
+NPC commander on designation fires only at what the post gave him, and reports his spot (`report_spot`); `ChooseSpot` drives
+the vehicle to the spot chosen. Nothing refuses the player: the commander's log writes spots, positions, the covered unit's
+place, moves, regimes, fire modes and launches; `campaign::CheckLimits` lists the breaches in the debrief. Unreal: the map draws the
+leash, the covered unit, the spot area and the fire and emission notes; P then a click picks the Osa commander's spot.
+
+Try this: the missions menu's "PU-12M: cover the company on its move" at the battery commander's seat. Watch the company's
+grid reports on the covered net, then stay put after 20:30: the helper shows the follow order and the debrief lists the
+leash breach. With `?SimWar=new:rebels?SimSeat=osa:commander`, press M once you have your card, then P and click 2 km
+away: your crew drives there, you report it, and the post's record shows your spot outside the leeway.

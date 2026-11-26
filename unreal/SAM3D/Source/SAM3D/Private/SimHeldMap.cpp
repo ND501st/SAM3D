@@ -81,7 +81,7 @@ struct FSimHeldMapState
 	// The battery commander's draft decision (not yet given).
 	simcore::command::BatteryDecision Draft;
 	bool bDraftDirty = false;
-	int32 Tool = 0;  // 0 none, 1 main, 2 reserve, 3 dummy, 4 a sector's first edge, 5 its second
+	int32 Tool = 0;  // 0 none, 1 main, 2 reserve, 3 dummy, 4 a sector's first edge, 5 its second, 6 a launcher's spot (O4)
 	int32 Launcher = -1;
 	double SectorFrom = 0.0;
 	std::vector<std::string> Launchers;
@@ -242,6 +242,7 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 	}
 	const HeldMapValues Values = R != nullptr ? R->HeldMapValuesOf() : HeldMapValues();
 	const bool bDecide = Sim->CanDecideOnMap(Station) && R != nullptr;
+	const bool bSpot = !bDecide && Sim->CanChooseSpotOnMap(Station) && R != nullptr;  // O4: a launcher commander's spot
 
 	// The sheet: a margin round the drawing, the legend's column on the right.
 	const float Cw = Canvas->ClipX;
@@ -421,6 +422,22 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 			}
 			Say(Result, 8.0);
 			S.bDraftDirty = false;
+			S.BuiltAt = -1e9;
+		}
+	}
+
+	// O4: the launcher commander chooses his exact spot (P, then click): his crew drives there and he reports it. A spot
+	// outside his leeway is not refused; the post's record shows it.
+	if (bSpot)
+	{
+		if (Pressed(EKeys::P)) { S.Tool = 6; Say(TEXT("Click your spot"), 4.0); }
+		if (Pressed(EKeys::LeftMouseButton) && bInSheet && S.Tool == 6)
+		{
+			const FVector2D At = S.ToMap(Mouse);
+			FString Why;
+			const bool bMoved = Sim->ChooseSpotFromMap(simcore::Vec3{At.X, At.Y, 0.0}, Why);
+			Say(bMoved ? FString(TEXT("Your crew drives to your spot: report it once deployed")) : FString(TEXT("Not now: ")) + Why, 6.0);
+			S.Tool = 0;
 			S.BuiltAt = -1e9;
 		}
 	}
@@ -846,6 +863,16 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 			Label(M, S.ToScreen(M.points[M.points.size() / 2].x, M.points[M.points.size() / 2].y), Colour);
 			return;
 		}
+		// O4: an area round a point (a launcher's spot's leeway, the leash round the covered unit as last known).
+		if (M.kind == "spot_area" || M.kind == "leash")
+		{
+			const double Rpx = M.radius_m / S.MPerPx;
+			Circle(P0, Rpx, FLinearColor(Colour.R, Colour.G, Colour.B, 0.55f), M.kind == "leash" ? 1.6f : 1.1f, true, Seed);
+			const FVector2D Lp = P0 + FVector2D(0.0, -Rpx);
+			if (Lp.X > Box.Min.X && Lp.X < Box.Max.X && Lp.Y > Box.Min.Y && Lp.Y < Box.Max.Y) Label(M, Lp, Colour);
+			Near(M, Lp);
+			return;
+		}
 		// A place: its sign.
 		if (M.kind == "main")
 		{
@@ -868,6 +895,16 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 			Pencil(P0 + FVector2D(8.0, -8.0), P0 + FVector2D(8.0, 8.0), Colour, Th, Seed + 1u);
 			Pencil(P0 + FVector2D(8.0, 8.0), P0 + FVector2D(-8.0, 8.0), Colour, Th, Seed + 2u);
 			Pencil(P0 + FVector2D(-8.0, 8.0), P0 + FVector2D(-8.0, -8.0), Colour, Th, Seed + 3u);
+		}
+		else if (M.kind == "covered_unit")
+		{
+			// The covered unit where he last knew it: a unit's frame with the motor rifles' cross.
+			Pencil(P0 + FVector2D(-10.0, -6.0), P0 + FVector2D(10.0, -6.0), Colour, Th, Seed);
+			Pencil(P0 + FVector2D(10.0, -6.0), P0 + FVector2D(10.0, 6.0), Colour, Th, Seed + 1u);
+			Pencil(P0 + FVector2D(10.0, 6.0), P0 + FVector2D(-10.0, 6.0), Colour, Th, Seed + 2u);
+			Pencil(P0 + FVector2D(-10.0, 6.0), P0 + FVector2D(-10.0, -6.0), Colour, Th, Seed + 3u);
+			Pencil(P0 + FVector2D(-10.0, -6.0), P0 + FVector2D(10.0, 6.0), Colour, 1.2f, Seed + 4u);
+			Pencil(P0 + FVector2D(-10.0, 6.0), P0 + FVector2D(10.0, -6.0), Colour, 1.2f, Seed + 5u);
 		}
 		else if (M.kind == "sam_unit")
 		{
@@ -965,6 +1002,7 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 	Key(TEXT("main position; leeway ring"), [this](float X, float Y) { DrawRect(CRed, X - 2.0f, Y - 2.0f, 4.0f, 4.0f); DrawLine(X - 7.0f, Y - 7.0f, X + 7.0f, Y - 7.0f, CRed, 1.5f); DrawLine(X - 7.0f, Y + 7.0f, X + 7.0f, Y + 7.0f, CRed, 1.5f); });
 	Key(TEXT("reserve / dummy position"), [this](float X, float Y) { DrawLine(X - 7.0f, Y, X - 2.0f, Y, CRed, 1.5f); DrawLine(X + 2.0f, Y, X + 7.0f, Y, CRed, 1.5f); });
 	Key(TEXT("covered object"), [this](float X, float Y) { DrawLine(X - 7.0f, Y - 6.0f, X + 7.0f, Y - 6.0f, CRed, 1.5f); DrawLine(X - 7.0f, Y + 6.0f, X + 7.0f, Y + 6.0f, CRed, 1.5f); });
+	Key(TEXT("covered unit (last known); leash, spot area"), [this](float X, float Y) { DrawLine(X - 9.0f, Y - 5.0f, X + 9.0f, Y + 5.0f, CRed, 1.2f); DrawLine(X - 9.0f, Y + 5.0f, X + 9.0f, Y - 5.0f, CRed, 1.2f); });
 	Key(TEXT("a launcher's sector"), [this](float X, float Y) { DrawLine(X - 10.0f, Y + 6.0f, X, Y - 6.0f, CRed, 1.5f); DrawLine(X + 10.0f, Y + 6.0f, X, Y - 6.0f, CRed, 1.5f); });
 	Key(TEXT("attack, helicopter, jammer line"), Stroke(CBlue, 2.4f));
 	Key(TEXT("our aviation's corridor, zone"), [this](float X, float Y) { DrawLine(X - 11.0f, Y - 4.0f, X - 2.0f, Y - 4.0f, CRed, 1.2f); DrawLine(X + 2.0f, Y + 4.0f, X + 11.0f, Y + 4.0f, CRed, 1.2f); });
@@ -1070,6 +1108,10 @@ void ASimCabinHUD::DrawHeldMap(USimWorldSubsystem* Sim, ASimOsaVehicle* Vehicle,
 	if (bDecide)
 	{
 		Keys += TEXT("   |   1 main  2 reserve  3 dummy (then click)   S next launcher, click its sector's edges   X clear   Enter: the combat order");
+	}
+	if (bSpot)
+	{
+		Keys += TEXT("   |   P then click: your spot");
 	}
 	DrawText(Keys, CInk, SheetX0, Ch - 40.0f, Small);
 	if (Now < S.NoteUntil && !S.Note.IsEmpty())
