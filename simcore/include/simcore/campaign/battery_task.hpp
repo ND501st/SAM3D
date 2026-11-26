@@ -108,6 +108,14 @@ inline int EmissionOpenness(const std::string& regime) {
     return -1;
 }
 
+// Track O, O7: a launcher detached from the battery to a place of its own (docs/campaign/12 section 8: a single launcher
+// sent to cover an asset or lie in ambush; against the rebels, the launchers split singly over villages): it goes there
+// on the roads on its own, stands there and fights on its own, its commander the senior man on the spot.
+struct TaskDetach {
+    std::string vehicle;  // a launcher of the battery
+    std::string place;    // where it goes (an anchor of the roads)
+};
+
 struct BatteryTask {
     std::string id;
     TaskKind kind = TaskKind::CoverObject;
@@ -147,6 +155,14 @@ struct BatteryTask {
     // is). A task with the division's move names the new one: the regiment's column goes there, and its evening briefings
     // are held there once it has arrived (campaign/mission_session.hpp).
     std::string regiment_cp;
+    // Track O, O7: launchers detached to places of their own (none: the battery together).
+    std::vector<TaskDetach> detached;
+    const TaskDetach* DetachedOf(const std::string& vehicle) const {
+        for (const TaskDetach& d : detached) {
+            if (d.vehicle == vehicle) return &d;
+        }
+        return nullptr;
+    }
 
     // The main attack direction from the covered object (the first attack line's middle); false if the order gives none.
     bool MainAttackDeg(double& out) const {
@@ -166,6 +182,7 @@ struct BatteryTask {
         }
         out.insert(out.end(), reserve.begin(), reserve.end());
         out.insert(out.end(), dummies.begin(), dummies.end());
+        for (const TaskDetach& d : detached) out.push_back(d.place);
         return out;
     }
 };
@@ -178,7 +195,7 @@ public:
         if (!Keys(root, "", {"task_id", "kind", "given_by", "unit", "covered", "task", "short_ru", "area_ru", "reasons", "situation", "habits",
                              "area", "sectors", "readiness", "readiness_text", "emission", "on_turns", "off_turns", "reconnoitre",
                              "roving", "axis_deg", "width_m", "ready_in_s", "lasts_s", "coordination", "reports", "support",
-                             "own_air", "limits", "regiment_cp", "source", "confidence", "notes"}) ||
+                             "own_air", "limits", "regiment_cp", "detached", "source", "confidence", "notes"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -219,7 +236,7 @@ public:
             std::string e;
             if (!command::LoadCooperationPlan(*oa, "own_air", t.own_air, &e)) return Fail("own_air", e);
         }
-        if (!LoadArea(root, t) || !LoadSituation(root, t) || !LoadSectors(root, t) || !LoadLimits(root, t)) return false;
+        if (!LoadArea(root, t) || !LoadSituation(root, t) || !LoadSectors(root, t) || !LoadLimits(root, t) || !LoadDetached(root, t)) return false;
         if (t.kind != TaskKind::CoverMarch && t.main.empty()) return Fail("area.main", "required: where the battery goes");
         if ((t.kind == TaskKind::CoverObject || t.kind == TaskKind::CoverRebuild || t.kind == TaskKind::CoverCrossing ||
              t.kind == TaskKind::CoverTroops) && t.covered.empty()) {
@@ -290,6 +307,19 @@ private:
         }
         if (!o.fire.empty() && o.fire != "designation" && o.fire != "independent") return Fail("limits.fire", "designation or independent");
         if (o.leash_m >= 0.0 && o.cover_unit.empty()) return Fail("limits.leash_m", "a leash needs the unit it is to (cover_unit)");
+        return true;
+    }
+    bool LoadDetached(const json::Value& root, BatteryTask& t) {
+        const json::Value* arr = OptionalArray(root, "", "detached");
+        if (arr == nullptr) return message_.empty();
+        for (std::size_t i = 0; i < arr->items.size(); ++i) {
+            const std::string p = Index("detached", i);
+            const json::Value& v = arr->items[i];
+            TaskDetach d;
+            if (!Keys(v, p, {"vehicle", "place", "notes"}) || !RequireString(v, p, "vehicle", d.vehicle) || !RequireString(v, p, "place", d.place)) return false;
+            if (t.DetachedOf(d.vehicle) != nullptr) return Fail(Join(p, "vehicle"), "'" + d.vehicle + "' detached twice");
+            t.detached.push_back(d);
+        }
         return true;
     }
     static bool Bearing(double d) { return d >= 0.0 && d <= 360.0; }
@@ -366,6 +396,11 @@ inline std::string TaskDocument(const BatteryTask& t, double given_s, const std:
     if (!names.empty()) s += "; dummies " + detail::JoinWords(names, ", ");
     if (!t.tzm_place.empty()) s += "; the TZM at " + place(t.tzm_place);
     s += ".";
+    if (!t.detached.empty()) {  // O7
+        s += "\n   Detached, each on its own, its commander the senior man there:";
+        for (std::size_t i = 0; i < t.detached.size(); ++i) s += std::string(i == 0 ? " " : "; ") + t.detached[i].vehicle + " to " + place(t.detached[i].place);
+        s += ".";
+    }
     if (!t.sectors.empty()) {
         s += "\n4. Sectors:";
         for (const TaskSector& c : t.sectors) {

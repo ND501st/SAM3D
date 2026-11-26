@@ -150,14 +150,14 @@ and they are then the senior man on the spot.
 
 | Situation that reaches the officer | What he orders | Precedent | Most against |
 |---|---|---|---|
-| Another division under heavier air attack | the regiment, or some batteries, sent there for some days | AD massed on the main axis (*to source*); Egypt 1973, armour beyond the SAM umbrella | the Pact, NATO |
-| Intelligence names an asset about to be struck | a battery or a launcher sent to cover it for a few days | Vietnam 1965-72; Libya 1986 | all |
-| A battery worn down (fatigue, faults, missiles) | relieved by a reserve battery, rested and repaired | rotation in long air campaigns (*to source*); needs a reserve battery | long wars |
-| The regiment's radars or post destroyed, contact lost | batteries or launchers fight alone, roving | Syria 1982; flagged hindsight: Iraq 1991, Yugoslavia 1999 | NATO, the Pact |
-| A breakthrough or encirclement | withdraw alone to the next line or friendly force | Soviet doctrine for units cut off (*to source*); hindsight: Iraq 2003 | the Pact, NATO |
-| A deep-strike campaign on strategic assets | batteries lent to the national air defence | Hanoi and Haiphong 1967-72; the nation's own liberty; hindsight: Iraq 1991 | NATO, the Pact's long-range aviation |
-| A special mission: an ambush, a convoy, a bridging | a battery or launcher detached, radars silent until the moment | Egypt 1970; Vietnam's mobile ambushes; hindsight: 1999 | NATO, the Pact; the rebels' helicopters |
-| Rebels: few aircraft, many helicopters | launchers split singly over villages, roads, convoys | Angola in the 1980s (*to source*) | the rebels |
+| Another division under heavier air attack | the regiment, or some batteries, sent there for some days | AD massed on the main axis (`vr_1981_fanfule_army_ad_defence`); Egypt 1973, armour beyond the SAM umbrella | the Pact, NATO |
+| Intelligence names an asset about to be struck | a battery or a launcher sent to cover it for a few days | Vietnam 1965-72; Libya 1986; moving fire units from less important directions (`vr_1982_volny_ad_restoration`) | all |
+| A battery worn down (fatigue, faults, missiles) | relieved by a reserve battery, rested and repaired | restoration from depth (`vr_1982_volny_ad_restoration`, which also says SAM reserves were usually not formed: the reserve battery is ours) | long wars |
+| The regiment's radars or post destroyed, contact lost | batteries or launchers fight alone, roving | Syria 1982; `pvo_bu_ix_1984`, `vr_1985_plss`; flagged hindsight: Iraq 1991, Yugoslavia 1999 | NATO, the Pact |
+| A breakthrough or encirclement | withdraw alone to the next line or friendly force | units cut off (`vr_1980_krizek_encirclement`); hindsight: Iraq 2003 | the Pact, NATO |
+| A deep-strike campaign on strategic assets | batteries lent to the national air defence | Hanoi and Haiphong 1967-72; one zone-and-object defence (`vr_1985_jurica_ad_on_the_move`); a troops' battery lent: not found, game values | NATO, the Pact's long-range aviation |
+| A special mission: an ambush, a convoy, a bridging | a battery or launcher detached, radars silent until the moment | Egypt 1970; fire ambushes (`vr_1985_jurica_ad_on_the_move`); Vietnam 1966 (`nhandan_2025_tan_bn61_1966`); hindsight: 1999 | NATO, the Pact; the rebels' helicopters |
+| Rebels: few aircraft, many helicopters | launchers split singly over villages, roads, convoys | Angola 1987-88, flagged hindsight (`kuito_memoirs`: Strela-10s split over a brigade's area; singly over villages not found, game values) | the rebels |
 
 The war's year is 1985: cases after it are flagged hindsight and inform the design, never the 1985 doctrine.
 
@@ -292,3 +292,16 @@ Try this: `mission_demo --campaign warsaw_pact data --hours 30` (also `nato`, `n
 the menu's Campaign box (2 the neutral, 3 the Pact, 4 NATO) at the battery commander's seat: hear the task at the
 briefing, watch «К маршу!» at 19:35, then W through the night's halts to «в назначенный район прибыла» at the dam; the
 ground round you is the district's. `?SimWar=new:nato?SimSeat=osa:commander` rides the march in launcher 21.
+
+**O7** (26 Nov 2026, first form). `tasking.json` has twelve new rules: the eight situations, O6's second echelon, the cover of
+a first-echelon regiment, bounds, and a loan's end. Each is read by `RegimentTasking` only on facts in the regiment's picture:
+the warning net's raids, the ground war's Dispersed, attack and counterattack orders, and another sector raised to defend,
+all as `RegimentWatch` had them reach its posts; the battery's own ready report with its missiles; and its radars off the
+air. Score: the adversary's weight times (1 - departure x (1 - the commander's willingness)) from his traits (R1's sources in
+`SOURCES.md`). A task's `"detached"`: each launcher hears its order on the battery net, drives on the roads (a mover,
+`osa_9a33`), deploys and fights on its own, and the player's Osa hears it is the senior man there. The relief: the reserve's
+column from the barracks, a fighting neighbour on arrival, the march to rest, then repairs and missiles.
+
+Try this: headless, `simcore_tests "redeploy"`. In a rebels campaign, wait (W) for helicopter raids: by the next briefing
+the launchers split over Vrbice, Horka, Dubník and Polány; with `?SimSeat=osa:commander` you drive to Vrbice and are told
+you are on your own. Against NATO, wait three days in line for the 25th Battery's column and the march to the rear.

@@ -683,6 +683,23 @@ Registered for `docs/fronts/` and `docs/research/FRONTS_RESEARCH_2026-11.md` (th
 | `vr_podesva_1988` | 1 (post-period) | Maj. Gen. Ing. František Podesva, «Vojenská doktrína a další rozvoj operačního umění i přípravy vojsk», *Vojenské rozhledy* (Vojenská mysl) 1988 No. 8, pp. 17-19, https://www.vojenskerozhledy.cz/pdfs/vor/1988/08/04.pdf | Used as hindsight on the 1987 defensive doctrine. Read: snippet (opening). Whose view: Czechoslovak army's own; topic file: fronts our_side. |
 | `polnar_2022` | 4 (later study) | Stanislav Polnar, 'The Evolution of Czechoslovak Defence Planning, 1918-1992', *British Journal for Military History* 8.3 (2022), pp. 128-151, https://journals.gold.ac.uk/index.php/bjmh/article/download/1647/1761/2020 | Used for the Czechoslovak war plans of 1964, 1977, 1986 and 1989. Read: chapter (pp. 145-149). Whose view: a Czech military historian, from the archives; topic file: fronts our_side. |
 
+## Redeployments sources (track O, O7, 26 Nov 2026)
+
+R1, the officers' redeployments (`docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md` section 8,
+`data/campaign/tasking.json`'s O7 rules). Already registered and used there too: `voenizdat_osa_1991`, `pvo_bu_ix_1984`,
+`vr_1985_plss`, `vr_poltikovic_1984` and `kuito_memoirs` (Angola 1987-88: hindsight for a 1985 war). Not found: a troops'
+battery lent to the national air defence of a capital, and launchers split singly over villages: those rules' values are
+game values. Not opened: FM 100-2-1's chapter on air defence, the CIA's 1973 and 1976 papers, Volný 2/1981.
+
+| Id | Tier | Source | Used for |
+|---|---|---|---|
+| `vr_1981_fanfule_army_ad_defence` | 1 | Fanfule, «K použití prostředků PVO vševojskové armády v obranné operaci», *Vojenské rozhledy* 1981 No. 4, pp. 50-55, https://vojenskerozhledy.cz/pdfs/vor/1981/04/10.pdf | The army's SAM regiment's emphasis on the enemy's main attack; it goes over a first-echelon division lacking its own regiment or with heavy losses; batteries about 15 km behind the front edge, 10-15 km apart, 1-2 alternates within 5 km; ready in a counterstroke's area at least 1 h before it; the second-echelon divisions covered. Read: full. Whose view: Czechoslovak army's own. |
+| `vr_1982_volny_ad_restoration` | 1 | Volný, «Obnova silně narušeného systému protivzdušné obrany státu», *Vojenské rozhledy* 1982 No. 7, pp. 52-59, https://www.vojenskerozhledy.cz/pdfs/vor/1982/07/09.pdf | Losses of 25-30 % weaken a system, 35-40 % moderately, 45-55 % severely; restoration by moving units from depth or less important directions, shifting missiles, repair by priority; "we usually form no SAM reserves" (p. 54), against SAM3D's reserve battery: both recorded. National air defence (PVOS), not troops'. Read: full. |
+| `vr_1980_krizek_encirclement` | 1 | Křížek, «Boj divize v obklíčení a vyjití z obklíčení», *Vojenské rozhledy* 1980 No. 9, pp. 37-42, https://www.vojenskerozhledy.cz/pdfs/vor/1980/09/07.pdf | Cut off: the senior officer in the pocket commands all its units; a breakout on the superior's decision, or on its own when he cannot help; leaving in small groups without the equipment inadmissible; air defence in the breakout's formation. Read: full. |
+| `vr_1985_jurica_ad_on_the_move` | 1 | Juřica, «PVO pozemního vojska při jeho přesunech…», *Vojenské rozhledy* 1985 No. 7, pp. 46-50, https://vojenskerozhledy.cz/pdfs/vor/1985/07/07.pdf | Air defence of troops on the move; fire ambushes and decoy firing positions; one zone-and-object defence with the national air defence under one command post. Read: full. |
+| `nhandan_2025_tan_bn61_1966` | 2 (a veteran's account, published 2025) | Nguyễn Thanh Tân, «Chiến sĩ Tiểu đoàn 61 lập công ngay trên quê hương Bác Hồ», *Nhân Dân*, 18 May 2025, https://nhandan.vn/chien-si-tieu-doan-61-lap-cong-ngay-tren-que-huong-bac-ho-post880498.html | Battalion 61's march of 1966 kept secret, radio and radar only on order: an ambush's silence. Read: full. |
+| `sggp_2025_regt238_vinhlinh` | 4 | «Giữa hai tín hiệu tử thần», *Sài Gòn Giải Phóng*, 3 Aug 2025, https://www.sggp.org.vn/giua-hai-tin-hieu-tu-than-post806648.html | Regiment 238's march to Vinh Linh in 1966, its disguise, its radars against the Shrike. Read: full. |
+
 ## Validation scenarios (Osa)
 
 | Event | What to check | Sources |

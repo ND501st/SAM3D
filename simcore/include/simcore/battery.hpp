@@ -303,6 +303,10 @@ public:
         Vec3 slot;
         bool has_spot = false;
         Vec3 spot;
+        // Track O, O7: detached from the battery to a place of its own (a single launcher sent to cover an asset, the
+        // launchers split singly over villages): it takes no part in the battery's moves and formations, and deploys
+        // where it stands once its run on the roads (as `away`, a mover of the session) has brought it there.
+        bool detached = false;
     };
 
     struct Event {
@@ -420,6 +424,45 @@ public:
             v.goal = at;
             v.speed_mps = 0.0;
         }
+    }
+    // Track O, O7: a vehicle detached from the battery (`on`), standing at `at` (it deploys there), or back with it. False
+    // for no such vehicle.
+    bool SetDetached(const std::string& id, bool on, const Vec3& at, double t) {
+        for (Vehicle& v : vehicles_) {
+            if (v.def.id != id) continue;
+            v.detached = on;
+            v.away = false;
+            v.catching = false;
+            v.waiting = false;
+            v.position = at;
+            v.goal = at;
+            v.speed_mps = 0.0;
+            v.deployed = false;
+            v.deploy_done_s = -1.0;
+            v.has_spot = false;
+            events_.push_back({t, v.def.callsign, on ? "detached: at its own place, deploying" : "back with the battery"});
+            return true;
+        }
+        return false;
+    }
+    bool Detached(const std::string& id) const {
+        const Vehicle* v = Find(id);
+        return v != nullptr && v->detached;
+    }
+    // Track O, O7: rested and repaired at the rear (a battery relieved by the reserve): every fault mended, the TZM and the
+    // fuel truck loaded full again.
+    void RestAndRepair(double t) {
+        for (Vehicle& v : vehicles_) {
+            if (v.broken) {
+                v.broken = false;
+                v.broken_why.clear();
+                v.repair_at_s = -1.0;
+            }
+            v.helping.clear();
+            if (v.def.kind == BatteryVehicleKind::Reload) v.stock = tactics_.tzm_capacity;
+            if (v.def.kind == BatteryVehicleKind::Fuel) v.stock = tactics_.fuel_truck_capacity_l;
+        }
+        events_.push_back({t, "Battery commander", "rested and repaired: the faults mended, the TZM and the fuel truck full"});
     }
     // A vehicle as another model of the same battery has it (track O, O3: a linked Osa's runner follows the post's battery,
     // which marches and deploys it): where it stands, its heading and speed, whether it is set up. False for no such vehicle.
@@ -569,6 +612,7 @@ public:
                 mode_ = Mode::Forming;
                 marched_s_ = 0.0;
                 for (Vehicle& v : vehicles_) {
+                    if (v.detached) continue;  // O7: at its own place
                     v.deployed = false;
                     v.catching = false;
                     if (!v.absent) v.dug_in = false;
@@ -584,6 +628,7 @@ public:
                 const Vec3 toward{std::sin(DegToRad(o.threat_az_deg)), std::cos(DegToRad(o.threat_az_deg)), 0.0};
                 for (std::size_t k = 0; k < vehicles_.size(); ++k) {
                     Vehicle& v = vehicles_[k];
+                    if (v.detached) continue;  // O7: at its own place
                     const double s = SlotArc(rank_[k]);
                     const Vec3 dir = DirectionAt(s);
                     const Vec3 left{-dir.y, dir.x, 0.0};
@@ -620,6 +665,7 @@ public:
                 mode_ = Mode::Formation;
                 bounding_ = false;
                 for (Vehicle& v : vehicles_) {
+                    if (v.detached) continue;  // O7: at its own place
                     v.waiting = false;
                     v.goal = v.position + shift;
                     v.slot = v.goal;  // O4: the new place is where it is taken; a chosen spot stays behind
@@ -670,7 +716,9 @@ public:
             case BatteryOrder::Kind::Resume:
                 if (route_.size() >= 2) {
                     mode_ = Mode::Forming;
-                    for (Vehicle& v : vehicles_) v.deployed = false;
+                    for (Vehicle& v : vehicles_) {
+                        if (!v.detached) v.deployed = false;
+                    }
                     events_.push_back({t, "Battery commander", "back on the road: form the column"});
                 }
                 break;
@@ -689,7 +737,7 @@ public:
             for (std::size_t k = 0; k < vehicles_.size(); ++k) {
                 Vehicle& v = vehicles_[k];
                 if (v.absent && v.def.id == leader_) formed = false;  // the column does not move off without its commander
-                if (v.absent || v.away || v.catching || v.broken) continue;  // not in the column (yet): the column goes without it
+                if (v.absent || v.away || v.catching || v.broken || v.detached) continue;  // not in the column (yet): the column goes without it
                 v.goal = PointAt(SlotArc(rank_[k]));
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m + Spacing() * 0.5) formed = false;
             }
@@ -701,7 +749,7 @@ public:
                 // The leader moves on as long as nobody behind has fallen too far back.
                 bool keeping_up = true;
                 for (const Vehicle& v : vehicles_)
-                    if (!v.absent && !v.away && !v.catching && !v.broken && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
+                    if (!v.absent && !v.away && !v.catching && !v.broken && !v.detached && Dist(v.position, v.goal) > 4.0 * Spacing() + 50.0) keeping_up = false;
                 if (keeping_up && lead_s_ < total_ && t >= hold_until_s_) {
                     double next = Advance(lead_s_, dt);
                     // The head stops at a plan's point until its time, and at a halt.
@@ -736,7 +784,7 @@ public:
                                                                 : (on_road ? tactics_.march_speed_mps : tactics_.cross_country_speed_mps);
         for (Vehicle& v : vehicles_) {
             if (v.def.own && !drive_own_) continue;
-            if (v.absent || v.away || v.broken || t < v.hold_until_s) {
+            if (v.absent || v.away || v.broken || v.detached || t < v.hold_until_s) {
                 v.speed_mps = 0.0;
                 continue;
             }
@@ -756,11 +804,20 @@ public:
             Move(v, v.afloat ? tactics_.water_speed_mps : speed, dt, mode_ == Mode::Marching);
             if (mode_ == Mode::Marching) MarchWear(v, t, Dist(was, v.position));
         }
+        // O7: a detached vehicle at its own place deploys there, whatever the battery does.
+        for (Vehicle& v : vehicles_) {
+            if (!v.detached || v.deployed || v.broken || v.away) continue;
+            if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
+            if (t >= v.deploy_done_s) {
+                v.deployed = true;
+                events_.push_back({t, v.def.callsign, "detached, in position, deployed"});
+            }
+        }
         // Stopped at a short-halt point, a formation slot, an ambush point or a river position: deploy.
         if (mode_ == Mode::ShortHalt || mode_ == Mode::Formation || mode_ == Mode::Ambush || mode_ == Mode::RiverApproach ||
             mode_ == Mode::RiverCrossing) {
             for (Vehicle& v : vehicles_) {
-                if (v.deployed || !v.serving.empty() || v.waiting || v.absent || v.away || v.broken) continue;
+                if (v.deployed || !v.serving.empty() || v.waiting || v.absent || v.away || v.broken || v.detached) continue;
                 if (mode_ == Mode::RiverCrossing && v.crossing_stage != 0 && v.crossing_stage != 4) continue;
                 if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) continue;
                 if (v.deploy_done_s < 0.0) v.deploy_done_s = t + tactics_.deploy_s;
@@ -982,6 +1039,7 @@ private:
         const Vec3 right{std::cos(a), -std::sin(a), 0.0};
         std::vector<std::size_t> launchers, reloads, others;
         for (std::size_t k = 0; k < vehicles_.size(); ++k) {
+            if (vehicles_[k].detached) continue;  // O7: at its own place
             vehicles_[k].waiting = false;
             switch (vehicles_[k].def.kind) {
                 case BatteryVehicleKind::Launcher: launchers.push_back(k); break;
@@ -1021,7 +1079,7 @@ private:
     std::vector<std::size_t> Launchers() const {
         std::vector<std::size_t> out;
         for (std::size_t k = 0; k < vehicles_.size(); ++k)
-            if (vehicles_[k].def.kind == BatteryVehicleKind::Launcher) out.push_back(k);
+            if (vehicles_[k].def.kind == BatteryVehicleKind::Launcher && !vehicles_[k].detached) out.push_back(k);
         return out;
     }
 

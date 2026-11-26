@@ -869,6 +869,9 @@ public:
     // 15.2; the regiment's tasking gives it, 14.2): on its net to the battery commander ("radio") or in person, and he
     // plans it from where his battery stands. The task before it is over: its account stays in the debrief. False, with
     // why, without a battery to give it to.
+    // A session played beside another (the Osa beside the post, O3) runs as long as that one does: its time limit raised
+    // to `limit_s` (never lowered).
+    void KeepRunningTo(double limit_s) { def_.time_limit_s = std::max(def_.time_limit_s, limit_s); }
     bool GiveTask(campaign::BatteryTask t, const std::string& means, std::string* why = nullptr) {
         const auto fail = [why](const std::string& w) {
             if (why != nullptr) *why = w;
@@ -1088,7 +1091,7 @@ public:
         int n = 0;
         if (battery_) {
             for (const Battery::Vehicle& bv : battery_->Vehicles()) {
-                if (bv.def.kind != BatteryVehicleKind::Launcher || bv.away) continue;
+                if (bv.def.kind != BatteryVehicleKind::Launcher || bv.away || bv.detached) continue;
                 c.x += bv.position.x;
                 c.y += bv.position.y;
                 ++n;
@@ -5828,6 +5831,7 @@ private:
             PostOwesOrders();
             PostStowsForMarch();
             UpdateSupply();
+            UpdateDetachments();
         }
         UpdateBatteryFire();
         // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
@@ -6616,6 +6620,7 @@ private:
             if (def_.task.off_turns > 0.0) r.off_turns = def_.task.off_turns;
             BatteryOrderRegime(r);
         }
+        HoldDetachments();  // O7: launchers already at their detached places stand there
         if (!PostGivesOrders()) return;
         HeldPaper order;
         order.id = "combat_order:" + std::to_string(own_papers_.size());
@@ -6714,6 +6719,7 @@ private:
         }
         DecidedPlaces();
         HandInSectorCards(written);
+        OrderDetachments();  // O7: each detached launcher told where it goes; one detached before and not now called back
         BatteryOrder move;
         if (task_plan_.march_at_s >= 0.0) {
             move.kind = BatteryOrder::Kind::March;
@@ -8374,7 +8380,7 @@ private:
                 Transmitted("battery", "Battery commander", 2.0);
             }
             const bool off = !nets_->MemberOnNet("battery", s.callsign) || nets_->Jam("battery", time_) >= 2;
-            const bool told = SearchOwnHeard(s.callsign);
+            const bool told = SearchOwnHeard(s.callsign) || (battery_ && battery_->Detached(s.callsign));  // O7: detached, on its own
             if ((off || told) != s.on_own) {
                 Event(s.callsign, off ? "off the battery net: searches and fires on its own"
                                       : (told ? "searches and fires on its own in its sector, by the battery commander's order"
@@ -8645,6 +8651,8 @@ private:
             if (l.state != LauncherStatus::State::Empty) ++ready;
             missiles += l.missiles > 0 ? l.missiles : 0;
         }
+        last_report_missiles_ = missiles;  // O7: what the regiment was told (its tasking reads the report, not the truth)
+        last_report_s_ = time_;
         // O4: arrived, the battery's place as a grid reference (the launchers' middle as he reads it off his map).
         const std::string grid = command::GridRef(LaunchersCentre(), def_.held_map);
         const std::string arrived = moved_since_report_ ? "в назначенный район прибыла, " + grid + ", " : std::string();
@@ -8684,7 +8692,55 @@ private:
         if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_report_regiment", "communications and every launcher ready"))) ReportToRegiment();
     }
 
+    int last_report_missiles_ = -1;
+    double last_report_s_ = -1.0;
+
 public:
+    // O7: the battery's last report of readiness up to the regiment: the missiles it said it had (-1: none yet), and when.
+    int LastReportMissiles() const { return last_report_missiles_; }
+    double LastReportS() const { return last_report_s_; }
+    // O7: the battery rested and repaired at the rear (relieved by the regiment's reserve): its faults mended, the TZM and
+    // the fuel truck full, each launcher's load made up to `missiles` from the regiment's stocks there.
+    void RestAndRepair(int missiles) {
+        if (battery_) battery_->RestAndRepair(time_);
+        if (battery_fire_) {
+            for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                if (!s.external) battery_fire_->Refill(s.callsign, missiles);
+            }
+        }
+        if (!tzm_id_.empty() && battery_) {
+            const Battery::Vehicle* v = battery_->Find(tzm_id_);
+            if (v != nullptr) tzm_reckoned_ = static_cast<int>(std::lround(v->stock));
+        }
+        siding_empty_heard_ = false;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "rest", "rested and repaired at the rear, every launcher loaded"});
+    }
+    // O7: a fighting neighbour come to the battery's area in the session (the regiment's reserve battery relieving it): its
+    // launchers fight beside ours from now. False for one already there.
+    bool AddFightingNeighbour(const ScenarioNeighbour& nb) {
+        for (const ScenarioNeighbour& had : def_.neighbours) {
+            if (had.id == nb.id) return false;
+        }
+        def_.neighbours.push_back(nb);
+        if (!nb.fights) return true;
+        if (!neighbour_fire_) {
+            neighbour_fire_built_ = false;  // built at the next step, with it
+            return true;
+        }
+        const std::size_t j = def_.neighbours.size() - 1;
+        const std::vector<Vec3> places = NeighbourLauncherPlaces(nb);
+        const int n = static_cast<int>(places.size());
+        const int total = nb.missiles < 0 ? 6 * n : std::min(nb.missiles, 6 * n);
+        for (int k = 0; k < n; ++k) {
+            const int share = total / n + (k < total % n ? 1 : 0);
+            neighbour_fire_->AddShooter(nb.id + "/" + std::to_string(k + 1), places[static_cast<std::size_t>(k)], share);
+            shooter_neighbour_.push_back(j);
+        }
+        neighbour_launches_[nb.id] = 0;
+        neighbour_radar_s_[nb.id] = 0.0;
+        return true;
+    }
+
     // ---- what the voice paths expose (the HUD, the orders menu, the tests)
     const VoiceComms* Voice() const { return voice_.get(); }
     const RadioNets* Nets() const { return nets_.get(); }
@@ -11416,6 +11472,211 @@ private:
         const std::vector<campaign::StockEvent>& ev = tzm_run_->Events();
         for (; tzm_events_seen_ < ev.size(); ++tzm_events_seen_) {
             log_.Record({ev[tzm_events_seen_].t, DebriefEntry::Kind::Scenario, TzmCallsign(), "TZM run", ev[tzm_events_seen_].text});
+        }
+    }
+    // ---- Track O, O7: launchers detached from the battery (campaign/battery_task.hpp's TaskDetach; docs/campaign/12
+    // section 8). With the combat order the battery commander tells each detached launcher on the battery net where it
+    // goes; once its commander has heard, it drives there on the roads on its own (a mover of the session, as the TZM's
+    // run: its class's way), deploys and fights on its own, its commander the senior man on the spot. Released by a later
+    // task, it comes back to the battery the same way and joins it. Nothing is moved without a road: no way, he says so.
+public:
+    static constexpr const char* kLauncherMobility = "osa_9a33";  // data/vehicles/mobility.json
+    struct DetachRun {
+        std::string vehicle;
+        std::string place;  // where it goes ("" : back to the battery)
+        int order = -1;     // its order on the battery net
+        bool started = false;
+        bool there = false;
+        bool failed = false;
+    };
+
+private:
+    std::vector<DetachRun> detach_runs_;
+
+public:
+    // What a detached launcher's own crew learns (the Osa beside the post, O3): its detachment, where to, and when it is
+    // back with the battery. Taken once.
+    struct DetachNews {
+        std::string vehicle;
+        std::string place;
+        std::string place_name;
+        bool detached = true;  // false: back with the battery
+    };
+    std::vector<DetachNews> TakeDetachNews() {
+        std::vector<DetachNews> out;
+        out.swap(detach_news_);
+        return out;
+    }
+    const std::vector<DetachRun>& DetachRuns() const { return detach_runs_; }
+    // Whether a launcher stands detached (at its place, deployed or deploying), and where.
+    bool LauncherDetached(const std::string& vehicle, std::string* place = nullptr) const {
+        if (!battery_ || !battery_->Detached(vehicle)) return false;
+        for (const DetachRun& d : detach_runs_) {
+            if (d.vehicle == vehicle && !d.place.empty() && d.there && place != nullptr) *place = d.place;
+        }
+        return true;
+    }
+
+private:
+    std::vector<DetachNews> detach_news_;
+    std::string DetachMoverId(const std::string& vehicle) const { return "detached:" + vehicle; }
+    // With the combat order: each launcher the task detaches is told where to go; one detached before and not now is
+    // called back.
+    void OrderDetachments() {
+        if (!battery_ || !order_net_ || !nav_) return;
+        for (const campaign::TaskDetach& d : def_.task.detached) {
+            const Battery::Vehicle* v = battery_->Find(d.vehicle);
+            if (v == nullptr || v->def.kind != BatteryVehicleKind::Launcher) continue;
+            bool held = false;
+            for (const DetachRun& r : detach_runs_) held = held || (r.vehicle == d.vehicle && r.place == d.place && !r.failed);
+            if (held) continue;
+            DetachOrder(d.vehicle, d.place);
+        }
+        for (const Battery::Vehicle& v : battery_->Vehicles()) {
+            bool going = false;
+            for (const DetachRun& r : detach_runs_) going = going || (r.vehicle == v.def.id && !r.place.empty() && !r.failed);
+            if (!going || def_.task.DetachedOf(v.def.id) != nullptr) continue;
+            DetachOrder(v.def.id, std::string());  // called back to the battery
+        }
+    }
+    void DetachOrder(const std::string& vehicle, const std::string& place) {
+        for (std::size_t i = detach_runs_.size(); i-- > 0;) {
+            if (detach_runs_[i].vehicle == vehicle) detach_runs_.erase(detach_runs_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        KeepOrderNetCurrent();
+        std::string call = vehicle;
+        for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+            if (c.vehicle == vehicle) call = c.callsign;
+        }
+        const std::string words = place.empty() ? call + ", я " + BatteryPostCall() + ": вернуться в расположение батареи."
+                                                : call + ", я " + BatteryPostCall() + ": выдвинуться в район " + PlaceName(place) +
+                                                      ", прикрыть его, действовать самостоятельно.";
+        DetachRun r;
+        r.vehicle = vehicle;
+        r.place = place;
+        r.order = order_net_->Give(place.empty() ? "detach_back" : "detach", words, "radio_voice", time_, {vehicle});
+        order_words_[r.order] = place.empty() ? std::make_pair(std::string("вернуться в батарею"), std::string("back to the battery"))
+                                              : std::make_pair("выдвинуться в " + PlaceName(place), "detached to " + PlaceName(place));
+        notice_orders_.insert(r.order);  // the battery does not move on it: the launcher's own run does
+        detach_runs_.push_back(r);
+        GiverJournal().Heard(time_, "battery net", "Battery commander", words);
+        Radio("battery net", BatteryPostCall(), words);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "battery net", words});
+    }
+    void UpdateDetachments() {
+        if (detach_runs_.empty() || !battery_ || !nav_) return;
+        for (DetachRun& r : detach_runs_) {
+            if (r.failed || r.there) continue;
+            const Battery::Vehicle* v = battery_->Find(r.vehicle);
+            if (v == nullptr) continue;
+            if (!r.started) {
+                if (!order_net_->Acting(r.order, r.vehicle) && !order_net_->Heard(r.order, r.vehicle)) continue;
+                StartDetachRun(r, *v);
+                continue;
+            }
+            nav::Mover* m = nav_->GetMovers().Find(DetachMoverId(r.vehicle));
+            if (m == nullptr) continue;
+            const MapPoint at = nav::PointAlong(m->route, m->arc_m);
+            if (m->state != nav::MoverState::Arrived) {
+                battery_->SetAway(r.vehicle, true, GroundEnu(at.east_m, at.north_m));
+                continue;
+            }
+            m->level = nav::MoverLevel::M0;
+            r.there = true;
+            std::string call = r.vehicle;
+            for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+                if (c.vehicle == r.vehicle) call = c.callsign;
+            }
+            if (!r.place.empty()) {  // there: deploys and fights on its own
+                battery_->SetDetached(r.vehicle, true, GroundEnu(at.east_m, at.north_m), time_);
+                if (battery_fire_) battery_fire_->SetOnOwn(r.vehicle, true);
+                order_net_->Done(r.order, r.vehicle, time_, call + ": в район " + PlaceName(r.place) + " прибыл, действую самостоятельно.");
+                log_.Record({time_, DebriefEntry::Kind::Scenario, call, "detached", "at " + PlaceName(r.place) + ": deploying, on its own"});
+            } else {  // back: the battery's vehicle again, joining it where it is
+                battery_->SetDetached(r.vehicle, false, GroundEnu(at.east_m, at.north_m), time_);
+                if (battery_fire_) battery_fire_->SetOnOwn(r.vehicle, false);
+                battery_->SetAbsent(r.vehicle, true);
+                battery_->Join(r.vehicle, time_);
+                order_net_->Done(r.order, r.vehicle, time_, call + ": в расположение батареи прибыл.");
+                log_.Record({time_, DebriefEntry::Kind::Scenario, call, "detached", "back with the battery"});
+                detach_news_.push_back({r.vehicle, std::string(), std::string(), false});
+            }
+        }
+        for (std::size_t i = detach_runs_.size(); i-- > 0;) {  // the runs back are over once it is with the battery
+            if (detach_runs_[i].place.empty() && detach_runs_[i].there) detach_runs_.erase(detach_runs_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
+    void StartDetachRun(DetachRun& r, const Battery::Vehicle& v) {
+        r.started = true;
+        const nav::Mobility* cls = nav_->MobilityClasses().Find(kLauncherMobility);
+        MapPoint to;
+        if (!r.place.empty()) {
+            const nav::Anchor* a = nav_->GetAnchors().Find(r.place);
+            if (a != nullptr) to = a->at;
+            if (a == nullptr) cls = nullptr;
+        } else {  // back to where the battery's post stands now
+            const Battery::Vehicle* post = battery_->Own();
+            const Vec3 c = post != nullptr && post->def.kind != BatteryVehicleKind::Launcher ? post->position : LaunchersCentre();
+            to = {c.x, c.y};
+        }
+        nav::Route route;
+        if (cls != nullptr) {
+            nav::RouteRequest q;
+            q.from = {v.position.x, v.position.y};
+            q.to = to;
+            q.mobility = cls;
+            q.h = time_ / 3600.0;
+            q.night = light_.dark;
+            route = nav_->Graph().Find(q, roads_believed_);
+        }
+        if (!route.found) {
+            r.failed = true;
+            const std::string why = route.why.empty() ? "no way there on the roads" : route.why;
+            order_net_->Cannot(r.order, r.vehicle, time_, why, r.vehicle + ": " + (r.place.empty() ? "вернуться" : "выдвинуться") + " не могу, пути нет.");
+            log_.Record({time_, DebriefEntry::Kind::Scenario, r.vehicle, "detached", "cannot go: " + why});
+            return;
+        }
+        nav::Mover m;
+        nav::Mover* had = nav_->GetMovers().Find(DetachMoverId(r.vehicle));
+        if (had != nullptr) m = *had;
+        m.id = DetachMoverId(r.vehicle);
+        m.kind = "vehicle";
+        m.mobility = kLauncherMobility;
+        m.route = route;
+        m.depart_s = time_;
+        m.state = nav::MoverState::Moving;
+        m.arc_m = 0.0;
+        m.moved_s = 0.0;
+        m.arrived_s = -1.0;
+        m.halt_until_s = time_;
+        m.level = nav::MoverLevel::M1;
+        if (had != nullptr) {
+            *had = m;
+        } else {
+            nav_->AddMover(m, kLauncherMobility);
+        }
+        if (battery_->Detached(r.vehicle)) battery_->SetDetached(r.vehicle, false, v.position, time_);
+        if (battery_fire_) battery_fire_->SetOnOwn(r.vehicle, true);  // out of the battery's formation: on its own from here
+        battery_->SetAway(r.vehicle, true, v.position);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, r.vehicle, "detached",
+                     r.place.empty() ? std::string("sets off back to the battery") : "sets off for " + PlaceName(r.place)});
+        if (!r.place.empty()) detach_news_.push_back({r.vehicle, r.place, PlaceName(r.place), true});
+    }
+    // A held task's detachments (a campaign resumed): each launcher already at its place stands there, detached.
+    void HoldDetachments() {
+        if (!battery_ || !nav_) return;
+        for (const campaign::TaskDetach& d : def_.task.detached) {
+            const Battery::Vehicle* v = battery_->Find(d.vehicle);
+            const nav::Anchor* a = nav_->GetAnchors().Find(d.place);
+            if (v == nullptr || a == nullptr || std::hypot(v->position.x - a->at.east_m, v->position.y - a->at.north_m) > kTaskInAreaM) continue;
+            battery_->SetDetached(d.vehicle, true, v->position, time_);
+            if (battery_fire_) battery_fire_->SetOnOwn(d.vehicle, true);
+            DetachRun r;
+            r.vehicle = d.vehicle;
+            r.place = d.place;
+            r.started = r.there = true;
+            detach_runs_.push_back(r);
+            detach_news_.push_back({d.vehicle, d.place, PlaceName(d.place), true});
         }
     }
     // The TZM's chief's report reaches the battery commander: his roads gain the bridges the chief found down on the way

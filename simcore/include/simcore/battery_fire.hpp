@@ -18,6 +18,7 @@
 // (free fire, or the PU-12 lost).
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <random>
@@ -194,6 +195,22 @@ public:
         s->target = phase == Phase::Idle ? std::string() : target;
         s->phase = s->target.empty() ? Phase::Idle : phase;
         return true;
+    }
+
+    // Track O, O7: a launcher's load made up at the rear (a battery relieved and refitted). False for an unknown shooter.
+    bool Refill(const std::string& callsign, int missiles) {
+        Shooter* s = Find(callsign);
+        if (s == nullptr || s->external) return false;
+        s->missiles = std::max(s->missiles, missiles);
+        s->asked_tzm = false;
+        return true;
+    }
+    // Whether a launcher searches and fires on its own (off the net, or detached).
+    bool OnOwn(const std::string& callsign) const {
+        for (const Shooter& s : shooters_) {
+            if (s.callsign == callsign) return s.on_own;
+        }
+        return false;
     }
 
     // The battery commander gives a shooter a target. False for an unknown shooter, or one with no missiles.

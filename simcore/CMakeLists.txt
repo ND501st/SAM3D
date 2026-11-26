@@ -128,6 +128,7 @@ add_executable(simcore_tests
   tests/test_comms_jamming.cpp
   tests/test_director.cpp
   tests/test_regiment.cpp
+  tests/test_redeploy.cpp
   tests/test_picture_lost.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp

@@ -240,6 +240,16 @@ inline json::Value TaskJsonValue(const BatteryTask& t) {
         Put(o, "limits", l);
     }
     if (!t.regiment_cp.empty()) Put(o, "regiment_cp", Str(t.regiment_cp));  // O6
+    if (!t.detached.empty()) {  // O7
+        json::Value det = Arr();
+        for (const TaskDetach& d : t.detached) {
+            json::Value x = Obj();
+            Put(x, "vehicle", Str(d.vehicle));
+            Put(x, "place", Str(d.place));
+            Push(det, x);
+        }
+        Put(o, "detached", det);
+    }
     Put(o, "source", Str("SAM3D: the task as the battery held it when the campaign was saved"));
     Put(o, "confidence", Str("estimate"));
     return o;
