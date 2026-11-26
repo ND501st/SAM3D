@@ -63,6 +63,15 @@ struct TaskingRule {
     std::string readiness_text;          // posture: its words ("": as held)
     std::string emission;                // posture: the emission regime by name ("": as held)
     double work_s = 0.0;                 // the regiment's staff's work from the fact reaching it to the order
+    // Track O, O5: the battery's standing with the regiment (its day's mark at the summing up and its trust in the
+    // battery's reports, grading.hpp). "trusted": the mark at least grade_at_least and the trust at least trust_at_least;
+    // "distrusted": the mark at most grade_at_most or the trust below trust_below (each 0: not read). Task "fire_mode": the
+    // task held with its launchers' fire mode set to `fire`.
+    int grade_at_least = 0;
+    int grade_at_most = 0;
+    double trust_at_least = 0.0;
+    double trust_below = 0.0;
+    std::string fire;                    // fire_mode: "designation" or "independent"
 };
 
 struct TaskingRules {
@@ -88,20 +97,37 @@ public:
             TaskingRule t;
             if (!r.Is(json::Type::Object) ||
                 !Keys(r, p, {"id", "when", "task", "task_file", "urgent", "ready_in_s", "reason", "positions", "back_m", "readiness", "readiness_text",
-                             "emission", "work_s", "source", "confidence", "notes"}) ||
+                             "emission", "work_s", "grade_at_least", "grade_at_most", "trust_at_least", "trust_below", "fire", "source", "confidence",
+                             "notes"}) ||
                 !Provenance(r, p) || !RequireString(r, p, "id", t.id) || !RequireString(r, p, "when", t.when) ||
                 !RequireString(r, p, "task", t.task) || !OptionalString(r, p, "task_file", t.task_file) ||
                 !OptionalBool(r, p, "urgent", t.urgent) || !OptionalNumber(r, p, "ready_in_s", t.ready_in_s) ||
                 !RequireString(r, p, "reason", t.reason) || !OptionalNumber(r, p, "back_m", t.back_m) || !OptionalInt(r, p, "readiness", t.readiness) ||
                 !OptionalString(r, p, "readiness_text", t.readiness_text) || !OptionalString(r, p, "emission", t.emission) ||
-                !OptionalNumber(r, p, "work_s", t.work_s)) {
+                !OptionalNumber(r, p, "work_s", t.work_s) || !OptionalInt(r, p, "grade_at_least", t.grade_at_least) ||
+                !OptionalInt(r, p, "grade_at_most", t.grade_at_most) || !OptionalNumber(r, p, "trust_at_least", t.trust_at_least) ||
+                !OptionalNumber(r, p, "trust_below", t.trust_below) || !OptionalString(r, p, "fire", t.fire)) {
                 return false;
             }
             const auto any = [](const std::string&) { return std::string(); };
             if (!StringList(r, p, "positions", t.positions, any)) return false;
             if (t.when != "no_task" && t.when != "enemy_knows_battery" && t.when != "division_withdraws" && t.when != "sector_defend" &&
-                t.when != "sector_economy" && t.when != "sharing_changed") {
-                return Fail(p + ".when", "no_task, enemy_knows_battery, division_withdraws, sector_defend, sector_economy or sharing_changed");
+                t.when != "sector_economy" && t.when != "sharing_changed" && t.when != "trusted" && t.when != "distrusted") {
+                return Fail(p + ".when", "no_task, enemy_knows_battery, division_withdraws, sector_defend, sector_economy, sharing_changed, trusted or distrusted");
+            }
+            // O5: the standing's triggers take the fire mode, and the fire mode only them.
+            if ((t.when == "trusted" || t.when == "distrusted") != (t.task == "fire_mode")) {
+                return Fail(p + ".task", "\"fire_mode\" goes with \"when\": \"trusted\" or \"distrusted\", and only with them");
+            }
+            if (t.task == "fire_mode") {
+                if (t.fire != "designation" && t.fire != "independent") return Fail(p + ".fire", "designation or independent");
+                if (!(t.ready_in_s > 0.0)) return Fail(p + ".ready_in_s", "required with \"task\": \"fire_mode\", > 0");
+                if (t.when == "trusted" && t.grade_at_least <= 0 && !(t.trust_at_least > 0.0)) {
+                    return Fail(p + ".grade_at_least", "\"trusted\" reads grade_at_least or trust_at_least");
+                }
+                if (t.when == "distrusted" && t.grade_at_most <= 0 && !(t.trust_below > 0.0)) {
+                    return Fail(p + ".grade_at_most", "\"distrusted\" reads grade_at_most or trust_below");
+                }
             }
             if (t.task == "task_file") {
                 if (t.task_file.empty()) return Fail(p + ".task_file", "required with \"task\": \"task_file\"");
@@ -118,8 +144,8 @@ public:
                     return Fail(p + ".emission", "free, limited, arm or silent");
                 }
                 if (t.readiness == 0 && t.emission.empty()) return Fail(p + ".readiness", "a posture changes the readiness or the emission");
-            } else if (t.task != "tell_sharing") {
-                return Fail(p + ".task", "task_file, relocate, march_back, posture or tell_sharing");
+            } else if (t.task != "tell_sharing" && t.task != "fire_mode") {
+                return Fail(p + ".task", "task_file, relocate, march_back, posture, tell_sharing or fire_mode");
             }
             // The F4.4 triggers each take their own task.
             const std::string pair = t.when == "division_withdraws" ? "march_back"
@@ -176,6 +202,12 @@ struct RegimentPicture {
     bool sharing_known = false;       // the sky's sharing there, by the national sector's priority the regiment holds
     command::CooperationMethod sharing = command::CooperationMethod::ByZones;
     double sharing_h = -1.0;          // when that order reached the regiment (< 0: the pre-war plan)
+
+    // Track O, O5: the battery's standing as the regiment holds it from its records (grading.hpp's RegimentStanding).
+    double standing_h = -1.0;         // the campaign hour of its latest summing up (< 0: none yet)
+    int standing_grade = 0;           // the day's mark then (0: nothing to sum up)
+    double standing_trust = 1.0;      // its trust in the battery's reports
+    std::string standing_why;         // the summing up's words for the mark
 };
 
 inline RegimentPicture PictureFromJournal(const airwar::AirCampaign& c) {
@@ -230,7 +262,7 @@ namespace detail {
 inline std::string TaskBaseId(std::string id) {
     for (bool cut = true; cut;) {
         cut = false;
-        for (const char* s : {"_withdraw", "_defend", "_economy"}) {
+        for (const char* s : {"_withdraw", "_defend", "_economy", "_independent", "_designation"}) {
             const std::string suffix = s;
             if (id.size() > suffix.size() && id.compare(id.size() - suffix.size(), suffix.size(), suffix) == 0) {
                 id.erase(id.size() - suffix.size());
@@ -322,6 +354,25 @@ inline void PostureTask(const BatteryTask& now, const TaskingRule& rule, const R
     if (pic.sharing_known) out.own_air = command::TellSharing(out.own_air, pic.sharing, split_m);
 }
 
+// O5: the task held with its launchers' fire mode as the rule gives it for the battery's standing.
+inline void FireModeTask(const BatteryTask& now, const TaskingRule& rule, const RegimentPicture& pic, BatteryTask& out) {
+    out = now;
+    out.id = detail::TaskBaseId(now.id) + "_" + rule.fire;
+    out.limits.fire = rule.fire;
+    const std::string head = "the launchers ";
+    const std::string go_on = ", and go on with the task: ";
+    std::string text = now.task_text;
+    const std::size_t at = text.find(go_on);
+    if (text.compare(0, head.size(), head) == 0 && at != std::string::npos) text = text.substr(at + go_on.size());
+    out.task_text = head + (rule.fire == "designation" ? "on the battery commander's designation only" : "to search and fire on their own in their sectors") +
+                    go_on + text;
+    out.reasons.clear();
+    out.reasons.push_back(detail::Because(rule.reason, pic.standing_why));
+    out.ready_in_s = rule.ready_in_s;
+    out.reconnoitre = false;
+    out.lasts_s = -1.0;
+}
+
 struct TaskingDecision {
     bool give = false;
     std::string rule;
@@ -381,6 +432,16 @@ public:
                 priority_acted_h_ = pic.priority_h;
                 PostureTask(*holds, r, pic, split_m_, d.task);
                 d.fact_h = pic.priority_h;
+            } else if (r.when == "trusted" || r.when == "distrusted") {
+                // O5: once per summing up, on the standing the regiment holds from the battery's records.
+                if (holds == nullptr || pic.standing_h < 0.0 || pic.standing_h <= standing_acted_h_ || holds->limits.fire == r.fire) continue;
+                const bool trusted = (r.grade_at_least <= 0 || pic.standing_grade >= r.grade_at_least) &&
+                                     (!(r.trust_at_least > 0.0) || pic.standing_trust + 1e-9 >= r.trust_at_least) && pic.standing_grade > 0;
+                const bool distrusted = (r.grade_at_most > 0 && pic.standing_grade > 0 && pic.standing_grade <= r.grade_at_most) ||
+                                        (r.trust_below > 0.0 && pic.standing_trust < r.trust_below);
+                if (r.when == "trusted" ? !trusted : !distrusted) continue;
+                standing_acted_h_ = pic.standing_h;
+                FireModeTask(*holds, r, pic, d.task);
             } else if (r.when == "sharing_changed") {
                 if (holds == nullptr || !pic.sharing_known) continue;
                 const int now = static_cast<int>(pic.sharing);
@@ -406,6 +467,7 @@ private:
     TaskingRules rules_;
     std::string data_dir_;
     double acted_on_h_ = -1.0;  // the estimate the regiment moved the battery on
+    double standing_acted_h_ = -1.0;  // O5: the summing up the regiment last changed the battery's fire mode on
     // F4.4
     PlaceDepth depth_;
     double split_m_ = 5000.0;        // own_air.json's cooperation split_height_m, as its loader's default

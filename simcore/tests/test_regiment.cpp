@@ -31,7 +31,7 @@ SC_TEST("regiment (14.2): the tasking rules load, each with its reason, and the 
     std::string e;
     SC_EXPECT(campaign::LoadTaskingRules(kData, "campaign/tasking.json", rules, &e));
     SC_EXPECT_NEAR(rules.briefing_hour, 19.0, 1e-9);
-    SC_EXPECT(rules.rules.size() == 6);  // and F4.4's four: test_regiment's F4.4 tests
+    SC_EXPECT(rules.rules.size() == 8);  // and F4.4's four: test_regiment's F4.4 tests; O5's two: test_summing_up
     if (rules.rules.size() < 2) return;
     const campaign::TaskingRule& cover = rules.rules[0];
     const campaign::TaskingRule& move = rules.rules[1];

@@ -761,6 +761,15 @@ void USimWorldSubsystem::AfterCampaignStep()
 	}
 }
 
+FString USimWorldSubsystem::GetCampaignRevealText() const
+{
+	if (!Session || Runner == nullptr)
+	{
+		return FString();
+	}
+	return ToF(simcore::campaign::MakeReveal(*Session).Text());
+}
+
 FString USimWorldSubsystem::GetCampaignStatus() const
 {
 	if (!Session || Runner == nullptr)

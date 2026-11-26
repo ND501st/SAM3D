@@ -108,6 +108,8 @@ struct MissionSessionDef {
     std::string osa_callsign;
     // The session's start hour, local (the missions menu's time of day, roadmap R7; < 0: the mission's own).
     double start_hour = -1.0;
+    // Track O, O5: the battery's standing with the regiment as a save carried it (grading.hpp; null: none yet).
+    const RegimentStanding* standing = nullptr;
 };
 
 class MissionSession {
@@ -171,6 +173,14 @@ public:
         }
         runner_ = std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
         if (osa_) runner_->SetExternalLauncher(osa_callsign_);
+        if (d.standing != nullptr) standing_ = *d.standing;
+        if (d.battery != nullptr) prior_crew_grades_ = d.battery->crew_grades;
+        // Resumed at a briefing's seam: the day was summed up before the save; its lines are said at the briefing again.
+        if (d.briefing_due && d.standing != nullptr && !d.standing->days.empty() && d.battery != nullptr &&
+            d.standing->summed_h >= d.battery->campaign_h - 0.5) {
+            summed_once_ = true;
+            if (d.standing->days.back().campaign_h >= d.battery->campaign_h - 0.5) summing_lines_ = d.standing->days.back().lines;
+        }
         StartBriefings(d.briefing_due);
         if (d.faction.empty()) return true;
         if (clock_start_s < 0.0) return fail(d.scenario + ": no \"clock_start\" to put the air war's day on");
@@ -267,10 +277,12 @@ public:
             const bool briefing = briefing_due_ && !(live_ && live_->Active());
             if (briefing) {
                 briefing_due_ = false;
+                SumUp();
                 if (seams_) MakeSeam("briefing");
             }
             RegimentPicture pic = campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture();
             if (watch_.Bound()) watch_.Fill(pic, campaign_->Now());
+            FillStanding(pic);
             RegimentDecides(pic, briefing);
         }
         NoteReceived();
@@ -361,7 +373,51 @@ public:
     RegimentPicture RegimentHolds() const {
         RegimentPicture p = campaign_ ? PictureFromJournal(*campaign_) : RegimentPicture();
         if (watch_.Bound()) watch_.Fill(p, campaign_->Now());
+        FillStanding(p);
         return p;
+    }
+    // Track O, O5: the summing up. At the regiment's evening briefing, before the seam and before it decides, the day is
+    // graded from what reached the regiment of it, as written (grading.hpp's GradeDay on the runner's DayRecordSince);
+    // the marks go into the battery's standing, which the tasking reads, and are said at the briefing. Without a post
+    // there is no record to grade.
+    void SumUp() {
+        ScenarioRunner& r = *runner_;
+        if (summed_once_) {  // resumed at the briefing: summed up before the save
+            summed_once_ = false;
+            summed_from_s_ = r.Time();
+            return;
+        }
+        DayRecord rec;
+        if (r.Time() - summed_from_s_ < 3600.0) return;  // the session's first hour: no day of its records yet
+        if (!r.DayRecordSince(summed_from_s_, rec, standing_.unit)) return;
+        SummingUp s = GradeDay(rec, r.Grading(), r.AfterAction(), [this](double t) { return Clock(t); });
+        s.campaign_h = campaign_ ? campaign_->Now() : h0_ + r.Time() / 3600.0;
+        standing_.Add(s, rec);
+        summings_.push_back(s);
+        summed_from_s_ = r.Time();
+        summing_lines_ = s.lines;
+        std::string text;
+        for (const std::string& l : s.lines) text += (text.empty() ? "" : " ") + l;
+        r.NoteInLog(Speaker(r.Grading().speaker), "the summing up", text);
+    }
+    void FillStanding(RegimentPicture& p) const {
+        if (!runner_) return;
+        p.standing_h = standing_.summed_h;
+        p.standing_grade = standing_.days.empty() || standing_.days.back().campaign_h < standing_.summed_h - 1e-6 ? 0 : standing_.LastGrade();
+        p.standing_trust = standing_.Trust(runner_->AfterAction());
+        p.standing_why = !summings_.empty() && !summings_.back().lines.empty() ? summings_.back().lines.back() : std::string();
+    }
+    // The battery's standing with the regiment (its marks and its trust), this session's summings up, and the crews'
+    // marks the battery commander has written (a save's first, then this session's).
+    const RegimentStanding& Standing() const { return standing_; }
+    const std::vector<SummingUp>& Summings() const { return summings_; }
+    std::vector<CrewGrade> CrewGradesAll() const {
+        std::vector<CrewGrade> out = prior_crew_grades_;
+        for (CrewGrade c : runner_->CrewMarks()) {
+            c.campaign_h = h0_ + c.time_s / 3600.0;
+            out.push_back(c);
+        }
+        return out;
     }
     const std::vector<GivenTask>& TasksGiven() const { return given_; }
     const std::vector<std::string>& Notes() const { return notes_; }
@@ -374,6 +430,7 @@ public:
         double at_s = 0.0;     // the session second it was taken
         std::string air_war;   // air_war/save.hpp's text
         BatteryState battery;
+        RegimentStanding standing;  // O5: the regiment's marks and trust as of the summing up just made
     };
     // The seam taken since the last call, once (false: none).
     bool TakeSeam(Seam& out) {
@@ -425,6 +482,7 @@ public:
         s.task_ready = r.TaskReadyS() >= 0.0;
         s.at = at_;
         s.arrived_h = arrived_h_ >= kNeverH ? -1.0 : arrived_h_;
+        s.crew_grades = CrewGradesAll();  // O5: his marks for his crews, as his log has them
         return s;
     }
     double CampaignHourAtStart() const { return h0_; }
@@ -1018,6 +1076,12 @@ private:
         for (const BriefingItem& it : brief_.regiment.items) {
             r.AddSceneLine({"regiment_briefing", t, Speaker(it.by), it.id, FillLine(it.en, f)});
             t += brief_.regiment.line_s;
+            if (it.id != "summing_up") continue;
+            for (const std::string& l : summing_lines_) {  // O5: the battery's marks, each with its reason
+                r.AddSceneLine({"regiment_briefing", t, Speaker(r.Grading().speaker), "summing_up_grade", l});
+                t += brief_.regiment.line_s;
+            }
+            summing_lines_.clear();
         }
         brief_end_s_ = t;
     }
@@ -1208,6 +1272,7 @@ private:
         seam_.at_s = runner_->Time();
         seam_.air_war = airwar::SaveCampaignJson(*campaign_, theatre_file_, faction_file_);
         seam_.battery = BatteryNow();
+        seam_.standing = standing_;
         seam_ready_ = true;
         ++seams_taken_;
     }
@@ -1389,6 +1454,13 @@ private:
     bool briefing_due_ = false;     // the briefing's hour has come; held once the sky is clear
     Seam seam_;
     bool seam_ready_ = false;
+    // O5: the summing up.
+    RegimentStanding standing_;
+    std::vector<SummingUp> summings_;
+    std::vector<std::string> summing_lines_;  // to be said at the next briefing
+    double summed_from_s_ = 0.0;              // the next day's record starts here
+    bool summed_once_ = false;                // resumed at a briefing: its summing up was made before the save
+    std::vector<CrewGrade> prior_crew_grades_;
     int seams_taken_ = 0;
     std::unique_ptr<command::InfoNet> net_;          // F4.4: the campaign's pipeline (the fronts on)
     std::unique_ptr<command::CampaignFeed> feed_;

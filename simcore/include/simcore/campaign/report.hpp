@@ -357,6 +357,7 @@ inline CombatReport CompileReport(const std::string& unit, double from_s, double
         raid.aircraft += std::max(1, x.formation);
     }
     for (const LogEntry& e : log) {
+        if (e.kind == "grade") continue;  // O5: his marks for his crews, no launcher's report
         if (IsLimitEntry(e)) {
             r.limits.push_back(e);
             continue;
@@ -780,6 +781,18 @@ public:
         const auto it = units_.find(unit);
         return it != units_.end() ? it->second.checks : 0;
     }
+    // O5: the counts behind a unit's trust, for a save and for the regiment's standing (grading.hpp), and set back.
+    struct Count {
+        int checked = 0;
+        int agreed = 0;
+        int checks = 0;
+    };
+    Count CountOf(const std::string& unit) const {
+        const auto it = units_.find(unit);
+        if (it == units_.end()) return Count();
+        return {it->second.checked, it->second.agreed, it->second.checks};
+    }
+    void Set(const std::string& unit, const Count& c) { units_[unit] = {c.checked, c.agreed, c.checks}; }
 
 private:
     struct Unit {

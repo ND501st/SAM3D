@@ -98,6 +98,16 @@ void ASimCabinHUD::DrawHUD()
 	{
 		if (Vehicle->IsMissionMenuOpen())
 		{
+			// V: the reveal (track O, O5), the campaign's only page from the truth; V or Esc's menu closing puts it away.
+			if (Sim->IsCampaign() && OwnerPc != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::V))
+			{
+				bShowReveal = !bShowReveal;
+			}
+			if (bShowReveal && Sim->IsCampaign())
+			{
+				DrawReveal(Sim);
+				return;
+			}
 			DrawMissionMenu(Sim, Vehicle);
 			if (bShowKeys)
 			{
@@ -105,6 +115,7 @@ void ASimCabinHUD::DrawHUD()
 			}
 			return;
 		}
+		bShowReveal = false;
 		if (Vehicle->IsInstructorOpen())
 		{
 			DrawInstructor(Sim, Vehicle);
@@ -979,8 +990,9 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 		Y += 24.0f;
 		const FString Saved = Sim->GetCampaignSavedLabel().IsEmpty() ? FString(TEXT("not saved yet")) : Sim->GetCampaignSavedLabel();
 		const FString Lines[] = {TEXT("Enter  back to the war"), TEXT("W      wait until something reaches you (Esc stops it)"),
-			TEXT("R      back to the last save: ") + Saved, TEXT("M      the menu (the campaign stays saved)"), TEXT("Q      quit"), TEXT("G      every key")};
-		for (int32 I = 0; I < 6; ++I)
+			TEXT("R      back to the last save: ") + Saved, TEXT("M      the menu (the campaign stays saved)"), TEXT("Q      quit"), TEXT("G      every key"),
+			TEXT("V      the reveal: what we believed, and what was so")};
+		for (int32 I = 0; I < 7; ++I)
 		{
 			if ((!bLeave && I >= 1 && I <= 3) || (bEnded && I == 1))
 			{
@@ -1035,6 +1047,54 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 	{
 		DrawText(DebriefLines[I], Paper, X, Y, Small);
 		Y += 17.0f;
+	}
+}
+
+void ASimCabinHUD::DrawReveal(USimWorldSubsystem* Sim)
+{
+	UFont* Large = GEngine != nullptr ? GEngine->GetLargeFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const FLinearColor Amber(1.0f, 0.78f, 0.35f);
+	const FLinearColor Paper(0.93f, 0.92f, 0.86f);
+	const FLinearColor Truth(1.0f, 0.62f, 0.55f);
+	const FLinearColor Dim(0.62f, 0.64f, 0.58f);
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float X = FMath::Max(16.0f, W * 0.03f);
+	DrawRect(FLinearColor(0.01f, 0.012f, 0.01f, 0.95f), 0.0f, 0.0f, W, H);
+	float Y = FMath::Max(16.0f, H * 0.03f);
+	DrawText(TEXT("The reveal"), Amber, X, Y, Large, 1.1f);
+	DrawText(TEXT("V or Esc: back"), Dim, W - X - 120.0f, Y + 8.0f, Small);
+	Y += 40.0f;
+	TArray<FString> Lines;
+	Sim->GetCampaignRevealText().ParseIntoArrayLines(Lines, false);
+	// Left: the matters both ways and the records' marks; right: the enemy's journal and the ledgers (the truth).
+	int32 Split = Lines.Num();
+	for (int32 I = 0; I < Lines.Num(); ++I)
+	{
+		if (Lines[I].StartsWith(TEXT("The enemy's journal")))
+		{
+			Split = I;
+			break;
+		}
+	}
+	const float ColW = (W - 3.0f * X) * 0.5f;
+	const float Top = Y;
+	for (int32 Col = 0; Col < 2; ++Col)
+	{
+		float Cy = Top;
+		const float Cx = X + Col * (ColW + X);
+		for (int32 I = Col == 0 ? 1 : Split; I < (Col == 0 ? Split : Lines.Num()) && Cy < H - 20.0f; ++I)
+		{
+			const FString& L = Lines[I];
+			const bool bHead = !L.StartsWith(TEXT(" "));
+			const bool bTruth = L.Contains(TEXT("truth:")) || L.Contains(TEXT("[their mind]")) || (Col == 1 && !L.Contains(TEXT("[we learned]")));
+			for (const FString& Part : Wrap(L, ColW, Small))
+			{
+				DrawText(Part, bHead ? Amber : bTruth ? Truth : Paper, Cx, Cy, Small);
+				Cy += 16.0f;
+			}
+		}
 	}
 }
 

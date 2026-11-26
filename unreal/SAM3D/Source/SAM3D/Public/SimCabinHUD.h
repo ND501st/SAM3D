@@ -37,6 +37,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Command")
 	bool bShowHeldMap = false;
 
+	/** The reveal full screen (V in the campaign's pause menu; track O, O5): what our side believed beside the truth. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SAM3D|Campaign")
+	bool bShowReveal = false;
+
 
 	/** The lesson card's lower edge this frame (0: no card); the crew menu opens below it. */
 	float GuideBottom = 0.0f;
@@ -100,6 +104,9 @@ private:
 	TArray<FString> Wrap(const FString& Text, float Width, class UFont* Font, float Scale = 1.0f);
 	/** Esc in a mission: resume, restart, the missions, quit; the debrief's summary once the scenario has ended. */
 	void DrawMissionMenu(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
+	/** The reveal page (V in the campaign's pause menu): the records and the regiment's marks, then the truth's ledgers and
+	 *  the enemy's journal, in two columns. */
+	void DrawReveal(class USimWorldSubsystem* Sim);
 	void DrawInstructor(class USimWorldSubsystem* Sim, const class ASimOsaVehicle* Vehicle);
 	/** M: open or close the held map; it takes the mouse (a cursor) and the keys from the cabin. */
 	void SetHeldMapOpen(APlayerController* Pc, class ASimOsaVehicle* Vehicle, bool bOpen);

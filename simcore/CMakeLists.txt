@@ -151,6 +151,7 @@ add_executable(simcore_tests
   tests/test_campaign_situation.cpp
   tests/test_held_map.cpp
   tests/test_order_limits.cpp
+  tests/test_summing_up.cpp
   tests/test_anchors.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp

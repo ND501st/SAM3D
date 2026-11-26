@@ -878,6 +878,34 @@
    "word_error": 0.0,
    "phonemes": "ðə bˈæɾɚɹi nˈɛts sˈɛt bˈæk tə ðə wˈɜːkɪŋ fɹˈiːkwənsi!"
   },
+  "battery_commander/order_grade_crews": {
+   "seat": "battery_commander",
+   "id": "order_grade_crews",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The day is summed up: each crew's mark is in my log.",
+   "spoken": "The day is summed up: each crew's mark is in my log.",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The day is summed up: each crew's mark is in my log.",
+    "engine_text": "The day is summed up: each crew's mark is in my log.",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə dˈeɪ ɪz sˈʌmd ˈʌp: ˈiːtʃ kɹˈuːz mˈɑːɹk ɪz ɪn maɪ lˈɔɡ.",
+   "duration_s": 3.06,
+   "speech_s": 2.56,
+   "slot_s": 3.2,
+   "rms_db": -18.8,
+   "peak_db": -2.1,
+   "flags": [],
+   "transcript": "The day is summed up, each crew's mark is in my log.",
+   "word_error": 0.0
+  },
   "battery_commander/order_lay_lines": {
    "seat": "battery_commander",
    "id": "order_lay_lines",

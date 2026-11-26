@@ -10,4 +10,5 @@ THIRD_PARTY_INCLUDES_START
 #include "simcore/command/campaign_situation.hpp"
 #include "simcore/campaign/campaign_save.hpp"
 #include "simcore/campaign/director.hpp"
+#include "simcore/campaign/reveal.hpp"
 THIRD_PARTY_INCLUDES_END

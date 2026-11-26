@@ -8,7 +8,7 @@
 // (ApplyBatteryState): a task it was ready on is held (ScenarioDef::task_held: nobody gives it again), a task not yet
 // carried out is given again a minute into the session and the battery commander plans it from where the battery stands.
 // Not carried (left): a vehicle on a run of its own or broken down (it is back in the battery), a launcher's own regime
-// inside the order's ceiling, the crews' needs and records.
+// inside the order's ceiling, the crews' needs and records (but O5's marks for them, from his log, are carried).
 #pragma once
 
 #include <cmath>
@@ -17,6 +17,7 @@
 
 #include "simcore/battery.hpp"
 #include "simcore/campaign/battery_task.hpp"
+#include "simcore/campaign/grading.hpp"
 #include "simcore/geo.hpp"
 #include "simcore/scenario.hpp"
 
@@ -45,6 +46,7 @@ struct BatteryState {
     bool task_ready = false;   // reported ready on it
     std::string at;            // the task's position the campaign has the battery at ("": where it started)
     double arrived_h = -1.0;   // the campaign hour it came there (< 0: not yet; 0: there from the war's start)
+    std::vector<CrewGrade> crew_grades;  // O5: the battery commander's marks for his crews, as his log had them
 };
 
 // A task not carried out at the save is given again this far into the resumed session (as the bridges mission's order).

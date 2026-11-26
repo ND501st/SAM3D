@@ -6,14 +6,15 @@
 // (roadmap 14.2: data/campaign/tasking.json). The director (roadmap 15.4) counts what woke the battery commander and how
 // long the quiet between was.
 //
-// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts [--u2-km km]]
+// Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts [--u2-km km]] [--reveal]
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
 //   --hours: the session held that long from its start (the task through the day), not to the scenario's end;
 //   --theatre: the war's theatre in data/air_war/ (theatre_pannonia.json); --fronts: track F's modes on (the ground war
 //   and our air defence commanders at 1, the air front at 2, following its own ground offensive: F7.3) and the regiment following them on what reached it (F4.4; needs a theatre
 //   with a country map: --theatre theatre_pannonia_nation.json); with the fronts, the ground war's units near the battery
 //   at U2 and the front heard from afar (F5.2); --u2-km: how near is near (20 km; battery 21 stands about 100 km from
-//   the nearest regiment in the Pact's war, so nothing comes down there unless widened)
+//   the nearest regiment in the Pact's war, so nothing comes down there unless widened); --reveal: at the end, what our
+//   side believed beside the truth (track O, O5: campaign/reveal.hpp)
 // Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
 // with --war also if no package came in.
 #include <cstdio>
@@ -23,12 +24,14 @@
 
 #include "simcore/campaign/director.hpp"
 #include "simcore/campaign/mission_session.hpp"
+#include "simcore/campaign/reveal.hpp"
 #include "simcore/scenario_runner.hpp"
 
 using namespace simcore;
 
 int main(int argc, char** argv) {
     std::vector<std::string> args;
+    bool reveal = false;
     campaign::MissionSessionDef md;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -45,6 +48,10 @@ int main(int argc, char** argv) {
         }
         if (a == "--theatre" && i + 1 < argc) {
             md.theatre = std::string("air_war/") + argv[++i];
+            continue;
+        }
+        if (a == "--reveal") {
+            reveal = true;
             continue;
         }
         if (a == "--fronts") {
@@ -179,5 +186,15 @@ int main(int argc, char** argv) {
     const std::size_t outcomes_at = with_outcomes.find("The battery's two outcomes");
     if (outcomes_at != std::string::npos) std::printf("==== %s", with_outcomes.substr(outcomes_at).c_str());
     std::printf("==== The director\n  %s", director.Text(r.Time()).c_str());
+    // Track O, O5: the regiment's summings up at its briefings, from the battery's records; the crews' marks.
+    if (!s.Summings().empty() || !s.CrewGradesAll().empty()) {
+        std::printf("==== The summing up (O5)\n");
+        for (const campaign::SummingUp& u : s.Summings()) {
+            std::printf("  %s:\n", r.TaskClock(u.at_s).c_str());
+            for (const std::string& l : u.lines) std::printf("    %s\n", l.c_str());
+        }
+        for (const campaign::CrewGrade& c : s.CrewGradesAll()) std::printf("  %s\n", campaign::CrewGradeText(c).c_str());
+    }
+    if (reveal) std::printf("==== %s", campaign::MakeReveal(s).Text().c_str());
     return r.TaskReadyS() >= 0.0 && r.TaskReadyS() <= p.ready_by_s && war_ok ? 0 : 1;
 }

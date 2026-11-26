@@ -1161,6 +1161,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
 	FString GetCampaignStatus() const;
 
+	/** The reveal (track O, O5; simcore/campaign/reveal.hpp): what our side believed beside the truth, the only page that
+	 *  shows the truth. Empty without a campaign. */
+	FString GetCampaignRevealText() const;
+
 	/** The last save's label ("Day 2, 19:00"), or empty. */
 	const FString& GetCampaignSavedLabel() const { return CampaignSavedLabel; }
 

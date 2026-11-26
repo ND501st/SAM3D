@@ -14,7 +14,10 @@
 // "air_war" is air_war/save.hpp's save as an object (written again as its text on a load), "battery" the battery between
 // its tasks (battery_state.hpp), with the task it held written in the task files' own format (data/campaign/tasks/), so the
 // task loader reads it back.
-// Not in the save (left, O5): the crews' records before it and the outcomes' ledgers; the director's count of wakes.
+// O5: "standing", the regiment's marks for the battery and its trust in its reports (grading.hpp), and the battery's
+// "crew_grades", the marks its commander wrote for his crews; the task's "limits" with it (the fire mode the standing set).
+// Not in the save: the crews' records before it and the outcomes' ledgers (so the reveal covers the session since the
+// last save); the director's count of wakes.
 #pragma once
 
 #include <algorithm>
@@ -227,6 +230,15 @@ inline json::Value TaskJsonValue(const BatteryTask& t) {
     Put(o, "reports", save_json::Strings(t.reports));
     Put(o, "support", save_json::Strings(t.support));
     if (t.own_air.present) Put(o, "own_air", save_json::CooperationJson(t.own_air));
+    if (t.limits.Any()) {  // O4's limits (O5: the regiment's fire mode by the battery's standing travels in them)
+        json::Value l = Obj();
+        if (t.limits.spot_m >= 0.0) Put(l, "spot_m", Num(t.limits.spot_m));
+        if (t.limits.launcher_spot_m >= 0.0) Put(l, "launcher_spot_m", Num(t.limits.launcher_spot_m));
+        if (!t.limits.cover_unit.empty()) Put(l, "cover_unit", Str(t.limits.cover_unit));
+        if (t.limits.leash_m >= 0.0) Put(l, "leash_m", Num(t.limits.leash_m));
+        if (!t.limits.fire.empty()) Put(l, "fire", Str(t.limits.fire));
+        Put(o, "limits", l);
+    }
     Put(o, "source", Str("SAM3D: the task as the battery held it when the campaign was saved"));
     Put(o, "confidence", Str("estimate"));
     return o;
@@ -250,7 +262,88 @@ struct CampaignSave {
     std::string briefings;     // O3 ("" none)
     std::string osa_mission;   // O3: the Osa beside the post ("" none)
     std::string osa_callsign;
+    RegimentStanding standing; // O5: the regiment's marks for the battery and its trust in its reports
 };
+
+namespace save_json {
+
+inline json::Value StandingJson(const RegimentStanding& s) {
+    namespace jb = airwar::jsonb;
+    json::Value o = jb::Obj();
+    jb::Put(o, "unit", jb::Str(s.unit));
+    jb::Put(o, "checked", jb::Num(s.checked));
+    jb::Put(o, "agreed", jb::Num(s.agreed));
+    jb::Put(o, "checks", jb::Num(s.checks));
+    jb::Put(o, "summed_h", jb::Num(s.summed_h));
+    json::Value days = jb::Arr();
+    for (const DayMark& d : s.days) {
+        json::Value x = jb::Obj();
+        jb::Put(x, "campaign_h", jb::Num(d.campaign_h));
+        jb::Put(x, "grade", jb::Num(d.grade));
+        json::Value obj = jb::Arr();
+        for (const auto& g : d.objectives) {
+            json::Value y = jb::Obj();
+            jb::Put(y, "id", jb::Str(g.first));
+            jb::Put(y, "grade", jb::Num(g.second));
+            jb::Push(obj, y);
+        }
+        jb::Put(x, "objectives", obj);
+        jb::Put(x, "lines", Strings(d.lines));
+        jb::Push(days, x);
+    }
+    jb::Put(o, "days", days);
+    return o;
+}
+inline void ReadStanding(const json::Value& o, RegimentStanding& s) {
+    s.unit = Str(o, "unit", s.unit);
+    s.checked = static_cast<int>(Num(o, "checked"));
+    s.agreed = static_cast<int>(Num(o, "agreed"));
+    s.checks = static_cast<int>(Num(o, "checks"));
+    s.summed_h = Num(o, "summed_h", -1.0);
+    if (const json::Value* days = o.Find("days")) {
+        for (const json::Value& x : days->items) {
+            DayMark d;
+            d.campaign_h = Num(x, "campaign_h", -1.0);
+            d.grade = static_cast<int>(Num(x, "grade"));
+            if (const json::Value* obj = x.Find("objectives")) {
+                for (const json::Value& y : obj->items) d.objectives.push_back({Str(y, "id"), static_cast<int>(Num(y, "grade"))});
+            }
+            if (const json::Value* lines = x.Find("lines")) {
+                for (const json::Value& l : lines->items) d.lines.push_back(l.string);
+            }
+            s.days.push_back(d);
+        }
+    }
+}
+inline json::Value CrewGradesJson(const std::vector<CrewGrade>& g) {
+    namespace jb = airwar::jsonb;
+    json::Value a = jb::Arr();
+    for (const CrewGrade& c : g) {
+        json::Value x = jb::Obj();
+        jb::Put(x, "campaign_h", jb::Num(c.campaign_h));
+        jb::Put(x, "crew", jb::Str(c.crew));
+        jb::Put(x, "grade", jb::Num(c.grade));
+        jb::Put(x, "by_player", jb::Bool(c.by_player));
+        jb::Put(x, "reasons", Strings(c.reasons));
+        jb::Push(a, x);
+    }
+    return a;
+}
+inline void ReadCrewGrades(const json::Value& a, std::vector<CrewGrade>& out) {
+    for (const json::Value& x : a.items) {
+        CrewGrade c;
+        c.campaign_h = Num(x, "campaign_h", -1.0);
+        c.crew = Str(x, "crew");
+        c.grade = static_cast<int>(Num(x, "grade", 5.0));
+        c.by_player = Flag(x, "by_player");
+        if (const json::Value* r = x.Find("reasons")) {
+            for (const json::Value& l : r->items) c.reasons.push_back(l.string);
+        }
+        out.push_back(c);
+    }
+}
+
+}  // namespace save_json
 
 inline std::string CampaignSaveJson(const CampaignSave& s) {
     using namespace airwar::jsonb;
@@ -295,7 +388,9 @@ inline std::string CampaignSaveJson(const CampaignSave& s) {
     Put(bj, "task_ready", Bool(b.task_ready));
     Put(bj, "at", Str(b.at));
     Put(bj, "arrived_h", Num(b.arrived_h));
+    if (!b.crew_grades.empty()) Put(bj, "crew_grades", save_json::CrewGradesJson(b.crew_grades));
     Put(root, "battery", bj);
+    Put(root, "standing", save_json::StandingJson(s.standing));
     json::Value war;
     std::string e;
     if (!s.air_war.empty() && json::Parse(s.air_war, war, &e)) Put(root, "air_war", war);
@@ -362,6 +457,8 @@ inline bool LoadCampaignSaveJson(const std::string& text, CampaignSave& out, std
     b.task_ready = Flag(*bj, "task_ready");
     b.at = Str(*bj, "at");
     b.arrived_h = Num(*bj, "arrived_h", -1.0);
+    if (const json::Value* g = bj->Find("crew_grades")) save_json::ReadCrewGrades(*g, b.crew_grades);
+    if (const json::Value* st = root.Find("standing")) save_json::ReadStanding(*st, out.standing);
     const json::Value* war = root.Find("air_war");
     if (war == nullptr) return fail("no air war");
     out.air_war = airwar::jsonb::Dump(*war, 1, 17);
@@ -420,6 +517,7 @@ inline MissionSessionDef ResumeCampaign(const CampaignSave& save, const std::str
     def.seams = true;
     def.briefing_due = save.kind == "briefing";
     def.briefings = save.briefings;
+    def.standing = &save.standing;  // O5
     if (!save.osa_mission.empty()) {
         def.osa_scenario = data_dir + "/" + save.osa_mission;
         def.osa_callsign = save.osa_callsign;
@@ -433,6 +531,7 @@ inline CampaignSave SaveOfSeam(const CampaignSave& header, const MissionSession&
     out.kind = seam.kind;
     out.air_war = seam.air_war;
     out.battery = seam.battery;
+    out.standing = seam.standing;
     if (out.war_hours <= 0.0) out.war_hours = s.CampaignHourAtStart() + s.Runner().Def().time_limit_s / 3600.0;
     const double start_hour = s.Campaign() != nullptr ? s.Campaign()->Data().theatre.start_hour : 0.0;
     const int day = static_cast<int>(std::floor((seam.battery.campaign_h + start_hour) / 24.0)) + 1;

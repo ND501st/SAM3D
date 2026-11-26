@@ -33,6 +33,7 @@
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_task.hpp"
 #include "simcore/campaign/briefings.hpp"
+#include "simcore/campaign/grading.hpp"
 #include "simcore/campaign/report.hpp"
 #include "simcore/campaign/stocks.hpp"
 #include "simcore/command/battery_orders.hpp"
@@ -375,6 +376,9 @@ struct ScenarioDef {
     // The after-action report from the post's records and the regiment's check of them (roadmap P9,
     // data/gameplay/after_action.json, read with any post).
     campaign::AfterActionValues after_action;
+    // Track O, O5: the summing up's rules, the regiment's and the battery commander's for his crews
+    // (data/campaign/grading.json, read with any post).
+    campaign::GradingRules grading;
     bool has_post_radar = false;
     RegimentRadar post_radar;
     // The cabled radar in the electromagnetic layer ("post.em"): its echoes, IFF replies and jamming strobes from the EM
@@ -2359,6 +2363,7 @@ private:
         }
         if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
         if (!campaign::LoadAfterActionValues(data_dir, "gameplay/after_action.json", out.after_action, &error)) return Fail("post", error);
+        if (!campaign::LoadGradingRules(data_dir, "campaign/grading.json", out.grading, &error)) return Fail("post", error);
         if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);
         if (!codes_file.empty() && !LoadAspdCodesFile(data_dir + "/" + codes_file, out.post_codes, &error)) return Fail("post.codes", error);
         RegimentRadarLibrary lib;

@@ -79,6 +79,34 @@
       "source": "vr_krupicka_1984 pp. 62-64 (the sky shared by zones or in one zone by height, the method set by the PVOS formation's commander; the SAM troops and the fighters each told the other's); data/command/own_air.json sky_by_sector (the method by the sector's priority, F4.3); sam3d estimate (work_s: the regiment's duty officer passes it on)",
       "confidence": "estimate",
       "notes": "Track F, F4.4: the method for the division's sector by the national sector's commander's priority there, as the orders that reached the regiment's commander give it (his pre-war plan before any), told when it differs from the plan of cooperation the battery holds; heard at the battery's post, the plan is shared that way (ScenarioRunner::RegimentTellsSharing)."
+    },
+    {
+      "id": "trusted_on_its_own",
+      "when": "trusted",
+      "task": "fire_mode",
+      "fire": "independent",
+      "grade_at_least": 5,
+      "trust_at_least": 0.85,
+      "urgent": false,
+      "ready_in_s": 1800,
+      "reason": "The regiment trusts your battery's reports: your launchers search and fire on their own in their sectors.",
+      "source": "docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md sections 3 (D6: trust decides who gets the important task) and 7 (track O, O5); pvo_bu_ix_1984 (search and fire on the senior commander's designation, or independently); sam3d estimate (the bands: an excellent day and the trust above its prior of 0.8, data/gameplay/after_action.json)",
+      "confidence": "estimate",
+      "notes": "Track O, O5: read at the evening briefing, once per summing up, on the standing the regiment holds from the battery's records (simcore/campaign/grading.hpp): the task held, its launchers on their own (the harder task, and more of the battery's own judgement)."
+    },
+    {
+      "id": "distrusted_on_designation",
+      "when": "distrusted",
+      "task": "fire_mode",
+      "fire": "designation",
+      "grade_at_most": 2,
+      "trust_below": 0.7,
+      "urgent": false,
+      "ready_in_s": 1800,
+      "reason": "Your battery's reports have not held up: your launchers fire on your designation only.",
+      "source": "docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md sections 3 (D6) and 7 (track O, O5); pvo_bu_ix_1984 (search and fire on the senior commander's designation); sam3d estimate (the bands: an unsatisfactory day, or the trust under 0.7, data/gameplay/after_action.json's grade_3)",
+      "confidence": "estimate",
+      "notes": "Track O, O5: as trusted_on_its_own; a battery the regiment cannot believe is held on a short rein: its launchers on its commander's designation only."
     }
   ]
 }

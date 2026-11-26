@@ -261,3 +261,18 @@ Try this: the missions menu's "PU-12M: cover the company on its move" at the bat
 grid reports on the covered net, then stay put after 20:30: the helper shows the follow order and the debrief lists the
 leash breach. With `?SimWar=new:rebels?SimSeat=osa:commander`, press M once you have your card, then P and click 2 km
 away: your crew drives there, you report it, and the post's record shows your spot outside the leeway.
+
+**O5** (26 Nov 2026). At 19:00, before the seam, the regiment's commander grades the day 5 to 2 from what reached it
+(`campaign/grading.hpp`'s `GradeDay` on `ScenarioRunner::DayRecordSince`; bands and lines in `data/campaign/grading.json`):
+readiness as reported against the ready-by, journal and board against the radar company's log (P9), the limits' breaches in
+the commander's log (O4), kills claimed against that log (`CheckClaims`). Each mark is said with its reason after the
+summing-up item; the day's mark is the mean, held to one above the worst; marks and trust live in `RegimentStanding` and the
+save. Two tasking rules read them (`fire_mode`): a 5 with trust at least 0.85 puts the launchers on their own; a 2, or
+trust under 0.7, on designation. The battery commander grades each crew from his log 1.5 h before the briefing
+(`order_grade_crews` through `NpcDoes`; `SetCrewMark` for a player's own, no Unreal UI yet), into his log and the save. The
+reveal (`campaign/reveal.hpp`) sets the records beside the ledgers and the enemy's journal. The late battery was two
+planning bugs, fixed: the cover task marched to the covered unit, not behind it; an in-person order left out the gathering.
+
+Try this: `?SimWar=new:rebels?SimSeat=battery_commander`. Play to the second evening's briefing and hear the marks and their
+reasons. Then press Esc and V for the reveal. After 17:30 at your post the helper shows the grading order in the warning
+net sector of the crew menu. Headless: `mission_demo data/scenarios/pu12m_mission_cover.json data --war rebels 1 --hours 26 --reveal`.
