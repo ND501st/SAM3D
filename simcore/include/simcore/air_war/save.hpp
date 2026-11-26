@@ -551,6 +551,7 @@ inline std::string SaveCampaignJson(const AirCampaign& c, const std::string& the
                     Put(j, "h", Num(t.h));
                     Put(j, "intercept", Num(t.intercept));
                     Put(j, "key", Str(t.key));
+                    if (t.extra) Put(j, "extra", Bool(true));
                     Push(calls, j);
                 }
                 Put(x, "calls", calls);
@@ -684,6 +685,8 @@ inline bool LoadCampaignJson(const std::string& text, const std::string& data_di
                         t.h = r.Number(j, "h");
                         t.intercept = r.Number(j, "intercept", 1.0);
                         t.key = r.String(j, "key");
+                        const json::Value* extra = j.Find("extra");
+                        t.extra = extra != nullptr && extra->type == json::Type::Bool && extra->boolean;
                         a.calls.push_back(t);
                     }
                 }

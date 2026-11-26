@@ -16,6 +16,24 @@ void ASimCabinHUD::DrawHUD()
 	APlayerController* OwnerPc = GetOwningPlayerController();
 	USimWorldSubsystem* Sim = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USimWorldSubsystem>() : nullptr;
 	UFont* SmallFont = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	// M: the holder's map full screen (track O, O2); while it is open it has the keys and the mouse, and nothing else is drawn.
+	ASimOsaVehicle* MapVehicle = OwnerPc != nullptr ? Cast<ASimOsaVehicle>(OwnerPc->GetPawn()) : nullptr;
+	TickHeldMapShot(Sim, MapVehicle, OwnerPc);
+	if (OwnerPc != nullptr && MapVehicle != nullptr && Sim != nullptr && Sim->IsScenarioRunning() && !MapVehicle->IsMissionMenuOpen() &&
+		!MapVehicle->IsAtJournal() && !MapVehicle->IsCrewMenuOpen() &&
+		(OwnerPc->WasInputKeyJustPressed(EKeys::M) || (bShowHeldMap && OwnerPc->WasInputKeyJustPressed(EKeys::Escape))))
+	{
+		SetHeldMapOpen(OwnerPc, MapVehicle, !bShowHeldMap);
+	}
+	if (bShowHeldMap)
+	{
+		if (Canvas != nullptr && Sim != nullptr && MapVehicle != nullptr && Sim->IsScenarioRunning() && !MapVehicle->IsMissionMenuOpen())
+		{
+			DrawHeldMap(Sim, MapVehicle, OwnerPc);
+			return;
+		}
+		SetHeldMapOpen(OwnerPc, MapVehicle, false);
+	}
 	if (OwnerPc != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::B))
 	{
 		bShowBoard = !bShowBoard;
@@ -80,6 +98,16 @@ void ASimCabinHUD::DrawHUD()
 	{
 		if (Vehicle->IsMissionMenuOpen())
 		{
+			// V: the reveal (track O, O5), the campaign's only page from the truth; V or Esc's menu closing puts it away.
+			if (Sim->IsCampaign() && OwnerPc != nullptr && OwnerPc->WasInputKeyJustPressed(EKeys::V))
+			{
+				bShowReveal = !bShowReveal;
+			}
+			if (bShowReveal && Sim->IsCampaign())
+			{
+				DrawReveal(Sim);
+				return;
+			}
 			DrawMissionMenu(Sim, Vehicle);
 			if (bShowKeys)
 			{
@@ -87,6 +115,7 @@ void ASimCabinHUD::DrawHUD()
 			}
 			return;
 		}
+		bShowReveal = false;
 		if (Vehicle->IsInstructorOpen())
 		{
 			DrawInstructor(Sim, Vehicle);
@@ -100,6 +129,38 @@ void ASimCabinHUD::DrawHUD()
 			GetTextSize(Ended, Tw, Th, Medium);
 			DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), (Canvas->ClipX - Tw) * 0.5f - 12.0f, 8.0f, Tw + 24.0f, Th + 10.0f);
 			DrawText(Ended, FLinearColor(1.0f, 0.78f, 0.35f), (Canvas->ClipX - Tw) * 0.5f, 13.0f, Medium);
+		}
+		else if (Sim->IsCampaign())
+		{
+			// The campaign's line (track O, O1): the day and hour, waiting, or what woke you (the director: what reached your seat).
+			UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+			const FString Status = Sim->GetCampaignStatus();
+			float Tw = 0.0f;
+			float Th = 0.0f;
+			GetTextSize(Status, Tw, Th, Small);
+			DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, Sim->IsCampaignWaiting() ? 0.7f : 0.45f), (Canvas->ClipX - Tw) * 0.5f - 10.0f, 6.0f, Tw + 20.0f, Th + 8.0f);
+			DrawText(Status, Sim->IsCampaignWaiting() ? FLinearColor(1.0f, 0.78f, 0.35f) : FLinearColor(0.93f, 0.92f, 0.86f, 0.85f),
+				(Canvas->ClipX - Tw) * 0.5f, 10.0f, Small);
+			// Track O, O3: the scene the player's character is at, as subtitles (no voices yet), and where he is when away.
+			TArray<FString> Lines;
+			FString Away;
+			Sim->GetSceneSubtitles(Lines, Away);
+			UFont* Medium = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
+			float Sy = Canvas->ClipY * 0.78f;
+			if (!Away.IsEmpty())
+			{
+				GetTextSize(Away, Tw, Th, Small);
+				DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), (Canvas->ClipX - Tw) * 0.5f - 10.0f, 30.0f, Tw + 20.0f, Th + 8.0f);
+				DrawText(Away, FLinearColor(1.0f, 0.78f, 0.35f), (Canvas->ClipX - Tw) * 0.5f, 34.0f, Small);
+			}
+			for (const FString& L : Lines)
+			{
+				GetTextSize(L, Tw, Th, Medium);
+				const float Fit = Tw > Canvas->ClipX - 80.0f ? (Canvas->ClipX - 80.0f) / Tw : 1.0f;
+				DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), (Canvas->ClipX - Tw * Fit) * 0.5f - 10.0f, Sy - 4.0f, Tw * Fit + 20.0f, Th * Fit + 8.0f);
+				DrawText(L, FLinearColor(1.0f, 1.0f, 0.92f), (Canvas->ClipX - Tw * Fit) * 0.5f, Sy, Medium, Fit);
+				Sy += Th * Fit + 12.0f;
+			}
 		}
 	}
 	// A battery link: the other vehicle is a key away.
@@ -825,7 +886,8 @@ void ASimCabinHUD::DrawKeys(const ASimOsaVehicle* Vehicle)
 				TEXT("U / I / P   «Есть!» / «Выполнено!» / «Повторите!»"),
 				TEXT("H   the helper: off, hints, on, watch the crewman"), TEXT("1-9   quick crew drills (outside the crew menu)"),
 				TEXT("B   the PU-12 board (in a launcher: the designations, and what you have heard)"), TEXT("V   the other vehicle (battery link)"),
-				TEXT("O   your map case: the papers handed in to you")}},
+				TEXT("O   your map case: the papers handed in to you"),
+				TEXT("M   your map: what reached you, each mark's source on hover; the battery commander decides and orders on it")}},
 		{TEXT("Headset and radios"),
 			{TEXT("J   headset on / off: without it you hear only the cabin"), TEXT("K / Shift+K   turn your intercom box (ВС, РСТ-1..4)"),
 				TEXT("Y   answer a ringing line or telephone (again: put it down)")}},
@@ -921,16 +983,38 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 	DrawText(Sim->GetScenarioName(), Paper, X, Y, Medium);
 	Y += 34.0f;
 	const bool bLeave = Vehicle->CanLeaveMission();
-	const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit"),
-		TEXT("G      every key")};
-	for (int32 I = 0; I < 5; ++I)
+	if (Sim->IsCampaign())
 	{
-		if (!bLeave && (I == 1 || I == 2))
+		// The campaign (track O, O1): saved at each evening briefing; W waits until something reaches you.
+		DrawText(Sim->GetCampaignStatus(), Dim, X, Y, Small);
+		Y += 24.0f;
+		const FString Saved = Sim->GetCampaignSavedLabel().IsEmpty() ? FString(TEXT("not saved yet")) : Sim->GetCampaignSavedLabel();
+		const FString Lines[] = {TEXT("Enter  back to the war"), TEXT("W      wait until something reaches you (Esc stops it)"),
+			TEXT("R      back to the last save: ") + Saved, TEXT("M      the menu (the campaign stays saved)"), TEXT("Q      quit"), TEXT("G      every key"),
+			TEXT("V      the reveal: what we believed, and what was so")};
+		for (int32 I = 0; I < 7; ++I)
 		{
-			continue;
+			if ((!bLeave && I >= 1 && I <= 3) || (bEnded && I == 1))
+			{
+				continue;
+			}
+			DrawText(Lines[I], Paper, X, Y, Medium);
+			Y += 26.0f;
 		}
-		DrawText(Lines[I], Paper, X, Y, Medium);
-		Y += 26.0f;
+	}
+	else
+	{
+		const TCHAR* Lines[] = {TEXT("Enter  back to the mission"), TEXT("R      restart the mission"), TEXT("M      the missions"), TEXT("Q      quit"),
+			TEXT("G      every key")};
+		for (int32 I = 0; I < 5; ++I)
+		{
+			if (!bLeave && (I == 1 || I == 2))
+			{
+				continue;
+			}
+			DrawText(Lines[I], Paper, X, Y, Medium);
+			Y += 26.0f;
+		}
 	}
 	// The helper (docs/crew/14_HELPER.md): H off, hints, on; kept for the next missions.
 	DrawText(TEXT("H      the helper: ") + USimWorldSubsystem::HelperLevelLabel(Sim->GetAssistLevel()), Paper, X, Y, Medium);
@@ -963,6 +1047,54 @@ void ASimCabinHUD::DrawMissionMenu(USimWorldSubsystem* Sim, const ASimOsaVehicle
 	{
 		DrawText(DebriefLines[I], Paper, X, Y, Small);
 		Y += 17.0f;
+	}
+}
+
+void ASimCabinHUD::DrawReveal(USimWorldSubsystem* Sim)
+{
+	UFont* Large = GEngine != nullptr ? GEngine->GetLargeFont() : nullptr;
+	UFont* Small = GEngine != nullptr ? GEngine->GetSmallFont() : nullptr;
+	const FLinearColor Amber(1.0f, 0.78f, 0.35f);
+	const FLinearColor Paper(0.93f, 0.92f, 0.86f);
+	const FLinearColor Truth(1.0f, 0.62f, 0.55f);
+	const FLinearColor Dim(0.62f, 0.64f, 0.58f);
+	const float W = Canvas->ClipX;
+	const float H = Canvas->ClipY;
+	const float X = FMath::Max(16.0f, W * 0.03f);
+	DrawRect(FLinearColor(0.01f, 0.012f, 0.01f, 0.95f), 0.0f, 0.0f, W, H);
+	float Y = FMath::Max(16.0f, H * 0.03f);
+	DrawText(TEXT("The reveal"), Amber, X, Y, Large, 1.1f);
+	DrawText(TEXT("V or Esc: back"), Dim, W - X - 120.0f, Y + 8.0f, Small);
+	Y += 40.0f;
+	TArray<FString> Lines;
+	Sim->GetCampaignRevealText().ParseIntoArrayLines(Lines, false);
+	// Left: the matters both ways and the records' marks; right: the enemy's journal and the ledgers (the truth).
+	int32 Split = Lines.Num();
+	for (int32 I = 0; I < Lines.Num(); ++I)
+	{
+		if (Lines[I].StartsWith(TEXT("The enemy's journal")))
+		{
+			Split = I;
+			break;
+		}
+	}
+	const float ColW = (W - 3.0f * X) * 0.5f;
+	const float Top = Y;
+	for (int32 Col = 0; Col < 2; ++Col)
+	{
+		float Cy = Top;
+		const float Cx = X + Col * (ColW + X);
+		for (int32 I = Col == 0 ? 1 : Split; I < (Col == 0 ? Split : Lines.Num()) && Cy < H - 20.0f; ++I)
+		{
+			const FString& L = Lines[I];
+			const bool bHead = !L.StartsWith(TEXT(" "));
+			const bool bTruth = L.Contains(TEXT("truth:")) || L.Contains(TEXT("[their mind]")) || (Col == 1 && !L.Contains(TEXT("[we learned]")));
+			for (const FString& Part : Wrap(L, ColW, Small))
+			{
+				DrawText(Part, bHead ? Amber : bTruth ? Truth : Paper, Cx, Cy, Small);
+				Cy += 16.0f;
+			}
+		}
 	}
 }
 

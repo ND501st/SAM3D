@@ -117,6 +117,19 @@ struct FSimAircraftLook
 	bool bIsWeapon = false;
 };
 
+/** One enemy the game's campaign can be fought against (data/campaign/campaigns.json; track O, O1). */
+struct FSimCampaignChoice
+{
+	FString Id;
+	FString Label;
+	FString Line;
+	/** The mission the war opens with ("scenarios/....json"). */
+	FString Mission;
+	bool bPlayable = false;
+	/** Why not yet, for one that isn't playable. */
+	FString NotYet;
+};
+
 /** One mark on the PU-12 plotting board (samsim_osa p20 notation). */
 USTRUCT(BlueprintType)
 struct SAM3D_API FSimBoardMark
@@ -1113,6 +1126,57 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SAM3D|Missions")
 	bool HasUrlOption(const FString& Key) const;
 
+	// ------------------------------------------------------------------ the campaign (track O, O1)
+
+	/**
+	 * The game's campaign (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 9): one long battery mission with the
+	 * enemy's air war on its clock (simcore/campaign/mission_session.hpp), saved at the regiment's evening briefing.
+	 * How: "new:<adversary>" (data/campaign/campaigns.json) or "continue" (CampaignSaveFile()). Seat: the player's (empty:
+	 * the save's, else the battery commander's). Ends any running scenario.
+	 */
+	bool StartCampaign(const FString& How, const FString& Seat, FString& OutError);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
+	bool IsCampaign() const { return Session.IsValid(); }
+
+	/** The seat the campaign was started in (the save's on a continue), without its vehicle ("osa:commander": "commander"). */
+	const FString& GetCampaignSeat() const { return CampaignSeat; }
+
+	/** Track O, O3: the lines of the scenes the player's character is at as they are spoken (the regiment's briefing, the
+	 *  battery commander's combat order in person, the crew's briefing), "speaker: words", the newest last; and where the
+	 *  battery commander is while he is away from his post ("" at it, or not the player's seat). No voices yet. */
+	void GetSceneSubtitles(TArray<FString>& OutLines, FString& OutAway) const;
+
+	/** The pause menu's W: time runs at sam3d.WaitScale until the director wakes the player's seat (a word heard there, a
+	 *  new contact, a new mark on the board: what reaches the player's person, never the truth) or the evening briefing's
+	 *  save comes. */
+	UFUNCTION(BlueprintCallable, Category = "SAM3D|Campaign")
+	void SetCampaignWaiting(bool bWait);
+
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
+	bool IsCampaignWaiting() const { return bCampaignWaiting; }
+
+	/** The campaign's line for the HUD: the enemy, the day and the hour, and waiting or what woke the player last. Empty
+	 *  without a campaign. */
+	UFUNCTION(BlueprintPure, Category = "SAM3D|Campaign")
+	FString GetCampaignStatus() const;
+
+	/** The reveal (track O, O5; simcore/campaign/reveal.hpp): what our side believed beside the truth, the only page that
+	 *  shows the truth. Empty without a campaign. */
+	FString GetCampaignRevealText() const;
+
+	/** The last save's label ("Day 2, 19:00"), or empty. */
+	const FString& GetCampaignSavedLabel() const { return CampaignSavedLabel; }
+
+	/** The campaign's save: <project>/Saved/Campaign/campaign.json. */
+	static FString CampaignSaveFile();
+
+	/** The saved campaign's label, adversary and seat; false: none, or it does not read. */
+	bool ReadCampaignSave(FString& OutLabel, FString& OutAdversary, FString& OutSeat) const;
+
+	/** The enemies a campaign can be fought against, for the menu. */
+	bool GetCampaignChoices(TArray<FSimCampaignChoice>& Out, FString& OutError) const;
+
 	/** Fired for every new debrief line while a scenario runs. */
 	UPROPERTY(BlueprintAssignable, Category = "SAM3D|Scenario")
 	FOnSimDebriefEntry OnDebriefEntry;
@@ -1215,6 +1279,25 @@ public:
 	 *  "order_k_boyu": its drills go to their seats and the words are spoken. False if there is no such order. */
 	UFUNCTION(BlueprintCallable, Category = "SAM3D|Crew")
 	bool GiveCrewOrder(const FString& OrderId);
+
+	/** The map the player's character holds (track O, O2; simcore/command/held_map.hpp): in a campaign his post's, from what
+	 *  reached it through the pipeline (the net's player), else in the scenario the battery commander's (at his seat) or the
+	 *  own launcher's commander's from his sector card. OutHolder: whose. Nothing on it the holder was not told. */
+	simcore::command::HeldMap GetHeldMap(const FString& Station, FString& OutHolder) const;
+	/** The battery commander decides at his seat once the regiment's task has reached him. */
+	bool CanDecideOnMap(const FString& Station) const;
+	/** The battery commander's decision from his map, then the combat order given with it (O2): the march to the decided main,
+	 *  the decided sectors, the sector cards. OutBreaches: what it breaks of the order (listed, never refused); false with
+	 *  OutWhy when the order cannot be given now (the decision is kept for when it is). */
+	bool GiveCombatOrderFromMap(const simcore::command::BatteryDecision& Decision, TArray<FString>& OutBreaches, FString& OutWhy);
+	/** O4: a launcher commander chooses his exact spot on his map once he holds his sector card (the Osa beside the post). */
+	bool CanChooseSpotOnMap(const FString& Station) const;
+	/** His spot, chosen on his map: his crew drives there and he reports it on the battery net once deployed. Nothing about
+	 *  the place is refused (a spot outside his leeway is in the post's record); false with OutWhy with no card yet. */
+	bool ChooseSpotFromMap(const simcore::Vec3& At, FString& OutWhy);
+	/** The order's point of a place (the task's positions), in the session's ENU metres; false if unknown. */
+	bool GetTaskPlace(const FString& Id, simcore::Vec3& Out) const;
+	const simcore::campaign::MissionSession* GetCampaignSession() const { return Session.Get(); }
 
 	/** The drill master's best next move for a seat toward a task of the crew data (e.g. "ready_halted"): the
 	 *  training overlay's highlight. Runs the ideal crew on a copy of the console: call it when the state changes or
@@ -1898,6 +1981,20 @@ private:
 	TUniquePtr<simcore::ScenarioRunner> OwnedRunner;
 	/** A battery link (simcore/battery_link.hpp): the player's Osa and the PU-12M stepped as one battery. */
 	TUniquePtr<simcore::BatteryLink> Link;
+	/** The game's campaign (track O, O1): the mission session that owns the runner, the director of the player's seat, the
+	 *  save's header. */
+	TUniquePtr<simcore::campaign::MissionSession> Session;
+	TUniquePtr<simcore::campaign::Director> CampaignDirector;
+	simcore::campaign::CampaignSave CampaignHeader;
+	FString CampaignSeat;
+	FString CampaignEnemy;
+	bool bCampaignWaiting = false;
+	/** What woke the player last, and when (session seconds; < 0: nothing yet). */
+	FString CampaignWoken;
+	double CampaignWokenAtS = -1.0;
+	FString CampaignSavedLabel;
+	/** After each step of the session: the director's wakes (they end a wait) and the session's seam (written as the save). */
+	void AfterCampaignStep();
 	/** Drops the scenario (its runner or its link). */
 	void ClearScenario();
 	/** The crew's bodies and voices for the runner the player is in (presentation data: a scenario runs without them). */

@@ -204,6 +204,36 @@ SC_TEST("battery mission (14.5): what the order ends in, by the mission's kind")
     SC_EXPECT(!p.planned && p.why.find("atlantis") != std::string::npos);
 }
 
+SC_TEST("battery mission (14.5): the post behind the pairs, or at the centre of the battle order where behind it would lose the regiment's nets") {
+    campaign::PlanSequence seq;
+    SC_EXPECT(campaign::LoadPlanSequence(kData, "campaign/battery_plan.json", seq));
+    BatteryTactics tactics;
+    tactics.behind_covered_m = 2000.0;
+    tactics.command_post_behind_m = 1000.0;
+    const campaign::BatteryTask t = BridgesTask();
+    // The regiment's post in the Lazne woods: 19.8 km from the main position, 20.7 km from 1 km behind it (the attack
+    // from 255 deg, so behind is towards 75 deg, away from the regiment). The air-picture net reaches 20 km.
+    campaign::PlanInputs in = Inputs(1200.0);
+    in.has_regiment_cp = true;
+    in.regiment_cp = Vec3{-10000.0, -4000.0, 0.0};
+    in.regiment_reach_m = 20000.0;
+    campaign::BatteryPlan p = campaign::PlanBatteryTask(t, seq, tactics, in);
+    SC_EXPECT(p.has_formation && p.formation.post_behind_m == 0.0 && p.post_note.find("centre of the battle order") != std::string::npos);
+    SC_EXPECT(campaign::PlanText(p, Clock19).find("In the battle order: the post at the centre") != std::string::npos);
+    // Within reach 1 km behind (a longer reach), or no reach from the centre either, or the regiment's post unknown: the
+    // tactics' distance.
+    in.regiment_reach_m = 30000.0;
+    p = campaign::PlanBatteryTask(t, seq, tactics, in);
+    SC_EXPECT(p.formation.post_behind_m < 0.0 && p.post_note.empty());
+    in.regiment_reach_m = 20000.0;
+    in.regiment_cp = Vec3{-20000.0, -4000.0, 0.0};
+    p = campaign::PlanBatteryTask(t, seq, tactics, in);
+    SC_EXPECT(p.formation.post_behind_m < 0.0);
+    in.has_regiment_cp = false;
+    p = campaign::PlanBatteryTask(t, seq, tactics, in);
+    SC_EXPECT(p.formation.post_behind_m < 0.0);
+}
+
 SC_TEST("battery mission (14.1-14.5): the regiment's order by radio to «к бою готов» west of the bridges by its ready-by") {
     ScenarioDef def;
     ConsoleData console;
@@ -280,6 +310,19 @@ SC_TEST("battery mission (14.1-14.5): the regiment's order by radio to «к бо
         SC_EXPECT(v.deployed && std::hypot(dx, dy) < 2500.0 && std::fabs(along) < 400.0);
     }
     SC_EXPECT(launchers == 4);
+    // The post stands where it keeps the regiment's nets: 1 km behind the pairs is 20.7 km from the regiment's post in the
+    // Lazne woods, past the air-picture net's 20 km (the radar company's reports there went unheard, so neither the journal
+    // nor the board had them for the regiment's check), so at the centre of the battle order, 19.8 km from it.
+    const CommandPost* post = r.Post();
+    SC_EXPECT(post != nullptr);
+    if (post != nullptr) {
+        const Vec3& rc = r.Def().post_regiment.position;
+        const double from_main = std::hypot(post->Position().x - at.east_m, post->Position().y - at.north_m);
+        const bool heard = post->AirNetInReach(r.Def().post_regiment, r.Time());
+        std::printf("    the post %.0f m from the position, %.2f km from the regiment's post; the air-picture net heard there: %d\n", from_main,
+                    std::hypot(post->Position().x - rc.x, post->Position().y - rc.y) / 1000.0, heard ? 1 : 0);
+        SC_EXPECT(heard && from_main < 300.0);
+    }
     // «к бою готов» up to the regiment by the order's ready-by: the task is done in its book.
     SC_EXPECT(r.TaskReadyS() > p.arrive_s && r.TaskReadyS() <= p.ready_by_s);
     SC_EXPECT(reg != nullptr && reg->Book().Orders().front().For("bty21_commander") != nullptr &&

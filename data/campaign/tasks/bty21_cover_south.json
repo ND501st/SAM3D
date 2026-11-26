@@ -1,0 +1,142 @@
+{
+  "task_id": "bty21_cover_south",
+  "kind": "cover_object",
+  "given_by": "rgt_commander",
+  "unit": "battery 21",
+  "covered": "sw_depot",
+  "task": "march with the 72nd Motor Rifle Regiment to the war plan's area and cover the south-western group's forward depot and the regiment's rear from low-flying attack from the main position north of the Lenta road",
+  "short_ru": "ÑÐ¾Ð²ÐµÑ€ÑˆÐ¸Ñ‚ÑŒ Ð¼Ð°Ñ€Ñˆ Ð² Ñ€Ð°Ð¹Ð¾Ð½ Ð¿Ð¾ Ð¿Ð»Ð°Ð½Ñƒ, Ð¿Ñ€Ð¸ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¿ÐµÑ€ÐµÐ´Ð¾Ð²Ð¾Ð¹ ÑÐºÐ»Ð°Ð´ ÑŽÐ³Ð¾-Ð·Ð°Ð¿Ð°Ð´Ð½Ð¾Ð¹ Ð³Ñ€ÑƒÐ¿Ð¿Ñ‹ Ð¾Ñ‚ ÑƒÐ´Ð°Ñ€Ð¾Ð² Ñ Ð¼Ð°Ð»Ñ‹Ñ… Ð²Ñ‹ÑÐ¾Ñ‚",
+  "area_ru": "ÑÐµÐ²ÐµÑ€Ð½ÐµÐµ Ð´Ð¾Ñ€Ð¾Ð³Ð¸ Ð½Ð° Ð›ÐµÐ½Ñ‚Ñƒ",
+  "reasons": [
+    "The Noric Republic has opened a border war in the south-west: the division sends its 72nd Motor Rifle Regiment from Kesmark to the south-western group tonight, and battery 21 marches to cover it.",
+    "The forward depot by the Lenta road feeds the south-western group and the 72nd; the neutral's small air force strikes supply first.",
+    "Its aircraft are few and modern: they come low from the south-west over the border forest."
+  ],
+  "situation": [
+    {
+      "kind": "attack",
+      "from_deg": 190,
+      "to_deg": 250,
+      "text": "fighter-bombers low over the border forest from the south-west"
+    },
+    {
+      "kind": "helicopter",
+      "from_deg": 170,
+      "to_deg": 220,
+      "text": "helicopters along the Lenta valley"
+    },
+    {
+      "kind": "jammer",
+      "from_deg": 200,
+      "to_deg": 240,
+      "range_km": 50,
+      "text": "an escort jammer with the strikes"
+    }
+  ],
+  "habits": "The Noric air force is small and modern: short raids by pairs and fours, low, at dawn and dusk.",
+  "area": {
+    "main": "bty21_south",
+    "reserve": [
+      "bty21_south_reserve"
+    ],
+    "dummies": [
+      "bty21_south_dummy"
+    ],
+    "tzm": "bty21_south_reserve",
+    "notes": "The war plan's positions, prepared in peacetime: the main one, the reserve within 2 km, a dummy (data/command/places_pannonia.json)."
+  },
+  "sectors": [
+    {
+      "vehicle": "21",
+      "from_deg": 190,
+      "to_deg": 240,
+      "duty": true
+    },
+    {
+      "vehicle": "22",
+      "from_deg": 190,
+      "to_deg": 240
+    },
+    {
+      "vehicle": "23",
+      "from_deg": 230,
+      "to_deg": 280
+    },
+    {
+      "vehicle": "24",
+      "from_deg": 150,
+      "to_deg": 200,
+      "duty": true
+    }
+  ],
+  "readiness": 1,
+  "readiness_text": "no. 1 from arrival",
+  "emission": "limited",
+  "reconnoitre": false,
+  "ready_in_s": 54000,
+  "regiment_cp": "rgt_cp_south",
+  "coordination": [
+    "the 72nd's Strela-1 and Shilka platoons with its forward troops",
+    "battery 25 to the north",
+    "call signs and frequencies as the communications diagram"
+  ],
+  "own_air": {
+    "method": "by_zones",
+    "fighter_floor_m": 6000,
+    "floor_unable_m": 3000,
+    "zones": [
+      {
+        "id": "2",
+        "kind": "corridor",
+        "path_m": [
+          [
+            -90000,
+            -40000
+          ],
+          [
+            -130000,
+            -60000
+          ]
+        ],
+        "half_width_m": 5000,
+        "floor_m": 2000,
+        "ceiling_m": 6000,
+        "from_h": 6,
+        "to_h": 20,
+        "notes": "our fighters' corridor along the south-western road to the front, north of the battery, by day"
+      },
+      {
+        "id": "1",
+        "kind": "duty_zone",
+        "path_m": [
+          [
+            -70000,
+            -55000
+          ]
+        ],
+        "half_width_m": 15000,
+        "floor_m": 1500,
+        "ceiling_m": 12000,
+        "notes": "the fighter regiment's duty zone north-east of the front, outside the battery's zone"
+      }
+    ],
+    "recognition_signal": "by the day's signal table",
+    "fire_prohibition_signal": "code 20 on the battery net",
+    "code_issue": "the identification code table of the day",
+    "source": "sam3d: by mitronin_1976 pp. 5-9 (cooperation by zones against the first massed strike; corridors and duty zones named in the SAM unit's order; the fighters' floor above the regiment's highest kill limit) and mt_franchuk_front p. 6; the corridor's place, width, heights and hours and the duty zone are the campaign's (the regulations' widths and heights not found: docs/air_battle/08_OUR_FIGHTERS.md Left open); code 20 as the fire ban is the talk table's sam3d placeholder (pvo_bu_x_1984 art. 30)",
+    "confidence": "estimate"
+  },
+  "reports": [
+    "Â«Ðº Ð±Ð¾ÑŽ Ð³Ð¾Ñ‚Ð¾Ð²Â» to the regiment's command post by radio on arrival",
+    "each control point passed on the march, by radio in short form",
+    "each engagement as fought",
+    "the day's report by wire"
+  ],
+  "support": [
+    "the TZM with the column, then at the reserve position",
+    "fuel at the division's halt, then from the regiment's rear at first light"
+  ],
+  "source": "sam3d: a fictional order in the form of voenizdat_osa_1991 pp. 240-245; the march with the division to its war plan's area (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md D7, section 8; data/campaign/ground_defence.json); the reasons, the situation and the ready-by are the campaign's (the ready-by: the march on the country's roads timed by the route service with the commander's sequence and the occupation, data/campaign/battery_plan.json, and a margin)",
+  "confidence": "estimate",
+  "notes": "Battery 21's first task in the war against neutral (track O, O6): from the Kesmark barracks to the southern front on the Noric border, the regiment's command post with it (regiment_cp)."
+}

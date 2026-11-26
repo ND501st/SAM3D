@@ -121,10 +121,14 @@ add_executable(simcore_tests
   tests/test_map_leftovers.cpp
   tests/test_damage.cpp
   tests/test_mission_session.cpp
+  tests/test_campaign_save.cpp
+  tests/test_opening_march.cpp
+  tests/test_orders_in_person.cpp
   tests/test_outcomes.cpp
   tests/test_comms_jamming.cpp
   tests/test_director.cpp
   tests/test_regiment.cpp
+  tests/test_redeploy.cpp
   tests/test_picture_lost.cpp
   tests/test_logistics.cpp
   tests/test_weapons.cpp
@@ -147,6 +151,9 @@ add_executable(simcore_tests
   tests/test_ad_strategy.cpp
   tests/test_situation_map.cpp
   tests/test_campaign_situation.cpp
+  tests/test_held_map.cpp
+  tests/test_order_limits.cpp
+  tests/test_summing_up.cpp
   tests/test_anchors.cpp
   tests/test_nav.cpp
   tests/test_fx_acoustics.cpp

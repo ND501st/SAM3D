@@ -32,9 +32,12 @@
 #include "simcore/c2_sources.hpp"
 #include "simcore/campaign/battery_plan.hpp"
 #include "simcore/campaign/battery_task.hpp"
+#include "simcore/campaign/briefings.hpp"
+#include "simcore/campaign/grading.hpp"
 #include "simcore/campaign/report.hpp"
 #include "simcore/campaign/stocks.hpp"
 #include "simcore/command/battery_orders.hpp"
+#include "simcore/command/held_map.hpp"
 #include "simcore/command/own_flights.hpp"
 
 #include "simcore/command_post.hpp"
@@ -373,6 +376,9 @@ struct ScenarioDef {
     // The after-action report from the post's records and the regiment's check of them (roadmap P9,
     // data/gameplay/after_action.json, read with any post).
     campaign::AfterActionValues after_action;
+    // Track O, O5: the summing up's rules, the regiment's and the battery commander's for his crews
+    // (data/campaign/grading.json, read with any post).
+    campaign::GradingRules grading;
     bool has_post_radar = false;
     RegimentRadar post_radar;
     // The cabled radar in the electromagnetic layer ("post.em"): its echoes, IFF replies and jamming strobes from the EM
@@ -416,7 +422,16 @@ struct ScenarioDef {
     campaign::BatteryTask task;
     double task_given_s = 0.0;
     std::string task_means = "radio";
+    // "held": true: the battery holds the task from before the session, in its area and reported ready (a campaign's
+    // session resumed from a save: track O, O1). Nobody gives it again: the battery commander has its paper, the
+    // launchers their sectors, and the regime is said once on the battery net as the watch begins.
+    bool task_held = false;
     campaign::PlanSequence plan_sequence;
+    // The maps people hold (track O, O2: data/gameplay/held_map.json): the decision's leeway and the sheet's drawing values.
+    command::HeldMapValues held_map;
+    // The orders as people give them (track O, O3: "briefings", campaign/briefings.hpp); absent: the order by radio, as before.
+    std::string briefings_file;
+    campaign::BriefingsData briefings;
     // "clock_start": "19:00": the time of day at the session's second 0, for the order's paper, the order books and the
     // debrief (< 0: none, the session's own clock).
     double clock_start_s = -1.0;
@@ -498,7 +513,7 @@ public:
                              "terrain", "command_post", "c2", "post", "battery", "own_unit", "crew", "crew_commander", "battery_commander",
                              "targets", "neighbours", "triggers", "end", "assistance", "environment", "doctrine", "weather", "radio_data",
                              "setting", "emission_orders", "deliveries", "nav", "task", "clock_start", "date", "utc_offset_h", "supply",
-                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air"})) {
+                             "scenery", "waves", "flights", "packages", "air_radio", "damage", "air_fight", "own_air", "briefings"})) {
 
             return false;
         }
@@ -551,6 +566,13 @@ public:
         if (!LoadEnvironment(root, out) || !LoadWeather(root, data_dir, out) || !LoadDoctrine(root, out)) return false;
         if (!LoadEmissionOrders(root, out)) return false;
         if (!LoadClockStart(root, out) || !LoadTask(root, data_dir, out)) return false;
+        // "briefings": "campaign/briefings.json" (track O, O3): how the battery's orders are given in person and by radio,
+        // and the crew's briefing at the vehicle (campaign/briefings.hpp).
+        if (!OptionalString(root, "", "briefings", out.briefings_file)) return false;
+        if (!out.briefings_file.empty()) {
+            std::string error;
+            if (!campaign::LoadBriefings(data_dir, out.briefings_file, out.briefings, &error)) return Fail("briefings", error);
+        }
         if (!LoadFlights(root, out) || !LoadTargets(root, out) || !CheckFlights(out) || !LoadAirRadio(root, data_dir, out)) return false;
         if (!LoadAirFight(root, data_dir, out) || !LoadOwnAir(root, data_dir, out)) return false;
 
@@ -2341,6 +2363,7 @@ private:
         }
         if (!LoadPlottingBoardFile(data_dir + "/" + board_file, out.post_board, &error)) return Fail("post.board", error);
         if (!campaign::LoadAfterActionValues(data_dir, "gameplay/after_action.json", out.after_action, &error)) return Fail("post", error);
+        if (!campaign::LoadGradingRules(data_dir, "campaign/grading.json", out.grading, &error)) return Fail("post", error);
         if (!LoadAspdFile(data_dir + "/" + aspd_file, out.post_aspd, &error)) return Fail("post.aspd", error);
         if (!codes_file.empty() && !LoadAspdCodesFile(data_dir + "/" + codes_file, out.post_codes, &error)) return Fail("post.codes", error);
         RegimentRadarLibrary lib;
@@ -2861,8 +2884,9 @@ private:
         if (t == nullptr) return true;
         const std::string p = "task";
         std::string file, error;
-        if (!Keys(*t, p, {"file", "given_s", "means", "notes"}) || !RequireString(*t, p, "file", file) ||
-            !OptionalNumber(*t, p, "given_s", out.task_given_s) || !OptionalString(*t, p, "means", out.task_means)) {
+        if (!Keys(*t, p, {"file", "given_s", "means", "held", "notes"}) || !RequireString(*t, p, "file", file) ||
+            !OptionalNumber(*t, p, "given_s", out.task_given_s) || !OptionalString(*t, p, "means", out.task_means) ||
+            !OptionalBool(*t, p, "held", out.task_held)) {
             return false;
         }
         if (out.task_given_s < 0.0) return Fail(Join(p, "given_s"), "must be >= 0");
@@ -2882,6 +2906,7 @@ private:
             if (!found) return Fail(Join(p, "file"), file + ": a sector for '" + sec.vehicle + "', not a launcher of the battery");
         }
         if (!campaign::LoadPlanSequence(data_dir, "campaign/battery_plan.json", out.plan_sequence, &error)) return Fail(p, error);
+        if (!command::LoadHeldMapValues(data_dir, "gameplay/held_map.json", out.held_map, &error)) return Fail(p, error);
         out.has_task = true;
         return true;
     }

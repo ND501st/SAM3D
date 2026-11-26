@@ -1,0 +1,56 @@
+{
+  "task_id": "bty21_cover_company",
+  "kind": "cover_troops",
+  "given_by": "rgt_commander",
+  "unit": "battery 21",
+  "covered": "bty21_bridges",
+  "task": "cover the 2nd motor rifle company from low-flying attack on its move east to the Kesmark bridges, keeping behind it",
+  "short_ru": "прикрыть 2-ю мотострелковую роту от ударов с малых высот при выдвижении к мостам Кесмарк",
+  "area_ru": "за ротой, на её направлении",
+  "reasons": [
+    "The company takes over the bridges' close defence from the west.",
+    "On the road it has no cover of its own against low attack.",
+    "The enemy has struck columns on the Lazne road twice since the war began."
+  ],
+  "situation": [
+    { "kind": "attack", "from_deg": 225, "to_deg": 285, "text": "strike aircraft low along the Rava valley and over the Lazne road" },
+    { "kind": "helicopter", "from_deg": 190, "to_deg": 230, "text": "helicopters along the river's south bank" }
+  ],
+  "habits": "The enemy comes at dawn and at dusk, low, and hunts columns on the roads.",
+  "area": {
+    "main": "bty21_bridges",
+    "notes": "The company's assembly area west of the bridges: the battery forms behind it there, then keeps behind it as it moves."
+  },
+  "axis_deg": 70,
+  "sectors": [
+    { "vehicle": "21", "from_deg": 225, "to_deg": 270, "duty": true },
+    { "vehicle": "22", "from_deg": 225, "to_deg": 270 },
+    { "vehicle": "23", "from_deg": 250, "to_deg": 300 },
+    { "vehicle": "24", "from_deg": 180, "to_deg": 235, "duty": true }
+  ],
+  "readiness": 1,
+  "readiness_text": "no. 1 while the company is on the move",
+  "emission": "limited",
+  "ready_in_s": 4500,
+  "limits": {
+    "cover_unit": "coy_2",
+    "fire": "designation",
+    "source": "voenizdat_osa_1991 pp. 232-239 (covering troops: the battery 1.5-3 km behind the covered companies); pvo_bu_ix_1984 (search and fire on the senior commander's designation, or independently); the choice of designation for this order is the campaign's",
+    "confidence": "estimate",
+    "notes": "Track O, O4: the leash is the held map's leash_m (data/gameplay/held_map.json); the launchers fire on the battery commander's designation only."
+  },
+  "coordination": [
+    "the company's net (the covered unit's, FuG-2): its call sign Клён",
+    "call signs and frequencies as the communications diagram"
+  ],
+  "reports": [
+    "«к бою готов» to the regiment's command post by radio on arrival",
+    "each move after the company, with its new place"
+  ],
+  "support": [
+    "the TZM with the battery"
+  ],
+  "source": "sam3d: a fictional order in the form of voenizdat_osa_1991 pp. 240-245 (the working map's contents) for covering troops (pp. 232-239); the reasons and the situation are the campaign's",
+  "confidence": "estimate",
+  "notes": "Track O, O4's mission: the company the battery covers moves on after the battery has formed behind it; the battery commander knows where it is only from its reports on its net or by seeing it, and keeps the battery within the leash of it."
+}

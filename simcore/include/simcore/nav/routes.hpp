@@ -297,14 +297,20 @@ public:
     static RoadGraph ForCountry(const CountryDef& country, const MapDef* district = nullptr) {
         std::vector<const MapLineDef*> roads;
         for (const MapLineDef& l : country.ground.roads) roads.push_back(&l);
+        RoadGraph g = Build(roads, country.ground.rivers);
         if (district != nullptr) {
             for (const MapLineDef& l : district->roads) {
                 bool known = false;
                 for (const MapLineDef& c : country.ground.roads) known = known || c.id == l.id;
-                if (!known) roads.push_back(&l);
+                if (known || l.points.size() < 2) continue;
+                // A district's track that ends on a road between its bends joins it there (track O, O6: a district's
+                // tracks off the country's roads); the country's own graph (the ground war's) is never split.
+                g.JoinAt(l.points.front());
+                g.JoinAt(l.points.back());
+                g.AddLine(l);
             }
         }
-        return Build(roads, country.ground.rivers);
+        return g;
     }
 
     const std::vector<NavNode>& Nodes() const { return nodes_; }
@@ -643,6 +649,36 @@ private:
         nd.crossing = crossing;
         nodes_.push_back(nd);
         return static_cast<int>(nodes_.size() - 1);
+    }
+
+    // A point on a road between two of its nodes (within kJoinM of the edge, none of its nodes that near) becomes a node
+    // there: the edge split in two, its line and class kept.
+    void JoinAt(const MapPoint& p) {
+        for (const NavNode& nd : nodes_) {
+            if (std::hypot(nd.at.east_m - p.east_m, nd.at.north_m - p.north_m) <= kJoinM) return;
+        }
+        const Snap s = SnapTo(p);
+        if (s.edge < 0 || static_cast<double>(s.off_cm) / 100.0 > kJoinM) return;
+        const int ei = s.edge;
+        const int b = edges_[static_cast<std::size_t>(ei)].b;
+        NavNode mid;
+        mid.at = s.on;
+        nodes_.push_back(mid);
+        const int m = static_cast<int>(nodes_.size() - 1);
+        NavEdge& e = edges_[static_cast<std::size_t>(ei)];
+        NavEdge rest = e;
+        e.b = m;
+        e.length_cm = std::llround(std::hypot(s.on.east_m - nodes_[static_cast<std::size_t>(e.a)].at.east_m,
+                                              s.on.north_m - nodes_[static_cast<std::size_t>(e.a)].at.north_m) * 100.0);
+        rest.a = m;
+        rest.length_cm = std::llround(std::hypot(nodes_[static_cast<std::size_t>(b)].at.east_m - s.on.east_m,
+                                                 nodes_[static_cast<std::size_t>(b)].at.north_m - s.on.north_m) * 100.0);
+        edges_.push_back(rest);
+        const int ri = static_cast<int>(edges_.size() - 1);
+        nodes_[static_cast<std::size_t>(m)].edges = {ei, ri};
+        for (int& x : nodes_[static_cast<std::size_t>(b)].edges) {
+            if (x == ei) x = ri;
+        }
     }
 
     void Link(int a, int b, const MapLineDef& line) {

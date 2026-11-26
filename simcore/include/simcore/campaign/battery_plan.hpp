@@ -118,6 +118,11 @@ struct PlanInputs {
     double march_s = -1.0;    // the head's time by the roads to the main position (< 0: no march: the battery is in the area)
     // A place's position (an anchor of the route service); false if it is unknown.
     std::function<bool(const std::string&, Vec3&)> where;
+    // The regiment's command post as the order and the communications diagram give it, and how far the post's nets with
+    // it reach (the shortest: the air-picture net's R-123M, command_post.hpp's air_net_range_m). Unknown: no check.
+    bool has_regiment_cp = false;
+    Vec3 regiment_cp;
+    double regiment_reach_m = -1.0;
 };
 
 struct PlannedStep {
@@ -173,6 +178,7 @@ struct BatteryPlan {
     std::string to_place;     // the march's end: the main position
     bool has_formation = false;
     BatteryOrder formation;   // at the march's end (or at the order, in the area): the task's formation
+    std::string post_note;    // where the post stands in it, when not at the tactics' distance, and why
     bool InTime() const { return late_s <= 0.0; }
     const PlannedStep* Step(const std::string& id) const {
         for (const PlannedStep& s : steps) {
@@ -319,6 +325,22 @@ inline BatteryPlan PlanBatteryTask(const BatteryTask& task, const PlanSequence& 
             break;
         case TaskKind::CoverMarch: break;
     }
+    // His command post's place in it (voenizdat_osa_1991 p234, p237): at the centre of the battle order or near a pair, at
+    // a distance that keeps control steady. Behind the pairs by the tactics' distance, unless that takes it out of its
+    // nets' reach of the regiment's post where the centre is within it: then at the centre.
+    if (plan.has_formation && f.kind == BatteryOrder::Kind::CombatFormation && in.has_regiment_cp && in.regiment_reach_m > 0.0) {
+        const Vec3 back = detail::Toward(f.axis_deg);
+        const Vec3 centre = f.covered - back * tactics.behind_covered_m;
+        const Vec3 behind = centre - back * tactics.command_post_behind_m;
+        const auto off = [&](const Vec3& p) { return std::hypot(p.x - in.regiment_cp.x, p.y - in.regiment_cp.y); };
+        if (off(behind) > in.regiment_reach_m && off(centre) <= in.regiment_reach_m) {
+            f.post_behind_m = 0.0;
+            char note[192];
+            std::snprintf(note, sizeof(note), "the post at the centre of the battle order: %.0f m behind it is %.1f km from the regiment's post, beyond its nets' %.0f km",
+                          tactics.command_post_behind_m, off(behind) / 1000.0, in.regiment_reach_m / 1000.0);
+            plan.post_note = note;
+        }
+    }
     plan.planned = true;
     return plan;
 }
@@ -358,6 +380,7 @@ inline std::string PlanText(const BatteryPlan& p, const std::function<std::strin
     s += ":";
     for (const PlannedStep& st : p.steps) s += "\n" + clock(st.start_s) + "-" + clock(st.end_s) + "  " + st.en;
     if (p.march_at_s >= 0.0) s += "\n" + clock(p.march_at_s) + "  «К маршу!» to " + (name ? name(p.to_place) : p.to_place) + ", the head there at " + clock(p.arrive_s);
+    if (!p.post_note.empty()) s += "\nIn the battle order: " + p.post_note;
     s += "\n" + clock(p.ready_s) + "  ready, by the order " + clock(p.ready_by_s);
     if (!p.InTime()) {
         char late[48];

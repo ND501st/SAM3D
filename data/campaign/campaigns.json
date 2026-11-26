@@ -1,0 +1,51 @@
+{
+  "catalog_id": "campaigns",
+  "notes": "The game's campaign (track O, O1; docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 9): one enemy, chosen at the start, and battery 21's war against it as one long battery mission with the enemy's air war on its clock (simcore/campaign/campaign_save.hpp). Saved at the regiment's evening briefing; Continue comes back there. Game values throughout: the war's length, its seed and U2's reach are SAM3D's.",
+  "source": "SAM3D: the campaign's frame (the owner's track O plan, approved 25 Nov 2026)",
+  "confidence": "estimate",
+  "theatre": "air_war/theatre_pannonia_nation.json",
+  "tasking": "campaign/tasking.json",
+  "fronts": true,
+  "days": 14,
+  "u2_radius_km": 20,
+  "seed": 6,
+  "briefings": "campaign/briefings.json",
+  "adversaries": [
+    {
+      "id": "rebels",
+      "label": "The rebels",
+      "line": "The Rava Liberation Front has risen in the south. Its light air wing strikes supply and crossings at dusk and by night. Battery 21 covers the Kesmark bridges for the 7th Division.",
+      "mission": "scenarios/pu12m_mission_cover.json",
+      "osa_mission": "scenarios/osa_mission_cover.json",
+      "osa_callsign": "21",
+      "playable": true
+    },
+    {
+      "id": "neutral",
+      "label": "The neutral neighbour",
+      "line": "A border war: raids along a short front by a small, modern air force. The division sends its 72nd Regiment to the Noric border; battery 21 marches with it from Kesmark to cover the south-western group's forward depot.",
+      "mission": "scenarios/pu12m_mission_neutral.json",
+      "osa_mission": "scenarios/osa_mission_neutral.json",
+      "osa_callsign": "21",
+      "playable": true
+    },
+    {
+      "id": "warsaw_pact",
+      "label": "The Warsaw Pact",
+      "line": "The Pact comes to bring the country back: massed blows, then the hunt for our air defences. The 7th Division leaves Kesmark for the Rava gorge; battery 21 marches to cover the dam above Dravec.",
+      "mission": "scenarios/pu12m_mission_pact.json",
+      "osa_mission": "scenarios/osa_mission_pact.json",
+      "osa_callsign": "21",
+      "playable": true
+    },
+    {
+      "id": "nato",
+      "label": "NATO",
+      "line": "The West takes the crossing country: decoys, stand-off jamming and the SEAD packages ahead of the strikes. The 7th Division leaves Kesmark for Novo Varosd as the army's second echelon; battery 21 marches to cover the Dombas hub.",
+      "mission": "scenarios/pu12m_mission_nato.json",
+      "osa_mission": "scenarios/osa_mission_nato.json",
+      "osa_callsign": "21",
+      "playable": true
+    }
+  ]
+}

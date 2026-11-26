@@ -1,0 +1,70 @@
+{
+  "briefings_id": "orders_1985",
+  "status": "track O, O3 (26 Nov 2026): docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 4, simcore/campaign/briefings.hpp",
+  "notes": "The orders as people give them: the regiment's evening briefing at its command post in the Lazne woods (the battery commander drives there by the roads and back), the battery commander's oral combat order (at the PU-12M's map table, on the ground, or by radio in short form), the vehicle commander's briefing of his crew at the vehicle, and the state radio's morning news. Each a scene of lines in its items' order. The words are SAM3D's. R0 (the capped check of the items marked 'to confirm') was not carried out in O3: the regiment's items' order, the map scales and their signing-for and the code change procedure stay game values, labelled so here.",
+  "source": "voenizdat_osa_1991 pp. 224-258 (the battery commander's sequence: understand the task, work out the time, preliminary orders, assess, decide, reconnoitre, the oral combat order, organise support; the crew's work on arrival); docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 4; game values where marked",
+  "confidence": "estimate",
+  "regiment": {
+    "place": "rgt_cp",
+    "hour": { "value": 19, "source": "game value: D1, the owner's 19:00 (docs/campaign/12 section 3); chain_pannonia.json's rgt_evening_briefing", "confidence": "estimate" },
+    "car_mobility": "truck",
+    "car_model": "uaz469",
+    "leave_margin_s": { "value": 600, "source": "game value: the battery commander means to be at the command post ten minutes early", "confidence": "estimate" },
+    "wait_s": { "value": 1800, "source": "game value: the chief of staff waits half an hour for a late battery commander, then goes on without him", "confidence": "estimate" },
+    "line_s": { "value": 7, "source": "game value: a line's time in the scene (the briefing's hour compressed to its items)", "confidence": "estimate" },
+    "notes": "The car is the battery commander's UAZ-469, driven on the roads at the truck class's speeds (data/vehicles/mobility.json has no light car yet).",
+    "items": [
+      { "id": "summing_up", "by": "rgt_chief_of_staff", "en": "Comrades, the day's summing up. {summary}", "source": "game value (R0 not done): docs/campaign/12 section 4's order, the summing up first (D6)", "confidence": "estimate" },
+      { "id": "enemy", "by": "rgt_chief_of_staff", "en": "The enemy: {enemy}", "source": "game value (R0 not done): docs/campaign/12 section 4", "confidence": "estimate" },
+      { "id": "situation", "by": "rgt_chief_of_staff", "en": "Our troops: the 7th Motor Rifle Division holds its line; the regiment covers its crossings and its rear.", "source": "game value (R0 not done): docs/campaign/12 section 4", "confidence": "estimate" },
+      { "id": "tasks", "by": "rgt_commander", "en": "Battery 21: {task}. Your position area: {area}. Ready by {ready}. Trace it on your map.", "source": "voenizdat_osa_1991 p238 (a battery changes position only on the regiment commander's order); the item's place in the order a game value (R0 not done)", "confidence": "estimate" },
+      { "id": "coordination", "by": "rgt_signals_chief", "en": "Coordination. {own_air} Tomorrow's identification codes change at {code_changes}: the table is yours, signed for. Call signs and frequencies as on the table.", "source": "game value (R0 not done); D5: the code table as a paper at the briefing, never by radio (soviet_iff, low)", "confidence": "estimate" },
+      { "id": "support", "by": "rgt_rear_deputy", "en": "Support: missiles from the technical battery at the Horka siding; fuel and rations with the transport company in the morning.", "source": "game value (R0 not done): docs/campaign/12 section 4", "confidence": "estimate" },
+      { "id": "reports", "by": "rgt_chief_of_staff", "en": "Reports: readiness to the command post on the net as soon as you stand ready; the combat report by the evening. That is all, comrades.", "source": "game value (R0 not done): docs/campaign/12 section 4", "confidence": "estimate" }
+    ],
+    "papers": [
+      { "id": "code_table", "title": "Identification code table (Kremniy-2M)", "by": "rgt_signals_chief", "source": "D5 (docs/campaign/12 section 3): the signals chief's paper, carried only by means that carry documents (data/command/iff_codes.json); soviet_iff for the filters", "confidence": "low" },
+      { "id": "cooperation_plan", "title": "Plan of cooperation with our aviation", "by": "rgt_chief_of_staff", "source": "game value: docs/campaign/12 section 4 (coordination: our aviation's corridors and hours); data/command/own_air.json", "confidence": "estimate" },
+      { "id": "call_signs", "title": "Call-sign and frequency table", "by": "rgt_signals_chief", "source": "game value: docs/campaign/12 section 4; the battery's nets as data/scenarios/pu12m_mission_cover.json's radio_data", "confidence": "estimate" }
+    ]
+  },
+  "battery_order": {
+    "urgent_s": { "value": 1800, "source": "game value: with less than half an hour to the ready-by the battery commander gives his order by radio in short form (D1: by radio when urgent)", "confidence": "estimate" },
+    "line_s": { "value": 6, "source": "game value: a line's time in the scene", "confidence": "estimate" },
+    "gather_m": { "value": 30, "source": "game value: the vehicle commanders stand round the map table or the battery commander's spot", "confidence": "estimate" },
+    "radio_en": "The combat order: {task}. Area {area}. Ready by {ready}. Sectors and emission as on the map.",
+    "radio_source": "voenizdat_osa_1991 p243; the short form's words are sam3d",
+    "notes": "The combat order's parts in voenizdat_osa_1991's order (pp. 240-245): the enemy, the battery's task, each launcher's point and sector, the measures against jamming and ARMs (the emission regime), the move and the reserve, the identification code times, the time of readiness and the reports. Given in person the sector card and the route card are handed over as papers; by radio each vehicle commander writes down what he heard.",
+    "items": [
+      { "id": "enemy", "en": "The enemy: {enemy}", "source": "voenizdat_osa_1991 pp. 240-245 (the combat order's parts); the words sam3d", "confidence": "medium" },
+      { "id": "task", "en": "The battery's task: {task}.", "source": "voenizdat_osa_1991 pp. 240-245", "confidence": "medium" },
+      { "id": "sectors", "en": "Sectors: {sectors}.", "source": "voenizdat_osa_1991 p243 (each launcher's sector)", "confidence": "medium" },
+      { "id": "emission", "en": "Emission: {regime}.", "source": "voenizdat_osa_1991 p243 (the measures against jamming and ARMs)", "confidence": "medium" },
+      { "id": "positions", "en": "The battery's point: {point}. Reserve: {reserve}.", "source": "voenizdat_osa_1991 pp. 232-239 (main and reserve positions)", "confidence": "medium" },
+      { "id": "codes", "en": "Identification codes change at {code_changes}.", "source": "game value: D5, the code times with the order (docs/campaign/12 section 4)", "confidence": "estimate" },
+      { "id": "ready", "en": "Ready by {ready}: report «к бою готов» on the battery net. Questions? Carry on.", "source": "voenizdat_osa_1991 p246 (к бою готов reported)", "confidence": "medium" }
+    ]
+  },
+  "crew_briefing": {
+    "line_s": { "value": 5, "source": "game value: a line's time at the vehicle", "confidence": "estimate" },
+    "notes": "docs/campaign/12 section 4: at the vehicle on arrival, then the clutter card and the landmark card (voenizdat_osa_1991 pp. 246-258). Each line said on the intercom is known by whoever heard it.",
+    "items": [
+      { "id": "position", "en": "Crew, listen. We stand at {point}: {task}.", "source": "docs/campaign/12 section 4 (where we stand and why); voenizdat_osa_1991 pp. 246-258", "confidence": "estimate" },
+      { "id": "sector", "en": "Our sector: {sector}. Landmarks: {landmarks}.", "source": "docs/campaign/12 section 4; voenizdat_osa_1991 pp. 246-258 (the landmark card)", "confidence": "estimate" },
+      { "id": "readiness", "en": "Readiness: {readiness}. Emission: {regime}.", "source": "docs/campaign/12 section 4", "confidence": "estimate" },
+      { "id": "designation", "en": "Targets from the battery commander on the net; search on our own only when he orders it.", "source": "docs/campaign/12 section 6 (fire control: on the battery commander's designation, by permission, independent search)", "confidence": "estimate" },
+      { "id": "codes", "en": "Identification codes change at {code_changes}.", "source": "D5 (docs/campaign/12 section 3)", "confidence": "estimate" },
+      { "id": "reserve", "en": "Reserve position: {reserve}.", "source": "docs/campaign/12 section 4", "confidence": "estimate" },
+      { "id": "lost", "en": "If contact with the battery is lost: search our sector, engage what attacks us, keep trying the spare frequency.", "source": "game value: docs/campaign/12 section 4 (what to do if contact is lost); pvo_bu_ix_1984 (independent search when the senior commander's designation fails)", "confidence": "estimate" }
+    ]
+  },
+  "news": {
+    "at_local_h": [7],
+    "from": "the state radio",
+    "opening": "Seven o'clock. This is the state radio with the news.",
+    "quiet": "The government repeats its call for calm in the south; no new fighting is reported. The weather: dry, cool in the morning.",
+    "source": "game value: chain_pannonia.json's state_news routine (07:00); the words sam3d",
+    "confidence": "estimate",
+    "notes": "The bulletin carries what the pipeline gave the state radio since the last one (the war declared, the press's lines), else the quiet line."
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "map_id": "kesmark_rava_dam",
+  "extends": "maps/kesmark_range.json",
+  "name": "The Kesmark range with the Rava dam's district",
+  "description": "The Kesmark range as it is (its 40 km, its detail areas, the country beyond) with a third detail area 13 km square at 20 m round the Rava dam above Dravec, where battery 21 fights the Warsaw Pact's war (track O, O6), and the district's tracks.",
+  "status": "track O, O6 (26 Nov 2026): the Pact's district (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 8)",
+  "source": "game value: sam3d estimate (the area's size and spacing as the plan's about 12 km at 10-20 m; the tracks and the village are SAM3D's, on the country's ground, river and roads, data/maps/pannonia.json)",
+  "confidence": "estimate",
+  "notes": "A district's map extends the range (simcore/terrain_map.hpp LoadMap): the base is loaded as itself and the areas and tracks here are added, so the range and the country stay one ground. The country's roads and the Rava through the area are imported into it as for the capital's area.",
+  "terrain": {
+    "detail": [
+      {
+        "id": "rava_dam",
+        "east_km": 46.5,
+        "north_km": 102,
+        "half_km": 6.5,
+        "spacing_m": 20,
+        "micro_m": 0.6,
+        "source": "game value: sam3d estimate",
+        "confidence": "estimate",
+        "notes": "The Rava's gorge from the Dravec bridge (44.53, 95.53) to the dam (48.33, 108) and Dravec (52, 96): 20 m ground (roadmap R6, 15.6). Its edges are nodes of the far ground's 500 m ground."
+      }
+    ]
+  },
+  "roads": [
+    {"id": "t_dam_west", "name": "The dam track on the Rava's west bank", "class": "track",
+     "points": [[44.0, 95.5], [44.6, 98.0], [45.0, 100.4], [46.0, 102.0], [45.4, 103.6], [47.0, 106.6], [47.6, 107.6]],
+     "notes": "From the Hradec-Dravec road west of the bridge up the west bank to the dam's west end, by the battery's positions."},
+    {"id": "t_dam_cp", "name": "Track to the regiment's command post in the woods", "class": "track",
+     "points": [[41.5, 95.34], [41.5, 100.8]]}
+  ],
+  "detail_settlements": [
+    {"id": "podhradi", "name": "Podhradi", "kind": "village", "east_km": 43.0, "north_km": 98.4, "radius_km": 0.55, "buildings": 100,
+     "notes": "A village on the gorge's west side, SAM3D's."}
+  ]
+}

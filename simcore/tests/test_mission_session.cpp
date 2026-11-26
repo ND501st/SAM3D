@@ -286,6 +286,7 @@ SC_TEST("our posts (17.3): the regiment's radars the war struck before the missi
         md.faction = "warsaw_pact";
         md.seed = seed;
         md.day = 1;
+        md.tasking = "campaign/tasking.json";  // the regiment's tasking on what reached it, as the ctest's mission_demo_war
         campaign::MissionSession s;
         std::string e;
         SC_EXPECT(s.Start(md, kData, &e));
@@ -313,12 +314,18 @@ SC_TEST("our posts (17.3): the regiment's radars the war struck before the missi
         SC_EXPECT(!CommandPost::RadarDownAt(r.Def().post_regiment.radars.front(), 0.0));  // the scenario's own P-19
         if (seed == 1) SC_EXPECT(function("kesmark_p40") <= 0.3 && function("ludas_p19") <= 0.3);
         if (seed == 2) SC_EXPECT(function("kesmark_p40") > 0.3);
-        while (s.Runner().Time() < 300.0) s.Step(0.1);
+        while (s.Runner().Time() < 900.0) s.Step(0.1);
         bool told = false;
         for (const DebriefEntry& entry : s.Runner().Log().Entries()) {
             told = told || (entry.what == "regiment net" && entry.detail.rfind("heard", 0) == 0 && entry.detail.find("out of action") != std::string::npos);
         }
         SC_EXPECT(told);
+        // O7: both struck before the mission were in the situation the regiment's task was given on (seed 1): its post
+        // still talks, so no «связи с полком нет» after the rule's five minutes. The battery keeps the bridges.
+        for (const campaign::MissionSession::GivenTask& g : s.TasksGiven()) {
+            std::printf("    seed %u: %s given (rule %s)\n", seed, g.task.c_str(), g.rule.c_str());
+            SC_EXPECT(g.rule != "contact_lost_roving");
+        }
     }
 }
 

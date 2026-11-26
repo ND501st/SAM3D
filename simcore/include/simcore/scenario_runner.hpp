@@ -259,6 +259,7 @@ public:
         clock_.Lap(StepProfile::Waves);
         DeliverOrders();
         PlayDeliveries();
+        UpdateOrdersInPerson();
         UpdateVoice();
         UpdateOsaNet();
         UpdateIntercomCheck();
@@ -267,6 +268,7 @@ public:
         StepNav(dt);
         clock_.Lap(StepProfile::Nav);
         UpdateEmission(dt);
+        UpdateLimits();
         UpdateOwnAir();
         UpdateNeighbourFire(dt);
         clock_.Lap(StepProfile::Defences);
@@ -867,6 +869,9 @@ public:
     // 15.2; the regiment's tasking gives it, 14.2): on its net to the battery commander ("radio") or in person, and he
     // plans it from where his battery stands. The task before it is over: its account stays in the debrief. False, with
     // why, without a battery to give it to.
+    // A session played beside another (the Osa beside the post, O3) runs as long as that one does: its time limit raised
+    // to `limit_s` (never lowered).
+    void KeepRunningTo(double limit_s) { def_.time_limit_s = std::max(def_.time_limit_s, limit_s); }
     bool GiveTask(campaign::BatteryTask t, const std::string& means, std::string* why = nullptr) {
         const auto fail = [why](const std::string& w) {
             if (why != nullptr) *why = w;
@@ -883,6 +888,8 @@ public:
             if (v == nullptr || v->def.kind != BatteryVehicleKind::Launcher) return fail(t.id + ": a sector for '" + sec.vehicle + "', not a launcher of the battery");
         }
         if (def_.has_task) tasks_before_.push_back(TaskBlock());
+        if (def_.has_task && task_received_s_ >= 0.0) readiness_before_.push_back(CurrentReadiness());  // O5
+        task_held_now_ = false;
         // The session goes on to the new task's ready-by and a while past it, so that its readiness is seen.
         def_.time_limit_s = std::max(def_.time_limit_s, time_ + t.ready_in_s + kTaskWatchedS);
         def_.task = std::move(t);
@@ -900,9 +907,479 @@ public:
         task_moved_ = false;
         task_ready_s_ = -1.0;
         task_sectors_set_ = 0;
+        has_decision_ = false;
+        decision_ = command::BatteryDecision();
+        decision_breaches_.clear();
         return true;
     }
     int TasksGiven() const { return static_cast<int>(tasks_before_.size()) + (def_.has_task ? 1 : 0); }
+
+    // ---- The maps people hold (track O, O2; command/held_map.hpp, docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 5)
+
+    // The battery commander's decision on his map (D3): the main, reserve and dummy positions and each launcher's sector.
+    // The combat order given after it uses it in place of the task's own (the march to the decided main, the decided
+    // sectors, the formation round the decided main). Checked against the task: what it breaks is returned and kept
+    // (DecisionBreaches), and nothing is refused (D4). Empty without a task.
+    std::vector<command::DecisionBreach> SetBatteryDecision(const command::BatteryDecision& d) {
+        decision_breaches_.clear();
+        if (!def_.has_task) return decision_breaches_;
+        decision_ = d;
+        has_decision_ = !d.Empty();
+        decision_breaches_ = command::CheckDecision(def_.task, d, [this](const std::string& id, Vec3& out) { return TaskPlace(id, out); }, def_.held_map);
+        if (has_decision_) {
+            std::string text = "his decision on the map:";
+            if (d.has_main) text += " the main position at " + command::GridSquare(d.main, def_.held_map) + ";";
+            for (const command::DecidedSector& s : d.sectors) text += " " + s.vehicle + " " + std::to_string(static_cast<int>(std::lround(s.from_deg))) + "-" +
+                                                                     std::to_string(static_cast<int>(std::lround(s.to_deg)));
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", text});
+        }
+        return decision_breaches_;
+    }
+    const command::BatteryDecision* BatteryDecisionHeld() const { return has_decision_ ? &decision_ : nullptr; }
+    const std::vector<command::DecisionBreach>& DecisionBreaches() const { return decision_breaches_; }
+    // The sector cards handed out with the last combat order, one per launcher (O2).
+    const std::vector<command::SectorCard>& SectorCards() const { return sector_cards_; }
+    const command::HeldMapValues& HeldMapValuesOf() const { return def_.held_map; }
+    // A place of the session's roads by id (an anchor), in the session's frame.
+    bool TaskPlace(const std::string& id, Vec3& out) const {
+        const nav::Anchor* a = nav_ ? nav_->GetAnchors().Find(id) : nullptr;
+        if (a == nullptr) return false;
+        out = Vec3{a->at.east_m, a->at.north_m, 0.0};
+        return true;
+    }
+    // The battery commander's position in the chain (the regiment's orders go to him), or his vehicle's id with no chain.
+    const std::string& BatteryCommanderPost() const {
+        return def_.battery_giver_post.empty() ? def_.battery_giver : def_.battery_giver_post;
+    }
+    // The map a person of the battery holds, from what reached him in the session: the battery commander's (`holder` his
+    // post, BatteryCommanderPost(), or "battery_commander") with the regiment's task once he has it and his decision; a
+    // launcher commander's ("<vehicle>:commander") from his sector card. The situation from the campaign's pipeline is
+    // the mission session's to add (MissionSession::HeldMapFor). Hours are the session's (second 0 at 0 h).
+    command::HeldMap HeldMapOf(const std::string& holder) const {
+        command::HeldMap m;
+        m.holder = holder;
+        m.now_h = time_ / 3600.0;
+        m.now = DayClock(time_);
+        m.leeway_m = SpotLeewayM();
+        const command::HeldMapValues& v = def_.held_map;
+        const auto name = [this](const std::string& id) { return PlaceName(id); };
+        const auto where = [this](const std::string& id, Vec3& out) { return TaskPlace(id, out); };
+        const bool is_commander = holder == def_.battery_giver || holder == "battery_commander" ||
+                                  (!def_.battery_giver_post.empty() && holder == def_.battery_giver_post);
+        if (is_commander) {
+            m.holder_label = "the battery commander";
+            if (def_.has_task && task_received_s_ >= 0.0) {
+                command::MarkSource src;
+                src.source = "the regiment";
+                src.means = def_.task_held ? "in_person" : (def_.task_means == "radio" ? "radio_voice" : "in_person");
+                src.as_of_h = task_received_s_ / 3600.0;
+                src.as_of = DayClock(task_received_s_);
+                command::AddTaskMarks(m, def_.task, where, src, v, name, !(has_decision_ && !decision_.sectors.empty()));
+                if (has_decision_) {
+                    command::MarkSource own;
+                    own.source = "your decision";
+                    own.means = "own decision";
+                    own.as_of_h = m.now_h;
+                    own.as_of = m.now;
+                    Vec3 main;
+                    const bool has_main = TaskPlace(def_.task.main, main);
+                    command::AddDecisionMarks(m, decision_, has_main ? &main : nullptr, own, v);
+                }
+                // O4: the covered unit where he last knew it and the leash round it, the regiment's fire mode and emission.
+                command::MarkSource lim = src;
+                if (covered_known_.known) {
+                    lim.source = covered_known_.means == "seen" ? "seen from the post" : "its own report";
+                    lim.means = covered_known_.means;
+                    lim.as_of_h = covered_known_.as_of_s / 3600.0;
+                    lim.as_of = DayClock(covered_known_.as_of_s);
+                }
+                command::AddLimitMarks(m, CommanderLimits(), lim);
+            }
+            return m;
+        }
+        const std::string suffix = ":commander";
+        if (holder.size() > suffix.size() && holder.compare(holder.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            const std::string vehicle = holder.substr(0, holder.size() - suffix.size());
+            m.holder_label = "the commander of " + vehicle;
+            for (const command::SectorCard& c : sector_cards_) {
+                if (c.vehicle != vehicle) continue;
+                command::MarkSource src;
+                src.source = "the battery commander";
+                // The card a paper carried with the combat order; O3: handed in person, or his notes of the radio's order.
+                src.means = c.written ? "radio_voice" : (def_.briefings.present ? "in_person" : "messenger");
+                src.as_of_h = c.given_s / 3600.0;
+                src.as_of = c.given;
+                command::AddCardMarks(m, c, src, v);
+                // O4: his spot's area round his place in the formation (where the battery's formation took him), the fire
+                // mode he holds (the card's, or the battery net's order since) and the emission at most.
+                command::HeldLimits lim;
+                if (FormationPlaceOf(vehicle, lim.spot_centre)) {
+                    lim.has_spot = true;
+                    lim.spot_m = c.spot_m >= 0.0 ? c.spot_m : v.decision_leeway_m;
+                    lim.spot_label = "your place in the formation";
+                }
+                lim.fire = vehicle == OwnCallsign() && !fire_mode_cmdr_.empty() ? fire_mode_cmdr_ : c.fire;
+                lim.emission = c.emission;
+                command::AddLimitMarks(m, lim, src);
+            }
+        }
+        return m;
+    }
+
+    // ---- Track O, O4: the order's limits (campaign/battery_task.hpp's OrderLimits; docs/campaign/12 sections 3 and 6).
+    // Each limit is the order's as its holder was given it: the battery commander's in the regiment's task, a launcher
+    // commander's on his sector card and by the battery net's orders since. NPCs keep them; a player may break them, and
+    // nothing refuses him: a breach shows only in the records as the post wrote them (the commander's log, the journal),
+    // and so in the combat report and the regiment's check (LimitBreaches, campaign/report.hpp's CheckLimits).
+    // The leeways and the leash: the order's where it gives them, else the held map's (data/gameplay/held_map.json).
+    double SpotLeewayM() const { return def_.has_task && def_.task.limits.spot_m >= 0.0 ? def_.task.limits.spot_m : def_.held_map.decision_leeway_m; }
+    double LauncherSpotM() const {
+        return def_.has_task && def_.task.limits.launcher_spot_m >= 0.0 ? def_.task.limits.launcher_spot_m : def_.held_map.decision_leeway_m;
+    }
+    double LeashM() const { return def_.has_task && def_.task.limits.leash_m >= 0.0 ? def_.task.limits.leash_m : def_.held_map.leash_m; }
+    // The mode the battery commander has his launchers firing in, as he ordered it ("" where the order sets none).
+    std::string BatteryFireMode() const {
+        if (search_own_order_ >= 0) return "independent";
+        return def_.has_task && !def_.task.limits.fire.empty() ? "designation" : std::string();
+    }
+    // The Osa's commander: the fire mode he holds (his card's, then the battery net's orders he heard; "" none).
+    const std::string& CommanderFireMode() const { return fire_mode_cmdr_; }
+    // The covered unit as the battery commander last knew it: from its own reports on its net, or seen from his post.
+    struct CoveredKnown {
+        bool known = false;
+        Vec3 at;
+        double as_of_s = -1.0;
+        std::string means;  // "radio_voice" (its report) or "seen"
+        std::string grid;   // as said, or as he read it off the map
+    };
+    const CoveredKnown& CoveredUnitKnown() const { return covered_known_; }
+    // The battery commander's map's limits: the covered unit where he last knew it and the leash round it, the regiment's
+    // fire mode and its emission at most now.
+    command::HeldLimits CommanderLimits() const {
+        command::HeldLimits l;
+        if (!def_.has_task) return l;
+        if (covered_known_.known) {
+            l.has_covered = true;
+            l.covered = covered_known_.at;
+            l.covered_name = def_.task.limits.cover_unit;
+            l.leash_m = LeashM();
+            l.covered_source = covered_known_.means == "seen" ? "seen from the post" : "its own report";
+            l.covered_means = covered_known_.means;
+            l.covered_as_of_h = covered_known_.as_of_s / 3600.0;
+            l.covered_as_of = DayClock(covered_known_.as_of_s);
+        }
+        l.fire = def_.task.limits.fire;
+        l.emission = given_limits_.EmissionAt(time_);
+        if (l.emission.empty()) l.emission = def_.task.emission;
+        return l;
+    }
+    // Where a launcher's place in the formation is as its commander knows it (the Osa beside the post: where the battery's
+    // formation took it; the post: the place it gave it). False before a formation.
+    bool FormationPlaceOf(const std::string& vehicle, Vec3& out) const {
+        if (has_formation_place_ && vehicle == OwnCallsign()) {
+            out = formation_place_;
+            return true;
+        }
+        const Battery::Vehicle* bv = battery_ ? battery_->Find(vehicle) : nullptr;
+        if (bv == nullptr || !bv->has_slot) return false;
+        out = bv->slot;
+        return true;
+    }
+    // The launchers' middle, where the battery stands (its own vehicle's place with none).
+    Vec3 LaunchersCentre() const {
+        Vec3 c{0.0, 0.0, 0.0};
+        int n = 0;
+        if (battery_) {
+            for (const Battery::Vehicle& bv : battery_->Vehicles()) {
+                if (bv.def.kind != BatteryVehicleKind::Launcher || bv.away || bv.detached) continue;
+                c.x += bv.position.x;
+                c.y += bv.position.y;
+                ++n;
+            }
+        }
+        if (n > 0) return Vec3{c.x / n, c.y / n, 0.0};
+        const Battery::Vehicle* own = battery_ ? battery_->Own() : nullptr;
+        return own != nullptr ? own->position : def_.unit_position;
+    }
+    // The battery after the covered unit (order_battery_follow, docs/campaign/12 section 6): a march to a point
+    // leash_behind_m behind where he last knew it, on the battery's side of it, then the combat formation there across the
+    // line from the battery to it. False, with why, with no covered unit known.
+    bool FollowCovered(const std::string& by) {
+        if (!covered_known_.known || !battery_ || !nav_ || !def_.has_task) {
+            last_refusal_ = "the covered unit's place is not known";
+            return false;
+        }
+        const Vec3 c = LaunchersCentre();
+        const Vec3 k = covered_known_.at;
+        const double len = std::hypot(c.x - k.x, c.y - k.y);
+        const Vec3 back = len > 1.0 ? Vec3{(c.x - k.x) / len, (c.y - k.y) / len, 0.0} : Vec3{0.0, -1.0, 0.0};
+        const double behind = def_.held_map.leash_behind_m;
+        const Vec3 to{k.x + back.x * behind, k.y + back.y * behind, 0.0};
+        const std::string place = "follow:" + std::to_string(follows_++);
+        nav_->MutableAnchors().Add(place, "point", {to.x, to.y}, "behind the covered unit");
+        double axis = RadToDeg(std::atan2(-back.x, -back.y));
+        if (axis < 0.0) axis += 360.0;
+        BatteryOrder f;
+        f.kind = BatteryOrder::Kind::CombatFormation;
+        f.from = "battery";
+        // The formation stands behind_covered_m behind its "covered" point: put that point so the pairs stand at `to`.
+        const double ar = DegToRad(axis);
+        const double formation_behind = battery_->Tactics().behind_covered_m;
+        f.covered = Vec3{to.x + std::sin(ar) * formation_behind, to.y + std::cos(ar) * formation_behind, 0.0};
+        f.axis_deg = axis;
+        task_plan_.formation = f;
+        task_plan_.has_formation = true;
+        task_formation_pending_ = true;
+        BatteryOrder move;
+        move.kind = BatteryOrder::Kind::March;
+        move.to_place = place;
+        move.at_s = time_;
+        move.from = "battery";
+        task_orders_.push_back(move);
+        task_orders_done_.push_back(0);
+        follow_pending_ = true;
+        follow_s_ = time_;
+        regiment_reported_ = false;  // he reports the battery's new place up once it is ready there
+        const std::string grid = command::GridRef(to, def_.held_map);
+        LimitLog("follow", "battery", grid);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, by, "the covered unit", "the battery after it: to " + grid + ", behind it"});
+        return true;
+    }
+    // A launcher's commander moved to the spot he chose (a linked Osa's: the post's battery drives it there).
+    bool MoveLauncherSpot(const std::string& callsign, const Vec3& p) { return battery_ && battery_->SetSpot(callsign, p, time_); }
+    // A launcher's report of its spot heard on the battery net (a linked Osa's commander: «позицию занял, 594 437»): into the
+    // journal as words on the net, and into the commander's log with how far it stands from the place he gave it.
+    void HearLauncherSpot(const std::string& callsign, const std::string& grid) {
+        Radio("battery net", callsign, callsign + ": позицию занял, " + grid + ".", false, BatteryNetHearers());
+        if (!post_ || !NetHears()) return;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, callsign, "battery net", "reports its spot: " + grid});
+        Vec3 p, place;
+        const bool read = command::ReadGridRef(grid, LaunchersCentre(), def_.held_map, p);
+        const bool has_place = read && FormationPlaceOf(callsign, place);
+        LimitLog("spot", callsign, grid, has_place ? std::hypot(p.x - place.x, p.y - place.y) : -1.0, has_place ? LauncherSpotM() : -1.0);
+    }
+    // The Osa's commander chose his spot (a player, on his map): his crew drives there in the formation (the link's to
+    // carry), and he reports it once there. Nothing about the place is refused (the limits are rules, not walls); false
+    // only with no combat order to choose it by.
+    bool ChooseSpot(const Vec3& p) {
+        if (!LinkedToPost() || SectorCardOf(OwnCallsign()) == nullptr) {
+            last_refusal_ = "no combat order yet: no place to choose a spot by";
+            return false;
+        }
+        spot_moves_.push_back(Vec3{p.x, p.y, 0.0});
+        spot_reported_ = false;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "his spot", "chooses his spot at " + command::GridRef(p, def_.held_map)});
+        return true;
+    }
+    bool CanChooseSpot() const { return LinkedToPost() && SectorCardOf(OwnCallsign()) != nullptr; }
+    std::vector<Vec3> TakeSpotMoves() {
+        std::vector<Vec3> out;
+        out.swap(spot_moves_);
+        return out;
+    }
+    std::vector<std::string> TakeSpotReports() {
+        std::vector<std::string> out;
+        out.swap(spot_reports_);
+        return out;
+    }
+    bool SpotReported() const { return spot_reported_; }
+    // The Osa's side of the link: whether the battery has it deployed, and its place in the formation (where the battery's
+    // formation took it). A new place: its commander reports his spot again once there.
+    void SetFormationPlace(bool deployed, bool has_slot, const Vec3& slot) {
+        osa_deployed_ = deployed;
+        if (!has_slot) return;
+        if (!has_formation_place_ || std::hypot(slot.x - formation_place_.x, slot.y - formation_place_.y) > 1.0) spot_reported_ = false;
+        has_formation_place_ = true;
+        formation_place_ = slot;
+    }
+    // The post's orders of the fire mode said on the battery net since the last call ("designation", "independent"), and
+    // the Osa's commander hearing one.
+    std::vector<std::string> TakeFireModeOrders() {
+        std::vector<std::string> out;
+        out.swap(fire_mode_orders_);
+        return out;
+    }
+    void HearFireModeOrder(const std::string& mode) {
+        if (c2_ != nullptr && !c2_->Hearing()) {
+            Event("battery net", "the battery commander's order of the fire mode (" + mode + ") was not heard");
+            return;
+        }
+        if (mode == fire_mode_cmdr_) return;
+        fire_mode_cmdr_ = mode;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(Cmdr()), "battery net", std::string("fire: ") + campaign::FireModeWords(mode)});
+    }
+    // The breaches of the order's limits the records show (the commander's log against what the regiment gave). Empty
+    // without a post or a task.
+    std::vector<campaign::LimitFinding> LimitBreaches() const {
+        if (!post_ || !def_.has_task) return {};
+        return campaign::CheckLimits(commander_log_, given_limits_);
+    }
+    const campaign::GivenLimits& GivenLimitsOf() const { return given_limits_; }
+    // ---- Track O, O3: the orders as people give them (campaign/briefings.hpp; docs/campaign/12 section 4). The session's
+    // briefings data (without it every order goes as before O3). The lines of the session's scenes as they were spoken
+    // (the battery commander's combat order in person, the crew's briefing at the vehicle; the mission session adds the
+    // regiment's evening briefing's), each also in the log; a line comes when its time comes.
+    void SetBriefings(campaign::BriefingsData b) { def_.briefings = std::move(b); }
+    const campaign::BriefingsData& Briefings() const { return def_.briefings; }
+    const std::vector<campaign::SceneLine>& SceneLines() const { return scene_lines_; }
+    void AddSceneLine(const campaign::SceneLine& l, bool intercom = false) { pending_lines_.push_back({l, intercom}); }
+    // A paper handed to a seat in person (the regiment's code table at its briefing), into its map case and the record.
+    void GivePaper(const HeldPaper& p) {
+        own_papers_.push_back(p);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, p.station, "paper", p.title + " (" + p.from + ")"});
+    }
+    // A line in the session's record (the session's own: a briefing missed, a card not handed), and a place's name.
+    void NoteInLog(const std::string& who, const std::string& what, const std::string& text) {
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, what, text});
+    }
+    std::string PlaceNameOf(const std::string& id) const { return PlaceName(id); }
+    // The battery commander away from his post ("" back): on the road to the regiment's command post, at its briefing.
+    // Away, he gives his combat order only by radio.
+    void SetCommanderAway(const std::string& where) {
+        if (where == commander_away_) return;
+        commander_away_ = where;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "away", where.empty() ? std::string("back at his post") : where});
+    }
+    const std::string& CommanderAway() const { return commander_away_; }
+    // His leaving for the regiment's briefing: the NPC battery commander's when the session says it is time (through
+    // NpcDoes: a player in his seat owes it), the player's from the order menu. TakeBriefingTrip: once, the session's to
+    // drive him there.
+    bool NpcGoesToBriefing(const std::string& why) {
+        if (!PostGivesOrders() || def_.crew_data.FindOrder("order_to_briefing") == nullptr) return false;
+        SeatDuty d = SeatDuty::Order(Cmdr(), "order_to_briefing", why);
+        d.keep_s = 1.0;
+        return NpcDoes(Cmdr(), d) && GiveCrewOrder("order_to_briefing");
+    }
+    bool TakeBriefingTrip() {
+        const bool b = briefing_trip_;
+        briefing_trip_ = false;
+        return b;
+    }
+    // How he gave the task's combat order (Default: not yet, or before O3's data).
+    campaign::OrderWay CombatOrderWay() const { return given_way_; }
+    // The vehicle commanders called to him for the combat order in person: where, and the scene's start and end (end_s
+    // < 0: none). `id` counts the gatherings.
+    struct Gathering {
+        int id = 0;
+        Vec3 at;
+        double start_s = -1.0;
+        double end_s = -1.0;
+        std::string way;
+    };
+    const Gathering& CurrentGathering() const { return gathering_; }
+    // The combat orders said by radio in the short form since the last call (the session's for the enemy's intercept).
+    int TakeRadioOrders() {
+        const int n = radio_orders_;
+        radio_orders_ = 0;
+        return n;
+    }
+    // A launcher's card as the battery commander made it (null none).
+    const command::SectorCard* SectorCardOf(const std::string& vehicle) const {
+        for (const command::SectorCard& c : sector_cards_) {
+            if (c.vehicle == vehicle) return &c;
+        }
+        return nullptr;
+    }
+    // The linked Osa's side: its commander now holds his card (handed in person) or his notes of the order (by radio).
+    void TakeSectorCard(const command::SectorCard& c, const std::string& from) {
+        bool replaced = false;
+        for (command::SectorCard& old : sector_cards_) {
+            if (old.vehicle == c.vehicle) {
+                old = c;
+                replaced = true;
+            }
+        }
+        if (!replaced) sector_cards_.push_back(c);
+        if (!post_ && c.vehicle == OwnCallsign() && !c.fire.empty()) fire_mode_cmdr_ = c.fire;  // O4: his card's fire mode
+        HeldPaper paper;
+        paper.id = "sector_card:" + c.vehicle + ":" + std::to_string(own_papers_.size());
+        paper.station = Cmdr();
+        paper.time_s = time_;
+        paper.title = c.written ? "Notes of the combat order, launcher " + c.vehicle : "Sector card, launcher " + c.vehicle;
+        paper.text = command::SectorCardText(c, def_.held_map);
+        paper.from = from;
+        GivePaper(paper);
+    }
+    // The linked Osa's commander called to the battery commander (an NPC goes through NpcDoes; a player owes it), and
+    // back to his seat once it is over. CommanderNear: his body within r of a point.
+    bool GoToGathering(const Vec3& at, const std::string& why) {
+        gathering_place_ = at;
+        has_gathering_place_ = true;
+        Event(Cmdr(), "called to the battery commander: " + why);
+        if (def_.crew_data.FindOrder("order_to_gathering") == nullptr) return false;
+        SeatDuty d = SeatDuty::Order(Cmdr(), "order_to_gathering", why);
+        d.keep_s = kGatheringOweS;
+        return NpcDoes(Cmdr(), d) && GiveCrewOrder("order_to_gathering");
+    }
+    void GatheringOver() {
+        if (!has_gathering_place_) return;
+        has_gathering_place_ = false;
+        if (CrewMember* m = MemberAt(Cmdr())) {
+            if (m->WantedPlace() == "gathering") m->StayAt(std::string());
+        }
+    }
+    bool CommanderNear(const Vec3& at, double r) const {
+        Vec3 where = def_.unit_position;
+        if (const CrewMover* m = Mover(Cmdr())) where = Pose().ToEnu(m->View(Pose()).feet_m);
+        return std::hypot(where.x - at.x, where.y - at.y) <= r;
+    }
+    // The identification code table's end (D5: each evening's briefing hands out the next day's): past it, without the
+    // next, the crews stay on its last code.
+    void SetCodeTableUntil(double until_s) {
+        if (!own_air_) return;
+        own_air_->battery.valid_until_h = ClockH(until_s);
+        own_air_->post.valid_until_h = ClockH(until_s);
+    }
+    bool CodeTableRunOut() const { return own_air_ && own_air_->battery.RunOut(ClockH(time_)); }
+    // The vehicle commander's briefing of his crew at the vehicle (docs/campaign/12 section 4): each item a line on the
+    // intercom; whoever hears it knows it (CrewKnows). From the order menu, or the NPC commander's once he holds a new card.
+    bool BriefCrew(const std::string& who) {
+        const command::SectorCard* c = OwnCard();
+        if (!def_.briefings.present || c == nullptr) {
+            last_refusal_ = "no combat order to brief the crew on";
+            return false;
+        }
+        if (Outside(Cmdr())) {
+            last_refusal_ = "the briefing is given at the vehicle, on the intercom: get in first";
+            return false;
+        }
+        std::map<std::string, std::string> f;
+        f["point"] = c->point_name;
+        f["task"] = def_.has_task ? def_.task.task_text : std::string("cover the battery's position");
+        char sec[64];
+        std::snprintf(sec, sizeof(sec), "from %03.0f to %03.0f degrees", c->from_deg, c->to_deg);
+        f["sector"] = sec;
+        std::string marks;
+        for (const command::SectorCard::Landmark& l : c->landmarks) {
+            char b[96];
+            std::snprintf(b, sizeof(b), "%s%s at %03.0f, %.0f km", marks.empty() ? "" : "; ", l.name.c_str(), l.bearing_deg, l.range_m / 1000.0);
+            marks += b;
+        }
+        f["landmarks"] = marks.empty() ? std::string("none given") : marks;
+        f["readiness"] = c->duty ? std::string("no. 1, the duty launcher") : std::string("no. 1");
+        f["regime"] = EmissionKindName(CrewRegime().kind);
+        std::string codes;
+        for (const std::string& t : c->code_changes) codes += (codes.empty() ? "" : ", ") + t;
+        f["code_changes"] = codes;
+        f["reserve"] = c->has_reserve ? c->reserve_name : std::string();
+        double t = time_ + kBriefFirstLineS;
+        for (const campaign::BriefingItem& it : def_.briefings.crew.items) {
+            if (it.id == "codes" && codes.empty()) continue;  // not on his notes: never by radio (D5)
+            if (it.id == "reserve" && !c->has_reserve) continue;
+            AddSceneLine({"crew_briefing", t, who, it.id, campaign::FillLine(it.en, f)}, true);
+            t += def_.briefings.crew.line_s;
+        }
+        crew_briefed_card_s_ = c->given_s;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, "the crew's briefing", "at the vehicle, on the intercom"});
+        return true;
+    }
+    // What a crewman heard of the crew's briefing: its items' ids.
+    bool CrewKnows(const std::string& seat, const std::string& item) const {
+        const auto it = crew_briefed_.find(seat);
+        return it != crew_briefed_.end() && it->second.count(item) != 0;
+    }
+    static constexpr double kGatheringOweS = 600.0;  // sam3d: the player owes the walk this long
+    static constexpr double kBriefFirstLineS = 2.0;  // sam3d: the first line after his call to the crew
     static constexpr double kTaskWatchedS = 1200.0;  // sam3d: as the bridges mission's end, 19 min past its ready-by
 
     // Which wheels the NPC crew aims (none at a seat a player holds).
@@ -993,6 +1470,7 @@ public:
     // A place in words: "the line-up", a line's far end, a place round the vehicle by its label.
     std::string PlaceLabel(const std::string& id) const {
         if (id == "lineup") return "the line-up";
+        if (id == "gathering") return "the battery commander";
         if (const int n = LinePlace(id)) {
             const LineDef* l = def_.radio_data.Line(n);
             return "the far end of line " + std::to_string(n) + (l != nullptr ? " (" + l->to_name + ")" : std::string());
@@ -1009,6 +1487,7 @@ public:
             Vec3 end_at;
             if (def_.has_vehicle && LineFarEnd(n, end_at)) return MoveGoal::OnGroundAt(end_at, place, def_.vehicle.wire.lay_mps);
         }
+        if (place == "gathering" && has_gathering_place_) return MoveGoal::OnGroundAt(gathering_place_, place);  // O3
         return MoveGoal::AtPlace(place);
     }
 
@@ -1284,8 +1763,49 @@ public:
             if (done) orders_given_.push_back({time_, order_id});
             return done;
         }
+        // Track O, O3: the combat order on the ground or by radio (the plain one: at the map table when the player gives
+        // it, by the NPC's rule when he does); the battery commander off to the regiment's briefing; a vehicle commander
+        // to the battery commander's gathering; the crew's briefing at the vehicle.
+        if (order_id == "order_battery_combat_order_ground" || order_id == "order_battery_combat_order_radio") {
+            requested_way_ = order_id == "order_battery_combat_order_radio" ? campaign::OrderWay::Radio : campaign::OrderWay::Ground;
+            const bool done = PostGivesOrders() && GiveTaskOrder("order_battery_combat_order", "Battery commander");
+            requested_way_ = campaign::OrderWay::Default;
+            if (done) orders_given_.push_back({time_, order_id});
+            return done;
+        }
+        if (order_id == "order_to_briefing" || order_id == "order_to_gathering" || order_id == "order_crew_briefing" || order_id == "order_grade_crews") {
+            bool done = false;
+            if (order_id == "order_grade_crews") {  // O5: his marks for his crews, from his log, into it
+                done = GradeCrewsNow("Battery commander");
+            } else if (order_id == "order_to_briefing") {
+                if (!def_.briefings.present) {
+                    last_refusal_ = "no briefing to go to";
+                } else if (!commander_away_.empty()) {
+                    last_refusal_ = "away already: " + commander_away_;
+                } else {
+                    briefing_trip_ = true;
+                    done = true;
+                }
+            } else if (order_id == "order_to_gathering") {
+                CrewMember* m = MemberAt(Cmdr());
+                if (!has_gathering_place_ || m == nullptr) {
+                    last_refusal_ = "nobody has called the commanders";
+                } else {
+                    m->StayAt("gathering");
+                    done = true;
+                }
+            } else {
+                done = BriefCrew(Cmdr());
+            }
+            if (!done) return false;
+            orders_given_.push_back({time_, order_id});
+            SpeakOrder(order_id);
+            return true;
+        }
         if (order_id == "order_battery_preliminary" || order_id == "order_battery_combat_order") {  // the task's plan (14.3)
+            if (order_id == "order_battery_combat_order" && !SeatHolder(Cmdr()).empty()) requested_way_ = campaign::OrderWay::MapTable;
             const bool done = PostGivesOrders() && GiveTaskOrder(order_id, "Battery commander");
+            requested_way_ = campaign::OrderWay::Default;
             if (done) orders_given_.push_back({time_, order_id});
             return done;
         }
@@ -1298,8 +1818,10 @@ public:
         // The commander's orders on the nets (docs/crew/12_COMMUNICATIONS.md): said on the air, not on the intercom.
         if (order_id == "order_battery_spare" || order_id == "order_battery_duty" || order_id == "order_battery_simplex" ||
             order_id == "order_warn_covered" || order_id == "order_all_clear_covered" || order_id == "order_report_regiment" ||
-            order_id == "order_battery_search_own" || order_id == "order_battery_by_designation" || order_id == "order_tzm_run") {
+            order_id == "order_battery_search_own" || order_id == "order_battery_by_designation" || order_id == "order_tzm_run" ||
+            order_id == "order_battery_follow") {
             bool done = false;
+            if (order_id == "order_battery_follow") done = FollowCovered("Battery commander");
             if (order_id == "order_tzm_run") done = OrderTzmRun("Battery commander");
             if (order_id == "order_battery_search_own") done = OrderSearchOwn(true, "Battery commander");
             if (order_id == "order_battery_by_designation") done = OrderSearchOwn(false, "Battery commander");
@@ -1387,6 +1909,11 @@ public:
         if (order_id == "order_battery_search_own" || order_id == "order_battery_by_designation") {
             if (!battery_fire_) return refuse("пусковых на батарейной сети нет", "no launchers on the battery net");
             if ((order_id == "order_battery_search_own") == (search_own_order_ >= 0)) return refuse("уже выполнено", "done already");
+        }
+        if (order_id == "order_battery_follow") {
+            if (!PostGivesOrders()) return refuse("приказы батарее отдаёт командир батареи на ПУ", "the battery's orders are given from its command post");
+            if (!covered_known_.known) return refuse("место прикрываемых неизвестно", "the covered unit's place is not known");
+            if (follow_pending_) return refuse("батарея уже выдвигается за прикрываемыми", "the battery is on its way after them already");
         }
         if (order_id == "order_tzm_run") {
             if (tzm_id_.empty()) return refuse("ТЗМ на батарейной сети нет", "no TZM on the battery net to send");
@@ -1814,6 +2341,8 @@ public:
                 if (def_.crew_data.FindCallout(id) != nullptr) out.push_back(id);
             }
         }
+        // His spot reported to the battery commander (O4; refused before the battery has given him a place).
+        if (LinkedToPost() && def_.crew_data.FindCallout("report_spot") != nullptr) out.push_back("report_spot");
         // The TZM and the fuel truck asked for on the battery net (G9; refused until the launcher is empty, the tank at
         // its reserve).
         if (battery_) {
@@ -1955,6 +2484,7 @@ public:
         }
         for (const std::string& before : tasks_before_) out += before;  // the tasks the regiment gave before this one
         if (def_.has_task) out += TaskBlock();
+        if (post_ && def_.has_task) out += "  " + campaign::LimitsCheckText(LimitBreaches(), [this](double t) { return DayClock(t); }) + "\n";
         if (order_net_ && !order_net_->Book().Orders().empty()) {  // each battery order's times for each vehicle (G10.6)
             out += "  Battery orders (the order book, on the mission's clock):\n";
             for (const std::string& s : order_net_->Debrief(0.0)) out += "    " + s + "\n";
@@ -5301,6 +5831,7 @@ private:
             PostOwesOrders();
             PostStowsForMarch();
             UpdateSupply();
+            UpdateDetachments();
         }
         UpdateBatteryFire();
         // The TZM or fuel truck alongside: the console's inputs (the launcher's crane and the fuel model act on them).
@@ -5979,6 +6510,14 @@ private:
     std::string TaskArea() const { return def_.task.area_ru.empty() ? PlaceName(def_.task.main) : def_.task.area_ru; }
     void UpdateTask() {
         if (!def_.has_task) return;
+        if (held_sectors_ && battery_fire_) {  // the launchers are on the battery net from the second step
+            held_sectors_ = false;
+            for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        }
+        if (def_.task_held && !task_given_) {
+            HoldTask();
+            return;
+        }
         if (!task_given_ && time_ + 1e-9 >= def_.task_given_s) {
             task_given_ = true;
             log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "the task", def_.task.task_text});
@@ -5993,10 +6532,16 @@ private:
         }
         if (task_received_s_ < 0.0 || !task_plan_.planned) return;
         for (const campaign::PlannedStep& st : task_plan_.steps) {
-            if (time_ + 1e-9 < st.end_s || task_steps_done_.count(st.id) != 0) continue;
+            if (time_ + 1e-9 < (st.order.empty() ? st.end_s : CombatOrderDueS(st)) || task_steps_done_.count(st.id) != 0) continue;
             if (st.order.empty()) {  // a step of his own planning: done when its time is up
                 task_steps_done_.insert(st.id);
                 log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", st.en});
+                continue;
+            }
+            // O3: away from his post (the regiment's briefing), he gives his combat order on his return, by radio only
+            // when the ready-by is too near to wait.
+            if (st.id == "combat_order" && def_.briefings.present && !commander_away_.empty() &&
+                task_plan_.ready_by_s - time_ >= def_.briefings.battery.urgent_s) {
                 continue;
             }
             if (!PostGivesOrders()) {  // an NPC battery commander in a post we do not ride in
@@ -6015,14 +6560,21 @@ private:
         campaign::PlanInputs in;
         in.given_s = def_.task_given_s;
         in.received_s = time_;
-        in.march_s = TaskMarchS();
+        const std::string march_to = TaskMarchPlace();
+        in.march_s = TaskMarchS(march_to);
         in.where = [this](const std::string& id, Vec3& out) {
             const nav::Anchor* a = nav_ ? nav_->GetAnchors().Find(id) : nullptr;
             if (a == nullptr) return false;
             out = Vec3{a->at.east_m, a->at.north_m, 0.0};
             return true;
         };
+        // The regiment's post where his order and the communications diagram put it; his post's nets with it reach the
+        // shorter of the air-picture net's and the command net's ranges (the ASPD-U's data).
+        in.has_regiment_cp = def_.post_regiment.has_position;
+        in.regiment_cp = def_.post_regiment.position;
+        in.regiment_reach_m = std::min(def_.post_aspd.air_net_range_m, def_.post_aspd.regiment_net_range_m);
         task_plan_ = campaign::PlanBatteryTask(def_.task, def_.plan_sequence, battery_->Tactics(), in);
+        if (task_plan_.march_at_s >= 0.0) task_plan_.to_place = march_to;
         log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task",
                      "received " + how + ": " + def_.task.task_text + ", ready by " + DayClock(task_plan_.ready_by_s)});
         if (!task_plan_.planned) {
@@ -6052,11 +6604,64 @@ private:
         mine.from = "your own planning";
         own_papers_.push_back(mine);
     }
-    // The head's time by the roads to the main position (< 0: the battery stands in the area, or no road there).
-    double TaskMarchS() const {
+    // A task the battery holds from before the session (ScenarioDef::task_held: a campaign resumed, track O's O1): received,
+    // carried out and reported ready at the start; the launchers' sectors set once they are on the battery net, the
+    // task's regime ordered on it as the watch begins, and the commander's paper of the order in his map case.
+    void HoldTask() {
+        task_held_now_ = true;  // O5: summed up on the day it was given
+        task_given_ = true;
+        task_received_s_ = time_;
+        task_plan_ = campaign::BatteryPlan();
+        task_plan_.planned = true;
+        task_plan_.ready_by_s = task_plan_.order_s = task_plan_.ready_s = time_;
+        task_moved_ = true;
+        task_ready_s_ = time_;
+        held_sectors_ = !def_.task.sectors.empty();
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the task", "held from before the session: " + def_.task.task_text});
+        EmissionKind k = EmissionKind::Free;
+        if (battery_ && !def_.task.emission.empty() && ParseEmissionKind(def_.task.emission, k)) {
+            EmissionRegime r = def_.emission.Make(k, "regiment");
+            if (def_.task.on_turns > 0.0) r.on_turns = def_.task.on_turns;
+            if (def_.task.off_turns > 0.0) r.off_turns = def_.task.off_turns;
+            BatteryOrderRegime(r);
+        }
+        HoldDetachments();  // O7: launchers already at their detached places stand there
+        if (!PostGivesOrders()) return;
+        HeldPaper order;
+        order.id = "combat_order:" + std::to_string(own_papers_.size());
+        order.station = Cmdr();
+        order.time_s = time_;
+        order.title = "Combat order, " + def_.task.unit;
+        order.text = campaign::TaskDocument(def_.task, def_.task_given_s, [this](double t) { return DayClock(t); },
+                                            [this](const std::string& id) { return PlaceName(id); });
+        order.from = "held from before (the regiment's order)";
+        own_papers_.push_back(order);
+    }
+    bool held_sectors_ = false;  // a held task's sectors, set once the launchers are on the battery net
+
+    // O5: where the task's march ends. Covering troops, behind the covered place on their axis, where the formation's
+    // pairs stand (voenizdat_osa_1991 pp. 232-239: the battery 1.5-3 km behind the covered companies), a "point" place
+    // of the roads; otherwise the main position. Before O5 the march ended at the covered place itself and the battery
+    // then drove back 2-3 km through it into its formation, a time the plan never counted (the NPC battery reported
+    // ready 11 min late on pu12m_cover_company).
+    std::string TaskMarchPlace() {
+        if (def_.task.kind != campaign::TaskKind::CoverTroops || !nav_ || !battery_) return def_.task.main;
+        Vec3 covered;
+        if (!TaskPlace(def_.task.covered.empty() ? def_.task.main : def_.task.covered, covered)) return def_.task.main;
+        const double a = DegToRad(def_.task.axis_deg);
+        const double back = battery_->Tactics().behind_covered_m;
+        const Vec3 to{covered.x - std::sin(a) * back, covered.y - std::cos(a) * back, 0.0};
+        const std::string place = "task:behind:" + std::to_string(task_behind_++);
+        nav_->MutableAnchors().Add(place, "point", {to.x, to.y}, PlaceName(def_.task.main) + ", behind the covered unit");
+        return place;
+    }
+    int task_behind_ = 0;
+    // The head's time by the roads to the march's end (< 0: the battery stands in the area of the main position, or no
+    // road there).
+    double TaskMarchS(const std::string& to_place) const {
         const Battery::Vehicle* head = battery_->Own() != nullptr ? battery_->Own() : battery_->Find(def_.battery_giver);
         const nav::Anchor* a = nav_ ? nav_->GetAnchors().Find(def_.task.main) : nullptr;
-        if (head == nullptr || a == nullptr) return -1.0;
+        if (head == nullptr || a == nullptr || nav_->GetAnchors().Find(to_place) == nullptr) return -1.0;
         if (std::hypot(head->position.x - a->at.east_m, head->position.y - a->at.north_m) < kTaskInAreaM) return -1.0;
         std::vector<nav::MarchVehicle> column;
         for (const Battery::Vehicle& v : battery_->Vehicles()) {
@@ -6066,7 +6671,7 @@ private:
             column.push_back(m);
         }
         std::string why;
-        const nav::MarchPlan p = nav_->PlanTo({head->position.x, head->position.y}, def_.task.main, column, battery_->Tactics(), time_, &why,
+        const nav::MarchPlan p = nav_->PlanTo({head->position.x, head->position.y}, to_place, column, battery_->Tactics(), time_, &why,
                                               DarkAt(time_));
         return p.found ? std::max(0.0, p.end_s - time_) : -1.0;
     }
@@ -6088,6 +6693,7 @@ private:
         }
         if (!order_net_) return false;
         const bool combat = st->id == "combat_order";
+        if (combat && def_.briefings.present) return GiveCombatOrder(*st, who);
         const std::map<std::string, std::string> f{{"time", DayClock(task_plan_.march_at_s >= 0.0 ? task_plan_.march_at_s : task_plan_.order_s)},
                                                    {"task", def_.task.short_ru}, {"task_en", def_.task.task_text},
                                                    {"area", TaskArea()}, {"area_en", PlaceName(def_.task.main)},
@@ -6101,7 +6707,7 @@ private:
         if (combat) TaskCombatOrder();
         return true;
     }
-    void TaskCombatOrder() {
+    void TaskCombatOrder(bool written = false) {
         EmissionKind k = EmissionKind::Free;
         if (!def_.task.emission.empty() && ParseEmissionKind(def_.task.emission, k)) {
             EmissionRegime r = def_.emission.Make(k, "regiment");
@@ -6109,11 +6715,21 @@ private:
             if (def_.task.off_turns > 0.0) r.off_turns = def_.task.off_turns;
             BatteryOrderRegime(r);
         }
-        for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        // The sectors: the battery commander's decided split when he made one on his map (O2), else the task's.
+        const bool decided_sectors = has_decision_ && !decision_.sectors.empty();
+        if (decided_sectors) {
+            for (const command::DecidedSector& sec : decision_.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        } else {
+            for (const campaign::TaskSector& sec : def_.task.sectors) task_sectors_set_ += SetBatterySector(sec.vehicle, sec.from_deg, sec.to_deg) ? 1 : 0;
+        }
+        DecidedPlaces();
+        HandInSectorCards(written);
+        OrderDetachments();  // O7: each detached launcher told where it goes; one detached before and not now called back
         BatteryOrder move;
         if (task_plan_.march_at_s >= 0.0) {
             move.kind = BatteryOrder::Kind::March;
             move.to_place = task_plan_.to_place;
+            if (!decided_main_place_.empty()) move.to_place = decided_main_place_;
             task_formation_pending_ = task_plan_.has_formation;
         } else if (task_plan_.has_formation) {
             move = task_plan_.formation;
@@ -6126,6 +6742,595 @@ private:
         task_orders_.push_back(move);
         task_orders_done_.push_back(0);
         task_moved_ = true;
+    }
+    // The decided main position as a place of the session's roads (a "point" anchor the march is planned to), and the
+    // task's formation moved with it: the pairs round the decided main as they were round the order's (O2). The ambush's
+    // points are the decided main and reserves.
+    void DecidedPlaces() {
+        decided_main_place_.clear();
+        if (!has_decision_ || !decision_.has_main || !nav_) return;
+        Vec3 order_main;
+        if (!TaskPlace(def_.task.main, order_main)) return;
+        decided_main_place_ = "decision:main:" + std::to_string(decided_anchors_++);
+        nav_->MutableAnchors().Add(decided_main_place_, "point", {decision_.main.x, decision_.main.y}, PlaceName(def_.task.main) + " (decided)");
+        if (!task_plan_.has_formation) return;
+        const Vec3 delta{decision_.main.x - order_main.x, decision_.main.y - order_main.y, 0.0};
+        BatteryOrder& f = task_plan_.formation;
+        switch (def_.task.kind) {
+            case campaign::TaskKind::CoverObject:
+            case campaign::TaskKind::CoverRebuild:
+            case campaign::TaskKind::Relocate:
+                if (f.kind == BatteryOrder::Kind::CombatFormation) f.covered = f.covered + delta;
+                break;
+            case campaign::TaskKind::Ambush:
+                if (!f.route.empty()) f.route[0] = Vec3{decision_.main.x, decision_.main.y, 0.0};
+                for (std::size_t i = 0; i < decision_.reserve.size() && i + 1 < f.route.size(); ++i) f.route[i + 1] = decision_.reserve[i];
+                break;
+            default: break;  // the covered troops' or crossing's place is not the battery's to move
+        }
+    }
+    // The sector cards (O2): each launcher commander's paper with the combat order, in his map case (the own vehicle's
+    // commander's seat when it is one of the launchers, else "<vehicle>:commander").
+    // O3: `written`, the order came by radio in the short form: each commander writes down what he heard (the point and
+    // the sectors; no landmarks, no reserve, and never the codes: D5), and no card is handed.
+    void HandInSectorCards(bool written = false) {
+        if (!battery_) return;
+        std::vector<command::DecidedSector> all;
+        if (has_decision_ && !decision_.sectors.empty()) {
+            all = decision_.sectors;
+        } else {
+            for (const campaign::TaskSector& s : def_.task.sectors) all.push_back({s.vehicle, s.from_deg, s.to_deg, s.duty});
+        }
+        Vec3 point;
+        std::string point_name = PlaceName(def_.task.main);
+        const bool has_point = (has_decision_ && decision_.has_main) || TaskPlace(def_.task.main, point);
+        if (has_decision_ && decision_.has_main) {
+            point = decision_.main;
+            point_name += " (decided)";
+        }
+        if (!has_point) return;
+        command::SectorCard base;
+        base.point = point;
+        base.point_name = point_name;
+        base.given_s = time_;
+        base.given = DayClock(time_);
+        if (def_.has_task) {  // O4: his spot's leeway, the fire mode the battery commander has them in, the emission at most
+            base.spot_m = LauncherSpotM();
+            base.fire = BatteryFireMode();
+            base.emission = def_.task.emission;
+        }
+        if (has_decision_ && !decision_.reserve.empty()) {
+            base.has_reserve = true;
+            base.reserve = decision_.reserve.front();
+            base.reserve_name = "decided";
+        } else if (!def_.task.reserve.empty() && TaskPlace(def_.task.reserve.front(), base.reserve)) {
+            base.has_reserve = true;
+            base.reserve_name = PlaceName(def_.task.reserve.front());
+        }
+        // The landmarks: the nearest towns and landmarks of the map within the card's reach, by bearing from the point.
+        if (nav_) {
+            std::vector<command::SectorCard::Landmark> nearby;
+            for (const nav::Anchor& a : nav_->GetAnchors().All()) {
+                if (a.kind != "settlement" && a.kind != "landmark") continue;
+                const double r = std::hypot(a.at.east_m - point.x, a.at.north_m - point.y);
+                if (r > kCardLandmarkM || r < 1.0) continue;
+                nearby.push_back({a.name, RadToDeg(AzimuthOf(Vec3{a.at.east_m - point.x, a.at.north_m - point.y, 0.0})), r});
+            }
+            std::stable_sort(nearby.begin(), nearby.end(), [](const command::SectorCard::Landmark& a, const command::SectorCard::Landmark& b) { return a.range_m < b.range_m; });
+            if (nearby.size() > kCardLandmarks) nearby.resize(kCardLandmarks);
+            base.landmarks = nearby;
+        }
+        // The identification code's change times over the next day (the codes are on the day's table, not on the card).
+        if (const command::IffSchedule* codes = IffCodes()) {
+            const double now_h = ClockH(time_);
+            for (const command::IffSchedule::Change& c : codes->Changes()) {
+                if (c.from_h <= now_h || c.from_h > now_h + 24.0) continue;
+                const long long m = static_cast<long long>(std::llround(c.from_h * 60.0)) % (24 * 60);
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
+                base.code_changes.push_back(buf);
+            }
+        }
+        const std::string own = battery_->Own() != nullptr ? battery_->Own()->def.id : std::string();
+        for (const command::DecidedSector& s : all) {
+            command::SectorCard c = base;
+            c.vehicle = s.vehicle;
+            c.from_deg = s.from_deg;
+            c.to_deg = s.to_deg;
+            c.duty = s.duty;
+            for (const command::DecidedSector& n : all) {
+                if (n.vehicle != s.vehicle) c.neighbours.push_back(n);
+            }
+            if (written) {
+                c.written = true;
+                c.landmarks.clear();
+                c.code_changes.clear();
+                c.has_reserve = false;
+            }
+            bool replaced = false;
+            for (command::SectorCard& old : sector_cards_) {
+                if (old.vehicle == c.vehicle) {
+                    old = c;
+                    replaced = true;
+                }
+            }
+            if (!replaced) sector_cards_.push_back(c);
+            HeldPaper paper;
+            paper.id = "sector_card:" + s.vehicle + ":" + std::to_string(own_papers_.size());
+            paper.station = s.vehicle == own ? Cmdr() : s.vehicle + ":commander";
+            paper.time_s = time_;
+            paper.title = (written ? "Notes of the combat order, launcher " : "Sector card, launcher ") + s.vehicle;
+            paper.text = command::SectorCardText(c, def_.held_map);
+            paper.from = written ? std::string("written down by its commander from the battery net")
+                                 : def_.briefings.present ? "the battery commander, in person (" + std::string(campaign::OrderWayName(given_way_)) + ")"
+                                                          : std::string("the battery commander, with the combat order");
+            own_papers_.push_back(paper);
+        }
+    }
+    static constexpr double kCardLandmarkM = 15000.0;  // sam3d: the landmarks a card names lie within this of the point
+    static constexpr std::size_t kCardLandmarks = 4;    // sam3d: and no more than these
+    command::BatteryDecision decision_;
+    bool has_decision_ = false;
+    std::vector<command::DecisionBreach> decision_breaches_;
+    std::vector<command::SectorCard> sector_cards_;
+    std::string decided_main_place_;  // the decided main's anchor ("" none)
+    int decided_anchors_ = 0;
+
+    // ---- Track O, O4 (the order's limits) ----
+    // A line in the commander's log bearing on the limits (the post's, with a task).
+    void LimitLog(const char* kind, const std::string& who, const std::string& text, double off_m = -1.0, double limit_m = -1.0,
+                  const std::string& mode = std::string()) {
+        if (!post_ || !def_.has_task) return;
+        campaign::LogEntry e;
+        e.time_s = time_;
+        e.callsign = who;
+        e.kind = kind;
+        e.text = text;
+        e.off_m = off_m;
+        e.limit_m = limit_m;
+        e.mode = mode;
+        commander_log_.push_back(e);
+    }
+    // ---- Track O, O5: the summing up (campaign/grading.hpp; docs/campaign/12 sections 3 and 7).
+public:
+    // Each task's readiness as he reported it up against its ready-by, the tasks before the one held first.
+    std::vector<campaign::TaskReadiness> TaskReadinessRecord() const {
+        std::vector<campaign::TaskReadiness> out = readiness_before_;
+        if (def_.has_task && task_received_s_ >= 0.0) out.push_back(CurrentReadiness());
+        return out;
+    }
+    // What reached the regiment of the battery since `from_s`, as written: the combat report from the post's records, the
+    // journal and the board checked against the radar company's log, the breaches of the order's limits his log shows,
+    // each task's readiness as reported (a task not yet due and not reported is not judged yet), and the kills claimed
+    // against the radar company's log. False without a post.
+    bool DayRecordSince(double from_s, campaign::DayRecord& out, const std::string& unit = "Battery 21") const {
+        if (!post_) return false;
+        out = campaign::DayRecord();
+        out.unit = unit;
+        out.from_s = from_s;
+        out.to_s = time_;
+        ReportFromRecords(out.report, unit, from_s);
+        std::vector<campaign::SaidReport> said;
+        for (const campaign::SaidReport& s : radar_log_) {
+            if (s.time_s >= from_s) said.push_back(s);
+        }
+        std::vector<campaign::JournalLine> journal;
+        for (const campaign::JournalLine& l : campaign::JournalLines(journal_, time_)) {
+            if (l.heard_s >= from_s) journal.push_back(l);
+        }
+        std::vector<campaign::BoardRecord> board;
+        for (const campaign::BoardRecord& m : campaign::BoardRecords(post_->Board().Marks())) {
+            if (m.time_s >= from_s) board.push_back(m);
+        }
+        out.has_journal = !console_.post_journal_keeper.empty();
+        out.journal = campaign::CheckJournal(journal, said, def_.after_action);
+        out.board = campaign::CheckBoard(board, said, def_.after_action);
+        for (const campaign::LimitFinding& f : LimitBreaches()) {
+            if (f.time_s >= from_s) out.breaches.push_back(f);
+        }
+        for (const campaign::TaskReadiness& t : TaskReadinessRecord()) {
+            if (t.held || (t.ready_s < 0.0 && t.ready_by_s > time_)) continue;
+            if (t.given_s >= from_s || t.ready_s >= from_s || t.ready_s < 0.0) out.readiness.push_back(t);
+        }
+        std::vector<campaign::LogEntry> log;
+        for (const campaign::LogEntry& e : commander_log_) {
+            if (e.time_s >= from_s) log.push_back(e);
+        }
+        out.claims = campaign::CheckClaims(log, radar_log_, time_, def_.grading);
+        return true;
+    }
+    const campaign::GradingRules& Grading() const { return def_.grading; }
+    // The battery's launchers, whose crews he grades.
+    std::vector<std::string> LauncherCrews() const {
+        std::vector<std::string> out;
+        if (!battery_) return out;
+        for (const Battery::Vehicle& v : battery_->Vehicles()) {
+            if (v.def.kind == BatteryVehicleKind::Launcher) out.push_back(v.def.id);
+        }
+        return out;
+    }
+    // The marks his log gives each crew since he last graded them (the rule's), with a player's own marks in their place.
+    std::vector<campaign::CrewGrade> ProposedCrewGrades() const {
+        std::vector<campaign::CrewGrade> g = campaign::GradeCrews(LauncherCrews(), commander_log_, LimitBreaches(), crews_graded_s_, time_, def_.grading);
+        for (campaign::CrewGrade& c : g) {
+            const auto it = player_marks_.find(c.crew);
+            if (it == player_marks_.end()) continue;
+            c.grade = it->second;
+            c.by_player = true;
+        }
+        return g;
+    }
+    // The player's own mark for a crew (2 to 5), written when he grades them (order_grade_crews). False for no such crew.
+    bool SetCrewMark(const std::string& crew, int grade) {
+        const std::vector<std::string> crews = LauncherCrews();
+        if (grade < 2 || grade > 5 || std::find(crews.begin(), crews.end(), crew) == crews.end()) return false;
+        player_marks_[crew] = grade;
+        return true;
+    }
+    // The crews graded: each mark with its reasons into his log (and the session's record). False without a battery.
+    bool GradeCrewsNow(const std::string& who) {
+        if (!post_ || !battery_) {
+            last_refusal_ = "no battery's crews to grade";
+            return false;
+        }
+        const std::vector<campaign::CrewGrade> g = ProposedCrewGrades();
+        if (g.empty()) {
+            last_refusal_ = "no launchers in the battery";
+            return false;
+        }
+        for (const campaign::CrewGrade& c : g) {
+            campaign::LogEntry e;
+            e.time_s = time_;
+            e.callsign = c.crew;
+            e.kind = "grade";
+            e.number = c.grade;
+            e.text = campaign::CrewGradeText(c);
+            commander_log_.push_back(e);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, who, "crew grades", e.text});
+            crew_grades_.push_back(c);
+        }
+        crews_graded_s_ = time_;
+        crews_graded_any_ = true;
+        player_marks_.clear();
+        return true;
+    }
+    const std::vector<campaign::CrewGrade>& CrewMarks() const { return crew_grades_; }
+    double CrewsGradedS() const { return crews_graded_s_; }
+
+private:
+    std::vector<campaign::TaskReadiness> readiness_before_;
+    bool task_held_now_ = false;
+    std::vector<campaign::CrewGrade> crew_grades_;
+    std::map<std::string, int> player_marks_;
+    double crews_graded_s_ = 0.0;
+    bool crews_graded_any_ = false;
+    campaign::TaskReadiness CurrentReadiness() const {
+        campaign::TaskReadiness t;
+        t.task = def_.task.id;
+        t.given_s = def_.task_given_s;
+        t.ready_by_s = task_plan_.ready_by_s;
+        t.ready_s = task_ready_s_;
+        t.held = task_held_now_;
+        return t;
+    }
+    // The NPC battery commander grades his crews from his log before he leaves for the regiment's briefing (within the
+    // crews' lead of its hour), once a day, at his post.
+    void NpcGradesCrews() {
+        if (!def_.briefings.present || !battery_ || !def_.has_task || !commander_away_.empty() || !def_.has_crew_data) return;
+        if (def_.crew_data.FindOrder("order_grade_crews") == nullptr) return;
+        if (crews_graded_any_ && time_ - crews_graded_s_ < 12.0 * 3600.0) return;
+        const double to_h = std::fmod(def_.briefings.regiment.hour - std::fmod(ClockH(time_), 24.0) + 48.0, 24.0);
+        if (to_h > def_.grading.crew_lead_h || to_h < 1.0 / 60.0) return;
+        SeatDuty d = SeatDuty::Order(Cmdr(), "order_grade_crews", "before the regiment's briefing: he grades his crews from his log");
+        d.keep_s = 60.0;
+        if (NpcDoes(Cmdr(), d)) GiveCrewOrder("order_grade_crews");
+    }
+
+private:
+    void UpdateLimits() {
+        if (post_) {
+            NpcGradesCrews();
+            if (def_.has_task && limits_for_ != TasksGiven()) {  // what the regiment gave, for the records' check
+                limits_for_ = TasksGiven();
+                given_limits_.fire = def_.task.limits.fire;
+                given_limits_.leash_grace_s = def_.held_map.leash_grace_s;
+                given_limits_.emission.push_back({def_.task_given_s, def_.task.emission});
+            }
+            UpdateCovered();
+        } else if (LinkedToPost()) {
+            UpdateSpotReport();
+        }
+    }
+    // The covered unit: it says where it is on its net every covered_report_s (heard where the post's set is on the net),
+    // and the post sees it within the visual range; the battery commander knows it only so. Beyond the leash, the NPC
+    // takes the battery after it (order_battery_follow through NpcDoes: a player owes it, and his delay is in the record).
+    void UpdateCovered() {
+        if (!def_.has_task || !nav_ || !battery_ || def_.task.limits.cover_unit.empty()) return;
+        const nav::Mover* mv = nav_->GetMovers().Find(def_.task.limits.cover_unit);
+        if (mv == nullptr) return;
+        if (time_ >= covered_look_s_) {
+            covered_look_s_ = time_ + kCoveredLookS;
+            for (const nav::SessionNav::Seen& sn : nav_->Visible()) {
+                if (sn.mover != mv->id || sn.index != 0) continue;
+                const Vec3 at{sn.at.east_m, sn.at.north_m, 0.0};
+                CoveredLearned(at, "seen", command::GridRef(at, def_.held_map));
+            }
+        }
+        const RadioNetDef* n = def_.radio_data.Find("covered");
+        if (n != nullptr && time_ >= covered_report_next_s_) {
+            covered_report_next_s_ = time_ + def_.held_map.covered_report_s;
+            const MapPoint at = nav::PointAlong(mv->route, mv->arc_m);
+            const std::string grid = command::GridRef(Vec3{at.east_m, at.north_m, 0.0}, def_.held_map);
+            const std::vector<std::string> ears = NetHearers("covered");
+            Radio("covered net", n->main_call_sign, n->own_call_sign + ", я " + n->main_call_sign + ": нахожусь " + grid + ". Приём.", false, ears);
+            Vec3 p;
+            if (!ears.empty() && command::ReadGridRef(grid, LaunchersCentre(), def_.held_map, p)) CoveredLearned(p, "radio_voice", grid);
+        }
+        if (follow_pending_ && time_ - follow_s_ > kFollowSettleS && battery_->CurrentMode() == Battery::Mode::Formation && !task_formation_pending_ &&
+            post_planned_.empty()) {
+            follow_pending_ = false;
+        }
+        if (!covered_known_.known || follow_pending_ || task_ready_s_ < 0.0 || battery_->CurrentMode() != Battery::Mode::Formation || !post_planned_.empty()) return;
+        const Vec3 c = LaunchersCentre();
+        if (std::hypot(c.x - covered_known_.at.x, c.y - covered_known_.at.y) <= LeashM()) return;
+        if (!def_.has_crew_data || def_.crew_data.FindOrder("order_battery_follow") == nullptr) {
+            FollowCovered("Battery commander");
+            return;
+        }
+        SeatDuty d = SeatDuty::Order(Cmdr(), "order_battery_follow", "the covered unit beyond the leash: the battery after it");
+        d.keep_s = 60.0;
+        if (NpcDoes(Cmdr(), d)) GiveCrewOrder("order_battery_follow");
+    }
+    // He learned where the covered unit is: his map's mark, and a line in his log when it has moved or a while has passed
+    // (off: from the launchers' middle; the limit: the leash). Not before the battery first stood ready behind it, nor
+    // while it is on its way after it.
+    void CoveredLearned(const Vec3& at, const std::string& means, const std::string& grid) {
+        covered_known_.known = true;
+        covered_known_.at = at;
+        covered_known_.as_of_s = time_;
+        covered_known_.means = means;
+        covered_known_.grid = grid;
+        if (follow_pending_ || task_ready_s_ < 0.0) return;  // the leash holds once the battery stands behind it (reported ready)
+        const bool moved = std::hypot(at.x - covered_logged_at_.x, at.y - covered_logged_at_.y) > kCoveredMovedM;
+        if (!moved && time_ - covered_logged_s_ < def_.held_map.covered_report_s - 1.0) return;
+        covered_logged_at_ = at;
+        covered_logged_s_ = time_;
+        const Vec3 c = LaunchersCentre();
+        LimitLog("covered", "battery", grid + (means == "seen" ? " (seen)" : " (its report)"), std::hypot(c.x - at.x, c.y - at.y), LeashM());
+    }
+    // The Osa's commander reports his spot to the battery commander once deployed at his place (or the spot he chose).
+    void UpdateSpotReport() {
+        if (spot_reported_ || !osa_deployed_ || !has_formation_place_ || !spot_moves_.empty() || SectorCardOf(OwnCallsign()) == nullptr) return;
+        if (!callouts_ || def_.crew_data.FindCallout("report_spot") == nullptr) return;
+        const std::map<std::string, std::string> f{{"callsign", OwnCallsign()}, {"grid", command::GridRef(UnitPosition(), def_.held_map)}};
+        SeatDuty d = SeatDuty::Report(Cmdr(), "report_spot", "deployed at his spot: where he stands, to the battery commander", f);
+        d.keep_s = 30.0;
+        if (!NpcDoes(Cmdr(), d)) return;
+        if (!SayOnRadio("report_spot", f, false)) return;
+        spot_reported_ = true;
+        spot_reports_.push_back(f.at("grid"));
+    }
+    // The Osa: whether the battery commander gave him this target (a designation he heard, or a group's pick).
+    bool DesignatedToUs(const std::string& target) const {
+        for (const C2Network::Event& d : designations_heard_) {
+            if (d.subject == target) return true;
+        }
+        for (const GroupOrder& g : group_orders_) {
+            if (g.pick == target) return true;
+        }
+        return false;
+    }
+    static constexpr double kCoveredLookS = 30.0;   // sam3d: the post looks for it this often
+    static constexpr double kCoveredMovedM = 200.0;  // sam3d: moved this far, he writes it down again
+    static constexpr double kFollowSettleS = 60.0;   // sam3d: the march after it given by then
+    CoveredKnown covered_known_;
+    double covered_look_s_ = 0.0;
+    double covered_report_next_s_ = 0.0;
+    Vec3 covered_logged_at_{1e12, 1e12, 0.0};
+    double covered_logged_s_ = -1e9;
+    int follows_ = 0;
+    bool follow_pending_ = false;
+    double follow_s_ = -1e9;
+    std::map<std::string, std::set<int>> designated_;  // the post: the board numbers he gave each launcher
+    std::vector<std::string> fire_mode_orders_;        // the post: for a linked Osa
+    campaign::GivenLimits given_limits_;
+    int limits_for_ = 0;
+    std::string fire_mode_cmdr_;  // the Osa: the fire mode its commander holds
+    std::string held_fire_for_;
+    bool has_formation_place_ = false;
+    Vec3 formation_place_;
+    bool osa_deployed_ = false;
+    bool spot_reported_ = false;
+    std::vector<Vec3> spot_moves_;
+    std::vector<std::string> spot_reports_;
+
+    // ---- Track O, O3 (the orders as people give them) ----
+    struct PendingLine {
+        campaign::SceneLine line;
+        bool intercom = false;
+    };
+    std::vector<PendingLine> pending_lines_;
+    std::vector<campaign::SceneLine> scene_lines_;
+    std::string commander_away_;
+    bool briefing_trip_ = false;
+    campaign::OrderWay requested_way_ = campaign::OrderWay::Default;
+    campaign::OrderWay given_way_ = campaign::OrderWay::Default;
+    Gathering gathering_;
+    double combat_due_s_ = -1.0;  // the order in person: its last line, when the cards are handed
+    std::string combat_words_;
+    int radio_orders_ = 0;
+    std::map<std::string, std::set<std::string>> crew_briefed_;
+    double crew_briefed_card_s_ = -1e18;  // the card the crew was last briefed on
+    bool has_gathering_place_ = false;
+    Vec3 gathering_place_;
+    static constexpr double kGatherWalkMps = 1.2;  // sam3d: a vehicle commander's walk over to the battery commander
+    static constexpr double kGatherReadyS = 120.0;  // sam3d: and his getting out and going
+
+    const command::SectorCard* OwnCard() const {
+        if (!battery_ || battery_->Own() == nullptr) return nullptr;
+        return SectorCardOf(battery_->Own()->def.id);
+    }
+    // The combat order's words for the scene and the short form.
+    std::map<std::string, std::string> CombatOrderFields() const {
+        std::map<std::string, std::string> f{{"time", DayClock(task_plan_.march_at_s >= 0.0 ? task_plan_.march_at_s : task_plan_.order_s)},
+                                             {"task", def_.task.task_text}, {"task_en", def_.task.task_text},
+                                             {"area", PlaceName(def_.task.main)}, {"area_en", PlaceName(def_.task.main)},
+                                             {"ready", DayClock(task_plan_.ready_by_s)}};
+        f["enemy"] = def_.task.habits.empty() ? std::string("as on your maps") : def_.task.habits;
+        std::string sectors;
+        const auto add = [&sectors](const std::string& v, double a, double b) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%s%s from %03.0f to %03.0f", sectors.empty() ? "" : ", ", v.c_str(), a, b);
+            sectors += buf;
+        };
+        if (has_decision_ && !decision_.sectors.empty()) {
+            for (const command::DecidedSector& d : decision_.sectors) add(d.vehicle, d.from_deg, d.to_deg);
+        } else {
+            for (const campaign::TaskSector& d : def_.task.sectors) add(d.vehicle, d.from_deg, d.to_deg);
+        }
+        f["sectors"] = sectors;
+        f["regime"] = def_.task.emission.empty() ? std::string("as it is") : def_.task.emission;
+        f["point"] = PlaceName(def_.task.main);
+        f["reserve"] = def_.task.reserve.empty() ? std::string("none") : PlaceName(def_.task.reserve.front());
+        std::string codes;
+        if (const command::IffSchedule* table = IffCodes()) {
+            const double now_h = ClockH(time_);
+            for (const command::IffSchedule::Change& c : table->Changes()) {
+                if (c.from_h <= now_h || c.from_h > now_h + 24.0) continue;
+                const long long m = static_cast<long long>(std::llround(c.from_h * 60.0)) % (24 * 60);
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%02lld:%02lld", m / 60, m % 60);
+                codes += (codes.empty() ? "" : ", ") + std::string(buf);
+            }
+        }
+        f["code_changes"] = codes.empty() ? std::string("as on the table") : codes;
+        return f;
+    }
+    // The task's combat order with O3's data: by radio in the short form (each commander writes down what he heard), or
+    // in person at the map table or on the ground: the vehicle commanders called to him, the order item by item once they
+    // are there, the cards handed at its end (UpdateOrdersInPerson).
+    bool GiveCombatOrder(const campaign::PlannedStep& st, const std::string& who) {
+        using campaign::OrderWay;
+        OrderWay w = requested_way_;
+        if (w == OrderWay::Default) w = NpcOrderWay();
+        if (campaign::InPerson(w) && !commander_away_.empty()) {
+            last_refusal_ = "away (" + commander_away_ + "): by radio only";
+            return false;
+        }
+        given_way_ = w;
+        task_steps_done_.insert(st.id);
+        const std::map<std::string, std::string> f = CombatOrderFields();
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, "the combat order", std::string("given ") + campaign::OrderWayName(w)});
+        if (w == OrderWay::Radio) {
+            const CalloutDef* c = def_.crew_data.FindCallout("order_battery_combat_order");
+            const std::string en = campaign::FillLine(def_.briefings.battery.radio_en, f);
+            const std::string words = c != nullptr ? FillCallout(c->ru, RuFields(f)) : en;
+            NoticeOnOrderNet(st.id, words, std::make_pair(std::string("боевой приказ"), std::string("the combat order")));
+            log_.Record({time_, DebriefEntry::Kind::Scenario, who, "battery net", en});
+            ++radio_orders_;
+            TaskCombatOrder(true);
+            return true;
+        }
+        const Vec3 at = GatheringPlace();
+        const double gather_s = GatheringS();
+        ++gathering_.id;
+        gathering_.at = at;
+        gathering_.start_s = time_;
+        gathering_.way = campaign::OrderWayName(w);
+        Radio("battery net", BatteryPostCall(), "Всем, я " + BatteryPostCall() + ": командирам машин — ко мне.");
+        log_.Record({time_, DebriefEntry::Kind::Scenario, who, "battery net", "the vehicle commanders called to him for the combat order"});
+        double t = time_ + gather_s;
+        for (const campaign::BriefingItem& it : def_.briefings.battery.items) {
+            AddSceneLine({"battery_order", t, "the battery commander", it.id, campaign::FillLine(it.en, f)});
+            t += def_.briefings.battery.line_s;
+        }
+        gathering_.end_s = t;
+        combat_due_s_ = t;
+        combat_words_ = c_words(f);
+        return true;
+    }
+    std::string c_words(const std::map<std::string, std::string>& f) const {
+        const CalloutDef* c = def_.crew_data.FindCallout("order_battery_combat_order");
+        return c != nullptr ? FillCallout(c->ru, RuFields(f)) : "Боевой приказ: " + def_.task.short_ru + ".";
+    }
+    // The callout's Russian words take the task and the area as said on the radio.
+    std::map<std::string, std::string> RuFields(std::map<std::string, std::string> f) const {
+        f["task"] = def_.task.short_ru;
+        f["area"] = TaskArea();
+        return f;
+    }
+    // The NPC battery commander's way (D1): by radio when away or the ready-by is near; at the map table before a march
+    // (the route on the map); else on the ground at the position.
+    // O5: also by radio when calling the vehicle commanders now would leave the battery late: their walk over and the
+    // order's items, then the march and the occupation as his plan has them, past the ready-by (he knows where his
+    // vehicles stand).
+    campaign::OrderWay NpcOrderWay() const {
+        if (!commander_away_.empty() || task_plan_.ready_by_s - time_ < def_.briefings.battery.urgent_s) return campaign::OrderWay::Radio;
+        const double rest_s = task_plan_.planned ? std::max(0.0, task_plan_.ready_s - task_plan_.order_s) : 0.0;
+        if (time_ + GatheringS() + CombatOrderItemsS() + rest_s > task_plan_.ready_by_s + 1e-6) return campaign::OrderWay::Radio;
+        return task_plan_.march_at_s >= 0.0 ? campaign::OrderWay::MapTable : campaign::OrderWay::Ground;
+    }
+    // Where the vehicle commanders gather (his post), how long the farthest takes to walk over, and the order's items.
+    Vec3 GatheringPlace() const { return battery_ && battery_->Own() != nullptr ? battery_->Own()->position : def_.unit_position; }
+    double GatheringS() const {
+        if (!order_net_) return 0.0;
+        const Vec3 at = GatheringPlace();
+        double gather_s = 0.0;
+        for (const command::OrderVehicle& v : order_net_->Vehicles()) gather_s = std::max(gather_s, std::hypot(v.at.x - at.x, v.at.y - at.y) / kGatherWalkMps);
+        return gather_s + kGatherReadyS;
+    }
+    double CombatOrderItemsS() const { return static_cast<double>(def_.briefings.battery.items.size()) * def_.briefings.battery.line_s; }
+    // O5: the NPC's combat order in person is called early, so that the commanders are there by his plan's time for it
+    // (the farthest one's walk before it, not before his preliminary order); by radio it is given at that time.
+    double CombatOrderDueS(const campaign::PlannedStep& st) const {
+        if (st.id != "combat_order" || !def_.briefings.present || !campaign::InPerson(NpcOrderWay())) return st.end_s;
+        double earliest = st.start_s;
+        if (const campaign::PlannedStep* pre = task_plan_.Step("preliminary")) earliest = std::min(earliest, pre->end_s);
+        return std::max(earliest, st.end_s - GatheringS() - CombatOrderItemsS());
+    }
+    // Each step: the scenes' lines whose time has come (a line on the intercom heard by whoever its router lets hear it,
+    // who then knows its item); the combat order in person at its end; the NPC commander's crew briefing.
+    void UpdateOrdersInPerson() {
+        if (pending_lines_.empty() && combat_due_s_ < 0.0 && !def_.briefings.present) return;
+        for (std::size_t i = 0; i < pending_lines_.size();) {
+            if (pending_lines_[i].line.at_s > time_ + 1e-9) {
+                ++i;
+                continue;
+            }
+            const PendingLine p = pending_lines_[i];
+            pending_lines_.erase(pending_lines_.begin() + static_cast<std::ptrdiff_t>(i));
+            scene_lines_.push_back(p.line);
+            log_.Record({time_, DebriefEntry::Kind::Scenario, p.line.speaker, p.line.scene, p.line.text});
+            if (!p.intercom) continue;
+            const std::vector<std::string> heard = HeardBy("intercom");
+            Radio("intercom", Cmdr(), p.line.text, false, heard);
+            if (!voice_) {
+                for (const ConsoleStation& st : console_.stations) crew_briefed_[st.id].insert(p.line.item);
+            } else {
+                for (const std::string& h : heard) crew_briefed_[h].insert(p.line.item);
+            }
+        }
+        if (combat_due_s_ >= 0.0 && time_ + 1e-9 >= combat_due_s_) {
+            combat_due_s_ = -1.0;
+            if (order_net_) {
+                KeepOrderNetCurrent();
+                std::vector<std::string> to;
+                for (const command::OrderVehicle& v : order_net_->Vehicles()) to.push_back(v.vehicle);
+                const int order = order_net_->Give("combat_order", combat_words_, "gathered", time_, to);
+                order_words_[order] = std::make_pair(std::string("боевой приказ"), std::string("the combat order"));
+                notice_orders_.insert(order);
+            }
+            log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "the combat order", "given in person; the cards handed over"});
+            TaskCombatOrder(false);
+        }
+        if (def_.briefings.present && def_.crew_data.FindOrder("order_crew_briefing") != nullptr) {
+            const command::SectorCard* c = OwnCard();
+            if (c != nullptr && c->given_s > crew_briefed_card_s_ + 1e-9 && !Outside(Cmdr()) && !has_gathering_place_) {
+                SeatDuty d = SeatDuty::Order(Cmdr(), "order_crew_briefing", "back at the vehicle with the combat order: he briefs his crew");
+                d.keep_s = 1.0;
+                if (NpcDoes(Cmdr(), d)) GiveCrewOrder("order_crew_briefing");
+            }
+        }
     }
     // An order of words only on the battery net (the task's preliminary order and the oral combat order): every vehicle
     // commander hears it and reads it back (only the launchers' for a fire order); nobody moves on it.
@@ -7180,7 +8385,7 @@ private:
                 Transmitted("battery", "Battery commander", 2.0);
             }
             const bool off = !nets_->MemberOnNet("battery", s.callsign) || nets_->Jam("battery", time_) >= 2;
-            const bool told = SearchOwnHeard(s.callsign);
+            const bool told = SearchOwnHeard(s.callsign) || (battery_ && battery_->Detached(s.callsign));  // O7: detached, on its own
             if ((off || told) != s.on_own) {
                 Event(s.callsign, off ? "off the battery net: searches and fires on its own"
                                       : (told ? "searches and fires on its own in its sector, by the battery commander's order"
@@ -7211,6 +8416,9 @@ private:
                                               : std::make_pair(std::string("по целеуказанию"), std::string("on the designations")),
                                            true);
         search_own_order_ = on ? order : -1;
+        LimitLog("fire_mode", "battery", on ? "the launchers on their own search" : "the launchers on the designations", -1.0, -1.0,
+                 on ? "independent" : "designation");
+        if (def_.has_task && !def_.task.limits.fire.empty()) fire_mode_orders_.push_back(on ? "independent" : "designation");
         log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", words});
         return true;
     }
@@ -7233,7 +8441,8 @@ private:
         const double since = time_ - raid_warned_s_;
         const bool no_picture = raid_warned_s_ >= 0.0 && since >= kNoPictureS && since < kRaidWarningS && time_ - fresh_s >= kNoPictureS;
         const bool picture = time_ - fresh_s < kPictureBackS;
-        if (search_own_order_ < 0 && no_picture && !MarchRadioBan()) {
+        const bool designation_only = def_.has_task && def_.task.limits.fire == "designation";  // O4: the order's fire mode kept
+        if (search_own_order_ < 0 && no_picture && !MarchRadioBan() && !designation_only) {
             SeatDuty d = SeatDuty::Order(std::string(), "order_battery_search_own", "a raid announced and nothing on the board: the launchers search on their own");
             d.keep_s = 120.0;
             if (NpcDoes(Cmdr(), d)) OrderSearchOwn(true, "Battery commander");
@@ -7447,9 +8656,20 @@ private:
             if (l.state != LauncherStatus::State::Empty) ++ready;
             missiles += l.missiles > 0 ? l.missiles : 0;
         }
+        last_report_missiles_ = missiles;  // O7: what the regiment was told (its tasking reads the report, not the truth)
+        last_report_s_ = time_;
+        // O4: arrived, the battery's place as a grid reference (the launchers' middle as he reads it off his map).
+        const std::string grid = command::GridRef(LaunchersCentre(), def_.held_map);
+        const std::string arrived = moved_since_report_ ? "в назначенный район прибыла, " + grid + ", " : std::string();
         char text[256];
         std::snprintf(text, sizeof(text), "%s, я %s: %sк бою готова, пусковых %d, ракет %d. Приём.", rn->main_call_sign.c_str(),
-                      rn->own_call_sign.c_str(), moved_since_report_ ? "в назначенный район прибыла, " : "", ready, missiles);
+                      rn->own_call_sign.c_str(), arrived.c_str(), ready, missiles);
+        if (moved_since_report_ && def_.has_task) {  // the position as he reported it, against the order's point
+            Vec3 point;
+            const bool limited = def_.task.limits.cover_unit.empty() && TaskPlace(def_.task.main, point);
+            const Vec3 at = LaunchersCentre();
+            LimitLog("position", "battery", grid, limited ? std::hypot(at.x - point.x, at.y - point.y) : -1.0, limited ? SpotLeewayM() : -1.0);
+        }
         Radio("regiment net", SpeakerName(talker), text, false, NetHearers("regiment"));
         Transmitted("regiment", SpeakerName(talker), 5.0);
         log_.Record({time_, DebriefEntry::Kind::Scenario, SpeakerName(talker), "regiment", text});
@@ -7468,6 +8688,8 @@ private:
     // The NPC commander reports once the post's communications are ready and every launcher has reported ready.
     void UpdateRegimentReport() {
         if (regiment_reported_ || !post_ || def_.radio_data.Find("regiment") == nullptr || MarchRadioBan()) return;
+        // O6: a long march's halt is not the end of it (the post deployed there is not the battery in its area).
+        if (battery_ && battery_->CurrentMode() == Battery::Mode::Halted) return;
         if (!console_.equipment.IsReady("comms_ready") || status_boards_.empty()) return;
         for (const LauncherStatus& l : status_boards_) {
             if (l.state != LauncherStatus::State::Ready) return;
@@ -7475,7 +8697,55 @@ private:
         if (NpcDoes(Cmdr(), SeatDuty::Order(Cmdr(), "order_report_regiment", "communications and every launcher ready"))) ReportToRegiment();
     }
 
+    int last_report_missiles_ = -1;
+    double last_report_s_ = -1.0;
+
 public:
+    // O7: the battery's last report of readiness up to the regiment: the missiles it said it had (-1: none yet), and when.
+    int LastReportMissiles() const { return last_report_missiles_; }
+    double LastReportS() const { return last_report_s_; }
+    // O7: the battery rested and repaired at the rear (relieved by the regiment's reserve): its faults mended, the TZM and
+    // the fuel truck full, each launcher's load made up to `missiles` from the regiment's stocks there.
+    void RestAndRepair(int missiles) {
+        if (battery_) battery_->RestAndRepair(time_);
+        if (battery_fire_) {
+            for (const BatteryFire::Shooter& s : battery_fire_->Shooters()) {
+                if (!s.external) battery_fire_->Refill(s.callsign, missiles);
+            }
+        }
+        if (!tzm_id_.empty() && battery_) {
+            const Battery::Vehicle* v = battery_->Find(tzm_id_);
+            if (v != nullptr) tzm_reckoned_ = static_cast<int>(std::lround(v->stock));
+        }
+        siding_empty_heard_ = false;
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "rest", "rested and repaired at the rear, every launcher loaded"});
+    }
+    // O7: a fighting neighbour come to the battery's area in the session (the regiment's reserve battery relieving it): its
+    // launchers fight beside ours from now. False for one already there.
+    bool AddFightingNeighbour(const ScenarioNeighbour& nb) {
+        for (const ScenarioNeighbour& had : def_.neighbours) {
+            if (had.id == nb.id) return false;
+        }
+        def_.neighbours.push_back(nb);
+        if (!nb.fights) return true;
+        if (!neighbour_fire_) {
+            neighbour_fire_built_ = false;  // built at the next step, with it
+            return true;
+        }
+        const std::size_t j = def_.neighbours.size() - 1;
+        const std::vector<Vec3> places = NeighbourLauncherPlaces(nb);
+        const int n = static_cast<int>(places.size());
+        const int total = nb.missiles < 0 ? 6 * n : std::min(nb.missiles, 6 * n);
+        for (int k = 0; k < n; ++k) {
+            const int share = total / n + (k < total % n ? 1 : 0);
+            neighbour_fire_->AddShooter(nb.id + "/" + std::to_string(k + 1), places[static_cast<std::size_t>(k)], share);
+            shooter_neighbour_.push_back(j);
+        }
+        neighbour_launches_[nb.id] = 0;
+        neighbour_radar_s_[nb.id] = 0.0;
+        return true;
+    }
+
     // ---- what the voice paths expose (the HUD, the orders menu, the tests)
     const VoiceComms* Voice() const { return voice_.get(); }
     const RadioNets* Nets() const { return nets_.get(); }
@@ -8152,6 +9422,26 @@ public:
         def_.post_regiment.radars.push_back(r);
         Event("regiment's radar", id + " (" + type + ") feeds the regiment's picture");
         return true;
+    }
+    // Track O, O6: the regiment's command post at its new place (its column arrived there, campaign/mission_session.hpp):
+    // the post, and the radars of its own that stood by it (within 3 km), each as far from it and as high off the ground
+    // as before. Its nets are heard from there; theatre radars that joined the feed elsewhere stay where they are.
+    void MoveRegiment(double east_m, double north_m) {
+        PostRegiment& g = def_.post_regiment;
+        const Terrain& ground = world_.GetTerrain();
+        const Vec3 was = g.position;
+        const auto moved = [&](const Vec3& p) {
+            const double e = east_m + (p.x - was.x), n = north_m + (p.y - was.y);
+            return Vec3{e, n, ground.HeightAt(e, n) + std::max(0.0, p.z - ground.HeightAt(p.x, p.y))};
+        };
+        if (g.has_position) {
+            for (RegimentRadar& r : g.radars) {
+                if ((Vec3{r.position.x, r.position.y, 0.0} - Vec3{was.x, was.y, 0.0}).Length() < 3000.0) r.position = moved(r.position);
+            }
+        }
+        g.position = g.has_position ? moved(was) : Vec3{east_m, north_m, ground.HeightAt(east_m, north_m) + 2.0};
+        g.has_position = true;
+        Event("regiment", "the regiment's command post at its new place");
     }
     // A radar of the regiment's off the air from now (struck) or back on it (repaired): its picture stops at the board, or
     // comes again. False for an unknown radar, or one already so.
@@ -10189,6 +11479,211 @@ private:
             log_.Record({ev[tzm_events_seen_].t, DebriefEntry::Kind::Scenario, TzmCallsign(), "TZM run", ev[tzm_events_seen_].text});
         }
     }
+    // ---- Track O, O7: launchers detached from the battery (campaign/battery_task.hpp's TaskDetach; docs/campaign/12
+    // section 8). With the combat order the battery commander tells each detached launcher on the battery net where it
+    // goes; once its commander has heard, it drives there on the roads on its own (a mover of the session, as the TZM's
+    // run: its class's way), deploys and fights on its own, its commander the senior man on the spot. Released by a later
+    // task, it comes back to the battery the same way and joins it. Nothing is moved without a road: no way, he says so.
+public:
+    static constexpr const char* kLauncherMobility = "osa_9a33";  // data/vehicles/mobility.json
+    struct DetachRun {
+        std::string vehicle;
+        std::string place;  // where it goes ("" : back to the battery)
+        int order = -1;     // its order on the battery net
+        bool started = false;
+        bool there = false;
+        bool failed = false;
+    };
+
+private:
+    std::vector<DetachRun> detach_runs_;
+
+public:
+    // What a detached launcher's own crew learns (the Osa beside the post, O3): its detachment, where to, and when it is
+    // back with the battery. Taken once.
+    struct DetachNews {
+        std::string vehicle;
+        std::string place;
+        std::string place_name;
+        bool detached = true;  // false: back with the battery
+    };
+    std::vector<DetachNews> TakeDetachNews() {
+        std::vector<DetachNews> out;
+        out.swap(detach_news_);
+        return out;
+    }
+    const std::vector<DetachRun>& DetachRuns() const { return detach_runs_; }
+    // Whether a launcher stands detached (at its place, deployed or deploying), and where.
+    bool LauncherDetached(const std::string& vehicle, std::string* place = nullptr) const {
+        if (!battery_ || !battery_->Detached(vehicle)) return false;
+        for (const DetachRun& d : detach_runs_) {
+            if (d.vehicle == vehicle && !d.place.empty() && d.there && place != nullptr) *place = d.place;
+        }
+        return true;
+    }
+
+private:
+    std::vector<DetachNews> detach_news_;
+    std::string DetachMoverId(const std::string& vehicle) const { return "detached:" + vehicle; }
+    // With the combat order: each launcher the task detaches is told where to go; one detached before and not now is
+    // called back.
+    void OrderDetachments() {
+        if (!battery_ || !order_net_ || !nav_) return;
+        for (const campaign::TaskDetach& d : def_.task.detached) {
+            const Battery::Vehicle* v = battery_->Find(d.vehicle);
+            if (v == nullptr || v->def.kind != BatteryVehicleKind::Launcher) continue;
+            bool held = false;
+            for (const DetachRun& r : detach_runs_) held = held || (r.vehicle == d.vehicle && r.place == d.place && !r.failed);
+            if (held) continue;
+            DetachOrder(d.vehicle, d.place);
+        }
+        for (const Battery::Vehicle& v : battery_->Vehicles()) {
+            bool going = false;
+            for (const DetachRun& r : detach_runs_) going = going || (r.vehicle == v.def.id && !r.place.empty() && !r.failed);
+            if (!going || def_.task.DetachedOf(v.def.id) != nullptr) continue;
+            DetachOrder(v.def.id, std::string());  // called back to the battery
+        }
+    }
+    void DetachOrder(const std::string& vehicle, const std::string& place) {
+        for (std::size_t i = detach_runs_.size(); i-- > 0;) {
+            if (detach_runs_[i].vehicle == vehicle) detach_runs_.erase(detach_runs_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+        KeepOrderNetCurrent();
+        std::string call = vehicle;
+        for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+            if (c.vehicle == vehicle) call = c.callsign;
+        }
+        const std::string words = place.empty() ? call + ", я " + BatteryPostCall() + ": вернуться в расположение батареи."
+                                                : call + ", я " + BatteryPostCall() + ": выдвинуться в район " + PlaceName(place) +
+                                                      ", прикрыть его, действовать самостоятельно.";
+        DetachRun r;
+        r.vehicle = vehicle;
+        r.place = place;
+        r.order = order_net_->Give(place.empty() ? "detach_back" : "detach", words, "radio_voice", time_, {vehicle});
+        order_words_[r.order] = place.empty() ? std::make_pair(std::string("вернуться в батарею"), std::string("back to the battery"))
+                                              : std::make_pair("выдвинуться в " + PlaceName(place), "detached to " + PlaceName(place));
+        notice_orders_.insert(r.order);  // the battery does not move on it: the launcher's own run does
+        detach_runs_.push_back(r);
+        GiverJournal().Heard(time_, "battery net", "Battery commander", words);
+        Radio("battery net", BatteryPostCall(), words);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, "Battery commander", "battery net", words});
+    }
+    void UpdateDetachments() {
+        if (detach_runs_.empty() || !battery_ || !nav_) return;
+        for (DetachRun& r : detach_runs_) {
+            if (r.failed || r.there) continue;
+            const Battery::Vehicle* v = battery_->Find(r.vehicle);
+            if (v == nullptr) continue;
+            if (!r.started) {
+                if (!order_net_->Acting(r.order, r.vehicle) && !order_net_->Heard(r.order, r.vehicle)) continue;
+                StartDetachRun(r, *v);
+                continue;
+            }
+            nav::Mover* m = nav_->GetMovers().Find(DetachMoverId(r.vehicle));
+            if (m == nullptr) continue;
+            const MapPoint at = nav::PointAlong(m->route, m->arc_m);
+            if (m->state != nav::MoverState::Arrived) {
+                battery_->SetAway(r.vehicle, true, GroundEnu(at.east_m, at.north_m));
+                continue;
+            }
+            m->level = nav::MoverLevel::M0;
+            r.there = true;
+            std::string call = r.vehicle;
+            for (const command::OrderVehicle& c : order_net_->Vehicles()) {
+                if (c.vehicle == r.vehicle) call = c.callsign;
+            }
+            if (!r.place.empty()) {  // there: deploys and fights on its own
+                battery_->SetDetached(r.vehicle, true, GroundEnu(at.east_m, at.north_m), time_);
+                if (battery_fire_) battery_fire_->SetOnOwn(r.vehicle, true);
+                order_net_->Done(r.order, r.vehicle, time_, call + ": в район " + PlaceName(r.place) + " прибыл, действую самостоятельно.");
+                log_.Record({time_, DebriefEntry::Kind::Scenario, call, "detached", "at " + PlaceName(r.place) + ": deploying, on its own"});
+            } else {  // back: the battery's vehicle again, joining it where it is
+                battery_->SetDetached(r.vehicle, false, GroundEnu(at.east_m, at.north_m), time_);
+                if (battery_fire_) battery_fire_->SetOnOwn(r.vehicle, false);
+                battery_->SetAbsent(r.vehicle, true);
+                battery_->Join(r.vehicle, time_);
+                order_net_->Done(r.order, r.vehicle, time_, call + ": в расположение батареи прибыл.");
+                log_.Record({time_, DebriefEntry::Kind::Scenario, call, "detached", "back with the battery"});
+                detach_news_.push_back({r.vehicle, std::string(), std::string(), false});
+            }
+        }
+        for (std::size_t i = detach_runs_.size(); i-- > 0;) {  // the runs back are over once it is with the battery
+            if (detach_runs_[i].place.empty() && detach_runs_[i].there) detach_runs_.erase(detach_runs_.begin() + static_cast<std::ptrdiff_t>(i));
+        }
+    }
+    void StartDetachRun(DetachRun& r, const Battery::Vehicle& v) {
+        r.started = true;
+        const nav::Mobility* cls = nav_->MobilityClasses().Find(kLauncherMobility);
+        MapPoint to;
+        if (!r.place.empty()) {
+            const nav::Anchor* a = nav_->GetAnchors().Find(r.place);
+            if (a != nullptr) to = a->at;
+            if (a == nullptr) cls = nullptr;
+        } else {  // back to where the battery's post stands now
+            const Battery::Vehicle* post = battery_->Own();
+            const Vec3 c = post != nullptr && post->def.kind != BatteryVehicleKind::Launcher ? post->position : LaunchersCentre();
+            to = {c.x, c.y};
+        }
+        nav::Route route;
+        if (cls != nullptr) {
+            nav::RouteRequest q;
+            q.from = {v.position.x, v.position.y};
+            q.to = to;
+            q.mobility = cls;
+            q.h = time_ / 3600.0;
+            q.night = light_.dark;
+            route = nav_->Graph().Find(q, roads_believed_);
+        }
+        if (!route.found) {
+            r.failed = true;
+            const std::string why = route.why.empty() ? "no way there on the roads" : route.why;
+            order_net_->Cannot(r.order, r.vehicle, time_, why, r.vehicle + ": " + (r.place.empty() ? "вернуться" : "выдвинуться") + " не могу, пути нет.");
+            log_.Record({time_, DebriefEntry::Kind::Scenario, r.vehicle, "detached", "cannot go: " + why});
+            return;
+        }
+        nav::Mover m;
+        nav::Mover* had = nav_->GetMovers().Find(DetachMoverId(r.vehicle));
+        if (had != nullptr) m = *had;
+        m.id = DetachMoverId(r.vehicle);
+        m.kind = "vehicle";
+        m.mobility = kLauncherMobility;
+        m.route = route;
+        m.depart_s = time_;
+        m.state = nav::MoverState::Moving;
+        m.arc_m = 0.0;
+        m.moved_s = 0.0;
+        m.arrived_s = -1.0;
+        m.halt_until_s = time_;
+        m.level = nav::MoverLevel::M1;
+        if (had != nullptr) {
+            *had = m;
+        } else {
+            nav_->AddMover(m, kLauncherMobility);
+        }
+        if (battery_->Detached(r.vehicle)) battery_->SetDetached(r.vehicle, false, v.position, time_);
+        if (battery_fire_) battery_fire_->SetOnOwn(r.vehicle, true);  // out of the battery's formation: on its own from here
+        battery_->SetAway(r.vehicle, true, v.position);
+        log_.Record({time_, DebriefEntry::Kind::Scenario, r.vehicle, "detached",
+                     r.place.empty() ? std::string("sets off back to the battery") : "sets off for " + PlaceName(r.place)});
+        if (!r.place.empty()) detach_news_.push_back({r.vehicle, r.place, PlaceName(r.place), true});
+    }
+    // A held task's detachments (a campaign resumed): each launcher already at its place stands there, detached.
+    void HoldDetachments() {
+        if (!battery_ || !nav_) return;
+        for (const campaign::TaskDetach& d : def_.task.detached) {
+            const Battery::Vehicle* v = battery_->Find(d.vehicle);
+            const nav::Anchor* a = nav_->GetAnchors().Find(d.place);
+            if (v == nullptr || a == nullptr || std::hypot(v->position.x - a->at.east_m, v->position.y - a->at.north_m) > kTaskInAreaM) continue;
+            battery_->SetDetached(d.vehicle, true, v->position, time_);
+            if (battery_fire_) battery_fire_->SetOnOwn(d.vehicle, true);
+            DetachRun r;
+            r.vehicle = d.vehicle;
+            r.place = d.place;
+            r.started = r.there = true;
+            detach_runs_.push_back(r);
+            detach_news_.push_back({d.vehicle, d.place, PlaceName(d.place), true});
+        }
+    }
     // The TZM's chief's report reaches the battery commander: his roads gain the bridges the chief found down on the way
     // (closed at the hour the regiment since said one open again), and back, his reckoning is the load reported and the
     // run is over; out there with no way back, the run stands until he is back.
@@ -11126,6 +12621,15 @@ private:
             NpcGive("order_iff", 10.0);
             return;
         }
+        // O4: on designation only, he launches at nothing the battery commander gave him not (an NPC keeps the mode; a
+        // player is not stopped, and his launch is in the post's record). Off the net he fights on his own.
+        if (fire_mode_cmdr_ == "designation" && LinkedToPost() && (c2_ == nullptr || c2_->Hearing()) && !DesignatedToUs(tracked)) {
+            if (held_fire_for_ != tracked) {
+                held_fire_for_ = tracked;
+                Event(Cmdr(), "holds fire at " + tracked + ": not designated to him, fire on designation only");
+            }
+            return;
+        }
         // A missile already at this target (a miss, still in the zone): "Вторая — пуск!".
         const char* permit = npc_launched_at_.count(tracked) != 0 ? "order_second_missile" : "fire_permitted";
         if (NpcGive(permit, 0.0)) {
@@ -11478,6 +12982,7 @@ private:
                 if (e != nullptr) HeardGroup(e->code, "regiment", ears);
                 DecodeHeard(ears, e);
                 log_.Record({time_, DebriefEntry::Kind::Scenario, "Regiment", "regiment net", "the emission regime: " + RegimeText(regiment_regime_)});
+                given_limits_.emission.push_back({time_, EmissionKindName(regiment_regime_.kind)});  // O4: the ceiling from now
                 OweBatteryRegime(regiment_regime_, def_.emission.relay_s, "the regiment's order of the emission regime, passed on to the battery");
             } else if (regiment_regime_tries_ > def_.emission.repeats) {
                 regiment_regime_next_s_ = -1.0;
@@ -11496,6 +13001,13 @@ private:
         if (pending_since_s_ < 0.0 || time_ - pending_since_s_ < pending_delay_s_ || MarchRadioBan()) return;
         if (pending_regime_.Same(regime_cmdr_)) {
             pending_since_s_ = -1.0;
+            return;
+        }
+        // O4: a regime of his own above the regiment's at most is not ordered (the order's limit kept).
+        const std::string at_most = given_limits_.EmissionAt(time_);
+        if (!at_most.empty() && campaign::EmissionOpenness(EmissionKindName(pending_regime_.kind)) > campaign::EmissionOpenness(at_most)) {
+            pending_since_s_ = -1.0;
+            Event("battery net", std::string("the battery commander keeps the regiment's ") + at_most + ": no " + EmissionKindName(pending_regime_.kind));
             return;
         }
         bool done = false;
@@ -11531,6 +13043,7 @@ private:
         pending_since_s_ = -1.0;
         if (battery_) BatteryOrderRegime(r);
         log_.Record({time_, DebriefEntry::Kind::Scenario, by, "battery net", "the emission regime: " + RegimeText(r)});
+        LimitLog("regime", "battery", RegimeText(r), -1.0, -1.0, EmissionKindName(r.kind));
         return true;
     }
 
@@ -13664,7 +15177,27 @@ private:
 
     // The battery commander at the post writes each launch and result he hears in his log (P9: the combat report's claims).
     void LogLauncher(const LinkReport& r, const char* kind) {
-        if (post_) commander_log_.push_back({time_, r.callsign, kind, r.number});
+        if (!post_) return;
+        campaign::LogEntry e;
+        e.time_s = time_;
+        e.callsign = r.callsign;
+        e.kind = kind;
+        e.number = r.number;
+        if (def_.has_task && e.kind == "launch") {  // O4: the mode it was to fire in, and whether he had given it this target
+            e.mode = LauncherFireMode(r.callsign);
+            const auto it = designated_.find(r.callsign);
+            e.designated = it != designated_.end() && it->second.count(r.number) != 0;
+        }
+        commander_log_.push_back(e);
+    }
+    // The mode a launcher fires in as he knows it: on its own off the net or by his order, else the battery's.
+    std::string LauncherFireMode(const std::string& callsign) const {
+        if (battery_fire_) {
+            for (const BatteryFire::Shooter& sh : battery_fire_->Shooters()) {
+                if (sh.callsign == callsign && !sh.external && sh.on_own) return "independent";
+            }
+        }
+        return BatteryFireMode();
     }
     // What a launcher's report by number means to the post: the newest mark of that number on its board (the launcher may
     // have found another aircraft where it was told to look); the report's own target where the board has none of it.
@@ -13687,6 +15220,7 @@ private:
         const std::string number = r.number > 0 ? std::string(n) : r.target;
         switch (r.kind) {
             case BatteryFire::Event::Kind::Assigned:
+                if (post_) designated_[r.callsign].insert(r.number);  // O4: given this launcher
                 // Spoken by whoever assigned it; the linked Osa hears the post give another launcher a target.
                 if (LinkedToPost() && r.callsign != OwnCallsign()) {
                     given_elsewhere_[r.target] = r.callsign;
@@ -14042,6 +15576,8 @@ private:
         out.rule = rule;
         for (const BoardMark& g : group) out.group_ids.push_back(g.target_id);
         designations_out_.push_back(out);
+        for (const BoardMark& g : group) designated_[callsign].insert(g.number);  // O4: what he gave it, by number
+        designated_[callsign].insert(m.number);
         if (ExternalLauncher(callsign)) linked_out_.push_back({callsign, at, start, battery_net_free_s_});
         const PlottingBoard::Designation d = PlottingBoard::Designate(at, sh->position);
         char n[16], r[16], az[16];
@@ -14965,6 +16501,10 @@ public:
             f["callsign"] = OwnCallsign();
             if (!arm_sign_az_.empty()) f["azimuth"] = arm_sign_az_;
         }
+        if (callout_id == "report_spot" && station == Cmdr()) {  // where he stands (O4)
+            f["callsign"] = OwnCallsign();
+            f["grid"] = command::GridRef(UnitPosition(), def_.held_map);
+        }
         auto blanks = [](std::string t) {
             for (std::size_t a = t.find('{'); a != std::string::npos; a = t.find('{', a)) {
                 const std::size_t b = t.find('}', a);
@@ -15058,6 +16598,13 @@ public:
                     }
                     if (f.count("azimuth") == 0) f["azimuth"] = violator_az_;
                 }
+                if (callout_id == "report_spot") {  // where he stands, off his map (O4)
+                    if (!has_formation_place_) {
+                        last_refusal_ = "no place in the battery's formation yet";
+                        return false;
+                    }
+                    if (f.count("grid") == 0) f["grid"] = command::GridRef(UnitPosition(), def_.held_map);
+                }
                 if (callout_id == "request_tzm" && (!launcher_ || launcher_->LoadedCount() > 0)) {
                     last_refusal_ = "the launcher still has missiles";
                     return false;
@@ -15071,6 +16618,10 @@ public:
                 if (callout_id == "request_fuel") fuel_asked_ = true;
                 SettleOwedReport(station, callout_id, target);
                 if (callout_id == "report_arm_attack") ArmAttackReported(f["azimuth"]);
+                if (callout_id == "report_spot") {
+                    spot_reported_ = true;
+                    spot_reports_.push_back(f["grid"]);
+                }
                 if (callout_id == "report_result" && !target.empty()) results_reported_.insert(target);
                 if (callout_id == "report_not_destroyed" && !target.empty()) KillReportTakenBack(target);
                 if (callout_id == "report_hit_flies_on" && !target.empty()) KillReportTakenBack(target, true);

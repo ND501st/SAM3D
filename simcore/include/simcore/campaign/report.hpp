@@ -28,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "simcore/campaign/battery_task.hpp"
 #include "simcore/command/own_air.hpp"
 #include "simcore/console_data.hpp"
 #include "simcore/crew_data.hpp"
@@ -130,6 +131,17 @@ struct LogEntry {
     std::string kind;  // "launch", "destroyed", "missed", "not destroyed" (a kill taken back), "hit" (a kill taken back as hit,
                        // seen burning and flying on: roadmap S4)
     int number = 0;    // the target's board number as reported (0: not said)
+    // Track O, O4: what bears on the order's limits as he wrote it, in the kinds "spot" (a launcher's spot as it reported
+    // it), "position" (the battery's, as he reported it up), "covered" (the covered unit's place as he learned it),
+    // "follow" (his move after it), "regime" (an emission regime he ordered), "fire_mode" (his launchers on designation or
+    // on their own); and a launch's mode. The words written (a grid reference, how he learned it), how far off what the
+    // limit measures from, the limit as he held it (< 0: none), the mode ("designation"/"independent", a regime's name),
+    // and whether a launch was at a target he had designated to that launcher.
+    std::string text;
+    double off_m = -1.0;
+    double limit_m = -1.0;
+    std::string mode;
+    bool designated = true;
 };
 // A report the radar company said on the air-picture net, as its own log has it.
 struct SaidReport {
@@ -222,6 +234,7 @@ struct CombatReport {
     std::vector<int> friends;           // numbers written as our own aircraft
     std::vector<ReportRaid> raids;
     std::vector<LogEntry> claims;       // the launchers' reports
+    std::vector<LogEntry> limits;       // O4: what bears on the order's limits, as written (positions, moves, regimes, modes)
     int missiles = 0;                   // launches reported
     int destroyed = 0;                  // kills reported and not taken back
     int damaged = 0;                    // ...taken back as hit, flying on (roadmap S4)
@@ -239,6 +252,31 @@ struct CombatReport {
         return n;
     }
 };
+
+// A line of the commander's log that bears on the order's limits and is no launcher's claim (O4).
+inline bool IsLimitEntry(const LogEntry& e) {
+    return e.kind == "spot" || e.kind == "position" || e.kind == "covered" || e.kind == "follow" || e.kind == "regime" || e.kind == "fire_mode";
+}
+
+namespace detail {
+inline std::string KmWords(double m) {
+    char b[32];
+    std::snprintf(b, sizeof(b), "%.1f km", m / 1000.0);
+    return b;
+}
+}  // namespace detail
+
+// One line of the log's limit entries as the report has them.
+inline std::string LimitEntryText(const LogEntry& e, const std::function<std::string(double)>& clock) {
+    const std::string at = clock(e.time_s) + " ";
+    if (e.kind == "spot") return at + e.callsign + " reported its spot at " + e.text;
+    if (e.kind == "position") return at + "the battery reported at " + e.text;
+    if (e.kind == "covered") return at + "the covered unit at " + e.text + (e.off_m >= 0.0 ? ", " + detail::KmWords(e.off_m) + " off" : std::string());
+    if (e.kind == "follow") return at + "the battery after the covered unit, to " + e.text;
+    if (e.kind == "regime") return at + "the emission regime " + e.mode;
+    if (e.kind == "fire_mode") return at + (e.mode == "independent" ? "the launchers to search on their own" : "the launchers on designation");
+    return at + e.kind;
+}
 
 // How the post writes a place on the board (square or azimuth and range: command_post.hpp's PlaceWords). Null: a target
 // only on the board is reported without its places.
@@ -319,6 +357,11 @@ inline CombatReport CompileReport(const std::string& unit, double from_s, double
         raid.aircraft += std::max(1, x.formation);
     }
     for (const LogEntry& e : log) {
+        if (e.kind == "grade") continue;  // O5: his marks for his crews, no launcher's report
+        if (IsLimitEntry(e)) {
+            r.limits.push_back(e);
+            continue;
+        }
         r.claims.push_back(e);
         if (e.kind == "launch") ++r.missiles;
         if (e.kind == "destroyed") ++r.destroyed;
@@ -385,6 +428,11 @@ inline std::string ReportText(const CombatReport& r, const std::function<std::st
         s += " Targets hit and flying on: " + std::to_string(r.damaged) + hits + ").";
     }
     if (r.unreadable > 0) s += " Lines of the journal that do not read: " + std::to_string(r.unreadable) + ".";
+    if (!r.limits.empty()) {  // O4: positions, moves, regimes and modes as the log has them
+        s += " As written:";
+        for (std::size_t i = 0; i < r.limits.size(); ++i) s += (i == 0 ? " " : "; ") + LimitEntryText(r.limits[i], clock);
+        s += ".";
+    }
     return s;
 }
 // As told by voice.
@@ -624,6 +672,83 @@ inline std::string OwnAirCheckText(const OwnAirCheck& c, const std::function<std
     return s;
 }
 
+// ---------------------------------------------------------------------------------------------- the order's limits (O4)
+
+// The limits as the regiment gave them (it knows its own orders): the emission regime at most from each time it ordered
+// one, the fire mode, and how long the battery may stand off the leash before it counts. The places' limits travel in
+// the log's entries, as the battery commander held them when he wrote them.
+struct GivenLimits {
+    std::vector<std::pair<double, std::string>> emission;  // from each time: the regime at most ("" not limited)
+    std::string fire;                                      // "designation", "independent" ("" not limited)
+    double leash_grace_s = 900.0;
+    std::string EmissionAt(double t) const {
+        std::string out;
+        for (const auto& e : emission) {
+            if (e.first <= t + 1e-9) out = e.second;
+        }
+        return out;
+    }
+};
+// A breach the records show: when, whose, which limit ("spot", "position", "leash", "emission", "fire"), and why.
+struct LimitFinding {
+    double time_s = 0.0;
+    std::string who;
+    std::string limit;
+    std::string text;
+};
+
+// The breaches of the order's limits as the battery's log has them, checked against what the regiment gave: a launcher's
+// spot or the battery's position reported beyond its leeway, the covered unit learned beyond the leash with no move
+// ordered within the grace, a regime ordered above the regiment's, the launchers put on their own against an order to
+// fire on designation, a launch at a target not designated to that launcher while it was to fire on designation. What
+// nobody wrote down is not here (D4).
+inline std::vector<LimitFinding> CheckLimits(const std::vector<LogEntry>& log, const GivenLimits& given) {
+    std::vector<LimitFinding> out;
+    double beyond_s = -1.0;  // the covered unit first learned beyond the leash since the last move after it (-1 none)
+    std::string beyond_text;
+    for (const LogEntry& e : log) {
+        if ((e.kind == "spot" || e.kind == "position") && e.limit_m >= 0.0 && e.off_m > e.limit_m) {
+            out.push_back({e.time_s, e.callsign, e.kind,
+                           (e.kind == "spot" ? e.callsign + "'s spot " : std::string("the battery's position ")) + e.text + ", " + detail::KmWords(e.off_m) +
+                               (e.kind == "spot" ? " from its place" : " from the order's point") + " (the leeway " + detail::KmWords(e.limit_m) + "), as reported"});
+        } else if (e.kind == "follow") {
+            beyond_s = -1.0;
+        } else if (e.kind == "covered" && e.limit_m >= 0.0) {
+            if (e.off_m <= e.limit_m) {
+                beyond_s = -1.0;
+            } else if (beyond_s < 0.0) {
+                beyond_s = e.time_s;
+                beyond_text = e.text;
+            } else if (e.time_s - beyond_s >= given.leash_grace_s) {
+                out.push_back({beyond_s, "battery", "leash",
+                               "the covered unit " + detail::KmWords(e.off_m) + " off (the leash " + detail::KmWords(e.limit_m) + ") from " + beyond_text +
+                                   ", no move ordered after it"});
+                beyond_s = -1.0;
+            }
+        } else if (e.kind == "regime") {
+            const std::string at_most = given.EmissionAt(e.time_s);
+            if (!at_most.empty() && EmissionOpenness(e.mode) > EmissionOpenness(at_most)) {
+                out.push_back({e.time_s, "battery", "emission", "the emission regime " + e.mode + " ordered, the regiment's " + at_most + " at most"});
+            }
+        } else if (e.kind == "fire_mode") {
+            if (given.fire == "designation" && e.mode == "independent") {
+                out.push_back({e.time_s, "battery", "fire", "the launchers put on their own search, the regiment's order to fire on designation"});
+            }
+        } else if (e.kind == "launch" && e.mode == "designation" && !e.designated) {
+            out.push_back({e.time_s, e.callsign, "fire",
+                           e.callsign + " launched at " + (e.number > 0 ? BoardNumber(e.number) : std::string("a target")) + ", not designated to it"});
+        }
+    }
+    return out;
+}
+
+inline std::string LimitsCheckText(const std::vector<LimitFinding>& f, const std::function<std::string(double)>& clock) {
+    if (f.empty()) return "The order's limits: no breach in the records.";
+    std::string s = "The order's limits: " + std::to_string(f.size()) + (f.size() == 1 ? " breach" : " breaches") + " in the records.";
+    for (const LimitFinding& x : f) s += " " + clock(x.time_s) + ": " + x.text + ".";
+    return s;
+}
+
 // The regiment's belief in each unit's reports: the share of its records' entries that have checked out, over every check,
 // starting from a prior (a unit not yet checked is believed at prior_agreed / prior_checked).
 class ReportTrust {
@@ -656,6 +781,18 @@ public:
         const auto it = units_.find(unit);
         return it != units_.end() ? it->second.checks : 0;
     }
+    // O5: the counts behind a unit's trust, for a save and for the regiment's standing (grading.hpp), and set back.
+    struct Count {
+        int checked = 0;
+        int agreed = 0;
+        int checks = 0;
+    };
+    Count CountOf(const std::string& unit) const {
+        const auto it = units_.find(unit);
+        if (it == units_.end()) return Count();
+        return {it->second.checked, it->second.agreed, it->second.checks};
+    }
+    void Set(const std::string& unit, const Count& c) { units_[unit] = {c.checked, c.agreed, c.checks}; }
 
 private:
     struct Unit {

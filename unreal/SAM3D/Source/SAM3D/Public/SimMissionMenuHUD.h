@@ -19,8 +19,12 @@
  * picks a mission, turns the helper or the time of day, or presses Start. Enter or Start opens the crew: every crewman of the mission's vehicles with his duties
  * (Up/Down or 1-9 one, Enter or a second click plays him, Esc back to the missions).
  *
+ * The campaign (track O, O1; docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 9): 1-4 a new campaign against
+ * that enemy (data/campaign/campaigns.json), its mission's crew to choose from, then ?SimWar=new:<id>?SimSeat=<station>;
+ * C the saved one (?SimWar=continue). Shift+1-4 and Shift+C open the air war's developer screen instead.
+ *
  * Scripted check: -SimMenuTest=<folder> photographs the menu (menu.png), then -SimMenuPick=<mission>:<vehicle>:<seat>
- * picks and photographs (menu_pick.png) and starts it; without a pick it quits.
+ * (or campaign:<adversary>:<seat>) picks and photographs (menu_pick.png) and starts it; without a pick it quits.
  */
 UCLASS()
 class SAM3D_API ASimMissionMenuHUD : public AHUD
@@ -74,11 +78,27 @@ private:
 	TArray<FBox2D> CrewBoxes;
 	FBox2D CrewPlayBox = FBox2D(ForceInit);
 	FBox2D CrewBackBox = FBox2D(ForceInit);
-	/** The air war: start a campaign against adversary 0-3 (rebels, neutral, Warsaw Pact, NATO) and open its screen. */
+	/** The air war's developer screen (Shift+1-4): start a campaign against adversary 0-3 (rebels, neutral, Warsaw Pact,
+	 *  NATO) and open its screen. */
 	void StartCampaign(int32 Index);
-	/** Continue the campaign under way, or the saved one. */
+	/** The developer screen's Shift+C: continue the campaign under way, or the saved one. */
 	void ContinueCampaign();
+	/** The game's campaign (track O, O1; 1-4): a new one against CampaignChoices[Index], its mission's crew to choose
+	 *  from first, then ?SimWar=new:<id>. */
+	void NewCampaign(int32 Index);
+	/** C: the saved campaign, in its seat (?SimWar=continue). */
+	void ContinueSavedCampaign();
 	void DrawCampaignBox(float X, float Y, float Width);
+	TArray<FSimCampaignChoice> CampaignChoices;
+	/** While the crew is chosen for a new campaign: its ?SimWar and the line shown over the crew. */
+	FString CampaignWar;
+	FString CampaignLabel;
+	/** Why a campaign key did nothing (not yet playable, nothing saved). */
+	FString CampaignNote;
+	bool bHasSavedCampaign = false;
+	FString SavedCampaignLabel;
+	FString SavedCampaignAdversary;
+	FString SavedCampaignSeat;
 	void RunScriptedCheck(float DeltaSeconds);
 
 	TArray<FSimMission> Missions;

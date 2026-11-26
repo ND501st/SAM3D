@@ -1,0 +1,132 @@
+{
+  "scenario_id": "osa_mission_pact",
+  "name": "The opening march to the Rava dam above Dravec: the Osa 21 (the battery's launcher beside the PU-12M in the campaign)",
+  "description": "Launcher 21 of battery 21 in the campaign's opening march (track O, O6): the Osa played beside the PU-12M of data/scenarios/pu12m_mission_pact.json, so a launcher commander's seat can be taken. The post's runner is the sky's truth; the battery's moves are the post's.",
+  "source": "sam3d",
+  "confidence": "estimate",
+  "notes": "Fictional. Positions as pu12m_mission_pact.json's battery in the Kesmark barracks' park (launcher 21 at its place, the PU-12M as vehicle 20). No targets of its own: the session copies the post's (simcore/campaign/mission_session.hpp, SyncOsa).",
+  "seed": 1,
+  "origin": {
+    "lat_deg": 46.9,
+    "lon_deg": 19.7,
+    "alt_m": 110
+  },
+  "terrain": {
+    "type": "map",
+    "map": "maps/kesmark_rava_dam.json"
+  },
+  "clock_start": "19:00",
+  "command_post": "command/pu12.json",
+  "c2": {
+    "library": "command/c2_sources.json",
+    "primary": "pu12"
+  },
+  "battery": {
+    "deployed": false,
+    "own": {
+      "id": "21",
+      "callsign": "21"
+    },
+    "vehicles": [
+      {
+        "id": "20",
+        "kind": "command_post",
+        "position": {
+          "east_m": 7200,
+          "north_m": -2900,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "22",
+        "kind": "launcher",
+        "position": {
+          "east_m": 7080,
+          "north_m": -2960,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "23",
+        "kind": "launcher",
+        "position": {
+          "east_m": 7160,
+          "north_m": -2960,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "24",
+        "kind": "launcher",
+        "position": {
+          "east_m": 7240,
+          "north_m": -2960,
+          "up_m": 3
+        }
+      },
+      {
+        "id": "TZM",
+        "kind": "reload",
+        "position": {
+          "east_m": 7320,
+          "north_m": -2960,
+          "up_m": 3
+        }
+      }
+    ]
+  },
+  "own_unit": {
+    "console": "procedures/osa_ak.json",
+    "tuning": "gameplay/osa_ak.json",
+    "em": {
+      "library": "em/osa_ak.json",
+      "search_radar": "osa_ak_soc",
+      "track_radar": "osa_ak_ssc"
+    },
+    "position": {
+      "east_m": 7000,
+      "north_m": -2960,
+      "up_m": 3
+    },
+    "heading_deg": 0,
+    "inputs": {
+      "vehicle_stopped": true
+    },
+    "readiness": "powered"
+  },
+  "crew": [
+    {
+      "name": "Commander",
+      "role": "commander",
+      "skill": "class1"
+    },
+    {
+      "name": "Deputy commander",
+      "role": "deputy_commander",
+      "skill": "class2"
+    },
+    {
+      "name": "Senior operator",
+      "role": "senior_operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Operator",
+      "role": "operator",
+      "skill": "class2"
+    },
+    {
+      "name": "Driver",
+      "role": "driver",
+      "skill": "class2"
+    }
+  ],
+  "targets": [],
+  "triggers": [],
+  "end": {
+    "time_limit_s": 39600,
+    "when_targets_gone": false
+  },
+  "crew_commander": "npc",
+  "battery_commander": "post"
+}

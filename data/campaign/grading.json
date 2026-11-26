@@ -1,0 +1,49 @@
+{
+  "grading_id": "rgt15_summing_up_first_form",
+  "status": "track O, O5 (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md sections 3 (D6) and 7): first form",
+  "notes": "The summing up at the regiment's evening briefing (simcore/campaign/grading.hpp). The regiment's officer grades the battery commander 5 to 2 on what reached the regiment of the day, from the written record only (docs/command/01_PRINCIPLES.md 9): readiness against the ready-by as his report gave it, the records against the radar company's log (P9's check), the order's limits as his log shows them (O4), and the kills claimed against what the radar company's log can confirm. Each objective's mark comes with its reason in a line an officer would say; the day's mark is their mean, held to one above the lowest. The battery commander grades each launcher's crew the same way from his own log, before he leaves for the briefing. All marks are the Soviet five-point scale; the bands are game values in the pattern of the period's standards (a norm met for 'excellent', a little over for 'good' and 'satisfactory').",
+  "source": "game value: the bands and the lines; the five-point marks as data/gameplay/after_action.json; the objectives as docs/campaign/12 section 7",
+  "confidence": "estimate",
+  "speaker": "rgt_commander",
+  "ready": {
+    "late_5_s": { "value": 0, "source": "game value: ready by the order's time for 'excellent'", "confidence": "estimate" },
+    "late_4_s": { "value": 600, "source": "game value: up to ten minutes late for 'good'", "confidence": "estimate" },
+    "late_3_s": { "value": 1800, "source": "game value: up to half an hour late for 'satisfactory'; later, or never reported, 'unsatisfactory'", "confidence": "estimate" }
+  },
+  "limits": {
+    "breaches_5": { "value": 0, "source": "game value: no breach written down for 'excellent' (D4: a breach counts only when seen or written down)", "confidence": "estimate" },
+    "breaches_4": { "value": 1, "source": "game value: one for 'good'", "confidence": "estimate" },
+    "breaches_3": { "value": 2, "source": "game value: two for 'satisfactory'; more, 'unsatisfactory'", "confidence": "estimate" }
+  },
+  "claims": {
+    "confirm_s": { "value": 180, "source": "game value: the radar company's log says nothing more of a target this long after a kill was claimed: the company confirms it (three of its reporting periods, aspd_u.json air_net_period_s 60)", "confidence": "estimate" },
+    "share_5": { "value": 1.0, "source": "game value: every kill claimed confirmed for 'excellent'", "confidence": "estimate" },
+    "share_4": { "value": 0.75, "source": "game value: three in four for 'good'", "confidence": "estimate" },
+    "share_3": { "value": 0.5, "source": "game value: half for 'satisfactory'; a kill the company's log contradicts counts against", "confidence": "estimate" }
+  },
+  "overall": {
+    "above_lowest": { "value": 1, "source": "game value: the day's mark at most one above the worst objective's (an unsatisfactory objective holds the day to satisfactory)", "confidence": "estimate" }
+  },
+  "lines": {
+    "ready_in_time": "Readiness: you reported ready at {ready}, {spare} min inside the order's {by}.",
+    "ready_late": "Readiness: you reported ready at {ready}, {late} min after the order's {by}.",
+    "ready_never": "Readiness: no report of readiness reached us against the order's {by}.",
+    "records": "Your records: {as_said} of {said} reports as the radar company said them, {wrong} with a digit wrong, {missing} missing, {ghosts} it never said.",
+    "limits_none": "The order's limits: nothing in your log breaks them.",
+    "limits_some": "The order's limits: {count} in your log. {first}.",
+    "claims": "Kills: you claim {claims}; the radar company's log bears out {confirmed}{against}.",
+    "overall": "{unit} for the day: {grade}.",
+    "nothing": "{unit}: nothing in its records to sum up today."
+  },
+  "crews": {
+    "lead_h": { "value": 1.5, "source": "game value: the battery commander grades his crews from his log in the hour and a half before he leaves for the regiment's briefing", "confidence": "estimate" },
+    "per_breach": { "value": 1, "source": "game value: each breach of the order's limits his log shows of a crew (its spot, a launch not designated to it) takes a mark off", "confidence": "estimate" },
+    "per_retracted": { "value": 1, "source": "game value: each kill a crew reported and then took back takes a mark off (a hasty report)", "confidence": "estimate" },
+    "lines": {
+      "none": "{crew}: nothing against it in my log.",
+      "launches": "{crew}: {launches} launched, {destroyed} destroyed as reported.",
+      "breach": "{crew}: {text}.",
+      "retracted": "{crew}: {n} kill reported and taken back."
+    }
+  }
+}

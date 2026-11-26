@@ -198,9 +198,12 @@ private:
 	float TimeSinceBeginPlay = 0.0f;
 	/** The menu's seat for the player's vehicle (?SimSeat). */
 	FString StartSeat;
+	/** ?SimWar=new:<adversary> or continue: the game's campaign instead of a scenario (track O, O1). */
+	FString CampaignWar;
 	bool bMissionMenuShown = false;
 	TWeakObjectPtr<ASimOsaVehicle> PlayerVehicle;
 	/** -SimMenuTest=<folder>, in a mission started from the menu: its first view and its menu photographed, then quit. */
 	FString MenuTestFolder;
 	int32 MenuTestStep = 0;
+	float MenuTestWaitFrom = 0.0f;
 };

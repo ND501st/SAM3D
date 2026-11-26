@@ -56,6 +56,18 @@ void ASimScenarioDirector::BeginPlay()
 		ShowMissionMenu();
 		return;
 	}
+	// ?SimWar=new:<adversary> or ?SimWar=continue (track O, O1): the game's campaign, from ?SimSeat (a continue: the save's).
+	if (Sim->HasUrlOption(TEXT("SimWar")))
+	{
+		CampaignWar = Sim->GetLaunchOption(TEXT("SimWar"));
+		StartSeat = Sim->GetLaunchOption(TEXT("SimSeat"));
+		ScenarioFile = TEXT("(the campaign)");
+		CabinFile.Reset();
+		bShowEventsOnScreen = false;
+		FParse::Value(FCommandLine::Get(), TEXT("SimMenuTest="), MenuTestFolder);
+		StartScenario(Sim);
+		return;
+	}
 	// The air war (docs/air_war/): ?SimCampaign shows the campaign screen; ?SimAirWarRaid=<id> plays the raid the campaign
 	// wrote for it (Saved/AirWar/), from ?SimSeat. A raid the campaign no longer waits for goes back to the screen.
 	USimAirCampaignSubsystem* AirWar = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<USimAirCampaignSubsystem>() : nullptr;
@@ -189,13 +201,23 @@ void ASimScenarioDirector::ShowCampaignScreen()
 void ASimScenarioDirector::StartScenario(USimWorldSubsystem* Sim)
 {
 	FString Error;
-	if (!Sim->LoadScenario(ScenarioFile, Error))
+	const bool bCampaign = !CampaignWar.IsEmpty();
+	if (bCampaign ? !Sim->StartCampaign(CampaignWar, StartSeat, Error) : !Sim->LoadScenario(ScenarioFile, Error))
 	{
 		if (GEngine != nullptr)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Red, FString::Printf(TEXT("Scenario failed to load: %s"), *Error));
+			GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Red,
+				FString::Printf(TEXT("%s failed to load: %s"), bCampaign ? TEXT("The campaign") : TEXT("Scenario"), *Error));
+		}
+		if (bCampaign)
+		{
+			ShowMissionMenu();  // back to the menu, not an empty level
 		}
 		return;
+	}
+	if (bCampaign)
+	{
+		StartSeat = Sim->GetCampaignSeat();  // a continue's seat is the save's
 	}
 	const FString Cabin = CabinFile.IsEmpty() ? Sim->GetDefaultCabinFile() : (CabinFile == TEXT("none") ? FString() : CabinFile);
 	if (!Cabin.IsEmpty() && !Sim->LoadCabin(Cabin, Error) && GEngine != nullptr)
@@ -459,6 +481,33 @@ void ASimScenarioDirector::RunMenuCheck(float DeltaSeconds)
 		MenuTestStep = 3;
 	}
 	else if (MenuTestStep == 3 && TimeSinceBeginPlay >= 31.0f)
+	{
+		USimWorldSubsystem* Sim = GetWorld()->GetSubsystem<USimWorldSubsystem>();
+		if (Sim != nullptr && Sim->IsCampaign() && Vehicle != nullptr)
+		{
+			// A campaign (track O, O1): the pause menu's W, waited until something reaches the player (at most 10 minutes).
+			Vehicle->SetMissionMenuOpen(false);
+			Sim->SetCampaignWaiting(true);
+			MenuTestWaitFrom = TimeSinceBeginPlay;
+			MenuTestStep = 4;
+			return;
+		}
+		UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: done"));
+		FGenericPlatformMisc::RequestExit(false);
+	}
+	else if (MenuTestStep == 4)
+	{
+		USimWorldSubsystem* Sim = GetWorld()->GetSubsystem<USimWorldSubsystem>();
+		if (Sim == nullptr || !Sim->IsCampaignWaiting() || TimeSinceBeginPlay - MenuTestWaitFrom >= 600.0f)
+		{
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(MenuTestFolder, TEXT("woken.png")), false, false);
+			UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: woken.png after %.0f s of waiting: %s"), TimeSinceBeginPlay - MenuTestWaitFrom,
+				Sim != nullptr ? *Sim->GetCampaignStatus() : TEXT("no sim"));
+			MenuTestWaitFrom = TimeSinceBeginPlay;
+			MenuTestStep = 5;
+		}
+	}
+	else if (MenuTestStep == 5 && TimeSinceBeginPlay - MenuTestWaitFrom >= 2.0f)
 	{
 		UE_LOG(LogSAM3D, Log, TEXT("Missions menu check: done"));
 		FGenericPlatformMisc::RequestExit(false);

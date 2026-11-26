@@ -5,6 +5,7 @@
 #include <set>
 #include <string>
 
+#include "simcore/campaign/campaign_save.hpp"
 #include "simcore/missions.hpp"
 #include "test_framework.hpp"
 
@@ -32,7 +33,7 @@ SC_TEST("missions: the catalogue loads and every mission in it starts, with its 
     if (!e.empty()) std::printf("    %s\n", e.c_str());
     const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     std::printf("    %zu missions in %zu groups, loaded in %.0f ms\n", c.Count(), c.groups.size(), ms);
-    SC_EXPECT(c.Count() == 13 + 17 + 4 + 7 + 7 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 && c.groups.size() == 6);  // the missions (with the two ARM drills and the emission regime) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range, + the battery's orders by a means (the Osa's and the post's), + the march on the roads (G2.3), + the post's deployment with its lines laid (8.14), + the regiment's order carried out (14.1-14.5), + the dynamic campaign test, + the air battle shot check's two scenarios (B13)
+    SC_EXPECT(c.Count() == 13 + 17 + 4 + 7 + 7 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 1 && c.groups.size() == 6);  // the missions (with the two ARM drills and the emission regime) and drills, the tutorial and the Osa's and PU-12M's seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + the air war's sample raids (docs/air_war/), + the test range, + the battery's orders by a means (the Osa's and the post's), + the march on the roads (G2.3), + the post's deployment with its lines laid (8.14), + the regiment's order carried out (14.1-14.5), + the dynamic campaign test, + the air battle shot check's two scenarios (B13), + the covered company (O4)
     for (const MissionGroup& g : c.groups) {
         SC_EXPECT(!g.label.empty() && !g.notes.empty());
         for (const MissionDef& m : g.missions) {
@@ -107,6 +108,13 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
             for (const MissionVehicle& v : m.vehicles) covered.insert(v.scenario_file);
         }
     }
+    // The campaign's missions (track O): its Osa beside the post is played only there (O3).
+    campaign::CampaignsData cd;
+    SC_EXPECT(campaign::LoadCampaignsData(kData, "campaign/campaigns.json", cd));
+    for (const campaign::CampaignAdversary& a : cd.adversaries) {
+        if (!a.osa_mission.empty()) covered.insert(a.osa_mission);
+        if (!a.mission.empty()) covered.insert(a.mission);  // O6: each war's opening march is played only in its campaign
+    }
     int files = 0;
     for (const auto& entry : std::filesystem::directory_iterator(kData + "/scenarios")) {
         const std::string name = entry.path().filename().string();
@@ -116,7 +124,7 @@ SC_TEST("missions: every scenario of data/scenarios is in the menu, or is a half
         if (!listed) std::printf("    not in the menu: scenarios/%s\n", name.c_str());
         SC_EXPECT(listed);
     }
-    SC_EXPECT(files == 13 + 19 + 4 + 7 + 7 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2);  // the missions (with the two ARM drills and the emission regime) and drills, the tutorial and the seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + data/scenarios/air_war_*.json, + the test range, + the battery's orders by a means (the Osa's and the post's), + the march on the roads (G2.3), + the post's deployment with its lines laid (8.14), + the regiment's order carried out (14.1-14.5), + the dynamic campaign test, + the air battle shot check's two scenarios (B13)
+    SC_EXPECT(files == 13 + 19 + 4 + 7 + 7 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 6);  // the missions (with the two ARM drills and the emission regime) and drills, the tutorial and the seat lessons, + the counter-jamming, low flier, VHF jamming and trainer drills, + ranges and history, + data/scenarios/air_war_*.json, + the test range, + the battery's orders by a means (the Osa's and the post's), + the march on the roads (G2.3), + the post's deployment with its lines laid (8.14), + the regiment's order carried out (14.1-14.5), + the dynamic campaign test, + the air battle shot check's two scenarios (B13), + the campaign's Osa (O3), + the covered company (O4), + the three wars' opening marches, post and Osa (O6)
 }
 
 SC_TEST("missions: a mission that would not start is refused, naming its place in the list") {

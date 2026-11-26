@@ -1,0 +1,36 @@
+{
+  "map_id": "kesmark_dombas",
+  "extends": "maps/kesmark_range.json",
+  "name": "The Kesmark range with the Dombas hub's district",
+  "description": "The Kesmark range as it is (its 40 km, its detail areas, the country beyond) with a third detail area 13 km square at 20 m round the Dombas hub towards Novo Varosd, where battery 21 fights NATO's war (track O, O6), and the district's tracks.",
+  "status": "track O, O6 (26 Nov 2026): NATO's district (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 8)",
+  "source": "game value: sam3d estimate (the area's size and spacing as the plan's about 12 km at 10-20 m; the tracks and the village are SAM3D's, on the country's ground and roads, data/maps/pannonia.json)",
+  "confidence": "estimate",
+  "notes": "A district's map extends the range (simcore/terrain_map.hpp LoadMap). The country's map has no road to the hub: the hub's track joins it to the Novo Varosd road, and is the district's own (the ground war's roads are the country's, unchanged).",
+  "terrain": {
+    "detail": [
+      {
+        "id": "dombas",
+        "east_km": -41.5,
+        "north_km": 11.5,
+        "half_km": 6.5,
+        "spacing_m": 20,
+        "micro_m": 0.6,
+        "source": "game value: sam3d estimate",
+        "confidence": "estimate",
+        "notes": "The Dombas helicopter base (-48, 8) and the Cegled rail junction (-35, 15) with the fields between: 20 m ground (roadmap R6, 15.6). Its edges are nodes of the far ground's 500 m ground."
+      }
+    ]
+  },
+  "roads": [
+    {"id": "t_dombas_hub", "name": "The hub's road from the Novo Varosd road", "class": "track",
+     "points": [[-20.707, 17.0], [-28.0, 16.2], [-34.6, 15.0], [-38.0, 13.0], [-42.0, 11.8], [-43.0, 10.6], [-47.6, 8.2]],
+     "notes": "From the Novo Varosd-Kesmark road by the Cegled junction to the helicopter base, by the regiment's and the battery's positions."},
+    {"id": "t_dombas_village", "name": "Track to Dombas village", "class": "track",
+     "points": [[-44.2, 11.8], [-46.0, 13.2]]}
+  ],
+  "detail_settlements": [
+    {"id": "dombas", "name": "Dombas", "kind": "village", "east_km": -46.0, "north_km": 13.2, "radius_km": 0.6, "buildings": 110,
+     "notes": "The village the helicopter base is named after, SAM3D's."}
+  ]
+}

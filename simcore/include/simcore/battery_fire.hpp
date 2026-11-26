@@ -18,6 +18,7 @@
 // (free fire, or the PU-12 lost).
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <random>
@@ -142,6 +143,7 @@ public:
                 s->has_sector = v.def.has_sector;  // the scenario's sector; the battery commander may change it later
                 s->sector_from_deg = v.def.sector_from_deg;
                 s->sector_to_deg = v.def.sector_to_deg;
+                if (v.def.missiles >= 0) s->missiles = v.def.missiles;  // what it had when the campaign was saved (O1)
             }
             if ((s->position - v.position).LengthSquared() > 1.0) s->sight.clear();  // moved: look again
             s->position = v.position;
@@ -193,6 +195,22 @@ public:
         s->target = phase == Phase::Idle ? std::string() : target;
         s->phase = s->target.empty() ? Phase::Idle : phase;
         return true;
+    }
+
+    // Track O, O7: a launcher's load made up at the rear (a battery relieved and refitted). False for an unknown shooter.
+    bool Refill(const std::string& callsign, int missiles) {
+        Shooter* s = Find(callsign);
+        if (s == nullptr || s->external) return false;
+        s->missiles = std::max(s->missiles, missiles);
+        s->asked_tzm = false;
+        return true;
+    }
+    // Whether a launcher searches and fires on its own (off the net, or detached).
+    bool OnOwn(const std::string& callsign) const {
+        for (const Shooter& s : shooters_) {
+            if (s.callsign == callsign) return s.on_own;
+        }
+        return false;
     }
 
     // The battery commander gives a shooter a target. False for an unknown shooter, or one with no missiles.

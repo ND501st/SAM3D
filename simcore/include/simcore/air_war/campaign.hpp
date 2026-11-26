@@ -90,6 +90,9 @@ struct Transmission {
     double h = 0.0;
     double intercept = 1.0;  // how much one such message tells the enemy's intercept service (the radio: everything)
     std::string key;         // the call's own name, so it is heard once
+    // Heard beside the posture's guess (track O, O3: a battery commander's combat order given by radio in short form): it
+    // does not switch the enemy's radio intercept over to the pipeline's calls.
+    bool extra = false;
 };
 
 struct CampaignAction {
@@ -497,8 +500,16 @@ public:
     // from its posture's radio discipline. Each call once (by its key); recorded, so a save replays them.
     void NoteTransmissions(const std::vector<Transmission>& calls) {
         std::vector<Transmission> fresh;
+        bool extra_only = !calls.empty();
         for (const Transmission& t : calls) {
+            extra_only = extra_only && t.extra;
             if (noted_.insert(t.key).second) fresh.push_back(t);
+        }
+        if (extra_only) {  // heard besides whatever else the enemy hears (Transmission::extra)
+            if (fresh.empty()) return;
+            Record(CampaignAction::Kind::Transmit).calls = fresh;
+            on_air_.insert(on_air_.end(), fresh.begin(), fresh.end());
+            return;
         }
         if (fresh.empty() && traffic_fed_) return;
         Record(CampaignAction::Kind::Transmit).calls = fresh;
@@ -3229,16 +3240,13 @@ private:
                 intel_.Queue(r);
                 ++comint_heard_;
             };
-            if (traffic_fed_) {
-                for (const Transmission& call : on_air_) {
-                    if (call.h >= t0 + dt) continue;
-                    if (rng_.Chance(Clamp01(call.intercept * tune.Get("intel.comint_per_call")))) heard(call.h);
-                }
-                on_air_.erase(std::remove_if(on_air_.begin(), on_air_.end(), [&](const Transmission& call) { return call.h < t0 + dt; }),
-                              on_air_.end());
-            } else if (rng_.Chance(Clamp01((1.0 - posture_.radio_discipline) * dt))) {
-                heard(t0);
+            const auto due = [&](const Transmission& call) { return call.h < t0 + dt && (traffic_fed_ || call.extra); };
+            for (const Transmission& call : on_air_) {
+                if (!due(call)) continue;
+                if (rng_.Chance(Clamp01(call.intercept * tune.Get("intel.comint_per_call")))) heard(call.h);
             }
+            on_air_.erase(std::remove_if(on_air_.begin(), on_air_.end(), due), on_air_.end());
+            if (!traffic_fed_ && rng_.Chance(Clamp01((1.0 - posture_.radio_discipline) * dt))) heard(t0);
             if (posture_.dummy_traffic && rng_.Chance(0.5 * dt)) {
                 IntelReport g = ReportAbout(player_, IntelSource::Comint, t0, t0 + in.comint_delay_h, in.comint_sigma_m);
                 g.object_id.clear();

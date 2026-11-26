@@ -408,6 +408,9 @@ public:
 	 * journal keeper) or reading it (anyone else). */
 	bool IsCrossOnJournal() const { return bOnJournal; }
 	bool IsAtJournal() const { return bAtJournal; }
+	/** The holder's map open full screen (M, track O, O2): it has the mouse and the keys; nothing in the cabin hears them. */
+	bool IsHeldMapOpen() const { return bHeldMapOpen; }
+	void SetHeldMapOpen(bool bOpen) { bHeldMapOpen = bOpen; }
 	bool IsWritingJournal() const { return bAtJournal && bJournalWriter; }
 	float GetLastPlotMissCm() const { return LastPlotMissCm; }
 	float GetLastPlotTime() const { return LastPlotTime; }
@@ -579,6 +582,7 @@ private:
 	bool bInCabin = false;
 	FString PendingSeat;
 	bool bMissionMenuOpen = false;
+	bool bHeldMapOpen = false;
 	void HandleMissionMenu(APlayerController* Pc);
 	bool bInstructorOpen = false;
 	FString InstructorPick;
