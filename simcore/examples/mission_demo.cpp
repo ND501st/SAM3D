@@ -7,6 +7,8 @@
 // long the quiet between was.
 //
 // Usage: mission_demo [scenario.json] [data_dir] [--war faction [seed [day]]] [--hours h] [--theatre file] [--fronts [--u2-km km]] [--reveal]
+//        mission_demo --campaign <adversary> [data_dir] [--hours h] [--reveal]: the game's campaign as the menu starts it
+//   (data/campaign/campaigns.json: its mission, war, theatre, tasking and fronts; track O, O6), at the battery commander's seat
 //   defaults: data/scenarios/pu12m_mission_cover.json, data (run from the repo root); seed 1, the war's first day;
 //   --hours: the session held that long from its start (the task through the day), not to the scenario's end;
 //   --theatre: the war's theatre in data/air_war/ (theatre_pannonia.json); --fronts: track F's modes on (the ground war
@@ -17,11 +19,13 @@
 //   side believed beside the truth (track O, O5: campaign/reveal.hpp)
 // Exits non-zero if the scenario fails to load, has no task, or the battery was not reported ready by the ready-by;
 // with --war also if no package came in.
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
 
+#include "simcore/campaign/campaign_save.hpp"
 #include "simcore/campaign/director.hpp"
 #include "simcore/campaign/mission_session.hpp"
 #include "simcore/campaign/reveal.hpp"
@@ -32,6 +36,7 @@ using namespace simcore;
 int main(int argc, char** argv) {
     std::vector<std::string> args;
     bool reveal = false;
+    std::string campaign_id;
     campaign::MissionSessionDef md;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -62,10 +67,30 @@ int main(int argc, char** argv) {
             md.u2_radius_m = std::atof(argv[++i]) * 1000.0;
             continue;
         }
+        if (a == "--campaign" && i + 1 < argc) {
+            campaign_id = argv[++i];
+            continue;
+        }
         args.push_back(a);
     }
     md.scenario = args.size() > 0 ? args[0] : "data/scenarios/pu12m_mission_cover.json";
-    const std::string data_dir = args.size() > 1 ? args[1] : "data";
+    // With --campaign the mission is the campaign's: the one argument is the data folder.
+    const std::string data_dir = campaign_id.empty() ? (args.size() > 1 ? args[1] : "data") : (args.empty() ? "data" : args[0]);
+    if (!campaign_id.empty()) {
+        // Track O, O6: the game's campaign as the menu starts it (data/campaign/campaigns.json), headless.
+        campaign::CampaignsData cd;
+        campaign::CampaignSave header;
+        std::string e;
+        const double hours = md.hours;
+        if (!campaign::LoadCampaignsData(data_dir, "campaign/campaigns.json", cd, &e) ||
+            !campaign::NewCampaign(cd, campaign_id, data_dir, "battery_commander", md, header, &e)) {
+            std::fprintf(stderr, "%s\n", e.c_str());
+            return 1;
+        }
+        md.hours = hours > 0.0 ? hours : 24.0;  // the war's first day unless asked for more (the campaign's is its whole length)
+        md.seams = false;
+        std::printf("==== The campaign against %s: %s (war seed %u)\n", campaign_id.c_str(), header.mission.c_str(), md.seed);
+    }
 
     campaign::MissionSession s;
     std::string error;
@@ -102,6 +127,18 @@ int main(int argc, char** argv) {
                     spare_min >= 0.0 ? spare_min : -spare_min);
     } else {
         std::printf("  reported      never\n");
+    }
+    // Track O, O6: the march with the division: where the battery and the regiment's command post stand at the end.
+    if (const nav::SessionNav* nav = r.Nav()) {
+        const nav::Anchor* main = nav->GetAnchors().Find(r.Task().main);
+        const Vec3 at = r.UnitPosition();
+        std::printf("==== The march (O6)\n");
+        if (main != nullptr) {
+            std::printf("  the post at the end: %.1f km from the task's main position (%s)\n",
+                        std::hypot(at.x - main->at.east_m, at.y - main->at.north_m) / 1000.0, r.PlaceNameOf(r.Task().main).c_str());
+        }
+        std::printf("  the regiment's command post: %s%s\n", r.PlaceNameOf(s.RegimentCp()).c_str(),
+                    s.RegimentGoing().empty() ? "" : (", its column on the way to " + r.PlaceNameOf(s.RegimentGoing())).c_str());
     }
     bool war_ok = true;
     if (const airwar::LivePackages* live = s.Packages()) {

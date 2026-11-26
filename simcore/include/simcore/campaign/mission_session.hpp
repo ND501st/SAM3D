@@ -173,6 +173,12 @@ public:
         }
         runner_ = std::make_unique<ScenarioRunner>(std::move(def), std::move(console));
         if (osa_) runner_->SetExternalLauncher(osa_callsign_);
+        // O6: resumed with the regiment's command post moved: it stands there (its briefings, its nets and its radars).
+        if (d.battery != nullptr && !d.battery->regiment_cp.empty() && d.battery->regiment_cp != brief_.regiment.place) {
+            cp_place_ = d.battery->regiment_cp;
+            const nav::SessionNav* nav = runner_->Nav();
+            if (const nav::Anchor* a = nav != nullptr ? nav->GetAnchors().Find(cp_place_) : nullptr) runner_->MoveRegiment(a->at.east_m, a->at.north_m);
+        }
         if (d.standing != nullptr) standing_ = *d.standing;
         if (d.battery != nullptr) prior_crew_grades_ = d.battery->crew_grades;
         // Resumed at a briefing's seam: the day was summed up before the save; its lines are said at the briefing again.
@@ -261,6 +267,7 @@ public:
         if (live_) live_->Step(*runner_);
         if (osa_) SyncOsa();
         StepBriefings();
+        FollowRegiment();
         StepGroundUnits(false);
         PumpFronts();
         CarryTheMove();
@@ -362,6 +369,13 @@ public:
     int BriefingsMissed() const { return briefings_missed_; }
     // The id of the battery commander's car among the session's movers (nav/movers.hpp).
     static constexpr const char* kCarId = "bty21_commander_car";
+    // O6: the regiment's command post's column among the movers, and its vehicles (sam3d: the post's PU-12M and signal
+    // centre, the staff's cars and the guard; a game value).
+    static constexpr const char* kRegimentColumnId = "rgt15_cp_column";
+    static constexpr int kRegimentColumnVehicles = 6;
+    // O6: the place of the regiment's command post (its briefings there) and where its column is going ("" not moving).
+    const std::string& RegimentCp() const { return CpPlace(); }
+    const std::string& RegimentGoing() const { return cp_going_; }
     const airwar::AirCampaign* Campaign() const { return campaign_.get(); }
     const airwar::LivePackages* Packages() const { return live_.get(); }
     const RegimentTasking* Regiment() const { return regiment_.get(); }
@@ -483,6 +497,7 @@ public:
         s.at = at_;
         s.arrived_h = arrived_h_ >= kNeverH ? -1.0 : arrived_h_;
         s.crew_grades = CrewGradesAll();  // O5: his marks for his crews, as his log has them
+        s.regiment_cp = CpPlace();        // O6: a move it is on is made again from there
         return s;
     }
     double CampaignHourAtStart() const { return h0_; }
@@ -934,7 +949,7 @@ private:
     // roads or no way (the session notes it).
     bool StartDrive(bool back) {
         nav::SessionNav* nav = runner_->MutableNav();
-        const nav::Anchor* cp = nav != nullptr ? nav->GetAnchors().Find(brief_.regiment.place) : nullptr;
+        const nav::Anchor* cp = nav != nullptr ? nav->GetAnchors().Find(CpPlace()) : nullptr;
         const nav::Mobility* mob = nav != nullptr ? nav->MobilityClasses().Find(brief_.regiment.car_mobility) : nullptr;
         if (cp == nullptr || mob == nullptr) return false;
         const Battery* b = runner_->GetBattery();
@@ -978,7 +993,7 @@ private:
         if (drive_s_ >= 0.0) return drive_s_;
         drive_s_ = 0.0;
         const nav::SessionNav* nav = runner_->Nav();
-        const nav::Anchor* cp = nav != nullptr ? nav->GetAnchors().Find(brief_.regiment.place) : nullptr;
+        const nav::Anchor* cp = nav != nullptr ? nav->GetAnchors().Find(CpPlace()) : nullptr;
         const nav::Mobility* mob = nav != nullptr ? nav->MobilityClasses().Find(brief_.regiment.car_mobility) : nullptr;
         if (cp == nullptr || mob == nullptr) return drive_s_;
         const Battery* b = runner_->GetBattery();
@@ -1057,6 +1072,73 @@ private:
         brief_held_ = false;
         papers_given_ = false;
         drive_s_ = -1.0;
+    }
+    // ---- Track O, O6: the regiment moves with the division ----
+    // The place of the regiment's command post now: its briefings are held there.
+    const std::string& CpPlace() const { return cp_place_.empty() ? brief_.regiment.place : cp_place_; }
+    // A task that names another command post for the regiment (the division's move: the opening march): its column of
+    // the command post leaves once the battery commander has left its briefing, goes there on the roads, and from its
+    // arrival the regiment's post and its own radars stand there and its briefings are held there. The battery commander
+    // knows where from the order; nobody is told the column's road.
+    void FollowRegiment() {
+        ScenarioRunner& r = *runner_;
+        nav::SessionNav* nav = r.MutableNav();
+        if (nav == nullptr) return;
+        if (!cp_going_.empty()) {
+            const nav::Mover* m = nav->GetMovers().Find(kRegimentColumnId);
+            if (m == nullptr || m->state != nav::MoverState::Arrived) return;
+            const nav::Anchor* at = nav->GetAnchors().Find(cp_going_);
+            cp_place_ = cp_going_;
+            cp_going_.clear();
+            if (at != nullptr) r.MoveRegiment(at->at.east_m, at->at.north_m);
+            drive_s_ = -1.0;  // the briefings' drive is from the battery to the new place
+            Note("the regiment's command post has moved to " + r.PlaceNameOf(cp_place_));
+            return;
+        }
+        if (!r.HasTask() || r.Task().regiment_cp.empty() || r.Task().regiment_cp == CpPlace()) return;
+        if (brief_.present && (trip_ == Trip::AtCp || trip_ == Trip::Driving)) return;  // after its briefing
+        nav::SessionMoverDef col;
+        col.id = kRegimentColumnId;
+        col.kind = "convoy";
+        col.mobility = brief_.present ? brief_.regiment.car_mobility : std::string("truck");
+        col.from = CpPlace();
+        col.to = r.Task().regiment_cp;
+        col.depart_s = r.Time();
+        col.vehicles = kRegimentColumnVehicles;
+        col.spacing_m = 50.0;
+        if (nav::Mover* old = nav->GetMovers().Find(kRegimentColumnId)) {  // a move after an earlier one: the same column
+            nav::RouteRequest q;
+            const nav::Anchor* a = nav->GetAnchors().Find(col.from);
+            const nav::Anchor* b = nav->GetAnchors().Find(col.to);
+            const nav::Mobility* mob = nav->MobilityClasses().Find(col.mobility);
+            if (a == nullptr || b == nullptr || mob == nullptr) return;
+            q.from = a->at;
+            q.to = b->at;
+            q.mobility = mob;
+            q.swim = false;
+            const nav::Route route = nav->Graph().Find(q);
+            if (!route.found) {
+                Note("the regiment's column: no way from " + col.from + " to " + col.to);
+                cp_place_ = col.to;  // it gets there its own way: the briefings are held there
+                return;
+            }
+            old->route = route;
+            old->depart_s = r.Time();
+            old->state = nav::MoverState::Waiting;
+            old->arc_m = 0.0;
+            old->moved_s = 0.0;
+            old->arrived_s = -1.0;
+            old->halt_until_s = -1.0;
+        } else {
+            std::string why;
+            if (!nav->AddMover(col, &why)) {
+                Note("the regiment's column: " + why);
+                cp_place_ = col.to;
+                return;
+            }
+        }
+        cp_going_ = col.to;
+        Note("the regiment's command post leaves " + r.PlaceNameOf(col.from) + " for " + r.PlaceNameOf(col.to));
     }
     // The briefing as a scene: its items in order, each said by its officer, heard by the battery commander there.
     void HoldBriefing() {
@@ -1489,6 +1571,9 @@ private:
     std::size_t scene_seen_ = 0;
     double osa_card_s_ = -1e18;
     int radio_orders_heard_ = 0;
+    // O6: the regiment's command post (a place: its briefings there) and where its column is going ("" not moving).
+    std::string cp_place_;
+    std::string cp_going_;
     std::unique_ptr<airwar::LivePackages> live_;
     std::unique_ptr<RegimentTasking> regiment_;
     double h0_ = 0.0;

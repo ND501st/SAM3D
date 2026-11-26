@@ -101,7 +101,7 @@ SC_TEST("campaign save (O1): the rebels' campaign saved in the evening comes bac
     campaign::MissionSessionDef md;
     campaign::CampaignSave header;
     SC_EXPECT(campaign::NewCampaign(cd, "rebels", kData, "battery_commander", md, header, &e));
-    SC_EXPECT(!campaign::NewCampaign(cd, "nato", kData, "battery_commander", md, header, &e) && e.find("O6") != std::string::npos);
+    SC_EXPECT(!campaign::NewCampaign(cd, "martians", kData, "battery_commander", md, header, &e) && e.find("martians") != std::string::npos);
     SC_EXPECT(campaign::NewCampaign(cd, "rebels", kData, "battery_commander", md, header, &e));
     campaign::MissionSession a;
     SC_EXPECT(a.Start(md, kData, &e));

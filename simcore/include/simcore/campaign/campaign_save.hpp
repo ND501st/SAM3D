@@ -239,6 +239,7 @@ inline json::Value TaskJsonValue(const BatteryTask& t) {
         if (!t.limits.fire.empty()) Put(l, "fire", Str(t.limits.fire));
         Put(o, "limits", l);
     }
+    if (!t.regiment_cp.empty()) Put(o, "regiment_cp", Str(t.regiment_cp));  // O6
     Put(o, "source", Str("SAM3D: the task as the battery held it when the campaign was saved"));
     Put(o, "confidence", Str("estimate"));
     return o;
@@ -389,6 +390,7 @@ inline std::string CampaignSaveJson(const CampaignSave& s) {
     Put(bj, "at", Str(b.at));
     Put(bj, "arrived_h", Num(b.arrived_h));
     if (!b.crew_grades.empty()) Put(bj, "crew_grades", save_json::CrewGradesJson(b.crew_grades));
+    if (!b.regiment_cp.empty()) Put(bj, "regiment_cp", Str(b.regiment_cp));
     Put(root, "battery", bj);
     Put(root, "standing", save_json::StandingJson(s.standing));
     json::Value war;
@@ -458,6 +460,7 @@ inline bool LoadCampaignSaveJson(const std::string& text, CampaignSave& out, std
     b.at = Str(*bj, "at");
     b.arrived_h = Num(*bj, "arrived_h", -1.0);
     if (const json::Value* g = bj->Find("crew_grades")) save_json::ReadCrewGrades(*g, b.crew_grades);
+    b.regiment_cp = Str(*bj, "regiment_cp");
     if (const json::Value* st = root.Find("standing")) save_json::ReadStanding(*st, out.standing);
     const json::Value* war = root.Find("air_war");
     if (war == nullptr) return fail("no air war");

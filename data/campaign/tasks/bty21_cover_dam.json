@@ -1,0 +1,148 @@
+{
+  "task_id": "bty21_cover_dam",
+  "kind": "cover_object",
+  "given_by": "rgt_commander",
+  "unit": "battery 21",
+  "covered": "rava_dam",
+  "task": "march with the division to the war plan's area and cover the Rava dam from low-flying attack from the main position below it on the west bank",
+  "short_ru": "ÑÐ¾Ð²ÐµÑ€ÑˆÐ¸Ñ‚ÑŒ Ð¼Ð°Ñ€Ñˆ Ð² Ñ€Ð°Ð¹Ð¾Ð½ Ð¿Ð¾ Ð¿Ð»Ð°Ð½Ñƒ, Ð¿Ñ€Ð¸ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¿Ð»Ð¾Ñ‚Ð¸Ð½Ñƒ Ð½Ð° Ð Ð°Ð²Ðµ Ð¾Ñ‚ ÑƒÐ´Ð°Ñ€Ð¾Ð² Ñ Ð¼Ð°Ð»Ñ‹Ñ… Ð²Ñ‹ÑÐ¾Ñ‚",
+  "area_ru": "Ð½Ð¸Ð¶Ðµ Ð¿Ð»Ð¾Ñ‚Ð¸Ð½Ñ‹, Ð·Ð°Ð¿Ð°Ð´Ð½Ñ‹Ð¹ Ð±ÐµÑ€ÐµÐ³",
+  "reasons": [
+    "The Warsaw Pact's troops have crossed the north-eastern border: the 7th Motor Rifle Division leaves Kesmark tonight for its war plan's area on the Rava gorge and Dravec, and the regiment marches with it.",
+    "The dam holds the reservoir above Dravec and carries the gorge road: its loss floods the valley the division is to defend.",
+    "The Pact's aviation will come low down the gorge from the border range; the S-125 at the dam cannot see below the gorge's sides."
+  ],
+  "situation": [
+    {
+      "kind": "attack",
+      "from_deg": 0,
+      "to_deg": 50,
+      "text": "fighter-bombers low down the gorge from the border range"
+    },
+    {
+      "kind": "helicopter",
+      "from_deg": 330,
+      "to_deg": 20,
+      "text": "helicopters over the reservoir"
+    },
+    {
+      "kind": "jammer",
+      "from_deg": 20,
+      "to_deg": 70,
+      "range_km": 60,
+      "text": "a stand-off jammer's orbit beyond the border"
+    },
+    {
+      "kind": "arm",
+      "from_deg": 10,
+      "to_deg": 60,
+      "text": "anti-radiation missiles from the north-east"
+    }
+  ],
+  "habits": "The Pact's aviation strikes in massed blows behind jamming, then hunts our air defences with anti-radiation missiles.",
+  "area": {
+    "main": "bty21_dam",
+    "reserve": [
+      "bty21_dam_reserve"
+    ],
+    "dummies": [
+      "bty21_dam_dummy"
+    ],
+    "tzm": "bty21_dam_reserve",
+    "notes": "The war plan's positions, prepared in peacetime: the main one, the reserve within 2 km, a dummy (data/command/places_pannonia.json)."
+  },
+  "sectors": [
+    {
+      "vehicle": "21",
+      "from_deg": 340,
+      "to_deg": 40,
+      "duty": true
+    },
+    {
+      "vehicle": "22",
+      "from_deg": 340,
+      "to_deg": 40
+    },
+    {
+      "vehicle": "23",
+      "from_deg": 20,
+      "to_deg": 80
+    },
+    {
+      "vehicle": "24",
+      "from_deg": 290,
+      "to_deg": 350,
+      "duty": true
+    }
+  ],
+  "readiness": 1,
+  "readiness_text": "no. 1 from arrival",
+  "emission": "limited",
+  "reconnoitre": false,
+  "ready_in_s": 36000,
+  "regiment_cp": "rgt_cp_dam",
+  "coordination": [
+    "the S-125 fire unit by the dam: it covers the dam from medium height, you below the gorge's sides",
+    "the ZU-23 guns and the militia's Strela-2s at the dam",
+    "call signs and frequencies as the communications diagram"
+  ],
+  "own_air": {
+    "method": "by_zones",
+    "fighter_floor_m": 6000,
+    "floor_unable_m": 3000,
+    "zones": [
+      {
+        "id": "2",
+        "kind": "corridor",
+        "path_m": [
+          [
+            20000,
+            70000
+          ],
+          [
+            20000,
+            130000
+          ]
+        ],
+        "half_width_m": 5000,
+        "floor_m": 2000,
+        "ceiling_m": 6000,
+        "from_h": 6,
+        "to_h": 20,
+        "notes": "our fighters' corridor north to the border range west of the gorge, by day"
+      },
+      {
+        "id": "1",
+        "kind": "duty_zone",
+        "path_m": [
+          [
+            75000,
+            80000
+          ]
+        ],
+        "half_width_m": 15000,
+        "floor_m": 1500,
+        "ceiling_m": 12000,
+        "notes": "the fighter regiment's duty zone east of the gorge, outside the battery's zone"
+      }
+    ],
+    "recognition_signal": "by the day's signal table",
+    "fire_prohibition_signal": "code 20 on the battery net",
+    "code_issue": "the identification code table of the day",
+    "source": "sam3d: by mitronin_1976 pp. 5-9 (cooperation by zones against the first massed strike; corridors and duty zones named in the SAM unit's order; the fighters' floor above the regiment's highest kill limit) and mt_franchuk_front p. 6; the corridor's place, width, heights and hours and the duty zone are the campaign's (the regulations' widths and heights not found: docs/air_battle/08_OUR_FIGHTERS.md Left open); code 20 as the fire ban is the talk table's sam3d placeholder (pvo_bu_x_1984 art. 30)",
+    "confidence": "estimate"
+  },
+  "reports": [
+    "Â«Ðº Ð±Ð¾ÑŽ Ð³Ð¾Ñ‚Ð¾Ð²Â» to the regiment's command post by radio on arrival",
+    "each control point passed on the march, by radio in short form",
+    "each engagement as fought",
+    "the day's report by wire"
+  ],
+  "support": [
+    "the TZM with the column, then at the reserve position",
+    "fuel at the division's halt, then from the regiment's rear at first light"
+  ],
+  "source": "sam3d: a fictional order in the form of voenizdat_osa_1991 pp. 240-245; the march with the division to its war plan's area (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md D7, section 8; data/campaign/ground_defence.json); the reasons, the situation and the ready-by are the campaign's (the ready-by: the march on the country's roads timed by the route service with the commander's sequence and the occupation, data/campaign/battery_plan.json, and a margin)",
+  "confidence": "estimate",
+  "notes": "Battery 21's first task in the war against warsaw_pact (track O, O6): from the Kesmark barracks to the Rava dam above Dravec, the regiment's command post with it (regiment_cp)."
+}

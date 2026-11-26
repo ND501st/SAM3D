@@ -1,0 +1,36 @@
+{
+  "map_id": "kesmark_south",
+  "extends": "maps/kesmark_range.json",
+  "name": "The Kesmark range with the southern front's district",
+  "description": "The Kesmark range as it is (its 40 km, its detail areas, the country beyond) with a third detail area 12 km square at 20 m on the south-western border with the Noric Republic, where battery 21 fights the neutral's war (track O, O6), and the district's tracks.",
+  "status": "track O, O6 (26 Nov 2026): the neutral's district (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md section 8)",
+  "source": "game value: sam3d estimate (the area's size and spacing as the plan's about 12 km at 10-20 m; the tracks and the village are SAM3D's, on the country's ground and roads, data/maps/pannonia.json)",
+  "confidence": "estimate",
+  "notes": "A district's map extends the range (simcore/terrain_map.hpp LoadMap). The Lenta valley road runs along the area's southern edge.",
+  "terrain": {
+    "detail": [
+      {
+        "id": "south",
+        "east_km": -102,
+        "north_km": -74,
+        "half_km": 6,
+        "spacing_m": 20,
+        "micro_m": 0.6,
+        "source": "game value: sam3d estimate",
+        "confidence": "estimate",
+        "notes": "The south-western group's forward depot (-96, -80), the 72nd Regiment's line and the Lenta road: 20 m ground (roadmap R6, 15.6). Its edges are nodes of the far ground's 500 m ground."
+      }
+    ]
+  },
+  "roads": [
+    {"id": "t_south_border", "name": "The border track north from the Lenta road", "class": "track",
+     "points": [[-100.0, -80.0], [-100.0, -76.0], [-101.2, -74.6], [-99.0, -70.5]],
+     "notes": "From the Lenta valley road north past the battery's positions to the regiment's command post."},
+    {"id": "t_south_dummy", "name": "Track to the dummy position", "class": "track",
+     "points": [[-100.0, -76.0], [-98.6, -74.8]]}
+  ],
+  "detail_settlements": [
+    {"id": "lentavar", "name": "Lentavar", "kind": "village", "east_km": -103.6, "north_km": -77.6, "radius_km": 0.55, "buildings": 100,
+     "notes": "A border village by the Lenta road, SAM3D's."}
+  ]
+}

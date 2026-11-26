@@ -276,3 +276,19 @@ planning bugs, fixed: the cover task marched to the covered unit, not behind it;
 Try this: `?SimWar=new:rebels?SimSeat=battery_commander`. Play to the second evening's briefing and hear the marks and their
 reasons. Then press Esc and V for the reveal. After 17:30 at your post the helper shows the grading order in the warning
 net sector of the crew menu. Headless: `mission_demo data/scenarios/pu12m_mission_cover.json data --war rebels 1 --hours 26 --reveal`.
+
+**O6** (26 Nov 2026, first form). The Pact, NATO and the neutral are playable (`campaigns.json`). Each war opens at
+19:00 with battery 21 in the Kesmark barracks' park, `pu12m_mission_<war>.json` and `osa_mission_<war>.json`, the
+division's columns leaving Kesmark (nav movers, for show) and the task given in person at the briefing: march to the
+war plan's area and cover its object (`tasks/bty21_cover_dam|dombas|south.json`, ready-by 10, 6 and 15 h, measured).
+The commander plans a night march: about 7 h to the Rava dam, 3 h to Dombas and 12 h to the south. The districts
+(`maps/kesmark_rava_dam|dombas|south.json`) `"extends"` the test map with one 20 m area, tracks and a village. Their tracks
+join the country's roads where they end on them (`RoadGraph::ForCountry`; the ground war's graph is unchanged). A task's
+`regiment_cp` moves the regiment's post as a column after the briefing. From its arrival, the post, its radars and the
+briefings stand there (`ScenarioRunner::MoveRegiment`; kept in the save). A halt on a long march is not its end: no «к
+бою готова» there. Unreal draws the scenario's own map. Left: the second echelon, cover-a-regiment and bounds rules (O7).
+
+Try this: `mission_demo --campaign warsaw_pact data --hours 30` (also `nato`, `neutral`; `rebels` unchanged). In the game,
+the menu's Campaign box (2 the neutral, 3 the Pact, 4 NATO) at the battery commander's seat: hear the task at the
+briefing, watch «К маршу!» at 19:35, then W through the night's halts to «в назначенный район прибыла» at the dam; the
+ground round you is the district's. `?SimWar=new:nato?SimSeat=osa:commander` rides the march in launcher 21.

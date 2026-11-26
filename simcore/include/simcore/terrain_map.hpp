@@ -2465,6 +2465,23 @@ public:
                DetailTownsInAreas(out);
     }
 
+    // A district's map that extends another (track O, O6; "extends": the base's file): the base as it is, with this file's
+    // id, name and description, and its detail areas, their towns and the district's tracks added to the base's, each
+    // checked as the base's own are and against them (an area overlapping one of the base's, a track's id twice).
+    bool LoadExtension(const json::Value& root, MapDef& out) {
+        if (!Keys(root, "", {"map_id", "name", "description", "status", "source", "confidence", "notes", "extends", "terrain", "roads",
+                             "detail_settlements"}) ||
+            !RequireString(root, "", "map_id", out.map_id) || !RequireString(root, "", "name", out.name) ||
+            !OptionalString(root, "", "description", out.description) || !Provenance(root, "")) {
+            return false;
+        }
+        if (const json::Value* t = root.Find("terrain")) {
+            if (!Keys(*t, "terrain", {"detail", "notes"})) return false;
+        }
+        return LoadDetail(root, out) && LoadLines(root, "roads", "", out.roads) &&
+               LoadSettlements(root, "detail_settlements", out.detail_settlements) && DetailTownsInAreas(out);
+    }
+
     // The ground another file shapes (a country's, named as a district's "far_ground"): its origin, seed, terrain, rivers
     // and lakes; and its roads and railways (imported into the district's detail areas) and its towns (their places,
     // radii and kinds: the clutter of those the district does not lay out). The rest of that file is its own loader's
@@ -2893,7 +2910,32 @@ inline std::shared_ptr<const MapData> LoadMap(const std::string& data_dir, const
         return nullptr;
     }
     MapDef def;
-    if (!LoadMapDefJson(text, def, error)) return nullptr;
+    json::Value map_root;
+    std::string map_error;
+    if (!json::Parse(text, map_root, &map_error)) {
+        if (error) *error = "map: " + map_error;
+        return nullptr;
+    }
+    if (const json::Value* base = map_root.Find("extends")) {
+        // A district's map on another (track O, O6): the base loaded as itself, then this file's areas and tracks added.
+        std::string base_text;
+        if (!base->Is(json::Type::String) || !detail::ReadTextFile(data_dir + "/" + base->string, base_text)) {
+            if (error) *error = "map: extends: cannot open " + (base->Is(json::Type::String) ? base->string : std::string("(not a file name)"));
+            return nullptr;
+        }
+        if (!LoadMapDefJson(base_text, def, error)) return nullptr;
+        detail::MapLoader loader;
+        if (!loader.LoadExtension(map_root, def)) {
+            if (error) *error = "map: " + loader.Message();
+            return nullptr;
+        }
+    } else {
+        detail::MapLoader loader;
+        if (!loader.Load(map_root, def)) {
+            if (error) *error = "map: " + loader.Message();
+            return nullptr;
+        }
+    }
     // The representative clutter heights of the far ground's towns (data/gameplay/clutter.json; none without it).
     if (!LoadClutterHeights(data_dir, def.clutter, error)) return nullptr;
     if (!def.far_ground_file.empty()) {

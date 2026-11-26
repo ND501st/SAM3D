@@ -47,6 +47,9 @@ struct BatteryState {
     std::string at;            // the task's position the campaign has the battery at ("": where it started)
     double arrived_h = -1.0;   // the campaign hour it came there (< 0: not yet; 0: there from the war's start)
     std::vector<CrewGrade> crew_grades;  // O5: the battery commander's marks for his crews, as his log had them
+    // O6: the place the regiment's command post stood at (its briefings there; "": the briefings' own place). A move it
+    // was on is made again from there (the task held names where it goes).
+    std::string regiment_cp;
 };
 
 // A task not carried out at the save is given again this far into the resumed session (as the bridges mission's order).

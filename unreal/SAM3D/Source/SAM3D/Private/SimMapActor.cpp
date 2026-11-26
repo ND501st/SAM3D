@@ -306,7 +306,20 @@ void ASimMapActor::Tick(float DeltaSeconds)
 	}
 	const simcore::GeoPoint& O = W->Frame().Origin();
 	const FVector Origin(O.LonDeg(), O.LatDeg(), O.alt_m);
-	if (!Origin.Equals(BuiltFor, 1e-9))
+	// Track O, O6: a war's district is its own map (the test map with that district's detail area): draw the running
+	// scenario's map, rebuilt when a scenario on another map starts.
+	bool bOtherMap = false;
+	if (const simcore::ScenarioRunner* R = Sim->GetScenarioRunner())
+	{
+		const FString ScenarioMap = UTF8_TO_TCHAR(R->Def().map_file.c_str());
+		if (!ScenarioMap.IsEmpty() && ScenarioMap != MapFile)
+		{
+			UE_LOG(LogSAM3D, Log, TEXT("Map: the scenario plays on %s (was %s): redrawn"), *ScenarioMap, *MapFile);
+			MapFile = ScenarioMap;
+			bOtherMap = true;
+		}
+	}
+	if (bOtherMap || !Origin.Equals(BuiltFor, 1e-9))
 	{
 		FString Error;
 		if (!Build(Origin, Sim->GetDataDirectory(), Error))

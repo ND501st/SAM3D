@@ -1,0 +1,148 @@
+{
+  "task_id": "bty21_cover_dombas",
+  "kind": "cover_object",
+  "given_by": "rgt_commander",
+  "unit": "battery 21",
+  "covered": "dombas_heliport",
+  "task": "march with the division to the war plan's area and cover the Dombas helicopter base and the hub's depots from low-flying attack from the main position between the base and the Cegled junction",
+  "short_ru": "ÑÐ¾Ð²ÐµÑ€ÑˆÐ¸Ñ‚ÑŒ Ð¼Ð°Ñ€Ñˆ Ð² Ñ€Ð°Ð¹Ð¾Ð½ Ð¿Ð¾ Ð¿Ð»Ð°Ð½Ñƒ, Ð¿Ñ€Ð¸ÐºÑ€Ñ‹Ñ‚ÑŒ Ð²ÐµÑ€Ñ‚Ð¾Ð»Ñ‘Ñ‚Ð½ÑƒÑŽ Ð±Ð°Ð·Ñƒ Ð”Ð¾Ð¼Ð±Ð°Ñˆ Ð¾Ñ‚ ÑƒÐ´Ð°Ñ€Ð¾Ð² Ñ Ð¼Ð°Ð»Ñ‹Ñ… Ð²Ñ‹ÑÐ¾Ñ‚",
+  "area_ru": "Ð¼ÐµÐ¶Ð´Ñƒ Ð±Ð°Ð·Ð¾Ð¹ Ð¸ ÑƒÐ·Ð»Ð¾Ð¼ Ð¦ÐµÐ³Ð»ÐµÐ´",
+  "reasons": [
+    "NATO's troops have crossed the western border: the 7th Motor Rifle Division leaves Kesmark tonight for its war plan's area by Novo Varosd, the army's second echelon, and the regiment marches with it.",
+    "The Dombas hub holds the army's helicopters, its artillery's rear base and the materials depot by the Cegled junction: NATO's raids into the centre cross it.",
+    "NATO's strikers will come low from the west behind their SEAD packages and decoys."
+  ],
+  "situation": [
+    {
+      "kind": "attack",
+      "from_deg": 240,
+      "to_deg": 300,
+      "text": "strike aircraft low from the west, the SEAD package ahead of them"
+    },
+    {
+      "kind": "helicopter",
+      "from_deg": 220,
+      "to_deg": 260,
+      "text": "attack helicopters along the western road"
+    },
+    {
+      "kind": "jammer",
+      "from_deg": 250,
+      "to_deg": 290,
+      "range_km": 70,
+      "text": "a stand-off jammer's orbit beyond the border"
+    },
+    {
+      "kind": "arm",
+      "from_deg": 250,
+      "to_deg": 300,
+      "text": "anti-radiation missiles and decoys from the west"
+    }
+  ],
+  "habits": "NATO comes behind decoys and stand-off jamming, its SEAD packages ahead of the strikes, and fires anti-radiation missiles at any radar that radiates.",
+  "area": {
+    "main": "bty21_dombas",
+    "reserve": [
+      "bty21_dombas_reserve"
+    ],
+    "dummies": [
+      "bty21_dombas_dummy"
+    ],
+    "tzm": "bty21_dombas_reserve",
+    "notes": "The war plan's positions, prepared in peacetime: the main one, the reserve within 2 km, a dummy (data/command/places_pannonia.json)."
+  },
+  "sectors": [
+    {
+      "vehicle": "21",
+      "from_deg": 240,
+      "to_deg": 290,
+      "duty": true
+    },
+    {
+      "vehicle": "22",
+      "from_deg": 240,
+      "to_deg": 290
+    },
+    {
+      "vehicle": "23",
+      "from_deg": 280,
+      "to_deg": 330
+    },
+    {
+      "vehicle": "24",
+      "from_deg": 200,
+      "to_deg": 250,
+      "duty": true
+    }
+  ],
+  "readiness": 1,
+  "readiness_text": "no. 1 from arrival",
+  "emission": "limited",
+  "reconnoitre": false,
+  "ready_in_s": 21600,
+  "regiment_cp": "rgt_cp_dombas",
+  "coordination": [
+    "the ZU-23 guns at the helicopter base",
+    "the S-75 and S-125 fire units at Novo Varosd: the sky above 3000 m is theirs",
+    "call signs and frequencies as the communications diagram"
+  ],
+  "own_air": {
+    "method": "by_zones",
+    "fighter_floor_m": 6000,
+    "floor_unable_m": 3000,
+    "zones": [
+      {
+        "id": "2",
+        "kind": "corridor",
+        "path_m": [
+          [
+            -20000,
+            40000
+          ],
+          [
+            -80000,
+            40000
+          ]
+        ],
+        "half_width_m": 5000,
+        "floor_m": 2000,
+        "ceiling_m": 6000,
+        "from_h": 6,
+        "to_h": 20,
+        "notes": "our fighters' corridor west along the western road, north of the hub, by day"
+      },
+      {
+        "id": "1",
+        "kind": "duty_zone",
+        "path_m": [
+          [
+            -10000,
+            30000
+          ]
+        ],
+        "half_width_m": 15000,
+        "floor_m": 1500,
+        "ceiling_m": 12000,
+        "notes": "the fighter regiment's duty zone north-east of the hub, outside the battery's zone"
+      }
+    ],
+    "recognition_signal": "by the day's signal table",
+    "fire_prohibition_signal": "code 20 on the battery net",
+    "code_issue": "the identification code table of the day",
+    "source": "sam3d: by mitronin_1976 pp. 5-9 (cooperation by zones against the first massed strike; corridors and duty zones named in the SAM unit's order; the fighters' floor above the regiment's highest kill limit) and mt_franchuk_front p. 6; the corridor's place, width, heights and hours and the duty zone are the campaign's (the regulations' widths and heights not found: docs/air_battle/08_OUR_FIGHTERS.md Left open); code 20 as the fire ban is the talk table's sam3d placeholder (pvo_bu_x_1984 art. 30)",
+    "confidence": "estimate"
+  },
+  "reports": [
+    "Â«Ðº Ð±Ð¾ÑŽ Ð³Ð¾Ñ‚Ð¾Ð²Â» to the regiment's command post by radio on arrival",
+    "each control point passed on the march, by radio in short form",
+    "each engagement as fought",
+    "the day's report by wire"
+  ],
+  "support": [
+    "the TZM with the column, then at the reserve position",
+    "fuel at the division's halt, then from the regiment's rear at first light"
+  ],
+  "source": "sam3d: a fictional order in the form of voenizdat_osa_1991 pp. 240-245; the march with the division to its war plan's area (docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md D7, section 8; data/campaign/ground_defence.json); the reasons, the situation and the ready-by are the campaign's (the ready-by: the march on the country's roads timed by the route service with the commander's sequence and the occupation, data/campaign/battery_plan.json, and a margin)",
+  "confidence": "estimate",
+  "notes": "Battery 21's first task in the war against nato (track O, O6): from the Kesmark barracks to the Dombas hub towards Novo Varosd, the regiment's command post with it (regiment_cp)."
+}

@@ -8675,6 +8675,8 @@ private:
     // The NPC commander reports once the post's communications are ready and every launcher has reported ready.
     void UpdateRegimentReport() {
         if (regiment_reported_ || !post_ || def_.radio_data.Find("regiment") == nullptr || MarchRadioBan()) return;
+        // O6: a long march's halt is not the end of it (the post deployed there is not the battery in its area).
+        if (battery_ && battery_->CurrentMode() == Battery::Mode::Halted) return;
         if (!console_.equipment.IsReady("comms_ready") || status_boards_.empty()) return;
         for (const LauncherStatus& l : status_boards_) {
             if (l.state != LauncherStatus::State::Ready) return;
@@ -9359,6 +9361,26 @@ public:
         def_.post_regiment.radars.push_back(r);
         Event("regiment's radar", id + " (" + type + ") feeds the regiment's picture");
         return true;
+    }
+    // Track O, O6: the regiment's command post at its new place (its column arrived there, campaign/mission_session.hpp):
+    // the post, and the radars of its own that stood by it (within 3 km), each as far from it and as high off the ground
+    // as before. Its nets are heard from there; theatre radars that joined the feed elsewhere stay where they are.
+    void MoveRegiment(double east_m, double north_m) {
+        PostRegiment& g = def_.post_regiment;
+        const Terrain& ground = world_.GetTerrain();
+        const Vec3 was = g.position;
+        const auto moved = [&](const Vec3& p) {
+            const double e = east_m + (p.x - was.x), n = north_m + (p.y - was.y);
+            return Vec3{e, n, ground.HeightAt(e, n) + std::max(0.0, p.z - ground.HeightAt(p.x, p.y))};
+        };
+        if (g.has_position) {
+            for (RegimentRadar& r : g.radars) {
+                if ((Vec3{r.position.x, r.position.y, 0.0} - Vec3{was.x, was.y, 0.0}).Length() < 3000.0) r.position = moved(r.position);
+            }
+        }
+        g.position = g.has_position ? moved(was) : Vec3{east_m, north_m, ground.HeightAt(east_m, north_m) + 2.0};
+        g.has_position = true;
+        Event("regiment", "the regiment's command post at its new place");
     }
     // A radar of the regiment's off the air from now (struck) or back on it (repaired): its picture stops at the board, or
     // comes again. False for an unknown radar, or one already so.

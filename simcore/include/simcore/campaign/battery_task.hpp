@@ -143,6 +143,10 @@ struct BatteryTask {
     // corridors and duty zones with their heights and hours (ENU of the task's map), the signals and the codes' issue.
     command::CooperationPlan own_air;
     OrderLimits limits;        // O4: the order's limits (none: as before)
+    // Track O, O6: where the regiment's command post stands for this task (a place, an anchor of the roads; "": where it
+    // is). A task with the division's move names the new one: the regiment's column goes there, and its evening briefings
+    // are held there once it has arrived (campaign/mission_session.hpp).
+    std::string regiment_cp;
 
     // The main attack direction from the covered object (the first attack line's middle); false if the order gives none.
     bool MainAttackDeg(double& out) const {
@@ -157,7 +161,7 @@ struct BatteryTask {
     // Every place the task names, for a check that each is an anchor.
     std::vector<std::string> Places() const {
         std::vector<std::string> out;
-        for (const std::string& p : {covered, main, tzm_place}) {
+        for (const std::string& p : {covered, main, tzm_place, regiment_cp}) {
             if (!p.empty()) out.push_back(p);
         }
         out.insert(out.end(), reserve.begin(), reserve.end());
@@ -174,7 +178,7 @@ public:
         if (!Keys(root, "", {"task_id", "kind", "given_by", "unit", "covered", "task", "short_ru", "area_ru", "reasons", "situation", "habits",
                              "area", "sectors", "readiness", "readiness_text", "emission", "on_turns", "off_turns", "reconnoitre",
                              "roving", "axis_deg", "width_m", "ready_in_s", "lasts_s", "coordination", "reports", "support",
-                             "own_air", "limits", "source", "confidence", "notes"}) ||
+                             "own_air", "limits", "regiment_cp", "source", "confidence", "notes"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -183,7 +187,7 @@ public:
             !RequireString(root, "", "given_by", t.given_by) || !RequireString(root, "", "unit", t.unit) ||
             !OptionalString(root, "", "covered", t.covered) || !RequireString(root, "", "task", t.task_text) ||
             !RequireString(root, "", "short_ru", t.short_ru) || !OptionalString(root, "", "area_ru", t.area_ru) ||
-            !OptionalString(root, "", "habits", t.habits) ||
+            !OptionalString(root, "", "habits", t.habits) || !OptionalString(root, "", "regiment_cp", t.regiment_cp) ||
             !OptionalString(root, "", "readiness_text", t.readiness_text) || !OptionalString(root, "", "emission", t.emission) ||
             !OptionalNumber(root, "", "on_turns", t.on_turns) || !OptionalNumber(root, "", "off_turns", t.off_turns) ||
             !OptionalBool(root, "", "reconnoitre", t.reconnoitre) || !OptionalBool(root, "", "roving", t.roving) ||

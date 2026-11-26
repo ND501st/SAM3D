@@ -34,6 +34,7 @@ sim and the picture still share one ground:
 |---|---|---|---|---|
 | `bty21` | 9.5 km east, 6.5 km south, 12 km square (inside the map proper) | 10 m, micro relief 0.8 m | 25 m | Battery 21's position, both Kesmark bridges, Vrbice, the station |
 | `capital` | 36 km east, 58 km north, 15 km square (on the far ground) | 20 m, micro relief 0.6 m | 25 m | The capital, laid out (12000 buildings), and the dynamic campaign test round it |
+| `rava_dam`, `dombas`, `south` | One each in the wars' district maps (`kesmark_rava_dam.json` etc., which `"extends"` this one; track O, O6), 12-13 km square on the far ground | 20 m, micro relief 0.6 m | 25 m | Battery 21's positions, the regiment's post and their tracks in the Pact's, NATO's and the neutral's wars |
 
 * **Edges on the coarse nodes.** An area's edges fall on the nodes of the ground it lies in (the map proper's 50 m, the
   far ground's 500 m) and its spacing divides that ground's, so a coarse cell is wholly inside it (not drawn) or wholly

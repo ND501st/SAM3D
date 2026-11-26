@@ -23,23 +23,29 @@
     {
       "id": "neutral",
       "label": "The neutral neighbour",
-      "line": "A border war: raids along a short front by a small, modern air force.",
-      "playable": false,
-      "not_yet": "its front's district comes with the campaign's moves (track O, O6)"
+      "line": "A border war: raids along a short front by a small, modern air force. The division sends its 72nd Regiment to the Noric border; battery 21 marches with it from Kesmark to cover the south-western group's forward depot.",
+      "mission": "scenarios/pu12m_mission_neutral.json",
+      "osa_mission": "scenarios/osa_mission_neutral.json",
+      "osa_callsign": "21",
+      "playable": true
     },
     {
       "id": "warsaw_pact",
       "label": "The Warsaw Pact",
-      "line": "The Pact comes to bring the country back: massed blows, then the hunt for our air defences.",
-      "playable": false,
-      "not_yet": "its front's district comes with the campaign's moves (track O, O6)"
+      "line": "The Pact comes to bring the country back: massed blows, then the hunt for our air defences. The 7th Division leaves Kesmark for the Rava gorge; battery 21 marches to cover the dam above Dravec.",
+      "mission": "scenarios/pu12m_mission_pact.json",
+      "osa_mission": "scenarios/osa_mission_pact.json",
+      "osa_callsign": "21",
+      "playable": true
     },
     {
       "id": "nato",
       "label": "NATO",
-      "line": "The West takes the crossing country: decoys, stand-off jamming and the SEAD packages ahead of the strikes.",
-      "playable": false,
-      "not_yet": "its front's district comes with the campaign's moves (track O, O6)"
+      "line": "The West takes the crossing country: decoys, stand-off jamming and the SEAD packages ahead of the strikes. The 7th Division leaves Kesmark for Novo Varosd as the army's second echelon; battery 21 marches to cover the Dombas hub.",
+      "mission": "scenarios/pu12m_mission_nato.json",
+      "osa_mission": "scenarios/osa_mission_nato.json",
+      "osa_callsign": "21",
+      "playable": true
     }
   ]
 }
