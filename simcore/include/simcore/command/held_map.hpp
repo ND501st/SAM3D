@@ -49,6 +49,13 @@ struct HeldMapValues {
     double sector_drawn_m = 10000.0;    // a launcher's sector drawn to this radius
     double false_easting_km = 50.0;     // the sheet's grid numbers: km from the origin plus these
     double false_northing_km = 50.0;
+    // Track O, O4: the leash to a covered unit (voenizdat_osa_1991 pp. 232-239: the battery 1.5-3 km behind the covered
+    // companies), how often the covered unit says where it is on its net, and how long the battery may stand off the leash
+    // before the records' check calls it a breach (game values).
+    double leash_m = 3000.0;
+    double leash_behind_m = 1500.0;
+    double covered_report_s = 600.0;
+    double leash_grace_s = 900.0;
 };
 
 namespace detail {
@@ -61,8 +68,11 @@ public:
         if (values == nullptr) return Fail("values", "required");
         const std::pair<const char*, double*> each[] = {{"decision_leeway_m", &out.decision_leeway_m}, {"coverage_step_deg", &out.coverage_step_deg},
                                                         {"line_range_m", &out.line_range_m},           {"sector_drawn_m", &out.sector_drawn_m},
-                                                        {"false_easting_km", &out.false_easting_km},   {"false_northing_km", &out.false_northing_km}};
-        if (!Keys(*values, "values", {"decision_leeway_m", "coverage_step_deg", "line_range_m", "sector_drawn_m", "false_easting_km", "false_northing_km"})) {
+                                                        {"false_easting_km", &out.false_easting_km},   {"false_northing_km", &out.false_northing_km},
+                                                        {"leash_m", &out.leash_m},                     {"leash_behind_m", &out.leash_behind_m},
+                                                        {"covered_report_s", &out.covered_report_s},   {"leash_grace_s", &out.leash_grace_s}};
+        if (!Keys(*values, "values", {"decision_leeway_m", "coverage_step_deg", "line_range_m", "sector_drawn_m", "false_easting_km", "false_northing_km",
+                                      "leash_m", "leash_behind_m", "covered_report_s", "leash_grace_s"})) {
             return false;
         }
         for (const auto& e : each) {
@@ -75,6 +85,8 @@ public:
             *e.second = n->number;
         }
         if (!(out.coverage_step_deg > 0.0)) return Fail("values.coverage_step_deg.value", "a number > 0");
+        if (!(out.covered_report_s > 0.0)) return Fail("values.covered_report_s.value", "a number > 0");
+        if (out.leash_behind_m > out.leash_m) return Fail("values.leash_behind_m.value", "at most the leash");
         return true;
     }
 };
@@ -177,6 +189,38 @@ inline std::string GridSquare(const Vec3& p, const HeldMapValues& v) {
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%02d%02d", GridNumber(p.x, v.false_easting_km), GridNumber(p.y, v.false_northing_km));
     return buf;
+}
+
+// A place said to 100 m (track O, O4: a launcher's spot, the covered unit's place on its net): the sheet's easting and
+// northing in hundreds of metres, three figures each ("594 437"; a game value: the period's form is to be confirmed).
+inline int GridRefNumber(double metres, double false_km) {
+    const long long hm = static_cast<long long>(std::floor(metres / 100.0 + false_km * 10.0));
+    return static_cast<int>(((hm % 1000) + 1000) % 1000);
+}
+inline std::string GridRef(const Vec3& p, const HeldMapValues& v) {
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%03d %03d", GridRefNumber(p.x, v.false_easting_km), GridRefNumber(p.y, v.false_northing_km));
+    return buf;
+}
+// The place a grid reference names, as the hearer reads it: the middle of its 100 m square, in the 100 km cycle nearest
+// `hearer` (where the hearer is). False for words that are not one.
+inline bool ReadGridRef(const std::string& text, const Vec3& hearer, const HeldMapValues& v, Vec3& out) {
+    // Exactly three digits, a space, three digits.
+    if (text.size() != 7 || text[3] != ' ') return false;
+    int e = 0, n = 0;
+    for (int i = 0; i < 3; ++i) {
+        const char a = text[static_cast<std::size_t>(i)], b = text[static_cast<std::size_t>(i + 4)];
+        if (a < '0' || a > '9' || b < '0' || b > '9') return false;
+        e = e * 10 + (a - '0');
+        n = n * 10 + (b - '0');
+    }
+    const auto axis = [](int said, double false_km, double near_m) {
+        const double base = said * 100.0 + 50.0 - false_km * 1000.0;  // one reading of it in the session's frame
+        const double cycles = std::round((near_m - base) / 100000.0);
+        return base + cycles * 100000.0;
+    };
+    out = Vec3{axis(e, v.false_easting_km, hearer.x), axis(n, v.false_northing_km, hearer.y), 0.0};
+    return true;
 }
 
 // ------------------------------------------------------------------------------------------------------------- bearings
@@ -359,14 +403,22 @@ struct SectorCard {
     // Track O, O3: the order came by radio in short form, and this is what its commander wrote down of it himself (no
     // card was handed over: only in person are papers given).
     bool written = false;
+    // Track O, O4: the order's limits as they came down to him: his spot within `spot_m` of his place in the formation,
+    // the fire mode ("designation", "independent"; "" not limited), the battery's emission at most ("" not limited).
+    double spot_m = -1.0;  // < 0: the held map's leeway
+    std::string fire;
+    std::string emission;
 };
 
 inline std::string SectorCardText(const SectorCard& c, const HeldMapValues& v) {
     using namespace held_detail;
     std::string s = c.written ? "Launcher " + c.vehicle + ": the combat order as heard on the battery net at " + c.given + ", written down.\n"
                               : "Launcher " + c.vehicle + (c.duty ? " (duty launcher)" : "") + ", with the combat order of " + c.given + ".\n";
-    s += "Your point: " + c.point_name + ", square " + GridSquare(c.point, v) + "; your spot within " + Km(v.decision_leeway_m) + " of it.\n";
+    s += "Your point: " + c.point_name + ", square " + GridSquare(c.point, v) + "; your spot within " +
+         Km(c.spot_m >= 0.0 ? c.spot_m : v.decision_leeway_m) + " of your place in the formation; report it.\n";
     s += "Your sector: " + Deg(c.from_deg) + " to " + Deg(c.to_deg) + ".\n";
+    if (!c.fire.empty()) s += std::string("Fire: ") + campaign::FireModeWords(c.fire) + ".\n";
+    if (!c.emission.empty()) s += "Emission: " + c.emission + " at most.\n";
     if (!c.landmarks.empty()) {
         s += "Landmarks from the point:";
         for (const SectorCard::Landmark& l : c.landmarks) s += "\n  " + l.name + ": " + Deg(l.bearing_deg) + ", " + Km(l.range_m);
@@ -550,6 +602,73 @@ inline void AddCardMarks(HeldMap& out, const SectorCard& c, const MarkSource& sr
     if (!out.has_centre) {
         out.has_centre = true;
         out.centre = c.point;
+    }
+}
+
+// ------------------------------------------------------------------------------------------------------------- limits (O4)
+
+// The order's limits as the holder holds them (track O, O4), for his map: the area he may choose his spot in (a circle
+// round the point the order or the formation gives him), the covered unit where he last knew it with the leash round it
+// (who told him, by what, when), and the fire and emission limits in the margin. Only what reached him: the covered
+// unit's place is its last report or the last sight of it, never where it is.
+struct HeldLimits {
+    bool has_spot = false;
+    Vec3 spot_centre;
+    double spot_m = 0.0;
+    std::string spot_label;      // "your place in the formation", "the order's main position"
+    bool has_covered = false;
+    Vec3 covered;                // where he last knew it
+    std::string covered_name;
+    double leash_m = 0.0;
+    std::string covered_source;  // "its own report", "seen"
+    std::string covered_means;   // "radio_voice", "seen"
+    double covered_as_of_h = -1.0;
+    std::string covered_as_of;
+    std::string fire;            // the fire mode ("" not limited)
+    std::string emission;        // at most ("" not limited)
+};
+
+inline void AddLimitMarks(HeldMap& out, const HeldLimits& l, const MarkSource& src) {
+    using namespace held_detail;
+    if (l.has_spot && l.spot_m > 0.0) {
+        HeldMark m = Stamped(src, "spot_area", "spot", MarkSide::Ours);
+        m.points = {Vec3{l.spot_centre.x, l.spot_centre.y, 0.0}};
+        m.radius_m = l.spot_m;
+        m.label = "your spot within " + Km(l.spot_m) + (l.spot_label.empty() ? std::string() : " of " + l.spot_label);
+        out.marks.push_back(m);
+    }
+    if (l.has_covered) {
+        MarkSource seen = src;
+        seen.source = l.covered_source;
+        seen.means = l.covered_means;
+        seen.as_of_h = l.covered_as_of_h;
+        seen.as_of = l.covered_as_of;
+        seen.certainty = l.covered_means == "seen" ? MarkCertainty::Confirmed : MarkCertainty::Reported;
+        HeldMark c = Stamped(seen, "covered_unit", "covered", MarkSide::Ours);
+        c.points = {Vec3{l.covered.x, l.covered.y, 0.0}};
+        c.label = l.covered_name + ", " + l.covered_as_of;
+        out.marks.push_back(c);
+        if (l.leash_m > 0.0) {
+            HeldMark r = Stamped(seen, "leash", "covered", MarkSide::Ours);
+            r.points = c.points;
+            r.radius_m = l.leash_m;
+            r.label = "keep within " + Km(l.leash_m);
+            out.marks.push_back(r);
+        }
+        if (!out.has_centre) {
+            out.has_centre = true;
+            out.centre = l.covered;
+        }
+    }
+    if (!l.fire.empty()) {
+        HeldMark n = Stamped(src, "note", "fire", MarkSide::Ours);
+        n.label = std::string("Fire: ") + campaign::FireModeWords(l.fire);
+        out.marks.push_back(n);
+    }
+    if (!l.emission.empty()) {
+        HeldMark n = Stamped(src, "note", "emission", MarkSide::Ours);
+        n.label = "Emission: " + l.emission + " at most";
+        out.marks.push_back(n);
     }
 }
 

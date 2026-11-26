@@ -99,6 +99,13 @@ private:
         for (const EmissionRegime& r : post_->TakeBatteryEmissionOrders()) osa_->HearBatteryEmissionOrder(r);  // the emission regime
         for (const std::string& az : osa_->TakeArmAttackReports()) post_->HearArmAttackReport(callsign_, az);  // an ARM attack
         for (int number : osa_->TakeReadbacks()) post_->HearReadback(callsign_, number);
+        // Track O, O4: the fire mode said on the net, the spot its commander chose and his report of it, its place.
+        for (const std::string& mode : post_->TakeFireModeOrders()) osa_->HearFireModeOrder(mode);
+        for (const Vec3& p : osa_->TakeSpotMoves()) post_->MoveLauncherSpot(callsign_, p);
+        if (const Battery* b = post_->GetBattery()) {
+            if (const Battery::Vehicle* v = b->Find(callsign_)) osa_->SetFormationPlace(v->deployed, v->has_slot, v->slot);
+        }
+        for (const std::string& grid : osa_->TakeSpotReports()) post_->HearLauncherSpot(callsign_, grid);
         for (const ScenarioRunner::LinkReport& r : osa_->TakeOwnReports()) post_->HearBatteryReport(r);
         ShowPostMissiles();  // before the reports: the burst comes before the wreck
         for (const ScenarioRunner::LinkReport& r : post_->TakeNetReports()) {

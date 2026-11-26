@@ -297,6 +297,12 @@ public:
         double odo_m = 0.0;          // driven on the march (a fault's chance per kilometre)
         double repair_at_s = -1.0;   // broken down: repaired then (< 0: waiting for the maintenance vehicle)
         std::string helping;         // the maintenance vehicle: the broken-down vehicle it stays with
+        // Track O, O4: a launcher's place in the combat formation as the battery commander set it, and the spot its own
+        // commander chose within his leeway of it (has_spot: it drives there in place of its place).
+        bool has_slot = false;
+        Vec3 slot;
+        bool has_spot = false;
+        Vec3 spot;
     };
 
     struct Event {
@@ -465,6 +471,26 @@ public:
         const Vehicle* v = Find(id);
         return v != nullptr && v->catching;
     }
+    // Track O, O4: a launcher's commander chose his spot (within his leeway of his place in the formation, or not: the order's
+    // limits are rules, not walls): in the combat formation the vehicle leaves its place and drives across country there
+    // and deploys. False for no such launcher, or none in a formation.
+    bool SetSpot(const std::string& id, const Vec3& p, double t) {
+        if (mode_ != Mode::Formation) return false;
+        for (Vehicle& v : vehicles_) {
+            if ((v.def.id != id && v.def.callsign != id) || v.def.kind != BatteryVehicleKind::Launcher || v.broken || v.away) continue;
+            v.has_spot = true;
+            v.spot = Vec3{p.x, p.y, v.position.z};
+            v.goal = v.spot;  // a pair held while another bounds goes there in its turn
+            if (Dist(v.position, v.goal) > tactics_.slot_tolerance_m) {
+                v.deployed = false;
+                v.deploy_done_s = -1.0;
+                events_.push_back({t, v.def.callsign, "to its commander's spot, " + Fmt(Dist(v.position, v.goal)) + " m"});
+            }
+            return true;
+        }
+        return false;
+    }
+
     // A vehicle breaks down where it stands: it stops, and the column goes on without it.
     void Breakdown(const std::string& id, double t, const std::string& why) {
         for (Vehicle& v : vehicles_) {
@@ -596,6 +622,8 @@ public:
                 for (Vehicle& v : vehicles_) {
                     v.waiting = false;
                     v.goal = v.position + shift;
+                    v.slot = v.goal;  // O4: the new place is where it is taken; a chosen spot stays behind
+                    v.has_spot = false;
                     v.deployed = false;
                     v.deploy_done_s = -1.0;
                 }
@@ -970,6 +998,9 @@ private:
             const double side = j % 2 == 0 ? -0.5 : 0.5;
             Vehicle& v = vehicles_[launchers[j]];
             v.goal = pair_centre(j / 2) + right * (side * tactics_.pair_internal_m);
+            v.slot = v.goal;
+            v.has_slot = true;
+            v.has_spot = false;
             v.deployed = false;
             v.deploy_done_s = -1.0;
         }

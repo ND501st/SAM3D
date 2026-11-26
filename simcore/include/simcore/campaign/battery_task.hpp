@@ -79,6 +79,35 @@ struct TaskSector {
     bool duty = false;
 };
 
+// The order's limits (track O, O4; docs/campaign/12_ORDERS_MAPS_AND_THE_CAMPAIGN.md sections 3 (D3, D4) and 6): the rules
+// within which the battery commander, and through his combat order each launcher commander, decides for himself. They are
+// rules, not walls: an NPC keeps them, a player may break them, and a breach counts only as the records show it
+// (campaign/report.hpp's CheckLimits). A value < 0 takes the held map's (data/gameplay/held_map.json).
+struct OrderLimits {
+    double spot_m = -1.0;           // the battery's position within this of the order's main point (D3)
+    double launcher_spot_m = -1.0;  // a launcher commander's spot within this of his place in the formation (D3's 1 km)
+    std::string cover_unit;         // the unit the battery keeps with: a mover of the session's roads ("" none)
+    double leash_m = -1.0;          // within this of it (pp. 232-239: 1.5-3 km behind the covered companies)
+    std::string fire;               // "designation" (on the battery commander's only) or "independent" ("": not limited)
+    bool Any() const { return spot_m >= 0.0 || launcher_spot_m >= 0.0 || !cover_unit.empty() || leash_m >= 0.0 || !fire.empty(); }
+};
+
+// The fire modes (pvo_bu_ix_1984: search on the senior commander's designation or independently; the period's names are
+// to be confirmed, docs/campaign/12 section 6).
+inline const char* FireModeWords(const std::string& mode) {
+    if (mode == "designation") return "on the battery commander's designation only";
+    if (mode == "independent") return "search and fire on your own in your sector";
+    return "as it is";
+}
+// The emission regimes from the least to the most emitting (emission_regime.hpp's): a regime above the order's is a breach.
+inline int EmissionOpenness(const std::string& regime) {
+    if (regime == "silent") return 0;
+    if (regime == "arm") return 1;
+    if (regime == "limited") return 2;
+    if (regime == "free") return 3;
+    return -1;
+}
+
 struct BatteryTask {
     std::string id;
     TaskKind kind = TaskKind::CoverObject;
@@ -113,6 +142,7 @@ struct BatteryTask {
     // The plan of cooperation with our fighters (S1, docs/air_battle/08_OUR_FIGHTERS.md section 5): by zones or one zone, the
     // corridors and duty zones with their heights and hours (ENU of the task's map), the signals and the codes' issue.
     command::CooperationPlan own_air;
+    OrderLimits limits;        // O4: the order's limits (none: as before)
 
     // The main attack direction from the covered object (the first attack line's middle); false if the order gives none.
     bool MainAttackDeg(double& out) const {
@@ -144,7 +174,7 @@ public:
         if (!Keys(root, "", {"task_id", "kind", "given_by", "unit", "covered", "task", "short_ru", "area_ru", "reasons", "situation", "habits",
                              "area", "sectors", "readiness", "readiness_text", "emission", "on_turns", "off_turns", "reconnoitre",
                              "roving", "axis_deg", "width_m", "ready_in_s", "lasts_s", "coordination", "reports", "support",
-                             "own_air", "source", "confidence", "notes"}) ||
+                             "own_air", "limits", "source", "confidence", "notes"}) ||
             !Provenance(root, "")) {
             return false;
         }
@@ -185,7 +215,7 @@ public:
             std::string e;
             if (!command::LoadCooperationPlan(*oa, "own_air", t.own_air, &e)) return Fail("own_air", e);
         }
-        if (!LoadArea(root, t) || !LoadSituation(root, t) || !LoadSectors(root, t)) return false;
+        if (!LoadArea(root, t) || !LoadSituation(root, t) || !LoadSectors(root, t) || !LoadLimits(root, t)) return false;
         if (t.kind != TaskKind::CoverMarch && t.main.empty()) return Fail("area.main", "required: where the battery goes");
         if ((t.kind == TaskKind::CoverObject || t.kind == TaskKind::CoverRebuild || t.kind == TaskKind::CoverCrossing ||
              t.kind == TaskKind::CoverTroops) && t.covered.empty()) {
@@ -242,6 +272,20 @@ private:
             }
             t.sectors.push_back(s);
         }
+        return true;
+    }
+    bool LoadLimits(const json::Value& root, BatteryTask& t) {
+        const json::Value* l = root.Find("limits");
+        if (l == nullptr) return true;
+        OrderLimits& o = t.limits;
+        if (!Keys(*l, "limits", {"spot_m", "launcher_spot_m", "cover_unit", "leash_m", "fire", "source", "confidence", "notes"}) ||
+            !OptionalNumber(*l, "limits", "spot_m", o.spot_m) || !OptionalNumber(*l, "limits", "launcher_spot_m", o.launcher_spot_m) ||
+            !OptionalString(*l, "limits", "cover_unit", o.cover_unit) || !OptionalNumber(*l, "limits", "leash_m", o.leash_m) ||
+            !OptionalString(*l, "limits", "fire", o.fire)) {
+            return false;
+        }
+        if (!o.fire.empty() && o.fire != "designation" && o.fire != "independent") return Fail("limits.fire", "designation or independent");
+        if (o.leash_m >= 0.0 && o.cover_unit.empty()) return Fail("limits.leash_m", "a leash needs the unit it is to (cover_unit)");
         return true;
     }
     static bool Bearing(double d) { return d >= 0.0 && d <= 360.0; }
@@ -325,8 +369,30 @@ inline std::string TaskDocument(const BatteryTask& t, double given_s, const std:
         }
     }
     s += "\n5. Readiness no. " + std::to_string(t.readiness) + (t.readiness_text.empty() ? std::string() : ": " + t.readiness_text);
-    if (!t.emission.empty()) s += "; emission " + t.emission;
+    if (!t.emission.empty()) s += "; emission " + t.emission + " at most";
+    if (!t.limits.fire.empty()) s += "; fire " + std::string(FireModeWords(t.limits.fire));
     s += ".";
+    if (t.limits.spot_m >= 0.0 || t.limits.launcher_spot_m >= 0.0 || !t.limits.cover_unit.empty()) {  // O4: the order's limits
+        s += "\n   Limits:";
+        char buf[160];
+        if (t.limits.spot_m >= 0.0) {
+            std::snprintf(buf, sizeof(buf), " the battery within %.1f km of its main position;", t.limits.spot_m / 1000.0);
+            s += buf;
+        }
+        if (t.limits.launcher_spot_m >= 0.0) {
+            std::snprintf(buf, sizeof(buf), " each launcher within %.1f km of its place;", t.limits.launcher_spot_m / 1000.0);
+            s += buf;
+        }
+        if (!t.limits.cover_unit.empty()) {
+            if (t.limits.leash_m >= 0.0) {
+                std::snprintf(buf, sizeof(buf), " keep within %.1f km of the covered unit (%s), behind it;", t.limits.leash_m / 1000.0, t.limits.cover_unit.c_str());
+            } else {
+                std::snprintf(buf, sizeof(buf), " keep with the covered unit (%s), behind it;", t.limits.cover_unit.c_str());
+            }
+            s += buf;
+        }
+        if (!s.empty() && s.back() == ';') s.back() = '.';
+    }
     s += "\n6. Time: ready by " + clock(given_s + t.ready_in_s) + "; " +
          (t.lasts_s < 0.0 ? std::string("until relieved") : "until " + clock(given_s + t.lasts_s)) + ".";
     std::vector<std::string> coordination = t.coordination;

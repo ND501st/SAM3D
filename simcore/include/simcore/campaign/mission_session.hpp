@@ -1129,6 +1129,14 @@ private:
                 if (d.HorizontalLength() > 1.0) osa.SetUnitPosition(v->position);
             }
         }
+        // Track O, O4: the fire mode said on the net; the spot its commander chose (the post's battery drives it there), its
+        // place in the formation and whether it is deployed, and his report of his spot on the net.
+        for (const std::string& mode : post.TakeFireModeOrders()) osa.HearFireModeOrder(mode);
+        for (const Vec3& p : osa.TakeSpotMoves()) post.MoveLauncherSpot(osa_callsign_, p);
+        if (const Battery* b = post.GetBattery()) {
+            if (const Battery::Vehicle* v = b->Find(osa_callsign_)) osa.SetFormationPlace(v->deployed, v->has_slot, v->slot);
+        }
+        for (const std::string& grid : osa.TakeSpotReports()) post.HearLauncherSpot(osa_callsign_, grid);
         // The combat order's gathering: the Osa's commander called over, the lines he hears there, his card at its end.
         const ScenarioRunner::Gathering& g = post.CurrentGathering();
         const double near_m = std::max(brief_.battery.gather_m, 1.0);
