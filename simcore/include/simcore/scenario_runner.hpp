@@ -6546,16 +6546,16 @@ private:
         }
         // The landmarks: the nearest towns and landmarks of the map within the card's reach, by bearing from the point.
         if (nav_) {
-            std::vector<command::SectorCard::Landmark> near;
+            std::vector<command::SectorCard::Landmark> nearby;
             for (const nav::Anchor& a : nav_->GetAnchors().All()) {
                 if (a.kind != "settlement" && a.kind != "landmark") continue;
                 const double r = std::hypot(a.at.east_m - point.x, a.at.north_m - point.y);
                 if (r > kCardLandmarkM || r < 1.0) continue;
-                near.push_back({a.name, RadToDeg(AzimuthOf(Vec3{a.at.east_m - point.x, a.at.north_m - point.y, 0.0})), r});
+                nearby.push_back({a.name, RadToDeg(AzimuthOf(Vec3{a.at.east_m - point.x, a.at.north_m - point.y, 0.0})), r});
             }
-            std::stable_sort(near.begin(), near.end(), [](const command::SectorCard::Landmark& a, const command::SectorCard::Landmark& b) { return a.range_m < b.range_m; });
-            if (near.size() > kCardLandmarks) near.resize(kCardLandmarks);
-            base.landmarks = near;
+            std::stable_sort(nearby.begin(), nearby.end(), [](const command::SectorCard::Landmark& a, const command::SectorCard::Landmark& b) { return a.range_m < b.range_m; });
+            if (nearby.size() > kCardLandmarks) nearby.resize(kCardLandmarks);
+            base.landmarks = nearby;
         }
         // The identification code's change times over the next day (the codes are on the day's table, not on the card).
         if (const command::IffSchedule* codes = IffCodes()) {

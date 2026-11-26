@@ -246,6 +246,64 @@
    "transcript": "the battery back on the post's designations.",
    "word_error": 0.0
   },
+  "battery_commander/order_battery_combat_order_ground": {
+   "seat": "battery_commander",
+   "id": "order_battery_combat_order_ground",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "Vehicle commanders to me. The combat order on the ground.",
+   "spoken": "Vehicle commanders to me. The combat order on the ground.",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "Vehicle commanders to me. The combat order on the ground.",
+    "engine_text": "Vehicle commanders to me. The combat order on the ground.",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "vˈiəkəl kəmˈændɚz tə mˌiː. ðə kˈɑːmbæt ˈɔːɹdɚɹ ɔnðə ɡɹˈaʊnd.",
+   "duration_s": 3.3,
+   "speech_s": 2.75,
+   "slot_s": 3.9,
+   "rms_db": -18.8,
+   "peak_db": -2.2,
+   "flags": [],
+   "transcript": "Vehicle commanders to me, the combat order on the ground.",
+   "word_error": 0.0
+  },
+  "battery_commander/order_battery_combat_order_radio": {
+   "seat": "battery_commander",
+   "id": "order_battery_combat_order_radio",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "The combat order by radio, in short form.",
+   "spoken": "The combat order by radio, in short form.",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "The combat order by radio, in short form.",
+    "engine_text": "The combat order by radio, in short form.",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "ðə kˈɑːmbæt ˈɔːɹdɚ baɪ ɹˈeɪdɪˌoʊ, ɪn ʃˈɔːɹt fˈɔːɹm.",
+   "duration_s": 2.67,
+   "speech_s": 2.38,
+   "slot_s": 2.5,
+   "rms_db": -18.5,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "the combat order by radio in short form.",
+   "word_error": 0.0
+  },
   "battery_commander/order_battery_duty": {
    "seat": "battery_commander",
    "id": "order_battery_duty",
@@ -1106,6 +1164,36 @@
    "word_error": 0.0,
    "phonemes": "stˈoʊ ðə pˈoʊst!"
   },
+  "battery_commander/order_to_briefing": {
+   "seat": "battery_commander",
+   "id": "order_to_briefing",
+   "crews": [
+    "pu12m_crew.json"
+   ],
+   "en": "I am off to the regiment's command post for the briefing. The senior operator stands in for me.",
+   "spoken": "I am off to the regiment's command post for the briefing. The senior operator stands in for me.",
+   "voice": "am_adam",
+   "settings": {
+    "spoken": "I am off to the regiment's command post for the briefing. The senior operator stands in for me.",
+    "engine_text": "I am off to the regiment's command post for the briefing. The senior operator stands in for me.",
+    "voice": "am_adam",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "aɪɐm ˈɔf tə ðə ɹˈɛdʒɪmənts kəmˈænd pˈoʊst fɚðə bɹˈiːfɪŋ. ðə sˈiːnjɚɹ ˈɑːpɚɹˌeɪɾɚ stˈændz ɪn fɔːɹ mˌiː.",
+   "duration_s": 5.21,
+   "speech_s": 4.46,
+   "slot_s": 4.25,
+   "rms_db": -18.8,
+   "peak_db": -1.0,
+   "flags": [
+    "long"
+   ],
+   "transcript": "I am off to the regiment's command post for the briefing. The senior operator stands in for me.",
+   "word_error": 0.0
+  },
   "battery_commander/order_tzm_run": {
    "seat": "battery_commander",
    "id": "order_tzm_run",
@@ -1740,6 +1828,36 @@
    "transcript": "Range pull-off protection on.",
    "word_error": 0.0,
    "phonemes": "ɹˈeɪndʒ pˈʊlˈɔf! pɹətˈɛkʃən ˈɔn!"
+  },
+  "commander/order_crew_briefing": {
+   "seat": "commander",
+   "id": "order_crew_briefing",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "Crew, listen to our task.",
+   "spoken": "Crew, listen to our task.",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "Crew, listen to our task.",
+    "engine_text": "Crew, listen to our task.",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "kɹˈuː, lˈɪsən tʊ ˌaʊɚ tˈæsk.",
+   "duration_s": 1.83,
+   "speech_s": 1.6,
+   "slot_s": 1.8,
+   "rms_db": -18.6,
+   "peak_db": -1.4,
+   "flags": [
+    "long"
+   ],
+   "transcript": "Crew, listen to our task.",
+   "word_error": 0.0
   },
   "commander/order_dismount": {
    "seat": "commander",
@@ -2850,6 +2968,36 @@
    "transcript": "Stop the search.",
    "word_error": 0.0,
    "phonemes": "stˈɑːp ðə sˈɜːtʃ!"
+  },
+  "commander/order_to_gathering": {
+   "seat": "commander",
+   "id": "order_to_gathering",
+   "crews": [
+    "osa_ak_crew.json"
+   ],
+   "en": "I am going to the battery commander. The operator stands in for me.",
+   "spoken": "I am going to the battery commander. The operator stands in for me.",
+   "voice": "am_echo",
+   "settings": {
+    "spoken": "I am going to the battery commander. The operator stands in for me.",
+    "engine_text": "I am going to the battery commander. The operator stands in for me.",
+    "voice": "am_echo",
+    "speed": 1.0,
+    "accent": "en-us",
+    "model": "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5",
+    "voice_pack": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+   },
+   "phonemes": "aɪɐm ɡˌoʊɪŋ tə ðə bˈæɾɚɹi kəmˈændɚ. ðɪ ˈɑːpɚɹˌeɪɾɚ stˈændz ɪn fɔːɹ mˌiː.",
+   "duration_s": 3.72,
+   "speech_s": 3.26,
+   "slot_s": 3.2,
+   "rms_db": -18.6,
+   "peak_db": -1.8,
+   "flags": [
+    "long"
+   ],
+   "transcript": "I am going to the battery commander, the operator stands in for me.",
+   "word_error": 0.0
   },
   "commander/order_track_tv": {
    "seat": "commander",
