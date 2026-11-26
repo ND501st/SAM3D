@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cmath>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,26 @@
 
 namespace simcore {
 namespace campaign {
+
+// Track O, O7: the regiment's memory of its redeployments, carried over a save (RegimentTasking::Memory and the session's
+// relief): when each rule last acted, a loan under way (the temporary task, until when, the task held before it), a
+// relief asked for; and in the session, the battery in line since when and a relief's stage (the reserve coming, or the
+// battery resting until an hour). Campaign hours throughout.
+struct RegimentMemory {
+    bool present = false;
+    std::map<std::string, double> last_h;  // by rule
+    std::string temp_id;                   // "": no loan
+    double temp_until_h = 0.0;
+    bool has_before = false;
+    BatteryTask before;
+    bool relief_pending = false;
+    double in_line_h = -1.0;               // < 0: not in line (rested, or not yet reported ready)
+    std::string relief_stage;              // "", "coming" or "resting"
+    std::string relief_rule, relief_unit, relief_from;
+    double relief_rest_h = 0.0;
+    BatteryTask relief_task;               // the march to rest
+    double rest_until_h = -1.0;            // resting: until then (< 0: not at the rest place yet)
+};
 
 struct SavedVehicle {
     std::string id;
@@ -50,6 +71,7 @@ struct BatteryState {
     // O6: the place the regiment's command post stood at (its briefings there; "": the briefings' own place). A move it
     // was on is made again from there (the task held names where it goes).
     std::string regiment_cp;
+    RegimentMemory regiment;  // O7
 };
 
 // A task not carried out at the save is given again this far into the resumed session (as the bridges mission's order).

@@ -185,7 +185,12 @@ public:
                 },
                 [this](const std::string& id) { return runner_->PlaceNameOf(id); });
         }
-        if (d.battery != nullptr && d.battery->arrived_h >= 0.0) in_line_h_ = d.battery->arrived_h;  // O7: in line since it came
+        if (d.battery != nullptr && d.battery->regiment.present) {  // O7: the regiment's memory as saved
+            in_line_h_ = d.battery->regiment.in_line_h;
+            if (regiment_) regiment_->Remember(d.battery->regiment);
+        } else if (d.battery != nullptr && d.battery->arrived_h >= 0.0) {
+            in_line_h_ = d.battery->arrived_h;  // in line since it came
+        }
         // O6: resumed with the regiment's command post moved: it stands there (its briefings, its nets and its radars).
         if (d.battery != nullptr && !d.battery->regiment_cp.empty() && d.battery->regiment_cp != brief_.regiment.place) {
             cp_place_ = d.battery->regiment_cp;
@@ -258,6 +263,7 @@ public:
             regiment_->Since(pic);
         }
         if (regiment_) regiment_->RaidsSince(campaign_->Now());  // O7: the raids before the session were weighed before it
+        if (d.battery != nullptr && d.battery->regiment.present) ResumeRelief(d.battery->regiment);
         airwar::ScenarioFormat fmt;
         fmt.air_radio = war.faction.radio.present;  // the enemy's calls as transmissions in the session (roadmap B9)
         live_ = std::make_unique<airwar::LivePackages>(*campaign_, data_dir, h0_, fmt);
@@ -530,6 +536,19 @@ public:
         s.arrived_h = arrived_h_ >= kNeverH ? -1.0 : arrived_h_;
         s.crew_grades = CrewGradesAll();  // O5: his marks for his crews, as his log has them
         s.regiment_cp = CpPlace();        // O6: a move it is on is made again from there
+        if (regiment_) {                  // O7: the regiment's redeployments under way
+            regiment_->FillMemory(s.regiment);
+            s.regiment.in_line_h = in_line_h_;
+            if (relief_state_ != Relief::None || relief_resume_) {
+                s.regiment.relief_stage = relief_state_ == Relief::Resting ? "resting" : "coming";
+                s.regiment.relief_rule = relief_d_.rule;
+                s.regiment.relief_unit = relief_d_.reserve_unit;
+                s.regiment.relief_from = relief_d_.reserve_from;
+                s.regiment.relief_rest_h = relief_d_.rest_h;
+                s.regiment.relief_task = relief_d_.task;
+                s.regiment.rest_until_h = rest_until_s_ >= 0.0 ? h0_ + rest_until_s_ / 3600.0 : -1.0;
+            }
+        }
         return s;
     }
     double CampaignHourAtStart() const { return h0_; }
@@ -1377,7 +1396,7 @@ private:
     // The facts the officers' redeployments read, in the session's frame: the war's enemy (the doctrine profile's key);
     // where the regiment has the battery (the held task's main position); the raids, the counterattack and a threatened
     // sector as the watch had them reach the regiment; the battery's ready report as the post sent it; and its radars off
-    // the air as the regiment's net had it.
+    // the air as the regiment knows it (RadarWord: their reports wrecked, or their silence).
     void FillO7(RegimentPicture& p) const {
         if (!runner_) return;
         const ScenarioRunner& r = *runner_;
@@ -1397,15 +1416,7 @@ private:
         }
         p.ready_report_h = in_line_h_;
         p.missiles_reported = r.LastReportMissiles();
-        int total = 0, out = 0;
-        for (const OurPost& o : ours_) {
-            if (!o.radar) continue;
-            ++total;
-            if (!o.stands) ++out;
-        }
-        p.radars_total = total;
-        p.radars_out = out;
-        p.radars_out_h = total > 0 && out == total ? radars_out_h_ : -1.0;
+        radar_word_.Fill(p, p.now_h);  // our radars off the air as their reports and their silence told the regiment
     }
     // The battery's first ready report at a position since it last rested is when it went into line there.
     void FollowReadyReports() {
@@ -1450,11 +1461,35 @@ private:
         Note("the regiment sends " + d.reserve_unit + " from " + r.PlaceNameOf(col.from) + " to relieve the battery (" + d.rule + ")");
         return true;
     }
+    // Resumed with a relief under way: the reserve's march made again from where it set off (once the battery holds its
+    // task again), or the battery resting at the rest place until the saved hour.
+    void ResumeRelief(const RegimentMemory& m) {
+        if (m.relief_stage.empty()) return;
+        relief_d_ = TaskingDecision();
+        relief_d_.give = true;
+        relief_d_.relief = true;
+        relief_d_.rule = m.relief_rule;
+        relief_d_.task = m.relief_task;
+        relief_d_.reserve_unit = m.relief_unit;
+        relief_d_.reserve_from = m.relief_from;
+        relief_d_.rest_h = m.relief_rest_h;
+        if (m.relief_stage == "resting") {
+            relief_state_ = Relief::Resting;
+            rest_until_s_ = m.rest_until_h >= 0.0 ? (m.rest_until_h - h0_) * 3600.0 : -1.0;
+        } else {
+            relief_resume_ = true;
+        }
+    }
     // The reserve's column there: it takes over the position (a fighting neighbour from now) and our battery is given the
     // march to rest; at the rest place, after the rule's hours, it is rested and repaired and its launchers loaded.
     void StepRelief() {
-        if (relief_state_ == Relief::None || !regiment_) return;
+        if (!regiment_) return;
         ScenarioRunner& r = *runner_;
+        if (relief_resume_ && r.HasTask()) {
+            relief_resume_ = false;
+            StartRelief(relief_d_, -1.0);
+        }
+        if (relief_state_ == Relief::None) return;
         nav::SessionNav* nav = r.MutableNav();
         if (nav == nullptr) return;
         if (relief_state_ == Relief::Coming) {
@@ -1484,7 +1519,8 @@ private:
             return;
         }
         // Resting: from its arrival at the rest place, the rule's hours.
-        if (!r.HasTask() || r.Task().id != relief_d_.task.id) {  // given another task meanwhile: the rest is over
+        if (!r.HasTask()) return;  // resumed: the task held is given again
+        if (r.Task().id != relief_d_.task.id) {  // given another task meanwhile: the rest is over
             relief_state_ = Relief::None;
             return;
         }
@@ -1594,17 +1630,21 @@ private:
             const bool changed = p.radar ? runner_->SetRegimentRadarDown(p.object, !stands, why) : runner_->SetC2SourceDown(p.object, !stands, why);
             if (changed && p.radar) (stands ? back : out).push_back(p.name);
         }
-        // O7: all of them off the air, since when (the regiment's own posts: it knows at once).
-        int radars = 0, down = 0;
+        // O7: what the regiment hears of them. A radar on the air is heard (its reports on the regiment's net); one struck
+        // before the mission has long been silent (the regiment tells the battery so at the start); the wrecks reported
+        // through the pipeline as each reached the regiment.
+        const double now_h = campaign_ ? campaign_->Now() : h0_ + runner_->Time() / 3600.0;
         for (const OurPost& p : ours_) {
             if (!p.radar) continue;
-            ++radars;
-            if (!p.stands) ++down;
+            if (start) radar_word_.Add(p.object, p.stands ? now_h : now_h - RadarWord::kSilentH);
+            if (p.stands) radar_word_.Heard(p.object, now_h);
         }
-        if (radars == 0 || down < radars) {
-            radars_out_h_ = -1.0;
-        } else if (radars_out_h_ < 0.0) {
-            radars_out_h_ = campaign_ ? campaign_->Now() : h0_ + runner_->Time() / 3600.0;
+        if (watch_.Bound()) {
+            const auto& wrecks = watch_.RadarWrecks();
+            for (; radar_wrecks_read_ < wrecks.size(); ++radar_wrecks_read_) {
+                const RegimentWatch::RadarWreck& w = wrecks[radar_wrecks_read_];
+                radar_word_.Reported(w.object, w.wrecked_h, w.reached_h);
+            }
         }
         const auto told = [this, start](const std::vector<std::string>& names, const char* one, const char* many) {
             if (names.empty()) return;
@@ -1786,7 +1826,9 @@ private:
     std::vector<GivenTask> given_;
     std::vector<OurPost> ours_;
     double next_posts_s_ = 0.0;
-    double radars_out_h_ = -1.0;    // O7: since when all our radars the battery follows have been out (< 0: not all)
+    RadarWord radar_word_;          // O7: what the regiment hears of its radars
+    std::size_t radar_wrecks_read_ = 0;
+    bool relief_resume_ = false;    // O7: resumed with the reserve on its way: its march made again
     // O7: the officers' redeployments in the session.
     std::string faction_;
     double in_line_h_ = -1.0;       // the battery's first ready report at a position since it last rested (campaign hours)

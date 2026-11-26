@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 
+#include "simcore/campaign/campaign_save.hpp"
 #include "simcore/campaign/mission_session.hpp"
 #include "simcore/campaign/regiment.hpp"
 #include "test_framework.hpp"
@@ -226,18 +227,61 @@ SC_TEST("redeploy (O7, situation 2): a battery long in line or short of missiles
 }
 
 SC_TEST("redeploy (O7, situation 7): with all the regiment's radars off the air the battery fights alone, roving") {
+    // What the regiment knows of its radars: their reports and the reports of them wrecked, never their state.
+    campaign::RadarWord word;
+    word.Add("p19_north", 29.0);
+    word.Add("p40_south", 29.0);
     campaign::RegimentTasking rgt = Regiment(Only("contact_lost_roving"));
     const campaign::BatteryTask holds = Bridges();
-    campaign::RegimentPicture p = At(30.0, "warsaw_pact");
-    p.radars_total = 2;
-    p.radars_out = 1;
+    const auto at = [&word](double now_h) {
+        campaign::RegimentPicture p = At(now_h, "warsaw_pact");
+        word.Fill(p, now_h);
+        return p;
+    };
+    // Both struck at 29.0 (their last word); five minutes on nothing has reached the regiment: it fights on as before.
+    campaign::RegimentPicture p = at(29.0 + 5.0 / 60.0);
+    SC_EXPECT(p.radars_total == 2 && p.radars_out == 0 && p.radars_out_h < 0.0);
     SC_EXPECT(!rgt.Decide(p, &holds, 0.0, false).give);
-    p.radars_out = 2;
-    p.radars_out_h = 29.5;
+    // One wreck reported at 29.1; the other's report still on its way: not all are out.
+    word.Reported("p19_north", 29.0, 29.1);
+    word.Reported("p40_south", 29.0, 29.4);
+    p = at(29.12);
+    SC_EXPECT(p.radars_out == 1 && p.radars_out_h < 0.0);
+    SC_EXPECT(!rgt.Decide(p, &holds, 0.0, false).give);
+    // The second one silent for a quarter of an hour (its report not yet in): now the regiment has lost both, and acts once
+    // its staff has worked on it (the rule's five minutes).
+    p = at(29.0 + campaign::RadarWord::kSilentH + 0.01);
+    SC_EXPECT(p.radars_out == 2 && !rgt.Decide(p, &holds, 0.0, false).give);
+    p = at(29.0 + campaign::RadarWord::kSilentH + 0.1);
+    SC_EXPECT(p.radars_out == 2);
+    SC_EXPECT_NEAR(p.radars_out_h, 29.0 + campaign::RadarWord::kSilentH, 1e-9);
     const campaign::TaskingDecision d = rgt.Decide(p, &holds, 0.0, false);
     SC_EXPECT(d.give && d.task.kind == campaign::TaskKind::Ambush && d.task.roving && d.task.limits.fire == "independent");
     SC_EXPECT(!d.task.reserve.empty());
     SC_EXPECT(!rgt.Decide(p, &d.task, 0.0, false).give);  // once per outage
+    // Both wrecks reported fast: the reports, not the silence, tell it (the later report's hour).
+    campaign::RadarWord fast;
+    fast.Add("a", 40.0);
+    fast.Add("b", 40.0);
+    fast.Reported("a", 40.0, 40.05);
+    fast.Reported("b", 40.0, 40.08);
+    campaign::RegimentPicture q = At(40.2, "warsaw_pact");
+    fast.Fill(q, 40.2);
+    SC_EXPECT(q.radars_out == 2);
+    SC_EXPECT_NEAR(q.radars_out_h, 40.08, 1e-9);
+    campaign::RegimentTasking other = Regiment(Only("contact_lost_roving"));
+    SC_EXPECT(other.Decide(q, &holds, 0.0, false).give);
+    // Repaired and heard again: an old report no longer counts.
+    fast.Heard("a", 41.0);
+    fast.Heard("b", 41.0);
+    fast.Fill(q, 41.05);
+    SC_EXPECT(q.radars_out == 0 && q.radars_out_h < 0.0);
+    // Down in the session's truth but heard a minute ago (the regiment does not know yet): nothing out.
+    campaign::RadarWord quiet;
+    quiet.Add("a", 50.0);
+    campaign::RegimentPicture r = At(50.02, "warsaw_pact");
+    quiet.Fill(r, 50.02);
+    SC_EXPECT(r.radars_total == 1 && r.radars_out == 0);
 }
 
 SC_TEST("redeploy (O7, situation 3): the covered division broken, the battery withdraws alone to the next line, on its own") {
@@ -499,4 +543,93 @@ SC_TEST("redeploy (O7): the player's Osa detached: told on the net, it drives on
     // The Osa stands where it went.
     const nav::Anchor* a = r.Nav()->GetAnchors().Find("kesmark_station");
     if (a != nullptr) SC_EXPECT(std::hypot(s.Osa()->UnitPosition().x - a->at.east_m, s.Osa()->UnitPosition().y - a->at.north_m) < 600.0);
+}
+
+SC_TEST("redeploy (O7): a loan begun before a save ends after the resume, and the battery gets the task it held before") {
+    campaign::CampaignsData cd;
+    std::string e;
+    SC_EXPECT(campaign::LoadCampaignsData(kData, "campaign/campaigns.json", cd, &e));
+    campaign::MissionSessionDef md;
+    campaign::CampaignSave header;
+    SC_EXPECT(campaign::NewCampaign(cd, "rebels", kData, "battery_commander", md, header, &e));
+    campaign::MissionSession a;
+    SC_EXPECT(a.Start(md, kData, &e));
+    if (a.Campaign() == nullptr || a.Regiment() == nullptr || a.Runner().Nav() == nullptr) {
+        std::printf("    %s\n", e.c_str());
+        return;
+    }
+    ScenarioRunner& r = a.Runner();
+    while (!r.Finished() && r.TaskReceivedS() < 0.0 && r.Time() < 3600.0) a.Step(0.2);
+    SC_EXPECT(r.HasTask());
+    if (!r.HasTask()) return;
+    const std::string held = r.Task().id;
+    // An object away from the battery struck twice, the warning net's reports reaching the regiment in the session (the
+    // picture taken an hour on, once its staff has worked on them).
+    const nav::Anchors& anchors = r.Nav()->GetAnchors();
+    const nav::Anchor* main = anchors.Find(r.Task().main);
+    const nav::Anchor* object = nullptr;
+    for (const char* id : {"kesmark_station", "kesmark_sugar", "div_hq", "tech_battery", "vrbice_crossroads"}) {
+        const nav::Anchor* x = anchors.Find(id);
+        if (x != nullptr && main != nullptr && std::hypot(x->at.east_m - main->at.east_m, x->at.north_m - main->at.north_m) > 5000.0) object = x;
+    }
+    SC_EXPECT(object != nullptr);
+    if (object == nullptr) return;
+    campaign::RegimentPicture p = a.RegimentHolds();
+    const double now_h = p.now_h;
+    p.now_h = now_h + 1.0;
+    for (int i = 0; i < 2; ++i) p.raids.push_back(Raid(now_h + 0.2 + 0.1 * i, Vec3{object->at.east_m, object->at.north_m, 0.0}, "test_object"));
+    SC_EXPECT(a.RegimentDecides(p, true));
+    const std::string loan = a.Regiment()->TemporaryTask();
+    const double until_h = a.Regiment()->TemporaryUntilH();
+    SC_EXPECT(!loan.empty() && loan != held);
+    for (double t0 = r.Time(); r.Task().id != loan && r.Time() < t0 + 600.0;) a.Step(0.2);
+    SC_EXPECT(r.Task().id == loan && !r.Task().detached.empty());
+    // Saved, written and read back: the regiment's memory with it.
+    campaign::MissionSession::Seam seam;
+    seam.kind = "briefing";
+    seam.air_war = airwar::SaveCampaignJson(*a.Campaign(), a.TheatreFile(), a.FactionFile());
+    seam.battery = a.BatteryNow();
+    campaign::CampaignSave loaded;
+    SC_EXPECT(campaign::LoadCampaignSaveJson(campaign::CampaignSaveJson(campaign::SaveOfSeam(header, a, seam)), loaded, &e));
+    const campaign::RegimentMemory& m = loaded.battery.regiment;
+    SC_EXPECT(m.present && m.temp_id == loan && m.has_before && m.before.id == held);
+    SC_EXPECT_NEAR(m.temp_until_h, until_h, 1e-6);
+    SC_EXPECT(!m.last_h.empty());
+    // Resumed: the regiment still has the loan, the battery its task; at the loan's end the task held before comes back.
+    campaign::MissionSession b;
+    SC_EXPECT(b.Start(campaign::ResumeCampaign(loaded, kData), kData, &e));
+    if (b.Campaign() == nullptr || b.Regiment() == nullptr) {
+        std::printf("    %s\n", e.c_str());
+        return;
+    }
+    for (int i = 0; i < 20; ++i) b.Step(0.1);
+    SC_EXPECT(b.Regiment()->TemporaryTask() == loan);
+    SC_EXPECT_NEAR(b.Regiment()->TemporaryUntilH(), until_h, 1e-6);
+    SC_EXPECT(b.Runner().HasTask() && b.Runner().Task().id == loan);
+    campaign::RegimentPicture q = b.RegimentHolds();
+    SC_EXPECT(!b.RegimentDecides(q, true));  // not yet
+    q.now_h = until_h + 0.1;
+    SC_EXPECT(b.RegimentDecides(q, true));
+    for (double t0 = b.Runner().Time(); b.Runner().Task().id != held && b.Runner().Time() < t0 + 600.0;) b.Step(0.2);
+    SC_EXPECT(b.Runner().Task().id == held && b.Runner().Task().detached.empty());
+    SC_EXPECT(b.Regiment()->TemporaryTask().empty());
+    // A relief under way is carried the same way.
+    campaign::RegimentMemory relief;
+    relief.present = true;
+    relief.relief_pending = true;
+    relief.in_line_h = 12.0;
+    relief.relief_stage = "resting";
+    relief.relief_unit = "the 25th Battery";
+    relief.relief_from = "kesmark_barracks";
+    relief.relief_rest_h = 12.0;
+    relief.relief_task = m.before;
+    relief.rest_until_h = 40.5;
+    const json::Value v = campaign::save_json::RegimentMemoryJson(relief);
+    campaign::RegimentMemory back;
+    const bool read = campaign::save_json::ReadRegimentMemory(v, back, &e);
+    if (!read) std::printf("    %s%c", e.c_str(), 10);
+    SC_EXPECT(read);
+    SC_EXPECT(back.relief_stage == "resting" && back.relief_pending && back.relief_unit == relief.relief_unit && back.relief_task.id == held);
+    SC_EXPECT_NEAR(back.rest_until_h, 40.5, 1e-9);
+    SC_EXPECT_NEAR(back.in_line_h, 12.0, 1e-9);
 }

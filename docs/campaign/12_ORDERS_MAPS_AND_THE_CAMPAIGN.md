@@ -297,10 +297,11 @@ ground round you is the district's. `?SimWar=new:nato?SimSeat=osa:commander` rid
 a first-echelon regiment, bounds, and a loan's end. Each is read by `RegimentTasking` only on facts in the regiment's picture:
 the warning net's raids, the ground war's Dispersed, attack and counterattack orders, and another sector raised to defend,
 all as `RegimentWatch` had them reach its posts; the battery's own ready report with its missiles; and its radars off the
-air. Score: the adversary's weight times (1 - departure x (1 - the commander's willingness)) from his traits (R1's sources in
-`SOURCES.md`). A task's `"detached"`: each launcher hears its order on the battery net, drives on the roads (a mover,
-`osa_9a33`), deploys and fights on its own, and the player's Osa hears it is the senior man there. The relief: the reserve's
-column from the barracks, a fighting neighbour on arrival, the march to rest, then repairs and missiles.
+air as their wreck reports or 15 minutes' silence told it (`RadarWord`). Score: the adversary's weight times (1 - departure
+x (1 - the commander's willingness)) from his traits (R1's sources in `SOURCES.md`). A task's `"detached"`: each launcher
+hears its order on the battery net, drives on the roads (a mover, `osa_9a33`), deploys and fights on its own, and the
+player's Osa hears it is the senior man there. The relief: the reserve's column from the barracks, a fighting neighbour on
+arrival, the march to rest, then repairs and missiles. A save carries the regiment's memory (a loan, a relief, time in line).
 
 Try this: headless, `simcore_tests "redeploy"`. In a rebels campaign, wait (W) for helicopter raids: by the next briefing
 the launchers split over Vrbice, Horka, Dubník and Polány; with `?SimSeat=osa:commander` you drive to Vrbice and are told

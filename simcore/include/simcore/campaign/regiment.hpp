@@ -36,6 +36,7 @@
 
 #include "simcore/air_war/campaign.hpp"
 #include "simcore/campaign/ad_strategy.hpp"
+#include "simcore/campaign/battery_state.hpp"
 #include "simcore/campaign/battery_task.hpp"
 #include "simcore/command/air_war_feed.hpp"
 #include "simcore/command/own_air.hpp"
@@ -349,8 +350,8 @@ struct RegimentPicture {
     double ready_report_h = -1.0;     // the battery's last ready report at its position (< 0: none)
     int missiles_reported = -1;       // its missiles in that report (< 0: not said)
     int radars_total = 0;             // the regiment's radars the battery follows on its net
-    int radars_out = 0;               // of them out, as the net told it
-    double radars_out_h = -1.0;       // since when all were out (< 0: not all)
+    int radars_out = 0;               // of them off the air as the regiment knows it (RadarWord)
+    double radars_out_h = -1.0;       // since when the regiment has known all were (< 0: not all)
     int dispersals = 0;               // the covered division broken and dispersed (cut off), each once
     double dispersal_h = -1.0;
     std::string dispersal;
@@ -903,6 +904,25 @@ public:
     // A relief under way: the reserve battery on its way (the session gives the march to rest on its arrival).
     void ReliefDone() { relief_pending_ = false; }
     bool ReliefPending() const { return relief_pending_; }
+    // What of the regiment's redeployments a save carries (battery_state.hpp's RegimentMemory, its tasking part), and
+    // taken back on a resume, before Since and RaidsSince (which then mark what reached it before the session as acted on).
+    void FillMemory(RegimentMemory& m) const {
+        m.present = true;
+        m.last_h = last_h_;
+        m.temp_id = temp_id_;
+        m.temp_until_h = temp_until_h_;
+        m.has_before = !temp_id_.empty();
+        if (m.has_before) m.before = before_;
+        m.relief_pending = relief_pending_;
+    }
+    void Remember(const RegimentMemory& m) {
+        if (!m.present) return;
+        last_h_ = m.last_h;
+        temp_id_ = m.has_before ? m.temp_id : std::string();
+        temp_until_h_ = m.temp_until_h;
+        if (m.has_before) before_ = m.before;
+        relief_pending_ = m.relief_pending;
+    }
 
 private:
     // ---- O7: the officers' redeployments. True when the rule gives a task now (d filled).
@@ -1111,6 +1131,75 @@ private:
     static bool Due(const RegimentPicture& pic, double reached_h, const TaskingRule& r) { return pic.now_h + 1e-9 >= reached_h + r.work_s / 3600.0; }
 };
 
+// O7: what the regiment knows of its own radars being on the air. Each radar's reports (its plots and its routine reports
+// to the regiment's post) are heard while it is on the air; a report of it wrecked reaches the regiment through the
+// pipeline (the feed's OwnDamage fact, RegimentWatch::RadarWrecks). A radar is off the air for the regiment from the
+// arrival of a wreck report while nothing has been heard from it since the wreck, or once nothing has been heard from it
+// for kSilentH: the net gone silent. Never from the radar's state itself.
+class RadarWord {
+public:
+    static constexpr double kSilentH = 0.25;  // sam3d: a game value (the post calls a radar it has not heard for 15 min)
+
+    void Add(const std::string& id, double heard_h) {
+        for (const Radar& r : radars_) {
+            if (r.id == id) return;
+        }
+        radars_.push_back({id, heard_h, -1.0, -1.0});
+    }
+    void Clear() { radars_.clear(); }
+    // A report from the radar reached the regiment at h.
+    void Heard(const std::string& id, double h) {
+        for (Radar& r : radars_) {
+            if (r.id == id && h > r.heard_h) r.heard_h = h;
+        }
+    }
+    // A report of the radar wrecked at wrecked_h reached the regiment at reached_h.
+    void Reported(const std::string& id, double wrecked_h, double reached_h) {
+        for (Radar& r : radars_) {
+            if (r.id != id || wrecked_h < r.wrecked_h) continue;
+            r.wrecked_h = wrecked_h;
+            r.reached_h = reached_h;
+        }
+    }
+    // When the regiment has known the radar off the air, at now_h (< 0: it has not).
+    double OutSinceH(const std::string& id, double now_h) const {
+        for (const Radar& r : radars_) {
+            if (r.id == id) return OutSince(r, now_h);
+        }
+        return -1.0;
+    }
+    std::size_t Count() const { return radars_.size(); }
+    void Fill(RegimentPicture& p, double now_h) const {
+        p.radars_total = static_cast<int>(radars_.size());
+        p.radars_out = 0;
+        double all_h = -1.0;
+        for (const Radar& r : radars_) {
+            const double h = OutSince(r, now_h);
+            if (h < 0.0) continue;
+            ++p.radars_out;
+            all_h = std::max(all_h, h);
+        }
+        p.radars_out_h = p.radars_total > 0 && p.radars_out == p.radars_total ? all_h : -1.0;
+    }
+
+private:
+    struct Radar {
+        std::string id;
+        double heard_h = -1.0;    // its last word
+        double wrecked_h = -1.0;  // the last wreck reported: when it was wrecked, and when the report came
+        double reached_h = -1.0;
+    };
+    static double OutSince(const Radar& r, double now_h) {
+        double h = -1.0;
+        const bool unheard_since = r.heard_h <= r.wrecked_h + kSilentH + 1e-9;  // repaired and heard again: the report is old
+        if (r.reached_h >= 0.0 && unheard_since && r.reached_h <= now_h + 1e-9) h = r.reached_h;
+        const double silent = r.heard_h + kSilentH;
+        if (silent <= now_h + 1e-9 && (h < 0.0 || silent < h)) h = silent;
+        return h;
+    }
+    std::vector<Radar> radars_;
+};
+
 // ------------------------------------------------------------------- F4.4: what reached the regiment through the pipeline
 
 // One fact the watch saw reach the regiment, for the debrief and the bench.
@@ -1145,6 +1234,13 @@ public:
         return true;
     }
     bool Bound() const { return net_ != nullptr; }
+    // O7: a wreck of one of the regiment's radars as its report reached the regiment (the theatre object's id).
+    struct RadarWreck {
+        std::string object;
+        double wrecked_h = 0.0;
+        double reached_h = 0.0;
+    };
+    const std::vector<RadarWreck>& RadarWrecks() const { return radar_wrecks_; }
 
     // After each pump of the feed: what is new, and what of it reached the regiment by the campaign's hour. True when
     // its picture changed.
@@ -1201,6 +1297,15 @@ public:
             const int fact = net_->FactIndex("raid:" + std::to_string(raids_seen_));
             if (fact < 0) break;  // not in the pipeline yet: looked for after the next pump
             pending_.push_back({fact, What::Raid, -1, raids[raids_seen_].h, static_cast<int>(raids_seen_)});
+        }
+        // O7: the wrecks of the regiment's radars reported (the feed's OwnDamage facts), as each reached the regiment.
+        const std::vector<command::Fact>& facts = net_->Facts();
+        for (; facts_seen_ < facts.size(); ++facts_seen_) {
+            const command::Fact& f = facts[facts_seen_];
+            if (f.kind != command::FactKind::OwnDamage) continue;
+            const int oi = c.Data().theatre.IndexOf(f.subject);
+            if (oi < 0 || c.Data().theatre.objects[static_cast<std::size_t>(oi)].regiment_radar.empty()) continue;
+            pending_.push_back({static_cast<int>(facts_seen_), What::Wreck, -1, f.h, oi});
         }
         bool news = !read_;
         read_ = true;
@@ -1261,7 +1366,7 @@ public:
     std::size_t Waiting() const { return pending_.size(); }
 
 private:
-    enum class What { Withdrawal, Report, Priority, Sharing, Dispersal, Advance, Counterattack, Threatened, Raid };
+    enum class What { Withdrawal, Report, Priority, Sharing, Dispersal, Advance, Counterattack, Threatened, Raid, Wreck };
     struct Pending {
         int fact = -1;
         What what = What::Report;
@@ -1296,6 +1401,8 @@ private:
     double sharing_h_ = -1.0;
     // O7: the facts the redeployments read.
     std::size_t raids_seen_ = 0;
+    std::size_t facts_seen_ = 0;  // O7: the net's facts looked at for our radars' wrecks
+    std::vector<RadarWreck> radar_wrecks_;
     std::vector<RegimentPicture::Raid> raids_;
     int dispersals_ = 0, advances_ = 0, counterattacks_ = 0;
     double dispersal_h_ = -1.0, advance_h_ = -1.0, counterattack_h_ = -1.0;
@@ -1344,8 +1451,8 @@ private:
 
     void Take(const Pending& p, double at, const airwar::AirCampaign& c) {
         const command::Fact& f = net_->Facts()[static_cast<std::size_t>(p.fact)];
-        static const char* const kWhat[] = {"withdrawal", "report", "priority", "sharing", "dispersal", "advance", "counterattack", "threatened", "raid"};
-        if (p.what != What::Raid) arrivals_.push_back({f.key, kWhat[static_cast<int>(p.what)], p.h, at});
+        static const char* const kWhat[] = {"withdrawal", "report", "priority", "sharing", "dispersal", "advance", "counterattack", "threatened", "raid", "wreck"};
+        if (p.what != What::Raid && p.what != What::Wreck) arrivals_.push_back({f.key, kWhat[static_cast<int>(p.what)], p.h, at});
         const airwar::LineOfContact& line = c.FrontLine();
         switch (p.what) {
             case What::Dispersal:
@@ -1402,6 +1509,9 @@ private:
                 raids_.push_back(out);
                 break;
             }
+            case What::Wreck:
+                radar_wrecks_.push_back({f.subject, p.h, at});
+                break;
             default:
                 break;
         }

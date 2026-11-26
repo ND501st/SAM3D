@@ -354,6 +354,62 @@ inline void ReadCrewGrades(const json::Value& a, std::vector<CrewGrade>& out) {
     }
 }
 
+// O7: the regiment's memory of its redeployments (battery_state.hpp's RegimentMemory).
+inline json::Value RegimentMemoryJson(const RegimentMemory& m) {
+    namespace jb = airwar::jsonb;
+    json::Value o = jb::Obj();
+    json::Value last = jb::Obj();
+    for (const auto& kv : m.last_h) jb::Put(last, kv.first, jb::Num(kv.second));
+    jb::Put(o, "last_h", last);
+    if (!m.temp_id.empty()) {
+        jb::Put(o, "temp_id", jb::Str(m.temp_id));
+        jb::Put(o, "temp_until_h", jb::Num(m.temp_until_h));
+    }
+    if (m.has_before) jb::Put(o, "before", TaskJsonValue(m.before));
+    jb::Put(o, "relief_pending", jb::Bool(m.relief_pending));
+    jb::Put(o, "in_line_h", jb::Num(m.in_line_h));
+    if (!m.relief_stage.empty()) {
+        jb::Put(o, "relief_stage", jb::Str(m.relief_stage));
+        jb::Put(o, "relief_rule", jb::Str(m.relief_rule));
+        jb::Put(o, "relief_unit", jb::Str(m.relief_unit));
+        jb::Put(o, "relief_from", jb::Str(m.relief_from));
+        jb::Put(o, "relief_rest_h", jb::Num(m.relief_rest_h));
+        jb::Put(o, "relief_task", TaskJsonValue(m.relief_task));
+        jb::Put(o, "rest_until_h", jb::Num(m.rest_until_h));
+    }
+    return o;
+}
+inline bool ReadTaskValue(const json::Value& v, BatteryTask& t, std::string* e) {
+    std::ostringstream s;
+    airwar::jsonb::Write(s, v, 0, 0, 17);
+    return LoadBatteryTaskJson(s.str(), t, e);
+}
+inline bool ReadRegimentMemory(const json::Value& o, RegimentMemory& m, std::string* e) {
+    m = RegimentMemory();
+    m.present = true;
+    if (const json::Value* last = o.Find("last_h")) {
+        for (std::size_t i = 0; i < last->keys.size() && i < last->items.size(); ++i) m.last_h[last->keys[i]] = last->items[i].number;
+    }
+    m.temp_id = Str(o, "temp_id");
+    m.temp_until_h = Num(o, "temp_until_h");
+    if (const json::Value* b = o.Find("before")) {
+        if (!ReadTaskValue(*b, m.before, e)) return false;
+        m.has_before = true;
+    }
+    m.relief_pending = Flag(o, "relief_pending");
+    m.in_line_h = Num(o, "in_line_h", -1.0);
+    m.relief_stage = Str(o, "relief_stage");
+    m.relief_rule = Str(o, "relief_rule");
+    m.relief_unit = Str(o, "relief_unit");
+    m.relief_from = Str(o, "relief_from");
+    m.relief_rest_h = Num(o, "relief_rest_h");
+    if (const json::Value* t = o.Find("relief_task")) {
+        if (!ReadTaskValue(*t, m.relief_task, e)) return false;
+    }
+    m.rest_until_h = Num(o, "rest_until_h", -1.0);
+    return true;
+}
+
 }  // namespace save_json
 
 inline std::string CampaignSaveJson(const CampaignSave& s) {
@@ -401,6 +457,7 @@ inline std::string CampaignSaveJson(const CampaignSave& s) {
     Put(bj, "arrived_h", Num(b.arrived_h));
     if (!b.crew_grades.empty()) Put(bj, "crew_grades", save_json::CrewGradesJson(b.crew_grades));
     if (!b.regiment_cp.empty()) Put(bj, "regiment_cp", Str(b.regiment_cp));
+    if (b.regiment.present) Put(bj, "regiment", save_json::RegimentMemoryJson(b.regiment));
     Put(root, "battery", bj);
     Put(root, "standing", save_json::StandingJson(s.standing));
     json::Value war;
@@ -471,6 +528,9 @@ inline bool LoadCampaignSaveJson(const std::string& text, CampaignSave& out, std
     b.arrived_h = Num(*bj, "arrived_h", -1.0);
     if (const json::Value* g = bj->Find("crew_grades")) save_json::ReadCrewGrades(*g, b.crew_grades);
     b.regiment_cp = Str(*bj, "regiment_cp");
+    if (const json::Value* rm = bj->Find("regiment")) {
+        if (!save_json::ReadRegimentMemory(*rm, b.regiment, &e)) return fail("battery.regiment: " + e);
+    }
     if (const json::Value* st = root.Find("standing")) save_json::ReadStanding(*st, out.standing);
     const json::Value* war = root.Find("air_war");
     if (war == nullptr) return fail("no air war");
